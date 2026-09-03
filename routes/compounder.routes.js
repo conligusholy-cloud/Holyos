@@ -2528,17 +2528,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
       l.example_model = undefined;
     });
     // Poslední chat se specialistou (zpráva zákazníka) → značka „dnes chatoval" + rychlý filtr.
-    try {
-      const lids = leads.map((l) => l.id);
-      if (lids.length) {
-        const chats = await prisma.aiSpecialistMessage.groupBy({
-          by: ['lead_id'], where: { lead_id: { in: lids }, role: 'user' }, _max: { created_at: true },
-        });
-        const chatMap = {};
-        chats.forEach((c) => { chatMap[c.lead_id] = c._max.created_at; });
-        leads.forEach((l) => { l.ai_last_chat_at = chatMap[l.id] || null; });
-      }
-    } catch (e) { leads.forEach((l) => { l.ai_last_chat_at = l.ai_last_chat_at || null; }); }
+    await annotateAiChat(leads);
     // Levná míra zahřátí z eventů otagovaných lead_id (bez AI). Limit = strop načítaných leadů (500),
     // ať dopočet aktivity nevypadne, když leadů přibude přes 200 (import/FB reklamy).
     if (leads.length && leads.length <= 500) {
