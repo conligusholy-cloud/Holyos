@@ -121,6 +121,15 @@ function attach(server) {
       }
     }
 
+    // Sjednocení s AI specialistou: doplň pojistky proti vymýšlení + přesnou matematiku
+    // + ZÁVAZNÉ firemní podklady (stejná znalostní báze) + mluvený styl. Neblokuje hovor.
+    try {
+      const aic = require('../compounder/ai-context');
+      state.system = await aic.augmentSystem(state.system, { voice: true });
+    } catch (e) {
+      console.warn('[voice] augment systému selhal:', e.message);
+    }
+
     ws.on('message', async (raw) => {
       let msg;
       try {

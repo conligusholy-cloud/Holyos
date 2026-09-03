@@ -420,9 +420,12 @@
       <div id="ai-inbound" style="display:none;max-width:760px;">
         <h3 style="margin:0 0 12px;font-size:16px;">Nastavení příchozí recepční</h3>
         <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
-        <textarea id="ai-inbound-prompt" rows="6" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
+        <textarea id="ai-inbound-prompt" rows="6" oninput="aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
+        <div id="ai-inbound-prompt-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
-        <textarea id="ai-inbound-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
+        <textarea id="ai-inbound-greeting" rows="2" oninput="aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
+        <div id="ai-inbound-greeting-cnt" style="font-size:11px;color:var(--text2);margin-top:3px;"></div>
+        <div style="font-size:11px;color:var(--text2);background:rgba(139,92,246,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:10px;line-height:1.5;">📎 <b>Podklady (fakta, ceník, parametry)</b> jsou <b>sdílené s AI specialistou</b> — nahraješ je v záložce <b>💬 AI specialista (chat)</b> → „Znalostní podklady". Telefonní AI z nich čerpá stejně. Limity: 40 000 znaků/soubor, celkem 90 000 znaků, max 20 MB / 8 souborů, skenované PDF bez textu nefunguje.</div>
         <div style="margin-top:8px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-inbound-msg-top" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
         <input id="ai-inbound-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
@@ -5029,6 +5032,17 @@
     }
     function aiToggleCall(id){ var r=document.getElementById('ai-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; }
 
+    // Generická kontrola délky pole (znaky + slova) s upozorněním na překročení.
+    function aiCountField(taId, outId, maxChars, maxWords){
+      var ta=document.getElementById(taId), c=document.getElementById(outId); if(!ta||!c) return;
+      var t=ta.value||'', chars=t.length, words=(t.trim().match(/\S+/g)||[]).length, col, note;
+      if(chars>Math.round(maxChars*1.55)){ col='#ef4444'; note=' · ⚠️ PŘEKROČENO'; }
+      else if(chars>maxChars || words>maxWords){ col='#eab308'; note=' · ⚠️ nad doporučením'; }
+      else { col='#10b981'; note=' · ✅ OK'; }
+      c.style.color=col; c.textContent=chars+' / max '+maxChars+' znaků · '+words+' / max '+maxWords+' slov'+note;
+    }
+    window.aiCountField=aiCountField;
+
     // ── Příchozí recepční (config) ──
     async function aiLoadConfig(){
       try{
@@ -5037,6 +5051,8 @@
         document.getElementById('ai-inbound-greeting').value=c.inbound_greeting||'';
         document.getElementById('ai-inbound-notify').value=(c.notify_person_ids||[]).join(',');
         document.getElementById('ai-inbound-from').value=c.default_from||'';
+        aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400);
+        aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50);
       }catch(e){ document.getElementById('ai-inbound-msg').textContent='Chyba načtení: '+e.message; }
     }
     async function aiSaveConfig(){
@@ -5228,7 +5244,9 @@
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">';
         html+='<h3 style="margin:0 0 10px;font-size:15px;">Nová kampaň</h3>';
         html+='<input id="ai-c-name" placeholder="Název kampaně" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:8px;">';
-        html+='<textarea id="ai-c-script" rows="4" placeholder="Scénář hovoru — co má AI říct a zjistit" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:8px;"></textarea>';
+        html+='<textarea id="ai-c-script" rows="4" oninput="aiCountField(\'ai-c-script\',\'ai-c-script-cnt\',9000,1400)" placeholder="Scénář hovoru — co má AI říct a zjistit" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:4px;"></textarea>';
+        html+='<div id="ai-c-script-cnt" style="font-size:11px;color:var(--text2);margin-bottom:8px;">0 / max 9000 znaků · 0 / max 1400 slov · ✅ OK</div>';
+        html+='<div style="font-size:11px;color:var(--text2);background:rgba(139,92,246,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">📎 Fakta/ceník jsou <b>sdílené s AI specialistou</b> (záložka 💬 AI specialista → Znalostní podklady). Telefonní AI z nich čerpá a drží se scénáře — nevymýšlí si.</div>';
         html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
         html+='<input id="ai-c-from" placeholder="Odchozí číslo (+420…)" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
         html+='<input id="ai-c-from-h" placeholder="Volat od (HH:MM)" style="width:130px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
@@ -5298,9 +5316,11 @@
         html+='<div id="ai-camp-actions" style="margin-bottom:10px;">'+aiCampActionsHtml(c)+'</div>';
         html+='<div style="margin-bottom:14px;">';
         html+='<div style="font-size:13px;font-weight:600;margin-bottom:4px;">Úvodní věta (co AI řekne jako první, když volaný zvedne)</div>';
-        html+='<textarea id="ai-camp-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Prázdné = AI zahájí sama podle scénáře. Např.: Dobrý den, jmenuji se Klára z Best Series, volám ohledně samoobslužných prádelen…">'+aiEsc(c.greeting||'')+'</textarea>';
+        html+='<textarea id="ai-camp-greeting" rows="2" oninput="aiCountField(\'ai-camp-greeting\',\'ai-camp-greeting-cnt\',300,50)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Prázdné = AI zahájí sama podle scénáře. Např.: Dobrý den, jmenuji se Klára z Best Series, volám ohledně samoobslužných prádelen…">'+aiEsc(c.greeting||'')+'</textarea>';
+        html+='<div id="ai-camp-greeting-cnt" style="font-size:11px;color:var(--text2);margin-top:3px;"></div>';
         html+='<div style="font-size:13px;font-weight:600;margin:10px 0 4px;">Scénář hovoru (co má AI říkat a zjistit)</div>';
-        html+='<textarea id="ai-camp-script" rows="10" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;">'+aiEsc(c.script||'')+'</textarea>';
+        html+='<textarea id="ai-camp-script" rows="10" oninput="aiCountField(\'ai-camp-script\',\'ai-camp-script-cnt\',9000,1400)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;">'+aiEsc(c.script||'')+'</textarea>';
+        html+='<div id="ai-camp-script-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>';
         html+='<div style="margin-top:6px;"><button class="btn" onclick="aiSaveScript(\''+c.id+'\')" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-camp-script-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
         html+='</div>';
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
@@ -5310,6 +5330,8 @@
         html+='</div>';
         html+='<div id="ai-targets">'+aiRenderTargets(c)+'</div>';
         det.innerHTML=html;
+        aiCountField('ai-camp-greeting','ai-camp-greeting-cnt',300,50);
+        aiCountField('ai-camp-script','ai-camp-script-cnt',9000,1400);
         aiStartPoll(id);
       }catch(e){ det.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
