@@ -5107,7 +5107,7 @@
         var rt=j.rates||{};
         var h='<div style="display:flex;gap:10px;flex-wrap:wrap;">'
           + card('Zpřístupněno leadům', j.showCount)
-          + card('Odeslán odkaz (SMS)', j.sent)
+          + card('Odeslán odkaz (SMS)', j.sent, '📱 telefon '+(j.sentPhone||0)+' · 📡 brána '+(j.sentGateway||0))
           + card('Otevřelo odkaz', j.opened, rt.openOfSent+'% z odeslaných')
           + card('Chatovalo', j.chattedLeads, rt.chatOfOpened+'% z otevřených')
           + card('Zájem o schůzku', j.meetingRequests)

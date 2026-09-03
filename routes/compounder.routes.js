@@ -765,18 +765,21 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
     const notTest = { notIn: [...testIds] };
     const sentLeads = await prisma.compounderLead.findMany({
       where: { ai_specialist_sms_sent_at: { not: null }, is_test: false },
-      select: { ai_specialist_sms_status: true, ai_specialist_opened_at: true, source: true },
+      select: { ai_specialist_sms_status: true, ai_specialist_opened_at: true, source: true, ai_specialist_sms_channel: true },
     });
     const sent = sentLeads.length;
     const sentStatus = {};
     let openedOfSent = 0;
     const sentBySource = {};
+    let sentPhone = 0, sentGateway = 0;
     sentLeads.forEach((r) => {
       const s = r.ai_specialist_sms_status || 'odesláno';
       sentStatus[s] = (sentStatus[s] || 0) + 1;
       if (r.ai_specialist_opened_at) openedOfSent += 1;
       const src = r.source || 'jiný';
       sentBySource[src] = (sentBySource[src] || 0) + 1;
+      if (r.ai_specialist_sms_channel === 'phone') sentPhone += 1;
+      else sentGateway += 1; // 'gateway' i starší bez příznaku
     });
 
     const [showCount, openedTotal, summaries, totalMessages, meetEv, callEv] = await Promise.all([
@@ -802,7 +805,9 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
     const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
     res.json({
       ok: true,
-      sent,                       // kolika lidem odešel odkaz (SMS)
+      sent,                       // kolika lidem odešel odkaz (SMS) celkem
+      sentPhone,                  // z toho z telefonu obchodníka
+      sentGateway,                // z toho přes bránu (GoSMS/Twilio)
       sentStatus,                 // rozpad doručení
       sentBySource,               // podle zdroje (reklama/…)
       showCount,                  // kolik leadů má specialistu zpřístupněného
@@ -879,6 +884,7 @@ async function autosendAiSpecialistSms(lead) {
         ai_specialist_sms_sent_at: new Date(),
         ai_specialist_sms_id: String(sid || ''),
         ai_specialist_sms_status: 'odesláno',
+        ai_specialist_sms_channel: 'gateway',
         status: 'odeslan_specialista', // automaticky přepnout stav kontaktu
       },
     }).catch(() => {});
@@ -1037,12 +1043,31 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     const sentAt = new Date();
     await prisma.compounderLead.update({
       where: { id },
-      data: { ai_specialist_sms_sent_at: sentAt, ai_specialist_sms_id: String(sid || ''), ai_specialist_sms_status: 'odesláno' },
+      data: { ai_specialist_sms_sent_at: sentAt, ai_specialist_sms_id: String(sid || ''), ai_specialist_sms_status: 'odesláno', ai_specialist_sms_channel: 'gateway' },
     }).catch(() => {});
     res.json({ ok: true, sid, link, sentAt, status: 'odesláno' });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+// POST /api/compounder/leads/:id/ai-specialist-mark-phone-sent — obchodník odeslal SMS z TELEFONU.
+// Zaeviduje odeslání (kanál 'phone') + přepne stav — aby to bylo ve statistice.
+router.post('/leads/:id/ai-specialist-mark-phone-sent', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.compounderLead.update({
+      where: { id },
+      data: {
+        ai_specialist_sms_sent_at: new Date(),
+        ai_specialist_sms_channel: 'phone',
+        ai_specialist_sms_status: 'odesláno',
+        status: 'odeslan_specialista',
+        show_ai_specialist: true,
+      },
+    }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
 // GET /api/compounder/leads/:id/ai-specialist-link — vrátí odkaz na AI specialistu (ke zkopírování)

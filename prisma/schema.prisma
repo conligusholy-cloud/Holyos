@@ -5643,6 +5643,8 @@ model CompounderLead {
   ai_specialist_sms_status  String?
   // Kdy lead poprvé otevřel odkaz na AI specialistu (stránku /ai).
   ai_specialist_opened_at   DateTime?
+  // Přes co byla SMS s odkazem odeslána: 'gateway' (GoSMS/Twilio) nebo 'phone' (z telefonu obchodníka).
+  ai_specialist_sms_channel String?
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
