@@ -1447,7 +1447,7 @@
       if (!r.ok || !j.link){ if(st) st.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
       var lead = state.leads.find(function(x){return x.id===id;});
       var num = lead ? String(lead.phone||'').replace(/[^0-9+]/g,'') : '';
-      var text = 'Dobrý den, zasíláme Vám informace ohledně PRÁDLOMATU: ' + j.link;
+      var text = 'Dobrý den, Prádlomat: ' + j.link;
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       // Samotné odeslání (stav přepneme, zalogujeme a otevřeme SMS z čísla obchodníka).
       function doSend(){
