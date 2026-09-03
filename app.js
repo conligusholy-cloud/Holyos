@@ -703,7 +703,20 @@ app.use((req, res, next) => {
       req.path.startsWith('/dist/')) return next();
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
+  // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
+  if (req.path.startsWith('/s/')) {
+    const url = compounderRoutes.shortCodeToAiUrl(decodeURIComponent(req.path.slice(3)));
+    if (url) return res.redirect(302, url);
+    return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
+  }
   compounderStatic(req, res, () => serveCompounderHtml(req, res));
+});
+
+// Zkrácený odkaz i na app.holyos.cz (fallback, kdyby ho někdo otevřel tam).
+app.get('/s/:code', (req, res) => {
+  const url = compounderRoutes.shortCodeToAiUrl(String(req.params.code || ''));
+  if (url) return res.redirect(302, url);
+  return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
 });
 
 // (2) app.holyos.cz/compounder/ → tentýž web na podcestě (trailing slash kvůli relativním cestám).
