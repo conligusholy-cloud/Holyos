@@ -1382,7 +1382,8 @@
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Odeslání selhalo.</span>'; }
   }
 
-  async function sendAccessWA(id){
+  async function sendAccessWA(id, _skipGate){
+    if (!_skipGate && !obContactSaved(id)){ var _l=(state.leads||[]).find(function(x){return x.id===id;})||{}; obAskSaveFirst(_l.name, function(){ sendAccessWA(id, true); }, id); return; }
     var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji odkaz…</span>';
     try {
       var r = await api('/leads/'+id+'/access-link', { method:'POST' });
@@ -1408,7 +1409,8 @@
     var info = document.getElementById('access-info-'+id); if (info && lead) info.innerHTML = accessInfoHtml(lead);
   }
   // Poslat přístup přes SMS (otevře nativní SMS s předvyplněným textem).
-  async function sendAccessSMS(id){
+  async function sendAccessSMS(id, _skipGate){
+    if (!_skipGate && !obContactSaved(id)){ var _l=(state.leads||[]).find(function(x){return x.id===id;})||{}; obAskSaveFirst(_l.name, function(){ sendAccessSMS(id, true); }, id); return; }
     var msg = document.getElementById('access-msg-'+id); if (msg) msg.innerHTML = '<span style="color:var(--muted)">Připravuji SMS…</span>';
     try {
       var r = await api('/leads/'+id+'/access-link', { method:'POST' });
