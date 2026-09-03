@@ -658,7 +658,9 @@ router.post('/leads/:id/ai-specialist-summary', requireAuth, async (req, res, ne
     const transcript = rows.map((r) => (r.role === 'user' ? 'Zájemce: ' : 'AI: ') + r.text).join('\n');
     const agent = require('../services/voice/agent');
     const { text } = await agent.runTurn({
-      system: 'Shrň česky ve 3–6 bodech, CO tento zájemce o prádlomaty/Compounder chce a jaký je jeho stav a zájem, na základě jeho chatu s AI specialistou. Buď věcný a konkrétní, ať to obchodník rychle pochopí. Zmiň lokalitu, rozpočet, roli (provozovatel/investor) a další krok, pokud zazněly.',
+      system: 'Shrň česky, CO tento zájemce o prádlomaty/Compounder chce a jaký je jeho stav a zájem, na základě jeho chatu s AI specialistou. Buď věcný a konkrétní, ať to obchodník rychle pochopí. Zmiň lokalitu, rozpočet, roli (provozovatel/investor) a další krok, pokud zazněly. '
+        + 'FORMÁT: Piš ČISTÝ text bez jakéhokoli markdownu — NIKDY nepoužívej hvězdičky (** ani *), mřížky (#) ani jiné značky. '
+        + 'Nadpisy sekcí piš prostými slovy (např. „Co chce:", „Stav a zájem:", „Další kroky:") a jednotlivé body odsazuj pomlčkou „- " na začátku řádku. Krátké, přehledné řádky.',
       history: [],
       userText: transcript,
       maxTokens: 400,

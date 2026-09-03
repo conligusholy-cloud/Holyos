@@ -4664,12 +4664,13 @@
         out.innerHTML=h;
       }catch(e){ out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení</span>'; }
     }
+    function cmpStripMd(s){ return String(s==null?'':s).replace(/\*\*/g,'').replace(/(^|\n)#{1,6}\s*/g,'$1').replace(/\*/g,'').trim(); }
     async function cmpAiSpecSummary(id){
       var out = document.getElementById('aispec-out-'+id); if(out) out.innerHTML='<span style="color:var(--text2);font-size:12px;">Generuji shrnutí…</span>';
       try{
         var r = await fetch('/api/compounder/leads/'+id+'/ai-specialist-summary', { method:'POST', credentials:'include' });
         var j = await r.json().catch(function(){return{};});
-        if(r.ok && j.ok){ if(out) out.innerHTML='<div style="background:rgba(234,179,8,0.08);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;white-space:pre-wrap;"><b>🧠 Co lead chce:</b><br>'+cmpEsc(j.summary||'')+'</div>'; }
+        if(r.ok && j.ok){ if(out) out.innerHTML='<div style="background:rgba(234,179,8,0.08);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:12px;white-space:pre-wrap;"><b>🧠 Co lead chce:</b><br>'+cmpEsc(cmpStripMd(j.summary||''))+'</div>'; }
         else { if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+cmpEsc(j.error||'')+'</span>'; }
       }catch(e){ if(out) out.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba spojení</span>'; }
     }

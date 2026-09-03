@@ -1481,7 +1481,7 @@
       var opened = j.openedAt ? ('<span style="color:var(--converted)">✓ otevřel odkaz ('+fmtDate(j.openedAt)+')</span>') : '<span style="color:var(--muted2)">zatím neotevřel odkaz</span>';
       var chat = (j.userMsgCount>0) ? (' · 💬 '+j.userMsgCount+' zpráv v chatu') : ' · zatím nechatoval';
       st.innerHTML = opened + chat;
-      if (sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(j.summary)) : '';
+      if (sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(obStripMd(j.summary))) : '';
     } catch(e){ st.innerHTML = '<span style="color:var(--muted2)">Stav se nepodařilo načíst.</span>'; }
   }
   window.loadAiSpecStatus = loadAiSpecStatus;
@@ -1491,7 +1491,7 @@
     try {
       var r = await api('/leads/'+id+'/ai-specialist-summary', { method:'POST' });
       var j = await r.json().catch(function(){return {};});
-      if (r.ok && j.ok){ if(sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(j.summary)) : '<span style="color:var(--muted2)">Zatím není z čeho vyhodnocovat (žádný chat).</span>'; }
+      if (r.ok && j.ok){ if(sm) sm.innerHTML = j.summary ? ('<b>🧠 Co lead chce:</b>\n'+esc(obStripMd(j.summary))) : '<span style="color:var(--muted2)">Zatím není z čeho vyhodnocovat (žádný chat).</span>'; }
       else { if(sm) sm.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; }
     } catch(e){ if(sm) sm.innerHTML = '<span style="color:#fca5a5">Nepodařilo se vyhodnotit.</span>'; }
   }
@@ -1543,6 +1543,9 @@
   // Bylo už na tomhle telefonu uloženo přes tlačítko „Uložit kontakt"? (localStorage, per zařízení)
   function obContactSaved(id){ try{ return !!localStorage.getItem('ob.saved.'+id); }catch(e){ return false; } }
   window.obContactSaved = obContactSaved;
+  // Odstraní markdown značky (hvězdičky, mřížky) z textu — pro čitelné shrnutí.
+  function obStripMd(s){ return String(s==null?'':s).replace(/\*\*/g,'').replace(/(^|\n)#{1,6}\s*/g,'$1').replace(/\*/g,'').trim(); }
+  window.obStripMd = obStripMd;
 
   async function toggleTemplate(id, key, on){
     var lead = state.leads.find(function(x){return x.id===id;}); if (!lead) return;
