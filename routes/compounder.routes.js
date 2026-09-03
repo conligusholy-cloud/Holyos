@@ -575,7 +575,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
       system: sys + knowledgeBlock + '\n\n' + AI_SPECIALIST_GUARDRAILS + '\n\n' + MATH_RULE + '\n\n' + AI_SPECIALIST_STYLE + '\n\n' + ctx,
       history,
       userText: message,
-      maxTokens: 600,
+      maxTokens: 1200,
     });
 
     // Ulož oba tahy (záznam chatu u leada)
