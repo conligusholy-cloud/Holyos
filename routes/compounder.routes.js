@@ -752,14 +752,16 @@ router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
 // Automatické odeslání SMS specialisty na nový lead dle pravidel (volá se po vzniku leada z reklamy).
 async function autosendAiSpecialistSms(lead) {
   try {
-    if (!lead || !lead.id || !lead.phone) return;
+    if (!lead || !lead.id) return;
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
     if (!cfg || !cfg.enabled) return;
-    if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return;
-    if (cfg.onlyNew && (lead.status || 'new') !== 'new') return;
-    if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return;
-    if (lead.ai_specialist_sms_sent_at) return; // dedup — jen jednou
-    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return; }
+    const skip = (why) => { console.log('[aispec-autosend] lead', lead.id, '— přeskočeno:', why); };
+    if (!lead.phone) return skip('chybí telefon');
+    if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
+    if (cfg.onlyNew && (lead.status || 'new') !== 'new') return skip('stav není Nový');
+    if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
+    if (lead.ai_specialist_sms_sent_at) return skip('SMS už odeslána');
+    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = portalBase() + '/s/' + makeShortCode(lead.id);
     const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
@@ -4661,7 +4663,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
       meta_raw: meta.raw || null,
       activity_log: initLog,
     },
-    select: { id: true, name: true, email: true, phone: true, owner_person_id: true, external_rep_id: true },
+    select: { id: true, name: true, email: true, phone: true, owner_person_id: true, external_rep_id: true, status: true, source: true, ai_specialist_sms_sent_at: true },
   });
   console.log(`[fb-webhook] Založen Compounder lead #${created.id} (${srcLabel})`);
 
