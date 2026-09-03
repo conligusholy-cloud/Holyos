@@ -693,7 +693,7 @@ const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { file
 function knScope(req) {
   const s = String((req.query && req.query.scope) || (req.body && req.body.scope) || 'specialist');
   if (['inbound', 'outbound', 'specialist'].indexOf(s) !== -1) return s;
-  if (/^outbound:\d+$/.test(s)) return s; // per-kampaň podklady
+  if (/^outbound:[A-Za-z0-9_-]{1,60}$/.test(s)) return s; // per-kampaň podklady (UUID kampaně)
   return 'specialist';
 }
 function knKey(scope) { return require('../services/compounder/ai-context').docsSettingKey(scope); }
