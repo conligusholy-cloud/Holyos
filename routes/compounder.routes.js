@@ -476,8 +476,18 @@ async function detectMeetingIntent(leadId, userMsg, aiReply, lead) {
     let j = null;
     try { j = JSON.parse(String(text).replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim()); } catch (_) { return; }
     if (!j || j.meeting !== true) return;
+    // Dedup: jedna notifikace na leada (marker uložený jako CompounderEvent).
+    try {
+      const existing = await prisma.compounderEvent.findFirst({
+        where: { event: 'meeting_notified', props: { path: ['lead_id'], equals: leadId } },
+        select: { id: true },
+      });
+      if (existing) { console.log('[ai-specialist] schůzka už nahlášena u leada', leadId, '— přeskočeno'); return; }
+    } catch (e) { /* když JSON filtr selže, raději upozorníme, než abychom mlčeli */ }
     const terms = Array.isArray(j.terms) ? j.terms.filter(Boolean).map((s) => String(s).slice(0, 60)).slice(0, 5) : [];
     await compounderNotify.notifyMeetingRequest(prisma, { lead, terms, note: (j.note ? String(j.note).slice(0, 200) : '') });
+    // Zapiš marker, aby se u tohoto leada už znovu neupozorňovalo.
+    prisma.compounderEvent.create({ data: { sid: 'server', event: 'meeting_notified', props: { lead_id: leadId, terms } } }).catch(() => {});
     console.log('[ai-specialist] zájem o schůzku u leada', leadId, '→ Velín notifikace, termíny:', terms.join(' | ') || '—');
   } catch (e) {
     console.warn('[ai-specialist] detekce schůzky selhala:', e.message);
