@@ -2401,9 +2401,29 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
     await enrichWarmth(leads);
     await _annotateBlacklist(leads);
     await annotateDiscount(leads);
+    await annotateAiChat(leads);
     res.json(leads);
   } catch (err) { next(err); }
 });
+
+// Doplní leads o ai_last_chat_at (poslední zpráva zákazníka v chatu se specialistou).
+async function annotateAiChat(leads) {
+  try {
+    if (!leads || !leads.length) return;
+    const ids = leads.map((l) => l.id);
+    const rows = await prisma.aiSpecialistMessage.findMany({
+      where: { lead_id: { in: ids }, role: 'user' },
+      select: { lead_id: true, created_at: true },
+      orderBy: { created_at: 'desc' },
+      take: 20000,
+    });
+    const map = {};
+    for (const r of rows) { if (!map[r.lead_id]) map[r.lead_id] = r.created_at; }
+    leads.forEach((l) => { l.ai_last_chat_at = map[l.id] ? new Date(map[l.id]).toISOString() : null; });
+  } catch (e) {
+    leads.forEach((l) => { l.ai_last_chat_at = l.ai_last_chat_at || null; });
+  }
+}
 
 // Interní (server generované) session id — NIKDY nejsou návštěva zákazníka na webu.
 // Zákaznické portálové eventy chodí přes beacon s náhodným browser sid; interní
