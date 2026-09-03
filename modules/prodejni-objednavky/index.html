@@ -513,6 +513,10 @@
           <div id="ai-as-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + zaškrtnutí Tomáš a Jan → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAutosend()" style="background:#8b5cf6;color:#fff;font-weight:700;">💾 Uložit automatické odesílání</button> <span id="ai-as-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+          <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><b style="font-size:13px;color:var(--text);">📊 Odeslané SMS specialisty</b><button class="btn" onclick="aiLoadSmsStats()" style="font-size:12px;padding:4px 10px;">↻ Načíst statistiku</button><span id="ai-as-stats-sum" style="font-size:12px;color:var(--text2);"></span></div>
+            <div id="ai-as-stats-list" style="margin-top:8px;font-size:12px;color:var(--text2);"></div>
+          </div>
         </div>
 
         <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
@@ -5294,6 +5298,28 @@
       }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
     }
     window.aiSaveAutosend=aiSaveAutosend;
+    function aiFmtDt2(s){ try{ return new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return s||''; } }
+    async function aiLoadSmsStats(){
+      var sum=document.getElementById('ai-as-stats-sum'), box=document.getElementById('ai-as-stats-list');
+      if(sum) sum.textContent='Načítám…';
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-sms-stats',{ credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        if(!r.ok||!j.ok){ if(sum) sum.textContent='Chyba načtení'; return; }
+        var bs=j.byStatus||{}; var parts=Object.keys(bs).map(function(k){return k+': '+bs[k];});
+        if(sum) sum.innerHTML='Celkem <b style="color:var(--text)">'+j.total+'</b> SMS · otevřelo odkaz '+j.opened+(parts.length?(' · '+parts.join(' · ')):'');
+        var list=j.list||[];
+        if(!list.length){ box.innerHTML='<span>Zatím žádná odeslaná SMS.</span>'; return; }
+        var h='<table class="data-table" style="width:100%;font-size:12px;"><thead><tr><th>Kontakt</th><th>Telefon</th><th>Odesláno</th><th>Stav</th><th>Otevřel</th></tr></thead><tbody>';
+        list.forEach(function(x){
+          var stcol = x.status==='doručeno'?'#10b981':(x.status==='nedoručeno'?'#ef4444':'#eab308');
+          h+='<tr><td>'+cmpEsc(x.name||'—')+'</td><td>'+cmpEsc(x.phone||'—')+'</td><td style="white-space:nowrap;">'+aiFmtDt2(x.sentAt)+'</td><td style="color:'+stcol+';">'+cmpEsc(x.status)+'</td><td>'+(x.opened?'✓':'—')+'</td></tr>';
+        });
+        h+='</tbody></table>';
+        box.innerHTML=h;
+      }catch(e){ if(sum) sum.textContent='Chyba spojení'; }
+    }
+    window.aiLoadSmsStats=aiLoadSmsStats;
     async function aiLoadSmsConfig(){
       try{
         aiLoadAutosend();

@@ -719,6 +719,36 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Statistika odeslaných SMS s odkazem na AI specialistu (kolik a komu).
+router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await prisma.compounderLead.findMany({
+      where: { ai_specialist_sms_sent_at: { not: null } },
+      select: { id: true, name: true, phone: true, source: true, owner_person_id: true, ai_specialist_sms_sent_at: true, ai_specialist_sms_status: true, ai_specialist_opened_at: true },
+      orderBy: { ai_specialist_sms_sent_at: 'desc' },
+      take: 1000,
+    });
+    const byStatus = {};
+    let opened = 0;
+    rows.forEach((r) => {
+      const s = r.ai_specialist_sms_status || 'odesláno';
+      byStatus[s] = (byStatus[s] || 0) + 1;
+      if (r.ai_specialist_opened_at) opened += 1;
+    });
+    res.json({
+      ok: true,
+      total: rows.length,
+      opened,
+      byStatus,
+      list: rows.map((r) => ({
+        id: r.id, name: r.name, phone: r.phone, source: r.source,
+        sentAt: r.ai_specialist_sms_sent_at, status: r.ai_specialist_sms_status || 'odesláno',
+        opened: !!r.ai_specialist_opened_at,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
 // Automatické odeslání SMS specialisty na nový lead dle pravidel (volá se po vzniku leada z reklamy).
 async function autosendAiSpecialistSms(lead) {
   try {
