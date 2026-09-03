@@ -509,9 +509,9 @@
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-ads"> Jen kontakty z reklamy (Facebook / Google)</label>
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-new"> Jen nové kontakty (stav Nový)</label>
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-nobl"> Přeskočit black list (kontakty s ❗)</label>
-          <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (Person ID, oddělené čárkou — prázdné = všichni):</div>
-          <input id="ai-as-owners" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="např. 1, 32">
-          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + obchodníci „1, 32" (Tomáš, Jan) → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
+          <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (nezaškrtnuté nic = všichni):</div>
+          <div id="ai-as-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + zaškrtnutí Tomáš a Jan → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAutosend()" style="background:#8b5cf6;color:#fff;font-weight:700;">💾 Uložit automatické odesílání</button> <span id="ai-as-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         </div>
 
@@ -5266,12 +5266,19 @@
         document.getElementById('ai-as-ads').checked = srcs.indexOf('facebook_ads')!==-1 || srcs.indexOf('google_ads')!==-1;
         document.getElementById('ai-as-new').checked = c.onlyNew!==false;
         document.getElementById('ai-as-nobl').checked = c.skipBlacklist!==false;
-        document.getElementById('ai-as-owners').value = (c.ownerPersonIds||[]).join(', ');
+        var sel = (c.ownerPersonIds||[]).map(Number);
+        try { if (typeof fbEnsureSellers==='function') await fbEnsureSellers(); } catch(e){}
+        var box=document.getElementById('ai-as-owners-box');
+        if(box){
+          var list=(typeof CMP_SELLERS!=='undefined' && Array.isArray(CMP_SELLERS))?CMP_SELLERS:[];
+          if(!list.length){ box.innerHTML='<span>Žádní obchodníci k dispozici.</span>'; }
+          else box.innerHTML=list.map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<label style="display:inline-flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;"><input type="checkbox" class="ai-as-owner" value="'+s.id+'"'+(sel.indexOf(Number(s.id))!==-1?' checked':'')+'> '+cmpEsc(nm)+'</label>'; }).join('');
+        }
       }catch(e){}
     }
     async function aiSaveAutosend(){
       var msg=document.getElementById('ai-as-msg'); if(msg) msg.textContent='Ukládám…';
-      var owners=(document.getElementById('ai-as-owners').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
+      var owners=Array.prototype.slice.call(document.querySelectorAll('.ai-as-owner:checked')).map(function(c){return parseInt(c.value,10);}).filter(Boolean);
       var ads=document.getElementById('ai-as-ads').checked;
       try{
         var r=await fetch('/api/compounder/ai-specialist-autosend',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
