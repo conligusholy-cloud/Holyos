@@ -60,8 +60,8 @@ async function computeAispecToday(since) {
     const userMsgs = await prisma.aiSpecialistMessage.findMany({ where: { role: 'user', created_at: { gte: since } }, select: { lead_id: true } });
     const chatIds = [...new Set(userMsgs.map((m) => m.lead_id))];
     const [sentToday, openedToday, meetingToday, callbackToday] = await Promise.all([
-      prisma.compounderLead.count({ where: { ai_specialist_sms_sent_at: { gte: since } } }),
-      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { gte: since } } }),
+      prisma.compounderLead.count({ where: { ai_specialist_sms_sent_at: { gte: since }, is_test: false } }),
+      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { gte: since }, is_test: false } }),
       prisma.compounderEvent.count({ where: { event: 'meeting_notified', created_at: { gte: since } } }),
       prisma.compounderEvent.count({ where: { event: 'callback_notified', created_at: { gte: since } } }),
     ]);

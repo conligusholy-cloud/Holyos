@@ -757,8 +757,12 @@ router.get('/ai-specialist-today-analysis', requireAuth, async (req, res, next) 
 // Kompletní statistika AI specialisty: odeslané odkazy → otevření → chat → schůzky/zavolání.
 router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
   try {
+    // Testovací kontakty (is_test) do statistik nepočítáme.
+    const testRows = await prisma.compounderLead.findMany({ where: { is_test: true }, select: { id: true } });
+    const testIds = new Set(testRows.map((l) => l.id));
+    const notTest = { notIn: [...testIds] };
     const sentLeads = await prisma.compounderLead.findMany({
-      where: { ai_specialist_sms_sent_at: { not: null } },
+      where: { ai_specialist_sms_sent_at: { not: null }, is_test: false },
       select: { ai_specialist_sms_status: true, ai_specialist_opened_at: true, source: true },
     });
     const sent = sentLeads.length;
@@ -773,20 +777,24 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
       sentBySource[src] = (sentBySource[src] || 0) + 1;
     });
 
-    const [showCount, openedTotal, summaries, totalMessages, meeting, callback] = await Promise.all([
-      prisma.compounderLead.count({ where: { show_ai_specialist: true } }),
-      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { not: null } } }),
-      prisma.compounderLead.count({ where: { ai_specialist_summary: { not: null } } }),
-      prisma.aiSpecialistMessage.count(),
-      prisma.compounderEvent.count({ where: { event: 'meeting_notified' } }),
-      prisma.compounderEvent.count({ where: { event: 'callback_notified' } }),
+    const [showCount, openedTotal, summaries, totalMessages, meetEv, callEv] = await Promise.all([
+      prisma.compounderLead.count({ where: { show_ai_specialist: true, is_test: false } }),
+      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { not: null }, is_test: false } }),
+      prisma.compounderLead.count({ where: { ai_specialist_summary: { not: null }, is_test: false } }),
+      prisma.aiSpecialistMessage.count({ where: { lead_id: notTest } }),
+      prisma.compounderEvent.findMany({ where: { event: 'meeting_notified' }, select: { props: true } }),
+      prisma.compounderEvent.findMany({ where: { event: 'callback_notified' }, select: { props: true } }),
     ]);
+    const notTestEvent = (e) => e.props && !testIds.has(Number(e.props.lead_id));
+    const meeting = meetEv.filter(notTestEvent).length;
+    const callback = callEv.filter(notTestEvent).length;
 
     let chattedLeads = 0, userMessages = 0;
     try {
       const groups = await prisma.aiSpecialistMessage.groupBy({ by: ['lead_id'], where: { role: 'user' }, _count: { _all: true } });
-      chattedLeads = groups.length;
-      userMessages = groups.reduce((s, g) => s + (g._count._all || 0), 0);
+      const real = groups.filter((g) => !testIds.has(g.lead_id));
+      chattedLeads = real.length;
+      userMessages = real.reduce((s, g) => s + (g._count._all || 0), 0);
     } catch (_) { /* groupBy fallback */ }
 
     const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
@@ -818,7 +826,7 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
 router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
   try {
     const rows = await prisma.compounderLead.findMany({
-      where: { ai_specialist_sms_sent_at: { not: null } },
+      where: { ai_specialist_sms_sent_at: { not: null }, is_test: false },
       select: { id: true, name: true, phone: true, source: true, owner_person_id: true, ai_specialist_sms_sent_at: true, ai_specialist_sms_status: true, ai_specialist_opened_at: true },
       orderBy: { ai_specialist_sms_sent_at: 'desc' },
       take: 1000,
