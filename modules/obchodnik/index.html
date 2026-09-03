@@ -1060,10 +1060,38 @@
     document.getElementById('ob-sa-send').onclick = function(){ ov.remove(); if (onSend) onSend(); };
   }
   window.obAskSms = obAskSms;
+  // Vynucení „nejdřív ulož kontakt": když není uložený, nabídne uložení jako první krok.
+  function obAskSaveFirst(name, onProceed, id){
+    var ex = document.getElementById('ob-saveask'); if (ex) ex.remove();
+    var ov = document.createElement('div'); ov.id = 'ob-saveask';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+    ov.innerHTML =
+      '<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:6px">📇 Nejdřív ulož kontakt do telefonu</div>'
+      + '<div style="font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Kontakt ' + esc(name || '') + ' zatím nemáš uložený v telefonu. Ulož si ho jako první krok — pak se ti u hovorů a zpráv ukáže jméno.</div>'
+      + '<button id="ob-sf-save" style="width:100%;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px">💾 Uložit kontakt do telefonu</button>'
+      + '<button id="ob-sf-skip" style="width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:12px;font-size:14px;cursor:pointer;font-family:inherit">Teď ne, pokračovat bez uložení</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('ob-sf-save').onclick = function(){ ov.remove(); try{ saveContact(id); }catch(e){} };
+    document.getElementById('ob-sf-skip').onclick = function(){ ov.remove(); if (onProceed) onProceed(); };
+  }
+  window.obAskSaveFirst = obAskSaveFirst;
+  // Brána na odkazové akce (WhatsApp / SMS / mailto): neuložený kontakt → nejdřív ulož.
+  function obLinkGate(ev, id){
+    if (obContactSaved(id)) return true;
+    if (ev && ev.preventDefault) ev.preventDefault();
+    var a = ev.currentTarget; var href = a.getAttribute('href'); var tgt = a.getAttribute('target');
+    var l = (state.leads||[]).find(function(x){ return x.id===id; }) || {};
+    obAskSaveFirst(l.name, function(){ if (tgt === '_blank') window.open(href, '_blank'); else window.location.href = href; }, id);
+    return false;
+  }
+  window.obLinkGate = obLinkGate;
   // Klik na „Volat": u nového kontaktu se nejdřív zeptá (vlastní dialog), jestli ho máš uložený v telefonu.
   function obCallClick(ev, id){
     var l = (state.leads||[]).find(function(x){ return x.id===id; }) || {};
-    if (l.status === 'new'){
+    if (!obContactSaved(id)){
       if (ev && ev.preventDefault) ev.preventDefault();
       var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
       obAskCall(l.name, function(){ _obActiveTaskId=null; markCalled(id); window.location.href = href; setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); }, function(){ saveContact(id); });
@@ -1238,8 +1266,8 @@
       '<div class="detail">' +
         '<div class="actions-row" style="margin-top:12px">' +
           (l.phone ? '<a href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')">📞 Volat</a>' : '') +
-          (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener">💬 WhatsApp</a>' : '') +
-          (l.phone ? '<a href="sms:'+esc(telClean)+'">📩 SMS</a>' : '') +
+          (waNum ? '<a href="https://wa.me/'+waNum+'" target="_blank" rel="noopener" onclick="return obLinkGate(event,'+l.id+')">💬 WhatsApp</a>' : '') +
+          (l.phone ? '<a href="sms:'+esc(telClean)+'" onclick="return obLinkGate(event,'+l.id+')">📩 SMS</a>' : '') +
           (l.email ? '<a href="mailto:'+esc(l.email)+'">✉️ E-mail</a>' : '') +
         '</div>' +
         ((l.phone && obAiSpecAllowed()) ?
@@ -1426,8 +1454,8 @@
         window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
         if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
       }
-      // Jen u NOVÉHO kontaktu, který sis na tomhle telefonu ještě neuložil, nabídni uložení.
-      if (lead && (lead.status||'new') === 'new' && !obContactSaved(id)) {
+      // Když kontakt nemáš uložený v telefonu, nabídni uložení jako první krok.
+      if (lead && !obContactSaved(id)) {
         if (st) st.innerHTML = '';
         obAskSms(lead.name, doSend, function(){ try { saveContact(id); } catch(e){} if (st) st.innerHTML = '<span style="color:var(--muted)">💾 Kontakt uložen. Pak klikni znovu na „Odeslat SMS s odkazem na specialistu".</span>'; });
       } else {
