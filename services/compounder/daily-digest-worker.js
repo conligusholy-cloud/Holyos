@@ -54,8 +54,29 @@ function fmtMin(ms) {
   return m + ' min';
 }
 
+// Dnešní aktivita AI specialisty: kolik odešlo/otevřelo/chatovalo + kdo chatoval a co chce.
+async function computeAispecToday(since) {
+  try {
+    const userMsgs = await prisma.aiSpecialistMessage.findMany({ where: { role: 'user', created_at: { gte: since } }, select: { lead_id: true } });
+    const chatIds = [...new Set(userMsgs.map((m) => m.lead_id))];
+    const [sentToday, openedToday, meetingToday, callbackToday] = await Promise.all([
+      prisma.compounderLead.count({ where: { ai_specialist_sms_sent_at: { gte: since } } }),
+      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { gte: since } } }),
+      prisma.compounderEvent.count({ where: { event: 'meeting_notified', created_at: { gte: since } } }),
+      prisma.compounderEvent.count({ where: { event: 'callback_notified', created_at: { gte: since } } }),
+    ]);
+    let chatters = [];
+    if (chatIds.length) {
+      const rows = await prisma.compounderLead.findMany({ where: { id: { in: chatIds }, is_test: false }, select: { id: true, name: true, email: true, phone: true, ai_specialist_summary: true } });
+      chatters = rows.map((r) => ({ name: r.name || r.email || ('lead #' + r.id), phone: r.phone || '', summary: r.ai_specialist_summary || '' }));
+    }
+    return { chatCount: chatters.length, sentToday, openedToday, meetingToday, callbackToday, chatters };
+  } catch (e) { return { chatCount: 0, sentToday: 0, openedToday: 0, meetingToday: 0, callbackToday: 0, chatters: [] }; }
+}
+
 async function computeDigest() {
   const since = startOfToday();
+  const aispec = await computeAispecToday(since);
   const evs = await prisma.compounderEvent.findMany({
     where: { created_at: { gte: since } },
     select: { event: true, props: true, created_at: true },
@@ -81,7 +102,7 @@ async function computeDigest() {
     if (typeof e.event === 'string' && e.event.indexOf('eco_') === 0) a.eco += 1;
   }
   const ids = [...byLead.keys()];
-  if (!ids.length) return { activeCount: 0, perLead: [], perSales: [] };
+  if (!ids.length) return { activeCount: 0, perLead: [], perSales: [], aispec };
 
   const leads = await prisma.compounderLead.findMany({
     where: { id: { in: ids }, is_test: false }, // testovací kontakty do denního hodnocení nepočítáme
@@ -122,12 +143,31 @@ async function computeDigest() {
   }
   perLead.sort((x, y) => y.events - x.events);
   const perSales2 = [...perSales.values()].sort((x, y) => y.events - x.events);
-  return { activeCount: perLead.length, perLead, perSales: perSales2 };
+  return { activeCount: perLead.length, perLead, perSales: perSales2, aispec };
+}
+
+// Přidá do textu digestu sekci AI specialisty (dnešní chaty + doporučení na ráno).
+function appendAispec(lines, a) {
+  if (!a) return;
+  lines.push('');
+  lines.push('— AI SPECIALISTA (dnes) —');
+  lines.push(`Odesláno odkazů: ${a.sentToday} · otevřelo: ${a.openedToday} · chatovalo: ${a.chatCount} · zájem o schůzku: ${a.meetingToday} · žádost o zavolání: ${a.callbackToday}`);
+  if (a.chatters && a.chatters.length) {
+    lines.push('Dnes chatovali (na co reagovat ráno):');
+    a.chatters.slice(0, 20).forEach((c) => {
+      const s = String(c.summary || '').replace(/\*\*/g, '').replace(/\s*\n+\s*/g, ' ').trim().slice(0, 200);
+      lines.push(`• ${c.name}${c.phone ? ' (' + c.phone + ')' : ''}: ${s || 'chatoval — vygeneruj shrnutí u leada'}`);
+    });
+  }
 }
 
 function buildText(d) {
   const dateStr = new Intl.DateTimeFormat('cs-CZ', { timeZone: process.env.VELIN_TZ || 'Europe/Prague', dateStyle: 'long' }).format(new Date());
-  if (!d.activeCount) return { title: '📊 Denní hodnocení leadů', body: `${dateStr}\n\nDnes nebyl aktivní žádný (nezkušební) lead.` };
+  if (!d.activeCount) {
+    const l0 = [`${dateStr}`, '', 'Dnes nebyl aktivní žádný (nezkušební) lead.'];
+    appendAispec(l0, d.aispec);
+    return { title: '📊 Denní hodnocení leadů', body: l0.join('\n') };
+  }
   const lines = [];
   lines.push(`${dateStr}`);
   lines.push(`Aktivních leadů: ${d.activeCount}`);
@@ -147,6 +187,7 @@ function buildText(d) {
       lines.push(`• ${s.name}: ${s.leads} akt. kontaktů, ${s.events} akcí, ${fmtMin(s.ms)}`);
     });
   }
+  appendAispec(lines, d.aispec);
   return { title: `📊 Denní hodnocení leadů — ${d.activeCount} aktivních`, body: lines.join('\n') };
 }
 

@@ -719,6 +719,41 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Rychlá AI analýza kontaktů, kteří DNES chatovali (jen leady přihlášeného obchodníka).
+router.get('/ai-specialist-today-analysis', requireAuth, async (req, res, next) => {
+  try {
+    const meId = req.user && req.user.person ? req.user.person.id : null;
+    const tz = process.env.VELIN_TZ || 'Europe/Prague';
+    const dayKey = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    const since = new Date(dayKey + 'T00:00:00Z');
+    const userMsgs = await prisma.aiSpecialistMessage.findMany({ where: { role: 'user', created_at: { gte: since } }, select: { lead_id: true } });
+    const chatIds = [...new Set(userMsgs.map((m) => m.lead_id))];
+    if (!chatIds.length) return res.json({ ok: true, analysis: 'Dnes zatím nikdo nechatoval.', count: 0 });
+    const where = { id: { in: chatIds }, is_test: false };
+    if (meId) where.owner_person_id = meId; // jen moje kontakty (když nemám person, vezmu všechny)
+    const leads = await prisma.compounderLead.findMany({ where, select: { id: true, name: true, email: true, phone: true } });
+    if (!leads.length) return res.json({ ok: true, analysis: 'Dnes u tvých kontaktů nikdo nechatoval.', count: 0 });
+    // Sesbírej krátké přepisy chatů (max ~24 zpráv na leada).
+    const blocks = [];
+    for (const l of leads.slice(0, 15)) {
+      const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: l.id }, orderBy: { created_at: 'asc' }, take: 60 });
+      const t = rows.slice(-24).map((r) => (r.role === 'user' ? 'Zákazník: ' : 'AI: ') + r.text).join('\n');
+      blocks.push('### ' + (l.name || l.email || ('lead #' + l.id)) + (l.phone ? ' (' + l.phone + ')' : '') + '\n' + t);
+    }
+    const transcript = blocks.join('\n\n').slice(0, 12000);
+    const agent = require('../services/voice/agent');
+    const { text } = await agent.runTurn({
+      system: 'Jsi obchodní kouč pro prodejce prádlomatů. Dostaneš přepisy dnešních chatů zákazníků s AI specialistou. '
+        + 'Pro KAŽDÝ kontakt napiš stručně (1–3 řádky): co zákazník chce, jak je zahřátý, a KONKRÉTNÍ další krok na zítřejší ráno (zavolat/schůzka/poslat co). '
+        + 'Piš čistý text bez markdownu (žádné hvězdičky ani mřížky), přehledně, každý kontakt zvlastní blok. Na konci přidej 1 větu souhrnné priority (koho řešit první).',
+      history: [],
+      userText: transcript,
+      maxTokens: 900,
+    });
+    res.json({ ok: true, analysis: String(text || '').replace(/\*\*/g, '').replace(/(^|\n)#{1,6}\s*/g, '$1'), count: leads.length });
+  } catch (err) { next(err); }
+});
+
 // Kompletní statistika AI specialisty: odeslané odkazy → otevření → chat → schůzky/zavolání.
 router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
   try {
