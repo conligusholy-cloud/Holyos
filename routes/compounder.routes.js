@@ -719,6 +719,66 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Kompletní statistika AI specialisty: odeslané odkazy → otevření → chat → schůzky/zavolání.
+router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
+  try {
+    const sentLeads = await prisma.compounderLead.findMany({
+      where: { ai_specialist_sms_sent_at: { not: null } },
+      select: { ai_specialist_sms_status: true, ai_specialist_opened_at: true, source: true },
+    });
+    const sent = sentLeads.length;
+    const sentStatus = {};
+    let openedOfSent = 0;
+    const sentBySource = {};
+    sentLeads.forEach((r) => {
+      const s = r.ai_specialist_sms_status || 'odesláno';
+      sentStatus[s] = (sentStatus[s] || 0) + 1;
+      if (r.ai_specialist_opened_at) openedOfSent += 1;
+      const src = r.source || 'jiný';
+      sentBySource[src] = (sentBySource[src] || 0) + 1;
+    });
+
+    const [showCount, openedTotal, summaries, totalMessages, meeting, callback] = await Promise.all([
+      prisma.compounderLead.count({ where: { show_ai_specialist: true } }),
+      prisma.compounderLead.count({ where: { ai_specialist_opened_at: { not: null } } }),
+      prisma.compounderLead.count({ where: { ai_specialist_summary: { not: null } } }),
+      prisma.aiSpecialistMessage.count(),
+      prisma.compounderEvent.count({ where: { event: 'meeting_notified' } }),
+      prisma.compounderEvent.count({ where: { event: 'callback_notified' } }),
+    ]);
+
+    let chattedLeads = 0, userMessages = 0;
+    try {
+      const groups = await prisma.aiSpecialistMessage.groupBy({ by: ['lead_id'], where: { role: 'user' }, _count: { _all: true } });
+      chattedLeads = groups.length;
+      userMessages = groups.reduce((s, g) => s + (g._count._all || 0), 0);
+    } catch (_) { /* groupBy fallback */ }
+
+    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+    res.json({
+      ok: true,
+      sent,                       // kolika lidem odešel odkaz (SMS)
+      sentStatus,                 // rozpad doručení
+      sentBySource,               // podle zdroje (reklama/…)
+      showCount,                  // kolik leadů má specialistu zpřístupněného
+      opened: openedTotal,        // kolik lidí otevřelo odkaz
+      openedOfSent,               // z odeslaných kolik otevřelo
+      chattedLeads,               // kolik lidí reálně chatovalo
+      userMessages,               // počet zpráv od zákazníků
+      totalMessages,              // celkem zpráv v chatech
+      summaries,                  // kolik má AI shrnutí
+      meetingRequests: meeting,   // zájem o schůzku
+      callbackRequests: callback, // žádost o zavolání
+      rates: {
+        openOfSent: pct(openedOfSent, sent),
+        chatOfOpened: pct(chattedLeads, openedTotal),
+        chatOfSent: pct(chattedLeads, sent),
+        meetingOfChat: pct(meeting, chattedLeads),
+      },
+    });
+  } catch (err) { next(err); }
+});
+
 // Statistika odeslaných SMS s odkazem na AI specialistu (kolik a komu).
 router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
   try {

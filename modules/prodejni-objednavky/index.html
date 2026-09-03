@@ -444,6 +444,11 @@
       <div id="ai-aispec" style="display:none;max-width:820px;">
         <h3 style="margin:0 0 6px;font-size:16px;">💬 AI specialista (chat na portálu Compounder)</h3>
         <p style="color:var(--text2);font-size:13px;margin:0 0 12px;">Chatovací AI prodejce pro leady na compounder.world. Tady nastavíš, jak má komunikovat. Zapíná se u konkrétního leada (Compounder → detail leadu), odkaz mu pošleš SMSkou, a celý chat + shrnutí uvidíš u leada.</p>
+
+        <div style="border:1px solid rgba(139,92,246,0.5);border-radius:10px;padding:14px;margin-bottom:16px;background:rgba(139,92,246,0.06);">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><b style="font-size:14px;">📊 Statistika specialisty</b><button class="btn" onclick="aiLoadAiSpecStats()" style="font-size:12px;padding:4px 10px;">↻ Načíst</button></div>
+          <div id="ai-aispec-stats" style="margin-top:12px;color:var(--text2);font-size:13px;">Klikni „Načíst" pro zobrazení statistiky.</div>
+        </div>
         <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Úvodní věta (co AI napíše jako první)</label>
         <textarea id="ai-aispec-greeting" rows="2" oninput="aiAispecCount()" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="Dobrý den! Jsem specialista na prádlomaty…"></textarea>
         <div id="ai-aispec-greeting-cnt" style="font-size:11px;color:var(--text2);margin-top:3px;"></div>
@@ -5091,9 +5096,43 @@
         if(msg) msg.textContent='✅ Uloženo'; if(msg2) msg2.textContent='✅ Uloženo';
       }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; if(msg2) msg2.textContent='Chyba: '+e.message; }
     }
+    async function aiLoadAiSpecStats(){
+      var box=document.getElementById('ai-aispec-stats'); if(!box) return;
+      box.innerHTML='Načítám…';
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-stats',{ credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        if(!r.ok||!j.ok){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení</span>'; return; }
+        function card(lbl,val,sub){ return '<div style="flex:1;min-width:120px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;"><div style="font-size:22px;font-weight:800;color:var(--text);">'+val+'</div><div style="font-size:11px;color:var(--text2);">'+lbl+'</div>'+(sub?('<div style="font-size:11px;color:#8b5cf6;margin-top:2px;">'+sub+'</div>'):'')+'</div>'; }
+        var rt=j.rates||{};
+        var h='<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+          + card('Zpřístupněno leadům', j.showCount)
+          + card('Odeslán odkaz (SMS)', j.sent)
+          + card('Otevřelo odkaz', j.opened, rt.openOfSent+'% z odeslaných')
+          + card('Chatovalo', j.chattedLeads, rt.chatOfOpened+'% z otevřených')
+          + card('Zájem o schůzku', j.meetingRequests)
+          + card('Žádost o zavolání', j.callbackRequests)
+          + '</div>';
+        h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;">'
+          + card('Zpráv od zákazníků', j.userMessages)
+          + card('Zpráv celkem', j.totalMessages)
+          + card('AI shrnutí', j.summaries)
+          + '</div>';
+        // trychtýř
+        h+='<div style="margin-top:12px;font-size:12px;color:var(--text2);"><b style="color:var(--text);">Trychtýř:</b> odeslán odkaz '+j.sent+' → otevřelo '+j.opened+' ('+rt.openOfSent+'%) → chatovalo '+j.chattedLeads+' ('+rt.chatOfSent+'% z odeslaných) → schůzka '+j.meetingRequests+' / zavolání '+j.callbackRequests+'</div>';
+        // rozpad doručení
+        var ss=j.sentStatus||{}; var sk=Object.keys(ss);
+        if(sk.length) h+='<div style="margin-top:6px;font-size:12px;color:var(--text2);"><b style="color:var(--text);">Doručení SMS:</b> '+sk.map(function(k){return k+': '+ss[k];}).join(' · ')+'</div>';
+        var bs=j.sentBySource||{}; var bk=Object.keys(bs);
+        if(bk.length) h+='<div style="margin-top:6px;font-size:12px;color:var(--text2);"><b style="color:var(--text);">Podle zdroje:</b> '+bk.map(function(k){return k+': '+bs[k];}).join(' · ')+'</div>';
+        box.innerHTML=h;
+      }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba spojení</span>'; }
+    }
+    window.aiLoadAiSpecStats=aiLoadAiSpecStats;
     var AISPEC_DEFAULT_PROMPT = '';
     async function aiLoadAiSpecConfig(){
       var msg=document.getElementById('ai-aispec-msg');
+      aiLoadAiSpecStats();
       try{
         var r = await fetch('/api/compounder/ai-specialist-config', { credentials:'include' });
         var j = await r.json();
