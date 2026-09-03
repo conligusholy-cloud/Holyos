@@ -1253,7 +1253,7 @@
         '<div class="field" style="margin-top:8px"><button class="btn btn-g" style="width:100%" onclick="meetingFromLead('+l.id+')">📅 Naplánovat schůzku</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
-        (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="saveContact('+l.id+')">💾 Uložit kontakt do telefonu</button></div>' : '') +
+        (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" onclick="saveContact('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
         obDiscHtml(l) +
@@ -1426,8 +1426,8 @@
         window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
         if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
       }
-      // Jen u NOVÉHO kontaktu nabídni uložení do telefonu (stejný dialog jako u hovoru).
-      if (lead && (lead.status||'new') === 'new') {
+      // Jen u NOVÉHO kontaktu, který sis na tomhle telefonu ještě neuložil, nabídni uložení.
+      if (lead && (lead.status||'new') === 'new' && !obContactSaved(id)) {
         if (st) st.innerHTML = '';
         obAskSms(lead.name, doSend, function(){ try { saveContact(id); } catch(e){} if (st) st.innerHTML = '<span style="color:var(--muted)">💾 Kontakt uložen. Pak klikni znovu na „Odeslat SMS s odkazem na specialistu".</span>'; });
       } else {
@@ -1501,9 +1501,14 @@
       a.download = (String(name).replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'kontakt') + '.vcf';
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+      // Zapamatuj si (na tomhle telefonu), že kontakt byl uložen → přestane se ptát a ukáže ✓.
+      try { localStorage.setItem('ob.saved.'+id, String(Date.now())); render(); } catch(e){}
     } catch(e){ alert('Kontakt se nepodařilo připravit.'); }
   }
   window.saveContact = saveContact;
+  // Bylo už na tomhle telefonu uloženo přes tlačítko „Uložit kontakt"? (localStorage, per zařízení)
+  function obContactSaved(id){ try{ return !!localStorage.getItem('ob.saved.'+id); }catch(e){ return false; } }
+  window.obContactSaved = obContactSaved;
 
   async function toggleTemplate(id, key, on){
     var lead = state.leads.find(function(x){return x.id===id;}); if (!lead) return;
