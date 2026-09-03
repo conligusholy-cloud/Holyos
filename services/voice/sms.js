@@ -129,6 +129,9 @@ function extractGoSmsId(j) {
     return null;
   }
   if (typeof j !== 'object') return null;
+  // GoSMS POST /messages vrací id v poli "link" = "api/v1/messages/<id>".
+  if (j.link) { const m = String(j.link).match(/(\d+)\/?$/); if (m) return m[1]; }
+  if (j.links && j.links.self) { const m = String(j.links.self).match(/(\d+)\/?$/); if (m) return m[1]; }
   if (j.id != null && String(j.id).trim()) return String(j.id);
   if (j['@id']) {
     const m = String(j['@id']).match(/(\d+)\/?$/);
@@ -172,15 +175,23 @@ async function getGoSmsStatus(id) {
     throw new Error('GoSMS status HTTP ' + r.status + ' ' + t.slice(0, 150));
   }
   const j = await r.json().catch(() => ({}));
-  // GoSMS vrací pole recipients se stavem doručení; sesbíráme nejvýznamnější stav.
+  // GoSMS detail: delivery.isDelivered (bool) + sendingInfo.status (CONCEPT/QUEUE/SENT/DELIVERED/…)
+  // + recipients.notSent/invalid. Vyhodnotíme nejvýznamnější stav.
   let label = 'odesláno';
   try {
-    const recs = Array.isArray(j.recipients) ? j.recipients : (j.data && Array.isArray(j.data.recipients) ? j.data.recipients : []);
-    const states = recs.map((x) => String(x.status || x.state || x.deliveryStatus || '').toLowerCase());
-    const blob = (states.join(',') + ' ' + JSON.stringify(j)).toLowerCase();
-    if (/deliver|doru|3\b/.test(blob)) label = 'doručeno';
-    else if (/(fail|undeliver|expired|reject|nedoru|error)/.test(blob)) label = 'nedoručeno';
-    else if (/(sent|sending|queue|pending|accepted|odesl)/.test(blob)) label = 'odesláno';
+    const delivered = !!(j.delivery && j.delivery.isDelivered);
+    const sstatus = String((j.sendingInfo && j.sendingInfo.status) || '').toLowerCase();
+    const notSent = (j.recipients && Array.isArray(j.recipients.notSent) && j.recipients.notSent.length) ? j.recipients.notSent.length : 0;
+    const invalid = (j.recipients && Array.isArray(j.recipients.invalid) && j.recipients.invalid.length) ? j.recipients.invalid.length : 0;
+    if (delivered || /deliver|doru/.test(sstatus)) label = 'doručeno';
+    else if (notSent || invalid || /(fail|undeliver|expir|reject|error|nedoru)/.test(sstatus)) label = 'nedoručeno';
+    else if (/(sent|sending|queue|concept|pending|accepted|odesl)/.test(sstatus)) label = 'odesláno';
+    else {
+      // fallback na hrubé prohledání
+      const blob = JSON.stringify(j).toLowerCase();
+      if (/isdelivered":true|deliver|doru/.test(blob)) label = 'doručeno';
+      else if (/(fail|undeliver|expir|reject|error|nedoru)/.test(blob)) label = 'nedoručeno';
+    }
   } catch (_) { /* fallback */ }
   return { raw: j, label };
 }

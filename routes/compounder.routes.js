@@ -878,6 +878,10 @@ router.get('/leads/:id/ai-specialist-sms-status', requireAuth, async (req, res, 
     }
     let label = lead.ai_specialist_sms_status || 'odesláno';
     let detail = null;
+    // Starší zpráva bez sledovatelného GoSMS id (fallback „gosms") → nehlásit 404, jen info.
+    if (!lead.ai_specialist_sms_id || lead.ai_specialist_sms_id === 'gosms') {
+      return res.json({ ok: true, status: label, sentAt: lead.ai_specialist_sms_sent_at, detail: 'Tato zpráva byla odeslána starší verzí bez sledovatelného ID. Doručení nové SMS už půjde ověřit.' });
+    }
     try {
       const sms = require('../services/voice/sms');
       const st = await sms.getGoSmsStatus(lead.ai_specialist_sms_id);
