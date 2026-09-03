@@ -1041,6 +1041,25 @@
     document.getElementById('ob-ca-call').onclick = function(){ ov.remove(); if (onCall) onCall(); };
   }
   window.obAskCall = obAskCall;
+  // Stejný dialog jako u hovoru, ale pro SMS se specialistou: „Uložit kontakt" / „Odeslat SMS".
+  function obAskSms(name, onSend, onSave){
+    var ex = document.getElementById('ob-smsask'); if (ex) ex.remove();
+    var ov = document.createElement('div'); ov.id = 'ob-smsask';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+    ov.innerHTML =
+      '<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:6px">💬 Poslat odkaz na specialistu ' + esc(name || 'tomuto kontaktu') + '?</div>'
+      + '<div style="font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Máš tento kontakt uložený v telefonu? Bez uložení nemusí SMS ukázat jméno. Ulož si ho, nebo rovnou odešli SMS.</div>'
+      + '<div style="display:flex;gap:10px">'
+      + '<button id="ob-sa-save" style="flex:1;background:var(--surface2);border:1px solid var(--primary);color:var(--primary);border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">💾 Uložit kontakt do telefonu</button>'
+      + '<button id="ob-sa-send" style="flex:1;background:#8b5cf6;border:none;color:#fff;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📩 Odeslat SMS</button>'
+      + '</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('ob-sa-save').onclick = function(){ ov.remove(); if (onSave) onSave(); };
+    document.getElementById('ob-sa-send').onclick = function(){ ov.remove(); if (onSend) onSend(); };
+  }
+  window.obAskSms = obAskSms;
   // Klik na „Volat": u nového kontaktu se nejdřív zeptá (vlastní dialog), jestli ho máš uložený v telefonu.
   function obCallClick(ev, id){
     var l = (state.leads||[]).find(function(x){ return x.id===id; }) || {};
@@ -1398,15 +1417,22 @@
       if (!r.ok || !j.link){ if(st) st.innerHTML = '<span style="color:#fca5a5">'+esc((j&&j.error)||'Chyba')+'</span>'; return; }
       var lead = state.leads.find(function(x){return x.id===id;});
       var num = lead ? String(lead.phone||'').replace(/[^0-9+]/g,'') : '';
-      // Dotaz na uložení kontaktu do telefonu PŘED odesláním
-      if (window.confirm('Uložit kontakt do telefonu před odesláním SMS?')) { try { saveContact(id); } catch(e){} }
-      // Auto-přepnutí stavu leada na „Odeslán odkaz na specialistu"
-      try { await setField(id,'status','odeslan_specialista'); } catch(e){}
-      try { obLogAction(id,'send_aispec','💬 Odeslán odkaz na specialistu (SMS)'); } catch(e){}
       var text = 'Dobry den, specialista na pradlomaty vam rad poradi zde: ' + j.link;
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
-      if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
+      // Samotné odeslání (stav přepneme, zalogujeme a otevřeme SMS z čísla obchodníka).
+      function doSend(){
+        try { obLogAction(id,'send_aispec','💬 Odeslán odkaz na specialistu (SMS)'); } catch(e){}
+        try { setField(id,'status','odeslan_specialista'); } catch(e){} // fire-and-forget, ať se nerozbije gesto pro sms:
+        window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
+        if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
+      }
+      // Jen u NOVÉHO kontaktu nabídni uložení do telefonu (stejný dialog jako u hovoru).
+      if (lead && (lead.status||'new') === 'new') {
+        if (st) st.innerHTML = '';
+        obAskSms(lead.name, doSend, function(){ try { saveContact(id); } catch(e){} if (st) st.innerHTML = '<span style="color:var(--muted)">💾 Kontakt uložen. Pak klikni znovu na „Odeslat SMS s odkazem na specialistu".</span>'; });
+      } else {
+        doSend();
+      }
     } catch(e){ if(st) st.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit SMS.</span>'; }
   }
   window.sendAiSpecSMS = sendAiSpecSMS;
