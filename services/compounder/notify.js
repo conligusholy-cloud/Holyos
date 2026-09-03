@@ -273,9 +273,23 @@ async function notifyMeetingRequest(prisma, { lead, terms, note }) {
   } catch (e) { console.error('[compounder-notify] meeting request', e.message); }
 }
 
+// Zájemce v chatu chce, abychom mu ZAVOLALI → push + zvonek majitelům, s kdy a tel.
+async function notifyCallbackRequest(prisma, { lead, when, note }) {
+  try {
+    const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
+    const title = '📞 Žádost o zavolání — ' + who;
+    const body = 'Zájemce v chatu chce, abychom mu zavolali.'
+      + (when ? (' Kdy: ' + when + '.') : '')
+      + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : ' (telefon není u kontaktu vyplněn)')
+      + (note ? (' ' + note) : '');
+    await dispatch(prisma, { title, body, data: { type: 'compounder_callback_request', lead_id: (lead && lead.id) ? lead.id : null } });
+  } catch (e) { console.error('[compounder-notify] callback request', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   notifyMeetingRequest,
+  notifyCallbackRequest,
   getEligibleVelinPeople,
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,

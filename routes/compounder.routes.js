@@ -461,36 +461,54 @@ const AI_SPECIALIST_GUARDRAILS =
   'Když se zájemce ptá „jaké prádlomaty/verze máte", a v podkladech to není, NEVYPISUJ domnělé varianty — ' +
   'řekni, že přesnou nabídku a parametry mu ukáže/pošle kolega, a zeptej se, co potřebuje (kapacita, lokalita, rozpočet), ať to umíš předat.';
 
-// Detekce zájmu o schůzku v chatu se specialistou. Levný předfiltr (klíčová slova),
-// pak AI extrakce navržených termínů → notifikace do Velína majitelům.
-async function detectMeetingIntent(leadId, userMsg, aiReply, lead) {
+// Zjistí, zda už byla u leada odeslána notifikace daného typu (dedup marker v eventech).
+async function _alreadyNotified(leadId, marker) {
+  try {
+    const ex = await prisma.compounderEvent.findFirst({
+      where: { event: marker, props: { path: ['lead_id'], equals: leadId } },
+      select: { id: true },
+    });
+    return !!ex;
+  } catch (e) { return false; } // když JSON filtr selže, raději upozorníme než mlčíme
+}
+
+// Detekce záměrů v chatu se specialistou: (1) zájem o schůzku + termíny, (2) žádost, abychom
+// zavolali. Levný předfiltr (klíčová slova), pak jedna AI extrakce → notifikace do Velína.
+async function detectChatIntents(leadId, userMsg, aiReply, lead) {
   try {
     const blob = ((userMsg || '') + ' ' + (aiReply || '')).toLowerCase();
-    if (!/(sch[uů]zk|sej[ií]t|potkat|setk[aá]|domluv|nav[sš]t[eě]v|term[ií]n|kdy (se|by)|meeting|osobn[ěe])/.test(blob)) return;
+    const meetingHint = /(sch[uů]zk|sej[ií]t|potkat|setk[aá]|domluv|nav[sš]t[eě]v|term[ií]n|kdy (se|by)|meeting|osobn[ěe])/.test(blob);
+    const callHint = /(zavol|zavolej|zavolat|ozv[eě]|ozvat|brnkn|telefon|zatelefon|cal ?l|zpětn[ýé] hovor|callback)/.test(blob);
+    if (!meetingHint && !callHint) return;
     const agent = require('../services/voice/agent');
-    const sys = 'Jsi extraktor. Z posledního úseku chatu urči, zda zájemce CHCE domluvit osobní/online schůzku a jaké NAVRHL termíny. ' +
-      'Vrať POUZE JSON bez textu okolo ve tvaru {"meeting":true|false,"terms":["…"],"note":"…"}. ' +
-      '"terms" = konkrétní termíny/časy, které zazněly (např. "úterý 14:00", "zítra dopoledne"); když žádné, prázdné pole. ' +
-      'meeting=true jen když je zájem o schůzku opravdu vyjádřen. note = krátká česká poznámka pro obchodníka (max 1 věta).';
-    const { text } = await agent.runTurn({ system: sys, history: [], userText: 'Zájemce: ' + (userMsg || '') + '\nSpecialista: ' + (aiReply || ''), maxTokens: 200 });
+    const sys = 'Jsi extraktor záměrů z chatu prodejce s klientem. Urči DVĚ věci: ' +
+      '(1) zda zájemce chce SCHŮZKU (osobní/online) a jaké navrhl termíny; ' +
+      '(2) zda zájemce chce, abychom mu ZAVOLALI (žádá telefonát) a kdy se mu to hodí. ' +
+      'Vrať POUZE JSON bez textu okolo: {"meeting":bool,"terms":["…"],"callback":bool,"callback_when":"…","note":"…"}. ' +
+      '"terms"/"callback_when" = konkrétní časy/termíny co zazněly (jinak prázdné). ' +
+      'Nastav true JEN když je záměr opravdu vyjádřen zájemcem (ne když to jen nabídl specialista). note = krátká česká poznámka pro obchodníka.';
+    const { text } = await agent.runTurn({ system: sys, history: [], userText: 'Zájemce: ' + (userMsg || '') + '\nSpecialista: ' + (aiReply || ''), maxTokens: 220 });
     let j = null;
     try { j = JSON.parse(String(text).replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim()); } catch (_) { return; }
-    if (!j || j.meeting !== true) return;
-    // Dedup: jedna notifikace na leada (marker uložený jako CompounderEvent).
-    try {
-      const existing = await prisma.compounderEvent.findFirst({
-        where: { event: 'meeting_notified', props: { path: ['lead_id'], equals: leadId } },
-        select: { id: true },
-      });
-      if (existing) { console.log('[ai-specialist] schůzka už nahlášena u leada', leadId, '— přeskočeno'); return; }
-    } catch (e) { /* když JSON filtr selže, raději upozorníme, než abychom mlčeli */ }
-    const terms = Array.isArray(j.terms) ? j.terms.filter(Boolean).map((s) => String(s).slice(0, 60)).slice(0, 5) : [];
-    await compounderNotify.notifyMeetingRequest(prisma, { lead, terms, note: (j.note ? String(j.note).slice(0, 200) : '') });
-    // Zapiš marker, aby se u tohoto leada už znovu neupozorňovalo.
-    prisma.compounderEvent.create({ data: { sid: 'server', event: 'meeting_notified', props: { lead_id: leadId, terms } } }).catch(() => {});
-    console.log('[ai-specialist] zájem o schůzku u leada', leadId, '→ Velín notifikace, termíny:', terms.join(' | ') || '—');
+    if (!j) return;
+    const note = j.note ? String(j.note).slice(0, 200) : '';
+
+    // (1) Schůzka
+    if (j.meeting === true && !(await _alreadyNotified(leadId, 'meeting_notified'))) {
+      const terms = Array.isArray(j.terms) ? j.terms.filter(Boolean).map((s) => String(s).slice(0, 60)).slice(0, 5) : [];
+      await compounderNotify.notifyMeetingRequest(prisma, { lead, terms, note });
+      prisma.compounderEvent.create({ data: { sid: 'server', event: 'meeting_notified', props: { lead_id: leadId, terms } } }).catch(() => {});
+      console.log('[ai-specialist] zájem o schůzku u leada', leadId, '→ Velín, termíny:', terms.join(' | ') || '—');
+    }
+    // (2) Žádost o zavolání
+    if (j.callback === true && !(await _alreadyNotified(leadId, 'callback_notified'))) {
+      const when = j.callback_when ? String(j.callback_when).slice(0, 80) : '';
+      await compounderNotify.notifyCallbackRequest(prisma, { lead, when, note });
+      prisma.compounderEvent.create({ data: { sid: 'server', event: 'callback_notified', props: { lead_id: leadId, when } } }).catch(() => {});
+      console.log('[ai-specialist] žádost o zavolání u leada', leadId, '→ Velín, kdy:', when || '—');
+    }
   } catch (e) {
-    console.warn('[ai-specialist] detekce schůzky selhala:', e.message);
+    console.warn('[ai-specialist] detekce záměrů selhala:', e.message);
   }
 }
 
@@ -566,8 +584,8 @@ router.post('/portal/ai-specialist', async (req, res) => {
       await prisma.aiSpecialistMessage.create({ data: { lead_id: leadId, role: 'assistant', text: text || '' } });
     } catch (e) { console.warn('[ai-specialist] uložení zprávy selhalo:', e.message); }
 
-    // Detekce zájmu o schůzku → push do Velína s navrženými termíny (best-effort, neblokuje odpověď).
-    detectMeetingIntent(leadId, message, text || '', lead).catch(() => {});
+    // Detekce záměrů (schůzka / žádost o zavolání) → push do Velína (best-effort, neblokuje odpověď).
+    detectChatIntents(leadId, message, text || '', lead).catch(() => {});
 
     res.json({ ok: true, reply: text });
   } catch (err) {
