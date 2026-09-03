@@ -1012,7 +1012,19 @@
       var r=await api('/ai-specialist-today-analysis');
       var j=await r.json().catch(function(){return{};});
       var b=document.getElementById('ob-analysis-body');
-      if(b) b.textContent = (r.ok&&j.ok)? (j.analysis||'Bez dat.') : ('Chyba: '+((j&&j.error)||('HTTP '+r.status)));
+      if(!b) return;
+      if(!(r.ok&&j.ok)){ b.textContent='Chyba: '+((j&&j.error)||('HTTP '+r.status)); return; }
+      var txt=String(j.analysis||'Bez dat.');
+      // Oddělit blok „KLÍČOVÝ ZÁKAZNÍK DNE" a zvýraznit ho nahoře.
+      var m=txt.split(/Ostatní kontakty\s*:?/i);
+      function esc2(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      if(m.length>1){
+        b.innerHTML='<div style="background:rgba(139,92,246,0.18);border:1px solid rgba(139,92,246,0.6);border-radius:12px;padding:12px;margin-bottom:12px;white-space:pre-wrap;font-weight:600;color:#e9e0ff;">'+esc2(m[0].trim())+'</div>'
+          +'<div style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px;">Ostatní kontakty</div>'
+          +'<div style="white-space:pre-wrap;">'+esc2(m.slice(1).join('Ostatní kontakty').trim())+'</div>';
+      } else {
+        b.textContent=txt;
+      }
     }catch(e){ var b2=document.getElementById('ob-analysis-body'); if(b2) b2.textContent='Chyba spojení: '+e.message; }
   }
   window.obTodayAnalysis = obTodayAnalysis;
