@@ -461,6 +461,29 @@ const AI_SPECIALIST_GUARDRAILS =
   'Když se zájemce ptá „jaké prádlomaty/verze máte", a v podkladech to není, NEVYPISUJ domnělé varianty — ' +
   'řekni, že přesnou nabídku a parametry mu ukáže/pošle kolega, a zeptej se, co potřebuje (kapacita, lokalita, rozpočet), ať to umíš předat.';
 
+// Detekce zájmu o schůzku v chatu se specialistou. Levný předfiltr (klíčová slova),
+// pak AI extrakce navržených termínů → notifikace do Velína majitelům.
+async function detectMeetingIntent(leadId, userMsg, aiReply, lead) {
+  try {
+    const blob = ((userMsg || '') + ' ' + (aiReply || '')).toLowerCase();
+    if (!/(sch[uů]zk|sej[ií]t|potkat|setk[aá]|domluv|nav[sš]t[eě]v|term[ií]n|kdy (se|by)|meeting|osobn[ěe])/.test(blob)) return;
+    const agent = require('../services/voice/agent');
+    const sys = 'Jsi extraktor. Z posledního úseku chatu urči, zda zájemce CHCE domluvit osobní/online schůzku a jaké NAVRHL termíny. ' +
+      'Vrať POUZE JSON bez textu okolo ve tvaru {"meeting":true|false,"terms":["…"],"note":"…"}. ' +
+      '"terms" = konkrétní termíny/časy, které zazněly (např. "úterý 14:00", "zítra dopoledne"); když žádné, prázdné pole. ' +
+      'meeting=true jen když je zájem o schůzku opravdu vyjádřen. note = krátká česká poznámka pro obchodníka (max 1 věta).';
+    const { text } = await agent.runTurn({ system: sys, history: [], userText: 'Zájemce: ' + (userMsg || '') + '\nSpecialista: ' + (aiReply || ''), maxTokens: 200 });
+    let j = null;
+    try { j = JSON.parse(String(text).replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim()); } catch (_) { return; }
+    if (!j || j.meeting !== true) return;
+    const terms = Array.isArray(j.terms) ? j.terms.filter(Boolean).map((s) => String(s).slice(0, 60)).slice(0, 5) : [];
+    await compounderNotify.notifyMeetingRequest(prisma, { lead, terms, note: (j.note ? String(j.note).slice(0, 200) : '') });
+    console.log('[ai-specialist] zájem o schůzku u leada', leadId, '→ Velín notifikace, termíny:', terms.join(' | ') || '—');
+  } catch (e) {
+    console.warn('[ai-specialist] detekce schůzky selhala:', e.message);
+  }
+}
+
 router.post('/portal/ai-specialist', async (req, res) => {
   try {
     const b = req.body || {};
@@ -533,6 +556,9 @@ router.post('/portal/ai-specialist', async (req, res) => {
       await prisma.aiSpecialistMessage.create({ data: { lead_id: leadId, role: 'assistant', text: text || '' } });
     } catch (e) { console.warn('[ai-specialist] uložení zprávy selhalo:', e.message); }
 
+    // Detekce zájmu o schůzku → push do Velína s navrženými termíny (best-effort, neblokuje odpověď).
+    detectMeetingIntent(leadId, message, text || '', lead).catch(() => {});
+
     res.json({ ok: true, reply: text });
   } catch (err) {
     console.error('[ai-specialist]', err.message);
@@ -561,7 +587,7 @@ router.get('/portal/ai-specialist/info', async (req, res) => {
     } catch (_) { messages = []; }
     // Zaznamenej první otevření odkazu na specialistu (pro obchodníka: „otevřel odkaz").
     prisma.compounderLead.updateMany({ where: { id: leadId, ai_specialist_opened_at: null }, data: { ai_specialist_opened_at: new Date() } }).catch(() => {});
-    res.json({ ok: true, name: lead.name || '', greeting, messages });
+    res.json({ ok: true, leadId, name: lead.name || '', greeting, messages });
   } catch (err) {
     res.status(500).json({ ok: false, error: 'Chyba' });
   }

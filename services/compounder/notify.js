@@ -259,8 +259,23 @@ async function notifyFbLead(prisma, { lead, campaign, ownerName }) {
   } catch (e) { console.error('[compounder-notify] fb lead', e.message); }
 }
 
+// Zájemce v chatu s AI specialistou chce schůzku → push + zvonek majitelům,
+// včetně navržených termínů, ať je obchodník rychle potvrdí.
+async function notifyMeetingRequest(prisma, { lead, terms, note }) {
+  try {
+    const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
+    const termsTxt = Array.isArray(terms) && terms.length ? terms.join(' | ') : (terms || 'termín neuveden');
+    const title = '📅 Zájem o schůzku — ' + who;
+    const body = 'Zájemce v chatu se specialistou chce schůzku. Navržené termíny: ' + termsTxt + '.'
+      + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : '')
+      + (note ? (' ' + note) : '');
+    await dispatch(prisma, { title, body, data: { type: 'compounder_meeting_request', lead_id: (lead && lead.id) ? lead.id : null } });
+  } catch (e) { console.error('[compounder-notify] meeting request', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
+  notifyMeetingRequest,
   getEligibleVelinPeople,
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,

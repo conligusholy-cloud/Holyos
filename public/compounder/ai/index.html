@@ -157,6 +157,22 @@
 (function(){
   var token = new URLSearchParams(location.search).get('t') || '';
   var busy = false;
+  var LEAD_ID = null;
+  var _openedAt = Date.now(), _visitSent = false;
+  // Session id (stejný klíč jako portál → sjednocená „Cesta uživatele" u leada).
+  function trkSid(){ try{ var s=localStorage.getItem('compounder.sid'); if(!s){ s='s_'+Date.now().toString(36)+Math.random().toString(36).slice(2,8); localStorage.setItem('compounder.sid',s);} return s; }catch(e){ return 's_'+Date.now().toString(36); } }
+  // Odeslání analytického eventu na sdílený /track (váže se na lead_id).
+  function trk(event, props){
+    try{
+      if(!LEAD_ID) return;
+      var pl = { sid: trkSid(), event: event, path: '/ai', lang: (navigator.language||'').slice(0,10),
+                 props: Object.assign({ lead_id: LEAD_ID, surface: 'ai_specialist' }, props||{}) };
+      var body = JSON.stringify(pl);
+      if(navigator.sendBeacon) navigator.sendBeacon('/api/compounder/track', new Blob([body],{type:'application/json'}));
+      else fetch('/api/compounder/track',{method:'POST',headers:{'Content-Type':'application/json'},body:body,keepalive:true}).catch(function(){});
+    }catch(e){}
+  }
+  function trkVisitEnd(){ if(_visitSent) return; _visitSent=true; trk('visit_end',{ ms: Date.now()-_openedAt }); }
   function el(id){ return document.getElementById(id); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   // Lehké vykreslení: **tučně** → <strong>, odrážky "- "/"* " → •, zbytek zůstává (pre-wrap zachová řádky).
@@ -183,6 +199,7 @@
   async function send(){
     var msg = (el('input').value||'').trim(); if(!msg || busy) return;
     el('input').value=''; autoGrow(); busy=true;
+    trk('aispec_chat', { text: msg.slice(0,200) });
     var _in = el('intro'); if(_in) _in.classList.add('collapsed'); // jakmile začne chat, leták se sbalí
     var uEl = addMsg('user', msg);
     var ph = addMsg('ai','…');
@@ -202,7 +219,20 @@
       var r = await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token));
       var j = await r.json().catch(function(){ return {}; });
       if(!r.ok || !j.ok){ el('gate').textContent = (j && j.error) ? j.error : 'Odkaz je neplatný nebo nedostupný.'; return; }
+      LEAD_ID = j.leadId || null;
       el('gate').style.display='none'; el('chat').style.display='flex';
+      trk('aispec_open');
+      // Klikací mapa: každý klik zaznamenej (text prvku + souřadnice) → „Cesta uživatele".
+      document.addEventListener('click', function(e){
+        try{
+          var t=e.target.closest('button,a,[data-q],input,textarea,.letak,.ihead') || e.target;
+          var label=(t.getAttribute && (t.getAttribute('data-q')||t.getAttribute('aria-label')))|| (t.textContent||'').trim().slice(0,60) || (t.id||t.className||t.tagName);
+          trk('aispec_click', { label: String(label).slice(0,80), x: e.clientX, y: e.clientY });
+        }catch(_){}
+      }, true);
+      // Konec návštěvy (přesný čas) při skrytí/opuštění stránky.
+      document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='hidden') trkVisitEnd(); });
+      window.addEventListener('pagehide', trkVisitEnd);
       (j.messages||[]).forEach(function(m){ addMsg(m.role==='user'?'user':'ai', m.text); });
       if(!(j.messages||[]).length && j.greeting) addMsg('ai', j.greeting);
       el('send').addEventListener('click', send);
