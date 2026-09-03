@@ -770,9 +770,14 @@ async function autosendAiSpecialistSms(lead) {
     const sid = await sms.sendSms(lead.phone, text);
     await prisma.compounderLead.update({
       where: { id: lead.id },
-      data: { ai_specialist_sms_sent_at: new Date(), ai_specialist_sms_id: String(sid || ''), ai_specialist_sms_status: 'odesláno' },
+      data: {
+        ai_specialist_sms_sent_at: new Date(),
+        ai_specialist_sms_id: String(sid || ''),
+        ai_specialist_sms_status: 'odesláno',
+        status: 'odeslan_specialista', // automaticky přepnout stav kontaktu
+      },
     }).catch(() => {});
-    console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id);
+    console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
   } catch (e) { console.warn('[aispec-autosend] selhalo:', e.message); }
 }
 
