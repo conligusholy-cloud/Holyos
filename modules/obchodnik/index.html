@@ -1452,9 +1452,13 @@
       // Samotné odeslání (stav přepneme, zalogujeme a otevřeme SMS z čísla obchodníka).
       function doSend(){
         try { obLogAction(id,'send_aispec','💬 Odeslán odkaz na specialistu (SMS)'); } catch(e){}
-        try { setField(id,'status','odeslan_specialista'); } catch(e){} // fire-and-forget, ať se nerozbije gesto pro sms:
-        window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
+        // Přepnutí stavu přes keepalive fetch → dokončí se, i když stránku uspí navigace na sms:.
+        try {
+          fetch('/api/compounder/leads/'+id, { method:'PATCH', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ status:'odeslan_specialista' }), keepalive:true });
+        } catch(e){}
+        try { if (lead) { lead.status='odeslan_specialista'; if (typeof render==='function') render(); } } catch(e){}
         if (st) st.innerHTML = '<span style="color:var(--converted)">✓ Otevírám SMS — odešli zprávu. Stav: „Odeslán odkaz na specialistu".</span>';
+        window.location.href = 'sms:'+num+(iOS?'&':'?')+'body='+encodeURIComponent(text);
       }
       // Když kontakt nemáš uložený v telefonu, nabídni uložení jako první krok.
       if (lead && !obContactSaved(id)) {
