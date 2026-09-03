@@ -697,6 +697,15 @@ function knScope(req) {
   return 'specialist';
 }
 function knKey(scope) { return require('../services/compounder/ai-context').docsSettingKey(scope); }
+// Složka pro originály nahraných podkladů (persistentní volume data/). Umožní stažení do PC.
+function aiDocsDir(scope) {
+  const path = require('path');
+  const safe = String(scope || 'specialist').replace(/[^a-z0-9._-]/gi, '_');
+  return path.join(__dirname, '..', 'data', 'ai-docs', safe);
+}
+function safeDocName(name) {
+  return String(name || 'soubor').replace(/[\\/\x00-\x1f]/g, '_').slice(0, 150) || 'soubor';
+}
 async function loadAiSpecDocs(scope) {
   try {
     const raw = await getSetting(knKey(scope), { type: 'json', defaultValue: [] });
@@ -712,6 +721,7 @@ function docsMeta(docs) {
     chars: (d.text || '').length,
     at: d.at || null,
     truncated: (d.text || '').includes('…[zkráceno]'),
+    hasFile: !!d.hasFile,
   }));
 }
 
@@ -723,6 +733,25 @@ router.get('/ai-specialist-knowledge', requireAuth, async (req, res, next) => {
     const docs = await loadAiSpecDocs(scope);
     const total = docs.reduce((s, d) => s + (d.text || '').length, 0);
     res.json({ ok: true, scope, files: docsMeta(docs), totalChars: total, perDocMax: kn.PER_DOC_MAX, totalMax: kn.TOTAL_MAX });
+  } catch (err) { next(err); }
+});
+
+// GET /file — stažení originálu podkladu do PC (fallback: vytažený text jako .txt)
+router.get('/ai-specialist-knowledge/file', requireAuth, async (req, res, next) => {
+  try {
+    const scope = knScope(req);
+    const name = String(req.query.name || '');
+    if (!name) return res.status(400).json({ ok: false, error: 'Chybí název' });
+    const fs = require('fs'); const path = require('path');
+    const p = path.join(aiDocsDir(scope), safeDocName(name));
+    if (fs.existsSync(p)) return res.download(p, name);
+    // Fallback: originál nemáme (starší nahrání) → pošli vytažený text jako .txt.
+    const docs = await loadAiSpecDocs(scope);
+    const d = docs.find((x) => x.name === name);
+    if (!d) return res.status(404).json({ ok: false, error: 'Soubor nenalezen' });
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="' + encodeURIComponent(name) + '.txt"');
+    return res.send(d.text || '');
   } catch (err) { next(err); }
 });
 
@@ -741,9 +770,17 @@ router.post('/ai-specialist-knowledge', requireAuth, knowledgeUpload.array('file
       try {
         const text = kn.clean(await kn.extractText(f.buffer, f.originalname), kn.PER_DOC_MAX);
         if (!text.trim()) { errors.push(f.originalname + ': nepodařilo se přečíst text'); continue; }
+        // Ulož originál na disk (pro stažení do PC) — best effort.
+        let hasFile = false;
+        try {
+          const fs = require('fs'); const path = require('path');
+          const dir = aiDocsDir(scope); fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, safeDocName(f.originalname)), f.buffer);
+          hasFile = true;
+        } catch (e) { /* originál se neuloží, text zůstává */ }
         // stejný název přepíše starší verzi
         docs = docs.filter((d) => d.name !== f.originalname);
-        docs.push({ name: f.originalname, at: new Date().toISOString(), text });
+        docs.push({ name: f.originalname, at: new Date().toISOString(), text, hasFile });
         added.push(f.originalname);
       } catch (e) {
         errors.push((f.originalname || 'soubor') + ': ' + e.message);
@@ -764,6 +801,7 @@ router.post('/ai-specialist-knowledge/delete', requireAuth, async (req, res, nex
     let docs = await loadAiSpecDocs(scope);
     docs = docs.filter((d) => d.name !== name);
     await saveAiSpecDocs(docs, req.user && req.user.id, scope);
+    try { const fs = require('fs'); const path = require('path'); fs.unlinkSync(path.join(aiDocsDir(scope), safeDocName(name))); } catch (e) { /* soubor nemusí existovat */ }
     res.json({ ok: true, files: docsMeta(docs) });
   } catch (err) { next(err); }
 });

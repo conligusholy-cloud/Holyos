@@ -5125,7 +5125,10 @@
             : '<span style="color:#10b981;">✅ v limitu</span>';
           h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
             +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(c)+'</span> · '+stav+'</span>'
-            +'<button class="btn" onclick="aiDeleteKnowledge('+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;flex:0 0 auto;">✕</button>'
+            +'<span style="display:flex;gap:6px;flex:0 0 auto;">'
+            +'<a class="btn" href="/api/compounder/ai-specialist-knowledge/file?scope=specialist&name='+encodeURIComponent(f.name)+'" title="'+(f.hasFile?'Stáhnout originál do PC':'Originál není uložen — stáhne se vytažený text (.txt)')+'" style="font-size:11px;padding:3px 8px;text-decoration:none;">⬇</a>'
+            +'<button class="btn" onclick="aiDeleteKnowledge('+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;">✕</button>'
+            +'</span>'
             +'</div>';
         });
         var tcol = total>totalMax?'#ef4444':(total>totalMax*0.8?'#eab308':'#10b981');
@@ -5188,7 +5191,10 @@
           var stav=f.truncated?'<span style="color:#ef4444;">⚠️ oříznuto (nad '+perMax+' znaků)</span>':'<span style="color:#10b981;">✅ v limitu</span>';
           h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
             +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(f.chars||0)+'</span> · '+stav+'</span>'
-            +'<button class="btn" onclick="aiKnDelete(\''+scope+'\','+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;flex:0 0 auto;">✕</button>'
+            +'<span style="display:flex;gap:6px;flex:0 0 auto;">'
+            +'<a class="btn" href="/api/compounder/ai-specialist-knowledge/file?scope='+encodeURIComponent(scope)+'&name='+encodeURIComponent(f.name)+'" title="'+(f.hasFile?'Stáhnout originál do PC':'Originál není uložen — stáhne se vytažený text (.txt)')+'" style="font-size:11px;padding:3px 8px;text-decoration:none;">⬇</a>'
+            +'<button class="btn" onclick="aiKnDelete(\''+scope+'\','+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;">✕</button>'
+            +'</span>'
             +'</div>';
         });
         var tcol=total>totalMax?'#ef4444':(total>totalMax*0.8?'#eab308':'#10b981');
