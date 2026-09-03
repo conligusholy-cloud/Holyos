@@ -744,8 +744,10 @@ router.get('/ai-specialist-today-analysis', requireAuth, async (req, res, next) 
     const agent = require('../services/voice/agent');
     const { text } = await agent.runTurn({
       system: 'Jsi obchodní kouč pro prodejce prádlomatů. Dostaneš přepisy dnešních chatů zákazníků s AI specialistou. '
-        + 'Pro KAŽDÝ kontakt napiš stručně (1–3 řádky): co zákazník chce, jak je zahřátý, a KONKRÉTNÍ další krok na zítřejší ráno (zavolat/schůzka/poslat co). '
-        + 'Piš čistý text bez markdownu (žádné hvězdičky ani mřížky), přehledně, každý kontakt zvlastní blok. Na konci přidej 1 větu souhrnné priority (koho řešit první).',
+        + 'ZAČNI blokem „🎯 KLÍČOVÝ ZÁKAZNÍK DNE:" — vyber JEDEN nejperspektivnější kontakt (nejvíc zahřátý / nejblíž k rozhodnutí / největší potenciál), napiš jméno a ve 2–3 větách proč je klíčový a co s ním udělat jako první. '
+        + 'Pak nadpis „Ostatní kontakty:" a pro KAŽDÝ další kontakt stručně (1–3 řádky): co chce, jak je zahřátý, a KONKRÉTNÍ další krok na zítřejší ráno (zavolat/schůzka/poslat co). '
+        + 'Seřaď kontakty od nejnadějnějšího po nejméně nadějný. '
+        + 'Piš čistý text bez markdownu (žádné hvězdičky ani mřížky), přehledně, každý kontakt vlastní blok.',
       history: [],
       userText: transcript,
       maxTokens: 900,
