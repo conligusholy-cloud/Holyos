@@ -831,7 +831,7 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     const custom = (req.body && req.body.text) ? String(req.body.text) : '';
     const body = (custom && custom.indexOf('{link}') !== -1)
       ? custom.replace('{link}', link)
-      : ('Specialista na pradlomaty vam rad poradi zde: ' + link);
+      : ('Dobry den, zasilame Vam informace ohledne PRADLOMATU: ' + link);
     const sms = require('../services/voice/sms');
     const sid = await sms.sendSms(lead.phone, body);
     const sentAt = new Date();
