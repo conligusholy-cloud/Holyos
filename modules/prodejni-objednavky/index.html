@@ -5309,8 +5309,6 @@
         html+='</div>';
         html+='<button class="btn" onclick="aiCreateCampaign()" style="background:#eab308;color:#0e1a22;font-weight:700;">➕ Vytvořit kampaň</button> <span id="ai-c-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
         html+='</div>';
-        html+='<div style="font-size:12px;color:var(--text2);margin:0 0 6px;">Podklady pro <b>odchozí</b> obvolávání (vlastní, oddělené od příchozí a specialisty):</div>';
-        html+='<div id="ai-kn-sec-outbound"></div>';
         if(!camps.length){ html+='<div style="color:var(--text2);">Zatím žádné kampaně.</div>'; }
         else {
           html+='<table class="data-table"><thead><tr><th>Kampaň</th><th>Stav</th><th>Čeká</th><th>Volá</th><th>Hotovo</th><th>Bez odp.</th><th></th></tr></thead><tbody>';
@@ -5321,7 +5319,6 @@
           html+='</tbody></table>';
         }
         wrap.innerHTML=html;
-        var _kno=document.getElementById('ai-kn-sec-outbound'); if(_kno){ _kno.innerHTML=aiKnSectionHtml('outbound'); aiKnLoad('outbound'); }
       }catch(e){ wrap.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
     async function aiCreateCampaign(){
@@ -5380,6 +5377,8 @@
         html+='<textarea id="ai-camp-script" rows="10" oninput="aiCountField(\'ai-camp-script\',\'ai-camp-script-cnt\',9000,1400)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;line-height:1.5;font-family:inherit;">'+aiEsc(c.script||'')+'</textarea>';
         html+='<div id="ai-camp-script-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>';
         html+='<div style="margin-top:6px;"><button class="btn" onclick="aiSaveScript(\''+c.id+'\')" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-camp-script-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
+        html+='<div style="font-size:12px;color:var(--text2);margin:14px 0 0;">Podklady <b>jen pro tuto kampaň</b> (oddělené od ostatních):</div>';
+        html+='<div id="ai-kn-sec-camp"></div>';
         html+='</div>';
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
         html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
@@ -5390,6 +5389,7 @@
         det.innerHTML=html;
         aiCountField('ai-camp-greeting','ai-camp-greeting-cnt',300,50);
         aiCountField('ai-camp-script','ai-camp-script-cnt',9000,1400);
+        var _knc=document.getElementById('ai-kn-sec-camp'); if(_knc){ var _sc='outbound:'+c.id; _knc.innerHTML=aiKnSectionHtml(_sc); aiKnLoad(_sc); }
         aiStartPoll(id);
       }catch(e){ det.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }

@@ -691,8 +691,10 @@ const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { file
 
 // Oddělené znalostní báze podle kontextu: 'specialist' (chat) | 'inbound' | 'outbound'.
 function knScope(req) {
-  const s = (req.query && req.query.scope) || (req.body && req.body.scope) || 'specialist';
-  return ['inbound', 'outbound', 'specialist'].indexOf(String(s)) !== -1 ? String(s) : 'specialist';
+  const s = String((req.query && req.query.scope) || (req.body && req.body.scope) || 'specialist');
+  if (['inbound', 'outbound', 'specialist'].indexOf(s) !== -1) return s;
+  if (/^outbound:\d+$/.test(s)) return s; // per-kampaň podklady
+  return 'specialist';
 }
 function knKey(scope) { return require('../services/compounder/ai-context').docsSettingKey(scope); }
 async function loadAiSpecDocs(scope) {

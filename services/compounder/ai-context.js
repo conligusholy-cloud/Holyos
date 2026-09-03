@@ -28,6 +28,8 @@ const VOICE_STYLE =
 // Oddělené znalostní báze podle kontextu (mohou se lišit).
 function docsSettingKey(scope) {
   if (scope === 'inbound') return 'voice.inbound_docs';
+  // Per-kampaň: scope 'outbound:<id>' → vlastní podklady dané kampaně.
+  if (typeof scope === 'string' && scope.indexOf('outbound:') === 0) return 'voice.outbound_docs.' + scope.slice(9);
   if (scope === 'outbound') return 'voice.outbound_docs';
   return 'compounder.ai_specialist_docs'; // 'specialist' (default)
 }
