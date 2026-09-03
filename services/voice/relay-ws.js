@@ -125,7 +125,7 @@ function attach(server) {
     // + ZÁVAZNÉ firemní podklady (stejná znalostní báze) + mluvený styl. Neblokuje hovor.
     try {
       const aic = require('../compounder/ai-context');
-      state.system = await aic.augmentSystem(state.system, { voice: true });
+      state.system = await aic.augmentSystem(state.system, { voice: true, scope: (mode === 'outbound' ? 'outbound' : 'inbound') });
     } catch (e) {
       console.warn('[voice] augment systému selhal:', e.message);
     }

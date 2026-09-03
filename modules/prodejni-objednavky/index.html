@@ -419,13 +419,13 @@
       <!-- Sub: Příchozí recepční -->
       <div id="ai-inbound" style="display:none;max-width:760px;">
         <h3 style="margin:0 0 12px;font-size:16px;">Nastavení příchozí recepční</h3>
-        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
-        <textarea id="ai-inbound-prompt" rows="6" oninput="aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
-        <div id="ai-inbound-prompt-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
-        <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
         <textarea id="ai-inbound-greeting" rows="2" oninput="aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
         <div id="ai-inbound-greeting-cnt" style="font-size:11px;color:var(--text2);margin-top:3px;"></div>
-        <div style="font-size:11px;color:var(--text2);background:rgba(139,92,246,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:10px;line-height:1.5;">📎 <b>Podklady (fakta, ceník, parametry)</b> jsou <b>sdílené s AI specialistou</b> — nahraješ je v záložce <b>💬 AI specialista (chat)</b> → „Znalostní podklady". Telefonní AI z nich čerpá stejně. Limity: 40 000 znaků/soubor, celkem 90 000 znaků, max 20 MB / 8 souborů, skenované PDF bez textu nefunguje.</div>
+        <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
+        <textarea id="ai-inbound-prompt" rows="6" oninput="aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka Best Series, zjisti kdo volá a co potřebuje…"></textarea>
+        <div id="ai-inbound-prompt-cnt" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
+        <div id="ai-kn-sec-inbound"></div>
         <div style="margin-top:8px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit scénář a úvod</button> <span id="ai-inbound-msg-top" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
         <input id="ai-inbound-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
@@ -5053,6 +5053,8 @@
         document.getElementById('ai-inbound-from').value=c.default_from||'';
         aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400);
         aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50);
+        var _kn=document.getElementById('ai-kn-sec-inbound'); if(_kn && !_kn.getAttribute('data-init')){ _kn.innerHTML=aiKnSectionHtml('inbound'); _kn.setAttribute('data-init','1'); }
+        aiKnLoad('inbound');
       }catch(e){ document.getElementById('ai-inbound-msg').textContent='Chyba načtení: '+e.message; }
     }
     async function aiSaveConfig(){
@@ -5156,6 +5158,60 @@
       try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include' }); aiLoadKnowledge(); }catch(e){}
     }
     window.aiUploadKnowledge=aiUploadKnowledge; window.aiDeleteKnowledge=aiDeleteKnowledge; window.aiClearKnowledge=aiClearKnowledge;
+
+    // ── Obecné podklady se scope ('inbound' | 'outbound') — oddělené báze ──
+    function aiKnSectionHtml(scope){
+      return '<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:14px;">'
+        + '<h4 style="margin:0 0 6px;font-size:14px;">📎 Znalostní podklady (závazný zdroj dat)</h4>'
+        + '<div style="font-size:11px;color:var(--text2);background:rgba(234,179,8,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">'
+        + 'Vlastní podklady jen pro tento kontext (nezávislé na ostatních). PDF, DOCX, XLSX, CSV, TXT. '
+        + 'Max <b>40 000 znaků/soubor</b> (~6 000 slov), celkem <b>90 000 znaků</b>, max <b>20 MB / 8 souborů</b>. Skenované PDF bez textu se nepřečte.'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+        + '<input type="file" id="ai-kn-file-'+scope+'" multiple accept=".pdf,.docx,.xlsx,.xls,.csv,.txt" style="font-size:12px;color:var(--text2);">'
+        + '<button class="btn" onclick="aiKnUpload(\''+scope+'\')" style="background:#eab308;color:#0e1a22;font-weight:700;font-size:12px;">⬆ Nahrát podklady</button>'
+        + '<span id="ai-kn-msg-'+scope+'" style="font-size:12px;color:var(--text2);"></span>'
+        + '</div>'
+        + '<div id="ai-kn-list-'+scope+'" style="margin-top:12px;font-size:12px;color:var(--text2);">Načítám…</div>'
+        + '</div>';
+    }
+    window.aiKnSectionHtml=aiKnSectionHtml;
+    async function aiKnLoad(scope){
+      var box=document.getElementById('ai-kn-list-'+scope); if(!box) return;
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-knowledge?scope='+encodeURIComponent(scope),{ credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        var files=(j&&j.files)||[]; var perMax=j.perDocMax||40000, totalMax=j.totalMax||90000, total=j.totalChars||0;
+        if(!files.length){ box.innerHTML='<span style="color:var(--text2);">Zatím žádné podklady.</span>'; return; }
+        var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="color:var(--text);">Nahrané podklady ('+files.length+')</b><button class="btn" onclick="aiKnClear(\''+scope+'\')" style="font-size:11px;padding:3px 8px;">🗑 Smazat vše</button></div>';
+        files.forEach(function(f){
+          var stav=f.truncated?'<span style="color:#ef4444;">⚠️ oříznuto (nad '+perMax+' znaků)</span>':'<span style="color:#10b981;">✅ v limitu</span>';
+          h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+            +'<span style="color:var(--text);word-break:break-all;">📄 '+cmpEscA(f.name)+' <span style="color:var(--text2);">· '+aiKnFmt(f.chars||0)+'</span> · '+stav+'</span>'
+            +'<button class="btn" onclick="aiKnDelete(\''+scope+'\','+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;flex:0 0 auto;">✕</button>'
+            +'</div>';
+        });
+        var tcol=total>totalMax?'#ef4444':(total>totalMax*0.8?'#eab308':'#10b981');
+        var tnote=total>totalMax?' · ⚠️ PŘEKROČENO':(total>totalMax*0.8?' · ⚠️ blížíš se stropu':' · ✅ OK');
+        h+='<div style="margin-top:4px;font-size:11px;color:'+tcol+';">Celkem do AI: '+total+' / max '+totalMax+' znaků'+tnote+'</div>';
+        box.innerHTML=h;
+      }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení: '+e.message+'</span>'; }
+    }
+    async function aiKnUpload(scope){
+      var inp=document.getElementById('ai-kn-file-'+scope), msg=document.getElementById('ai-kn-msg-'+scope);
+      if(!inp.files||!inp.files.length){ if(msg) msg.textContent='Vyber soubor(y).'; return; }
+      var fd=new FormData(); for(var i=0;i<inp.files.length;i++) fd.append('files', inp.files[i]); fd.append('scope', scope);
+      if(msg) msg.textContent='Nahrávám a čtu…';
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-knowledge?scope='+encodeURIComponent(scope),{ method:'POST', credentials:'include', body:fd });
+        var j=await r.json().catch(function(){return{};});
+        if(r.ok && j.ok){ var t='✅ Přidáno: '+((j.added&&j.added.length)?j.added.join(', '):'0'); if(j.errors&&j.errors.length) t+=' · ⚠️ '+j.errors.join(' | '); if(msg) msg.textContent=t; inp.value=''; aiKnLoad(scope); }
+        else { if(msg) msg.textContent='Chyba: '+(j.error||('HTTP '+r.status)); }
+      }catch(e){ if(msg) msg.textContent='Chyba spojení: '+e.message; }
+    }
+    async function aiKnDelete(scope,name){ try{ await fetch('/api/compounder/ai-specialist-knowledge/delete',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:scope,name:name}) }); aiKnLoad(scope); }catch(e){} }
+    async function aiKnClear(scope){ if(!confirm('Smazat všechny nahrané podklady tohoto kontextu?')) return; try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:scope}) }); aiKnLoad(scope); }catch(e){} }
+    window.aiKnLoad=aiKnLoad; window.aiKnUpload=aiKnUpload; window.aiKnDelete=aiKnDelete; window.aiKnClear=aiKnClear;
     async function aiSaveAiSpecConfig(){
       var msg=document.getElementById('ai-aispec-msg'); if(msg) msg.textContent='Ukládám…';
       try{
@@ -5246,7 +5302,6 @@
         html+='<input id="ai-c-name" placeholder="Název kampaně" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:8px;">';
         html+='<textarea id="ai-c-script" rows="4" oninput="aiCountField(\'ai-c-script\',\'ai-c-script-cnt\',9000,1400)" placeholder="Scénář hovoru — co má AI říct a zjistit" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;margin-bottom:4px;"></textarea>';
         html+='<div id="ai-c-script-cnt" style="font-size:11px;color:var(--text2);margin-bottom:8px;">0 / max 9000 znaků · 0 / max 1400 slov · ✅ OK</div>';
-        html+='<div style="font-size:11px;color:var(--text2);background:rgba(139,92,246,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;line-height:1.5;">📎 Fakta/ceník jsou <b>sdílené s AI specialistou</b> (záložka 💬 AI specialista → Znalostní podklady). Telefonní AI z nich čerpá a drží se scénáře — nevymýšlí si.</div>';
         html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
         html+='<input id="ai-c-from" placeholder="Odchozí číslo (+420…)" style="flex:1;min-width:160px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
         html+='<input id="ai-c-from-h" placeholder="Volat od (HH:MM)" style="width:130px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
@@ -5254,6 +5309,8 @@
         html+='</div>';
         html+='<button class="btn" onclick="aiCreateCampaign()" style="background:#eab308;color:#0e1a22;font-weight:700;">➕ Vytvořit kampaň</button> <span id="ai-c-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
         html+='</div>';
+        html+='<div style="font-size:12px;color:var(--text2);margin:0 0 6px;">Podklady pro <b>odchozí</b> obvolávání (vlastní, oddělené od příchozí a specialisty):</div>';
+        html+='<div id="ai-kn-sec-outbound"></div>';
         if(!camps.length){ html+='<div style="color:var(--text2);">Zatím žádné kampaně.</div>'; }
         else {
           html+='<table class="data-table"><thead><tr><th>Kampaň</th><th>Stav</th><th>Čeká</th><th>Volá</th><th>Hotovo</th><th>Bez odp.</th><th></th></tr></thead><tbody>';
@@ -5264,6 +5321,7 @@
           html+='</tbody></table>';
         }
         wrap.innerHTML=html;
+        var _kno=document.getElementById('ai-kn-sec-outbound'); if(_kno){ _kno.innerHTML=aiKnSectionHtml('outbound'); aiKnLoad('outbound'); }
       }catch(e){ wrap.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
     async function aiCreateCampaign(){

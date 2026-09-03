@@ -689,14 +689,20 @@ router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
 // ─── Znalostní báze AI specialisty (nahrané podklady = závazný zdroj dat) ──────
 const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
 
-async function loadAiSpecDocs() {
+// Oddělené znalostní báze podle kontextu: 'specialist' (chat) | 'inbound' | 'outbound'.
+function knScope(req) {
+  const s = (req.query && req.query.scope) || (req.body && req.body.scope) || 'specialist';
+  return ['inbound', 'outbound', 'specialist'].indexOf(String(s)) !== -1 ? String(s) : 'specialist';
+}
+function knKey(scope) { return require('../services/compounder/ai-context').docsSettingKey(scope); }
+async function loadAiSpecDocs(scope) {
   try {
-    const raw = await getSetting('compounder.ai_specialist_docs', { type: 'json', defaultValue: [] });
+    const raw = await getSetting(knKey(scope), { type: 'json', defaultValue: [] });
     return Array.isArray(raw) ? raw : [];
   } catch (_) { return []; }
 }
-async function saveAiSpecDocs(docs, uid) {
-  await setSetting('compounder.ai_specialist_docs', docs, { type: 'json', userId: uid });
+async function saveAiSpecDocs(docs, uid, scope) {
+  await setSetting(knKey(scope), docs, { type: 'json', userId: uid });
 }
 function docsMeta(docs) {
   return (docs || []).map((d) => ({
@@ -711,9 +717,10 @@ function docsMeta(docs) {
 router.get('/ai-specialist-knowledge', requireAuth, async (req, res, next) => {
   try {
     const kn = require('../services/compounder/knowledge');
-    const docs = await loadAiSpecDocs();
+    const scope = knScope(req);
+    const docs = await loadAiSpecDocs(scope);
     const total = docs.reduce((s, d) => s + (d.text || '').length, 0);
-    res.json({ ok: true, files: docsMeta(docs), totalChars: total, perDocMax: kn.PER_DOC_MAX, totalMax: kn.TOTAL_MAX });
+    res.json({ ok: true, scope, files: docsMeta(docs), totalChars: total, perDocMax: kn.PER_DOC_MAX, totalMax: kn.TOTAL_MAX });
   } catch (err) { next(err); }
 });
 
@@ -722,9 +729,10 @@ router.post('/ai-specialist-knowledge', requireAuth, knowledgeUpload.array('file
   try {
     const kn = require('../services/compounder/knowledge');
     const uid = req.user && req.user.id;
+    const scope = knScope(req);
     const files = req.files || [];
     if (!files.length) return res.status(400).json({ ok: false, error: 'Žádný soubor' });
-    let docs = await loadAiSpecDocs();
+    let docs = await loadAiSpecDocs(scope);
     const added = [];
     const errors = [];
     for (const f of files) {
@@ -739,8 +747,8 @@ router.post('/ai-specialist-knowledge', requireAuth, knowledgeUpload.array('file
         errors.push((f.originalname || 'soubor') + ': ' + e.message);
       }
     }
-    await saveAiSpecDocs(docs, uid);
-    res.json({ ok: true, added, errors, files: docsMeta(docs) });
+    await saveAiSpecDocs(docs, uid, scope);
+    res.json({ ok: true, scope, added, errors, files: docsMeta(docs) });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
@@ -749,10 +757,11 @@ router.post('/ai-specialist-knowledge', requireAuth, knowledgeUpload.array('file
 // POST /delete — smaže jeden podklad podle názvu
 router.post('/ai-specialist-knowledge/delete', requireAuth, async (req, res, next) => {
   try {
+    const scope = knScope(req);
     const name = String((req.body && req.body.name) || '');
-    let docs = await loadAiSpecDocs();
+    let docs = await loadAiSpecDocs(scope);
     docs = docs.filter((d) => d.name !== name);
-    await saveAiSpecDocs(docs, req.user && req.user.id);
+    await saveAiSpecDocs(docs, req.user && req.user.id, scope);
     res.json({ ok: true, files: docsMeta(docs) });
   } catch (err) { next(err); }
 });
@@ -760,7 +769,7 @@ router.post('/ai-specialist-knowledge/delete', requireAuth, async (req, res, nex
 // POST /clear — smaže všechny podklady
 router.post('/ai-specialist-knowledge/clear', requireAuth, async (req, res, next) => {
   try {
-    await saveAiSpecDocs([], req.user && req.user.id);
+    await saveAiSpecDocs([], req.user && req.user.id, knScope(req));
     res.json({ ok: true, files: [] });
   } catch (err) { next(err); }
 });

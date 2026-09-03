@@ -25,10 +25,17 @@ const VOICE_STYLE =
   'MLUVENÝ PROJEV (telefon): Mluvíš, nepíšeš. Krátké přirozené věty, žádný markdown, odrážky ani emoji. ' +
   'Neříkej nahlas „hvězdička" ani „odrážka". Buď stručný a lidský, nech prostor druhé straně a ptej se.';
 
-// Načte znalostní bázi (nahrané podklady AI specialisty) jako blok do promptu.
-async function loadKnowledgeBlock() {
+// Oddělené znalostní báze podle kontextu (mohou se lišit).
+function docsSettingKey(scope) {
+  if (scope === 'inbound') return 'voice.inbound_docs';
+  if (scope === 'outbound') return 'voice.outbound_docs';
+  return 'compounder.ai_specialist_docs'; // 'specialist' (default)
+}
+
+// Načte znalostní bázi daného kontextu jako blok do promptu.
+async function loadKnowledgeBlock(scope) {
   try {
-    const docs = await getSetting('compounder.ai_specialist_docs', { type: 'json', defaultValue: [] });
+    const docs = await getSetting(docsSettingKey(scope), { type: 'json', defaultValue: [] });
     const block = knowledge.buildKnowledgeBlock(Array.isArray(docs) ? docs : []);
     if (!block) return '';
     return '\n\n=== ZÁVAZNÉ FIREMNÍ PODKLADY (nejvyšší zdroj pravdy — čísla a fakta přebírej PŘESNĚ odsud) ===\n'
@@ -37,11 +44,11 @@ async function loadKnowledgeBlock() {
 }
 
 // Sestaví doplněk k libovolnému scénáři: guardrails + matematika + (volitelně hlasový styl) + podklady.
-async function augmentSystem(baseSystem, { voice = false } = {}) {
-  const kb = await loadKnowledgeBlock();
+async function augmentSystem(baseSystem, { voice = false, scope = 'specialist' } = {}) {
+  const kb = await loadKnowledgeBlock(scope);
   const parts = [String(baseSystem || ''), GUARDRAILS, MATH_RULE];
   if (voice) parts.push(VOICE_STYLE);
   return parts.join('\n\n') + kb;
 }
 
-module.exports = { GUARDRAILS, MATH_RULE, VOICE_STYLE, loadKnowledgeBlock, augmentSystem };
+module.exports = { GUARDRAILS, MATH_RULE, VOICE_STYLE, docsSettingKey, loadKnowledgeBlock, augmentSystem };
