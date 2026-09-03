@@ -500,6 +500,21 @@
           <span id="ai-sms-gw-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span>
         </div>
 
+        <div style="border:1px solid rgba(139,92,246,0.5);border-radius:10px;padding:14px;margin-bottom:16px;background:rgba(139,92,246,0.06);">
+          <h4 style="margin:0 0 8px;font-size:14px;">💬 AI specialista — automatické odeslání SMS</h4>
+          <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;"><input type="checkbox" id="ai-as-enabled"> Automaticky poslat SMS s odkazem na specialistu novým leadům</label>
+          <div style="font-size:12px;color:var(--text2);margin:8px 0 4px;">Text SMS (použij <code>{link}</code> pro odkaz):</div>
+          <textarea id="ai-as-text" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="PRADLOMATY-info: {link}"></textarea>
+          <div style="font-size:12px;color:var(--text2);margin:12px 0 6px;font-weight:600;">Komu a kdy odeslat:</div>
+          <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-ads"> Jen kontakty z reklamy (Facebook / Google)</label>
+          <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-new"> Jen nové kontakty (stav Nový)</label>
+          <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-nobl"> Přeskočit black list (kontakty s ❗)</label>
+          <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (Person ID, oddělené čárkou — prázdné = všichni):</div>
+          <input id="ai-as-owners" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="např. 1, 32">
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + obchodníci „1, 32" (Tomáš, Jan) → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
+          <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAutosend()" style="background:#8b5cf6;color:#fff;font-weight:700;">💾 Uložit automatické odesílání</button> <span id="ai-as-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+        </div>
+
         <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
           <h4 style="margin:0 0 8px;font-size:14px;">📩 SMS při nedovolání (odchozí kampaně)</h4>
           <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;"><input type="checkbox" id="ai-sms-on"> Poslat leadovi SMS, když hovor nezvedne (nebo spadne do schránky)</label>
@@ -5240,8 +5255,41 @@
     }
     window.aiSaveAiSpecConfig=aiSaveAiSpecConfig; window.aiFillAiSpecDefault=aiFillAiSpecDefault; window.aiCopyAiSpecPrompt=aiCopyAiSpecPrompt;
 
+    async function aiLoadAutosend(){
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-autosend',{ credentials:'include' });
+        var j=await r.json().catch(function(){return{};});
+        var c=(j&&j.config)||{};
+        document.getElementById('ai-as-enabled').checked=!!c.enabled;
+        document.getElementById('ai-as-text').value=c.text||'PRADLOMATY-info: {link}';
+        var srcs=c.sources||[];
+        document.getElementById('ai-as-ads').checked = srcs.indexOf('facebook_ads')!==-1 || srcs.indexOf('google_ads')!==-1;
+        document.getElementById('ai-as-new').checked = c.onlyNew!==false;
+        document.getElementById('ai-as-nobl').checked = c.skipBlacklist!==false;
+        document.getElementById('ai-as-owners').value = (c.ownerPersonIds||[]).join(', ');
+      }catch(e){}
+    }
+    async function aiSaveAutosend(){
+      var msg=document.getElementById('ai-as-msg'); if(msg) msg.textContent='Ukládám…';
+      var owners=(document.getElementById('ai-as-owners').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
+      var ads=document.getElementById('ai-as-ads').checked;
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-autosend',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+          enabled: document.getElementById('ai-as-enabled').checked,
+          text: document.getElementById('ai-as-text').value,
+          sources: ads ? ['facebook_ads','google_ads'] : [],
+          onlyNew: document.getElementById('ai-as-new').checked,
+          skipBlacklist: document.getElementById('ai-as-nobl').checked,
+          ownerPersonIds: owners
+        })});
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        if(msg) msg.textContent='✅ Uloženo';
+      }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
+    }
+    window.aiSaveAutosend=aiSaveAutosend;
     async function aiLoadSmsConfig(){
       try{
+        aiLoadAutosend();
         var c=await aiApi('/config');
         document.getElementById('ai-sms-on').checked=!!c.sms_on_no_answer;
         document.getElementById('ai-sms-text').value=c.sms_text||'';

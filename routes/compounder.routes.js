@@ -688,6 +688,62 @@ router.put('/ai-specialist-config', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Automatické odesílání SMS s odkazem na AI specialistu (pravidla) ─────────
+const AISPEC_AUTOSEND_DEFAULT = {
+  enabled: false,
+  text: 'PRADLOMATY-info: {link}',
+  sources: ['facebook_ads', 'google_ads'], // jen z reklamy
+  onlyNew: true,                            // jen nové kontakty
+  skipBlacklist: true,                      // přeskočit black list (vykřičník)
+  ownerPersonIds: [],                       // jen tito obchodníci (prázdné = všichni)
+};
+router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
+  try {
+    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: AISPEC_AUTOSEND_DEFAULT });
+    res.json({ ok: true, config: Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}), default: AISPEC_AUTOSEND_DEFAULT });
+  } catch (err) { next(err); }
+});
+router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const cfg = {
+      enabled: !!b.enabled,
+      text: String(b.text || 'PRADLOMATY-info: {link}').slice(0, 500),
+      sources: Array.isArray(b.sources) ? b.sources.filter((s) => ['facebook_ads', 'google_ads'].indexOf(s) !== -1) : ['facebook_ads', 'google_ads'],
+      onlyNew: b.onlyNew !== false,
+      skipBlacklist: b.skipBlacklist !== false,
+      ownerPersonIds: Array.isArray(b.ownerPersonIds) ? b.ownerPersonIds.map((n) => parseInt(n, 10)).filter(Boolean) : [],
+    };
+    await setSetting('compounder.aispec_autosend', cfg, { type: 'json', userId: req.user && req.user.id });
+    res.json({ ok: true, config: cfg });
+  } catch (err) { next(err); }
+});
+
+// Automatické odeslání SMS specialisty na nový lead dle pravidel (volá se po vzniku leada z reklamy).
+async function autosendAiSpecialistSms(lead) {
+  try {
+    if (!lead || !lead.id || !lead.phone) return;
+    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
+    if (!cfg || !cfg.enabled) return;
+    if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return;
+    if (cfg.onlyNew && (lead.status || 'new') !== 'new') return;
+    if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return;
+    if (lead.ai_specialist_sms_sent_at) return; // dedup — jen jednou
+    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return; }
+    await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
+    const link = portalBase().replace('://www.', '://') + '/s/' + makeShortCode(lead.id);
+    const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
+    const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
+    const sms = require('../services/voice/sms');
+    const sid = await sms.sendSms(lead.phone, text);
+    await prisma.compounderLead.update({
+      where: { id: lead.id },
+      data: { ai_specialist_sms_sent_at: new Date(), ai_specialist_sms_id: String(sid || ''), ai_specialist_sms_status: 'odesláno' },
+    }).catch(() => {});
+    console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id);
+  } catch (e) { console.warn('[aispec-autosend] selhalo:', e.message); }
+}
+
 // ─── Znalostní báze AI specialisty (nahrané podklady = závazný zdroj dat) ──────
 const knowledgeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 8 } });
 
@@ -4604,6 +4660,9 @@ async function _fbCreateLead(fields, meta, formCfg) {
 
   // Velín push + zvonek majitelům (Jan + Tomáš, resp. compounder.velin_notify_person_ids).
   try { await compounderNotify.notifyFbLead(prisma, { lead: created, campaign, ownerName }); } catch (e) { /* neblokuje příjem */ }
+
+  // Automatické odeslání SMS s odkazem na AI specialistu (dle pravidel) — nebrání příjmu leada.
+  autosendAiSpecialistSms(created).catch(() => {});
 
   return { created: true, id: created.id };
 }
