@@ -640,6 +640,14 @@ router.get('/portal/ai-specialist/info', async (req, res) => {
     } catch (_) { messages = []; }
     // Zaznamenej první otevření odkazu na specialistu (pro obchodníka: „otevřel odkaz").
     prisma.compounderLead.updateMany({ where: { id: leadId, ai_specialist_opened_at: null }, data: { ai_specialist_opened_at: new Date() } }).catch(() => {});
+    // Otevření podle kanálu (sms|email) pro A/B — zaznamenej jednou na lead+kanál.
+    try {
+      const ch = (req.query.c === 'sms' || req.query.c === 'email') ? req.query.c : null;
+      if (ch) {
+        const already = await prisma.compounderEvent.count({ where: { event: 'aispec_open_' + ch, props: { path: ['lead_id'], equals: leadId } } }).catch(() => 0);
+        if (!already) await prisma.compounderEvent.create({ data: { sid: 'server', event: 'aispec_open_' + ch, props: { lead_id: leadId, ch } } }).catch(() => {});
+      }
+    } catch (_) { /* best-effort */ }
     res.json({ ok: true, leadId, name: lead.name || '', greeting, messages });
   } catch (err) {
     res.status(500).json({ ok: false, error: 'Chyba' });
@@ -818,17 +826,22 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
       else sentGateway += 1; // 'gateway' i starší bez příznaku
     });
 
-    const [showCount, openedTotal, summaries, totalMessages, meetEv, callEv] = await Promise.all([
+    const [showCount, openedTotal, summaries, totalMessages, emailSent, meetEv, callEv, openSmsEv, openEmailEv] = await Promise.all([
       prisma.compounderLead.count({ where: { show_ai_specialist: true, is_test: false } }),
       prisma.compounderLead.count({ where: { ai_specialist_opened_at: { not: null }, is_test: false } }),
       prisma.compounderLead.count({ where: { ai_specialist_summary: { not: null }, is_test: false } }),
       prisma.aiSpecialistMessage.count({ where: { lead_id: notTest } }),
+      prisma.compounderLead.count({ where: { ai_specialist_email_sent_at: { not: null }, is_test: false } }),
       prisma.compounderEvent.findMany({ where: { event: 'meeting_notified' }, select: { props: true } }),
       prisma.compounderEvent.findMany({ where: { event: 'callback_notified' }, select: { props: true } }),
+      prisma.compounderEvent.findMany({ where: { event: 'aispec_open_sms' }, select: { props: true } }),
+      prisma.compounderEvent.findMany({ where: { event: 'aispec_open_email' }, select: { props: true } }),
     ]);
     const notTestEvent = (e) => e.props && !testIds.has(Number(e.props.lead_id));
     const meeting = meetEv.filter(notTestEvent).length;
     const callback = callEv.filter(notTestEvent).length;
+    const openedSms = new Set(openSmsEv.filter(notTestEvent).map((e) => Number(e.props.lead_id))).size;
+    const openedEmail = new Set(openEmailEv.filter(notTestEvent).map((e) => Number(e.props.lead_id))).size;
 
     let chattedLeads = 0, userMessages = 0;
     try {
@@ -844,6 +857,9 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
       sent,                       // kolika lidem odešel odkaz (SMS) celkem
       sentPhone,                  // z toho z telefonu obchodníka
       sentGateway,                // z toho přes bránu (GoSMS/Twilio)
+      emailSent,                  // kolika lidem odešel odkaz E-MAILEM
+      openedSms,                  // otevřeli přes SMS link
+      openedEmail,                // otevřeli přes e-mail link
       sentStatus,                 // rozpad doručení
       sentBySource,               // podle zdroje (reklama/…)
       showCount,                  // kolik leadů má specialistu zpřístupněného
@@ -909,7 +925,7 @@ async function autosendAiSpecialistSms(lead) {
     if (lead.ai_specialist_sms_sent_at) return skip('SMS už odeslána');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
-    const link = specialistBase() + '/s/' + makeShortCode(lead.id);
+    const link = specialistShortLink(lead.id, 'sms');
     const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
     const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
     const sms = require('../services/voice/sms');
@@ -1069,7 +1085,7 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     // Odkaz bez „www." → kratší SMS. Text bez diakritiky, aby se vešel do 1 SMS
     // (s diakritikou je limit 70 znaků/SMS; bez diakritiky 160 znaků GSM-7).
     // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
-    const link = specialistBase() + '/s/' + makeShortCode(id);
+    const link = specialistShortLink(id, 'sms');
     const custom = (req.body && req.body.text) ? String(req.body.text) : '';
     const body = (custom && custom.indexOf('{link}') !== -1)
       ? custom.replace('{link}', link)
@@ -1085,6 +1101,26 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
   }
+});
+
+// POST /api/compounder/leads/:id/send-ai-specialist-email — pošle odkaz na specialistu E-MAILEM.
+router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, email: true, name: true, show_ai_specialist: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    if (!lead.email) return res.status(400).json({ ok: false, error: 'Lead nemá e-mail' });
+    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
+    if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
+    const link = specialistShortLink(id, 'email');
+    const subject = 'Prádlomat — váš specialista odpoví na vše';
+    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nBest Series';
+    await sendMail({ to: lead.email, subject, body, from, fromName: compounderMailFromName(), link, linkLabel: 'Zeptat se specialisty', brand: 'compounder' });
+    const sentAt = new Date();
+    await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
+    res.json({ ok: true, sentAt, link });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
 // POST /api/compounder/leads/:id/ai-specialist-mark-phone-sent — obchodník odeslal SMS z TELEFONU.
@@ -1117,7 +1153,7 @@ router.get('/leads/:id/ai-specialist-link', requireAuth, async (req, res) => {
       await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     }
     // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
-    const link = specialistBase() + '/s/' + makeShortCode(id);
+    const link = specialistShortLink(id, 'sms');
     res.json({ ok: true, link });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -6165,6 +6201,11 @@ function specialistBase() {
   const b = process.env.COMPOUNDER_SPECIALIST_BASE;
   return (b && String(b).trim()) ? String(b).trim().replace(/\/+$/, '') : portalBase();
 }
+// Krátký odkaz na specialistu s označením kanálu (sms|email) — pro A/B srovnání.
+function specialistShortLink(id, channel) {
+  const ch = channel === 'email' ? 'email' : 'sms';
+  return specialistBase() + '/s/' + makeShortCode(id) + '?c=' + ch;
+}
 function portalBase() {
   return (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
 }
@@ -6195,10 +6236,12 @@ function verifyShortCode(code) {
   return id;
 }
 // Z krátkého kódu vyrobí cílovou adresu AI specialisty (pro přesměrování /s/<kód>).
-function shortCodeToAiUrl(code) {
+// channel (sms|email) se předá dál, ať /ai stránka zaznamená otevření dle kanálu.
+function shortCodeToAiUrl(code, channel) {
   const id = verifyShortCode(code);
   if (!id) return null;
-  return specialistBase() + '/ai?t=' + makePortalToken(id);
+  const ch = (channel === 'sms' || channel === 'email') ? ('&c=' + channel) : '';
+  return specialistBase() + '/ai?t=' + makePortalToken(id) + ch;
 }
 // Zpřístupníme app.js (přesměrování /s/<kód> na compounder.world i holyos.cz).
 router.shortCodeToAiUrl = shortCodeToAiUrl;

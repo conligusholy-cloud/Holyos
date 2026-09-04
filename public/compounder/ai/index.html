@@ -216,7 +216,8 @@
   async function boot(){
     if(!token){ el('gate').textContent='Neplatný odkaz.'; return; }
     try{
-      var r = await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token));
+      var _ch = new URLSearchParams(location.search).get('c') || '';
+      var r = await fetch('/api/compounder/portal/ai-specialist/info?t='+encodeURIComponent(token)+(_ch?('&c='+encodeURIComponent(_ch)):''));
       var j = await r.json().catch(function(){ return {}; });
       if(!r.ok || !j.ok){ el('gate').textContent = (j && j.error) ? j.error : 'Odkaz je neplatný nebo nedostupný.'; return; }
       LEAD_ID = j.leadId || null;

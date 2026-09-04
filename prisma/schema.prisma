@@ -5645,6 +5645,9 @@ model CompounderLead {
   ai_specialist_opened_at   DateTime?
   // Přes co byla SMS s odkazem odeslána: 'gateway' (GoSMS/Twilio) nebo 'phone' (z telefonu obchodníka).
   ai_specialist_sms_channel String?
+  // Odeslání odkazu na specialistu E-MAILEM (pro A/B srovnání SMS vs e-mail).
+  ai_specialist_email_sent_at DateTime?
+  ai_specialist_email_status  String?
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text

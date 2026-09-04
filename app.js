@@ -705,7 +705,7 @@ app.use((req, res, next) => {
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {
-    const url = compounderRoutes.shortCodeToAiUrl(decodeURIComponent(req.path.slice(3)));
+    const url = compounderRoutes.shortCodeToAiUrl(decodeURIComponent(req.path.slice(3)), req.query && req.query.c);
     if (url) return res.redirect(302, url);
     return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
   }
@@ -714,7 +714,7 @@ app.use((req, res, next) => {
 
 // Zkrácený odkaz i na app.holyos.cz (fallback, kdyby ho někdo otevřel tam).
 app.get('/s/:code', (req, res) => {
-  const url = compounderRoutes.shortCodeToAiUrl(String(req.params.code || ''));
+  const url = compounderRoutes.shortCodeToAiUrl(String(req.params.code || ''), req.query && req.query.c);
   if (url) return res.redirect(302, url);
   return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
 });
