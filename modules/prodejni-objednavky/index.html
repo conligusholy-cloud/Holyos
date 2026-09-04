@@ -5624,6 +5624,7 @@
       }
       if(c.status!=='running') h+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'start\')" style="background:#10b981;color:#062;font-weight:700;">▶ Spustit obvolávání</button> ';
       if(c.status==='running') h+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'pause\')" style="background:#f59e0b;color:#3a2a0a;font-weight:700;">⏸ Pozastavit</button> ';
+      h+='<button class="btn" onclick="aiBackfillRecordings(\''+c.id+'\')" style="background:#0ea5e9;color:#fff;">🔎 Dohledat nahrávky</button> ';
       h+='<button class="btn" onclick="aiArchiveCampaign(\''+c.id+'\')" style="background:#6b7280;color:#fff;">📦 Archivovat celou kampaň</button> ';
       h+='<button class="btn" onclick="aiDeleteCampaign(\''+c.id+'\')" style="background:#ef444422;color:#ef4444;">🗑 Smazat</button>';
       return h;
@@ -5676,6 +5677,15 @@
       catch(e){ alert('Chyba: '+e.message); }
     }
     window.aiArchiveCampaign=aiArchiveCampaign;
+    async function aiBackfillRecordings(id){
+      try{ if(typeof aiStopPoll==='function') aiStopPoll(); }catch(e){}
+      try{
+        var r=await aiApi('/campaigns/'+id+'/backfill-recordings',{ method:'POST' });
+        alert('Dohledáno nahrávek: '+(r.fixed||0)+(r.checked!=null?(' (kontrolováno '+r.checked+')'):''));
+        aiOpenCampaign(id);
+      }catch(e){ alert('Chyba: '+e.message); }
+    }
+    window.aiBackfillRecordings=aiBackfillRecordings;
     var AI_TSTATUS_COLOR={ pending:'#9aa0ad', calling:'#3b82f6', ringing:'#3b82f6', in_progress:'#22c55e', done:'#10b981', failed:'#ef4444', no_answer:'#f59e0b' };
     function aiRenderTargets(c, batch){
       var tg=(c.targets||[]);

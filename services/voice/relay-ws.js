@@ -426,23 +426,32 @@ function attach(server) {
       let saved = null;
       try {
         if (prisma.voiceCall) {
-          saved = await prisma.voiceCall.create({
-            data: {
-              direction: mode,
-              agent_kind: mode === 'outbound' ? 'campaign' : 'personal',
-              from_number: state.from || '',
-              to_number: state.to || '',
-              twilio_call_sid: state.callSid || 'local-' + Date.now(),
-              started_at: state.startedAt,
-              ended_at: endedAt,
-              duration_sec: durationSec,
-              transcript: state.transcript,
-              summary,
-              caller_name: callerName,
-              caller_intent: callerIntent,
-              campaign_target_id: state.targetId || null,
-            },
-          });
+          const data = {
+            direction: mode,
+            agent_kind: mode === 'outbound' ? 'campaign' : 'personal',
+            from_number: state.from || '',
+            to_number: state.to || '',
+            twilio_call_sid: state.callSid || 'local-' + Date.now(),
+            started_at: state.startedAt,
+            ended_at: endedAt,
+            duration_sec: durationSec,
+            transcript: state.transcript,
+            summary,
+            caller_name: callerName,
+            caller_intent: callerIntent,
+            campaign_target_id: state.targetId || null,
+          };
+          // UPSERT podle callSid: nahrávka mohla dorazit dřív a záznam už existuje
+          // (jen s audio_url) → doplníme ho, ať nevznikne duplikát a nepřijdeme o nahrávku.
+          let existing = null;
+          if (state.callSid) {
+            existing = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: state.callSid }, select: { id: true } }).catch(() => null);
+          }
+          if (existing) {
+            saved = await prisma.voiceCall.update({ where: { id: existing.id }, data });
+          } else {
+            saved = await prisma.voiceCall.create({ data });
+          }
         }
       } catch (e) {
         console.warn('[voice] uložení hovoru selhalo:', e.message);

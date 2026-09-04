@@ -532,7 +532,23 @@ router.post('/recording', form, async (req, res) => {
     const sid = b.CallSid;
     const url = b.RecordingUrl;
     if (sid && url && prisma.voiceCall) {
-      await prisma.voiceCall.updateMany({ where: { twilio_call_sid: sid }, data: { audio_url: url } });
+      const upd = await prisma.voiceCall.updateMany({ where: { twilio_call_sid: sid }, data: { audio_url: url } });
+      // RACE: nahrávka může dorazit DŘÍV, než WS uloží záznam hovoru (u dovolaných).
+      // Když ještě žádný záznam není, založíme ho s URL, ať se nahrávka neztratí.
+      // WS ho pak jen doplní (upsert podle sid).
+      if (!upd.count) {
+        try {
+          await prisma.voiceCall.create({
+            data: {
+              direction: 'outbound', agent_kind: 'campaign',
+              from_number: b.From || '', to_number: b.To || '',
+              twilio_call_sid: sid, started_at: new Date(), ended_at: new Date(),
+              duration_sec: parseInt(b.RecordingDuration, 10) || 0,
+              transcript: [], audio_url: url,
+            },
+          });
+        } catch (e) { console.warn('[voice] recording pre-create:', e.message); }
+      }
       // Předstáhni nahrávku na disk, ať je hned připravená k přehrání (non-fatal).
       try {
         const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true } });
@@ -1060,6 +1076,38 @@ router.get('/campaigns/:id/stats', requireAuth, async (req, res, next) => {
       .sort((a, b) => b.batch_no - a.batch_no);
 
     res.json(Object.assign({ ok: true, current_batch: (camp && camp.current_batch) || 1, batches }, computeStats(targets)));
+  } catch (err) { next(err); }
+});
+
+// Dohledá u dovolaných hovorů chybějící nahrávky přímo z Twilia (podle CallSid).
+// Řeší starší hovory, u kterých se URL nahrávky kdysi neuložila.
+router.post('/campaigns/:id/backfill-recordings', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall || !prisma.voiceCampaignTarget) return res.json({ ok: true, fixed: 0 });
+    const targets = await prisma.voiceCampaignTarget.findMany({ where: { campaign_id: req.params.id }, select: { voice_call_id: true } });
+    const ids = targets.map((t) => t.voice_call_id).filter(Boolean);
+    if (!ids.length) return res.json({ ok: true, fixed: 0 });
+    const calls = await prisma.voiceCall.findMany({
+      where: { id: { in: ids }, audio_url: null, twilio_call_sid: { not: null } },
+      select: { id: true, twilio_call_sid: true },
+    });
+    if (!calls.length) return res.json({ ok: true, fixed: 0 });
+    const c = require('../services/voice/outbound').client();
+    if (!c) return res.status(500).json({ error: 'Twilio není nakonfigurováno' });
+    let fixed = 0;
+    for (const call of calls) {
+      if (!call.twilio_call_sid || String(call.twilio_call_sid).startsWith('local-')) continue;
+      try {
+        const recs = await c.recordings.list({ callSid: call.twilio_call_sid, limit: 1 });
+        if (recs && recs.length) {
+          const uri = String(recs[0].uri || '').replace(/\.json$/, '');
+          const url = 'https://api.twilio.com' + uri; // ensureLocalRecording doplní .mp3
+          await prisma.voiceCall.update({ where: { id: call.id }, data: { audio_url: url } });
+          fixed++;
+        }
+      } catch (e) { console.warn('[voice] backfill rec', call.twilio_call_sid, ':', e.message); }
+    }
+    res.json({ ok: true, fixed, checked: calls.length });
   } catch (err) { next(err); }
 });
 
