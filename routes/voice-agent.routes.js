@@ -434,12 +434,26 @@ router.get('/recording/:callId', requireAuth, async (req, res, next) => {
     if (!SID || !TOKEN) return res.status(500).send('Twilio není nakonfigurováno');
     const mediaUrl = call.audio_url.endsWith('.mp3') ? call.audio_url : call.audio_url + '.mp3';
     const auth = 'Basic ' + Buffer.from(SID + ':' + TOKEN).toString('base64');
-    const r = await fetch(mediaUrl, { headers: { Authorization: auth } });
-    if (!r.ok) return res.status(502).send('Nahrávku nelze načíst');
-    res.set('Content-Type', 'audio/mpeg');
+    // Předej Range požadavek prohlížeče na Twilio → umožní převíjení a plynulé
+    // přehrávání inline (jinak přehrávač po pár vteřinách skáče zpět na začátek).
+    const headers = { Authorization: auth };
+    if (req.headers.range) headers.Range = req.headers.range;
+    const r = await fetch(mediaUrl, { headers });
+    if (!r.ok && r.status !== 206) return res.status(502).send('Nahrávku nelze načíst');
+    // Zrcadli stav (200 / 206) i hlavičky pro seek.
+    res.status(r.status);
+    res.set('Content-Type', r.headers.get('content-type') || 'audio/mpeg');
+    res.set('Accept-Ranges', 'bytes');
+    const cr = r.headers.get('content-range'); if (cr) res.set('Content-Range', cr);
+    const cl = r.headers.get('content-length'); if (cl) res.set('Content-Length', cl);
     res.set('Cache-Control', 'private, max-age=3600');
-    const buf = Buffer.from(await r.arrayBuffer());
-    res.send(buf);
+    // Streamuj tělo (bez načtení celého souboru do paměti).
+    const { Readable } = require('stream');
+    if (r.body && typeof Readable.fromWeb === 'function') {
+      Readable.fromWeb(r.body).pipe(res);
+    } else {
+      res.end(Buffer.from(await r.arrayBuffer()));
+    }
   } catch (err) {
     next(err);
   }
