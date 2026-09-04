@@ -2695,11 +2695,11 @@ async function annotateAiChat(leads) {
       orderBy: { created_at: 'desc' },
       take: 20000,
     });
-    const map = {};
-    for (const r of rows) { if (!map[r.lead_id]) map[r.lead_id] = r.created_at; }
-    leads.forEach((l) => { l.ai_last_chat_at = map[l.id] ? new Date(map[l.id]).toISOString() : null; });
+    const map = {}; const cnt = {};
+    for (const r of rows) { if (!map[r.lead_id]) map[r.lead_id] = r.created_at; cnt[r.lead_id] = (cnt[r.lead_id] || 0) + 1; }
+    leads.forEach((l) => { l.ai_last_chat_at = map[l.id] ? new Date(map[l.id]).toISOString() : null; l.ai_chat_count = cnt[l.id] || 0; });
   } catch (e) {
-    leads.forEach((l) => { l.ai_last_chat_at = l.ai_last_chat_at || null; });
+    leads.forEach((l) => { l.ai_last_chat_at = l.ai_last_chat_at || null; l.ai_chat_count = l.ai_chat_count || 0; });
   }
 }
 

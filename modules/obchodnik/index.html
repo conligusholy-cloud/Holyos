@@ -288,7 +288,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false, chatEverOnly:false };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -997,6 +997,27 @@
   window.setHotOnly = setHotOnly;
   function setChatTodayOnly(v){ state.chatTodayOnly = !!v; render(); }
   window.setChatTodayOnly = setChatTodayOnly;
+  function setChatEverOnly(v){ state.chatEverOnly = !!v; render(); }
+  window.setChatEverOnly = setChatEverOnly;
+  // Zda lead někdy chatoval s AI specialistou (bez ohledu na den).
+  function hasChatted(l){ return (l.ai_chat_count||0) > 0 || !!l.ai_last_chat_at; }
+  // Vytáhne „co lead chce" přímo v seznamu (bez nutnosti rozklikávat kartu).
+  async function obListSummary(id, btn){
+    var box = document.getElementById('ob-listsum-'+id);
+    if (btn) btn.disabled = true;
+    if (box) box.innerHTML = '<span style="color:var(--muted)">Vyhodnocuji chat…</span>';
+    try {
+      var r = await api('/leads/'+id+'/ai-specialist-summary', { method:'POST' });
+      var j = await r.json().catch(function(){return {};});
+      if (r.ok && j.ok && j.summary){
+        var lead = (state.leads||[]).find(function(x){return x.id===id;});
+        if (lead) lead.ai_specialist_summary = j.summary;
+        if (box) box.innerHTML = '<b>🧠 Chce:</b> '+esc(obStripMd(j.summary)).replace(/\n+/g,' ');
+        if (btn) btn.style.display = 'none';
+      } else { if (box) box.innerHTML = '<span style="color:var(--muted2)">'+esc((j&&j.error)||'Zatím není z čeho vyhodnocovat.')+'</span>'; if (btn) btn.disabled = false; }
+    } catch(e){ if (box) box.innerHTML = '<span style="color:#fca5a5">Nepodařilo se vyhodnotit.</span>'; if (btn) btn.disabled = false; }
+  }
+  window.obListSummary = obListSummary;
   // Rychlá AI analýza dnešních chatů — zobrazí ve spodním panelu.
   async function obTodayAnalysis(){
     var ex=document.getElementById('ob-analysis'); if(ex) ex.remove();
@@ -1186,9 +1207,11 @@
       if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
       if (state.hotOnly) filtered = filtered.filter(function(l){ return !!l.is_hot; });
       if (state.chatTodayOnly) filtered = filtered.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); });
+      if (state.chatEverOnly) filtered = filtered.filter(hasChatted);
       var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
       var hotCount = leads.filter(function(l){ return !!l.is_hot; }).length;
       var chatTodayCount = leads.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); }).length;
+      var chatEverCount = leads.filter(hasChatted).length;
       var opts = '<option value="">Všechny stavy ('+leads.length+')</option>' +
         Object.keys(STATUS).map(function(k){
           var n = leads.filter(function(l){ return (l.status||'new') === k; }).length;
@@ -1200,6 +1223,7 @@
         '<button onclick="setHotOnly('+(!state.hotOnly)+')" title="Zobrazit jen zajímavé kontakty" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.hotOnly?'#eab308':'var(--line)')+';background:'+(state.hotOnly?'rgba(234,179,8,0.18)':'transparent')+';color:'+(state.hotOnly?'#eab308':'var(--muted)')+'">⭐ Zajímavé'+(hotCount?' ('+hotCount+')':'')+'</button>' +
         '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
         '<button onclick="setChatTodayOnly('+(!state.chatTodayOnly)+')" title="Zobrazit jen ty, co dnes chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatTodayOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatTodayOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatTodayOnly?'#c4b5fd':'var(--muted)')+'">💬 Dnes chatoval'+(chatTodayCount?' ('+chatTodayCount+')':'')+'</button>' +
+        '<button onclick="setChatEverOnly('+(!state.chatEverOnly)+')" title="Zobrazit všechny, kdo někdy chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatEverOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatEverOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatEverOnly?'#c4b5fd':'var(--muted)')+'">💬 Chatovali'+(chatEverCount?' ('+chatEverCount+')':'')+'</button>' +
         (chatTodayCount?'<button onclick="obTodayAnalysis()" title="Rychlá AI analýza dnešních chatů" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid #8b5cf6;background:#8b5cf6;color:#fff;font-weight:700;">🧠 AI analýza dneška</button>':'') +
         '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
         '</div>';
@@ -1271,6 +1295,21 @@
     var calledBadge = calledToday ? '<div style="font-size:11px;color:#a78bfa;font-weight:700;margin-top:2px">📞 Dnes voláno '+('0'+calledDate.getHours()).slice(-2)+':'+('0'+calledDate.getMinutes()).slice(-2)+'</div>' : '';
     var chatToday = l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at));
     var chatBadge = chatToday ? '<div style="display:inline-block;font-size:11px;color:#c4b5fd;background:rgba(139,92,246,0.20);border:1px solid rgba(139,92,246,0.6);border-radius:999px;padding:1px 8px;font-weight:700;margin-top:3px">💬 Dnes chatoval se specialistou</div>' : '';
+    // Kdokoli někdy chatoval → odznak s počtem zpráv + výtah „co chce" (automaticky, když je uložený).
+    var chatCount = l.ai_chat_count || 0;
+    var chatEverHtml = '';
+    if (chatCount > 0) {
+      var _sum = (l.ai_specialist_summary||'').trim();
+      var _sumShort = _sum ? esc(obStripMd(_sum)).replace(/\n+/g,' ') : '';
+      if (_sumShort.length > 220) _sumShort = _sumShort.slice(0,220) + '…';
+      chatEverHtml = '<div style="margin-top:4px" onclick="event.stopPropagation()">' +
+        '<span style="display:inline-block;font-size:11px;color:#c4b5fd;background:rgba(139,92,246,0.14);border:1px solid rgba(139,92,246,0.5);border-radius:999px;padding:1px 8px;font-weight:700">💬 '+chatCount+'× psal specialistovi</span>' +
+        (_sumShort
+           ? '<div style="font-size:12px;color:#ddd6fe;margin-top:3px;line-height:1.4"><b>🧠 Chce:</b> '+_sumShort+'</div>'
+           : '<button onclick="obListSummary('+l.id+',this)" style="margin-top:3px;font-size:11px;padding:2px 9px;border-radius:999px;cursor:pointer;border:1px solid rgba(139,92,246,0.6);background:transparent;color:#c4b5fd">✨ Vytáhnout, co chce</button>') +
+        '<div id="ob-listsum-'+l.id+'" style="font-size:12px;color:#ddd6fe;margin-top:3px;line-height:1.4"></div>' +
+      '</div>';
+    }
     var subParts = [];
     if (l.email) subParts.push(esc(l.email));
     if (l.phone) subParts.push(esc(l.phone));
@@ -1290,7 +1329,7 @@
     return '<div class="card'+(open?' open':'')+(laToday?' today':'')+'" id="card-'+l.id+'">' +
       '<div class="card-main" onclick="toggle('+l.id+')">' +
         '<span class="dot" style="background:'+st.c+'"></span>' +
-        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+obNextEventBadge(l.id)+'</div>' +
+        '<div class="card-body"><div class="card-name">'+(l.is_hot?'⭐ ':'')+esc(l.name||l.email)+blBadge+(l.extra_offers?' <span title="Individuální nabídka lokalit">🎯</span>':'')+'</div>'+invHtml+'<div class="card-sub">'+(subHtml||'—')+'</div>'+(laToday?'<div style="font-size:11px;color:#22c55e;margin-top:2px">Poslední aktivita: '+fmtD(laDate)+'</div>':'')+obOverdueBadge(l)+calledBadge+chatBadge+chatEverHtml+obNextEventBadge(l.id)+'</div>' +
         '<span class="badge" style="background:'+st.c+'22;color:'+st.c+';white-space:normal;text-align:center;line-height:1.2">'+st.l+((l.status==='dosledovani' && l.discount && l.discount.endsAt)?('<br><span style="font-weight:400;font-size:.85em;opacity:.85">do '+new Date(l.discount.endsAt).toLocaleDateString('cs-CZ')+'</span>'):'')+'</span>' +
         '<span class="gear" onclick="event.stopPropagation();openEdit('+l.id+')" title="Upravit údaje kontaktu">⚙️</span>' +
         '<span class="chev">▸</span>' +
