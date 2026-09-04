@@ -667,7 +667,7 @@ const staticOpts = isDev
 //   (2) na app.holyos.cz/compounder/ — servírováno z podcesty.
 // sw.js a manifest jdou s no-cache, ať se nainstalovaná PWA aktualizuje.
 const COMPOUNDER_DIR = path.join(__dirname, 'public', 'compounder');
-const COMPOUNDER_HOSTS = (process.env.COMPOUNDER_HOSTS || 'compounder.world,www.compounder.world')
+const COMPOUNDER_HOSTS = (process.env.COMPOUNDER_HOSTS || 'compounder.world,www.compounder.world,pradlomaty.info,www.pradlomaty.info')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 function reqHostname(req) {
   // za Railway proxy je původní doména v X-Forwarded-Host

@@ -909,7 +909,7 @@ async function autosendAiSpecialistSms(lead) {
     if (lead.ai_specialist_sms_sent_at) return skip('SMS už odeslána');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
-    const link = portalBase() + '/s/' + makeShortCode(lead.id);
+    const link = specialistBase() + '/s/' + makeShortCode(lead.id);
     const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
     const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
     const sms = require('../services/voice/sms');
@@ -1069,7 +1069,7 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
     // Odkaz bez „www." → kratší SMS. Text bez diakritiky, aby se vešel do 1 SMS
     // (s diakritikou je limit 70 znaků/SMS; bez diakritiky 160 znaků GSM-7).
     // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
-    const link = portalBase() + '/s/' + makeShortCode(id);
+    const link = specialistBase() + '/s/' + makeShortCode(id);
     const custom = (req.body && req.body.text) ? String(req.body.text) : '';
     const body = (custom && custom.indexOf('{link}') !== -1)
       ? custom.replace('{link}', link)
@@ -1117,7 +1117,7 @@ router.get('/leads/:id/ai-specialist-link', requireAuth, async (req, res) => {
       await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     }
     // Použij plnou doménu z portalBase (má platný TLS certifikát). Apex bez „www" cert nemá → ERR_CERT_COMMON_NAME_INVALID.
-    const link = portalBase() + '/s/' + makeShortCode(id);
+    const link = specialistBase() + '/s/' + makeShortCode(id);
     res.json({ ok: true, link });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -6159,6 +6159,12 @@ async function notifyNewLead(leadId, d) {
 function portalSecret() {
   return process.env.COMPOUNDER_TOKEN_SECRET || process.env.JWT_SECRET || 'compounder-portal-secret';
 }
+// Základ URL pro odkazy na AI specialistu. Lze přesměrovat na vlastní doménu
+// (env COMPOUNDER_SPECIALIST_BASE, např. https://pradlomaty.info); jinak = portalBase().
+function specialistBase() {
+  const b = process.env.COMPOUNDER_SPECIALIST_BASE;
+  return (b && String(b).trim()) ? String(b).trim().replace(/\/+$/, '') : portalBase();
+}
 function portalBase() {
   return (process.env.COMPOUNDER_BASE_URL || 'https://www.compounder.world').replace(/\/+$/, '');
 }
@@ -6192,7 +6198,7 @@ function verifyShortCode(code) {
 function shortCodeToAiUrl(code) {
   const id = verifyShortCode(code);
   if (!id) return null;
-  return portalBase() + '/ai?t=' + makePortalToken(id);
+  return specialistBase() + '/ai?t=' + makePortalToken(id);
 }
 // Zpřístupníme app.js (přesměrování /s/<kód> na compounder.world i holyos.cz).
 router.shortCodeToAiUrl = shortCodeToAiUrl;
