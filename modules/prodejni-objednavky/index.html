@@ -4716,11 +4716,30 @@
         var j = await r.json().catch(function(){return{};});
         if(!r.ok || !j.ok){ out.innerHTML='<span style="color:#ef4444;font-size:12px;">Nepodařilo se načíst chat.</span>'; return; }
         var h='';
-        if(j.summary){ h+='<div style="background:rgba(234,179,8,0.08);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;white-space:pre-wrap;"><b>🧠 Shrnutí:</b><br>'+cmpEsc(j.summary)+'</div>'; }
-        if(!(j.messages||[]).length){ h+='<div style="color:var(--text2);font-size:12px;">Zatím žádný chat.</div>'; }
+        if(j.summary){ h+='<div style="background:rgba(234,179,8,0.08);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px;white-space:pre-wrap;"><b>🧠 Shrnutí:</b><br>'+cmpEsc(cmpStripMd(j.summary))+'</div>'; }
+        var msgs=j.messages||[];
+        if(!msgs.length){ h+='<div style="color:var(--text2);font-size:12px;">Zatím žádný chat.</div>'; }
         else{
-          h+='<div style="max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:6px;">';
-          j.messages.forEach(function(m){ var me=m.role==='user'; h+='<div style="max-width:88%;padding:6px 9px;border-radius:9px;font-size:12px;line-height:1.4;white-space:pre-wrap;'+(me?'align-self:flex-end;background:#26303c;color:#fff;':'align-self:flex-start;background:var(--surface2);color:var(--text);')+'">'+(me?'🧑 ':'🤖 ')+cmpEsc(m.text)+'</div>'; });
+          function cmpChatTime(iso){ if(!iso) return ''; try{ return new Date(iso).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
+          var userN=msgs.filter(function(m){return m.role==='user';}).length;
+          var aiN=msgs.length-userN;
+          // Hlavička: kolik zpráv + odkdy dokdy
+          h+='<div style="font-size:12px;color:var(--text2);margin-bottom:6px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+            +'<b style="color:var(--text);">💬 Celý chat</b>'
+            +'<span>'+msgs.length+' zpráv (🧑 '+userN+' / 🤖 '+aiN+')</span>'
+            +'<span>'+cmpChatTime(msgs[0].at)+' → '+cmpChatTime(msgs[msgs.length-1].at)+'</span>'
+            +'</div>';
+          h+='<div style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--bg);">';
+          h+='<div style="text-align:center;font-size:11px;color:var(--text2);border-bottom:1px dashed var(--border);padding-bottom:4px;">— začátek konverzace —</div>';
+          msgs.forEach(function(m){
+            var me=m.role==='user';
+            var t=cmpChatTime(m.at);
+            h+='<div style="display:flex;flex-direction:column;max-width:88%;'+(me?'align-self:flex-end;align-items:flex-end;':'align-self:flex-start;align-items:flex-start;')+'">'
+              +'<div style="padding:7px 10px;border-radius:10px;font-size:12px;line-height:1.45;white-space:pre-wrap;'+(me?'background:#26303c;color:#fff;border-bottom-right-radius:3px;':'background:var(--surface2);color:var(--text);border-bottom-left-radius:3px;')+'">'+(me?'🧑 ':'🤖 ')+cmpEsc(cmpStripMd(m.text))+'</div>'
+              +'<div style="font-size:10px;color:var(--text2);margin-top:2px;">'+(me?'Zákazník':'Specialista')+(t?(' · '+t):'')+'</div>'
+              +'</div>';
+          });
+          h+='<div style="text-align:center;font-size:11px;color:var(--text2);border-top:1px dashed var(--border);padding-top:4px;">— konec konverzace —</div>';
           h+='</div>';
         }
         out.innerHTML=h;
