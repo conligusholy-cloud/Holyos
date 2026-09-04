@@ -31,7 +31,8 @@ function personalSystem() {
   return (
     'Jsi telefonní asistentka firmy Best Series. Mluvíš česky, stručně a mile. ' +
     'Tvým úkolem je zjistit, KDO volá a CO potřebuje. Kladeš jednu krátkou otázku po druhé. ' +
-    'Až máš jméno i důvod hovoru, poděkuj, potvrď že předáš vzkaz, a rozluč se. Nevymýšlej si informace.'
+    'Až máš jméno i důvod hovoru, poděkuj, potvrď že předáš vzkaz, a rozluč se. Nevymýšlej si informace. ' +
+    'Pokud volající chce mluvit s živým člověkem, kolegou nebo obchodníkem, neodmítej ho — řekni, že ho přepojíš, a systém přepojení zajistí.'
   );
 }
 
@@ -42,7 +43,8 @@ function outboundSystem(script) {
     (script
       ? 'Scénář hovoru, kterým se řiď: ' + script
       : 'Představ se za Best Series, zjisti zájem o prádlomaty a pokus se domluvit další krok (schůzku nebo zaslání informací).') +
-    ' Buď přirozený/á, respektuj když člověk nemá zájem, na konci poděkuj a rozluč se.'
+    ' Buď přirozený/á, respektuj když člověk nemá zájem, na konci poděkuj a rozluč se.' +
+    ' Pokud zákazník chce mluvit s živým člověkem nebo obchodníkem, neodmítej ho — řekni, že ho přepojíš, a systém přepojení zajistí.'
   );
 }
 
@@ -52,6 +54,26 @@ function send(ws, obj) {
   } catch (_) {
     /* socket zavřený */
   }
+}
+
+// Rozpozná, že volající chce mluvit s živým člověkem (aby ho AI přepojila).
+// Bez diakritiky, malá písmena. Volíme spíš konzervativně, ať to nemíří omylem.
+function wantsHuman(text) {
+  const t = String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '');
+  if (!t) return false;
+  // "s clovekem", "na cloveka", "ziveho cloveka", "s nekym zivym", "realnou osobou"
+  if (/(s |se |na |za )?(zive?ho|zivou|realn\w*|skutecn\w*)?\s*(clovek\w*|osob\w*)/.test(t) &&
+      /(chci|chtel|chtela|muzu|mohu|potrebuj\w*|dejte|prepoj\w*|spoj\w*|mluvit|mluvil|volat|zavolej\w*|preda\w*)/.test(t)) return true;
+  // přímé fráze / žádost o operátora / obchodníka
+  if (/(prepoj\w*|spoj\w*|preda\w*)\s+(me|mne|nas)?\s*(na|k)?\s*(operator\w*|obchodnik\w*|kolegu|clovek\w*|zive\w*)/.test(t)) return true;
+  if (/\boperator\w*/.test(t) && /(chci|prepoj\w*|spoj\w*|mluvit|s )/.test(t)) return true;
+  // odmítnutí robota/AI
+  if (/(nechci|nebudu|nemluvim)\s+(s )?(robot\w*|ai|umel\w*|automat\w*)/.test(t)) return true;
+  if (/(jsi| jste|to je)\s+(robot|ai|umela|automat)/.test(t) && /(chci|prepoj|clovek|zive)/.test(t)) return true;
+  return false;
 }
 
 function attach(server) {
@@ -84,6 +106,7 @@ function attach(server) {
       history: [],
       startedAt: new Date(),
       mode,
+      handedOff: false,
       targetId,
       target: null,
       campaign: null,
@@ -185,6 +208,30 @@ function attach(server) {
         const userText = (msg.voicePrompt || '').trim();
         if (!userText) return;
         state.transcript.push({ role: 'caller', text: userText, ts: Date.now() });
+
+        // Přepojení na živého člověka: když zákazník chce člověka, řekni krátkou
+        // přepojovací větu a ukonči AI relaci s handoffData → Twilio zavolá
+        // /api/voice/relay-end, které vytočí obchodníka leadu / záložní kontakt.
+        if (!state.handedOff && wantsHuman(userText)) {
+          let allow = true;
+          try {
+            if (getSetting) {
+              const v = await getSetting('voice.transfer_enabled');
+              allow = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1');
+            }
+          } catch (_) { allow = true; }
+          if (allow) {
+            state.handedOff = true;
+            const line = 'Jasně, přepojím vás na kolegu. Chvilku prosím vydržte.';
+            state.transcript.push({ role: 'agent', text: line, ts: Date.now() });
+            send(ws, { type: 'text', token: line, last: true });
+            // Malá prodleva, ať se přepojovací věta stihne přehrát, pak ukonči relaci.
+            setTimeout(() => {
+              send(ws, { type: 'end', handoffData: JSON.stringify({ transfer: true, reason: 'caller_requested_human' }) });
+            }, 1200);
+            return;
+          }
+        }
         try {
           const { text, messages } = await agent.runTurn({
             system: state.system,

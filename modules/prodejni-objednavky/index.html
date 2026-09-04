@@ -431,6 +431,19 @@
         <input id="ai-inbound-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
         <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Výchozí odchozí číslo (Twilio, pro kampaně)</label>
         <input id="ai-inbound-from" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420910926010">
+
+        <div style="border:1px solid rgba(16,185,129,0.4);border-radius:10px;padding:14px;margin-top:16px;background:rgba(16,185,129,0.06);">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka</div>
+          <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Když zákazník během hovoru řekne, že chce mluvit s živým člověkem, AI ho přepojí. U odchozích kampaní volá nejdřív mobil obchodníka přiřazeného k danému leadu; když to nikdo nezvedne (do vypršení vyzvánění), zkusí postupně záložní čísla. U příchozích hovorů začíná číslem pro příchozí a pak záložními.</p>
+          <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="ai-transfer-enabled"> Zapnout přepojení na živého člověka</label>
+          <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Záložní čísla (když se obchodník nedovolá) — oddělená čárkou, v pořadí</label>
+          <input id="ai-transfer-fallback" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456, +420602000000">
+          <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Číslo pro příchozí hovory (kam přepojit volajícího na recepční)</label>
+          <input id="ai-transfer-inbound" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456">
+          <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Doba vyzvánění na jedno číslo (sekundy)</label>
+          <input id="ai-transfer-timeout" type="number" min="8" max="60" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="20">
+        </div>
+
         <div style="margin-top:14px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-inbound-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
       </div>
 
@@ -5087,6 +5100,10 @@
         document.getElementById('ai-inbound-greeting').value=c.inbound_greeting||'';
         document.getElementById('ai-inbound-notify').value=(c.notify_person_ids||[]).join(',');
         document.getElementById('ai-inbound-from').value=c.default_from||'';
+        var _te=document.getElementById('ai-transfer-enabled'); if(_te) _te.checked = c.transfer_enabled!==false;
+        var _tf=document.getElementById('ai-transfer-fallback'); if(_tf) _tf.value = c.transfer_fallback_numbers||'';
+        var _ti=document.getElementById('ai-transfer-inbound'); if(_ti) _ti.value = c.transfer_inbound_number||'';
+        var _tt=document.getElementById('ai-transfer-timeout'); if(_tt) _tt.value = c.transfer_ring_timeout||20;
         aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400);
         aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50);
         var _kn=document.getElementById('ai-kn-sec-inbound'); if(_kn && !_kn.getAttribute('data-init')){ _kn.innerHTML=aiKnSectionHtml('inbound'); _kn.setAttribute('data-init','1'); }
@@ -5102,7 +5119,11 @@
           inbound_prompt: document.getElementById('ai-inbound-prompt').value,
           inbound_greeting: document.getElementById('ai-inbound-greeting').value,
           notify_person_ids: notify,
-          default_from: document.getElementById('ai-inbound-from').value.trim()
+          default_from: document.getElementById('ai-inbound-from').value.trim(),
+          transfer_enabled: !!(document.getElementById('ai-transfer-enabled')||{}).checked,
+          transfer_fallback_numbers: ((document.getElementById('ai-transfer-fallback')||{}).value||'').trim(),
+          transfer_inbound_number: ((document.getElementById('ai-transfer-inbound')||{}).value||'').trim(),
+          transfer_ring_timeout: parseInt((document.getElementById('ai-transfer-timeout')||{}).value,10)||20
         })});
         if(msg) msg.textContent='✅ Uloženo'; if(msg2) msg2.textContent='✅ Uloženo';
       }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; if(msg2) msg2.textContent='Chyba: '+e.message; }

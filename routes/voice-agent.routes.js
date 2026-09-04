@@ -22,6 +22,11 @@ const WS_URL = process.env.VOICE_RELAY_WS_URL || 'wss://app.holyos.cz/api/voice/
 const TTS_PROVIDER = process.env.VOICE_TTS_PROVIDER || 'ElevenLabs';
 const STT_PROVIDER = process.env.VOICE_STT_PROVIDER || 'Deepgram';
 const RELAY_SECRET = process.env.VOICE_RELAY_SECRET || '';
+// Veřejná adresa serveru (pro action URL TwiML). Z WS_URL odvodíme https host.
+const PUBLIC_BASE = process.env.PUBLIC_BASE_URL
+  || (WS_URL.replace(/^wss?:\/\//, 'https://').replace(/\/api\/voice\/relay.*$/, ''))
+  || 'https://app.holyos.cz';
+const VOICE_DEFAULT_FROM = process.env.VOICE_DEFAULT_FROM || '';
 
 // WS url + sdílené tajemství (+ volitelně další query, např. target pro outbound)
 function relayUrl(extra) {
@@ -42,17 +47,114 @@ function xmlAttr(s) {
     .replace(/"/g, '&quot;');
 }
 
-function twimlConnect(wsUrl) {
+// TwiML pro spojení hovoru s ConversationRelay. actionUrl = kam Twilio zavolá,
+// až AI relace skončí (buď zákazník zavěsí, nebo AI pošle {type:'end'} kvůli
+// přepojení na živého člověka). Bez action by hovor po konci relace jen spadl.
+function twimlConnect(wsUrl, actionUrl) {
   const u = xmlAttr(wsUrl);
+  const act = actionUrl ? ` action="${xmlAttr(actionUrl)}" method="POST"` : '';
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
-    '  <Connect>\n' +
+    `  <Connect${act}>\n` +
     `    <ConversationRelay url="${u}" language="cs-CZ" ` +
     `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}" />\n` +
     '  </Connect>\n' +
     '</Response>'
   );
+}
+
+// E.164 normalizace (české 9místné → +420…, 00… → +…).
+function e164(num) {
+  num = (num || '').replace(/[\s\-()]/g, '');
+  if (!num) return '';
+  if (num.startsWith('+')) return num;
+  if (num.startsWith('00')) return '+' + num.slice(2);
+  if (/^\d{9}$/.test(num)) return '+420' + num;
+  return num;
+}
+function encList(arr) {
+  return Buffer.from(JSON.stringify(arr || []), 'utf8').toString('base64');
+}
+function decList(s) {
+  try { return JSON.parse(Buffer.from(String(s || ''), 'base64').toString('utf8')) || []; }
+  catch (_) { return []; }
+}
+
+// TwiML, které postupně vytáčí čísla ze seznamu (první = obchodník leadu, pak
+// záložní kontakty). Po skončení každého <Dial> Twilio zavolá action s tailem —
+// když se to nikdo nezvedl, zkusí se další v pořadí; když zvedl, hovor běží a
+// po zavěšení action dostane completed → zavěsíme.
+function twimlDial(numbers, timeout) {
+  const list = (numbers || []).map(e164).filter(Boolean);
+  if (!list.length) {
+    return (
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<Response>\n' +
+      '  <Say language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
+      '  <Hangup/>\n' +
+      '</Response>'
+    );
+  }
+  const first = xmlAttr(list[0]);
+  const tail = encList(list.slice(1));
+  const t = Math.max(8, Math.min(60, parseInt(timeout, 10) || 20));
+  const callerId = VOICE_DEFAULT_FROM ? ` callerId="${xmlAttr(e164(VOICE_DEFAULT_FROM))}"` : '';
+  const action = xmlAttr(`${PUBLIC_BASE}/api/voice/transfer?q=${tail}&t=${t}`);
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<Response>\n' +
+    '  <Say language="cs-CZ">Přepojuji vás na kolegu, chvilku prosím vydržte.</Say>\n' +
+    `  <Dial timeout="${t}"${callerId} action="${action}" method="POST">\n` +
+    `    <Number>${first}</Number>\n` +
+    '  </Dial>\n' +
+    '</Response>'
+  );
+}
+
+// Sestaví pořadí čísel k vytáčení: [obchodník leadu] + [záložní čísla z nastavení].
+async function resolveTransferNumbers(mode, targetId) {
+  const get = settings ? settings.getSetting : null;
+  const fallbackRaw = get ? (await get('voice.transfer_fallback_numbers')) || '' : '';
+  const inboundNum = get ? (await get('voice.transfer_inbound_number')) || '' : '';
+  const fallbacks = String(fallbackRaw).split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+  const nums = [];
+
+  if (mode === 'outbound' && targetId && prisma.voiceCampaignTarget) {
+    try {
+      const t = await prisma.voiceCampaignTarget.findUnique({ where: { id: targetId } });
+      if (t && t.phone) {
+        const owner = await ownerPhoneForPhone(t.phone);
+        if (owner) nums.push(owner);
+      }
+    } catch (e) { console.warn('[voice] resolve owner selhal:', e.message); }
+  } else if (mode === 'inbound' && inboundNum) {
+    nums.push(inboundNum);
+  }
+  fallbacks.forEach((f) => nums.push(f));
+  // deduplikace v E.164
+  const seen = new Set();
+  return nums.map(e164).filter((n) => n && !seen.has(n) && seen.add(n));
+}
+
+// Najde mobil obchodníka přiřazeného k leadu podle telefonu (posledních 9 číslic).
+async function ownerPhoneForPhone(phone) {
+  try {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length < 6) return '';
+    const tail = digits.slice(-9);
+    const leads = await prisma.compounderLead.findMany({
+      where: { phone: { contains: tail } },
+      select: { phone: true, owner_person_id: true },
+      take: 5,
+      orderBy: { updated_at: 'desc' },
+    });
+    const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail && l.owner_person_id);
+    if (!lead) return '';
+    const p = await prisma.person.findUnique({ where: { id: lead.owner_person_id }, select: { phone: true, active: true } });
+    if (p && p.active !== false && p.phone && p.phone.replace(/\D/g, '').length >= 6) return p.phone;
+    return '';
+  } catch (e) { console.warn('[voice] ownerPhoneForPhone:', e.message); return ''; }
 }
 
 // Twilio posílá application/x-www-form-urlencoded
@@ -61,7 +163,8 @@ const form = express.urlencoded({ extended: false });
 // POST /api/voice/incoming — první webhook příchozího hovoru.
 // Vrací TwiML, které předá hovor ConversationRelay (řeč↔text) a napojí ho na náš WS.
 router.post('/incoming', form, (req, res) => {
-  res.type('text/xml').send(twimlConnect(relayUrl()));
+  const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound`;
+  res.type('text/xml').send(twimlConnect(relayUrl(), action));
 });
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
@@ -95,7 +198,53 @@ router.post('/outgoing', form, async (req, res) => {
   }
 
   const extra = target ? 'target=' + encodeURIComponent(target) : '';
-  res.type('text/xml').send(twimlConnect(relayUrl(extra)));
+  const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=outbound` + (target ? '&target=' + encodeURIComponent(target) : '');
+  res.type('text/xml').send(twimlConnect(relayUrl(extra), action));
+});
+
+// POST /api/voice/relay-end — Twilio sem zavolá, když AI relace (ConversationRelay)
+// skončí. Když AI poslala {type:'end', handoffData:{transfer:true}} (zákazník chce
+// živého člověka), přepojíme hovor přes <Dial>. Jinak hovor zavěsíme.
+router.post('/relay-end', form, async (req, res) => {
+  try {
+    const mode = (req.query.mode || 'inbound') === 'outbound' ? 'outbound' : 'inbound';
+    const target = req.query.target || '';
+    let handoff = {};
+    try { handoff = JSON.parse((req.body && req.body.HandoffData) || '{}'); } catch (_) { handoff = {}; }
+    const wantsTransfer = !!(handoff && handoff.transfer);
+
+    const get = settings ? settings.getSetting : null;
+    const enRaw = get ? await get('voice.transfer_enabled') : true;
+    const enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
+
+    if (!wantsTransfer || !enabled) {
+      return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+    }
+    const timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
+    const numbers = await resolveTransferNumbers(mode, target);
+    return res.type('text/xml').send(twimlDial(numbers, timeout));
+  } catch (e) {
+    console.warn('[voice] relay-end:', e.message);
+    return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+  }
+});
+
+// POST /api/voice/transfer — sekvenční vytáčení dalších čísel v pořadí (?q=<base64 zbytek>).
+// Twilio sem zavolá po každém <Dial>: když se dovolalo (completed), zavěsíme;
+// jinak zkusíme další číslo ze zbytku; když už žádné není, omluvíme se a zavěsíme.
+router.post('/transfer', form, (req, res) => {
+  try {
+    const status = ((req.body && req.body.DialCallStatus) || '').toLowerCase();
+    if (status === 'completed' || status === 'answered') {
+      return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+    }
+    const rest = decList(req.query.q);
+    const timeout = parseInt(req.query.t, 10) || 20;
+    return res.type('text/xml').send(twimlDial(rest, timeout));
+  } catch (e) {
+    console.warn('[voice] transfer:', e.message);
+    return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+  }
 });
 
 // POST /api/voice/status — status callback po skončení hovoru.
@@ -233,7 +382,14 @@ router.get('/config', requireAuth, async (req, res, next) => {
     // Brána SMS (provider + kanál/odesílatel), včetně readiness klíčů (bez tajných hodnot)
     let sms_gateway = { provider: 'twilio', gosms_channel: '', twilio_sms_from: '', gosms_ready: false, twilio_ready: false };
     try { sms_gateway = await require('../services/voice/sms').getSmsConfigView(); } catch (_) { /* fallback */ }
-    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway });
+    // Přepojení na živého člověka
+    const trRaw = get ? await get('voice.transfer_enabled') : true;
+    const transfer_enabled = trRaw === undefined || trRaw === null ? true : (trRaw === true || trRaw === 'true' || trRaw === 1 || trRaw === '1');
+    const transfer_fallback_numbers = get ? (await get('voice.transfer_fallback_numbers')) || '' : '';
+    const transfer_inbound_number = get ? (await get('voice.transfer_inbound_number')) || '' : '';
+    const transfer_ring_timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
+    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway,
+      transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout });
   } catch (err) {
     next(err);
   }
@@ -271,6 +427,16 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       await settings.setSetting('voice.gosms_channel', String(gosms_channel || '').trim(), { type: 'string', userId: uid });
     if (twilio_sms_from !== undefined)
       await settings.setSetting('voice.twilio_sms_from', String(twilio_sms_from || '').trim(), { type: 'string', userId: uid });
+    // Přepojení na živého člověka
+    const { transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout } = req.body || {};
+    if (transfer_enabled !== undefined)
+      await settings.setSetting('voice.transfer_enabled', !!transfer_enabled, { type: 'boolean', userId: uid });
+    if (transfer_fallback_numbers !== undefined)
+      await settings.setSetting('voice.transfer_fallback_numbers', String(transfer_fallback_numbers || '').trim(), { type: 'string', userId: uid });
+    if (transfer_inbound_number !== undefined)
+      await settings.setSetting('voice.transfer_inbound_number', String(transfer_inbound_number || '').trim(), { type: 'string', userId: uid });
+    if (transfer_ring_timeout !== undefined)
+      await settings.setSetting('voice.transfer_ring_timeout', String(parseInt(transfer_ring_timeout, 10) || 20), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);
