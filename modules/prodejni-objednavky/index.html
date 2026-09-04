@@ -5527,7 +5527,9 @@
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
         html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
         html+='<textarea id="ai-t-raw" rows="4" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="Jan Novák; +420777123456"></textarea>';
-        html+='<button class="btn" onclick="aiAddTargets(\''+c.id+'\')" style="margin-top:8px;">➕ Přidat leady</button> <span id="ai-t-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
+        html+='<button class="btn" onclick="aiAddTargets(\''+c.id+'\')" style="margin-top:8px;">➕ Přidat leady</button>';
+        html+=' <button class="btn" onclick="aiOpenLeadPicker(\''+c.id+'\')" style="margin-top:8px;background:#8b5cf6;color:#fff;font-weight:700;">🎯 Vybrat z Compounder leadů</button>';
+        html+=' <span id="ai-t-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
         html+='</div>';
         html+='<div id="ai-targets">'+aiRenderTargets(c)+'</div>';
         det.innerHTML=html;
@@ -5554,6 +5556,61 @@
         msg.textContent='✅ Přidáno '+r.added; aiOpenCampaign(id);
       }catch(e){ msg.textContent='Chyba: '+e.message; }
     }
+    // ── Chytrý výběr leadů do kampaně (filtr obchodník + stav, jednotlivě/hromadně) ──
+    async function aiOpenLeadPicker(campId){
+      var ex=document.getElementById('ai-lead-picker'); if(ex) ex.remove();
+      try{ if(typeof fbEnsureSellers==='function') await fbEnsureSellers(); }catch(e){}
+      var sellers=(typeof CMP_SELLERS!=='undefined'&&Array.isArray(CMP_SELLERS))?CMP_SELLERS:[];
+      var ownerOpts='<option value="">— všichni obchodníci —</option>'+sellers.map(function(s){var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id);return '<option value="'+s.id+'">'+aiEsc(nm)+'</option>';}).join('');
+      var statusOpts='<option value="">— všechny stavy —</option>'+Object.keys(CMP_STATUS).map(function(k){return '<option value="'+k+'">'+CMP_STATUS[k]+'</option>';}).join('');
+      var ov=document.createElement('div'); ov.id='ai-lead-picker';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;';
+      ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+      ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:760px;max-height:86vh;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:14px;overflow:hidden;">'
+        +'<div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;"><b>🎯 Vybrat leady do kampaně</b><button class="btn" onclick="document.getElementById(\'ai-lead-picker\').remove()" style="font-size:13px;">✕</button></div>'
+        +'<div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border);">'
+          +'<select id="aip-owner" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px;">'+ownerOpts+'</select>'
+          +'<select id="aip-status" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px;">'+statusOpts+'</select>'
+          +'<button class="btn" onclick="aiPickerLoad()" style="background:#eab308;color:#0e1a22;font-weight:700;font-size:13px;">↻ Načíst</button>'
+          +'<label style="font-size:13px;color:var(--text2);display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="aip-all" onchange="aiPickerToggleAll(this.checked)"> vybrat vše</label>'
+          +'<span id="aip-count" style="font-size:12px;color:var(--text2);margin-left:auto;"></span>'
+        +'</div>'
+        +'<div id="aip-list" style="flex:1;overflow:auto;padding:10px 16px;font-size:13px;color:var(--text2);">Zvol filtr a klikni „Načíst".</div>'
+        +'<div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;"><button class="btn" onclick="aiPickerAdd(\''+campId+'\')" style="background:#8b5cf6;color:#fff;font-weight:700;">➕ Přidat vybrané do kampaně</button><span id="aip-msg" style="font-size:13px;color:var(--text2);"></span></div>'
+        +'</div>';
+      document.body.appendChild(ov);
+    }
+    async function aiPickerLoad(){
+      var box=document.getElementById('aip-list'); if(!box) return; box.innerHTML='Načítám…';
+      var owner=document.getElementById('aip-owner').value; var status=document.getElementById('aip-status').value;
+      var qs=[]; if(owner) qs.push('owner='+encodeURIComponent(owner)); if(status) qs.push('status='+encodeURIComponent(status));
+      try{
+        var r=await fetch('/api/compounder/leads'+(qs.length?('?'+qs.join('&')):''), { credentials:'include' });
+        var leads=await r.json();
+        var withPhone=(Array.isArray(leads)?leads:[]).filter(function(l){ return l.phone && String(l.phone).replace(/\D/g,'').length>=6 && !l.is_test; });
+        if(!withPhone.length){ box.innerHTML='<span>Žádné kontakty s telefonem pro tento filtr.</span>'; document.getElementById('aip-count').textContent=''; return; }
+        box.innerHTML=withPhone.map(function(l){
+          var nm=aiEsc(l.name||l.email||('#'+l.id));
+          return '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border);cursor:pointer;"><input type="checkbox" class="aip-ch" value="'+l.id+'" data-name="'+aiEsc(String(l.name||"").replace(/"/g,""))+'" data-phone="'+aiEsc(l.phone)+'"><span style="color:var(--text);">'+nm+'</span><span style="color:var(--text2);">· '+aiEsc(l.phone)+'</span><span style="color:var(--text2);margin-left:auto;font-size:11px;">'+(CMP_STATUS[l.status]||l.status||'')+'</span></label>';
+        }).join('');
+        document.getElementById('aip-count').textContent=withPhone.length+' kontaktů';
+        var all=document.getElementById('aip-all'); if(all) all.checked=false;
+      }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba: '+e.message+'</span>'; }
+    }
+    function aiPickerToggleAll(on){ Array.prototype.slice.call(document.querySelectorAll('.aip-ch')).forEach(function(c){c.checked=on;}); }
+    async function aiPickerAdd(campId){
+      var chs=Array.prototype.slice.call(document.querySelectorAll('.aip-ch:checked'));
+      var msg=document.getElementById('aip-msg');
+      if(!chs.length){ if(msg) msg.textContent='Nikdo nevybrán.'; return; }
+      var raw=chs.map(function(c){ return (c.getAttribute('data-name')||'')+'; '+c.getAttribute('data-phone'); }).join('\n');
+      if(msg) msg.textContent='Přidávám '+chs.length+'…';
+      try{
+        var r=await aiApi('/campaigns/'+campId+'/targets',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ raw: raw })});
+        if(msg) msg.textContent='✅ Přidáno '+(r.added!=null?r.added:chs.length);
+        setTimeout(function(){ var ov=document.getElementById('ai-lead-picker'); if(ov) ov.remove(); aiOpenCampaign(campId); }, 700);
+      }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
+    }
+    window.aiOpenLeadPicker=aiOpenLeadPicker; window.aiPickerLoad=aiPickerLoad; window.aiPickerToggleAll=aiPickerToggleAll; window.aiPickerAdd=aiPickerAdd;
     async function aiCampAction(id, action){
       try{ await aiApi('/campaigns/'+id+'/'+action,{ method:'POST' }); aiOpenCampaign(id); }
       catch(e){ alert('Chyba: '+e.message); }
