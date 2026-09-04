@@ -104,27 +104,41 @@ async function summarize(transcript = []) {
     .trim();
 }
 
-// Strukturované shrnutí pro notifikaci: { summary, caller_name, caller_intent }.
-async function summarizeStructured(transcript = []) {
+// Strukturované shrnutí + záměry pro automatizaci (stav kontaktu, kalendář).
+// Vrací { summary, caller_name, caller_intent, no_interest, callback, callback_at,
+//         meeting, meeting_at, when_text }.
+async function summarizeStructured(transcript = [], opts = {}) {
   const text = transcript
     .map((t) => `${t.role === 'caller' ? 'Volající' : 'Asistent'}: ${t.text}`)
     .join('\n');
-  if (!text.trim()) return { summary: '', caller_name: null, caller_intent: null };
+  const EMPTY = { summary: '', caller_name: null, caller_intent: null, no_interest: false, callback: false, callback_at: null, meeting: false, meeting_at: null, when_text: null };
+  if (!text.trim()) return EMPTY;
+
+  // Aktuální čas v Praze — aby AI mohla odvodit konkrétní termín ("pondělí v 10:00").
+  const now = opts.now ? new Date(opts.now) : new Date();
+  let nowStr = '';
+  try {
+    nowStr = now.toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch (_) { nowStr = now.toISOString(); }
 
   const client = getClient();
   const resp = await messagesCreate(
     client,
     {
       model: VOICE_MODEL,
-      max_tokens: 350,
+      max_tokens: 450,
       temperature: 0.2,
       system:
-        'Shrň telefonní hovor. Odpověz POUZE validním JSON bez markdownu, přesně ve tvaru ' +
-        '{"caller_name": string|null, "caller_intent": string, "summary": string, "no_interest": boolean}. ' +
-        'caller_name = jméno volajícího pokud zaznělo, jinak null. ' +
-        'caller_intent = krátce co volající potřeboval. summary = 1–3 věty. ' +
-        'no_interest = true POUZE pokud volající jasně vyjádřil, že NEMÁ zájem o prádlomaty ' +
-        'nebo si výslovně NEPŘEJE být dále kontaktován; při nejistotě nebo běžném dotazu false. ' +
+        'Shrň telefonní hovor a vytáhni záměry. Odpověz POUZE validním JSON bez markdownu, přesně ve tvaru ' +
+        '{"caller_name": string|null, "caller_intent": string, "summary": string, "no_interest": boolean, ' +
+        '"callback": boolean, "callback_at": string|null, "meeting": boolean, "meeting_at": string|null, "when_text": string|null}. ' +
+        'caller_name = jméno volajícího pokud zaznělo, jinak null. caller_intent = krátce co volající potřeboval. summary = 1–3 věty. ' +
+        'no_interest = true POUZE pokud volající jasně řekl, že NEMÁ zájem nebo si NEPŘEJE kontakt. ' +
+        'callback = true, pokud volající chce, abychom mu zavolali jindy / v jiný čas. ' +
+        'meeting = true, pokud si volající chce domluvit schůzku. ' +
+        'when_text = doslovně jak termín řekl (např. „v pondělí v 10:00"), jinak null. ' +
+        'callback_at / meeting_at = konkrétní termín v ISO 8601 s posunem +02:00 (Europe/Prague), pokud ho lze odvodit z hovoru vůči aktuálnímu času; jinak null. ' +
+        'Aktuální datum a čas (Europe/Prague): ' + nowStr + '. ' +
         'Vše česky.',
       messages: [{ role: 'user', content: text }],
     },
@@ -145,9 +159,14 @@ async function summarizeStructured(transcript = []) {
       caller_name: o.caller_name || null,
       caller_intent: o.caller_intent || null,
       no_interest: o.no_interest === true || o.no_interest === 'true',
+      callback: o.callback === true || o.callback === 'true',
+      callback_at: o.callback_at || null,
+      meeting: o.meeting === true || o.meeting === 'true',
+      meeting_at: o.meeting_at || null,
+      when_text: o.when_text || null,
     };
   } catch (_) {
-    return { summary: raw, caller_name: null, caller_intent: null, no_interest: false };
+    return Object.assign({}, EMPTY, { summary: raw });
   }
 }
 

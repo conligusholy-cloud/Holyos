@@ -56,35 +56,103 @@ function send(ws, obj) {
   }
 }
 
-// Stavy, které NEpřepisujeme automatickým „nezájmem" (dál v procesu / terminální).
-const NO_INTEREST_KEEP = new Set([
-  'converted', 'smlouva_odeslat', 'smlouva_odeslana', 'schuzka', 'schuzka_online',
-  'qualified', 'nelze_pouzit', 'nezajem',
-]);
+// Terminální / uzavřené stavy, které automatika z hovoru NEPŘEPISUJE.
+const TERMINAL_KEEP = new Set(['converted', 'smlouva_odeslat', 'smlouva_odeslana', 'nelze_pouzit']);
 
-// Zákazník při hovoru řekl, že nemá zájem / nepřeje si kontakt → u Compounder
-// leadu (spárovaného podle telefonu, posledních 9 číslic) nastav stav „nezajem".
-async function markLeadNoInterest(phone, summary) {
+function appendLog(existing, note) {
+  const stamp = new Date().toLocaleString('cs-CZ');
+  return (existing ? (existing + '\n') : '') + '[' + stamp + '] ' + note;
+}
+
+// Zpracuje záměry z hovoru u Compounder leadu (spárovaného podle telefonu):
+//  - nemá zájem  → stav „Nemá zájem"
+//  - schůzka     → stav „Domluvena schůzka" + událost do kalendáře obchodníka
+//  - zavolat jindy → stav „Volat příště" + událost (hovor) do kalendáře obchodníka
+async function applyVoiceIntents(phone, s, summary) {
   const digits = String(phone || '').replace(/\D/g, '');
-  if (digits.length < 6) return;
+  if (digits.length < 6 || !s) return;
   const tail = digits.slice(-9);
   const leads = await prisma.compounderLead.findMany({
     where: { phone: { contains: tail } },
-    select: { id: true, phone: true, status: true, activity_log: true },
+    select: { id: true, phone: true, status: true, activity_log: true, name: true, owner_person_id: true },
     take: 5,
     orderBy: { updated_at: 'desc' },
   });
   const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
   if (!lead) return;
-  if (NO_INTEREST_KEEP.has(lead.status)) return; // neklobrč rozpracovaný/terminální stav
-  const stamp = new Date().toLocaleString('cs-CZ');
-  const note = '[' + stamp + '] AI hovor: zákazník nemá zájem / nepřeje si kontakt → stav „Nemá zájem".'
-    + (summary ? (' ' + String(summary).replace(/\s+/g, ' ').trim().slice(0, 200)) : '');
-  const activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + note;
-  await prisma.compounderLead.update({
-    where: { id: lead.id },
-    data: { status: 'nezajem', activity_log },
-  });
+  if (TERMINAL_KEEP.has(lead.status)) return; // neklobrč uzavřený obchod
+
+  const sumTxt = summary ? String(summary).replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+  const who = lead.name || phone;
+
+  // 1) Nezájem má přednost
+  if (s.no_interest) {
+    await prisma.compounderLead.update({
+      where: { id: lead.id },
+      data: { status: 'nezajem', activity_log: appendLog(lead.activity_log, 'AI hovor: zákazník nemá zájem / nepřeje si kontakt → „Nemá zájem". ' + sumTxt) },
+    });
+    return;
+  }
+
+  let salesEvents = null;
+  try { salesEvents = require('../sales/events'); } catch (_) { salesEvents = null; }
+  let notify = null;
+  try { notify = require('../compounder/notify'); } catch (_) { notify = null; }
+
+  // 2) Schůzka
+  if (s.meeting) {
+    const at = validDate(s.meeting_at) || nextDay(10);
+    const desc = 'Automaticky z AI hovoru.' + (s.when_text ? (' Domluveno: ' + s.when_text + '.') : '') + (sumTxt ? (' ' + sumTxt) : '');
+    if (salesEvents) {
+      await salesEvents.createLeadCalendarEvent({
+        leadId: lead.id, organizerId: lead.owner_person_id || null,
+        title: '🤝 Schůzka (AI): ' + who, description: desc,
+        startAt: at, endAt: new Date(at.getTime() + 60 * 60000), eventType: 'meeting',
+      });
+    }
+    await prisma.compounderLead.update({
+      where: { id: lead.id },
+      data: { status: 'schuzka', activity_log: appendLog(lead.activity_log, 'AI hovor: domluvena schůzka' + (s.when_text ? (' (' + s.when_text + ')') : '') + '. ' + sumTxt) },
+    });
+    if (notify && notify.notifyMeetingRequest) {
+      notify.notifyMeetingRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, terms: s.when_text || (s.meeting_at || ''), note: 'Z AI hovoru.' }).catch(() => {});
+    }
+    return;
+  }
+
+  // 3) Zavolat jindy
+  if (s.callback) {
+    const at = validDate(s.callback_at) || nextDay(9);
+    const desc = 'Automaticky z AI hovoru — zákazník chce zavolat jindy.' + (s.when_text ? (' Domluveno: ' + s.when_text + '.') : '') + (sumTxt ? (' ' + sumTxt) : '');
+    if (salesEvents) {
+      await salesEvents.createLeadCalendarEvent({
+        leadId: lead.id, organizerId: lead.owner_person_id || null,
+        title: '📞 Domluvený hovor (AI): ' + who, description: desc,
+        startAt: at, endAt: new Date(at.getTime() + 15 * 60000), eventType: 'call',
+      });
+    }
+    await prisma.compounderLead.update({
+      where: { id: lead.id },
+      data: { status: 'volat_pristi', activity_log: appendLog(lead.activity_log, 'AI hovor: zavolat jindy' + (s.when_text ? (' (' + s.when_text + ')') : '') + '. ' + sumTxt) },
+    });
+    if (notify && notify.notifyCallbackRequest) {
+      notify.notifyCallbackRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, when: s.when_text || (s.callback_at || ''), note: 'Z AI hovoru.' }).catch(() => {});
+    }
+    return;
+  }
+}
+
+// Bezpečně převede ISO řetězec na Date (nebo null).
+function validDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? null : d;
+}
+// Fallback: zítra v danou hodinu (přibližně, když AI neurčila přesný čas).
+function nextDay(hour) {
+  const d = new Date(Date.now() + 24 * 3600000);
+  d.setHours(hour, 0, 0, 0);
+  return d;
 }
 
 // Rozpozná, že volající chce mluvit s živým člověkem (aby ho AI přepojila).
@@ -310,14 +378,14 @@ function attach(server) {
       let summary = null;
       let callerName = null;
       let callerIntent = null;
-      let noInterest = false;
+      let intents = null;
       try {
         if (state.transcript.some((t) => t.role === 'caller')) {
-          const s = await agent.summarizeStructured(state.transcript);
+          const s = await agent.summarizeStructured(state.transcript, { now: new Date() });
           summary = s.summary || null;
           callerName = s.caller_name || null;
           callerIntent = s.caller_intent || null;
-          noInterest = !!s.no_interest;
+          intents = s;
         }
       } catch (e) {
         console.warn('[voice] shrnutí selhalo:', e.message);
@@ -366,12 +434,13 @@ function attach(server) {
         } catch (e) {
           console.warn('[voice] update cíle kampaně selhal:', e.message);
         }
-        // Nezájem / nepřeje si kontakt → automaticky nastav stav Compounder kontaktu na „Nemá zájem".
-        if (noInterest && state.target.phone) {
+        // Automatika podle záměrů z hovoru: nezájem → „Nemá zájem"; schůzka →
+        // „Domluvena schůzka" + kalendář; zavolat jindy → „Volat příště" + kalendář.
+        if (intents && state.target.phone) {
           try {
-            await markLeadNoInterest(state.target.phone, summary);
+            await applyVoiceIntents(state.target.phone, intents, summary);
           } catch (e) {
-            console.warn('[voice] označení nezájmu selhalo:', e.message);
+            console.warn('[voice] zpracování záměrů selhalo:', e.message);
           }
         }
       } else {
