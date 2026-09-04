@@ -404,6 +404,40 @@ router.post('/status', form, async (req, res) => {
   res.sendStatus(204);
 });
 
+// POST /api/voice/amd — asynchronní výsledek detekce záznamníku. Přijde na pozadí
+// pár vteřin po zvednutí (TwiML/AI už mezitím běží). Když to zvedl záznamník,
+// hovor ukončíme (ať AI nemluví do schránky), cíl označíme jako nedovolané + SMS.
+router.post('/amd', form, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const sid = b.CallSid;
+    const answeredBy = (b.AnsweredBy || '').toLowerCase();
+    const isMachine = answeredBy.startsWith('machine') || answeredBy === 'fax';
+    if (isMachine && sid) {
+      // 1) označ cíl (nejdřív DB, ať to WS close nepřepíše na 'done')
+      try {
+        if (prisma.voiceCampaignTarget) {
+          const t = await prisma.voiceCampaignTarget.findFirst({ where: { last_call_sid: sid } });
+          if (t && t.status !== 'done') {
+            await prisma.voiceCampaignTarget.update({
+              where: { id: t.id },
+              data: { status: 'no_answer', result_summary: 'Hlasová schránka / záznamník' },
+            });
+            try { require('../services/voice/sms').maybeSendNoAnswerSms(t); } catch (e) { console.warn('[voice] amd SMS:', e.message); }
+          }
+        }
+      } catch (e) { console.warn('[voice] amd target:', e.message); }
+      // 2) ukonči hovor přes Twilio REST
+      try {
+        const { client } = require('../services/voice/outbound');
+        const c = client && client();
+        if (c) await c.calls(sid).update({ status: 'completed' });
+      } catch (e) { console.warn('[voice] amd hangup:', e.message); }
+    }
+  } catch (e) { console.warn('[voice] amd:', e.message); }
+  res.sendStatus(204);
+});
+
 // POST /api/voice/recording — Twilio pošle URL nahrávky po skončení hovoru.
 router.post('/recording', form, async (req, res) => {
   try {

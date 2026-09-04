@@ -52,10 +52,14 @@ async function placeCall(target, campaign) {
     method: 'POST',
     statusCallback: `${PUBLIC_BASE}/api/voice/status`,
     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-    // Detekce záznamníku/schránky — AnsweredBy dorazí do /api/voice/outgoing,
-    // kde záznamník vyhodnotíme jako nedovolané (hang up + SMS).
+    // Detekce záznamníku/schránky ASYNCHRONNĚ — TwiML (a tedy AI pozdrav) se
+    // spustí HNED po zvednutí, detekce běží na pozadí a výsledek (AnsweredBy)
+    // dorazí zvlášť na /api/voice/amd. Bez async by Twilio čekal s TwiML několik
+    // vteřin na vyhodnocení AMD → volaný slyší ticho a zavěsí dřív, než AI začne.
     machineDetection: 'Enable',
-    machineDetectionTimeout: 15,
+    asyncAmd: 'true',
+    asyncAmdStatusCallback: `${PUBLIC_BASE}/api/voice/amd`,
+    asyncAmdStatusCallbackMethod: 'POST',
     // Nahrávání hovoru → po skončení Twilio pošle URL na /api/voice/recording
     record: true,
     recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,

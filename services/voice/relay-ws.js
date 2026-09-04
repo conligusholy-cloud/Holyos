@@ -337,12 +337,16 @@ function attach(server) {
       }
 
       if (mode === 'outbound' && state.target) {
-        // Aktualizuj cíl kampaně
+        // Aktualizuj cíl kampaně. Pozor: pokud AMD mezitím označil záznamník
+        // (no_answer/failed), neklobrč to na 'done'.
         try {
+          let cur = null;
+          try { cur = await prisma.voiceCampaignTarget.findUnique({ where: { id: state.target.id }, select: { status: true } }); } catch (_) { cur = null; }
+          const keep = cur && (cur.status === 'no_answer' || cur.status === 'failed');
           await prisma.voiceCampaignTarget.update({
             where: { id: state.target.id },
             data: {
-              status: 'done',
+              status: keep ? cur.status : 'done',
               result_summary: summary || callerIntent || null,
               voice_call_id: saved && saved.id,
             },
