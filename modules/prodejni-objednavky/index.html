@@ -5083,13 +5083,16 @@
       return '<span class="ai-rec"><button class="btn" onclick="aiRecLoad(this,\''+callId+'\')" style="padding:4px 10px;font-size:12px;">▶ Přehrát</button></span>';
     }
     async function aiRecLoad(btn, callId){
+      // Zastav automatické obnovování detailu kampaně (jinak by po 4 s překreslení
+      // zničilo právě přehrávaný záznam → hrálo jen pár vteřin a „restartovalo se").
+      try{ if(typeof aiStopPoll==='function') aiStopPoll(); }catch(e){}
       var span=btn.parentNode; var orig=btn.textContent; btn.disabled=true; btn.textContent='Načítám…';
       try{
         var r=await fetch('/api/voice/recording/'+callId, { credentials:'include' });
         if(!r.ok){ btn.textContent='Chyba '+r.status; btn.disabled=false; setTimeout(function(){btn.textContent=orig;},2500); return; }
         var blob=await r.blob();
         var url=URL.createObjectURL(blob);
-        span.innerHTML='<audio controls autoplay src="'+url+'" style="height:32px;max-width:230px;vertical-align:middle;"></audio> <a href="'+url+'" download="hovor-'+callId+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:16px;vertical-align:middle;">📥</a>';
+        span.innerHTML='<audio controls autoplay src="'+url+'" style="height:32px;max-width:230px;vertical-align:middle;"></audio> <a href="'+url+'" download="hovor-'+callId+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:18px;vertical-align:middle;margin-left:6px;">📥 Stáhnout</a>';
       }catch(e){ btn.textContent='Chyba spojení'; btn.disabled=false; setTimeout(function(){btn.textContent=orig;},2500); }
     }
     window.aiRecLoad=aiRecLoad; window.aiRecPlayer=aiRecPlayer;
