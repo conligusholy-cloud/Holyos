@@ -598,7 +598,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
           const now = new Date();
           const p = (n) => (n < 10 ? '0' : '') + n;
           const stamp = p(now.getDate()) + '.' + p(now.getMonth() + 1) + '. ' + p(now.getHours()) + ':' + p(now.getMinutes());
-          const line = '[' + stamp + '] 💬 Zákazník začal psát s AI specialistou → stav „Píše s chatem"';
+          const line = '[' + stamp + '] 💬 Zákazník začal psát s AI specialistou → stav „Psal s chatem"';
           const cur = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { activity_log: true } });
           const updated = (cur && cur.activity_log) ? (line + '\n' + cur.activity_log) : line;
           await prisma.compounderLead.update({ where: { id: leadId }, data: { activity_log: updated } });
