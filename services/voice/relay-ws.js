@@ -194,6 +194,15 @@ function attach(server) {
       return;
     }
 
+    // KEEPALIVE: při tichu v hovoru neteče přes WS žádný provoz a proxy (Railway)
+    // nečinné spojení po ~minutě zavře → hovor spadne. Posíláme proto ping frame
+    // každých 20 s, aby spojení zůstalo živé po celou dobu hovoru.
+    const pingTimer = setInterval(() => {
+      try { if (ws.readyState === ws.OPEN) ws.ping(); } catch (_) { /* noop */ }
+    }, 20000);
+    // Bez listeneru na 'error' vyhodí Node u WS chyby výjimku (a shodí spojení/proces).
+    ws.on('error', (e) => { console.warn('[voice] WS error:', (e && e.message) || e); });
+
     const targetId = q.target || null;
     const mode = targetId ? 'outbound' : 'inbound';
     // Úvod řekne Twilio přes welcomeGreeting (neinteruptovatelně) → WS ho sám neposílá.
@@ -389,6 +398,7 @@ function attach(server) {
     });
 
     ws.on('close', async () => {
+      try { clearInterval(pingTimer); } catch (_) { /* noop */ }
       if (!state.callSid && mode !== 'outbound') return;
       const endedAt = new Date();
       const durationSec = Math.max(0, Math.round((endedAt - state.startedAt) / 1000));
