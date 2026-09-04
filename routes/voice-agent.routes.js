@@ -884,6 +884,81 @@ router.post('/campaigns/:id/targets/:tid/retry', requireAuth, async (req, res, n
   }
 });
 
+// Archivace sady (kvůli statistikám ji necháme, jen ji v UI sbalíme dolů).
+router.post('/campaigns/:id/archive', requireAuth, async (req, res, next) => {
+  try {
+    const camp = await prisma.voiceCampaign.update({ where: { id: req.params.id }, data: { status: 'archived' } });
+    res.json(camp);
+  } catch (err) { next(err); }
+});
+router.post('/campaigns/:id/unarchive', requireAuth, async (req, res, next) => {
+  try {
+    const camp = await prisma.voiceCampaign.update({ where: { id: req.params.id }, data: { status: 'paused' } });
+    res.json(camp);
+  } catch (err) { next(err); }
+});
+
+// Statistika sady (kampaně): trychtýř dovolání + čas hovorů + SMS + výsledky.
+router.get('/campaigns/:id/stats', requireAuth, async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const targets = await prisma.voiceCampaignTarget.findMany({
+      where: { campaign_id: id },
+      select: { status: true, sms_sent: true, phone: true, voice_call_id: true },
+    });
+    const total = targets.length;
+    const by = {};
+    targets.forEach((t) => { by[t.status] = (by[t.status] || 0) + 1; });
+    const reached = by.done || 0;
+    const noAnswer = by.no_answer || 0;
+    const failed = by.failed || 0;
+    const pending = by.pending || 0;
+    const inProgress = (by.calling || 0) + (by.ringing || 0) + (by.in_progress || 0);
+    const attempted = total - pending;
+    const smsSent = targets.filter((t) => t.sms_sent).length;
+
+    // Čas hovorů z napojených VoiceCall.
+    let totalSec = 0, withAudio = 0, reachedDur = [];
+    const callIds = targets.map((t) => t.voice_call_id).filter(Boolean);
+    if (callIds.length && prisma.voiceCall) {
+      const calls = await prisma.voiceCall.findMany({ where: { id: { in: callIds } }, select: { duration_sec: true, audio_url: true } });
+      calls.forEach((c) => { totalSec += (c.duration_sec || 0); if (c.audio_url) withAudio++; if (c.duration_sec) reachedDur.push(c.duration_sec); });
+    }
+    const avgSec = reachedDur.length ? Math.round(reachedDur.reduce((a, b) => a + b, 0) / reachedDur.length) : 0;
+
+    // Výsledky podle aktuálního stavu spárovaných kontaktů (schůzka / volat příště / nezájem).
+    let meeting = 0, callback = 0, nointerest = 0;
+    try {
+      if (prisma.compounderLead) {
+        const tails = new Set(targets.map((t) => String(t.phone || '').replace(/\D/g, '').slice(-9)).filter((x) => x.length >= 6));
+        if (tails.size) {
+          const leads = await prisma.compounderLead.findMany({
+            where: { status: { in: ['schuzka', 'schuzka_online', 'volat_pristi', 'nezajem'] } },
+            select: { phone: true, status: true },
+            take: 5000,
+          });
+          leads.forEach((l) => {
+            const tl = String(l.phone || '').replace(/\D/g, '').slice(-9);
+            if (!tails.has(tl)) return;
+            if (l.status === 'nezajem') nointerest++;
+            else if (l.status === 'volat_pristi') callback++;
+            else meeting++;
+          });
+        }
+      }
+    } catch (_) { /* výsledky jsou best-effort */ }
+
+    const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
+    res.json({
+      ok: true,
+      total, attempted, reached, noAnswer, failed, pending, inProgress, smsSent,
+      totalSec, avgSec, withAudio,
+      meeting, callback, nointerest,
+      rates: { reachedOfAttempted: pct(reached, attempted), reachedOfTotal: pct(reached, total) },
+    });
+  } catch (err) { next(err); }
+});
+
 router.delete('/campaigns/:id', requireAuth, async (req, res, next) => {
   try {
     await prisma.voiceCampaign.delete({ where: { id: req.params.id } });
