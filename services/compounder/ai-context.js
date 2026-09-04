@@ -23,7 +23,12 @@ const MATH_RULE =
 // Styl pro TELEFON (mluvený projev) — bez markdownu, krátké věty.
 const VOICE_STYLE =
   'MLUVENÝ PROJEV (telefon): Mluvíš, nepíšeš. Krátké přirozené věty, žádný markdown, odrážky ani emoji. ' +
-  'Neříkej nahlas „hvězdička" ani „odrážka". Buď stručný a lidský, nech prostor druhé straně a ptej se.';
+  'Neříkej nahlas „hvězdička" ani „odrážka". Buď stručný a lidský, nech prostor druhé straně a ptej se. ' +
+  'ČÍSLA A JEDNOTKY (DŮLEŽITÉ — jinak hlas drmolí): Všechna čísla piš SLOVY, ne číslicemi. ' +
+  'Např. místo „25 000 Kč" napiš „dvacet pět tisíc korun", místo „1 500 000" napiš „jeden a půl milionu", místo „12,5 %" napiš „dvanáct a půl procenta". ' +
+  'Nikdy nepoužívej symboly ani zkratky (Kč, %, m², ks, cca, tel., č.) — vyslov je celým slovem (korun, procent, metrů čtverečních, kusů, přibližně). ' +
+  'Velká čísla klidně rozumně zaokrouhli a řekni je přirozeně, jak by je řekl člověk („zhruba půl milionu korun", „kolem dvou set tisíc"). ' +
+  'Roky a data řekni slovy (např. „dva tisíce dvacet šest"). Telefonní čísla diktuj pomalu po skupinách, ale jen když o ně někdo výslovně požádá.';
 
 // Odhad pohlaví z českého jména/příjmení → 'male' | 'female' | null.
 // Nejsilnější signál je příjmení (ženská skoro vždy končí na -á). Doplňkově křestní.
