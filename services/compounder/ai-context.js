@@ -28,7 +28,12 @@ const VOICE_STYLE =
   'Např. místo „25 000 Kč" napiš „dvacet pět tisíc korun", místo „1 500 000" napiš „jeden a půl milionu", místo „12,5 %" napiš „dvanáct a půl procenta". ' +
   'Nikdy nepoužívej symboly ani zkratky (Kč, %, m², ks, cca, tel., č.) — vyslov je celým slovem (korun, procent, metrů čtverečních, kusů, přibližně). ' +
   'Velká čísla klidně rozumně zaokrouhli a řekni je přirozeně, jak by je řekl člověk („zhruba půl milionu korun", „kolem dvou set tisíc"). ' +
-  'Roky a data řekni slovy (např. „dva tisíce dvacet šest"). Telefonní čísla diktuj pomalu po skupinách, ale jen když o ně někdo výslovně požádá.';
+  'Roky a data řekni slovy (např. „dva tisíce dvacet šest"). ' +
+  'DŮLEŽITÁ ČÍSLA ŘÍKEJ POMALU A ZŘETELNĚ HNED NAPOPRVÉ (nečekej, až o to někdo požádá): ' +
+  'kolem každého důležitého čísla (cena, návratnost, částka) udělej krátké pauzy pomocí čárek a teček, ať se nedrmolí — ' +
+  'např. „to vychází, na dvacet pět tisíc korun, měsíčně." Řekni jen jedno důležité číslo ve větě (nehromaď víc čísel za sebou) ' +
+  'a hned ho krátce potvrď nebo zopakuj vlastními slovy, ať to druhá strana bezpečně pochytí ' +
+  '(např. „tedy dvacet pět tisíc korun měsíčně, ano?"). Když číslo řekneš, nech kratší pauzu, než budeš pokračovat.';
 
 // Odhad pohlaví z českého jména/příjmení → 'male' | 'female' | null.
 // Nejsilnější signál je příjmení (ženská skoro vždy končí na -á). Doplňkově křestní.
