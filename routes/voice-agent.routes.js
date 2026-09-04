@@ -403,6 +403,32 @@ router.post('/transfer', form, (req, res) => {
   }
 });
 
+// Vytvoří „stub" záznam hovoru, když pro daný CallSid ještě žádný neexistuje
+// (dovolané konverzace ukládá kompletně WS; tohle pokrývá nedovolané atd.).
+async function ensureVoiceCallStub(sid, { from, to, durationSec, summary, campaignTargetId }) {
+  if (!sid || !prisma.voiceCall) return;
+  const existing = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true } });
+  if (existing) return; // WS už uložil kompletní záznam
+  const now = new Date();
+  await prisma.voiceCall.create({
+    data: {
+      direction: 'outbound',
+      agent_kind: 'campaign',
+      from_number: from || '',
+      to_number: to || '',
+      twilio_call_sid: sid,
+      started_at: now,
+      ended_at: now,
+      duration_sec: durationSec || 0,
+      transcript: [],
+      summary: summary || null,
+      caller_name: null,
+      caller_intent: null,
+      campaign_target_id: campaignTargetId || null,
+    },
+  });
+}
+
 // POST /api/voice/status — status callback po skončení hovoru.
 // Shrnutí + uložení + push řeší WS close v services/voice/relay-ws.js
 // (tam máme kompletní přepis). Tady jen potvrdíme příjem.
@@ -436,6 +462,19 @@ router.post('/status', form, async (req, res) => {
             }
           }
         }
+      }
+      // Zaznamenej KAŽDÝ pokus o hovor do Záznamů (i nedovolané/obsazené/záznamník),
+      // ať je log kompletní. Pro dovolané konverzace vytvoří kompletní záznam WS —
+      // tady jen doplníme stub, když ještě žádný záznam pro tento hovor není.
+      const terminal = ['completed', 'no-answer', 'busy', 'failed', 'canceled'];
+      if (terminal.indexOf(cs) !== -1) {
+        const OUTCOME = { 'no-answer': 'Bez odpovědi', busy: 'Obsazeno', failed: 'Volání selhalo', canceled: 'Zrušeno' };
+        await ensureVoiceCallStub(sid, {
+          from: b.From, to: b.To,
+          durationSec: parseInt(b.CallDuration, 10) || 0,
+          summary: OUTCOME[cs] || null,
+          campaignTargetId: (typeof t !== 'undefined' && t) ? t.id : null,
+        }).catch((e) => console.warn('[voice] stub záznamu:', e.message));
       }
     }
   } catch (e) {
