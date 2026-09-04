@@ -152,10 +152,73 @@ function extractGoSmsId(j) {
   return null;
 }
 
-async function sendSms(to, body) {
+// Zaloguje odeslání SMS do sms_log (nikdy neshodí odeslání kvůli logu).
+async function logSms({ provider, to, body, message_id, context, lead_id, status, error }) {
+  try {
+    if (!prisma.smsLog) return;
+    await prisma.smsLog.create({
+      data: {
+        provider: String(provider || '').slice(0, 20),
+        to_number: String(to || '').slice(0, 40),
+        body: body ? String(body) : null,
+        message_id: message_id ? String(message_id).slice(0, 64) : null,
+        context: context ? String(context).slice(0, 40) : 'other',
+        lead_id: lead_id != null ? Number(lead_id) : null,
+        status: status || 'sent',
+        delivered: false,
+        error: error ? String(error).slice(0, 500) : null,
+      },
+    });
+  } catch (e) { console.warn('[sms] log selhal:', e.message); }
+}
+
+async function sendSms(to, body, meta = {}) {
   const p = await smsProvider();
-  if (p === 'gosms') return sendViaGoSms(to, body);
-  return sendViaTwilio(to, body);
+  let id = null;
+  let err = null;
+  try {
+    id = (p === 'gosms') ? await sendViaGoSms(to, body) : await sendViaTwilio(to, body);
+  } catch (e) { err = e; }
+  await logSms({
+    provider: p, to, body, message_id: id,
+    context: meta.context, lead_id: meta.leadId,
+    status: err ? 'failed' : 'sent', error: err ? err.message : null,
+  });
+  if (err) throw err;
+  return id;
+}
+
+// Projde nedokončené GoSMS zprávy v logu a doplní stav doručení z GoSMS API.
+async function refreshSmsLogStatuses(limit = 40) {
+  if (!prisma.smsLog) return 0;
+  const since = new Date(Date.now() - 14 * 86400000);
+  const rows = await prisma.smsLog.findMany({
+    where: {
+      provider: 'gosms',
+      created_at: { gte: since },
+      message_id: { not: null },
+      status: { in: ['sent', 'unknown'] },
+    },
+    orderBy: { created_at: 'desc' },
+    take: Math.min(limit, 100),
+  });
+  let n = 0;
+  for (const r of rows) {
+    if (!r.message_id || r.message_id === 'gosms') continue;
+    try {
+      const st = await getGoSmsStatus(r.message_id);
+      const label = st.label;
+      let status = 'sent', delivered = false;
+      if (label === 'doručeno') { status = 'delivered'; delivered = true; }
+      else if (label === 'nedoručeno') { status = 'undelivered'; }
+      await prisma.smsLog.update({
+        where: { id: r.id },
+        data: { status, delivered, status_checked_at: new Date() },
+      });
+      n++;
+    } catch (e) { /* přeskoč jednotlivé chyby */ }
+  }
+  return n;
 }
 
 // Zjistí stav doručení GoSMS zprávy podle id → { raw, label }.
@@ -218,7 +281,7 @@ async function maybeSendNoAnswerSms(target) {
     let text = await getSetting('voice.sms_text');
     if (!text || !String(text).trim()) text = DEFAULT_TEXT;
 
-    await sendSms(target.phone, String(text));
+    await sendSms(target.phone, String(text), { context: 'no_answer' });
     await prisma.voiceCampaignTarget
       .update({ where: { id: target.id }, data: { sms_sent: true } })
       .catch(() => {});
@@ -228,4 +291,4 @@ async function maybeSendNoAnswerSms(target) {
   }
 }
 
-module.exports = { sendSms, maybeSendNoAnswerSms, getGoSmsStatus, getSmsConfigView, DEFAULT_TEXT };
+module.exports = { sendSms, maybeSendNoAnswerSms, getGoSmsStatus, getSmsConfigView, refreshSmsLogStatuses, DEFAULT_TEXT };

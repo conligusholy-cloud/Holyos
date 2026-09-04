@@ -6171,3 +6171,25 @@ model VoiceCampaignTarget {
   @@index([status])
   @@map("voice_campaign_targets")
 }
+
+// Log všech odeslaných SMS (napříč kanály: specialista, nedovolání, ruční…) —
+// jednotný přehled se stavem doručení (u GoSMS se dotahuje z jejich API).
+model SmsLog {
+  id                Int       @id @default(autoincrement())
+  provider          String    @db.VarChar(20)   // gosms | twilio
+  to_number         String    @db.VarChar(40)
+  body              String?   @db.Text
+  message_id        String?   @db.VarChar(64)   // GoSMS id / Twilio SID
+  context           String?   @db.VarChar(40)   // specialist | no_answer | manual | other
+  lead_id           Int?
+  status            String    @default("sent") @db.VarChar(20) // sent | delivered | undelivered | failed | unknown
+  delivered         Boolean   @default(false)
+  error             String?   @db.Text
+  status_checked_at DateTime?
+  created_at        DateTime  @default(now())
+
+  @@index([created_at])
+  @@index([message_id])
+  @@index([lead_id])
+  @@map("sms_log")
+}

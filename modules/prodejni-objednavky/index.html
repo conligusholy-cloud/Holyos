@@ -558,6 +558,16 @@
           </div>
           <span id="ai-sms-testmsg" style="font-size:13px;color:var(--text2);"></span>
         </div>
+
+        <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:16px;">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
+            <h4 style="margin:0;font-size:14px;">📋 Odeslané SMS</h4>
+            <button class="btn" onclick="aiLoadSmsLog(true)" style="font-size:12px;">↻ Načíst a ověřit stav</button>
+            <span id="ai-smslog-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+          <p style="color:var(--text2);font-size:11px;margin:0 0 8px;">Stav: odesláno → doručeno / nedoručeno (dotahuje se z GoSMS). „Otevřel odkaz" je u SMS se specialistou náhrada za přečtení — SMS samotná potvrzení o přečtení nemá.</p>
+          <div id="ai-smslog-body" style="overflow-x:auto;"><div style="color:var(--text2);font-size:13px;">Klikni „Načíst a ověřit stav".</div></div>
+        </div>
       </div>
     </div>
 
@@ -5055,7 +5065,7 @@
       if(name==='calls') aiLoadCalls();
       if(name==='inbound') aiLoadConfig();
       if(name==='outbound') aiLoadCampaigns();
-      if(name==='sms') aiLoadSmsConfig();
+      if(name==='sms'){ aiLoadSmsConfig(); aiLoadSmsLog(false); }
       if(name==='aispec') aiLoadAiSpecConfig();
     }
 
@@ -5471,8 +5481,46 @@
       try{
         var r=await aiApi('/sms',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ to:to, body:body })});
         m.textContent='✅ Odesláno'+(r.sid?(' (SID '+r.sid+')'):'');
+        aiLoadSmsLog(false);
       }catch(e){ m.textContent='Chyba: '+e.message; }
     }
+
+    // ── Přehled odeslaných SMS ──
+    var AI_SMSLOG_CTX = { specialist:'Specialista', no_answer:'Nedovolání', manual:'Ruční/test', other:'Ostatní' };
+    function aiSmsStatusBadge(r){
+      var map = {
+        delivered:  { l:'✅ doručeno',  c:'#10b981', b:'rgba(16,185,129,0.15)' },
+        undelivered:{ l:'❌ nedoručeno', c:'#ef4444', b:'rgba(239,68,68,0.15)' },
+        failed:     { l:'⚠️ neodesláno', c:'#ef4444', b:'rgba(239,68,68,0.15)' },
+        sent:       { l:'📤 odesláno',  c:'#eab308', b:'rgba(234,179,8,0.15)' },
+        unknown:    { l:'? neznámý',    c:'#9aa0ad', b:'rgba(154,160,173,0.15)' }
+      };
+      var s = map[r.status] || map.unknown;
+      return '<span style="background:'+s.b+';color:'+s.c+';padding:2px 8px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;">'+s.l+'</span>';
+    }
+    async function aiLoadSmsLog(refresh){
+      var box=document.getElementById('ai-smslog-body'); if(!box) return;
+      var msg=document.getElementById('ai-smslog-msg');
+      if(msg) msg.textContent = refresh ? 'Ověřuji stavy u GoSMS…' : 'Načítám…';
+      try{
+        var r=await aiApi('/sms-log'+(refresh?'?refresh=1':''));
+        var rows=(r&&r.rows)||[];
+        if(msg) msg.textContent = rows.length ? (rows.length+' zpráv') : '';
+        if(!rows.length){ box.innerHTML='<div style="color:var(--text2);font-size:13px;">Zatím žádné odeslané SMS.</div>'; return; }
+        var h='<table class="data-table"><thead><tr><th>Kdy</th><th>Komu</th><th>Kontext</th><th>Text</th><th>Stav</th><th>Otevřel odkaz</th></tr></thead><tbody>';
+        rows.forEach(function(x){
+          var when=aiEsc(aiFmtDate(x.created_at));
+          var to=aiEsc((x.name?(x.name+' · '):'')+(x.to||''));
+          var ctx=aiEsc(AI_SMSLOG_CTX[x.context]||x.context||'—');
+          var txt=aiEsc(String(x.body||'').slice(0,80))+((x.body&&x.body.length>80)?'…':'');
+          var opened = x.opened===true ? ('✅'+(x.opened_at?(' '+aiEsc(aiFmtDate(x.opened_at))):'')) : (x.opened===false ? '—' : '<span style="color:var(--text2);">n/a</span>');
+          h+='<tr><td style="white-space:nowrap;">'+when+'</td><td>'+to+'</td><td>'+ctx+'</td><td style="max-width:280px;">'+txt+'</td><td>'+aiSmsStatusBadge(x)+'</td><td style="white-space:nowrap;">'+opened+'</td></tr>';
+        });
+        h+='</tbody></table>';
+        box.innerHTML=h;
+      }catch(e){ box.innerHTML='<div style="color:#ef4444;font-size:13px;">Chyba: '+aiEsc(e.message)+'</div>'; if(msg) msg.textContent=''; }
+    }
+    window.aiLoadSmsLog=aiLoadSmsLog;
 
     // ── Odchozí kampaně ──
     async function aiLoadCampaigns(){

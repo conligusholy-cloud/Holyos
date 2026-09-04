@@ -929,7 +929,7 @@ async function autosendAiSpecialistSms(lead) {
     const tpl = String(cfg.text || 'PRADLOMATY-info: {link}');
     const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
     const sms = require('../services/voice/sms');
-    const sid = await sms.sendSms(lead.phone, text);
+    const sid = await sms.sendSms(lead.phone, text, { context: 'specialist', leadId: lead.id });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: {
@@ -1091,7 +1091,7 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
       ? custom.replace('{link}', link)
       : ('PRADLOMATY-info: ' + link);
     const sms = require('../services/voice/sms');
-    const sid = await sms.sendSms(lead.phone, body);
+    const sid = await sms.sendSms(lead.phone, body, { context: 'specialist', leadId: lead.id });
     const sentAt = new Date();
     await prisma.compounderLead.update({
       where: { id },

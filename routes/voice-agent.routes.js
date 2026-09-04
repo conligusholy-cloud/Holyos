@@ -630,11 +630,45 @@ router.post('/sms', requireAuth, express.json(), async (req, res) => {
     if (!to || !String(to).trim()) return res.status(400).json({ error: 'Chybí telefonní číslo' });
     if (!body || !String(body).trim()) return res.status(400).json({ error: 'Chybí text zprávy' });
     const sms = require('../services/voice/sms');
-    const sid = await sms.sendSms(String(to).trim(), String(body));
+    const sid = await sms.sendSms(String(to).trim(), String(body), { context: 'manual' });
     res.json({ ok: true, sid });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// GET /api/voice/sms-log — jednotný přehled odeslaných SMS + stav doručení.
+// ?refresh=1 → nejdřív dotáhne aktuální stavy z GoSMS (u nedokončených).
+router.get('/sms-log', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.smsLog) return res.json({ rows: [] });
+    if (req.query.refresh === '1') {
+      try { await require('../services/voice/sms').refreshSmsLogStatuses(60); } catch (_) { /* nevadí */ }
+    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || 150, 400);
+    const rows = await prisma.smsLog.findMany({ orderBy: { created_at: 'desc' }, take: limit });
+    // Otevření odkazu (proxy „přečteno") u specialistních SMS podle leadu.
+    const leadIds = Array.from(new Set(rows.filter((r) => r.lead_id).map((r) => r.lead_id)));
+    const leadMap = {};
+    if (leadIds.length && prisma.compounderLead) {
+      const leads = await prisma.compounderLead.findMany({
+        where: { id: { in: leadIds } },
+        select: { id: true, name: true, ai_specialist_opened_at: true },
+      });
+      leads.forEach((l) => { leadMap[l.id] = l; });
+    }
+    const out = rows.map((r) => {
+      const l = r.lead_id ? leadMap[r.lead_id] : null;
+      return {
+        id: r.id, provider: r.provider, to: r.to_number, body: r.body, context: r.context,
+        status: r.status, delivered: r.delivered, error: r.error, created_at: r.created_at,
+        lead_id: r.lead_id, name: l ? l.name : null,
+        opened: l ? !!l.ai_specialist_opened_at : null,
+        opened_at: l ? l.ai_specialist_opened_at : null,
+      };
+    });
+    res.json({ rows: out });
+  } catch (err) { next(err); }
 });
 
 // ─── Odchozí kampaně ────────────────────────────────────────────────────────
