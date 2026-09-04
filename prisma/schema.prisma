@@ -6138,8 +6138,9 @@ model VoiceCampaign {
   // Primární cíl je vždy mobil obchodníka přiřazeného k danému leadu; když se
   // nedovolá (do vypršení vyzvánění), zkusí se postupně tato záložní čísla.
   transfer_enabled          Boolean @default(true)
-  transfer_fallback_numbers String? @db.Text     // čísla oddělená čárkou, v pořadí
+  transfer_fallback_numbers String? @db.Text     // JSON pořadí kontaktů (obchodníci/čísla), příp. legacy CSV čísel
   transfer_ring_timeout     Int?                  // doba vyzvánění na jedno číslo (s)
+  transfer_rounds           Int?                  // kolikrát projít seznam dokola (max koleček)
   created_by_user_id Int?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt

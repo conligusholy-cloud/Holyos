@@ -81,26 +81,34 @@ function decList(s) {
   catch (_) { return []; }
 }
 
-// TwiML, které postupně vytáčí čísla ze seznamu (první = obchodník leadu, pak
-// záložní kontakty). Po skončení každého <Dial> Twilio zavolá action s tailem —
-// když se to nikdo nezvedl, zkusí se další v pořadí; když zvedl, hovor běží a
-// po zavěšení action dostane completed → zavěsíme.
-function twimlDial(numbers, timeout) {
+// Omluvná zpráva + zavěšení, když se nikoho nepodařilo zastihnout.
+function twimlApology() {
+  return (
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<Response>\n' +
+    '  <Say language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
+    '  <Hangup/>\n' +
+    '</Response>'
+  );
+}
+
+// TwiML, které postupně vytáčí čísla ze seznamu (fronta už obsahuje i opakování
+// koleček). Po skončení každého <Dial> Twilio zavolá action s tailem — když se
+// nikdo nezvedl, zkusí se další; když zvedl, hovor běží a po zavěšení dostane
+// action completed → zavěsíme. ctx = {mode, target} se veze dál kvůli notifikaci
+// do Velína, když se nikoho nepodaří zastihnout.
+function twimlDial(numbers, timeout, ctx) {
   const list = (numbers || []).map(e164).filter(Boolean);
-  if (!list.length) {
-    return (
-      '<?xml version="1.0" encoding="UTF-8"?>\n' +
-      '<Response>\n' +
-      '  <Say language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
-      '  <Hangup/>\n' +
-      '</Response>'
-    );
-  }
+  const t = Math.max(8, Math.min(60, parseInt(timeout, 10) || 20));
+  if (!list.length) return twimlApology();
   const first = xmlAttr(list[0]);
   const tail = encList(list.slice(1));
-  const t = Math.max(8, Math.min(60, parseInt(timeout, 10) || 20));
   const callerId = VOICE_DEFAULT_FROM ? ` callerId="${xmlAttr(e164(VOICE_DEFAULT_FROM))}"` : '';
-  const action = xmlAttr(`${PUBLIC_BASE}/api/voice/transfer?q=${tail}&t=${t}`);
+  const c = ctx || {};
+  const q = [`q=${tail}`, `t=${t}`];
+  if (c.mode) q.push('m=' + encodeURIComponent(c.mode));
+  if (c.target) q.push('tg=' + encodeURIComponent(c.target));
+  const action = xmlAttr(`${PUBLIC_BASE}/api/voice/transfer?${q.join('&')}`);
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
@@ -112,15 +120,43 @@ function twimlDial(numbers, timeout) {
   );
 }
 
+// Rozbalí uložený seznam kontaktů (JSON pořadí obchodníků/čísel, nebo legacy CSV)
+// na telefonní čísla v pořadí. Obchodníci se přeloží na Person.phone.
+async function fallbackNumbersFromStored(stored) {
+  const s = String(stored || '').trim();
+  if (!s) return [];
+  let entries = null;
+  try { const p = JSON.parse(s); if (Array.isArray(p)) entries = p; } catch (_) { entries = null; }
+  if (!entries) {
+    // legacy: čísla oddělená čárkou / středníkem / novým řádkem
+    return s.split(/[,;\n]/).map((x) => x.trim()).filter(Boolean);
+  }
+  const out = [];
+  for (const e of entries) {
+    if (e == null) continue;
+    if (typeof e === 'string') { out.push(e); continue; }
+    if (e.v || e.number) { out.push(String(e.v || e.number)); continue; }
+    const pid = parseInt(e.id || e.person_id, 10);
+    if (pid) {
+      try {
+        const p = await prisma.person.findUnique({ where: { id: pid }, select: { phone: true, active: true } });
+        if (p && p.active !== false && p.phone) out.push(p.phone);
+      } catch (_) { /* přeskoč */ }
+    }
+  }
+  return out;
+}
+
 // Sestaví plán přepojení: povoleno? + pořadí čísel + doba vyzvánění.
 // Odchozí (kampaň): nastavení se bere Z KAMPANĚ (každá může mít jiné). Primární
 // cíl je mobil obchodníka přiřazeného k leadu, pak záložní čísla kampaně.
 // Příchozí (recepční): globální nastavení (voice.transfer_*).
 async function resolveTransferPlan(mode, targetId) {
   const get = settings ? settings.getSetting : null;
-  const nums = [];
+  const base = [];              // pořadí kontaktů v jednom kolečku
   let enabled = true;
   let timeout = 20;
+  let rounds = 2;
 
   if (mode === 'outbound' && targetId && prisma.voiceCampaignTarget) {
     try {
@@ -131,30 +167,81 @@ async function resolveTransferPlan(mode, targetId) {
       const camp = t && t.campaign;
       enabled = camp ? camp.transfer_enabled !== false : true;
       timeout = (camp && camp.transfer_ring_timeout) || 20;
+      rounds = (camp && camp.transfer_rounds) || 2;
+      // 1) mobil obchodníka přiřazeného k leadu (automaticky)
       if (t && t.phone) {
         const owner = await ownerPhoneForPhone(t.phone);
-        if (owner) nums.push(owner);
+        if (owner) base.push(owner);
       }
-      const fb = String((camp && camp.transfer_fallback_numbers) || '')
-        .split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-      fb.forEach((f) => nums.push(f));
+      // 2) nakonfigurované záložní kontakty (obchodníci / čísla) v pořadí
+      const fb = await fallbackNumbersFromStored(camp && camp.transfer_fallback_numbers);
+      fb.forEach((f) => base.push(f));
     } catch (e) { console.warn('[voice] resolve kampaň přepojení selhal:', e.message); }
   } else {
     // inbound — globální nastavení
     const enRaw = get ? await get('voice.transfer_enabled') : true;
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
+    rounds = get ? parseInt(await get('voice.transfer_rounds'), 10) || 2 : 2;
     const inboundNum = get ? (await get('voice.transfer_inbound_number')) || '' : '';
-    if (inboundNum) nums.push(inboundNum);
-    const fb = String(get ? (await get('voice.transfer_fallback_numbers')) || '' : '')
-      .split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
-    fb.forEach((f) => nums.push(f));
+    if (inboundNum) base.push(inboundNum);
+    const fb = await fallbackNumbersFromStored(get ? (await get('voice.transfer_fallback_numbers')) || '' : '');
+    fb.forEach((f) => base.push(f));
   }
 
-  // deduplikace v E.164
+  // deduplikace jednoho kolečka v E.164
   const seen = new Set();
-  const numbers = nums.map(e164).filter((n) => n && !seen.has(n) && seen.add(n));
-  return { enabled, numbers, timeout: Math.max(8, Math.min(60, parseInt(timeout, 10) || 20)) };
+  const oneRound = base.map(e164).filter((n) => n && !seen.has(n) && seen.add(n));
+  rounds = Math.max(1, Math.min(5, parseInt(rounds, 10) || 2));
+  // fronta = seznam zopakovaný „rounds"-krát dokola
+  const queue = [];
+  for (let i = 0; i < rounds; i++) queue.push(...oneRound);
+  return {
+    enabled,
+    numbers: queue,
+    perRound: oneRound.length,
+    rounds,
+    timeout: Math.max(8, Math.min(60, parseInt(timeout, 10) || 20)),
+  };
+}
+
+// Kontext pro notifikaci do Velína, když se nikoho nepodaří zastihnout.
+async function transferContext(mode, targetId) {
+  const ctx = { who: null, phone: null, leadId: null, campaignName: null };
+  try {
+    if (mode === 'outbound' && targetId && prisma.voiceCampaignTarget) {
+      const t = await prisma.voiceCampaignTarget.findUnique({
+        where: { id: targetId },
+        include: { campaign: true },
+      });
+      if (t) {
+        ctx.who = t.name || t.phone || null;
+        ctx.phone = t.phone || null;
+        ctx.campaignName = t.campaign && t.campaign.name;
+        // dohledej lead_id podle telefonu (kvůli prokliku na kontakt)
+        const digits = String(t.phone || '').replace(/\D/g, '');
+        if (digits.length >= 6 && prisma.compounderLead) {
+          const tail = digits.slice(-9);
+          const leads = await prisma.compounderLead.findMany({
+            where: { phone: { contains: tail } }, select: { id: true, phone: true, name: true }, take: 5,
+          });
+          const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
+          if (lead) { ctx.leadId = lead.id; if (!ctx.who) ctx.who = lead.name; }
+        }
+      }
+    }
+  } catch (e) { console.warn('[voice] transferContext:', e.message); }
+  return ctx;
+}
+
+// Pošle do Velína, že zákazník nebyl přepojen na obchodníka.
+async function notifyTransferFailed(mode, targetId, attempts) {
+  try {
+    const notify = require('../services/compounder/notify');
+    if (!notify.notifyTransferFailed) return;
+    const c = await transferContext(mode, targetId);
+    await notify.notifyTransferFailed(prisma, { who: c.who, phone: c.phone, leadId: c.leadId, campaignName: c.campaignName, attempts });
+  } catch (e) { console.warn('[voice] notifyTransferFailed:', e.message); }
 }
 
 // Najde mobil obchodníka přiřazeného k leadu podle telefonu (posledních 9 číslic).
@@ -239,7 +326,12 @@ router.post('/relay-end', form, async (req, res) => {
     if (!plan.enabled) {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
-    return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout));
+    if (!plan.numbers.length) {
+      // Přepojení zapnuto, ale není koho volat → info do Velína a omluva.
+      notifyTransferFailed(mode, target, 0);
+      return res.type('text/xml').send(twimlApology());
+    }
+    return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout, { mode, target }));
   } catch (e) {
     console.warn('[voice] relay-end:', e.message);
     return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
@@ -257,7 +349,14 @@ router.post('/transfer', form, (req, res) => {
     }
     const rest = decList(req.query.q);
     const timeout = parseInt(req.query.t, 10) || 20;
-    return res.type('text/xml').send(twimlDial(rest, timeout));
+    const mode = req.query.m || 'inbound';
+    const target = req.query.tg || '';
+    if (!rest.length) {
+      // Vyčerpána všechna čísla i kolečka a nikdo se nedovolal → info do Velína.
+      notifyTransferFailed(mode, target, undefined);
+      return res.type('text/xml').send(twimlApology());
+    }
+    return res.type('text/xml').send(twimlDial(rest, timeout, { mode, target }));
   } catch (e) {
     console.warn('[voice] transfer:', e.message);
     return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
@@ -405,8 +504,9 @@ router.get('/config', requireAuth, async (req, res, next) => {
     const transfer_fallback_numbers = get ? (await get('voice.transfer_fallback_numbers')) || '' : '';
     const transfer_inbound_number = get ? (await get('voice.transfer_inbound_number')) || '' : '';
     const transfer_ring_timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
+    const transfer_rounds = get ? parseInt(await get('voice.transfer_rounds'), 10) || 2 : 2;
     res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway,
-      transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout });
+      transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds });
   } catch (err) {
     next(err);
   }
@@ -454,6 +554,8 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       await settings.setSetting('voice.transfer_inbound_number', String(transfer_inbound_number || '').trim(), { type: 'string', userId: uid });
     if (transfer_ring_timeout !== undefined)
       await settings.setSetting('voice.transfer_ring_timeout', String(parseInt(transfer_ring_timeout, 10) || 20), { type: 'string', userId: uid });
+    if (req.body.transfer_rounds !== undefined)
+      await settings.setSetting('voice.transfer_rounds', String(parseInt(req.body.transfer_rounds, 10) || 2), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);

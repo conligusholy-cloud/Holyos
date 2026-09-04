@@ -306,11 +306,26 @@ async function notifyCallbackRequest(prisma, { lead, when, note }) {
   } catch (e) { console.error('[compounder-notify] callback request', e.message); }
 }
 
+// Hlasový hovor: zákazník chtěl přepojit na obchodníka, ale nikdo hovor nezvedl
+// (vyčerpána všechna čísla i kolečka). Push + zvonek, ať se ozve zpět.
+async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, attempts }) {
+  try {
+    const label = who || (phone ? phone : 'zákazník');
+    const title = '📵 Nepřepojeno na obchodníka — ' + label;
+    const body = 'Zákazník během hovoru' + (campaignName ? (' (kampaň ' + campaignName + ')') : '')
+      + ' chtěl mluvit s obchodníkem, ale nikdo hovor nezvedl'
+      + (attempts ? (' (' + attempts + ' pokusů)') : '') + '. Zavolejte mu zpět'
+      + (phone ? (': ' + phone) : '.') + (phone ? '.' : '');
+    await dispatch(prisma, { title, body, data: { type: 'voice_transfer_failed', lead_id: leadId || null, phone: phone || null } });
+  } catch (e) { console.error('[compounder-notify] transfer failed', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   notifyChatStarted,
   notifyMeetingRequest,
   notifyCallbackRequest,
+  notifyTransferFailed,
   getEligibleVelinPeople,
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,

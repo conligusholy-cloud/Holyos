@@ -440,8 +440,12 @@
           <input id="ai-transfer-fallback" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456, +420602000000">
           <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Číslo pro příchozí hovory (kam přepojit volajícího na recepční)</label>
           <input id="ai-transfer-inbound" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456">
-          <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Doba vyzvánění na jedno číslo (sekundy)</label>
-          <input id="ai-transfer-timeout" type="number" min="8" max="60" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="20">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
+            <div><label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Kolik koleček (max)</label>
+            <input id="ai-transfer-rounds" type="number" min="1" max="5" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="2"></div>
+            <div><label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Vyzvánění na číslo (s)</label>
+            <input id="ai-transfer-timeout" type="number" min="8" max="60" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="20"></div>
+          </div>
         </div>
 
         <div style="margin-top:14px;"><button class="btn" onclick="aiSaveConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit nastavení</button> <span id="ai-inbound-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
@@ -5104,6 +5108,7 @@
         var _tf=document.getElementById('ai-transfer-fallback'); if(_tf) _tf.value = c.transfer_fallback_numbers||'';
         var _ti=document.getElementById('ai-transfer-inbound'); if(_ti) _ti.value = c.transfer_inbound_number||'';
         var _tt=document.getElementById('ai-transfer-timeout'); if(_tt) _tt.value = c.transfer_ring_timeout||20;
+        var _tr=document.getElementById('ai-transfer-rounds'); if(_tr) _tr.value = c.transfer_rounds||2;
         aiCountField('ai-inbound-prompt','ai-inbound-prompt-cnt',9000,1400);
         aiCountField('ai-inbound-greeting','ai-inbound-greeting-cnt',300,50);
         var _kn=document.getElementById('ai-kn-sec-inbound'); if(_kn && !_kn.getAttribute('data-init')){ _kn.innerHTML=aiKnSectionHtml('inbound'); _kn.setAttribute('data-init','1'); }
@@ -5123,7 +5128,8 @@
           transfer_enabled: !!(document.getElementById('ai-transfer-enabled')||{}).checked,
           transfer_fallback_numbers: ((document.getElementById('ai-transfer-fallback')||{}).value||'').trim(),
           transfer_inbound_number: ((document.getElementById('ai-transfer-inbound')||{}).value||'').trim(),
-          transfer_ring_timeout: parseInt((document.getElementById('ai-transfer-timeout')||{}).value,10)||20
+          transfer_ring_timeout: parseInt((document.getElementById('ai-transfer-timeout')||{}).value,10)||20,
+          transfer_rounds: parseInt((document.getElementById('ai-transfer-rounds')||{}).value,10)||2
         })});
         if(msg) msg.textContent='✅ Uloženo'; if(msg2) msg2.textContent='✅ Uloženo';
       }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; if(msg2) msg2.textContent='Chyba: '+e.message; }
@@ -5545,13 +5551,22 @@
         // Přepojení na živého člověka — per kampaň
         html+='<div style="border:1px solid rgba(16,185,129,0.4);border-radius:10px;padding:12px;margin-top:14px;background:rgba(16,185,129,0.06);">';
         html+='<div style="font-weight:700;font-size:13px;margin-bottom:4px;">📞 Přepojení na živého člověka (tato kampaň)</div>';
-        html+='<p style="color:var(--text2);font-size:12px;margin:0 0 8px;">Když zákazník během hovoru řekne, že chce živého člověka, AI ho přepojí — nejdřív na mobil obchodníka přiřazeného k danému leadu; když se nedovolá (do vypršení vyzvánění), zkusí postupně tato záložní čísla.</p>';
+        html+='<p style="color:var(--text2);font-size:12px;margin:0 0 8px;">Když zákazník během hovoru řekne, že chce živého člověka, AI volá kontakty <b>podle pořadí</b> a dokola, dokud se někdo nedovolá. Když ani po nastaveném počtu koleček nikdo nezvedne, přijde upozornění do Velína.</p>';
         html+='<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:8px;"><input type="checkbox" id="ai-camp-transfer-enabled"'+(c.transfer_enabled!==false?' checked':'')+'> Zapnout přepojení u této kampaně</label>';
-        html+='<label style="display:block;font-size:12px;color:var(--text2);margin:8px 0 4px;">Záložní čísla (oddělená čárkou, v pořadí)</label>';
-        html+='<input id="ai-camp-transfer-fallback" type="text" value="'+aiEsc(c.transfer_fallback_numbers||'')+'" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="+420777123456, +420602000000">';
-        html+='<label style="display:block;font-size:12px;color:var(--text2);margin:8px 0 4px;">Doba vyzvánění na jedno číslo (sekundy)</label>';
-        html+='<input id="ai-camp-transfer-timeout" type="number" min="8" max="60" value="'+(c.transfer_ring_timeout||20)+'" style="width:120px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;">';
-        html+='<div style="margin-top:8px;"><button class="btn" onclick="aiSaveTransfer(\''+c.id+'\')" style="background:#10b981;color:#04150e;font-weight:700;">💾 Uložit přepojení</button> <span id="ai-camp-transfer-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
+        html+='<div style="font-size:12px;color:var(--text2);margin:10px 0 4px;font-weight:600;">Pořadí volání:</div>';
+        html+='<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);"><span style="width:20px;color:#10b981;font-size:12px;font-weight:700;">1.</span><span style="flex:1;font-size:13px;color:var(--text);">👤 Obchodník přiřazený k leadu <span style="color:var(--text2);">(automaticky, volá se první)</span></span></div>';
+        html+='<div id="ai-camp-tf-list"></div>';
+        html+='<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;">';
+        html+='<select id="ai-camp-tf-seller" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px;min-width:180px;"></select>';
+        html+='<button class="btn" onclick="aiTfAddSeller()" style="font-size:12px;">➕ obchodník</button>';
+        html+='<input id="ai-camp-tf-num" type="text" placeholder="+420…" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px;width:150px;">';
+        html+='<button class="btn" onclick="aiTfAddNumber()" style="font-size:12px;">➕ číslo</button>';
+        html+='</div>';
+        html+='<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;">';
+        html+='<div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Kolik koleček (max)</label><input id="ai-camp-transfer-rounds" type="number" min="1" max="5" value="'+(c.transfer_rounds||2)+'" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>';
+        html+='<div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Vyzvánění na číslo (s)</label><input id="ai-camp-transfer-timeout" type="number" min="8" max="60" value="'+(c.transfer_ring_timeout||20)+'" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>';
+        html+='</div>';
+        html+='<div style="margin-top:10px;"><button class="btn" onclick="aiSaveTransfer(\''+c.id+'\')" style="background:#10b981;color:#04150e;font-weight:700;">💾 Uložit přepojení</button> <span id="ai-camp-transfer-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span></div>';
         html+='</div>';
         html+='<div style="font-size:12px;color:var(--text2);margin:14px 0 0;">Podklady <b>jen pro tuto kampaň</b> (oddělené od ostatních):</div>';
         html+='<div id="ai-kn-sec-camp"></div>';
@@ -5568,6 +5583,7 @@
         aiCountField('ai-camp-greeting','ai-camp-greeting-cnt',300,50);
         aiCountField('ai-camp-script','ai-camp-script-cnt',9000,1400);
         var _knc=document.getElementById('ai-kn-sec-camp'); if(_knc){ var _sc='outbound:'+c.id; _knc.innerHTML=aiKnSectionHtml(_sc); aiKnLoad(_sc); }
+        aiTfInit(c.transfer_fallback_numbers);
         aiStartPoll(id);
       }catch(e){ det.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
@@ -5661,12 +5677,52 @@
         m.textContent='✅ Uloženo';
       }catch(e){ m.textContent='Chyba: '+e.message; }
     }
+    // ── Přepojení: editor pořadí kontaktů (obchodníci + čísla) ──
+    var aiCampTf = [];
+    function aiTfParse(stored){
+      aiCampTf=[];
+      var s=String(stored||'').trim(); if(!s) return;
+      try{ var p=JSON.parse(s); if(Array.isArray(p)){ p.forEach(function(e){
+        if(typeof e==='string'){ if(e.trim()) aiCampTf.push({t:'num',v:e.trim()}); }
+        else if(e&&(e.v||e.number)) aiCampTf.push({t:'num',v:String(e.v||e.number)});
+        else if(e&&(e.id||e.person_id)) aiCampTf.push({t:'seller',id:parseInt(e.id||e.person_id,10)});
+      }); return; } }catch(_){}
+      // legacy: čísla oddělená čárkou
+      s.split(/[,;\n]/).map(function(x){return x.trim();}).filter(Boolean).forEach(function(n){ aiCampTf.push({t:'num',v:n}); });
+    }
+    function aiTfSellerName(id){ var p=(CMP_SELLERS||[]).find(function(x){return x.id===id;}); return p?((((p.first_name||'')+' '+(p.last_name||'')).trim())||('#'+id)):('#'+id); }
+    function aiTfRender(){
+      var box=document.getElementById('ai-camp-tf-list'); if(!box) return;
+      if(!aiCampTf.length){ box.innerHTML='<div style="font-size:12px;color:var(--text2);padding:6px 0;">Zatím žádné záložní kontakty. Přidej obchodníka nebo číslo níže.</div>'; return; }
+      box.innerHTML=aiCampTf.map(function(e,i){
+        var label = e.t==='seller' ? ('👤 '+aiEsc(aiTfSellerName(e.id))) : ('📱 '+aiEsc(e.v));
+        return '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);">'
+          +'<span style="width:20px;color:var(--text2);font-size:12px;">'+(i+2)+'.</span>'
+          +'<span style="flex:1;font-size:13px;color:var(--text);">'+label+'</span>'
+          +'<button class="btn" onclick="aiTfMove('+i+',-1)" style="padding:2px 7px;font-size:12px;"'+(i===0?' disabled':'')+'>↑</button>'
+          +'<button class="btn" onclick="aiTfMove('+i+',1)" style="padding:2px 7px;font-size:12px;"'+(i===aiCampTf.length-1?' disabled':'')+'>↓</button>'
+          +'<button class="btn" onclick="aiTfDel('+i+')" style="padding:2px 7px;font-size:12px;background:#7f1d1d;color:#fff;">✕</button>'
+          +'</div>';
+      }).join('');
+    }
+    async function aiTfInit(stored){
+      try{ if(typeof fbEnsureSellers==='function') await fbEnsureSellers(); }catch(e){}
+      var sel=document.getElementById('ai-camp-tf-seller');
+      if(sel){ sel.innerHTML='<option value="">— vyber obchodníka —</option>'+((typeof CMP_SELLERS!=='undefined'&&CMP_SELLERS)||[]).map(function(s){var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id);return '<option value="'+s.id+'">'+aiEsc(nm)+'</option>';}).join(''); }
+      aiTfParse(stored); aiTfRender();
+    }
+    function aiTfAddSeller(){ var sel=document.getElementById('ai-camp-tf-seller'); if(!sel||!sel.value) return; var id=parseInt(sel.value,10); if(!aiCampTf.some(function(e){return e.t==='seller'&&e.id===id;})) aiCampTf.push({t:'seller',id:id}); sel.value=''; aiTfRender(); }
+    function aiTfAddNumber(){ var inp=document.getElementById('ai-camp-tf-num'); if(!inp) return; var v=(inp.value||'').trim(); if(!v) return; aiCampTf.push({t:'num',v:v}); inp.value=''; aiTfRender(); }
+    function aiTfMove(i,d){ var j=i+d; if(j<0||j>=aiCampTf.length) return; var tmp=aiCampTf[i]; aiCampTf[i]=aiCampTf[j]; aiCampTf[j]=tmp; aiTfRender(); }
+    function aiTfDel(i){ aiCampTf.splice(i,1); aiTfRender(); }
+    window.aiTfInit=aiTfInit; window.aiTfAddSeller=aiTfAddSeller; window.aiTfAddNumber=aiTfAddNumber; window.aiTfMove=aiTfMove; window.aiTfDel=aiTfDel;
     async function aiSaveTransfer(id){
       var m=document.getElementById('ai-camp-transfer-msg'); if(m) m.textContent='Ukládám…';
       try{
         await aiApi('/campaigns/'+id,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
           transfer_enabled: !!(document.getElementById('ai-camp-transfer-enabled')||{}).checked,
-          transfer_fallback_numbers: ((document.getElementById('ai-camp-transfer-fallback')||{}).value||'').trim(),
+          transfer_fallback_numbers: JSON.stringify(aiCampTf),
+          transfer_rounds: parseInt((document.getElementById('ai-camp-transfer-rounds')||{}).value,10)||2,
           transfer_ring_timeout: parseInt((document.getElementById('ai-camp-transfer-timeout')||{}).value,10)||20
         })});
         if(m) m.textContent='✅ Uloženo';
