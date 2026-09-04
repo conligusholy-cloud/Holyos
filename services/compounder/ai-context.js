@@ -25,6 +25,57 @@ const VOICE_STYLE =
   'MLUVENÝ PROJEV (telefon): Mluvíš, nepíšeš. Krátké přirozené věty, žádný markdown, odrážky ani emoji. ' +
   'Neříkej nahlas „hvězdička" ani „odrážka". Buď stručný a lidský, nech prostor druhé straně a ptej se.';
 
+// Odhad pohlaví z českého jména/příjmení → 'male' | 'female' | null.
+// Nejsilnější signál je příjmení (ženská skoro vždy končí na -á). Doplňkově křestní.
+function detectGenderCz(firstName, lastName, fullName) {
+  const low = (s) => String(s || '').trim().toLowerCase();               // ponechá diakritiku (kvůli „-á")
+  const strip = (s) => low(s).normalize('NFD').replace(/[̀-ͯ]/g, '');    // bez diakritiky (na porovnání se sadami)
+  let fnRaw = low(firstName), lnRaw = low(lastName);
+  if (!fnRaw && !lnRaw && fullName) {
+    const parts = low(fullName).split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) { fnRaw = parts[0]; lnRaw = parts[parts.length - 1]; }
+    else if (parts.length === 1) { fnRaw = parts[0]; }
+  }
+  const fn = strip(fnRaw);
+
+  const MALE = new Set(['jan', 'petr', 'josef', 'jiri', 'martin', 'tomas', 'pavel', 'jaroslav', 'miroslav', 'zdenek', 'frantisek', 'vaclav', 'michal', 'jakub', 'david', 'lukas', 'ondrej', 'radek', 'roman', 'marek', 'milan', 'ivan', 'karel', 'antonin', 'vladimir', 'daniel', 'filip', 'stanislav', 'ladislav', 'adam', 'vojtech', 'matej', 'dominik', 'patrik', 'robert', 'rostislav', 'boris', 'mirek', 'honza', 'petr']);
+  const FEMALE = new Set(['jana', 'eva', 'hana', 'anna', 'lenka', 'katerina', 'lucie', 'vera', 'alena', 'petra', 'veronika', 'jaroslava', 'marie', 'martina', 'jitka', 'zdena', 'ivana', 'barbora', 'barbara', 'michaela', 'tereza', 'monika', 'zuzana', 'kristyna', 'nikola', 'gabriela', 'dana', 'pavla', 'denisa', 'sarka', 'sona', 'radka', 'simona', 'marketa', 'liliana', 'aneta', 'bozena', 'natalie', 'natalia', 'iveta', 'drahoslava', 'bohuslava']);
+
+  // 1) Křestní jméno ze známé sady (nejspolehlivější, řeší i mužská příjmení na -a).
+  if (fn) {
+    if (MALE.has(fn)) return 'male';
+    if (FEMALE.has(fn)) return 'female';
+  }
+  // 2) Příjmení: české ženské příjmení končí na „á" (Nováková, Krátká) — s diakritikou;
+  //    u dat bez diakritiky bereme koncovky -ova/-cka/-ska. Mužská na „a" (Svoboda, Čada) NE.
+  if (lnRaw) {
+    if (/á$/.test(lnRaw) || /(ova|cka|ska|na|la|ta|ra)$/.test(lnRaw) && /á$/.test(lnRaw)) return 'female';
+    if (/(ová|cká|ská|á)$/.test(lnRaw)) return 'female';
+    if (/(ova|cka|ska)$/.test(strip(lnRaw))) return 'female';
+  }
+  // 3) Koncovka křestního jména jako slabší signál.
+  if (fn) {
+    if (/(a|e)$/.test(fn)) return 'female';           // Jana, Marie, Lucie
+    if (/[bcdfghjklmnprstvzx]$/.test(fn)) return 'male'; // většina mužských končí souhláskou
+  }
+  return null;
+}
+
+// Pokyn pro AI, jak oslovovat/skloňovat podle pohlaví (2. osoba, minulý čas, oslovení).
+function genderInstruction(gender) {
+  if (gender === 'female') {
+    return 'POHLAVÍ ZÁKAZNÍKA: žena. Komunikuj v ŽENSKÉM rodě — 2. osoba minulého času a příčestí v ženském tvaru '
+      + '(např. „byla byste", „měla byste", „uvažovala jste", „mohla byste"). Oslovení „paní". Nikdy nepoužij mužské tvary.';
+  }
+  if (gender === 'male') {
+    return 'POHLAVÍ ZÁKAZNÍKA: muž. Komunikuj v MUŽSKÉM rodě — 2. osoba minulého času a příčestí v mužském tvaru '
+      + '(např. „byl byste", „měl byste", „uvažoval jste", „mohl byste"). Oslovení „pane". Nikdy nepoužij ženské tvary.';
+  }
+  // neznámé pohlaví → neutrální, ať se netrefí špatně
+  return 'POHLAVÍ ZÁKAZNÍKA: nejisté. Vol, prosím, neutrální formulace a vyhýbej se rodově vyhraněnému minulému času '
+    + '(použij např. přítomný čas nebo neutrální obraty), ať nikoho neoslovíš špatným rodem.';
+}
+
 // Oddělené znalostní báze podle kontextu (mohou se lišit).
 function docsSettingKey(scope) {
   if (scope === 'inbound') return 'voice.inbound_docs';
@@ -53,4 +104,4 @@ async function augmentSystem(baseSystem, { voice = false, scope = 'specialist' }
   return parts.join('\n\n') + kb;
 }
 
-module.exports = { GUARDRAILS, MATH_RULE, VOICE_STYLE, docsSettingKey, loadKnowledgeBlock, augmentSystem };
+module.exports = { GUARDRAILS, MATH_RULE, VOICE_STYLE, docsSettingKey, loadKnowledgeBlock, augmentSystem, detectGenderCz, genderInstruction };

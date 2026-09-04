@@ -254,6 +254,24 @@ function attach(server) {
         ? (state.campaign && state.campaign.id ? ('outbound:' + state.campaign.id) : 'outbound')
         : 'inbound';
       state.system = await aic.augmentSystem(state.system, { voice: true, scope });
+      // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
+      if (mode === 'outbound' && state.target) {
+        let first = null, last = null, full = state.target.name || null;
+        try {
+          const tail = String(state.target.phone || '').replace(/\D/g, '').slice(-9);
+          if (tail.length >= 6) {
+            const leads = await prisma.compounderLead.findMany({
+              where: { phone: { contains: tail } },
+              select: { phone: true, first_name: true, last_name: true, name: true },
+              take: 5, orderBy: { updated_at: 'desc' },
+            });
+            const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
+            if (lead) { first = lead.first_name; last = lead.last_name; full = lead.name || full; }
+          }
+        } catch (_) { /* fallback na jméno z cíle */ }
+        const g = aic.detectGenderCz(first, last, full);
+        if (g) state.system += '\n\n' + aic.genderInstruction(g);
+      }
     } catch (e) {
       console.warn('[voice] augment systému selhal:', e.message);
     }

@@ -519,7 +519,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
     if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id: leadId },
-      select: { id: true, show_ai_specialist: true, name: true, city: true, role: true, pradlomat_version: true, access_approved_at: true, source: true, owner_person_id: true, phone: true, email: true },
+      select: { id: true, show_ai_specialist: true, name: true, first_name: true, last_name: true, city: true, role: true, pradlomat_version: true, access_approved_at: true, source: true, owner_person_id: true, phone: true, email: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Nenalezeno' });
     if (!leadAccessAllowed(lead)) return res.status(403).json({ ok: false, error: 'Přístup nepovolen' });
@@ -542,9 +542,15 @@ router.post('/portal/ai-specialist', async (req, res) => {
     if (!sys || !String(sys).trim()) sys = AI_SPECIALIST_DEFAULT;
 
     const who = (lead.name || '').trim();
+    // Rod komunikace podle jména/příjmení leada (muž/žena).
+    let genderRule = '';
+    try {
+      const aic = require('../services/compounder/ai-context');
+      genderRule = ' ' + aic.genderInstruction(aic.detectGenderCz(lead.first_name, lead.last_name, lead.name));
+    } catch (_) { genderRule = ''; }
     const ctx =
       'Kontext hovoru: mluvíš se zájemcem' + (who ? ' jménem ' + who : '') +
-      (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') + '. ' +
+      (lead.city ? ', město ' + lead.city : '') + (lead.role ? ', typ ' + lead.role : '') + '.' + genderRule + ' ' +
       '(INTERNÍ, NEZMIŇUJ: ekonomický profil leada je „' + (lead.pradlomat_version || 'V3') + '". ' +
       'Tenhle kód je jen interní přepínač ekonomiky — NIKDY ho v chatu nevyslovuj, neoznačuj ho za „verzi", ' +
       'a hlavně si k němu NEVYMÝŠLEJ žádné technické parametry, kapacity ani konfigurace.)';
