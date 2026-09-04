@@ -5113,7 +5113,7 @@
       try{
         var rows=await aiApi('/calls?limit=100');
         if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
-        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
         rows.forEach(function(c){
           var isOut = c.direction==='outbound';
           var dirCol = isOut ? '#3b82f6' : '#10b981';
@@ -5129,9 +5129,10 @@
             +'<td>'+aiEsc(num||'')+'</td>'
             +'<td>'+aiEsc(c.caller_name||'—')+'</td>'
             +'<td>'+aiEsc(c.caller_intent||c.summary||'—')+'</td>'
+            +'<td style="text-align:center;"><button class="btn" onclick="event.stopPropagation();aiToggleCall(\''+c.id+'\')" title="Zobrazit celý přepis hovoru" style="padding:4px 10px;font-size:14px;">📄</button></td>'
             +'<td onclick="event.stopPropagation()">'+rec+'</td>'
             +'<td>'+aiFmtDur(c.duration_sec)+'</td></tr>';
-          html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="7" style="background:var(--surface2);padding:14px;border-left:3px solid '+dirCol+';">'+aiCallDetail(c)+'</td></tr>';
+          html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="8" style="background:var(--surface2);padding:14px;border-left:3px solid '+dirCol+';">'+aiCallDetail(c)+'</td></tr>';
         });
         html+='</tbody></table>';
         body.innerHTML=html;
