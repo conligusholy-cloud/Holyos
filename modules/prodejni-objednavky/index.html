@@ -5079,23 +5079,14 @@
     // Přehrávač nahrávky: soubor se přes fetch celý stáhne do prohlížeče (blob) a
     // přehraje se kompletně z paměti — nezávisle na streamování/Range ze serveru
     // (to dřív usekávalo přehrávání po pár vteřinách).
+    // Klasický přehrávač (nativní ovládání). Při přehrávání vypne auto-refresh
+    // detailu kampaně, aby překreslení nezničilo právě hraný záznam.
     function aiRecPlayer(callId){
-      return '<span class="ai-rec"><button class="btn" onclick="aiRecLoad(this,\''+callId+'\')" style="padding:4px 10px;font-size:12px;">▶ Přehrát</button></span>';
+      return '<audio controls preload="none" onplay="aiRecOnPlay()" src="/api/voice/recording/'+callId+'" style="height:32px;max-width:230px;vertical-align:middle;"></audio>'
+        + ' <a href="/api/voice/recording/'+callId+'" download="hovor-'+callId+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:17px;vertical-align:middle;">📥</a>';
     }
-    async function aiRecLoad(btn, callId){
-      // Zastav automatické obnovování detailu kampaně (jinak by po 4 s překreslení
-      // zničilo právě přehrávaný záznam → hrálo jen pár vteřin a „restartovalo se").
-      try{ if(typeof aiStopPoll==='function') aiStopPoll(); }catch(e){}
-      var span=btn.parentNode; var orig=btn.textContent; btn.disabled=true; btn.textContent='Načítám…';
-      try{
-        var r=await fetch('/api/voice/recording/'+callId, { credentials:'include' });
-        if(!r.ok){ btn.textContent='Chyba '+r.status; btn.disabled=false; setTimeout(function(){btn.textContent=orig;},2500); return; }
-        var blob=await r.blob();
-        var url=URL.createObjectURL(blob);
-        span.innerHTML='<audio controls autoplay src="'+url+'" style="height:32px;max-width:230px;vertical-align:middle;"></audio> <a href="'+url+'" download="hovor-'+callId+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:18px;vertical-align:middle;margin-left:6px;">📥 Stáhnout</a>';
-      }catch(e){ btn.textContent='Chyba spojení'; btn.disabled=false; setTimeout(function(){btn.textContent=orig;},2500); }
-    }
-    window.aiRecLoad=aiRecLoad; window.aiRecPlayer=aiRecPlayer;
+    function aiRecOnPlay(){ try{ if(typeof aiStopPoll==='function') aiStopPoll(); }catch(e){} }
+    window.aiRecPlayer=aiRecPlayer; window.aiRecOnPlay=aiRecOnPlay;
     function aiFmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }
     var AI_STATUS = { draft:'Koncept', running:'Běží', paused:'Pozastaveno', done:'Hotovo', archived:'Archivováno', pending:'Čeká', calling:'Volá se', ringing:'Vyzvání', in_progress:'Hovor probíhá', failed:'Chyba', no_answer:'Bez odpovědi' };
 
