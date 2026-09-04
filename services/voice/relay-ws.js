@@ -128,6 +128,8 @@ function attach(server) {
 
     const targetId = q.target || null;
     const mode = targetId ? 'outbound' : 'inbound';
+    // Úvod řekne Twilio přes welcomeGreeting (neinteruptovatelně) → WS ho sám neposílá.
+    const welcomeByTwilio = q.wg === '1';
 
     const state = {
       callSid: null,
@@ -135,6 +137,7 @@ function attach(server) {
       to: null,
       transcript: [],
       history: [],
+      welcomeByTwilio,
       startedAt: new Date(),
       mode,
       handedOff: false,
@@ -204,7 +207,12 @@ function attach(server) {
         if (mode === 'outbound') {
           const fixedGreeting =
             state.campaign && state.campaign.greeting && String(state.campaign.greeting).trim();
-          if (fixedGreeting) {
+          if (state.welcomeByTwilio && fixedGreeting) {
+            // Úvod řekne Twilio (welcomeGreeting, neinteruptovatelně) → jen si ho
+            // vložíme do historie, ať AI ví, že se už představila. Nic neposíláme.
+            state.history = [{ role: 'assistant', content: fixedGreeting }];
+            state.transcript.push({ role: 'agent', text: fixedGreeting, ts: Date.now() });
+          } else if (fixedGreeting) {
             // Pevná úvodní věta z kampaně (AI ji řekne přesně takto)
             state.history = [{ role: 'assistant', content: fixedGreeting }];
             state.transcript.push({ role: 'agent', text: fixedGreeting, ts: Date.now() });
@@ -229,6 +237,10 @@ function attach(server) {
               });
             }
           }
+        } else if (state.welcomeByTwilio) {
+          // Příchozí: úvod řekne Twilio → jen ho zaznamenáme do historie.
+          state.history = [{ role: 'assistant', content: state.greeting }];
+          state.transcript.push({ role: 'agent', text: state.greeting, ts: Date.now() });
         } else {
           send(ws, { type: 'text', token: state.greeting, last: true });
         }

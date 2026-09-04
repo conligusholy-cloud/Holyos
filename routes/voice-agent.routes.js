@@ -50,15 +50,21 @@ function xmlAttr(s) {
 // TwiML pro spojení hovoru s ConversationRelay. actionUrl = kam Twilio zavolá,
 // až AI relace skončí (buď zákazník zavěsí, nebo AI pošle {type:'end'} kvůli
 // přepojení na živého člověka). Bez action by hovor po konci relace jen spadl.
-function twimlConnect(wsUrl, actionUrl) {
+function twimlConnect(wsUrl, actionUrl, welcomeGreeting) {
   const u = xmlAttr(wsUrl);
   const act = actionUrl ? ` action="${xmlAttr(actionUrl)}" method="POST"` : '';
+  // Úvodní věta jako welcomeGreeting → Twilio ji řekne stejným hlasem (ElevenLabs)
+  // a s welcomeGreetingInterruptible="none" ji NELZE přerušit (dořekne se celá,
+  // i když do toho volaný mluví). Teprve pak běží běžná (přerušitelná) konverzace.
+  const wg = welcomeGreeting && String(welcomeGreeting).trim()
+    ? ` welcomeGreeting="${xmlAttr(String(welcomeGreeting).trim())}" welcomeGreetingInterruptible="none"`
+    : '';
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
     `  <Connect${act}>\n` +
     `    <ConversationRelay url="${u}" language="cs-CZ" ` +
-    `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}" />\n` +
+    `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}"${wg} />\n` +
     '  </Connect>\n' +
     '</Response>'
   );
@@ -269,9 +275,18 @@ const form = express.urlencoded({ extended: false });
 
 // POST /api/voice/incoming — první webhook příchozího hovoru.
 // Vrací TwiML, které předá hovor ConversationRelay (řeč↔text) a napojí ho na náš WS.
-router.post('/incoming', form, (req, res) => {
+router.post('/incoming', form, async (req, res) => {
   const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound`;
-  res.type('text/xml').send(twimlConnect(relayUrl(), action));
+  let greeting = '';
+  try {
+    const get = settings ? settings.getSetting : null;
+    greeting = (get ? await get('voice.inbound_greeting') : '') || '';
+  } catch (_) { greeting = ''; }
+  if (!String(greeting).trim()) {
+    greeting = 'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?';
+  }
+  // wg=1 → WS ví, že úvod řekne Twilio (welcomeGreeting), takže ho sám neposílá.
+  res.type('text/xml').send(twimlConnect(relayUrl('wg=1'), action, greeting));
 });
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
@@ -304,9 +319,20 @@ router.post('/outgoing', form, async (req, res) => {
       .send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
   }
 
-  const extra = target ? 'target=' + encodeURIComponent(target) : '';
+  // Úvodní věta kampaně jako neinteruptovatelný welcomeGreeting (dořekne se celá).
+  let greeting = '';
+  if (target && prisma.voiceCampaign && prisma.voiceCampaignTarget) {
+    try {
+      const t = await prisma.voiceCampaignTarget.findUnique({ where: { id: target }, include: { campaign: true } });
+      greeting = (t && t.campaign && t.campaign.greeting) || '';
+    } catch (_) { greeting = ''; }
+  }
+  const parts = [];
+  if (target) parts.push('target=' + encodeURIComponent(target));
+  if (String(greeting).trim()) parts.push('wg=1');
+  const extra = parts.join('&');
   const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=outbound` + (target ? '&target=' + encodeURIComponent(target) : '');
-  res.type('text/xml').send(twimlConnect(relayUrl(extra), action));
+  res.type('text/xml').send(twimlConnect(relayUrl(extra), action, greeting));
 });
 
 // POST /api/voice/relay-end — Twilio sem zavolá, když AI relace (ConversationRelay)
