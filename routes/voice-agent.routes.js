@@ -277,6 +277,20 @@ const form = express.urlencoded({ extended: false });
 // Vrací TwiML, které předá hovor ConversationRelay (řeč↔text) a napojí ho na náš WS.
 router.post('/incoming', form, async (req, res) => {
   const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound`;
+  // Zapni nahrávání příchozího hovoru (odchozí se nahrávají už při vytvoření).
+  // <Connect>/ConversationRelay nemá record atribut → spustíme nahrávku přes REST.
+  const sid = req.body && req.body.CallSid;
+  if (sid) {
+    try {
+      const c = require('../services/voice/outbound').client();
+      if (c) {
+        await c.calls(sid).recordings.create({
+          recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,
+          recordingStatusCallbackEvent: ['completed'],
+        });
+      }
+    } catch (e) { console.warn('[voice] start nahrávky (příchozí):', e.message); }
+  }
   let greeting = '';
   try {
     const get = settings ? settings.getSetting : null;
