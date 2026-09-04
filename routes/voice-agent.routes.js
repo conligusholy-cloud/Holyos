@@ -527,7 +527,8 @@ async function ensureLocalRecording(callId, audioUrl) {
 }
 
 // GET /api/voice/recording/:callId — nahrávku stáhneme jednou na disk a servírujeme
-// přes res.sendFile (nativní podpora Range → plynulé přehrávání i převíjení).
+// s RUČNÍ obsluhou HTTP Range (206) → plynulé přehrávání i převíjení. (res.sendFile
+// za některými proxy/kompresí neposlal Content-Length/Range a přehrávač se sekal.)
 router.get('/recording/:callId', requireAuth, async (req, res, next) => {
   try {
     if (!prisma.voiceCall) return res.status(404).send('Bez nahrávky');
@@ -537,12 +538,33 @@ router.get('/recording/:callId', requireAuth, async (req, res, next) => {
     });
     if (!call || !call.audio_url) return res.status(404).send('Bez nahrávky');
     const file = await ensureLocalRecording(req.params.callId, call.audio_url);
+    const fs = require('fs');
+    const size = fs.statSync(file).size;
+    res.set('Accept-Ranges', 'bytes');
     res.set('Content-Type', 'audio/mpeg');
     res.set('Cache-Control', 'private, max-age=86400');
-    return res.sendFile(file);
+    const range = req.headers.range;
+    if (range) {
+      const m = /bytes=(\d*)-(\d*)/.exec(range);
+      let start = m && m[1] ? parseInt(m[1], 10) : 0;
+      let end = m && m[2] ? parseInt(m[2], 10) : size - 1;
+      if (isNaN(start)) start = 0;
+      if (isNaN(end) || end >= size) end = size - 1;
+      if (start > end || start >= size) {
+        res.status(416).set('Content-Range', 'bytes */' + size).end();
+        return;
+      }
+      res.status(206);
+      res.set('Content-Range', 'bytes ' + start + '-' + end + '/' + size);
+      res.set('Content-Length', String(end - start + 1));
+      fs.createReadStream(file, { start, end }).pipe(res);
+    } else {
+      res.set('Content-Length', String(size));
+      fs.createReadStream(file).pipe(res);
+    }
   } catch (err) {
     console.warn('[voice] recording serve:', err.message);
-    return res.status(502).send('Nahrávku nelze načíst');
+    if (!res.headersSent) return res.status(502).send('Nahrávku nelze načíst');
   }
 });
 
