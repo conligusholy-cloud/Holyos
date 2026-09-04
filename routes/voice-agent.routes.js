@@ -506,23 +506,46 @@ function recordingsDir() {
 // Stáhne nahrávku z Twilia jednou na disk (pokud tam ještě není) a vrátí lokální
 // cestu. Servírování z lokálního souboru přes res.sendFile pak spolehlivě
 // podporuje převíjení (Range) — proxy stream z Twilia přehrávač usekával.
+// Zjistí skutečnou velikost nahrávky u Twilia (přes Range 0-0 → Content-Range total).
+async function remoteRecordingSize(mediaUrl, auth) {
+  try {
+    const r = await fetch(mediaUrl, { headers: { Authorization: auth, Range: 'bytes=0-0' } });
+    const cr = r.headers.get('content-range'); // "bytes 0-0/123456"
+    if (cr) { const m = /\/(\d+)\s*$/.exec(cr); if (m) return parseInt(m[1], 10); }
+    const cl = r.headers.get('content-length');
+    if (r.status === 200 && cl) return parseInt(cl, 10);
+    return 0;
+  } catch (_) { return 0; }
+}
+
 async function ensureLocalRecording(callId, audioUrl) {
   const fs = require('fs');
   const path = require('path');
   const dir = recordingsDir();
   const file = path.join(dir, String(callId).replace(/[^a-zA-Z0-9._-]/g, '_') + '.mp3');
-  if (fs.existsSync(file) && fs.statSync(file).size > 0) return file;
   const SID = process.env.TWILIO_ACCOUNT_SID;
   const TOKEN = process.env.TWILIO_AUTH_TOKEN;
   if (!SID || !TOKEN) throw new Error('Twilio není nakonfigurováno');
   const mediaUrl = audioUrl.endsWith('.mp3') ? audioUrl : audioUrl + '.mp3';
   const auth = 'Basic ' + Buffer.from(SID + ':' + TOKEN).toString('base64');
+
+  const localSize = (fs.existsSync(file) ? fs.statSync(file).size : 0);
+  // Ověř skutečnou velikost u Twilia — když je lokální kopie menší (uřízlá /
+  // stažená dřív, než byla nahrávka hotová), stáhneme ji znovu celou.
+  const remoteSize = await remoteRecordingSize(mediaUrl, auth);
+  if (localSize > 0 && (remoteSize === 0 || localSize >= remoteSize)) return file;
+
   const r = await fetch(mediaUrl, { headers: { Authorization: auth } });
-  if (!r.ok) throw new Error('Nahrávku nelze načíst (' + r.status + ')');
+  if (!r.ok) {
+    if (localSize > 0) return file; // radši starší kopie než nic
+    throw new Error('Nahrávku nelze načíst (' + r.status + ')');
+  }
   fs.mkdirSync(dir, { recursive: true });
   const tmp = file + '.part';
-  fs.writeFileSync(tmp, Buffer.from(await r.arrayBuffer()));
+  const buf = Buffer.from(await r.arrayBuffer());
+  fs.writeFileSync(tmp, buf);
   fs.renameSync(tmp, file);
+  console.log('[voice] nahrávka ' + callId + ' stažena: ' + buf.length + ' B (remote ' + remoteSize + ', lokálně bylo ' + localSize + ')');
   return file;
 }
 
