@@ -5630,50 +5630,62 @@
       }
       if(c.status!=='running') h+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'start\')" style="background:#10b981;color:#062;font-weight:700;">▶ Spustit obvolávání</button> ';
       if(c.status==='running') h+='<button class="btn" onclick="aiCampAction(\''+c.id+'\',\'pause\')" style="background:#f59e0b;color:#3a2a0a;font-weight:700;">⏸ Pozastavit</button> ';
-      h+='<button class="btn" onclick="aiArchiveCampaign(\''+c.id+'\')" style="background:#6b7280;color:#fff;">📦 Uzavřít a archivovat sadu</button> ';
+      h+='<button class="btn" onclick="aiArchiveCampaign(\''+c.id+'\')" style="background:#6b7280;color:#fff;">📦 Archivovat celou kampaň</button> ';
       h+='<button class="btn" onclick="aiDeleteCampaign(\''+c.id+'\')" style="background:#ef444422;color:#ef4444;">🗑 Smazat</button>';
+      return h;
+    }
+    function aiStatDur(sec){ sec=Number(sec)||0; var m=Math.floor(sec/60), ss=sec%60; return m+':'+(ss<10?'0':'')+ss; }
+    // Karty statistiky (sdílené pro celek i jednotlivá kola). accent = barva rámečku.
+    function aiStatCardsHtml(s, title, accent){
+      function card(lbl,val,sub,col){ return '<div style="flex:1;min-width:92px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;"><div style="font-size:19px;font-weight:800;color:'+(col||'var(--text)')+';">'+val+'</div><div style="font-size:11px;color:var(--text2);">'+lbl+'</div>'+(sub?('<div style="font-size:11px;color:var(--text2);margin-top:1px;">'+sub+'</div>'):'')+'</div>'; }
+      var rt=s.rates||{};
+      var h='<div style="border:1px solid '+(accent||'rgba(59,130,246,0.4)')+';border-radius:10px;padding:12px;background:rgba(59,130,246,0.06);">';
+      if(title) h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px;">'+title+'</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        + card('Kontaktů', s.total) + card('Voláno', s.attempted)
+        + card('Dovoláno', s.reached, (rt.reachedOfAttempted||0)+'% z volaných', '#10b981')
+        + card('Bez odpovědi', s.noAnswer, null, '#f59e0b')
+        + card('Chyba', s.failed, null, s.failed?'#ef4444':null)
+        + card('Čeká', s.pending) + '</div>';
+      h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
+        + card('Čas hovorů', aiStatDur(s.totalSec)) + card('Průměr hovoru', aiStatDur(s.avgSec))
+        + card('SMS odesláno', s.smsSent)
+        + card('🤝 Schůzka', s.meeting, null, s.meeting?'#10b981':null)
+        + card('📞 Volat příště', s.callback, null, s.callback?'#3b82f6':null)
+        + card('🚫 Nemá zájem', s.nointerest, null, s.nointerest?'#9aa0ad':null)
+        + '</div></div>';
       return h;
     }
     async function aiLoadCampStats(id){
       var box=document.getElementById('ai-camp-stats'); if(!box) return;
       try{
         var s=await aiApi('/campaigns/'+id+'/stats'); if(!s||!s.ok){ box.innerHTML=''; return; }
-        function card(lbl,val,sub,col){ return '<div style="flex:1;min-width:96px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;"><div style="font-size:20px;font-weight:800;color:'+(col||'var(--text)')+';">'+val+'</div><div style="font-size:11px;color:var(--text2);">'+lbl+'</div>'+(sub?('<div style="font-size:11px;color:var(--text2);margin-top:1px;">'+sub+'</div>'):'')+'</div>'; }
-        function dur(sec){ sec=Number(sec)||0; var m=Math.floor(sec/60), ss=sec%60; return m+':'+(ss<10?'0':'')+ss; }
-        var rt=s.rates||{};
-        var h='<div style="border:1px solid rgba(59,130,246,0.4);border-radius:10px;padding:12px;background:rgba(59,130,246,0.06);">';
-        h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px;">📊 Statistika sady</div>';
-        h+='<div style="display:flex;gap:8px;flex-wrap:wrap;">'
-          + card('Kontaktů', s.total)
-          + card('Voláno', s.attempted)
-          + card('Dovoláno', s.reached, rt.reachedOfAttempted+'% z volaných', '#10b981')
-          + card('Bez odpovědi', s.noAnswer, null, '#f59e0b')
-          + card('Chyba', s.failed, null, s.failed?'#ef4444':null)
-          + card('Čeká', s.pending)
-          + '</div>';
-        h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
-          + card('Čas hovorů', dur(s.totalSec))
-          + card('Průměr hovoru', dur(s.avgSec))
-          + card('SMS odesláno', s.smsSent)
-          + card('🤝 Schůzka', s.meeting, null, s.meeting?'#10b981':null)
-          + card('📞 Volat příště', s.callback, null, s.callback?'#3b82f6':null)
-          + card('🚫 Nemá zájem', s.nointerest, null, s.nointerest?'#9aa0ad':null)
-          + '</div>';
-        h+='<div style="font-size:11px;color:var(--text2);margin-top:6px;">Výsledky (schůzka/volat/nezájem) dle aktuálního stavu spárovaných kontaktů.</div>';
-        h+='</div>';
-        box.innerHTML=h;
+        box.innerHTML=aiStatCardsHtml(s, '📊 Celkem za kampaň', 'rgba(234,179,8,0.5)')
+          + '<div style="font-size:11px;color:var(--text2);margin-top:6px;">Výsledky (schůzka/volat/nezájem) dle aktuálního stavu spárovaných kontaktů.</div>';
+        // Statistika jednotlivých kol → do připravených kontejnerů (pokud existují).
+        (s.batches||[]).forEach(function(b){
+          var el=document.getElementById('ai-bstat-'+b.batch_no);
+          if(el) el.innerHTML=aiStatCardsHtml(b, null, 'var(--border)');
+        });
       }catch(e){ box.innerHTML=''; }
     }
     window.aiLoadCampStats=aiLoadCampStats;
+    async function aiCloseBatch(id){
+      if(!confirm('Uzavřít aktuální seznam a začít nový? Kampaň běží dál, uzavřený seznam zůstane kvůli statistikám (sbalený dole). Nové leady půjdou do nového seznamu.')) return;
+      try{ await aiApi('/campaigns/'+id+'/new-batch',{ method:'POST' }); aiOpenCampaign(id); }
+      catch(e){ alert('Chyba: '+e.message); }
+    }
+    window.aiCloseBatch=aiCloseBatch;
     async function aiArchiveCampaign(id){
-      if(!confirm('Uzavřít tuto sadu kontaktů a archivovat ji? Zůstane dostupná kvůli statistikám (sbalená dole), obvolávání se zastaví.')) return;
+      if(!confirm('Archivovat CELOU kampaň? Zůstane dostupná kvůli statistikám (sbalená dole v seznamu kampaní), obvolávání se zastaví. (Pokud chceš jen uzavřít aktuální volaný seznam a pokračovat, použij „Uzavřít seznam a začít nový".)')) return;
       try{ await aiApi('/campaigns/'+id+'/archive',{ method:'POST' }); aiLoadCampaigns(); }
       catch(e){ alert('Chyba: '+e.message); }
     }
     window.aiArchiveCampaign=aiArchiveCampaign;
     var AI_TSTATUS_COLOR={ pending:'#9aa0ad', calling:'#3b82f6', ringing:'#3b82f6', in_progress:'#22c55e', done:'#10b981', failed:'#ef4444', no_answer:'#f59e0b' };
-    function aiRenderTargets(c){
-      var tg=c.targets||[];
+    function aiRenderTargets(c, batch){
+      var tg=(c.targets||[]);
+      if(batch!=null) tg=tg.filter(function(t){ return (t.batch_no||1)===batch; });
       if(!tg.length) return '<div style="color:var(--text2);">Zatím žádné leady.</div>';
       var h='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Voláno</th><th>Výsledek</th><th>SMS</th><th></th></tr></thead><tbody>';
       tg.forEach(function(t){
@@ -5730,14 +5742,36 @@
         html+='<div style="font-size:12px;color:var(--text2);margin:14px 0 0;">Podklady <b>jen pro tuto kampaň</b> (oddělené od ostatních):</div>';
         html+='<div id="ai-kn-sec-camp"></div>';
         html+='</div>';
+        var _cur=c.current_batch||1;
+        var _bset={}; (c.targets||[]).forEach(function(t){ _bset[t.batch_no||1]=true; });
+        var _older=Object.keys(_bset).map(Number).filter(function(b){return b!==_cur;}).sort(function(a,b){return b-a;});
+        // Aktuální seznam (kolo)
+        html+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0;">';
+        html+='<h4 style="margin:0;font-size:15px;">📋 Aktuální seznam — kolo '+_cur+'</h4>';
+        html+='<button class="btn" onclick="aiCloseBatch(\''+c.id+'\')" style="background:#6b7280;color:#fff;font-size:12px;">🔒 Uzavřít seznam a začít nový</button>';
+        html+='</div>';
+        html+='<div id="ai-bstat-'+_cur+'" style="margin-bottom:10px;"></div>';
         html+='<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px;">';
-        html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
+        html+='<div style="font-size:13px;margin-bottom:6px;">Přidat leady do aktuálního seznamu (každý na řádek, formát <code>Jméno; +420…</code> nebo jen číslo):</div>';
         html+='<textarea id="ai-t-raw" rows="4" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;" placeholder="Jan Novák; +420777123456"></textarea>';
         html+='<button class="btn" onclick="aiAddTargets(\''+c.id+'\')" style="margin-top:8px;">➕ Přidat leady</button>';
         html+=' <button class="btn" onclick="aiOpenLeadPicker(\''+c.id+'\')" style="margin-top:8px;background:#8b5cf6;color:#fff;font-weight:700;">🎯 Vybrat z Compounder leadů</button>';
         html+=' <span id="ai-t-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
         html+='</div>';
-        html+='<div id="ai-targets">'+aiRenderTargets(c)+'</div>';
+        html+='<div id="ai-targets">'+aiRenderTargets(c, _cur)+'</div>';
+        // Dřívější (uzavřené) seznamy — sbalené, kvůli statistikám
+        if(_older.length){
+          html+='<details style="margin-top:16px;border:1px solid var(--border);border-radius:8px;padding:8px 12px;">';
+          html+='<summary style="cursor:pointer;font-size:13px;color:var(--text2);">📁 Dřívější seznamy ('+_older.length+') — statistiky a hovory</summary><div style="margin-top:12px;">';
+          _older.forEach(function(b){
+            html+='<div style="margin-bottom:16px;">';
+            html+='<div style="font-weight:700;font-size:14px;margin-bottom:6px;">Kolo '+b+'</div>';
+            html+='<div id="ai-bstat-'+b+'" style="margin-bottom:8px;"></div>';
+            html+=aiRenderTargets(c, b);
+            html+='</div>';
+          });
+          html+='</div></details>';
+        }
         det.innerHTML=html;
         aiCountField('ai-camp-greeting','ai-camp-greeting-cnt',300,50);
         aiCountField('ai-camp-script','ai-camp-script-cnt',9000,1400);
@@ -5752,7 +5786,7 @@
         var c=await aiApi('/campaigns/'+id);
         var st=document.getElementById('ai-camp-status'); if(st) st.innerHTML=aiCampStatusHtml(c);
         var ac=document.getElementById('ai-camp-actions'); if(ac) ac.innerHTML=aiCampActionsHtml(c);
-        var tb=document.getElementById('ai-targets'); if(tb) tb.innerHTML=aiRenderTargets(c);
+        var tb=document.getElementById('ai-targets'); if(tb) tb.innerHTML=aiRenderTargets(c, c.current_batch||1);
       }catch(e){ /* tichý pokus */ }
     }
     function aiStartPoll(id){ aiStopPoll(); aiState.pollTimer=setInterval(function(){ aiRefreshCampaign(id); }, 4000); }

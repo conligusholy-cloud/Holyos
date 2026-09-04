@@ -933,13 +933,26 @@ router.post('/campaigns/:id/targets', requireAuth, express.json(), async (req, r
 
     if (!clean.length) return res.status(400).json({ error: 'Žádná platná telefonní čísla' });
 
+    const batch = camp.current_batch || 1;
     await prisma.voiceCampaignTarget.createMany({
-      data: clean.map((i) => ({ campaign_id: camp.id, name: i.name, phone: i.phone, status: 'pending' })),
+      data: clean.map((i) => ({ campaign_id: camp.id, name: i.name, phone: i.phone, status: 'pending', batch_no: batch })),
     });
-    res.status(201).json({ added: clean.length });
+    res.status(201).json({ added: clean.length, batch });
   } catch (err) {
     next(err);
   }
+});
+
+// Uzavře aktuální seznam (kolo) a založí nový — kampaň běží dál, staré kolo
+// zůstává kvůli statistikám. Nové leady půjdou do nového kola.
+router.post('/campaigns/:id/new-batch', requireAuth, async (req, res, next) => {
+  try {
+    const camp = await prisma.voiceCampaign.findUnique({ where: { id: req.params.id }, select: { current_batch: true } });
+    if (!camp) return res.status(404).json({ error: 'Kampaň nenalezena' });
+    const next = (camp.current_batch || 1) + 1;
+    const updated = await prisma.voiceCampaign.update({ where: { id: req.params.id }, data: { current_batch: next } });
+    res.json({ ok: true, current_batch: next, campaign: updated });
+  } catch (err) { next(err); }
 });
 
 router.post('/campaigns/:id/start', requireAuth, async (req, res, next) => {
@@ -990,64 +1003,63 @@ router.post('/campaigns/:id/unarchive', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Statistika sady (kampaně): trychtýř dovolání + čas hovorů + SMS + výsledky.
+// Statistika kampaně: celkem + rozpad po kolech (seznamech). Trychtýř dovolání
+// + čas hovorů + SMS + výsledky (schůzka/volat/nezájem dle stavu kontaktů).
 router.get('/campaigns/:id/stats', requireAuth, async (req, res, next) => {
   try {
     const id = req.params.id;
+    const camp = await prisma.voiceCampaign.findUnique({ where: { id }, select: { current_batch: true } });
     const targets = await prisma.voiceCampaignTarget.findMany({
       where: { campaign_id: id },
-      select: { status: true, sms_sent: true, phone: true, voice_call_id: true },
+      select: { status: true, sms_sent: true, phone: true, voice_call_id: true, batch_no: true },
     });
-    const total = targets.length;
-    const by = {};
-    targets.forEach((t) => { by[t.status] = (by[t.status] || 0) + 1; });
-    const reached = by.done || 0;
-    const noAnswer = by.no_answer || 0;
-    const failed = by.failed || 0;
-    const pending = by.pending || 0;
-    const inProgress = (by.calling || 0) + (by.ringing || 0) + (by.in_progress || 0);
-    const attempted = total - pending;
-    const smsSent = targets.filter((t) => t.sms_sent).length;
-
-    // Čas hovorů z napojených VoiceCall.
-    let totalSec = 0, withAudio = 0, reachedDur = [];
+    // Délky hovorů (jeden dotaz).
+    const callMap = {};
     const callIds = targets.map((t) => t.voice_call_id).filter(Boolean);
     if (callIds.length && prisma.voiceCall) {
-      const calls = await prisma.voiceCall.findMany({ where: { id: { in: callIds } }, select: { duration_sec: true, audio_url: true } });
-      calls.forEach((c) => { totalSec += (c.duration_sec || 0); if (c.audio_url) withAudio++; if (c.duration_sec) reachedDur.push(c.duration_sec); });
+      const calls = await prisma.voiceCall.findMany({ where: { id: { in: callIds } }, select: { id: true, duration_sec: true, audio_url: true } });
+      calls.forEach((c) => { callMap[c.id] = c; });
     }
-    const avgSec = reachedDur.length ? Math.round(reachedDur.reduce((a, b) => a + b, 0) / reachedDur.length) : 0;
-
-    // Výsledky podle aktuálního stavu spárovaných kontaktů (schůzka / volat příště / nezájem).
-    let meeting = 0, callback = 0, nointerest = 0;
+    // Stavy spárovaných kontaktů (jeden dotaz) → mapa podle posledních 9 číslic.
+    const leadByTail = {};
     try {
       if (prisma.compounderLead) {
-        const tails = new Set(targets.map((t) => String(t.phone || '').replace(/\D/g, '').slice(-9)).filter((x) => x.length >= 6));
-        if (tails.size) {
-          const leads = await prisma.compounderLead.findMany({
-            where: { status: { in: ['schuzka', 'schuzka_online', 'volat_pristi', 'nezajem'] } },
-            select: { phone: true, status: true },
-            take: 5000,
-          });
-          leads.forEach((l) => {
-            const tl = String(l.phone || '').replace(/\D/g, '').slice(-9);
-            if (!tails.has(tl)) return;
-            if (l.status === 'nezajem') nointerest++;
-            else if (l.status === 'volat_pristi') callback++;
-            else meeting++;
-          });
-        }
+        const leads = await prisma.compounderLead.findMany({
+          where: { status: { in: ['schuzka', 'schuzka_online', 'volat_pristi', 'nezajem'] } },
+          select: { phone: true, status: true }, take: 8000,
+        });
+        leads.forEach((l) => { const tl = String(l.phone || '').replace(/\D/g, '').slice(-9); if (tl.length >= 6) leadByTail[tl] = l.status; });
       }
-    } catch (_) { /* výsledky jsou best-effort */ }
+    } catch (_) { /* best-effort */ }
 
     const pct = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0);
-    res.json({
-      ok: true,
-      total, attempted, reached, noAnswer, failed, pending, inProgress, smsSent,
-      totalSec, avgSec, withAudio,
-      meeting, callback, nointerest,
-      rates: { reachedOfAttempted: pct(reached, attempted), reachedOfTotal: pct(reached, total) },
-    });
+    function computeStats(list) {
+      const total = list.length;
+      const by = {};
+      list.forEach((t) => { by[t.status] = (by[t.status] || 0) + 1; });
+      const reached = by.done || 0, noAnswer = by.no_answer || 0, failed = by.failed || 0, pending = by.pending || 0;
+      const inProgress = (by.calling || 0) + (by.ringing || 0) + (by.in_progress || 0);
+      const attempted = total - pending;
+      const smsSent = list.filter((t) => t.sms_sent).length;
+      let totalSec = 0, withAudio = 0, durs = [];
+      list.forEach((t) => { const c = t.voice_call_id && callMap[t.voice_call_id]; if (c) { totalSec += (c.duration_sec || 0); if (c.audio_url) withAudio++; if (c.duration_sec) durs.push(c.duration_sec); } });
+      const avgSec = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : 0;
+      let meeting = 0, callback = 0, nointerest = 0;
+      list.forEach((t) => {
+        const tl = String(t.phone || '').replace(/\D/g, '').slice(-9);
+        const st = leadByTail[tl]; if (!st) return;
+        if (st === 'nezajem') nointerest++; else if (st === 'volat_pristi') callback++; else meeting++;
+      });
+      return { total, attempted, reached, noAnswer, failed, pending, inProgress, smsSent, totalSec, avgSec, withAudio, meeting, callback, nointerest, rates: { reachedOfAttempted: pct(reached, attempted), reachedOfTotal: pct(reached, total) } };
+    }
+
+    // Rozpad po kolech.
+    const byBatch = {};
+    targets.forEach((t) => { const b = t.batch_no || 1; (byBatch[b] = byBatch[b] || []).push(t); });
+    const batches = Object.keys(byBatch).map((b) => Object.assign({ batch_no: parseInt(b, 10) }, computeStats(byBatch[b])))
+      .sort((a, b) => b.batch_no - a.batch_no);
+
+    res.json(Object.assign({ ok: true, current_batch: (camp && camp.current_batch) || 1, batches }, computeStats(targets)));
   } catch (err) { next(err); }
 });
 

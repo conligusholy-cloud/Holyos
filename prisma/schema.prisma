@@ -6141,6 +6141,7 @@ model VoiceCampaign {
   transfer_fallback_numbers String? @db.Text     // JSON pořadí kontaktů (obchodníci/čísla), příp. legacy CSV čísel
   transfer_ring_timeout     Int?                  // doba vyzvánění na jedno číslo (s)
   transfer_rounds           Int?                  // kolikrát projít seznam dokola (max koleček)
+  current_batch             Int     @default(1)   // aktuální „kolo"/seznam kampaně (nové leady jdou sem)
   created_by_user_id Int?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
@@ -6162,6 +6163,7 @@ model VoiceCampaignTarget {
   result_summary String?  @db.Text
   voice_call_id  String?
   sms_sent       Boolean  @default(false)
+  batch_no       Int      @default(1)  // „kolo"/seznam kampaně, do kterého lead patří
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
@@ -6169,6 +6171,7 @@ model VoiceCampaignTarget {
 
   @@index([campaign_id])
   @@index([status])
+  @@index([campaign_id, batch_no])
   @@map("voice_campaign_targets")
 }
 
