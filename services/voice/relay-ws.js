@@ -215,7 +215,11 @@ function attach(server) {
         if (!state.handedOff && wantsHuman(userText)) {
           let allow = true;
           try {
-            if (getSetting) {
+            if (mode === 'outbound') {
+              // Odchozí: povolení řídí konkrétní kampaň.
+              allow = state.campaign ? state.campaign.transfer_enabled !== false : true;
+            } else if (getSetting) {
+              // Příchozí: globální nastavení.
               const v = await getSetting('voice.transfer_enabled');
               allow = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1');
             }

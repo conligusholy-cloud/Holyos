@@ -6134,6 +6134,12 @@ model VoiceCampaign {
   max_attempts       Int      @default(1)
   call_from          String?  @db.VarChar(5)     // pracovní okno HH:MM
   call_to            String?  @db.VarChar(5)
+  // Přepojení na živého člověka — nastavitelné zvlášť pro každou kampaň.
+  // Primární cíl je vždy mobil obchodníka přiřazeného k danému leadu; když se
+  // nedovolá (do vypršení vyzvánění), zkusí se postupně tato záložní čísla.
+  transfer_enabled          Boolean @default(true)
+  transfer_fallback_numbers String? @db.Text     // čísla oddělená čárkou, v pořadí
+  transfer_ring_timeout     Int?                  // doba vyzvánění na jedno číslo (s)
   created_by_user_id Int?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt

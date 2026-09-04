@@ -112,29 +112,49 @@ function twimlDial(numbers, timeout) {
   );
 }
 
-// Sestaví pořadí čísel k vytáčení: [obchodník leadu] + [záložní čísla z nastavení].
-async function resolveTransferNumbers(mode, targetId) {
+// Sestaví plán přepojení: povoleno? + pořadí čísel + doba vyzvánění.
+// Odchozí (kampaň): nastavení se bere Z KAMPANĚ (každá může mít jiné). Primární
+// cíl je mobil obchodníka přiřazeného k leadu, pak záložní čísla kampaně.
+// Příchozí (recepční): globální nastavení (voice.transfer_*).
+async function resolveTransferPlan(mode, targetId) {
   const get = settings ? settings.getSetting : null;
-  const fallbackRaw = get ? (await get('voice.transfer_fallback_numbers')) || '' : '';
-  const inboundNum = get ? (await get('voice.transfer_inbound_number')) || '' : '';
-  const fallbacks = String(fallbackRaw).split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
   const nums = [];
+  let enabled = true;
+  let timeout = 20;
 
   if (mode === 'outbound' && targetId && prisma.voiceCampaignTarget) {
     try {
-      const t = await prisma.voiceCampaignTarget.findUnique({ where: { id: targetId } });
+      const t = await prisma.voiceCampaignTarget.findUnique({
+        where: { id: targetId },
+        include: { campaign: true },
+      });
+      const camp = t && t.campaign;
+      enabled = camp ? camp.transfer_enabled !== false : true;
+      timeout = (camp && camp.transfer_ring_timeout) || 20;
       if (t && t.phone) {
         const owner = await ownerPhoneForPhone(t.phone);
         if (owner) nums.push(owner);
       }
-    } catch (e) { console.warn('[voice] resolve owner selhal:', e.message); }
-  } else if (mode === 'inbound' && inboundNum) {
-    nums.push(inboundNum);
+      const fb = String((camp && camp.transfer_fallback_numbers) || '')
+        .split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+      fb.forEach((f) => nums.push(f));
+    } catch (e) { console.warn('[voice] resolve kampaň přepojení selhal:', e.message); }
+  } else {
+    // inbound — globální nastavení
+    const enRaw = get ? await get('voice.transfer_enabled') : true;
+    enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
+    timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
+    const inboundNum = get ? (await get('voice.transfer_inbound_number')) || '' : '';
+    if (inboundNum) nums.push(inboundNum);
+    const fb = String(get ? (await get('voice.transfer_fallback_numbers')) || '' : '')
+      .split(/[,;\n]/).map((s) => s.trim()).filter(Boolean);
+    fb.forEach((f) => nums.push(f));
   }
-  fallbacks.forEach((f) => nums.push(f));
+
   // deduplikace v E.164
   const seen = new Set();
-  return nums.map(e164).filter((n) => n && !seen.has(n) && seen.add(n));
+  const numbers = nums.map(e164).filter((n) => n && !seen.has(n) && seen.add(n));
+  return { enabled, numbers, timeout: Math.max(8, Math.min(60, parseInt(timeout, 10) || 20)) };
 }
 
 // Najde mobil obchodníka přiřazeného k leadu podle telefonu (posledních 9 číslic).
@@ -212,17 +232,14 @@ router.post('/relay-end', form, async (req, res) => {
     let handoff = {};
     try { handoff = JSON.parse((req.body && req.body.HandoffData) || '{}'); } catch (_) { handoff = {}; }
     const wantsTransfer = !!(handoff && handoff.transfer);
-
-    const get = settings ? settings.getSetting : null;
-    const enRaw = get ? await get('voice.transfer_enabled') : true;
-    const enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
-
-    if (!wantsTransfer || !enabled) {
+    if (!wantsTransfer) {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
-    const timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
-    const numbers = await resolveTransferNumbers(mode, target);
-    return res.type('text/xml').send(twimlDial(numbers, timeout));
+    const plan = await resolveTransferPlan(mode, target);
+    if (!plan.enabled) {
+      return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
+    }
+    return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout));
   } catch (e) {
     console.warn('[voice] relay-end:', e.message);
     return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
@@ -492,6 +509,9 @@ router.post('/campaigns', requireAuth, express.json(), async (req, res, next) =>
         max_attempts: parseInt(b.max_attempts, 10) || 1,
         call_from: b.call_from || null,
         call_to: b.call_to || null,
+        transfer_enabled: b.transfer_enabled === undefined ? true : !!b.transfer_enabled,
+        transfer_fallback_numbers: b.transfer_fallback_numbers ? String(b.transfer_fallback_numbers).trim() : null,
+        transfer_ring_timeout: b.transfer_ring_timeout != null ? (parseInt(b.transfer_ring_timeout, 10) || null) : null,
         created_by_user_id: req.user && req.user.id,
         status: 'draft',
       },
@@ -513,6 +533,9 @@ router.put('/campaigns/:id', requireAuth, express.json(), async (req, res, next)
     if (b.from_number !== undefined) data.from_number = b.from_number ? String(b.from_number).replace(/[\s\-()]/g, '') : null;
     if (b.call_from !== undefined) data.call_from = b.call_from || null;
     if (b.call_to !== undefined) data.call_to = b.call_to || null;
+    if (b.transfer_enabled !== undefined) data.transfer_enabled = !!b.transfer_enabled;
+    if (b.transfer_fallback_numbers !== undefined) data.transfer_fallback_numbers = b.transfer_fallback_numbers ? String(b.transfer_fallback_numbers).trim() : null;
+    if (b.transfer_ring_timeout !== undefined) data.transfer_ring_timeout = b.transfer_ring_timeout != null && b.transfer_ring_timeout !== '' ? (parseInt(b.transfer_ring_timeout, 10) || null) : null;
     const camp = await prisma.voiceCampaign.update({ where: { id: req.params.id }, data });
     res.json(camp);
   } catch (err) {
