@@ -364,14 +364,18 @@ function attach(server) {
           } catch (_) { allow = true; }
           if (allow) {
             state.handedOff = true;
-            const line = 'Jasně, přepojím vás na kolegu. Chvilku prosím vydržte.';
+            const line = 'Přepojím vás na kolegu, moment prosím.';
             state.transcript.push({ role: 'agent', text: line, ts: Date.now() });
             send(ws, { type: 'text', token: line, last: true });
-            // Malá prodleva, ať se přepojovací věta stihne přehrát, pak ukonči relaci.
+            console.log('[voice] přepojení vyžádáno (' + mode + ') → posílám end/handoff, callSid=' + state.callSid);
+            // Prodleva, ať se přepojovací věta stihne DOŘÍCT, pak ukonči relaci
+            // (jinak Twilio ukončí relaci uprostřed věty).
             setTimeout(() => {
               send(ws, { type: 'end', handoffData: JSON.stringify({ transfer: true, reason: 'caller_requested_human' }) });
-            }, 1200);
+            }, 2600);
             return;
+          } else {
+            console.log('[voice] přepojení vyžádáno, ale je VYPNUTÉ (' + mode + ').');
           }
         }
         try {

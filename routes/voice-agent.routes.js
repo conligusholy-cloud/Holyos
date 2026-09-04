@@ -359,15 +359,23 @@ router.post('/relay-end', form, async (req, res) => {
     let handoff = {};
     try { handoff = JSON.parse((req.body && req.body.HandoffData) || '{}'); } catch (_) { handoff = {}; }
     const wantsTransfer = !!(handoff && handoff.transfer);
+    console.log('[voice] relay-end: mode=' + mode + ' target=' + target
+      + ' sessionStatus=' + ((req.body && req.body.SessionStatus) || '-')
+      + ' handoff=' + JSON.stringify((req.body && req.body.HandoffData) || null)
+      + ' wantsTransfer=' + wantsTransfer);
     if (!wantsTransfer) {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
     const plan = await resolveTransferPlan(mode, target);
+    console.log('[voice] relay-end plán: enabled=' + plan.enabled + ' čísla=' + plan.numbers.length
+      + ' [' + plan.numbers.map((n) => String(n).replace(/\d(?=\d{3})/g, '•')).join(', ') + ']'
+      + ' timeout=' + plan.timeout + ' kolecek=' + plan.rounds);
     if (!plan.enabled) {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
     if (!plan.numbers.length) {
-      // Přepojení zapnuto, ale není koho volat → info do Velína a omluva.
+      // Přepojení zapnuto, ale není koho volat → řekni to zákazníkovi + info do Velína.
+      console.warn('[voice] relay-end: přepojení chtěné, ale ŽÁDNÉ číslo (obchodník leadu bez telefonu a žádná záložní čísla u kampaně).');
       notifyTransferFailed(mode, target, 0);
       return res.type('text/xml').send(twimlApology());
     }
