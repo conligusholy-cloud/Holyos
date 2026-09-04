@@ -5066,12 +5066,27 @@
       try{
         var rows=await aiApi('/calls?limit=100');
         if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
-        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Délka</th></tr></thead><tbody>';
+        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
         rows.forEach(function(c){
-          var dir = c.direction==='outbound' ? '📢 odchozí' : '📞 příchozí';
-          var num = c.direction==='outbound' ? c.to_number : c.from_number;
-          html+='<tr onclick="aiToggleCall(\''+c.id+'\')" style="cursor:pointer;"><td>'+aiEsc(aiFmtDate(c.started_at))+'</td><td>'+dir+'</td><td>'+aiEsc(num||'')+'</td><td>'+aiEsc(c.caller_name||'—')+'</td><td>'+aiEsc(c.caller_intent||c.summary||'—')+'</td><td>'+aiFmtDur(c.duration_sec)+'</td></tr>';
-          html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="6" style="background:var(--surface2);padding:14px;">'+aiCallDetail(c)+'</td></tr>';
+          var isOut = c.direction==='outbound';
+          var dirCol = isOut ? '#3b82f6' : '#10b981';
+          var dirBg  = isOut ? 'rgba(59,130,246,0.15)' : 'rgba(16,185,129,0.15)';
+          var dir = (isOut?'📢 odchozí':'📞 příchozí');
+          var dirBadge = '<span style="background:'+dirBg+';color:'+dirCol+';padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;">'+dir+'</span>';
+          var num = isOut ? c.to_number : c.from_number;
+          var fnum = String(num||'').replace(/\D/g,'')||'hovor';
+          var rec = c.audio_url
+            ? ('<audio controls preload="none" src="/api/voice/recording/'+c.id+'" style="height:30px;width:180px;vertical-align:middle;"></audio> <a href="/api/voice/recording/'+c.id+'" download="hovor-'+fnum+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:17px;vertical-align:middle;">📥</a>')
+            : '<span style="color:var(--text2);">—</span>';
+          html+='<tr onclick="aiToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
+            +'<td style="border-left:3px solid '+dirCol+';">'+aiEsc(aiFmtDate(c.started_at))+'</td>'
+            +'<td>'+dirBadge+'</td>'
+            +'<td>'+aiEsc(num||'')+'</td>'
+            +'<td>'+aiEsc(c.caller_name||'—')+'</td>'
+            +'<td>'+aiEsc(c.caller_intent||c.summary||'—')+'</td>'
+            +'<td onclick="event.stopPropagation()">'+rec+'</td>'
+            +'<td>'+aiFmtDur(c.duration_sec)+'</td></tr>';
+          html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="7" style="background:var(--surface2);padding:14px;border-left:3px solid '+dirCol+';">'+aiCallDetail(c)+'</td></tr>';
         });
         html+='</tbody></table>';
         body.innerHTML=html;
@@ -5080,7 +5095,8 @@
     function aiCallDetail(c){
       var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+aiEsc(x.text)+'</div>'; }).join('');
       var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+aiEsc(c.summary)+'</div>' : '';
-      var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><audio controls preload="none" src="/api/voice/recording/'+c.id+'" style="height:34px;margin-top:4px;"></audio></div>' : '';
+      var _fn = String((c.direction==='outbound'?c.to_number:c.from_number)||'').replace(/\D/g,'')||'hovor';
+      var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><audio controls preload="none" src="/api/voice/recording/'+c.id+'" style="height:34px;margin-top:4px;vertical-align:middle;"></audio> <a href="/api/voice/recording/'+c.id+'" download="hovor-'+_fn+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:18px;vertical-align:middle;">📥</a></div>' : '';
       return s + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
     }
     function aiToggleCall(id){ var r=document.getElementById('ai-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; }
