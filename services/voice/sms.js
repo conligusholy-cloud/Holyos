@@ -17,7 +17,7 @@ try {
 
 const DEFAULT_TEXT =
   'Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). ' +
-  'Nedovolali jsme se, zkusíme to ještě jednou. Děkujeme, Best Series.';
+  'Nedovolali jsme se. Napište si kdykoli s naším specialistou: {link}';
 
 // Nastavení lze měnit za běhu přes AppSetting (voice.sms_provider / voice.gosms_channel /
 // voice.twilio_sms_from) — nadřazené env. Když v nastavení nic není, použije se env.
@@ -280,8 +280,41 @@ async function maybeSendNoAnswerSms(target) {
 
     let text = await getSetting('voice.sms_text');
     if (!text || !String(text).trim()) text = DEFAULT_TEXT;
+    text = String(text);
 
-    await sendSms(target.phone, String(text), { context: 'no_answer' });
+    // Jedinečný odkaz na specialistu pro daného leada (spárováno podle telefonu).
+    // Podporuje placeholder {link}; když ho text nemá, odkaz připojíme na konec.
+    let leadId = null;
+    try {
+      const digits = String(target.phone || '').replace(/\D/g, '');
+      if (digits.length >= 6 && prisma.compounderLead) {
+        const tail = digits.slice(-9);
+        const leads = await prisma.compounderLead.findMany({
+          where: { phone: { contains: tail } },
+          select: { id: true, phone: true, show_ai_specialist: true },
+          take: 5, orderBy: { updated_at: 'desc' },
+        });
+        const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
+        if (lead) {
+          leadId = lead.id;
+          let link = '';
+          try { link = require('../../routes/compounder.routes').specialistShortLink(lead.id, 'sms'); } catch (_) { link = ''; }
+          if (link) {
+            // Odkaz funguje jen když lead vidí specialistu — zapneme mu ho.
+            if (!lead.show_ai_specialist) {
+              await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
+            }
+            if (text.indexOf('{link}') !== -1) text = text.replace('{link}', link);
+            else text = text.trim() + ' ' + link;
+          } else if (text.indexOf('{link}') !== -1) {
+            text = text.replace('{link}', '').replace(/\s+/g, ' ').trim();
+          }
+        }
+      }
+    } catch (e) { console.warn('[voice] no-answer link:', e.message); }
+    if (text.indexOf('{link}') !== -1) text = text.replace('{link}', '').replace(/\s+/g, ' ').trim();
+
+    await sendSms(target.phone, text, { context: 'no_answer', leadId });
     await prisma.voiceCampaignTarget
       .update({ where: { id: target.id }, data: { sms_sent: true } })
       .catch(() => {});

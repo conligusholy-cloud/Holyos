@@ -544,8 +544,8 @@
         <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
           <h4 style="margin:0 0 8px;font-size:14px;">📩 SMS při nedovolání (odchozí kampaně)</h4>
           <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;"><input type="checkbox" id="ai-sms-on"> Poslat leadovi SMS, když hovor nezvedne (nebo spadne do schránky)</label>
-          <textarea id="ai-sms-text" rows="3" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). Zkusíme to ještě jednou."></textarea>
-          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Bránu a odesílatele nastavíš výše (📡 Brána SMS). SMS se pošle jednou na lead. Posílej jen kontaktům se souhlasem.</div>
+          <textarea id="ai-sms-text" rows="3" style="width:100%;margin-top:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, volali jsme Vám ohledně prádelen Prádlomat (Best Series). Napište si s naším specialistou: {link}"></textarea>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Napiš <b>{link}</b> tam, kam se má vložit jedinečný odkaz na specialistu pro daný kontakt (když ho vynecháš, odkaz se připojí na konec). Bránu a odesílatele nastavíš výše (📡 Brána SMS). SMS se pošle jednou na lead. Posílej jen kontaktům se souhlasem.</div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveSmsConfig()" style="background:#eab308;color:#0e1a22;font-weight:700;">💾 Uložit SMS nastavení</button> <span id="ai-sms-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         </div>
 

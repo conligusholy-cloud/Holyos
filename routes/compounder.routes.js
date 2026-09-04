@@ -6258,6 +6258,7 @@ function shortCodeToAiUrl(code, channel) {
 // Zpřístupníme app.js (přesměrování /s/<kód> na compounder.world i holyos.cz).
 router.shortCodeToAiUrl = shortCodeToAiUrl;
 router.makeShortCode = makeShortCode;
+router.specialistShortLink = specialistShortLink;
 // Časově omezený přihlašovací token — formát: id.exp.sig (exp = ms epoch). Default 24 h.
 function makeLoginToken(leadId, ttlMs) {
   const exp = Date.now() + (ttlMs || 10 * 24 * 3600 * 1000); // přístupový odkaz platí 10 dní
