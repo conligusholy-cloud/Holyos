@@ -120,9 +120,12 @@ async function summarizeStructured(transcript = []) {
       temperature: 0.2,
       system:
         'Shrň telefonní hovor. Odpověz POUZE validním JSON bez markdownu, přesně ve tvaru ' +
-        '{"caller_name": string|null, "caller_intent": string, "summary": string}. ' +
+        '{"caller_name": string|null, "caller_intent": string, "summary": string, "no_interest": boolean}. ' +
         'caller_name = jméno volajícího pokud zaznělo, jinak null. ' +
-        'caller_intent = krátce co volající potřeboval. summary = 1–3 věty. Vše česky.',
+        'caller_intent = krátce co volající potřeboval. summary = 1–3 věty. ' +
+        'no_interest = true POUZE pokud volající jasně vyjádřil, že NEMÁ zájem o prádlomaty ' +
+        'nebo si výslovně NEPŘEJE být dále kontaktován; při nejistotě nebo běžném dotazu false. ' +
+        'Vše česky.',
       messages: [{ role: 'user', content: text }],
     },
     { label: 'voice-summary' }
@@ -141,9 +144,10 @@ async function summarizeStructured(transcript = []) {
       summary: o.summary || raw,
       caller_name: o.caller_name || null,
       caller_intent: o.caller_intent || null,
+      no_interest: o.no_interest === true || o.no_interest === 'true',
     };
   } catch (_) {
-    return { summary: raw, caller_name: null, caller_intent: null };
+    return { summary: raw, caller_name: null, caller_intent: null, no_interest: false };
   }
 }
 

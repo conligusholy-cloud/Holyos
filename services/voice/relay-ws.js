@@ -56,6 +56,37 @@ function send(ws, obj) {
   }
 }
 
+// Stavy, které NEpřepisujeme automatickým „nezájmem" (dál v procesu / terminální).
+const NO_INTEREST_KEEP = new Set([
+  'converted', 'smlouva_odeslat', 'smlouva_odeslana', 'schuzka', 'schuzka_online',
+  'qualified', 'nelze_pouzit', 'nezajem',
+]);
+
+// Zákazník při hovoru řekl, že nemá zájem / nepřeje si kontakt → u Compounder
+// leadu (spárovaného podle telefonu, posledních 9 číslic) nastav stav „nezajem".
+async function markLeadNoInterest(phone, summary) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 6) return;
+  const tail = digits.slice(-9);
+  const leads = await prisma.compounderLead.findMany({
+    where: { phone: { contains: tail } },
+    select: { id: true, phone: true, status: true, activity_log: true },
+    take: 5,
+    orderBy: { updated_at: 'desc' },
+  });
+  const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
+  if (!lead) return;
+  if (NO_INTEREST_KEEP.has(lead.status)) return; // neklobrč rozpracovaný/terminální stav
+  const stamp = new Date().toLocaleString('cs-CZ');
+  const note = '[' + stamp + '] AI hovor: zákazník nemá zájem / nepřeje si kontakt → stav „Nemá zájem".'
+    + (summary ? (' ' + String(summary).replace(/\s+/g, ' ').trim().slice(0, 200)) : '');
+  const activity_log = (lead.activity_log ? (lead.activity_log + '\n') : '') + note;
+  await prisma.compounderLead.update({
+    where: { id: lead.id },
+    data: { status: 'nezajem', activity_log },
+  });
+}
+
 // Rozpozná, že volající chce mluvit s živým člověkem (aby ho AI přepojila).
 // Bez diakritiky, malá písmena. Volíme spíš konzervativně, ať to nemíří omylem.
 function wantsHuman(text) {
@@ -267,12 +298,14 @@ function attach(server) {
       let summary = null;
       let callerName = null;
       let callerIntent = null;
+      let noInterest = false;
       try {
         if (state.transcript.some((t) => t.role === 'caller')) {
           const s = await agent.summarizeStructured(state.transcript);
           summary = s.summary || null;
           callerName = s.caller_name || null;
           callerIntent = s.caller_intent || null;
+          noInterest = !!s.no_interest;
         }
       } catch (e) {
         console.warn('[voice] shrnutí selhalo:', e.message);
@@ -316,6 +349,14 @@ function attach(server) {
           });
         } catch (e) {
           console.warn('[voice] update cíle kampaně selhal:', e.message);
+        }
+        // Nezájem / nepřeje si kontakt → automaticky nastav stav Compounder kontaktu na „Nemá zájem".
+        if (noInterest && state.target.phone) {
+          try {
+            await markLeadNoInterest(state.target.phone, summary);
+          } catch (e) {
+            console.warn('[voice] označení nezájmu selhalo:', e.message);
+          }
         }
       } else {
         // Inbound: push do Velína
