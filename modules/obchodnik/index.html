@@ -1018,19 +1018,21 @@
     } catch(e){ if (box) box.innerHTML = '<span style="color:#fca5a5">Nepodařilo se vyhodnotit.</span>'; if (btn) btn.disabled = false; }
   }
   window.obListSummary = obListSummary;
-  // Rychlá AI analýza dnešních chatů — zobrazí ve spodním panelu.
-  async function obTodayAnalysis(){
+  // Rychlá AI analýza chatů — zobrazí ve spodním panelu. all=true → všichni, co kdy psali.
+  async function obTodayAnalysis(all){
+    var title = all ? '🧠 AI analýza všech, co psali s chatem' : '🧠 AI analýza dnešních chatů';
+    var loading = all ? 'Analyzuji všechny chaty…' : 'Analyzuji dnešní chaty…';
     var ex=document.getElementById('ob-analysis'); if(ex) ex.remove();
     var ov=document.createElement('div'); ov.id='ob-analysis';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:130;display:flex;align-items:flex-end;justify-content:center';
     ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
     ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:620px;max-height:82vh;overflow:auto;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:18px 16px calc(18px + env(safe-area-inset-bottom,0))">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:16px;">🧠 AI analýza dnešních chatů</b><button onclick="document.getElementById(\'ob-analysis\').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">✕</button></div>'
-      +'<div id="ob-analysis-body" style="font-size:14px;line-height:1.5;color:var(--text);white-space:pre-wrap;">Analyzuji dnešní chaty…</div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:16px;">'+title+'</b><button onclick="document.getElementById(\'ob-analysis\').remove()" style="background:none;border:none;color:var(--muted);font-size:22px;cursor:pointer;">✕</button></div>'
+      +'<div id="ob-analysis-body" style="font-size:14px;line-height:1.5;color:var(--text);white-space:pre-wrap;">'+loading+'</div>'
       +'</div>';
     document.body.appendChild(ov);
     try{
-      var r=await api('/ai-specialist-today-analysis');
+      var r=await api('/ai-specialist-today-analysis'+(all?'?scope=all':''));
       var j=await r.json().catch(function(){return{};});
       var b=document.getElementById('ob-analysis-body');
       if(!b) return;
@@ -1224,7 +1226,8 @@
         '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
         '<button onclick="setChatTodayOnly('+(!state.chatTodayOnly)+')" title="Zobrazit jen ty, co dnes chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatTodayOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatTodayOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatTodayOnly?'#c4b5fd':'var(--muted)')+'">💬 Dnes chatoval'+(chatTodayCount?' ('+chatTodayCount+')':'')+'</button>' +
         '<button onclick="setChatEverOnly('+(!state.chatEverOnly)+')" title="Zobrazit všechny, kdo někdy chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatEverOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatEverOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatEverOnly?'#c4b5fd':'var(--muted)')+'">💬 Chatovali'+(chatEverCount?' ('+chatEverCount+')':'')+'</button>' +
-        (chatTodayCount?'<button onclick="obTodayAnalysis()" title="Rychlá AI analýza dnešních chatů" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid #8b5cf6;background:#8b5cf6;color:#fff;font-weight:700;">🧠 AI analýza dneška</button>':'') +
+        (chatTodayCount?'<button onclick="obTodayAnalysis(false)" title="Rychlá AI analýza dnešních chatů" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid #8b5cf6;background:#8b5cf6;color:#fff;font-weight:700;">🧠 AI analýza dneška</button>':'') +
+        (chatEverCount?'<button onclick="obTodayAnalysis(true)" title="Rychlá AI analýza všech, co si psali s chatem" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid #a855f7;background:#a855f7;color:#fff;font-weight:700;">🧠 AI analýza všech chatů</button>':'') +
         '<select onchange="setLeadStatus(this.value)">'+opts+'</select>' +
         '</div>';
     }
