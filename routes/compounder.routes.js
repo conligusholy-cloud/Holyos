@@ -584,6 +584,28 @@ router.post('/portal/ai-specialist', async (req, res) => {
       await prisma.aiSpecialistMessage.create({ data: { lead_id: leadId, role: 'assistant', text: text || '' } });
     } catch (e) { console.warn('[ai-specialist] uložení zprávy selhalo:', e.message); }
 
+    // Zákazník začal psát s chatem → automaticky přepni stav na „Píše s chatem".
+    // Jen z ranějších/mrtvých fází (chat = silný signál i re-engagement); pokročilé
+    // fáze (schůzka, smlouva, převeden…) NEPŘEPISUJEME.
+    try {
+      const CHAT_PROMOTE_FROM = ['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'nezajem', 'nelze_pouzit', 'rejected'];
+      const promoted = await prisma.compounderLead.updateMany({
+        where: { id: leadId, status: { in: CHAT_PROMOTE_FROM } },
+        data: { status: 'psal_chatovi' },
+      });
+      if (promoted.count) {
+        try {
+          const now = new Date();
+          const p = (n) => (n < 10 ? '0' : '') + n;
+          const stamp = p(now.getDate()) + '.' + p(now.getMonth() + 1) + '. ' + p(now.getHours()) + ':' + p(now.getMinutes());
+          const line = '[' + stamp + '] 💬 Zákazník začal psát s AI specialistou → stav „Píše s chatem"';
+          const cur = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { activity_log: true } });
+          const updated = (cur && cur.activity_log) ? (line + '\n' + cur.activity_log) : line;
+          await prisma.compounderLead.update({ where: { id: leadId }, data: { activity_log: updated } });
+        } catch (_) {}
+      }
+    } catch (e) { console.warn('[ai-specialist] auto-stav selhal:', e.message); }
+
     // Detekce záměrů (schůzka / žádost o zavolání) → push do Velína (best-effort, neblokuje odpověď).
     detectChatIntents(leadId, message, text || '', lead).catch(() => {});
 
@@ -2931,7 +2953,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'psal_chatovi', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
