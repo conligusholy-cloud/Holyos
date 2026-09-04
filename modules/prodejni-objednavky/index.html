@@ -4731,6 +4731,13 @@
             +'</div>';
           h+='<div style="max-height:60vh;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--bg);">';
           h+='<div style="text-align:center;font-size:11px;color:var(--text2);border-bottom:1px dashed var(--border);padding-bottom:4px;">— začátek konverzace —</div>';
+          // Úvodní pozdrav specialisty (portál ho ukazuje, ale neukládá do zpráv).
+          if(j.greeting){
+            h+='<div style="display:flex;flex-direction:column;max-width:88%;align-self:flex-start;align-items:flex-start;">'
+              +'<div style="padding:7px 10px;border-radius:10px;font-size:12px;line-height:1.45;white-space:pre-wrap;background:var(--surface2);color:var(--text);border-bottom-left-radius:3px;opacity:.85;">🤖 '+cmpEsc(cmpStripMd(j.greeting))+'</div>'
+              +'<div style="font-size:10px;color:var(--text2);margin-top:2px;">Specialista · úvodní pozdrav</div>'
+              +'</div>';
+          }
           msgs.forEach(function(m){
             var me=m.role==='user';
             var t=cmpChatTime(m.at);

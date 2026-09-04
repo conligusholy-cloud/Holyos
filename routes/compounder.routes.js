@@ -661,11 +661,17 @@ router.get('/leads/:id/ai-specialist-chat', requireAuth, async (req, res, next) 
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { ai_specialist_summary: true, ai_specialist_opened_at: true } });
     const rows = await prisma.aiSpecialistMessage.findMany({ where: { lead_id: id }, orderBy: { created_at: 'asc' }, take: 500 });
     const userMsgs = rows.filter((r) => r.role === 'user').length;
+    // Úvodní pozdrav specialisty se do zpráv neukládá (portál ho jen zobrazí) —
+    // vracíme ho zvlášť, ať admin vidí skutečný začátek konverzace.
+    let greeting = null;
+    try { greeting = await getSetting('compounder.ai_specialist_greeting', { type: 'string', defaultValue: null }); } catch (_) {}
+    if (!greeting || !String(greeting).trim()) greeting = 'Dobrý den! Jsem specialista na prádlomaty Compounder. Zeptejte se mě na cokoli — jak to celé funguje, ekonomiku provozu, návratnost, výběr lokality. 🙂';
     res.json({
       ok: true,
       summary: (lead && lead.ai_specialist_summary) || null,
       openedAt: (lead && lead.ai_specialist_opened_at) || null,
       userMsgCount: userMsgs,
+      greeting,
       messages: rows.map((r) => ({ role: r.role, text: r.text, at: r.created_at })),
     });
   } catch (err) { next(err); }
