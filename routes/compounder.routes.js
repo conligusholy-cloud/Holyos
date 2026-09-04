@@ -519,7 +519,7 @@ router.post('/portal/ai-specialist', async (req, res) => {
     if (!leadId) return res.status(401).json({ ok: false, error: 'Neplatný přístup' });
     const lead = await prisma.compounderLead.findUnique({
       where: { id: leadId },
-      select: { id: true, show_ai_specialist: true, name: true, city: true, role: true, pradlomat_version: true, access_approved_at: true, source: true },
+      select: { id: true, show_ai_specialist: true, name: true, city: true, role: true, pradlomat_version: true, access_approved_at: true, source: true, owner_person_id: true, phone: true, email: true },
     });
     if (!lead) return res.status(404).json({ ok: false, error: 'Nenalezeno' });
     if (!leadAccessAllowed(lead)) return res.status(403).json({ ok: false, error: 'Přístup nepovolen' });
@@ -603,6 +603,9 @@ router.post('/portal/ai-specialist', async (req, res) => {
           const updated = (cur && cur.activity_log) ? (line + '\n' + cur.activity_log) : line;
           await prisma.compounderLead.update({ where: { id: leadId }, data: { activity_log: updated } });
         } catch (_) {}
+        // Push do Velína + zvonek (nastaveným příjemcům a přímo obchodníkovi leada).
+        compounderNotify.notifyChatStarted(prisma, { lead, ownerPersonId: lead.owner_person_id, preview: message })
+          .catch((e) => console.warn('[ai-specialist] chat-started push:', e && e.message));
       }
     } catch (e) { console.warn('[ai-specialist] auto-stav selhal:', e.message); }
 

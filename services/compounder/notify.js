@@ -259,6 +259,26 @@ async function notifyFbLead(prisma, { lead, campaign, ownerName }) {
   } catch (e) { console.error('[compounder-notify] fb lead', e.message); }
 }
 
+// Zájemce právě ZAČAL psát s AI specialistou (přechod do stavu „Píše s chatem")
+// → push + zvonek nastaveným příjemcům a navíc přímo obchodníkovi, jemuž lead patří.
+async function notifyChatStarted(prisma, { lead, ownerPersonId, preview }) {
+  try {
+    if (!lead) return;
+    const who = lead.name || lead.email || lead.phone || ('lead #' + lead.id);
+    const raw = preview ? String(preview).replace(/\s+/g, ' ').trim() : '';
+    const snippet = raw.slice(0, 120);
+    const title = '💬 Začal chatovat — ' + who;
+    const body = 'Zájemce právě začal psát s AI specialistou'
+      + (snippet ? (': „' + snippet + (raw.length > 120 ? '…' : '') + '"') : '.')
+      + (lead.phone ? (' Tel: ' + lead.phone + '.') : '');
+    const data = { type: 'compounder_chat_started', lead_id: lead.id };
+    await dispatch(prisma, { title, body, data });
+    if (ownerPersonId) {
+      notifyPerson(prisma, ownerPersonId, { title, body, data: Object.assign({ link: LINK }, data), sound: 'default' }).catch(() => {});
+    }
+  } catch (e) { console.error('[compounder-notify] chat started', e.message); }
+}
+
 // Zájemce v chatu s AI specialistou chce schůzku → push + zvonek majitelům,
 // včetně navržených termínů, ať je obchodník rychle potvrdí.
 async function notifyMeetingRequest(prisma, { lead, terms, note }) {
@@ -288,6 +308,7 @@ async function notifyCallbackRequest(prisma, { lead, when, note }) {
 
 module.exports = {
   NOTIFY_SETTING_KEY,
+  notifyChatStarted,
   notifyMeetingRequest,
   notifyCallbackRequest,
   getEligibleVelinPeople,
