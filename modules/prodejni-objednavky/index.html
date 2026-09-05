@@ -5229,11 +5229,29 @@
           + '</div>';
         // trychtýř
         h+='<div style="margin-top:12px;font-size:12px;color:var(--text2);"><b style="color:var(--text);">Trychtýř:</b> odeslán odkaz '+j.sent+' → otevřelo '+j.opened+' ('+rt.openOfSent+'%) → chatovalo '+j.chattedLeads+' ('+rt.chatOfSent+'% z odeslaných) → schůzka '+j.meetingRequests+' / zavolání '+j.callbackRequests+'</div>';
-        // A/B srovnání SMS vs e-mail (otevření podle kanálu odkazu)
+        // Samostatné vyhodnocení kanálů SMS vs E-mail (celý trychtýř)
         function abPct(o,s){ return s>0?(' ('+(Math.round(o/s*1000)/10)+'%)'):''; }
-        h+='<div style="margin-top:8px;font-size:12px;color:var(--text2);border-top:1px solid var(--border);padding-top:8px;"><b style="color:var(--text);">A/B kanál (míra otevření):</b> '
-          +'📱 SMS — odesláno '+j.sent+', otevřelo '+(j.openedSms||0)+abPct(j.openedSms||0, j.sent)+' &nbsp;·&nbsp; '
-          +'📧 E-mail — odesláno '+(j.emailSent||0)+', otevřelo '+(j.openedEmail||0)+abPct(j.openedEmail||0, j.emailSent||0)+'</div>';
+        var ch=j.channels||{sms:{},email:{}};
+        function chanCol(title, icon, d, col){
+          d=d||{}; var rt2=d.rates||{};
+          function row(lbl,val,sub){ return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);"><span style="color:var(--text2);">'+lbl+'</span><span style="color:var(--text);font-weight:600;">'+(val||0)+(sub?(' <span style=\"color:var(--text2);font-weight:400;\">'+sub+'</span>'):'')+'</span></div>'; }
+          return '<div style="flex:1;min-width:220px;border:1px solid '+col+';border-radius:10px;padding:10px 12px;">'
+            +'<div style="font-weight:700;font-size:13px;color:'+col+';margin-bottom:6px;">'+icon+' '+title+'</div>'
+            +row('Odesláno', d.sent)
+            +row('Otevřelo odkaz', d.opened, abPct(d.opened, d.sent))
+            +row('Chatovalo', d.chatted, (rt2.chatOfOpened!=null?('('+rt2.chatOfOpened+'% z otevřených)'):''))
+            +row('Schůzka', d.meeting)
+            +row('Zavolání', d.callback)
+            +'</div>';
+        }
+        h+='<div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">'
+          +'<b style="color:var(--text);font-size:13px;">📊 Samostatné vyhodnocení kanálů</b>'
+          +'<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">'
+          + chanCol('SMS','📱',ch.sms,'#10b981')
+          + chanCol('E-mail','📧',ch.email,'#3b82f6')
+          +'</div>'
+          +'<div style="font-size:11px;color:var(--text2);margin-top:6px;">Zapojení (chat/schůzka/zavolání) se přiřadí podle kanálu, kterým kontakt otevřel odkaz (SMS = ?c=sms, e-mail = ?c=email).</div>'
+          +'</div>';
         // rozpad doručení
         var ss=j.sentStatus||{}; var sk=Object.keys(ss);
         if(sk.length) h+='<div style="margin-top:6px;font-size:12px;color:var(--text2);"><b style="color:var(--text);">Doručení SMS:</b> '+sk.map(function(k){return k+': '+ss[k];}).join(' · ')+'</div>';

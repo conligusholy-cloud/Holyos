@@ -885,18 +885,47 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
       prisma.compounderEvent.findMany({ where: { event: 'aispec_open_email' }, select: { props: true } }),
     ]);
     const notTestEvent = (e) => e.props && !testIds.has(Number(e.props.lead_id));
-    const meeting = meetEv.filter(notTestEvent).length;
-    const callback = callEv.filter(notTestEvent).length;
-    const openedSms = new Set(openSmsEv.filter(notTestEvent).map((e) => Number(e.props.lead_id))).size;
-    const openedEmail = new Set(openEmailEv.filter(notTestEvent).map((e) => Number(e.props.lead_id))).size;
+    const meetingSet = new Set(meetEv.filter(notTestEvent).map((e) => Number(e.props.lead_id)));
+    const callbackSet = new Set(callEv.filter(notTestEvent).map((e) => Number(e.props.lead_id)));
+    const meeting = meetingSet.size;
+    const callback = callbackSet.size;
+    const smsOpenSet = new Set(openSmsEv.filter(notTestEvent).map((e) => Number(e.props.lead_id)));
+    const emailOpenSet = new Set(openEmailEv.filter(notTestEvent).map((e) => Number(e.props.lead_id)));
+    const openedSms = smsOpenSet.size;
+    const openedEmail = emailOpenSet.size;
 
     let chattedLeads = 0, userMessages = 0;
+    let chattedSet = new Set();
     try {
       const groups = await prisma.aiSpecialistMessage.groupBy({ by: ['lead_id'], where: { role: 'user' }, _count: { _all: true } });
       const real = groups.filter((g) => !testIds.has(g.lead_id));
       chattedLeads = real.length;
       userMessages = real.reduce((s, g) => s + (g._count._all || 0), 0);
+      chattedSet = new Set(real.map((g) => g.lead_id));
     } catch (_) { /* groupBy fallback */ }
+
+    // Rozpad kanálů (SMS vs e-mail) — zapojení se přiřadí podle toho, kterým
+    // odkazem lead otevřel specialistu (?c=sms / ?c=email).
+    const inter = (setA, setB) => { let n = 0; setA.forEach((x) => { if (setB.has(x)) n++; }); return n; };
+    const channels = {
+      sms: {
+        sent,
+        opened: openedSms,
+        chatted: inter(smsOpenSet, chattedSet),
+        meeting: inter(smsOpenSet, meetingSet),
+        callback: inter(smsOpenSet, callbackSet),
+      },
+      email: {
+        sent: emailSent,
+        opened: openedEmail,
+        chatted: inter(emailOpenSet, chattedSet),
+        meeting: inter(emailOpenSet, meetingSet),
+        callback: inter(emailOpenSet, callbackSet),
+      },
+    };
+    const chpct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
+    channels.sms.rates = { openOfSent: chpct(channels.sms.opened, channels.sms.sent), chatOfOpened: chpct(channels.sms.chatted, channels.sms.opened) };
+    channels.email.rates = { openOfSent: chpct(channels.email.opened, channels.email.sent), chatOfOpened: chpct(channels.email.chatted, channels.email.opened) };
 
     const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
     res.json({
@@ -918,6 +947,7 @@ router.get('/ai-specialist-stats', requireAuth, async (req, res, next) => {
       summaries,                  // kolik má AI shrnutí
       meetingRequests: meeting,   // zájem o schůzku
       callbackRequests: callback, // žádost o zavolání
+      channels,                   // samostatné vyhodnocení SMS vs e-mail (trychtýř)
       rates: {
         openOfSent: pct(openedOfSent, sent),
         chatOfOpened: pct(chattedLeads, openedTotal),
