@@ -163,16 +163,26 @@ function wantsHuman(text) {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '');
   if (!t) return false;
-  // "s clovekem", "na cloveka", "ziveho cloveka", "s nekym zivym", "realnou osobou"
-  if (/(s |se |na |za )?(zive?ho|zivou|realn\w*|skutecn\w*)?\s*(clovek\w*|osob\w*)/.test(t) &&
-      /(chci|chtel|chtela|muzu|mohu|potrebuj\w*|dejte|prepoj\w*|spoj\w*|mluvit|mluvil|volat|zavolej\w*|preda\w*)/.test(t)) return true;
-  // přímé fráze / žádost o operátora / obchodníka
-  if (/(prepoj\w*|spoj\w*|preda\w*)\s+(me|mne|nas)?\s*(na|k)?\s*(operator\w*|obchodnik\w*|kolegu|clovek\w*|zive\w*)/.test(t)) return true;
-  if (/\boperator\w*/.test(t) && /(chci|prepoj\w*|spoj\w*|mluvit|s )/.test(t)) return true;
-  // odmítnutí robota/AI
+  // přímé žádosti o přepojení / spojení / operátora / obchodníka / kolegu
+  if (/(prepoj|prepni|spoj|spojit|spojte|preda|predejte|prepojte)/.test(t) &&
+      /(me|mne|nas|na |k |s )?(operator\w*|obchodnik\w*|koleg\w*|clovek\w*|osob\w*|zive\w*|nekoho|nekym|někým)?/.test(t)) return true;
+  // „chci/můžu/potřebuju … (mluvit) … člověk/živý/operátor/obchodník/kolega/někdo živý"
+  if (/(chci|chtel|chtela|chtěl|potrebuj\w*|muzu|mohu|dejte|da se|slo by|slo|bych)/.test(t) &&
+      /(clovek\w*|zive?ho|zivou|zivym|zivy|realn\w*|skutecn\w*|operator\w*|obchodnik\w*|koleg\w*|nekym zivym|nekoho zivyho|s nekym|na nekoho)/.test(t)) return true;
+  // samotné „operátor / živého člověka / obchodníka" jako reakce
+  if (/(zive?ho|zivou)\s+(clovek\w*|osob\w*)/.test(t)) return true;
+  if (/\boperator\w*/.test(t)) return true;
+  if (/(s |se )?(clovek\w*|osob\w*),?\s*(ne|nikoliv|nechci)\s+(robot|ai|automat)/.test(t)) return true;
+  // odmítnutí robota/AI se žádostí o člověka
   if (/(nechci|nebudu|nemluvim)\s+(s )?(robot\w*|ai|umel\w*|automat\w*)/.test(t)) return true;
-  if (/(jsi| jste|to je)\s+(robot|ai|umela|automat)/.test(t) && /(chci|prepoj|clovek|zive)/.test(t)) return true;
   return false;
+}
+
+// Rozpozná, že AI ve své odpovědi slíbila přepojení na živého člověka.
+function aiPromisesTransfer(text) {
+  const t = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (!t) return false;
+  return /(prepoj[ií]m|prepoj[ií]|prepojuji|prepojim vas|preda[mv]\w* vas|predam vas|spoj[ií]m vas|spojuji vas|prepojim vas na koleg\w*|prepojim vas na obchodnik\w*)/.test(t);
 }
 
 function attach(server) {
@@ -347,37 +357,32 @@ function attach(server) {
         if (!userText) return;
         state.transcript.push({ role: 'caller', text: userText, ts: Date.now() });
 
-        // Přepojení na živého člověka: když zákazník chce člověka, řekni krátkou
-        // přepojovací větu a ukonči AI relaci s handoffData → Twilio zavolá
-        // /api/voice/relay-end, které vytočí obchodníka leadu / záložní kontakt.
-        if (!state.handedOff && wantsHuman(userText)) {
-          let allow = true;
-          try {
-            if (mode === 'outbound') {
-              // Odchozí: povolení řídí konkrétní kampaň.
-              allow = state.campaign ? state.campaign.transfer_enabled !== false : true;
-            } else if (getSetting) {
-              // Příchozí: globální nastavení.
-              const v = await getSetting('voice.transfer_enabled');
-              allow = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1');
-            }
-          } catch (_) { allow = true; }
-          if (allow) {
-            state.handedOff = true;
-            const line = 'Přepojím vás na kolegu, moment prosím.';
-            state.transcript.push({ role: 'agent', text: line, ts: Date.now() });
-            send(ws, { type: 'text', token: line, last: true });
-            console.log('[voice] přepojení vyžádáno (' + mode + ') → posílám end/handoff, callSid=' + state.callSid);
-            // Prodleva, ať se přepojovací věta stihne DOŘÍCT, pak ukonči relaci
-            // (jinak Twilio ukončí relaci uprostřed věty).
-            setTimeout(() => {
-              send(ws, { type: 'end', handoffData: JSON.stringify({ transfer: true, reason: 'caller_requested_human' }) });
-            }, 2600);
-            return;
-          } else {
-            console.log('[voice] přepojení vyžádáno, ale je VYPNUTÉ (' + mode + ').');
-          }
+        // Je přepojení pro tento hovor povolené?
+        let transferAllowed = true;
+        try {
+          if (mode === 'outbound') transferAllowed = state.campaign ? state.campaign.transfer_enabled !== false : true;
+          else if (getSetting) { const v = await getSetting('voice.transfer_enabled'); transferAllowed = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1'); }
+        } catch (_) { transferAllowed = true; }
+
+        // Spustí přepojení: (volitelně) doříkne větu, pak ukončí relaci s handoffem.
+        const startHandoff = (spokenLine) => {
+          state.handedOff = true;
+          const delay = spokenLine ? Math.min(9000, Math.max(2600, spokenLine.length * 75)) : 800;
+          console.log('[voice] HANDOFF (' + mode + ') callSid=' + state.callSid + ' delay=' + delay);
+          setTimeout(() => {
+            send(ws, { type: 'end', handoffData: JSON.stringify({ transfer: true, reason: 'caller_requested_human' }) });
+          }, delay);
+        };
+
+        // 1) Rychlá cesta: zákazník jasně chce člověka → krátká věta + přepojení.
+        if (!state.handedOff && transferAllowed && wantsHuman(userText)) {
+          const line = 'Přepojím vás na kolegu, moment prosím.';
+          state.transcript.push({ role: 'agent', text: line, ts: Date.now() });
+          send(ws, { type: 'text', token: line, last: true });
+          startHandoff(line);
+          return;
         }
+
         try {
           const { text, messages } = await agent.runTurn({
             system: state.system,
@@ -389,6 +394,11 @@ function attach(server) {
           state.history = messages;
           state.transcript.push({ role: 'agent', text, ts: Date.now() });
           send(ws, { type: 'text', token: text, last: true });
+          // 2) Pojistka: když AI sama v odpovědi slíbí přepojení, spusť ho po doříkání.
+          if (!state.handedOff && transferAllowed && aiPromisesTransfer(text)) {
+            console.log('[voice] AI slíbila přepojení → handoff po doříkání.');
+            startHandoff(text);
+          }
         } catch (e) {
           console.warn('[voice] runTurn selhal:', e.message);
           send(ws, {
