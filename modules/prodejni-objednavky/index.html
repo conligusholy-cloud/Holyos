@@ -493,6 +493,15 @@
           </div>
           <div id="ai-aispec-kn-list" style="margin-top:12px;font-size:12px;color:var(--text2);">Načítám…</div>
         </div>
+
+        <div style="margin-top:18px;border:1px solid var(--border);border-radius:10px;padding:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <h4 style="margin:0;font-size:14px;">💬 Kontakty, které chatovaly s AI</h4>
+            <button class="btn" onclick="aiLoadChats()" style="font-size:11px;padding:3px 8px;">↻ Obnovit</button>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Klikni na „Zobrazit chat" a uvidíš celou konverzaci — pro analýzu i pro obchodníka, který má kontakt na starost.</div>
+          <div id="ai-aispec-chats" style="font-size:12px;color:var(--text2);">Načítám…</div>
+        </div>
       </div>
 
       <!-- Sub: SMS -->
@@ -5246,8 +5255,61 @@
         AISPEC_DEFAULT_PROMPT = j.defaultPrompt||'';
         aiAispecCount();
         aiLoadKnowledge();
+        aiLoadChats();
       }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
     }
+    // Seznam kontaktů, které chatovaly s AI (analýza + obchodník).
+    async function aiLoadChats(){
+      var box=document.getElementById('ai-aispec-chats'); if(!box) return;
+      box.innerHTML='Načítám…';
+      try{
+        var r=await fetch('/api/compounder/ai-specialist-chats',{credentials:'include'});
+        var list=await r.json();
+        if(!Array.isArray(list)||!list.length){ box.innerHTML='<span style="color:var(--text2);">Zatím nikdo nechatoval.</span>'; return; }
+        var fmt=function(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString('cs-CZ'); }catch(e){ return '—'; } };
+        var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12px;"><thead><tr><th>Kontakt</th><th>Obchodník</th><th style="text-align:right;">Zpráv</th><th>Poslední</th><th></th></tr></thead><tbody>';
+        list.forEach(function(x){
+          var nm=cmpEsc(x.name)+(x.is_test?' <span style="color:#c084fc;" title="Testovací">🧪</span>':'');
+          h+='<tr><td>'+nm+(x.email?'<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(x.email)+'</span>':'')+'</td>'
+            +'<td>'+(x.owner?cmpEsc(x.owner):'<span style="color:var(--text2);">—</span>')+'</td>'
+            +'<td style="text-align:right;">'+(x.user_msgs||0)+'</td>'
+            +'<td style="white-space:nowrap;">'+fmt(x.last_at)+'</td>'
+            +'<td style="white-space:nowrap;"><button class="btn" style="font-size:11px;padding:3px 8px;" onclick="aiViewChat('+x.id+',\''+cmpEsc(String(x.name)).replace(/\x27/g,"&#39;")+'\')">💬 Zobrazit chat</button></td></tr>';
+        });
+        h+='</tbody></table></div>';
+        box.innerHTML=h;
+      }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načítání chatů.</span>'; }
+    }
+    window.aiLoadChats=aiLoadChats;
+    async function aiViewChat(id, name){
+      var ov=document.getElementById('aiChatOv');
+      if(ov) ov.remove();
+      ov=document.createElement('div'); ov.id='aiChatOv';
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;';
+      ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+      ov.innerHTML='<div style="background:var(--bg,#0e1116);border:1px solid var(--border);max-width:640px;width:100%;border-radius:12px;max-height:88vh;display:flex;flex-direction:column;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;padding:14px;border-bottom:1px solid var(--border);"><b style="color:var(--text);">💬 Chat — '+cmpEsc(name||'')+'</b><button onclick="document.getElementById(\'aiChatOv\').remove()" style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;">×</button></div>'
+        +'<div id="aiChatSum" style="padding:10px 14px;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border);"></div>'
+        +'<div id="aiChatBody" style="padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">Načítám…</div></div>';
+      document.body.appendChild(ov);
+      try{
+        var r=await fetch('/api/compounder/leads/'+id+'/ai-specialist-chat',{credentials:'include'});
+        var j=await r.json();
+        var body=document.getElementById('aiChatBody'); if(!body) return;
+        var sum=document.getElementById('aiChatSum');
+        if(sum) sum.innerHTML = j.summary ? ('<b>Shrnutí:</b> '+cmpEsc(j.summary)) : 'Bez AI shrnutí.';
+        var msgs=(j.messages||[]);
+        var html='';
+        if(j.greeting) html+='<div style="align-self:flex-start;max-width:88%;background:#171b22;border:1px solid var(--border);color:var(--text);border-radius:12px;padding:8px 11px;font-size:13px;white-space:pre-wrap;">'+cmpEsc(j.greeting)+'</div>';
+        msgs.forEach(function(m){
+          var me=(m.role==='user');
+          html+='<div style="align-self:'+(me?'flex-end':'flex-start')+';max-width:88%;background:'+(me?'#26303c':'#171b22')+';'+(me?'':'border:1px solid var(--border);')+'color:'+(me?'#fff':'var(--text)')+';border-radius:12px;padding:8px 11px;font-size:13px;white-space:pre-wrap;">'+cmpEsc(m.text)+'</div>';
+        });
+        if(!msgs.length) html+='<div style="color:var(--text2);">Žádné zprávy.</div>';
+        body.innerHTML=html; body.scrollTop=0;
+      }catch(e){ var b=document.getElementById('aiChatBody'); if(b) b.innerHTML='<span style="color:#ef4444;">Chyba načítání chatu.</span>'; }
+    }
+    window.aiViewChat=aiViewChat;
     // Doporučené limity pro spolehlivé dodržování scénáře
     var AISPEC_PROMPT_MAX_CHARS = 9000;   // doporučené maximum znaků (OK do této hodnoty)
     var AISPEC_PROMPT_MAX_WORDS = 1400;   // doporučené maximum slov

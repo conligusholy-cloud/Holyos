@@ -715,6 +715,41 @@ router.post('/leads/:id/ai-specialist-summary', requireAuth, async (req, res, ne
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/ai-specialist-chats — seznam kontaktů, které chatovaly s AI (pro analýzu).
+router.get('/ai-specialist-chats', requireAuth, async (req, res, next) => {
+  try {
+    const groups = await prisma.aiSpecialistMessage.groupBy({ by: ['lead_id'], _count: { _all: true }, _max: { created_at: true } });
+    if (!groups.length) return res.json([]);
+    const ids = groups.map((g) => g.lead_id);
+    const leads = await prisma.compounderLead.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, email: true, phone: true, is_test: true, owner_person_id: true, external_rep_id: true, ai_specialist_summary: true },
+    });
+    const userGroups = await prisma.aiSpecialistMessage.groupBy({ by: ['lead_id'], where: { role: 'user' }, _count: { _all: true } }).catch(() => []);
+    const umap = new Map(userGroups.map((g) => [g.lead_id, g._count._all]));
+    const gmax = new Map(groups.map((g) => [g.lead_id, g._max.created_at]));
+    const gcount = new Map(groups.map((g) => [g.lead_id, g._count._all]));
+    const pids = leads.map((l) => l.owner_person_id).filter(Boolean);
+    const persons = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : [];
+    const pmap = new Map(persons.map((p) => [p.id, ((p.first_name || '') + ' ' + (p.last_name || '')).trim()]));
+    let reps = []; try { reps = await _loadExternalReps(); } catch (e) { reps = []; }
+    const rmap = new Map((reps || []).map((r) => [Number(r.id), r.jmeno || r.email || ('#' + r.id)]));
+    const out = leads.map((l) => ({
+      id: l.id,
+      name: l.name || l.email || ('#' + l.id),
+      email: l.email || null, phone: l.phone || null,
+      is_test: !!l.is_test,
+      owner: l.owner_person_id ? (pmap.get(l.owner_person_id) || null)
+           : (l.external_rep_id ? ('🤝 ' + (rmap.get(Number(l.external_rep_id)) || 'externí')) : null),
+      user_msgs: umap.get(l.id) || 0,
+      total_msgs: gcount.get(l.id) || 0,
+      last_at: gmax.get(l.id) || null,
+      has_summary: !!l.ai_specialist_summary,
+    })).sort((a, b) => new Date(b.last_at || 0) - new Date(a.last_at || 0));
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 // GET/PUT /api/compounder/ai-specialist-config — scénář (prompt) + úvodní věta AI specialisty
 router.get('/ai-specialist-config', requireAuth, async (req, res, next) => {
   try {
