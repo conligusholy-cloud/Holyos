@@ -79,8 +79,8 @@ async function applyVoiceIntents(phone, s, summary) {
     orderBy: { updated_at: 'desc' },
   });
   const lead = leads.find((l) => String(l.phone || '').replace(/\D/g, '').slice(-9) === tail);
-  if (!lead) return;
-  if (TERMINAL_KEEP.has(lead.status)) return; // neklobrč uzavřený obchod
+  if (!lead) return false;
+  if (TERMINAL_KEEP.has(lead.status)) return true; // neklobrč uzavřený obchod
 
   const sumTxt = summary ? String(summary).replace(/\s+/g, ' ').trim().slice(0, 200) : '';
   const who = lead.name || phone;
@@ -91,7 +91,7 @@ async function applyVoiceIntents(phone, s, summary) {
       where: { id: lead.id },
       data: { status: 'nezajem', activity_log: appendLog(lead.activity_log, 'AI hovor: zákazník nemá zájem / nepřeje si kontakt → „Nemá zájem". ' + sumTxt) },
     });
-    return;
+    return true;
   }
 
   let salesEvents = null;
@@ -115,9 +115,9 @@ async function applyVoiceIntents(phone, s, summary) {
       data: { status: 'schuzka', activity_log: appendLog(lead.activity_log, 'AI hovor: domluvena schůzka' + (s.when_text ? (' (' + s.when_text + ')') : '') + '. ' + sumTxt) },
     });
     if (notify && notify.notifyMeetingRequest) {
-      notify.notifyMeetingRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, terms: s.when_text || (s.meeting_at || ''), note: 'Z AI hovoru.' }).catch(() => {});
+      notify.notifyMeetingRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, terms: s.when_text || (s.meeting_at || ''), note: 'Analýza hovoru: ' + sumTxt, source: 'hovor' }).catch(() => {});
     }
-    return;
+    return true;
   }
 
   // 3) Zavolat jindy
@@ -136,10 +136,11 @@ async function applyVoiceIntents(phone, s, summary) {
       data: { status: 'volat_pristi', activity_log: appendLog(lead.activity_log, 'AI hovor: zavolat jindy' + (s.when_text ? (' (' + s.when_text + ')') : '') + '. ' + sumTxt) },
     });
     if (notify && notify.notifyCallbackRequest) {
-      notify.notifyCallbackRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, when: s.when_text || (s.callback_at || ''), note: 'Z AI hovoru.' }).catch(() => {});
+      notify.notifyCallbackRequest(prisma, { lead: { id: lead.id, name: lead.name, phone }, when: s.when_text || (s.callback_at || ''), note: 'Analýza hovoru: ' + sumTxt, source: 'hovor' }).catch(() => {});
     }
-    return;
+    return true;
   }
+  return true;
 }
 
 // Bezpečně převede ISO řetězec na Date (nebo null).
@@ -485,17 +486,8 @@ function attach(server) {
         } catch (e) {
           console.warn('[voice] update cíle kampaně selhal:', e.message);
         }
-        // Automatika podle záměrů z hovoru: nezájem → „Nemá zájem"; schůzka →
-        // „Domluvena schůzka" + kalendář; zavolat jindy → „Volat příště" + kalendář.
-        if (intents && state.target.phone) {
-          try {
-            await applyVoiceIntents(state.target.phone, intents, summary);
-          } catch (e) {
-            console.warn('[voice] zpracování záměrů selhalo:', e.message);
-          }
-        }
       } else {
-        // Inbound: push do Velína
+        // Inbound: push do Velína (obecné zmeškání/odbavení)
         try {
           const notify = require('./notify');
           await notify.notifyCall({
@@ -509,6 +501,29 @@ function attach(server) {
         } catch (e) {
           console.warn('[voice] notifikace selhala:', e.message);
         }
+      }
+
+      // Záměry z hovoru (schůzka / zavolat jindy / nezájem) — pro OBA směry.
+      // Spáruje kontakt podle telefonu → nastaví stav, založí událost do kalendáře
+      // obchodníka a pošle do Velína notifikaci s ANALÝZOU hovoru. Když kontakt
+      // není v databázi (typicky neznámý příchozí), pošle aspoň notifikaci s analýzou.
+      try {
+        const intentPhone = (mode === 'outbound' && state.target) ? state.target.phone : state.from;
+        if (intents && intentPhone && (intents.meeting || intents.callback || intents.no_interest)) {
+          const handled = await applyVoiceIntents(intentPhone, intents, summary);
+          if (!handled && (intents.meeting || intents.callback)) {
+            const cnotify = require('../compounder/notify');
+            const leadish = { id: null, name: callerName || null, phone: intentPhone };
+            const note = 'Analýza hovoru (' + (mode === 'outbound' ? 'odchozí' : 'příchozí') + '): ' + (summary ? String(summary).replace(/\s+/g, ' ').trim().slice(0, 300) : '(bez shrnutí)');
+            if (intents.meeting && cnotify.notifyMeetingRequest) {
+              cnotify.notifyMeetingRequest(prisma, { lead: leadish, terms: intents.when_text || intents.meeting_at || '', note, source: 'hovor' }).catch(() => {});
+            } else if (intents.callback && cnotify.notifyCallbackRequest) {
+              cnotify.notifyCallbackRequest(prisma, { lead: leadish, when: intents.when_text || intents.callback_at || '', note, source: 'hovor' }).catch(() => {});
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[voice] zpracování záměrů selhalo:', e.message);
       }
 
       if (state.callSid) calls.delete(state.callSid);

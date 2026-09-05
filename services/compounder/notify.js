@@ -281,24 +281,26 @@ async function notifyChatStarted(prisma, { lead, ownerPersonId, preview }) {
 
 // Zájemce v chatu s AI specialistou chce schůzku → push + zvonek majitelům,
 // včetně navržených termínů, ať je obchodník rychle potvrdí.
-async function notifyMeetingRequest(prisma, { lead, terms, note }) {
+async function notifyMeetingRequest(prisma, { lead, terms, note, source }) {
   try {
     const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
     const termsTxt = Array.isArray(terms) && terms.length ? terms.join(' | ') : (terms || 'termín neuveden');
+    const kde = source === 'hovor' ? 'v telefonním hovoru' : 'v chatu se specialistou';
     const title = '📅 Zájem o schůzku — ' + who;
-    const body = 'Zájemce v chatu se specialistou chce schůzku. Navržené termíny: ' + termsTxt + '.'
+    const body = 'Zájemce ' + kde + ' chce schůzku. Navržené termíny: ' + termsTxt + '.'
       + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : '')
       + (note ? (' ' + note) : '');
     await dispatch(prisma, { title, body, data: { type: 'compounder_meeting_request', lead_id: (lead && lead.id) ? lead.id : null } });
   } catch (e) { console.error('[compounder-notify] meeting request', e.message); }
 }
 
-// Zájemce v chatu chce, abychom mu ZAVOLALI → push + zvonek majitelům, s kdy a tel.
-async function notifyCallbackRequest(prisma, { lead, when, note }) {
+// Zájemce chce, abychom mu ZAVOLALI → push + zvonek majitelům, s kdy a tel.
+async function notifyCallbackRequest(prisma, { lead, when, note, source }) {
   try {
     const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
+    const kde = source === 'hovor' ? 'v telefonním hovoru' : 'v chatu';
     const title = '📞 Žádost o zavolání — ' + who;
-    const body = 'Zájemce v chatu chce, abychom mu zavolali.'
+    const body = 'Zájemce ' + kde + ' chce, abychom mu zavolali.'
       + (when ? (' Kdy: ' + when + '.') : '')
       + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : ' (telefon není u kontaktu vyplněn)')
       + (note ? (' ' + note) : '');
