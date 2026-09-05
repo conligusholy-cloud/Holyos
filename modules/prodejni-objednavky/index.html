@@ -5631,6 +5631,7 @@
       return h;
     }
     function aiStatDur(sec){ sec=Number(sec)||0; var m=Math.floor(sec/60), ss=sec%60; return m+':'+(ss<10?'0':'')+ss; }
+    function aiStatDurLong(sec){ sec=Number(sec)||0; var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h>0?(h+':'+(m<10?'0':'')+m+':'+(s<10?'0':'')+s):(m+':'+(s<10?'0':'')+s)); }
     // Karty statistiky (sdílené pro celek i jednotlivá kola). accent = barva rámečku.
     function aiStatCardsHtml(s, title, accent){
       function card(lbl,val,sub,col){ return '<div style="flex:1;min-width:92px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;"><div style="font-size:19px;font-weight:800;color:'+(col||'var(--text)')+';">'+val+'</div><div style="font-size:11px;color:var(--text2);">'+lbl+'</div>'+(sub?('<div style="font-size:11px;color:var(--text2);margin-top:1px;">'+sub+'</div>'):'')+'</div>'; }
@@ -5644,7 +5645,9 @@
         + card('Chyba', s.failed, null, s.failed?'#ef4444':null)
         + card('Čeká', s.pending) + '</div>';
       h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">'
-        + card('Čas hovorů', aiStatDur(s.totalSec)) + card('Průměr hovoru', aiStatDur(s.avgSec))
+        + card('Doba obvolávání', aiStatDurLong(s.spanSec), 'od 1. do posl. hovoru', '#8b5cf6')
+        + card('Čas hovorů', aiStatDur(s.totalSec), 'součet délek')
+        + card('Průměr hovoru', aiStatDur(s.avgSec))
         + card('SMS odesláno', s.smsSent)
         + card('🤝 Schůzka', s.meeting, null, s.meeting?'#10b981':null)
         + card('📞 Volat příště', s.callback, null, s.callback?'#3b82f6':null)

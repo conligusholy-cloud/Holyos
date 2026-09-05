@@ -1033,7 +1033,7 @@ router.get('/campaigns/:id/stats', requireAuth, async (req, res, next) => {
     const callMap = {};
     const callIds = targets.map((t) => t.voice_call_id).filter(Boolean);
     if (callIds.length && prisma.voiceCall) {
-      const calls = await prisma.voiceCall.findMany({ where: { id: { in: callIds } }, select: { id: true, duration_sec: true, audio_url: true } });
+      const calls = await prisma.voiceCall.findMany({ where: { id: { in: callIds } }, select: { id: true, duration_sec: true, audio_url: true, started_at: true, ended_at: true } });
       calls.forEach((c) => { callMap[c.id] = c; });
     }
     // Stavy spárovaných kontaktů (jeden dotaz) → mapa podle posledních 9 číslic.
@@ -1058,15 +1058,23 @@ router.get('/campaigns/:id/stats', requireAuth, async (req, res, next) => {
       const attempted = total - pending;
       const smsSent = list.filter((t) => t.sms_sent).length;
       let totalSec = 0, withAudio = 0, durs = [];
-      list.forEach((t) => { const c = t.voice_call_id && callMap[t.voice_call_id]; if (c) { totalSec += (c.duration_sec || 0); if (c.audio_url) withAudio++; if (c.duration_sec) durs.push(c.duration_sec); } });
+      let minStart = null, maxEnd = null;
+      list.forEach((t) => { const c = t.voice_call_id && callMap[t.voice_call_id]; if (c) {
+        totalSec += (c.duration_sec || 0); if (c.audio_url) withAudio++; if (c.duration_sec) durs.push(c.duration_sec);
+        const st = c.started_at ? new Date(c.started_at).getTime() : null;
+        const en = c.ended_at ? new Date(c.ended_at).getTime() : (st && c.duration_sec ? st + c.duration_sec * 1000 : st);
+        if (st && (minStart === null || st < minStart)) minStart = st;
+        if (en && (maxEnd === null || en > maxEnd)) maxEnd = en;
+      } });
       const avgSec = durs.length ? Math.round(durs.reduce((a, b) => a + b, 0) / durs.length) : 0;
+      const spanSec = (minStart !== null && maxEnd !== null && maxEnd > minStart) ? Math.round((maxEnd - minStart) / 1000) : 0;
       let meeting = 0, callback = 0, nointerest = 0;
       list.forEach((t) => {
         const tl = String(t.phone || '').replace(/\D/g, '').slice(-9);
         const st = leadByTail[tl]; if (!st) return;
         if (st === 'nezajem') nointerest++; else if (st === 'volat_pristi') callback++; else meeting++;
       });
-      return { total, attempted, reached, noAnswer, failed, pending, inProgress, smsSent, totalSec, avgSec, withAudio, meeting, callback, nointerest, rates: { reachedOfAttempted: pct(reached, attempted), reachedOfTotal: pct(reached, total) } };
+      return { total, attempted, reached, noAnswer, failed, pending, inProgress, smsSent, totalSec, avgSec, spanSec, withAudio, meeting, callback, nointerest, rates: { reachedOfAttempted: pct(reached, attempted), reachedOfTotal: pct(reached, total) } };
     }
 
     // Rozpad po kolech.
