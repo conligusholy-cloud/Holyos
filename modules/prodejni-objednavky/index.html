@@ -540,6 +540,7 @@
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-ads"> Jen kontakty z reklamy (Facebook / Google)</label>
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-new"> Jen nové kontakty (stav Nový)</label>
           <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-nobl"> Přeskočit black list (kontakty s ❗)</label>
+          <label style="font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px;margin:4px 0;"><input type="checkbox" id="ai-as-email"> 📧 Poslat automaticky i e-mail se specialistou (má-li kontakt e-mail; stejná pravidla)</label>
           <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (nezaškrtnuté nic = všichni):</div>
           <div id="ai-as-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + zaškrtnutí Tomáš a Jan → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
@@ -5285,11 +5286,18 @@
         var list=await r.json();
         if(!Array.isArray(list)||!list.length){ box.innerHTML='<span style="color:var(--text2);">Zatím nikdo nechatoval.</span>'; return; }
         var fmt=function(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString('cs-CZ'); }catch(e){ return '—'; } };
-        var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12px;"><thead><tr><th>Kontakt</th><th>Obchodník</th><th style="text-align:right;">Zpráv</th><th>Poslední</th><th></th></tr></thead><tbody>';
+        var chanLbl=function(c){
+          if(c==='sms') return '<span style="color:#10b981;">📱 SMS</span>';
+          if(c==='email') return '<span style="color:#3b82f6;">📧 E-mail</span>';
+          if(c==='sms+email') return '<span style="color:#8b5cf6;">📱📧 obojí</span>';
+          return '<span style="color:var(--text2);">—</span>';
+        };
+        var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12px;"><thead><tr><th>Kontakt</th><th>Obchodník</th><th>Zdroj</th><th style="text-align:right;">Zpráv</th><th>Poslední</th><th></th></tr></thead><tbody>';
         list.forEach(function(x){
           var nm=cmpEsc(x.name)+(x.is_test?' <span style="color:#c084fc;" title="Testovací">🧪</span>':'');
           h+='<tr><td>'+nm+(x.email?'<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(x.email)+'</span>':'')+'</td>'
             +'<td>'+(x.owner?cmpEsc(x.owner):'<span style="color:var(--text2);">—</span>')+'</td>'
+            +'<td style="white-space:nowrap;">'+chanLbl(x.channel)+'</td>'
             +'<td style="text-align:right;">'+(x.user_msgs||0)+'</td>'
             +'<td style="white-space:nowrap;">'+fmt(x.last_at)+'</td>'
             +'<td style="white-space:nowrap;"><button class="btn" style="font-size:11px;padding:3px 8px;" onclick="aiViewChat('+x.id+',\''+cmpEsc(String(x.name)).replace(/\x27/g,"&#39;")+'\')">💬 Zobrazit chat</button></td></tr>';
@@ -5494,6 +5502,7 @@
         document.getElementById('ai-as-ads').checked = srcs.indexOf('facebook_ads')!==-1 || srcs.indexOf('google_ads')!==-1;
         document.getElementById('ai-as-new').checked = c.onlyNew!==false;
         document.getElementById('ai-as-nobl').checked = c.skipBlacklist!==false;
+        var _em=document.getElementById('ai-as-email'); if(_em) _em.checked=!!c.emailEnabled;
         var sel = (c.ownerPersonIds||[]).map(Number);
         try { if (typeof fbEnsureSellers==='function') await fbEnsureSellers(); } catch(e){}
         var box=document.getElementById('ai-as-owners-box');
@@ -5515,6 +5524,7 @@
           sources: ads ? ['facebook_ads','google_ads'] : [],
           onlyNew: document.getElementById('ai-as-new').checked,
           skipBlacklist: document.getElementById('ai-as-nobl').checked,
+          emailEnabled: !!(document.getElementById('ai-as-email')||{}).checked,
           ownerPersonIds: owners
         })});
         if(!r.ok) throw new Error('HTTP '+r.status);

@@ -734,6 +734,16 @@ router.get('/ai-specialist-chats', requireAuth, async (req, res, next) => {
     const pmap = new Map(persons.map((p) => [p.id, ((p.first_name || '') + ' ' + (p.last_name || '')).trim()]));
     let reps = []; try { reps = await _loadExternalReps(); } catch (e) { reps = []; }
     const rmap = new Map((reps || []).map((r) => [Number(r.id), r.jmeno || r.email || ('#' + r.id)]));
+    // Zdroj příchodu na chat (kterým odkazem kontakt otevřel specialistu): SMS / e-mail.
+    let smsSet = new Set(), emailSet = new Set();
+    try {
+      const [openSms, openEmail] = await Promise.all([
+        prisma.compounderEvent.findMany({ where: { event: 'aispec_open_sms' }, select: { props: true } }),
+        prisma.compounderEvent.findMany({ where: { event: 'aispec_open_email' }, select: { props: true } }),
+      ]);
+      smsSet = new Set(openSms.map((e) => Number(e.props && e.props.lead_id)));
+      emailSet = new Set(openEmail.map((e) => Number(e.props && e.props.lead_id)));
+    } catch (_) { /* zdroj je best-effort */ }
     const out = leads.map((l) => ({
       id: l.id,
       name: l.name || l.email || ('#' + l.id),
@@ -745,6 +755,7 @@ router.get('/ai-specialist-chats', requireAuth, async (req, res, next) => {
       total_msgs: gcount.get(l.id) || 0,
       last_at: gmax.get(l.id) || null,
       has_summary: !!l.ai_specialist_summary,
+      channel: (smsSet.has(l.id) && emailSet.has(l.id)) ? 'sms+email' : (smsSet.has(l.id) ? 'sms' : (emailSet.has(l.id) ? 'email' : null)),
     })).sort((a, b) => new Date(b.last_at || 0) - new Date(a.last_at || 0));
     res.json(out);
   } catch (err) { next(err); }
@@ -776,6 +787,7 @@ const AISPEC_AUTOSEND_DEFAULT = {
   onlyNew: true,                            // jen nové kontakty
   skipBlacklist: true,                      // přeskočit black list (vykřičník)
   ownerPersonIds: [],                       // jen tito obchodníci (prázdné = všichni)
+  emailEnabled: false,                      // automaticky poslat i E-MAIL se specialistou (stejná pravidla)
 };
 router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   try {
@@ -793,6 +805,7 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
       onlyNew: b.onlyNew !== false,
       skipBlacklist: b.skipBlacklist !== false,
       ownerPersonIds: Array.isArray(b.ownerPersonIds) ? b.ownerPersonIds.map((n) => parseInt(n, 10)).filter(Boolean) : [],
+      emailEnabled: !!b.emailEnabled,
     };
     await setSetting('compounder.aispec_autosend', cfg, { type: 'json', userId: req.user && req.user.id });
     res.json({ ok: true, config: cfg });
@@ -1019,6 +1032,35 @@ async function autosendAiSpecialistSms(lead) {
     }).catch(() => {});
     console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
   } catch (e) { console.warn('[aispec-autosend] selhalo:', e.message); }
+}
+
+// Automatické odeslání E-MAILU se specialistou novému reklamnímu leadovi
+// (stejná pravidla jako SMS: zdroj z reklamy, vybraní obchodníci, jen nové).
+async function autosendAiSpecialistEmail(lead) {
+  try {
+    if (!lead || !lead.id) return;
+    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
+    if (!cfg || !cfg.emailEnabled) return;
+    const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); };
+    if (!lead.email) return skip('chybí e-mail');
+    if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
+    if (cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('stav není Nový');
+    if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
+    if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
+    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
+    await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
+    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    if (!from) return skip('není nastavený odesílatel');
+    const link = specialistShortLink(lead.id, 'email');
+    const subject = 'Prádlomat — váš specialista odpoví na vše';
+    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' });
+    await prisma.compounderLead.update({
+      where: { id: lead.id },
+      data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
+    }).catch(() => {});
+    console.log('[aispec-autosend-email] e-mail specialisty odeslán na lead', lead.id);
+  } catch (e) { console.warn('[aispec-autosend-email] selhalo:', e.message); }
 }
 
 // ─── Znalostní báze AI specialisty (nahrané podklady = závazný zdroj dat) ──────
@@ -4977,8 +5019,9 @@ async function _fbCreateLead(fields, meta, formCfg) {
   // Velín push + zvonek majitelům (Jan + Tomáš, resp. compounder.velin_notify_person_ids).
   try { await compounderNotify.notifyFbLead(prisma, { lead: created, campaign, ownerName }); } catch (e) { /* neblokuje příjem */ }
 
-  // Automatické odeslání SMS s odkazem na AI specialistu (dle pravidel) — nebrání příjmu leada.
+  // Automatické odeslání SMS / E-MAILU s odkazem na AI specialistu (dle pravidel) — nebrání příjmu leada.
   autosendAiSpecialistSms(created).catch(() => {});
+  autosendAiSpecialistEmail(created).catch(() => {});
 
   return { created: true, id: created.id };
 }
