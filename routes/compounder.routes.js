@@ -1162,8 +1162,8 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
     const subject = 'Prádlomat — váš specialista odpoví na vše';
-    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nBest Series';
-    await sendMail({ to: lead.email, subject, body, from, fromName: compounderMailFromName(), link, linkLabel: 'Zeptat se specialisty', brand: 'compounder' });
+    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' });
     const sentAt = new Date();
     await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });

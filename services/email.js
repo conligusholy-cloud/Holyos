@@ -103,6 +103,46 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
 </body></html>`;
   }
 
+  // ── Prádlomaty brand (modrá grafika jako stránka specialisty / leták) ─────
+  if (brand === 'pradlomaty') {
+    const site = 'https://pradlomaty.info';
+    const pLink = link && link.startsWith('http') ? link : site + (link || '');
+    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    return `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+<body style="margin:0;padding:0;background:#eaf2ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f2444;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eaf2ff;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:26px 34px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);">
+          <div style="font-size:22px;font-weight:800;letter-spacing:.04em;color:#ffffff;">💧 PRÁDLOMATY</div>
+          <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#dbe8ff;margin-top:6px;">Samoobslužné prádelny</div>
+        </td></tr>
+        <tr><td style="padding:30px 34px 8px;">
+          <div style="font-size:22px;font-weight:700;color:#0f2444;line-height:1.3;">${escapeHtml(title || '')}</div>
+        </td></tr>
+        <tr><td style="padding:14px 34px 4px;">
+          ${bodyHtml ? `<div style="font-size:15px;line-height:1.7;color:#334867;">${bodyHtml}</div>` : ''}
+          ${pLink ? `
+            <div style="margin:26px 0 8px;">
+              <a href="${escapeHtml(pLink)}" style="display:inline-block;padding:14px 28px;background:#2563eb;color:#ffffff;text-decoration:none;border-radius:10px;font-size:15px;font-weight:700;">
+                ${escapeHtml(linkLabel || 'Otevřít')}
+              </a>
+            </div>
+            <div style="font-size:12px;color:#6b7d99;margin-top:14px;word-break:break-all;">${escapeHtml(pLink)}</div>` : ''}
+        </td></tr>
+        <tr><td style="padding:24px 34px 30px;border-top:1px solid #e3ecfb;font-size:11.5px;color:#6b7d99;text-align:center;line-height:1.7;">
+          Tento e-mail vám zaslaly <b style="color:#425774;">Prádlomaty</b> — Best Series s.r.o. · IČO 05643724 · Česká republika<br>
+          <a href="${site}" style="color:#2563eb;text-decoration:none;">pradlomaty.info</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  ${pixelImg}
+</body></html>`;
+  }
+
   // ── Best Series / Výběry brand (bez HolyOS) ───────────────────────────────
   if (brand === 'vybery' || brand === 'bestseries') {
     const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
