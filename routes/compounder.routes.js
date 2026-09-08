@@ -2863,9 +2863,9 @@ router.get('/my-leads', requireAuth, async (req, res, next) => {
         const hayNotes = norm((l.notes || '') + ' ' + (l.activity_log || ''));
         if (hayNotes.indexOf(nq) !== -1) return true;
         return false;
-      }).slice(0, 500);
+      }).slice(0, 2000);
     } else {
-      leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
+      leads = await prisma.compounderLead.findMany({ where, orderBy: { created_at: 'desc' }, take: 2000 });
     }
     await enrichWarmth(leads);
     await _annotateBlacklist(leads);
@@ -2907,13 +2907,18 @@ const NON_CUSTOMER_EVENTS = new Set(['admin_model_view', 'loss_email_sent', 'los
 
 // Doplní leads o warmthPct, lastActivityAt, requestedContact, hasPhone (z eventů).
 async function enrichWarmth(leads) {
-  if (!leads.length || leads.length > 500) return;
+  if (!leads.length || leads.length > 2000) return;
   const ids = leads.map((l) => l.id);
-  const evs = await prisma.compounderEvent.findMany({
-    where: { OR: ids.map((id) => ({ props: { path: ['lead_id'], equals: id } })) },
+  const idsSet = new Set(ids);
+  // Místo OR přes N JSON podmínek (u tisíců leadů extrémně pomalé / rozbije dotaz)
+  // načteme eventy z posledních 180 dní jedním rozsahovým dotazem a odfiltrujeme v JS.
+  const evsSince = new Date(Date.now() - 180 * 86400000);
+  const evs = (await prisma.compounderEvent.findMany({
+    where: { created_at: { gte: evsSince } },
     select: { event: true, props: true, created_at: true, sid: true },
-    take: 20000,
-  });
+    orderBy: { created_at: 'desc' },
+    take: 60000,
+  }).catch(() => [])).filter((e) => e.props && idsSet.has(Number(e.props.lead_id)));
   // Systémové/admin eventy se NEpočítají jako „poslední aktivita" zákazníka
   // (odeslání pozvánky, push, loss e-mail, náhled modelu adminem) — jinak by to
   // vypadalo, že lead byl na portálu, i když jsme mu jen něco poslali.
