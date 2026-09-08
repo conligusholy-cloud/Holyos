@@ -3184,6 +3184,62 @@ router.post('/leads/:id(\\d+)/hot', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /leads/:id/create-sales-order — z leadu vytvoří prodejní objednávku (Order) a nastaví stav Prodáno.
+router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, phone: true, company: true, activity_log: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    const b = req.body || {};
+    const buyerName = String(b.company_name || lead.company || lead.name || '').trim();
+    if (!buyerName) return res.status(400).json({ ok: false, error: 'Chybí odběratel.' });
+    const items = Array.isArray(b.items) ? b.items.filter((it) => it && String(it.name || '').trim()) : [];
+    if (!items.length) return res.status(400).json({ ok: false, error: 'Přidej alespoň jednu položku.' });
+    const ico = b.ico ? String(b.ico).replace(/\s/g, '').slice(0, 20) : null;
+    const currency = String(b.currency || 'CZK').toUpperCase().slice(0, 3);
+
+    // Najdi/založ firmu (odběratele).
+    let company = null;
+    if (ico) company = await prisma.company.findFirst({ where: { ico } }).catch(() => null);
+    if (!company) company = await prisma.company.findFirst({ where: { name: { equals: buyerName, mode: 'insensitive' } } }).catch(() => null);
+    if (!company) {
+      company = await prisma.company.create({ data: {
+        name: buyerName, ico: ico || null, dic: b.dic ? String(b.dic).slice(0, 20) : null,
+        address: b.address ? String(b.address).slice(0, 255) : null, type: 'customer',
+      } });
+    }
+
+    // Spočti položky.
+    const oItems = items.map((it) => {
+      const q = Math.max(0, Number(it.quantity) || 1);
+      const up = Math.max(0, Number(it.unit_price) || 0);
+      return { name: String(it.name).trim().slice(0, 255), quantity: q, unit: String(it.unit || 'ks').slice(0, 20), unit_price: up, total_price: Math.round(q * up * 100) / 100 };
+    });
+    const total = oItems.reduce((s, it) => s + it.total_price, 0);
+    const orderNumber = 'SO-' + Date.now().toString(36).toUpperCase();
+
+    const order = await prisma.order.create({
+      data: {
+        order_number: orderNumber, type: 'sales', company_id: company.id, status: 'ordered',
+        currency, items_count: oItems.length, total_amount: total,
+        note: (b.note ? String(b.note).slice(0, 2000) + '\n' : '') + 'Z Compounder leadu #' + id + ' (' + (lead.name || '') + (lead.email ? ', ' + lead.email : '') + ')',
+        expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
+        created_by: (req.user && req.user.id) || null,
+        items: { create: oItems },
+      },
+      include: { items: true },
+    });
+
+    // Lead → Prodáno + zápis do aktivit.
+    try {
+      const line = _actionStamp('💰 Vytvořena prodejní objednávka ' + orderNumber + ' (' + total.toLocaleString('cs-CZ') + ' ' + currency + ')');
+      await prisma.compounderLead.update({ where: { id }, data: { status: 'prodano', activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
+    } catch (e) {}
+
+    res.status(201).json({ ok: true, order_id: order.id, order_number: orderNumber, total, currency });
+  } catch (err) { next(err); }
+});
+
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
