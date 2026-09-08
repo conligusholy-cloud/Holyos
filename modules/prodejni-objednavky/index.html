@@ -668,6 +668,7 @@
             <option value="">Všechny stavy</option>
             <option value="new">Nový</option>
             <option value="quoted">Poptáno</option>
+            <option value="prodano">Prodáno</option>
             <option value="ordered">Objednáno</option>
             <option value="confirmed">Potvrzeno</option>
             <option value="delivered">Doručeno</option>
@@ -892,6 +893,7 @@
     const ORDER_STATUSES = {
       new: { label: 'Nový', color: '#3b82f6' },
       quoted: { label: 'Poptáno', color: '#3b82f6' },
+      prodano: { label: 'Prodáno', color: '#06b6d4' },
       ordered: { label: 'Objednáno', color: '#8b5cf6' },
       confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
       delivered: { label: 'Doručeno', color: '#10b981' },
@@ -1069,7 +1071,7 @@
         html += '<td>' + (o.production_finish_last
           ? '<span style="color:#10b981;font-weight:600;">' + new Date(o.production_finish_last).toLocaleDateString('cs-CZ') + '</span>'
           : '<span style="color:var(--text2);">—</span>') + '</td>';
-        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
+        html += '<td>' + (o.status === 'prodano' ? '<button class="btn btn-sm" style="background:#06b6d4;color:#04121c;font-weight:700;margin-right:6px;" onclick="event.stopPropagation();openOrderDetail(' + o.id + ')" title="Doplnit podrobnosti a vygenerovat objednávku">📝 Vygenerovat objednávku</button>' : '') + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
         html += '</tr>';
       }
       html += '</tbody></table></div>';
@@ -2331,6 +2333,7 @@
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
             '<h2 style="margin:0;">' + order.order_number + '</h2>' +
             '<div style="display:flex;gap:8px;align-items:center;">' +
+              (order.status === 'prodano' ? '<button class="btn" style="background:#06b6d4;color:#04121c;font-weight:700;" onclick="generateOrderFromSold(' + id + ')" title="Podrobnosti níže jsou vyplněné — vygenerovat objednávku a posunout na Objednáno">📝 Vygenerovat objednávku →</button>' : '') +
               '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
               renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
             '</div>' +
@@ -2952,6 +2955,19 @@
       loadOrders();
       loadStats();
     }
+
+    // Ze stavu „Prodáno" vygeneruj objednávku: podrobnosti se doplní ve formuláři detailu výše,
+    // toto potvrdí objednávku a posune ji do toku (→ Objednáno).
+    async function generateOrderFromSold(id) {
+      if (!confirm('Vygenerovat objednávku z prodeje? Zkontroluj, že máš vyplněné podrobnosti (odběratel, položky, termíny, platba). Stav se změní na „Objednáno".')) return;
+      try {
+        await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'ordered' }) });
+        closeModal();
+        loadOrders();
+        loadStats();
+      } catch (e) { alert('Vygenerování objednávky selhalo: ' + (e.message || '')); }
+    }
+    window.generateOrderFromSold = generateOrderFromSold;
 
     async function deleteOrder(id) {
       if (!confirm('Opravdu smazat tuto objednávku?')) return;
