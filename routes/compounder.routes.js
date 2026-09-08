@@ -3191,22 +3191,35 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, phone: true, company: true, activity_log: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     const b = req.body || {};
+    const buyerType = (b.buyer_type === 'osoba') ? 'osoba' : 'firma';
     const buyerName = String(b.company_name || lead.company || lead.name || '').trim();
     if (!buyerName) return res.status(400).json({ ok: false, error: 'Chybí odběratel.' });
     const items = Array.isArray(b.items) ? b.items.filter((it) => it && String(it.name || '').trim()) : [];
     if (!items.length) return res.status(400).json({ ok: false, error: 'Přidej alespoň jednu položku.' });
-    const ico = b.ico ? String(b.ico).replace(/\s/g, '').slice(0, 20) : null;
+    const ico = (buyerType === 'firma' && b.ico) ? String(b.ico).replace(/\s/g, '').slice(0, 20) : null;
+    const dic = b.dic ? String(b.dic).trim().slice(0, 20) : null;
+    const address = b.address ? String(b.address).trim().slice(0, 255) : null;
+    const responsible = b.responsible ? String(b.responsible).trim().slice(0, 255) : null;
+    const email = b.email ? String(b.email).trim().slice(0, 255) : (lead.email || null);
+    const phone = b.phone ? String(b.phone).trim().slice(0, 40) : (lead.phone || null);
+    const version = b.version ? String(b.version).trim().slice(0, 20) : null;
     const currency = String(b.currency || 'CZK').toUpperCase().slice(0, 3);
 
-    // Najdi/založ firmu (odběratele).
+    // Najdi/založ odběratele (firma nebo fyzická osoba jako customer).
     let company = null;
     if (ico) company = await prisma.company.findFirst({ where: { ico } }).catch(() => null);
     if (!company) company = await prisma.company.findFirst({ where: { name: { equals: buyerName, mode: 'insensitive' } } }).catch(() => null);
     if (!company) {
       company = await prisma.company.create({ data: {
-        name: buyerName, ico: ico || null, dic: b.dic ? String(b.dic).slice(0, 20) : null,
-        address: b.address ? String(b.address).slice(0, 255) : null, type: 'customer',
+        name: buyerName, ico: ico || null, dic: dic || null,
+        address: address || null, type: 'customer',
       } });
+    } else {
+      // Doplň chybějící fakturační údaje na existující firmě.
+      const patch = {};
+      if (dic && !company.dic) patch.dic = dic;
+      if (address && !company.address) patch.address = address;
+      if (Object.keys(patch).length) { try { await prisma.company.update({ where: { id: company.id }, data: patch }); } catch (e) {} }
     }
 
     // Spočti položky.
@@ -3218,11 +3231,25 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     const total = oItems.reduce((s, it) => s + it.total_price, 0);
     const orderNumber = 'SO-' + Date.now().toString(36).toUpperCase();
 
+    // Fakturační blok do poznámky objednávky (Order nemá vlastní pole na kontakt/odp. osobu).
+    const inv = [];
+    inv.push('— FAKTURAČNÍ ÚDAJE —');
+    inv.push((buyerType === 'firma' ? 'Firma: ' : 'Fyzická osoba: ') + buyerName);
+    if (ico) inv.push('IČO: ' + ico + (dic ? '  DIČ: ' + dic : ''));
+    else if (dic) inv.push('DIČ: ' + dic);
+    if (address) inv.push('Adresa: ' + address);
+    if (responsible) inv.push('Odpovědná osoba: ' + responsible);
+    if (email) inv.push('E-mail: ' + email);
+    if (phone) inv.push('Telefon: ' + phone);
+    if (version) inv.push('Verze: ' + version);
+    inv.push('Z Compounder leadu #' + id + ' (' + (lead.name || '') + ')');
+    const noteFull = (b.note ? String(b.note).slice(0, 1500) + '\n\n' : '') + inv.join('\n');
+
     const order = await prisma.order.create({
       data: {
         order_number: orderNumber, type: 'sales', company_id: company.id, status: 'ordered',
         currency, items_count: oItems.length, total_amount: total,
-        note: (b.note ? String(b.note).slice(0, 2000) + '\n' : '') + 'Z Compounder leadu #' + id + ' (' + (lead.name || '') + (lead.email ? ', ' + lead.email : '') + ')',
+        note: noteFull.slice(0, 4000),
         expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
         created_by: (req.user && req.user.id) || null,
         items: { create: oItems },

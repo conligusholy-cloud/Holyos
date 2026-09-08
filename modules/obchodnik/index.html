@@ -1833,16 +1833,49 @@
     var el=document.getElementById('oor-total'); if(el) el.textContent=t.toLocaleString('cs-CZ')+' Kč';
   };
   window.obAddOrderRow=function(){ var box=document.getElementById('oor-rows'); if(box){ box.insertAdjacentHTML('beforeend', obOrderRow()); } };
+  window.obSetBuyerType=function(t){
+    document.getElementById('oor-type').value=t;
+    var firma=(t==='firma');
+    document.getElementById('oor-btn-firma').style.opacity=firma?'1':'.5';
+    document.getElementById('oor-btn-osoba').style.opacity=firma?'.5':'1';
+    document.getElementById('oor-firma-fields').style.display=firma?'':'none';
+    document.getElementById('oor-resp-field').style.display=firma?'':'none';
+    document.getElementById('oor-company-label').textContent=firma?'Název firmy':'Jméno a příjmení';
+  };
+  window.obAres=async function(){
+    var ico=(document.getElementById('oor-ico').value||'').replace(/\s/g,'');
+    var m=document.getElementById('oor-ares-msg');
+    if(!/^\d{6,8}$/.test(ico)){ if(m) m.textContent='Zadej platné IČO (6–8 číslic).'; return; }
+    if(m) m.textContent='Hledám v ARES…';
+    try{
+      var r=await fetch('/api/compounder/ares/'+ico,{credentials:'include'});
+      if(!r.ok) throw new Error();
+      var d=await r.json();
+      if(d.name) document.getElementById('oor-company').value=d.name;
+      if(d.dic) document.getElementById('oor-dic').value=d.dic;
+      if(d.address) document.getElementById('oor-address').value=d.address;
+      if(m) m.textContent='Doplněno z ARES ✓';
+    }catch(e){ if(m) m.textContent='ARES: nenalezeno.'; }
+  };
   function obOpenOrderForm(id){
     var l=(state.leads||[]).find(function(x){return x.id===id;})||{};
     var ex=document.getElementById('oorOv'); if(ex) ex.remove();
+    var ver=(l.pradlomat_version==='V2')?'V2':'V3';
     var ov=document.createElement('div'); ov.id='oorOv';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:130;display:flex;align-items:flex-end;justify-content:center;';
     ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    var tglBtn=function(idb,t,lbl){ return '<button type="button" id="'+idb+'" onclick="obSetBuyerType(\''+t+'\')" style="flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px;font-size:14px;font-weight:700;cursor:pointer;">'+lbl+'</button>'; };
     ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:560px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);max-height:92vh;overflow:auto;padding:18px 16px calc(18px + env(safe-area-inset-bottom));">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:17px;font-weight:800;">💰 Prodejní objednávka</div><button onclick="document.getElementById(\'oorOv\').remove()" style="background:none;border:none;color:var(--muted);font-size:24px;cursor:pointer;">×</button></div>'
-      +'<div class="field"><label>Odběratel</label><input id="oor-company" class="qinput" value="'+esc(l.company||l.name||'')+'"></div>'
-      +'<div style="display:flex;gap:8px;"><div class="field" style="flex:1;"><label>IČO (nepovinné)</label><input id="oor-ico" class="qinput" inputmode="numeric"></div><div class="field" style="flex:1;"><label>Termín dodání</label><input id="oor-date" class="qinput" type="date"></div></div>'
+      +'<input type="hidden" id="oor-type" value="firma">'
+      +'<div style="display:flex;gap:8px;margin-bottom:10px;">'+tglBtn('oor-btn-firma','firma','🏢 Firma')+tglBtn('oor-btn-osoba','osoba','👤 Fyzická osoba')+'</div>'
+      +'<div id="oor-firma-fields"><div class="field"><label>IČO</label><div style="display:flex;gap:8px;"><input id="oor-ico" class="qinput" inputmode="numeric" style="flex:1;"><button type="button" onclick="obAres()" style="background:var(--primary);border:none;color:var(--primary-d,#04121e);border-radius:10px;padding:0 14px;font-weight:800;cursor:pointer;">🔎 ARES</button></div><div id="oor-ares-msg" style="font-size:11px;color:var(--muted);margin-top:3px;"></div></div></div>'
+      +'<div class="field"><label id="oor-company-label">Název firmy</label><input id="oor-company" class="qinput" value="'+esc(l.company||l.name||'')+'"></div>'
+      +'<div id="oor-firma-fields2" style="display:flex;gap:8px;"><div class="field" style="flex:1;"><label>DIČ</label><input id="oor-dic" class="qinput"></div></div>'
+      +'<div class="field"><label>Fakturační adresa</label><input id="oor-address" class="qinput" placeholder="Ulice č.p., PSČ Město"></div>'
+      +'<div class="field" id="oor-resp-field"><label>Odpovědná osoba</label><input id="oor-resp" class="qinput" value="'+esc(l.name||'')+'" placeholder="Jméno osoby jednající za firmu"></div>'
+      +'<div style="display:flex;gap:8px;"><div class="field" style="flex:1;"><label>E-mail</label><input id="oor-email" class="qinput" inputmode="email" value="'+esc(l.email||'')+'"></div><div class="field" style="flex:1;"><label>Telefon</label><input id="oor-phone" class="qinput" inputmode="tel" value="'+esc(l.phone||'')+'"></div></div>'
+      +'<div style="display:flex;gap:8px;"><div class="field" style="flex:1;"><label>Verze prádlomatu</label><select id="oor-version" class="qinput"><option value="V3"'+(ver==='V3'?' selected':'')+'>V3</option><option value="V2"'+(ver==='V2'?' selected':'')+'>V2</option></select></div><div class="field" style="flex:1;"><label>Termín dodání</label><input id="oor-date" class="qinput" type="date"></div></div>'
       +'<div class="field"><label>Položky</label><div id="oor-rows">'+obOrderRow()+'</div><button type="button" onclick="obAddOrderRow()" style="background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;">+ Přidat položku</button></div>'
       +'<div class="field"><label>Poznámka</label><textarea id="oor-note" class="qinput" rows="2" placeholder="Detaily objednávky…"></textarea></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin:8px 0 12px;font-size:15px;"><span style="color:var(--muted);">Celkem</span><b id="oor-total" style="font-size:18px;">0 Kč</b></div>'
@@ -1851,12 +1884,23 @@
       +'<button id="oor-save" onclick="obSubmitOrder('+id+')" style="flex:2;background:#16a34a;border:none;color:#fff;border-radius:12px;padding:14px;font-size:15px;font-weight:800;cursor:pointer;">✅ Vygenerovat objednávku</button></div></div>';
     document.body.appendChild(ov);
     ov.addEventListener('input', function(e){ if(e.target.classList.contains('oor-qty')||e.target.classList.contains('oor-price')) obOrderTotal(); });
+    obSetBuyerType('firma');
   }
   window.obSubmitOrder=async function(id){
     var err=document.getElementById('oor-err'); if(err) err.textContent='';
     var items=[]; document.querySelectorAll('#oor-rows .oor').forEach(function(r){ var n=(r.querySelector('.oor-name').value||'').trim(); if(n) items.push({ name:n, quantity:Number(r.querySelector('.oor-qty').value)||1, unit_price:Number(r.querySelector('.oor-price').value)||0 }); });
     if(!items.length){ if(err) err.textContent='Přidej alespoň jednu položku.'; return; }
-    var body={ company_name:(document.getElementById('oor-company').value||'').trim(), ico:(document.getElementById('oor-ico').value||'').trim(), expected_delivery:document.getElementById('oor-date').value||null, note:(document.getElementById('oor-note').value||'').trim(), items:items };
+    var gv=function(x){ var e=document.getElementById(x); return e?(e.value||'').trim():''; };
+    var body={
+      buyer_type:gv('oor-type')||'firma',
+      company_name:gv('oor-company'),
+      ico:gv('oor-ico'), dic:gv('oor-dic'), address:gv('oor-address'),
+      responsible:gv('oor-resp'), email:gv('oor-email'), phone:gv('oor-phone'),
+      version:gv('oor-version'),
+      expected_delivery:document.getElementById('oor-date').value||null,
+      note:gv('oor-note'), items:items
+    };
+    if(!body.company_name){ if(err) err.textContent='Vyplň odběratele.'; return; }
     var btn=document.getElementById('oor-save'); if(btn){ btn.disabled=true; btn.textContent='Generuji…'; }
     try{
       var r=await api('/leads/'+id+'/create-sales-order',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
