@@ -557,6 +557,7 @@ function buildLeadTasks(ctx) {
   (ctx.leads || []).forEach((l) => {
     if (covered.has(l.id)) return;
     if (l.status === 'nelze_pouzit' || l.status === 'rejected' || l.status === 'nezajem') { covered.add(l.id); return; } // mrtvé leady do plánu nepatří
+    if (l.status === 'prodano' || l.status === 'converted') { covered.add(l.id); return; } // hotové (prodáno/konvertováno) — už se neobvolávají
     // MÁ DOMLUVENO: pokud je s kontaktem domluvený budoucí krok (hovor/schůzka/slib) — i za víc dní —
     // dnes ho neotravujeme jinak; ten krok se objeví jako úkol až v den termínu (přebíjí dosledování).
     if (scheduled.has(l.id) || l.status === 'schuzka' || l.status === 'schuzka_online') { covered.add(l.id); return; }

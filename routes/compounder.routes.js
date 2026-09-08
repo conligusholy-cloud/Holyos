@@ -2706,6 +2706,16 @@ const WA_MSG = {
   de: (n, u) => `Hallo, hier ist Ihr persönlicher Zugang zum Compounder Portal: ${u}`,
   pl: (n, u) => `Dzień dobry, oto Twój osobisty dostęp do Compounder Portal: ${u}`,
 };
+// Řádek s odkazem na leták/prospekt — připojí se k SMS/WhatsApp zprávě s přístupem.
+// (SMS ani wa.me odkaz neumí vložit obrázek, proto přikládáme odkaz; WhatsApp u něj
+// zobrazí náhled letáku.)
+const FLYER_LINE = {
+  cs: (u) => `Leták: ${u}`,
+  sk: (u) => `Leták: ${u}`,
+  en: (u) => `Flyer: ${u}`,
+  de: (u) => `Flyer: ${u}`,
+  pl: (u) => `Ulotka: ${u}`,
+};
 router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
@@ -2717,7 +2727,8 @@ router.post('/leads/:id/access-link', requireAuth, async (req, res, next) => {
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     const code = String(lead.lang || 'cs').toLowerCase().split(/[-_]/)[0];
     const msgFn = WA_MSG[code] || WA_MSG.cs;
-    const message = msgFn(lead.name || '', url);
+    const flyerFn = FLYER_LINE[code] || FLYER_LINE.cs;
+    const message = msgFn(lead.name || '', url) + '\n\n' + flyerFn(flyerImageUrl());
     // Telefon → jen číslice (wa.me/SMS formát), odstraň +, mezery, 00 prefix. Bez telefonu = jen odkaz ke kopírování.
     let wa = lead.phone ? String(lead.phone).replace(/[^\d]/g, '') : '';
     if (wa.startsWith('00')) wa = wa.slice(2);
@@ -3127,7 +3138,7 @@ router.get('/leads', requireAuth, async (req, res, next) => {
 
 // PATCH /api/compounder/leads/:id — změna stavu / poznámky
 const patchSchema = z.object({
-  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'psal_chatovi', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
+  status: z.enum(['new', 'nedovolano', 'volat_pristi', 'contacted', 'access_sent', 'odeslan_specialista', 'psal_chatovi', 'schuzka', 'schuzka_online', 'qualified', 'dosledovani', 'slibeny_krok', 'smlouva_odeslat', 'smlouva_odeslana', 'prodano', 'converted', 'nezajem', 'nelze_pouzit', 'rejected']).optional(),
   notes: z.string().max(5000).optional().nullable(),
   lang: z.string().trim().max(10).optional().nullable(),
   owner_person_id: z.number().int().positive().optional().nullable(),
@@ -4731,7 +4742,7 @@ router.post('/leads/discount-followup', requireAuth, async (req, res, next) => {
       where: { is_test: false },
       select: { id: true, status: true, discount_until: true, discount_permanent: true, discount_disabled: true, access_last_sent_at: true, created_at: true },
     });
-    const SKIP = ['dosledovani', 'converted', 'rejected', 'nelze_pouzit', 'nezajem'];
+    const SKIP = ['dosledovani', 'converted', 'prodano', 'rejected', 'nelze_pouzit', 'nezajem'];
     const ids = [];
     for (const l of leads) {
       const eff = effectiveDiscount(l, cs);
@@ -6069,7 +6080,8 @@ router.post('/external-reps/me/leads/:id/access-link', async (req, res, next) =>
     const url = `${portalBase()}/portal?t=${makeLoginToken(lead.id)}`;
     const code = String(lead.lang || 'cs').toLowerCase().split(/[-_]/)[0];
     const msgFn = WA_MSG[code] || WA_MSG.cs;
-    const message = msgFn(lead.name || '', url);
+    const flyerFn = FLYER_LINE[code] || FLYER_LINE.cs;
+    const message = msgFn(lead.name || '', url) + '\n\n' + flyerFn(flyerImageUrl());
     let wa = String(lead.phone).replace(/[^\d]/g, ''); if (wa.startsWith('00')) wa = wa.slice(2);
     const updated = await prisma.compounderLead.update({ where: { id }, data: { access_sent_count: { increment: 1 }, access_last_sent_at: new Date() }, select: { access_sent_count: true, access_last_sent_at: true } });
     _repActivity(repId, 'Poslal přístup na WhatsApp: ' + (lead.name || ''), null).catch(() => {});
@@ -6326,6 +6338,12 @@ function specialistBase() {
   const b = process.env.COMPOUNDER_SPECIALIST_BASE;
   return (b && String(b).trim()) ? String(b).trim().replace(/\/+$/, '') : portalBase();
 }
+// Veřejná URL letáku/prospektu (obrázek). Servíruje se z Compounder statiky na
+// doméně specialisty (pradlomaty.info/ai/letak.png). Vkládá se do portálových e-mailů
+// a jako odkaz do SMS/WhatsApp zpráv při zaslání přístupu na portál.
+function flyerImageUrl() {
+  return specialistBase() + '/ai/letak.png';
+}
 // Krátký odkaz na specialistu s označením kanálu (sms|email) — pro A/B srovnání.
 function specialistShortLink(id, channel) {
   const ch = channel === 'email' ? 'email' : 'sms';
@@ -6425,6 +6443,7 @@ async function sendPortalInvite(d, portalUrl) {
     body: t.body,
     link: portalUrl,
     linkLabel: t.linkLabel,
+    flyerUrl: flyerImageUrl(),
   });
 }
 async function sendPortalLogin(d, url) {
@@ -6441,6 +6460,7 @@ async function sendPortalLogin(d, url) {
     body: t.body,
     link: url,
     linkLabel: t.linkLabel,
+    flyerUrl: flyerImageUrl(),
   });
 }
 
