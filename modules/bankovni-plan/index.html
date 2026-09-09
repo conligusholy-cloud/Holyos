@@ -192,7 +192,8 @@
     function leaseInit(){
       if (_lease) return;
       var u = FC.unitBreakdown || {};
-      _lease = { price: Math.round(u.allIn || 1400000), count: 1, term: 60, down: 10, residual: 1, rate: 8 };
+      var rd = (DATA.unitEconomics && DATA.unitEconomics.revenueDist) || {};
+      _lease = { price: Math.round(u.allIn || 1400000), count: 1, term: 60, down: 10, residual: 1, rate: 8, revBase: Math.round(rd.p50 || u.revenue || 37693), revPct: 100 };
     }
     window.setLease = function(k, v){
       leaseInit();
@@ -233,7 +234,8 @@
       var vat = 21;
       var mode = _leaseVat; // 'platce' | 'neplatce'
       var rd = DATA.unitEconomics.revenueDist || {};
-      var revBezBase = rd.p50 || u.revenue; // medián tržby bez DPH
+      var revPct = (L.revPct!=null?L.revPct:100);
+      var revBezBase = (L.revBase || rd.p50 || u.revenue) * (revPct/100); // upravená průměrná tržba bez DPH
       var base = leaseUnit(revBezBase, mode, vat);
       var noi = base.noi;                     // NOI v režimu (bez/hrubé)
       var price = (mode==='neplatce') ? Math.round(L.price*(1+vat/100)) : L.price;
@@ -266,6 +268,11 @@
             '<div style="font-size:11px;color:var(--text2);margin-top:3px">= <b>'+money(gross)+'</b> s DPH ('+vat+' %)</div></div>'; })()+
           inp('count','Počet jednotek', L.count,'ks')+
           inp('term','Doba leasingu', L.term,'měs')+
+        '</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
+          '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Průměrná tržba / měs (bez DPH)</label><div style="display:flex;align-items:center;gap:4px"><input value="'+(L.revBase||0).toLocaleString('cs-CZ')+'" onchange="setLease(\'revBase\',this.value)" inputmode="numeric" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"><span style="font-size:11px;color:var(--text2)">Kč</span></div><div style="font-size:11px;color:var(--text2);margin-top:3px">výchozí medián sítě: '+money(rd.p50||0)+'</div></div>'+
+          inp('revPct','Úprava tržby', String(revPct).replace('.',','),'%')+
+          '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Použitá tržba (po úpravě)</label><div style="padding:8px;font-weight:800;font-size:15px">'+money(revBezBase)+' <span style="font-size:11px;color:var(--text2);font-weight:400">bez DPH</span></div></div>'+
         '</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
           inp('down','Akontace', L.down,'%')+
@@ -395,7 +402,7 @@
       var u=FC.unitBreakdown, t=DATA.trackRecord, L=_lease;
       var vat=21, mode=_leaseVat;
       var rd=DATA.unitEconomics.revenueDist||{};
-      var revBezBase=rd.p50||u.revenue;
+      var revBezBase=(L.revBase||rd.p50||u.revenue)*((L.revPct!=null?L.revPct:100)/100);
       var base=leaseUnit(revBezBase, mode, vat);
       var noi=base.noi;
       var price=(mode==='neplatce')?Math.round(L.price*(1+vat/100)):L.price;
