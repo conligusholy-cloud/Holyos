@@ -445,8 +445,30 @@ function deriveUnitModelPct(cfg) {
   };
 }
 
+// Rozpad položek servisu (V3) — podíly z měsíčních nákladů, aby šly rozepsat i v jiné měně.
+// Vrací [{ key, label, share, eurMonthly }] (share = podíl na celkovém servisu, součet = 1).
+function deriveServiceBreakdown(cfg) {
+  const d = Object.assign({}, UNIT_V3, cfg || {});
+  const vv_pr = d.prasek_velka * d.cena_prasku, vv_av = d.aviv_velka * d.cena_avivaze;
+  const vm_pr = d.prasek_mala * d.cena_prasku, vm_av = d.aviv_mala * d.cena_avivaze;
+  const washDet = ((vv_pr + vv_av / 2) + (vm_pr + vm_av / 2)) / 2;
+  const zm = d.zakazniku_za_den * 30.5;
+  const detM = zm * washDet;
+  const items = [
+    { key: 'udrzba', label: 'Údržba a náhradní díly', eur: d.udrzba },
+    { key: 'servis', label: 'Servisní zásahy / práce technika', eur: d.servis },
+    { key: 'software', label: 'Software a vzdálený monitoring (SIS)', eur: d.software },
+    { key: 'infolinka', label: 'Infolinka / zákaznická podpora', eur: d.infolinka },
+    { key: 'internet', label: 'Internet / konektivita', eur: d.internet },
+    { key: 'pojisteni', label: 'Pojištění stroje', eur: d.pojisteni },
+    { key: 'detergenty', label: 'Detergenty (prášek, aviváž)', eur: detM },
+  ];
+  const total = items.reduce((a, it) => a + (it.eur || 0), 0) || 1;
+  return items.map((it) => ({ key: it.key, label: it.label, share: (it.eur || 0) / total, eurMonthly: Math.round(it.eur || 0) }));
+}
+
 module.exports = {
-  sourceCurrencyForCode, convert, toBase, deriveUnitModelPct,
+  sourceCurrencyForCode, convert, toBase, deriveUnitModelPct, deriveServiceBreakdown,
   percentile, percentiles, seasonalityIndex, cohortCurve,
   stabilizationMonth, stabilizedSiteValue, volatilityStats, worstRolling, maxDebtForDscr,
   siteEconomics,

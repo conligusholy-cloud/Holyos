@@ -19,7 +19,7 @@ async function _unitModelPct() {
     const row = await prisma.businessToolDefaults.findUnique({ where: { tool: 'pradlomat-economy' }, select: { data_json: true } });
     if (row && row.data_json && typeof row.data_json === 'object') cfg = row.data_json;
   } catch (e) { /* fallback na konstanty V3 */ }
-  return E.deriveUnitModelPct(cfg);
+  return Object.assign({}, E.deriveUnitModelPct(cfg), { serviceBreakdown: E.deriveServiceBreakdown(cfg) });
 }
 
 const HISTORY_KEY = 'bank_plan.sis_history';
