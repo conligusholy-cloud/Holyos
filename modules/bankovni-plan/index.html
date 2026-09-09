@@ -331,11 +331,12 @@
       // Scénáře P25 / P50 / P75
       var d2=function(x){ return (Math.round(x*100)/100).toString().replace('.',','); };
       var scRows='';
+      var adjRev=function(p){ return (p||0)*(revPct/100) + modelAdd; };
       [['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].forEach(function(s){
-        var b=leaseUnit(s[1]||0, mode, vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0;
+        var b=leaseUnit(adjRev(s[1]), mode, vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0;
         scRows+='<tr><td>'+s[0]+'</td><td class="r">'+money(b.rev)+'</td><td class="r">'+money(b.ebitda)+'</td><td class="r">'+money(b.noi)+'</td><td class="r" style="color:#f59e0b">'+money(pmt)+'</td><td class="r" style="color:'+(cf>=0?'#22c55e':'#ef4444')+'">'+money(cf)+'</td><td class="r" style="font-weight:700;color:'+(dq>=1.2?'#22c55e':dq>=1?'#eab308':'#ef4444')+'">'+d2(dq)+'×</td></tr>';
       });
-      h += '<div class="sec"><h2>📊 Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="note">Z reálné distribuce sítě: Konzervativní = dolní kvartil, Základní = medián, Silný = horní kvartil. Režim: '+modeLbl+'.</div>'+
+      h += '<div class="sec"><h2>📊 Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="note">Z reálné distribuce sítě (Konzervativní = dolní kvartil, Základní = medián, Silný = horní kvartil), přepočteno tvou úpravou tržby'+(revPct!==100?(' ('+String(revPct).replace('.',',')+' %)'):'')+(modelAdd>0?(' + modelové sušení '+money(modelAdd)):'')+'. Režim: '+modeLbl+'.</div>'+
         '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr></thead><tbody>'+scRows+'</tbody></table></div></div>';
 
       // DSCR prahy — minimální tržba
@@ -425,7 +426,8 @@
       var now=new Date().toLocaleDateString('cs-CZ');
       var scen=[1,3,5,10].map(function(N){ return '<tr><td><b>'+N+'×</b></td><td class="r">'+f(price*N)+'</td><td class="r">'+f(financed*N)+'</td><td class="r">'+f(pmt*N)+'</td><td class="r">'+f(noi*N)+'</td><td class="r"><b>'+d2(dscr)+'×</b></td></tr>'; }).join('');
       // Scénáře P25/P50/P75 a stresy −10/−20 (režimové)
-      var scenRows=[['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].map(function(s){ var b=leaseUnit(s[1]||0,mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.rev)+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(b.noi)+'</td><td class="r">'+f(pmt)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
+      var adjRevP=function(p){ return (p||0)*((L.revPct!=null?L.revPct:100)/100)+modelAdd; };
+      var scenRows=[['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].map(function(s){ var b=leaseUnit(adjRevP(s[1]),mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.rev)+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(b.noi)+'</td><td class="r">'+f(pmt)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
       var stressRows=[['Base (medián)',1],['Pokles tržeb −10 %',0.9],['Pokles tržeb −20 %',0.8]].map(function(s){ var b=leaseUnit(revBezBase*s[1],mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
       var Rr=leaseRatios(); var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
       var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez)/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
