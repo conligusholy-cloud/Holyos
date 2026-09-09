@@ -193,8 +193,15 @@
       if (_lease) return;
       var u = FC.unitBreakdown || {};
       var rd = (DATA.unitEconomics && DATA.unitEconomics.revenueDist) || {};
-      _lease = { price: Math.round(u.allIn || 1400000), count: 1, term: 60, down: 10, residual: 1, rate: 8, revBase: Math.round(rd.p50 || u.revenue || 37693), revPct: 100, addDryCount: 0, addDryPrice: 50 };
+      var def = { price: Math.round(u.allIn || 1400000), count: 1, term: 60, down: 10, residual: 1, rate: 8, revBase: Math.round(rd.p50 || u.revenue || 37693), revPct: 100, addDryCount: 0, addDryPrice: 50 };
+      try { var s = JSON.parse(localStorage.getItem('bp.lease') || 'null'); if (s && typeof s === 'object') def = Object.assign(def, s); } catch (e) {}
+      _lease = def;
     }
+    window.leaseSave = function(){
+      try { localStorage.setItem('bp.lease', JSON.stringify(_lease)); } catch(e){}
+      var el = document.getElementById('lease-saved'); if (el){ el.textContent = 'Uloženo ✓'; setTimeout(function(){ if(el) el.textContent=''; }, 2500); }
+      render();
+    };
     window.setLease = function(k, v){
       leaseInit();
       _lease[k] = (k==='count'||k==='term') ? (parseInt(v,10)||0) : (parseFloat(String(v).replace(/\s/g,'').replace(',','.'))||0);
@@ -285,6 +292,11 @@
           inp('down','Akontace', L.down,'%')+
           inp('residual','Zůstatková hodnota', L.residual,'%')+
           inp('rate','Roční úrok', L.rate,'%')+
+        '</div>'+
+        '<div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          '<button class="btn" onclick="leaseSave()" style="background:#eab308;color:#0e1a22;border:none;font-weight:800">💾 Uložit leasingový podklad</button>'+
+          '<span id="lease-saved" style="color:#22c55e;font-weight:700;font-size:13px"></span>'+
+          '<span style="font-size:11px;color:var(--text2)">Uloží zadané parametry (cena, tržba, úprava, modelové sušení, akontace…) a při dalším otevření je obnoví.</span>'+
         '</div></div>';
 
       // Ekonomika 1 jednotky (ze SIS)
