@@ -40,6 +40,7 @@
     table.dt { width:100%; border-collapse:collapse; font-size:12.5px; }
     table.dt th { text-align:left; padding:7px 10px; color:var(--text2); text-transform:uppercase; font-size:10.5px; letter-spacing:.4px; border-bottom:1px solid var(--border); }
     table.dt td { padding:7px 10px; border-bottom:1px solid rgba(255,255,255,.04); }
+    table.dt th.r, table.dt td.r { text-align:right; }
     .flag { font-size:11px; padding:1px 6px; border-radius:5px; }
     .flag-out { background:rgba(168,85,247,.16); color:#c084fc; }
     .flag-loss { background:rgba(239,68,68,.16); color:#ef4444; }
@@ -198,6 +199,25 @@
       _lease[k] = (k==='count'||k==='term') ? (parseInt(v,10)||0) : (parseFloat(String(v).replace(/\s/g,'').replace(',','.'))||0);
       render();
     };
+    var _leaseVat = 'neplatce'; // start bývá neplátce; přepínatelné
+    window.setLeaseVat = function(m){ _leaseVat = m; render(); };
+    // Poměry nákladů z ekonomiky jedné jednotky (bez DPH) — pro škálování na scénáře P25/P50/P75.
+    function leaseRatios(){
+      var u = FC.unitBreakdown, rev = u.revenue||1;
+      return {
+        rentBez: u.rent||0,
+        varPct: ((u.service||0)+(u.energy||0)+(u.fee||0))/rev,   // servis+energie+poplatky (% obratu)
+        maintPct: (u.maintenance||0)/rev,
+      };
+    }
+    // Ekonomika jedné jednotky pro danou měsíční tržbu BEZ DPH, v režimu plátce/neplátce.
+    function leaseUnit(revBez, vatMode, vat){
+      var R = leaseRatios();
+      var ebitdaBez = revBez - R.rentBez - revBez*R.varPct;
+      var noiBez = ebitdaBez - revBez*R.maintPct;
+      var k = (vatMode==='neplatce') ? (1+vat/100) : 1; // neplátce = vše v hrubých hodnotách
+      return { rev: revBez*k, ebitda: ebitdaBez*k, noi: noiBez*k, marginPct: revBez>0?ebitdaBez/revBez:0, _bezNoi: noiBez };
+    }
     // Měsíční anuita se zůstatkovou hodnotou (balloon): PMT financuje (financed − PV(residual)).
     function leasePMT(financed, residual, ratePct, n){
       var r = ratePct/100/12; if (n<=0) return 0;
@@ -209,22 +229,33 @@
       leaseInit();
       var u = FC.unitBreakdown;
       var t = DATA.trackRecord;
-      var noi = (u.noi!=null?u.noi:u.ebitda)||0;   // provozní zisk před splátkou (na jednotku, měsíčně)
       var L = _lease;
-      var financed = L.price*(1 - L.down/100);
-      var residual = L.price*L.residual/100;
+      var vat = 21;
+      var mode = _leaseVat; // 'platce' | 'neplatce'
+      var rd = DATA.unitEconomics.revenueDist || {};
+      var revBezBase = rd.p50 || u.revenue; // medián tržby bez DPH
+      var base = leaseUnit(revBezBase, mode, vat);
+      var noi = base.noi;                     // NOI v režimu (bez/hrubé)
+      var price = (mode==='neplatce') ? Math.round(L.price*(1+vat/100)) : L.price;
+      var financed = price*(1 - L.down/100);
+      var residual = price*L.residual/100;
       var pmt = leasePMT(financed, residual, L.rate, L.term);
       var dscr = pmt>0 ? noi/pmt : 0;
       var cushion = noi>0 ? (1 - pmt/noi)*100 : 0; // o kolik % může tržba/NOI klesnout než DSCR=1
       var pass = dscr>=1.20, ok = dscr>=1.0;
       var dcol = pass?'#22c55e':(ok?'#eab308':'#ef4444');
-      var totalCost = pmt*L.term + L.price*L.down/100 + residual; // co zákazník za leasing celkem zaplatí
+      var modeLbl = (mode==='neplatce') ? 'Neplátce DPH (částky vč. neodpočitatelné DPH)' : 'Plátce DPH (částky bez DPH)';
 
       var inp = function(k,lbl,val,suf){ return '<div style="flex:1;min-width:130px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">'+lbl+'</label><div style="display:flex;align-items:center;gap:4px"><input value="'+val+'" onchange="setLease(\''+k+'\',this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"><span style="font-size:11px;color:var(--text2)">'+(suf||'')+'</span></div></div>'; };
 
       var h = '';
       h += '<div class="banner">Podklad pro <b>leasingovou / financující společnost</b>. Ukazuje, že <b>jedna jednotka (prádlomat) funguje samostatně</b> — její provozní zisk pokryje leasingovou splátku s rezervou — a že je model <b>škálovatelný</b> (síť '+t.activeCount+' jednotek, '+String(t.yearsData).replace('.',',')+' let dat ze SIS). Cíl: leasingovka vyhodnotí výrobek jako profinancovatelný a můžeme ho zákazníkovi nabídnout s financováním.</div>';
-      h += '<div style="margin:6px 0 14px"><button class="btn" onclick="leasingPdf()" style="background:#0ea5e9;color:#fff;border:none;font-weight:700">📄 Podklad pro leasingovku (PDF)</button></div>';
+      h += '<div style="margin:6px 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
+        '<button class="btn" onclick="leasingPdf()" style="background:#0ea5e9;color:#fff;border:none;font-weight:700">📄 Podklad pro leasingovku (PDF)</button>'+
+        '<span style="margin-left:8px;font-size:12px;color:var(--text2)">Režim DPH:</span>'+
+        '<button class="btn" onclick="setLeaseVat(\'neplatce\')" style="'+(mode==='neplatce'?'background:#eab308;color:#0e1a22;border:none;font-weight:700':'')+'">Neplátce</button>'+
+        '<button class="btn" onclick="setLeaseVat(\'platce\')" style="'+(mode==='platce'?'background:#eab308;color:#0e1a22;border:none;font-weight:700':'')+'">Plátce</button>'+
+        '<span style="font-size:11px;color:var(--text2)">'+modeLbl+'</span></div>';
 
       // Předmět financování + parametry leasingu
       h += '<div class="sec"><h2>Předmět financování &amp; parametry leasingu</h2>'+
@@ -245,17 +276,18 @@
       // Ekonomika 1 jednotky (ze SIS)
       var rowKV=function(lbl,val,col){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">'+lbl+'</span><b style="color:'+(col||'var(--text)')+'">'+val+'</b></div>'; };
       h += '<div class="grid2">';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ekonomika 1 jednotky <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Reprezentativní prádlomat (medián ze SIS, měsíčně, bez DPH).</div>'+
-        rowKV('Tržba / měs (bez DPH)', money(u.revenue))+
-        rowKV('EBITDA / měs', money(u.ebitda), '#22c55e')+
+      h += '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ekonomika 1 jednotky <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Reprezentativní prádlomat (medián ze SIS, měsíčně) — režim: <b>'+modeLbl+'</b>.</div>'+
+        rowKV((mode==='neplatce'?'Koncové inkaso / měs':'Tržba / měs (bez DPH)'), money(base.rev))+
+        rowKV('EBITDA / měs', money(base.ebitda), '#22c55e')+
         rowKV('NOI (před splátkou) / měs', money(noi), '#22c55e')+
-        rowKV('Marže', pct(u.ebitdaMargin))+
+        rowKV('Marže', pct(base.marginPct))+
         '</div>';
 
       // Leasingová kalkulace + DSCR
       h += '<div class="sec"><h2>💳 Leasingová kalkulace (1 jednotka)</h2>'+
+        rowKV('Pořizovací cena ('+(mode==='neplatce'?'vč. DPH':'bez DPH')+')', money(price))+
         rowKV('Financovaná částka', money(financed))+
-        rowKV('Akontace ('+String(L.down).replace('.',',')+' %)', money(L.price*L.down/100))+
+        rowKV('Akontace ('+String(L.down).replace('.',',')+' %)', money(price*L.down/100))+
         rowKV('Zůstatková hodnota', money(residual))+
         rowKV('Měsíční splátka (anuita)', money(pmt), '#f59e0b')+
         rowKV('NOI ÷ splátka (DSCR)', (Math.round(dscr*100)/100).toString().replace('.',',')+'×', dcol)+
@@ -274,7 +306,7 @@
       [1,3,5,10].forEach(function(N){
         var hl = (N===L.count) ? 'background:rgba(234,179,8,.10)' : '';
         h += '<tr style="'+hl+'"><td style="font-weight:700">'+N+'×</td>'+
-          '<td style="text-align:right">'+money(L.price*N)+'</td>'+
+          '<td style="text-align:right">'+money(price*N)+'</td>'+
           '<td style="text-align:right">'+money(financed*N)+'</td>'+
           '<td style="text-align:right;color:#f59e0b">'+money(pmt*N)+'</td>'+
           '<td style="text-align:right;color:#22c55e">'+money(noi*N)+'</td>'+
@@ -282,12 +314,62 @@
       });
       h += '</tbody></table></div></div>';
 
+      // Scénáře P25 / P50 / P75
+      var d2=function(x){ return (Math.round(x*100)/100).toString().replace('.',','); };
+      var scRows='';
+      [['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].forEach(function(s){
+        var b=leaseUnit(s[1]||0, mode, vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0;
+        scRows+='<tr><td>'+s[0]+'</td><td class="r">'+money(b.rev)+'</td><td class="r">'+money(b.ebitda)+'</td><td class="r">'+money(b.noi)+'</td><td class="r" style="color:#f59e0b">'+money(pmt)+'</td><td class="r" style="color:'+(cf>=0?'#22c55e':'#ef4444')+'">'+money(cf)+'</td><td class="r" style="font-weight:700;color:'+(dq>=1.2?'#22c55e':dq>=1?'#eab308':'#ef4444')+'">'+d2(dq)+'×</td></tr>';
+      });
+      h += '<div class="sec"><h2>📊 Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="note">Z reálné distribuce sítě: Konzervativní = dolní kvartil, Základní = medián, Silný = horní kvartil. Režim: '+modeLbl+'.</div>'+
+        '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr></thead><tbody>'+scRows+'</tbody></table></div></div>';
+
+      // DSCR prahy — minimální tržba
+      var R=leaseRatios(); var pmtBez = pmt/(mode==='neplatce'?(1+vat/100):1);
+      var minRev=function(x){ var denom=(1-R.varPct-R.maintPct); var rb=denom>0?((x*pmtBez)+R.rentBez)/denom:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
+      h += '<div class="sec"><h2>🎯 Minimální tržba pro DSCR</h2><div class="note">Kolik musí jednotka měsíčně utržit, aby pokryla splátku na dané úrovni krytí.</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
+          '<div class="sec" style="flex:1;min-width:150px;text-align:center"><div class="note">DSCR 1,00 (bod zvratu)</div><div style="font-size:20px;font-weight:800">'+money(minRev(1.0))+'</div></div>'+
+          '<div class="sec" style="flex:1;min-width:150px;text-align:center"><div class="note">DSCR 1,20</div><div style="font-size:20px;font-weight:800">'+money(minRev(1.2))+'</div></div>'+
+          '<div class="sec" style="flex:1;min-width:150px;text-align:center"><div class="note">DSCR 1,30</div><div style="font-size:20px;font-weight:800">'+money(minRev(1.3))+'</div></div>'+
+        '</div></div>';
+
+      // Stresové testy −10 % / −20 %
+      var stRows='';
+      [['Base (medián)',1],['Pokles tržeb −10 %',0.9],['Pokles tržeb −20 %',0.8]].forEach(function(s){
+        var b=leaseUnit(revBezBase*s[1], mode, vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0;
+        stRows+='<tr><td>'+s[0]+'</td><td class="r">'+money(b.ebitda)+'</td><td class="r" style="color:'+(cf>=0?'#22c55e':'#ef4444')+'">'+money(cf)+'</td><td class="r" style="font-weight:700;color:'+(dq>=1.2?'#22c55e':dq>=1?'#eab308':'#ef4444')+'">'+d2(dq)+'×</td></tr>';
+      });
+      h += '<div class="sec"><h2>🧪 Stresové testy</h2><div class="note">Dopad poklesu tržeb na EBITDA, cash flow po splátce a DSCR.</div>'+
+        '<div style="overflow-x:auto"><table class="dt"><thead><tr><th>Scénář</th><th class="r">EBITDA/měs</th><th class="r">Cash flow po splátce</th><th class="r">DSCR</th></tr></thead><tbody>'+stRows+'</tbody></table></div></div>';
+
+      // Technická specifikace + zůstatková hodnota
+      h += '<div class="grid2">';
+      h += '<div class="sec"><h2>🔧 Technická specifikace (předmět financování)</h2>'+
+        '<ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--text2)">'+
+          '<li>Sušička <b>LS350</b></li>'+
+          '<li>Pračka <b>SY180</b></li>'+
+          '<li>Pračka <b>SY80</b></li>'+
+          '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b></li>'+
+          '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS)</li>'+
+          '<li>Movitý, identifikovatelný a přemístitelný předmět financování</li>'+
+        '</ul><div class="note" style="margin-top:6px">Přesné komponenty/výrobce a připojení doplníme do datové přílohy <span class="tag" style="background:#64748b33;color:#94a3b8">TO BE CONFIRMED</span>.</div></div>';
+      h += '<div class="sec"><h2>♻️ Zůstatková hodnota &amp; relokace (metodika)</h2>'+
+        '<ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--text2)">'+
+          '<li>Účetní odpis <b>5 let</b>; technická životnost dle cyklů (30 000).</li>'+
+          '<li>Stroj je <b>oddělitelný a přemístitelný</b> → možná relokace na jinou lokalitu.</li>'+
+          '<li>Zůstatkovou hodnotu neopíráme o účetní odpis, ale o technický stav a životnost komponent.</li>'+
+          '<li>Bez doložených prodejů ojetých strojů uvádíme <b>pouze metodiku</b>, ne tržní cenu <span class="tag" style="background:#64748b33;color:#94a3b8">TO BE CONFIRMED</span>.</li>'+
+          '<li>Zpětný odkup <b>není garantován</b> — jen na vyžádání a za smluvních podmínek leasingové společnosti.</li>'+
+        '</ul></div>';
+      h += '</div>';
+
       // Zajištění + track record
       h += '<div class="grid2">';
       h += '<div class="sec"><h2>🛡️ Zajištění pro financující společnost</h2>'+
         '<ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--text2)">'+
           '<li>Předmětem financování je <b>movitý majetek</b> (prádlomat) — slouží jako zástava.</li>'+
-          '<li><b>Zpětný odkup / garance</b> ze strany výrobce (Best Series).</li>'+
+          '<li>Nezávazná <b>součinnost při relokaci</b>; případný zpětný odkup jen na vyžádání leasingové společnosti <span class="tag" style="background:#64748b33;color:#94a3b8">PROPOSAL</span>.</li>'+
           '<li><b>Vzdálený monitoring přes SIS</b> — tržby a provoz v reálném čase.</li>'+
           '<li>Vlastní <b>servisní síť</b> a rychlá údržba → minimální výpadky.</li>'+
           '<li>Platby koncových zákazníků <b>předem u stroje</b> (žádné pohledávky, žádná koncentrace).</li>'+
@@ -311,15 +393,26 @@
       if(!FC || !FC.unitBreakdown){ alert('Model jednotky ještě není načtený — dej ↻ Přebudovat data.'); return; }
       leaseInit();
       var u=FC.unitBreakdown, t=DATA.trackRecord, L=_lease;
-      var noi=(u.noi!=null?u.noi:u.ebitda)||0;
-      var financed=L.price*(1-L.down/100), residual=L.price*L.residual/100;
+      var vat=21, mode=_leaseVat;
+      var rd=DATA.unitEconomics.revenueDist||{};
+      var revBezBase=rd.p50||u.revenue;
+      var base=leaseUnit(revBezBase, mode, vat);
+      var noi=base.noi;
+      var price=(mode==='neplatce')?Math.round(L.price*(1+vat/100)):L.price;
+      var gross=Math.round(L.price*(1+vat/100));
+      var financed=price*(1-L.down/100), residual=price*L.residual/100;
       var pmt=leasePMT(financed,residual,L.rate,L.term);
       var dscr=pmt>0?noi/pmt:0, cushion=noi>0?(1-pmt/noi)*100:0;
-      var vat=21, gross=Math.round(L.price*(1+vat/100));
+      var modeLbl=(mode==='neplatce')?'Neplátce DPH (částky vč. neodpočitatelné DPH)':'Plátce DPH (částky bez DPH)';
       var f=function(n){ return money(n); };
       var d2=function(x){ return (Math.round(x*100)/100).toString().replace('.',','); };
       var now=new Date().toLocaleDateString('cs-CZ');
-      var scen=[1,3,5,10].map(function(N){ return '<tr><td><b>'+N+'×</b></td><td class="r">'+f(L.price*N)+'</td><td class="r">'+f(financed*N)+'</td><td class="r">'+f(pmt*N)+'</td><td class="r">'+f(noi*N)+'</td><td class="r"><b>'+d2(dscr)+'×</b></td></tr>'; }).join('');
+      var scen=[1,3,5,10].map(function(N){ return '<tr><td><b>'+N+'×</b></td><td class="r">'+f(price*N)+'</td><td class="r">'+f(financed*N)+'</td><td class="r">'+f(pmt*N)+'</td><td class="r">'+f(noi*N)+'</td><td class="r"><b>'+d2(dscr)+'×</b></td></tr>'; }).join('');
+      // Scénáře P25/P50/P75 a stresy −10/−20 (režimové)
+      var scenRows=[['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].map(function(s){ var b=leaseUnit(s[1]||0,mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.rev)+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(b.noi)+'</td><td class="r">'+f(pmt)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
+      var stressRows=[['Base (medián)',1],['Pokles tržeb −10 %',0.9],['Pokles tržeb −20 %',0.8]].map(function(s){ var b=leaseUnit(revBezBase*s[1],mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
+      var Rr=leaseRatios(); var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
+      var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez)/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
       var verdict = dscr>=1.2 ? 'Profinancovatelné — provozní zisk jednotky pokryje leasingovou splátku s rezervou.' : (dscr>=1.0 ? 'Na hraně — DSCR ≥ 1,0, ale s malou rezervou.' : 'Splátka převyšuje provozní zisk jednotky.');
       var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
         'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
@@ -333,11 +426,17 @@
         '<h1>Podklad pro financování — Prádlomat</h1>'+
         '<div class="muted">Best Series s.r.o. · vytvořeno '+now+' · data ze SIS '+t.firstData+' → '+t.lastData+'</div>'+
         '<div class="box">Cíl: prokázat, že <b>jedna jednotka (prádlomat) funguje samostatně</b> a její provozní zisk pokryje leasingovou splátku, a že je model <b>škálovatelný</b>. Umožní financující společnosti nabídnout produkt našim zákazníkům s možností leasingu.</div>'+
+        '<div class="kv"><span>Režim DPH</span><b>'+modeLbl+'</b></div>'+
         '<h2>Předmět financování</h2>'+
         '<div class="kv"><span>Pořizovací cena / jednotka (bez DPH)</span><b>'+f(L.price)+'</b></div>'+
         '<div class="kv"><span>Cena s DPH ('+vat+' %)</span><b>'+f(gross)+'</b></div>'+
+        '<div class="kv"><span>Financovaná cena ('+(mode==='neplatce'?'vč. DPH — neplátce':'bez DPH — plátce')+')</span><b>'+f(price)+'</b></div>'+
         '<div class="kv"><span>Počet jednotek</span><b>'+L.count+'×</b></div>'+
-        '<h2>Ekonomika 1 jednotky (medián ze SIS, měsíčně, bez DPH)</h2>'+
+        '<h2>Ekonomika 1 jednotky — '+modeLbl+' (medián ze SIS, měsíčně)</h2>'+
+        '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Tržba bez DPH')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
+        '<tr><td>EBITDA</td><td class="r"><b>'+f(base.ebitda)+' ('+pct(base.marginPct)+')</b></td></tr>'+
+        '<tr><td><b>NOI (před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
+        '<div class="muted">Nákladová struktura (bez DPH, z ekonomiky jednoho prádlomatu):</div>'+
         '<table><tr><td>Obrat (bez DPH)</td><td class="r"><b>'+f(u.revenue)+'</b></td></tr>'+
         '<tr><td>− Nájem</td><td class="r">'+f(u.rent)+'</td></tr>'+
         '<tr><td>− Servis</td><td class="r">'+f(u.service)+'</td></tr>'+
@@ -348,19 +447,34 @@
         '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
         '<h2>Návrh leasingu (1 jednotka)</h2>'+
         '<div class="kv"><span>Financovaná částka</span><b>'+f(financed)+'</b></div>'+
-        '<div class="kv"><span>Akontace ('+String(L.down).replace('.',',')+' %)</span><b>'+f(L.price*L.down/100)+'</b></div>'+
+        '<div class="kv"><span>Akontace ('+String(L.down).replace('.',',')+' %)</span><b>'+f(price*L.down/100)+'</b></div>'+
         '<div class="kv"><span>Zůstatková hodnota ('+String(L.residual).replace('.',',')+' %)</span><b>'+f(residual)+'</b></div>'+
         '<div class="kv"><span>Doba / roční úrok</span><b>'+L.term+' měs · '+String(L.rate).replace('.',',')+' %</b></div>'+
         '<div class="kv"><span>Měsíční splátka (anuita)</span><b>'+f(pmt)+'</b></div>'+
         '<div class="kv"><span>DSCR (NOI ÷ splátka)</span><b class="ok">'+d2(dscr)+'×</b></div>'+
         '<div class="box"><span class="ok">✔ '+verdict+'</span><br>Tržba/NOI může klesnout o '+ (Math.round(cushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div>'+
+        '<h2>Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="muted">Konzervativní = dolní kvartil · Základní = medián · Silný = horní kvartil sítě.</div>'+
+        '<table><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr>'+scenRows+'</table>'+
+        '<h2>Minimální tržba pro DSCR</h2><table><tr><th>DSCR 1,00 (bod zvratu)</th><th>DSCR 1,20</th><th>DSCR 1,30</th></tr><tr><td class="r">'+f(minRev(1.0))+'</td><td class="r">'+f(minRev(1.2))+'</td><td class="r">'+f(minRev(1.3))+'</td></tr></table>'+
+        '<h2>Stresové testy</h2><table><tr><th>Scénář</th><th class="r">EBITDA/měs</th><th class="r">Cash flow po splátce</th><th class="r">DSCR</th></tr>'+stressRows+'</table>'+
         '<h2>Škálovatelnost</h2><table><tr><th>Jednotek</th><th class="r">Investice</th><th class="r">Financováno</th><th class="r">Splátka/měs</th><th class="r">NOI/měs</th><th class="r">DSCR</th></tr>'+scen+'</table>'+
+        '<h2>Technická specifikace (předmět financování)</h2><ul>'+
+        '<li>Sušička <b>LS350</b>, pračka <b>SY180</b>, pračka <b>SY80</b>.</li>'+
+        '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b>.</li>'+
+        '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS).</li>'+
+        '<li>Movitý, identifikovatelný a přemístitelný předmět financování (přesné komponenty/výrobce — TO BE CONFIRMED).</li></ul>'+
+        '<h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
+        '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
+        '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li>'+
+        '<li>Bez doložených prodejů ojetých strojů uvádíme jen metodiku, ne tržní cenu (TO BE CONFIRMED).</li>'+
+        '<li>Zpětný odkup není garantován — jen na vyžádání a za podmínek leasingové společnosti.</li></ul>'+
         '<h2>Zajištění pro financující společnost</h2><ul>'+
         '<li>Movitý majetek (prádlomat) jako zástava.</li>'+
-        '<li>Zpětný odkup / garance výrobce (Best Series).</li>'+
         '<li>Vzdálený monitoring přes SIS — tržby a provoz v reálném čase.</li>'+
         '<li>Vlastní servisní síť a rychlá údržba.</li>'+
-        '<li>Platby koncových zákazníků předem u stroje (žádné pohledávky).</li></ul>'+
+        '<li>Platby koncových zákazníků předem u stroje (žádné pohledávky, žádná koncentrace).</li>'+
+        '<li>Nezávazná součinnost při relokaci; případný zpětný odkup jen na vyžádání (PROPOSAL).</li></ul>'+
+        '<h2>Bonita zákazníka vs. ekonomika předmětu</h2><div class="muted">Historická ekonomika prádlomatu nenahrazuje posouzení bonity zákazníka — tu posuzuje leasingová společnost samostatně (účetní výsledky, historie, zajištění). Data výrobce slouží k vyhodnocení ekonomiky a provozního rizika předmětu financování.</div>'+
         '<h2>Track record (důkaz funkčnosti)</h2>'+
         '<div class="kv"><span>Roky dat ze SIS</span><b>'+String(t.yearsData).replace('.',',')+' let</b></div>'+
         '<div class="kv"><span>Aktivních jednotek</span><b>'+num(t.activeCount)+' (z '+t.realCount+')</b></div>'+
