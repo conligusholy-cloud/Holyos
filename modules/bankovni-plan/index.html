@@ -175,16 +175,54 @@
       loadForecast();
     }
 
-    function locTable(){
-      var locs = (DATA.locations||[]).slice().sort(function(a,b){
-        if (!!a.excluded !== !!b.excluded) return a.excluded ? 1 : -1; // vyřazené dolů
-        return (b.ebitda||0)-(a.ebitda||0);
+    // Země podle měny provozu (měna = země, kde lokalita reálně vydělává).
+    function locCountry(l){
+      var c=(l.currency||'CZK').toUpperCase();
+      var M={ CZK:['🇨🇿','Česko'], EUR:['🇪🇺','Eurozóna'], PLN:['🇵🇱','Polsko'], HUF:['🇭🇺','Maďarsko'], RON:['🇷🇴','Rumunsko'], BGN:['🇧🇬','Bulharsko'], GBP:['🇬🇧','Velká Británie'], USD:['🇺🇸','USA'] };
+      return M[c] || ['🏳️', c];
+    }
+    var _locSort={ key:'ebitda', dir:-1 };
+    var _locVer='';
+    var LOC_TEXT_KEYS=['code','version','country','label'];
+    window.setLocSort=function(k){
+      if(_locSort.key===k){ _locSort.dir*=-1; }
+      else { _locSort={ key:k, dir:(LOC_TEXT_KEYS.indexOf(k)>=0?1:-1) }; }
+      var w=document.getElementById('loc-table-wrap'); if(w) w.innerHTML=locTableInner();
+    };
+    window.setLocVer=function(v){ _locVer=v||''; var w=document.getElementById('loc-table-wrap'); if(w) w.innerHTML=locTableInner(); };
+    function locSortVal(l,k){
+      if(k==='country') return locCountry(l)[1];
+      if(k==='label') return l.label||'';
+      if(k==='code') return l.code||'';
+      if(k==='version') return l.version||'';
+      if(k==='openDate') return l.openDate||'';
+      if(k==='avgRev') return Number(l.avgRev)||0;
+      if(k==='ebitda') return Number(l.ebitda)||0;
+      if(k==='margin') return Number(l.margin)||0;
+      return '';
+    }
+    function locTable(){ return '<div id="loc-table-wrap">'+locTableInner()+'</div>'; }
+    function locTableInner(){
+      var all=(DATA.locations||[]).slice();
+      if(_locVer) all=all.filter(function(l){ return (l.version||'')===_locVer; });
+      var textKey=LOC_TEXT_KEYS.indexOf(_locSort.key)>=0 || _locSort.key==='openDate';
+      all.sort(function(a,b){
+        if (!!a.excluded !== !!b.excluded) return a.excluded ? 1 : -1; // vyřazené vždy dolů
+        var va=locSortVal(a,_locSort.key), vb=locSortVal(b,_locSort.key);
+        if(textKey) return String(va).localeCompare(String(vb),'cs')*_locSort.dir;
+        return (va-vb)*_locSort.dir;
       });
       var p90 = DATA.unitEconomics.revenueDist.p90;
-      var exCount = locs.filter(function(l){return l.excluded;}).length;
+      var exCount = all.filter(function(l){return l.excluded;}).length;
+      // Filtr varianty
+      var vers={}; (DATA.locations||[]).forEach(function(l){ if(l.version) vers[l.version]=1; });
+      var verOpts='<option value="">Všechny verze</option>'+Object.keys(vers).sort().map(function(v){ return '<option value="'+v+'"'+(_locVer===v?' selected':'')+'>'+v+'</option>'; }).join('');
       var h = '<div class="note" style="margin-bottom:8px">Zaškrtnuté = v plánu. Odškrtnutím lokalitu vyřadíš (nesmysly/testy) — nezapočítá se do žádných čísel.'+(exCount?(' Vyřazeno: '+exCount+'.'):'')+'</div>';
-      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th><th>Kód</th><th>Verze</th><th>Lokalita</th><th>Otevřeno</th><th style="text-align:right">Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span></th><th style="text-align:right">EBITDA/měs</th><th style="text-align:right">Marže</th><th></th></tr></thead><tbody>';
-      locs.forEach(function(l){
+      h += '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:12px;color:var(--text2)">Filtr:</span><select onchange="setLocVer(this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px">'+verOpts+'</select><span style="font-size:11px;color:var(--text2)">Klikni na hlavičku sloupce = řazení (znovu = obráceně).</span></div>';
+      var arrow=function(k){ return _locSort.key===k ? (' '+(_locSort.dir<0?'▼':'▲')) : ''; };
+      var thS=function(k,lbl,align){ return '<th style="cursor:pointer;'+(align?'text-align:'+align+';':'')+'" onclick="setLocSort(\''+k+'\')" title="Seřadit">'+lbl+arrow(k)+'</th>'; };
+      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th>'+thS('code','Kód')+thS('version','Verze')+thS('country','Země')+thS('label','Lokalita')+thS('openDate','Otevřeno')+thS('avgRev','Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span>','right')+thS('ebitda','EBITDA/měs','right')+thS('margin','Marže','right')+'<th></th></tr></thead><tbody>';
+      all.forEach(function(l){
         var flags = '';
         if (l.classification === 'closed') flags += ' <span class="flag" style="background:rgba(148,163,184,.16);color:#94a3b8">uzavřená</span>';
         if (!l.excluded && l.avgRev != null && p90 != null && l.avgRev >= p90) flags += ' <span class="flag flag-out">🟣 outlier</span>';
@@ -194,7 +232,8 @@
         var vcol = { V2:'#f59e0b', V3:'#0ea5e9', V4:'#a855f7' }[l.version] || '#94a3b8';
         var vbadge = l.version ? '<span class="flag" style="background:'+vcol+'22;color:'+vcol+';font-weight:700">'+esc(l.version)+'</span>' : '<span style="color:var(--text2)">—</span>';
         var curLbl = l.currency && l.currency !== 'CZK' ? ' <span style="font-size:10px;color:#f59e0b">'+esc(l.currency)+'</span>' : '';
-        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+curLbl+'</td><td>'+vbadge+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
+        var co = locCountry(l);
+        h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+curLbl+'</td><td>'+vbadge+'</td><td style="white-space:nowrap">'+co[0]+' '+esc(co[1])+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
           '<td style="text-align:right">'+money(l.avgRev)+'</td>'+
           '<td style="text-align:right;color:'+((l.ebitda||0)<0?'#ef4444':'#22c55e')+';font-weight:600">'+money(l.ebitda)+'</td>'+
           '<td style="text-align:right">'+pct(l.margin)+'</td><td>'+flags+'</td></tr>';
