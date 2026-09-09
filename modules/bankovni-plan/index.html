@@ -410,7 +410,7 @@
       var _dscrTxt=(Math.round(dscr*100)/100).toString().replace('.',',');
       if(_co.length){
         h += '<div class="sec"><h2>📈 Náběhová křivka & odklad splátek <span class="tag tag-actual">ACTUAL</span></h2>'+
-          '<div class="note">Medián tržby jednotky podle počtu měsíců od uvedení do provozu — reálná data sítě ('+_co.length+' kohortních měsíců). Oranžové body = náběhové období (M0–M5), zelené = po stabilizaci.</div>'+
+          '<div class="note">Medián tržby jednotky podle počtu měsíců od uvedení do provozu — reálná data sítě ('+_co.length+' kohortních měsíců). Oranžové body = náběhové období (M0–M5), zelené = po stabilizaci. <b style="color:#ef4444">Červená přerušovaná</b> = tržba, při které zisk (NOI) přesně pokryje leasingovou splátku (DSCR 1,0) — jakmile ji zelená křivka překročí, jednotka se sama profinancuje.</div>'+
           '<canvas id="ch-lease-ramp" height="120"></canvas>'+
           '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
             '<div class="sec" style="flex:1;min-width:150px;text-align:center;background:var(--surface2)"><div class="note">1. měsíc provozu</div><div style="font-size:20px;font-weight:800;color:#f59e0b">'+_pct0+' %</div><div class="note">stabilizované tržby</div></div>'+
@@ -583,13 +583,18 @@
       var _prampHead=_prampShow.map(function(c){return '<th class="r">M'+c.month+'</th>';}).join('');
       var _prampVal=_prampShow.map(function(c){return '<td class="r">'+f(Math.round(c.median||0))+'</td>';}).join('');
       var _prampPct=_prampShow.map(function(c){return '<td class="r">'+(_pplateau?Math.round((c.median||0)/_pplateau*100):0)+' %</td>';}).join('');
+      // Breakeven (zisk = splátka, DSCR 1,0) v tržbě bez DPH + měsíc překročení
+      var _pbeDenom=(1-Rr.varPct-Rr.maintPct);
+      var _pbeRev=_pbeDenom>0?(pmtBez+Rr.rentBez)/_pbeDenom:null;
+      var _pbeCross=null; if(_pbeRev!=null){ for(var _bi=0;_bi<_pco.length;_bi++){ if((_pco[_bi].median||0)>=_pbeRev){ _pbeCross=_pco[_bi].month; break; } } }
       var rampSection = _pco.length ? (
         '<h2>Náběhová křivka a odklad splátek</h2>'+
         '<div class="muted">Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě.</div>'+
         '<table><tr><th>Měsíc provozu</th>'+_prampHead+'</tr>'+
         '<tr><td>Medián tržby</td>'+_prampVal+'</tr>'+
         '<tr><td>% stabilizované úrovně</td>'+_prampPct+'</tr></table>'+
-        '<div class="box">V prvních 6 měsících od uvedení do provozu dosahuje jednotka v průměru <b>'+_ppct6+' %</b> stabilizované tržby. Navrhovaný <b>6měsíční odklad splátek</b> slaďuje splátkový kalendář s reálným náběhem cash flow; po stabilizaci (~M'+(_pstabM!=null?_pstabM:6)+') provozní zisk (NOI) pokryje splátku s rezervou (DSCR '+d2(dscr)+'×). Odklad snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.</div>'
+        '<div class="box">V prvních 6 měsících od uvedení do provozu dosahuje jednotka v průměru <b>'+_ppct6+' %</b> stabilizované tržby. Navrhovaný <b>6měsíční odklad splátek</b> slaďuje splátkový kalendář s reálným náběhem cash flow; po stabilizaci (~M'+(_pstabM!=null?_pstabM:6)+') provozní zisk (NOI) pokryje splátku s rezervou (DSCR '+d2(dscr)+'×). Odklad snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.'+
+        (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+'</div>'
       ) : '';
       var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
         'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
@@ -1328,11 +1333,27 @@
       var labels = co.map(function(c){ return 'M'+c.month; });
       var vals = co.map(function(c){ return Math.round(c.median||0); });
       var ptcol = co.map(function(c){ return c.month<6 ? '#f59e0b' : '#22c55e'; });
+      // Breakeven: tržba bez DPH, při které NOI = leasingová splátka (DSCR 1,0).
+      var beRev = null;
+      if (FC && FC.unitBreakdown){
+        leaseInit();
+        var L=_lease, mode=_leaseVat, vat=21;
+        var price=(mode==='neplatce')?Math.round(L.price*(1+vat/100)):L.price;
+        var financed=price*(1-L.down/100), residual=price*L.residual/100;
+        var pmt=leasePMT(financed,residual,L.rate,L.term);
+        var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
+        var R=leaseRatios(); var denom=(1-R.varPct-R.maintPct);
+        beRev = denom>0 ? (pmtBez + R.rentBez)/denom : null;
+      }
+      var datasets=[
+        { label:'Medián tržby / měs', data:vals, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:3, pointBackgroundColor:ptcol, pointBorderColor:ptcol },
+        { label:'Stabilizovaná úroveň', data:labels.map(function(){ return Math.round(plateau); }), borderColor:'#64748b', borderDash:[6,4], pointRadius:0, fill:false }
+      ];
+      if (beRev!=null && isFinite(beRev)){
+        datasets.push({ label:'Zisk = splátka (DSCR 1,0)', data:labels.map(function(){ return Math.round(beRev); }), borderColor:'#ef4444', borderDash:[4,4], borderWidth:2, pointRadius:0, fill:false });
+      }
       _charts.leaseRamp = new Chart(el, { type:'line',
-        data:{ labels:labels, datasets:[
-          { label:'Medián tržby / měs', data:vals, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:3, pointBackgroundColor:ptcol, pointBorderColor:ptcol },
-          { label:'Stabilizovaná úroveň', data:labels.map(function(){ return Math.round(plateau); }), borderColor:'#64748b', borderDash:[6,4], pointRadius:0, fill:false }
-        ]},
+        data:{ labels:labels, datasets:datasets },
         options:{ plugins:{ legend:{ display:true, labels:{ color:tick } } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true } }, maintainAspectRatio:true } });
     }
     window.drawLeaseRamp = drawLeaseRamp;
