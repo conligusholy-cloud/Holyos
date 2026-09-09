@@ -114,9 +114,53 @@
         if (r.status === 404){ box.innerHTML = emptyState(); return; }
         if (!r.ok) throw new Error('HTTP ' + r.status);
         DATA = await r.json();
+        loadLeasePhotos();
         render();
       } catch(e){ box.innerHTML = '<div class="banner">Nepodařilo se načíst data: ' + (e.message||'') + '</div>'; }
     }
+
+    // Fotky prádlomatu pro leasingový podklad (server-side, sdílené).
+    var _leasePhotos = [];
+    async function loadLeasePhotos(){
+      try { var r=await fetch('/api/bank-plan/leasing-photos',{credentials:'include'}); if(r.ok){ var j=await r.json(); _leasePhotos = Array.isArray(j.photos)?j.photos:[]; if(_bpMode==='leasing') render(); } } catch(e){}
+    }
+    // Nahrání fotek: zmenšení v prohlížeči (max 1200 px, JPEG) → data URL → uložit na server.
+    function _resizeImage(file, maxPx){
+      return new Promise(function(resolve,reject){
+        var img=new Image(); var url=URL.createObjectURL(file);
+        img.onload=function(){
+          var w=img.width,h=img.height; var sc=Math.min(1, maxPx/Math.max(w,h));
+          var cw=Math.round(w*sc),ch=Math.round(h*sc);
+          var c=document.createElement('canvas'); c.width=cw; c.height=ch;
+          c.getContext('2d').drawImage(img,0,0,cw,ch);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL('image/jpeg',0.82));
+        };
+        img.onerror=function(){ URL.revokeObjectURL(url); reject(new Error('Obrázek nelze načíst')); };
+        img.src=url;
+      });
+    }
+    window.leaseUploadPhotos = async function(input){
+      var files=Array.prototype.slice.call(input.files||[]);
+      if(!files.length) return;
+      var st=document.getElementById('lease-photo-status'); if(st) st.textContent='Zpracovávám…';
+      try {
+        var slots=Math.max(0, 3-_leasePhotos.length);
+        var use=files.slice(0, slots);
+        for (var i=0;i<use.length;i++){ var d=await _resizeImage(use[i],1200); _leasePhotos.push(d); }
+        _leasePhotos=_leasePhotos.slice(0,3);
+        var r=await fetch('/api/bank-plan/leasing-photos',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({photos:_leasePhotos})});
+        var j=await r.json(); _leasePhotos=Array.isArray(j.photos)?j.photos:_leasePhotos;
+        if(st) st.textContent='Uloženo ✓';
+        render();
+      } catch(e){ if(st) st.textContent='Chyba: '+(e.message||''); }
+      input.value='';
+    };
+    window.leaseRemovePhoto = async function(idx){
+      _leasePhotos.splice(idx,1);
+      try { await fetch('/api/bank-plan/leasing-photos',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({photos:_leasePhotos})}); } catch(e){}
+      render();
+    };
 
     function emptyState(){
       return '<div class="banner">Snapshot dat ze SIS zatím není vytvořený. Klikni na <b>↻ Přebudovat data</b> nahoře — stáhne se historie ze SIS (~1–2 min).</div>';
@@ -276,6 +320,28 @@
         '<button class="btn" onclick="setLeaseVat(\'neplatce\')" style="'+(mode==='neplatce'?'background:#eab308;color:#0e1a22;border:none;font-weight:700':'')+'">Neplátce</button>'+
         '<button class="btn" onclick="setLeaseVat(\'platce\')" style="'+(mode==='platce'?'background:#eab308;color:#0e1a22;border:none;font-weight:700':'')+'">Plátce</button>'+
         '<span style="font-size:11px;color:var(--text2)">'+modeLbl+'</span></div>';
+
+      // Fotky prádlomatu — úvod zprávy (zobrazí se i v PDF)
+      h += '<div class="sec"><h2>📷 Fotky prádlomatu <span style="font-size:11px;color:var(--text2);font-weight:400">(zobrazí se v úvodu podkladu i v PDF, max 3)</span></h2>';
+      if (_leasePhotos.length){
+        h += '<div style="display:flex;gap:10px;flex-wrap:wrap">';
+        _leasePhotos.forEach(function(src,i){
+          h += '<div style="position:relative;width:200px;height:150px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:#000">'+
+            '<img src="'+src+'" style="width:100%;height:100%;object-fit:cover">'+
+            '<button onclick="leaseRemovePhoto('+i+')" title="Odebrat" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,.65);color:#fff;border:none;border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:14px">✕</button>'+
+          '</div>';
+        });
+        h += '</div>';
+      } else {
+        h += '<div class="note">Zatím žádné fotky. Nahraj až 3 fotografie stroje — leasingovka uvidí, jak prádlomat vypadá.</div>';
+      }
+      if (_leasePhotos.length < 3){
+        h += '<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          '<label class="btn" style="background:#0ea5e9;color:#fff;border:none;font-weight:700;cursor:pointer">➕ Nahrát fotky<input type="file" accept="image/*" multiple onchange="leaseUploadPhotos(this)" style="display:none"></label>'+
+          '<span id="lease-photo-status" style="font-size:12px;color:var(--text2)"></span>'+
+        '</div>';
+      }
+      h += '</div>';
 
       // Předmět financování + parametry leasingu
       h += '<div class="sec"><h2>Předmět financování &amp; parametry leasingu</h2>'+
@@ -499,6 +565,13 @@
       var Rr=leaseRatios(); var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
       var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez)/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
       var verdict = dscr>=1.2 ? 'Profinancovatelné — provozní zisk jednotky pokryje leasingovou splátku s rezervou.' : (dscr>=1.0 ? 'Na hraně — DSCR ≥ 1,0, ale s malou rezervou.' : 'Splátka převyšuje provozní zisk jednotky.');
+      // Zůstatková hodnota dle cyklů (stejný výpočet jako na obrazovce)
+      var lifeCycles=30000;
+      var cyclesPerMonth=(t.locationMonths>0 && t.totalTx>0)?(t.totalTx/t.locationMonths):0;
+      var cyclesUsed5=cyclesPerMonth*60;
+      var remCycles5=Math.max(0,lifeCycles-cyclesUsed5);
+      var remPct5=lifeCycles>0?remCycles5/lifeCycles:0;
+      var techResidual5=Math.round(L.price*remPct5);
       // Náběhová křivka (kohorty) pro PDF
       var _pco=(DATA.cohort||[]).filter(function(c){return c.count>0;});
       var _pplateau=0; _pco.forEach(function(c){ if((c.median||0)>_pplateau) _pplateau=c.median; });
@@ -526,9 +599,15 @@
         '.box{border:1px solid #0ea5e9;background:#e8f6fd;border-radius:8px;padding:12px;margin:10px 0}'+
         '.ok{color:#127a3a;font-weight:bold}.ftr{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #ddd;padding-top:8px}'+
         '@media print{body{margin:12mm}}';
+      var photoStrip = (Array.isArray(_leasePhotos) && _leasePhotos.length) ? (
+        '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:nowrap">'+
+        _leasePhotos.map(function(src){ return '<img src="'+src+'" style="flex:1;min-width:0;max-height:200px;object-fit:cover;border:1px solid #ccc;border-radius:6px">'; }).join('')+
+        '</div>'
+      ) : '';
       var html='<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>Leasingový podklad — Prádlomat</title><style>'+css+'</style></head><body>'+
         '<h1>Podklad pro financování — Prádlomat</h1>'+
         '<div class="muted">Best Series s.r.o. · vytvořeno '+now+' · data ze SIS '+t.firstData+' → '+t.lastData+'</div>'+
+        photoStrip+
         '<div class="box">Cíl: prokázat, že <b>jedna jednotka (prádlomat) funguje samostatně</b> a její provozní zisk pokryje leasingovou splátku, a že je model <b>škálovatelný</b>. Umožní financující společnosti nabídnout produkt našim zákazníkům s možností leasingu.</div>'+
         '<div class="kv"><span>Režim DPH</span><b>'+modeLbl+'</b></div>'+
         '<h2>Předmět financování</h2>'+

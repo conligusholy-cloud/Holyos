@@ -751,6 +751,26 @@ router.post('/ai-instructions', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Fotky prádlomatu pro leasingový podklad (data URL v AppSetting) ─────────
+const LEASING_PHOTOS_KEY = 'bank_plan.leasing_photos';
+router.get('/leasing-photos', requireAuth, async (req, res, next) => {
+  try {
+    const v = await getSetting(LEASING_PHOTOS_KEY, { type: 'json', defaultValue: null });
+    res.json({ photos: (v && Array.isArray(v.photos)) ? v.photos : [] });
+  } catch (err) { next(err); }
+});
+router.post('/leasing-photos', requireAuth, async (req, res, next) => {
+  try {
+    let arr = (req.body && Array.isArray(req.body.photos)) ? req.body.photos : [];
+    // Jen data:image/*, max 3, každá max ~4 MB (base64), ořízni zbytek.
+    arr = arr
+      .filter((s) => typeof s === 'string' && /^data:image\/(png|jpe?g|webp);base64,/i.test(s) && s.length < 4 * 1024 * 1024)
+      .slice(0, 3);
+    await setSetting(LEASING_PHOTOS_KEY, { photos: arr }, { type: 'json', userId: req.user && req.user.id, description: 'Fotky prádlomatu pro leasingový podklad' });
+    res.json({ ok: true, photos: arr });
+  } catch (err) { next(err); }
+});
+
 // POST /api/bank-plan/ai-analysis — AI agent: analýza VÝHRADNĚ z reálných dat modelu na stránce.
 router.post('/ai-analysis', requireAuth, async (req, res, next) => {
   try {
