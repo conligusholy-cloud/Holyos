@@ -135,7 +135,7 @@
       if(_bpMode==='leasing'){
         document.getElementById('bp-content').innerHTML = toggle + leasingHtml();
         if(!FC || !FC.unitBreakdown) loadForecast();
-        drawLeaseRamp();
+        drawLeaseCharts();
         return;
       }
 
@@ -355,6 +355,16 @@
             '<b style="color:#0ea5e9">Zdůvodnění 6měsíčního odkladu splátek:</b> V prvních 6 měsících od uvedení stroje do provozu dosahuje jednotka v průměru jen <b>'+_pct6+' %</b> stabilizované tržby (náběhová křivka z reálných dat sítě) — buduje se klientská základna a povědomí o lokalitě. 6měsíční odklad splátek proto slaďuje splátkový kalendář s reálným náběhem cash flow: po náběhu (~M'+(_stabM!=null?_stabM:6)+') jednotka generuje NOI, které splátku pokryje s rezervou (DSCR '+_dscrTxt+'× v základním scénáři). Odklad tak snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.</div>'+
           '</div>';
       }
+
+      // Grafy z bankovního plánu, přepočtené na 1 jednotku (vč. úpravy tržby, sušení navíc a režimu DPH)
+      var _addTxt = (modelAdd>0? (' vč. sušení navíc '+money(modelAdd)) : '');
+      h += '<div class="sec"><h2>📊 Grafy — přepočteno na 1 jednotku'+(modelAdd>0?' (vč. sušení navíc)':'')+'</h2>'+
+        '<div class="note">Distribuce a sezónnost ze sítě, přepočtené na leasingový podklad: úprava tržby '+(revPct!==100?(String(revPct).replace('.',',')+' %'):'100 %')+_addTxt+', režim '+modeLbl+'.</div></div>';
+      h += '<div class="grid2">'+
+        '<div class="sec"><h2>💰 Distribuce tržby / jednotku <span class="tag tag-actual">ACTUAL+MODEL</span></h2><div class="note">Percentily měsíční tržby napříč lokalitami, přepočteno na leasingový podklad'+_addTxt+'.</div><canvas id="ch-lease-revdist" height="150"></canvas></div>'+
+        '<div class="sec"><h2>📈 Distribuce EBITDA / jednotku <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">EBITDA/měs dle provozních předpokladů, přepočteno na leasingový podklad'+_addTxt+'.</div><canvas id="ch-lease-ebitdist" height="150"></canvas></div>'+
+        '</div>';
+      h += '<div class="sec"><h2>🗓️ Sezónnost <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Index měsíců (100 = průměr) z reálných tržeb sítě. Doplňkové sušení je měsíčně konstantní, takže nemění sezónní vzorec.</div><canvas id="ch-lease-seas" height="110"></canvas></div>';
 
       // Detailní rozpad jedné jednotky (stejná tabulka jako v Bankovním plánu).
       h += unitBreakdownHtml();
@@ -1247,6 +1257,43 @@
         options:{ plugins:{ legend:{ display:true, labels:{ color:tick } } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true } }, maintainAspectRatio:true } });
     }
     window.drawLeaseRamp = drawLeaseRamp;
+
+    // Distribuce tržby/EBITDA na 1 jednotku (přepočteno vč. sušení navíc) + sezónnost pro leasing.
+    function drawLeaseCharts(){
+      if (!window.Chart) return;
+      drawLeaseRamp();
+      var grid='rgba(255,255,255,.07)', tick='#94a3b8';
+      var common={ plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick}}, y:{grid:{color:grid},ticks:{color:tick}} }, maintainAspectRatio:true };
+      // sezónnost — nepotřebuje FC
+      var elS=document.getElementById('ch-lease-seas');
+      if(elS){ if(_charts.leaseSeas){try{_charts.leaseSeas.destroy();}catch(e){}}
+        var mon=['Led','Úno','Bře','Dub','Kvě','Čer','Čvc','Srp','Zář','Říj','Lis','Pro'];
+        var seas=DATA.seasonality||[];
+        _charts.leaseSeas=new Chart(elS,{ type:'bar',
+          data:{ labels:mon, datasets:[{ data:seas.map(function(x){return x==null?null:x;}), backgroundColor:seas.map(function(x){ return (x!=null&&x>=100)?'#22c55e':'#f59e0b'; }) }] },
+          options:Object.assign({},common,{ scales:{ x:{grid:{color:grid},ticks:{color:tick}}, y:{grid:{color:grid},ticks:{color:tick},beginAtZero:true,suggestedMax:140 } } }) });
+      }
+      // distribuce tržby/EBITDA — potřebují leaseUnit (FC.unitBreakdown)
+      if(!FC || !FC.unitBreakdown) return;
+      leaseInit();
+      var L=_lease, mode=_leaseVat, vat=21;
+      var rd=DATA.unitEconomics.revenueDist||{};
+      var revPct=(L.revPct!=null?L.revPct:100);
+      var modelAdd=(L.addDryCount||0)*(L.addDryPrice||0);
+      var adj=function(p){ return (p||0)*(revPct/100)+modelAdd; };
+      var ps=['p10','p25','p50','p75','p90'];
+      var elR=document.getElementById('ch-lease-revdist');
+      if(elR){ if(_charts.leaseRev){try{_charts.leaseRev.destroy();}catch(e){}}
+        var revVals=ps.map(function(k){ return Math.round(leaseUnit(adj(rd[k]),mode,vat).rev); });
+        _charts.leaseRev=new Chart(elR,{ type:'bar', data:{ labels:['P10','P25','Medián','P75','P90'], datasets:[{ data:revVals, backgroundColor:'#0ea5e9' }] }, options:common });
+      }
+      var elE=document.getElementById('ch-lease-ebitdist');
+      if(elE){ if(_charts.leaseEb){try{_charts.leaseEb.destroy();}catch(e){}}
+        var ebVals=ps.map(function(k){ return Math.round(leaseUnit(adj(rd[k]),mode,vat).ebitda); });
+        _charts.leaseEb=new Chart(elE,{ type:'bar', data:{ labels:['P10','P25','Medián','P75','P90'], datasets:[{ data:ebVals, backgroundColor:['#94a3b8','#94a3b8','#22c55e','#94a3b8','#94a3b8'] }] }, options:common });
+      }
+    }
+    window.drawLeaseCharts = drawLeaseCharts;
 
     var _polling = null;
     // ─── AI agent: analýza z dat na stránce + administrativa pokynů (⚙️) ───
