@@ -135,6 +135,7 @@
       if(_bpMode==='leasing'){
         document.getElementById('bp-content').innerHTML = toggle + leasingHtml();
         if(!FC || !FC.unitBreakdown) loadForecast();
+        drawLeaseRamp();
         return;
       }
 
@@ -331,6 +332,30 @@
         '</div></div>';
       h += '</div>';
 
+      // Náběhová křivka + zdůvodnění 6měsíčního odkladu splátek (reálná kohortní data)
+      var _co=(DATA.cohort||[]).filter(function(c){return c.count>0;});
+      var _plateau=0; _co.forEach(function(c){ if((c.median||0)>_plateau) _plateau=c.median; });
+      var _m0=_co.length?(_co[0].median||0):0;
+      var _first6=_co.slice(0,6);
+      var _avg6=_first6.length?_first6.reduce(function(a,c){return a+(c.median||0);},0)/_first6.length:0;
+      var _pct0=_plateau?Math.round(_m0/_plateau*100):0;
+      var _pct6=_plateau?Math.round(_avg6/_plateau*100):0;
+      var _stabM=null; for(var _i=0;_i<_co.length;_i++){ if(_plateau&&(_co[_i].median||0)>=0.9*_plateau){ _stabM=_co[_i].month; break; } }
+      var _dscrTxt=(Math.round(dscr*100)/100).toString().replace('.',',');
+      if(_co.length){
+        h += '<div class="sec"><h2>📈 Náběhová křivka & odklad splátek <span class="tag tag-actual">ACTUAL</span></h2>'+
+          '<div class="note">Medián tržby jednotky podle počtu měsíců od uvedení do provozu — reálná data sítě ('+_co.length+' kohortních měsíců). Oranžové body = náběhové období (M0–M5), zelené = po stabilizaci.</div>'+
+          '<canvas id="ch-lease-ramp" height="120"></canvas>'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+
+            '<div class="sec" style="flex:1;min-width:150px;text-align:center;background:var(--surface2)"><div class="note">1. měsíc provozu</div><div style="font-size:20px;font-weight:800;color:#f59e0b">'+_pct0+' %</div><div class="note">stabilizované tržby</div></div>'+
+            '<div class="sec" style="flex:1;min-width:150px;text-align:center;background:var(--surface2)"><div class="note">Průměr měsíců 1–6</div><div style="font-size:20px;font-weight:800;color:#f59e0b">'+_pct6+' %</div><div class="note">stabilizované tržby</div></div>'+
+            '<div class="sec" style="flex:1;min-width:150px;text-align:center;background:var(--surface2)"><div class="note">Stabilizace ~od</div><div style="font-size:20px;font-weight:800;color:#22c55e">'+(_stabM!=null?('M'+_stabM):'—')+'</div><div class="note">≥ 90 % plató</div></div>'+
+          '</div>'+
+          '<div style="margin-top:10px;padding:12px;border-radius:10px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.35);color:var(--text2);line-height:1.6">'+
+            '<b style="color:#0ea5e9">Zdůvodnění 6měsíčního odkladu splátek:</b> V prvních 6 měsících od uvedení stroje do provozu dosahuje jednotka v průměru jen <b>'+_pct6+' %</b> stabilizované tržby (náběhová křivka z reálných dat sítě) — buduje se klientská základna a povědomí o lokalitě. 6měsíční odklad splátek proto slaďuje splátkový kalendář s reálným náběhem cash flow: po náběhu (~M'+(_stabM!=null?_stabM:6)+') jednotka generuje NOI, které splátku pokryje s rezervou (DSCR '+_dscrTxt+'× v základním scénáři). Odklad tak snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.</div>'+
+          '</div>';
+      }
+
       // Detailní rozpad jedné jednotky (stejná tabulka jako v Bankovním plánu).
       h += unitBreakdownHtml();
 
@@ -464,6 +489,25 @@
       var Rr=leaseRatios(); var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
       var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez)/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
       var verdict = dscr>=1.2 ? 'Profinancovatelné — provozní zisk jednotky pokryje leasingovou splátku s rezervou.' : (dscr>=1.0 ? 'Na hraně — DSCR ≥ 1,0, ale s malou rezervou.' : 'Splátka převyšuje provozní zisk jednotky.');
+      // Náběhová křivka (kohorty) pro PDF
+      var _pco=(DATA.cohort||[]).filter(function(c){return c.count>0;});
+      var _pplateau=0; _pco.forEach(function(c){ if((c.median||0)>_pplateau) _pplateau=c.median; });
+      var _pfirst6=_pco.slice(0,6);
+      var _pavg6=_pfirst6.length?_pfirst6.reduce(function(a,c){return a+(c.median||0);},0)/_pfirst6.length:0;
+      var _ppct6=_pplateau?Math.round(_pavg6/_pplateau*100):0;
+      var _pstabM=null; for(var _pri=0;_pri<_pco.length;_pri++){ if(_pplateau&&(_pco[_pri].median||0)>=0.9*_pplateau){ _pstabM=_pco[_pri].month; break; } }
+      var _prampShow=_pco.filter(function(c){return c.month<=12;});
+      var _prampHead=_prampShow.map(function(c){return '<th class="r">M'+c.month+'</th>';}).join('');
+      var _prampVal=_prampShow.map(function(c){return '<td class="r">'+f(Math.round(c.median||0))+'</td>';}).join('');
+      var _prampPct=_prampShow.map(function(c){return '<td class="r">'+(_pplateau?Math.round((c.median||0)/_pplateau*100):0)+' %</td>';}).join('');
+      var rampSection = _pco.length ? (
+        '<h2>Náběhová křivka a odklad splátek</h2>'+
+        '<div class="muted">Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě.</div>'+
+        '<table><tr><th>Měsíc provozu</th>'+_prampHead+'</tr>'+
+        '<tr><td>Medián tržby</td>'+_prampVal+'</tr>'+
+        '<tr><td>% stabilizované úrovně</td>'+_prampPct+'</tr></table>'+
+        '<div class="box">V prvních 6 měsících od uvedení do provozu dosahuje jednotka v průměru <b>'+_ppct6+' %</b> stabilizované tržby. Navrhovaný <b>6měsíční odklad splátek</b> slaďuje splátkový kalendář s reálným náběhem cash flow; po stabilizaci (~M'+(_pstabM!=null?_pstabM:6)+') provozní zisk (NOI) pokryje splátku s rezervou (DSCR '+d2(dscr)+'×). Odklad snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.</div>'
+      ) : '';
       var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
         'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
         '.muted{color:#666;font-size:12px}table{width:100%;border-collapse:collapse;margin:6px 0}'+
@@ -503,6 +547,7 @@
         '<div class="kv"><span>Měsíční splátka (anuita)</span><b>'+f(pmt)+'</b></div>'+
         '<div class="kv"><span>DSCR (NOI ÷ splátka)</span><b class="ok">'+d2(dscr)+'×</b></div>'+
         '<div class="box"><span class="ok">✔ '+verdict+'</span><br>Tržba/NOI může klesnout o '+ (Math.round(cushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div>'+
+        rampSection+
         '<h2>Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="muted">Konzervativní = dolní kvartil · Základní = medián · Silný = horní kvartil sítě.</div>'+
         '<table><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr>'+scenRows+'</table>'+
         '<h2>Minimální tržba pro DSCR</h2><table><tr><th>DSCR 1,00 (bod zvratu)</th><th>DSCR 1,20</th><th>DSCR 1,30</th></tr><tr><td class="r">'+f(minRev(1.0))+'</td><td class="r">'+f(minRev(1.2))+'</td><td class="r">'+f(minRev(1.3))+'</td></tr></table>'+
@@ -1182,6 +1227,26 @@
         data:{ labels:co.map(function(c){return 'M'+c.month;}), datasets:[{ data:co.map(function(c){return Math.round(c.median||0);}), borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:2 }] },
         options: common });
     }
+
+    // Náběhová křivka v leasingovém pohledu (samostatně — leasing větev nevolá drawCharts).
+    function drawLeaseRamp(){
+      if (!window.Chart) return;
+      var el = document.getElementById('ch-lease-ramp'); if (!el) return;
+      if (_charts.leaseRamp) { try{ _charts.leaseRamp.destroy(); }catch(e){} }
+      var grid='rgba(255,255,255,.07)', tick='#94a3b8';
+      var co = (DATA.cohort||[]).filter(function(c){ return c.count>0; });
+      var plateau=0; co.forEach(function(c){ if((c.median||0)>plateau) plateau=c.median; });
+      var labels = co.map(function(c){ return 'M'+c.month; });
+      var vals = co.map(function(c){ return Math.round(c.median||0); });
+      var ptcol = co.map(function(c){ return c.month<6 ? '#f59e0b' : '#22c55e'; });
+      _charts.leaseRamp = new Chart(el, { type:'line',
+        data:{ labels:labels, datasets:[
+          { label:'Medián tržby / měs', data:vals, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:3, pointBackgroundColor:ptcol, pointBorderColor:ptcol },
+          { label:'Stabilizovaná úroveň', data:labels.map(function(){ return Math.round(plateau); }), borderColor:'#64748b', borderDash:[6,4], pointRadius:0, fill:false }
+        ]},
+        options:{ plugins:{ legend:{ display:true, labels:{ color:tick } } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true } }, maintainAspectRatio:true } });
+    }
+    window.drawLeaseRamp = drawLeaseRamp;
 
     var _polling = null;
     // ─── AI agent: analýza z dat na stránce + administrativa pokynů (⚙️) ───
