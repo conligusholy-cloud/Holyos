@@ -393,9 +393,15 @@
         rowKV('Roky dat ze SIS', String(t.yearsData).replace('.',',')+' let')+
         rowKV('Aktivních jednotek', num(t.activeCount)+' (z '+t.realCount+')')+
         rowKV('Location-months provozu', num(t.locationMonths))+
-        rowKV('Transakcí v SIS', num(t.totalTx))+
+        rowKV('Transakcí v SIS (skutečné)', num(t.totalTx))+
+        rowKV('Kumulativní obrat (skutečný, bez DPH)', money(t.cumulativeRevenue))+
+        rowKV('Kumulativní obrat (skutečný, s DPH '+vat+' %)', money((t.cumulativeRevenue||0)*(1+vat/100)), '#22c55e')+
+        ((L.addDryCount||0)>0 ? (
+          rowKV('Modelová sušení celkem (ks)', num(Math.round((L.addDryCount||0)*(t.locationMonths||0)))+' <span style="font-size:10px;background:#a855f733;color:#c084fc;padding:1px 5px;border-radius:4px">MODEL</span>')+
+          rowKV('Kumulativní obrat vč. modelového (s DPH)', money(((t.cumulativeRevenue||0)+((L.addDryCount||0)*(L.addDryPrice||0)*(t.locationMonths||0)))*(1+vat/100)), '#c084fc')
+        ) : '')+
         rowKV('Medián tržby / jednotka', money(DATA.unitEconomics.revenueDist.p50))+
-        '<div class="note" style="margin-top:6px">Nejde o koncept na papíře — síť je reálně v provozu a měřená.</div>'+
+        '<div class="note" style="margin-top:6px">Skutečné údaje ze SIS. Řádky označené <b style="color:#c084fc">MODEL</b> zahrnují modelové sušení (doplňková služba), nejde o skutečné SIS transakce.</div>'+
         '</div>';
       h += '</div>';
 
@@ -498,7 +504,10 @@
         '<div class="kv"><span>Roky dat ze SIS</span><b>'+String(t.yearsData).replace('.',',')+' let</b></div>'+
         '<div class="kv"><span>Aktivních jednotek</span><b>'+num(t.activeCount)+' (z '+t.realCount+')</b></div>'+
         '<div class="kv"><span>Location-months provozu</span><b>'+num(t.locationMonths)+'</b></div>'+
-        '<div class="kv"><span>Transakcí v SIS</span><b>'+num(t.totalTx)+'</b></div>'+
+        '<div class="kv"><span>Transakcí v SIS (skutečné)</span><b>'+num(t.totalTx)+'</b></div>'+
+        '<div class="kv"><span>Kumulativní obrat (skutečný, bez DPH)</span><b>'+f(t.cumulativeRevenue)+'</b></div>'+
+        '<div class="kv"><span>Kumulativní obrat (skutečný, s DPH '+vat+' %)</span><b>'+f((t.cumulativeRevenue||0)*(1+vat/100))+'</b></div>'+
+        (modelAdd>0 ? ('<div class="kv"><span>Kumulativní obrat vč. modelového sušení (s DPH) — MODEL</span><b>'+f(((t.cumulativeRevenue||0)+(modelAdd*(t.locationMonths||0)))*(1+vat/100))+'</b></div>') : '')+
         '<div class="kv"><span>Medián tržby / jednotka</span><b>'+f(DATA.unitEconomics.revenueDist.p50)+'</b></div>'+
         '<div class="ftr">Ekonomika jednotky vychází ze skutečných dat SIS (medián, bez DPH) a provozních předpokladů. Splátka je orientační anuita dle zadaných parametrů; konkrétní podmínky určuje financující společnost. Nejde o garantovaný výnos.</div>'+
         '</body></html>';
