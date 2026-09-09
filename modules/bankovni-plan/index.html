@@ -378,9 +378,12 @@
           '<li>Pračka <b>SY180</b></li>'+
           '<li>Pračka <b>SY80</b></li>'+
           '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b></li>'+
+          '<li><b>Dodavatel spotřebičů:</b> Laundry Alliance — pračky a sušičky vyráběné v <b>České republice (Příbor)</b>. Velikost a trhy působnosti: <span class="tag" style="background:#64748b33;color:#94a3b8">TO BE CONFIRMED</span>.</li>'+
+          '<li><b>Výrobce prádlomatu:</b> Best Series s.r.o., výroba v <b>Rychnově nad Kněžnou (ČR)</b>.</li>'+
+          '<li>Každý prádlomat má vlastní <b>výrobní číslo</b>, značku <b>CE</b> a chráněné <b>průmyslové vzory</b> (identifikovatelný předmět financování).</li>'+
           '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS)</li>'+
           '<li>Movitý, identifikovatelný a přemístitelný předmět financování</li>'+
-        '</ul><div class="note" style="margin-top:6px">Přesné komponenty/výrobce a připojení doplníme do datové přílohy <span class="tag" style="background:#64748b33;color:#94a3b8">TO BE CONFIRMED</span>.</div></div>';
+        '</ul><div class="note" style="margin-top:6px">Přesné komponenty, konkrétní data o dodavateli a připojení doplníme do datové přílohy <span class="tag" style="background:#64748b33;color:#94a3b8">TO BE CONFIRMED</span>.</div></div>';
       h += '<div class="sec"><h2>♻️ Zůstatková hodnota &amp; relokace (metodika)</h2>'+
         '<ul style="margin:0;padding-left:18px;line-height:1.7;color:var(--text2)">'+
           '<li>Účetní odpis <b>5 let</b>; technická životnost dle cyklů (30 000).</li>'+
@@ -469,7 +472,6 @@
         '<div class="kv"><span>Financovaná cena ('+(mode==='neplatce'?'vč. DPH — neplátce':'bez DPH — plátce')+')</span><b>'+f(price)+'</b></div>'+
         '<div class="kv"><span>Počet jednotek</span><b>'+L.count+'×</b></div>'+
         '<h2>Ekonomika 1 jednotky — '+modeLbl+' (medián ze SIS, měsíčně)</h2>'+
-        (modelAdd>0?'<div class="box" style="border-color:#a855f7;background:#f7f0fd">Použitá tržba zahrnuje <b>modelové doplňkové sušení '+f(modelAdd)+'/měs</b> ('+(L.addDryCount||0)+' × '+f(L.addDryPrice||0)+') — označeno jako MODEL/PROPOSAL, není součástí skutečných dat SIS. Skutečná tržba ze SIS: '+f(revReal)+'.</div>':'')+
         '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Tržba bez DPH')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
         '<tr><td>EBITDA</td><td class="r"><b>'+f(base.ebitda)+' ('+pct(base.marginPct)+')</b></td></tr>'+
         '<tr><td><b>NOI (před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
@@ -498,8 +500,11 @@
         '<h2>Technická specifikace (předmět financování)</h2><ul>'+
         '<li>Sušička <b>LS350</b>, pračka <b>SY180</b>, pračka <b>SY80</b>.</li>'+
         '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b>.</li>'+
+        '<li><b>Dodavatel spotřebičů:</b> Laundry Alliance — pračky a sušičky vyráběné v <b>České republice (Příbor)</b>.</li>'+
+        '<li><b>Výrobce prádlomatu:</b> Best Series s.r.o., výroba v <b>Rychnově nad Kněžnou (ČR)</b>.</li>'+
+        '<li>Každý prádlomat má vlastní <b>výrobní číslo</b>, značku <b>CE</b> a chráněné <b>průmyslové vzory</b>.</li>'+
         '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS).</li>'+
-        '<li>Movitý, identifikovatelný a přemístitelný předmět financování (přesné komponenty/výrobce — TO BE CONFIRMED).</li></ul>'+
+        '<li>Movitý, identifikovatelný a přemístitelný předmět financování.</li></ul>'+
         '<h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
         '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
         '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li>'+
@@ -519,7 +524,7 @@
         '<div class="kv"><span>Transakcí v SIS (skutečné)</span><b>'+num(t.totalTx)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, bez DPH)</span><b>'+f(t.cumulativeRevenue)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, s DPH '+vat+' %)</span><b>'+f((t.cumulativeRevenue||0)*(1+vat/100))+'</b></div>'+
-        (modelAdd>0 ? ('<div class="kv"><span>Kumulativní obrat vč. modelového sušení (s DPH) — MODEL</span><b>'+f(((t.cumulativeRevenue||0)+(modelAdd*(t.locationMonths||0)))*(1+vat/100))+'</b></div>') : '')+
+        (modelAdd>0 ? ('<div class="kv"><span>Kumulativní obrat vč. hotovostních plateb (s DPH)</span><b>'+f(((t.cumulativeRevenue||0)+(modelAdd*(t.locationMonths||0)))*(1+vat/100))+'</b></div>') : '')+
         '<div class="kv"><span>Medián tržby / jednotka</span><b>'+f(DATA.unitEconomics.revenueDist.p50)+'</b></div>'+
         '<div class="ftr">Ekonomika jednotky vychází ze skutečných dat SIS (medián, bez DPH) a provozních předpokladů. Splátka je orientační anuita dle zadaných parametrů; konkrétní podmínky určuje financující společnost. Nejde o garantovaný výnos.</div>'+
         '</body></html>';
