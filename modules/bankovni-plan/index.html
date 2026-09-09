@@ -257,6 +257,14 @@
       var dcol = pass?'#22c55e':(ok?'#eab308':'#ef4444');
       var modeLbl = (mode==='neplatce') ? 'Neplátce DPH (částky vč. neodpočitatelné DPH)' : 'Plátce DPH (částky bez DPH)';
 
+      // Dopočet zůstatkové hodnoty dle reálného vytížení (cykly ze SIS)
+      var lifeCycles = 30000;
+      var cyclesPerMonth = (t.locationMonths>0 && t.totalTx>0) ? (t.totalTx/t.locationMonths) : 0;
+      var cyclesUsed5 = cyclesPerMonth * 60;                              // 5 let = 60 měs
+      var remCycles5 = Math.max(0, lifeCycles - cyclesUsed5);
+      var remPct5 = lifeCycles>0 ? remCycles5/lifeCycles : 0;
+      var techResidual5 = Math.round(L.price * remPct5);                 // bez DPH, lineárně dle zbývajících cyklů
+
       var inp = function(k,lbl,val,suf){ return '<div style="flex:1;min-width:130px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">'+lbl+'</label><div style="display:flex;align-items:center;gap:4px"><input value="'+val+'" onchange="setLease(\''+k+'\',this.value)" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"><span style="font-size:11px;color:var(--text2)">'+(suf||'')+'</span></div></div>'; };
 
       var h = '';
@@ -389,6 +397,11 @@
           '<li>Účetní odpis <b>5 let</b>; technická životnost dle cyklů (30 000).</li>'+
           '<li>Stroj je <b>oddělitelný a přemístitelný</b> → možná relokace na jinou lokalitu.</li>'+
           '<li>Zůstatkovou hodnotu neopíráme o účetní odpis, ale o technický stav a životnost komponent.</li>'+
+          (cyclesPerMonth>0 ? (
+            '<li>Reálné vytížení dle SIS: <b>'+num(Math.round(cyclesPerMonth))+' cyklů/měs</b> (~'+num(Math.round(cyclesPerMonth*12))+' cyklů/rok).</li>'+
+            '<li>Za <b>5 let</b> (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 (<b>'+Math.round(remPct5*100)+' %</b> technické životnosti).</li>'+
+            '<li>Orientační technická zůstatková hodnota po 5 letech: <b style="color:#22c55e">'+money(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
+          ) : '')+
         '</ul></div>';
       h += '</div>';
 
@@ -505,7 +518,12 @@
         '<li>Movitý, identifikovatelný a přemístitelný předmět financování.</li></ul>'+
         '<h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
         '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
-        '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li></ul>'+
+        '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li>'+
+        (cyclesPerMonth>0 ? (
+          '<li>Reálné vytížení dle SIS: <b>'+num(Math.round(cyclesPerMonth))+' cyklů/měs</b> (~'+num(Math.round(cyclesPerMonth*12))+' cyklů/rok).</li>'+
+          '<li>Za 5 let (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 ('+Math.round(remPct5*100)+' % technické životnosti).</li>'+
+          '<li>Orientační technická zůstatková hodnota po 5 letech: <b>'+f(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
+        ) : '')+'</ul>'+
         '<h2>Zajištění pro financující společnost</h2><ul>'+
         '<li>Movitý majetek (prádlomat) jako zástava.</li>'+
         '<li>Vzdálený monitoring přes SIS — tržby a provoz v reálném čase.</li>'+
