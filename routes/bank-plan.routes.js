@@ -177,6 +177,17 @@ function avgRecentMonthly(monthly, n) {
   if (!use.length) return null;
   return use.reduce((a, ym) => a + (Number(monthly[ym]) || 0), 0) / use.length;
 }
+// Průměr TAKE nejlepších měsíců z posledních WINDOW dokončených měsíců.
+function bestMonthsAvg(monthly, window, take) {
+  const yms = Object.keys(monthly || {}).sort();
+  if (!yms.length) return null;
+  const complete = yms.slice(0, -1); // vynech poslední (částečný) měsíc
+  const use = complete.slice(-(window || 12));
+  if (!use.length) return null;
+  const vals = use.map((ym) => Number(monthly[ym]) || 0).sort((a, b) => b - a);
+  const top = vals.slice(0, Math.min(take || 6, vals.length));
+  return top.reduce((a, v) => a + v, 0) / top.length;
+}
 
 // Převod celé měsíční řady mezi měnami (stored base → požadovaná base) přes fx k CZK.
 function convertMonthly(monthly, fromBase, toBase, fx) {
@@ -265,7 +276,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     // Per-lokalita pro tabulku = všechny reálné (aktivní i uzavřené), s příznakem excluded.
     const perLoc = nonTest.map((l) => {
       const m = netMonthly(l); // BEZ DPH
-      const avgRev = avgRecentMonthly(m, 18) || 0;
+      const avgRev = bestMonthsAvg(m, 12, 6) || 0; // průměr 6 nejlepších měsíců z posledních 12
       const cfg = cfgMap[l.code] || {};
       const version = cfg.version ? String(cfg.version).toUpperCase() : null;
       const rentDiv = A.rentVatIncluded ? (1 + ((vatMap.CZK != null ? vatMap.CZK : 21) / 100)) : 1; // nájem s DPH → na bez DPH
@@ -384,10 +395,10 @@ async function _portfolioInputs(hist, A, base) {
   const revs = [], marginArr = [];
   pool.forEach((l) => {
     const m = netMonthly(l);
-    // ZÁKLADNÍ medián/scénáře = prostý 18M průměr (raw) — konzistentní s tabulkou Lokality
-    // (Tržba/měs). Vyloučení prvních 6 měsíců (stabilizace) platí JEN pro volatilitu/nejhorší
-    // období — to se počítá zvlášť v /overview, nezávisle.
-    const stabVal = avgRecent(m, 18);
+    // ZÁKLADNÍ medián/scénáře = průměr 6 NEJLEPŠÍCH měsíců z posledních 12 (raw) — konzistentní
+    // s tabulkou Lokality (Tržba/měs). Vyloučení prvních 6 měsíců (stabilizace) platí JEN pro
+    // volatilitu/nejhorší období — to se počítá zvlášť v /overview, nezávisle.
+    const stabVal = bestMonthsAvg(m, 12, 6);
     if (stabVal == null) { stabExcluded++; return; } // nesplňuje min. historii
     revs.push(stabVal);
     const cfg = cfgMap[l.code] || {};
