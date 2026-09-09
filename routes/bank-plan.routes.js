@@ -265,7 +265,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
     // Per-lokalita pro tabulku = všechny reálné (aktivní i uzavřené), s příznakem excluded.
     const perLoc = nonTest.map((l) => {
       const m = netMonthly(l); // BEZ DPH
-      const avgRev = avgRecentMonthly(m, 12) || 0;
+      const avgRev = avgRecentMonthly(m, 18) || 0;
       const cfg = cfgMap[l.code] || {};
       const version = cfg.version ? String(cfg.version).toUpperCase() : null;
       const rentDiv = A.rentVatIncluded ? (1 + ((vatMap.CZK != null ? vatMap.CZK : 21) / 100)) : 1; // nájem s DPH → na bez DPH
@@ -384,10 +384,10 @@ async function _portfolioInputs(hist, A, base) {
   const revs = [], marginArr = [];
   pool.forEach((l) => {
     const m = netMonthly(l);
-    // ZÁKLADNÍ medián/scénáře = VŽDY prostý 12M průměr (raw), aby dlaždice/karty/scénáře
-    // seděly s horní kartou „Medián tržby" (33 386). Vyloučení prvních 6 měsíců (stabilizace)
-    // platí JEN pro volatilitu/nejhorší období — to se počítá zvlášť v /overview, nezávisle.
-    const stabVal = avgRecent(m, 12);
+    // ZÁKLADNÍ medián/scénáře = prostý 18M průměr (raw) — konzistentní s tabulkou Lokality
+    // (Tržba/měs). Vyloučení prvních 6 měsíců (stabilizace) platí JEN pro volatilitu/nejhorší
+    // období — to se počítá zvlášť v /overview, nezávisle.
+    const stabVal = avgRecent(m, 18);
     if (stabVal == null) { stabExcluded++; return; } // nesplňuje min. historii
     revs.push(stabVal);
     const cfg = cfgMap[l.code] || {};
