@@ -283,7 +283,10 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       const rentCzk = (typeof cfg.rentMonthlyCzk === 'number') ? cfg.rentMonthlyCzk : A.rentMonthlyDefault;
       const rent = E.convert(rentCzk / rentDiv, 'CZK', base, fx);
       const se = E.siteEconomics({ revenue: avgRev, rentMonthly: rent, servicePct: A.servicePct, energyPct: A.energyPct, paymentFeePct: A.paymentFeePct, maintenanceReservePct: A.maintenanceReservePct });
-      return { code: l.code, label: l.label, version, currency: E.sourceCurrencyForCode(l.code, curOverrides), avgRev, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
+      const curL = E.sourceCurrencyForCode(l.code, curOverrides);
+      const vatL = (vatMap[curL] != null ? vatMap[curL] : 21);
+      const avgRevGross = avgRev != null ? avgRev * (1 + vatL / 100) : null; // tržba s DPH
+      return { code: l.code, label: l.label, version, currency: curL, avgRev, avgRevGross, vatPct: vatL, ebitda: se.siteEbitda, margin: se.ebitdaMargin, opCashFlow: se.operatingCashFlow, openDate: l.openDate, classification: l.classification, excluded: isExcluded(l) };
     });
 
     // Distribuce/kohorty jen z ZAHRNUTÝCH aktivních lokalit.

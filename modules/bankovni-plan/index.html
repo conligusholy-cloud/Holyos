@@ -197,6 +197,7 @@
       if(k==='version') return l.version||'';
       if(k==='openDate') return l.openDate||'';
       if(k==='avgRev') return Number(l.avgRev)||0;
+      if(k==='avgRevGross') return Number(l.avgRevGross)||0;
       if(k==='ebitda') return Number(l.ebitda)||0;
       if(k==='margin') return Number(l.margin)||0;
       return '';
@@ -221,7 +222,7 @@
       h += '<div style="margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span style="font-size:12px;color:var(--text2)">Filtr:</span><select onchange="setLocVer(this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px">'+verOpts+'</select><span style="font-size:11px;color:var(--text2)">Klikni na hlavičku sloupce = řazení (znovu = obráceně).</span></div>';
       var arrow=function(k){ return _locSort.key===k ? (' '+(_locSort.dir<0?'▼':'▲')) : ''; };
       var thS=function(k,lbl,align){ return '<th style="cursor:pointer;'+(align?'text-align:'+align+';':'')+'" onclick="setLocSort(\''+k+'\')" title="Seřadit">'+lbl+arrow(k)+'</th>'; };
-      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th>'+thS('code','Kód')+thS('version','Verze')+thS('country','Země')+thS('label','Lokalita')+thS('openDate','Otevřeno')+thS('avgRev','Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span>','right')+thS('ebitda','EBITDA/měs','right')+thS('margin','Marže','right')+'<th></th></tr></thead><tbody>';
+      h += '<div style="overflow-x:auto;"><table class="dt"><thead><tr><th>V plánu</th>'+thS('code','Kód')+thS('version','Verze')+thS('country','Země')+thS('label','Lokalita')+thS('openDate','Otevřeno')+thS('avgRev','Tržba/měs<br><span style="font-weight:400;text-transform:none">bez DPH</span>','right')+thS('avgRevGross','Tržba/měs<br><span style="font-weight:400;text-transform:none">s DPH</span>','right')+thS('ebitda','EBITDA/měs','right')+thS('margin','Marže','right')+'<th></th></tr></thead><tbody>';
       all.forEach(function(l){
         var flags = '';
         if (l.classification === 'closed') flags += ' <span class="flag" style="background:rgba(148,163,184,.16);color:#94a3b8">uzavřená</span>';
@@ -235,6 +236,7 @@
         var co = locCountry(l);
         h += '<tr style="'+dim+'"><td style="text-align:center">'+chk+'</td><td style="font-weight:600">'+esc(l.code)+curLbl+'</td><td>'+vbadge+'</td><td style="white-space:nowrap">'+co[0]+' '+esc(co[1])+'</td><td>'+esc(l.label||'')+'</td><td>'+(l.openDate||'—')+'</td>'+
           '<td style="text-align:right">'+money(l.avgRev)+'</td>'+
+          '<td style="text-align:right;color:var(--text2)">'+money(l.avgRevGross)+'</td>'+
           '<td style="text-align:right;color:'+((l.ebitda||0)<0?'#ef4444':'#22c55e')+';font-weight:600">'+money(l.ebitda)+'</td>'+
           '<td style="text-align:right">'+pct(l.margin)+'</td><td>'+flags+'</td></tr>';
       });
