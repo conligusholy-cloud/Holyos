@@ -228,7 +228,10 @@
       // Předmět financování + parametry leasingu
       h += '<div class="sec"><h2>Předmět financování &amp; parametry leasingu</h2>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
-          inp('price','Pořizovací cena / jednotka', money(L.price).replace(/[^\d]/g,''),'Kč')+
+          (function(){ var vat=21; var gross=Math.round(L.price*(1+vat/100));
+            return '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Pořizovací cena / jednotka <b style="color:#eab308">(bez DPH)</b></label>'+
+            '<div style="display:flex;align-items:center;gap:4px"><input value="'+L.price.toLocaleString('cs-CZ')+'" onchange="setLease(\'price\',this.value)" inputmode="numeric" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"><span style="font-size:11px;color:var(--text2)">Kč</span></div>'+
+            '<div style="font-size:11px;color:var(--text2);margin-top:3px">= <b>'+money(gross)+'</b> s DPH ('+vat+' %)</div></div>'; })()+
           inp('count','Počet jednotek', L.count,'ks')+
           inp('term','Doba leasingu', L.term,'měs')+
         '</div>'+
