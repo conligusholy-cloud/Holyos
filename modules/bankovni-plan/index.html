@@ -381,7 +381,12 @@
         '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+
           '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Průměrná tržba / měs (bez DPH)</label><div style="display:flex;align-items:center;gap:4px"><input value="'+(L.revBase||0).toLocaleString('cs-CZ')+'" onchange="setLease(\'revBase\',this.value)" inputmode="numeric" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"><span style="font-size:11px;color:var(--text2)">Kč</span></div><div style="font-size:11px;color:var(--text2);margin-top:3px">výchozí medián sítě: '+money(rd.p50||0)+'</div></div>'+
           inp('revPct','Úprava tržby', String(revPct).replace('.',','),'%')+
-          '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Použitá tržba (bez DPH)</label><div style="padding:8px;font-weight:800;font-size:15px">'+money(revBezBase)+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">medián ze SIS × úprava</div></div>'+
+          '<div style="flex:1;min-width:150px"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px">Použitá tržba (bez DPH)</label><div style="padding:8px;font-weight:800;font-size:15px">'+money(revBezBase)+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+money(revReal)+(modelAdd>0?(' + <span style="color:#a855f7">'+money(modelAdd)+'</span>'):'')+'</div></div>'+
+        '</div>'+
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;align-items:flex-end;background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.3);border-radius:10px;padding:10px">'+
+          '<div style="flex:1;min-width:130px"><label style="display:block;font-size:11px;color:#c084fc;margin-bottom:3px;font-weight:700">➕ Sušení navíc / měs <span style="font-size:9px;background:#a855f733;color:#c084fc;padding:1px 5px;border-radius:4px">INTERNÍ</span></label><input value="'+(L.addDryCount||0)+'" onchange="setLease(\'addDryCount\',this.value)" inputmode="numeric" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:13px"></div>'+
+          inp('addDryPrice','Cena / sušení', L.addDryPrice,'Kč')+
+          '<div style="flex:1;min-width:150px;font-size:11px;color:var(--text2)"><b style="color:#c084fc">Jen interní.</b> Ve výstupním podkladu (obrazovka i PDF) se nikde nezobrazí — projeví se pouze vyšší tržbou, vše se přepočítá.</div>'+
         '</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
           inp('down','Akontace', L.down,'%')+
