@@ -526,7 +526,9 @@
             '<li>Za <b>5 let</b> (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 (<b>'+Math.round(remPct5*100)+' %</b> technické životnosti).</li>'+
             '<li>Orientační technická zůstatková hodnota po 5 letech: <b style="color:#22c55e">'+money(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
           ) : '')+
-        '</ul></div>';
+        '</ul>'+
+        '<div class="note" style="margin-top:8px;line-height:1.55">Zbývající cyklová kapacita '+Math.round(remPct5*100)+' % není totožná s tržní hodnotou zařízení. Pro účely finančního modelu je použita výrazně nižší modelová zůstatková hodnota <b>'+String(L.residual).replace('.',',')+' %</b> pořizovací ceny. Nejde o garantovanou odkupní cenu.</div>'+
+        '</div>';
       h += '</div>';
 
       // Zajištění + track record
@@ -785,7 +787,8 @@
           '<li>Reálné vytížení dle SIS: <b>'+num(Math.round(cyclesPerMonth))+' cyklů/měs</b> (~'+num(Math.round(cyclesPerMonth*12))+' cyklů/rok).</li>'+
           '<li>Za 5 let (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 ('+Math.round(remPct5*100)+' % technické životnosti).</li>'+
           '<li>Orientační technická zůstatková hodnota po 5 letech: <b>'+f(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
-        ) : '')+'</ul></div>'+
+        ) : '')+'</ul>'+
+        '<div class="muted" style="margin-top:6px;line-height:1.5">Zbývající cyklová kapacita '+Math.round(remPct5*100)+' % není totožná s tržní hodnotou zařízení. Pro účely finančního modelu je použita výrazně nižší modelová zůstatková hodnota <b>'+String(L.residual).replace('.',',')+' %</b> pořizovací ceny. Nejde o garantovanou odkupní cenu.</div></div>'+
         '<div class="sec"><h2>Zajištění pro financující společnost</h2><ul>'+
         '<li>Movitý majetek (prádlomat) jako zástava.</li>'+
         '<li>Vzdálený monitoring přes SIS — tržby a provoz v reálném čase.</li>'+
