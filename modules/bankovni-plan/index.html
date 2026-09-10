@@ -541,6 +541,11 @@
     window.leasingPdf = function(){
       if(!FC || !FC.unitBreakdown){ alert('Model jednotky ještě není načtený — dej ↻ Přebudovat data.'); return; }
       leaseInit();
+      // Zachyť grafy z obrazovky jako obrázky (canvas → PNG) pro vložení do PDF.
+      try{ drawLeaseCharts(); }catch(e){}
+      var _chartImg=function(id){ var el=document.getElementById(id); if(!el||!el.toDataURL) return ''; try{ return el.toDataURL('image/png'); }catch(e){ return ''; } };
+      var imgRamp=_chartImg('ch-lease-ramp'), imgRev=_chartImg('ch-lease-revdist'), imgEb=_chartImg('ch-lease-ebitdist'), imgSeas=_chartImg('ch-lease-seas');
+      var _chartBlock=function(img,cap){ return img?('<div style="background:#0e1a22;border-radius:8px;padding:10px;margin:8px 0;page-break-inside:avoid">'+(cap?'<div style="color:#cbd5e1;font-size:11px;margin-bottom:4px">'+cap+'</div>':'')+'<img src="'+img+'" style="width:100%;display:block"></div>'):''; };
       var u=FC.unitBreakdown, t=DATA.trackRecord, L=_lease;
       var vat=21, mode=_leaseVat;
       var rd=DATA.unitEconomics.revenueDist||{};
@@ -590,12 +595,20 @@
       var _pbeCross=null; if(_pbeRev!=null){ for(var _bi=0;_bi<_pco.length;_bi++){ if((_pco[_bi].median||0)>=_pbeRev){ _pbeCross=_pco[_bi].month; break; } } }
       var rampSection = _pco.length ? (
         '<h2>Náběhová křivka a odklad splátek</h2>'+
-        '<div class="muted">Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě.</div>'+
-        '<table><tr><th>Měsíc provozu</th>'+_prampHead+'</tr>'+
-        '<tr><td>Medián tržby</td>'+_prampVal+'</tr>'+
-        '<tr><td>% stabilizované úrovně</td>'+_prampPct+'</tr></table>'+
+        (imgRamp ? _chartBlock(imgRamp,'Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě. Červená přerušovaná = bod zvratu (zisk = splátka, DSCR 1,0).')
+                 : ('<div class="muted">Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě.</div>'+
+                    '<table><tr><th>Měsíc provozu</th>'+_prampHead+'</tr>'+
+                    '<tr><td>Medián tržby</td>'+_prampVal+'</tr>'+
+                    '<tr><td>% stabilizované úrovně</td>'+_prampPct+'</tr></table>'))+
         '<div class="box">V prvních 6 měsících od uvedení do provozu dosahuje jednotka v průměru <b>'+_ppct6+' %</b> stabilizované tržby. Navrhovaný <b>6měsíční odklad splátek</b> slaďuje splátkový kalendář s reálným náběhem cash flow; po stabilizaci (~M'+(_pstabM!=null?_pstabM:6)+') provozní zisk (NOI) pokryje splátku s rezervou (DSCR '+d2(dscr)+'×). Odklad snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.'+
         (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+'</div>'
+      ) : '';
+      // Sekce grafů (distribuce + sezónnost) — obrázky z obrazovky.
+      var grafySection = (imgRev||imgEb||imgSeas) ? (
+        '<h2>Grafy — přepočteno na 1 jednotku'+(modelAdd>0?' (vč. sušení navíc)':'')+'</h2>'+
+        _chartBlock(imgRev,'Distribuce tržby / jednotku — percentily P10–P90 (režim '+modeLbl+')')+
+        _chartBlock(imgEb,'Distribuce EBITDA / jednotku — percentily P10–P90')+
+        _chartBlock(imgSeas,'Sezónnost — index měsíců (100 = průměr), reálná data sítě')
       ) : '';
       var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
         'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
@@ -651,6 +664,7 @@
         '<table><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr>'+scenRows+'</table>'+
         '<h2>Minimální tržba pro DSCR</h2><table><tr><th>DSCR 1,00 (bod zvratu)</th><th>DSCR 1,20</th><th>DSCR 1,30</th></tr><tr><td class="r">'+f(minRev(1.0))+'</td><td class="r">'+f(minRev(1.2))+'</td><td class="r">'+f(minRev(1.3))+'</td></tr></table>'+
         '<h2>Stresové testy</h2><table><tr><th>Scénář</th><th class="r">EBITDA/měs</th><th class="r">Cash flow po splátce</th><th class="r">DSCR</th></tr>'+stressRows+'</table>'+
+        grafySection+
         '<h2>Škálovatelnost</h2><table><tr><th>Jednotek</th><th class="r">Investice</th><th class="r">Financováno</th><th class="r">Splátka/měs</th><th class="r">NOI/měs</th><th class="r">DSCR</th></tr>'+scen+'</table>'+
         '<h2>Technická specifikace (předmět financování)</h2><ul>'+
         '<li>Sušička <b>LS350</b>, pračka <b>SY180</b>, pračka <b>SY80</b>.</li>'+
