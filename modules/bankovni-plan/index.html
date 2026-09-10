@@ -448,13 +448,7 @@
           '</div>';
       }
 
-      // Grafy z bankovního plánu, přepočtené na 1 jednotku
-      h += '<div class="sec"><h2>📊 Grafy — přepočteno na 1 jednotku</h2>'+
-        '<div class="note">Distribuce a sezónnost ze sítě, přepočtené na leasingový podklad: úprava tržby '+(revPct!==100?(String(revPct).replace('.',',')+' %'):'100 %')+', režim '+modeLbl+'.</div></div>';
-      h += '<div class="grid2">'+
-        '<div class="sec"><h2>💰 Distribuce tržby / jednotku <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Percentily měsíční tržby napříč lokalitami, přepočteno na leasingový podklad.</div><canvas id="ch-lease-revdist" height="150"></canvas></div>'+
-        '<div class="sec"><h2>📈 Distribuce EBITDA / jednotku <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">EBITDA/měs dle provozních předpokladů, přepočteno na leasingový podklad.</div><canvas id="ch-lease-ebitdist" height="150"></canvas></div>'+
-        '</div>';
+      // Grafy ze sítě
       h += '<div class="sec"><h2>🗓️ Sezónnost <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Index měsíců (100 = průměr) z reálných tržeb sítě.</div><canvas id="ch-lease-seas" height="110"></canvas></div>';
       h += '<div class="sec"><h2>📉 Vývoj tržeb portfolia (s DPH) <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Měsíční tržby celé sítě dohromady <b>včetně DPH</b>, od začátku provozu po poslední kompletní měsíc ('+BASE+').</div><canvas id="ch-lease-portfolio" height="90"></canvas></div>';
 
@@ -634,10 +628,8 @@
         (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+' <b>Uvedená náběhová křivka je dosažena bez jakékoli reklamní podpory</b> (čistě organický náběh); cílená propagace lokality jej dokáže dále urychlit. Alternativou k plnému odkladu splátek může být i jejich <b>dočasné snížení</b> v období náběhu.</div>'
       ) : '';
       // Sekce grafů (distribuce + sezónnost) — obrázky z obrazovky.
-      var grafySection = (imgRev||imgEb||imgSeas||imgPortfolio) ? (
-        '<h2>Grafy — přepočteno na 1 jednotku</h2>'+
-        _chartBlock(imgRev,'Distribuce tržby / jednotku — percentily P10–P90 (režim '+modeLbl+')')+
-        _chartBlock(imgEb,'Distribuce EBITDA / jednotku — percentily P10–P90')+
+      var grafySection = (imgSeas||imgPortfolio) ? (
+        '<h2>Grafy sítě</h2>'+
         _chartBlock(imgSeas,'Sezónnost — index měsíců (100 = průměr), reálná data sítě')+
         _chartBlock(imgPortfolio,'Vývoj tržeb portfolia (s DPH) — celá síť od začátku po poslední kompletní měsíc')
       ) : '';
