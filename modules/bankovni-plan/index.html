@@ -647,13 +647,16 @@
         '<tr><td><b>Servis celkem</b></td><td class="r"><b>'+f(Math.round(servisRP))+' bez · '+f(Math.round(servisRP*1.21))+' s DPH</b></td></tr></table>'+
         '<div class="box">Takto je servis započten v modelaci (provozní náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček včetně detergentů ale umíme převzít my v rámci České republiky za <b>13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz zákazník sám, na servisu ušetří.</div>'
       ):'';
-      var _enBd=(DATA.unitModel&&DATA.unitModel.energyBreakdown)||[];
-      var energyNotePdf=(_enBd.length&&u.energy)?(
-        '<h2>Co zahrnuje energie</h2>'+
-        '<div class="muted">Spotřeba na prací / sušicí cyklus (měsíčně, medián):</div>'+
-        '<table>'+_enBd.map(function(it){ var bez=u.energy*it.share; return '<tr><td>'+it.label+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
-        '<tr><td><b>Energie celkem</b></td><td class="r"><b>'+f(Math.round(u.energy))+' bez · '+f(Math.round(u.energy*1.21))+' s DPH</b></td></tr></table>'+
-        '<div class="box">Hodnoty vychází z nastavených programů strojů (voda, teplota, doba sušení). Skutečná spotřeba se liší podle naplnění strojů prádlem — plnější náplň znamená nižší spotřebu na kg. Ceny energií dle aktuálních sazeb.</div>'
+      var _csP=(DATA.unitModel&&DATA.unitModel.cycleSpec)||[];
+      var _fxCS=(DATA.unitModel&&DATA.unitModel.fxEurToBase)||25;
+      var _decP=function(n,dd){ var p=Math.pow(10,dd); return (Math.round((n||0)*p)/p).toString().replace('.',','); };
+      var energyNotePdf=(_csP.length)?(
+        '<h2>Co zahrnuje energie — spotřeba na cyklus</h2>'+
+        '<div class="muted">Dle nastavených programů strojů (na jeden cyklus):</div>'+
+        '<table><tr><th>Stroj</th><th>Elektřina</th><th>Voda</th><th>Prášek + aviváž</th><th class="r">Cena / cyklus</th></tr>'+
+        _csP.map(function(it){ var bez=(it.costEur||0)*_fxCS; return '<tr><td>'+it.label+' <span style="color:#888">('+it.cycle+')</span></td><td>'+_decP(it.el,2)+' kWh</td><td>'+(it.voda?(_decP(it.voda,0)+' l'):'—')+'</td><td>'+(it.prasek?(_decP(it.prasek,2)+' + '+_decP(it.aviv,2)+' l'):'—')+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
+        '</table>'+
+        '<div class="box">Prací cyklus trvá 30–40 min, sušicí cyklus 15 min. Jeden zákazník je průměrně odbaven za 45–60 min. Hodnoty vychází z nastavených programů strojů — skutečná spotřeba se liší podle naplnění bubnu prádlem (plnější náplň = nižší spotřeba na kg).</div>'
       ):'';
       var photoStrip = (Array.isArray(_leasePhotos) && _leasePhotos.length) ? (
         '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:nowrap">'+
@@ -1185,15 +1188,20 @@
           '<div style="margin-top:8px;color:var(--text2)">Pevné položky jsou dle ekonomiky V3 (nezávislé na obratu), detergenty dle skutečného obratu. Takto je servis započten v modelaci (náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček (včetně detergentů) ale umíme <b>převzít my v rámci České republiky za 13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz sám, na servisu ušetří.</div>'+
         '</div>';
       }
-      var _eb=(DATA.unitModel&&DATA.unitModel.energyBreakdown)||[];
-      if(_eb.length && u.energy){
-        var _erows='';
-        _eb.forEach(function(it){ var bez=u.energy*it.share; _erows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)">'+it.label+'</span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span></span></div>'; });
+      var _cs=(DATA.unitModel&&DATA.unitModel.cycleSpec)||[];
+      if(_cs.length){
+        var _fx2=(DATA.unitModel&&DATA.unitModel.fxEurToBase)||25;
+        var _dec=function(n,dd){ var p=Math.pow(10,dd); return (Math.round((n||0)*p)/p).toString().replace('.',','); };
+        var _crows='';
+        _cs.forEach(function(it){
+          var bez=(it.costEur||0)*_fx2;
+          var spot=_dec(it.el,2)+' kWh'+(it.voda?(' · '+_dec(it.voda,0)+' l vody'):'')+(it.prasek?(' · '+_dec(it.prasek,2)+' l prášku'):'')+(it.aviv?(' + '+_dec(it.aviv,2)+' l aviváže'):'');
+          _crows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)"><b>'+it.label+'</b> <span style="opacity:.6;font-size:11px">('+it.cycle+')</span><br><span style="font-size:11px;opacity:.8">'+spot+'</span></span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span> <span style="opacity:.6;font-size:11px">/ cyklus</span></span></div>';
+        });
         h += '<div style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.25);line-height:1.5;font-size:13px">'+
-          '<div style="font-weight:700;color:#eab308;margin-bottom:6px">Co zahrnuje energie — spotřeba na prací / sušicí cyklus (měsíčně, medián):</div>'+
-          _erows+
-          '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0 0;font-weight:800"><span>Energie celkem</span><span style="white-space:nowrap">'+money(u.energy)+' <span style="opacity:.6;font-weight:400">bez</span> · '+money(u.energy*1.21)+' <span style="opacity:.6;font-weight:400">s DPH</span></span></div>'+
-          '<div style="margin-top:8px;color:var(--text2)">Uvedené hodnoty vychází z <b>nastavených programů strojů</b> (voda, teplota, doba sušení). Skutečná spotřeba se liší podle toho, <b>jak jsou stroje naplněny prádlem</b> — plnější náplň = nižší spotřeba na kg. Ceny energií dle aktuálních sazeb.</div>'+
+          '<div style="font-weight:700;color:#eab308;margin-bottom:6px">Co zahrnuje energie — spotřeba na jeden cyklus (dle programu strojů):</div>'+
+          _crows+
+          '<div style="margin-top:8px;color:var(--text2)">Prací cyklus trvá <b>30–40 min</b>, sušicí cyklus <b>15 min</b>. Jeden zákazník je průměrně odbaven za <b>45–60 min</b>. Hodnoty vychází z nastavených programů strojů — skutečná spotřeba se liší podle <b>naplnění bubnu prádlem</b> (plnější náplň = nižší spotřeba na kg). Ceny energií a detergentů dle aktuálních sazeb.</div>'+
         '</div>';
       }
       h += '</div>'; // konec sekce

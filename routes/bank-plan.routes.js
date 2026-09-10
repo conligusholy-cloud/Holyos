@@ -25,6 +25,7 @@ async function _unitModelPct(base, fx) {
   return Object.assign({}, E.deriveUnitModelPct(cfg), {
     serviceBreakdown: E.deriveServiceBreakdown(cfg),
     energyBreakdown: E.deriveEnergyBreakdown(cfg),
+    cycleSpec: E.deriveCycleSpec(cfg),
     fxEurToBase: fxEurToBase,
   });
 }
