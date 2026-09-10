@@ -456,6 +456,7 @@
         '<div class="sec"><h2>📈 Distribuce EBITDA / jednotku <span class="tag tag-assume">ASSUMPTION</span></h2><div class="note">EBITDA/měs dle provozních předpokladů, přepočteno na leasingový podklad'+_addTxt+'.</div><canvas id="ch-lease-ebitdist" height="150"></canvas></div>'+
         '</div>';
       h += '<div class="sec"><h2>🗓️ Sezónnost <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Index měsíců (100 = průměr) z reálných tržeb sítě. Doplňkové sušení je měsíčně konstantní, takže nemění sezónní vzorec.</div><canvas id="ch-lease-seas" height="110"></canvas></div>';
+      h += '<div class="sec"><h2>📉 Vývoj tržeb portfolia (s DPH) <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Měsíční tržby celé sítě dohromady <b>včetně DPH</b>, od začátku provozu po poslední kompletní měsíc ('+BASE+').</div><canvas id="ch-lease-portfolio" height="90"></canvas></div>';
 
       // Detailní rozpad jedné jednotky (stejná tabulka jako v Bankovním plánu).
       h += unitBreakdownHtml();
@@ -568,7 +569,7 @@
       // Zachyť grafy z obrazovky jako obrázky (canvas → PNG) pro vložení do PDF.
       try{ drawLeaseCharts(); }catch(e){}
       var _chartImg=function(id){ var el=document.getElementById(id); if(!el||!el.toDataURL) return ''; try{ return el.toDataURL('image/png'); }catch(e){ return ''; } };
-      var imgRamp=_chartImg('ch-lease-ramp'), imgRev=_chartImg('ch-lease-revdist'), imgEb=_chartImg('ch-lease-ebitdist'), imgSeas=_chartImg('ch-lease-seas');
+      var imgRamp=_chartImg('ch-lease-ramp'), imgRev=_chartImg('ch-lease-revdist'), imgEb=_chartImg('ch-lease-ebitdist'), imgSeas=_chartImg('ch-lease-seas'), imgPortfolio=_chartImg('ch-lease-portfolio');
       var _chartBlock=function(img,cap){ return img?('<div style="background:#0e1a22;border-radius:8px;padding:10px;margin:8px 0;page-break-inside:avoid">'+(cap?'<div style="color:#cbd5e1;font-size:11px;margin-bottom:4px">'+cap+'</div>':'')+'<img src="'+img+'" style="width:100%;display:block"></div>'):''; };
       var u=FC.unitBreakdown, t=DATA.trackRecord, L=_lease;
       var vat=21, mode=_leaseVat;
@@ -628,11 +629,12 @@
         (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+'</div>'
       ) : '';
       // Sekce grafů (distribuce + sezónnost) — obrázky z obrazovky.
-      var grafySection = (imgRev||imgEb||imgSeas) ? (
+      var grafySection = (imgRev||imgEb||imgSeas||imgPortfolio) ? (
         '<h2>Grafy — přepočteno na 1 jednotku'+(modelAdd>0?' (vč. sušení navíc)':'')+'</h2>'+
         _chartBlock(imgRev,'Distribuce tržby / jednotku — percentily P10–P90 (režim '+modeLbl+')')+
         _chartBlock(imgEb,'Distribuce EBITDA / jednotku — percentily P10–P90')+
-        _chartBlock(imgSeas,'Sezónnost — index měsíců (100 = průměr), reálná data sítě')
+        _chartBlock(imgSeas,'Sezónnost — index měsíců (100 = průměr), reálná data sítě')+
+        _chartBlock(imgPortfolio,'Vývoj tržeb portfolia (s DPH) — celá síť od začátku po poslední kompletní měsíc')
       ) : '';
       var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
         'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
@@ -1473,6 +1475,17 @@
         _charts.leaseSeas=new Chart(elS,{ type:'bar',
           data:{ labels:mon, datasets:[{ data:seas.map(function(x){return x==null?null:x;}), backgroundColor:seas.map(function(x){ return (x!=null&&x>=100)?'#22c55e':'#f59e0b'; }) }] },
           options:Object.assign({},common,{ scales:{ x:{grid:{color:grid},ticks:{color:tick}}, y:{grid:{color:grid},ticks:{color:tick},beginAtZero:true,suggestedMax:140 } } }) });
+      }
+      // Vývoj tržeb portfolia (s DPH) — od začátku po poslední kompletní měsíc — nepotřebuje FC
+      var elP=document.getElementById('ch-lease-portfolio');
+      if(elP){ if(_charts.leasePortfolio){try{_charts.leasePortfolio.destroy();}catch(e){}}
+        var pm=DATA.portfolioMonthly||{};
+        var _now=new Date(); var curYM=_now.getFullYear()+'-'+String(_now.getMonth()+1).padStart(2,'0');
+        var pyms=Object.keys(pm).sort().filter(function(y){ return y<curYM; });
+        var pvals=pyms.map(function(y){ return Math.round((pm[y]||0)*1.21); });
+        _charts.leasePortfolio=new Chart(elP,{ type:'line',
+          data:{ labels:pyms, datasets:[{ data:pvals, borderColor:'#0ea5e9', backgroundColor:'rgba(14,165,233,.15)', fill:true, tension:.25, pointRadius:0 }] },
+          options:common });
       }
       // distribuce tržby/EBITDA — potřebují leaseUnit (FC.unitBreakdown)
       if(!FC || !FC.unitBreakdown) return;
