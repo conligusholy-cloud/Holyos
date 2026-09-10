@@ -626,6 +626,14 @@
         '<tr><td><b>Servis celkem</b></td><td class="r"><b>'+f(Math.round(u.service))+' bez · '+f(Math.round(u.service*1.21))+' s DPH</b></td></tr></table>'+
         '<div class="box">Takto je servis započten v modelaci (provozní náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček včetně detergentů ale umíme převzít my v rámci České republiky za <b>13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz zákazník sám, na servisu ušetří.</div>'
       ):'';
+      var _enBd=(DATA.unitModel&&DATA.unitModel.energyBreakdown)||[];
+      var energyNotePdf=(_enBd.length&&u.energy)?(
+        '<h2>Co zahrnuje energie</h2>'+
+        '<div class="muted">Spotřeba na prací / sušicí cyklus (měsíčně, medián):</div>'+
+        '<table>'+_enBd.map(function(it){ var bez=u.energy*it.share; return '<tr><td>'+it.label+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
+        '<tr><td><b>Energie celkem</b></td><td class="r"><b>'+f(Math.round(u.energy))+' bez · '+f(Math.round(u.energy*1.21))+' s DPH</b></td></tr></table>'+
+        '<div class="box">Hodnoty vychází z nastavených programů strojů (voda, teplota, doba sušení). Skutečná spotřeba se liší podle naplnění strojů prádlem — plnější náplň znamená nižší spotřebu na kg. Ceny energií dle aktuálních sazeb.</div>'
+      ):'';
       var photoStrip = (Array.isArray(_leasePhotos) && _leasePhotos.length) ? (
         '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:nowrap">'+
         _leasePhotos.map(function(src){ return '<img src="'+src+'" style="flex:1;min-width:0;max-height:200px;object-fit:cover;border:1px solid #ccc;border-radius:6px">'; }).join('')+
@@ -657,6 +665,7 @@
         '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(u.ebitda)+' ('+pct(u.ebitdaMargin)+')</b></td></tr>'+
         '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
         svcNotePdf+
+        energyNotePdf+
         '<h2>Návrh leasingu (1 jednotka)</h2>'+
         '<div class="kv"><span>Financovaná částka</span><b>'+f(financed)+'</b></div>'+
         '<div class="kv"><span>Akontace ('+String(L.down).replace('.',',')+' %)</span><b>'+f(price*L.down/100)+'</b></div>'+
@@ -1142,6 +1151,17 @@
           _rows+
           '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0 0;font-weight:800"><span>Servis celkem</span><span style="white-space:nowrap">'+money(u.service)+' <span style="opacity:.6;font-weight:400">bez</span> · '+money(u.service*1.21)+' <span style="opacity:.6;font-weight:400">s DPH</span></span></div>'+
           '<div style="margin-top:8px;color:var(--text2)">Takto je servis započten v modelaci (provozní náklad, pokud si ho provoz zajišťuje zákazník sám). Kompletní balíček (včetně detergentů) ale umíme <b>převzít my v rámci České republiky za 13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz sám, na servisu ušetří.</div>'+
+        '</div>';
+      }
+      var _eb=(DATA.unitModel&&DATA.unitModel.energyBreakdown)||[];
+      if(_eb.length && u.energy){
+        var _erows='';
+        _eb.forEach(function(it){ var bez=u.energy*it.share; _erows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)">'+it.label+'</span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span></span></div>'; });
+        h += '<div style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.25);line-height:1.5;font-size:13px">'+
+          '<div style="font-weight:700;color:#eab308;margin-bottom:6px">Co zahrnuje energie — spotřeba na prací / sušicí cyklus (měsíčně, medián):</div>'+
+          _erows+
+          '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0 0;font-weight:800"><span>Energie celkem</span><span style="white-space:nowrap">'+money(u.energy)+' <span style="opacity:.6;font-weight:400">bez</span> · '+money(u.energy*1.21)+' <span style="opacity:.6;font-weight:400">s DPH</span></span></div>'+
+          '<div style="margin-top:8px;color:var(--text2)">Uvedené hodnoty vychází z <b>nastavených programů strojů</b> (voda, teplota, doba sušení). Skutečná spotřeba se liší podle toho, <b>jak jsou stroje naplněny prádlem</b> — plnější náplň = nižší spotřeba na kg. Ceny energií dle aktuálních sazeb.</div>'+
         '</div>';
       }
       h += '</div>'; // konec sekce

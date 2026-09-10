@@ -467,8 +467,24 @@ function deriveServiceBreakdown(cfg) {
   return items.map((it) => ({ key: it.key, label: it.label, share: (it.eur || 0) / total, eurMonthly: Math.round(it.eur || 0) }));
 }
 
+// Rozpad energie (V3) — voda/stočné a elektřina na praní a sušení. Podíly z nákladů na zákazníka.
+// Vrací [{ key, label, share }] (součet share = 1). Reálná spotřeba se liší dle naplnění bubnu.
+function deriveEnergyBreakdown(cfg) {
+  const d = Object.assign({}, UNIT_V3, cfg || {});
+  const vodne = d.cena_vodne + d.cena_stocne;
+  const voda = (((d.voda_velka / 1000) * vodne) + ((d.voda_mala / 1000) * vodne)) / 2;
+  const elPrani = ((d.el_velka * d.cena_elektriny) + (d.el_mala * d.cena_elektriny)) / 2;
+  const elSuseni = ((d.susicka_15 * 2 * d.cena_elektriny) + (d.susicka_15 * d.cena_elektriny)) / 2;
+  const total = voda + elPrani + elSuseni || 1;
+  return [
+    { key: 'voda', label: 'Voda a stočné (prací cyklus)', share: voda / total },
+    { key: 'el_prani', label: 'Elektřina — praní', share: elPrani / total },
+    { key: 'el_suseni', label: 'Elektřina — sušení', share: elSuseni / total },
+  ];
+}
+
 module.exports = {
-  sourceCurrencyForCode, convert, toBase, deriveUnitModelPct, deriveServiceBreakdown,
+  sourceCurrencyForCode, convert, toBase, deriveUnitModelPct, deriveServiceBreakdown, deriveEnergyBreakdown,
   percentile, percentiles, seasonalityIndex, cohortCurve,
   stabilizationMonth, stabilizedSiteValue, volatilityStats, worstRolling, maxDebtForDscr,
   siteEconomics,
