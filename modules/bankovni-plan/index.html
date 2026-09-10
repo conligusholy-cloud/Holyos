@@ -547,9 +547,9 @@
         rowKV('Aktivních jednotek', num(t.activeCount)+' (z '+t.realCount+')')+
         rowKV('Location-months provozu', num(t.locationMonths))+
         rowKV('Transakcí v SIS (skutečné)', num(t.totalTx))+
-        rowKV('Kumulativní obrat (skutečný, bez DPH)', money(t.cumulativeRevenue))+
-        rowKV('Kumulativní obrat (skutečný, s DPH '+vat+' %)', money((t.cumulativeRevenue||0)*(1+vat/100)), '#22c55e')+
-        '<div class="note" style="margin-top:6px">Skutečné údaje ze SIS.</div>'+
+        rowKV('Kumulativní obrat (skutečný, bez DPH)', money((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0)))+
+        rowKV('Kumulativní obrat (skutečný, s DPH '+vat+' %)', money(((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0))*(1+vat/100)), '#22c55e')+
+        '<div class="note" style="margin-top:6px">Interní pohled.</div>'+
         '</div>';
       h += '</div>';
 
