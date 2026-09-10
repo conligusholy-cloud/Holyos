@@ -571,6 +571,7 @@
       var noi=base.noi;
       // Nákladová struktura přepočtená na použitou tržbu (bez DPH) — konzistentní s horní tabulkou.
       var _rrN=leaseRatios();
+      var _kN=(mode==='neplatce')?(1+vat/100):1;
       var _vsumN=(u.service||0)+(u.energy||0)+(u.fee||0)||1;
       var nVarN=revBezBase*_rrN.varPct;
       var nRent=_rrN.rentBez, nSvc=nVarN*((u.service||0)/_vsumN), nEne=nVarN*((u.energy||0)/_vsumN), nFee=nVarN*((u.fee||0)/_vsumN);
@@ -733,15 +734,15 @@
         '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Tržba bez DPH')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
         '<tr><td>EBITDA</td><td class="r"><b>'+f(base.ebitda)+' ('+pct(base.marginPct)+')</b></td></tr>'+
         '<tr><td><b>NOI (před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
-        '<div class="muted">Nákladová struktura (bez DPH, na 1 jednotku):</div>'+
-        '<table><tr><td>Obrat (bez DPH)</td><td class="r"><b>'+f(revBezBase)+'</b></td></tr>'+
-        '<tr><td>− Nájem</td><td class="r">'+f(nRent)+'</td></tr>'+
-        '<tr><td>− Servis</td><td class="r">'+f(nSvc)+'</td></tr>'+
-        '<tr><td>− Energie</td><td class="r">'+f(nEne)+'</td></tr>'+
-        '<tr><td>− Platební poplatky</td><td class="r">'+f(nFee)+'</td></tr>'+
-        (nMnt?'<tr><td>− Údržba (rezerva)</td><td class="r">'+f(nMnt)+'</td></tr>':'')+
-        '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(nEbitda)+' ('+pct(revBezBase?nEbitda/revBezBase:0)+')</b></td></tr>'+
-        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(nNoi)+'</b></td></tr></table></div>'+
+        '<div class="muted">Nákladová struktura ('+(mode==='neplatce'?'vč. neodpočitatelné DPH':'bez DPH')+', na 1 jednotku):</div>'+
+        '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Obrat (bez DPH)')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
+        '<tr><td>− Nájem</td><td class="r">'+f(nRent*_kN)+'</td></tr>'+
+        '<tr><td>− Servis</td><td class="r">'+f(nSvc*_kN)+'</td></tr>'+
+        '<tr><td>− Energie</td><td class="r">'+f(nEne*_kN)+'</td></tr>'+
+        '<tr><td>− Platební poplatky</td><td class="r">'+f(nFee*_kN)+'</td></tr>'+
+        (nMnt?'<tr><td>− Údržba (rezerva)</td><td class="r">'+f(nMnt*_kN)+'</td></tr>':'')+
+        '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(base.ebitda)+' ('+pct(revBezBase?nEbitda/revBezBase:0)+')</b></td></tr>'+
+        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table></div>'+
         '<div class="sec">'+svcNotePdf+'</div>'+
         '<div class="sec">'+energyNotePdf+'</div>'+
         // 6) Návrh leasingu + DSCR
@@ -1202,20 +1203,24 @@
       var _L=_lease, _rd=DATA.unitEconomics.revenueDist||{};
       var _revPct=(_L.revPct!=null?_L.revPct:100);
       var _modelAdd=(_L.addDryCount||0)*(_L.addDryPrice||0);
-      var rev=(_L.revBase||_rd.p50||u.revenue)*(_revPct/100)+_modelAdd;   // použitá tržba (bez DPH)
+      var _k=(_leaseVat==='neplatce')?(1+21/100):1;    // režim DPH (neplátce = vč. neodpočitatelné DPH)
+      var _revBez=(_L.revBase||_rd.p50||u.revenue)*(_revPct/100)+_modelAdd;   // použitá tržba (bez DPH)
       var _rr=leaseRatios();
       var _vsum=(u.service||0)+(u.energy||0)+(u.fee||0)||1;
-      var _nVar=rev*_rr.varPct;
-      var _rent=_rr.rentBez, _svc=_nVar*((u.service||0)/_vsum), _ene=_nVar*((u.energy||0)/_vsum), _fee=_nVar*((u.fee||0)/_vsum);
-      var _mnt=rev*_rr.maintPct;
+      var _nVar=_revBez*_rr.varPct;
+      var rev=_revBez*_k;
+      var _rent=_rr.rentBez*_k, _svc=_nVar*((u.service||0)/_vsum)*_k, _ene=_nVar*((u.energy||0)/_vsum)*_k, _fee=_nVar*((u.fee||0)/_vsum)*_k;
+      var _mnt=_revBez*_rr.maintPct*_k;
       var _ebitda=rev-_rent-_svc-_ene-_fee;
       var _noi=_ebitda-_mnt;
-      var _netWithDebt=_noi-(u.tax||0)-(u.payment||0);
-      var _netPaidOff=_noi-(u.tax||0);
+      var _pay=(u.payment||0)*_k, _tax=(u.tax||0)*_k;
+      var _netWithDebt=_noi-_tax-_pay;
+      var _netPaidOff=_noi-_tax;
+      var _amtLbl=(_leaseVat==='neplatce')?'vč. neodpočitatelné DPH':'bez DPH';
       var h = '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ukázka jedné lokality (měsíčně) <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2>'+
-        '<div class="note">Reprezentativní prádlomat (použitá tržba, bez DPH): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru.</div>'+
+        '<div class="note">Reprezentativní prádlomat (použitá tržba, '+_amtLbl+'): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru.</div>'+
         '<div style="max-width:520px">';
-      h += row('Obrat (bez DPH)', rev, {bold:true});
+      h += row((_leaseVat==='neplatce'?'Koncové inkaso':'Obrat (bez DPH)'), rev, {bold:true});
       h += row('Nájem', _rent, {minus:true, col:'#ef4444', pct:_rent/rev});
       h += row('Servis', _svc, {minus:true, col:'#ef4444', pct:_svc/rev});
       h += row('Energie', _ene, {minus:true, col:'#ef4444', pct:_ene/rev});
@@ -1223,9 +1228,9 @@
       h += row('EBITDA', _ebitda, {bold:true, col:'#22c55e', top:true, pct:(rev?_ebitda/rev:null)});
       if (_mnt) h += row('Údržba (rezerva)', _mnt, {minus:true, col:'#ef4444', pct:_mnt/rev});
       h += row('NOI (provozní zisk před daní i splátkou)', _noi, {bold:true, col:'#22c55e', pct:(rev?_noi/rev:null)});
-      h += row('Splátka úvěru (anuita)', u.payment, {minus:true, col:'#f59e0b'});
-      if (u.payment) h += '<div class="note" style="margin:2px 0 8px">DSCR jedné lokality (NOI ÷ splátka) = <b>'+ (Math.round(_noi/u.payment*100)/100).toString().replace('.',',') +'×</b></div>';
-      h += row('Daň (po odpisech '+(u.depreciationYears||5)+' let)', u.tax, {minus:true, col:'#ef4444'});
+      h += row('Splátka úvěru (anuita)', _pay, {minus:true, col:'#f59e0b'});
+      if (_pay) h += '<div class="note" style="margin:2px 0 8px">DSCR jedné lokality (NOI ÷ splátka) = <b>'+ (Math.round(_noi/_pay*100)/100).toString().replace('.',',') +'×</b></div>';
+      h += row('Daň (po odpisech '+(u.depreciationYears||5)+' let)', _tax, {minus:true, col:'#ef4444'});
       h += row('Čistý cash po VŠEM (i splátce)', _netWithDebt, {bold:true, col:(_netWithDebt>=0?'#22c55e':'#ef4444'), top:true});
       h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
            row('Čistý cash po splacení stroje (bez splátky)', _netPaidOff, {bold:true, col:'#22c55e'})+
