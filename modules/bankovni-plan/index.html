@@ -315,6 +315,21 @@
       var h = '';
       h += '<div class="banner">Podklad pro <b>leasingovou / financující společnost</b>. Ukazuje, že <b>jedna jednotka (prádlomat) funguje samostatně</b> — její provozní zisk pokryje leasingovou splátku s rezervou — a že je model <b>škálovatelný</b> (síť '+t.activeCount+' jednotek, '+String(t.yearsData).replace('.',',')+' let dat ze SIS). Cíl: leasingovka vyhodnotí výrobek jako profinancovatelný a můžeme ho zákazníkovi nabídnout s financováním.</div>';
       h += '<div class="note" style="margin:-6px 0 12px;padding:10px;border-radius:8px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.25);line-height:1.5">Podklad je zpracován pro <b>verzi V3</b> — konfiguraci <b>1× pračka 8 kg + 1× pračka 18 kg + 1× sušička 18 kg</b>, což je nejrozšířenější varianta, na kterou máme <b>nejvíce provozních dat</b>. Ekonomika vychází ze <b>zavedené sítě prádlomatů s víceletou historií provozu</b> ('+String(t.yearsData).replace('.',',')+' let dat ze SIS, '+String(t.firstData)+' → '+String(t.lastData)+'), aby byla data reprezentativní.</div>';
+
+      // Cílový zákazník — 3 segmenty poptávky
+      (function(){
+        var seg=function(num,col,title,body){ return '<div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)"><div style="flex:0 0 28px;height:28px;border-radius:50%;background:'+col+';color:#0e1a22;font-weight:800;display:flex;align-items:center;justify-content:center">'+num+'</div><div style="flex:1"><div style="font-weight:700;margin-bottom:2px">'+title+'</div><div style="color:var(--text2);line-height:1.55;font-size:13px">'+body+'</div></div></div>'; };
+        h += '<div class="sec"><h2>🎯 Cílový zákazník</h2>'+
+          '<div class="note">Poptávku tvoří tři segmenty. Hlavní objem a nejpravidelnější tržby táhne první z nich; třetí roste nejpomaleji, ale nejstabilněji.</div>'+
+          seg('1','#22c55e','Drobní podnikatelé — hlavní segment, největší objem (18kg pračka)',
+            'Ubytovny (ložní prádlo), penziony, chalupáři, restaurace (ubrusy, podsedáky), kadeřnictví (ručníky), autodetailing (potahy sedadel), masážní a úklidové firmy. Mají <b>příliš velký objem</b> prádla na domácí 5kg pračku, ale zároveň ne dost na vlastní prádelnu či pravidelnou čistírnu. Jsou to typičtí zákazníci <b>velké 18kg pračky</b> — nosí největší a nejpravidelnější objem.')+
+          seg('2','#0ea5e9','Domácnosti s rozměrným prádlem',
+            'Věci, které se doma do pračky nevejdou — kabáty, spacáky, závěsy, potahy, ovčí vlna, zahradní sedáky, autopotahy, běhouny, peřiny, polštáře, velké deky, plyšáci. Alternativou je čistírna: <b>~3× dražší a trvá několik dní</b>. U prádlomatu to mají hotové <b>do hodiny a zhruba za třetinu ceny</b>.')+
+          seg('3','#eab308','Standardní prádlo — roste nejpomaleji, ale stabilně',
+            'Lidé, kterým se rozbila pračka nebo nemají doma prostor na pračku a sušičku, lidé na cestách, studenti na kolejích, řidiči kamionů, turisté. Největší přírůstek přichází pravidelně <b>před Vánoci</b> — při předvánočním úklidu lidé přetíží a rozbijí domácí pračku a řeší dilema: dát <b>200 Kč</b> za vyprání u nás, nebo <b>10 000 Kč</b> za novou pračku místo dárků. Kdo jednou přijde, obvykle zůstává.')+
+          '<div class="note" style="margin-top:8px;line-height:1.55">Není to nový princip — před generací bylo běžné prát ve sdílených prádelnách bytových a panelových domů. Prádlomat tuto službu vrací v moderní, samoobslužné a dostupné podobě.</div>'+
+        '</div>';
+      })();
       h += '<div style="margin:6px 0 14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">'+
         '<button class="btn" onclick="leasingPdf()" style="background:#0ea5e9;color:#fff;border:none;font-weight:700">📄 Podklad pro leasingovku (PDF)</button>'+
         '<span style="margin-left:8px;font-size:12px;color:var(--text2)">Režim DPH:</span>'+
@@ -646,6 +661,12 @@
         photoStrip+
         '<div class="box">Cíl: prokázat, že <b>jedna jednotka (prádlomat) funguje samostatně</b> a její provozní zisk pokryje leasingovou splátku, a že je model <b>škálovatelný</b>. Umožní financující společnosti nabídnout produkt našim zákazníkům s možností leasingu.</div>'+
         '<div class="muted" style="margin:6px 0">Podklad je zpracován pro <b>verzi V3</b> — konfiguraci <b>1× pračka 8 kg + 1× pračka 18 kg + 1× sušička 18 kg</b>, nejrozšířenější variantu, na kterou máme nejvíce provozních dat. Ekonomika vychází ze zavedené sítě prádlomatů s víceletou historií provozu ('+String(t.yearsData).replace('.',',')+' let dat ze SIS, '+t.firstData+' → '+t.lastData+'), aby byla data reprezentativní.</div>'+
+        '<h2>Cílový zákazník</h2>'+
+        '<div class="muted">Poptávku tvoří tři segmenty; hlavní objem a nejpravidelnější tržby táhne první z nich.</div>'+
+        '<p><b>1) Drobní podnikatelé — hlavní segment, největší objem (18kg pračka).</b> Ubytovny (ložní prádlo), penziony, chalupáři, restaurace (ubrusy, podsedáky), kadeřnictví (ručníky), autodetailing (potahy), masážní a úklidové firmy. Mají příliš velký objem prádla na domácí 5kg pračku, ale ne dost na vlastní prádelnu či pravidelnou čistírnu — typičtí zákazníci velké 18kg pračky s největším a nejpravidelnějším objemem.</p>'+
+        '<p><b>2) Domácnosti s rozměrným prádlem.</b> Kabáty, spacáky, závěsy, potahy, ovčí vlna, zahradní sedáky, autopotahy, běhouny, peřiny, polštáře, velké deky, plyšáci — věci, které se doma do pračky nevejdou. Čistírna je ~3× dražší a trvá několik dní; u prádlomatu to mají do hodiny a zhruba za třetinu ceny.</p>'+
+        '<p><b>3) Standardní prádlo — roste nejpomaleji, ale stabilně.</b> Rozbitá pračka, nedostatek místa na pračku a sušičku, lidé na cestách, studenti na kolejích, řidiči kamionů, turisté. Největší přírůstek pravidelně před Vánoci (předvánoční úklid → přetížená a rozbitá domácí pračka; 200 Kč za vyprání vs. 10 000 Kč za novou pračku místo dárků). Kdo jednou přijde, obvykle zůstává.</p>'+
+        '<div class="muted">Není to nový princip — před generací bylo běžné prát ve sdílených prádelnách bytových a panelových domů. Prádlomat tuto službu vrací v moderní, samoobslužné a dostupné podobě.</div>'+
         '<div class="kv"><span>Režim DPH</span><b>'+modeLbl+'</b></div>'+
         '<h2>Předmět financování</h2>'+
         '<div class="kv"><span>Pořizovací cena / jednotka (bez DPH)</span><b>'+f(L.price)+'</b></div>'+
