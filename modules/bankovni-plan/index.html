@@ -443,7 +443,7 @@
             '<div class="sec" style="flex:1;min-width:150px;text-align:center;background:var(--surface2)"><div class="note">Stabilizace ~od</div><div style="font-size:20px;font-weight:800;color:#22c55e">'+(_stabM!=null?('M'+_stabM):'—')+'</div><div class="note">≥ 90 % plató</div></div>'+
           '</div>'+
           '<div style="margin-top:10px;padding:12px;border-radius:10px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.35);color:var(--text2);line-height:1.6">'+
-            '<b style="color:#0ea5e9">Zdůvodnění 6měsíčního odkladu splátek:</b> V prvních 6 měsících od uvedení stroje do provozu dosahuje jednotka v průměru jen <b>'+_pct6+' %</b> stabilizované tržby (náběhová křivka z reálných dat sítě) — buduje se klientská základna a povědomí o lokalitě. 6měsíční odklad splátek proto slaďuje splátkový kalendář s reálným náběhem cash flow: po náběhu (~M'+(_stabM!=null?_stabM:6)+') jednotka generuje NOI, které splátku pokryje s rezervou (DSCR '+_dscrTxt+'× v základním scénáři). Odklad tak snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.</div>'+
+            '<b style="color:#0ea5e9">Zdůvodnění 6měsíčního odkladu splátek:</b> V prvních 6 měsících od uvedení stroje do provozu dosahuje jednotka v průměru jen <b>'+_pct6+' %</b> stabilizované tržby (náběhová křivka z reálných dat sítě) — buduje se klientská základna a povědomí o lokalitě. 6měsíční odklad splátek proto slaďuje splátkový kalendář s reálným náběhem cash flow: po náběhu (~M'+(_stabM!=null?_stabM:6)+') jednotka generuje NOI, které splátku pokryje s rezervou (DSCR '+_dscrTxt+'× v základním scénáři). Odklad tak snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost. <b>Uvedená náběhová křivka je přitom dosažena bez jakékoli reklamní podpory</b> — jde o čistě organický náběh; cílená propagace nové lokality jej dokáže dále urychlit. Alternativou k plnému odkladu může být i <b>dočasné snížení splátek</b> v období náběhu — rovněž sladí splátky s reálným cash flow a přitom udrží průběžné splácení.</div>'+
           '</div>';
       }
 
@@ -626,7 +626,7 @@
                     '<tr><td>Medián tržby</td>'+_prampVal+'</tr>'+
                     '<tr><td>% stabilizované úrovně</td>'+_prampPct+'</tr></table>'))+
         '<div class="box">V prvních 6 měsících od uvedení do provozu dosahuje jednotka v průměru <b>'+_ppct6+' %</b> stabilizované tržby. Navrhovaný <b>6měsíční odklad splátek</b> slaďuje splátkový kalendář s reálným náběhem cash flow; po stabilizaci (~M'+(_pstabM!=null?_pstabM:6)+') provozní zisk (NOI) pokryje splátku s rezervou (DSCR '+d2(dscr)+'×). Odklad snižuje riziko prodlení v nejcitlivější fázi a nemění celkovou profinancovatelnost.'+
-        (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+'</div>'
+        (_pbeRev!=null?(' <b>Bod zvratu (zisk = splátka, DSCR 1,0):</b> '+f(Math.round(_pbeRev))+' bez DPH/měs'+(_pbeCross!=null?(' — medián jednotky ho překračuje ~od měsíce M'+_pbeCross+'.'):'.')):'')+' <b>Uvedená náběhová křivka je dosažena bez jakékoli reklamní podpory</b> (čistě organický náběh); cílená propagace lokality jej dokáže dále urychlit. Alternativou k plnému odkladu splátek může být i jejich <b>dočasné snížení</b> v období náběhu.</div>'
       ) : '';
       // Sekce grafů (distribuce + sezónnost) — obrázky z obrazovky.
       var grafySection = (imgRev||imgEb||imgSeas||imgPortfolio) ? (
