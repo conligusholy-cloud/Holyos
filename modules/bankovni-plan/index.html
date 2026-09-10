@@ -1391,7 +1391,7 @@
       }
       _charts.leaseRamp = new Chart(el, { type:'line',
         data:{ labels:labels, datasets:datasets },
-        options:{ plugins:{ legend:{ display:true, labels:{ color:tick } } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true } }, maintainAspectRatio:true } });
+        options:{ animation:false, plugins:{ legend:{ display:true, labels:{ color:tick } } }, scales:{ x:{ grid:{color:grid}, ticks:{color:tick} }, y:{ grid:{color:grid}, ticks:{color:tick}, beginAtZero:true } }, maintainAspectRatio:true } });
     }
     window.drawLeaseRamp = drawLeaseRamp;
 
@@ -1400,7 +1400,7 @@
       if (!window.Chart) return;
       drawLeaseRamp();
       var grid='rgba(255,255,255,.07)', tick='#94a3b8';
-      var common={ plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick}}, y:{grid:{color:grid},ticks:{color:tick}} }, maintainAspectRatio:true };
+      var common={ animation:false, plugins:{legend:{display:false}}, scales:{ x:{grid:{color:grid},ticks:{color:tick}}, y:{grid:{color:grid},ticks:{color:tick}} }, maintainAspectRatio:true };
       // sezónnost — nepotřebuje FC
       var elS=document.getElementById('ch-lease-seas');
       if(elS){ if(_charts.leaseSeas){try{_charts.leaseSeas.destroy();}catch(e){}}
