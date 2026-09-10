@@ -636,14 +636,49 @@
         _chartBlock(imgSeas,'Sezónnost — index měsíců (100 = průměr), reálná data sítě')+
         _chartBlock(imgPortfolio,'Vývoj tržeb portfolia (s DPH) — celá síť od začátku po poslední kompletní měsíc')
       ) : '';
-      var css='body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px;font-size:13px;line-height:1.5}'+
-        'h1{font-size:20px;margin:0 0 2px}h2{font-size:14px;margin:20px 0 8px;color:#0e5a86;border-bottom:2px solid #0ea5e9;padding-bottom:3px}'+
-        '.muted{color:#666;font-size:12px}table{width:100%;border-collapse:collapse;margin:6px 0}'+
-        'th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f1f5f9}.r{text-align:right}'+
-        '.kv{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:4px 0}'+
-        '.box{border:1px solid #0ea5e9;background:#e8f6fd;border-radius:8px;padding:12px;margin:10px 0}'+
-        '.ok{color:#127a3a;font-weight:bold}.ftr{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #ddd;padding-top:8px}'+
-        '@media print{body{margin:12mm}}';
+      var css='*{box-sizing:border-box}'+
+        'body{font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:#1e293b;margin:0;font-size:12.5px;line-height:1.55;background:#fff}'+
+        '.wrap{max-width:840px;margin:0 auto;padding:0 26px 28px}'+
+        '.hdr{background:linear-gradient(135deg,#0e5a86,#0ea5e9);color:#fff;padding:24px 26px;margin-bottom:6px}'+
+        '.hdr h1{font-size:23px;margin:0 0 5px;font-weight:800;letter-spacing:-.01em}'+
+        '.hdr .sub{font-size:12px;opacity:.92}'+
+        'h2{font-size:15px;margin:24px 0 10px;color:#0e5a86;font-weight:800;border-bottom:2px solid #e2e8f0;padding-bottom:6px}'+
+        'p{margin:0 0 8px}'+
+        '.muted{color:#64748b;font-size:11.5px}'+
+        'table{width:100%;border-collapse:collapse;margin:8px 0;font-size:12px}'+
+        'th,td{border:1px solid #e2e8f0;padding:6px 9px;text-align:left}'+
+        'th{background:#f1f5f9;color:#334155;font-weight:700}'+
+        'tbody tr:nth-child(even) td{background:#f8fafc}'+
+        '.r{text-align:right}'+
+        '.kv{display:flex;justify-content:space-between;border-bottom:1px solid #eef2f7;padding:5px 0}'+
+        '.kv span{color:#475569}'+
+        '.box{border:1px solid #bae6fd;background:#f0f9ff;border-radius:10px;padding:12px 14px;margin:12px 0}'+
+        '.verdict{border:1px solid #86efac;background:#f0fdf4;border-radius:10px;padding:12px 14px;margin:12px 0}'+
+        '.ok{color:#15803d;font-weight:800}'+
+        '.kpis{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}'+
+        '.kpi{flex:1;min-width:120px;border:1px solid #e2e8f0;border-radius:10px;padding:11px 13px;background:#fff}'+
+        '.kpi .l{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.04em}'+
+        '.kpi .v{font-size:20px;font-weight:800;color:#0e5a86;margin-top:3px}'+
+        '.kpi .s{font-size:10px;color:#94a3b8;margin-top:1px}'+
+        'ul{margin:6px 0;padding-left:20px}li{margin:2px 0}'+
+        '.sec{page-break-inside:avoid}'+
+        '.ftr{margin-top:24px;color:#94a3b8;font-size:10.5px;border-top:1px solid #e2e8f0;padding-top:10px}'+
+        '@media print{.hdr,.kpi .v,.box,.verdict{-webkit-print-color-adjust:exact;print-color-adjust:exact}}';
+      var kpicards='<div class="kpis">'+
+        '<div class="kpi"><div class="l">DSCR (medián)</div><div class="v">'+d2(dscr)+'×</div><div class="s">NOI ÷ splátka</div></div>'+
+        '<div class="kpi"><div class="l">NOI / měsíc</div><div class="v">'+f(noi)+'</div><div class="s">provozní zisk 1 jednotky</div></div>'+
+        '<div class="kpi"><div class="l">Měsíční splátka</div><div class="v">'+f(pmt)+'</div><div class="s">anuita '+L.term+' měs · '+String(L.rate).replace('.',',')+' %</div></div>'+
+        '<div class="kpi"><div class="l">Rezerva do DSCR 1,0</div><div class="v">'+(Math.round(cushion*10)/10).toString().replace('.',',')+' %</div><div class="s">pokles tržby, který jednotka unese</div></div>'+
+        '<div class="kpi"><div class="l">Track record</div><div class="v">'+String(t.yearsData).replace('.',',')+' let</div><div class="s">'+num(t.activeCount)+' aktivních jednotek</div></div>'+
+        '</div>';
+      var techSpecUl='<ul>'+
+        '<li>Sušička <b>LS350</b>, pračka <b>SY180</b>, pračka <b>SY80</b>.</li>'+
+        '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b>.</li>'+
+        '<li><b>Dodavatel spotřebičů:</b> Laundry Alliance — pračky a sušičky vyráběné v <b>České republice (Příbor)</b>.</li>'+
+        '<li><b>Výrobce prádlomatu:</b> Best Series s.r.o., výroba v <b>Rychnově nad Kněžnou (ČR)</b>.</li>'+
+        '<li>Každý prádlomat má vlastní <b>výrobní číslo</b>, značku <b>CE</b> a chráněné <b>průmyslové vzory</b>.</li>'+
+        '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS).</li>'+
+        '<li>Movitý, identifikovatelný a přemístitelný předmět financování.</li></ul>';
       var _svcBd=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
       var svcNotePdf=(_svcBd.length)?(
         '<h2>Co servis zahrnuje</h2>'+
@@ -667,29 +702,36 @@
         '</div>'
       ) : '';
       var html='<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>Leasingový podklad — Prádlomat</title><style>'+css+'</style></head><body>'+
-        '<h1>Podklad pro financování — Prádlomat</h1>'+
-        '<div class="muted">Best Series s.r.o. · vytvořeno '+now+' · data ze SIS '+t.firstData+' → '+t.lastData+'</div>'+
+        '<div class="hdr"><h1>Podklad pro financování — Prádlomat</h1>'+
+          '<div class="sub">Best Series s.r.o. · vytvořeno '+now+' · data ze SIS '+t.firstData+' → '+t.lastData+' · režim '+modeLbl+'</div></div>'+
+        '<div class="wrap">'+
         photoStrip+
+        // 1) Shrnutí
         '<div class="box">Cíl: prokázat, že <b>jedna jednotka (prádlomat) funguje samostatně</b> a její provozní zisk pokryje leasingovou splátku, a že je model <b>škálovatelný</b>. Umožní financující společnosti nabídnout produkt našim zákazníkům s možností leasingu.</div>'+
-        '<div class="muted" style="margin:6px 0">Podklad je zpracován pro <b>verzi V3</b> — konfiguraci <b>1× pračka 8 kg + 1× pračka 18 kg + 1× sušička 18 kg</b>, nejrozšířenější variantu, na kterou máme nejvíce provozních dat. Ekonomika vychází ze zavedené sítě prádlomatů s víceletou historií provozu ('+String(t.yearsData).replace('.',',')+' let dat ze SIS, '+t.firstData+' → '+t.lastData+'), aby byla data reprezentativní.</div>'+
-        '<h2>Cílový zákazník</h2>'+
-        '<div class="muted">Poptávku tvoří tři segmenty; hlavní objem a nejpravidelnější tržby táhne první z nich.</div>'+
-        '<p><b>1) Drobní podnikatelé — hlavní segment, největší objem (18kg pračka).</b> Ubytovny (ložní prádlo), penziony, chalupáři, restaurace (ubrusy, podsedáky), kadeřnictví (ručníky), autodetailing (potahy), masážní a úklidové firmy. Mají příliš velký objem prádla na domácí 5kg pračku, ale ne dost na vlastní prádelnu či pravidelnou čistírnu — typičtí zákazníci velké 18kg pračky s největším a nejpravidelnějším objemem.</p>'+
-        '<p><b>2) Domácnosti s rozměrným prádlem.</b> Kabáty, spacáky, závěsy, potahy, ovčí vlna, zahradní sedáky, autopotahy, běhouny, peřiny, polštáře, velké deky, plyšáci — věci, které se doma do pračky nevejdou. Čistírna je ~3× dražší a trvá několik dní; u prádlomatu to mají do hodiny a zhruba za třetinu ceny.</p>'+
-        '<p><b>3) Standardní prádlo — roste nejpomaleji, ale stabilně.</b> Rozbitá pračka, nedostatek místa na pračku a sušičku, lidé na cestách, studenti na kolejích, řidiči kamionů, turisté. Největší přírůstek pravidelně před Vánoci (předvánoční úklid → přetížená a rozbitá domácí pračka; 200 Kč za vyprání vs. 10 000 Kč za novou pračku místo dárků). Kdo jednou přijde, obvykle zůstává.</p>'+
-        '<div class="muted">Není to nový princip — před generací bylo běžné prát ve sdílených prádelnách bytových a panelových domů. Prádlomat tuto službu vrací v moderní, samoobslužné a dostupné podobě.</div>'+
-        '<h2>Likvidita a srovnatelné technologie</h2>'+
-        '<p>Prádlomat využívá <b>stejné průmyslové pračky a sušičky jako převažující řešení na trhu praní</b> — nejde o unikátní, obtížně zpeněžitelnou technologii, ale o standardní, prověřené a široce používané stroje.</p>'+
-        '<p>Přímou konkurencí jsou <b>samoobslužné prádelny uvnitř budov</b> (např. Speed Queen, Quick Wash, Lavos a podobné) — používají v podstatě totožnou technologii, jen v interiéru. Ve strojích téže třídy perou i profesionální prádelny a čistírny a rovněž hotely, restaurace a nemocnice s vlastním praním.</p>'+
-        '<p>Nespornou výhodou prádlomatu oproti vnitřním instalacím je, že jde o <b>kompaktní, přemístitelnou buňku</b>: pokud se lokalita neosvědčí, lze celou jednotku bez ztráty kvality, vzhledu a funkčnosti přesunout jinam. U instalace ve vnitřním prostoru to při stejném vybavení možné není.</p>'+
-        '<p>Technologie prádlomatu má uplatnění v mnoha sektorech a odvětvích, což rozšiřuje sekundární trh a <b>podporuje likviditu a zůstatkovou hodnotu</b> předmětu financování.</p>'+
-        '<div class="kv"><span>Režim DPH</span><b>'+modeLbl+'</b></div>'+
-        '<h2>Předmět financování</h2>'+
+        kpicards+
+        '<div class="muted">Podklad je zpracován pro <b>verzi V3</b> — konfiguraci <b>1× pračka 8 kg + 1× pračka 18 kg + 1× sušička 18 kg</b>, nejrozšířenější variantu, na kterou máme nejvíce provozních dat. Ekonomika vychází ze zavedené sítě prádlomatů s víceletou historií provozu ('+String(t.yearsData).replace('.',',')+' let dat ze SIS, '+t.firstData+' → '+t.lastData+'), aby byla data reprezentativní.</div>'+
+        // 2) Předmět financování + technická specifikace
+        '<div class="sec"><h2>Předmět financování</h2>'+
         '<div class="kv"><span>Pořizovací cena / jednotka (bez DPH)</span><b>'+f(L.price)+'</b></div>'+
         '<div class="kv"><span>Cena s DPH ('+vat+' %)</span><b>'+f(gross)+'</b></div>'+
         '<div class="kv"><span>Financovaná cena ('+(mode==='neplatce'?'vč. DPH — neplátce':'bez DPH — plátce')+')</span><b>'+f(price)+'</b></div>'+
         '<div class="kv"><span>Počet jednotek</span><b>'+L.count+'×</b></div>'+
-        '<h2>Ekonomika 1 jednotky — '+modeLbl+' (medián ze SIS, měsíčně)</h2>'+
+        '<div class="muted" style="margin-top:8px">Technická specifikace předmětu financování:</div>'+techSpecUl+'</div>'+
+        // 3) Likvidita a srovnatelné technologie
+        '<div class="sec"><h2>Likvidita a srovnatelné technologie</h2>'+
+        '<p>Prádlomat využívá <b>stejné průmyslové pračky a sušičky jako převažující řešení na trhu praní</b> — nejde o unikátní, obtížně zpeněžitelnou technologii, ale o standardní, prověřené a široce používané stroje.</p>'+
+        '<p>Přímou konkurencí jsou <b>samoobslužné prádelny uvnitř budov</b> (např. Speed Queen, Quick Wash, Lavos a podobné) — používají v podstatě totožnou technologii, jen v interiéru. Ve strojích téže třídy perou i profesionální prádelny a čistírny a rovněž hotely, restaurace a nemocnice s vlastním praním.</p>'+
+        '<p>Nespornou výhodou prádlomatu oproti vnitřním instalacím je, že jde o <b>kompaktní, přemístitelnou buňku</b>: pokud se lokalita neosvědčí, lze celou jednotku bez ztráty kvality, vzhledu a funkčnosti přesunout jinam. U instalace ve vnitřním prostoru to při stejném vybavení možné není.</p>'+
+        '<p>Technologie prádlomatu má uplatnění v mnoha sektorech a odvětvích, což rozšiřuje sekundární trh a <b>podporuje likviditu a zůstatkovou hodnotu</b> předmětu financování.</p></div>'+
+        // 4) Cílový zákazník
+        '<div class="sec"><h2>Cílový zákazník</h2>'+
+        '<div class="muted">Poptávku tvoří tři segmenty; hlavní objem a nejpravidelnější tržby táhne první z nich.</div>'+
+        '<p><b>1) Drobní podnikatelé — hlavní segment, největší objem (18kg pračka).</b> Ubytovny (ložní prádlo), penziony, chalupáři, restaurace (ubrusy, podsedáky), kadeřnictví (ručníky), autodetailing (potahy), masážní a úklidové firmy. Mají příliš velký objem prádla na domácí 5kg pračku, ale ne dost na vlastní prádelnu či pravidelnou čistírnu — typičtí zákazníci velké 18kg pračky s největším a nejpravidelnějším objemem.</p>'+
+        '<p><b>2) Domácnosti s rozměrným prádlem.</b> Kabáty, spacáky, závěsy, potahy, ovčí vlna, zahradní sedáky, autopotahy, běhouny, peřiny, polštáře, velké deky, plyšáci — věci, které se doma do pračky nevejdou. Čistírna je ~3× dražší a trvá několik dní; u prádlomatu to mají do hodiny a zhruba za třetinu ceny.</p>'+
+        '<p><b>3) Standardní prádlo — roste nejpomaleji, ale stabilně.</b> Rozbitá pračka, nedostatek místa na pračku a sušičku, lidé na cestách, studenti na kolejích, řidiči kamionů, turisté. Největší přírůstek pravidelně před Vánoci (předvánoční úklid → přetížená a rozbitá domácí pračka; 200 Kč za vyprání vs. 10 000 Kč za novou pračku místo dárků). Kdo jednou přijde, obvykle zůstává.</p>'+
+        '<div class="muted">Není to nový princip — před generací bylo běžné prát ve sdílených prádelnách bytových a panelových domů. Prádlomat tuto službu vrací v moderní, samoobslužné a dostupné podobě.</div></div>'+
+        // 5) Ekonomika 1 jednotky
+        '<div class="sec"><h2>Ekonomika 1 jednotky — '+modeLbl+' (medián ze SIS, měsíčně)</h2>'+
         '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Tržba bez DPH')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
         '<tr><td>EBITDA</td><td class="r"><b>'+f(base.ebitda)+' ('+pct(base.marginPct)+')</b></td></tr>'+
         '<tr><td><b>NOI (před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
@@ -701,48 +743,31 @@
         '<tr><td>− Platební poplatky</td><td class="r">'+f(u.fee)+'</td></tr>'+
         (u.maintenance?'<tr><td>− Údržba (rezerva)</td><td class="r">'+f(u.maintenance)+'</td></tr>':'')+
         '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(u.ebitda)+' ('+pct(u.ebitdaMargin)+')</b></td></tr>'+
-        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
-        svcNotePdf+
-        energyNotePdf+
-        '<h2>Návrh leasingu (1 jednotka)</h2>'+
+        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table></div>'+
+        '<div class="sec">'+svcNotePdf+'</div>'+
+        '<div class="sec">'+energyNotePdf+'</div>'+
+        // 6) Návrh leasingu + DSCR
+        '<div class="sec"><h2>Návrh leasingu (1 jednotka)</h2>'+
         '<div class="kv"><span>Financovaná částka</span><b>'+f(financed)+'</b></div>'+
         '<div class="kv"><span>Akontace ('+String(L.down).replace('.',',')+' %)</span><b>'+f(price*L.down/100)+'</b></div>'+
         '<div class="kv"><span>Zůstatková hodnota ('+String(L.residual).replace('.',',')+' %)</span><b>'+f(residual)+'</b></div>'+
         '<div class="kv"><span>Doba / roční úrok</span><b>'+L.term+' měs · '+String(L.rate).replace('.',',')+' %</b></div>'+
         '<div class="kv"><span>Měsíční splátka (anuita)</span><b>'+f(pmt)+'</b></div>'+
         '<div class="kv"><span>DSCR (NOI ÷ splátka)</span><b class="ok">'+d2(dscr)+'×</b></div>'+
-        '<div class="box"><span class="ok">✔ '+verdict+'</span><br>Tržba/NOI může klesnout o '+ (Math.round(cushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div>'+
-        rampSection+
-        '<h2>Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="muted">Konzervativní = dolní kvartil · Základní = medián · Silný = horní kvartil sítě.</div>'+
-        '<table><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr>'+scenRows+'</table>'+
-        '<h2>Minimální tržba pro DSCR</h2><table><tr><th>DSCR 1,00 (bod zvratu)</th><th>DSCR 1,20</th><th>DSCR 1,30</th></tr><tr><td class="r">'+f(minRev(1.0))+'</td><td class="r">'+f(minRev(1.2))+'</td><td class="r">'+f(minRev(1.3))+'</td></tr></table>'+
-        '<h2>Stresové testy</h2><table><tr><th>Scénář</th><th class="r">EBITDA/měs</th><th class="r">Cash flow po splátce</th><th class="r">DSCR</th></tr>'+stressRows+'</table>'+
+        '<div class="verdict"><span class="ok">✔ '+verdict+'</span><br>Tržba/NOI může klesnout o '+ (Math.round(cushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div></div>'+
+        // 7) Náběhová křivka + odklad
+        '<div class="sec">'+rampSection+'</div>'+
+        // 8) Odolnost — scénáře, min. tržba, stresy
+        '<div class="sec"><h2>Scénáře výkonnosti (měsíčně, 1 jednotka)</h2><div class="muted">Konzervativní = dolní kvartil · Základní = medián · Silný = horní kvartil sítě.</div>'+
+        '<table><tr><th>Scénář</th><th class="r">Tržba/inkaso</th><th class="r">EBITDA</th><th class="r">NOI</th><th class="r">Splátka</th><th class="r">Cash flow</th><th class="r">DSCR</th></tr>'+scenRows+'</table></div>'+
+        '<div class="sec"><h2>Minimální tržba pro DSCR</h2><table><tr><th>DSCR 1,00 (bod zvratu)</th><th>DSCR 1,20</th><th>DSCR 1,30</th></tr><tr><td class="r">'+f(minRev(1.0))+'</td><td class="r">'+f(minRev(1.2))+'</td><td class="r">'+f(minRev(1.3))+'</td></tr></table></div>'+
+        '<div class="sec"><h2>Stresové testy</h2><table><tr><th>Scénář</th><th class="r">EBITDA/měs</th><th class="r">Cash flow po splátce</th><th class="r">DSCR</th></tr>'+stressRows+'</table></div>'+
+        // 9) Grafy
         grafySection+
-        '<h2>Škálovatelnost</h2><table><tr><th>Jednotek</th><th class="r">Investice</th><th class="r">Financováno</th><th class="r">Splátka/měs</th><th class="r">NOI/měs</th><th class="r">DSCR</th></tr>'+scen+'</table>'+
-        '<h2>Technická specifikace (předmět financování)</h2><ul>'+
-        '<li>Sušička <b>LS350</b>, pračka <b>SY180</b>, pračka <b>SY80</b>.</li>'+
-        '<li>Životnost spotřebičů dle výrobce: <b>30 000 cyklů</b>.</li>'+
-        '<li><b>Dodavatel spotřebičů:</b> Laundry Alliance — pračky a sušičky vyráběné v <b>České republice (Příbor)</b>.</li>'+
-        '<li><b>Výrobce prádlomatu:</b> Best Series s.r.o., výroba v <b>Rychnově nad Kněžnou (ČR)</b>.</li>'+
-        '<li>Každý prádlomat má vlastní <b>výrobní číslo</b>, značku <b>CE</b> a chráněné <b>průmyslové vzory</b>.</li>'+
-        '<li>Samoobslužný provoz, platební terminál, vzdálený monitoring (SIS).</li>'+
-        '<li>Movitý, identifikovatelný a přemístitelný předmět financování.</li></ul>'+
-        '<h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
-        '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
-        '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li>'+
-        (cyclesPerMonth>0 ? (
-          '<li>Reálné vytížení dle SIS: <b>'+num(Math.round(cyclesPerMonth))+' cyklů/měs</b> (~'+num(Math.round(cyclesPerMonth*12))+' cyklů/rok).</li>'+
-          '<li>Za 5 let (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 ('+Math.round(remPct5*100)+' % technické životnosti).</li>'+
-          '<li>Orientační technická zůstatková hodnota po 5 letech: <b>'+f(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
-        ) : '')+'</ul>'+
-        '<h2>Zajištění pro financující společnost</h2><ul>'+
-        '<li>Movitý majetek (prádlomat) jako zástava.</li>'+
-        '<li>Vzdálený monitoring přes SIS — tržby a provoz v reálném čase.</li>'+
-        '<li>Vlastní servisní síť a rychlá údržba.</li>'+
-        '<li>Platby koncových zákazníků předem u stroje (žádné pohledávky, žádná koncentrace).</li>'+
-        '<li>Nezávazná součinnost při relokaci; případný zpětný odkup jen na vyžádání (PROPOSAL).</li></ul>'+
-        '<h2>Bonita zákazníka vs. ekonomika předmětu</h2><div class="muted">Historická ekonomika prádlomatu nenahrazuje posouzení bonity zákazníka — tu posuzuje leasingová společnost samostatně (účetní výsledky, historie, zajištění). Data výrobce slouží k vyhodnocení ekonomiky a provozního rizika předmětu financování.</div>'+
-        '<h2>Track record (důkaz funkčnosti)</h2>'+
+        // 10) Škálovatelnost
+        '<div class="sec"><h2>Škálovatelnost</h2><table><tr><th>Jednotek</th><th class="r">Investice</th><th class="r">Financováno</th><th class="r">Splátka/měs</th><th class="r">NOI/měs</th><th class="r">DSCR</th></tr>'+scen+'</table></div>'+
+        // 11) Track record
+        '<div class="sec"><h2>Track record (důkaz funkčnosti)</h2>'+
         '<div class="kv"><span>Roky dat ze SIS</span><b>'+String(t.yearsData).replace('.',',')+' let</b></div>'+
         '<div class="kv"><span>Aktivních jednotek</span><b>'+num(t.activeCount)+' (z '+t.realCount+')</b></div>'+
         '<div class="kv"><span>Location-months provozu</span><b>'+num(t.locationMonths)+'</b></div>'+
@@ -750,9 +775,25 @@
         '<div class="kv"><span>Kumulativní obrat (skutečný, bez DPH)</span><b>'+f(t.cumulativeRevenue)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, s DPH '+vat+' %)</span><b>'+f((t.cumulativeRevenue||0)*(1+vat/100))+'</b></div>'+
         (modelAdd>0 ? ('<div class="kv"><span>Kumulativní obrat vč. hotovostních plateb (s DPH)</span><b>'+f(((t.cumulativeRevenue||0)+(modelAdd*(t.locationMonths||0)))*(1+vat/100))+'</b></div>') : '')+
-        '<div class="kv"><span>Medián tržby / jednotka</span><b>'+f(DATA.unitEconomics.revenueDist.p50)+'</b></div>'+
+        '<div class="kv"><span>Medián tržby / jednotka</span><b>'+f(DATA.unitEconomics.revenueDist.p50)+'</b></div></div>'+
+        // 12) Zůstatková hodnota + zajištění + bonita
+        '<div class="sec"><h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
+        '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
+        '<li>Stroj je oddělitelný a přemístitelný → možná relokace.</li>'+
+        (cyclesPerMonth>0 ? (
+          '<li>Reálné vytížení dle SIS: <b>'+num(Math.round(cyclesPerMonth))+' cyklů/měs</b> (~'+num(Math.round(cyclesPerMonth*12))+' cyklů/rok).</li>'+
+          '<li>Za 5 let (60 měs) najeto ~<b>'+num(Math.round(cyclesUsed5))+' cyklů</b> → zbývá <b>'+num(Math.round(remCycles5))+'</b> z 30 000 ('+Math.round(remPct5*100)+' % technické životnosti).</li>'+
+          '<li>Orientační technická zůstatková hodnota po 5 letech: <b>'+f(techResidual5)+'</b> bez DPH (≈ '+Math.round(remPct5*100)+' % pořizovací ceny, lineárně dle zbývajících cyklů).</li>'
+        ) : '')+'</ul></div>'+
+        '<div class="sec"><h2>Zajištění pro financující společnost</h2><ul>'+
+        '<li>Movitý majetek (prádlomat) jako zástava.</li>'+
+        '<li>Vzdálený monitoring přes SIS — tržby a provoz v reálném čase.</li>'+
+        '<li>Vlastní servisní síť a rychlá údržba.</li>'+
+        '<li>Platby koncových zákazníků předem u stroje (žádné pohledávky, žádná koncentrace).</li>'+
+        '<li>Nezávazná součinnost při relokaci; případný zpětný odkup jen na vyžádání (PROPOSAL).</li></ul></div>'+
+        '<div class="sec"><h2>Bonita zákazníka vs. ekonomika předmětu</h2><div class="muted">Historická ekonomika prádlomatu nenahrazuje posouzení bonity zákazníka — tu posuzuje leasingová společnost samostatně (účetní výsledky, historie, zajištění). Data výrobce slouží k vyhodnocení ekonomiky a provozního rizika předmětu financování.</div></div>'+
         '<div class="ftr">Ekonomika jednotky vychází ze skutečných dat SIS (medián, bez DPH) a provozních předpokladů. Splátka je orientační anuita dle zadaných parametrů; konkrétní podmínky určuje financující společnost. Nejde o garantovaný výnos.</div>'+
-        '</body></html>';
+        '</div></body></html>';
       var w=window.open('','_blank'); if(!w){ alert('Prohlížeč zablokoval vyskakovací okno — povol ho a zkus znovu.'); return; }
       w.document.write(html); w.document.close(); w.focus(); setTimeout(function(){ try{ w.print(); }catch(e){} }, 500);
     };
