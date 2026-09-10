@@ -13,13 +13,20 @@ const SIS = require('../services/bank-plan/sis-history');
 
 // Derivace servis/energie % z ŽIVÉ ekonomiky jednoho prádlomatu (businessToolDefaults).
 // Když upravíš hodnoty v pomůcce „Ekonomika prádlomatu" a uložíš, tady se přepočítají.
-async function _unitModelPct() {
+async function _unitModelPct(base, fx) {
   let cfg = {};
   try {
     const row = await prisma.businessToolDefaults.findUnique({ where: { tool: 'pradlomat-economy' }, select: { data_json: true } });
     if (row && row.data_json && typeof row.data_json === 'object') cfg = row.data_json;
   } catch (e) { /* fallback na konstanty V3 */ }
-  return Object.assign({}, E.deriveUnitModelPct(cfg), { serviceBreakdown: E.deriveServiceBreakdown(cfg), energyBreakdown: E.deriveEnergyBreakdown(cfg) });
+  // Kurz EUR → zobrazovaná měna (pevné položky V3 jsou v EUR).
+  let fxEurToBase = 1;
+  try { fxEurToBase = E.convert(1, 'EUR', base || 'CZK', fx); } catch (e) { fxEurToBase = (base === 'EUR') ? 1 : 25; }
+  return Object.assign({}, E.deriveUnitModelPct(cfg), {
+    serviceBreakdown: E.deriveServiceBreakdown(cfg),
+    energyBreakdown: E.deriveEnergyBreakdown(cfg),
+    fxEurToBase: fxEurToBase,
+  });
 }
 
 const HISTORY_KEY = 'bank_plan.sis_history';
@@ -361,7 +368,7 @@ router.get('/overview', requireAuth, async (req, res, next) => {
       cohort,
       portfolioMonthly,
       rentStats,
-      unitModel: await _unitModelPct(), // referenční % z ŽIVÉ ekonomiky jednoho prádlomatu
+      unitModel: await _unitModelPct(base, fx), // referenční % + pevné položky z ŽIVÉ ekonomiky jednoho prádlomatu
       assumptions: A,
       locations: perLoc,
     });

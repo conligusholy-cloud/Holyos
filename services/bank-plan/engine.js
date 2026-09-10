@@ -455,16 +455,16 @@ function deriveServiceBreakdown(cfg) {
   const zm = d.zakazniku_za_den * 30.5;
   const detM = zm * washDet;
   const items = [
-    { key: 'udrzba', label: 'Údržba a náhradní díly', eur: d.udrzba },
-    { key: 'servis', label: 'Servisní zásahy / práce technika', eur: d.servis },
-    { key: 'software', label: 'Software a vzdálený monitoring (SIS)', eur: d.software },
-    { key: 'infolinka', label: 'Infolinka / zákaznická podpora', eur: d.infolinka },
-    { key: 'internet', label: 'Internet / konektivita', eur: d.internet },
-    { key: 'pojisteni', label: 'Pojištění stroje', eur: d.pojisteni },
-    { key: 'detergenty', label: 'Detergenty (prášek, aviváž)', eur: detM },
+    { key: 'udrzba', label: 'Údržba a náhradní díly', eur: d.udrzba, fixed: true },
+    { key: 'servis', label: 'Servisní zásahy / práce technika', eur: d.servis, fixed: true },
+    { key: 'software', label: 'Software a vzdálený monitoring (SIS)', eur: d.software, fixed: true },
+    { key: 'infolinka', label: 'Infolinka / zákaznická podpora', eur: d.infolinka, fixed: true },
+    { key: 'internet', label: 'Internet / konektivita', eur: d.internet, fixed: true },
+    { key: 'pojisteni', label: 'Pojištění stroje', eur: d.pojisteni, fixed: true },
+    { key: 'detergenty', label: 'Detergenty (prášek, aviváž)', eur: detM, fixed: false },
   ];
   const total = items.reduce((a, it) => a + (it.eur || 0), 0) || 1;
-  return items.map((it) => ({ key: it.key, label: it.label, share: (it.eur || 0) / total, eurMonthly: Math.round(it.eur || 0) }));
+  return items.map((it) => ({ key: it.key, label: it.label, share: (it.eur || 0) / total, eurMonthly: Math.round(it.eur || 0), fixed: !!it.fixed }));
 }
 
 // Rozpad energie (V3) — voda/stočné a elektřina na praní a sušení. Podíly z nákladů na zákazníka.
