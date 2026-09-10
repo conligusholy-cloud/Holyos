@@ -619,7 +619,13 @@
         '.ok{color:#127a3a;font-weight:bold}.ftr{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #ddd;padding-top:8px}'+
         '@media print{body{margin:12mm}}';
       var _svcBd=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
-      var svcNotePdf=_svcBd.length?('<div class="box"><b>Co zahrnuje servis:</b> '+_svcBd.map(function(it){return it.label.charAt(0).toLowerCase()+it.label.slice(1);}).join(', ')+'. Tento kompletní balíček služeb (včetně detergentů) umíme zajistit v rámci České republiky za <b>13 % z obratu s DPH</b>, pokud si to zákazník přeje. Alternativně si provoz může zajišťovat sám — a na servisu tak i něco ušetřit.</div>'):'';
+      var svcNotePdf=(_svcBd.length&&u.service)?(
+        '<h2>Co zahrnuje servis</h2>'+
+        '<div class="muted">Cena servisu, pokud si ho provozovatel zajišťuje sám (měsíčně, medián):</div>'+
+        '<table>'+_svcBd.map(function(it){ var bez=u.service*it.share; return '<tr><td>'+it.label+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
+        '<tr><td><b>Servis celkem</b></td><td class="r"><b>'+f(Math.round(u.service))+' bez · '+f(Math.round(u.service*1.21))+' s DPH</b></td></tr></table>'+
+        '<div class="box">Takto je servis započten v modelaci (provozní náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček včetně detergentů ale umíme převzít my v rámci České republiky za <b>13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz zákazník sám, na servisu ušetří.</div>'
+      ):'';
       var photoStrip = (Array.isArray(_leasePhotos) && _leasePhotos.length) ? (
         '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:nowrap">'+
         _leasePhotos.map(function(src){ return '<img src="'+src+'" style="flex:1;min-width:0;max-height:200px;object-fit:cover;border:1px solid #ccc;border-radius:6px">'; }).join('')+
@@ -1128,12 +1134,14 @@
            '<div class="note" style="margin-top:4px">Investice/jednotku (all-in): '+money(u.allIn)+' · z toho úvěr '+money(u.debtPerUnit)+' + vlastní '+money(u.equityPerUnit)+'</div></div>';
       h += '</div>'; // konec max-width bloku
       var _sb=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
-      if(_sb.length){
-        var _items=_sb.map(function(it){return it.label.charAt(0).toLowerCase()+it.label.slice(1);}).join(', ');
-        h += '<div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.25);line-height:1.6;color:var(--text2);font-size:13px">'+
-          '<b style="color:#0ea5e9">Co zahrnuje servis:</b> '+_items+'. '+
-          'Tento kompletní balíček služeb (včetně detergentů) umíme <b>zajistit v rámci České republiky za 13 % z obratu s DPH</b>, pokud si to zákazník přeje. '+
-          'Alternativně si provoz může zajišťovat sám — a na servisu tak i něco ušetřit.'+
+      if(_sb.length && u.service){
+        var _rows='';
+        _sb.forEach(function(it){ var bez=u.service*it.share; _rows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)">'+it.label+'</span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span></span></div>'; });
+        h += '<div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.25);line-height:1.5;font-size:13px">'+
+          '<div style="font-weight:700;color:#0ea5e9;margin-bottom:6px">Co zahrnuje servis — cena, pokud si ho provozovatel zajišťuje sám (měsíčně, medián):</div>'+
+          _rows+
+          '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0 0;font-weight:800"><span>Servis celkem</span><span style="white-space:nowrap">'+money(u.service)+' <span style="opacity:.6;font-weight:400">bez</span> · '+money(u.service*1.21)+' <span style="opacity:.6;font-weight:400">s DPH</span></span></div>'+
+          '<div style="margin-top:8px;color:var(--text2)">Takto je servis započten v modelaci (provozní náklad, pokud si ho provoz zajišťuje zákazník sám). Kompletní balíček (včetně detergentů) ale umíme <b>převzít my v rámci České republiky za 13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz sám, na servisu ušetří.</div>'+
         '</div>';
       }
       h += '</div>'; // konec sekce
