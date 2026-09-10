@@ -606,7 +606,7 @@
         '.ok{color:#127a3a;font-weight:bold}.ftr{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #ddd;padding-top:8px}'+
         '@media print{body{margin:12mm}}';
       var _svcBd=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
-      var svcRowsPdf=(_svcBd.length&&u.service)?(_svcBd.map(function(it){ var bez=u.service*it.share; return '<tr><td style="padding-left:16px;color:#555">· '+it.label+'</td><td class="r" style="color:#555">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+'<tr><td colspan="2" style="font-size:11px;color:#555;padding-top:2px">Kompletní servis vč. detergentů zajišťujeme v rámci ČR za <b>13 % z hrubého obratu</b> (jednotný poplatek, bez cestovného; DPH 21 %).</td></tr>'):'';
+      var svcNotePdf=_svcBd.length?('<div class="box"><b>Co zahrnuje servis:</b> '+_svcBd.map(function(it){return it.label.charAt(0).toLowerCase()+it.label.slice(1);}).join(', ')+'. Tento kompletní balíček služeb (včetně detergentů) umíme zajistit v rámci České republiky za <b>13 % z obratu s DPH</b>, pokud si to zákazník přeje. Alternativně si provoz může zajišťovat sám — a na servisu tak i něco ušetřit.</div>'):'';
       var photoStrip = (Array.isArray(_leasePhotos) && _leasePhotos.length) ? (
         '<div style="display:flex;gap:8px;margin:10px 0 4px;flex-wrap:nowrap">'+
         _leasePhotos.map(function(src){ return '<img src="'+src+'" style="flex:1;min-width:0;max-height:200px;object-fit:cover;border:1px solid #ccc;border-radius:6px">'; }).join('')+
@@ -632,12 +632,12 @@
         '<table><tr><td>Obrat (bez DPH)</td><td class="r"><b>'+f(u.revenue)+'</b></td></tr>'+
         '<tr><td>− Nájem</td><td class="r">'+f(u.rent)+'</td></tr>'+
         '<tr><td>− Servis</td><td class="r">'+f(u.service)+'</td></tr>'+
-        svcRowsPdf+
         '<tr><td>− Energie</td><td class="r">'+f(u.energy)+'</td></tr>'+
         '<tr><td>− Platební poplatky</td><td class="r">'+f(u.fee)+'</td></tr>'+
         (u.maintenance?'<tr><td>− Údržba (rezerva)</td><td class="r">'+f(u.maintenance)+'</td></tr>':'')+
         '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(u.ebitda)+' ('+pct(u.ebitdaMargin)+')</b></td></tr>'+
         '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
+        svcNotePdf+
         '<h2>Návrh leasingu (1 jednotka)</h2>'+
         '<div class="kv"><span>Financovaná částka</span><b>'+f(financed)+'</b></div>'+
         '<div class="kv"><span>Akontace ('+String(L.down).replace('.',',')+' %)</span><b>'+f(price*L.down/100)+'</b></div>'+
@@ -1100,17 +1100,6 @@
       h += row('Obrat (bez DPH)', u.revenue, {bold:true});
       h += row('Nájem', u.rent, {minus:true, col:'#ef4444', pct:u.rent/rev});
       h += row('Servis', u.service, {minus:true, col:'#ef4444', pct:u.service/rev});
-      var _sb = (DATA.unitModel && DATA.unitModel.serviceBreakdown) || [];
-      if (_sb.length && u.service){
-        h += '<div style="margin:0 0 6px 14px;padding:8px 10px;border-left:2px solid rgba(239,68,68,.4);background:rgba(239,68,68,.05);border-radius:0 8px 8px 0">';
-        h += '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;font-weight:600">Rozpad servisu (měsíčně, medián):</div>';
-        _sb.forEach(function(it){
-          var bez = u.service * it.share; var gross = bez * 1.21;
-          h += '<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:12px"><span style="color:var(--text2)">• '+it.label+'</span><span style="text-align:right;color:var(--text2);white-space:nowrap">'+money(bez)+' <span style="opacity:.65">bez DPH</span> · <b>'+money(gross)+'</b> <span style="opacity:.65">s DPH</span></span></div>';
-        });
-        h += '<div style="font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5">Kompletní servis <b>včetně detergentů</b> zajišťujeme <b>v rámci České republiky za 13 % z hrubého obratu</b> — jednotný poplatek, bez cestovného. Uvedené částky jsou v sazbě DPH 21 %.</div>';
-        h += '</div>';
-      }
       h += row('Energie', u.energy, {minus:true, col:'#ef4444', pct:u.energy/rev});
       h += row('Platební poplatky', u.fee, {minus:true, col:'#ef4444', pct:u.fee/rev});
       h += row('EBITDA', u.ebitda, {bold:true, col:'#22c55e', top:true, pct:u.ebitdaMargin});
@@ -1123,7 +1112,17 @@
       h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
            row('Čistý cash po splacení stroje (bez splátky)', u.netPaidOff, {bold:true, col:'#22c55e'})+
            '<div class="note" style="margin-top:4px">Investice/jednotku (all-in): '+money(u.allIn)+' · z toho úvěr '+money(u.debtPerUnit)+' + vlastní '+money(u.equityPerUnit)+'</div></div>';
-      h += '</div></div>';
+      h += '</div>'; // konec max-width bloku
+      var _sb=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
+      if(_sb.length){
+        var _items=_sb.map(function(it){return it.label.charAt(0).toLowerCase()+it.label.slice(1);}).join(', ');
+        h += '<div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.25);line-height:1.6;color:var(--text2);font-size:13px">'+
+          '<b style="color:#0ea5e9">Co zahrnuje servis:</b> '+_items+'. '+
+          'Tento kompletní balíček služeb (včetně detergentů) umíme <b>zajistit v rámci České republiky za 13 % z obratu s DPH</b>, pokud si to zákazník přeje. '+
+          'Alternativně si provoz může zajišťovat sám — a na servisu tak i něco ušetřit.'+
+        '</div>';
+      }
+      h += '</div>'; // konec sekce
       return h;
     }
     // Roční agregace pro tabulku (rozšířená o nové/rok, splátky, čerpání, equity).
