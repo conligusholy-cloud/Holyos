@@ -543,7 +543,6 @@
         rowKV('Transakcí v SIS (skutečné)', num(t.totalTx))+
         rowKV('Kumulativní obrat (skutečný, bez DPH)', money(t.cumulativeRevenue))+
         rowKV('Kumulativní obrat (skutečný, s DPH '+vat+' %)', money((t.cumulativeRevenue||0)*(1+vat/100)), '#22c55e')+
-        rowKV('Použitá tržba / jednotka (měs)', money(revBezBase))+
         '<div class="note" style="margin-top:6px">Skutečné údaje ze SIS.</div>'+
         '</div>';
       h += '</div>';
@@ -773,7 +772,7 @@
         '<div class="kv"><span>Transakcí v SIS (skutečné)</span><b>'+num(t.totalTx)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, bez DPH)</span><b>'+f(t.cumulativeRevenue)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, s DPH '+vat+' %)</span><b>'+f((t.cumulativeRevenue||0)*(1+vat/100))+'</b></div>'+
-        '<div class="kv"><span>Použitá tržba / jednotka (měs)</span><b>'+f(revBezBase)+'</b></div></div>'+
+        '</div>'+
         // 12) Zůstatková hodnota + zajištění + bonita
         '<div class="sec"><h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
         '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
