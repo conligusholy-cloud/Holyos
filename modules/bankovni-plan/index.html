@@ -255,30 +255,18 @@
     var _leaseVat = 'neplatce'; // start bývá neplátce; přepínatelné
     window.setLeaseVat = function(m){ _leaseVat = m; render(); };
     // Poměry nákladů z ekonomiky jedné jednotky (bez DPH) — pro škálování na scénáře P25/P50/P75.
-    // Pevné servisní položky z ekonomiky V3 (EUR → zobrazovaná měna) — nezávislé na obratu.
-    function leaseFixedSvc(){
-      var um = DATA.unitModel||{}; var sb = um.serviceBreakdown||[]; var fx = um.fxEurToBase||25;
-      var eur = sb.filter(function(it){ return it.fixed; }).reduce(function(a,it){ return a+(it.eurMonthly||0); }, 0);
-      return eur*fx;
-    }
     function leaseRatios(){
       var u = FC.unitBreakdown, rev = u.revenue||1;
-      var um = DATA.unitModel||{};
-      var fixedBez = leaseFixedSvc();                              // pevné (údržba, servis, SW, infolinka, internet, pojištění)
-      var detergentBez = rev * ((um.detergentPct||0)/100);        // variabilní (škáluje s obratem)
-      var varBez = detergentBez + (u.energy||0) + (u.fee||0);     // detergenty + energie + poplatky
       return {
         rentBez: u.rent||0,
-        fixedBez: fixedBez,
-        varPct: varBez/rev,                                        // variabilní náklady (% obratu)
+        varPct: ((u.service||0)+(u.energy||0)+(u.fee||0))/rev,   // servis+energie+poplatky (% obratu)
         maintPct: (u.maintenance||0)/rev,
       };
     }
     // Ekonomika jedné jednotky pro danou měsíční tržbu BEZ DPH, v režimu plátce/neplátce.
-    // Pevné náklady (fixedBez) se nemění s tržbou; variabilní (varPct) škálují.
     function leaseUnit(revBez, vatMode, vat){
       var R = leaseRatios();
-      var ebitdaBez = revBez - R.rentBez - R.fixedBez - revBez*R.varPct;
+      var ebitdaBez = revBez - R.rentBez - revBez*R.varPct;
       var noiBez = ebitdaBez - revBez*R.maintPct;
       var k = (vatMode==='neplatce') ? (1+vat/100) : 1; // neplátce = vše v hrubých hodnotách
       return { rev: revBez*k, ebitda: ebitdaBez*k, noi: noiBez*k, marginPct: revBez>0?ebitdaBez/revBez:0, _bezNoi: noiBez };
@@ -475,7 +463,7 @@
 
       // DSCR prahy — minimální tržba
       var R=leaseRatios(); var pmtBez = pmt/(mode==='neplatce'?(1+vat/100):1);
-      var minRev=function(x){ var denom=(1-R.varPct-R.maintPct); var rb=denom>0?((x*pmtBez)+R.rentBez+R.fixedBez)/denom:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
+      var minRev=function(x){ var denom=(1-R.varPct-R.maintPct); var rb=denom>0?((x*pmtBez)+R.rentBez)/denom:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
       h += '<div class="sec"><h2>🎯 Minimální tržba pro DSCR</h2><div class="note">Kolik musí jednotka měsíčně utržit, aby pokryla splátku na dané úrovni krytí.</div>'+
         '<div style="display:flex;gap:10px;flex-wrap:wrap">'+
           '<div class="sec" style="flex:1;min-width:150px;text-align:center"><div class="note">DSCR 1,00 (bod zvratu)</div><div style="font-size:20px;font-weight:800">'+money(minRev(1.0))+'</div></div>'+
@@ -560,14 +548,6 @@
       var _chartBlock=function(img,cap){ return img?('<div style="background:#0e1a22;border-radius:8px;padding:10px;margin:8px 0;page-break-inside:avoid">'+(cap?'<div style="color:#cbd5e1;font-size:11px;margin-bottom:4px">'+cap+'</div>':'')+'<img src="'+img+'" style="width:100%;display:block"></div>'):''; };
       var u=FC.unitBreakdown, t=DATA.trackRecord, L=_lease;
       var vat=21, mode=_leaseVat;
-      // Rekonciliace nákladů pro tabulku: servis = pevné V3 + detergenty(dle obratu); energie variabilní.
-      var _um=DATA.unitModel||{};
-      var _fixedSvcP=leaseFixedSvc();
-      var _detBezP=(u.revenue||0)*((_um.detergentPct||0)/100);
-      var servisRP=_fixedSvcP+_detBezP;
-      var energieRP=u.energy||0;
-      var ebitdaRP=(u.revenue||0)-(u.rent||0)-servisRP-energieRP-(u.fee||0);
-      var noiRP=ebitdaRP-(u.maintenance||0);
       var rd=DATA.unitEconomics.revenueDist||{};
       var revReal=(L.revBase||rd.p50||u.revenue)*((L.revPct!=null?L.revPct:100)/100);
       var modelAdd=(L.addDryCount||0)*(L.addDryPrice||0);
@@ -589,7 +569,7 @@
       var scenRows=[['Konzervativní (P25)',rd.p25],['Základní (P50)',rd.p50],['Silný (P75)',rd.p75]].map(function(s){ var b=leaseUnit(adjRevP(s[1]),mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.rev)+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(b.noi)+'</td><td class="r">'+f(pmt)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
       var stressRows=[['Base (medián)',1],['Pokles tržeb −10 %',0.9],['Pokles tržeb −20 %',0.8]].map(function(s){ var b=leaseUnit(revBezBase*s[1],mode,vat); var cf=b.noi-pmt; var dq=pmt>0?b.noi/pmt:0; return '<tr><td>'+s[0]+'</td><td class="r">'+f(b.ebitda)+'</td><td class="r">'+f(cf)+'</td><td class="r"><b>'+d2(dq)+'×</b></td></tr>'; }).join('');
       var Rr=leaseRatios(); var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
-      var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez+(Rr.fixedBez||0))/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
+      var minRev=function(x){ var dn=(1-Rr.varPct-Rr.maintPct); var rb=dn>0?((x*pmtBez)+Rr.rentBez)/dn:0; return rb*(mode==='neplatce'?(1+vat/100):1); };
       var verdict = dscr>=1.2 ? 'Profinancovatelné — provozní zisk jednotky pokryje leasingovou splátku s rezervou.' : (dscr>=1.0 ? 'Na hraně — DSCR ≥ 1,0, ale s malou rezervou.' : 'Splátka převyšuje provozní zisk jednotky.');
       // Zůstatková hodnota dle cyklů (stejný výpočet jako na obrazovce)
       var lifeCycles=30000;
@@ -611,7 +591,7 @@
       var _prampPct=_prampShow.map(function(c){return '<td class="r">'+(_pplateau?Math.round((c.median||0)/_pplateau*100):0)+' %</td>';}).join('');
       // Breakeven (zisk = splátka, DSCR 1,0) v tržbě bez DPH + měsíc překročení
       var _pbeDenom=(1-Rr.varPct-Rr.maintPct);
-      var _pbeRev=_pbeDenom>0?(pmtBez+Rr.rentBez+(Rr.fixedBez||0))/_pbeDenom:null;
+      var _pbeRev=_pbeDenom>0?(pmtBez+Rr.rentBez)/_pbeDenom:null;
       var _pbeCross=null; if(_pbeRev!=null){ for(var _bi=0;_bi<_pco.length;_bi++){ if((_pco[_bi].median||0)>=_pbeRev){ _pbeCross=_pco[_bi].month; break; } } }
       var rampSection = _pco.length ? (
         '<h2>Náběhová křivka a odklad splátek</h2>'+
@@ -639,22 +619,19 @@
         '.ok{color:#127a3a;font-weight:bold}.ftr{margin-top:24px;color:#888;font-size:11px;border-top:1px solid #ddd;padding-top:8px}'+
         '@media print{body{margin:12mm}}';
       var _svcBd=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
-      var _fxP=_um.fxEurToBase||25;
       var svcNotePdf=(_svcBd.length)?(
-        '<h2>Co zahrnuje servis</h2>'+
-        '<div class="muted">Cena servisu, pokud si ho provozovatel zajišťuje sám (měsíčně). Pevné položky dle ekonomiky V3, detergenty dle skutečného obratu:</div>'+
-        '<table>'+_svcBd.map(function(it){ var bez = it.fixed ? ((it.eurMonthly||0)*_fxP) : _detBezP; return '<tr><td>'+it.label+(it.fixed?' (pevné)':' (dle obratu)')+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
-        '<tr><td><b>Servis celkem</b></td><td class="r"><b>'+f(Math.round(servisRP))+' bez · '+f(Math.round(servisRP*1.21))+' s DPH</b></td></tr></table>'+
-        '<div class="box">Takto je servis započten v modelaci (provozní náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček včetně detergentů ale umíme převzít my v rámci České republiky za <b>13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz zákazník sám, na servisu ušetří.</div>'
+        '<h2>Co servis zahrnuje</h2>'+
+        '<ul>'+_svcBd.map(function(it){ return '<li>'+it.label+'</li>'; }).join('')+'</ul>'+
+        '<div class="box">Servis je v modelaci započten jako <b>13 % z obratu (bez DPH)</b> — provozní náklad, pokud si ho zajišťuje zákazník sám. Kompletní balíček včetně detergentů ale umíme převzít my v rámci České republiky za <b>13 % z obratu s DPH</b> jako doplňkovou službu, pokud si to zákazník přeje. Zajišťuje-li si provoz zákazník sám, na servisu ušetří.</div>'
       ):'';
       var _csP=(DATA.unitModel&&DATA.unitModel.cycleSpec)||[];
       var _fxCS=(DATA.unitModel&&DATA.unitModel.fxEurToBase)||25;
       var _decP=function(n,dd){ var p=Math.pow(10,dd); return (Math.round((n||0)*p)/p).toString().replace('.',','); };
       var energyNotePdf=(_csP.length)?(
-        '<h2>Co zahrnuje energie — spotřeba na cyklus</h2>'+
+        '<h2>Co zahrnuje energie — cena pro zákazníka a spotřeba na cyklus</h2>'+
         '<div class="muted">Dle nastavených programů strojů (na jeden cyklus):</div>'+
-        '<table><tr><th>Stroj</th><th>Elektřina</th><th>Voda</th><th>Prášek + aviváž</th><th class="r">Cena / cyklus</th></tr>'+
-        _csP.map(function(it){ var bez=(it.costEur||0)*_fxCS; return '<tr><td>'+it.label+' <span style="color:#888">('+it.cycle+')</span></td><td>'+_decP(it.el,2)+' kWh</td><td>'+(it.voda?(_decP(it.voda,0)+' l'):'—')+'</td><td>'+(it.prasek?(_decP(it.prasek,2)+' + '+_decP(it.aviv,2)+' l'):'—')+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
+        '<table><tr><th>Stroj</th><th class="r">Cena pro zákazníka</th><th>Elektřina</th><th>Voda</th><th>Prášek + aviváž</th><th class="r">Náklad / cyklus</th></tr>'+
+        _csP.map(function(it){ var bez=(it.costEur||0)*_fxCS; var cust=(it.custAviv!=null)?(f(it.custNoAviv)+' / '+f(it.custAviv)+' (bez/s aviváží)'):f(it.custNoAviv); return '<tr><td>'+it.label+' <span style="color:#888">('+it.cycle+')</span></td><td class="r"><b>'+cust+'</b></td><td>'+_decP(it.el,2)+' kWh</td><td>'+(it.voda?(_decP(it.voda,0)+' l'):'—')+'</td><td>'+(it.prasek?(_decP(it.prasek,2)+' + '+_decP(it.aviv,2)+' l'):'—')+'</td><td class="r">'+f(Math.round(bez))+' bez · '+f(Math.round(bez*1.21))+' s DPH</td></tr>'; }).join('')+
         '</table>'+
         '<div class="box">Prací cyklus trvá 30–40 min, sušicí cyklus 15 min. Jeden zákazník je průměrně odbaven za 45–60 min. Hodnoty vychází z nastavených programů strojů — skutečná spotřeba se liší podle naplnění bubnu prádlem (plnější náplň = nižší spotřeba na kg).</div>'
       ):'';
@@ -682,12 +659,12 @@
         '<div class="muted">Nákladová struktura (bez DPH, z ekonomiky jednoho prádlomatu):</div>'+
         '<table><tr><td>Obrat (bez DPH)</td><td class="r"><b>'+f(u.revenue)+'</b></td></tr>'+
         '<tr><td>− Nájem</td><td class="r">'+f(u.rent)+'</td></tr>'+
-        '<tr><td>− Servis</td><td class="r">'+f(servisRP)+'</td></tr>'+
-        '<tr><td>− Energie</td><td class="r">'+f(energieRP)+'</td></tr>'+
+        '<tr><td>− Servis</td><td class="r">'+f(u.service)+'</td></tr>'+
+        '<tr><td>− Energie</td><td class="r">'+f(u.energy)+'</td></tr>'+
         '<tr><td>− Platební poplatky</td><td class="r">'+f(u.fee)+'</td></tr>'+
         (u.maintenance?'<tr><td>− Údržba (rezerva)</td><td class="r">'+f(u.maintenance)+'</td></tr>':'')+
-        '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(ebitdaRP)+' ('+pct((u.revenue||0)?ebitdaRP/(u.revenue||1):0)+')</b></td></tr>'+
-        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noiRP)+'</b></td></tr></table>'+
+        '<tr><td><b>EBITDA</b></td><td class="r"><b>'+f(u.ebitda)+' ('+pct(u.ebitdaMargin)+')</b></td></tr>'+
+        '<tr><td><b>NOI (provozní zisk před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
         svcNotePdf+
         energyNotePdf+
         '<h2>Návrh leasingu (1 jednotka)</h2>'+
@@ -1147,45 +1124,33 @@
         return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;'+bt+bold+'"><span style="color:var(--text2)">'+sign+lbl+'</span><span style="text-align:right;color:'+col+';'+bold+'">'+money(val)+pctTxt+'</span></div>';
       }
       var rev = u.revenue||1;
-      // Rekonciliace: servis = pevné položky V3 (pevně) + detergenty (dle obratu); energie variabilní.
-      var um = DATA.unitModel||{};
-      var fixedSvc = leaseFixedSvc();
-      var detBez = rev * ((um.detergentPct||0)/100);
-      var servisR = fixedSvc + detBez;                 // rekonciliovaný servis
-      var energieR = u.energy||0;                       // variabilní, beze změny
-      var ebitdaR = rev - (u.rent||0) - servisR - energieR - (u.fee||0);
-      var noiR = ebitdaR - (u.maintenance||0);
-      var netWithDebtR = noiR - (u.tax||0) - (u.payment||0);
-      var netPaidOffR = noiR - (u.tax||0);
       var h = '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ukázka jedné lokality (mediánová, měsíčně) <span class="tag tag-actual">ACTUAL</span> + <span class="tag tag-assume">ASSUMPTION</span></h2>'+
-        '<div class="note">Reprezentativní prádlomat (skutečný medián tržby ze SIS, bez DPH): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru. Pevné servisní položky jsou dle ekonomiky V3, energie a detergenty dle skutečného obratu.</div>'+
+        '<div class="note">Reprezentativní prádlomat (skutečný medián, bez DPH): co vydělá a co zbyde po odečtení všeho včetně splátky úvěru. Agregátní model níže používá scénáře: Base = historický medián, Downside = medián −10 %, Stress = medián −15 %.</div>'+
         '<div style="max-width:520px">';
       h += row('Obrat (bez DPH)', u.revenue, {bold:true});
       h += row('Nájem', u.rent, {minus:true, col:'#ef4444', pct:u.rent/rev});
-      h += row('Servis', servisR, {minus:true, col:'#ef4444', pct:servisR/rev});
-      h += row('Energie', energieR, {minus:true, col:'#ef4444', pct:energieR/rev});
+      h += row('Servis', u.service, {minus:true, col:'#ef4444', pct:u.service/rev});
+      h += row('Energie', u.energy, {minus:true, col:'#ef4444', pct:u.energy/rev});
       h += row('Platební poplatky', u.fee, {minus:true, col:'#ef4444', pct:u.fee/rev});
-      h += row('EBITDA', ebitdaR, {bold:true, col:'#22c55e', top:true, pct:(rev?ebitdaR/rev:null)});
+      h += row('EBITDA', u.ebitda, {bold:true, col:'#22c55e', top:true, pct:u.ebitdaMargin});
       if (u.maintenance) h += row('Údržba (rezerva)', u.maintenance, {minus:true, col:'#ef4444', pct:u.maintenance/rev});
-      h += row('NOI (provozní zisk před daní i splátkou)', noiR, {bold:true, col:'#22c55e', pct:(rev?noiR/rev:null)});
+      h += row('NOI (provozní zisk před daní i splátkou)', (u.noi!=null?u.noi:u.ebitda), {bold:true, col:'#22c55e', pct:(rev?((u.noi!=null?u.noi:u.ebitda)/rev):null)});
       h += row('Splátka úvěru (anuita)', u.payment, {minus:true, col:'#f59e0b'});
-      if (u.payment) h += '<div class="note" style="margin:2px 0 8px">DSCR jedné lokality (NOI ÷ splátka) = <b>'+ (Math.round(noiR/u.payment*100)/100).toString().replace('.',',') +'×</b></div>';
+      if (u.payment) h += '<div class="note" style="margin:2px 0 8px">DSCR jedné lokality (NOI ÷ splátka) = <b>'+ (Math.round((u.noi!=null?u.noi:u.ebitda)/u.payment*100)/100).toString().replace('.',',') +'×</b></div>';
       h += row('Daň (po odpisech '+(u.depreciationYears||5)+' let)', u.tax, {minus:true, col:'#ef4444'});
-      h += row('Čistý cash po VŠEM (i splátce)', netWithDebtR, {bold:true, col:(netWithDebtR>=0?'#22c55e':'#ef4444'), top:true});
+      h += row('Čistý cash po VŠEM (i splátce)', u.netWithDebt, {bold:true, col:(u.netWithDebt>=0?'#22c55e':'#ef4444'), top:true});
       h += '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">'+
-           row('Čistý cash po splacení stroje (bez splátky)', netPaidOffR, {bold:true, col:'#22c55e'})+
+           row('Čistý cash po splacení stroje (bez splátky)', u.netPaidOff, {bold:true, col:'#22c55e'})+
            '<div class="note" style="margin-top:4px">Investice/jednotku (all-in): '+money(u.allIn)+' · z toho úvěr '+money(u.debtPerUnit)+' + vlastní '+money(u.equityPerUnit)+'</div></div>';
       h += '</div>'; // konec max-width bloku
       var _sb=(DATA.unitModel&&DATA.unitModel.serviceBreakdown)||[];
       if(_sb.length){
-        var _fx=um.fxEurToBase||25;
-        var _rows='';
-        _sb.forEach(function(it){ var bez = it.fixed ? ((it.eurMonthly||0)*_fx) : detBez; var tag = it.fixed ? '<span style="opacity:.5;font-size:10px"> pevné</span>' : '<span style="opacity:.5;font-size:10px"> dle obratu</span>'; _rows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:3px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)">'+it.label+tag+'</span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span></span></div>'; });
+        var _items='';
+        _sb.forEach(function(it){ _items+='<li>'+it.label+'</li>'; });
         h += '<div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(14,165,233,.06);border:1px solid rgba(14,165,233,.25);line-height:1.5;font-size:13px">'+
-          '<div style="font-weight:700;color:#0ea5e9;margin-bottom:6px">Co zahrnuje servis — cena, pokud si ho provozovatel zajišťuje sám (měsíčně):</div>'+
-          _rows+
-          '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0 0;font-weight:800"><span>Servis celkem</span><span style="white-space:nowrap">'+money(servisR)+' <span style="opacity:.6;font-weight:400">bez</span> · '+money(servisR*1.21)+' <span style="opacity:.6;font-weight:400">s DPH</span></span></div>'+
-          '<div style="margin-top:8px;color:var(--text2)">Pevné položky jsou dle ekonomiky V3 (nezávislé na obratu), detergenty dle skutečného obratu. Takto je servis započten v modelaci (náklad, pokud si ho zajišťuje zákazník sám). Kompletní balíček (včetně detergentů) ale umíme <b>převzít my v rámci České republiky za 13 % z obratu s DPH</b> jako doplňkovou službu — pokud si to zákazník přeje. Zajišťuje-li si provoz sám, na servisu ušetří.</div>'+
+          '<div style="font-weight:700;color:#0ea5e9;margin-bottom:6px">Co servis zahrnuje:</div>'+
+          '<ul style="margin:0;padding-left:18px;color:var(--text2)">'+_items+'</ul>'+
+          '<div style="margin-top:8px;color:var(--text2)">Servis je v modelaci započten jako <b>13 % z obratu (bez DPH)</b> — provozní náklad, pokud si ho zajišťuje zákazník sám. Kompletní balíček (včetně detergentů) ale umíme <b>převzít my v rámci České republiky za 13 % z obratu s DPH</b> jako doplňkovou službu, pokud si to zákazník přeje. Zajišťuje-li si provoz sám, na servisu ušetří.</div>'+
         '</div>';
       }
       var _cs=(DATA.unitModel&&DATA.unitModel.cycleSpec)||[];
@@ -1196,10 +1161,14 @@
         _cs.forEach(function(it){
           var bez=(it.costEur||0)*_fx2;
           var spot=_dec(it.el,2)+' kWh'+(it.voda?(' · '+_dec(it.voda,0)+' l vody'):'')+(it.prasek?(' · '+_dec(it.prasek,2)+' l prášku'):'')+(it.aviv?(' + '+_dec(it.aviv,2)+' l aviváže'):'');
-          _crows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px dashed var(--border)"><span style="color:var(--text2)"><b>'+it.label+'</b> <span style="opacity:.6;font-size:11px">('+it.cycle+')</span><br><span style="font-size:11px;opacity:.8">'+spot+'</span></span><span style="white-space:nowrap;color:var(--text2)">'+money(bez)+' <span style="opacity:.6">bez</span> · <b>'+money(bez*1.21)+'</b> <span style="opacity:.6">s DPH</span> <span style="opacity:.6;font-size:11px">/ cyklus</span></span></div>';
+          var cust=(it.custAviv!=null)?(money(it.custNoAviv)+' / '+money(it.custAviv)+' <span style="opacity:.6;font-size:11px;font-weight:400">bez / s aviváží</span>'):money(it.custNoAviv);
+          _crows+='<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px dashed var(--border)">'+
+            '<span style="color:var(--text2)"><b>'+it.label+'</b> <span style="opacity:.6;font-size:11px">('+it.cycle+')</span><br><span style="font-size:11px;opacity:.8">'+spot+'</span></span>'+
+            '<span style="white-space:nowrap;text-align:right"><span style="color:#22c55e;font-weight:800">'+cust+'</span><br><span style="color:var(--text2);font-size:11px;opacity:.85">náklad '+money(bez)+' bez · '+money(bez*1.21)+' s DPH / cyklus</span></span>'+
+          '</div>';
         });
         h += '<div style="margin-top:12px;padding:12px;border-radius:10px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.25);line-height:1.5;font-size:13px">'+
-          '<div style="font-weight:700;color:#eab308;margin-bottom:6px">Co zahrnuje energie — spotřeba na jeden cyklus (dle programu strojů):</div>'+
+          '<div style="font-weight:700;color:#eab308;margin-bottom:6px">Co zahrnuje energie — cena pro zákazníka a spotřeba na cyklus (dle programu strojů):</div>'+
           _crows+
           '<div style="margin-top:8px;color:var(--text2)">Prací cyklus trvá <b>30–40 min</b>, sušicí cyklus <b>15 min</b>. Jeden zákazník je průměrně odbaven za <b>45–60 min</b>. Hodnoty vychází z nastavených programů strojů — skutečná spotřeba se liší podle <b>naplnění bubnu prádlem</b> (plnější náplň = nižší spotřeba na kg). Ceny energií a detergentů dle aktuálních sazeb.</div>'+
         '</div>';
@@ -1440,7 +1409,7 @@
         var pmt=leasePMT(financed,residual,L.rate,L.term);
         var pmtBez=pmt/(mode==='neplatce'?(1+vat/100):1);
         var R=leaseRatios(); var denom=(1-R.varPct-R.maintPct);
-        beRev = denom>0 ? (pmtBez + R.rentBez + (R.fixedBez||0))/denom : null;
+        beRev = denom>0 ? (pmtBez + R.rentBez)/denom : null;
       }
       var datasets=[
         { label:'Medián tržby / měs', data:vals, borderColor:'#22c55e', backgroundColor:'rgba(34,197,94,.12)', fill:true, tension:.25, pointRadius:3, pointBackgroundColor:ptcol, pointBorderColor:ptcol },
