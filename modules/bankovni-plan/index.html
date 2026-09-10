@@ -397,7 +397,7 @@
       // Ekonomika 1 jednotky (ze SIS)
       var rowKV=function(lbl,val,col){ return '<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)"><span style="color:var(--text2)">'+lbl+'</span><b style="color:'+(col||'var(--text)')+'">'+val+'</b></div>'; };
       h += '<div class="grid2">';
-      h += '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ekonomika 1 jednotky <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Reprezentativní prádlomat (medián ze SIS, měsíčně) — režim: <b>'+modeLbl+'</b>.</div>'+
+      h += '<div class="sec" style="background:var(--surface2)"><h2>🧺 Ekonomika 1 jednotky <span class="tag tag-actual">ACTUAL</span></h2><div class="note">Reprezentativní prádlomat (použitá tržba, měsíčně) — režim: <b>'+modeLbl+'</b>.</div>'+
         rowKV((mode==='neplatce'?'Koncové inkaso / měs':'Tržba / měs (bez DPH)'), money(base.rev))+
         rowKV('EBITDA / měs', money(base.ebitda), '#22c55e')+
         rowKV('NOI (před splátkou) / měs', money(noi), '#22c55e')+
@@ -543,7 +543,7 @@
         rowKV('Transakcí v SIS (skutečné)', num(t.totalTx))+
         rowKV('Kumulativní obrat (skutečný, bez DPH)', money(t.cumulativeRevenue))+
         rowKV('Kumulativní obrat (skutečný, s DPH '+vat+' %)', money((t.cumulativeRevenue||0)*(1+vat/100)), '#22c55e')+
-        rowKV('Medián tržby / jednotka', money(DATA.unitEconomics.revenueDist.p50))+
+        rowKV('Použitá tržba / jednotka (měs)', money(revBezBase))+
         '<div class="note" style="margin-top:6px">Skutečné údaje ze SIS.</div>'+
         '</div>';
       h += '</div>';
@@ -730,7 +730,7 @@
         '<p><b>3) Standardní prádlo — roste nejpomaleji, ale stabilně.</b> Rozbitá pračka, nedostatek místa na pračku a sušičku, lidé na cestách, studenti na kolejích, řidiči kamionů, turisté. Největší přírůstek pravidelně před Vánoci (předvánoční úklid → přetížená a rozbitá domácí pračka; 200 Kč za vyprání vs. 10 000 Kč za novou pračku místo dárků). Kdo jednou přijde, obvykle zůstává.</p>'+
         '<div class="muted">Není to nový princip — před generací bylo běžné prát ve sdílených prádelnách bytových a panelových domů. Prádlomat tuto službu vrací v moderní, samoobslužné a dostupné podobě.</div></div>'+
         // 5) Ekonomika 1 jednotky
-        '<div class="sec"><h2>Ekonomika 1 jednotky — '+modeLbl+' (medián ze SIS, měsíčně)</h2>'+
+        '<div class="sec"><h2>Ekonomika 1 jednotky — '+modeLbl+' (použitá tržba, měsíčně)</h2>'+
         '<table><tr><td>'+(mode==='neplatce'?'Koncové inkaso':'Tržba bez DPH')+'</td><td class="r"><b>'+f(base.rev)+'</b></td></tr>'+
         '<tr><td>EBITDA</td><td class="r"><b>'+f(base.ebitda)+' ('+pct(base.marginPct)+')</b></td></tr>'+
         '<tr><td><b>NOI (před splátkou)</b></td><td class="r"><b>'+f(noi)+'</b></td></tr></table>'+
@@ -773,7 +773,7 @@
         '<div class="kv"><span>Transakcí v SIS (skutečné)</span><b>'+num(t.totalTx)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, bez DPH)</span><b>'+f(t.cumulativeRevenue)+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (skutečný, s DPH '+vat+' %)</span><b>'+f((t.cumulativeRevenue||0)*(1+vat/100))+'</b></div>'+
-        '<div class="kv"><span>Medián tržby / jednotka</span><b>'+f(DATA.unitEconomics.revenueDist.p50)+'</b></div></div>'+
+        '<div class="kv"><span>Použitá tržba / jednotka (měs)</span><b>'+f(revBezBase)+'</b></div></div>'+
         // 12) Zůstatková hodnota + zajištění + bonita
         '<div class="sec"><h2>Zůstatková hodnota a relokace (metodika)</h2><ul>'+
         '<li>Účetní odpis 5 let; technická životnost dle cyklů (30 000).</li>'+
