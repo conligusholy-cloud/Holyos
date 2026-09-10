@@ -425,13 +425,14 @@
 
       // Náběhová křivka + zdůvodnění 6měsíčního odkladu splátek (reálná kohortní data)
       var _co=(DATA.cohort||[]).filter(function(c){return c.count>0;});
-      var _plateau=0; _co.forEach(function(c){ if((c.median||0)>_plateau) _plateau=c.median; });
-      var _m0=_co.length?(_co[0].median||0):0;
+      var _adjR=function(m){ return (m||0)*(revPct/100)+modelAdd; };   // úprava tržby + sušení navíc
+      var _plateau=0; _co.forEach(function(c){ var v=_adjR(c.median); if(v>_plateau) _plateau=v; });
+      var _m0=_co.length?_adjR(_co[0].median):0;
       var _first6=_co.slice(0,6);
-      var _avg6=_first6.length?_first6.reduce(function(a,c){return a+(c.median||0);},0)/_first6.length:0;
+      var _avg6=_first6.length?_first6.reduce(function(a,c){return a+_adjR(c.median);},0)/_first6.length:0;
       var _pct0=_plateau?Math.round(_m0/_plateau*100):0;
       var _pct6=_plateau?Math.round(_avg6/_plateau*100):0;
-      var _stabM=null; for(var _i=0;_i<_co.length;_i++){ if(_plateau&&(_co[_i].median||0)>=0.9*_plateau){ _stabM=_co[_i].month; break; } }
+      var _stabM=null; for(var _i=0;_i<_co.length;_i++){ if(_plateau&&_adjR(_co[_i].median)>=0.9*_plateau){ _stabM=_co[_i].month; break; } }
       var _dscrTxt=(Math.round(dscr*100)/100).toString().replace('.',',');
       if(_co.length){
         h += '<div class="sec"><h2>📈 Náběhová křivka & odklad splátek <span class="tag tag-actual">ACTUAL</span></h2>'+
@@ -608,19 +609,20 @@
       var techResidual5=Math.round(L.price*remPct5);
       // Náběhová křivka (kohorty) pro PDF
       var _pco=(DATA.cohort||[]).filter(function(c){return c.count>0;});
-      var _pplateau=0; _pco.forEach(function(c){ if((c.median||0)>_pplateau) _pplateau=c.median; });
+      var _adjP=function(m){ return (m||0)*((L.revPct!=null?L.revPct:100)/100)+modelAdd; };   // úprava tržby + sušení navíc
+      var _pplateau=0; _pco.forEach(function(c){ var v=_adjP(c.median); if(v>_pplateau) _pplateau=v; });
       var _pfirst6=_pco.slice(0,6);
-      var _pavg6=_pfirst6.length?_pfirst6.reduce(function(a,c){return a+(c.median||0);},0)/_pfirst6.length:0;
+      var _pavg6=_pfirst6.length?_pfirst6.reduce(function(a,c){return a+_adjP(c.median);},0)/_pfirst6.length:0;
       var _ppct6=_pplateau?Math.round(_pavg6/_pplateau*100):0;
-      var _pstabM=null; for(var _pri=0;_pri<_pco.length;_pri++){ if(_pplateau&&(_pco[_pri].median||0)>=0.9*_pplateau){ _pstabM=_pco[_pri].month; break; } }
+      var _pstabM=null; for(var _pri=0;_pri<_pco.length;_pri++){ if(_pplateau&&_adjP(_pco[_pri].median)>=0.9*_pplateau){ _pstabM=_pco[_pri].month; break; } }
       var _prampShow=_pco.filter(function(c){return c.month<=12;});
       var _prampHead=_prampShow.map(function(c){return '<th class="r">M'+c.month+'</th>';}).join('');
-      var _prampVal=_prampShow.map(function(c){return '<td class="r">'+f(Math.round(c.median||0))+'</td>';}).join('');
-      var _prampPct=_prampShow.map(function(c){return '<td class="r">'+(_pplateau?Math.round((c.median||0)/_pplateau*100):0)+' %</td>';}).join('');
+      var _prampVal=_prampShow.map(function(c){return '<td class="r">'+f(Math.round(_adjP(c.median)))+'</td>';}).join('');
+      var _prampPct=_prampShow.map(function(c){return '<td class="r">'+(_pplateau?Math.round(_adjP(c.median)/_pplateau*100):0)+' %</td>';}).join('');
       // Breakeven (zisk = splátka, DSCR 1,0) v tržbě bez DPH + měsíc překročení
       var _pbeDenom=(1-Rr.varPct-Rr.maintPct);
       var _pbeRev=_pbeDenom>0?(pmtBez+Rr.rentBez)/_pbeDenom:null;
-      var _pbeCross=null; if(_pbeRev!=null){ for(var _bi=0;_bi<_pco.length;_bi++){ if((_pco[_bi].median||0)>=_pbeRev){ _pbeCross=_pco[_bi].month; break; } } }
+      var _pbeCross=null; if(_pbeRev!=null){ for(var _bi=0;_bi<_pco.length;_bi++){ if(_adjP(_pco[_bi].median)>=_pbeRev){ _pbeCross=_pco[_bi].month; break; } } }
       var rampSection = _pco.length ? (
         '<h2>Náběhová křivka a odklad splátek</h2>'+
         (imgRamp ? _chartBlock(imgRamp,'Medián tržby jednotky dle měsíce od uvedení do provozu — reálná data sítě. Červená přerušovaná = bod zvratu (zisk = splátka, DSCR 1,0).')
@@ -1492,9 +1494,11 @@
       if (_charts.leaseRamp) { try{ _charts.leaseRamp.destroy(); }catch(e){} }
       var grid='rgba(255,255,255,.07)', tick='#94a3b8';
       var co = (DATA.cohort||[]).filter(function(c){ return c.count>0; });
-      var plateau=0; co.forEach(function(c){ if((c.median||0)>plateau) plateau=c.median; });
+      var _Lr=(_lease||{}); var _revPctR=(_Lr.revPct!=null?_Lr.revPct:100); var _modelAddR=(_Lr.addDryCount||0)*(_Lr.addDryPrice||0);
+      var _adjR=function(m){ return (m||0)*(_revPctR/100)+_modelAddR; };   // úprava tržby + sušení navíc (zahrnuto v tržbě)
+      var plateau=0; co.forEach(function(c){ var v=_adjR(c.median); if(v>plateau) plateau=v; });
       var labels = co.map(function(c){ return 'M'+c.month; });
-      var vals = co.map(function(c){ return Math.round(c.median||0); });
+      var vals = co.map(function(c){ return Math.round(_adjR(c.median)); });
       var ptcol = co.map(function(c){ return c.month<6 ? '#f59e0b' : '#22c55e'; });
       // Breakeven: tržba bez DPH, při které NOI = leasingová splátka (DSCR 1,0).
       var beRev = null;
