@@ -540,7 +540,7 @@
         rowKV('Roky dat ze SIS', String(t.yearsData).replace('.',',')+' let')+
         rowKV('Aktivních jednotek', num(t.activeCount)+' (z '+t.realCount+')')+
         rowKV('Location-months provozu', num(t.locationMonths))+
-        rowKV('Transakcí celkem', num(t.totalTx))+
+        rowKV('Transakcí celkem', num((t.totalTx||0)+(L.addDryCount||0)*(t.locationMonths||0)))+
         rowKV('Kumulativní obrat (bez DPH)', money((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0)))+
         rowKV('Kumulativní obrat (s DPH '+vat+' %)', money(((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0))*(1+vat/100)), '#22c55e')+
         '<div class="note" style="margin-top:6px">Interní pohled.</div>'+
@@ -768,7 +768,7 @@
         '<div class="kv"><span>Roky dat ze SIS</span><b>'+String(t.yearsData).replace('.',',')+' let</b></div>'+
         '<div class="kv"><span>Aktivních jednotek</span><b>'+num(t.activeCount)+' (z '+t.realCount+')</b></div>'+
         '<div class="kv"><span>Location-months provozu</span><b>'+num(t.locationMonths)+'</b></div>'+
-        '<div class="kv"><span>Transakcí celkem</span><b>'+num(t.totalTx)+'</b></div>'+
+        '<div class="kv"><span>Transakcí celkem</span><b>'+num((t.totalTx||0)+(L.addDryCount||0)*(t.locationMonths||0))+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (bez DPH)</span><b>'+f((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0))+'</b></div>'+
         '<div class="kv"><span>Kumulativní obrat (s DPH '+vat+' %)</span><b>'+f(((t.cumulativeRevenue||0)+modelAdd*(t.locationMonths||0))*(1+vat/100))+'</b></div>'+
         '</div>'+
