@@ -297,7 +297,10 @@
       var residual = price*L.residual/100;
       var pmt = leasePMT(financed, residual, L.rate, L.term);
       var dscr = pmt>0 ? noi/pmt : 0;
-      var cushion = noi>0 ? (1 - pmt/noi)*100 : 0; // o kolik % může tržba/NOI klesnout než DSCR=1
+      var cushion = noi>0 ? (1 - pmt/noi)*100 : 0; // o kolik % může NOI klesnout než DSCR=1
+      // Rezerva v TRŽBĚ (kvůli fixním nákladům klesá NOI rychleji než tržba): breakeven tržba ÷ použitá tržba.
+      var _Rk=leaseRatios(); var _pmtBezK=pmt/(mode==='neplatce'?(1+vat/100):1); var _denK=(1-_Rk.varPct-_Rk.maintPct);
+      var revCushion=(revBezBase>0 && _denK>0) ? Math.max(0,(1-((_pmtBezK+_Rk.rentBez)/_denK)/revBezBase)*100) : 0;
       var pass = dscr>=1.20, ok = dscr>=1.0;
       var dcol = pass?'#22c55e':(ok?'#eab308':'#ef4444');
       var modeLbl = (mode==='neplatce') ? 'Neplátce DPH (částky vč. neodpočitatelné DPH)' : 'Plátce DPH (částky bez DPH)';
@@ -419,7 +422,7 @@
         rowKV('NOI ÷ splátka (DSCR)', (Math.round(dscr*100)/100).toString().replace('.',',')+'×', dcol)+
         '<div style="margin-top:8px;padding:10px;border-radius:8px;background:'+dcol+'1a;border:1px solid '+dcol+'55;color:'+dcol+';font-weight:700;text-align:center">'+
           (pass?'✅ Profinancovatelné — jednotka pokryje splátku s rezervou':(ok?'⚠ Na hraně — DSCR ≥ 1,0, ale malá rezerva':'❌ Splátka převyšuje provozní zisk'))+
-          '<div style="font-weight:500;font-size:12px;margin-top:3px">Tržba/NOI může klesnout o '+(Math.round(cushion*10)/10).toString().replace('.',',')+' % než DSCR spadne na 1,0.</div>'+
+          '<div style="font-weight:500;font-size:12px;margin-top:3px">Tržba může klesnout o '+(Math.round(revCushion*10)/10).toString().replace('.',',')+' % než DSCR spadne na 1,0.</div>'+
         '</div></div>';
       h += '</div>';
 
@@ -582,6 +585,8 @@
       var financed=price*(1-L.down/100), residual=price*L.residual/100;
       var pmt=leasePMT(financed,residual,L.rate,L.term);
       var dscr=pmt>0?noi/pmt:0, cushion=noi>0?(1-pmt/noi)*100:0;
+      var _RkP=leaseRatios(); var _pmtBezKP=pmt/(mode==='neplatce'?(1+vat/100):1); var _denKP=(1-_RkP.varPct-_RkP.maintPct);
+      var revCushion=(revBezBase>0 && _denKP>0) ? Math.max(0,(1-((_pmtBezKP+_RkP.rentBez)/_denKP)/revBezBase)*100) : 0;
       var modeLbl=(mode==='neplatce')?'Neplátce DPH (částky vč. neodpočitatelné DPH)':'Plátce DPH (částky bez DPH)';
       var f=function(n){ return money(n); };
       var d2=function(x){ return (Math.round(x*100)/100).toString().replace('.',','); };
@@ -665,7 +670,7 @@
         '<div class="kpi"><div class="l">DSCR (medián)</div><div class="v">'+d2(dscr)+'×</div><div class="s">NOI ÷ splátka</div></div>'+
         '<div class="kpi"><div class="l">NOI / měsíc</div><div class="v">'+f(noi)+'</div><div class="s">provozní zisk 1 jednotky</div></div>'+
         '<div class="kpi"><div class="l">Měsíční splátka</div><div class="v">'+f(pmt)+'</div><div class="s">anuita '+L.term+' měs · '+String(L.rate).replace('.',',')+' %</div></div>'+
-        '<div class="kpi"><div class="l">Rezerva do DSCR 1,0</div><div class="v">'+(Math.round(cushion*10)/10).toString().replace('.',',')+' %</div><div class="s">pokles tržby, který jednotka unese</div></div>'+
+        '<div class="kpi"><div class="l">Rezerva tržby do DSCR 1,0</div><div class="v">'+(Math.round(revCushion*10)/10).toString().replace('.',',')+' %</div><div class="s">pokles tržby, který jednotka unese</div></div>'+
         '<div class="kpi"><div class="l">Track record</div><div class="v">'+String(t.yearsData).replace('.',',')+' let</div><div class="s">'+num(t.activeCount)+' aktivních jednotek</div></div>'+
         '</div>';
       var techSpecUl='<ul>'+
@@ -751,7 +756,7 @@
         '<div class="kv"><span>Doba / roční úrok</span><b>'+L.term+' měs · '+String(L.rate).replace('.',',')+' %</b></div>'+
         '<div class="kv"><span>Měsíční splátka (anuita)</span><b>'+f(pmt)+'</b></div>'+
         '<div class="kv"><span>DSCR (NOI ÷ splátka)</span><b class="ok">'+d2(dscr)+'×</b></div>'+
-        '<div class="verdict"><span class="ok">✔ '+verdict+'</span><br>Tržba/NOI může klesnout o '+ (Math.round(cushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div></div>'+
+        '<div class="verdict"><span class="ok">✔ '+verdict+'</span><br>Tržba může klesnout o '+ (Math.round(revCushion*10)/10).toString().replace('.',',') +' % než DSCR spadne na 1,0.</div></div>'+
         // 7) Náběhová křivka + odklad
         '<div class="sec">'+rampSection+'</div>'+
         // 8) Odolnost — scénáře, min. tržba, stresy
