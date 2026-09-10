@@ -490,9 +490,9 @@ function deriveCycleSpec(cfg) {
   const vodne = d.cena_vodne + d.cena_stocne;
   const washCost = (el, voda, prasek, aviv) => el * d.cena_elektriny + (voda / 1000) * vodne + prasek * d.cena_prasku + aviv * d.cena_avivaze;
   return [
-    { key: 'w8', label: 'Pračka 8 kg', cycle: '30–40 min', el: d.el_mala, voda: d.voda_mala, prasek: d.prasek_mala, aviv: d.aviv_mala, costEur: washCost(d.el_mala, d.voda_mala, d.prasek_mala, d.aviv_mala) },
-    { key: 'w18', label: 'Pračka 18 kg', cycle: '30–40 min', el: d.el_velka, voda: d.voda_velka, prasek: d.prasek_velka, aviv: d.aviv_velka, costEur: washCost(d.el_velka, d.voda_velka, d.prasek_velka, d.aviv_velka) },
-    { key: 'dry', label: 'Sušička (15 min)', cycle: '15 min', el: d.susicka_15, voda: 0, prasek: 0, aviv: 0, costEur: d.susicka_15 * d.cena_elektriny },
+    { key: 'w8', label: 'Pračka 8 kg', cycle: '30–40 min', el: d.el_mala, voda: d.voda_mala, prasek: d.prasek_mala, aviv: d.aviv_mala, costEur: washCost(d.el_mala, d.voda_mala, d.prasek_mala, d.aviv_mala), custNoAviv: 200, custAviv: 250 },
+    { key: 'w18', label: 'Pračka 18 kg', cycle: '30–40 min', el: d.el_velka, voda: d.voda_velka, prasek: d.prasek_velka, aviv: d.aviv_velka, costEur: washCost(d.el_velka, d.voda_velka, d.prasek_velka, d.aviv_velka), custNoAviv: 300, custAviv: 350 },
+    { key: 'dry', label: 'Sušička (15 min)', cycle: '15 min', el: d.susicka_15, voda: 0, prasek: 0, aviv: 0, costEur: d.susicka_15 * d.cena_elektriny, custNoAviv: 50, custAviv: null },
   ];
 }
 
