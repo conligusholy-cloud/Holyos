@@ -430,6 +430,17 @@
           </div>
 
           <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+
+          <!-- Šablony konfigurace (snapshoty pro rychlé obnovení) -->
+          <div style="margin-top:22px;border:1px solid rgba(96,165,250,0.4);border-radius:10px;padding:14px;background:rgba(96,165,250,0.06);">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+              <div style="font-weight:700;font-size:14px;">📁 Šablony konfigurace</div>
+              <button class="btn btn-secondary" style="margin-left:auto;padding:5px 12px;font-size:13px;" onclick="infoSaveSnapshot()">💾 Uložit aktuální jako šablonu</button>
+            </div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Uloží kompletní nastavení recepční — úvodní věta, scénář, přepojení, SMS s odkazem <b>i všechny nahrané podklady s texty</b>. Kdykoli se z uložené verze vrátíš zpět, když se ti úpravy nepovedou. Před obnovením ulož aktuální stav, ať o nic nepřijdeš.</p>
+            <div id="info-snap-list"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
+            <div id="info-snap-msg" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
+          </div>
         </div>
 
         <!-- Sub: Plánování směn (+ přepojení hovoru) -->
@@ -760,8 +771,60 @@
           infoUpdateCounts();
           infoKnLoad();
           infoLoadSmsLog();
+          infoLoadSnapshots();
         }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
       }
+      // ── Šablony konfigurace (snapshoty) ──
+      var _snaps={};
+      window.infoLoadSnapshots = async function(){
+        var box=el('info-snap-list'); if(!box) return;
+        box.innerHTML='<span style="color:var(--text2);font-size:12px;">Načítám…</span>';
+        try{
+          var d=await api('/config/snapshots?line='+INFO_LINE);
+          var items=(d&&d.items)||[];
+          _snaps={}; items.forEach(function(s){ _snaps[s.id]=s; });
+          if(!items.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Zatím žádná uložená šablona.</span>'; return; }
+          box.innerHTML=items.map(function(s){
+            var meta=fmtDate(s.at)+' · '+(s.fileCount||0)+' podkladů · '+((s.charCount||0).toLocaleString('cs-CZ'))+' znaků'+(s.by?(' · '+esc(s.by)):'');
+            return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-bottom:6px;">'
+              +'<div style="flex:1;min-width:200px;"><div style="font-weight:600;font-size:13px;color:var(--text);">'+esc(s.name)+'</div><div style="font-size:11px;color:var(--text2);">'+meta+'</div></div>'
+              +'<button class="btn btn-primary" style="padding:4px 12px;font-size:12px;" onclick="infoRestoreSnapshot(\''+s.id+'\')">↩ Obnovit</button>'
+              +'<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="infoDeleteSnapshot(\''+s.id+'\')">🗑 Smazat</button>'
+              +'</div>';
+          }).join('');
+        }catch(e){ box.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+esc(e.message)+'</span>'; }
+      };
+      window.infoSaveSnapshot = async function(){
+        var name=prompt('Název šablony (ať ji poznáš):', 'Verze '+new Date().toLocaleDateString('cs-CZ'));
+        if(name===null) return;
+        var m=el('info-snap-msg'); if(m) m.textContent='Ukládám šablonu…';
+        try{
+          await api('/config/snapshots?line='+INFO_LINE,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ name:name }) });
+          if(m) m.textContent='✅ Šablona uložena';
+          infoLoadSnapshots();
+        }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
+      window.infoRestoreSnapshot = async function(id){
+        var name=(_snaps[id]&&_snaps[id].name)||'tato šablona';
+        if(!confirm('Obnovit nastavení ze šablony „'+name+'"?\n\nPřepíše se úvodní věta, scénář, přepojení, SMS i všechny nahrané podklady aktuální linky. Doporučení: nejdřív si ulož aktuální stav jako novou šablonu.')) return;
+        var m=el('info-snap-msg'); if(m) m.textContent='Obnovuji…';
+        try{
+          await api('/config/snapshots/'+encodeURIComponent(id)+'/restore?line='+INFO_LINE,{ method:'POST', headers:{'Content-Type':'application/json'}, body:'{}' });
+          if(m) m.textContent='✅ Obnoveno – načítám…';
+          await infoLoadConfig();
+          if(m) m.textContent='✅ Nastavení obnoveno ze šablony';
+        }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
+      window.infoDeleteSnapshot = async function(id){
+        var name=(_snaps[id]&&_snaps[id].name)||'tato šablona';
+        if(!confirm('Smazat šablonu „'+name+'"? Tuhle akci nelze vrátit.')) return;
+        var m=el('info-snap-msg'); if(m) m.textContent='Mažu…';
+        try{
+          await api('/config/snapshots/'+encodeURIComponent(id)+'?line='+INFO_LINE,{ method:'DELETE' });
+          if(m) m.textContent='🗑 Šablona smazána';
+          infoLoadSnapshots();
+        }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
       function smsStatusLabel(s){
         s=(s||'').toLowerCase();
         if(s==='delivered') return ['✅ doručeno','#16a34a'];

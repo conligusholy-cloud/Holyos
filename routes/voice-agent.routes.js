@@ -1229,6 +1229,124 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
   }
 });
 
+// ─── Šablony / snapshoty konfigurace linky ─────────────────────────────────
+// Uloží kompletní nastavení recepční (úvod, scénář, přepojení, SMS) + znalostní
+// podklady do pojmenovaného snapshotu, ze kterého lze kdykoli obnovit.
+const SNAPSHOT_KEYS = [
+  'inbound_greeting', 'inbound_prompt', 'notify_person_ids',
+  'transfer_enabled', 'transfer_fallback_numbers', 'transfer_inbound_number', 'transfer_ring_timeout', 'transfer_rounds',
+  'sms_form_text', 'sms_form_link',
+];
+// Klíč AppSettingu se znalostními podklady dané linky (scope 'inbound:<line>').
+function knowledgeKey(line) {
+  try { return require('../services/compounder/ai-context').docsSettingKey('inbound:' + normLine(line)); }
+  catch (_) { return 'voice.inbound_docs.' + normLine(line); }
+}
+async function readKnowledgeDocs(line) {
+  const get = settings ? settings.getSetting : null;
+  if (!get) return [];
+  let docs = await get(knowledgeKey(line));
+  if (typeof docs === 'string') { try { docs = JSON.parse(docs); } catch (_) { docs = []; } }
+  return Array.isArray(docs) ? docs : [];
+}
+function snapshotListKey(line) { return cfgKey(line, 'config_snapshots'); }
+async function readSnapshots(line) {
+  const get = settings ? settings.getSetting : null;
+  if (!get) return [];
+  let arr = await get(snapshotListKey(line));
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (_) { arr = []; } }
+  return Array.isArray(arr) ? arr : [];
+}
+async function writeSnapshots(line, arr, uid) {
+  await settings.setSetting(snapshotListKey(line), arr, { type: 'json', userId: uid });
+}
+// Metadata bez objemných dat (text podkladů) — pro seznam v UI.
+function snapshotMeta(s) {
+  const docs = Array.isArray(s.knowledge) ? s.knowledge : [];
+  const chars = docs.reduce((a, d) => a + ((d && d.text) ? d.text.length : 0), 0);
+  return { id: s.id, name: s.name, at: s.at, by: s.by || null, fileCount: docs.length, charCount: chars };
+}
+
+// GET /api/voice/config/snapshots?line=infolinka — seznam uložených šablon.
+router.get('/config/snapshots', requireAuth, async (req, res, next) => {
+  try {
+    const line = normLine(req.query.line);
+    const list = await readSnapshots(line);
+    res.json({ items: list.map(snapshotMeta) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/voice/config/snapshots?line=infolinka { name } — uloží aktuální stav.
+router.post('/config/snapshots', requireAuth, express.json(), async (req, res, next) => {
+  try {
+    if (!settings) return res.status(500).json({ error: 'settings nedostupné' });
+    const line = normLine(req.query.line);
+    const uid = req.user && req.user.id;
+    const name = String((req.body && req.body.name) || '').trim() || ('Šablona ' + new Date().toLocaleString('cs-CZ'));
+    const get = settings.getSetting;
+    const config = {};
+    for (const k of SNAPSHOT_KEYS) { config[k] = await get(cfgKey(line, k)); }
+    const knowledge = await readKnowledgeDocs(line);
+    const snap = {
+      id: 'snap_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name, at: new Date().toISOString(),
+      by: (req.user && (req.user.displayName || req.user.username)) || null,
+      config, knowledge,
+    };
+    const list = await readSnapshots(line);
+    list.unshift(snap);
+    // Rozumný strop, ať AppSetting nebobtná (podklady mohou být velké).
+    while (list.length > 20) list.pop();
+    await writeSnapshots(line, list, uid);
+    res.json({ ok: true, snapshot: snapshotMeta(snap), items: list.map(snapshotMeta) });
+  } catch (err) { next(err); }
+});
+
+// POST /api/voice/config/snapshots/:id/restore?line=infolinka — obnoví ze šablony.
+router.post('/config/snapshots/:id/restore', requireAuth, express.json(), async (req, res, next) => {
+  try {
+    if (!settings) return res.status(500).json({ error: 'settings nedostupné' });
+    const line = normLine(req.query.line);
+    const uid = req.user && req.user.id;
+    const list = await readSnapshots(line);
+    const snap = list.find((s) => s.id === req.params.id);
+    if (!snap) return res.status(404).json({ error: 'Šablona nenalezena' });
+    // Obnov config klíče
+    const cfg = snap.config || {};
+    for (const k of SNAPSHOT_KEYS) {
+      if (!(k in cfg)) continue;
+      const v = cfg[k];
+      if (k === 'notify_person_ids') {
+        const arr = Array.isArray(v) ? v : (typeof v === 'string' ? (() => { try { return JSON.parse(v); } catch (_) { return []; } })() : []);
+        await settings.setSetting(cfgKey(line, k), arr, { type: 'json', userId: uid });
+      } else if (k === 'transfer_enabled') {
+        await settings.setSetting(cfgKey(line, k), (v === true || v === 'true' || v === 1 || v === '1'), { type: 'boolean', userId: uid });
+      } else {
+        await settings.setSetting(cfgKey(line, k), String(v == null ? '' : v), { type: 'string', userId: uid });
+      }
+    }
+    // Obnov znalostní podklady (kompletně přepíše aktuální — včetně textů)
+    const docs = Array.isArray(snap.knowledge) ? snap.knowledge : [];
+    await settings.setSetting(knowledgeKey(line), docs, { type: 'json', userId: uid });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/voice/config/snapshots/:id?line=infolinka — smaže šablonu.
+router.delete('/config/snapshots/:id', requireAuth, async (req, res, next) => {
+  try {
+    if (!settings) return res.status(500).json({ error: 'settings nedostupné' });
+    const line = normLine(req.query.line);
+    const uid = req.user && req.user.id;
+    let list = await readSnapshots(line);
+    const before = list.length;
+    list = list.filter((s) => s.id !== req.params.id);
+    if (list.length === before) return res.status(404).json({ error: 'Šablona nenalezena' });
+    await writeSnapshots(line, list, uid);
+    res.json({ ok: true, items: list.map(snapshotMeta) });
+  } catch (err) { next(err); }
+});
+
 // POST /api/voice/shifts/notify — rozešle e-mailem rozpis směn všem operátorům v plánu (14 dní).
 router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next) => {
   try {
