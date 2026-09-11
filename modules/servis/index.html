@@ -1108,7 +1108,7 @@
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
               +'<td style="text-align:center;">'+smsCell(c)+'</td>'
               +'<td>'+transferCell(c)+'</td>'
-              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoToggleCall(\''+c.id+'\')" title="Celý přepis" style="padding:4px 10px;font-size:14px;">📄</button></td>'
+              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Celý přepis (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
             html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="9" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
@@ -1145,13 +1145,42 @@
         var rows=log.map(function(a){ var okS=(a.status||'').toLowerCase()==='sent'; var lab=okS?['odesláno','#22c55e']:['chyba','#ef4444']; return '<div style="margin:2px 0;">'+esc(fmtDate(a.at))+' · na <b>'+esc(a.to||'—')+'</b> → <span style="color:'+lab[1]+';">'+lab[0]+'</span>'+((!okS&&a.error)?(' <span style="color:var(--text2);">('+esc(a.error)+')</span>'):'')+'</div>'; }).join('');
         return '<div style="margin-bottom:10px;"><b>Odeslané SMS (odkaz na formulář):</b><div style="margin-top:4px;font-size:13px;">'+rows+'</div></div>';
       }
+      // Naformátuje celý přepis (řádky „AI:/Zákazník:/Technik:") na barevný dialog.
+      function fmtFull(text){
+        var lines=String(text||'').split(/\r?\n/).filter(function(l){return l.trim();});
+        if(!lines.length) return '<span style="color:var(--text2);">(prázdné)</span>';
+        return lines.map(function(l){
+          var m=l.match(/^\s*(AI|Z[aá]kazn[ií]k|Technik|Volaj[ií]c[ií])\s*:\s*(.*)$/i);
+          if(m){ var who=m[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), rest=m[2], lab, col;
+            if(who.indexOf('ai')===0){ lab='🤖 AI'; col='#22d3ee'; }
+            else if(who.indexOf('technik')===0){ lab='🔧 Technik'; col='#eab308'; }
+            else { lab='🧑 Zákazník'; col='#22c55e'; }
+            return '<div style="margin:3px 0;"><b style="color:'+col+';">'+lab+':</b> '+esc(rest)+'</div>'; }
+          return '<div style="margin:3px 0;">'+esc(l)+'</div>';
+        }).join('');
+      }
       function callDetail(c){
-        var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
+        var full=(c.full_transcript||'').trim();
         var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+esc(c.summary)+'</div>' : '';
         var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><div style="margin-top:4px;">'+recPlayer(c.id)+'</div></div>' : '';
-        return s + transferDetail(c) + smsDetail(c) + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
+        var ftInner = full ? fmtFull(full) : (c.audio_url ? '<span style="color:var(--text2);">Klikni na ikonu 📄 pro vytvoření celého přepisu (Whisper + rozlišení mluvčích).</span>' : '<span style="color:var(--text2);">Bez nahrávky k přepisu.</span>');
+        var ft = '<div style="font-size:13px;"><b>Celý přepis:</b> <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\',true)">'+(full?'🔁 Přepsat znovu':'📝 Vytvořit')+'</button><div id="ft-'+c.id+'" data-has="'+(full?'1':'')+'" style="margin-top:6px;">'+ftInner+'</div></div>';
+        return s + transferDetail(c) + smsDetail(c) + audio + ft;
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
+      // Otevře detail a když celý přepis ještě není (nebo force), vytvoří ho na kliknutí.
+      window.infoOpenTranscript = function(id, force){
+        var r=el('info-call-'+id);
+        if(r && r.style.display==='none') r.style.display='';
+        var box=el('ft-'+id); if(!box) return;
+        if(!force && box.getAttribute('data-has')==='1') return;      // už je hotový, jen ukázat
+        if(box.getAttribute('data-loading')==='1') return;             // už běží
+        box.setAttribute('data-loading','1');
+        box.innerHTML='<span style="color:var(--text2);">Přepisuji celý hovor… (chvíli to trvá)</span>';
+        api('/calls/'+id+'/transcribe'+(force?'?force=1':''),{ method:'POST' })
+          .then(function(j){ if(j && j.full_transcript!=null){ box.innerHTML=fmtFull(j.full_transcript||''); box.setAttribute('data-has','1'); } else { box.innerHTML='<span style="color:#ef4444;">Přepis se nepovedl.</span>'; } box.removeAttribute('data-loading'); })
+          .catch(function(e){ box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; box.removeAttribute('data-loading'); });
+      };
       // Dotáhne chybějící nahrávky přímo z Twilia (podle CallSid).
       window.infoBackfillRec = async function(){
         var m=el('info-rec-msg'); if(m) m.textContent='Načítám nahrávky z Twilia…';
