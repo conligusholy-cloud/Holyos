@@ -385,6 +385,7 @@
           <button type="button" class="btn btn-primary" data-infosub="settings" onclick="infoSub('settings')">⚙️ Nastavení recepční</button>
           <button type="button" class="btn btn-secondary" data-infosub="calls" onclick="infoSub('calls')">📞 Záznamy hovorů</button>
           <button type="button" class="btn btn-secondary" data-infosub="shifts" onclick="infoSub('shifts')">🗓️ Plánování směn</button>
+          <button type="button" class="btn btn-secondary" data-infosub="report" onclick="infoSub('report')">📊 Přehled služeb</button>
         </div>
 
         <!-- Sub: Nastavení recepční -->
@@ -451,6 +452,23 @@
           </div>
 
           <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg-shifts" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+        </div>
+
+        <!-- Sub: Přehled služeb (pro měsíční hodnocení) -->
+        <div id="info-report" style="display:none;max-width:820px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📊 Přehled služeb na Infolince</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 12px;">Kdo kolik dní držel službu (hlavní/záloha) ve vybraném období — podklad pro měsíční hodnocení. Stáhni do CSV (otevřeš v Excelu).</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Od</label>
+                <input id="info-rep-from" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Do</label>
+                <input id="info-rep-to" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <button class="btn btn-primary" onclick="infoLoadReport()">Zobrazit</button>
+              <button class="btn btn-secondary" onclick="infoReportCsv()">⬇ Stáhnout CSV</button>
+            </div>
+          </div>
+          <div id="info-report-body" style="color:var(--text2);font-size:13px;">Vyber období a klikni Zobrazit.</div>
         </div>
 
         <!-- Sub: Záznamy hovorů -->
@@ -619,12 +637,13 @@
 
       // ── Přepínání pod-záložek Infolinky ──
       window.infoSub = function(name){
-        ['settings','calls','shifts'].forEach(function(s){
+        ['settings','calls','shifts','report'].forEach(function(s){
           var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
           var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
           if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
         });
         if(name==='calls') window.infoLoadCalls();
+        else if(name==='report') infoInitReport();
         else infoLoadConfig();
       };
 
@@ -753,6 +772,71 @@
           .then(function(){ if(m) m.textContent='✅ Směny uloženy'; })
           .catch(function(){ if(m) m.textContent='Chyba uložení směny'; });
       }
+
+      // ── Přehled služeb (pro měsíční hodnocení) ──
+      var _repRows=[], _repDays=[], _repRange={from:'',to:''};
+      function ymd(d){ return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+      function fmtCzDay(key){ var p=String(key).split('-'); return p.length===3?(parseInt(p[2],10)+'. '+parseInt(p[1],10)+'. '+p[0]):key; }
+      function infoInitReport(){
+        var f=el('info-rep-from'), t=el('info-rep-to'), now=new Date();
+        if(f && !f.value) f.value=ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+        if(t && !t.value) t.value=ymd(new Date(now.getFullYear(), now.getMonth()+1, 0));
+        window.infoLoadReport();
+      }
+      window.infoLoadReport=async function(){
+        var box=el('info-report-body'); if(box) box.innerHTML='Načítám…';
+        var from=(el('info-rep-from')||{}).value||'', to=(el('info-rep-to')||{}).value||'';
+        if(from && to && from>to){ var tmp=from; from=to; to=tmp; }
+        _repRange={from:from,to:to};
+        try{
+          var c=await api('/config?line='+INFO_LINE);
+          var shifts=(c.shifts&&typeof c.shifts==='object'&&!Array.isArray(c.shifts))?c.shifts:{};
+          if(!_people.length){ await loadPeople(); }
+          var tally={}, days=[];
+          Object.keys(shifts).sort().forEach(function(key){
+            if(from && key<from) return; if(to && key>to) return;
+            var sh=shifts[key]||{}; var mainId=parseInt(sh.main,10)||null, backId=parseInt(sh.backup,10)||null;
+            if(!mainId && !backId) return;
+            if(mainId){ (tally[mainId]=tally[mainId]||{main:0,backup:0}).main++; }
+            if(backId){ (tally[backId]=tally[backId]||{main:0,backup:0}).backup++; }
+            days.push({ date:key, main:mainId, backup:backId });
+          });
+          var rows=Object.keys(tally).map(function(pid){ pid=parseInt(pid,10); var tt=tally[pid]; return { id:pid, name:opName(pid), main:tt.main, backup:tt.backup, total:tt.main+tt.backup }; });
+          rows.sort(function(a,b){ return b.total-a.total || b.main-a.main; });
+          _repRows=rows; _repDays=days;
+          renderReport();
+        }catch(e){ if(box) box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; }
+      };
+      function renderReport(){
+        var box=el('info-report-body'); if(!box) return;
+        if(!_repRows.length){ box.innerHTML='<span style="color:var(--text2);">V tomto období nejsou žádné naplánované služby.</span>'; return; }
+        var h='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;"><table class="data-table"><thead><tr><th>Operátor</th><th>Dní hlavní</th><th>Dní záloha</th><th>Celkem dní</th></tr></thead><tbody>';
+        _repRows.forEach(function(r){ h+='<tr><td><b>'+esc(r.name)+'</b></td><td>'+r.main+'</td><td>'+r.backup+'</td><td><b>'+r.total+'</b></td></tr>'; });
+        h+='</tbody></table></div>';
+        h+='<details><summary style="cursor:pointer;color:var(--text2);font-size:13px;margin-bottom:8px;">Rozpis po dnech ('+_repDays.length+')</summary>';
+        h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px;"><table class="data-table"><thead><tr><th>Den</th><th>Hlavní</th><th>Záložní</th></tr></thead><tbody>';
+        _repDays.forEach(function(d){ h+='<tr><td style="white-space:nowrap;">'+esc(fmtCzDay(d.date))+'</td><td>'+esc(d.main?opName(d.main):'—')+'</td><td>'+esc(d.backup?opName(d.backup):'—')+'</td></tr>'; });
+        h+='</tbody></table></div></details>';
+        box.innerHTML=h;
+      }
+      window.infoReportCsv=function(){
+        if(!_repRows.length){ alert('Nejdřív klikni Zobrazit.'); return; }
+        function cell(s){ s=String(s==null?'':s); return /[";\n]/.test(s)?('"'+s.replace(/"/g,'""')+'"'):s; }
+        var lines=[];
+        lines.push('Přehled služeb Infolinky;'+(_repRange.from||'')+' - '+(_repRange.to||''));
+        lines.push('');
+        lines.push('Operátor;Dní hlavní;Dní záloha;Celkem dní');
+        _repRows.forEach(function(r){ lines.push([cell(r.name),r.main,r.backup,r.total].join(';')); });
+        lines.push('');
+        lines.push('Rozpis po dnech');
+        lines.push('Den;Hlavní;Záložní');
+        _repDays.forEach(function(d){ lines.push([d.date, cell(d.main?opName(d.main):''), cell(d.backup?opName(d.backup):'')].join(';')); });
+        var csv='﻿'+lines.join('\r\n');
+        var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+        a.download='infolinka-sluzby_'+(_repRange.from||'')+'_'+(_repRange.to||'')+'.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },100);
+      };
 
       // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──
       function knSectionHtml(){
