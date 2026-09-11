@@ -1472,7 +1472,8 @@
     function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
     function fmtDate(s){ try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return ''; } }
     var _solvers=[]; // servisní tým (koho lze úkolovat) — z nastavení
-    function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:p.role||'' }; }); }).catch(function(){ _people=[]; }); }
+    function roleName(r){ if(!r) return ''; if(typeof r==='string') return r; return r.name||r.title||r.label||''; }
+    function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:roleName(p.role) }; }); }).catch(function(){ _people=[]; }); }
     function loadSolvers(){ return fetchJSON(API+'/request-settings').then(function(d){ _solvers=(d&&d.solvers)||[]; }).catch(function(){ _solvers=[]; }); }
     // Řešitele lze vybrat jen ze servisního týmu; když tým není nastaven, nabídni všechny (fallback).
     function peopleOptions(sel){
@@ -1490,19 +1491,36 @@
           +'<input type="checkbox" data-sid="'+p.id+'"'+(chosen[p.id]?' checked':'')+'>'
           +'<span style="flex:1;"><b>'+esc(p.name)+'</b>'+(p.role?(' <span style="color:var(--text2);font-size:12px;">'+esc(p.role)+'</span>'):'')+(p.phone?('<div style="color:var(--text2);font-size:11px;">📱 '+esc(p.phone)+'</div>'):'')+'</span></label>';
       }).join('');
-      ov.innerHTML='<div class="modal" style="width:560px;max-height:86vh;display:flex;flex-direction:column;"><h2>⚙️ Kdo může řešit servisní požadavky</h2>'
-        +'<p style="color:var(--text2);font-size:13px;margin:0 0 12px;">Vyber z Lidí a HR ty, které budeš úkolovat. Jen z nich pak volíš „Řešitele" u požadavku a uvidí své úkoly v telefonu.</p>'
-        +'<div style="flex:1;overflow:auto;padding-right:4px;">'+(rows||'<span style="color:var(--text2);">Žádní lidé v HR.</span>')+'</div>'
+      // Rozcestník nastavení servisu — sekce Servisní tým + místo pro další nastavení.
+      ov.innerHTML='<div class="modal" style="width:600px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;"><h2 style="margin-bottom:4px;">⚙️ Nastavení servisu</h2>'
+        +'<p style="color:var(--text2);font-size:13px;margin:0 0 14px;">Nastavení pro servisní požadavky a techniky. Další volby sem budeme přidávat.</p>'
+        +'<div style="flex:1;overflow:auto;padding-right:4px;">'
+        // Sekce 1: Servisní tým
+        +'<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
+        +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">👥 Servisní tým (kdo řeší požadavky)</div>'
+        +'<div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Vyber z Lidí a HR ty, které budeš úkolovat. Jen z nich pak volíš „Řešitele" u požadavku a uvidí své úkoly v telefonu.</div>'
+        +(rows||'<span style="color:var(--text2);">Žádní lidé v HR.</span>')
+        +'</div>'
+        // Sekce 2: Další nastavení (placeholder — připravené místo)
+        +'<div style="border:1px dashed var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px;opacity:.85;">'
+        +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">🧭 Další nastavení</div>'
+        +'<div style="color:var(--text2);font-size:12px;">Připravujeme: automatické přiřazování úkolů (podle lokality/rozpisu), výchozí lhůty řešení, notifikace technikům, sazba za km. Napiš, co sem chceš přidat.</div>'
+        +'</div>'
+        +'</div>'
         +'<div class="modal-actions" style="margin-top:12px;"><span id="sr-set-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
-        +'<button class="btn btn-secondary" id="sr-set-cancel">Zrušit</button><button class="btn btn-primary" id="sr-set-save">💾 Uložit tým</button></div></div>';
+        +'<button class="btn btn-secondary" id="sr-set-cancel">Zavřít</button><button class="btn btn-primary" id="sr-set-save">💾 Uložit tým</button></div></div>';
       document.getElementById('modal-root').appendChild(ov);
       function close(){ ov.remove(); }
       ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
       ov.querySelector('#sr-set-cancel').addEventListener('click',close);
       ov.querySelector('#sr-set-save').addEventListener('click',function(){
-        var ids=Array.prototype.slice.call(ov.querySelectorAll('input[data-sid]:checked')).map(function(c){ return parseInt(c.getAttribute('data-sid'),10); });
-        var m=ov.querySelector('#sr-set-msg'); if(m) m.textContent='Ukládám…';
-        fetchJSON(API+'/request-settings',{method:'PUT',body:JSON.stringify({solver_ids:ids})}).then(function(d){ _solvers=(d&&d.solvers)||[]; close(); }).catch(function(){ if(m) m.textContent='Uložení selhalo.'; });
+        var ids=Array.prototype.slice.call(ov.querySelectorAll('input[data-sid]:checked')).map(function(c){ return parseInt(c.getAttribute('data-sid'),10); }).filter(function(n){ return !!n; });
+        var m=ov.querySelector('#sr-set-msg'); if(m){ m.style.color='var(--text2)'; m.textContent='Ukládám…'; }
+        fetch(API+'/request-settings',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ solver_ids:ids }) })
+          .then(function(r){ return r.text().then(function(t){ var j={}; try{ j=JSON.parse(t); }catch(_){}
+            if(!r.ok) throw new Error((j&&j.error)||('HTTP '+r.status+(t?(' — '+t.slice(0,140)):''))); return j; }); })
+          .then(function(d){ _solvers=(d&&d.solvers)||[]; if(m){ m.style.color='#22c55e'; m.textContent='✅ Uloženo'; } setTimeout(close,700); })
+          .catch(function(e){ if(m){ m.style.color='#ef4444'; m.textContent='Uložení selhalo: '+e.message; } });
       });
     }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }

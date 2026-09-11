@@ -4793,6 +4793,24 @@ model ServiceMachine {
   @@map("service_machines")
 }
 
+// Odečet stavů měřidel (voda/elektro) — zadává kolegyně z mobilu, ukládá se do Odečtů.
+model MeterReading {
+  id                  Int      @id @default(autoincrement())
+  water_m3            Decimal? @db.Decimal(12, 3)   // stav vodoměru v m3
+  water_photo_url     String?  @db.VarChar(500)     // foto vodoměru
+  electricity_kwh     Decimal? @db.Decimal(12, 2)   // stav elektroměru v kWh
+  electricity_photo_url String? @db.VarChar(500)    // foto elektroměru
+  machine_id          Int?     // stroj/lokalita (ServiceMachine) — bez FK, jen odkaz
+  machine_name        String?  @db.VarChar(200)     // denormalizovaný název pro zobrazení
+  note                String?  @db.Text
+  created_by_user_id  Int?     // kdo odečet zadal (přihlášený uživatel)
+  created_at          DateTime @default(now())
+
+  @@index([machine_id])
+  @@index([created_at])
+  @@map("meter_readings")
+}
+
 // Spotřebič — fyzický komponent uvnitř produktu (motor, čerpadlo, kompresor,
 // displej, mincovník…). Volitelně provázáno s Material (BOM položka).
 model ServiceAppliance {

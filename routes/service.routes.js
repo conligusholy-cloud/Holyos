@@ -744,9 +744,11 @@ async function readSolverIds() {
 }
 async function peopleByIds(ids) {
   if (!ids.length) return [];
+  // POZN.: `role` je relace (Person.role → Role) — do selectu ji nedáváme, protože
+  // frontend ji odsud nepoužívá a zbytečně by komplikovala serializaci.
   const people = await prisma.person.findMany({
     where: { id: { in: ids } },
-    select: { id: true, first_name: true, last_name: true, phone: true, email: true, work_email: true, role: true },
+    select: { id: true, first_name: true, last_name: true, phone: true, email: true, work_email: true },
   });
   const byId = {}; people.forEach((p) => { byId[p.id] = p; });
   // Zachovej pořadí dle uloženého seznamu
@@ -755,7 +757,7 @@ async function peopleByIds(ids) {
     name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id),
     phone: (p.phone || '').trim(),
     email: (p.work_email || p.email || '').trim(),
-    role: p.role || '',
+    role: '',
   }));
 }
 
@@ -775,7 +777,9 @@ router.put('/request-settings', async (req, res, next) => {
     if (!Array.isArray(ids)) ids = [];
     ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
     await _settings.setSetting(SOLVERS_KEY, ids, { type: 'json', userId: req.user && req.user.id });
-    res.json({ ok: true, solver_ids: ids, solvers: await peopleByIds(ids) });
+    let solvers = [];
+    try { solvers = await peopleByIds(ids); } catch (e) { console.warn('[service] request-settings solvers:', e.message); }
+    res.json({ ok: true, solver_ids: ids, solvers });
   } catch (err) { next(err); }
 });
 
