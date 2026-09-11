@@ -1515,6 +1515,7 @@
         +'<select id="team-add" style="flex:1;"></select>'
         +'<button class="btn btn-secondary" id="team-add-btn" type="button">+ Přidat</button>'
         +'</div>'
+        +'<div id="team-count" style="font-size:11px;color:var(--text2);margin-top:6px;"></div>'
         +'</div>'
         +'<div style="border:1px dashed var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px;opacity:.85;">'
         +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">🧭 Další nastavení</div>'
@@ -1524,7 +1525,7 @@
         +'<div class="modal-actions" style="margin-top:12px;"><span id="sr-set-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
         +'<button class="btn btn-secondary" id="sr-set-cancel">Zavřít</button><button class="btn btn-primary" id="sr-set-save">💾 Uložit tým</button></div></div>';
       document.getElementById('modal-root').appendChild(ov);
-      var listEl=ov.querySelector('#team-list'), addSel=ov.querySelector('#team-add');
+      var listEl=ov.querySelector('#team-list'), addSel=ov.querySelector('#team-add'), cntEl=ov.querySelector('#team-count');
       function renderTeam(){
         if(!team.length){ listEl.innerHTML='<div style="color:var(--text2);font-size:13px;padding:6px 0;">Zatím nikdo. Přidej člověka níže.</div>'; }
         else { listEl.innerHTML=team.map(function(id){ var p=personById(id);
@@ -1535,12 +1536,20 @@
         // Nabídka = lidé, kteří ještě nejsou v týmu.
         var avail=_people.filter(function(p){ return team.indexOf(p.id)<0; }).sort(function(a,b){ return a.name.localeCompare(b.name,'cs'); });
         addSel.innerHTML='<option value="">+ Přidat člověka…</option>'+avail.map(function(p){ return '<option value="'+p.id+'">'+esc(p.name)+(p.role?(' — '+esc(p.role)):'')+'</option>'; }).join('');
+        if(cntEl) cntEl.textContent='K výběru: '+avail.length+' lidí · v týmu: '+team.length;
       }
       function addSelected(){ var id=parseInt(addSel.value,10); if(id && team.indexOf(id)<0){ team.push(id); renderTeam(); } }
       ov.querySelector('#team-add-btn').addEventListener('click',addSelected);
       addSel.addEventListener('change',addSelected);
       listEl.addEventListener('click',function(e){ var b=e.target.closest('[data-rm]'); if(!b) return; var id=parseInt(b.getAttribute('data-rm'),10); team=team.filter(function(x){return x!==id;}); renderTeam(); });
       renderTeam();
+      // Když se lidé nenačetli (prázdný výběr), zkus je natáhnout přímo teď a ukaž případnou chybu.
+      if(!_people.length){
+        if(cntEl) cntEl.textContent='Načítám lidi…';
+        fetch('/api/hr/people',{credentials:'include'}).then(function(r){ return r.text().then(function(t){ if(!r.ok) throw new Error('HTTP '+r.status); var j; try{ j=JSON.parse(t); }catch(_){ throw new Error('neplatná odpověď'); } return j; }); })
+          .then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:roleName(p.role) }; }); renderTeam(); })
+          .catch(function(e){ if(cntEl){ cntEl.style.color='#ef4444'; cntEl.textContent='Nepodařilo se načíst lidi: '+e.message; } });
+      }
       function close(){ ov.remove(); }
       ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
       ov.querySelector('#sr-set-cancel').addEventListener('click',close);
