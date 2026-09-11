@@ -413,7 +413,7 @@
         <div id="info-shifts" style="display:none;max-width:760px;">
           <div style="border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
             <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🗓️ Plánování směn na Infolince</div>
-            <p style="color:var(--text2);font-size:12px;margin:0;">Připravujeme rozpis směn — kdo drží Infolinku a kdy. Zatím se přepojení řídí čísly níže; časem se hovor bude přepojovat na toho, kdo má právě směnu.</p>
+            <p style="color:var(--text2);font-size:12px;margin:0;">U každého dne vyber, kdo drží Infolinku (hlavní) a kdo je záloha. Při přepojení volá AI nejdřív hlavního, když to nezvedne, pak zálohu — a teprve pak statická čísla níže. Ukládá se hned.</p>
           </div>
 
           <!-- Operátoři Infolinky (tým z Lidí a HR) -->
@@ -427,8 +427,15 @@
             <div id="info-op-list" style="display:flex;flex-direction:column;gap:6px;"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
           </div>
 
+          <!-- Rozpis směn (14 dní) -->
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🗓️ Rozpis směn (14 dní)</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">U každého dne vyber hlavního a záložního operátora (z lidí výše). Ukládá se hned.</p>
+            <div id="info-shift-roster"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
+          </div>
+
           <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;background:rgba(34,211,238,0.06);">
-            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka</div>
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka (statická čísla)</div>
             <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Když volající řekne, že chce mluvit s živým člověkem, AI ho přepojí — nejdřív na hlavní číslo, a když se nikdo nedovolá (do vypršení vyzvánění), postupně na záložní čísla.</p>
             <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="info-transfer-enabled"> Zapnout přepojení</label>
             <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Hlavní číslo pro přepojení</label>
@@ -640,7 +647,8 @@
           el('info-prompt').value=c.inbound_prompt||'';
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
           _ops=Array.isArray(c.operator_ids)?c.operator_ids.slice():[];
-          if(!_people.length){ loadPeople(); } else { fillOpSelect(); renderOps(); }
+          _shifts=(c.shifts&&typeof c.shifts==='object'&&!Array.isArray(c.shifts))?c.shifts:{};
+          if(!_people.length){ loadPeople(); } else { fillOpSelect(); renderOps(); renderShiftRoster(); }
           var te=el('info-transfer-enabled'); if(te) te.checked = c.transfer_enabled!==false;
           var tf=el('info-transfer-fallback'); if(tf) tf.value = c.transfer_fallback_numbers||'';
           var ti=el('info-transfer-inbound'); if(ti) ti.value = c.transfer_inbound_number||'';
@@ -673,12 +681,12 @@
       };
 
       // ── Operátoři Infolinky (tým z Lidí a HR) ──
-      var _people=[], _ops=[];
+      var _people=[], _ops=[], _shifts={};
       function loadPeople(){
         return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
           var arr=Array.isArray(list)?list:((list&&list.items)||[]);
           _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id), phone:(p.phone||'').trim() }; });
-          fillOpSelect(); renderOps();
+          fillOpSelect(); renderOps(); renderShiftRoster();
         }).catch(function(){ _people=[]; });
       }
       function fillOpSelect(){
@@ -708,8 +716,43 @@
         box.innerHTML=rows+warn;
       }
       function persistOps(){ return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ operator_ids:_ops }) }).catch(function(){}); }
-      window.infoAddOperator=function(){ var sel=el('info-op-select'); var id=parseInt(sel&&sel.value,10); if(!id) return; if(_ops.indexOf(id)<0){ _ops.push(id); fillOpSelect(); renderOps(); persistOps(); } if(sel) sel.value=''; };
-      window.infoRemoveOperator=function(id){ _ops=_ops.filter(function(x){ return x!==id; }); fillOpSelect(); renderOps(); persistOps(); };
+      window.infoAddOperator=function(){ var sel=el('info-op-select'); var id=parseInt(sel&&sel.value,10); if(!id) return; if(_ops.indexOf(id)<0){ _ops.push(id); fillOpSelect(); renderOps(); renderShiftRoster(); persistOps(); } if(sel) sel.value=''; };
+      window.infoRemoveOperator=function(id){ _ops=_ops.filter(function(x){ return x!==id; }); fillOpSelect(); renderOps(); renderShiftRoster(); persistOps(); };
+
+      // ── Rozpis směn (14 dní) ──
+      function shYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+      function shDayLabel(d){ var dn=['Ne','Po','Út','St','Čt','Pá','So']; return dn[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.'; }
+      function shOpts(sel){ return '<option value="">— nikdo —</option>'+_ops.map(function(id){ return '<option value="'+id+'"'+(String(sel)===String(id)?' selected':'')+'>'+esc(opName(id))+'</option>'; }).join(''); }
+      function renderShiftRoster(){
+        var box=el('info-shift-roster'); if(!box) return;
+        if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Nejdřív přidej operátory výše, pak jim tady přiřadíš směny.</span>'; return; }
+        var today=new Date(); today.setHours(0,0,0,0);
+        var head='<div style="display:grid;grid-template-columns:140px 1fr 1fr;gap:8px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>Hlavní</div><div>Záložní</div></div>';
+        var rows='';
+        for(var i=0;i<14;i++){
+          var d=new Date(today.getTime()+i*86400000); var key=shYmd(d); var sh=_shifts[key]||{};
+          var we=(d.getDay()===0||d.getDay()===6);
+          rows+='<div style="display:grid;grid-template-columns:140px 1fr 1fr;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.65;':'')+'">'
+            +'<div style="font-size:13px;'+(i===0?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(i===0?' · dnes':'')+'</div>'
+            +'<select data-sh-key="'+key+'" data-sh-role="main" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;">'+shOpts(sh.main)+'</select>'
+            +'<select data-sh-key="'+key+'" data-sh-role="backup" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;">'+shOpts(sh.backup)+'</select>'
+            +'</div>';
+        }
+        box.innerHTML=head+rows;
+        box.querySelectorAll('select[data-sh-key]').forEach(function(s){ s.addEventListener('change', onShiftChange); });
+      }
+      function onShiftChange(e){
+        var s=e.target; var key=s.getAttribute('data-sh-key'); var role=s.getAttribute('data-sh-role'); var val=parseInt(s.value,10)||null;
+        var cur=_shifts[key]||{}; cur[role]=val;
+        if(!cur.main && !cur.backup){ delete _shifts[key]; } else { _shifts[key]=cur; }
+        persistShifts();
+      }
+      function persistShifts(){
+        var m=el('info-msg-shifts'); if(m) m.textContent='Ukládám směnu…';
+        return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shifts:_shifts }) })
+          .then(function(){ if(m) m.textContent='✅ Směny uloženy'; })
+          .catch(function(){ if(m) m.textContent='Chyba uložení směny'; });
+      }
 
       // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──
       function knSectionHtml(){
