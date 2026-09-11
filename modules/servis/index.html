@@ -384,6 +384,7 @@
         <div class="toolbar" style="margin-top:0;">
           <button type="button" class="btn btn-primary" data-infosub="settings" onclick="infoSub('settings')">⚙️ Nastavení recepční</button>
           <button type="button" class="btn btn-secondary" data-infosub="calls" onclick="infoSub('calls')">📞 Záznamy hovorů</button>
+          <button type="button" class="btn btn-secondary" data-infosub="shifts" onclick="infoSub('shifts')">🗓️ Plánování směn</button>
         </div>
 
         <!-- Sub: Nastavení recepční -->
@@ -405,7 +406,17 @@
           <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
           <input id="info-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
 
-          <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;margin-top:16px;background:rgba(34,211,238,0.06);">
+          <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+        </div>
+
+        <!-- Sub: Plánování směn (+ přepojení hovoru) -->
+        <div id="info-shifts" style="display:none;max-width:760px;">
+          <div style="border:1px dashed var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🗓️ Plánování směn na Infolince</div>
+            <p style="color:var(--text2);font-size:12px;margin:0;">Připravujeme rozpis směn — kdo drží Infolinku a kdy. Zatím se přepojení řídí čísly níže; časem se hovor bude přepojovat na toho, kdo má právě směnu.</p>
+          </div>
+
+          <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;background:rgba(34,211,238,0.06);">
             <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka</div>
             <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Když volající řekne, že chce mluvit s živým člověkem, AI ho přepojí — nejdřív na hlavní číslo, a když se nikdo nedovolá (do vypršení vyzvánění), postupně na záložní čísla.</p>
             <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="info-transfer-enabled"> Zapnout přepojení</label>
@@ -421,7 +432,7 @@
             </div>
           </div>
 
-          <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+          <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg-shifts" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
         </div>
 
         <!-- Sub: Záznamy hovorů -->
@@ -590,7 +601,7 @@
 
       // ── Přepínání pod-záložek Infolinky ──
       window.infoSub = function(name){
-        ['settings','calls'].forEach(function(s){
+        ['settings','calls','shifts'].forEach(function(s){
           var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
           var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
           if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
@@ -629,7 +640,8 @@
         }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
       }
       window.infoSave = async function(){
-        var msg=el('info-msg'); if(msg) msg.textContent='Ukládám…';
+        var setMsg=function(t){ ['info-msg','info-msg-shifts'].forEach(function(id){ var m=el(id); if(m) m.textContent=t; }); };
+        setMsg('Ukládám…');
         var notify=(el('info-notify').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
         try{
           await api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
@@ -643,8 +655,8 @@
             transfer_ring_timeout: parseInt((el('info-transfer-timeout')||{}).value,10)||20,
             transfer_rounds: parseInt((el('info-transfer-rounds')||{}).value,10)||2
           })});
-          if(msg) msg.textContent='✅ Uloženo';
-        }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
+          setMsg('✅ Uloženo');
+        }catch(e){ setMsg('Chyba: '+e.message); }
       };
 
       // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──
