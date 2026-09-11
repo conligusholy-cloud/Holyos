@@ -800,6 +800,27 @@ app.use((req, res, next) => {
 });
 
 app.use(express.static(path.join(__dirname, 'public'), staticOpts));
+
+// Automatická injekce hlídače nové verze do VŠECH interních stránek pod /modules/
+// (i budoucích). Zákaznické stránky v public/ se nedotýkají. Zcela defenzivní:
+// při jakékoli chybě propadne na běžné statické servírování (nic nerozbije).
+app.get(/^\/modules\/.*(\.html|\/)$/, (req, res, next) => {
+  try {
+    let rel = decodeURIComponent(req.path).replace(/^\/+/, '');
+    if (rel.indexOf('..') >= 0) return next();
+    if (rel.endsWith('/')) rel += 'index.html';
+    if (!rel.endsWith('.html')) return next();
+    const file = path.join(__dirname, rel);
+    if (!file.startsWith(path.join(__dirname, 'modules'))) return next();
+    fs.readFile(file, 'utf8', (err, html) => {
+      if (err || !html || !/<\/body>/i.test(html)) return next();
+      if (html.indexOf('/js/version-watcher.js') >= 0) { res.type('html'); return res.send(html); }
+      const out = html.replace(/<\/body>/i, '  <script src="/js/version-watcher.js"></script>\n</body>');
+      res.type('html'); res.send(out);
+    });
+  } catch (_) { next(); }
+});
+
 app.use('/modules', express.static(path.join(__dirname, 'modules'), staticOpts));
 app.use('/css', express.static(path.join(__dirname, 'css'), staticOpts));
 app.use('/js', express.static(path.join(__dirname, 'js'), staticOpts));
