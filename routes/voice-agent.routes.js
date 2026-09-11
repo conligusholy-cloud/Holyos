@@ -1002,8 +1002,14 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
     const senderName = (req.user && (req.user.displayName || req.user.username)) || 'Best Series';
     let fromUpn = null;
     try {
-      const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true, email: true } });
-      if (pp) fromUpn = (pp.work_email || pp.email || '').trim() || null;
+      // 1) navázaná osoba (User.person), 2) osoba přes user_id, 3) přihlašovací jméno je-li e-mail
+      const per = (req.user && req.user.person) || null;
+      if (per) fromUpn = (per.work_email || per.email || '').trim() || null;
+      if (!fromUpn) {
+        const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true, email: true } });
+        if (pp) fromUpn = (pp.work_email || pp.email || '').trim() || null;
+      }
+      if (!fromUpn && req.user && /@/.test(String(req.user.username || ''))) fromUpn = String(req.user.username).trim();
     } catch (_) { /* fallback níže */ }
     const bodyHtml = '<p>Ahoj, tady je aktuální rozpis směn na Infolince (14 dní dopředu). Prosím počítej se svými směnami.</p>'
       + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
