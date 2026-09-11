@@ -1168,7 +1168,7 @@ router.post('/campaigns/:id/backfill-recordings', requireAuth, async (req, res, 
     const ids = targets.map((t) => t.voice_call_id).filter(Boolean);
     if (!ids.length) return res.json({ ok: true, fixed: 0 });
     const calls = await prisma.voiceCall.findMany({
-      where: { id: { in: ids }, audio_url: null, twilio_call_sid: { not: null } },
+      where: { id: { in: ids }, audio_url: null },
       select: { id: true, twilio_call_sid: true },
     });
     if (!calls.length) return res.json({ ok: true, fixed: 0 });
@@ -1197,7 +1197,9 @@ router.post('/campaigns/:id/backfill-recordings', requireAuth, async (req, res, 
 router.post('/calls/backfill-recordings', requireAuth, async (req, res, next) => {
   try {
     if (!prisma.voiceCall) return res.json({ ok: true, fixed: 0 });
-    let where = { audio_url: null, twilio_call_sid: { not: null } };
+    // twilio_call_sid je povinné pole → nefiltrujeme na not:null (Prisma to nedovolí),
+    // 'local-' sidy (bez Twilia) přeskočíme až ve smyčce.
+    let where = { audio_url: null };
     if (req.query.line !== undefined) {
       const line = normLine(req.query.line);
       where = (line === 'infolinka')
