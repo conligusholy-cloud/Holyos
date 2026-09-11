@@ -125,6 +125,30 @@
         .catch(function(e){ if(btn){ btn.disabled=false; btn.textContent='📝 Přepsat celý hovor'; } alert('Chyba: '+e.message); });
     };
 
+    // ── SMS s odkazem z telefonu technika (ne přes GoSMS) ──
+    var smsFormText='', smsFormLink='';
+    function loadFormCfg(){
+      return api('/api/voice/config?line=infolinka').then(function(r){ return r.ok?r.json():null; }).then(function(c){
+        if(c){ smsFormText=c.sms_form_text||''; smsFormLink=c.sms_form_link||''; }
+      }).catch(function(){});
+    }
+    function smsBody(){
+      var t=smsFormText||'', link=smsFormLink||'';
+      if(t){ return t.indexOf('{odkaz}')>=0 ? t.replace(/\{odkaz\}/g, link) : (t+(link?(' '+link):'')); }
+      return link || 'Dobrý den, zde je odkaz na formulář.';
+    }
+    function smsBadges(log){
+      log = Array.isArray(log) ? log : [];
+      if(!log.length) return '';
+      return log.map(function(e){ return '<span class="chip cb" style="background:rgba(139,92,246,0.18);color:#a78bfa;">✉️ SMS odeslána: '+esc(e.name||'?')+' · '+esc(fmtDate2(e.at))+'</span>'; }).join(' ');
+    }
+    window.markSms = function(id){
+      fetch('/api/voice/calls/'+id+'/manual-sms',{method:'POST',credentials:'include'})
+        .then(function(r){ return r.ok?r.json():null; })
+        .then(function(j){ if(j&&j.manual_sms_log){ var box=document.getElementById('sms-'+id); if(box) box.innerHTML=smsBadges(j.manual_sms_log); } })
+        .catch(function(){});
+    };
+
     // Odvodí „přesměrováno na koho" z transfer_log.
     function transferInfo(c){
       var log = Array.isArray(c.transfer_log) ? c.transfer_log : [];
@@ -139,7 +163,7 @@
       if(r.status===401||r.status===403){ show('gate'); return null; }
       if(!r.ok) throw new Error('me '+r.status);
       return r.json();
-    }).then(function(j){ if(!j) return; show('app'); loadCalls(); }).catch(function(){ show('gate'); });
+    }).then(function(j){ if(!j) return; show('app'); loadFormCfg().then(loadCalls); }).catch(function(){ show('gate'); });
 
     window.loadCalls = async function(){
       var box=$('list'); box.innerHTML='<div class="empty">Načítám…</div>';
@@ -170,10 +194,12 @@
             +'<div class="meta">'+repChip+chip+'<span class="chip len">⏱ '+fmtDur(c.duration_sec)+'</span>'+(c.caller_name?'<span class="chip none">👤 '+esc(c.caller_name)+'</span>':'')+'</div>'
             +'<div class="actions">'
               +(tel? '<a class="call-btn" href="tel:'+esc(tel)+'" onclick="markCallback(\''+c.id+'\')">Zavolat zpět</a>' : '')
+              +(tel? '<a class="call-btn" style="background:#8b5cf6;color:#fff;" href="sms:'+esc(tel)+'?&body='+encodeURIComponent(smsBody())+'" onclick="markSms(\''+c.id+'\')">✉️ SMS s odkazem</a>' : '')
               +(rec||'')
               +transcriptBlock(c)
             +'</div>'
             +'<div class="cbwrap" id="cb-'+c.id+'">'+cbBadges(c.callback_log)+'</div>'
+            +'<div class="cbwrap" id="sms-'+c.id+'">'+smsBadges(c.manual_sms_log)+'</div>'
           +'</div>';
         }).join('');
       }catch(e){ box.innerHTML='<div class="empty" style="color:#ef4444;">Chyba: '+esc(e.message)+'</div>'; }

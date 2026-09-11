@@ -6158,6 +6158,7 @@ model VoiceCall {
   transfer_log    Json?     // [{ number, name, status, at }] — pokusy o přesměrování na kolegu
   sms_log         Json?     // [{ context, to, status, at, error? }] — SMS odeslané během hovoru (např. odkaz na formulář)
   callback_log    Json?     // [{ name, person_id?, at }] — technik zavolal kontaktu zpět (přes tlačítko Zavolat zpět)
+  manual_sms_log  Json?     // [{ name, person_id?, at }] — technik poslal volajícímu SMS s odkazem z vlastního telefonu
   full_transcript String?   @db.Text // celý přepis nahrávky (vč. části se zákazníkem a technikem) — OpenAI Whisper
   full_transcript_at DateTime?        // kdy byl celý přepis pořízen
   cost_usd        Decimal?  @db.Decimal(10, 4)
