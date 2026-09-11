@@ -761,10 +761,25 @@ async function transcribeCall(callId, { force = false } = {}) {
   if (!call || !call.audio_url) return null;
   if (call.full_transcript && !force) return call.full_transcript;
   const file = await ensureLocalRecording(call.id, call.audio_url, call.line);
-  const text = await whisper.transcribeFile(file, { language: 'cs' });
-  await prisma.voiceCall.update({ where: { id: call.id }, data: { full_transcript: text || '', full_transcript_at: new Date() } });
-  console.log('[voice] Whisper přepis ' + callId + ': ' + (text ? text.length : 0) + ' znaků');
-  return text;
+  const raw = await whisper.transcribeFile(file, { language: 'cs' });
+  // Whisper vrací souvislý text bez mluvčích → AI krok (Claude) ho rozdělí a označí
+  // kdo mluví: AI / Zákazník / Technik. Když selže, uložíme aspoň surový text.
+  let out = raw;
+  try {
+    if (raw && raw.trim()) {
+      const agent = require('../services/voice/agent');
+      const sys = 'Dostaneš surový přepis (řeč→text) telefonního hovoru na AI technickou podporu samoobslužných prádlomatů Best Series. '
+        + 'Rozděl ho na jednotlivé repliky a označ mluvčí. Na začátku spolu mluví AI asistent a Zákazník; pokud během hovoru došlo k přepojení na živého člověka, další část vede Technik se Zákazníkem. '
+        + 'Každou repliku dej na NOVÝ ŘÁDEK přesně ve tvaru "AI:", "Zákazník:" nebo "Technik:" a za tím text repliky. '
+        + 'Zachovej obsah i pořadí, jen rozděl na mluvčí a oprav zjevné přeřeky a interpunkci. Když si nejsi jistý mluvčím, odhadni ho podle kontextu. '
+        + 'Nic nepřidávej, nekomentuj, vrať jen samotný dialog.';
+      const r = await agent.runTurn({ system: sys, history: [], userText: raw, maxTokens: 4000 });
+      if (r && r.text && r.text.trim()) out = r.text.trim();
+    }
+  } catch (e) { console.warn('[voice] označení mluvčích selhalo (' + callId + '):', e.message); }
+  await prisma.voiceCall.update({ where: { id: call.id }, data: { full_transcript: out || '', full_transcript_at: new Date() } });
+  console.log('[voice] Whisper+mluvčí přepis ' + callId + ': ' + (out ? out.length : 0) + ' znaků');
+  return out;
 }
 async function maybeTranscribeCall(callId) {
   try { await transcribeCall(callId, { force: false }); }

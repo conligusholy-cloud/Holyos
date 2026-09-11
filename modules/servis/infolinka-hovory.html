@@ -90,25 +90,41 @@
         .then(function(j){ if(j&&j.callback_log){ var box=document.getElementById('cb-'+id); if(box) box.innerHTML=cbBadges(j.callback_log); } })
         .catch(function(){});
     };
+    // Naformátuje celý přepis (řádky „AI:/Zákazník:/Technik:") na barevný dialog.
+    function fmtFull(text){
+      var lines=String(text||'').split(/\r?\n/).filter(function(l){return l.trim();});
+      if(!lines.length) return '<div style="color:var(--text2);">(prázdné)</div>';
+      return lines.map(function(l){
+        var m=l.match(/^\s*(AI|Z[aá]kazn[ií]k|Technik|Volaj[ií]c[ií])\s*:\s*(.*)$/i);
+        if(m){
+          var who=m[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), rest=m[2], label, col;
+          if(who.indexOf('ai')===0){ label='🤖 AI'; col='#22d3ee'; }
+          else if(who.indexOf('technik')===0){ label='🔧 Technik'; col='#eab308'; }
+          else { label='🧑 Zákazník'; col='#22c55e'; }
+          return '<div class="a"><b style="color:'+col+';">'+label+':</b> '+esc(rest)+'</div>';
+        }
+        return '<div class="a">'+esc(l)+'</div>';
+      }).join('');
+    }
     // Přepis: celý (Whisper) má přednost; jinak AI část + tlačítko na přepis celého hovoru.
     function transcriptBlock(c){
       var full=(c.full_transcript||'').trim();
       var ai=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div class="a"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
       var inner, label;
-      if(full){ inner='<div style="white-space:pre-wrap;">'+esc(full)+'</div>'; label='📄 Celý přepis'; }
+      if(full){ inner=fmtFull(full); label='📄 Celý přepis'; }
       else if(ai){ inner=ai+(c.audio_url?'<div style="margin-top:8px;color:var(--text2);font-size:12px;">Zatím jen část s AI. Celý hovor (i s technikem) přepíšeš tlačítkem „Přepsat celý hovor".</div>':''); label='📄 Přepis'; }
       else { inner='<div style="color:var(--text2);">Bez přepisu.</div>'; label='📄 Přepis'; }
       var trBtn='<button class="tr-toggle" onclick="var d=document.getElementById(\'tr-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">'+label+'</button>';
-      var wBtn=(!full && c.audio_url)?'<button class="tr-toggle" onclick="transcribeCall(\''+c.id+'\', this)">📝 Přepsat celý hovor</button>':'';
+      var wBtn=c.audio_url?('<button class="tr-toggle" onclick="transcribeCall(\''+c.id+'\', this, '+(full?'true':'false')+')">'+(full?'🔁 Přepsat znovu':'📝 Přepsat celý hovor')+'</button>'):'';
       return trBtn+wBtn+'<div class="transcript" id="tr-'+c.id+'">'+inner+'</div>';
     }
-    window.transcribeCall = function(id, btn){
+    window.transcribeCall = function(id, btn, force){
       if(btn){ btn.disabled=true; btn.textContent='Přepisuji… (chvíli to trvá)'; }
-      fetch('/api/voice/calls/'+id+'/transcribe',{method:'POST',credentials:'include'})
+      fetch('/api/voice/calls/'+id+'/transcribe'+(force?'?force=1':''),{method:'POST',credentials:'include'})
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
         .then(function(res){
           var d=document.getElementById('tr-'+id);
-          if(res.ok && res.j && res.j.full_transcript!=null){ if(d){ d.innerHTML='<div style="white-space:pre-wrap;">'+esc(res.j.full_transcript||'(prázdné)')+'</div>'; d.style.display='block'; } if(btn){ btn.textContent='✅ Přepsáno'; } }
+          if(res.ok && res.j && res.j.full_transcript!=null){ if(d){ d.innerHTML=fmtFull(res.j.full_transcript||''); d.style.display='block'; } if(btn){ btn.textContent='✅ Přepsáno'; } }
           else { if(btn){ btn.disabled=false; btn.textContent='📝 Přepsat celý hovor'; } alert('Přepis se nepovedl: '+((res.j&&res.j.error)||'chyba')); }
         })
         .catch(function(e){ if(btn){ btn.disabled=false; btn.textContent='📝 Přepsat celý hovor'; } alert('Chyba: '+e.message); });
