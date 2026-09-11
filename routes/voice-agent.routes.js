@@ -1191,6 +1191,45 @@ router.post('/campaigns/:id/backfill-recordings', requireAuth, async (req, res, 
   } catch (err) { next(err); }
 });
 
+// POST /api/voice/calls/backfill-recordings?line=infolinka — dotáhne chybějící
+// nahrávky (audio_url) přímo z Twilia podle CallSid. Pokrývá příchozí linky
+// (Infolinka i obchod), kde callback nahrávky nedorazil / nezapsal se.
+router.post('/calls/backfill-recordings', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.json({ ok: true, fixed: 0 });
+    let where = { audio_url: null, twilio_call_sid: { not: null } };
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      where = (line === 'infolinka')
+        ? Object.assign({ line: 'infolinka' }, where)
+        : Object.assign({ OR: [{ line: 'obchod' }, { line: null }] }, where);
+    }
+    const calls = await prisma.voiceCall.findMany({
+      where,
+      orderBy: { started_at: 'desc' },
+      take: Math.min(parseInt(req.query.limit, 10) || 100, 300),
+      select: { id: true, twilio_call_sid: true },
+    });
+    if (!calls.length) return res.json({ ok: true, fixed: 0, checked: 0 });
+    const c = require('../services/voice/outbound').client();
+    if (!c) return res.status(500).json({ error: 'Twilio není nakonfigurováno' });
+    let fixed = 0;
+    for (const call of calls) {
+      if (!call.twilio_call_sid || String(call.twilio_call_sid).startsWith('local-')) continue;
+      try {
+        const recs = await c.recordings.list({ callSid: call.twilio_call_sid, limit: 1 });
+        if (recs && recs.length) {
+          const uri = String(recs[0].uri || '').replace(/\.json$/, '');
+          const url = 'https://api.twilio.com' + uri; // ensureLocalRecording doplní .mp3
+          await prisma.voiceCall.update({ where: { id: call.id }, data: { audio_url: url } });
+          fixed++;
+        }
+      } catch (e) { console.warn('[voice] backfill rec', call.twilio_call_sid, ':', e.message); }
+    }
+    res.json({ ok: true, fixed, checked: calls.length });
+  } catch (err) { next(err); }
+});
+
 router.delete('/campaigns/:id', requireAuth, async (req, res, next) => {
   try {
     await prisma.voiceCampaign.delete({ where: { id: req.params.id } });

@@ -423,9 +423,11 @@
 
         <!-- Sub: Záznamy hovorů -->
         <div id="info-calls" style="display:none;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
             <h3 style="margin:0;font-size:16px;">Záznamy hovorů Infolinky</h3>
             <button class="btn btn-secondary" onclick="infoLoadCalls()">↻ Obnovit</button>
+            <button class="btn btn-secondary" onclick="infoBackfillRec()" title="Dotáhne chybějící nahrávky přímo z Twilia">🎧 Načíst nahrávky</button>
+            <span id="info-rec-msg" style="font-size:12px;color:var(--text2);"></span>
           </div>
           <div id="info-calls-body" style="color:var(--text2);">Načítám…</div>
         </div>
@@ -667,6 +669,15 @@
         return s + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
+      // Dotáhne chybějící nahrávky přímo z Twilia (podle CallSid).
+      window.infoBackfillRec = async function(){
+        var m=el('info-rec-msg'); if(m) m.textContent='Načítám nahrávky z Twilia…';
+        try{
+          var r=await api('/calls/backfill-recordings?line='+INFO_LINE,{ method:'POST' });
+          if(m) m.textContent='✅ Doplněno nahrávek: '+(r.fixed||0)+' (z '+(r.checked||0)+' bez nahrávky)';
+          window.infoLoadCalls();
+        }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
 
       // Inicializace při prvním zobrazení sekce Infolinka.
       window.infoInit = function(){ if(infoLoaded) return; infoLoaded=true; window.infoSub('settings'); };
