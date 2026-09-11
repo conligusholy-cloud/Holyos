@@ -216,6 +216,10 @@ function attach(server) {
 
     const targetId = q.target || null;
     const mode = targetId ? 'outbound' : 'inbound';
+    // Příchozí linka (dle volaného čísla): 'obchod' (výchozí) | 'infolinka'.
+    const line = (q.line === 'infolinka') ? 'infolinka' : 'obchod';
+    // Klíč nastavení pro tuto linku (obchod = legacy voice.<base>, jinak voice.<line>.<base>).
+    const lineKey = (base) => (line === 'obchod') ? ('voice.' + base) : ('voice.' + line + '.' + base);
     // Úvod řekne Twilio přes welcomeGreeting (neinteruptovatelně) → WS ho sám neposílá.
     const welcomeByTwilio = q.wg === '1';
 
@@ -254,12 +258,12 @@ function attach(server) {
       }
     }
 
-    // Inbound: scénář + úvodní věta z nastavení, jinak default
+    // Inbound: scénář + úvodní věta z nastavení dané linky, jinak default
     if (mode === 'inbound' && getSetting) {
       try {
-        const p = await getSetting('voice.inbound_prompt');
+        const p = await getSetting(lineKey('inbound_prompt'));
         if (p && String(p).trim()) state.system = String(p);
-        const g = await getSetting('voice.inbound_greeting');
+        const g = await getSetting(lineKey('inbound_greeting'));
         if (g && String(g).trim()) state.greeting = String(g);
       } catch (_) {
         /* default */
@@ -272,7 +276,7 @@ function attach(server) {
       const aic = require('../compounder/ai-context');
       const scope = (mode === 'outbound')
         ? (state.campaign && state.campaign.id ? ('outbound:' + state.campaign.id) : 'outbound')
-        : 'inbound';
+        : (line === 'obchod' ? 'inbound' : ('inbound:' + line));
       state.system = await aic.augmentSystem(state.system, { voice: true, scope });
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
       if (mode === 'outbound' && state.target) {
@@ -362,7 +366,7 @@ function attach(server) {
         let transferAllowed = true;
         try {
           if (mode === 'outbound') transferAllowed = state.campaign ? state.campaign.transfer_enabled !== false : true;
-          else if (getSetting) { const v = await getSetting('voice.transfer_enabled'); transferAllowed = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1'); }
+          else if (getSetting) { const v = await getSetting(lineKey('transfer_enabled')); transferAllowed = v === undefined || v === null ? true : (v === true || v === 'true' || v === 1 || v === '1'); }
         } catch (_) { transferAllowed = true; }
 
         // Spustí přepojení: (volitelně) doříkne větu, pak ukončí relaci s handoffem.
@@ -439,7 +443,8 @@ function attach(server) {
         if (prisma.voiceCall) {
           const data = {
             direction: mode,
-            agent_kind: mode === 'outbound' ? 'campaign' : 'personal',
+            agent_kind: mode === 'outbound' ? 'campaign' : (line === 'infolinka' ? 'infoline' : 'personal'),
+            line: (mode === 'outbound') ? null : line,
             from_number: state.from || '',
             to_number: state.to || '',
             twilio_call_sid: state.callSid || 'local-' + Date.now(),
@@ -497,6 +502,7 @@ function attach(server) {
             callerIntent,
             summary,
             callId: saved && saved.id,
+            line,
           });
         } catch (e) {
           console.warn('[voice] notifikace selhala:', e.message);

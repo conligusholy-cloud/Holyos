@@ -22,7 +22,7 @@ function normNumber(n) {
   return (n || '').replace(/[\s\-()]/g, '');
 }
 
-async function resolveRecipients(toNumber) {
+async function resolveRecipients(toNumber, line) {
   const ids = new Set();
 
   try {
@@ -40,7 +40,12 @@ async function resolveRecipients(toNumber) {
 
   if (!ids.size && getSetting) {
     try {
-      const raw = await getSetting('voice.notify_person_ids');
+      // Klíč příjemců dle linky: obchod = legacy voice.notify_person_ids,
+      // ostatní linky (infolinka) = voice.<line>.notify_person_ids.
+      const key = (String(line || '').toLowerCase() && String(line).toLowerCase() !== 'obchod')
+        ? ('voice.' + String(line).toLowerCase() + '.notify_person_ids')
+        : 'voice.notify_person_ids';
+      const raw = await getSetting(key);
       let arr = raw;
       if (typeof raw === 'string') {
         try {
@@ -61,8 +66,8 @@ async function resolveRecipients(toNumber) {
   return [...ids];
 }
 
-async function notifyCall({ toNumber, fromNumber, callerName, callerIntent, summary, callId }) {
-  const recipients = await resolveRecipients(toNumber);
+async function notifyCall({ toNumber, fromNumber, callerName, callerIntent, summary, callId, line }) {
+  const recipients = await resolveRecipients(toNumber, line);
   if (!recipients.length) {
     console.log(
       '[voice] žádný příjemce notifikace — nastav Person.voice_twilio_number nebo AppSetting voice.notify_person_ids'

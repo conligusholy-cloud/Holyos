@@ -372,14 +372,64 @@
 
     </section><!-- /section-hugo -->
 
-    <!-- ═══ SEKCE: INFOLINKA (připravujeme) ═══ -->
+    <!-- ═══ SEKCE: INFOLINKA (příchozí AI recepční — samostatná linka) ═══ -->
     <section class="section-panel" id="section-infolinka">
-      <div class="content">
-        <div class="empty-state" style="margin-top:24px; border:1px dashed var(--border); border-radius:12px;">
-          <div class="ico">📞</div>
-          <div style="font-size:15px; font-weight:600; color:var(--text); margin-bottom:6px;">Infolinka</div>
-          <div>Připravujeme. Tady bude hlasová AI infolinka — záznamy hovorů, přepisy a nastavení.</div>
+      <div class="content" style="padding-top:16px;">
+
+        <div style="background:linear-gradient(135deg, rgba(236,72,153,0.08), rgba(219,39,119,0.04)); border:1px solid rgba(236,72,153,0.25); border-radius:12px; padding:12px 18px; margin-bottom:16px; font-size:13px; color:var(--text2); line-height:1.6;">
+          📞 <b style="color:var(--text);">Příchozí AI recepční pro Infolinku</b> — samostatná linka oddělená od obchodu. Zadej vlastní telefonní číslo Infolinky (koupené v Twiliu), scénář a přepojení. Hovory a nastavení jsou úplně oddělené od obchodní recepční.
         </div>
+
+        <div class="toolbar" style="margin-top:0;">
+          <button type="button" class="btn btn-primary" data-infosub="settings" onclick="infoSub('settings')">⚙️ Nastavení recepční</button>
+          <button type="button" class="btn btn-secondary" data-infosub="calls" onclick="infoSub('calls')">📞 Záznamy hovorů</button>
+        </div>
+
+        <!-- Sub: Nastavení recepční -->
+        <div id="info-settings" style="max-width:760px;">
+          <label style="display:block;font-size:12px;color:var(--text2);margin:4px 0 4px;">Telefonní číslo Infolinky (Twilio, ve tvaru +420…)</label>
+          <input id="info-number" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420…">
+          <div style="font-size:11px;color:var(--text2);margin-top:3px;">Ve Twilio konzoli nastav u tohoto čísla webhook příchozího hovoru na <code>https://app.holyos.cz/api/voice/incoming</code>. Podle čísla systém pozná, že jde o Infolinku.</div>
+
+          <label style="display:block;font-size:12px;color:var(--text2);margin:14px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
+          <textarea id="info-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na infolinku. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
+
+          <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
+          <textarea id="info-prompt" rows="6" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka infolinky Best Series, odpověz na dotazy zákazníka podle podkladů, zjisti kdo volá a co potřebuje…"></textarea>
+
+          <div id="info-kn-sec"></div>
+
+          <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Komu chodí notifikace do Velína (Person ID, oddělené čárkou)</label>
+          <input id="info-notify" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="např. 1">
+
+          <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;margin-top:16px;background:rgba(34,211,238,0.06);">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Když volající řekne, že chce mluvit s živým člověkem, AI ho přepojí — nejdřív na hlavní číslo, a když se nikdo nedovolá (do vypršení vyzvánění), postupně na záložní čísla.</p>
+            <label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;margin-bottom:10px;"><input type="checkbox" id="info-transfer-enabled"> Zapnout přepojení</label>
+            <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Hlavní číslo pro přepojení</label>
+            <input id="info-transfer-inbound" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456">
+            <label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Záložní čísla (oddělená čárkou, v pořadí)</label>
+            <input id="info-transfer-fallback" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420777123456, +420602000000">
+            <div style="display:flex;gap:16px;flex-wrap:wrap;">
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Kolik koleček (max)</label>
+              <input id="info-transfer-rounds" type="number" min="1" max="5" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="2"></div>
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin:10px 0 4px;">Vyzvánění na číslo (s)</label>
+              <input id="info-transfer-timeout" type="number" min="8" max="60" style="width:100px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="20"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+        </div>
+
+        <!-- Sub: Záznamy hovorů -->
+        <div id="info-calls" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <h3 style="margin:0;font-size:16px;">Záznamy hovorů Infolinky</h3>
+            <button class="btn btn-secondary" onclick="infoLoadCalls()">↻ Obnovit</button>
+          </div>
+          <div id="info-calls-body" style="color:var(--text2);">Načítám…</div>
+        </div>
+
       </div>
     </section>
 
@@ -440,10 +490,174 @@
           var sec = btn.dataset.section;
           document.querySelectorAll('.section-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
           document.querySelectorAll('.section-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'section-' + sec); });
+          if (sec === 'infolinka' && window.infoInit) window.infoInit();
         });
       });
     });
   </script>
+
+  <!-- Infolinka: příchozí AI recepční (samostatná linka /api/voice?line=infolinka) -->
+  <script>
+    (function(){
+      var INFO_LINE = 'infolinka';
+      var INFO_SCOPE = 'inbound:infolinka';
+      var infoLoaded = false;
+      function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+      function fmtDur(s){ s=Number(s)||0; var m=Math.floor(s/60), ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
+      function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }
+      function knFmt(n){ n=Number(n)||0; return n>=1000?(Math.round(n/100)/10)+'k znaků':n+' znaků'; }
+      function el(id){ return document.getElementById(id); }
+      async function api(path, opts){
+        opts = opts || {};
+        var r = await fetch('/api/voice'+path, Object.assign({ credentials:'include' }, opts));
+        if(!r.ok){ var t=''; try{ t=(await r.json()).error||''; }catch(e){} throw new Error(t||('HTTP '+r.status)); }
+        if(r.status===204) return null;
+        return r.json();
+      }
+      function recPlayer(callId){
+        return '<audio controls preload="none" src="/api/voice/recording/'+callId+'" style="height:32px;max-width:230px;vertical-align:middle;"></audio>'
+          + ' <a href="/api/voice/recording/'+callId+'" download="hovor-'+callId+'.mp3" title="Stáhnout nahrávku" style="text-decoration:none;font-size:17px;vertical-align:middle;">📥</a>';
+      }
+
+      // ── Přepínání pod-záložek Infolinky ──
+      window.infoSub = function(name){
+        ['settings','calls'].forEach(function(s){
+          var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
+          var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
+          if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
+        });
+        if(name==='calls') window.infoLoadCalls();
+        else infoLoadConfig();
+      };
+
+      // ── Nastavení recepční ──
+      async function infoLoadConfig(){
+        var msg=el('info-msg'); if(msg) msg.textContent='';
+        try{
+          var c=await api('/config?line='+INFO_LINE);
+          el('info-number').value=c.line_number||'';
+          el('info-greeting').value=c.inbound_greeting||'';
+          el('info-prompt').value=c.inbound_prompt||'';
+          el('info-notify').value=(c.notify_person_ids||[]).join(',');
+          var te=el('info-transfer-enabled'); if(te) te.checked = c.transfer_enabled!==false;
+          var tf=el('info-transfer-fallback'); if(tf) tf.value = c.transfer_fallback_numbers||'';
+          var ti=el('info-transfer-inbound'); if(ti) ti.value = c.transfer_inbound_number||'';
+          var tt=el('info-transfer-timeout'); if(tt) tt.value = c.transfer_ring_timeout||20;
+          var tr=el('info-transfer-rounds'); if(tr) tr.value = c.transfer_rounds||2;
+          var kn=el('info-kn-sec'); if(kn && !kn.getAttribute('data-init')){ kn.innerHTML=knSectionHtml(); kn.setAttribute('data-init','1'); }
+          infoKnLoad();
+        }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
+      }
+      window.infoSave = async function(){
+        var msg=el('info-msg'); if(msg) msg.textContent='Ukládám…';
+        var notify=(el('info-notify').value||'').split(',').map(function(x){return parseInt(x,10);}).filter(Boolean);
+        try{
+          await api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
+            line_number: (el('info-number').value||'').trim(),
+            inbound_greeting: el('info-greeting').value,
+            inbound_prompt: el('info-prompt').value,
+            notify_person_ids: notify,
+            transfer_enabled: !!(el('info-transfer-enabled')||{}).checked,
+            transfer_fallback_numbers: ((el('info-transfer-fallback')||{}).value||'').trim(),
+            transfer_inbound_number: ((el('info-transfer-inbound')||{}).value||'').trim(),
+            transfer_ring_timeout: parseInt((el('info-transfer-timeout')||{}).value,10)||20,
+            transfer_rounds: parseInt((el('info-transfer-rounds')||{}).value,10)||2
+          })});
+          if(msg) msg.textContent='✅ Uloženo';
+        }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
+      };
+
+      // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──
+      function knSectionHtml(){
+        return '<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-top:14px;">'
+          + '<h4 style="margin:0 0 6px;font-size:14px;">📎 Znalostní podklady (závazný zdroj dat)</h4>'
+          + '<div style="font-size:11px;color:var(--text2);background:rgba(34,211,238,0.06);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:10px;line-height:1.5;">'
+          + 'Vlastní podklady jen pro Infolinku. PDF, DOCX, XLSX, CSV, TXT. Max <b>40 000 znaků/soubor</b>, celkem <b>90 000 znaků</b>, max <b>20 MB / 8 souborů</b>. Skenované PDF bez textu se nepřečte.'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+          + '<input type="file" id="info-kn-file" multiple accept=".pdf,.docx,.xlsx,.xls,.csv,.txt" style="font-size:12px;color:var(--text2);">'
+          + '<button class="btn btn-primary" onclick="infoKnUpload()" style="font-size:12px;">⬆ Nahrát podklady</button>'
+          + '<span id="info-kn-msg" style="font-size:12px;color:var(--text2);"></span>'
+          + '</div>'
+          + '<div id="info-kn-list" style="margin-top:12px;font-size:12px;color:var(--text2);">Načítám…</div>'
+          + '</div>';
+      }
+      async function infoKnLoad(){
+        var box=el('info-kn-list'); if(!box) return;
+        try{
+          var r=await fetch('/api/compounder/ai-specialist-knowledge?scope='+encodeURIComponent(INFO_SCOPE),{ credentials:'include' });
+          var j=await r.json().catch(function(){return{};});
+          var files=(j&&j.files)||[]; var perMax=j.perDocMax||40000, totalMax=j.totalMax||90000, total=j.totalChars||0;
+          if(!files.length){ box.innerHTML='<span style="color:var(--text2);">Zatím žádné podklady.</span>'; return; }
+          var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="color:var(--text);">Nahrané podklady ('+files.length+')</b><button class="btn btn-secondary" onclick="infoKnClear()" style="font-size:11px;padding:3px 8px;">🗑 Smazat vše</button></div>';
+          files.forEach(function(f){
+            var stav=f.truncated?'<span style="color:#ef4444;">⚠️ oříznuto (nad '+perMax+' znaků)</span>':'<span style="color:#22c55e;">✅ v limitu</span>';
+            h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">'
+              +'<span style="color:var(--text);word-break:break-all;">📄 '+esc(f.name)+' <span style="color:var(--text2);">· '+knFmt(f.chars||0)+'</span> · '+stav+'</span>'
+              +'<span style="display:flex;gap:6px;flex:0 0 auto;">'
+              +'<a class="btn btn-secondary" href="/api/compounder/ai-specialist-knowledge/file?scope='+encodeURIComponent(INFO_SCOPE)+'&name='+encodeURIComponent(f.name)+'" title="Stáhnout" style="font-size:11px;padding:3px 8px;text-decoration:none;">⬇</a>'
+              +'<button class="btn btn-secondary" onclick="infoKnDelete('+JSON.stringify(f.name).replace(/"/g,"&quot;")+')" style="font-size:11px;padding:3px 8px;">✕</button>'
+              +'</span></div>';
+          });
+          var tcol=total>totalMax?'#ef4444':(total>totalMax*0.8?'#eab308':'#22c55e');
+          var tnote=total>totalMax?' · ⚠️ PŘEKROČENO':(total>totalMax*0.8?' · ⚠️ blížíš se stropu':' · ✅ OK');
+          h+='<div style="margin-top:4px;font-size:11px;color:'+tcol+';">Celkem do AI: '+total+' / max '+totalMax+' znaků'+tnote+'</div>';
+          box.innerHTML=h;
+        }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení: '+e.message+'</span>'; }
+      }
+      window.infoKnUpload = async function(){
+        var inp=el('info-kn-file'), msg=el('info-kn-msg');
+        if(!inp||!inp.files||!inp.files.length){ if(msg) msg.textContent='Vyber soubor(y).'; return; }
+        var fd=new FormData(); for(var i=0;i<inp.files.length;i++) fd.append('files', inp.files[i]); fd.append('scope', INFO_SCOPE);
+        if(msg) msg.textContent='Nahrávám a čtu…';
+        try{
+          var r=await fetch('/api/compounder/ai-specialist-knowledge?scope='+encodeURIComponent(INFO_SCOPE),{ method:'POST', credentials:'include', body:fd });
+          var j=await r.json().catch(function(){return{};});
+          if(r.ok && j.ok){ var t='✅ Přidáno: '+((j.added&&j.added.length)?j.added.join(', '):'0'); if(j.errors&&j.errors.length) t+=' · ⚠️ '+j.errors.join(' | '); if(msg) msg.textContent=t; inp.value=''; infoKnLoad(); }
+          else { if(msg) msg.textContent='Chyba: '+(j.error||('HTTP '+r.status)); }
+        }catch(e){ if(msg) msg.textContent='Chyba spojení: '+e.message; }
+      };
+      window.infoKnDelete = async function(name){ try{ await fetch('/api/compounder/ai-specialist-knowledge/delete',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:INFO_SCOPE,name:name}) }); infoKnLoad(); }catch(e){} };
+      window.infoKnClear = async function(){ if(!confirm('Smazat všechny nahrané podklady Infolinky?')) return; try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:INFO_SCOPE}) }); infoKnLoad(); }catch(e){} };
+
+      // ── Záznamy hovorů (jen linka infolinka) ──
+      window.infoLoadCalls = async function(){
+        var body=el('info-calls-body'); if(!body) return;
+        body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
+        try{
+          var rows=await api('/calls?line='+INFO_LINE+'&limit=100');
+          if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          rows.forEach(function(c){
+            var num=c.from_number;
+            var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
+            html+='<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
+              +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
+              +'<td>'+esc(num||'')+'</td>'
+              +'<td>'+esc(c.caller_name||'—')+'</td>'
+              +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
+              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoToggleCall(\''+c.id+'\')" title="Celý přepis" style="padding:4px 10px;font-size:14px;">📄</button></td>'
+              +'<td onclick="event.stopPropagation()">'+rec+'</td>'
+              +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="7" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+          });
+          html+='</tbody></table></div>';
+          body.innerHTML=html;
+        }catch(e){ body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+esc(e.message)+'</div>'; }
+      };
+      function callDetail(c){
+        var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
+        var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+esc(c.summary)+'</div>' : '';
+        var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><div style="margin-top:4px;">'+recPlayer(c.id)+'</div></div>' : '';
+        return s + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
+      }
+      window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
+
+      // Inicializace při prvním zobrazení sekce Infolinka.
+      window.infoInit = function(){ if(infoLoaded) return; infoLoaded=true; window.infoSub('settings'); };
+    })();
+  </script>
+
   <script src="modules/servis/app.js?v=2026-05-17-7"></script>
 </body>
 </html>

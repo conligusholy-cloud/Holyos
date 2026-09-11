@@ -28,6 +28,40 @@ const PUBLIC_BASE = process.env.PUBLIC_BASE_URL
   || 'https://app.holyos.cz';
 const VOICE_DEFAULT_FROM = process.env.VOICE_DEFAULT_FROM || '';
 
+// ─── Příchozí linky ──────────────────────────────────────────────────────────
+// Systém rozlišuje víc příchozích „linek" podle VOLANÉHO čísla (Twilio „To"/„Called").
+// 'obchod'  = původní recepční (Prodejní objednávky). Config klíče beze změny (legacy
+//             voice.<base>), aby stávající linka jela dál bez migrace.
+// 'infolinka' = samostatná linka v modulu Servis. Config klíče voice.infolinka.<base>.
+// Mapa volané číslo → linka je v AppSetting voice.line_numbers = { "+420…":"infolinka" }.
+function normLine(l) {
+  return String(l || '').toLowerCase() === 'infolinka' ? 'infolinka' : 'obchod';
+}
+// Klíč nastavení pro danou linku. Obchod = legacy (voice.<base>), ostatní = voice.<line>.<base>.
+function cfgKey(line, base) {
+  return normLine(line) === 'obchod' ? 'voice.' + base : 'voice.' + normLine(line) + '.' + base;
+}
+// Z volaného čísla urči linku (default 'obchod', ať se nic nerozbije u neznámých čísel).
+async function lineFromCalledNumber(to) {
+  try {
+    const get = settings ? settings.getSetting : null;
+    if (!get) return 'obchod';
+    let map = await get('voice.line_numbers');
+    if (typeof map === 'string') { try { map = JSON.parse(map); } catch (_) { map = null; } }
+    if (map && typeof map === 'object') {
+      const t = e164(to);
+      if (t && map[t]) return normLine(map[t]);
+      const tail = String(to || '').replace(/\D/g, '').slice(-9);
+      if (tail) {
+        for (const k of Object.keys(map)) {
+          if (String(k).replace(/\D/g, '').slice(-9) === tail) return normLine(map[k]);
+        }
+      }
+    }
+  } catch (_) { /* default níže */ }
+  return 'obchod';
+}
+
 // WS url + sdílené tajemství (+ volitelně další query, např. target pro outbound)
 function relayUrl(extra) {
   let url = WS_URL;
@@ -157,7 +191,7 @@ async function fallbackNumbersFromStored(stored) {
 // Odchozí (kampaň): nastavení se bere Z KAMPANĚ (každá může mít jiné). Primární
 // cíl je mobil obchodníka přiřazeného k leadu, pak záložní čísla kampaně.
 // Příchozí (recepční): globální nastavení (voice.transfer_*).
-async function resolveTransferPlan(mode, targetId) {
+async function resolveTransferPlan(mode, targetId, line) {
   const get = settings ? settings.getSetting : null;
   const base = [];              // pořadí kontaktů v jednom kolečku
   let enabled = true;
@@ -184,14 +218,14 @@ async function resolveTransferPlan(mode, targetId) {
       fb.forEach((f) => base.push(f));
     } catch (e) { console.warn('[voice] resolve kampaň přepojení selhal:', e.message); }
   } else {
-    // inbound — globální nastavení
-    const enRaw = get ? await get('voice.transfer_enabled') : true;
+    // inbound — nastavení dané linky (obchod = legacy klíče, jinak voice.<line>.*)
+    const enRaw = get ? await get(cfgKey(line, 'transfer_enabled')) : true;
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
-    timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
-    rounds = get ? parseInt(await get('voice.transfer_rounds'), 10) || 2 : 2;
-    const inboundNum = get ? (await get('voice.transfer_inbound_number')) || '' : '';
+    timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
+    rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
+    const inboundNum = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
     if (inboundNum) base.push(inboundNum);
-    const fb = await fallbackNumbersFromStored(get ? (await get('voice.transfer_fallback_numbers')) || '' : '');
+    const fb = await fallbackNumbersFromStored(get ? (await get(cfgKey(line, 'transfer_fallback_numbers'))) || '' : '');
     fb.forEach((f) => base.push(f));
   }
 
@@ -276,7 +310,10 @@ const form = express.urlencoded({ extended: false });
 // POST /api/voice/incoming — první webhook příchozího hovoru.
 // Vrací TwiML, které předá hovor ConversationRelay (řeč↔text) a napojí ho na náš WS.
 router.post('/incoming', form, async (req, res) => {
-  const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound`;
+  // Podle volaného čísla urči linku (obchod = výchozí recepční, infolinka = Servis).
+  const calledNumber = (req.body && (req.body.To || req.body.Called)) || '';
+  const line = await lineFromCalledNumber(calledNumber);
+  const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound&line=${encodeURIComponent(line)}`;
   // Zapni nahrávání příchozího hovoru (odchozí se nahrávají už při vytvoření).
   // <Connect>/ConversationRelay nemá record atribut → spustíme nahrávku přes REST.
   const sid = req.body && req.body.CallSid;
@@ -294,13 +331,14 @@ router.post('/incoming', form, async (req, res) => {
   let greeting = '';
   try {
     const get = settings ? settings.getSetting : null;
-    greeting = (get ? await get('voice.inbound_greeting') : '') || '';
+    greeting = (get ? await get(cfgKey(line, 'inbound_greeting')) : '') || '';
   } catch (_) { greeting = ''; }
   if (!String(greeting).trim()) {
     greeting = 'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?';
   }
   // wg=1 → WS ví, že úvod řekne Twilio (welcomeGreeting), takže ho sám neposílá.
-  res.type('text/xml').send(twimlConnect(relayUrl('wg=1'), action, greeting));
+  // line=… → WS načte scénář/podklady správné linky a uloží ho k hovoru.
+  res.type('text/xml').send(twimlConnect(relayUrl('wg=1&line=' + encodeURIComponent(line)), action, greeting));
 });
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
@@ -356,6 +394,7 @@ router.post('/relay-end', form, async (req, res) => {
   try {
     const mode = (req.query.mode || 'inbound') === 'outbound' ? 'outbound' : 'inbound';
     const target = req.query.target || '';
+    const line = normLine(req.query.line);
     let handoff = {};
     try { handoff = JSON.parse((req.body && req.body.HandoffData) || '{}'); } catch (_) { handoff = {}; }
     const wantsTransfer = !!(handoff && handoff.transfer);
@@ -366,7 +405,7 @@ router.post('/relay-end', form, async (req, res) => {
     if (!wantsTransfer) {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
-    const plan = await resolveTransferPlan(mode, target);
+    const plan = await resolveTransferPlan(mode, target, line);
     console.log('[voice] relay-end plán: enabled=' + plan.enabled + ' čísla=' + plan.numbers.length
       + ' [' + plan.numbers.map((n) => String(n).replace(/\d(?=\d{3})/g, '•')).join(', ') + ']'
       + ' timeout=' + plan.timeout + ' kolecek=' + plan.rounds);
@@ -660,13 +699,24 @@ router.get('/calls', requireAuth, async (req, res, next) => {
   try {
     if (!prisma.voiceCall) return res.json([]);
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    // Filtr dle linky (příchozí): 'infolinka' = jen infolinka; 'obchod' = obchod + staré
+    // hovory bez linky (null) + odchozí kampaně (line=null). Bez parametru = vše.
+    let where = undefined;
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      where = (line === 'infolinka')
+        ? { line: 'infolinka' }
+        : { OR: [{ line: 'obchod' }, { line: null }] };
+    }
     const calls = await prisma.voiceCall.findMany({
+      where,
       orderBy: { started_at: 'desc' },
       take: limit,
       select: {
         id: true,
         direction: true,
         agent_kind: true,
+        line: true,
         from_number: true,
         to_number: true,
         started_at: true,
@@ -690,9 +740,10 @@ router.get('/calls', requireAuth, async (req, res, next) => {
 router.get('/config', requireAuth, async (req, res, next) => {
   try {
     const get = settings ? settings.getSetting : null;
-    const inbound_prompt = get ? (await get('voice.inbound_prompt')) || '' : '';
-    const inbound_greeting = get ? (await get('voice.inbound_greeting')) || '' : '';
-    let notify_person_ids = get ? await get('voice.notify_person_ids') : [];
+    const line = normLine(req.query.line);
+    const inbound_prompt = get ? (await get(cfgKey(line, 'inbound_prompt'))) || '' : '';
+    const inbound_greeting = get ? (await get(cfgKey(line, 'inbound_greeting'))) || '' : '';
+    let notify_person_ids = get ? await get(cfgKey(line, 'notify_person_ids')) : [];
     if (typeof notify_person_ids === 'string') {
       try {
         notify_person_ids = JSON.parse(notify_person_ids);
@@ -707,14 +758,23 @@ router.get('/config', requireAuth, async (req, res, next) => {
     // Brána SMS (provider + kanál/odesílatel), včetně readiness klíčů (bez tajných hodnot)
     let sms_gateway = { provider: 'twilio', gosms_channel: '', twilio_sms_from: '', gosms_ready: false, twilio_ready: false };
     try { sms_gateway = await require('../services/voice/sms').getSmsConfigView(); } catch (_) { /* fallback */ }
-    // Přepojení na živého člověka
-    const trRaw = get ? await get('voice.transfer_enabled') : true;
+    // Přepojení na živého člověka (per linka)
+    const trRaw = get ? await get(cfgKey(line, 'transfer_enabled')) : true;
     const transfer_enabled = trRaw === undefined || trRaw === null ? true : (trRaw === true || trRaw === 'true' || trRaw === 1 || trRaw === '1');
-    const transfer_fallback_numbers = get ? (await get('voice.transfer_fallback_numbers')) || '' : '';
-    const transfer_inbound_number = get ? (await get('voice.transfer_inbound_number')) || '' : '';
-    const transfer_ring_timeout = get ? parseInt(await get('voice.transfer_ring_timeout'), 10) || 20 : 20;
-    const transfer_rounds = get ? parseInt(await get('voice.transfer_rounds'), 10) || 2 : 2;
-    res.json({ inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway,
+    const transfer_fallback_numbers = get ? (await get(cfgKey(line, 'transfer_fallback_numbers'))) || '' : '';
+    const transfer_inbound_number = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
+    const transfer_ring_timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
+    const transfer_rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
+    // Volané číslo mapované na tuto linku (z voice.line_numbers) — pro UI Infolinky.
+    let line_number = '';
+    try {
+      let map = get ? await get('voice.line_numbers') : null;
+      if (typeof map === 'string') { try { map = JSON.parse(map); } catch (_) { map = null; } }
+      if (map && typeof map === 'object') {
+        for (const k of Object.keys(map)) { if (normLine(map[k]) === line) { line_number = k; break; } }
+      }
+    } catch (_) { /* ignore */ }
+    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway,
       transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds });
   } catch (err) {
     next(err);
@@ -726,15 +786,27 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
     if (!settings) return res.status(500).json({ error: 'settings nedostupné' });
     const { inbound_prompt, notify_person_ids, default_from } = req.body || {};
     const uid = req.user && req.user.id;
+    const line = normLine(req.query.line);
     if (inbound_prompt !== undefined)
-      await settings.setSetting('voice.inbound_prompt', String(inbound_prompt || ''), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'inbound_prompt'), String(inbound_prompt || ''), { type: 'string', userId: uid });
     if (req.body.inbound_greeting !== undefined)
-      await settings.setSetting('voice.inbound_greeting', String(req.body.inbound_greeting || ''), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'inbound_greeting'), String(req.body.inbound_greeting || ''), { type: 'string', userId: uid });
     if (notify_person_ids !== undefined) {
       const arr = (Array.isArray(notify_person_ids) ? notify_person_ids : [])
         .map((x) => parseInt(x, 10))
         .filter(Boolean);
-      await settings.setSetting('voice.notify_person_ids', arr, { type: 'json', userId: uid });
+      await settings.setSetting(cfgKey(line, 'notify_person_ids'), arr, { type: 'json', userId: uid });
+    }
+    // Telefonní číslo linky → mapa voice.line_numbers (číslo → linka). Prázdné = zruš mapování linky.
+    if (req.body.line_number !== undefined) {
+      let map = await settings.getSetting('voice.line_numbers');
+      if (typeof map === 'string') { try { map = JSON.parse(map); } catch (_) { map = null; } }
+      if (!map || typeof map !== 'object') map = {};
+      // odeber staré číslo(a) této linky
+      for (const k of Object.keys(map)) { if (normLine(map[k]) === line) delete map[k]; }
+      const num = e164(String(req.body.line_number || '').trim());
+      if (num) map[num] = line;
+      await settings.setSetting('voice.line_numbers', map, { type: 'json', userId: uid });
     }
     if (default_from !== undefined)
       await settings.setSetting('voice.default_from', String(default_from || ''), { type: 'string', userId: uid });
@@ -753,18 +825,18 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       await settings.setSetting('voice.gosms_channel', String(gosms_channel || '').trim(), { type: 'string', userId: uid });
     if (twilio_sms_from !== undefined)
       await settings.setSetting('voice.twilio_sms_from', String(twilio_sms_from || '').trim(), { type: 'string', userId: uid });
-    // Přepojení na živého člověka
+    // Přepojení na živého člověka (per linka)
     const { transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout } = req.body || {};
     if (transfer_enabled !== undefined)
-      await settings.setSetting('voice.transfer_enabled', !!transfer_enabled, { type: 'boolean', userId: uid });
+      await settings.setSetting(cfgKey(line, 'transfer_enabled'), !!transfer_enabled, { type: 'boolean', userId: uid });
     if (transfer_fallback_numbers !== undefined)
-      await settings.setSetting('voice.transfer_fallback_numbers', String(transfer_fallback_numbers || '').trim(), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'transfer_fallback_numbers'), String(transfer_fallback_numbers || '').trim(), { type: 'string', userId: uid });
     if (transfer_inbound_number !== undefined)
-      await settings.setSetting('voice.transfer_inbound_number', String(transfer_inbound_number || '').trim(), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'transfer_inbound_number'), String(transfer_inbound_number || '').trim(), { type: 'string', userId: uid });
     if (transfer_ring_timeout !== undefined)
-      await settings.setSetting('voice.transfer_ring_timeout', String(parseInt(transfer_ring_timeout, 10) || 20), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'transfer_ring_timeout'), String(parseInt(transfer_ring_timeout, 10) || 20), { type: 'string', userId: uid });
     if (req.body.transfer_rounds !== undefined)
-      await settings.setSetting('voice.transfer_rounds', String(parseInt(req.body.transfer_rounds, 10) || 2), { type: 'string', userId: uid });
+      await settings.setSetting(cfgKey(line, 'transfer_rounds'), String(parseInt(req.body.transfer_rounds, 10) || 2), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);

@@ -6095,7 +6095,8 @@ model AiSpecialistMessage {
 model VoiceCall {
   id              String    @id @default(uuid())
   direction       String    @default("inbound")
-  agent_kind      String    @default("personal") // personal | infoline
+  agent_kind      String    @default("personal") // personal | infoline | campaign
+  line            String?   @db.VarChar(32) // příchozí linka: obchod | infolinka (null = starý/odchozí)
   owner_person_id Int?
   from_number     String    @db.VarChar(32)
   to_number       String    @db.VarChar(32)
@@ -6120,6 +6121,7 @@ model VoiceCall {
   @@index([owner_person_id])
   @@index([from_number])
   @@index([started_at])
+  @@index([line])
   @@map("voice_calls")
 }
 

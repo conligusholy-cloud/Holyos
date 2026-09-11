@@ -89,6 +89,8 @@ function genderInstruction(gender) {
 // Oddělené znalostní báze podle kontextu (mohou se lišit).
 function docsSettingKey(scope) {
   if (scope === 'inbound') return 'voice.inbound_docs';
+  // Per-linka příchozí: scope 'inbound:<line>' → vlastní podklady dané linky (infolinka).
+  if (typeof scope === 'string' && scope.indexOf('inbound:') === 0) return 'voice.inbound_docs.' + scope.slice(8);
   // Per-kampaň: scope 'outbound:<id>' → vlastní podklady dané kampaně.
   if (typeof scope === 'string' && scope.indexOf('outbound:') === 0) return 'voice.outbound_docs.' + scope.slice(9);
   if (scope === 'outbound') return 'voice.outbound_docs';

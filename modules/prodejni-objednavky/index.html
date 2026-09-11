@@ -5138,7 +5138,7 @@
       var body=document.getElementById('ai-calls-body');
       body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
       try{
-        var rows=await aiApi('/calls?limit=100');
+        var rows=await aiApi('/calls?line=obchod&limit=100');
         if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
         var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
         rows.forEach(function(c){
