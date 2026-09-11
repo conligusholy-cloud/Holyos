@@ -1497,6 +1497,17 @@
     function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
     function fmtDate(s){ try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return ''; } }
     var _solvers=[]; // servisní tým (koho lze úkolovat) — z nastavení
+    // Číselníky servisních úkonů — rozevírací seznamy v požadavku.
+    var UKONY_PRADLOMAT=['Sušička','EL. rozvaděč','Pračka 8Kg','Pračka 18Kg','Boiler','Trezor, akceptor, terminál, počítač, osvětlení, kamery','Vandal','Skelet'];
+    var UKONY_SPAGETA=['Osvětlení venkovní','Osvětlení vnitřní','Chladící pult','Mrazák','Klimatizace','Sodabar','Kávovar','Výrobník těstovin','Skelet','Digestoř','Platební systém (batoh)','Objednávkový systém (kuchař)','Rozvod vody','Boiler','Odpad','Pastavar','Plotna klasik','Plotna WOK'];
+    function ukonSelect(id,list,cur){
+      cur=cur||'';
+      var custom = cur && list.indexOf(cur)<0;
+      return '<select id="'+id+'"><option value="">— vyber —</option>'
+        + list.map(function(o){ return '<option value="'+esc(o)+'"'+(cur===o?' selected':'')+'>'+esc(o)+'</option>'; }).join('')
+        + (custom?('<option value="'+esc(cur)+'" selected>'+esc(cur)+' (vlastní)</option>'):'')
+        + '</select>';
+    }
     function roleName(r){ if(!r) return ''; if(typeof r==='string') return r; return r.name||r.title||r.label||''; }
     function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:roleName(p.role) }; }); }).catch(function(){ _people=[]; }); }
     function loadSolvers(){ return fetchJSON(API+'/request-settings').then(function(d){ _solvers=(d&&d.solvers)||[]; }).catch(function(){ _solvers=[]; }); }
@@ -1605,8 +1616,8 @@
       ov.innerHTML='<div class="modal" style="width:640px"><h2>'+(isNew?'Nový servisní požadavek':'Servisní požadavek')+'</h2>'+
         '<div class="form-row"><label>Problém na stroji *</label><input id="sr-problem" list="sr-machine-list" autocomplete="off" placeholder="Vyber stroj v provozu nebo napiš vlastní" value="'+esc(row.problem||'')+'"><datalist id="sr-machine-list">'+_machines.map(function(m){ return '<option value="'+esc(m.name)+'">'+esc(m.type||'')+'</option>'; }).join('')+'</datalist></div>'+
         '<div class="form-grid-2">'+
-          '<div class="form-row"><label>Servisní úkon – prádlomat</label><input id="sr-action" value="'+esc(row.action||'')+'"></div>'+
-          '<div class="form-row"><label>Servisní úkol – špageta</label><input id="sr-task" value="'+esc(row.task||'')+'"></div>'+
+          '<div class="form-row"><label>Servisní úkon – prádlomat</label>'+ukonSelect('sr-action',UKONY_PRADLOMAT,row.action||'')+'</div>'+
+          '<div class="form-row"><label>Servisní úkol – špageta</label>'+ukonSelect('sr-task',UKONY_SPAGETA,row.task||'')+'</div>'+
         '</div>'+
         '<div class="form-row"><label>Foto problému (odkaz)</label><input id="sr-photo" value="'+esc(row.photo_url||'')+'"></div>'+
         '<div class="form-row"><label>Popis problému</label><textarea id="sr-desc" rows="3">'+esc(row.description||'')+'</textarea></div>'+
