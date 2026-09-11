@@ -732,6 +732,53 @@ router.get('/chat-sessions/:id', async (req, res, next) => {
 // ─── Servisní požadavky ──────────────────────────────────────────────────────
 const REQUEST_STATUSES = ['novy', 'reseni', 'vyreseno', 'zamitnuto'];
 
+// Nastavení: kdo tvoří servisní tým (koho lze úkolovat jako řešitele).
+let _settings = null;
+try { _settings = require('../services/settings'); } catch (_) { _settings = null; }
+const SOLVERS_KEY = 'service.solver_person_ids';
+async function readSolverIds() {
+  if (!_settings) return [];
+  let ids = await _settings.getSetting(SOLVERS_KEY);
+  if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = ids.split(',').map((s) => parseInt(s, 10)); } }
+  return Array.isArray(ids) ? ids.map((x) => parseInt(x, 10)).filter(Boolean) : [];
+}
+async function peopleByIds(ids) {
+  if (!ids.length) return [];
+  const people = await prisma.person.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, first_name: true, last_name: true, phone: true, email: true, work_email: true, role: true },
+  });
+  const byId = {}; people.forEach((p) => { byId[p.id] = p; });
+  // Zachovej pořadí dle uloženého seznamu
+  return ids.map((id) => byId[id]).filter(Boolean).map((p) => ({
+    id: p.id,
+    name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id),
+    phone: (p.phone || '').trim(),
+    email: (p.work_email || p.email || '').trim(),
+    role: p.role || '',
+  }));
+}
+
+// GET /api/service/request-settings — vrátí servisní tým (vybraní řešitelé).
+router.get('/request-settings', async (req, res, next) => {
+  try {
+    const ids = await readSolverIds();
+    res.json({ solver_ids: ids, solvers: await peopleByIds(ids) });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/service/request-settings { solver_ids: [] } — uloží servisní tým.
+router.put('/request-settings', async (req, res, next) => {
+  try {
+    if (!_settings) return res.status(500).json({ error: 'settings nedostupné' });
+    let ids = (req.body && req.body.solver_ids) || [];
+    if (!Array.isArray(ids)) ids = [];
+    ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
+    await _settings.setSetting(SOLVERS_KEY, ids, { type: 'json', userId: req.user && req.user.id });
+    res.json({ ok: true, solver_ids: ids, solvers: await peopleByIds(ids) });
+  } catch (err) { next(err); }
+});
+
 // Doplní ke každému požadavku jméno řešitele (Person) + jméno zadavatele (User).
 async function _attachAssignees(rows) {
   const ids = Array.from(new Set(rows.map((r) => r.assignee_id).filter((x) => x != null)));

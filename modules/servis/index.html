@@ -612,6 +612,7 @@
               <option value="zamitnuto">Zamítnuto</option>
             </select>
           </div>
+          <button class="btn btn-secondary" id="sr-settings-btn" title="Nastavení – kdo může řešit požadavky" style="margin-left:auto;">⚙️ Nastavení řešitelů</button>
         </div>
         <div style="overflow-x:auto">
           <table class="data-table" id="sr-table">
@@ -1460,8 +1461,40 @@
     function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
     function fmtDate(s){ try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return ''; } }
-    function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ') }; }); }).catch(function(){ _people=[]; }); }
-    function peopleOptions(sel){ return '<option value="">— nepřiřazeno —</option>'+_people.map(function(p){ return '<option value="'+p.id+'"'+(sel==p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join(''); }
+    var _solvers=[]; // servisní tým (koho lze úkolovat) — z nastavení
+    function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:p.role||'' }; }); }).catch(function(){ _people=[]; }); }
+    function loadSolvers(){ return fetchJSON(API+'/request-settings').then(function(d){ _solvers=(d&&d.solvers)||[]; }).catch(function(){ _solvers=[]; }); }
+    // Řešitele lze vybrat jen ze servisního týmu; když tým není nastaven, nabídni všechny (fallback).
+    function peopleOptions(sel){
+      var pool=_solvers.length?_solvers:_people;
+      var opts='<option value="">— nepřiřazeno —</option>'+pool.map(function(p){ return '<option value="'+p.id+'"'+(sel==p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+      // Pokud je aktuální řešitel mimo tým, přidej ho zvlášť ať nezmizí.
+      if(sel && !pool.some(function(p){return p.id==sel;})){ var ex=_people.filter(function(p){return p.id==sel;})[0]; if(ex) opts+='<option value="'+ex.id+'" selected>'+esc(ex.name)+' (mimo tým)</option>'; }
+      return opts;
+    }
+    function openSolverSettings(){
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      var chosen={}; _solvers.forEach(function(p){ chosen[p.id]=true; });
+      var rows=_people.slice().sort(function(a,b){ return a.name.localeCompare(b.name,'cs'); }).map(function(p){
+        return '<label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">'
+          +'<input type="checkbox" data-sid="'+p.id+'"'+(chosen[p.id]?' checked':'')+'>'
+          +'<span style="flex:1;"><b>'+esc(p.name)+'</b>'+(p.role?(' <span style="color:var(--text2);font-size:12px;">'+esc(p.role)+'</span>'):'')+(p.phone?('<div style="color:var(--text2);font-size:11px;">📱 '+esc(p.phone)+'</div>'):'')+'</span></label>';
+      }).join('');
+      ov.innerHTML='<div class="modal" style="width:560px;max-height:86vh;display:flex;flex-direction:column;"><h2>⚙️ Kdo může řešit servisní požadavky</h2>'
+        +'<p style="color:var(--text2);font-size:13px;margin:0 0 12px;">Vyber z Lidí a HR ty, které budeš úkolovat. Jen z nich pak volíš „Řešitele" u požadavku a uvidí své úkoly v telefonu.</p>'
+        +'<div style="flex:1;overflow:auto;padding-right:4px;">'+(rows||'<span style="color:var(--text2);">Žádní lidé v HR.</span>')+'</div>'
+        +'<div class="modal-actions" style="margin-top:12px;"><span id="sr-set-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
+        +'<button class="btn btn-secondary" id="sr-set-cancel">Zrušit</button><button class="btn btn-primary" id="sr-set-save">💾 Uložit tým</button></div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#sr-set-cancel').addEventListener('click',close);
+      ov.querySelector('#sr-set-save').addEventListener('click',function(){
+        var ids=Array.prototype.slice.call(ov.querySelectorAll('input[data-sid]:checked')).map(function(c){ return parseInt(c.getAttribute('data-sid'),10); });
+        var m=ov.querySelector('#sr-set-msg'); if(m) m.textContent='Ukládám…';
+        fetchJSON(API+'/request-settings',{method:'PUT',body:JSON.stringify({solver_ids:ids})}).then(function(d){ _solvers=(d&&d.solvers)||[]; close(); }).catch(function(){ if(m) m.textContent='Uložení selhalo.'; });
+      });
+    }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
     function render(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
@@ -1527,8 +1560,9 @@
     document.addEventListener('DOMContentLoaded',function(){
       var newBtn=document.getElementById('sr-new-btn'); if(newBtn) newBtn.addEventListener('click',function(){ openModal(null); });
       var f=document.getElementById('sr-filter-status'); if(f) f.addEventListener('change',load);
+      var settBtn=document.getElementById('sr-settings-btn'); if(settBtn) settBtn.addEventListener('click',function(){ (loaded?Promise.resolve():loadPeople()).then(openSolverSettings); });
       var loaded=false;
-      function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadPeople().then(load); }
+      function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadSolvers(); loadPeople().then(load); }
       window.srEnsure=ensure; // volá se i při obnově sekce po refreshi
       // Odkaz na mobilní formulář (dle aktuální domény) + kopírování
       var shareUrl=location.origin+'/modules/servis/pozadavek.html';
