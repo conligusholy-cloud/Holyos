@@ -717,16 +717,25 @@
       // Přepínání sekcí nejvyšší úrovně (Hugo | Infolinka | …).
       // Aktivní sekci si pamatujeme (localStorage), ať po refreshi zůstaneš na stejné.
       var SEC_KEY = 'servis_active_section';
+      // Načítací funkce jednotlivých sekcí se definují v samostatných IIFE (později
+      // v dokumentu), takže při obnově po refreshi ještě nemusí existovat. Proto je
+      // voláme s krátkým opakováním, dokud nejsou připravené.
+      function ensureFor(sec) {
+        var map = { infolinka: 'infoInit', pozadavky: 'srEnsure', stroje: 'smEnsure', odecty: 'odEnsure' };
+        var fn = map[sec]; if (!fn) return;
+        var tries = 0;
+        (function attempt() {
+          if (typeof window[fn] === 'function') { window[fn](); }
+          else if (tries++ < 30) { setTimeout(attempt, 100); }
+        })();
+      }
       function activateSection(sec) {
         var btn = document.querySelector('.section-tab[data-section="' + sec + '"]');
         if (!btn) { sec = 'hugo'; btn = document.querySelector('.section-tab[data-section="hugo"]'); }
         if (!btn) return;
         document.querySelectorAll('.section-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
         document.querySelectorAll('.section-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'section-' + sec); });
-        if (sec === 'infolinka' && window.infoInit) window.infoInit();
-        if (sec === 'pozadavky' && window.srEnsure) window.srEnsure();
-        if (sec === 'stroje' && window.smEnsure) window.smEnsure();
-        if (sec === 'odecty' && window.odEnsure) window.odEnsure();
+        ensureFor(sec);
       }
       document.querySelectorAll('.section-tab').forEach(function(btn) {
         btn.addEventListener('click', function() {
