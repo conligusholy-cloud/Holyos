@@ -627,8 +627,8 @@ router.post('/recording', form, async (req, res) => {
       }
       // Předstáhni nahrávku na disk, ať je hned připravená k přehrání (non-fatal).
       try {
-        const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true } });
-        if (call) ensureLocalRecording(call.id, url).catch(() => {});
+        const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true, line: true } });
+        if (call) ensureLocalRecording(call.id, url, call.line).catch(() => {});
       } catch (_) { /* nevadí, stáhne se při prvním přehrání */ }
     }
   } catch (e) {
@@ -657,16 +657,17 @@ async function remoteRecordingSize(mediaUrl, auth) {
   } catch (_) { return 0; }
 }
 
-async function ensureLocalRecording(callId, audioUrl) {
+async function ensureLocalRecording(callId, audioUrl, line) {
   const fs = require('fs');
   const path = require('path');
   const dir = recordingsDir();
   const file = path.join(dir, String(callId).replace(/[^a-zA-Z0-9._-]/g, '_') + '.mp3');
-  const SID = process.env.TWILIO_ACCOUNT_SID;
-  const TOKEN = process.env.TWILIO_AUTH_TOKEN;
-  if (!SID || !TOKEN) throw new Error('Twilio není nakonfigurováno');
+  // Údaje dle linky — Infolinka může být na jiném Twilio účtu (jinak by 401/403).
+  let creds = { sid: process.env.TWILIO_ACCOUNT_SID, token: process.env.TWILIO_AUTH_TOKEN };
+  try { creds = require('../services/voice/outbound').credsFor(line) || creds; } catch (_) { /* default */ }
+  if (!creds.sid || !creds.token) throw new Error('Twilio není nakonfigurováno');
   const mediaUrl = audioUrl.endsWith('.mp3') ? audioUrl : audioUrl + '.mp3';
-  const auth = 'Basic ' + Buffer.from(SID + ':' + TOKEN).toString('base64');
+  const auth = 'Basic ' + Buffer.from(creds.sid + ':' + creds.token).toString('base64');
 
   const localSize = (fs.existsSync(file) ? fs.statSync(file).size : 0);
   // Ověř skutečnou velikost u Twilia — když je lokální kopie menší (uřízlá /
@@ -696,10 +697,10 @@ router.get('/recording/:callId', requireAuth, async (req, res, next) => {
     if (!prisma.voiceCall) return res.status(404).send('Bez nahrávky');
     const call = await prisma.voiceCall.findUnique({
       where: { id: req.params.callId },
-      select: { audio_url: true },
+      select: { audio_url: true, line: true },
     });
     if (!call || !call.audio_url) return res.status(404).send('Bez nahrávky');
-    const file = await ensureLocalRecording(req.params.callId, call.audio_url);
+    const file = await ensureLocalRecording(req.params.callId, call.audio_url, call.line);
     const fs = require('fs');
     const size = fs.statSync(file).size;
     res.set('Accept-Ranges', 'bytes');
