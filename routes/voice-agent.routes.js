@@ -872,6 +872,11 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
         .filter(Boolean);
       await settings.setSetting(cfgKey(line, 'notify_person_ids'), arr, { type: 'json', userId: uid });
     }
+    if (req.body.operator_ids !== undefined) {
+      const arr = (Array.isArray(req.body.operator_ids) ? req.body.operator_ids : [])
+        .map((x) => parseInt(x, 10)).filter(Boolean);
+      await settings.setSetting(cfgKey(line, 'operator_ids'), arr, { type: 'json', userId: uid });
+    }
     // Telefonní číslo linky → mapa voice.line_numbers (číslo → linka). Prázdné = zruš mapování linky.
     if (req.body.line_number !== undefined) {
       let map = await settings.getSetting('voice.line_numbers');

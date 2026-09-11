@@ -416,6 +416,17 @@
             <p style="color:var(--text2);font-size:12px;margin:0;">Připravujeme rozpis směn — kdo drží Infolinku a kdy. Zatím se přepojení řídí čísly níže; časem se hovor bude přepojovat na toho, kdo má právě směnu.</p>
           </div>
 
+          <!-- Operátoři Infolinky (tým z Lidí a HR) -->
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">👥 Operátoři Infolinky</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Vyber z Lidí a HR, kdo bude Infolinku obsluhovat. Z těchto lidí pak sestavíš směny. Přidání/odebrání se ukládá hned.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+              <select id="info-op-select" style="flex:1;min-width:220px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;"><option value="">— vyber osobu —</option></select>
+              <button class="btn btn-primary" onclick="infoAddOperator()">+ Přidat</button>
+            </div>
+            <div id="info-op-list" style="display:flex;flex-direction:column;gap:6px;"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
+          </div>
+
           <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;background:rgba(34,211,238,0.06);">
             <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📞 Přepojení na živého člověka</div>
             <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">Když volající řekne, že chce mluvit s živým člověkem, AI ho přepojí — nejdřív na hlavní číslo, a když se nikdo nedovolá (do vypršení vyzvánění), postupně na záložní čísla.</p>
@@ -628,6 +639,8 @@
           el('info-greeting').value=c.inbound_greeting||'';
           el('info-prompt').value=c.inbound_prompt||'';
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
+          _ops=Array.isArray(c.operator_ids)?c.operator_ids.slice():[];
+          if(!_people.length){ loadPeople(); } else { fillOpSelect(); renderOps(); }
           var te=el('info-transfer-enabled'); if(te) te.checked = c.transfer_enabled!==false;
           var tf=el('info-transfer-fallback'); if(tf) tf.value = c.transfer_fallback_numbers||'';
           var ti=el('info-transfer-inbound'); if(ti) ti.value = c.transfer_inbound_number||'';
@@ -658,6 +671,34 @@
           setMsg('✅ Uloženo');
         }catch(e){ setMsg('Chyba: '+e.message); }
       };
+
+      // ── Operátoři Infolinky (tým z Lidí a HR) ──
+      var _people=[], _ops=[];
+      function loadPeople(){
+        return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
+          var arr=Array.isArray(list)?list:((list&&list.items)||[]);
+          _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id) }; });
+          fillOpSelect(); renderOps();
+        }).catch(function(){ _people=[]; });
+      }
+      function fillOpSelect(){
+        var sel=el('info-op-select'); if(!sel) return;
+        sel.innerHTML='<option value="">— vyber osobu —</option>'+_people.filter(function(p){ return _ops.indexOf(p.id)<0; }).map(function(p){ return '<option value="'+p.id+'">'+esc(p.name)+'</option>'; }).join('');
+      }
+      function opName(id){ var p=_people.filter(function(x){return x.id===id;})[0]; return p?p.name:('#'+id); }
+      function renderOps(){
+        var box=el('info-op-list'); if(!box) return;
+        if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Zatím nikdo. Přidej první osobu výběrem výše.</span>'; return; }
+        box.innerHTML=_ops.map(function(id){
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;">'
+            +'<span style="font-size:13px;">👤 '+esc(opName(id))+'</span>'
+            +'<button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="infoRemoveOperator('+id+')">✕ Odebrat</button>'
+            +'</div>';
+        }).join('');
+      }
+      function persistOps(){ return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ operator_ids:_ops }) }).catch(function(){}); }
+      window.infoAddOperator=function(){ var sel=el('info-op-select'); var id=parseInt(sel&&sel.value,10); if(!id) return; if(_ops.indexOf(id)<0){ _ops.push(id); fillOpSelect(); renderOps(); persistOps(); } if(sel) sel.value=''; };
+      window.infoRemoveOperator=function(id){ _ops=_ops.filter(function(x){ return x!==id; }); fillOpSelect(); renderOps(); persistOps(); };
 
       // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──
       function knSectionHtml(){
