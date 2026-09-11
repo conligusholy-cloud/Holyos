@@ -943,6 +943,54 @@ router.post('/calls/backfill-locations', requireAuth, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+// POST /api/voice/sms-incoming — Twilio Messaging webhook: příchozí SMS na naše číslo.
+// VEŘEJNÉ (volá Twilio). Uloží SMS do inbound_sms podle linky (dle volaného čísla).
+router.post('/sms-incoming', form, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const from = b.From || '', to = b.To || '', body = b.Body || '', sid = b.MessageSid || b.SmsSid || null;
+    if (from && to && prisma.inboundSms) {
+      const line = await lineFromCalledNumber(to);
+      try {
+        await prisma.inboundSms.create({ data: { line, from_number: from, to_number: to, body: body || null, message_sid: sid } });
+        console.log('[voice] příchozí SMS ' + line + ' od ' + from);
+      } catch (e) {
+        if (!/unique|duplicate/i.test(e.message || '')) console.warn('[voice] inbound sms uložení:', e.message);
+      }
+    }
+  } catch (e) { console.warn('[voice] sms-incoming:', e.message); }
+  res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response></Response>');
+});
+
+// GET /api/voice/sms-inbound?line=infolinka — přehled příchozích SMS (pro čtení v adminu).
+router.get('/sms-inbound', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.inboundSms) return res.json({ items: [], unread: 0 });
+    let where = undefined;
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      where = (line === 'infolinka') ? { line: 'infolinka' } : { OR: [{ line: 'obchod' }, { line: null }] };
+    }
+    const items = await prisma.inboundSms.findMany({ where, orderBy: { created_at: 'desc' }, take: Math.min(parseInt(req.query.limit, 10) || 100, 300) });
+    const unread = items.filter((i) => !i.read_at).length;
+    res.json({ items, unread });
+  } catch (err) { next(err); }
+});
+
+// POST /api/voice/sms-inbound/read?line=infolinka — označí příchozí SMS jako přečtené.
+router.post('/sms-inbound/read', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.inboundSms) return res.json({ ok: true });
+    const where = { read_at: null };
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      if (line === 'infolinka') where.line = 'infolinka'; else where.OR = [{ line: 'obchod' }, { line: null }];
+    }
+    await prisma.inboundSms.updateMany({ where, data: { read_at: new Date() } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).
 router.get('/sms/form-log', requireAuth, async (req, res, next) => {
   try {

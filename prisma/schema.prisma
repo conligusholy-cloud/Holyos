@@ -6245,3 +6245,20 @@ model SmsLog {
   @@index([lead_id])
   @@map("sms_log")
 }
+
+// Příchozí SMS na naše čísla (Infolinka apod.) — přijaté přes Twilio Messaging webhook.
+// Zvlášť od hovorů i od odchozích SMS (SmsLog).
+model InboundSms {
+  id           Int       @id @default(autoincrement())
+  line         String?   @db.VarChar(32)  // infolinka | obchod (dle volaného čísla)
+  from_number  String    @db.VarChar(40)
+  to_number    String    @db.VarChar(40)
+  body         String?   @db.Text
+  message_sid  String?   @unique @db.VarChar(64)
+  read_at      DateTime?
+  created_at   DateTime  @default(now())
+
+  @@index([line])
+  @@index([created_at])
+  @@map("inbound_sms")
+}

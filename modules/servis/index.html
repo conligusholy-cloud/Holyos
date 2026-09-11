@@ -387,6 +387,7 @@
           <button type="button" class="btn btn-secondary" data-infosub="shifts" onclick="infoSub('shifts')">🗓️ Plánování směn</button>
           <button type="button" class="btn btn-secondary" data-infosub="report" onclick="infoSub('report')">📊 Přehled služeb</button>
           <button type="button" class="btn btn-secondary" data-infosub="people" onclick="infoSub('people')">📈 Hodnocení lidí</button>
+          <button type="button" class="btn btn-secondary" data-infosub="sms" onclick="infoSub('sms')">📩 SMS <span id="info-sms-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px;"></span></button>
         </div>
 
         <!-- Sub: Nastavení recepční -->
@@ -519,6 +520,18 @@
             </div>
           </div>
           <div id="info-people-body" style="color:var(--text2);font-size:13px;">Vyber období a klikni Zobrazit.</div>
+        </div>
+
+        <!-- Sub: Příchozí SMS -->
+        <div id="info-sms" style="display:none;max-width:820px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+            <h3 style="margin:0;font-size:16px;">Příchozí SMS na Infolinku</h3>
+            <button class="btn btn-secondary" onclick="infoLoadSms()">↻ Obnovit</button>
+            <button class="btn btn-secondary" onclick="infoSmsRead()">✓ Označit vše přečtené</button>
+            <span id="info-sms-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">SMS, které někdo pošle na číslo Infolinky. (Vyžaduje, aby číslo mělo SMS a byl nastavený Messaging webhook — viz níže.)</div>
+          <div id="info-sms-body" style="color:var(--text2);font-size:13px;">Načítám…</div>
         </div>
 
         <!-- Sub: Záznamy hovorů -->
@@ -699,7 +712,7 @@
 
       // ── Přepínání pod-záložek Infolinky ──
       window.infoSub = function(name){
-        ['settings','calls','shifts','report','people'].forEach(function(s){
+        ['settings','calls','shifts','report','people','sms'].forEach(function(s){
           var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
           var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
           if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
@@ -707,6 +720,7 @@
         if(name==='calls') window.infoLoadCalls();
         else if(name==='report') infoInitReport();
         else if(name==='people') infoInitPeople();
+        else if(name==='sms') window.infoLoadSms();
         else infoLoadConfig();
       };
 
@@ -1205,8 +1219,29 @@
         }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
       };
 
+      // ── Příchozí SMS ──
+      function infoSmsBadge(n){ var b=el('info-sms-badge'); if(!b) return; if(n>0){ b.textContent=n; b.style.display=''; } else { b.style.display='none'; } }
+      function infoSmsBadgeRefresh(){ api('/sms-inbound?line='+INFO_LINE).then(function(j){ infoSmsBadge((j&&j.unread)||0); }).catch(function(){}); }
+      window.infoLoadSms = async function(){
+        var body=el('info-sms-body'); if(body) body.innerHTML='Načítám…';
+        try{
+          var j=await api('/sms-inbound?line='+INFO_LINE);
+          var items=(j&&j.items)||[];
+          infoSmsBadge((j&&j.unread)||0);
+          if(!items.length){ if(body) body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné příchozí SMS.</div>'; return; }
+          if(body) body.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Od</th><th>Zpráva</th></tr></thead><tbody>'
+            +items.map(function(s){ var un=!s.read_at; return '<tr'+(un?' style="font-weight:600;background:rgba(34,211,238,0.05);"':'')+'><td style="white-space:nowrap;">'+(un?'🔵 ':'')+esc(fmtDate(s.created_at))+'</td><td style="white-space:nowrap;">'+esc(s.from_number||'')+'</td><td>'+esc(s.body||'')+'</td></tr>'; }).join('')
+            +'</tbody></table></div>';
+        }catch(e){ if(body) body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+esc(e.message)+'</div>'; }
+      };
+      window.infoSmsRead = async function(){
+        var m=el('info-sms-msg'); if(m) m.textContent='Označuji…';
+        try{ await api('/sms-inbound/read?line='+INFO_LINE,{ method:'POST' }); if(m) m.textContent='✅ Označeno jako přečtené'; window.infoLoadSms(); }
+        catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
+
       // Inicializace při prvním zobrazení sekce Infolinka.
-      window.infoInit = function(){ if(infoLoaded) return; infoLoaded=true; window.infoSub('settings'); };
+      window.infoInit = function(){ if(infoLoaded) return; infoLoaded=true; window.infoSub('settings'); infoSmsBadgeRefresh(); };
     })();
   </script>
 
