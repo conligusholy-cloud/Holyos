@@ -814,7 +814,7 @@
       };
 
       // ── Operátoři Infolinky (tým z Lidí a HR) ──
-      var _people=[], _ops=[], _shifts={};
+      var _people=[], _ops=[], _shifts={}, _infoCalls=[];
       function loadPeople(){
         return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
           var arr=Array.isArray(list)?list:((list&&list.items)||[]);
@@ -1111,6 +1111,7 @@
         body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
         try{
           var rows=await api('/calls?line='+INFO_LINE+'&limit=100');
+          _infoCalls=Array.isArray(rows)?rows:[];
           if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
           // Kolikrát každé číslo volalo (z načtené historie).
           var counts={};
@@ -1122,7 +1123,7 @@
             var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
             html+='<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
               +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
-              +'<td'+(rep?' style="color:#eab308;font-weight:600;" title="Opakovaný volající"':'')+'>'+esc(num||'')+' ('+cnt+'×)'+'</td>'
+              +'<td><a onclick="event.stopPropagation();infoNumHistory(\''+k+'\')" title="Historie tohoto čísla (časová osa)" style="cursor:pointer;text-decoration:underline;'+(rep?'color:#eab308;font-weight:600;':'color:#22d3ee;')+'">'+esc(num||'')+' ('+cnt+'×)</a></td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
               +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
@@ -1188,6 +1189,32 @@
         return s + transferDetail(c) + smsDetail(c) + audio + ft;
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
+      // Časová osa hovorů jednoho čísla (klik na číslo v tabulce).
+      window.infoNumHistory = function(tail){
+        var list=(_infoCalls||[]).filter(function(c){ return String(c.from_number||'').replace(/\D/g,'').slice(-9)===tail; });
+        if(!list.length) return;
+        list.sort(function(a,b){ return new Date(a.started_at)-new Date(b.started_at); });
+        var num=list[list.length-1].from_number||('…'+tail);
+        var kdo=list.map(function(c){return c.caller_name;}).filter(Boolean)[0]||'';
+        var items=list.map(function(c){
+          var loc=c.location?(' · 📍 '+esc(c.location)):'';
+          var cb=(Array.isArray(c.callback_log)&&c.callback_log.length)?('<div style="color:#22d3ee;font-size:12px;margin-top:3px;">📞 voláno zpět: '+c.callback_log.map(function(e){return esc(e.name);}).join(', ')+'</div>'):'';
+          var sm=(Array.isArray(c.manual_sms_log)&&c.manual_sms_log.length)?('<div style="color:#a78bfa;font-size:12px;margin-top:3px;">✉️ SMS: '+c.manual_sms_log.map(function(e){return esc(e.name);}).join(', ')+'</div>'):'';
+          return '<div style="border-left:3px solid #ec4899;padding:8px 12px;margin-bottom:8px;background:var(--bg);border-radius:8px;">'
+            +'<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;"><b>'+esc(fmtDate(c.started_at))+'</b><span style="color:var(--text2);font-size:12px;">⏱ '+fmtDur(c.duration_sec)+'</span></div>'
+            +'<div style="margin:4px 0;font-size:13px;">'+esc(c.caller_intent||c.summary||'—')+'</div>'
+            +'<div style="font-size:12px;color:var(--text2);">Přepojeno: '+transferCell(c)+loc+'</div>'
+            +cb+sm
+            +'</div>';
+        }).join('');
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        ov.innerHTML='<div class="modal" style="width:640px;max-width:96vw;"><h2 style="margin-bottom:6px;">📞 '+esc(num)+'</h2>'
+          +'<div style="color:var(--text2);font-size:13px;margin-bottom:14px;">'+list.length+'× volal na Infolinku'+(kdo?(' · '+esc(kdo)):'')+' — časová osa (od nejstaršího):</div>'
+          +'<div style="max-height:60vh;overflow:auto;">'+items+'</div>'
+          +'<div class="modal-actions"><button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Zavřít</button></div></div>';
+        document.getElementById('modal-root').appendChild(ov);
+        ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
+      };
       // Otevře detail a když celý přepis ještě není (nebo force), vytvoří ho na kliknutí.
       window.infoOpenTranscript = function(id, force){
         var r=el('info-call-'+id);
