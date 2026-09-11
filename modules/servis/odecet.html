@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#10b981">
+  <title>Stavy měřidel</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root{ --bg:#f4f6f8; --card:#ffffff; --border:#dfe4ea; --text:#1f2a37; --text2:#8a97a6; --acc:#10b981; --acc2:#059669; --err:#ef4444; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    body{ min-height:100dvh; }
+    .wrap{ max-width:640px; margin:0 auto; padding:22px 18px 120px; }
+    h1{ font-size:22px; margin:0 0 4px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+    .sub{ font-size:15px; color:var(--text); font-weight:600; margin:14px 0 18px; }
+    .who{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:9px 14px; font-size:13px; color:var(--text2); margin-bottom:16px; }
+    .who b{ color:var(--text); }
+    .field{ position:relative; margin-bottom:14px; }
+    .field .ico{ position:absolute; left:16px; top:50%; transform:translateY(-50%); color:var(--text2); font-size:16px; pointer-events:none; }
+    input,select{ width:100%; background:var(--card); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:16px 16px; font-family:inherit; }
+    input.with-ico,select.with-ico{ padding-left:44px; }
+    input::placeholder{ color:var(--text2); }
+    input:focus,select:focus{ outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+    /* Foto tlačítko jako input s kancelářskou sponkou */
+    .photo{ position:relative; }
+    .photo .btn-file{ display:flex; align-items:center; gap:12px; width:100%; background:var(--card); border:1px solid var(--border); border-radius:12px; color:var(--text2); font-size:16px; padding:16px; cursor:pointer; }
+    .photo .btn-file.has{ color:var(--text); border-color:var(--acc); }
+    .photo input[type=file]{ display:none; }
+    .photo .thumb{ margin-top:8px; display:none; }
+    .photo .thumb img{ width:100%; max-height:220px; object-fit:cover; border-radius:12px; border:1px solid var(--border); }
+    .photo .thumb .rm{ margin-top:6px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:13px; color:var(--err); cursor:pointer; }
+    /* Sticky uložit */
+    .bar{ position:fixed; left:0; right:0; bottom:0; padding:14px 18px calc(14px + env(safe-area-inset-bottom)); display:flex; justify-content:flex-end; pointer-events:none; }
+    .bar .btn{ pointer-events:auto; background:var(--acc); color:#fff; border:none; border-radius:12px; padding:15px 26px; font-size:16px; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(16,185,129,.4); display:inline-flex; align-items:center; gap:8px; }
+    .bar .btn:disabled{ opacity:.6; }
+    .msg{ position:fixed; left:0; right:0; bottom:76px; text-align:center; font-size:14px; min-height:18px; padding:0 18px; }
+    .msg.err{ color:var(--err); } .msg.ok{ color:var(--acc2); }
+    .screen{ text-align:center; padding:70px 20px; }
+    .screen .big{ font-size:44px; margin-bottom:12px; }
+    .screen h2{ font-size:20px; margin:0 0 8px; }
+    .screen p{ color:var(--text2); font-size:14px; line-height:1.6; margin:0 auto 18px; max-width:340px; }
+    .screen a.btn{ background:var(--acc); color:#fff; text-decoration:none; border-radius:12px; padding:14px 22px; font-weight:700; display:inline-block; }
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="screen"><div class="big">⏳</div><p>Načítám…</p></div>
+
+  <div id="gate" class="screen hidden">
+    <div class="big">🔒</div>
+    <h2>Nutné přihlášení</h2>
+    <p>Odečty může zadat jen přihlášený uživatel HolyOS. Přihlas se a otevři tento odkaz znovu.</p>
+    <a class="btn" href="/">Přihlásit se do HolyOS</a>
+  </div>
+
+  <div id="app" class="wrap hidden">
+    <h1>Stavy měřidel</h1>
+    <div class="sub">Zadej stavy a přidej fotku měřidel</div>
+    <div class="who">👤 Zadává: <b id="who-name">—</b></div>
+
+    <div class="field">
+      <input id="f-water" class="" type="text" inputmode="decimal" placeholder="Stav vodoměru v m3">
+    </div>
+    <div class="field photo" id="ph-water">
+      <label class="btn-file" for="file-water"><span>📎</span> <span class="lbl">Fotka vodoměru</span></label>
+      <input id="file-water" type="file" accept="image/*" capture="environment">
+      <div class="thumb"><img alt="Vodoměr"><div><button type="button" class="rm">✕ Odebrat</button></div></div>
+    </div>
+
+    <div class="field">
+      <input id="f-elek" type="text" inputmode="decimal" placeholder="Stav elektroměru kWh">
+    </div>
+    <div class="field photo" id="ph-elek">
+      <label class="btn-file" for="file-elek"><span>📎</span> <span class="lbl">Fotka elektroměru</span></label>
+      <input id="file-elek" type="file" accept="image/*" capture="environment">
+      <div class="thumb"><img alt="Elektroměr"><div><button type="button" class="rm">✕ Odebrat</button></div></div>
+    </div>
+
+    <div class="field">
+      <span class="ico">🔎</span>
+      <select id="f-machine" class="with-ico"><option value="">Odečet na stroji</option></select>
+    </div>
+  </div>
+
+  <div id="done" class="screen hidden">
+    <div class="big">✅</div>
+    <h2>Odečet uložen</h2>
+    <p>Díky! Stavy měřidel byly zaznamenány a jsou vidět v HolyOS → Servis → Odečty.</p>
+    <button class="btn" id="again" style="background:var(--acc);color:#fff;border:none;cursor:pointer;">Zadat další</button>
+  </div>
+
+  <div class="msg" id="msg"></div>
+  <div class="bar hidden" id="bar"><button class="btn" id="save">💾 Uložit</button></div>
+
+  <script>
+  (function(){
+    var API='/api/service';
+    var me=null, photos={ water:null, elek:null };
+    function $(id){ return document.getElementById(id); }
+    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); }
+    function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
+
+    api('/api/auth/me').then(function(r){
+      if(r.status===401||r.status===403){ show('gate'); return null; }
+      if(!r.ok) throw new Error('me '+r.status);
+      return r.json();
+    }).then(function(j){
+      if(!j) return;
+      me=j.user||{};
+      $('who-name').textContent = me.displayName || me.username || ('#'+me.id);
+      show('app'); loadMachines();
+    }).catch(function(){ show('gate'); });
+
+    function loadMachines(){
+      api(API+'/machines').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
+        var sel=$('f-machine');
+        (Array.isArray(list)?list:[]).forEach(function(m){
+          var o=document.createElement('option'); o.value=m.id; o.textContent=m.name+(m.type?(' · '+m.type):''); sel.appendChild(o);
+        });
+      }).catch(function(){});
+    }
+
+    // Foto: komprese + náhled, ukládá do photos[key]
+    function wirePhoto(key, boxId, fileId){
+      var box=$(boxId), file=$(fileId);
+      var thumb=box.querySelector('.thumb'), img=thumb.querySelector('img'), rm=thumb.querySelector('.rm'), lbl=box.querySelector('.lbl'), btn=box.querySelector('.btn-file');
+      file.addEventListener('change', function(){
+        var f=this.files && this.files[0]; if(!f) return;
+        var reader=new FileReader();
+        reader.onload=function(e){
+          var im=new Image();
+          im.onload=function(){
+            var max=1600, w=im.width, h=im.height;
+            if(w>max||h>max){ if(w>=h){ h=Math.round(h*max/w); w=max; } else { w=Math.round(w*max/h); h=max; } }
+            var cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(im,0,0,w,h);
+            cv.toBlob(function(blob){ photos[key]=blob||f; img.src=URL.createObjectURL(photos[key]); thumb.style.display='block'; btn.classList.add('has'); lbl.textContent='Foto přiloženo ✓'; }, 'image/jpeg', 0.82);
+          };
+          im.onerror=function(){ photos[key]=f; img.src=e.target.result; thumb.style.display='block'; btn.classList.add('has'); lbl.textContent='Foto přiloženo ✓'; };
+          im.src=e.target.result;
+        };
+        reader.readAsDataURL(f);
+      });
+      rm.addEventListener('click', function(){ photos[key]=null; file.value=''; thumb.style.display='none'; btn.classList.remove('has'); lbl.textContent=(key==='water'?'Fotka vodoměru':'Fotka elektroměru'); });
+    }
+    wirePhoto('water','ph-water','file-water');
+    wirePhoto('elek','ph-elek','file-elek');
+
+    async function uploadPhoto(blob){
+      var fd=new FormData(); fd.append('photo', blob, 'foto.jpg');
+      var r=await api(API+'/readings/photo',{ method:'POST', body:fd });
+      if(!r.ok){ var e={}; try{ e=await r.json(); }catch(_){} throw new Error(e.error||('Foto se nepodařilo nahrát ('+r.status+')')); }
+      return (await r.json()).url;
+    }
+
+    $('save').addEventListener('click', async function(){
+      var msg=$('msg'); msg.className='msg'; msg.textContent='';
+      var water=$('f-water').value.trim(), elek=$('f-elek').value.trim();
+      if(!water && !elek && !photos.water && !photos.elek){ msg.className='msg err'; msg.textContent='Zadej aspoň jeden stav nebo fotku.'; return; }
+      var btn=$('save'); btn.disabled=true; btn.textContent='Ukládám…';
+      try{
+        var wUrl=null, eUrl=null;
+        if(photos.water){ msg.textContent='Nahrávám foto vodoměru…'; wUrl=await uploadPhoto(photos.water); }
+        if(photos.elek){ msg.textContent='Nahrávám foto elektroměru…'; eUrl=await uploadPhoto(photos.elek); }
+        var sel=$('f-machine'); var mid=sel.value?parseInt(sel.value,10):null; var mname=sel.value?sel.options[sel.selectedIndex].textContent:null;
+        msg.textContent='Ukládám odečet…';
+        var body={ water_m3:water||null, electricity_kwh:elek||null, water_photo_url:wUrl, electricity_photo_url:eUrl, machine_id:mid, machine_name:mname };
+        var rr=await api(API+'/readings',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        if(!rr.ok){ var re={}; try{ re=await rr.json(); }catch(_){} throw new Error(re.error||('Uložení selhalo ('+rr.status+')')); }
+        show('done');
+      }catch(e){ msg.className='msg err'; msg.textContent=e.message||'Chyba uložení.'; btn.disabled=false; btn.textContent='💾 Uložit'; }
+    });
+
+    $('again').addEventListener('click', function(){
+      $('f-water').value=''; $('f-elek').value=''; $('f-machine').value='';
+      ['ph-water','ph-elek'].forEach(function(id){ var b=$(id); b.querySelector('.thumb').style.display='none'; b.querySelector('.btn-file').classList.remove('has'); });
+      photos={ water:null, elek:null }; $('file-water').value=''; $('file-elek').value='';
+      $('ph-water').querySelector('.lbl').textContent='Fotka vodoměru'; $('ph-elek').querySelector('.lbl').textContent='Fotka elektroměru';
+      var b=$('save'); b.disabled=false; b.textContent='💾 Uložit'; $('msg').textContent='';
+      show('app');
+    });
+  })();
+  </script>
+  <script src="/js/version-watcher.js"></script>
+</body>
+</html>

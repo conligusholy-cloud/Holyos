@@ -1035,4 +1035,113 @@ router.delete('/machines/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Odečty měřidel (voda/elektro) ─────────────────────────────────────────
+// Mobilní formulář pro kolegyni: stavy vodoměru a elektroměru + fotky, k dané
+// lokalitě/stroji. Ukládá se do modulu Servis → Odečty.
+const METER_PHOTOS_DIR = path.join(__dirname, '..', 'data', 'meter-reading-photos');
+if (!fs.existsSync(METER_PHOTOS_DIR)) { fs.mkdirSync(METER_PHOTOS_DIR, { recursive: true }); }
+
+// POST /api/service/readings/photo — nahraje foto měřidla, vrací { url }.
+router.post('/readings/photo', photoUpload.single('photo'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Chybí foto (form field "photo")' });
+    const mt = (req.file.mimetype || '').toLowerCase();
+    const ext = mt.indexOf('png') >= 0 ? '.png' : mt.indexOf('webp') >= 0 ? '.webp' : mt.indexOf('heic') >= 0 ? '.heic' : '.jpg';
+    const name = Date.now() + '_' + Math.random().toString(36).slice(2, 8) + ext;
+    await fsp.writeFile(path.join(METER_PHOTOS_DIR, name), req.file.buffer);
+    res.status(201).json({ url: '/api/service/readings/photo/' + name });
+  } catch (err) {
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Foto je větší než 15 MB' });
+    next(err);
+  }
+});
+
+// GET /api/service/readings/photo/:name — servíruje foto (jen přihlášeným).
+router.get('/readings/photo/:name', async (req, res, next) => {
+  try {
+    const name = String(req.params.name || '').replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!name) return res.status(404).send('Foto nenalezeno');
+    const abs = path.join(METER_PHOTOS_DIR, name);
+    if (!fs.existsSync(abs)) return res.status(404).send('Foto nenalezeno');
+    res.sendFile(abs);
+  } catch (err) { next(err); }
+});
+
+// Doplní jméno zadavatele k odečtům.
+async function _attachReadingUsers(rows) {
+  const uids = Array.from(new Set(rows.map((r) => r.created_by_user_id).filter((x) => x != null)));
+  let umap = {};
+  if (uids.length) {
+    const users = await prisma.user.findMany({ where: { id: { in: uids } }, select: { id: true, display_name: true, username: true } });
+    users.forEach((u) => { umap[u.id] = u.display_name || u.username || ('#' + u.id); });
+  }
+  return rows.map((r) => Object.assign({}, r, {
+    water_m3: r.water_m3 != null ? Number(r.water_m3) : null,
+    electricity_kwh: r.electricity_kwh != null ? Number(r.electricity_kwh) : null,
+    created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,
+  }));
+}
+
+// GET /api/service/readings — seznam odečtů (nejnovější první).
+router.get('/readings', async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.machine_id) where.machine_id = parseInt(req.query.machine_id, 10) || undefined;
+    const rows = await prisma.meterReading.findMany({ where, orderBy: { created_at: 'desc' }, take: 500 });
+    res.json(await _attachReadingUsers(rows));
+  } catch (err) { next(err); }
+});
+
+const readingSchema = z.object({
+  water_m3: z.union([z.number(), z.string()]).optional().nullable(),
+  water_photo_url: z.string().max(500).optional().nullable(),
+  electricity_kwh: z.union([z.number(), z.string()]).optional().nullable(),
+  electricity_photo_url: z.string().max(500).optional().nullable(),
+  machine_id: z.number().int().optional().nullable(),
+  machine_name: z.string().max(200).optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+// Bezpečný převod čísla z textu (přijme čárku i tečku).
+function _num(v) {
+  if (v == null || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.').replace(/\s/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// POST /api/service/readings — vytvoří odečet.
+router.post('/readings', async (req, res, next) => {
+  try {
+    const parsed = readingSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const water = _num(d.water_m3), elek = _num(d.electricity_kwh);
+    if (water == null && elek == null && !d.water_photo_url && !d.electricity_photo_url) {
+      return res.status(400).json({ error: 'Zadej aspoň jeden stav nebo fotku.' });
+    }
+    const row = await prisma.meterReading.create({
+      data: {
+        water_m3: water,
+        water_photo_url: d.water_photo_url || null,
+        electricity_kwh: elek,
+        electricity_photo_url: d.electricity_photo_url || null,
+        machine_id: d.machine_id || null,
+        machine_name: d.machine_name || null,
+        note: d.note || null,
+        created_by_user_id: (req.user && req.user.id) || null,
+      },
+    });
+    res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/service/readings/:id
+router.delete('/readings/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.meterReading.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

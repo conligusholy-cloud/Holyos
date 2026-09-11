@@ -662,10 +662,21 @@
     <!-- ═══ SEKCE: ODEČTY (připravujeme) ═══ -->
     <section class="section-panel" id="section-odecty">
       <div class="content">
-        <div class="empty-state" style="margin-top:24px; border:1px dashed var(--border); border-radius:12px;">
-          <div class="ico">🔢</div>
-          <div style="font-size:15px; font-weight:600; color:var(--text); margin-bottom:6px;">Odečty</div>
-          <div>Připravujeme.</div>
+        <div style="background:linear-gradient(90deg,rgba(16,185,129,0.10),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="font-size:22px;">🔢</div>
+          <div style="flex:1;min-width:220px;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">Odkaz na mobilní formulář odečtů (pro kolegyni, za přihlášením)</div>
+            <div id="od-share-url" style="font-family:monospace;font-size:13px;color:var(--acc,#22d3ee);word-break:break-all;">…</div>
+          </div>
+          <button class="btn btn-sm btn-secondary" id="od-copy-btn" title="Zkopírovat odkaz">📋 Kopírovat</button>
+          <a href="modules/servis/odecet.html" target="_blank" class="btn btn-sm btn-secondary" title="Otevřít formulář">↗ Otevřít</a>
+        </div>
+        <div class="toolbar">
+          <button class="btn btn-secondary" id="od-refresh">↻ Obnovit</button>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
+          <table class="data-table"><thead><tr><th>Kdy</th><th>Lokalita / stroj</th><th>Vodoměr (m³)</th><th>Elektroměr (kWh)</th><th>Fotky</th><th>Zadal</th><th></th></tr></thead>
+          <tbody id="od-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
     </section>
@@ -711,6 +722,7 @@
         if (sec === 'infolinka' && window.infoInit) window.infoInit();
         if (sec === 'pozadavky' && window.srEnsure) window.srEnsure();
         if (sec === 'stroje' && window.smEnsure) window.smEnsure();
+        if (sec === 'odecty' && window.odEnsure) window.odEnsure();
       }
       document.querySelectorAll('.section-tab').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -1685,6 +1697,55 @@
       function ensure(){ if(loaded) return; loaded=true; load(); }
       window.smEnsure=ensure; // volá se i při obnově sekce po refreshi
       var tabBtn=document.querySelector('.section-tab[data-section="stroje"]');
+      if(tabBtn) tabBtn.addEventListener('click',ensure);
+    });
+  })();
+  </script>
+
+  <!-- Agenda: Odečty měřidel (seznam + odkaz na mobilní formulář) -->
+  <script>
+  (function(){
+    var API='/api/service';
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+    function fmtDate(s){ if(!s) return '—'; try{ return new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+    function numCz(n){ return (n==null||n==='')?'—':Number(n).toLocaleString('cs-CZ'); }
+    function photoLink(url,label){ return url?('<a href="'+esc(url)+'" target="_blank" style="text-decoration:none;">🖼 '+label+'</a>'):''; }
+    function render(rows){
+      var tb=document.getElementById('od-tbody'); if(!tb) return;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné odečty. Pošli kolegyni odkaz na formulář výše.</td></tr>'; return; }
+      tb.innerHTML=rows.map(function(r){
+        var photos=[photoLink(r.water_photo_url,'voda'),photoLink(r.electricity_photo_url,'elektro')].filter(Boolean).join(' · ')||'—';
+        return '<tr>'+
+          '<td style="white-space:nowrap;">'+esc(fmtDate(r.created_at))+'</td>'+
+          '<td>'+esc(r.machine_name||'—')+'</td>'+
+          '<td><b>'+numCz(r.water_m3)+'</b></td>'+
+          '<td><b>'+numCz(r.electricity_kwh)+'</b></td>'+
+          '<td style="font-size:12px;">'+photos+'</td>'+
+          '<td style="color:var(--text2);">'+esc(r.created_by_name||'—')+'</td>'+
+          '<td><button class="btn btn-sm btn-secondary" data-del="'+r.id+'">🗑</button></td>'+
+        '</tr>';
+      }).join('');
+      tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ if(!confirm('Smazat tento odečet?')) return; fetchJSON(API+'/readings/'+b.dataset.del,{method:'DELETE'}).then(load).catch(function(){ alert('Smazání selhalo.'); }); }); });
+    }
+    function load(){
+      var tb=document.getElementById('od-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr>';
+      fetchJSON(API+'/readings').then(render).catch(function(){ if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      var shareUrl=location.origin+'/modules/servis/odecet.html';
+      var urlEl=document.getElementById('od-share-url'); if(urlEl) urlEl.textContent=shareUrl;
+      var copyBtn=document.getElementById('od-copy-btn');
+      if(copyBtn) copyBtn.addEventListener('click',function(){
+        function ok(){ var t=copyBtn.textContent; copyBtn.textContent='✅ Zkopírováno'; setTimeout(function(){ copyBtn.textContent=t; },1500); }
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(shareUrl).then(ok,function(){ window.prompt('Zkopíruj odkaz:',shareUrl); }); }
+        else { window.prompt('Zkopíruj odkaz:',shareUrl); }
+      });
+      var rf=document.getElementById('od-refresh'); if(rf) rf.addEventListener('click',load);
+      var loaded=false;
+      function ensure(){ if(loaded) return; loaded=true; load(); }
+      window.odEnsure=ensure;
+      var tabBtn=document.querySelector('.section-tab[data-section="odecty"]');
       if(tabBtn) tabBtn.addEventListener('click',ensure);
     });
   })();
