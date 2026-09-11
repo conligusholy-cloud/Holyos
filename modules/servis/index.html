@@ -1117,7 +1117,7 @@
           // Kolikrát každé číslo volalo (z načtené historie).
           var counts={};
           rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
             var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
@@ -1130,10 +1130,11 @@
               +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
               +'<td style="text-align:center;">'+smsCell(c)+'</td>'
               +'<td>'+transferCell(c)+'</td>'
-              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Celý přepis (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
+              +'<td style="text-align:center;">'+twilioCell(c)+'</td>'
+              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Kompletní přepis přes OpenAI Whisper (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="10" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="11" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
           });
           html+='</tbody></table></div>';
           body.innerHTML=html;
@@ -1181,13 +1182,30 @@
           return '<div style="margin:3px 0;">'+esc(l)+'</div>';
         }).join('');
       }
+      // Živý přepis z Twilia (pole {role:'agent'|'caller', text}) — jen AI a zákazník, zdarma.
+      function fmtTwilio(arr){
+        if(!Array.isArray(arr)||!arr.length) return '<span style="color:var(--text2);">(bez živého přepisu)</span>';
+        return arr.map(function(t){
+          var isAI=(t.role==='agent'); var lab=isAI?'🤖 AI':'🧑 Zákazník'; var col=isAI?'#22d3ee':'#22c55e';
+          return '<div style="margin:3px 0;"><b style="color:'+col+';">'+lab+':</b> '+esc(t.text||'')+'</div>';
+        }).join('');
+      }
+      function twilioCell(c){
+        var has=Array.isArray(c.transcript)&&c.transcript.length;
+        if(!has) return '<span style="color:var(--text2);">—</span>';
+        return '<button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTwilio(\''+c.id+'\')" title="Živý přepis z Twilia (AI ↔ zákazník), zdarma" style="padding:4px 10px;font-size:14px;">📄</button>';
+      }
+      window.infoOpenTwilio = function(id){ var r=el('info-call-'+id); if(r && r.style.display==='none') r.style.display=''; var box=el('tw-'+id); if(box) box.scrollIntoView({block:'nearest'}); };
       function callDetail(c){
         var full=(c.full_transcript||'').trim();
         var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+esc(c.summary)+'</div>' : '';
         var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><div style="margin-top:4px;">'+recPlayer(c.id)+'</div></div>' : '';
-        var ftInner = full ? fmtFull(full) : (c.audio_url ? '<span style="color:var(--text2);">Klikni na ikonu 📄 pro vytvoření celého přepisu (Whisper + rozlišení mluvčích).</span>' : '<span style="color:var(--text2);">Bez nahrávky k přepisu.</span>');
-        var ft = '<div style="font-size:13px;"><b>Celý přepis:</b> <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\',true)">'+(full?'🔁 Přepsat znovu':'📝 Vytvořit')+'</button><div id="ft-'+c.id+'" data-has="'+(full?'1':'')+'" style="margin-top:6px;">'+ftInner+'</div></div>';
-        return s + transferDetail(c) + smsDetail(c) + audio + ft;
+        // 1) Přepis z Twilia — zdarma, jen část AI ↔ zákazník (technik se přes ConversationRelay nepřepisuje).
+        var tw = '<div style="font-size:13px;margin-bottom:12px;border-left:3px solid #22d3ee;padding-left:10px;"><b>Přepis Twilio</b> <span style="color:var(--text2);">(živý, zdarma — AI ↔ zákazník)</span><div id="tw-'+c.id+'" style="margin-top:6px;">'+fmtTwilio(c.transcript)+'</div></div>';
+        // 2) Kompletní přepis — OpenAI Whisper z nahrávky (vč. technika).
+        var ftInner = full ? fmtFull(full) : (c.audio_url ? '<span style="color:var(--text2);">Klikni na 📝 Vytvořit pro kompletní přepis (OpenAI Whisper + rozlišení mluvčích, vč. technika).</span>' : '<span style="color:var(--text2);">Bez nahrávky k přepisu.</span>');
+        var ft = '<div style="font-size:13px;border-left:3px solid #eab308;padding-left:10px;"><b>Kompletní přepis</b> <span style="color:var(--text2);">(OpenAI Whisper — vč. technika)</span> <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\',true)">'+(full?'🔁 Přepsat znovu':'📝 Vytvořit')+'</button><div id="ft-'+c.id+'" data-has="'+(full?'1':'')+'" style="margin-top:6px;">'+ftInner+'</div></div>';
+        return s + transferDetail(c) + smsDetail(c) + audio + tw + ft;
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
       // Časová osa hovorů jednoho čísla (klik na číslo v tabulce).
