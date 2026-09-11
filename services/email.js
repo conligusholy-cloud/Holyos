@@ -57,7 +57,7 @@ function escapeHtml(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand, trackingPixel, flyerUrl }) {
+function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand, trackingPixel, flyerUrl, rawHtml }) {
   const pixelImg = trackingPixel ? `<img src="${escapeHtml(trackingPixel)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden;">` : '';
   const appUrl = process.env.APP_URL || '';
   const fullLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + link : link);
@@ -156,7 +156,9 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
 
   // ── Best Series / Výběry brand (bez HolyOS) ───────────────────────────────
   if (brand === 'vybery' || brand === 'bestseries') {
-    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    // rawHtml = hotový (důvěryhodný) HTML obsah sestavený serverem → neescapuje se.
+    const bodyHtml = rawHtml ? String(rawHtml) : (body ? escapeHtml(body).replace(/\n/g, '<br>') : '');
+    const subtitle = brand === 'vybery' ? 'Výběry' : '';
     const bLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + (link || '') : link);
     return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
@@ -168,7 +170,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
         <tr><td style="padding:28px 34px 20px;border-bottom:1px solid #222228;">
           <div style="display:inline-block;width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#e6cf92,#c9a24b);color:#241c05;text-align:center;line-height:34px;font-weight:900;font-size:17px;vertical-align:middle;">B</div>
           <span style="font-size:18px;font-weight:800;letter-spacing:.04em;color:#f4f4f6;margin-left:10px;vertical-align:middle;">BEST SERIES</span>
-          <span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#c9a24b;margin-left:8px;vertical-align:middle;">Výběry</span>
+          ${subtitle ? `<span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#c9a24b;margin-left:8px;vertical-align:middle;">${escapeHtml(subtitle)}</span>` : ''}
         </td></tr>
         <tr><td style="padding:28px 34px 8px;">
           <div style="font-size:22px;font-weight:600;color:#f4f4f6;line-height:1.3;">${escapeHtml(title || '')}</div>
@@ -243,7 +245,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
@@ -252,7 +254,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
     try {
       const msGraph = require('./ms-graph-client');
       if (msGraph.isConfigured && msGraph.isConfigured()) {
-        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl });
+        const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml });
         await msGraph.sendMailAs(from, {
           to,
           cc: cc || undefined,
@@ -288,7 +290,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
       replyTo: replyTo || undefined,
       subject: subject || 'HolyOS — notifikace',
       text: body ? body + (link ? `\n\n${link}` : '') : '',
-      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl }),
+      html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }),
     };
     if (Array.isArray(attachments) && attachments.length > 0) {
       mailOpts.attachments = attachments;

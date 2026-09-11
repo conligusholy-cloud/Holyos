@@ -1001,11 +1001,18 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
       + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>';
     const { sendMail } = require('../services/email');
-    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || undefined;
+    // Odesílatel = pracovní e-mail přihlášeného (Graph send-as → ukáže se jako Best Series),
+    // NIKDY ne Compounder. Fallback: INFOLINKA_MAIL_FROM / SMTP_FROM.
+    let fromUpn = null;
+    try {
+      const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true } });
+      if (pp && pp.work_email) fromUpn = pp.work_email;
+    } catch (_) { /* fallback níže */ }
+    const from = fromUpn || process.env.INFOLINKA_MAIL_FROM || process.env.SMTP_FROM || undefined;
     const recipients = []; const missingEmail = [];
     for (const p of people) {
       if (!p.email) { missingEmail.push(pmap[p.id].name); continue; }
-      try { await sendMail({ to: p.email, from, fromName: 'HolyOS — Infolinka', subject: 'Rozpis směn na Infolince', body: bodyHtml }); recipients.push(p.email); }
+      try { await sendMail({ to: p.email, from, fromName: 'Best Series', brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml }); recipients.push(p.email); }
       catch (e) { console.warn('[voice] shift email', p.email, e.message); }
     }
     res.json({ ok: true, sent: recipients.length, recipients, missingEmail });
