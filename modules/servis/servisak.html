@@ -120,12 +120,15 @@
                   var kmv=j.routes[0].distance/1000, min=Math.round(j.routes[0].duration/60);
                   out.style.color='#22c55e'; out.textContent='🚗 '+kmv.toFixed(1)+' km · ~'+min+' min autem';
                   if(km && !km.value) km.value=kmv.toFixed(1);
+                  window.__routeInfo={ destLat:dla, destLon:dlo, km:Math.round(kmv*10)/10, min:min };
                 } else { throw new Error('no route'); }
               })
               .catch(function(){
                 var straight=haversineKm(oc.lat,oc.lon,dla,dlo);
+                var em=Math.max(1,Math.round(straight/50*60)); // odhad ~50 km/h
                 out.style.color='#f59e0b'; out.textContent='📏 ~'+straight.toFixed(1)+' km vzdušnou čarou (trasu se nepodařilo spočítat)';
                 if(km && !km.value) km.value=straight.toFixed(1);
+                window.__routeInfo={ destLat:dla, destLon:dlo, km:Math.round(straight*10)/10, min:em };
               });
           }).catch(function(){ out.style.color='#f59e0b'; out.textContent='Vzdálenost se nepodařilo spočítat — km zadej ručně.'; });
         };
@@ -151,7 +154,7 @@
         };
         window.__loadGeoOrigin = function(){
           var orig=document.getElementById('t-origin'), msg=document.getElementById('t-geo-msg'), btn=document.getElementById('t-geo');
-          if(!navigator.geolocation){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Tento prohlížeč GPS nepodporuje — zadej místo ručně.'; } window.__enableManualOrigin(); return; }
+          if(!navigator.geolocation){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Tento prohlížeč GPS nepodporuje — poloha se nedá načíst.'; } return; }
           // Zpět na GPS režim (readonly) při novém pokusu.
           if(orig){ orig.readOnly=true; orig.style.cursor='not-allowed'; orig.style.opacity='.9'; orig.value=''; orig.placeholder='Načítá se z GPS…'; }
           if(btn) btn.disabled=true; window.__originCoords=null; if(msg){ msg.style.color='#8ea1b3'; msg.textContent='Zjišťuji polohu z GPS…'; }
@@ -173,11 +176,10 @@
             }
             if(msg){
               msg.style.color='#ef4444';
-              if(code===1) msg.innerHTML='🚫 Přístup k poloze byl zamítnut. Prohlížeč se už znovu nezeptá — povol polohu pro tento web (v Safari: „aA" v adresním řádku → Poloha → Povolit; v Chrome: 🔒 → Oprávnění), pak klikni „Načíst polohu znovu". Nebo zadej místo ručně.';
-              else if(code===2) msg.textContent='Poloha není dostupná (slabý signál). Zkus to venku a klikni znovu, nebo zadej ručně.';
-              else msg.textContent='Polohu se nepodařilo získat. Klikni znovu, nebo zadej místo ručně.';
+              if(code===1) msg.innerHTML='🚫 Přístup k poloze byl zamítnut. Povol polohu pro tento web (v Safari: „aA" v adresním řádku → Poloha → Povolit; v Chrome: 🔒 → Oprávnění), pak klikni „Načíst polohu znovu".';
+              else if(code===2) msg.textContent='Poloha není dostupná (slabý signál). Zkus to venku a klikni „Načíst polohu znovu".';
+              else msg.textContent='Polohu se nepodařilo získat. Klikni „Načíst polohu znovu".';
             }
-            window.__enableManualOrigin(); // vždy nabídni ruční zadání, ať se dá pokračovat
           };
           window.__geoLowTried=false;
           navigator.geolocation.getCurrentPosition(onPos, onErr, { enableHighAccuracy:true, timeout:12000, maximumAge:0 });
@@ -301,6 +303,10 @@
       if(!dest){ m.className='msg err'; m.textContent='Vyplň, kam jedeš (místo zásahu).'; return; }
       var kmv=$('t-km').value.trim(); var body={ origin:origin, destination:dest, note:$('t-note').value.trim()||null };
       if(kmv!==''){ var n=Number(kmv.replace(',','.')); if(!isNaN(n)) body.km=n; }
+      // Souřadnice + trasa pro mapu Kontrola týmu (nepovinné).
+      var oc=window.__originCoords, ri=window.__routeInfo;
+      if(oc){ body.origin_lat=oc.lat; body.origin_lon=oc.lon; }
+      if(ri){ body.dest_lat=ri.destLat; body.dest_lon=ri.destLon; if(ri.km!=null) body.distance_km=ri.km; if(ri.min!=null) body.duration_min=ri.min; }
       var btn=$('t-go'); btn.disabled=true; btn.textContent='Odesílám…';
       api(API+'/requests/'+acceptId+'/accept',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
         .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
