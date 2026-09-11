@@ -813,9 +813,36 @@ async function _attachAssignees(rows) {
     const users = await prisma.user.findMany({ where: { id: { in: uids } }, select: { id: true, display_name: true, username: true } });
     users.forEach((u) => { umap[u.id] = u.display_name || u.username || ('#' + u.id); });
   }
+  // Časy z cesty (poslední cesta k požadavku): odhad vs. realita pro cestu i práci.
+  const tmap = {};
+  try {
+    const rqIds = rows.map((r) => r.id).filter(Boolean);
+    if (rqIds.length && prisma.serviceTrip) {
+      const trips = await prisma.serviceTrip.findMany({
+        where: { request_id: { in: rqIds } },
+        orderBy: { started_at: 'asc' },
+        select: { request_id: true, started_at: true, repair_started_at: true, return_started_at: true, duration_min: true, est_repair_min: true },
+      });
+      const diffMin = (a, b) => (a && b) ? Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : null;
+      trips.forEach((t) => { tmap[t.request_id] = t; }); // poslední (nejnovější) přepíše
+      Object.keys(tmap).forEach((k) => {
+        const t = tmap[k];
+        tmap[k] = {
+          est_travel_min: t.duration_min != null ? t.duration_min : null,
+          real_travel_min: diffMin(t.started_at, t.repair_started_at),
+          est_work_min: t.est_repair_min != null ? t.est_repair_min : null,
+          real_work_min: diffMin(t.repair_started_at, t.return_started_at),
+        };
+      });
+    }
+  } catch (e) { console.warn('[service] attach trip times:', e.message); }
   return rows.map((r) => Object.assign({}, r, {
     assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null,
     created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,
+    est_travel_min: tmap[r.id] ? tmap[r.id].est_travel_min : null,
+    real_travel_min: tmap[r.id] ? tmap[r.id].real_travel_min : null,
+    est_work_min: tmap[r.id] ? tmap[r.id].est_work_min : null,
+    real_work_min: tmap[r.id] ? tmap[r.id].real_work_min : null,
   }));
 }
 

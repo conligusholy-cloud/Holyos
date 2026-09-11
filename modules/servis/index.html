@@ -633,9 +633,9 @@
         <div style="overflow-x:auto">
           <table class="data-table" id="sr-table">
             <thead><tr>
-              <th>Požadavek</th><th>Úkon / úkol</th><th>Servis objednal</th><th>Stav</th><th>Řešitel</th><th>Způsob řešení</th><th>Vytvořeno</th><th></th>
+              <th>Požadavek</th><th>Úkon / úkol</th><th>Servis objednal</th><th>Stav</th><th>Řešitel</th><th title="odhad / reálný čas jízdy">Čas cesty<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th title="odhad / reálný čas opravy">Čas práce<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th>Způsob řešení</th><th>Vytvořeno</th><th></th>
             </tr></thead>
-            <tbody id="sr-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
+            <tbody id="sr-tbody"><tr><td colspan="10" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1607,9 +1607,15 @@
       });
     }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
+    function erCell(est,real){
+      var e=(est!=null)?(est+''):'—', r=(real!=null)?(real+''):'—';
+      var over=(est!=null&&real!=null&&real>est);
+      if(est==null&&real==null) return '<td style="color:var(--text2)">—</td>';
+      return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(over?'#ef4444':'#22c55e')+'">'+r+'</b> min</td>';
+    }
     function render(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="10" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var st=STL[r.status]||['?','badge-draft']; var ukon=[r.action,r.task].filter(Boolean).join(' · ');
         return '<tr>'+
@@ -1618,6 +1624,8 @@
           '<td>'+esc(r.ordered_by||'—')+'</td>'+
           '<td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
           '<td>'+esc(r.assignee_name||'—')+'</td>'+
+          erCell(r.est_travel_min, r.real_travel_min)+
+          erCell(r.est_work_min, r.real_work_min)+
           '<td style="color:var(--text2)">'+esc(r.resolution||'—')+'</td>'+
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.created_at)+'</td>'+
           '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
@@ -1627,7 +1635,7 @@
     }
     function load(){
       var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
-      fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+      fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="10" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
     }
     function openModal(row){
       row=row||{}; var isNew=!row.id;
