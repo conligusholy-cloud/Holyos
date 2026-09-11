@@ -1591,6 +1591,9 @@
       function close(){ ov.remove(); }
       ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
       ov.querySelector('#sr-cancel').addEventListener('click',close);
+      // Řešitele vždy načti čerstvě ze servisního týmu (ozubené kolečko), ať dropdown
+      // ukáže jen členy týmu i když se tým změnil po otevření sekce.
+      if(!isNew){ loadSolvers().then(function(){ var sel=ov.querySelector('#sr-assignee'); if(sel) sel.innerHTML=peopleOptions(row.assignee_id); }); }
       var delBtn=ov.querySelector('#sr-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat požadavek?')) return; fetchJSON(API+'/requests/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sr-save').addEventListener('click',function(){
         var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };
