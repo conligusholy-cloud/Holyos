@@ -501,15 +501,28 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       renderSidebar('servis');
-      // Přepínání sekcí nejvyšší úrovně (Hugo | Infolinka | …)
+      // Přepínání sekcí nejvyšší úrovně (Hugo | Infolinka | …).
+      // Aktivní sekci si pamatujeme (localStorage), ať po refreshi zůstaneš na stejné.
+      var SEC_KEY = 'servis_active_section';
+      function activateSection(sec) {
+        var btn = document.querySelector('.section-tab[data-section="' + sec + '"]');
+        if (!btn) { sec = 'hugo'; btn = document.querySelector('.section-tab[data-section="hugo"]'); }
+        if (!btn) return;
+        document.querySelectorAll('.section-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
+        document.querySelectorAll('.section-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'section-' + sec); });
+        if (sec === 'infolinka' && window.infoInit) window.infoInit();
+      }
       document.querySelectorAll('.section-tab').forEach(function(btn) {
         btn.addEventListener('click', function() {
           var sec = btn.dataset.section;
-          document.querySelectorAll('.section-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
-          document.querySelectorAll('.section-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'section-' + sec); });
-          if (sec === 'infolinka' && window.infoInit) window.infoInit();
+          try { localStorage.setItem(SEC_KEY, sec); } catch (e) {}
+          activateSection(sec);
         });
       });
+      // Po načtení obnov naposledy otevřenou sekci.
+      var saved = 'hugo';
+      try { saved = localStorage.getItem(SEC_KEY) || 'hugo'; } catch (e) {}
+      if (saved && saved !== 'hugo') activateSection(saved);
     });
   </script>
 
