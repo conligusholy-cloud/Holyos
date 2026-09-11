@@ -307,6 +307,31 @@ async function ownerPhoneForPhone(phone) {
 // Twilio posílá application/x-www-form-urlencoded
 const form = express.urlencoded({ extended: false });
 
+// Spustí nahrávání příchozího hovoru přes REST. Voláno AŽ po odeslání TwiML
+// (fire-and-forget) a s opakováním — při webhooku hovor ještě nemusí být
+// „in-progress" (Twilio vrací 21220), tak zkusíme znovu za 1,5 a 4 s.
+function startInboundRecording(sid) {
+  if (!sid) return;
+  let c;
+  try { c = require('../services/voice/outbound').client(); } catch (e) { c = null; }
+  if (!c) { console.warn('[voice] start nahrávky (příchozí): Twilio klient není k dispozici'); return; }
+  const delays = [0, 1500, 4000];
+  (function tryOnce(i) {
+    if (i >= delays.length) return;
+    setTimeout(function () {
+      c.calls(sid).recordings.create({
+        recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,
+        recordingStatusCallbackEvent: ['completed'],
+      }).then(function () {
+        console.log('[voice] nahrávka spuštěna (příchozí) ' + sid);
+      }).catch(function (e) {
+        console.warn('[voice] start nahrávky (příchozí) pokus ' + (i + 1) + '/' + delays.length + ':', e && e.message);
+        tryOnce(i + 1);
+      });
+    }, delays[i]);
+  })(0);
+}
+
 // POST /api/voice/incoming — první webhook příchozího hovoru.
 // Vrací TwiML, které předá hovor ConversationRelay (řeč↔text) a napojí ho na náš WS.
 router.post('/incoming', form, async (req, res) => {
@@ -314,20 +339,7 @@ router.post('/incoming', form, async (req, res) => {
   const calledNumber = (req.body && (req.body.To || req.body.Called)) || '';
   const line = await lineFromCalledNumber(calledNumber);
   const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound&line=${encodeURIComponent(line)}`;
-  // Zapni nahrávání příchozího hovoru (odchozí se nahrávají už při vytvoření).
-  // <Connect>/ConversationRelay nemá record atribut → spustíme nahrávku přes REST.
   const sid = req.body && req.body.CallSid;
-  if (sid) {
-    try {
-      const c = require('../services/voice/outbound').client();
-      if (c) {
-        await c.calls(sid).recordings.create({
-          recordingStatusCallback: `${PUBLIC_BASE}/api/voice/recording`,
-          recordingStatusCallbackEvent: ['completed'],
-        });
-      }
-    } catch (e) { console.warn('[voice] start nahrávky (příchozí):', e.message); }
-  }
   let greeting = '';
   try {
     const get = settings ? settings.getSetting : null;
@@ -339,6 +351,9 @@ router.post('/incoming', form, async (req, res) => {
   // wg=1 → WS ví, že úvod řekne Twilio (welcomeGreeting), takže ho sám neposílá.
   // line=… → WS načte scénář/podklady správné linky a uloží ho k hovoru.
   res.type('text/xml').send(twimlConnect(relayUrl('wg=1&line=' + encodeURIComponent(line)), action, greeting));
+  // Nahrávání spustíme až teď (po odeslání TwiML) a s opakováním — hovor v tuto
+  // chvíli přechází do „in-progress", takže recordings.create už projde.
+  startInboundRecording(sid);
 });
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
