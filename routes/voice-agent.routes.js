@@ -684,10 +684,11 @@ router.post('/recording', form, async (req, res) => {
           });
         } catch (e) { console.warn('[voice] recording pre-create:', e.message); }
       }
-      // Předstáhni nahrávku na disk, ať je hned připravená k přehrání (non-fatal).
+      // Předstáhni nahrávku na disk (ať je hned k přehrání) a rovnou přepiš celý
+      // hovor přes Whisper (vč. části zákazník–technik). Obojí non-fatal.
       try {
         const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true, line: true } });
-        if (call) ensureLocalRecording(call.id, url, call.line).catch(() => {});
+        if (call) ensureLocalRecording(call.id, url, call.line).then(() => maybeTranscribeCall(call.id)).catch(() => {});
       } catch (_) { /* nevadí, stáhne se při prvním přehrání */ }
     }
   } catch (e) {
@@ -746,6 +747,27 @@ async function ensureLocalRecording(callId, audioUrl, line) {
   fs.renameSync(tmp, file);
   console.log('[voice] nahrávka ' + callId + ' stažena: ' + buf.length + ' B (remote ' + remoteSize + ', lokálně bylo ' + localSize + ')');
   return file;
+}
+
+// Přepíše celou nahrávku hovoru přes Whisper a uloží do full_transcript.
+// force=false → přeskočí, pokud přepis už existuje. Non-fatal.
+async function transcribeCall(callId, { force = false } = {}) {
+  if (!prisma.voiceCall) return null;
+  let whisper;
+  try { whisper = require('../services/voice/whisper'); } catch (_) { return null; }
+  if (!whisper.isConfigured()) return null;
+  const call = await prisma.voiceCall.findUnique({ where: { id: callId }, select: { id: true, audio_url: true, line: true, full_transcript: true } });
+  if (!call || !call.audio_url) return null;
+  if (call.full_transcript && !force) return call.full_transcript;
+  const file = await ensureLocalRecording(call.id, call.audio_url, call.line);
+  const text = await whisper.transcribeFile(file, { language: 'cs' });
+  await prisma.voiceCall.update({ where: { id: call.id }, data: { full_transcript: text || '', full_transcript_at: new Date() } });
+  console.log('[voice] Whisper přepis ' + callId + ': ' + (text ? text.length : 0) + ' znaků');
+  return text;
+}
+async function maybeTranscribeCall(callId) {
+  try { await transcribeCall(callId, { force: false }); }
+  catch (e) { console.warn('[voice] Whisper přepis selhal (' + callId + '):', e.message); }
 }
 
 // GET /api/voice/recording/:callId — nahrávku stáhneme jednou na disk a servírujeme
@@ -829,6 +851,8 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         transfer_log: true,
         sms_log: true,
         callback_log: true,
+        full_transcript: true,
+        full_transcript_at: true,
       },
     });
     res.json(calls);
@@ -855,6 +879,21 @@ router.post('/calls/:id/callback', requireAuth, async (req, res, next) => {
     await prisma.voiceCall.update({ where: { id: call.id }, data: { callback_log: log } });
     res.json({ ok: true, callback_log: log });
   } catch (err) { next(err); }
+});
+
+// POST /api/voice/calls/:id/transcribe — přepíše celou nahrávku (Whisper) na text.
+// Použije se pro doplnění přepisu u starších hovorů nebo když auto-přepis selhal.
+router.post('/calls/:id/transcribe', requireAuth, async (req, res, next) => {
+  try {
+    let whisper; try { whisper = require('../services/voice/whisper'); } catch (_) { whisper = null; }
+    if (!whisper || !whisper.isConfigured()) return res.status(400).json({ error: 'Přepis není nastavený (chybí OPENAI_API_KEY v Railway).' });
+    const force = String((req.query && req.query.force) || '') === '1';
+    const text = await transcribeCall(req.params.id, { force });
+    if (text == null) return res.status(404).json({ error: 'Hovor nemá nahrávku k přepisu.' });
+    res.json({ ok: true, full_transcript: text });
+  } catch (err) {
+    res.status(500).json({ error: (err && err.message) || 'Přepis selhal' });
+  }
 });
 
 // GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).
