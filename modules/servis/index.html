@@ -1971,25 +1971,51 @@
     var API='/api/service';
     var map=null, layer=null, trips=[], animTimer=null, pollTimer=null, markers={};
     function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    var geoCache={}; // request/trip id → { line:[[lat,lon]...], cum:[...], total:km }
     function ensureMap(){
       if(map) return true;
       if(typeof L==='undefined'){ return false; }
       var el=document.getElementById('km-map'); if(!el) return false;
       map=L.map(el,{ scrollWheelZoom:true }).setView([49.8,15.5], 7); // ČR
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{ maxZoom:20, maxNativeZoom:19, attribution:'© OpenStreetMap, © CARTO' }).addTo(map);
+      // Esri street tiles — bez API klíče, spolehlivé (OSM veřejné i Carto blokovaly/vyžadují klíč).
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{ maxZoom:19, attribution:'Tiles © Esri' }).addTo(map);
       layer=L.layerGroup().addTo(map);
       return true;
     }
-    // Figurka technika (auto) jako divIcon.
     function techIcon(label){
       return L.divIcon({ className:'', html:'<div style="font-size:26px;line-height:26px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">🚐</div>'+(label?('<div style="font-size:10px;color:#fff;background:rgba(15,23,32,.85);border:1px solid #26333f;border-radius:8px;padding:1px 5px;margin-top:2px;white-space:nowrap;transform:translateX(-40%);">'+esc(label)+'</div>'):''), iconSize:[26,26], iconAnchor:[13,13] });
     }
     function dot(color){ return L.divIcon({ className:'', html:'<div style="width:12px;height:12px;border-radius:50%;background:'+color+';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5);"></div>', iconSize:[12,12], iconAnchor:[6,6] }); }
-    // Frakce projeté trasy 0..1 podle času od přijetí a doby jízdy.
     function progress(t){
       var dur=(t.duration_min||0)*60000; if(dur<=0) return 1;
       var el=Date.now()-new Date(t.started_at).getTime();
       var f=el/dur; if(f<0) f=0; if(f>1) f=1; return f;
+    }
+    function toRad(d){ return d*Math.PI/180; }
+    function hKm(a,b,c,d){ var R=6371,dLa=toRad(c-a),dLo=toRad(d-b); var x=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLo/2)*Math.sin(dLo/2); return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)); }
+    // Připraví kumulativní délky pro interpolaci po trase.
+    function prepGeo(line){
+      var cum=[0], tot=0;
+      for(var i=1;i<line.length;i++){ tot+=hKm(line[i-1][0],line[i-1][1],line[i][0],line[i][1]); cum.push(tot); }
+      return { line:line, cum:cum, total:tot||0.0001 };
+    }
+    // Bod na trase ve frakci f (0..1) podle délky.
+    function pointAt(g,f){
+      var target=g.total*f, cum=g.cum, line=g.line;
+      for(var i=1;i<line.length;i++){ if(cum[i]>=target){ var segLen=cum[i]-cum[i-1]||0.0001, r=(target-cum[i-1])/segLen; return [ line[i-1][0]+(line[i][0]-line[i-1][0])*r, line[i-1][1]+(line[i][1]-line[i-1][1])*r ]; } }
+      return line[line.length-1];
+    }
+    // Načte reálnou silniční trasu z OSRM (jednou na trip), pak překreslí.
+    function fetchGeo(t){
+      if(geoCache[t.id]!==undefined) return; geoCache[t.id]=null; // probíhá
+      var url='https://router.project-osrm.org/route/v1/driving/'+t.origin_lon+','+t.origin_lat+';'+t.dest_lon+','+t.dest_lat+'?overview=full&geometries=geojson';
+      fetch(url).then(function(r){ return r.ok?r.json():null; }).then(function(j){
+        if(j&&j.routes&&j.routes[0]&&j.routes[0].geometry){
+          var coords=j.routes[0].geometry.coordinates.map(function(c){ return [c[1],c[0]]; }); // lon,lat → lat,lon
+          geoCache[t.id]=prepGeo(coords);
+        } else { geoCache[t.id]=prepGeo([[t.origin_lat,t.origin_lon],[t.dest_lat,t.dest_lon]]); }
+        draw();
+      }).catch(function(){ geoCache[t.id]=prepGeo([[t.origin_lat,t.origin_lon],[t.dest_lat,t.dest_lon]]); draw(); });
     }
     function draw(){
       if(!ensureMap()) return;
@@ -1999,12 +2025,15 @@
         if(t.origin_lat==null||t.dest_lat==null) return;
         var o=[t.origin_lat,t.origin_lon], d=[t.dest_lat,t.dest_lon];
         pts.push(o,d);
-        L.polyline([o,d],{ color:'#22d3ee', weight:3, opacity:.7, dashArray:'6 6' }).addTo(layer);
+        var g=geoCache[t.id];
+        if(g===undefined){ fetchGeo(t); } // spustí načtení trasy
+        var lineCoords=(g&&g.line)?g.line:[o,d];
+        L.polyline(lineCoords,{ color:'#22d3ee', weight:4, opacity:.85 }).addTo(layer);
         L.marker(o,{ icon:dot('#8ea1b3') }).addTo(layer).bindPopup('Výjezd: '+esc(t.origin));
         L.marker(d,{ icon:dot('#f59e0b') }).addTo(layer).bindPopup('Cíl: '+esc(t.destination)+(t.problem?('<br>'+esc(t.problem)):''));
         markers[t.id]=L.marker(o,{ icon:techIcon(t.tech) }).addTo(layer);
       });
-      if(pts.length){ try{ map.fitBounds(pts,{ padding:[40,40], maxZoom:12 }); }catch(_){}}
+      if(pts.length){ try{ map.fitBounds(pts,{ padding:[40,40], maxZoom:13 }); }catch(_){}}
       var empt=document.getElementById('km-empty'); if(empt) empt.style.display=trips.length?'none':'';
       animate();
     }
@@ -2012,16 +2041,19 @@
       trips.forEach(function(t){
         var m=markers[t.id]; if(!m||t.origin_lat==null||t.dest_lat==null) return;
         var f=t.arrived?1:progress(t);
-        var la=t.origin_lat+(t.dest_lat-t.origin_lat)*f, lo=t.origin_lon+(t.dest_lon-t.origin_lon)*f;
-        m.setLatLng([la,lo]);
+        var g=geoCache[t.id];
+        var pos = (g&&g.line) ? pointAt(g,f) : [ t.origin_lat+(t.dest_lat-t.origin_lat)*f, t.origin_lon+(t.dest_lon-t.origin_lon)*f ];
+        m.setLatLng(pos);
         var rem=Math.max(0,Math.round((t.duration_min||0)*(1-f)));
-        var lbl=t.tech+(f>=1?' · na místě':(' · '+rem+' min'));
-        m.setIcon(techIcon(lbl));
+        m.setIcon(techIcon(t.tech+(f>=1?' · na místě':(' · '+rem+' min'))));
       });
     }
     function load(){
       fetch(API+'/trips/active',{credentials:'include'}).then(function(r){ return r.ok?r.json():[]; }).then(function(list){
-        trips=Array.isArray(list)?list:[]; draw();
+        var next=Array.isArray(list)?list:[];
+        // Zahoď cache tras pro cesty, které už nejsou aktivní.
+        var ids={}; next.forEach(function(t){ ids[t.id]=1; }); Object.keys(geoCache).forEach(function(k){ if(!ids[k]) delete geoCache[k]; });
+        trips=next; draw();
       }).catch(function(){});
     }
     window.kmEnsure=function(){
