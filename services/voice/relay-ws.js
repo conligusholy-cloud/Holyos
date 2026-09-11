@@ -186,6 +186,25 @@ function aiPromisesTransfer(text) {
   return /(prepoj[ií]m|prepoj[ií]|prepojuji|prepojim vas|preda[mv]\w* vas|predam vas|spoj[ií]m vas|spojuji vas|prepojim vas na koleg\w*|prepojim vas na obchodnik\w*)/.test(t);
 }
 
+// Rozpozná, že AI ve své odpovědi slíbila odeslat SMS s odkazem na formulář.
+function aiPromisesFormSms(text) {
+  const t = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (!t) return false;
+  // Musí zaznít akce poslání/odeslání SMS/odkazu/formuláře.
+  const send = /(posl[ií]?u|posil[aá]m|odesl[ií]?u|odesil[aá]m|zasl[ií]?u|zas[ií]l[aá]m|dostanete|obdrz[ií]te|prijde vam|prislu vam)/;
+  const obj = /(sms|odkaz|link|formular|formulari)/;
+  return send.test(t) && obj.test(t);
+}
+
+// Sestaví text SMS z šablony a odkazu ({odkaz} placeholder, jinak odkaz na konec).
+function composeFormSms(tpl, link) {
+  const t = String(tpl || '').trim();
+  const l = String(link || '').trim();
+  if (!t) return l || null;
+  if (t.includes('{odkaz}')) return t.replace(/\{odkaz\}/g, l).trim();
+  return l ? (t + ' ' + l) : t;
+}
+
 function attach(server) {
   const wss = new WebSocketServer({ server, path: WS_PATH });
 
@@ -233,6 +252,7 @@ function attach(server) {
       startedAt: new Date(),
       mode,
       handedOff: false,
+      formSmsSent: false,
       targetId,
       target: null,
       campaign: null,
@@ -403,6 +423,27 @@ function attach(server) {
           if (!state.handedOff && transferAllowed && aiPromisesTransfer(text)) {
             console.log('[voice] AI slíbila přepojení → handoff po doříkání.');
             startHandoff(text);
+          }
+          // 3) SMS s odkazem na formulář: když AI slíbí poslat SMS/odkaz, odešli ji
+          //    volajícímu přes GoSMS (jednou za hovor). Neblokuje hovor.
+          if (!state.formSmsSent && state.from && aiPromisesFormSms(text)) {
+            state.formSmsSent = true;
+            (async () => {
+              try {
+                let tpl = '', link = '';
+                if (getSetting) {
+                  tpl = (await getSetting(lineKey('sms_form_text'))) || '';
+                  link = (await getSetting(lineKey('sms_form_link'))) || '';
+                }
+                const body = composeFormSms(tpl, link);
+                if (!body) { console.warn('[voice] SMS formulář: prázdný text i odkaz → nic neposílám.'); return; }
+                await require('./sms').sendSms(state.from, body, { context: 'form_link', callSid: state.callSid, line });
+                console.log('[voice] SMS s odkazem na formulář odeslána na ' + state.from);
+              } catch (e) {
+                state.formSmsSent = false; // dovol další pokus, pokud selhalo
+                console.warn('[voice] odeslání SMS s formulářem selhalo:', e.message);
+              }
+            })();
           }
         } catch (e) {
           console.warn('[voice] runTurn selhal:', e.message);

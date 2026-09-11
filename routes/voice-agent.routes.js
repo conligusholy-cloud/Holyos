@@ -876,6 +876,9 @@ router.get('/config', requireAuth, async (req, res, next) => {
     const transfer_inbound_number = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
     const transfer_ring_timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
     const transfer_rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
+    // SMS s odkazem na formulář (posílá AI při hovoru přes GoSMS)
+    const sms_form_text = get ? (await get(cfgKey(line, 'sms_form_text'))) || '' : '';
+    const sms_form_link = get ? (await get(cfgKey(line, 'sms_form_link'))) || '' : '';
     // Volané číslo mapované na tuto linku (z voice.line_numbers) — pro UI Infolinky.
     let line_number = '';
     try {
@@ -886,7 +889,8 @@ router.get('/config', requireAuth, async (req, res, next) => {
       }
     } catch (_) { /* ignore */ }
     res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, shifts, work_from, work_to, work_person_id, default_from, sms_on_no_answer, sms_text, sms_gateway,
-      transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds });
+      transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds,
+      sms_form_text, sms_form_link });
   } catch (err) {
     next(err);
   }
@@ -963,6 +967,11 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       await settings.setSetting(cfgKey(line, 'transfer_ring_timeout'), String(parseInt(transfer_ring_timeout, 10) || 20), { type: 'string', userId: uid });
     if (req.body.transfer_rounds !== undefined)
       await settings.setSetting(cfgKey(line, 'transfer_rounds'), String(parseInt(req.body.transfer_rounds, 10) || 2), { type: 'string', userId: uid });
+    // SMS s odkazem na formulář (posílá AI během hovoru přes GoSMS)
+    if (req.body.sms_form_text !== undefined)
+      await settings.setSetting(cfgKey(line, 'sms_form_text'), String(req.body.sms_form_text || '').trim(), { type: 'string', userId: uid });
+    if (req.body.sms_form_link !== undefined)
+      await settings.setSetting(cfgKey(line, 'sms_form_link'), String(req.body.sms_form_link || '').trim(), { type: 'string', userId: uid });
     res.json({ ok: true });
   } catch (err) {
     next(err);
