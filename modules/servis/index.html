@@ -1622,7 +1622,7 @@
     document.addEventListener('DOMContentLoaded',function(){
       var newBtn=document.getElementById('sr-new-btn'); if(newBtn) newBtn.addEventListener('click',function(){ openModal(null); });
       var f=document.getElementById('sr-filter-status'); if(f) f.addEventListener('change',load);
-      var settBtn=document.getElementById('sr-settings-btn'); if(settBtn) settBtn.addEventListener('click',function(){ (loaded?Promise.resolve():loadPeople()).then(openSolverSettings); });
+      var settBtn=document.getElementById('sr-settings-btn'); if(settBtn) settBtn.addEventListener('click',function(){ Promise.all([loadPeople(), loadSolvers()]).then(openSolverSettings).catch(openSolverSettings); });
       var loaded=false;
       function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadSolvers(); loadPeople().then(load); }
       window.srEnsure=ensure; // volá se i při obnově sekce po refreshi
