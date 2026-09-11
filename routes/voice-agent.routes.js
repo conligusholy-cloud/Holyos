@@ -835,6 +835,26 @@ router.get('/calls', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).
+router.get('/sms/form-log', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.smsLog) return res.json({ items: [], total: 0, sent: 0, failed: 0 });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const rows = await prisma.smsLog.findMany({
+      where: { context: 'form_link' },
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      select: { id: true, to_number: true, status: true, delivered: true, error: true, created_at: true },
+    });
+    const total = await prisma.smsLog.count({ where: { context: 'form_link' } });
+    const sent = rows.filter((r) => r.status !== 'failed' && r.status !== 'undelivered').length;
+    const failed = rows.filter((r) => r.status === 'failed' || r.status === 'undelivered').length;
+    res.json({ items: rows, total, sent, failed });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── Nastavení příchozí recepční ───────────────────────────────────────────
 router.get('/config', requireAuth, async (req, res, next) => {
   try {
