@@ -762,7 +762,7 @@ async function peopleByIds(ids) {
   // frontend ji odsud nepoužívá a zbytečně by komplikovala serializaci.
   const people = await prisma.person.findMany({
     where: { id: { in: ids } },
-    select: { id: true, first_name: true, last_name: true, phone: true, email: true, work_email: true },
+    select: { id: true, first_name: true, last_name: true, phone: true, email: true },
   });
   const byId = {}; people.forEach((p) => { byId[p.id] = p; });
   // Zachovej pořadí dle uloženého seznamu
@@ -770,7 +770,7 @@ async function peopleByIds(ids) {
     id: p.id,
     name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id),
     phone: (p.phone || '').trim(),
-    email: (p.work_email || p.email || '').trim(),
+    email: (p.email || '').trim(),
     role: '',
   }));
 }

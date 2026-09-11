@@ -372,7 +372,7 @@ async function todaysShiftPeople(line) {
       if (a != null && b != null && cur >= a && cur < b) { const id = parseInt(sh.wperson, 10); if (id) ids.add(id); }
     }
     if (!ids.size) return [];
-    const people = await prisma.person.findMany({ where: { id: { in: Array.from(ids) }, active: { not: false } }, select: { id: true, first_name: true, last_name: true, email: true, work_email: true } });
+    const people = await prisma.person.findMany({ where: { id: { in: Array.from(ids) }, active: { not: false } }, select: { id: true, first_name: true, last_name: true, email: true } });
     return people.map((p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.work_email || p.email || '').trim() }));
   } catch (e) { console.warn('[voice] todaysShiftPeople:', e.message); return []; }
 }
@@ -387,7 +387,7 @@ async function serviceLeaderPeople() {
     ids = Array.isArray(ids) ? ids.filter((n) => Number.isInteger(n) && n > 0) : [];
     let people;
     if (ids.length) {
-      people = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true, email: true, work_email: true } });
+      people = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true, email: true } });
     } else {
       // Fallback: Radek Tichý (vedoucí servisu) + Radek Bečka (ředitel výroby).
       people = await prisma.person.findMany({
@@ -395,7 +395,7 @@ async function serviceLeaderPeople() {
           { AND: [{ first_name: { contains: 'Radek', mode: 'insensitive' } }, { last_name: { contains: 'Tich', mode: 'insensitive' } }] },
           { AND: [{ first_name: { contains: 'Radek', mode: 'insensitive' } }, { last_name: { contains: 'Beč', mode: 'insensitive' } }] },
         ] },
-        select: { id: true, first_name: true, last_name: true, email: true, work_email: true },
+        select: { id: true, first_name: true, last_name: true, email: true },
       });
     }
     return (people || []).map((p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.work_email || p.email || '').trim() }));
@@ -1604,7 +1604,7 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       const per = (req.user && req.user.person) || null;
       if (per) fromUpn = (per.work_email || per.email || '').trim() || null;
       if (!fromUpn) {
-        const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true, email: true } });
+        const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { email: true } });
         if (pp) fromUpn = (pp.work_email || pp.email || '').trim() || null;
       }
       if (!fromUpn && req.user && /@/.test(String(req.user.username || ''))) fromUpn = String(req.user.username).trim();
