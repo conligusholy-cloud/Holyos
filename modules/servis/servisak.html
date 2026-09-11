@@ -97,27 +97,63 @@
       <div id="t-geo-msg" style="font-size:12px;color:var(--text2);margin-top:4px;min-height:14px;"></div>
       <script>
       (function(){
+        window.__originCoords = null; // {lat,lon} z GPS
+        function toRad(d){ return d*Math.PI/180; }
+        function haversineKm(a,b,c,d){ var R=6371,dLa=toRad(c-a),dLo=toRad(d-b); var x=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLo/2)*Math.sin(dLo/2); return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x)); }
+        // Vypočte vzdálenost + dobu jízdy autem z GPS startu do cíle (stroj).
+        window.__computeRoute = function(){
+          var oc=window.__originCoords, dest=(document.getElementById('t-dest')||{}).value||'', out=document.getElementById('t-route'), km=document.getElementById('t-km');
+          if(!out) return;
+          if(!oc || !dest.trim()){ out.textContent=''; return; }
+          out.style.color='#8ea1b3'; out.textContent='Počítám vzdálenost a čas jízdy…';
+          // 1) geokóduj cíl (zkus i variantu bez posledního „ - …")
+          function geocode(q){ return fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=cs&countrycodes=cz&q='+encodeURIComponent(q)).then(function(r){ return r.ok?r.json():[]; }); }
+          var q1=dest.trim(), q2=q1.replace(/\s*[-–]\s*[^-–]+$/,'').trim();
+          geocode(q1).then(function(a){ if(a&&a.length) return a; return q2&&q2!==q1?geocode(q2):[]; }).then(function(a){
+            if(!a||!a.length){ out.style.color='#f59e0b'; out.textContent='📍 Cíl se nepodařilo najít na mapě — km zadej ručně.'; return; }
+            var dla=parseFloat(a[0].lat), dlo=parseFloat(a[0].lon);
+            // 2) trasa autem přes OSRM
+            fetch('https://router.project-osrm.org/route/v1/driving/'+oc.lon+','+oc.lat+';'+dlo+','+dla+'?overview=false')
+              .then(function(r){ return r.ok?r.json():null; })
+              .then(function(j){
+                if(j && j.routes && j.routes[0]){
+                  var kmv=j.routes[0].distance/1000, min=Math.round(j.routes[0].duration/60);
+                  out.style.color='#22c55e'; out.textContent='🚗 '+kmv.toFixed(1)+' km · ~'+min+' min autem';
+                  if(km && !km.value) km.value=kmv.toFixed(1);
+                } else { throw new Error('no route'); }
+              })
+              .catch(function(){
+                var straight=haversineKm(oc.lat,oc.lon,dla,dlo);
+                out.style.color='#f59e0b'; out.textContent='📏 ~'+straight.toFixed(1)+' km vzdušnou čarou (trasu se nepodařilo spočítat)';
+                if(km && !km.value) km.value=straight.toFixed(1);
+              });
+          }).catch(function(){ out.style.color='#f59e0b'; out.textContent='Vzdálenost se nepodařilo spočítat — km zadej ručně.'; });
+        };
         // Poloha výjezdu se bere VÝHRADNĚ z GPS telefonu (pole nejde ručně přepsat).
         window.__loadGeoOrigin = function(){
           var orig=document.getElementById('t-origin'), msg=document.getElementById('t-geo-msg'), btn=document.getElementById('t-geo');
           if(!navigator.geolocation){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Tento telefon/prohlížeč GPS nepodporuje — bez polohy nelze úkol přijmout.'; } return; }
-          if(btn) btn.disabled=true; if(orig) orig.value=''; if(msg){ msg.style.color='#8ea1b3'; msg.textContent='Zjišťuji polohu z GPS…'; }
+          if(btn) btn.disabled=true; if(orig) orig.value=''; window.__originCoords=null; if(msg){ msg.style.color='#8ea1b3'; msg.textContent='Zjišťuji polohu z GPS…'; }
           navigator.geolocation.getCurrentPosition(function(pos){
             var la=pos.coords.latitude, lo=pos.coords.longitude;
+            window.__originCoords={ lat:la, lon:lo };
             fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+la+'&lon='+lo+'&accept-language=cs')
               .then(function(r){ return r.ok?r.json():null; })
               .then(function(j){ if(orig) orig.value=(j&&j.display_name)?j.display_name:(la.toFixed(5)+', '+lo.toFixed(5)); if(msg){ msg.style.color='#22c55e'; msg.textContent='✅ Poloha načtena'; } })
               .catch(function(){ if(orig) orig.value=la.toFixed(5)+', '+lo.toFixed(5); if(msg){ msg.style.color='#22c55e'; msg.textContent='✅ Souřadnice načteny'; } })
-              .then(function(){ if(btn) btn.disabled=false; });
+              .then(function(){ if(btn) btn.disabled=false; if(window.__computeRoute) window.__computeRoute(); });
           }, function(err){
             if(btn) btn.disabled=false; if(msg){ msg.style.color='#ef4444'; msg.textContent='Polohu se nepodařilo získat — povol přístup k poloze a klikni „Načíst polohu znovu".'; }
           }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
         };
         var b=document.getElementById('t-geo'); if(b) b.addEventListener('click', window.__loadGeoOrigin);
+        var dst=document.getElementById('t-dest');
+        if(dst){ var tmr; dst.addEventListener('input', function(){ clearTimeout(tmr); tmr=setTimeout(function(){ if(window.__computeRoute) window.__computeRoute(); }, 700); }); }
       })();
       </script>
       <label>Kam jedeš (místo zásahu) <span class="req">*</span></label>
       <input id="t-dest" autocomplete="off" placeholder="např. prádlomat Tesco Rychnov">
+      <div id="t-route" style="font-size:13px;color:var(--text2);margin-top:6px;min-height:16px;"></div>
       <label>Ujeté km (nepovinné, můžeš doplnit po příjezdu)</label>
       <input id="t-km" type="number" inputmode="decimal" placeholder="např. 24">
       <label>Poznámka k cestě (nepovinné)</label>
