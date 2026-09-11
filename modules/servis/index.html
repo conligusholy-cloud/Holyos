@@ -1628,10 +1628,11 @@
           erCell(r.est_work_min, r.real_work_min)+
           '<td style="color:var(--text2)">'+esc(r.resolution||'—')+'</td>'+
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.created_at)+'</td>'+
-          '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
+          '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button> <button class="btn btn-sm btn-danger" data-del="'+r.id+'" title="Smazat požadavek">🗑</button></td>'+
         '</tr>';
       }).join('');
       tb.querySelectorAll('[data-edit]').forEach(function(b){ b.addEventListener('click',function(){ var row=rows.filter(function(x){return x.id==b.dataset.edit;})[0]; openModal(row); }); });
+      tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ var id=b.dataset.del; var row=rows.filter(function(x){return x.id==id;})[0]||{}; if(!confirm('Opravdu smazat požadavek „'+(row.problem||('#'+id))+'"? Nelze vrátit.')) return; fetchJSON(API+'/requests/'+id,{method:'DELETE'}).then(function(){ load(); }).catch(function(){ alert('Smazání selhalo.'); }); }); });
     }
     function load(){
       var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
