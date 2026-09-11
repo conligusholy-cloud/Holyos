@@ -1025,7 +1025,8 @@
           _pplCharts.push(new Chart(el('info-ppl-chart1').getContext('2d'),{ type:'bar', data:{ labels:labels, datasets:[
             {label:'Přijaté', data:ops.map(function(o){return o.accepted;}), backgroundColor:'#22c55e'},
             {label:'Nevzal to', data:ops.map(function(o){return o.unavailable;}), backgroundColor:'#eab308'},
-            {label:'Obsazeno', data:ops.map(function(o){return o.declined;}), backgroundColor:'#ef4444'}
+            {label:'Obsazeno', data:ops.map(function(o){return o.declined;}), backgroundColor:'#ef4444'},
+            {label:'Chyba', data:ops.map(function(o){return o.failed;}), backgroundColor:'#94a3b8'}
           ]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{stacked:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{stacked:true, beginAtZero:true, ticks:{color:gc,precision:0}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{ labels:{ color:gc } } } } }));
           _pplCharts.push(new Chart(el('info-ppl-chart2').getContext('2d'),{ type:'bar', data:{ labels:labels, datasets:[{ label:'Minuty', data:ops.map(function(o){return Math.round((o.talk_sec||0)/60);}), backgroundColor:'#22d3ee'}]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{beginAtZero:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{display:false} } } }));
         }catch(e){ if(box) box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; }
