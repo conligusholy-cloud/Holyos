@@ -164,6 +164,7 @@ function twimlDial(numbers, timeout, ctx) {
   if (c.mode) q.push('m=' + encodeURIComponent(c.mode));
   if (c.target) q.push('tg=' + encodeURIComponent(c.target));
   if (cidNum) q.push('cid=' + encodeURIComponent(cidNum));
+  if (list[0]) q.push('cur=' + encodeURIComponent(list[0])); // číslo vytáčené TÍMTO <Dial> → /transfer podle DialCallStatus zaloguje výsledek
   const action = xmlAttr(`${PUBLIC_BASE}/api/voice/transfer?${q.join('&')}`);
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
@@ -460,12 +461,43 @@ router.post('/relay-end', form, async (req, res) => {
   }
 });
 
+// Jméno kolegy podle telefonního čísla (Person.phone, shoda na posledních 9 číslic).
+async function nameForPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 6) return '';
+  const tail = digits.slice(-9);
+  try {
+    const people = await prisma.person.findMany({ where: { phone: { contains: tail } }, select: { first_name: true, last_name: true, phone: true }, take: 5 });
+    const p = people.find((x) => String(x.phone || '').replace(/\D/g, '').slice(-9) === tail);
+    if (p) return [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+  } catch (_) { /* neznámý */ }
+  return '';
+}
+
+// Zaznamená pokus o přesměrování k hovoru (koho, kdy, s jakým výsledkem).
+async function logTransferAttempt(callSid, entry) {
+  if (!callSid || !prisma.voiceCall) return;
+  try {
+    const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: callSid }, select: { id: true, transfer_log: true } });
+    if (!call) return;
+    const log = Array.isArray(call.transfer_log) ? call.transfer_log.slice() : [];
+    log.push(entry);
+    await prisma.voiceCall.update({ where: { id: call.id }, data: { transfer_log: log, handoff: true } });
+  } catch (e) { console.warn('[voice] logTransferAttempt:', e.message); }
+}
+
 // POST /api/voice/transfer — sekvenční vytáčení dalších čísel v pořadí (?q=<base64 zbytek>).
 // Twilio sem zavolá po každém <Dial>: když se dovolalo (completed), zavěsíme;
 // jinak zkusíme další číslo ze zbytku; když už žádné není, omluvíme se a zavěsíme.
 router.post('/transfer', form, (req, res) => {
   try {
     const status = ((req.body && req.body.DialCallStatus) || '').toLowerCase();
+    // Zaloguj výsledek právě vytočeného čísla (fire-and-forget, ať nezdržuje TwiML).
+    const cur = req.query.cur ? decodeURIComponent(req.query.cur) : '';
+    const callSid = req.body && req.body.CallSid;
+    if (cur && callSid) {
+      nameForPhone(cur).then((nm) => logTransferAttempt(callSid, { number: cur, name: nm || null, status: status || 'unknown', at: new Date().toISOString() }));
+    }
     if (status === 'completed' || status === 'answered') {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
     }
@@ -765,6 +797,8 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         transcript: true,
         campaign_target_id: true,
         audio_url: true,
+        handoff: true,
+        transfer_log: true,
       },
     });
     res.json(calls);
