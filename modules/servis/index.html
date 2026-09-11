@@ -1639,6 +1639,7 @@
         '<div class="form-row"><label>Foto problému (odkaz)</label><input id="sr-photo" value="'+esc(row.photo_url||'')+'"></div>'+
         '<div class="form-row"><label>Popis problému</label><textarea id="sr-desc" rows="3">'+esc(row.description||'')+'</textarea></div>'+
         '<div class="form-row"><label>Servis objednal *</label><input id="sr-ordered" value="'+esc(row.ordered_by||'')+'"></div>'+
+        '<div class="form-row"><label>Odhad opravy (min) — pro časomíru servisáka</label><input id="sr-est" type="number" min="0" placeholder="např. 45" value="'+(row.est_repair_min!=null?row.est_repair_min:'')+'"></div>'+
         (isNew?'':(
           '<div class="form-grid-2">'+
             '<div class="form-row"><label>Stav</label><select id="sr-status">'+['novy','reseni','vyreseno','zamitnuto'].map(function(s){ return '<option value="'+s+'"'+(row.status===s?' selected':'')+'>'+STL[s][0]+'</option>'; }).join('')+'</select></div>'+
@@ -1662,6 +1663,7 @@
       var delBtn=ov.querySelector('#sr-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat požadavek?')) return; fetchJSON(API+'/requests/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sr-save').addEventListener('click',function(){
         var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };
+        var estv=val('sr-est'); body.est_repair_min = estv!=='' ? (parseInt(estv,10)||0) : null;
         if(!body.problem){ alert('Vyplň Problém na stroji.'); return; }
         if(!body.ordered_by){ alert('Vyplň Servis objednal.'); return; }
         if(!isNew){ body.status=val('sr-status'); var a=val('sr-assignee'); body.assignee_id=a?parseInt(a,10):null; body.resolution=val('sr-resolution'); }

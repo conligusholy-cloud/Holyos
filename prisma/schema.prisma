@@ -4745,6 +4745,7 @@ model ServiceRequest {
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
   resolution  String?  @db.Text           // způsob řešení
+  est_repair_min Int?   // odhadovaný čas vlastní opravy (min) — pro časomíru servisáka
   fix_photo_urls Json?  // fotodokumentace opravy (pole URL) — servisák fotí z telefonu
   created_by_user_id Int?   // kdo požadavek zadal (přihlášený uživatel) — u mobilního formuláře povinné z tokenu
   created_at  DateTime @default(now())
@@ -4774,7 +4775,14 @@ model ServiceTrip {
   distance_km  Decimal? @db.Decimal(8, 1)  // vypočtená vzdálenost trasy
   duration_min Int?                        // vypočtená doba jízdy (min)
   arrived      Boolean  @default(false)    // technik dojel na místo
-  started_at  DateTime  @default(now())    // = čas přijetí úkolu (start jízdy)
+  // Časomíra vlastní opravy + cesta zpět (mapování času k úkolu).
+  repair_started_at  DateTime?             // zahájení vlastní opravy (= příjezd na místo)
+  repair_ended_at    DateTime?             // ukončení vlastní opravy
+  return_started_at  DateTime?             // zahájení cesty zpět / na další úkol
+  return_ended_at    DateTime?             // ukončení cesty zpět
+  return_destination String?  @db.VarChar(255)  // kam se vrací (domů / další úkol)
+  return_km          Decimal? @db.Decimal(8, 1)
+  started_at  DateTime  @default(now())    // = čas přijetí úkolu (start jízdy tam)
   ended_at    DateTime?
   created_at  DateTime  @default(now())
 

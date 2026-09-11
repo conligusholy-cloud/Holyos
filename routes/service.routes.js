@@ -913,7 +913,10 @@ router.get('/trips/active', async (req, res, next) => {
       const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true } });
       reqs.forEach((r) => { rmap[r.id] = r; });
     }
-    const out = trips.map((t) => ({
+    // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = cesta/práce).
+    // Vyřešené/zamítnuté/nové na mapě nechceme.
+    const activeTrips = trips.filter((t) => { const r = rmap[t.request_id]; return r && r.status === 'reseni'; });
+    const out = activeTrips.map((t) => ({
       id: t.id, request_id: t.request_id,
       tech: t.person_id ? (pmap[t.person_id] || ('#' + t.person_id)) : '—',
       origin: t.origin, destination: t.destination,
@@ -945,6 +948,44 @@ router.post('/trips/:id/finish', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Časomíra vlastní opravy + cesta zpět ──
+// POST /trips/:id/repair-start — technik dojel a začíná opravovat (spustí časomíru).
+router.post('/trips/:id/repair-start', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const trip = await prisma.serviceTrip.update({ where: { id }, data: { arrived: true, repair_started_at: new Date() } });
+    res.json({ ok: true, trip });
+  } catch (err) { next(err); }
+});
+// POST /trips/:id/repair-end — konec vlastní opravy.
+router.post('/trips/:id/repair-end', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const trip = await prisma.serviceTrip.update({ where: { id }, data: { repair_ended_at: new Date() } });
+    res.json({ ok: true, trip });
+  } catch (err) { next(err); }
+});
+// POST /trips/:id/return-start { destination } — zahájení cesty zpět / na další úkol.
+router.post('/trips/:id/return-start', express.json(), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const dest = (req.body && req.body.destination) ? String(req.body.destination).slice(0, 255) : null;
+    const trip = await prisma.serviceTrip.update({ where: { id }, data: { return_started_at: new Date(), return_destination: dest } });
+    res.json({ ok: true, trip });
+  } catch (err) { next(err); }
+});
+// POST /trips/:id/return-end { km } — ukončení cesty zpět; tím se celá cesta uzavře (ended_at).
+router.post('/trips/:id/return-end', express.json(), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const data = { return_ended_at: new Date(), ended_at: new Date() };
+    const km = req.body && req.body.km != null ? Number(String(req.body.km).replace(',', '.')) : null;
+    if (km != null && !Number.isNaN(km)) data.return_km = km;
+    const trip = await prisma.serviceTrip.update({ where: { id }, data });
+    res.json({ ok: true, trip });
+  } catch (err) { next(err); }
+});
+
 const requestSchema = z.object({
   problem: z.string().min(1).max(255),
   action: z.string().max(255).optional().nullable(),
@@ -952,6 +993,7 @@ const requestSchema = z.object({
   description: z.string().optional().nullable(),
   photo_url: z.string().max(500).optional().nullable(),
   ordered_by: z.string().min(1).max(120),
+  est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
 router.post('/requests', async (req, res, next) => {
@@ -977,6 +1019,7 @@ const requestPatchSchema = z.object({
   assignee_id: z.number().int().optional().nullable(),
   resolution: z.string().optional().nullable(),
   fix_photo_urls: z.array(z.string().max(500)).optional().nullable(),
+  est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
 router.patch('/requests/:id', async (req, res, next) => {

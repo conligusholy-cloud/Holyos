@@ -240,7 +240,7 @@
         var ord={ novy:0, reseni:1, vyreseno:2, zamitnuto:3 };
         rows.sort(function(a,b){ return (ord[a.status]||9)-(ord[b.status]||9); });
         $('list').innerHTML=rows.map(card).join('');
-        rows.forEach(function(c){ if(c.status==='reseni'||c.status==='vyreseno'||c.status==='zamitnuto') loadTrips(c.id); });
+        rows.forEach(function(c){ if(c.status==='reseni'||c.status==='vyreseno'||c.status==='zamitnuto') loadTrips(c.id, c.est_repair_min); });
       }).catch(function(e){ $('list').innerHTML='<div class="card" style="color:var(--err);">Chyba: '+esc(e.message)+'</div>'; });
     }
 
@@ -280,18 +280,72 @@
         +meta+photo+acts+'<div class="msg" id="m-'+c.id+'"></div></div>';
     }
 
-    function loadTrips(id){
+    // ── Časomíra: helpery ──
+    function ms(a,b){ if(!a) return null; return (b?new Date(b):new Date())-new Date(a); }
+    function fmtHMS(m){ if(m==null) return '—'; var s=Math.max(0,Math.round(m/1000)); var h=Math.floor(s/3600), mi=Math.floor((s%3600)/60), se=s%60; return (h?(h+':'):'')+(h?('0'+mi).slice(-2):mi)+':'+('0'+se).slice(-2); }
+    function fmtMin(m){ if(m==null) return '—'; return Math.round(m/60000)+' min'; }
+    // Globální tikot: aktualizuje živé časomíry každou vteřinu.
+    if(!window.__svcTick){ window.__svcTick=setInterval(function(){
+      document.querySelectorAll('.live-timer').forEach(function(el){
+        var since=el.getAttribute('data-since'); if(!since) return;
+        var el2=(new Date()-new Date(since));
+        var est=parseFloat(el.getAttribute('data-est'))||0; // minuty odhadu
+        if(est>0){ var remain=est*60000-el2; el.textContent=fmtHMS(el2)+' / odhad '+est+' min'+(remain<0?(' · přes o '+fmtHMS(-remain)):(' · zbývá '+fmtHMS(remain))); el.style.color=remain<0?'#ef4444':'#22c55e'; }
+        else { el.textContent=fmtHMS(el2); }
+      });
+    }, 1000); }
+
+    function loadTrips(id, est){
       api(API+'/requests/'+id+'/trips').then(function(r){ return r.ok?r.json():[]; }).then(function(tr){
         var box=$('trips-'+id); if(!box) return;
         if(!Array.isArray(tr)||!tr.length){ box.innerHTML=''; return; }
-        box.innerHTML=tr.map(function(t){
-          var km=(t.km!=null&&t.km!=='')?(Number(t.km)+' km'):'—';
-          var open=!t.ended_at;
-          var fin=open?('<button class="btn btn-ghost" style="margin-top:8px;" onclick="finishTrip('+t.id+','+id+')">🏁 Zapsat km / ukončit cestu</button>'):'';
-          return '<div class="trip">🚗 <b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b> · '+km+(open?' · <span style="color:var(--warn);">cesta otevřená</span>':'')+(t.note?(' · '+esc(t.note)):'')+fin+'</div>';
+        // Aktivní cesta = poslední neuzavřená; ostatní jen jako historie.
+        var active=tr.filter(function(t){ return !t.ended_at; }).slice(-1)[0];
+        var html=tr.map(function(t){
+          if(active && t.id===active.id) return tripActive(t, id, est);
+          return tripDone(t);
         }).join('');
+        box.innerHTML=html;
       }).catch(function(){});
     }
+    // Uzavřená / historická cesta — souhrn časů.
+    function tripDone(t){
+      var km=(t.km!=null&&t.km!=='')?(Number(t.km)+' km'):null;
+      var there=ms(t.started_at,t.repair_started_at), rep=ms(t.repair_started_at,t.repair_ended_at), back=ms(t.return_started_at,t.return_ended_at);
+      var parts=[]; if(there!=null)parts.push('🚗 tam '+fmtMin(there)); if(rep!=null)parts.push('🔧 oprava '+fmtMin(rep)); if(back!=null)parts.push('🏠 zpět '+fmtMin(back)); if(km)parts.push(km);
+      return '<div class="trip"><b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b>'+(parts.length?('<br>'+parts.join(' · ')):'')+(t.return_destination?('<br>↩ '+esc(t.return_destination)):'')+'</div>';
+    }
+    // Aktivní cesta — fázová časomíra + tlačítka.
+    function tripActive(t, id, est){
+      var h='<div class="trip" style="border-color:var(--acc);">🚗 <b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b>'+(t.duration_min?(' · odhad jízdy '+t.duration_min+' min'):'');
+      // Fáze 1: jede na místo (oprava nezahájena)
+      if(!t.repair_started_at){
+        h+='<div style="margin-top:8px;color:var(--text2);font-size:12px;">Až dorazíš na místo, zahaj vlastní opravu.</div>'
+          +'<button class="btn btn-primary" style="margin-top:8px;" onclick="repairStart('+t.id+','+id+')">🛠️ Zahájit vlastní opravu</button>';
+      } else if(!t.repair_ended_at){
+        // Fáze 2: probíhá oprava — časomíra + (odhad)
+        h+='<div style="margin-top:8px;font-size:13px;">🔧 Oprava běží: <b class="live-timer" data-since="'+t.repair_started_at+'" data-est="'+(est||'')+'">…</b></div>'
+          +'<button class="btn btn-warn" style="margin-top:8px;" onclick="repairEnd('+t.id+','+id+')">⏹️ Ukončit vlastní opravu</button>';
+      } else if(!t.return_started_at){
+        // Fáze 3: oprava hotová — souhrn + volba cesty zpět
+        var there=ms(t.started_at,t.repair_started_at), rep=ms(t.repair_started_at,t.repair_ended_at);
+        h+='<div style="margin-top:8px;font-size:12px;color:var(--text2);">✅ Oprava hotová · 🚗 cesta tam '+fmtMin(there)+' · 🔧 oprava '+fmtMin(rep)+'</div>'
+          +'<div class="acts" style="margin-top:8px;">'
+          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'domů\')">🏠 Cesta domů</button>'
+          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'další úkol\')">➡️ Na další úkol</button>'
+          +'</div>';
+      } else {
+        // Fáze 4: jede zpět — časomíra + ukončení
+        h+='<div style="margin-top:8px;font-size:13px;">🏠 Cesta '+esc(t.return_destination||'zpět')+': <b class="live-timer" data-since="'+t.return_started_at+'">…</b></div>'
+          +'<button class="btn btn-ok" style="margin-top:8px;" onclick="returnEnd('+t.id+','+id+')">🏁 Ukončit cestu (zapsat km)</button>';
+      }
+      h+='</div>';
+      return h;
+    }
+    window.repairStart=function(tid,rid){ api(API+'/trips/'+tid+'/repair-start',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit opravu.'); }); };
+    window.repairEnd=function(tid,rid){ api(API+'/trips/'+tid+'/repair-end',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit opravu.'); }); };
+    window.returnStart=function(tid,rid,kind){ var d=prompt('Kam jedeš? (domů / adresa dalšího úkolu)', kind==='domů'?'domů':''); if(d===null) return; api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:d||kind})}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit cestu.'); }); };
+    window.returnEnd=function(tid,rid){ var km=prompt('Kolik km cesty zpět? (nepovinné)',''); api(API+'/trips/'+tid+'/return-end',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({km:km?Number(km.replace(',','.')):null})}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit cestu.'); }); };
 
     // ── Přijmout + cesta ──
     window.openAccept=function(id){ acceptId=id; var c=rows.filter(function(x){return x.id===id;})[0]||{}; $('t-origin').value=''; $('t-dest').value=c.problem||''; $('t-km').value=''; $('t-note').value=''; $('t-msg').textContent=''; $('ov').classList.add('open'); if(window.__loadGeoOrigin) window.__loadGeoOrigin(); };
