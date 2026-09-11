@@ -815,9 +815,11 @@
         try{
           await api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shifts:_shifts }) });
           var r=await api('/shifts/notify?line='+INFO_LINE,{ method:'POST' });
+          if(r.error && !(r.sent>0)){ if(m){ m.style.color='#ef4444'; m.textContent='Uloženo, ale e-mail se NEodeslal: '+r.error; } return; }
           var txt='✅ Uloženo. Rozpis odeslán '+(r.sent||0)+' operátorům.';
+          if(r.failed && r.failed.length){ txt+=' ⚠ Neodesláno: '+r.failed.join(', ')+'.'; }
           if(r.missingEmail && r.missingEmail.length){ txt+=' ⚠ Bez e-mailu: '+r.missingEmail.join(', ')+' (doplň v Lidé a HR).'; }
-          if(m){ m.style.color='var(--text2)'; m.textContent=txt; }
+          if(m){ m.style.color=(r.failed&&r.failed.length)?'#eab308':'var(--text2)'; m.textContent=txt; }
         }catch(e){ if(m){ m.style.color='#ef4444'; m.textContent='Chyba: '+e.message; } }
       };
       function persistShifts(){

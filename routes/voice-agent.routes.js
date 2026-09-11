@@ -1001,21 +1001,26 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
       + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>';
     const { sendMail } = require('../services/email');
-    // Odesílatel = pracovní e-mail přihlášeného (Graph send-as → ukáže se jako Best Series),
-    // NIKDY ne Compounder. Fallback: INFOLINKA_MAIL_FROM / SMTP_FROM.
+    // Odesílatel = ten, kdo rozpis uložil/odeslal (přihlášený uživatel) — Graph send-as
+    // z jeho Best Series schránky. NIKDY ne Compounder. Fallback: INFOLINKA_MAIL_FROM / SMTP.
     let fromUpn = null;
     try {
-      const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true } });
-      if (pp && pp.work_email) fromUpn = pp.work_email;
+      const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true, email: true } });
+      if (pp) fromUpn = (pp.work_email || pp.email || '').trim() || null;
     } catch (_) { /* fallback níže */ }
     const from = fromUpn || process.env.INFOLINKA_MAIL_FROM || process.env.SMTP_FROM || undefined;
-    const recipients = []; const missingEmail = [];
+    const senderName = (req.user && (req.user.displayName || req.user.username)) || 'Best Series';
+    const recipients = []; const failed = []; const missingEmail = [];
+    let lastError = null;
     for (const p of people) {
       if (!p.email) { missingEmail.push(pmap[p.id].name); continue; }
-      try { await sendMail({ to: p.email, from, fromName: 'Best Series', brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml }); recipients.push(p.email); }
-      catch (e) { console.warn('[voice] shift email', p.email, e.message); }
+      try {
+        const r = await sendMail({ to: p.email, from, fromName: senderName, replyTo: from, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
+        if (r && r.sent) recipients.push(p.email);
+        else { failed.push(p.email); lastError = (r && (r.error || r.skipped)) || 'neodesláno'; }
+      } catch (e) { failed.push(p.email); lastError = e.message; console.warn('[voice] shift email', p.email, e.message); }
     }
-    res.json({ ok: true, sent: recipients.length, recipients, missingEmail });
+    res.json({ ok: recipients.length > 0, sent: recipients.length, recipients, failed, missingEmail, from: from || null, error: recipients.length ? undefined : ('E-mail se nepodařilo odeslat' + (lastError ? (': ' + lastError) : '') + '. Nastav v Railway INFOLINKA_MAIL_FROM na autorizovanou Best Series schránku (skupina HolyOS Senders).') });
   } catch (err) { next(err); }
 });
 
