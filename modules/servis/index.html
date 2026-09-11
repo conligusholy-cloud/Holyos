@@ -685,6 +685,8 @@
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
           _ops=Array.isArray(c.operator_ids)?c.operator_ids.slice():[];
           _shifts=(c.shifts&&typeof c.shifts==='object'&&!Array.isArray(c.shifts))?c.shifts:{};
+          var wf=el('info-work-from'); if(wf){ wf.value=c.work_from||''; if(!wf.__b){ wf.__b=1; wf.addEventListener('change', persistWork); } }
+          var wt=el('info-work-to'); if(wt){ wt.value=c.work_to||''; if(!wt.__b){ wt.__b=1; wt.addEventListener('change', persistWork); } }
           if(!_people.length){ loadPeople(); } else { fillOpSelect(); renderOps(); renderShiftRoster(); }
           var te=el('info-transfer-enabled'); if(te) te.checked = c.transfer_enabled!==false;
           var tf=el('info-transfer-fallback'); if(tf) tf.value = c.transfer_fallback_numbers||'';
@@ -770,8 +772,8 @@
         var mon=weekMonday(_weekOffset); var sun=new Date(mon.getTime()+6*86400000);
         if(lbl) lbl.textContent=mon.getDate()+'. '+(mon.getMonth()+1)+'. – '+sun.getDate()+'. '+(sun.getMonth()+1)+'. '+sun.getFullYear()+(_weekOffset===0?' · tento týden':'');
         var todayKey=shYmd(new Date());
-        var cols='110px 1.2fr 74px 74px 1.2fr 1.2fr';
-        var head='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>V práci (přednostní)</div><div>Od</div><div>Do</div><div>Hlavní</div><div>Záložní</div></div>';
+        var cols='120px 1.3fr 1.3fr 1.3fr';
+        var head='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>V práci (přednostní)</div><div>Hlavní</div><div>Záložní</div></div>';
         var inp='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;width:100%;box-sizing:border-box;';
         var rows='';
         var unplanned=0;
@@ -784,8 +786,6 @@
           rows+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.85;':'')+rowBg+'">'
             +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+(planned?'':' <span style="color:#ef4444;font-size:11px;">⚠</span>')+'</div>'
             +'<select data-sh-key="'+key+'" data-sh-role="wperson" style="'+inp+'">'+shOpts(sh.wperson)+'</select>'
-            +'<input data-sh-key="'+key+'" data-sh-role="wfrom" type="time" value="'+esc(sh.wfrom||'')+'" style="'+inp+'">'
-            +'<input data-sh-key="'+key+'" data-sh-role="wto" type="time" value="'+esc(sh.wto||'')+'" style="'+inp+'">'
             +'<select data-sh-key="'+key+'" data-sh-role="main" style="'+mainStyle+'">'+shOpts(sh.main)+'</select>'
             +'<select data-sh-key="'+key+'" data-sh-role="backup" style="'+backStyle+'">'+shOpts(sh.backup)+'</select>'
             +'</div>';
@@ -798,10 +798,10 @@
       }
       function onShiftChange(e){
         var s=e.target; var key=s.getAttribute('data-sh-key'); var role=s.getAttribute('data-sh-role');
-        var val = (role==='wfrom'||role==='wto') ? ((s.value||'')||null) : (parseInt(s.value,10)||null);
+        var val = parseInt(s.value,10)||null;
         var cur=_shifts[key]||{};
         if(val==null){ delete cur[role]; } else { cur[role]=val; }
-        if(!cur.main && !cur.backup && !cur.wperson && !cur.wfrom && !cur.wto){ delete _shifts[key]; } else { _shifts[key]=cur; }
+        if(!cur.main && !cur.backup && !cur.wperson){ delete _shifts[key]; } else { _shifts[key]=cur; }
         var m=el('info-roster-msg'); if(m) m.textContent='Neuloženo — klikni „Uložit rozpis".';
         renderShiftRoster();
       }
@@ -825,6 +825,13 @@
         return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shifts:_shifts }) })
           .then(function(){ if(m) m.textContent='✅ Směny uloženy'; })
           .catch(function(){ if(m) m.textContent='Chyba uložení směny'; });
+      }
+      // Globální pracovní doba (od–do) — jedna pro všechny dny; ukládá se hned při změně.
+      function persistWork(){
+        var m=el('info-work-msg'); if(m) m.textContent='Ukládám…';
+        return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ work_from:(el('info-work-from')||{}).value||'', work_to:(el('info-work-to')||{}).value||'' }) })
+          .then(function(){ if(m) m.textContent='✅ Uloženo'; })
+          .catch(function(){ if(m) m.textContent='Chyba uložení'; });
       }
 
       // ── Přehled služeb (pro měsíční hodnocení) ──
