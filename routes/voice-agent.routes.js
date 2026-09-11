@@ -329,8 +329,20 @@ async function notifyTransferFailed(mode, targetId, attempts, line) {
   try {
     const notify = require('../services/compounder/notify');
     if (!notify.notifyTransferFailed) return;
+    const ln = normLine(line);
     const c = await transferContext(mode, targetId);
-    await notify.notifyTransferFailed(prisma, { who: c.who, phone: c.phone, leadId: c.leadId, campaignName: c.campaignName, attempts, line: normLine(line) });
+    // Příjemci: pro Infolinku lidé nastavení u Infolinky (notify_person_ids),
+    // jinak (obchod) výchozí majitelé.
+    let recipientPersonIds;
+    try {
+      const get = settings ? settings.getSetting : null;
+      if (get) {
+        let ids = await get(cfgKey(ln, 'notify_person_ids'));
+        if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = ids.split(',').map((s) => parseInt(s, 10)); } }
+        if (Array.isArray(ids)) { ids = ids.filter((n) => Number.isInteger(n) && n > 0); if (ids.length) recipientPersonIds = ids; }
+      }
+    } catch (e) { console.warn('[voice] notifyTransferFailed příjemci:', e.message); }
+    await notify.notifyTransferFailed(prisma, { who: c.who, phone: c.phone, leadId: c.leadId, campaignName: c.campaignName, attempts, line: ln, recipientPersonIds });
   } catch (e) { console.warn('[voice] notifyTransferFailed:', e.message); }
 }
 
@@ -879,6 +891,91 @@ router.get('/calls', requireAuth, async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// GET /api/voice/ai-report?line=infolinka&from=YYYY-MM-DD&to=YYYY-MM-DD
+// Vyhodnocení výkonu AI recepční: kolik hovorů vyřídí AI sama vs. kolik předá
+// živému člověku, kolik času, kolik SMS, callbacky, top důvody a rozpad po dnech.
+router.get('/ai-report', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.json({ ok: false, error: 'voiceCall nedostupné' });
+    const line = normLine(req.query.line);
+    const where = (line === 'infolinka') ? { line: 'infolinka' } : { OR: [{ line: 'obchod' }, { line: null }] };
+    // Období (výchozí: aktuální měsíc)
+    const now = new Date();
+    const from = req.query.from ? new Date(req.query.from + 'T00:00:00') : new Date(now.getFullYear(), now.getMonth(), 1);
+    const to = req.query.to ? new Date(req.query.to + 'T23:59:59.999') : new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    where.started_at = { gte: from, lte: to };
+    const calls = await prisma.voiceCall.findMany({
+      where,
+      orderBy: { started_at: 'asc' },
+      select: {
+        id: true, started_at: true, duration_sec: true, handoff: true,
+        transfer_log: true, sms_log: true, manual_sms_log: true, callback_log: true,
+        caller_intent: true, location: true,
+      },
+    });
+    const isCompleted = (a) => { const s = String((a && a.status) || '').toLowerCase(); return s === 'completed' || s === 'answered'; };
+    let total = calls.length;
+    let aiOnly = 0;          // AI vyřídila bez předání
+    let transferAttempt = 0; // AI zkusila předat člověku
+    let humanConnected = 0;  // hovor se skutečně spojil s člověkem
+    let totalDur = 0, aiOnlyDur = 0, transferredDur = 0;
+    let smsSent = 0, smsDelivered = 0, smsFailed = 0, manualSms = 0;
+    let callbacks = 0;
+    const byIntent = {}; const byLocation = {}; const byDay = {};
+    for (const c of calls) {
+      const dur = c.duration_sec || 0; totalDur += dur;
+      const tlog = Array.isArray(c.transfer_log) ? c.transfer_log : [];
+      const attempted = c.handoff === true || tlog.length > 0;
+      const connected = tlog.some(isCompleted);
+      if (attempted) { transferAttempt++; transferredDur += dur; } else { aiOnly++; aiOnlyDur += dur; }
+      if (connected) humanConnected++;
+      // SMS s odkazem na formulář
+      const slog = Array.isArray(c.sms_log) ? c.sms_log : [];
+      for (const s of slog) {
+        const st = String((s && s.status) || '').toLowerCase();
+        if (st === 'failed') smsFailed++; else smsSent++;
+        if (st === 'delivered') smsDelivered++;
+      }
+      // Ruční SMS z hovoru
+      const mlog = Array.isArray(c.manual_sms_log) ? c.manual_sms_log : [];
+      manualSms += mlog.length;
+      // Callbacky
+      const clog = Array.isArray(c.callback_log) ? c.callback_log : [];
+      callbacks += clog.length;
+      // Top důvody
+      const intent = (c.caller_intent || '').trim(); if (intent) byIntent[intent] = (byIntent[intent] || 0) + 1;
+      const loc = (c.location || '').trim(); if (loc) byLocation[loc] = (byLocation[loc] || 0) + 1;
+      // Po dnech
+      const d = new Date(c.started_at);
+      const dk = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (!byDay[dk]) byDay[dk] = { day: dk, total: 0, ai: 0, transfer: 0 };
+      byDay[dk].total++; if (attempted) byDay[dk].transfer++; else byDay[dk].ai++;
+    }
+    const topN = (obj, n) => Object.entries(obj).map(([k, v]) => ({ label: k, count: v })).sort((a, b) => b.count - a.count).slice(0, n);
+    const pct = (a, b) => b > 0 ? Math.round((a / b) * 1000) / 10 : 0;
+    res.json({
+      ok: true,
+      range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
+      total,
+      aiOnly, transferAttempt, humanConnected,
+      transferNoAnswer: transferAttempt - humanConnected,
+      aiResolutionPct: pct(aiOnly, total),
+      transferPct: pct(transferAttempt, total),
+      humanConnectedPct: pct(humanConnected, total),
+      duration: {
+        totalSec: totalDur, avgSec: total > 0 ? Math.round(totalDur / total) : 0,
+        aiOnlySec: aiOnlyDur, transferredSec: transferredDur,
+        avgAiSec: aiOnly > 0 ? Math.round(aiOnlyDur / aiOnly) : 0,
+      },
+      sms: { sent: smsSent, delivered: smsDelivered, failed: smsFailed, manual: manualSms },
+      callbacks,
+      topIntents: topN(byIntent, 10),
+      topLocations: topN(byLocation, 10),
+      byDay: Object.values(byDay).sort((a, b) => a.day.localeCompare(b.day)),
+    });
+  } catch (err) { next(err); }
 });
 
 // POST /api/voice/calls/:id/callback — technik zaznamenal, že volá kontaktu zpět

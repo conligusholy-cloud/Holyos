@@ -64,9 +64,14 @@ async function resolveRecipientPersonIds(prisma) {
 }
 
 // Jádro: rozešle push + zvonek. Fire-and-forget, chyby jen logujeme.
-async function dispatch(prisma, { title, body, data }) {
+async function dispatch(prisma, { title, body, data, recipientPersonIds }) {
   let personIds = [];
-  try { personIds = await resolveRecipientPersonIds(prisma); } catch (e) { console.warn('[compounder-notify] příjemci:', e.message); }
+  // Explicitní příjemci (např. lidé nastavení u Infolinky) mají přednost před majiteli.
+  if (Array.isArray(recipientPersonIds) && recipientPersonIds.length) {
+    personIds = recipientPersonIds.filter((n) => Number.isInteger(n) && n > 0);
+  } else {
+    try { personIds = await resolveRecipientPersonIds(prisma); } catch (e) { console.warn('[compounder-notify] příjemci:', e.message); }
+  }
   if (!personIds.length) return;
 
   const persons = await prisma.person.findMany({
@@ -310,7 +315,7 @@ async function notifyCallbackRequest(prisma, { lead, when, note, source }) {
 
 // Hlasový hovor: zákazník chtěl přepojit na obchodníka, ale nikdo hovor nezvedl
 // (vyčerpána všechna čísla i kolečka). Push + zvonek, ať se ozve zpět.
-async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, attempts, line }) {
+async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, attempts, line, recipientPersonIds }) {
   try {
     const label = who || (phone ? phone : 'zákazník');
     const isInfolinka = String(line || '') === 'infolinka';
@@ -329,7 +334,7 @@ async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, 
         + (attempts ? (' (' + attempts + ' pokusů)') : '') + '. Zavolejte mu zpět'
         + (phone ? (': ' + phone) : '.') + (phone ? '.' : '');
     }
-    await dispatch(prisma, { title, body, data: { type: 'voice_transfer_failed', line: line || null, lead_id: leadId || null, phone: phone || null } });
+    await dispatch(prisma, { title, body, recipientPersonIds, data: { type: 'voice_transfer_failed', line: line || null, lead_id: leadId || null, phone: phone || null } });
   } catch (e) { console.error('[compounder-notify] transfer failed', e.message); }
 }
 
