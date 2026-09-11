@@ -93,6 +93,28 @@
       <div class="desc">Úkol se rozjede až po zadání cesty (kvůli evidenci ujetých km).</div>
       <label>Odkud vyjíždíš <span class="req">*</span></label>
       <input id="t-origin" autocomplete="off" placeholder="např. Rychnov n. Kn. — dílna">
+      <button type="button" class="btn btn-ghost" id="t-geo" style="margin-top:8px;">📍 Načíst aktuální polohu (GPS)</button>
+      <div id="t-geo-msg" style="font-size:12px;color:var(--text2);margin-top:4px;min-height:14px;"></div>
+      <script>
+      (function(){
+        var btn=document.getElementById('t-geo'); if(!btn) return;
+        btn.addEventListener('click', function(){
+          var orig=document.getElementById('t-origin'), msg=document.getElementById('t-geo-msg');
+          if(!navigator.geolocation){ if(msg){ msg.style.color='#ef4444'; msg.textContent='Tento telefon/prohlížeč GPS nepodporuje.'; } return; }
+          btn.disabled=true; if(msg){ msg.style.color='#8ea1b3'; msg.textContent='Zjišťuji polohu…'; }
+          navigator.geolocation.getCurrentPosition(function(pos){
+            var la=pos.coords.latitude, lo=pos.coords.longitude;
+            fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+la+'&lon='+lo+'&accept-language=cs')
+              .then(function(r){ return r.ok?r.json():null; })
+              .then(function(j){ if(orig) orig.value=(j&&j.display_name)?j.display_name:(la.toFixed(5)+', '+lo.toFixed(5)); if(msg){ msg.style.color='#22c55e'; msg.textContent='✅ Poloha načtena'; } })
+              .catch(function(){ if(orig) orig.value=la.toFixed(5)+', '+lo.toFixed(5); if(msg){ msg.style.color='#22c55e'; msg.textContent='✅ Souřadnice načteny'; } })
+              .then(function(){ btn.disabled=false; });
+          }, function(err){
+            btn.disabled=false; if(msg){ msg.style.color='#ef4444'; msg.textContent='Polohu se nepodařilo získat — povol přístup k poloze v prohlížeči.'; }
+          }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+        });
+      })();
+      </script>
       <label>Kam jedeš (místo zásahu) <span class="req">*</span></label>
       <input id="t-dest" autocomplete="off" placeholder="např. prádlomat Tesco Rychnov">
       <label>Ujeté km (nepovinné, můžeš doplnit po příjezdu)</label>
