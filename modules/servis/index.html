@@ -385,6 +385,7 @@
           <button type="button" class="btn btn-primary" data-infosub="settings" onclick="infoSub('settings')">⚙️ Nastavení recepční</button>
           <button type="button" class="btn btn-secondary" data-infosub="calls" onclick="infoSub('calls')">📞 Záznamy hovorů</button>
           <button type="button" class="btn btn-secondary" data-infosub="shifts" onclick="infoSub('shifts')">🗓️ Plánování směn</button>
+          <button type="button" class="btn btn-secondary" data-infosub="aiperf" onclick="infoSub('aiperf')">🤖 Výkon AI</button>
           <button type="button" class="btn btn-secondary" data-infosub="report" onclick="infoSub('report')">📊 Přehled služeb</button>
           <button type="button" class="btn btn-secondary" data-infosub="people" onclick="infoSub('people')">📈 Hodnocení lidí</button>
           <button type="button" class="btn btn-secondary" data-infosub="sms" onclick="infoSub('sms')">📩 SMS <span id="info-sms-badge" style="display:none;background:#ef4444;color:#fff;border-radius:10px;padding:0 6px;font-size:11px;margin-left:2px;"></span></button>
@@ -498,6 +499,22 @@
           </div>
 
           <div style="margin-top:14px;"><button class="btn btn-primary" onclick="infoSave()">💾 Uložit nastavení</button> <span id="info-msg-shifts" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
+        </div>
+
+        <!-- Sub: Výkon AI (AI vs. technik) -->
+        <div id="info-aiperf" style="display:none;max-width:960px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🤖 Výkon AI recepční</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 12px;">Kolik hovorů vyřídí AI sama a kolik předá živému technikovi, kolik času to zabere, kolik SMS pošle a proč lidé volají — za vybrané období.</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Od</label>
+                <input id="info-aiperf-from" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Do</label>
+                <input id="info-aiperf-to" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <button class="btn btn-primary" onclick="infoLoadAiPerf()">Zobrazit</button>
+            </div>
+          </div>
+          <div id="info-aiperf-body" style="color:var(--text2);font-size:13px;">Vyber období a klikni Zobrazit.</div>
         </div>
 
         <!-- Sub: Přehled služeb (pro měsíční hodnocení) -->
@@ -723,12 +740,13 @@
 
       // ── Přepínání pod-záložek Infolinky ──
       window.infoSub = function(name){
-        ['settings','calls','shifts','report','people','sms'].forEach(function(s){
+        ['settings','calls','shifts','aiperf','report','people','sms'].forEach(function(s){
           var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
           var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
           if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
         });
         if(name==='calls') window.infoLoadCalls();
+        else if(name==='aiperf') infoInitAiPerf();
         else if(name==='report') infoInitReport();
         else if(name==='people') infoInitPeople();
         else if(name==='sms') window.infoLoadSms();
@@ -1001,6 +1019,83 @@
           .then(function(){ if(m) m.textContent='✅ Uloženo'; })
           .catch(function(){ if(m) m.textContent='Chyba uložení'; });
       }
+
+      // ── Výkon AI (AI vs. technik) ──
+      function infoInitAiPerf(){
+        var f=el('info-aiperf-from'), t=el('info-aiperf-to'), now=new Date();
+        if(f && !f.value) f.value=ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+        if(t && !t.value) t.value=ymd(new Date(now.getFullYear(), now.getMonth()+1, 0));
+        window.infoLoadAiPerf();
+      }
+      function aiKpi(label,val,sub,color){
+        return '<div style="flex:1;min-width:150px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'
+          +'<div style="font-size:12px;color:var(--text2);">'+esc(label)+'</div>'
+          +'<div style="font-size:24px;font-weight:800;color:'+(color||'var(--text)')+';margin-top:2px;">'+val+'</div>'
+          +(sub?('<div style="font-size:11px;color:var(--text2);margin-top:2px;">'+sub+'</div>'):'')+'</div>';
+      }
+      function aiBar(ai,transfer,total){
+        if(!total) return '';
+        var ap=Math.round(ai/total*100), tp=100-ap;
+        return '<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid var(--border);font-size:11px;font-weight:700;color:#04121a;">'
+          +'<div style="width:'+ap+'%;background:#22c55e;display:flex;align-items:center;justify-content:center;">'+(ap>=12?(ap+'% AI'):'')+'</div>'
+          +'<div style="width:'+tp+'%;background:#f59e0b;display:flex;align-items:center;justify-content:center;">'+(tp>=12?(tp+'% technik'):'')+'</div></div>';
+      }
+      function fmtMin(sec){ sec=Number(sec)||0; var m=Math.floor(sec/60), s=sec%60; if(m>=60){ var h=Math.floor(m/60); return h+' h '+(m%60)+' min'; } return m+' min '+s+' s'; }
+      window.infoLoadAiPerf=async function(){
+        var box=el('info-aiperf-body'); if(!box) return;
+        box.innerHTML='Načítám…';
+        var f=(el('info-aiperf-from')||{}).value||'', t=(el('info-aiperf-to')||{}).value||'';
+        try{
+          var d=await api('/ai-report?line='+INFO_LINE+'&from='+f+'&to='+t);
+          if(!d||!d.ok){ box.innerHTML='<span style="color:#ef4444;">Chyba načtení.</span>'; return; }
+          if(!d.total){ box.innerHTML='<span style="color:var(--text2);">V tomto období nejsou žádné hovory.</span>'; return; }
+          var h='';
+          // Hlavní KPI
+          h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">';
+          h+=aiKpi('Hovorů celkem', d.total, 'za '+esc(d.range.from)+' – '+esc(d.range.to));
+          h+=aiKpi('Vyřídila AI sama', d.aiOnly, d.aiResolutionPct+' % všech hovorů', '#22c55e');
+          h+=aiKpi('Předáno technikovi', d.transferAttempt, d.transferPct+' % (spojeno '+d.humanConnected+')', '#f59e0b');
+          h+=aiKpi('Spojeno s člověkem', d.humanConnected, d.humanConnectedPct+' % · nedovoláno '+d.transferNoAnswer, '#60a5fa');
+          h+='</div>';
+          // Poměrový pruh
+          h+='<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text2);margin-bottom:5px;">Poměr vyřízení AI vs. předání technikovi</div>'+aiBar(d.aiOnly,d.transferAttempt,d.total)+'</div>';
+          // Čas + SMS + callbacky
+          h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">';
+          h+=aiKpi('Čas na hovorech', fmtMin(d.duration.totalSec), 'průměr '+fmtMin(d.duration.avgSec)+' / hovor');
+          h+=aiKpi('Z toho vyřídila AI', fmtMin(d.duration.aiOnlySec), 'průměr '+fmtMin(d.duration.avgAiSec)+' / hovor', '#22c55e');
+          h+=aiKpi('SMS s odkazem', d.sms.sent, 'doručeno '+d.sms.delivered+(d.sms.failed?(' · chyba '+d.sms.failed):''), '#34d399');
+          h+=aiKpi('Zpětná volání', d.callbacks, (d.sms.manual?('ruční SMS '+d.sms.manual):''), '#a78bfa');
+          h+='</div>';
+          // Top důvody hovorů
+          if(d.topIntents && d.topIntents.length){
+            h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;">';
+            h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px;">Proč lidé nejčastěji volají</div>';
+            var mx=d.topIntents[0].count||1;
+            d.topIntents.forEach(function(it){
+              var w=Math.round(it.count/mx*100);
+              h+='<div style="margin:5px 0;"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text);"><span>'+esc(it.label)+'</span><span style="color:var(--text2);">'+it.count+'×</span></div>'
+                +'<div style="height:6px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:2px;"><div style="width:'+w+'%;height:100%;background:#60a5fa;"></div></div></div>';
+            });
+            h+='</div>';
+          }
+          // Top lokality
+          if(d.topLocations && d.topLocations.length){
+            h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;">';
+            h+='<div style="font-weight:700;font-size:13px;margin-bottom:8px;">Nejčastější místa (prádlomaty)</div>';
+            h+='<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+            d.topLocations.forEach(function(l){ h+='<span style="background:var(--bg);border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:12px;color:var(--text);">📍 '+esc(l.label)+' <b>'+l.count+'</b></span>'; });
+            h+='</div></div>';
+          }
+          // Rozpad po dnech
+          if(d.byDay && d.byDay.length){
+            h+='<details><summary style="cursor:pointer;color:var(--text2);font-size:13px;margin-bottom:8px;">Rozpad po dnech ('+d.byDay.length+')</summary>';
+            h+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-top:8px;"><table class="data-table"><thead><tr><th>Den</th><th>Celkem</th><th>Vyřídila AI</th><th>Předáno technikovi</th></tr></thead><tbody>';
+            d.byDay.forEach(function(x){ h+='<tr><td style="white-space:nowrap;">'+esc(fmtCzDay(x.day))+'</td><td>'+x.total+'</td><td style="color:#22c55e;">'+x.ai+'</td><td style="color:#f59e0b;">'+x.transfer+'</td></tr>'; });
+            h+='</tbody></table></div></details>';
+          }
+          box.innerHTML=h;
+        }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; }
+      };
 
       // ── Přehled služeb (pro měsíční hodnocení) ──
       var _repRows=[], _repDays=[], _repRange={from:'',to:''};
