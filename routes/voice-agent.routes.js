@@ -838,18 +838,22 @@ router.get('/calls', requireAuth, async (req, res, next) => {
 // GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).
 router.get('/sms/form-log', requireAuth, async (req, res, next) => {
   try {
-    if (!prisma.smsLog) return res.json({ items: [], total: 0, sent: 0, failed: 0 });
+    if (!prisma.smsLog) return res.json({ items: [], total: 0, sent: 0, delivered: 0, undelivered: 0, failed: 0 });
+    // Nejdřív dotáhni aktuální stavy doručení z GoSMS (doručeno/nedoručeno) pro nedávné zprávy.
+    try { const sms = require('../services/voice/sms'); if (sms.refreshSmsLogStatuses) await sms.refreshSmsLogStatuses(60); } catch (_) { /* neblokuj */ }
     const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
     const rows = await prisma.smsLog.findMany({
       where: { context: 'form_link' },
       orderBy: { created_at: 'desc' },
       take: limit,
-      select: { id: true, to_number: true, status: true, delivered: true, error: true, created_at: true },
+      select: { id: true, to_number: true, status: true, delivered: true, error: true, created_at: true, status_checked_at: true },
     });
     const total = await prisma.smsLog.count({ where: { context: 'form_link' } });
-    const sent = rows.filter((r) => r.status !== 'failed' && r.status !== 'undelivered').length;
-    const failed = rows.filter((r) => r.status === 'failed' || r.status === 'undelivered').length;
-    res.json({ items: rows, total, sent, failed });
+    const delivered = rows.filter((r) => r.status === 'delivered').length;
+    const undelivered = rows.filter((r) => r.status === 'undelivered').length;
+    const failed = rows.filter((r) => r.status === 'failed').length;
+    const sent = rows.length - failed; // odesláno = vše, co neselhalo při odeslání
+    res.json({ items: rows, total, sent, delivered, undelivered, failed });
   } catch (err) {
     next(err);
   }
