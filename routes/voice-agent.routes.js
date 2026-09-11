@@ -244,6 +244,9 @@ async function resolveTransferPlan(mode, targetId, line) {
     try {
       let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
       if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
+      // Pracovní doba je GLOBÁLNÍ (jednotná pro všechny dny), ne per den.
+      const workFrom = get ? (await get(cfgKey(line, 'work_from'))) || '' : '';
+      const workTo = get ? (await get(cfgKey(line, 'work_to'))) || '' : '';
       const now = new Date();
       const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const sh = shifts && shifts[ymd];
@@ -252,10 +255,10 @@ async function resolveTransferPlan(mode, targetId, line) {
           const id = parseInt(pid, 10); if (!id) return;
           try { const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } }); if (p && p.active !== false && p.phone) base.push(p.phone); } catch (_) { /* přeskoč */ }
         };
-        // v pracovní době dne přednostně osoba „v práci"
-        if (sh.wperson && sh.wfrom && sh.wto) {
+        // v (globální) pracovní době přednostně osoba „v práci"
+        if (sh.wperson && workFrom && workTo) {
           const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
-          const a = toMin(sh.wfrom), b = toMin(sh.wto), cur = now.getHours() * 60 + now.getMinutes();
+          const a = toMin(workFrom), b = toMin(workTo), cur = now.getHours() * 60 + now.getMinutes();
           if (a != null && b != null && cur >= a && cur < b) await pushPerson(sh.wperson);
         }
         await pushPerson(sh.main);
@@ -964,6 +967,49 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/voice/shifts/notify — rozešle e-mailem rozpis směn všem operátorům v plánu (14 dní).
+router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next) => {
+  try {
+    const line = normLine(req.query.line);
+    const get = settings ? settings.getSetting : null;
+    let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
+    if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
+    if (!shifts || typeof shifts !== 'object') shifts = {};
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const dn = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const days = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today.getTime() + i * 86400000);
+      const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      if (shifts[key]) days.push({ d, sh: shifts[key] });
+    }
+    const ids = new Set();
+    days.forEach((x) => { [x.sh.main, x.sh.backup, x.sh.wperson].forEach((p) => { const id = parseInt(p, 10); if (id) ids.add(id); }); });
+    const people = ids.size ? await prisma.person.findMany({ where: { id: { in: Array.from(ids) } }, select: { id: true, first_name: true, last_name: true, email: true } }) : [];
+    const pmap = {}; people.forEach((p) => { pmap[p.id] = { name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.email || '').trim() }; });
+    const nm = (id) => { const p = pmap[parseInt(id, 10)]; return p ? p.name : '—'; };
+    const rowsHtml = days.map((x) => {
+      const d = x.d, sh = x.sh;
+      const dl = dn[d.getDay()] + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '.';
+      const work = sh.wperson ? (nm(sh.wperson) + (sh.wfrom && sh.wto ? (' (' + sh.wfrom + '–' + sh.wto + ')') : '')) : '—';
+      return '<tr><td>' + esc(dl) + '</td><td>' + esc(work) + '</td><td>' + esc(nm(sh.main)) + '</td><td>' + esc(nm(sh.backup)) + '</td></tr>';
+    }).join('');
+    const bodyHtml = '<p>Ahoj, tady je aktuální rozpis směn na Infolince (14 dní dopředu). Prosím počítej se svými směnami.</p>'
+      + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
+      + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>';
+    const { sendMail } = require('../services/email');
+    const from = process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || undefined;
+    const recipients = []; const missingEmail = [];
+    for (const p of people) {
+      if (!p.email) { missingEmail.push(pmap[p.id].name); continue; }
+      try { await sendMail({ to: p.email, from, fromName: 'HolyOS — Infolinka', subject: 'Rozpis směn na Infolince', body: bodyHtml }); recipients.push(p.email); }
+      catch (e) { console.warn('[voice] shift email', p.email, e.message); }
+    }
+    res.json({ ok: true, sent: recipients.length, recipients, missingEmail });
+  } catch (err) { next(err); }
 });
 
 // POST /api/voice/sms — ruční / testovací odeslání SMS (přes VOICE_SMS_FROM)

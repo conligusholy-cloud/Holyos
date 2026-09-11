@@ -439,8 +439,18 @@
                 <button class="btn btn-secondary" style="padding:4px 10px;" onclick="shiftWeek(0)">Tento týden</button>
               </div>
             </div>
-            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">U každého dne vyber osobu „v práci" + pracovní dobu (přednostní) a hlavního/záložního operátora. V pracovní době se volá nejdřív osoba v práci, pak hlavní, pak záložní, nakonec statická čísla. Ukládá se hned.</p>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">U každého dne vyber osobu „v práci" (přednostní) a hlavního/záložního operátora. V pracovní době (nastavená jednou níže) se volá nejdřív osoba v práci, pak hlavní, pak záložní, nakonec statická čísla. Ukládá se hned.</p>
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;">
+              <span style="font-size:12px;color:var(--text2);">🕐 Pracovní doba (platí pro všechny dny):</span>
+              <label style="font-size:12px;color:var(--text2);display:inline-flex;align-items:center;gap:6px;">Od <input id="info-work-from" type="time" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:13px;"></label>
+              <label style="font-size:12px;color:var(--text2);display:inline-flex;align-items:center;gap:6px;">Do <input id="info-work-to" type="time" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:13px;"></label>
+              <span id="info-work-msg" style="font-size:12px;color:var(--text2);"></span>
+            </div>
             <div id="info-shift-roster"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
+            <div style="margin-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="saveRoster()">💾 Uložit rozpis a rozeslat operátorům</button>
+              <span id="info-roster-msg" style="font-size:13px;color:var(--text2);"></span>
+            </div>
           </div>
 
           <div style="border:1px solid rgba(34,211,238,0.4);border-radius:10px;padding:14px;background:rgba(34,211,238,0.06);">
@@ -764,19 +774,26 @@
         var head='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>V práci (přednostní)</div><div>Od</div><div>Do</div><div>Hlavní</div><div>Záložní</div></div>';
         var inp='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;width:100%;box-sizing:border-box;';
         var rows='';
+        var unplanned=0;
         for(var i=0;i<7;i++){
           var d=new Date(mon.getTime()+i*86400000); var key=shYmd(d); var sh=_shifts[key]||{};
           var we=(d.getDay()===0||d.getDay()===6); var isToday=(key===todayKey);
-          rows+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.7;':'')+'">'
-            +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+'</div>'
+          var planned=!!(sh.main && sh.backup); if(!planned) unplanned++;
+          var rowBg = planned ? '' : 'background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;padding-left:6px;';
+          var mainStyle=inp+(sh.main?'':'border-color:#ef4444;'); var backStyle=inp+(sh.backup?'':'border-color:#ef4444;');
+          rows+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.85;':'')+rowBg+'">'
+            +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+(planned?'':' <span style="color:#ef4444;font-size:11px;">⚠</span>')+'</div>'
             +'<select data-sh-key="'+key+'" data-sh-role="wperson" style="'+inp+'">'+shOpts(sh.wperson)+'</select>'
             +'<input data-sh-key="'+key+'" data-sh-role="wfrom" type="time" value="'+esc(sh.wfrom||'')+'" style="'+inp+'">'
             +'<input data-sh-key="'+key+'" data-sh-role="wto" type="time" value="'+esc(sh.wto||'')+'" style="'+inp+'">'
-            +'<select data-sh-key="'+key+'" data-sh-role="main" style="'+inp+'">'+shOpts(sh.main)+'</select>'
-            +'<select data-sh-key="'+key+'" data-sh-role="backup" style="'+inp+'">'+shOpts(sh.backup)+'</select>'
+            +'<select data-sh-key="'+key+'" data-sh-role="main" style="'+mainStyle+'">'+shOpts(sh.main)+'</select>'
+            +'<select data-sh-key="'+key+'" data-sh-role="backup" style="'+backStyle+'">'+shOpts(sh.backup)+'</select>'
             +'</div>';
         }
-        box.innerHTML=head+rows;
+        var summary = unplanned
+          ? '<div style="margin-top:8px;font-size:12px;color:#ef4444;">⚠ '+unplanned+' '+(unplanned===1?'den nemá':'dní nemá')+' vyplněného hlavního a záložního operátora (povinné).</div>'
+          : '<div style="margin-top:8px;font-size:12px;color:#22c55e;">✅ Celý týden je naplánován.</div>';
+        box.innerHTML=head+rows+summary;
         box.querySelectorAll('[data-sh-key]').forEach(function(s){ s.addEventListener('change', onShiftChange); });
       }
       function onShiftChange(e){
@@ -785,8 +802,24 @@
         var cur=_shifts[key]||{};
         if(val==null){ delete cur[role]; } else { cur[role]=val; }
         if(!cur.main && !cur.backup && !cur.wperson && !cur.wfrom && !cur.wto){ delete _shifts[key]; } else { _shifts[key]=cur; }
-        persistShifts();
+        var m=el('info-roster-msg'); if(m) m.textContent='Neuloženo — klikni „Uložit rozpis".';
+        renderShiftRoster();
       }
+      window.saveRoster=async function(){
+        // Kontrola: zobrazený týden musí mít u každého dne hlavního i záložního.
+        var mon=weekMonday(_weekOffset); var missing=[];
+        for(var i=0;i<7;i++){ var d=new Date(mon.getTime()+i*86400000); var sh=_shifts[shYmd(d)]||{}; if(!(sh.main&&sh.backup)) missing.push(shDayLabel(d)); }
+        var m=el('info-roster-msg');
+        if(missing.length){ if(m){ m.style.color='#ef4444'; m.textContent='Doplň hlavního i záložního u: '+missing.join(', '); } return; }
+        if(m){ m.style.color='var(--text2)'; m.textContent='Ukládám a rozesílám…'; }
+        try{
+          await api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shifts:_shifts }) });
+          var r=await api('/shifts/notify?line='+INFO_LINE,{ method:'POST' });
+          var txt='✅ Uloženo. Rozpis odeslán '+(r.sent||0)+' operátorům.';
+          if(r.missingEmail && r.missingEmail.length){ txt+=' ⚠ Bez e-mailu: '+r.missingEmail.join(', ')+' (doplň v Lidé a HR).'; }
+          if(m){ m.style.color='var(--text2)'; m.textContent=txt; }
+        }catch(e){ if(m){ m.style.color='#ef4444'; m.textContent='Chyba: '+e.message; } }
+      };
       function persistShifts(){
         var m=el('info-msg-shifts'); if(m) m.textContent='Ukládám směnu…';
         return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ shifts:_shifts }) })
