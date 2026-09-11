@@ -4766,7 +4766,15 @@ model ServiceTrip {
   destination String    @db.VarChar(255)  // kam jede (místo zásahu)
   km          Decimal?  @db.Decimal(8, 1) // ujeté km (zatím ručně, později auto z mapy)
   note        String?   @db.Text
-  started_at  DateTime  @default(now())
+  // Souřadnice + doba jízdy pro mapu „Kontrola týmu" (pohyb figurky po trase).
+  origin_lat   Decimal? @db.Decimal(9, 6)
+  origin_lon   Decimal? @db.Decimal(9, 6)
+  dest_lat     Decimal? @db.Decimal(9, 6)
+  dest_lon     Decimal? @db.Decimal(9, 6)
+  distance_km  Decimal? @db.Decimal(8, 1)  // vypočtená vzdálenost trasy
+  duration_min Int?                        // vypočtená doba jízdy (min)
+  arrived      Boolean  @default(false)    // technik dojel na místo
+  started_at  DateTime  @default(now())    // = čas přijetí úkolu (start jízdy)
   ended_at    DateTime?
   created_at  DateTime  @default(now())
 

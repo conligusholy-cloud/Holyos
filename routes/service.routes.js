@@ -859,6 +859,13 @@ const acceptSchema = z.object({
   destination: z.string().min(1).max(255),
   km: z.number().nonnegative().optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
+  // Souřadnice + doba jízdy pro mapu (nepovinné — když GPS/route selže).
+  origin_lat: z.union([z.number(), z.string()]).optional().nullable(),
+  origin_lon: z.union([z.number(), z.string()]).optional().nullable(),
+  dest_lat: z.union([z.number(), z.string()]).optional().nullable(),
+  dest_lon: z.union([z.number(), z.string()]).optional().nullable(),
+  distance_km: z.union([z.number(), z.string()]).optional().nullable(),
+  duration_min: z.union([z.number(), z.string()]).optional().nullable(),
 });
 router.post('/requests/:id/accept', async (req, res, next) => {
   try {
@@ -868,11 +875,60 @@ router.post('/requests/:id/accept', async (req, res, next) => {
     const reqRow = await prisma.serviceRequest.findUnique({ where: { id } });
     if (!reqRow) return res.status(404).json({ error: 'Požadavek nenalezen' });
     const pid = await myPersonId(req);
+    const d = parsed.data;
+    const fnum = (v) => { if (v == null || v === '') return null; const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const dur = fnum(d.duration_min);
     const trip = await prisma.serviceTrip.create({
-      data: { request_id: id, person_id: pid, origin: parsed.data.origin, destination: parsed.data.destination, km: parsed.data.km ?? null, note: parsed.data.note || null },
+      data: {
+        request_id: id, person_id: pid, origin: d.origin, destination: d.destination,
+        km: d.km ?? null, note: d.note || null,
+        origin_lat: fnum(d.origin_lat), origin_lon: fnum(d.origin_lon),
+        dest_lat: fnum(d.dest_lat), dest_lon: fnum(d.dest_lon),
+        distance_km: fnum(d.distance_km), duration_min: dur != null ? Math.round(dur) : null,
+      },
     });
     const updated = await prisma.serviceRequest.update({ where: { id }, data: { status: 'reseni', assignee_id: pid || reqRow.assignee_id } });
     res.json({ ok: true, request: updated, trip });
+  } catch (err) { next(err); }
+});
+
+// GET /api/service/trips/active — aktivní cesty pro mapu „Kontrola týmu".
+// Vrací cesty, které mají souřadnice a ještě nejsou ukončené (ended_at null).
+router.get('/trips/active', async (req, res, next) => {
+  try {
+    const trips = await prisma.serviceTrip.findMany({
+      where: { ended_at: null, origin_lat: { not: null }, dest_lat: { not: null } },
+      orderBy: { started_at: 'desc' },
+      take: 100,
+    });
+    const pids = Array.from(new Set(trips.map((t) => t.person_id).filter(Boolean)));
+    const pmap = {};
+    if (pids.length) {
+      const people = await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } });
+      people.forEach((p) => { pmap[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id); });
+    }
+    const rids = Array.from(new Set(trips.map((t) => t.request_id).filter(Boolean)));
+    const rmap = {};
+    if (rids.length) {
+      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true } });
+      reqs.forEach((r) => { rmap[r.id] = r; });
+    }
+    const out = trips.map((t) => ({
+      id: t.id, request_id: t.request_id,
+      tech: t.person_id ? (pmap[t.person_id] || ('#' + t.person_id)) : '—',
+      origin: t.origin, destination: t.destination,
+      origin_lat: t.origin_lat != null ? Number(t.origin_lat) : null,
+      origin_lon: t.origin_lon != null ? Number(t.origin_lon) : null,
+      dest_lat: t.dest_lat != null ? Number(t.dest_lat) : null,
+      dest_lon: t.dest_lon != null ? Number(t.dest_lon) : null,
+      distance_km: t.distance_km != null ? Number(t.distance_km) : null,
+      duration_min: t.duration_min || null,
+      arrived: !!t.arrived,
+      started_at: t.started_at,
+      problem: rmap[t.request_id] ? rmap[t.request_id].problem : null,
+      req_status: rmap[t.request_id] ? rmap[t.request_id].status : null,
+    }));
+    res.json(out);
   } catch (err) { next(err); }
 });
 
