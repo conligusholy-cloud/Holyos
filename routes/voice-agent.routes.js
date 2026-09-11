@@ -1015,23 +1015,30 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
       + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>'
       + '<p style="color:#8a8a92;font-size:12px;margin-top:14px;">Rozpis připravil: ' + esc(senderName) + '. V případě dotazů odpovězte na tento e-mail.</p>';
-    // Odesílatel = sdílená Best Series schránka (INFOLINKA_MAIL_FROM) — stačí autorizovat
-    // JEDNU schránku pro AppOnly AccessPolicy, funguje pak komukoli přihlášenému. Když není
-    // nastavená, spadne na schránku přihlášeného. NIKDY ne Compounder.
-    // Reply-to vždy míří na toho, kdo rozpis připravil.
-    const from = process.env.INFOLINKA_MAIL_FROM || fromUpn || process.env.SMTP_FROM || undefined;
-    const replyTo = fromUpn || from;
+    // Kandidáti na odesílatele v pořadí: 1) schránka přihlášeného (kdo uložil),
+    // 2) sdílená Best Series schránka INFOLINKA_MAIL_FROM, 3) SMTP_FROM.
+    // Zkoušíme je po sobě — když první selže (např. 403 z AppOnly AccessPolicy),
+    // automaticky se zkusí další. Reply-to vždy na autora rozpisu.
+    const candidates = [];
+    [fromUpn, process.env.INFOLINKA_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => {
+      const v = (c || '').trim(); if (v && candidates.indexOf(v) < 0) candidates.push(v);
+    });
+    const replyTo = fromUpn || candidates[0] || undefined;
     const recipients = []; const failed = []; const missingEmail = [];
-    let lastError = null;
+    let lastError = null; let usedFrom = null;
     for (const p of people) {
       if (!p.email) { missingEmail.push(pmap[p.id].name); continue; }
-      try {
-        const r = await sendMail({ to: p.email, from, fromName: senderName, replyTo, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
-        if (r && r.sent) recipients.push(p.email);
-        else { failed.push(p.email); lastError = (r && (r.error || r.skipped)) || 'neodesláno'; }
-      } catch (e) { failed.push(p.email); lastError = e.message; console.warn('[voice] shift email', p.email, e.message); }
+      let sentOne = false;
+      for (const cand of (candidates.length ? candidates : [undefined])) {
+        try {
+          const r = await sendMail({ to: p.email, from: cand, fromName: senderName, replyTo, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
+          if (r && r.sent) { sentOne = true; usedFrom = cand; break; }
+          lastError = (r && (r.error || r.skipped)) || 'neodesláno';
+        } catch (e) { lastError = e.message; console.warn('[voice] shift email', p.email, cand, e.message); }
+      }
+      if (sentOne) recipients.push(p.email); else failed.push(p.email);
     }
-    res.json({ ok: recipients.length > 0, sent: recipients.length, recipients, failed, missingEmail, from: from || null, error: recipients.length ? undefined : ('E-mail se nepodařilo odeslat' + (lastError ? (': ' + lastError) : '') + '. Nastav v Railway INFOLINKA_MAIL_FROM na autorizovanou Best Series schránku (skupina HolyOS Senders).') });
+    res.json({ ok: recipients.length > 0, sent: recipients.length, recipients, failed, missingEmail, from: usedFrom || candidates[0] || null, error: recipients.length ? undefined : ('E-mail se nepodařilo odeslat' + (lastError ? (': ' + lastError) : '') + '. Zkontroluj, že infolinka@bestseries.cz je v autorizované skupině (HolyOS Senders) a že se změna propsala (může trvat ~30–60 min).') });
   } catch (err) { next(err); }
 });
 
