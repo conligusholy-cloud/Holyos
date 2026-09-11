@@ -168,7 +168,6 @@ function twimlDial(numbers, timeout, ctx) {
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
-    '  <Say voice="Polly.Jitka" language="cs-CZ">Přepojuji vás na kolegu, chvilku prosím vydržte.</Say>\n' +
     `  <Dial timeout="${t}"${callerId} action="${action}" method="POST">\n` +
     `    <Number>${first}</Number>\n` +
     '  </Dial>\n' +
