@@ -126,7 +126,7 @@ function twimlApology() {
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
-    '  <Say language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
+    '  <Say voice="Polly.Jitka" language="cs-CZ">Omlouvám se, teď se nedaří nikoho zastihnout. Ozveme se vám co nejdříve. Na shledanou.</Say>\n' +
     '  <Hangup/>\n' +
     '</Response>'
   );
@@ -137,22 +137,38 @@ function twimlApology() {
 // nikdo nezvedl, zkusí se další; když zvedl, hovor běží a po zavěšení dostane
 // action completed → zavěsíme. ctx = {mode, target} se veze dál kvůli notifikaci
 // do Velína, když se nikoho nepodaří zastihnout.
+// Vlastní telefonní číslo dané linky (z mapy voice.line_numbers: číslo → linka).
+// Pro Infolinku vrátí číslo Infolinky, aby se z něj volalo při přepojení.
+async function numberForLine(line) {
+  try {
+    const get = settings && settings.getSetting; if (!get) return '';
+    let map = await get('voice.line_numbers');
+    if (typeof map === 'string') { try { map = JSON.parse(map); } catch (_) { map = null; } }
+    if (map && typeof map === 'object') {
+      for (const k of Object.keys(map)) { if (normLine(map[k]) === normLine(line)) return k; }
+    }
+  } catch (_) { /* fallback níže */ }
+  return '';
+}
+
 function twimlDial(numbers, timeout, ctx) {
   const list = (numbers || []).map(e164).filter(Boolean);
   const t = Math.max(8, Math.min(60, parseInt(timeout, 10) || 20));
   if (!list.length) return twimlApology();
   const first = xmlAttr(list[0]);
   const tail = encList(list.slice(1));
-  const callerId = VOICE_DEFAULT_FROM ? ` callerId="${xmlAttr(e164(VOICE_DEFAULT_FROM))}"` : '';
   const c = ctx || {};
+  const cidNum = e164((c.callerId || VOICE_DEFAULT_FROM || ''));   // volající číslo = číslo linky (Infolinky)
+  const callerId = cidNum ? ` callerId="${xmlAttr(cidNum)}"` : '';
   const q = [`q=${tail}`, `t=${t}`];
   if (c.mode) q.push('m=' + encodeURIComponent(c.mode));
   if (c.target) q.push('tg=' + encodeURIComponent(c.target));
+  if (cidNum) q.push('cid=' + encodeURIComponent(cidNum));
   const action = xmlAttr(`${PUBLIC_BASE}/api/voice/transfer?${q.join('&')}`);
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
-    '  <Say language="cs-CZ">Přepojuji vás na kolegu, chvilku prosím vydržte.</Say>\n' +
+    '  <Say voice="Polly.Jitka" language="cs-CZ">Přepojuji vás na kolegu, chvilku prosím vydržte.</Say>\n' +
     `  <Dial timeout="${t}"${callerId} action="${action}" method="POST">\n` +
     `    <Number>${first}</Number>\n` +
     '  </Dial>\n' +
@@ -236,11 +252,16 @@ async function resolveTransferPlan(mode, targetId, line) {
   // fronta = seznam zopakovaný „rounds"-krát dokola
   const queue = [];
   for (let i = 0; i < rounds; i++) queue.push(...oneRound);
+  // Volající číslo pro přepojení = vlastní číslo linky (Infolinky). Fallback na default.
+  let callerId = '';
+  if (mode !== 'outbound') { callerId = await numberForLine(line); }
+  if (!callerId) callerId = VOICE_DEFAULT_FROM || '';
   return {
     enabled,
     numbers: queue,
     perRound: oneRound.length,
     rounds,
+    callerId,
     timeout: Math.max(8, Math.min(60, parseInt(timeout, 10) || 20)),
   };
 }
@@ -433,7 +454,7 @@ router.post('/relay-end', form, async (req, res) => {
       notifyTransferFailed(mode, target, 0);
       return res.type('text/xml').send(twimlApology());
     }
-    return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout, { mode, target }));
+    return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout, { mode, target, callerId: plan.callerId }));
   } catch (e) {
     console.warn('[voice] relay-end:', e.message);
     return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
@@ -453,12 +474,13 @@ router.post('/transfer', form, (req, res) => {
     const timeout = parseInt(req.query.t, 10) || 20;
     const mode = req.query.m || 'inbound';
     const target = req.query.tg || '';
+    const callerId = req.query.cid || '';
     if (!rest.length) {
       // Vyčerpána všechna čísla i kolečka a nikdo se nedovolal → info do Velína.
       notifyTransferFailed(mode, target, undefined);
       return res.type('text/xml').send(twimlApology());
     }
-    return res.type('text/xml').send(twimlDial(rest, timeout, { mode, target }));
+    return res.type('text/xml').send(twimlDial(rest, timeout, { mode, target, callerId }));
   } catch (e) {
     console.warn('[voice] transfer:', e.message);
     return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
