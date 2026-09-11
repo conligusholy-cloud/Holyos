@@ -377,7 +377,7 @@
     <section class="section-panel" id="section-infolinka">
       <div class="content" style="padding-top:16px;">
 
-        <div style="background:linear-gradient(135deg, rgba(236,72,153,0.08), rgba(219,39,119,0.04)); border:1px solid rgba(236,72,153,0.25); border-radius:12px; padding:12px 18px; margin-bottom:16px; font-size:13px; color:var(--text2); line-height:1.6;">
+        <div id="info-intro-banner" style="background:linear-gradient(135deg, rgba(236,72,153,0.08), rgba(219,39,119,0.04)); border:1px solid rgba(236,72,153,0.25); border-radius:12px; padding:12px 18px; margin-bottom:16px; font-size:13px; color:var(--text2); line-height:1.6;">
           📞 <b style="color:var(--text);">Příchozí AI recepční pro Infolinku</b> — samostatná linka oddělená od obchodu. Zadej vlastní telefonní číslo Infolinky (koupené v Twiliu), scénář a přepojení. Hovory a nastavení jsou úplně oddělené od obchodní recepční.
         </div>
 
@@ -739,6 +739,7 @@
         try{
           var c=await api('/config?line='+INFO_LINE);
           el('info-number').value=c.line_number||'';
+          var intro=el('info-intro-banner'); if(intro) intro.style.display=(c.line_number&&String(c.line_number).trim())?'none':'';
           el('info-greeting').value=c.inbound_greeting||'';
           el('info-prompt').value=c.inbound_prompt||'';
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
