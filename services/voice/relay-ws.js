@@ -499,6 +499,7 @@ function attach(server) {
             summary,
             caller_name: callerName,
             caller_intent: callerIntent,
+            location: (intents && intents.location) || null,
             campaign_target_id: state.targetId || null,
             sms_log: state.smsLog && state.smsLog.length ? state.smsLog : undefined,
           };

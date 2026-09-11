@@ -859,6 +859,7 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         duration_sec: true,
         caller_name: true,
         caller_intent: true,
+        location: true,
         summary: true,
         transcript: true,
         campaign_target_id: true,
@@ -910,6 +911,36 @@ router.post('/calls/:id/transcribe', requireAuth, async (req, res, next) => {
   } catch (err) {
     res.status(500).json({ error: (err && err.message) || 'Přepis selhal' });
   }
+});
+
+// POST /api/voice/calls/backfill-locations?line=infolinka — dopočítá „místo" (lokalitu
+// prádlomatu) u starších hovorů z uloženého (bezplatného) přepisu. Cheap AI shrnutí.
+router.post('/calls/backfill-locations', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.json({ ok: true, fixed: 0 });
+    const where = { location: null };
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      if (line === 'infolinka') where.line = 'infolinka';
+      else where.OR = [{ line: 'obchod' }, { line: null }];
+    }
+    const calls = await prisma.voiceCall.findMany({
+      where, orderBy: { started_at: 'desc' }, take: Math.min(parseInt(req.query.limit, 10) || 60, 150),
+      select: { id: true, transcript: true },
+    });
+    const agent = require('../services/voice/agent');
+    let fixed = 0, checked = 0;
+    for (const c of calls) {
+      const tr = Array.isArray(c.transcript) ? c.transcript : [];
+      if (!tr.some((t) => t && t.role === 'caller')) continue;
+      checked++;
+      try {
+        const s = await agent.summarizeStructured(tr, { now: new Date() });
+        if (s && s.location) { await prisma.voiceCall.update({ where: { id: c.id }, data: { location: s.location } }); fixed++; }
+      } catch (e) { console.warn('[voice] backfill location', c.id, e.message); }
+    }
+    res.json({ ok: true, fixed, checked });
+  } catch (err) { next(err); }
 });
 
 // GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).

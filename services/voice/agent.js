@@ -111,7 +111,7 @@ async function summarizeStructured(transcript = [], opts = {}) {
   const text = transcript
     .map((t) => `${t.role === 'caller' ? 'Volající' : 'Asistent'}: ${t.text}`)
     .join('\n');
-  const EMPTY = { summary: '', caller_name: null, caller_intent: null, no_interest: false, callback: false, callback_at: null, meeting: false, meeting_at: null, when_text: null };
+  const EMPTY = { summary: '', caller_name: null, caller_intent: null, location: null, no_interest: false, callback: false, callback_at: null, meeting: false, meeting_at: null, when_text: null };
   if (!text.trim()) return EMPTY;
 
   // Aktuální čas v Praze — aby AI mohla odvodit konkrétní termín ("pondělí v 10:00").
@@ -130,9 +130,10 @@ async function summarizeStructured(transcript = [], opts = {}) {
       temperature: 0.2,
       system:
         'Shrň telefonní hovor a vytáhni záměry. Odpověz POUZE validním JSON bez markdownu, přesně ve tvaru ' +
-        '{"caller_name": string|null, "caller_intent": string, "summary": string, "no_interest": boolean, ' +
+        '{"caller_name": string|null, "caller_intent": string, "summary": string, "location": string|null, "no_interest": boolean, ' +
         '"callback": boolean, "callback_at": string|null, "meeting": boolean, "meeting_at": string|null, "when_text": string|null}. ' +
         'caller_name = jméno volajícího pokud zaznělo, jinak null. caller_intent = krátce co volající potřeboval. summary = 1–3 věty. ' +
+        'location = místo/lokalita prádlomatu, kterého se dotaz týká, pokud v hovoru zaznělo (obchod + město, např. „Tesco, Rychnov nad Kněžnou" nebo „Kaufland, Luhačovice"); jinak null. ' +
         'no_interest = true POUZE pokud volající jasně řekl, že NEMÁ zájem nebo si NEPŘEJE kontakt. ' +
         'callback = true, pokud volající chce, abychom mu zavolali jindy / v jiný čas. ' +
         'meeting = true, pokud si volající chce domluvit schůzku. ' +
@@ -158,6 +159,7 @@ async function summarizeStructured(transcript = [], opts = {}) {
       summary: o.summary || raw,
       caller_name: o.caller_name || null,
       caller_intent: o.caller_intent || null,
+      location: o.location || null,
       no_interest: o.no_interest === true || o.no_interest === 'true',
       callback: o.callback === true || o.callback === 'true',
       callback_at: o.callback_at || null,

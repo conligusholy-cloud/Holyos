@@ -538,6 +538,7 @@
             <h3 style="margin:0;font-size:16px;">Záznamy hovorů Infolinky</h3>
             <button class="btn btn-secondary" onclick="infoLoadCalls()">↻ Obnovit</button>
             <button class="btn btn-secondary" onclick="infoBackfillRec()" title="Dotáhne chybějící nahrávky přímo z Twilia">🎧 Načíst nahrávky</button>
+            <button class="btn btn-secondary" onclick="infoBackfillLoc()" title="Dopočítá místo (lokalitu) u starších hovorů z přepisu">📍 Doplnit místa</button>
             <span id="info-rec-msg" style="font-size:12px;color:var(--text2);"></span>
           </div>
           <div id="info-calls-body" style="color:var(--text2);">Načítám…</div>
@@ -1100,7 +1101,7 @@
           // Kolikrát každé číslo volalo (z načtené historie).
           var counts={};
           rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>SMS</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
             var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
@@ -1110,12 +1111,13 @@
               +'<td'+(rep?' style="color:#eab308;font-weight:600;" title="Opakovaný volající"':'')+'>'+esc(num||'')+' ('+cnt+'×)'+'</td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
+              +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
               +'<td style="text-align:center;">'+smsCell(c)+'</td>'
               +'<td>'+transferCell(c)+'</td>'
               +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Celý přepis (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="9" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="10" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
           });
           html+='</tbody></table></div>';
           body.innerHTML=html;
@@ -1191,6 +1193,14 @@
         try{
           var r=await api('/calls/backfill-recordings?line='+INFO_LINE,{ method:'POST' });
           if(m) m.textContent='✅ Doplněno nahrávek: '+(r.fixed||0)+' (z '+(r.checked||0)+' bez nahrávky)';
+          window.infoLoadCalls();
+        }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
+      };
+      window.infoBackfillLoc = async function(){
+        var m=el('info-rec-msg'); if(m) m.textContent='Dopočítávám místa z přepisů…';
+        try{
+          var r=await api('/calls/backfill-locations?line='+INFO_LINE,{ method:'POST' });
+          if(m) m.textContent='✅ Doplněno míst: '+(r.fixed||0)+' (z '+(r.checked||0)+' přepsaných). Když jich zbývá víc, klikni znovu.';
           window.infoLoadCalls();
         }catch(e){ if(m) m.textContent='Chyba: '+e.message; }
       };

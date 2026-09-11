@@ -6149,6 +6149,7 @@ model VoiceCall {
   summary         String?   @db.Text
   caller_name     String?   @db.VarChar(255)
   caller_intent   String?   @db.Text
+  location        String?   @db.VarChar(255) // lokalita prádlomatu z hovoru (obchod + město) — z AI shrnutí (zdarma)
   audio_url       String?   @db.Text // R2
   lead_id         String?   // CompounderLead (infolinka)
   sales_event_id  Int?      // zapsaná schůzka
