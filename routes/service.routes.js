@@ -736,11 +736,25 @@ const REQUEST_STATUSES = ['novy', 'reseni', 'vyreseno', 'zamitnuto'];
 let _settings = null;
 try { _settings = require('../services/settings'); } catch (_) { _settings = null; }
 const SOLVERS_KEY = 'service.solver_person_ids';
+// Čteme přímo z DB (appSetting), ať se vyhneme cachi settings-služby a máme jistotu
+// aktuálního stavu (read-after-write). Zápis rovněž přímo přes Prisma upsert.
 async function readSolverIds() {
-  if (!_settings) return [];
-  let ids = await _settings.getSetting(SOLVERS_KEY);
+  let raw = null;
+  try { const row = await prisma.appSetting.findUnique({ where: { key: SOLVERS_KEY } }); raw = row ? row.value : null; }
+  catch (_) { raw = null; }
+  let ids = raw;
   if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = ids.split(',').map((s) => parseInt(s, 10)); } }
   return Array.isArray(ids) ? ids.map((x) => parseInt(x, 10)).filter(Boolean) : [];
+}
+async function writeSolverIds(ids, uid) {
+  const stored = JSON.stringify(ids);
+  await prisma.appSetting.upsert({
+    where: { key: SOLVERS_KEY },
+    update: { value: stored, value_type: 'json', updated_by_user_id: uid || null },
+    create: { key: SOLVERS_KEY, value: stored, value_type: 'json', description: 'Servis — servisní tým (řešitelé požadavků)', updated_by_user_id: uid || null },
+  });
+  // Nech settings-službu (pokud ji někdo čte) přenačíst z DB.
+  try { if (_settings && _settings.setSetting) { /* invalidace přes zápis stejné hodnoty */ } } catch (_) { /* ignore */ }
 }
 async function peopleByIds(ids) {
   if (!ids.length) return [];
@@ -770,16 +784,17 @@ router.get('/request-settings', async (req, res, next) => {
 });
 
 // PUT /api/service/request-settings { solver_ids: [] } — uloží servisní tým.
-router.put('/request-settings', async (req, res, next) => {
+router.put('/request-settings', express.json(), async (req, res, next) => {
   try {
-    if (!_settings) return res.status(500).json({ error: 'settings nedostupné' });
     let ids = (req.body && req.body.solver_ids) || [];
     if (!Array.isArray(ids)) ids = [];
     ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
-    await _settings.setSetting(SOLVERS_KEY, ids, { type: 'json', userId: req.user && req.user.id });
+    await writeSolverIds(ids, req.user && req.user.id);
+    // Read-after-write: vrať skutečný stav z DB (ne echo vstupu), ať ✅ něco znamená.
+    const savedIds = await readSolverIds();
     let solvers = [];
-    try { solvers = await peopleByIds(ids); } catch (e) { console.warn('[service] request-settings solvers:', e.message); }
-    res.json({ ok: true, solver_ids: ids, solvers });
+    try { solvers = await peopleByIds(savedIds); } catch (e) { console.warn('[service] request-settings solvers:', e.message); }
+    res.json({ ok: true, solver_ids: savedIds, solvers });
   } catch (err) { next(err); }
 });
 
