@@ -234,13 +234,14 @@
     function load(){
       $('list').innerHTML='<div style="color:var(--text2);padding:10px;">Načítám úkoly…</div>';
       api(API+'/requests?mine=1').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
-        rows=Array.isArray(list)?list:[];
-        if(!rows.length){ $('list').innerHTML='<div class="card" style="color:var(--text2);text-align:center;">Zatím ti není přiřazený žádný servisní úkol.</div>'; return; }
-        // pořadí: nejdřív nové, pak v řešení, pak uzavřené
-        var ord={ novy:0, reseni:1, vyreseno:2, zamitnuto:3 };
+        // Jen otevřené úkoly — vyřešené/zamítnuté ze servisákovy obrazovky mizí.
+        rows=(Array.isArray(list)?list:[]).filter(function(c){ return c.status==='novy'||c.status==='reseni'; });
+        if(!rows.length){ $('list').innerHTML='<div class="card" style="color:var(--text2);text-align:center;">Nemáš žádný otevřený úkol. 🎉</div>'; return; }
+        // pořadí: nejdřív nové, pak v řešení
+        var ord={ novy:0, reseni:1 };
         rows.sort(function(a,b){ return (ord[a.status]||9)-(ord[b.status]||9); });
         $('list').innerHTML=rows.map(card).join('');
-        rows.forEach(function(c){ if(c.status==='reseni'||c.status==='vyreseno'||c.status==='zamitnuto') loadTrips(c.id, c.est_repair_min); });
+        rows.forEach(function(c){ if(c.status==='reseni') loadTrips(c.id, c.est_repair_min); });
       }).catch(function(e){ $('list').innerHTML='<div class="card" style="color:var(--err);">Chyba: '+esc(e.message)+'</div>'; });
     }
 
