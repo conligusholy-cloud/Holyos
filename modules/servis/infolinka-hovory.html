@@ -194,7 +194,7 @@
             +'<div class="meta">'+repChip+chip+'<span class="chip len">⏱ '+fmtDur(c.duration_sec)+'</span>'+(c.caller_name?'<span class="chip none">👤 '+esc(c.caller_name)+'</span>':'')+'</div>'
             +'<div class="actions">'
               +(tel? '<a class="call-btn" href="tel:'+esc(tel)+'" onclick="markCallback(\''+c.id+'\')">Zavolat zpět</a>' : '')
-              +(tel? '<a class="call-btn" style="background:#8b5cf6;color:#fff;" href="sms:'+esc(tel)+'?&body='+encodeURIComponent(smsBody())+'" onclick="markSms(\''+c.id+'\')">✉️ SMS s odkazem</a>' : '')
+              +(tel? '<a class="call-btn" style="background:#8b5cf6;color:#fff;" href="sms:'+esc(tel)+'?&body='+encodeURIComponent(smsBody())+'" onclick="markSms(\''+c.id+'\')">✉️ SMS - Doklad/reklamace</a>' : '')
               +(rec||'')
               +transcriptBlock(c)
             +'</div>'
