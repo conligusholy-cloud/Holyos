@@ -997,25 +997,29 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       const work = sh.wperson ? (nm(sh.wperson) + (sh.wfrom && sh.wto ? (' (' + sh.wfrom + '–' + sh.wto + ')') : '')) : '—';
       return '<tr><td>' + esc(dl) + '</td><td>' + esc(work) + '</td><td>' + esc(nm(sh.main)) + '</td><td>' + esc(nm(sh.backup)) + '</td></tr>';
     }).join('');
-    const bodyHtml = '<p>Ahoj, tady je aktuální rozpis směn na Infolince (14 dní dopředu). Prosím počítej se svými směnami.</p>'
-      + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
-      + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>';
     const { sendMail } = require('../services/email');
-    // Odesílatel = ten, kdo rozpis uložil/odeslal (přihlášený uživatel) — Graph send-as
-    // z jeho Best Series schránky. NIKDY ne Compounder. Fallback: INFOLINKA_MAIL_FROM / SMTP.
+    // Kdo rozpis připravil/odeslal (přihlášený uživatel) — pro atribuci a reply-to.
+    const senderName = (req.user && (req.user.displayName || req.user.username)) || 'Best Series';
     let fromUpn = null;
     try {
       const pp = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { work_email: true, email: true } });
       if (pp) fromUpn = (pp.work_email || pp.email || '').trim() || null;
     } catch (_) { /* fallback níže */ }
+    const bodyHtml = '<p>Ahoj, tady je aktuální rozpis směn na Infolince (14 dní dopředu). Prosím počítej se svými směnami.</p>'
+      + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
+      + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>'
+      + '<p style="color:#8a8a92;font-size:12px;margin-top:14px;">Rozpis připravil: ' + esc(senderName) + '. V případě dotazů odpovězte na tento e-mail.</p>';
+    // Odesílatel = schránka toho, kdo je přihlášený a rozpis uložil (Graph send-as).
+    // Fallback: sdílená Best Series schránka (INFOLINKA_MAIL_FROM) / SMTP. NIKDY ne Compounder.
+    // Reply-to vždy míří na toho, kdo rozpis připravil.
     const from = fromUpn || process.env.INFOLINKA_MAIL_FROM || process.env.SMTP_FROM || undefined;
-    const senderName = (req.user && (req.user.displayName || req.user.username)) || 'Best Series';
+    const replyTo = fromUpn || from;
     const recipients = []; const failed = []; const missingEmail = [];
     let lastError = null;
     for (const p of people) {
       if (!p.email) { missingEmail.push(pmap[p.id].name); continue; }
       try {
-        const r = await sendMail({ to: p.email, from, fromName: senderName, replyTo: from, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
+        const r = await sendMail({ to: p.email, from, fromName: senderName, replyTo, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
         if (r && r.sent) recipients.push(p.email);
         else { failed.push(p.email); lastError = (r && (r.error || r.skipped)) || 'neodesláno'; }
       } catch (e) { failed.push(p.email); lastError = e.message; console.warn('[voice] shift email', p.email, e.message); }
