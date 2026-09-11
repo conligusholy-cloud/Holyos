@@ -724,7 +724,7 @@
       function loadPeople(){
         return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
           var arr=Array.isArray(list)?list:((list&&list.items)||[]);
-          _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id), phone:(p.phone||'').trim() }; });
+          _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim() }; });
           fillOpSelect(); renderOps(); renderShiftRoster();
         }).catch(function(){ _people=[]; });
       }
@@ -737,21 +737,29 @@
       function renderOps(){
         var box=el('info-op-list'); if(!box) return;
         if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Zatím nikdo. Přidej první osobu výběrem výše.</span>'; return; }
-        var missing=0;
+        var missingPhone=0, missingMail=0;
         var rows=_ops.map(function(id){
-          var p=opOf(id); var phone=p&&p.phone;
+          var p=opOf(id); var phone=p&&p.phone; var mail=p&&p.email;
           var tel = phone
             ? '<span style="font-size:12px;color:#22c55e;white-space:nowrap;">📱 '+esc(phone)+'</span>'
             : '<span style="font-size:12px;color:#ef4444;white-space:nowrap;">⚠️ chybí telefon</span>';
-          if(!phone) missing++;
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid '+(phone?'var(--border)':'rgba(239,68,68,0.5)')+';border-radius:8px;padding:8px 12px;">'
-            +'<span style="font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">👤 '+esc(opName(id))+' '+tel+'</span>'
+          var em = mail
+            ? '<span style="font-size:12px;color:#22c55e;white-space:nowrap;">✉️ '+esc(mail)+'</span>'
+            : '<span style="font-size:12px;color:#ef4444;white-space:nowrap;">⚠️ chybí e-mail</span>';
+          if(!phone) missingPhone++;
+          if(!mail) missingMail++;
+          var ok=phone&&mail;
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid '+(ok?'var(--border)':'rgba(239,68,68,0.5)')+';border-radius:8px;padding:8px 12px;">'
+            +'<span style="font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">👤 '+esc(opName(id))+' '+tel+' '+em+'</span>'
             +'<button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="infoRemoveOperator('+id+')">✕ Odebrat</button>'
             +'</div>';
         }).join('');
-        var warn = missing
-          ? '<div style="font-size:12px;color:#ef4444;margin-top:4px;">⚠️ '+missing+' '+(missing===1?'operátor nemá':'operátoři nemají')+' vyplněné telefonní číslo v Lidech a HR — na takového nejde přepojit hovor. Doplň číslo v Lidé a HR.</div>'
-          : '<div style="font-size:12px;color:#22c55e;margin-top:4px;">✅ Všichni operátoři mají telefon.</div>';
+        var warns=[];
+        if(missingPhone) warns.push('⚠️ '+missingPhone+' bez telefonu — nejde přepojit hovor.');
+        if(missingMail) warns.push('⚠️ '+missingMail+' bez e-mailu — nedorazí rozpis směn.');
+        var warn = warns.length
+          ? '<div style="font-size:12px;color:#ef4444;margin-top:4px;">'+warns.join(' ')+' Doplň v Lidé a HR.</div>'
+          : '<div style="font-size:12px;color:#22c55e;margin-top:4px;">✅ Všichni operátoři mají telefon i e-mail.</div>';
         box.innerHTML=rows+warn;
       }
       function persistOps(){ return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ operator_ids:_ops }) }).catch(function(){}); }
