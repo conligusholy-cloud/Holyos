@@ -250,10 +250,13 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
   //    je nakonfigurovaný — tedy Azure App z Fáze 3 s Mail.Send permission)
+  let graphError = null;
+  let graphConfigured = false;
   if (from) {
     try {
       const msGraph = require('./ms-graph-client');
       if (msGraph.isConfigured && msGraph.isConfigured()) {
+        graphConfigured = true;
         const html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml });
         await msGraph.sendMailAs(from, {
           to,
@@ -269,14 +272,23 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
         return { sent: true, via: 'graph', from };
       }
     } catch (e) {
-      console.error('[Email] Graph sendMailAs selhal, fallback na SMTP:', e.message);
+      graphError = (e && e.message) || String(e);
+      console.error('[Email] Graph sendMailAs selhal (from ' + from + '):', graphError);
       // Spadnout dolů na SMTP
     }
   }
 
   // 2) SMTP fallback
   const tx = getTransporter();
-  if (!tx) return { sent: false, skipped: 'no-transporter' };
+  if (!tx) {
+    // Vrať skutečnou příčinu: buď chyba Graphu (schránka není autorizovaná / neexistuje),
+    // nebo že Graph není nakonfigurovaný a SMTP chybí.
+    const why = graphError
+      ? ('Graph odmítl odeslat z ' + from + ': ' + graphError)
+      : (from && !graphConfigured ? 'Graph není nakonfigurovaný a SMTP chybí'
+        : (!from ? 'Chybí odesílatel (from) a SMTP není nastavený' : 'SMTP není nastavený'));
+    return { sent: false, skipped: 'no-transporter', error: why };
+  }
 
   var baseFrom = from || process.env.SMTP_FROM || process.env.SMTP_USER || 'holyos@localhost';
   // Když je zadané jméno odesílatele a adresa není už ve formátu "Jméno <adresa>", slož ho.
