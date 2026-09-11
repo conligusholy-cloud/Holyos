@@ -910,7 +910,7 @@ router.get('/trips/active', async (req, res, next) => {
     const rids = Array.from(new Set(trips.map((t) => t.request_id).filter(Boolean)));
     const rmap = {};
     if (rids.length) {
-      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true, action: true, task: true } });
+      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true, action: true, task: true, est_repair_min: true } });
       reqs.forEach((r) => { rmap[r.id] = r; });
     }
     // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = cesta/práce).
@@ -931,8 +931,14 @@ router.get('/trips/active', async (req, res, next) => {
         arrived: !!t.arrived,
         started_at: t.started_at,
         repair_started_at: t.repair_started_at || null,
+        repair_ended_at: t.repair_ended_at || null,
         return_started_at: t.return_started_at || null,
-        est_repair_min: t.est_repair_min || null,
+        return_ended_at: t.return_ended_at || null,
+        return_destination: t.return_destination || null,
+        return_lat: t.return_lat != null ? Number(t.return_lat) : null,
+        return_lon: t.return_lon != null ? Number(t.return_lon) : null,
+        return_duration_min: t.return_duration_min || null,
+        est_repair_min: r.est_repair_min || null,
         problem: r.problem || null,
         ukon: [r.action, r.task].filter(Boolean).join(' · ') || null,
         req_status: r.status || null,
@@ -976,8 +982,16 @@ router.post('/trips/:id/repair-end', async (req, res, next) => {
 router.post('/trips/:id/return-start', express.json(), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const dest = (req.body && req.body.destination) ? String(req.body.destination).slice(0, 255) : null;
-    const trip = await prisma.serviceTrip.update({ where: { id }, data: { return_started_at: new Date(), return_destination: dest } });
+    const b = req.body || {};
+    const fnum = (v) => { if (v == null || v === '') return null; const n = parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? n : null; };
+    const dur = fnum(b.return_duration_min);
+    const data = {
+      return_started_at: new Date(),
+      return_destination: b.destination ? String(b.destination).slice(0, 255) : null,
+      return_lat: fnum(b.return_lat), return_lon: fnum(b.return_lon),
+      return_duration_min: dur != null ? Math.round(dur) : null,
+    };
+    const trip = await prisma.serviceTrip.update({ where: { id }, data });
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });

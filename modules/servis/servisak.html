@@ -350,8 +350,8 @@
         h+='<div style="margin-top:8px;font-size:12px;color:var(--text2);">✅ Oprava hotová · 🚗 cesta tam '+fmtMin(there)+' · 🔧 oprava '+fmtMin(rep)+'</div>'
           +cmpNorm(rep, est)
           +'<div class="acts" style="margin-top:8px;">'
-          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'domů\')">🏠 Cesta domů</button>'
-          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'další úkol\')">➡️ Na další úkol</button>'
+          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'domů\','+t.origin_lat+','+t.origin_lon+','+t.dest_lat+','+t.dest_lon+')">🏠 Cesta domů</button>'
+          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'další\','+t.origin_lat+','+t.origin_lon+','+t.dest_lat+','+t.dest_lon+')">➡️ Na další úkol</button>'
           +'</div>';
       } else {
         // Fáze 4: jede zpět — časomíra + ukončení
@@ -363,18 +363,31 @@
     }
     window.repairStart=function(tid,rid){ api(API+'/trips/'+tid+'/repair-start',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit opravu.'); }); };
     window.repairEnd=function(tid,rid){ api(API+'/trips/'+tid+'/repair-end',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit opravu.'); }); };
-    window.returnStart=function(tid,rid,kind){
-      if(kind==='domů'){
-        var d=prompt('Kam domů? (adresa / obec)','domů'); if(d===null) return;
-        api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:d||'domů'})})
-          .then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); })
-          .catch(function(){ alert('Nepodařilo se zahájit cestu domů.'); });
-      } else {
-        // Na další úkol → zaznamenej odjezd a vrať se na seznam úkolů, kde si vybereš další a znovu ho zahájíš.
-        api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:'další úkol'})})
-          .then(function(){ if(typeof load==='function') load(); try{ window.scrollTo(0,0); }catch(_){}} )
-          .catch(function(){ if(typeof load==='function') load(); });
+    // Doba jízdy autem mezi dvěma body (min) přes OSRM; null při selhání.
+    function computeDur(oLat,oLon,dLat,dLon){
+      if(oLat==null||dLat==null) return Promise.resolve(null);
+      return fetch('https://router.project-osrm.org/route/v1/driving/'+oLon+','+oLat+';'+dLon+','+dLat+'?overview=false')
+        .then(function(r){ return r.ok?r.json():null; }).then(function(j){ return (j&&j.routes&&j.routes[0])?Math.round(j.routes[0].duration/60):null; }).catch(function(){ return null; });
+    }
+    window.returnStart=function(tid,rid,kind,oLat,oLon,dLat,dLon){
+      var estFor=function(){ return (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min; };
+      var isHome=(kind==='domů');
+      var d=prompt(isHome?'Kam domů? (nech „domů" = zpět na výchozí bod, nebo zadej adresu)':'Adresa dalšího úkolu (kam jedeš)', isHome?'domů':''); if(d===null) return;
+      var body={ destination:(d||(isHome?'domů':'další úkol')) };
+      function send(){ api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(function(){ loadTrips(rid, estFor()); }).catch(function(){ alert('Nepodařilo se zahájit cestu.'); }); }
+      var goHome = isHome && (!d || /^dom[uů]/i.test(d.trim()));
+      if(goHome && oLat!=null && oLon!=null){
+        // domů = zpět na výchozí bod výjezdu (odkud technik ráno vyjel)
+        body.return_lat=oLat; body.return_lon=oLon;
+        computeDur(dLat,dLon,oLat,oLon).then(function(min){ if(min!=null) body.return_duration_min=min; send(); });
+        return;
       }
+      // jinak geokóduj zadanou adresu (domů na jinou adresu / další úkol)
+      fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=cs&countrycodes=cz&q='+encodeURIComponent(d))
+        .then(function(r){ return r.ok?r.json():[]; }).then(function(a){
+          if(a&&a[0]){ body.return_lat=parseFloat(a[0].lat); body.return_lon=parseFloat(a[0].lon); return computeDur(dLat,dLon,body.return_lat,body.return_lon).then(function(min){ if(min!=null) body.return_duration_min=min; }); }
+        }).catch(function(){}).then(send);
     };
     window.returnEnd=function(tid,rid){ var km=prompt('Kolik km cesty zpět? (nepovinné)',''); api(API+'/trips/'+tid+'/return-end',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({km:km?Number(km.replace(',','.')):null})}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit cestu.'); }); };
 

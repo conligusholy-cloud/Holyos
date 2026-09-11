@@ -4781,6 +4781,9 @@ model ServiceTrip {
   return_started_at  DateTime?             // zahájení cesty zpět / na další úkol
   return_ended_at    DateTime?             // ukončení cesty zpět
   return_destination String?  @db.VarChar(255)  // kam se vrací (domů / další úkol)
+  return_lat         Decimal? @db.Decimal(9, 6)
+  return_lon         Decimal? @db.Decimal(9, 6)
+  return_duration_min Int?                       // odhad doby cesty zpět
   return_km          Decimal? @db.Decimal(8, 1)
   started_at  DateTime  @default(now())    // = čas přijetí úkolu (start jízdy tam)
   ended_at    DateTime?
