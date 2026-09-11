@@ -1015,10 +1015,11 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
       + '<tr><th>Den</th><th>V práci (přednostní)</th><th>Hlavní</th><th>Záložní</th></tr>' + rowsHtml + '</table>'
       + '<p style="color:#8a8a92;font-size:12px;margin-top:14px;">Rozpis připravil: ' + esc(senderName) + '. V případě dotazů odpovězte na tento e-mail.</p>';
-    // Odesílatel = schránka toho, kdo je přihlášený a rozpis uložil (Graph send-as).
-    // Fallback: sdílená Best Series schránka (INFOLINKA_MAIL_FROM) / SMTP. NIKDY ne Compounder.
+    // Odesílatel = sdílená Best Series schránka (INFOLINKA_MAIL_FROM) — stačí autorizovat
+    // JEDNU schránku pro AppOnly AccessPolicy, funguje pak komukoli přihlášenému. Když není
+    // nastavená, spadne na schránku přihlášeného. NIKDY ne Compounder.
     // Reply-to vždy míří na toho, kdo rozpis připravil.
-    const from = fromUpn || process.env.INFOLINKA_MAIL_FROM || process.env.SMTP_FROM || undefined;
+    const from = process.env.INFOLINKA_MAIL_FROM || fromUpn || process.env.SMTP_FROM || undefined;
     const replyTo = fromUpn || from;
     const recipients = []; const failed = []; const missingEmail = [];
     let lastError = null;
