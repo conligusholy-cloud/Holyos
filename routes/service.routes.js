@@ -910,27 +910,34 @@ router.get('/trips/active', async (req, res, next) => {
     const rids = Array.from(new Set(trips.map((t) => t.request_id).filter(Boolean)));
     const rmap = {};
     if (rids.length) {
-      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true } });
+      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true, action: true, task: true } });
       reqs.forEach((r) => { rmap[r.id] = r; });
     }
     // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = cesta/práce).
     // Vyřešené/zamítnuté/nové na mapě nechceme.
     const activeTrips = trips.filter((t) => { const r = rmap[t.request_id]; return r && r.status === 'reseni'; });
-    const out = activeTrips.map((t) => ({
-      id: t.id, request_id: t.request_id,
-      tech: t.person_id ? (pmap[t.person_id] || ('#' + t.person_id)) : '—',
-      origin: t.origin, destination: t.destination,
-      origin_lat: t.origin_lat != null ? Number(t.origin_lat) : null,
-      origin_lon: t.origin_lon != null ? Number(t.origin_lon) : null,
-      dest_lat: t.dest_lat != null ? Number(t.dest_lat) : null,
-      dest_lon: t.dest_lon != null ? Number(t.dest_lon) : null,
-      distance_km: t.distance_km != null ? Number(t.distance_km) : null,
-      duration_min: t.duration_min || null,
-      arrived: !!t.arrived,
-      started_at: t.started_at,
-      problem: rmap[t.request_id] ? rmap[t.request_id].problem : null,
-      req_status: rmap[t.request_id] ? rmap[t.request_id].status : null,
-    }));
+    const out = activeTrips.map((t) => {
+      var r = rmap[t.request_id] || {};
+      return {
+        id: t.id, request_id: t.request_id, person_id: t.person_id || null,
+        tech: t.person_id ? (pmap[t.person_id] || ('#' + t.person_id)) : '—',
+        origin: t.origin, destination: t.destination,
+        origin_lat: t.origin_lat != null ? Number(t.origin_lat) : null,
+        origin_lon: t.origin_lon != null ? Number(t.origin_lon) : null,
+        dest_lat: t.dest_lat != null ? Number(t.dest_lat) : null,
+        dest_lon: t.dest_lon != null ? Number(t.dest_lon) : null,
+        distance_km: t.distance_km != null ? Number(t.distance_km) : null,
+        duration_min: t.duration_min || null,
+        arrived: !!t.arrived,
+        started_at: t.started_at,
+        repair_started_at: t.repair_started_at || null,
+        return_started_at: t.return_started_at || null,
+        est_repair_min: t.est_repair_min || null,
+        problem: r.problem || null,
+        ukon: [r.action, r.task].filter(Boolean).join(' · ') || null,
+        req_status: r.status || null,
+      };
+    });
     res.json(out);
   } catch (err) { next(err); }
 });

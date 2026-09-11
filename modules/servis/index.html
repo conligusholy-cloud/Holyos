@@ -651,6 +651,8 @@
         </div>
         <div id="km-map" style="width:100%;height:560px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);"></div>
         <div id="km-empty" style="display:none;color:var(--text2);font-size:13px;padding:14px;">Žádné aktivní cesty. Jakmile technik v mobilu přijme úkol a vyjede, objeví se tady.</div>
+        <div style="font-weight:700;font-size:14px;margin:16px 0 8px;">👷 Servisní tým — kdo na čem dělá</div>
+        <div id="km-list"></div>
       </div>
     </section>
 
@@ -1971,8 +1973,43 @@
   <script>
   (function(){
     var API='/api/service';
-    var map=null, layer=null, trips=[], animTimer=null, pollTimer=null, markers={};
+    var map=null, layer=null, trips=[], animTimer=null, pollTimer=null, markers={}, team=[];
     function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function loadTeam(){ return fetch(API+'/request-settings',{credentials:'include'}).then(function(r){ return r.ok?r.json():null; }).then(function(d){ team=(d&&d.solvers)||[]; }).catch(function(){}); }
+    // Stav a překročení času u jedné cesty (na cestě → oprava → zpět).
+    function tripStatus(t, now){
+      now=now||Date.now();
+      function mins(ts){ return ts?Math.round((now-new Date(ts).getTime())/60000):null; }
+      if(t.return_started_at) return { label:'✅ hotovo — jede zpět', overdue:false };
+      if(t.repair_started_at){
+        var e=mins(t.repair_started_at)||0;
+        if(t.est_repair_min && e>t.est_repair_min) return { label:'🔧 opravuje — překročeno o '+(e-t.est_repair_min)+' min (odhad '+t.est_repair_min+' min)', overdue:true };
+        return { label:'🔧 opravuje na místě'+(t.est_repair_min?(' (zbývá ~'+Math.max(0,t.est_repair_min-e)+' min)'):' ('+e+' min)'), overdue:false };
+      }
+      var el=mins(t.started_at)||0, dur=t.duration_min||0;
+      if(dur && el>dur) return { label:'🚗 na cestě — zpoždění '+(el-dur)+' min (odhad '+dur+' min)', overdue:true };
+      return { label:'🚗 na cestě'+(dur?(' (~'+Math.max(0,dur-el)+' min do cíle)'):''), overdue:false };
+    }
+    function renderList(){
+      var box=document.getElementById('km-list'); if(!box) return;
+      var now=Date.now(), byPid={}, rows='';
+      trips.forEach(function(t){ if(t.person_id) byPid[t.person_id]=t; });
+      trips.forEach(function(t){
+        var st=tripStatus(t,now), col=st.overdue?'#ef4444':'#22c55e';
+        rows+='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid '+(st.overdue?'rgba(239,68,68,0.5)':'var(--border)')+';border-left:3px solid '+col+';border-radius:10px;margin-bottom:6px;background:var(--surface);">'
+          +'<div style="flex:1;min-width:0;"><b>'+esc(t.tech)+'</b> <span style="color:var(--text2);">— '+esc(t.problem||t.destination||'')+'</span>'
+          +(t.ukon?('<div style="color:var(--text2);font-size:12px;">🔧 '+esc(t.ukon)+'</div>'):'')
+          +'<div style="font-size:12px;color:'+col+';margin-top:2px;">'+esc(st.label)+'</div></div>'
+          +(st.overdue?'<span style="background:rgba(239,68,68,0.15);color:#ef4444;border-radius:20px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap;">⚠ Překročeno</span>':'<span style="background:rgba(34,197,94,0.15);color:#22c55e;border-radius:20px;padding:3px 9px;font-size:11px;font-weight:700;white-space:nowrap;">✅ V pořádku</span>')
+          +'</div>';
+      });
+      (team||[]).filter(function(p){ return !byPid[p.id]; }).forEach(function(p){
+        rows+='<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-left:3px solid #f59e0b;border-radius:10px;margin-bottom:6px;background:var(--surface);opacity:.85;">'
+          +'<div style="flex:1;"><b>'+esc(p.name)+'</b> <span style="color:var(--text2);font-size:12px;">— nemá aktivní úkol</span></div>'
+          +'<span style="background:rgba(245,158,11,0.15);color:#f59e0b;border-radius:20px;padding:3px 9px;font-size:11px;font-weight:700;">⏸ Stojí</span></div>';
+      });
+      box.innerHTML=rows||'<div style="color:var(--text2);font-size:13px;">Nikdo v týmu / žádná aktivita.</div>';
+    }
     var geoCache={}; // request/trip id → { line:[[lat,lon]...], cum:[...], total:km }
     function ensureMap(){
       if(map) return true;
@@ -2034,10 +2071,12 @@
         L.marker(o,{ icon:dot('#8ea1b3') }).addTo(layer).bindPopup('Výjezd: '+esc(t.origin));
         L.marker(d,{ icon:dot('#f59e0b') }).addTo(layer).bindPopup('Cíl: '+esc(t.destination)+(t.problem?('<br>'+esc(t.problem)):''));
         markers[t.id]=L.marker(o,{ icon:techIcon(t.tech) }).addTo(layer);
+        markers[t.id].bindTooltip('<b>'+esc(t.tech)+'</b><br>'+esc(t.problem||t.destination||'')+(t.ukon?('<br>🔧 '+esc(t.ukon)):''), { direction:'top', offset:[0,-12], opacity:0.95 });
       });
       if(pts.length){ try{ map.fitBounds(pts,{ padding:[40,40], maxZoom:13 }); }catch(_){}}
       var empt=document.getElementById('km-empty'); if(empt) empt.style.display=trips.length?'none':'';
       animate();
+      renderList();
     }
     function animate(){
       trips.forEach(function(t){
@@ -2049,6 +2088,7 @@
         var rem=Math.max(0,Math.round((t.duration_min||0)*(1-f)));
         m.setIcon(techIcon(t.tech+(f>=1?' · na místě':(' · '+rem+' min'))));
       });
+      renderList();
     }
     function load(){
       fetch(API+'/trips/active',{credentials:'include'}).then(function(r){ return r.ok?r.json():[]; }).then(function(list){
@@ -2060,6 +2100,7 @@
     }
     window.kmEnsure=function(){
       // Leaflet potřebuje viditelný kontejner — po přepnutí záložky přepočítej velikost.
+      loadTeam().then(renderList);
       setTimeout(function(){ if(ensureMap()){ map.invalidateSize(); load(); } }, 60);
       if(!animTimer) animTimer=setInterval(animate, 1000);   // plynulý pohyb figurky
       if(!pollTimer) pollTimer=setInterval(load, 30000);     // čerstvá data
