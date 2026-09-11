@@ -1501,23 +1501,21 @@
     }
     function openSolverSettings(){
       var ov=document.createElement('div'); ov.className='modal-overlay';
-      var chosen={}; _solvers.forEach(function(p){ chosen[p.id]=true; });
-      var rows=_people.slice().sort(function(a,b){ return a.name.localeCompare(b.name,'cs'); }).map(function(p){
-        return '<label style="display:flex;align-items:center;gap:10px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;">'
-          +'<input type="checkbox" data-sid="'+p.id+'"'+(chosen[p.id]?' checked':'')+'>'
-          +'<span style="flex:1;"><b>'+esc(p.name)+'</b>'+(p.role?(' <span style="color:var(--text2);font-size:12px;">'+esc(p.role)+'</span>'):'')+(p.phone?('<div style="color:var(--text2);font-size:11px;">📱 '+esc(p.phone)+'</div>'):'')+'</span></label>';
-      }).join('');
-      // Rozcestník nastavení servisu — sekce Servisní tým + místo pro další nastavení.
+      // Aktuální tým = jen vybraní lidé (ne celý seznam HR).
+      var team=(_solvers||[]).map(function(p){ return parseInt(p.id,10); }).filter(Boolean);
+      function personById(id){ return _people.filter(function(p){ return p.id==id; })[0] || (_solvers.filter(function(p){return p.id==id;})[0]) || { id:id, name:'#'+id, role:'', phone:'' }; }
       ov.innerHTML='<div class="modal" style="width:600px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column;"><h2 style="margin-bottom:4px;">⚙️ Nastavení servisu</h2>'
         +'<p style="color:var(--text2);font-size:13px;margin:0 0 14px;">Nastavení pro servisní požadavky a techniky. Další volby sem budeme přidávat.</p>'
         +'<div style="flex:1;overflow:auto;padding-right:4px;">'
-        // Sekce 1: Servisní tým
         +'<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
         +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">👥 Servisní tým (kdo řeší požadavky)</div>'
-        +'<div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Vyber z Lidí a HR ty, které budeš úkolovat. Jen z nich pak volíš „Řešitele" u požadavku a uvidí své úkoly v telefonu.</div>'
-        +(rows||'<span style="color:var(--text2);">Žádní lidé v HR.</span>')
+        +'<div style="color:var(--text2);font-size:12px;margin-bottom:10px;">Přidávej lidi z Lidí a HR. Jen z nich pak volíš „Řešitele" u požadavku a uvidí své úkoly v telefonu.</div>'
+        +'<div id="team-list" style="margin-bottom:10px;"></div>'
+        +'<div style="display:flex;gap:8px;align-items:center;">'
+        +'<select id="team-add" style="flex:1;"></select>'
+        +'<button class="btn btn-secondary" id="team-add-btn" type="button">+ Přidat</button>'
         +'</div>'
-        // Sekce 2: Další nastavení (placeholder — připravené místo)
+        +'</div>'
         +'<div style="border:1px dashed var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px;opacity:.85;">'
         +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">🧭 Další nastavení</div>'
         +'<div style="color:var(--text2);font-size:12px;">Připravujeme: automatické přiřazování úkolů (podle lokality/rozpisu), výchozí lhůty řešení, notifikace technikům, sazba za km. Napiš, co sem chceš přidat.</div>'
@@ -1526,11 +1524,28 @@
         +'<div class="modal-actions" style="margin-top:12px;"><span id="sr-set-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
         +'<button class="btn btn-secondary" id="sr-set-cancel">Zavřít</button><button class="btn btn-primary" id="sr-set-save">💾 Uložit tým</button></div></div>';
       document.getElementById('modal-root').appendChild(ov);
+      var listEl=ov.querySelector('#team-list'), addSel=ov.querySelector('#team-add');
+      function renderTeam(){
+        if(!team.length){ listEl.innerHTML='<div style="color:var(--text2);font-size:13px;padding:6px 0;">Zatím nikdo. Přidej člověka níže.</div>'; }
+        else { listEl.innerHTML=team.map(function(id){ var p=personById(id);
+          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;">'
+            +'<span style="flex:1;"><b>'+esc(p.name)+'</b>'+(p.role?(' <span style="color:var(--text2);font-size:12px;">'+esc(p.role)+'</span>'):'')+(p.phone?('<div style="color:var(--text2);font-size:11px;">📱 '+esc(p.phone)+'</div>'):'')+'</span>'
+            +'<button class="btn btn-danger" data-rm="'+p.id+'" type="button" style="flex:0 0 auto;min-width:0;padding:6px 10px;font-size:12px;">✕ Odebrat</button></div>';
+        }).join(''); }
+        // Nabídka = lidé, kteří ještě nejsou v týmu.
+        var avail=_people.filter(function(p){ return team.indexOf(p.id)<0; }).sort(function(a,b){ return a.name.localeCompare(b.name,'cs'); });
+        addSel.innerHTML='<option value="">+ Přidat člověka…</option>'+avail.map(function(p){ return '<option value="'+p.id+'">'+esc(p.name)+(p.role?(' — '+esc(p.role)):'')+'</option>'; }).join('');
+      }
+      function addSelected(){ var id=parseInt(addSel.value,10); if(id && team.indexOf(id)<0){ team.push(id); renderTeam(); } }
+      ov.querySelector('#team-add-btn').addEventListener('click',addSelected);
+      addSel.addEventListener('change',addSelected);
+      listEl.addEventListener('click',function(e){ var b=e.target.closest('[data-rm]'); if(!b) return; var id=parseInt(b.getAttribute('data-rm'),10); team=team.filter(function(x){return x!==id;}); renderTeam(); });
+      renderTeam();
       function close(){ ov.remove(); }
       ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
       ov.querySelector('#sr-set-cancel').addEventListener('click',close);
       ov.querySelector('#sr-set-save').addEventListener('click',function(){
-        var ids=Array.prototype.slice.call(ov.querySelectorAll('input[data-sid]:checked')).map(function(c){ return parseInt(c.getAttribute('data-sid'),10); }).filter(function(n){ return !!n; });
+        var ids=team.slice();
         var m=ov.querySelector('#sr-set-msg'); if(m){ m.style.color='var(--text2)'; m.textContent='Ukládám…'; }
         fetch(API+'/request-settings',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ solver_ids:ids }) })
           .then(function(r){ return r.text().then(function(t){ var j={}; try{ j=JSON.parse(t); }catch(_){}
