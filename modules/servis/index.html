@@ -1976,7 +1976,7 @@
       if(typeof L==='undefined'){ return false; }
       var el=document.getElementById('km-map'); if(!el) return false;
       map=L.map(el,{ scrollWheelZoom:true }).setView([49.8,15.5], 7); // ČR
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{ maxZoom:19, attribution:'© OpenStreetMap' }).addTo(map);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{ maxZoom:20, maxNativeZoom:19, attribution:'© OpenStreetMap, © CARTO' }).addTo(map);
       layer=L.layerGroup().addTo(map);
       return true;
     }
