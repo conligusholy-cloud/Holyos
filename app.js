@@ -629,10 +629,21 @@ app.post('/storage/:key', (req, res) => {
 
 // ─── Health check ──────────────────────────────────────────────────────────
 
+// Identifikátor nasazené verze — mění se každým deployem (Railway commit SHA),
+// stabilní napříč replikami téhož deploye. Fallback = čas startu procesu.
+// Frontend (js/sidebar.js) ho pravidelně kontroluje a při změně nabídne obnovení.
+const BUILD_ID = String(
+  process.env.RAILWAY_GIT_COMMIT_SHA
+  || process.env.RAILWAY_DEPLOYMENT_ID
+  || process.env.npm_package_version
+  || Date.now()
+);
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     version: process.env.npm_package_version || '0.3.0',
+    build: BUILD_ID,
     timestamp: new Date().toISOString(),
   });
 });
