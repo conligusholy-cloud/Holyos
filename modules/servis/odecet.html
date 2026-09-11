@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
-  <meta name="theme-color" content="#10b981">
+  <meta name="theme-color" content="#0e1a22">
   <title>Stavy měřidel</title>
   <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
   <style>
-    :root{ --bg:#f4f6f8; --card:#ffffff; --border:#dfe4ea; --text:#1f2a37; --text2:#8a97a6; --acc:#10b981; --acc2:#059669; --err:#ef4444; }
+    :root{ --bg:#0b0f14; --card:#141c26; --card2:#1b2530; --border:#26333f; --text:#e8eef3; --text2:#8ea1b3; --acc:#22d3ee; --acc2:#06b6d4; --err:#ef4444; }
     *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
     body{ min-height:100dvh; }
@@ -18,21 +18,21 @@
     .who b{ color:var(--text); }
     .field{ position:relative; margin-bottom:14px; }
     .field .ico{ position:absolute; left:16px; top:50%; transform:translateY(-50%); color:var(--text2); font-size:16px; pointer-events:none; }
-    input,select{ width:100%; background:var(--card); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:16px 16px; font-family:inherit; }
+    input,select{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:16px 16px; font-family:inherit; }
     input.with-ico,select.with-ico{ padding-left:44px; }
     input::placeholder{ color:var(--text2); }
-    input:focus,select:focus{ outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+    input:focus,select:focus{ outline:none; border-color:var(--acc); box-shadow:0 0 0 3px rgba(34,211,238,.15); }
     /* Foto tlačítko jako input s kancelářskou sponkou */
     .photo{ position:relative; }
-    .photo .btn-file{ display:flex; align-items:center; gap:12px; width:100%; background:var(--card); border:1px solid var(--border); border-radius:12px; color:var(--text2); font-size:16px; padding:16px; cursor:pointer; }
+    .photo .btn-file{ display:flex; align-items:center; gap:12px; width:100%; background:var(--card2); border:1px solid var(--border); border-radius:12px; color:var(--text2); font-size:16px; padding:16px; cursor:pointer; }
     .photo .btn-file.has{ color:var(--text); border-color:var(--acc); }
     .photo input[type=file]{ display:none; }
     .photo .thumb{ margin-top:8px; display:none; }
     .photo .thumb img{ width:100%; max-height:220px; object-fit:cover; border-radius:12px; border:1px solid var(--border); }
-    .photo .thumb .rm{ margin-top:6px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:13px; color:var(--err); cursor:pointer; }
+    .photo .thumb .rm{ margin-top:6px; background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:8px 12px; font-size:13px; color:var(--err); cursor:pointer; }
     /* Sticky uložit */
     .bar{ position:fixed; left:0; right:0; bottom:0; padding:14px 18px calc(14px + env(safe-area-inset-bottom)); display:flex; justify-content:flex-end; pointer-events:none; }
-    .bar .btn{ pointer-events:auto; background:var(--acc); color:#fff; border:none; border-radius:12px; padding:15px 26px; font-size:16px; font-weight:700; cursor:pointer; box-shadow:0 6px 18px rgba(16,185,129,.4); display:inline-flex; align-items:center; gap:8px; }
+    .bar .btn{ pointer-events:auto; background:var(--acc); color:#04222b; border:none; border-radius:12px; padding:15px 26px; font-size:16px; font-weight:800; cursor:pointer; box-shadow:0 6px 18px rgba(34,211,238,.35); display:inline-flex; align-items:center; gap:8px; }
     .bar .btn:disabled{ opacity:.6; }
     .msg{ position:fixed; left:0; right:0; bottom:76px; text-align:center; font-size:14px; min-height:18px; padding:0 18px; }
     .msg.err{ color:var(--err); } .msg.ok{ color:var(--acc2); }
@@ -40,7 +40,7 @@
     .screen .big{ font-size:44px; margin-bottom:12px; }
     .screen h2{ font-size:20px; margin:0 0 8px; }
     .screen p{ color:var(--text2); font-size:14px; line-height:1.6; margin:0 auto 18px; max-width:340px; }
-    .screen a.btn{ background:var(--acc); color:#fff; text-decoration:none; border-radius:12px; padding:14px 22px; font-weight:700; display:inline-block; }
+    .screen a.btn{ background:var(--acc); color:#04222b; text-decoration:none; border-radius:12px; padding:14px 22px; font-weight:800; display:inline-block; }
     .hidden{ display:none !important; }
   </style>
 </head>
@@ -87,7 +87,7 @@
     <div class="big">✅</div>
     <h2>Odečet uložen</h2>
     <p>Díky! Stavy měřidel byly zaznamenány a jsou vidět v HolyOS → Servis → Odečty.</p>
-    <button class="btn" id="again" style="background:var(--acc);color:#fff;border:none;cursor:pointer;">Zadat další</button>
+    <button class="btn" id="again" style="background:var(--acc);color:#04222b;border:none;cursor:pointer;font-weight:800;border-radius:12px;padding:14px 22px;">Zadat další</button>
   </div>
 
   <div class="msg" id="msg"></div>
