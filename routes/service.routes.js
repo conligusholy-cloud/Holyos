@@ -827,6 +827,28 @@ async function myPersonId(req) {
     return p ? p.id : null;
   } catch (_) { return null; }
 }
+// Jméno toho, kdo akci provedl (pro log).
+function actorName(req) {
+  const u = req && req.user;
+  return (u && (u.displayName || u.username || u.name)) || 'Systém';
+}
+// Zapíše řádek do logu aktivit úkolu (best-effort, nikdy neshodí request).
+async function logReq(requestId, req, action, detail) {
+  try {
+    if (!prisma.serviceRequestLog || !requestId) return;
+    await prisma.serviceRequestLog.create({ data: { request_id: parseInt(requestId, 10), actor: actorName(req).slice(0, 160), action: String(action).slice(0, 40), detail: detail ? String(detail).slice(0, 2000) : null } });
+  } catch (e) { console.warn('[service] logReq selhal:', e.message); }
+}
+
+// GET /api/service/requests/:id/log — kompletní historie aktivit úkolu.
+router.get('/requests/:id/log', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!prisma.serviceRequestLog) return res.json([]);
+    const rows = await prisma.serviceRequestLog.findMany({ where: { request_id: id }, orderBy: { at: 'desc' }, take: 500 });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
 
 router.get('/requests', async (req, res, next) => {
   try {
@@ -888,6 +910,7 @@ router.post('/requests/:id/accept', async (req, res, next) => {
       },
     });
     const updated = await prisma.serviceRequest.update({ where: { id }, data: { status: 'reseni', assignee_id: pid || reqRow.assignee_id } });
+    await logReq(id, req, 'accepted', 'Úkol přijat a výjezd zahájen: ' + d.origin + ' → ' + d.destination + (dur != null ? (' (odhad jízdy ' + Math.round(dur) + ' min)') : ''));
     res.json({ ok: true, request: updated, trip });
   } catch (err) { next(err); }
 });
@@ -957,9 +980,12 @@ router.post('/trips/:id/finish', async (req, res, next) => {
     if (km != null && !Number.isNaN(km)) data.km = km;
     if (req.body && req.body.note != null) data.note = String(req.body.note);
     const trip = await prisma.serviceTrip.update({ where: { id }, data });
+    await logReq(trip.request_id, req, 'trip_finish', 'Cesta ukončena' + (km != null ? (' · ' + km + ' km') : ''));
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
+
+const _minBetween = (a, b) => (a && b) ? Math.round((new Date(b) - new Date(a)) / 60000) : null;
 
 // ── Časomíra vlastní opravy + cesta zpět ──
 // POST /trips/:id/repair-start — technik dojel a začíná opravovat (spustí časomíru).
@@ -967,6 +993,8 @@ router.post('/trips/:id/repair-start', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const trip = await prisma.serviceTrip.update({ where: { id }, data: { arrived: true, repair_started_at: new Date() } });
+    const tam = _minBetween(trip.started_at, trip.repair_started_at);
+    await logReq(trip.request_id, req, 'repair_start', 'Zahájena vlastní oprava' + (tam != null ? (' · cesta tam ' + tam + ' min') : ''));
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
@@ -975,6 +1003,8 @@ router.post('/trips/:id/repair-end', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const trip = await prisma.serviceTrip.update({ where: { id }, data: { repair_ended_at: new Date() } });
+    const rep = _minBetween(trip.repair_started_at, trip.repair_ended_at);
+    await logReq(trip.request_id, req, 'repair_end', 'Ukončena vlastní oprava' + (rep != null ? (' · trvala ' + rep + ' min') : ''));
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
@@ -992,6 +1022,7 @@ router.post('/trips/:id/return-start', express.json(), async (req, res, next) =>
       return_duration_min: dur != null ? Math.round(dur) : null,
     };
     const trip = await prisma.serviceTrip.update({ where: { id }, data });
+    await logReq(trip.request_id, req, 'return_start', 'Zahájena cesta zpět: ' + (data.return_destination || '—') + (dur != null ? (' (odhad ' + Math.round(dur) + ' min)') : ''));
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
@@ -1003,6 +1034,8 @@ router.post('/trips/:id/return-end', express.json(), async (req, res, next) => {
     const km = req.body && req.body.km != null ? Number(String(req.body.km).replace(',', '.')) : null;
     if (km != null && !Number.isNaN(km)) data.return_km = km;
     const trip = await prisma.serviceTrip.update({ where: { id }, data });
+    const back = _minBetween(trip.return_started_at, trip.return_ended_at);
+    await logReq(trip.request_id, req, 'return_end', 'Ukončena cesta zpět' + (back != null ? (' · trvala ' + back + ' min') : '') + (km != null ? (' · ' + km + ' km') : ''));
     res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
@@ -1025,6 +1058,7 @@ router.post('/requests', async (req, res, next) => {
     const row = await prisma.serviceRequest.create({
       data: Object.assign({}, parsed.data, { status: 'novy', created_by_user_id: (req.user && req.user.id) || null }),
     });
+    await logReq(row.id, req, 'created', 'Požadavek vytvořen: ' + (row.problem || ''));
     res.status(201).json(row);
   } catch (err) { next(err); }
 });
@@ -1043,12 +1077,26 @@ const requestPatchSchema = z.object({
   est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
+const STATUS_LABEL = { novy: 'Nový', reseni: 'V řešení', vyreseno: 'Vyřešeno', zamitnuto: 'Zamítnuto' };
 router.patch('/requests/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
     const parsed = requestPatchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const before = await prisma.serviceRequest.findUnique({ where: { id } });
     const row = await prisma.serviceRequest.update({ where: { id }, data: parsed.data });
+    const d = parsed.data;
+    // Zaloguj smysluplné změny.
+    if (before) {
+      if (d.status !== undefined && d.status !== before.status) await logReq(id, req, 'status', 'Změna stavu: ' + (STATUS_LABEL[before.status] || before.status) + ' → ' + (STATUS_LABEL[d.status] || d.status));
+      if (d.assignee_id !== undefined && d.assignee_id !== before.assignee_id) {
+        let nm = '—'; if (d.assignee_id) { const p = await prisma.person.findUnique({ where: { id: d.assignee_id }, select: { first_name: true, last_name: true } }).catch(() => null); if (p) nm = [p.first_name, p.last_name].filter(Boolean).join(' '); }
+        await logReq(id, req, 'assignee', 'Řešitel: ' + nm);
+      }
+      if (d.resolution !== undefined && (d.resolution || '') !== (before.resolution || '')) await logReq(id, req, 'resolution', 'Upraven způsob řešení' + (d.resolution ? (': ' + String(d.resolution).slice(0, 200)) : ''));
+      if (d.fix_photo_urls !== undefined) { const nb = Array.isArray(d.fix_photo_urls) ? d.fix_photo_urls.length : 0, ob = Array.isArray(before.fix_photo_urls) ? before.fix_photo_urls.length : 0; if (nb > ob) await logReq(id, req, 'fix_photo', 'Přidána fotodokumentace opravy (' + nb + ')'); }
+      if (d.est_repair_min !== undefined && (d.est_repair_min || null) !== (before.est_repair_min || null)) await logReq(id, req, 'est', 'Odhad opravy: ' + (d.est_repair_min || 0) + ' min');
+    }
     res.json(row);
   } catch (err) { next(err); }
 });
@@ -1056,6 +1104,7 @@ router.patch('/requests/:id', async (req, res, next) => {
 router.delete('/requests/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
+    await logReq(id, req, 'deleted', 'Požadavek smazán');
     await prisma.serviceRequest.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { next(err); }

@@ -1649,6 +1649,7 @@
           '</div>'+
           '<div class="form-row"><label>Způsob řešení (jak se řeší)</label><textarea id="sr-resolution" rows="3">'+esc(row.resolution||'')+'</textarea></div>'
         ))+
+        (isNew?'':'<div class="form-row"><label>📜 Historie úkolu (kdo, kdy, co)</label><div id="sr-log" style="max-height:240px;overflow:auto;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;font-size:12px;">Načítám…</div></div>')+
         '<div class="modal-actions">'+
           (isNew?'':'<button class="btn btn-danger" id="sr-del">Smazat</button>')+
           '<button class="btn btn-secondary" id="sr-cancel">Zrušit</button>'+
@@ -1662,6 +1663,18 @@
       // Řešitele vždy načti čerstvě ze servisního týmu (ozubené kolečko), ať dropdown
       // ukáže jen členy týmu i když se tým změnil po otevření sekce.
       if(!isNew){ loadSolvers().then(function(){ var sel=ov.querySelector('#sr-assignee'); if(sel) sel.innerHTML=peopleOptions(row.assignee_id); }); }
+      // Historie úkolu (log aktivit)
+      if(!isNew){ (function(){
+        var box=ov.querySelector('#sr-log'); if(!box) return;
+        var ICON={ created:'🆕', status:'🔁', assignee:'👤', accepted:'▶️', repair_start:'🛠️', repair_end:'⏹️', return_start:'🚗', return_end:'🏁', trip_finish:'🏁', resolution:'📝', fix_photo:'📷', est:'⏱️', deleted:'🗑️' };
+        fetchJSON(API+'/requests/'+row.id+'/log').then(function(logs){
+          if(!Array.isArray(logs)||!logs.length){ box.innerHTML='<span style="color:var(--text2);">Zatím žádná aktivita.</span>'; return; }
+          box.innerHTML=logs.map(function(l){
+            var d=new Date(l.at).toLocaleString('cs-CZ');
+            return '<div style="padding:5px 0;border-bottom:1px solid var(--border);">'+(ICON[l.action]||'•')+' <b>'+esc(l.detail||l.action)+'</b><div style="color:var(--text2);font-size:11px;">'+esc(d)+' · '+esc(l.actor||'—')+'</div></div>';
+          }).join('');
+        }).catch(function(){ box.innerHTML='<span style="color:#ef4444;">Historii se nepodařilo načíst.</span>'; });
+      })(); }
       var delBtn=ov.querySelector('#sr-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat požadavek?')) return; fetchJSON(API+'/requests/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sr-save').addEventListener('click',function(){
         var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };

@@ -4757,6 +4757,19 @@ model ServiceRequest {
   @@map("service_requests")
 }
 
+// Log aktivit u servisního požadavku — kdo, kdy, co udělal (kompletní audit trail).
+model ServiceRequestLog {
+  id         Int      @id @default(autoincrement())
+  request_id Int
+  actor      String?  @db.VarChar(160)  // kdo akci provedl (jméno uživatele/technika)
+  action     String   @db.VarChar(40)   // kód akce (created, status, accepted, repair_start…)
+  detail     String?  @db.Text          // lidský popis
+  at         DateTime @default(now())
+
+  @@index([request_id])
+  @@map("service_request_logs")
+}
+
 // Cesta servisáka k zásahu — logování ujetých km. Vytvoří se při „Přijmout":
 // dokud servisák nezadá odkud vyjíždí a kam jede, úkol se nerozjede.
 model ServiceTrip {
