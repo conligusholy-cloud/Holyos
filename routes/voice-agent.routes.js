@@ -1053,8 +1053,11 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
     // 2) sdílená Best Series schránka INFOLINKA_MAIL_FROM, 3) SMTP_FROM.
     // Zkoušíme je po sobě — když první selže (např. 403 z AppOnly AccessPolicy),
     // automaticky se zkusí další. Reply-to vždy na autora rozpisu.
+    // Poslední záchrana: už autorizovaný odesílatel, který jinde v HolyOS spolehlivě
+    // odesílá (je členem skupiny HolyOS Senders) — aby rozpis odešel i když infolinka@
+    // není v autorizované skupině (403 RAOP / AppOnly AccessPolicy).
     const candidates = [];
-    [fromUpn, process.env.INFOLINKA_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => {
+    [fromUpn, process.env.INFOLINKA_MAIL_FROM, process.env.COMPOUNDER_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => {
       const v = (c || '').trim(); if (v && candidates.indexOf(v) < 0) candidates.push(v);
     });
     const replyTo = fromUpn || candidates[0] || undefined;
