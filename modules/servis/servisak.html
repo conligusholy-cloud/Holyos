@@ -284,6 +284,13 @@
     function ms(a,b){ if(!a) return null; return (b?new Date(b):new Date())-new Date(a); }
     function fmtHMS(m){ if(m==null) return '—'; var s=Math.max(0,Math.round(m/1000)); var h=Math.floor(s/3600), mi=Math.floor((s%3600)/60), se=s%60; return (h?(h+':'):'')+(h?('0'+mi).slice(-2):mi)+':'+('0'+se).slice(-2); }
     function fmtMin(m){ if(m==null) return '—'; return Math.round(m/60000)+' min'; }
+    // Srovnání normočas vs. skutečná doba opravy.
+    function cmpNorm(realMs, estMin){
+      if(!estMin || realMs==null) return '';
+      var real=Math.round(realMs/60000), diff=real-estMin;
+      var col=diff>0?'#ef4444':'#22c55e', sign=diff>0?'+':'';
+      return '<div style="margin-top:4px;font-size:12px;">📊 Normočas <b>'+estMin+' min</b> vs skutečnost <b>'+real+' min</b> · <b style="color:'+col+';">'+sign+diff+' min</b></div>';
+    }
     // Globální tikot: aktualizuje živé časomíry každou vteřinu.
     if(!window.__svcTick){ window.__svcTick=setInterval(function(){
       document.querySelectorAll('.live-timer').forEach(function(el){
@@ -292,6 +299,14 @@
         var est=parseFloat(el.getAttribute('data-est'))||0; // minuty odhadu
         if(est>0){ var remain=est*60000-el2; el.textContent=fmtHMS(el2)+' / odhad '+est+' min'+(remain<0?(' · přes o '+fmtHMS(-remain)):(' · zbývá '+fmtHMS(remain))); el.style.color=remain<0?'#ef4444':'#22c55e'; }
         else { el.textContent=fmtHMS(el2); }
+      });
+      // Plnící se pruh normočasu (odhad opravy). Fill = uplynulý/odhad, přes 100 % červeně.
+      document.querySelectorAll('.live-bar').forEach(function(el){
+        var since=el.getAttribute('data-since'); var est=parseFloat(el.getAttribute('data-est'))||0; if(!since||est<=0) return;
+        var elapsed=(new Date()-new Date(since)), full=est*60000;
+        var pct=Math.min(100, Math.round(elapsed/full*100)); var over=elapsed>full;
+        var fill=el.querySelector('.fill'); if(fill){ fill.style.width=pct+'%'; fill.style.background=over?'#ef4444':(pct>85?'#f59e0b':'#22c55e'); }
+        var cap=el.querySelector('.cap'); if(cap){ cap.textContent=over?('⚠ přes normočas o '+fmtHMS(elapsed-full)):(pct+' % z normočasu '+est+' min'); cap.style.color=over?'#ef4444':'var(--text2)'; }
       });
     }, 1000); }
 
@@ -303,17 +318,17 @@
         var active=tr.filter(function(t){ return !t.ended_at; }).slice(-1)[0];
         var html=tr.map(function(t){
           if(active && t.id===active.id) return tripActive(t, id, est);
-          return tripDone(t);
+          return tripDone(t, est);
         }).join('');
         box.innerHTML=html;
       }).catch(function(){});
     }
     // Uzavřená / historická cesta — souhrn časů.
-    function tripDone(t){
+    function tripDone(t, est){
       var km=(t.km!=null&&t.km!=='')?(Number(t.km)+' km'):null;
       var there=ms(t.started_at,t.repair_started_at), rep=ms(t.repair_started_at,t.repair_ended_at), back=ms(t.return_started_at,t.return_ended_at);
       var parts=[]; if(there!=null)parts.push('🚗 tam '+fmtMin(there)); if(rep!=null)parts.push('🔧 oprava '+fmtMin(rep)); if(back!=null)parts.push('🏠 zpět '+fmtMin(back)); if(km)parts.push(km);
-      return '<div class="trip"><b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b>'+(parts.length?('<br>'+parts.join(' · ')):'')+(t.return_destination?('<br>↩ '+esc(t.return_destination)):'')+'</div>';
+      return '<div class="trip"><b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b>'+(parts.length?('<br>'+parts.join(' · ')):'')+cmpNorm(rep, est)+(t.return_destination?('<br>↩ '+esc(t.return_destination)):'')+'</div>';
     }
     // Aktivní cesta — fázová časomíra + tlačítka.
     function tripActive(t, id, est){
@@ -323,13 +338,17 @@
         h+='<div style="margin-top:8px;color:var(--text2);font-size:12px;">Až dorazíš na místo, zahaj vlastní opravu.</div>'
           +'<button class="btn btn-primary" style="margin-top:8px;" onclick="repairStart('+t.id+','+id+')">🛠️ Zahájit vlastní opravu</button>';
       } else if(!t.repair_ended_at){
-        // Fáze 2: probíhá oprava — časomíra + (odhad)
-        h+='<div style="margin-top:8px;font-size:13px;">🔧 Oprava běží: <b class="live-timer" data-since="'+t.repair_started_at+'" data-est="'+(est||'')+'">…</b></div>'
-          +'<button class="btn btn-warn" style="margin-top:8px;" onclick="repairEnd('+t.id+','+id+')">⏹️ Ukončit vlastní opravu</button>';
+        // Fáze 2: probíhá oprava — časomíra + plnící se pruh normočasu
+        h+='<div style="margin-top:8px;font-size:13px;">🔧 Oprava běží: <b class="live-timer" data-since="'+t.repair_started_at+'" data-est="'+(est||'')+'">…</b></div>';
+        if(est){ h+='<div style="margin-top:6px;height:14px;background:var(--card2);border:1px solid var(--border);border-radius:8px;overflow:hidden;position:relative;">'
+          +'<div class="live-bar" data-since="'+t.repair_started_at+'" data-est="'+est+'" style="height:100%;"><div class="fill" style="height:100%;width:0;background:#22c55e;transition:width .6s linear;"></div><div class="cap" style="position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text2);"></div></div>'
+          +'</div>'; }
+        h+='<button class="btn btn-warn" style="margin-top:8px;" onclick="repairEnd('+t.id+','+id+')">⏹️ Ukončit vlastní opravu</button>';
       } else if(!t.return_started_at){
-        // Fáze 3: oprava hotová — souhrn + volba cesty zpět
+        // Fáze 3: oprava hotová — souhrn + srovnání normočas vs skutečnost + volba cesty zpět
         var there=ms(t.started_at,t.repair_started_at), rep=ms(t.repair_started_at,t.repair_ended_at);
         h+='<div style="margin-top:8px;font-size:12px;color:var(--text2);">✅ Oprava hotová · 🚗 cesta tam '+fmtMin(there)+' · 🔧 oprava '+fmtMin(rep)+'</div>'
+          +cmpNorm(rep, est)
           +'<div class="acts" style="margin-top:8px;">'
           +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'domů\')">🏠 Cesta domů</button>'
           +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'další úkol\')">➡️ Na další úkol</button>'
