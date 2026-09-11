@@ -386,6 +386,7 @@
           <button type="button" class="btn btn-secondary" data-infosub="calls" onclick="infoSub('calls')">📞 Záznamy hovorů</button>
           <button type="button" class="btn btn-secondary" data-infosub="shifts" onclick="infoSub('shifts')">🗓️ Plánování směn</button>
           <button type="button" class="btn btn-secondary" data-infosub="report" onclick="infoSub('report')">📊 Přehled služeb</button>
+          <button type="button" class="btn btn-secondary" data-infosub="people" onclick="infoSub('people')">📈 Hodnocení lidí</button>
         </div>
 
         <!-- Sub: Nastavení recepční -->
@@ -502,6 +503,22 @@
             </div>
           </div>
           <div id="info-report-body" style="color:var(--text2);font-size:13px;">Vyber období a klikni Zobrazit.</div>
+        </div>
+
+        <!-- Sub: Hodnocení lidí (statistika operátorů) -->
+        <div id="info-people" style="display:none;max-width:900px;">
+          <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px;">
+            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📈 Hodnocení operátorů Infolinky</div>
+            <p style="color:var(--text2);font-size:12px;margin:0 0 12px;">Kolik přepojených hovorů každý operátor přijal, kolik času na nich strávil, kolikrát byl nedostupný nebo hovor odmítl. Počítá se z přepojení AI na živého člověka za vybrané období.</p>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;">
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Od</label>
+                <input id="info-ppl-from" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <div><label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Do</label>
+                <input id="info-ppl-to" type="date" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px;color:var(--text);font-size:13px;"></div>
+              <button class="btn btn-primary" onclick="infoLoadPeople()">Zobrazit</button>
+            </div>
+          </div>
+          <div id="info-people-body" style="color:var(--text2);font-size:13px;">Vyber období a klikni Zobrazit.</div>
         </div>
 
         <!-- Sub: Záznamy hovorů -->
@@ -670,13 +687,14 @@
 
       // ── Přepínání pod-záložek Infolinky ──
       window.infoSub = function(name){
-        ['settings','calls','shifts','report'].forEach(function(s){
+        ['settings','calls','shifts','report','people'].forEach(function(s){
           var d=el('info-'+s); if(d) d.style.display=(s===name)?'':'none';
           var b=document.querySelector('#section-infolinka .btn[data-infosub="'+s+'"]');
           if(b){ b.classList.toggle('btn-primary', s===name); b.classList.toggle('btn-secondary', s!==name); }
         });
         if(name==='calls') window.infoLoadCalls();
         else if(name==='report') infoInitReport();
+        else if(name==='people') infoInitPeople();
         else infoLoadConfig();
       };
 
@@ -957,6 +975,49 @@
         var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
         a.download='infolinka-sluzby_'+(_repRange.from||'')+'_'+(_repRange.to||'')+'.csv';
         document.body.appendChild(a); a.click(); setTimeout(function(){ a.remove(); },100);
+      };
+
+      // ── Hodnocení lidí (statistika operátorů + grafy) ──
+      var _pplCharts=[], _chartLoading=null;
+      function ensureChartJs(){
+        if(window.Chart) return Promise.resolve();
+        if(_chartLoading) return _chartLoading;
+        _chartLoading=new Promise(function(res,rej){ var s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'; s.onload=function(){res();}; s.onerror=function(){rej(new Error('Chart.js se nenačetl'));}; document.head.appendChild(s); });
+        return _chartLoading;
+      }
+      function fmtMin(sec){ sec=Number(sec)||0; var m=Math.floor(sec/60), s=sec%60; return m+' min'+(s?(' '+s+' s'):''); }
+      function infoInitPeople(){
+        var f=el('info-ppl-from'), t=el('info-ppl-to'), now=new Date();
+        if(f && !f.value) f.value=ymd(new Date(now.getFullYear(), now.getMonth(), 1));
+        if(t && !t.value) t.value=ymd(new Date(now.getFullYear(), now.getMonth()+1, 0));
+        window.infoLoadPeople();
+      }
+      window.infoLoadPeople=async function(){
+        var box=el('info-people-body'); if(box) box.innerHTML='Načítám…';
+        var from=(el('info-ppl-from')||{}).value||'', to=(el('info-ppl-to')||{}).value||'';
+        try{
+          var j=await api('/operator-stats?line='+INFO_LINE+(from?'&from='+from:'')+(to?'&to='+to:''));
+          var ops=(j&&j.operators)||[];
+          if(!ops.length){ box.innerHTML='<span style="color:var(--text2);">V tomto období nejsou žádná data o přepojení na operátory. (Statistika se plní z hovorů, které AI přepojila na živého člověka.)</span>'; return; }
+          var h='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;"><table class="data-table"><thead><tr><th>Operátor</th><th>Přijaté</th><th>Čas na hovorech</th><th>Ø délka</th><th>Nedostupný</th><th>Odmítl</th><th>Chyba</th><th>Pokusů</th></tr></thead><tbody>';
+          ops.forEach(function(o){ h+='<tr><td><b>'+esc(o.name)+'</b></td><td>'+o.accepted+'</td><td>'+esc(fmtMin(o.talk_sec))+'</td><td>'+fmtDur(o.avg_sec)+'</td><td>'+o.unavailable+'</td><td>'+o.declined+'</td><td>'+o.failed+'</td><td>'+o.attempts+'</td></tr>'; });
+          h+='</tbody></table></div>';
+          h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;">'
+            +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px;">Výsledky hovorů podle operátora</div><canvas id="info-ppl-chart1" height="110"></canvas></div>'
+            +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px;">Čas na hovorech (min) podle operátora</div><canvas id="info-ppl-chart2" height="110"></canvas></div>'
+            +'</div>';
+          box.innerHTML=h;
+          await ensureChartJs();
+          _pplCharts.forEach(function(c){ try{c.destroy();}catch(e){} }); _pplCharts=[];
+          var labels=ops.map(function(o){return o.name;});
+          var gc='#8ea1b3';
+          _pplCharts.push(new Chart(el('info-ppl-chart1').getContext('2d'),{ type:'bar', data:{ labels:labels, datasets:[
+            {label:'Přijaté', data:ops.map(function(o){return o.accepted;}), backgroundColor:'#22c55e'},
+            {label:'Nedostupný', data:ops.map(function(o){return o.unavailable;}), backgroundColor:'#eab308'},
+            {label:'Odmítl', data:ops.map(function(o){return o.declined;}), backgroundColor:'#ef4444'}
+          ]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{stacked:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{stacked:true, beginAtZero:true, ticks:{color:gc,precision:0}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{ labels:{ color:gc } } } } }));
+          _pplCharts.push(new Chart(el('info-ppl-chart2').getContext('2d'),{ type:'bar', data:{ labels:labels, datasets:[{ label:'Minuty', data:ops.map(function(o){return Math.round((o.talk_sec||0)/60);}), backgroundColor:'#22d3ee'}]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{beginAtZero:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{display:false} } } }));
+        }catch(e){ if(box) box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; }
       };
 
       // ── Znalostní báze (scope inbound:infolinka, přes /api/compounder) ──

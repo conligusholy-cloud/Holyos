@@ -522,8 +522,9 @@ router.post('/transfer', form, (req, res) => {
     // Zaloguj výsledek právě vytočeného čísla (fire-and-forget, ať nezdržuje TwiML).
     const cur = req.query.cur ? decodeURIComponent(req.query.cur) : '';
     const callSid = req.body && req.body.CallSid;
+    const dialDur = parseInt((req.body && req.body.DialCallDuration), 10) || 0; // délka hovoru s operátorem (s)
     if (cur && callSid) {
-      nameForPhone(cur).then((nm) => logTransferAttempt(callSid, { number: cur, name: nm || null, status: status || 'unknown', at: new Date().toISOString() }));
+      nameForPhone(cur).then((nm) => logTransferAttempt(callSid, { number: cur, name: nm || null, status: status || 'unknown', duration: dialDur, at: new Date().toISOString() }));
     }
     if (status === 'completed' || status === 'answered') {
       return res.type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?>\n<Response><Hangup/></Response>');
@@ -859,6 +860,58 @@ router.get('/sms/form-log', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/voice/operator-stats?line=infolinka&from&to — hodnocení operátorů.
+// Agreguje pokusy o přepojení (VoiceCall.transfer_log) na živé lidi za období.
+router.get('/operator-stats', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.json({ operators: [], totals: {} });
+    const where = { handoff: true };
+    if (req.query.line !== undefined) {
+      const line = normLine(req.query.line);
+      if (line === 'infolinka') where.line = 'infolinka';
+      else where.OR = [{ line: 'obchod' }, { line: null }];
+    }
+    if (req.query.from || req.query.to) {
+      where.started_at = {};
+      if (req.query.from) where.started_at.gte = new Date(String(req.query.from).slice(0, 10) + 'T00:00:00');
+      if (req.query.to) where.started_at.lte = new Date(String(req.query.to).slice(0, 10) + 'T23:59:59');
+    }
+    const calls = await prisma.voiceCall.findMany({ where, select: { transfer_log: true }, take: 8000 });
+    const tail = (p) => String(p || '').replace(/\D/g, '').slice(-9);
+    const agg = {};
+    calls.forEach((c) => {
+      (Array.isArray(c.transfer_log) ? c.transfer_log : []).forEach((e) => {
+        const key = tail(e.number); if (!key) return;
+        const a = agg[key] || (agg[key] = { number: e.number, name: e.name || null, accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0 });
+        if (e.name && !a.name) a.name = e.name;
+        a.attempts++;
+        const s = String(e.status || '').toLowerCase();
+        if (s === 'completed' || s === 'answered') { a.accepted++; a.talk_sec += parseInt(e.duration, 10) || 0; }
+        else if (s === 'no-answer' || s === 'noanswer') { a.unavailable++; }
+        else if (s === 'busy') { a.declined++; }
+        else if (s === 'failed' || s === 'canceled') { a.failed++; }
+      });
+    });
+    const rows = Object.keys(agg).map((k) => agg[k]);
+    // Doplň jména podle Person.phone tam, kde chybí.
+    const missing = rows.filter((r) => !r.name);
+    if (missing.length) {
+      try {
+        const people = await prisma.person.findMany({ where: { phone: { not: null } }, select: { first_name: true, last_name: true, phone: true } });
+        const byTail = {}; people.forEach((p) => { const t = tail(p.phone); if (t) byTail[t] = [p.first_name, p.last_name].filter(Boolean).join(' ').trim(); });
+        missing.forEach((r) => { const nm = byTail[tail(r.number)]; if (nm) r.name = nm; });
+      } catch (_) { /* nevadí */ }
+    }
+    rows.forEach((r) => { if (!r.name) r.name = r.number; r.avg_sec = r.accepted ? Math.round(r.talk_sec / r.accepted) : 0; });
+    rows.sort((x, y) => y.accepted - x.accepted || y.attempts - x.attempts);
+    const totals = rows.reduce((t, r) => ({
+      accepted: t.accepted + r.accepted, unavailable: t.unavailable + r.unavailable,
+      declined: t.declined + r.declined, failed: t.failed + r.failed, talk_sec: t.talk_sec + r.talk_sec, attempts: t.attempts + r.attempts,
+    }), { accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0 });
+    res.json({ operators: rows, totals });
+  } catch (err) { next(err); }
+});
+
 // ─── Nastavení příchozí recepční ───────────────────────────────────────────
 router.get('/config', requireAuth, async (req, res, next) => {
   try {
@@ -1053,14 +1106,14 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
     // 2) sdílená Best Series schránka INFOLINKA_MAIL_FROM, 3) SMTP_FROM.
     // Zkoušíme je po sobě — když první selže (např. 403 z AppOnly AccessPolicy),
     // automaticky se zkusí další. Reply-to vždy na autora rozpisu.
-    // Poslední záchrana: už autorizovaný odesílatel, který jinde v HolyOS spolehlivě
-    // odesílá (je členem skupiny HolyOS Senders) — aby rozpis odešel i když infolinka@
-    // není v autorizované skupině (403 RAOP / AppOnly AccessPolicy).
+    // Rozpis má chodit z Best Series (infolinka@) — je autorizovaná. Compounder je až
+    // úplně poslední záchrana, aby zpráva odešla i kdyby infolinka@ selhala.
+    const infolinkaFrom = (process.env.INFOLINKA_MAIL_FROM || 'infolinka@bestseries.cz').trim();
     const candidates = [];
-    [fromUpn, process.env.INFOLINKA_MAIL_FROM, process.env.COMPOUNDER_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => {
+    [infolinkaFrom, fromUpn, process.env.COMPOUNDER_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => {
       const v = (c || '').trim(); if (v && candidates.indexOf(v) < 0) candidates.push(v);
     });
-    const replyTo = fromUpn || candidates[0] || undefined;
+    const replyTo = fromUpn || infolinkaFrom || candidates[0] || undefined;
     const recipients = []; const failed = []; const missingEmail = [];
     let lastError = null; let usedFrom = null;
     for (const p of people) {
@@ -1068,7 +1121,7 @@ router.post('/shifts/notify', requireAuth, express.json(), async (req, res, next
       let sentOne = false;
       for (const cand of (candidates.length ? candidates : [undefined])) {
         try {
-          const r = await sendMail({ to: p.email, from: cand, fromName: senderName, replyTo, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
+          const r = await sendMail({ to: p.email, from: cand, fromName: 'Best Series', replyTo, brand: 'bestseries', subject: 'Rozpis směn na Infolince', rawHtml: bodyHtml });
           if (r && r.sent) { sentOne = true; usedFrom = cand; break; }
           lastError = (r && (r.error || r.skipped)) || 'neodesláno';
         } catch (e) { lastError = e.message; console.warn('[voice] shift email', p.email, cand, e.message); }
