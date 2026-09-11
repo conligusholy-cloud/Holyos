@@ -822,6 +822,10 @@ router.get('/config', requireAuth, async (req, res, next) => {
         notify_person_ids = notify_person_ids.split(',').map((s) => parseInt(s, 10)).filter(Boolean);
       }
     }
+    // Operátoři linky (tým, který linku obsluhuje) — pole Person.id.
+    let operator_ids = get ? await get(cfgKey(line, 'operator_ids')) : [];
+    if (typeof operator_ids === 'string') { try { operator_ids = JSON.parse(operator_ids); } catch (_) { operator_ids = operator_ids.split(',').map((s) => parseInt(s, 10)).filter(Boolean); } }
+    if (!Array.isArray(operator_ids)) operator_ids = [];
     const default_from = get ? (await get('voice.default_from')) || '' : '';
     const smsRaw = get ? await get('voice.sms_on_no_answer') : false;
     const sms_on_no_answer = smsRaw === true || smsRaw === 'true' || smsRaw === 1 || smsRaw === '1';
@@ -845,7 +849,7 @@ router.get('/config', requireAuth, async (req, res, next) => {
         for (const k of Object.keys(map)) { if (normLine(map[k]) === line) { line_number = k; break; } }
       }
     } catch (_) { /* ignore */ }
-    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], default_from, sms_on_no_answer, sms_text, sms_gateway,
+    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, default_from, sms_on_no_answer, sms_text, sms_gateway,
       transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds });
   } catch (err) {
     next(err);
