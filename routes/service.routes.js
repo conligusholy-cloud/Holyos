@@ -775,26 +775,40 @@ async function peopleByIds(ids) {
   }));
 }
 
-// GET /api/service/request-settings — vrátí servisní tým (vybraní řešitelé).
+async function readBaseAddress() {
+  try { const s = await prisma.appSetting.findUnique({ where: { key: 'service.base_address' } }); return (s && s.value) ? String(s.value) : ''; }
+  catch (_) { return ''; }
+}
+
+// GET /api/service/request-settings — vrátí servisní tým (vybraní řešitelé) + základnu.
 router.get('/request-settings', async (req, res, next) => {
   try {
     const ids = await readSolverIds();
-    res.json({ solver_ids: ids, solvers: await peopleByIds(ids) });
+    res.json({ solver_ids: ids, solvers: await peopleByIds(ids), base_address: await readBaseAddress() });
   } catch (err) { next(err); }
 });
 
-// PUT /api/service/request-settings { solver_ids: [] } — uloží servisní tým.
+// PUT /api/service/request-settings { solver_ids?: [], base_address?: string } — uloží tým / základnu.
 router.put('/request-settings', express.json(), async (req, res, next) => {
   try {
-    let ids = (req.body && req.body.solver_ids) || [];
-    if (!Array.isArray(ids)) ids = [];
-    ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
-    await writeSolverIds(ids, req.user && req.user.id);
-    // Read-after-write: vrať skutečný stav z DB (ne echo vstupu), ať ✅ něco znamená.
+    if (req.body && req.body.solver_ids !== undefined) {
+      let ids = req.body.solver_ids || [];
+      if (!Array.isArray(ids)) ids = [];
+      ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
+      await writeSolverIds(ids, req.user && req.user.id);
+    }
+    if (req.body && req.body.base_address !== undefined) {
+      const val = String(req.body.base_address || '').trim().slice(0, 300);
+      await prisma.appSetting.upsert({
+        where: { key: 'service.base_address' },
+        update: { value: val, value_type: 'string', updated_by_user_id: (req.user && req.user.id) || null },
+        create: { key: 'service.base_address', value: val, value_type: 'string', description: 'Servis — adresa základny/dílny (pro odhad cesty)', updated_by_user_id: (req.user && req.user.id) || null },
+      });
+    }
     const savedIds = await readSolverIds();
     let solvers = [];
     try { solvers = await peopleByIds(savedIds); } catch (e) { console.warn('[service] request-settings solvers:', e.message); }
-    res.json({ ok: true, solver_ids: savedIds, solvers });
+    res.json({ ok: true, solver_ids: savedIds, solvers, base_address: await readBaseAddress() });
   } catch (err) { next(err); }
 });
 
@@ -839,9 +853,9 @@ async function _attachAssignees(rows) {
   return rows.map((r) => Object.assign({}, r, {
     assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null,
     created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,
-    est_travel_min: tmap[r.id] ? tmap[r.id].est_travel_min : null,
+    est_travel_min: (tmap[r.id] && tmap[r.id].est_travel_min != null) ? tmap[r.id].est_travel_min : (r.est_travel_min != null ? r.est_travel_min : null),
     real_travel_min: tmap[r.id] ? tmap[r.id].real_travel_min : null,
-    est_work_min: tmap[r.id] ? tmap[r.id].est_work_min : null,
+    est_work_min: (tmap[r.id] && tmap[r.id].est_work_min != null) ? tmap[r.id].est_work_min : (r.est_repair_min != null ? r.est_repair_min : null),
     real_work_min: tmap[r.id] ? tmap[r.id].real_work_min : null,
   }));
 }
@@ -1087,8 +1101,31 @@ router.post('/requests', async (req, res, next) => {
     });
     await logReq(row.id, req, 'created', 'Požadavek vytvořen: ' + (row.problem || ''));
     res.status(201).json(row);
+    // Na pozadí: AI odhad času opravy + odhad cesty ze základny ke stroji (nezdržuje odpověď).
+    estimateForRequest(row).catch((e) => console.warn('[service] estimateForRequest:', e.message));
   } catch (err) { next(err); }
 });
+
+// Best-effort odhady k požadavku (AI oprava + trasa ze základny) → uloží na request.
+async function estimateForRequest(row) {
+  try {
+    const est = require('../services/ai/service-estimate');
+    let base = '';
+    try {
+      const s = await prisma.appSetting.findUnique({ where: { key: 'service.base_address' } });
+      base = (s && s.value) ? String(s.value) : '';
+    } catch (_) { base = ''; }
+    if (!base) base = 'Rychnov nad Kněžnou'; // výchozí základna, dokud není nastavená
+    const [repairMin, travelMin] = await Promise.all([
+      est.estimateRepairMinutes({ problem: row.problem, action: row.action, task: row.task, machine: row.problem, description: row.description }),
+      est.estimateTravelMinutes(base, row.problem),
+    ]);
+    const data = {};
+    if (repairMin != null && row.est_repair_min == null) data.est_repair_min = repairMin;
+    if (travelMin != null) data.est_travel_min = travelMin;
+    if (Object.keys(data).length) await prisma.serviceRequest.update({ where: { id: row.id }, data });
+  } catch (e) { console.warn('[service] estimateForRequest inner:', e.message); }
+}
 
 const requestPatchSchema = z.object({
   problem: z.string().min(1).max(255).optional(),

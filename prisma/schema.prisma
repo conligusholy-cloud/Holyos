@@ -4745,7 +4745,8 @@ model ServiceRequest {
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
   resolution  String?  @db.Text           // způsob řešení
-  est_repair_min Int?   // odhadovaný čas vlastní opravy (min) — pro časomíru servisáka
+  est_repair_min Int?   // odhadovaný čas vlastní opravy (min) — AI odhad při vytvoření / časomíra servisáka
+  est_travel_min Int?   // odhadovaný čas cesty ze základny ke stroji (min) — spočítá se při vytvoření
   fix_photo_urls Json?  // fotodokumentace opravy (pole URL) — servisák fotí z telefonu
   created_by_user_id Int?   // kdo požadavek zadal (přihlášený uživatel) — u mobilního formuláře povinné z tokenu
   created_at  DateTime @default(now())

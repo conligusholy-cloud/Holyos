@@ -1529,7 +1529,8 @@
     }
     function roleName(r){ if(!r) return ''; if(typeof r==='string') return r; return r.name||r.title||r.label||''; }
     function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||('#'+p.id), phone:(p.phone||'').trim(), email:((p.work_email||p.email||'')+'').trim(), role:roleName(p.role) }; }); }).catch(function(){ _people=[]; }); }
-    function loadSolvers(){ return fetchJSON(API+'/request-settings').then(function(d){ _solvers=(d&&d.solvers)||[]; }).catch(function(){ _solvers=[]; }); }
+    var _baseAddress='';
+    function loadSolvers(){ return fetchJSON(API+'/request-settings').then(function(d){ _solvers=(d&&d.solvers)||[]; _baseAddress=(d&&d.base_address)||''; }).catch(function(){ _solvers=[]; }); }
     // Řešitele lze vybrat jen ze servisního týmu; když tým není nastaven, nabídni všechny (fallback).
     function peopleOptions(sel){
       var pool=_solvers.length?_solvers:_people;
@@ -1556,9 +1557,14 @@
         +'</div>'
         +'<div id="team-count" style="font-size:11px;color:var(--text2);margin-top:6px;"></div>'
         +'</div>'
+        +'<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;">'
+        +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">🏭 Základna / dílna (pro odhad času cesty)</div>'
+        +'<div style="color:var(--text2);font-size:12px;margin-bottom:8px;">Odkud technici typicky vyjíždějí. AI podle ní při vytvoření úkolu spočítá odhad času cesty ke stroji. (Reálný čas se pak měří z GPS technika.)</div>'
+        +'<input id="sr-base-addr" placeholder="např. Rychnov nad Kněžnou — dílna, Jiráskova 123" value="'+esc(_baseAddress||'')+'" style="width:100%;">'
+        +'</div>'
         +'<div style="border:1px dashed var(--border);border-radius:12px;padding:12px 14px;margin-bottom:6px;opacity:.85;">'
         +'<div style="font-weight:700;font-size:14px;margin-bottom:2px;">🧭 Další nastavení</div>'
-        +'<div style="color:var(--text2);font-size:12px;">Připravujeme: automatické přiřazování úkolů (podle lokality/rozpisu), výchozí lhůty řešení, notifikace technikům, sazba za km. Napiš, co sem chceš přidat.</div>'
+        +'<div style="color:var(--text2);font-size:12px;">Připravujeme: automatické přiřazování úkolů (podle lokality/rozpisu), výchozí lhůty řešení, notifikace technikům, sazba za km.</div>'
         +'</div>'
         +'</div>'
         +'<div class="modal-actions" style="margin-top:12px;"><span id="sr-set-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
@@ -1594,8 +1600,9 @@
       ov.querySelector('#sr-set-cancel').addEventListener('click',close);
       ov.querySelector('#sr-set-save').addEventListener('click',function(){
         var ids=team.slice();
+        var baseEl=ov.querySelector('#sr-base-addr'); var baseAddr=baseEl?baseEl.value.trim():undefined;
         var m=ov.querySelector('#sr-set-msg'); if(m){ m.style.color='var(--text2)'; m.textContent='Ukládám…'; }
-        fetch(API+'/request-settings',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ solver_ids:ids }) })
+        fetch(API+'/request-settings',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ solver_ids:ids, base_address:baseAddr }) })
           .then(function(r){ return r.text().then(function(t){ var j={}; try{ j=JSON.parse(t); }catch(_){}
             if(!r.ok) throw new Error((j&&j.error)||('HTTP '+r.status+(t?(' — '+t.slice(0,140)):''))); return j; }); })
           .then(function(d){ var srv=(d&&d.solver_ids)||[]; _solvers=(d&&d.solvers)||[];
