@@ -1000,6 +1000,35 @@ router.post('/machines', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/service/machines/bulk — hromadný import strojů z Excelu.
+// Body: { machines: [{ name, type?, status?, commissioned_at?, revision_at?, note? }] }
+router.post('/machines/bulk', async (req, res, next) => {
+  try {
+    let list = (req.body && req.body.machines) || [];
+    if (!Array.isArray(list)) list = [];
+    const norm = (s) => String(s == null ? '' : s).trim();
+    const data = [];
+    let skipped = 0;
+    for (const m of list) {
+      const name = norm(m && m.name);
+      if (!name) { skipped++; continue; }
+      const st = norm(m.status).toLowerCase();
+      const status = (st.indexOf('mimo') >= 0) ? 'mimo_provozu' : 'v_provozu';
+      data.push({
+        name: name.slice(0, 200),
+        type: norm(m.type).slice(0, 80) || null,
+        status,
+        commissioned_at: _toDate(m.commissioned_at),
+        revision_at: _toDate(m.revision_at),
+        note: norm(m.note) || null,
+      });
+    }
+    if (!data.length) return res.status(400).json({ error: 'Žádné platné řádky (chybí název stroje).', skipped });
+    const result = await prisma.serviceMachine.createMany({ data });
+    res.status(201).json({ ok: true, imported: result.count, skipped });
+  } catch (err) { next(err); }
+});
+
 const machinePatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   type: z.string().max(80).optional().nullable(),

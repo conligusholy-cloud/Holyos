@@ -7,6 +7,8 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <!-- SheetJS pro import strojů z .xlsx -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .page-header {
@@ -647,6 +649,8 @@
               <option value="mimo_provozu">Mimo provoz</option>
             </select>
           </div>
+          <button class="btn btn-secondary" id="sm-import-btn" style="margin-left:auto;">⬆️ Import z Excelu</button>
+          <input type="file" id="sm-import-file" accept=".xlsx,.xls" style="display:none;">
         </div>
         <div style="overflow-x:auto">
           <table class="data-table" id="sm-table">
@@ -1657,6 +1661,95 @@
     function load(){
       var st=document.getElementById('sm-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
       fetchJSON(API+'/machines'+q).then(render).catch(function(){ var tb=document.getElementById('sm-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+    }
+    // ── Import strojů z Excelu ──
+    var FIELD_DEFS=[['name','Název / lokalita *'],['type','Typ'],['status','Stav'],['commissioned_at','Uvedení do provozu'],['revision_at','Revize'],['note','Poznámka']];
+    function normHead(s){ return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim(); }
+    function guessField(head){
+      var h=normHead(head);
+      if(!h) return '';
+      if(/(stroj|nazev|lokalit|misto|provozovn|pradel|adresa|objekt|jmeno)/.test(h)) return 'name';
+      if(/(typ|druh|kategorie)/.test(h)) return 'type';
+      if(/(stav|status)/.test(h)) return 'status';
+      if(/(uveden|instalac|montaz|spusten|zprovozn|datum uveden)/.test(h)) return 'commissioned_at';
+      if(/(reviz|kontrol)/.test(h)) return 'revision_at';
+      if(/(poznamk|note|popis|komentar)/.test(h)) return 'note';
+      return '';
+    }
+    // Excel serial / dd.mm.yyyy / ISO → YYYY-MM-DD (nebo '' )
+    function toYmd(v){
+      if(v==null||v==='') return '';
+      if(typeof v==='number' && isFinite(v)){ var d=new Date(Date.UTC(1899,11,30)+v*86400000); if(!isNaN(d)) return d.toISOString().slice(0,10); }
+      var s=String(v).trim();
+      var m=s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/); // dd.mm.yyyy
+      if(m){ var yr=m[3].length===2?('20'+m[3]):m[3]; return yr+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); }
+      var d2=new Date(s); if(!isNaN(d2)) return d2.toISOString().slice(0,10);
+      return '';
+    }
+    document.getElementById('sm-import-btn') && document.getElementById('sm-import-btn').addEventListener('click',function(){
+      if(typeof XLSX==='undefined'){ alert('Knihovna pro Excel se nenačetla – zkontroluj připojení a zkus obnovit stránku.'); return; }
+      document.getElementById('sm-import-file').click();
+    });
+    document.getElementById('sm-import-file') && document.getElementById('sm-import-file').addEventListener('change',function(){
+      var file=this.files&&this.files[0]; this.value=''; if(!file) return;
+      var reader=new FileReader();
+      reader.onload=function(e){
+        try{
+          var wb=XLSX.read(e.target.result,{type:'array'});
+          var ws=wb.Sheets[wb.SheetNames[0]];
+          var aoa=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+          // najdi řádek s hlavičkou = první neprázdný řádek
+          var hi=0; while(hi<aoa.length && aoa[hi].every(function(c){return String(c==null?'':c).trim()==='';})) hi++;
+          var headers=(aoa[hi]||[]).map(function(c){ return String(c==null?'':c).trim(); });
+          var dataRows=aoa.slice(hi+1).filter(function(r){ return r.some(function(c){return String(c==null?'':c).trim()!=='';}); });
+          openImportModal(headers, dataRows);
+        }catch(err){ alert('Nepodařilo se přečíst Excel: '+err.message); }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+    function openImportModal(headers, dataRows){
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      var colOpts='<option value="-1">— nepoužít —</option>'+headers.map(function(h,i){ return '<option value="'+i+'">'+esc(h||('Sloupec '+(i+1)))+'</option>'; }).join('');
+      var mapRows=FIELD_DEFS.map(function(f){
+        var guess=-1; for(var i=0;i<headers.length;i++){ if(guessField(headers[i])===f[0]){ guess=i; break; } }
+        return '<div class="form-row" style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><label style="min-width:170px;margin:0;">'+f[1]+'</label>'
+          +'<select data-field="'+f[0]+'" style="flex:1;">'+colOpts.replace('value="'+guess+'"','value="'+guess+'" selected')+'</select></div>';
+      }).join('');
+      ov.innerHTML='<div class="modal" style="width:720px;max-height:88vh;display:flex;flex-direction:column;"><h2>⬆️ Import strojů z Excelu</h2>'
+        +'<p style="color:var(--text2);font-size:13px;margin:0 0 10px;">Našel jsem <b>'+dataRows.length+'</b> řádků. Zkontroluj přiřazení sloupců (název je povinný) a klikni Importovat. Přidá se k existujícím strojům.</p>'
+        +'<div style="margin-bottom:10px;">'+mapRows+'</div>'
+        +'<div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:8px;"><table class="data-table"><thead id="imp-prev-head"></thead><tbody id="imp-prev-body"></tbody></table></div>'
+        +'<div class="modal-actions" style="margin-top:12px;"><span id="imp-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
+        +'<button class="btn btn-secondary" id="imp-cancel">Zrušit</button><button class="btn btn-primary" id="imp-go">⬆️ Importovat</button></div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#imp-cancel').addEventListener('click',close);
+      function collect(){
+        var map={}; ov.querySelectorAll('select[data-field]').forEach(function(s){ map[s.getAttribute('data-field')]=parseInt(s.value,10); });
+        return dataRows.map(function(r){
+          function cell(f){ var i=map[f]; return (i>=0 && i<r.length)?r[i]:''; }
+          return { name:String(cell('name')||'').trim(), type:String(cell('type')||'').trim(), status:String(cell('status')||'').trim(),
+            commissioned_at:toYmd(cell('commissioned_at')), revision_at:toYmd(cell('revision_at')), note:String(cell('note')||'').trim() };
+        });
+      }
+      function preview(){
+        var rows=collect();
+        ov.querySelector('#imp-prev-head').innerHTML='<tr><th>Název</th><th>Typ</th><th>Stav</th><th>Uvedení</th><th>Revize</th><th>Poznámka</th></tr>';
+        ov.querySelector('#imp-prev-body').innerHTML=rows.slice(0,8).map(function(m){
+          return '<tr'+(!m.name?' style="opacity:.4;"':'')+'><td>'+esc(m.name||'—')+'</td><td>'+esc(m.type||'—')+'</td><td>'+esc(m.status||'v_provozu')+'</td><td>'+esc(m.commissioned_at||'—')+'</td><td>'+esc(m.revision_at||'—')+'</td><td>'+esc((m.note||'').slice(0,40)||'—')+'</td></tr>';
+        }).join('')+(rows.length>8?('<tr><td colspan="6" style="text-align:center;color:var(--text2);">… a dalších '+(rows.length-8)+' řádků</td></tr>'):'');
+      }
+      ov.querySelectorAll('select[data-field]').forEach(function(s){ s.addEventListener('change',preview); });
+      preview();
+      ov.querySelector('#imp-go').addEventListener('click',function(){
+        var rows=collect().filter(function(m){ return m.name; });
+        if(!rows.length){ ov.querySelector('#imp-msg').textContent='Přiřaď sloupec s názvem stroje.'; return; }
+        var btn=ov.querySelector('#imp-go'); btn.disabled=true; btn.textContent='Importuji…';
+        fetchJSON(API+'/machines/bulk',{method:'POST',body:JSON.stringify({machines:rows})}).then(function(d){
+          close(); load(); alert('Naimportováno strojů: '+(d.imported||0)+(d.skipped?(' · přeskočeno: '+d.skipped):''));
+        }).catch(function(){ btn.disabled=false; btn.textContent='⬆️ Importovat'; ov.querySelector('#imp-msg').textContent='Import selhal.'; });
+      });
     }
     function openModal(row){
       row=row||{}; var isNew=!row.id;
