@@ -4786,6 +4786,7 @@ model ServiceMachine {
   commissioned_at DateTime? @db.Date           // uvedení do provozu
   revision_at     DateTime? @db.Date           // příští revize
   note            String?   @db.Text           // poznámka (do budoucna víc informací o stroji)
+  extra           Json?     // všechny další sloupce z importu Excelu (klíč = název sloupce)
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 

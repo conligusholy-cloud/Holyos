@@ -972,6 +972,20 @@ router.get('/machines', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Ořízne `extra` na prostý objekt { název sloupce: text } — vyhodí prázdné hodnoty.
+function _cleanExtra(x) {
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
+  const out = {};
+  for (const k of Object.keys(x)) {
+    const key = String(k).trim(); if (!key) continue;
+    const v = x[k]; if (v == null) continue;
+    const val = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+    if (val.trim() === '') continue;
+    out[key.slice(0, 120)] = val.slice(0, 2000);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 const machineSchema = z.object({
   name: z.string().min(1).max(200),
   type: z.string().max(80).optional().nullable(),
@@ -979,6 +993,7 @@ const machineSchema = z.object({
   commissioned_at: z.string().optional().nullable(),
   revision_at: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
+  extra: z.record(z.any()).optional().nullable(),
 });
 
 router.post('/machines', async (req, res, next) => {
@@ -994,6 +1009,7 @@ router.post('/machines', async (req, res, next) => {
         commissioned_at: _toDate(d.commissioned_at),
         revision_at: _toDate(d.revision_at),
         note: d.note || null,
+        extra: _cleanExtra(d.extra),
       },
     });
     res.status(201).json(row);
@@ -1021,6 +1037,7 @@ router.post('/machines/bulk', async (req, res, next) => {
         commissioned_at: _toDate(m.commissioned_at),
         revision_at: _toDate(m.revision_at),
         note: norm(m.note) || null,
+        extra: _cleanExtra(m.extra),
       });
     }
     if (!data.length) return res.status(400).json({ error: 'Žádné platné řádky (chybí název stroje).', skipped });
@@ -1036,6 +1053,7 @@ const machinePatchSchema = z.object({
   commissioned_at: z.string().optional().nullable(),
   revision_at: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
+  extra: z.record(z.any()).optional().nullable(),
 });
 
 router.patch('/machines/:id', async (req, res, next) => {
@@ -1051,6 +1069,7 @@ router.patch('/machines/:id', async (req, res, next) => {
     if (d.commissioned_at !== undefined) data.commissioned_at = _toDate(d.commissioned_at);
     if (d.revision_at !== undefined) data.revision_at = _toDate(d.revision_at);
     if (d.note !== undefined) data.note = d.note || null;
+    if (d.extra !== undefined) data.extra = _cleanExtra(d.extra);
     const row = await prisma.serviceMachine.update({ where: { id }, data });
     res.json(row);
   } catch (err) { next(err); }

@@ -654,7 +654,7 @@
         </div>
         <div style="overflow-x:auto">
           <table class="data-table" id="sm-table">
-            <thead><tr>
+            <thead><tr id="sm-thead-row">
               <th>Stroj</th><th>Typ</th><th>Stav</th><th>Uvedení do provozu</th><th>Revize</th><th>Poznámka</th><th></th>
             </tr></thead>
             <tbody id="sm-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
@@ -1641,11 +1641,25 @@
     function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
     function fmtDate(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return '—'; } }
     function toInput(s){ if(!s) return ''; try{ return new Date(s).toISOString().slice(0,10); }catch(e){ return ''; } }
+    var _extraCols=[]; // dynamické sloupce z importu (sjednocení klíčů extra)
+    function collectExtraCols(rows){
+      var cols=[], seen={};
+      rows.forEach(function(r){ var ex=r.extra; if(ex&&typeof ex==='object'){ Object.keys(ex).forEach(function(k){ if(!seen[k]){ seen[k]=true; cols.push(k); } }); } });
+      return cols;
+    }
     function render(rows){
       var tb=document.getElementById('sm-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné stroje. Přidej první tlačítkem „+ Nový stroj".</td></tr>'; return; }
+      _extraCols=collectExtraCols(rows);
+      // Přestav hlavičku: pevné sloupce + dynamické z Excelu + akce.
+      var head=document.getElementById('sm-thead-row');
+      if(head){ head.innerHTML='<th>Stroj</th><th>Typ</th><th>Stav</th><th>Uvedení do provozu</th><th>Revize</th><th>Poznámka</th>'
+        +_extraCols.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'<th></th>'; }
+      var colspan=7+_extraCols.length;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="'+colspan+'" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné stroje. Přidej první tlačítkem „+ Nový stroj".</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var st=MST[r.status]||['?','badge-draft'];
+        var ex=r.extra||{};
+        var extraTds=_extraCols.map(function(c){ var v=(ex&&ex[c]!=null)?String(ex[c]):''; return '<td style="color:var(--text2)">'+(v?esc(v):'—')+'</td>'; }).join('');
         return '<tr>'+
           '<td><b>'+esc(r.name)+'</b></td>'+
           '<td style="color:var(--text2)">'+esc(r.type||'—')+'</td>'+
@@ -1653,6 +1667,7 @@
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.commissioned_at)+'</td>'+
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.revision_at)+'</td>'+
           '<td style="color:var(--text2)">'+esc(r.note?String(r.note).slice(0,80):'—')+'</td>'+
+          extraTds+
           '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
         '</tr>';
       }).join('');
@@ -1717,7 +1732,8 @@
       }).join('');
       ov.innerHTML='<div class="modal" style="width:720px;max-height:88vh;display:flex;flex-direction:column;"><h2>⬆️ Import strojů z Excelu</h2>'
         +'<p style="color:var(--text2);font-size:13px;margin:0 0 10px;">Našel jsem <b>'+dataRows.length+'</b> řádků. Zkontroluj přiřazení sloupců (název je povinný) a klikni Importovat. Přidá se k existujícím strojům.</p>'
-        +'<div style="margin-bottom:10px;">'+mapRows+'</div>'
+        +'<div style="margin-bottom:6px;">'+mapRows+'</div>'
+        +'<div id="imp-extra-note" style="font-size:12px;color:var(--acc);margin-bottom:10px;"></div>'
         +'<div style="flex:1;overflow:auto;border:1px solid var(--border);border-radius:8px;"><table class="data-table"><thead id="imp-prev-head"></thead><tbody id="imp-prev-body"></tbody></table></div>'
         +'<div class="modal-actions" style="margin-top:12px;"><span id="imp-msg" style="margin-right:auto;font-size:12px;color:var(--text2);"></span>'
         +'<button class="btn btn-secondary" id="imp-cancel">Zrušit</button><button class="btn btn-primary" id="imp-go">⬆️ Importovat</button></div></div>';
@@ -1727,18 +1743,41 @@
       ov.querySelector('#imp-cancel').addEventListener('click',close);
       function collect(){
         var map={}; ov.querySelectorAll('select[data-field]').forEach(function(s){ map[s.getAttribute('data-field')]=parseInt(s.value,10); });
+        var used={}; Object.keys(map).forEach(function(k){ if(map[k]>=0) used[map[k]]=true; });
         return dataRows.map(function(r){
           function cell(f){ var i=map[f]; return (i>=0 && i<r.length)?r[i]:''; }
+          // Extra = všechny ostatní sloupce z Excelu (klíč = název sloupce), aby se nic neztratilo.
+          var extra={};
+          for(var i=0;i<headers.length;i++){
+            if(used[i]) continue;
+            var h=String(headers[i]||'').trim(); if(!h) continue;
+            var v=(i<r.length)?r[i]:''; v=(v==null)?'':String(v).trim();
+            if(v!=='') extra[h]=v;
+          }
           return { name:String(cell('name')||'').trim(), type:String(cell('type')||'').trim(), status:String(cell('status')||'').trim(),
-            commissioned_at:toYmd(cell('commissioned_at')), revision_at:toYmd(cell('revision_at')), note:String(cell('note')||'').trim() };
+            commissioned_at:toYmd(cell('commissioned_at')), revision_at:toYmd(cell('revision_at')), note:String(cell('note')||'').trim(),
+            extra: Object.keys(extra).length?extra:null };
         });
+      }
+      function extraHeaders(){
+        var map={}; ov.querySelectorAll('select[data-field]').forEach(function(s){ map[s.getAttribute('data-field')]=parseInt(s.value,10); });
+        var used={}; Object.keys(map).forEach(function(k){ if(map[k]>=0) used[map[k]]=true; });
+        var list=[]; for(var i=0;i<headers.length;i++){ if(used[i]) continue; var h=String(headers[i]||'').trim(); if(h) list.push(h); }
+        return list;
       }
       function preview(){
         var rows=collect();
-        ov.querySelector('#imp-prev-head').innerHTML='<tr><th>Název</th><th>Typ</th><th>Stav</th><th>Uvedení</th><th>Revize</th><th>Poznámka</th></tr>';
+        var exH=extraHeaders();
+        var note=ov.querySelector('#imp-extra-note');
+        if(note) note.innerHTML=exH.length?('➕ Uloží se i všechny další sloupce jako jsou: <b>'+exH.map(esc).join('</b>, <b>')+'</b>'):'';
+        var exHead=exH.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('');
+        ov.querySelector('#imp-prev-head').innerHTML='<tr><th>Název</th><th>Typ</th><th>Stav</th><th>Uvedení</th><th>Revize</th><th>Poznámka</th>'+exHead+'</tr>';
+        var span=6+exH.length;
         ov.querySelector('#imp-prev-body').innerHTML=rows.slice(0,8).map(function(m){
-          return '<tr'+(!m.name?' style="opacity:.4;"':'')+'><td>'+esc(m.name||'—')+'</td><td>'+esc(m.type||'—')+'</td><td>'+esc(m.status||'v_provozu')+'</td><td>'+esc(m.commissioned_at||'—')+'</td><td>'+esc(m.revision_at||'—')+'</td><td>'+esc((m.note||'').slice(0,40)||'—')+'</td></tr>';
-        }).join('')+(rows.length>8?('<tr><td colspan="6" style="text-align:center;color:var(--text2);">… a dalších '+(rows.length-8)+' řádků</td></tr>'):'');
+          var ex=m.extra||{};
+          var exTds=exH.map(function(h){ return '<td>'+esc((ex[h]!=null?String(ex[h]):'').slice(0,30)||'—')+'</td>'; }).join('');
+          return '<tr'+(!m.name?' style="opacity:.4;"':'')+'><td>'+esc(m.name||'—')+'</td><td>'+esc(m.type||'—')+'</td><td>'+esc(m.status||'v_provozu')+'</td><td>'+esc(m.commissioned_at||'—')+'</td><td>'+esc(m.revision_at||'—')+'</td><td>'+esc((m.note||'').slice(0,40)||'—')+'</td>'+exTds+'</tr>';
+        }).join('')+(rows.length>8?('<tr><td colspan="'+span+'" style="text-align:center;color:var(--text2);">… a dalších '+(rows.length-8)+' řádků</td></tr>'):'');
       }
       ov.querySelectorAll('select[data-field]').forEach(function(s){ s.addEventListener('change',preview); });
       preview();
@@ -1750,6 +1789,19 @@
           close(); load(); alert('Naimportováno strojů: '+(d.imported||0)+(d.skipped?(' · přeskočeno: '+d.skipped):''));
         }).catch(function(){ btn.disabled=false; btn.textContent='⬆️ Importovat'; ov.querySelector('#imp-msg').textContent='Import selhal.'; });
       });
+    }
+    // Editovatelná pole pro importované sloupce (extra). Klíč sloupce je v data-ekey.
+    function extraFieldsHtml(extra){
+      if(!extra||typeof extra!=='object') return '';
+      var keys=Object.keys(extra); if(!keys.length) return '';
+      return '<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">'
+        +'<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Další sloupce z Excelu</div>'
+        +keys.map(function(k){ return '<div class="form-row"><label>'+esc(k)+'</label><input class="sm-extra" data-ekey="'+esc(k)+'" value="'+esc(extra[k]==null?'':String(extra[k]))+'"></div>'; }).join('')
+        +'</div>';
+    }
+    function gatherExtra(ov){
+      var ex={}; ov.querySelectorAll('.sm-extra').forEach(function(inp){ var k=inp.getAttribute('data-ekey'); var v=inp.value.trim(); if(k&&v!=='') ex[k]=v; });
+      return Object.keys(ex).length?ex:null;
     }
     function openModal(row){
       row=row||{}; var isNew=!row.id;
@@ -1765,6 +1817,7 @@
           '<div class="form-row"><label>Revize (příští)</label><input id="sm-rev" type="date" value="'+toInput(row.revision_at)+'"></div>'+
         '</div>'+
         '<div class="form-row"><label>Poznámka</label><textarea id="sm-note" rows="3" placeholder="výrobní číslo, další info o stroji…">'+esc(row.note||'')+'</textarea></div>'+
+        extraFieldsHtml(row.extra)+
         '<div class="modal-actions">'+
           (isNew?'':'<button class="btn btn-danger" id="sm-del">Smazat</button>')+
           '<button class="btn btn-secondary" id="sm-cancel">Zrušit</button>'+
@@ -1777,7 +1830,7 @@
       ov.querySelector('#sm-cancel').addEventListener('click',close);
       var delBtn=ov.querySelector('#sm-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat stroj?')) return; fetchJSON(API+'/machines/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sm-save').addEventListener('click',function(){
-        var body={ name:val('sm-name'), type:val('sm-type'), status:val('sm-status'), commissioned_at:val('sm-comm')||null, revision_at:val('sm-rev')||null, note:val('sm-note') };
+        var body={ name:val('sm-name'), type:val('sm-type'), status:val('sm-status'), commissioned_at:val('sm-comm')||null, revision_at:val('sm-rev')||null, note:val('sm-note'), extra:gatherExtra(ov) };
         if(!body.name){ alert('Vyplň název stroje.'); return; }
         var p=isNew?fetchJSON(API+'/machines',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/machines/'+row.id,{method:'PATCH',body:JSON.stringify(body)});
         p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
