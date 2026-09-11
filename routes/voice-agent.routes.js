@@ -828,12 +828,33 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         handoff: true,
         transfer_log: true,
         sms_log: true,
+        callback_log: true,
       },
     });
     res.json(calls);
   } catch (err) {
     next(err);
   }
+});
+
+// POST /api/voice/calls/:id/callback — technik zaznamenal, že volá kontaktu zpět
+// (přes tlačítko „Zavolat zpět" v mobilním přehledu). Přidá záznam do callback_log.
+router.post('/calls/:id/callback', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.voiceCall) return res.status(404).json({ error: 'Nedostupné' });
+    const call = await prisma.voiceCall.findUnique({ where: { id: req.params.id }, select: { id: true, callback_log: true } });
+    if (!call) return res.status(404).json({ error: 'Hovor nenalezen' });
+    let pid = null;
+    try {
+      const per = (req.user && req.user.person) || null;
+      if (per && per.id) pid = per.id;
+    } catch (_) { /* nevadí */ }
+    const name = (req.user && (req.user.displayName || req.user.username)) || 'Neznámý';
+    const log = Array.isArray(call.callback_log) ? call.callback_log.slice() : [];
+    log.push({ name, person_id: pid, at: new Date().toISOString() });
+    await prisma.voiceCall.update({ where: { id: call.id }, data: { callback_log: log } });
+    res.json({ ok: true, callback_log: log });
+  } catch (err) { next(err); }
 });
 
 // GET /api/voice/sms/form-log — přehled odeslaných SMS s odkazem na formulář (context=form_link).

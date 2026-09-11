@@ -6156,6 +6156,7 @@ model VoiceCall {
   handoff         Boolean   @default(false)
   transfer_log    Json?     // [{ number, name, status, at }] — pokusy o přesměrování na kolegu
   sms_log         Json?     // [{ context, to, status, at, error? }] — SMS odeslané během hovoru (např. odkaz na formulář)
+  callback_log    Json?     // [{ name, person_id?, at }] — technik zavolal kontaktu zpět (přes tlačítko Zavolat zpět)
   cost_usd        Decimal?  @db.Decimal(10, 4)
   created_at      DateTime  @default(now())
 
