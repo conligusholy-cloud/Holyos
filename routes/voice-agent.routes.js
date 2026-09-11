@@ -239,6 +239,25 @@ async function resolveTransferPlan(mode, targetId, line) {
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
     rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
+    // 0) Dnešní směna: hlavní → záložní operátor (mají přednost před statickými čísly).
+    try {
+      let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
+      if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
+      const now = new Date();
+      const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      const sh = shifts && shifts[ymd];
+      if (sh) {
+        for (const pid of [sh.main, sh.backup]) {
+          const id = parseInt(pid, 10);
+          if (!id) continue;
+          try {
+            const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } });
+            if (p && p.active !== false && p.phone) base.push(p.phone);
+          } catch (_) { /* přeskoč */ }
+        }
+      }
+    } catch (_) { /* směny nejsou povinné */ }
+    // 1) statická čísla (hlavní + záložní) jako další fallback
     const inboundNum = get ? (await get(cfgKey(line, 'transfer_inbound_number'))) || '' : '';
     if (inboundNum) base.push(inboundNum);
     const fb = await fallbackNumbersFromStored(get ? (await get(cfgKey(line, 'transfer_fallback_numbers'))) || '' : '');
@@ -826,6 +845,10 @@ router.get('/config', requireAuth, async (req, res, next) => {
     let operator_ids = get ? await get(cfgKey(line, 'operator_ids')) : [];
     if (typeof operator_ids === 'string') { try { operator_ids = JSON.parse(operator_ids); } catch (_) { operator_ids = operator_ids.split(',').map((s) => parseInt(s, 10)).filter(Boolean); } }
     if (!Array.isArray(operator_ids)) operator_ids = [];
+    // Rozpis směn: { "YYYY-MM-DD": { main: personId, backup: personId } }
+    let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
+    if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
+    if (!shifts || typeof shifts !== 'object') shifts = {};
     const default_from = get ? (await get('voice.default_from')) || '' : '';
     const smsRaw = get ? await get('voice.sms_on_no_answer') : false;
     const sms_on_no_answer = smsRaw === true || smsRaw === 'true' || smsRaw === 1 || smsRaw === '1';
@@ -849,7 +872,7 @@ router.get('/config', requireAuth, async (req, res, next) => {
         for (const k of Object.keys(map)) { if (normLine(map[k]) === line) { line_number = k; break; } }
       }
     } catch (_) { /* ignore */ }
-    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, default_from, sms_on_no_answer, sms_text, sms_gateway,
+    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, shifts, default_from, sms_on_no_answer, sms_text, sms_gateway,
       transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds });
   } catch (err) {
     next(err);
@@ -876,6 +899,10 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
       const arr = (Array.isArray(req.body.operator_ids) ? req.body.operator_ids : [])
         .map((x) => parseInt(x, 10)).filter(Boolean);
       await settings.setSetting(cfgKey(line, 'operator_ids'), arr, { type: 'json', userId: uid });
+    }
+    if (req.body.shifts !== undefined) {
+      const s = (req.body.shifts && typeof req.body.shifts === 'object' && !Array.isArray(req.body.shifts)) ? req.body.shifts : {};
+      await settings.setSetting(cfgKey(line, 'shifts'), s, { type: 'json', userId: uid });
     }
     // Telefonní číslo linky → mapa voice.line_numbers (číslo → linka). Prázdné = zruš mapování linky.
     if (req.body.line_number !== undefined) {

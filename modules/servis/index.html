@@ -677,7 +677,7 @@
       function loadPeople(){
         return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
           var arr=Array.isArray(list)?list:((list&&list.items)||[]);
-          _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id) }; });
+          _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ').trim()||p.name||('#'+p.id), phone:(p.phone||'').trim() }; });
           fillOpSelect(); renderOps();
         }).catch(function(){ _people=[]; });
       }
@@ -685,16 +685,27 @@
         var sel=el('info-op-select'); if(!sel) return;
         sel.innerHTML='<option value="">— vyber osobu —</option>'+_people.filter(function(p){ return _ops.indexOf(p.id)<0; }).map(function(p){ return '<option value="'+p.id+'">'+esc(p.name)+'</option>'; }).join('');
       }
-      function opName(id){ var p=_people.filter(function(x){return x.id===id;})[0]; return p?p.name:('#'+id); }
+      function opOf(id){ return _people.filter(function(x){return x.id===id;})[0] || null; }
+      function opName(id){ var p=opOf(id); return p?p.name:('#'+id); }
       function renderOps(){
         var box=el('info-op-list'); if(!box) return;
         if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Zatím nikdo. Přidej první osobu výběrem výše.</span>'; return; }
-        box.innerHTML=_ops.map(function(id){
-          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px;">'
-            +'<span style="font-size:13px;">👤 '+esc(opName(id))+'</span>'
+        var missing=0;
+        var rows=_ops.map(function(id){
+          var p=opOf(id); var phone=p&&p.phone;
+          var tel = phone
+            ? '<span style="font-size:12px;color:#22c55e;white-space:nowrap;">📱 '+esc(phone)+'</span>'
+            : '<span style="font-size:12px;color:#ef4444;white-space:nowrap;">⚠️ chybí telefon</span>';
+          if(!phone) missing++;
+          return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid '+(phone?'var(--border)':'rgba(239,68,68,0.5)')+';border-radius:8px;padding:8px 12px;">'
+            +'<span style="font-size:13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">👤 '+esc(opName(id))+' '+tel+'</span>'
             +'<button class="btn btn-secondary" style="font-size:11px;padding:3px 8px;" onclick="infoRemoveOperator('+id+')">✕ Odebrat</button>'
             +'</div>';
         }).join('');
+        var warn = missing
+          ? '<div style="font-size:12px;color:#ef4444;margin-top:4px;">⚠️ '+missing+' '+(missing===1?'operátor nemá':'operátoři nemají')+' vyplněné telefonní číslo v Lidech a HR — na takového nejde přepojit hovor. Doplň číslo v Lidé a HR.</div>'
+          : '<div style="font-size:12px;color:#22c55e;margin-top:4px;">✅ Všichni operátoři mají telefon.</div>';
+        box.innerHTML=rows+warn;
       }
       function persistOps(){ return api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ operator_ids:_ops }) }).catch(function(){}); }
       window.infoAddOperator=function(){ var sel=el('info-op-select'); var id=parseInt(sel&&sel.value,10); if(!id) return; if(_ops.indexOf(id)<0){ _ops.push(id); fillOpSelect(); renderOps(); persistOps(); } if(sel) sel.value=''; };
