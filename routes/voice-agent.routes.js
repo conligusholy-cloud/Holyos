@@ -88,17 +88,18 @@ function twimlConnect(wsUrl, actionUrl, welcomeGreeting) {
   const u = xmlAttr(wsUrl);
   const act = actionUrl ? ` action="${xmlAttr(actionUrl)}" method="POST"` : '';
   // Úvodní věta jako welcomeGreeting → Twilio ji řekne stejným hlasem (ElevenLabs)
-  // a s welcomeGreetingInterruptible="none" ji NELZE přerušit (dořekne se celá,
-  // i když do toho volaný mluví). Teprve pak běží běžná (přerušitelná) konverzace.
+  // a s welcomeGreetingInterruptible="none" ji NELZE přerušit.
   const wg = welcomeGreeting && String(welcomeGreeting).trim()
     ? ` welcomeGreeting="${xmlAttr(String(welcomeGreeting).trim())}" welcomeGreetingInterruptible="none"`
     : '';
+  // interruptible="none" → AI NEjde přerušit řečí ani po celou dobu hovoru: vždy
+  // dořekne větu a teprve pak nechá prostor druhé straně (žádné skákání do řeči).
   return (
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<Response>\n' +
     `  <Connect${act}>\n` +
     `    <ConversationRelay url="${u}" language="cs-CZ" ` +
-    `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}"${wg} />\n` +
+    `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}" interruptible="none"${wg} />\n` +
     '  </Connect>\n' +
     '</Response>'
   );
