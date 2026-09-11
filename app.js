@@ -79,6 +79,14 @@ app.use(helmet({
   contentSecurityPolicy: false, // Povolit inline skripty pro stávající frontend
 }));
 
+// Výslovně povol geolokaci/kameru/mikrofon pro stejný origin (servisák bere GPS,
+// mobilní formuláře fotí). Bez toho může prohlížeč v některých kontextech (webview,
+// PWA) polohu tiše blokovat bez dotazu na povolení.
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(self), microphone=(self)');
+  next();
+});
+
 // CORS
 app.use(cors({
   origin: process.env.CORS_ORIGIN || true,
