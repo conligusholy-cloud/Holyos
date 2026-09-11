@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#0b0f14">
+  <title>Infolinka — hovory</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root{ --bg:#0b0f14; --card:#141c26; --card2:#1b2530; --border:#26333f; --text:#e8eef3; --text2:#8ea1b3; --acc:#22d3ee; --ok:#22c55e; --warn:#eab308; --err:#ef4444; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    .wrap{ max-width:620px; margin:0 auto; padding:14px 14px 40px; }
+    .top{ display:flex; align-items:center; gap:10px; padding:4px 2px 12px; position:sticky; top:0; background:var(--bg); z-index:5; }
+    .top .logo{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--acc),#06b6d4); color:#04222b; display:flex; align-items:center; justify-content:center; font-size:18px; }
+    .top h1{ font-size:17px; margin:0; font-weight:700; }
+    .top .sub{ font-size:12px; color:var(--text2); }
+    .top .refresh{ margin-left:auto; background:var(--card2); border:1px solid var(--border); color:var(--text); border-radius:10px; padding:9px 14px; font-size:14px; font-weight:600; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+    .card .row1{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .num{ font-size:17px; font-weight:700; color:var(--acc); text-decoration:none; }
+    .time{ font-size:12px; color:var(--text2); white-space:nowrap; }
+    .want{ font-size:14px; line-height:1.5; margin:2px 0 8px; }
+    .want.empty{ color:var(--text2); font-style:italic; }
+    .meta{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .chip{ font-size:12px; padding:3px 10px; border-radius:20px; font-weight:600; white-space:nowrap; }
+    .chip.ok{ background:rgba(34,197,94,0.15); color:var(--ok); }
+    .chip.warn{ background:rgba(234,179,8,0.15); color:var(--warn); }
+    .chip.none{ background:var(--card2); color:var(--text2); }
+    .chip.len{ background:var(--card2); color:var(--text2); }
+    .actions{ display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+    .call-btn{ background:var(--ok); color:#04220f; border:none; border-radius:10px; padding:9px 14px; font-size:14px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+    audio{ height:34px; max-width:100%; vertical-align:middle; }
+    .tr-toggle{ background:var(--card2); border:1px solid var(--border); color:var(--text2); border-radius:10px; padding:8px 12px; font-size:13px; }
+    .transcript{ display:none; margin-top:8px; background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px; font-size:13px; line-height:1.5; max-height:300px; overflow:auto; }
+    .transcript .a{ margin:3px 0; } .transcript .a b{ color:var(--acc); }
+    .screen{ text-align:center; padding:56px 20px; }
+    .screen .big{ font-size:42px; margin-bottom:10px; }
+    .screen h2{ font-size:19px; margin:0 0 8px; }
+    .screen p{ color:var(--text2); font-size:14px; line-height:1.6; max-width:340px; margin:0 auto 18px; }
+    .screen a.btn{ background:var(--acc); color:#04222b; text-decoration:none; border-radius:12px; padding:14px 22px; font-weight:800; display:inline-block; }
+    .hidden{ display:none !important; }
+    .empty{ text-align:center; color:var(--text2); padding:40px 10px; }
+  </style>
+</head>
+<body>
+  <div id="loading" class="screen"><div class="big">⏳</div><p>Načítám…</p></div>
+
+  <div id="gate" class="screen hidden">
+    <div class="big">🔒</div>
+    <h2>Nutné přihlášení</h2>
+    <p>Tuhle stránku vidí jen přihlášení lidé z Best Series. Přihlas se do HolyOS a otevři odkaz znovu.</p>
+    <a class="btn" href="/">Přihlásit se do HolyOS</a>
+  </div>
+
+  <div id="app" class="wrap hidden">
+    <div class="top">
+      <div class="logo">📞</div>
+      <div>
+        <h1>Infolinka — hovory</h1>
+        <div class="sub">Kdo volal, co chtěl, kam byl přepojen</div>
+      </div>
+      <button class="refresh" onclick="loadCalls()">↻</button>
+    </div>
+    <div id="list"><div class="empty">Načítám…</div></div>
+  </div>
+
+  <script>
+  (function(){
+    function $(id){ return document.getElementById(id); }
+    function show(id){ ['loading','gate','app'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function api(p){ return fetch(p,{credentials:'include'}); }
+    function fmtDate(iso){ if(!iso) return ''; var d=new Date(iso); return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}); }
+    function fmtDur(s){ s=Number(s)||0; var m=Math.floor(s/60), ss=s%60; return m+':'+(ss<10?'0':'')+ss; }
+    function digits(s){ return String(s||'').replace(/[^\d+]/g,''); }
+
+    // Odvodí „přesměrováno na koho" z transfer_log.
+    function transferInfo(c){
+      var log = Array.isArray(c.transfer_log) ? c.transfer_log : [];
+      if(!log.length) return c.handoff ? {cls:'warn', txt:'⇢ přepojení chtěno, nedovoláno'} : null;
+      var ans = log.filter(function(e){ var s=String(e.status||'').toLowerCase(); return s==='completed'||s==='answered'; });
+      if(ans.length){ var e=ans[ans.length-1]; return {cls:'ok', txt:'✅ přepojeno: '+(e.name||e.number||'kolega')}; }
+      return {cls:'warn', txt:'⛔ nedovoláno ('+log.length+'×)'};
+    }
+
+    // 1) Ověř přihlášení
+    api('/api/auth/me').then(function(r){
+      if(r.status===401||r.status===403){ show('gate'); return null; }
+      if(!r.ok) throw new Error('me '+r.status);
+      return r.json();
+    }).then(function(j){ if(!j) return; show('app'); loadCalls(); }).catch(function(){ show('gate'); });
+
+    window.loadCalls = async function(){
+      var box=$('list'); box.innerHTML='<div class="empty">Načítám…</div>';
+      try{
+        var r=await api('/api/voice/calls?line=infolinka&limit=100');
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        var rows=await r.json();
+        if(!rows.length){ box.innerHTML='<div class="empty">Zatím žádné hovory.</div>'; return; }
+        box.innerHTML=rows.map(function(c){
+          var num=c.from_number||''; var tel=digits(num);
+          var want=c.caller_intent||c.summary||'';
+          var ti=transferInfo(c);
+          var chip = ti ? '<span class="chip '+ti.cls+'">'+esc(ti.txt)+'</span>' : '<span class="chip none">bez přepojení</span>';
+          var rec = c.audio_url ? '<audio controls preload="none" src="/api/voice/recording/'+c.id+'"></audio>' : '';
+          var tr=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div class="a"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
+          return '<div class="card">'
+            +'<div class="row1">'
+              +(tel? '<a class="num" href="tel:'+esc(tel)+'">📞 '+esc(num)+'</a>' : '<span class="num">📞 '+esc(num||'neznámé')+'</span>')
+              +'<span class="time">'+esc(fmtDate(c.started_at))+'</span>'
+            +'</div>'
+            +'<div class="want'+(want?'':' empty')+'">'+(want?esc(want):'(bez shrnutí)')+'</div>'
+            +'<div class="meta">'+chip+'<span class="chip len">⏱ '+fmtDur(c.duration_sec)+'</span>'+(c.caller_name?'<span class="chip none">👤 '+esc(c.caller_name)+'</span>':'')+'</div>'
+            +'<div class="actions">'
+              +(tel? '<a class="call-btn" href="tel:'+esc(tel)+'">Zavolat zpět</a>' : '')
+              +(rec||'')
+              +(tr? '<button class="tr-toggle" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'block\'?\'none\':\'block\'">📄 Přepis</button><div class="transcript">'+tr+'</div>' : '')
+            +'</div>'
+          +'</div>';
+        }).join('');
+      }catch(e){ box.innerHTML='<div class="empty" style="color:#ef4444;">Chyba: '+esc(e.message)+'</div>'; }
+    };
+  })();
+  </script>
+</body>
+</html>

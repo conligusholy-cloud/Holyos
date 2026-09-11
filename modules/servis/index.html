@@ -523,6 +523,17 @@
 
         <!-- Sub: Záznamy hovorů -->
         <div id="info-calls" style="display:none;">
+          <!-- Odkaz pro lidi na Infolince (mobilní přehled: kdo volal, co chtěl, kam přepojeno) -->
+          <div style="margin:0 0 14px; background:linear-gradient(135deg, rgba(236,72,153,0.08), rgba(219,39,119,0.04)); border:1px solid rgba(236,72,153,0.25); border-radius:12px; padding:12px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <div style="font-size:22px;">📱</div>
+            <div style="flex:1; min-width:240px;">
+              <div style="font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Odkaz pro operátory Infolinky (mobil, za přihlášením)</div>
+              <div style="font-size:14px; font-weight:600;"><span id="info-hovory-url" style="font-family:'Consolas',monospace; color:#22d3ee; word-break:break-all;">…</span></div>
+              <div style="font-size:11px; color:var(--text2); margin-top:3px;">Když jim při přepojení volá naše číslo, tady si rozkliknou, kdo volal, co chtěl a na koho byl hovor přepojen.</div>
+            </div>
+            <button class="btn btn-sm btn-secondary" id="info-hovory-copy" title="Zkopírovat odkaz">📋 Kopírovat</button>
+            <a href="modules/servis/infolinka-hovory.html" target="_blank" class="btn btn-sm btn-secondary" title="Otevřít">↗ Otevřít</a>
+          </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
             <h3 style="margin:0;font-size:16px;">Záznamy hovorů Infolinky</h3>
             <button class="btn btn-secondary" onclick="infoLoadCalls()">↻ Obnovit</button>
@@ -1075,6 +1086,11 @@
 
       // ── Záznamy hovorů (jen linka infolinka) ──
       window.infoLoadCalls = async function(){
+        // Odkaz pro operátory (mobilní přehled hovorů) + kopírování
+        var hu=el('info-hovory-url');
+        if(hu && !hu.__set){ hu.__set=1; var hurl=location.origin+'/modules/servis/infolinka-hovory.html'; hu.textContent=hurl;
+          var cb=el('info-hovory-copy'); if(cb) cb.addEventListener('click',function(){ function ok(){ var t=cb.textContent; cb.textContent='✅ Zkopírováno'; setTimeout(function(){cb.textContent=t;},1500); } if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(hurl).then(ok,function(){ window.prompt('Zkopíruj odkaz:',hurl); }); } else { window.prompt('Zkopíruj odkaz:',hurl); } });
+        }
         var body=el('info-calls-body'); if(!body) return;
         body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
         try{
