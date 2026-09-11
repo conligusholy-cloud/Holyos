@@ -310,15 +310,26 @@ async function notifyCallbackRequest(prisma, { lead, when, note, source }) {
 
 // Hlasový hovor: zákazník chtěl přepojit na obchodníka, ale nikdo hovor nezvedl
 // (vyčerpána všechna čísla i kolečka). Push + zvonek, ať se ozve zpět.
-async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, attempts }) {
+async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, attempts, line }) {
   try {
     const label = who || (phone ? phone : 'zákazník');
-    const title = '📵 Nepřepojeno na obchodníka — ' + label;
-    const body = 'Zákazník během hovoru' + (campaignName ? (' (kampaň ' + campaignName + ')') : '')
-      + ' chtěl mluvit s obchodníkem, ale nikdo hovor nezvedl'
-      + (attempts ? (' (' + attempts + ' pokusů)') : '') + '. Zavolejte mu zpět'
-      + (phone ? (': ' + phone) : '.') + (phone ? '.' : '');
-    await dispatch(prisma, { title, body, data: { type: 'voice_transfer_failed', lead_id: leadId || null, phone: phone || null } });
+    const isInfolinka = String(line || '') === 'infolinka';
+    let title, body;
+    if (isInfolinka) {
+      // Infolinka = technická porucha. Zákazník volal a NIKDO to nezvedl → urgentní.
+      title = '🚨🚨 INFOLINKU NIKDO NEZVEDL — ' + label;
+      body = '‼️ Zákazník volal na Infolinku (technická porucha) a NIKDO hovor nezvedl'
+        + (attempts ? (' — ' + attempts + ' pokusů o dovolání') : '')
+        + '. OKAMŽITĚ mu zavolejte zpět'
+        + (phone ? (': ' + phone) : '.') + (phone ? ' ☎️' : '');
+    } else {
+      title = '📵 Nepřepojeno na obchodníka — ' + label;
+      body = 'Zákazník během hovoru' + (campaignName ? (' (kampaň ' + campaignName + ')') : '')
+        + ' chtěl mluvit s obchodníkem, ale nikdo hovor nezvedl'
+        + (attempts ? (' (' + attempts + ' pokusů)') : '') + '. Zavolejte mu zpět'
+        + (phone ? (': ' + phone) : '.') + (phone ? '.' : '');
+    }
+    await dispatch(prisma, { title, body, data: { type: 'voice_transfer_failed', line: line || null, lead_id: leadId || null, phone: phone || null } });
   } catch (e) { console.error('[compounder-notify] transfer failed', e.message); }
 }
 
