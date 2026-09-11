@@ -12,6 +12,7 @@ function isConfigured() { return !!process.env.OPENAI_API_KEY; }
 async function transcribeFile(filePath, opts = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error('Chybí OPENAI_API_KEY');
+  if (/^sk-ant/i.test(key)) throw new Error('OPENAI_API_KEY vypadá jako Anthropic klíč (sk-ant-…). Whisper je od OpenAI — vlož OpenAI klíč z platform.openai.com/api-keys.');
   if (!fs.existsSync(filePath)) throw new Error('Nahrávka nenalezena na disku');
   const size = fs.statSync(filePath).size;
   if (size > 25 * 1024 * 1024) throw new Error('Nahrávka je větší než 25 MB (limit Whisper)');
