@@ -785,4 +785,86 @@ router.delete('/requests/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Stroje v provozu ──────────────────────────────────────────────────────
+// Evidence běžících strojů; slouží jako zdroj pole „Problém na stroji" v požadavku.
+const MACHINE_STATUSES = ['v_provozu', 'mimo_provozu'];
+// Datum z 'YYYY-MM-DD' (nebo prázdné → null). Uloží se jako @db.Date.
+function _toDate(v) {
+  if (v == null || v === '') return null;
+  const d = new Date(String(v).length <= 10 ? String(v) + 'T00:00:00Z' : v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+router.get('/machines', async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.status && MACHINE_STATUSES.includes(req.query.status)) where.status = req.query.status;
+    const rows = await prisma.serviceMachine.findMany({ where, orderBy: [{ status: 'asc' }, { name: 'asc' }] });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+const machineSchema = z.object({
+  name: z.string().min(1).max(200),
+  type: z.string().max(80).optional().nullable(),
+  status: z.enum(['v_provozu', 'mimo_provozu']).optional(),
+  commissioned_at: z.string().optional().nullable(),
+  revision_at: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+router.post('/machines', async (req, res, next) => {
+  try {
+    const parsed = machineSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const row = await prisma.serviceMachine.create({
+      data: {
+        name: d.name,
+        type: d.type || null,
+        status: d.status || 'v_provozu',
+        commissioned_at: _toDate(d.commissioned_at),
+        revision_at: _toDate(d.revision_at),
+        note: d.note || null,
+      },
+    });
+    res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+const machinePatchSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  type: z.string().max(80).optional().nullable(),
+  status: z.enum(['v_provozu', 'mimo_provozu']).optional(),
+  commissioned_at: z.string().optional().nullable(),
+  revision_at: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+router.patch('/machines/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = machinePatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const data = {};
+    if (d.name !== undefined) data.name = d.name;
+    if (d.type !== undefined) data.type = d.type || null;
+    if (d.status !== undefined) data.status = d.status;
+    if (d.commissioned_at !== undefined) data.commissioned_at = _toDate(d.commissioned_at);
+    if (d.revision_at !== undefined) data.revision_at = _toDate(d.revision_at);
+    if (d.note !== undefined) data.note = d.note || null;
+    const row = await prisma.serviceMachine.update({ where: { id }, data });
+    res.json(row);
+  } catch (err) { next(err); }
+});
+
+router.delete('/machines/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.serviceMachine.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

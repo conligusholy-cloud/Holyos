@@ -4753,6 +4753,24 @@ model ServiceRequest {
   @@map("service_requests")
 }
 
+// Stroj v provozu — evidence reálně běžících strojů (prádlomaty, výrobní stroje…).
+// Z tohoto seznamu se nabízí pole „Problém na stroji" v servisním požadavku.
+// Záměrně rozšiřitelné (poznámka teď, další pole do budoucna).
+model ServiceMachine {
+  id              Int       @id @default(autoincrement())
+  name            String    @db.VarChar(200)   // název / lokalita (např. „Vlašim - Tesco")
+  type            String?   @db.VarChar(80)    // Prádlomat | Špageta | jiný
+  status          String    @default("v_provozu") @db.VarChar(20) // v_provozu | mimo_provozu
+  commissioned_at DateTime? @db.Date           // uvedení do provozu
+  revision_at     DateTime? @db.Date           // příští revize
+  note            String?   @db.Text           // poznámka (do budoucna víc informací o stroji)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@index([status])
+  @@map("service_machines")
+}
+
 // Spotřebič — fyzický komponent uvnitř produktu (motor, čerpadlo, kompresor,
 // displej, mincovník…). Volitelně provázáno s Material (BOM položka).
 model ServiceAppliance {
