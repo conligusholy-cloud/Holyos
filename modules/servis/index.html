@@ -1559,7 +1559,11 @@
         fetch(API+'/request-settings',{ method:'PUT', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ solver_ids:ids }) })
           .then(function(r){ return r.text().then(function(t){ var j={}; try{ j=JSON.parse(t); }catch(_){}
             if(!r.ok) throw new Error((j&&j.error)||('HTTP '+r.status+(t?(' — '+t.slice(0,140)):''))); return j; }); })
-          .then(function(d){ _solvers=(d&&d.solvers)||[]; team=(_solvers||[]).map(function(p){ return parseInt(p.id,10); }).filter(Boolean); renderTeam(); if(m){ m.style.color='#22c55e'; m.textContent='✅ Uloženo'; setTimeout(function(){ if(m.textContent==='✅ Uloženo'){ m.textContent=''; } },2500); } })
+          .then(function(d){ var srv=(d&&d.solver_ids)||[]; _solvers=(d&&d.solvers)||[];
+            // Nepřepisuj zobrazený tým serverem naslepo — ponech, co jsi vybral.
+            renderTeam();
+            if(m){ if(srv.length===ids.length){ m.style.color='#22c55e'; m.textContent='✅ Uloženo ('+srv.length+' členů)'; } else { m.style.color='#f59e0b'; m.textContent='⚠️ Poslal jsem '+ids.length+', ale server uložil jen '+srv.length+' — backend není aktuální (nasaď routes/service.routes.js).'; } }
+          })
           .catch(function(e){ if(m){ m.style.color='#ef4444'; m.textContent='Uložení selhalo: '+e.message; } });
       });
     }
