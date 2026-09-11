@@ -196,6 +196,7 @@
       <button class="section-tab active" data-section="hugo">🔧 Hugo</button>
       <button class="section-tab" data-section="infolinka">📞 Infolinka</button>
       <button class="section-tab" data-section="pozadavky">🛠️ Servisní požadavky</button>
+      <button class="section-tab" data-section="stroje">⚙️ Stroje v provozu</button>
       <button class="section-tab" data-section="odecty">🔢 Odečty</button>
       <button class="section-tab" data-section="objednavky">📦 Objednávky</button>
       <button class="section-tab" data-section="sklad">🏬 Servisní sklad</button>
@@ -393,9 +394,11 @@
 
           <label style="display:block;font-size:12px;color:var(--text2);margin:14px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
           <textarea id="info-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na infolinku. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
+          <div id="info-greeting-cnt" style="margin-top:3px;font-size:11px;color:var(--text2);"></div>
 
           <label style="display:block;font-size:12px;color:var(--text2);margin:12px 0 4px;">Scénář / instrukce pro AI (co má zjistit, jak se chovat)</label>
           <textarea id="info-prompt" rows="6" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Např. Jsi asistentka infolinky Best Series, odpověz na dotazy zákazníka podle podkladů, zjisti kdo volá a co potřebuje…"></textarea>
+          <div id="info-prompt-cnt" style="margin-top:3px;font-size:11px;color:var(--text2);"></div>
 
           <div id="info-kn-sec"></div>
 
@@ -461,6 +464,30 @@
       </div>
     </section>
 
+    <!-- ═══ SEKCE: STROJE V PROVOZU ═══ -->
+    <section class="section-panel" id="section-stroje">
+      <div class="content">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="sm-new-btn">+ Nový stroj</button>
+          <div class="filters">
+            <select class="filter-input" id="sm-filter-status">
+              <option value="">Všechny stavy</option>
+              <option value="v_provozu">V provozu</option>
+              <option value="mimo_provozu">Mimo provoz</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="sm-table">
+            <thead><tr>
+              <th>Stroj</th><th>Typ</th><th>Stav</th><th>Uvedení do provozu</th><th>Revize</th><th>Poznámka</th><th></th>
+            </tr></thead>
+            <tbody id="sm-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     <!-- ═══ SEKCE: ODEČTY (připravujeme) ═══ -->
     <section class="section-panel" id="section-odecty">
       <div class="content">
@@ -511,6 +538,8 @@
         document.querySelectorAll('.section-tab').forEach(function(b) { b.classList.toggle('active', b === btn); });
         document.querySelectorAll('.section-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'section-' + sec); });
         if (sec === 'infolinka' && window.infoInit) window.infoInit();
+        if (sec === 'pozadavky' && window.srEnsure) window.srEnsure();
+        if (sec === 'stroje' && window.smEnsure) window.smEnsure();
       }
       document.querySelectorAll('.section-tab').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -561,6 +590,15 @@
       };
 
       // ── Nastavení recepční ──
+      function infoUpdateCounts(){
+        var defs=[['info-greeting','info-greeting-cnt',500],['info-prompt','info-prompt-cnt',8000]];
+        defs.forEach(function(d){
+          var t=el(d[0]), c=el(d[1]); if(!t||!c) return;
+          var n=(t.value||'').length, max=d[2], ok=n<=max;
+          c.textContent=n.toLocaleString('cs-CZ')+' / max '+max.toLocaleString('cs-CZ')+' znaků · '+(ok?'✓ v limitu':'⚠ přes limit');
+          c.style.color= ok ? '#22c55e' : '#ef4444';
+        });
+      }
       async function infoLoadConfig(){
         var msg=el('info-msg'); if(msg) msg.textContent='';
         try{
@@ -575,6 +613,8 @@
           var tt=el('info-transfer-timeout'); if(tt) tt.value = c.transfer_ring_timeout||20;
           var tr=el('info-transfer-rounds'); if(tr) tr.value = c.transfer_rounds||2;
           var kn=el('info-kn-sec'); if(kn && !kn.getAttribute('data-init')){ kn.innerHTML=knSectionHtml(); kn.setAttribute('data-init','1'); }
+          ['info-greeting','info-prompt'].forEach(function(id){ var t=el(id); if(t && !t.__cntBound){ t.__cntBound=1; t.addEventListener('input', infoUpdateCounts); } });
+          infoUpdateCounts();
           infoKnLoad();
         }catch(e){ if(msg) msg.textContent='Chyba načtení: '+e.message; }
       }
@@ -702,12 +742,14 @@
   (function(){
     var API='/api/service';
     var _people=[];
+    var _machines=[]; // stroje v provozu (pro výběr v poli Problém na stroji)
     var STL={ novy:['Nový','badge-draft'], reseni:['V řešení','badge-case'], vyreseno:['Vyřešeno','badge-published'], zamitnuto:['Zamítnuto','badge-archived'] };
     function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
     function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
     function fmtDate(s){ try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return ''; } }
     function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ') }; }); }).catch(function(){ _people=[]; }); }
     function peopleOptions(sel){ return '<option value="">— nepřiřazeno —</option>'+_people.map(function(p){ return '<option value="'+p.id+'"'+(sel==p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join(''); }
+    function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
     function render(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
       if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
@@ -734,7 +776,7 @@
       row=row||{}; var isNew=!row.id;
       var ov=document.createElement('div'); ov.className='modal-overlay';
       ov.innerHTML='<div class="modal" style="width:640px"><h2>'+(isNew?'Nový servisní požadavek':'Servisní požadavek')+'</h2>'+
-        '<div class="form-row"><label>Problém na stroji *</label><input id="sr-problem" value="'+esc(row.problem||'')+'"></div>'+
+        '<div class="form-row"><label>Problém na stroji *</label><input id="sr-problem" list="sr-machine-list" autocomplete="off" placeholder="Vyber stroj v provozu nebo napiš vlastní" value="'+esc(row.problem||'')+'"><datalist id="sr-machine-list">'+_machines.map(function(m){ return '<option value="'+esc(m.name)+'">'+esc(m.type||'')+'</option>'; }).join('')+'</datalist></div>'+
         '<div class="form-grid-2">'+
           '<div class="form-row"><label>Servisní úkon – prádlomat</label><input id="sr-action" value="'+esc(row.action||'')+'"></div>'+
           '<div class="form-row"><label>Servisní úkol – špageta</label><input id="sr-task" value="'+esc(row.task||'')+'"></div>'+
@@ -773,8 +815,83 @@
       var newBtn=document.getElementById('sr-new-btn'); if(newBtn) newBtn.addEventListener('click',function(){ openModal(null); });
       var f=document.getElementById('sr-filter-status'); if(f) f.addEventListener('change',load);
       var loaded=false;
-      function ensure(){ if(loaded) return; loaded=true; loadPeople().then(load); }
+      function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadPeople().then(load); }
+      window.srEnsure=ensure; // volá se i při obnově sekce po refreshi
       var tabBtn=document.querySelector('.section-tab[data-section="pozadavky"]');
+      if(tabBtn) tabBtn.addEventListener('click',ensure);
+    });
+  })();
+  </script>
+
+  <!-- Agenda: Stroje v provozu (CRUD) -->
+  <script>
+  (function(){
+    var API='/api/service';
+    var MST={ v_provozu:['V provozu','badge-published'], mimo_provozu:['Mimo provoz','badge-archived'] };
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+    function fmtDate(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return '—'; } }
+    function toInput(s){ if(!s) return ''; try{ return new Date(s).toISOString().slice(0,10); }catch(e){ return ''; } }
+    function render(rows){
+      var tb=document.getElementById('sm-tbody'); if(!tb) return;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné stroje. Přidej první tlačítkem „+ Nový stroj".</td></tr>'; return; }
+      tb.innerHTML=rows.map(function(r){
+        var st=MST[r.status]||['?','badge-draft'];
+        return '<tr>'+
+          '<td><b>'+esc(r.name)+'</b></td>'+
+          '<td style="color:var(--text2)">'+esc(r.type||'—')+'</td>'+
+          '<td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
+          '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.commissioned_at)+'</td>'+
+          '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.revision_at)+'</td>'+
+          '<td style="color:var(--text2)">'+esc(r.note?String(r.note).slice(0,80):'—')+'</td>'+
+          '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
+        '</tr>';
+      }).join('');
+      tb.querySelectorAll('[data-edit]').forEach(function(b){ b.addEventListener('click',function(){ var row=rows.filter(function(x){return x.id==b.dataset.edit;})[0]; openModal(row); }); });
+    }
+    function load(){
+      var st=document.getElementById('sm-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
+      fetchJSON(API+'/machines'+q).then(render).catch(function(){ var tb=document.getElementById('sm-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+    }
+    function openModal(row){
+      row=row||{}; var isNew=!row.id;
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      ov.innerHTML='<div class="modal" style="width:560px"><h2>'+(isNew?'Nový stroj':'Stroj v provozu')+'</h2>'+
+        '<div class="form-row"><label>Název / lokalita *</label><input id="sm-name" value="'+esc(row.name||'')+'" placeholder="např. Vlašim - Tesco"></div>'+
+        '<div class="form-grid-2">'+
+          '<div class="form-row"><label>Typ</label><input id="sm-type" list="sm-type-list" value="'+esc(row.type||'')+'" placeholder="Prádlomat / Špageta / jiný"><datalist id="sm-type-list"><option value="Prádlomat"><option value="Špageta"><option value="Jiný"></datalist></div>'+
+          '<div class="form-row"><label>Stav</label><select id="sm-status"><option value="v_provozu"'+(row.status!=='mimo_provozu'?' selected':'')+'>V provozu</option><option value="mimo_provozu"'+(row.status==='mimo_provozu'?' selected':'')+'>Mimo provoz</option></select></div>'+
+        '</div>'+
+        '<div class="form-grid-2">'+
+          '<div class="form-row"><label>Uvedení do provozu</label><input id="sm-comm" type="date" value="'+toInput(row.commissioned_at)+'"></div>'+
+          '<div class="form-row"><label>Revize (příští)</label><input id="sm-rev" type="date" value="'+toInput(row.revision_at)+'"></div>'+
+        '</div>'+
+        '<div class="form-row"><label>Poznámka</label><textarea id="sm-note" rows="3" placeholder="výrobní číslo, další info o stroji…">'+esc(row.note||'')+'</textarea></div>'+
+        '<div class="modal-actions">'+
+          (isNew?'':'<button class="btn btn-danger" id="sm-del">Smazat</button>')+
+          '<button class="btn btn-secondary" id="sm-cancel">Zrušit</button>'+
+          '<button class="btn btn-primary" id="sm-save">💾 Uložit</button>'+
+        '</div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      function val(id){ var el=ov.querySelector('#'+id); return el?el.value.trim():''; }
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#sm-cancel').addEventListener('click',close);
+      var delBtn=ov.querySelector('#sm-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat stroj?')) return; fetchJSON(API+'/machines/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
+      ov.querySelector('#sm-save').addEventListener('click',function(){
+        var body={ name:val('sm-name'), type:val('sm-type'), status:val('sm-status'), commissioned_at:val('sm-comm')||null, revision_at:val('sm-rev')||null, note:val('sm-note') };
+        if(!body.name){ alert('Vyplň název stroje.'); return; }
+        var p=isNew?fetchJSON(API+'/machines',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/machines/'+row.id,{method:'PATCH',body:JSON.stringify(body)});
+        p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+      });
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      var newBtn=document.getElementById('sm-new-btn'); if(newBtn) newBtn.addEventListener('click',function(){ openModal(null); });
+      var f=document.getElementById('sm-filter-status'); if(f) f.addEventListener('change',load);
+      var loaded=false;
+      function ensure(){ if(loaded) return; loaded=true; load(); }
+      window.smEnsure=ensure; // volá se i při obnově sekce po refreshi
+      var tabBtn=document.querySelector('.section-tab[data-section="stroje"]');
       if(tabBtn) tabBtn.addEventListener('click',ensure);
     });
   })();
