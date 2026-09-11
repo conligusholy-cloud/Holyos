@@ -1184,8 +1184,8 @@
           var j=await api('/operator-stats?line='+INFO_LINE+(from?'&from='+from:'')+(to?'&to='+to:''));
           var ops=(j&&j.operators)||[];
           if(!ops.length){ box.innerHTML='<span style="color:var(--text2);">V tomto období nejsou žádná data o přepojení na operátory. (Statistika se plní z hovorů, které AI přepojila na živého člověka.)</span>'; return; }
-          var h='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;"><table class="data-table"><thead><tr><th>Operátor</th><th>Přijaté</th><th>Čas na hovorech</th><th>Ø délka</th><th>Nevzal to</th><th>Obsazeno</th><th>Chyba</th><th>Pokusů</th></tr></thead><tbody>';
-          ops.forEach(function(o){ h+='<tr><td><b>'+esc(o.name)+'</b></td><td>'+o.accepted+'</td><td>'+esc(fmtMin(o.talk_sec))+'</td><td>'+fmtDur(o.avg_sec)+'</td><td>'+o.unavailable+'</td><td>'+o.declined+'</td><td>'+o.failed+'</td><td>'+o.attempts+'</td></tr>'; });
+          var h='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px;"><table class="data-table"><thead><tr><th>Operátor</th><th>Přijaté</th><th>Čas na hovorech</th><th>Ø délka</th><th>Nevzal to</th><th>Obsazeno</th><th>Chyba</th><th title="Hovory na Infolinku, které měl(a) ve službě a nikdo je nevyřídil">Nevyřízeno</th><th>Pokusů</th></tr></thead><tbody>';
+          ops.forEach(function(o){ var mis=o.missed||0; h+='<tr><td><b>'+esc(o.name)+'</b></td><td>'+o.accepted+'</td><td>'+esc(fmtMin(o.talk_sec))+'</td><td>'+fmtDur(o.avg_sec)+'</td><td>'+o.unavailable+'</td><td>'+o.declined+'</td><td>'+o.failed+'</td><td'+(mis?' style="color:#ef4444;font-weight:700;"':'')+'>'+mis+'</td><td>'+o.attempts+'</td></tr>'; });
           h+='</tbody></table></div>';
           h+='<div style="display:grid;grid-template-columns:1fr;gap:16px;">'
             +'<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;"><div style="font-size:13px;font-weight:600;margin-bottom:8px;">Výsledky hovorů podle operátora</div><canvas id="info-ppl-chart1" height="110"></canvas></div>'
@@ -1200,7 +1200,8 @@
             {label:'Přijaté', data:ops.map(function(o){return o.accepted;}), backgroundColor:'#22c55e'},
             {label:'Nevzal to', data:ops.map(function(o){return o.unavailable;}), backgroundColor:'#eab308'},
             {label:'Obsazeno', data:ops.map(function(o){return o.declined;}), backgroundColor:'#ef4444'},
-            {label:'Chyba', data:ops.map(function(o){return o.failed;}), backgroundColor:'#94a3b8'}
+            {label:'Chyba', data:ops.map(function(o){return o.failed;}), backgroundColor:'#94a3b8'},
+            {label:'Nevyřízeno', data:ops.map(function(o){return o.missed||0;}), backgroundColor:'#dc2626'}
           ]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{stacked:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{stacked:true, beginAtZero:true, ticks:{color:gc,precision:0}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{ labels:{ color:gc } } } } }));
           _pplCharts.push(new Chart(el('info-ppl-chart2').getContext('2d'),{ type:'bar', data:{ labels:labels, datasets:[{ label:'Minuty', data:ops.map(function(o){return Math.round((o.talk_sec||0)/60);}), backgroundColor:'#22d3ee'}]}, options:{ responsive:true, maintainAspectRatio:true, scales:{ x:{ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}}, y:{beginAtZero:true, ticks:{color:gc}, grid:{color:'rgba(255,255,255,0.05)'}} }, plugins:{ legend:{display:false} } } }));
         }catch(e){ if(box) box.innerHTML='<span style="color:#ef4444;">Chyba: '+esc(e.message)+'</span>'; }

@@ -325,13 +325,12 @@ async function transferContext(mode, targetId) {
 }
 
 // Pošle do Velína, že zákazník nebyl přepojen na obchodníka.
-async function notifyTransferFailed(mode, targetId, attempts, line) {
+async function notifyTransferFailed(mode, targetId, attempts, line, callSid) {
   try {
     const notify = require('../services/compounder/notify');
-    if (!notify.notifyTransferFailed) return;
     const ln = normLine(line);
     const c = await transferContext(mode, targetId);
-    // Příjemci: pro Infolinku lidé nastavení u Infolinky (notify_person_ids),
+    // Příjemci push/zvonku: pro Infolinku lidé nastavení u Infolinky (notify_person_ids),
     // jinak (obchod) výchozí majitelé.
     let recipientPersonIds;
     try {
@@ -342,8 +341,109 @@ async function notifyTransferFailed(mode, targetId, attempts, line) {
         if (Array.isArray(ids)) { ids = ids.filter((n) => Number.isInteger(n) && n > 0); if (ids.length) recipientPersonIds = ids; }
       }
     } catch (e) { console.warn('[voice] notifyTransferFailed příjemci:', e.message); }
-    await notify.notifyTransferFailed(prisma, { who: c.who, phone: c.phone, leadId: c.leadId, campaignName: c.campaignName, attempts, line: ln, recipientPersonIds });
+    if (notify.notifyTransferFailed) {
+      await notify.notifyTransferFailed(prisma, { who: c.who, phone: c.phone, leadId: c.leadId, campaignName: c.campaignName, attempts, line: ln, recipientPersonIds });
+    }
+    // Infolinka: navíc automatický e-mail lidem ve službě + vedení a zápis do hodnocení.
+    if (ln === 'infolinka') {
+      await handleUnhandledInfolinka({ line: ln, callSid, attempts });
+    }
   } catch (e) { console.warn('[voice] notifyTransferFailed:', e.message); }
+}
+
+// Kdo má DNES službu na lince (hlavní + záložní + osoba „v práci" v pracovní době).
+// Vrací [{ id, name, email }] jen aktivních lidí (i bez telefonu — kvůli e-mailu a hodnocení).
+async function todaysShiftPeople(line) {
+  try {
+    const get = settings ? settings.getSetting : null; if (!get) return [];
+    let shifts = await get(cfgKey(line, 'shifts'));
+    if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
+    if (!shifts || typeof shifts !== 'object') return [];
+    const now = new Date();
+    const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const sh = shifts[ymd]; if (!sh) return [];
+    const ids = new Set();
+    [sh.main, sh.backup].forEach((p) => { const id = parseInt(p, 10); if (id) ids.add(id); });
+    if (sh.wperson) { // osobu „v práci" počítáme jen v (globální) pracovní době
+      const workFrom = (await get(cfgKey(line, 'work_from'))) || '';
+      const workTo = (await get(cfgKey(line, 'work_to'))) || '';
+      const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
+      const a = toMin(workFrom), b = toMin(workTo), cur = now.getHours() * 60 + now.getMinutes();
+      if (a != null && b != null && cur >= a && cur < b) { const id = parseInt(sh.wperson, 10); if (id) ids.add(id); }
+    }
+    if (!ids.size) return [];
+    const people = await prisma.person.findMany({ where: { id: { in: Array.from(ids) }, active: { not: false } }, select: { id: true, first_name: true, last_name: true, email: true, work_email: true } });
+    return people.map((p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.work_email || p.email || '').trim() }));
+  } catch (e) { console.warn('[voice] todaysShiftPeople:', e.message); return []; }
+}
+
+// Vedoucí servisu + ředitel výroby (eskalace nevyřízeného hovoru).
+// Override: AppSetting voice.infolinka.escalation_person_ids (pole Person.id). Jinak podle jmen.
+async function serviceLeaderPeople() {
+  try {
+    const get = settings ? settings.getSetting : null;
+    let ids = get ? await get('voice.infolinka.escalation_person_ids') : null;
+    if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = ids.split(',').map((s) => parseInt(s, 10)); } }
+    ids = Array.isArray(ids) ? ids.filter((n) => Number.isInteger(n) && n > 0) : [];
+    let people;
+    if (ids.length) {
+      people = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true, email: true, work_email: true } });
+    } else {
+      // Fallback: Radek Tichý (vedoucí servisu) + Radek Bečka (ředitel výroby).
+      people = await prisma.person.findMany({
+        where: { OR: [
+          { AND: [{ first_name: { contains: 'Radek', mode: 'insensitive' } }, { last_name: { contains: 'Tich', mode: 'insensitive' } }] },
+          { AND: [{ first_name: { contains: 'Radek', mode: 'insensitive' } }, { last_name: { contains: 'Beč', mode: 'insensitive' } }] },
+        ] },
+        select: { id: true, first_name: true, last_name: true, email: true, work_email: true },
+      });
+    }
+    return (people || []).map((p) => ({ id: p.id, name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id), email: (p.work_email || p.email || '').trim() }));
+  } catch (e) { console.warn('[voice] serviceLeaderPeople:', e.message); return []; }
+}
+
+// Nevyřízený hovor na Infolince: zápis k lidem ve službě (hodnocení) + e-mail
+// operátorům ve službě a vedení (vedoucí servisu + ředitel výroby).
+async function handleUnhandledInfolinka({ line, callSid, attempts }) {
+  try {
+    let call = null;
+    if (callSid && prisma.voiceCall) {
+      call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: callSid }, select: { id: true, from_number: true, caller_name: true, caller_intent: true, summary: true } });
+    }
+    const shiftPeople = await todaysShiftPeople(line);
+    // 1) Záznam do hodnocení: kdo měl službu a hovor nikdo nevyřídil.
+    if (call && shiftPeople.length) {
+      try { await prisma.voiceCall.update({ where: { id: call.id }, data: { unhandled_person_ids: shiftPeople.map((p) => p.id) } }); } catch (e) { console.warn('[voice] mark unhandled:', e.message); }
+    }
+    // 2) E-mail: služba + vedení.
+    const leaders = await serviceLeaderPeople();
+    const seen = new Set(); const to = [];
+    shiftPeople.concat(leaders).forEach((p) => { const e = (p.email || '').toLowerCase(); if (p.email && !seen.has(e)) { seen.add(e); to.push(p.email); } });
+    if (!to.length) { console.warn('[voice] unhandled infolinka: žádní příjemci s e-mailem'); return; }
+    const { sendMail } = require('../services/email');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const num = (call && call.from_number) || '';
+    const who = (call && call.caller_name) || '';
+    const want = (call && (call.caller_intent || call.summary)) || '';
+    const when = new Date().toLocaleString('cs-CZ');
+    const shiftNames = shiftPeople.map((p) => p.name).join(', ') || '—';
+    const bodyHtml = '<p style="font-size:15px;"><b>‼️ Nevyřízený hovor na Infolince</b></p>'
+      + '<p>Zákazník volal na Infolinku a <b>nikdo hovor nevyřídil</b>' + (attempts ? (' (' + attempts + ' pokusů o dovolání)') : '') + '.</p>'
+      + '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;font-size:14px;">'
+      + '<tr><td><b>Volající</b></td><td>' + esc(num || '—') + (who ? (' — ' + esc(who)) : '') + '</td></tr>'
+      + (want ? ('<tr><td><b>Co chtěl</b></td><td>' + esc(want) + '</td></tr>') : '')
+      + '<tr><td><b>Kdy</b></td><td>' + esc(when) + '</td></tr>'
+      + '<tr><td><b>Službu měl(i)</b></td><td>' + esc(shiftNames) + '</td></tr>'
+      + '</table>'
+      + '<p style="margin-top:14px;font-size:15px;"><b>Zavolejte zákazníkovi obratem zpět' + (num ? (': ' + esc(num)) : '') + '.</b></p>';
+    const infolinkaFrom = (process.env.INFOLINKA_MAIL_FROM || 'infolinka@bestseries.cz').trim();
+    const candidates = []; [infolinkaFrom, process.env.COMPOUNDER_MAIL_FROM, process.env.SMTP_FROM].forEach((c) => { const v = (c || '').trim(); if (v && candidates.indexOf(v) < 0) candidates.push(v); });
+    for (const addr of to) {
+      for (const cand of (candidates.length ? candidates : [undefined])) {
+        try { const r = await sendMail({ to: addr, from: cand, fromName: 'Infolinka Best Series', replyTo: infolinkaFrom, brand: 'bestseries', subject: '‼️ Nevyřízený hovor na Infolince' + (num ? (' — ' + num) : ''), rawHtml: bodyHtml }); if (r && r.sent) break; } catch (e) { console.warn('[voice] unhandled email', addr, e.message); }
+      }
+    }
+  } catch (e) { console.warn('[voice] handleUnhandledInfolinka:', e.message); }
 }
 
 // Najde mobil obchodníka přiřazeného k leadu podle telefonu (posledních 9 číslic).
@@ -492,7 +592,7 @@ router.post('/relay-end', form, async (req, res) => {
     if (!plan.numbers.length) {
       // Přepojení zapnuto, ale není koho volat → řekni to zákazníkovi + info do Velína.
       console.warn('[voice] relay-end: přepojení chtěné, ale ŽÁDNÉ číslo (obchodník leadu bez telefonu a žádná záložní čísla u kampaně).');
-      notifyTransferFailed(mode, target, 0, line);
+      notifyTransferFailed(mode, target, 0, line, (req.body && req.body.CallSid) || '');
       return res.type('text/xml').send(twimlApology());
     }
     return res.type('text/xml').send(twimlDial(plan.numbers, plan.timeout, { mode, target, callerId: plan.callerId, line }));
@@ -551,7 +651,7 @@ router.post('/transfer', form, (req, res) => {
     const line = req.query.li || '';
     if (!rest.length) {
       // Vyčerpána všechna čísla i kolečka a nikdo se nedovolal → info do Velína.
-      notifyTransferFailed(mode, target, undefined, line);
+      notifyTransferFailed(mode, target, undefined, line, callSid);
       return res.type('text/xml').send(twimlApology());
     }
     return res.type('text/xml').send(twimlDial(rest, timeout, { mode, target, callerId, line }));
@@ -1148,13 +1248,14 @@ router.get('/operator-stats', requireAuth, async (req, res, next) => {
       if (req.query.from) where.started_at.gte = new Date(String(req.query.from).slice(0, 10) + 'T00:00:00');
       if (req.query.to) where.started_at.lte = new Date(String(req.query.to).slice(0, 10) + 'T23:59:59');
     }
-    const calls = await prisma.voiceCall.findMany({ where, select: { transfer_log: true }, take: 8000 });
+    const calls = await prisma.voiceCall.findMany({ where, select: { transfer_log: true, unhandled_person_ids: true }, take: 8000 });
     const tail = (p) => String(p || '').replace(/\D/g, '').slice(-9);
     const agg = {};
+    const missedByPid = {}; // personId → počet hovorů, které nikdo ve službě nevyřídil
     calls.forEach((c) => {
       (Array.isArray(c.transfer_log) ? c.transfer_log : []).forEach((e) => {
         const key = tail(e.number); if (!key) return;
-        const a = agg[key] || (agg[key] = { number: e.number, name: e.name || null, accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0 });
+        const a = agg[key] || (agg[key] = { number: e.number, name: e.name || null, accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0, missed: 0 });
         if (e.name && !a.name) a.name = e.name;
         a.attempts++;
         const s = String(e.status || '').toLowerCase();
@@ -1163,8 +1264,27 @@ router.get('/operator-stats', requireAuth, async (req, res, next) => {
         else if (s === 'busy') { a.declined++; }
         else if (s === 'failed' || s === 'canceled') { a.failed++; }
       });
+      (Array.isArray(c.unhandled_person_ids) ? c.unhandled_person_ids : []).forEach((pid) => {
+        const id = parseInt(pid, 10); if (id) missedByPid[id] = (missedByPid[id] || 0) + 1;
+      });
     });
     const rows = Object.keys(agg).map((k) => agg[k]);
+    // Nevyřízené hovory (nikdo ve službě je nevzal) přiřaď lidem — přes Person podle telefonu.
+    const missedPids = Object.keys(missedByPid).map((n) => parseInt(n, 10)).filter(Boolean);
+    if (missedPids.length) {
+      try {
+        const mp = await prisma.person.findMany({ where: { id: { in: missedPids } }, select: { id: true, first_name: true, last_name: true, phone: true } });
+        mp.forEach((p) => {
+          const nm = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id);
+          const t = tail(p.phone);
+          let row = t ? rows.find((r) => tail(r.number) === t) : null;
+          if (!row) { row = { number: p.phone || nm, name: nm, accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0, missed: 0 }; rows.push(row); }
+          if (!row.name) row.name = nm;
+          row.missed = (row.missed || 0) + (missedByPid[p.id] || 0);
+        });
+      } catch (e) { console.warn('[voice] operator-stats missed:', e.message); }
+    }
+    rows.forEach((r) => { if (r.missed == null) r.missed = 0; });
     // Doplň jména podle Person.phone tam, kde chybí.
     const missing = rows.filter((r) => !r.name);
     if (missing.length) {
@@ -1179,7 +1299,8 @@ router.get('/operator-stats', requireAuth, async (req, res, next) => {
     const totals = rows.reduce((t, r) => ({
       accepted: t.accepted + r.accepted, unavailable: t.unavailable + r.unavailable,
       declined: t.declined + r.declined, failed: t.failed + r.failed, talk_sec: t.talk_sec + r.talk_sec, attempts: t.attempts + r.attempts,
-    }), { accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0 });
+      missed: t.missed + (r.missed || 0),
+    }), { accepted: 0, unavailable: 0, declined: 0, failed: 0, talk_sec: 0, attempts: 0, missed: 0 });
     res.json({ operators: rows, totals });
   } catch (err) { next(err); }
 });

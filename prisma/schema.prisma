@@ -6161,6 +6161,7 @@ model VoiceCall {
   manual_sms_log  Json?     // [{ name, person_id?, at }] — technik poslal volajícímu SMS s odkazem z vlastního telefonu
   full_transcript String?   @db.Text // celý přepis nahrávky (vč. části se zákazníkem a technikem) — OpenAI Whisper
   full_transcript_at DateTime?        // kdy byl celý přepis pořízen
+  unhandled_person_ids Json?  // [personId] — kdo měl v době hovoru službu a hovor NIKDO nevyřídil (do hodnocení)
   cost_usd        Decimal?  @db.Decimal(10, 4)
   created_at      DateTime  @default(now())
 
