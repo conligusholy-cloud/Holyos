@@ -4732,6 +4732,27 @@ model ServiceCategory {
   @@map("service_categories")
 }
 
+// Servisní požadavek — nahlášený problém na stroji, řešený servisem.
+// Stavy: novy → reseni → vyreseno (+ zamitnuto). Řešitel = Person (HR).
+model ServiceRequest {
+  id          Int      @id @default(autoincrement())
+  problem     String   @db.VarChar(255)   // Problém na stroji
+  action      String?  @db.VarChar(255)   // Servisní úkon - prádlomat
+  task        String?  @db.VarChar(255)   // Servisní úkol - špageta
+  description String?  @db.Text           // Popis problému
+  photo_url   String?  @db.VarChar(500)   // Foto problému (odkaz)
+  ordered_by  String   @db.VarChar(120)   // Servis objednal
+  status      String   @default("novy") @db.VarChar(20)
+  assignee_id Int?     // řešitel (Person)
+  resolution  String?  @db.Text           // způsob řešení
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([status])
+  @@index([assignee_id])
+  @@map("service_requests")
+}
+
 // Spotřebič — fyzický komponent uvnitř produktu (motor, čerpadlo, kompresor,
 // displej, mincovník…). Volitelně provázáno s Material (BOM položka).
 model ServiceAppliance {

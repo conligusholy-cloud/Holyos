@@ -433,13 +433,28 @@
       </div>
     </section>
 
-    <!-- ═══ SEKCE: SERVISNÍ POŽADAVKY (připravujeme) ═══ -->
+    <!-- ═══ SEKCE: SERVISNÍ POŽADAVKY ═══ -->
     <section class="section-panel" id="section-pozadavky">
       <div class="content">
-        <div class="empty-state" style="margin-top:24px; border:1px dashed var(--border); border-radius:12px;">
-          <div class="ico">🛠️</div>
-          <div style="font-size:15px; font-weight:600; color:var(--text); margin-bottom:6px;">Servisní požadavky</div>
-          <div>Připravujeme.</div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="sr-new-btn">+ Nový požadavek</button>
+          <div class="filters">
+            <select class="filter-input" id="sr-filter-status">
+              <option value="">Všechny stavy</option>
+              <option value="novy">Nový</option>
+              <option value="reseni">V řešení</option>
+              <option value="vyreseno">Vyřešeno</option>
+              <option value="zamitnuto">Zamítnuto</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="sr-table">
+            <thead><tr>
+              <th>Požadavek</th><th>Úkon / úkol</th><th>Servis objednal</th><th>Stav</th><th>Řešitel</th><th>Způsob řešení</th><th>Vytvořeno</th><th></th>
+            </tr></thead>
+            <tbody id="sr-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -658,6 +673,88 @@
     })();
   </script>
 
+  <script>
+  // ─── Agenda: Servisní požadavky ───────────────────────────────────────────
+  (function(){
+    var API='/api/service';
+    var _people=[];
+    var STL={ novy:['Nový','badge-draft'], reseni:['V řešení','badge-case'], vyreseno:['Vyřešeno','badge-published'], zamitnuto:['Zamítnuto','badge-archived'] };
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+    function fmtDate(s){ try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return ''; } }
+    function loadPeople(){ return fetchJSON('/api/hr/people').then(function(list){ var arr=Array.isArray(list)?list:(list.items||[]); _people=arr.map(function(p){ return { id:p.id, name:[p.first_name,p.last_name].filter(Boolean).join(' ') }; }); }).catch(function(){ _people=[]; }); }
+    function peopleOptions(sel){ return '<option value="">— nepřiřazeno —</option>'+_people.map(function(p){ return '<option value="'+p.id+'"'+(sel==p.id?' selected':'')+'>'+esc(p.name)+'</option>'; }).join(''); }
+    function render(rows){
+      var tb=document.getElementById('sr-tbody'); if(!tb) return;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
+      tb.innerHTML=rows.map(function(r){
+        var st=STL[r.status]||['?','badge-draft']; var ukon=[r.action,r.task].filter(Boolean).join(' · ');
+        return '<tr>'+
+          '<td><b>'+esc(r.problem)+'</b>'+(r.description?('<div style="color:var(--text2);font-size:12px;margin-top:2px">'+esc(String(r.description).slice(0,120))+'</div>'):'')+'</td>'+
+          '<td style="color:var(--text2)">'+esc(ukon||'—')+'</td>'+
+          '<td>'+esc(r.ordered_by||'—')+'</td>'+
+          '<td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
+          '<td>'+esc(r.assignee_name||'—')+'</td>'+
+          '<td style="color:var(--text2)">'+esc(r.resolution||'—')+'</td>'+
+          '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.created_at)+'</td>'+
+          '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
+        '</tr>';
+      }).join('');
+      tb.querySelectorAll('[data-edit]').forEach(function(b){ b.addEventListener('click',function(){ var row=rows.filter(function(x){return x.id==b.dataset.edit;})[0]; openModal(row); }); });
+    }
+    function load(){
+      var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
+      fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+    }
+    function openModal(row){
+      row=row||{}; var isNew=!row.id;
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      ov.innerHTML='<div class="modal" style="width:640px"><h2>'+(isNew?'Nový servisní požadavek':'Servisní požadavek')+'</h2>'+
+        '<div class="form-row"><label>Problém na stroji *</label><input id="sr-problem" value="'+esc(row.problem||'')+'"></div>'+
+        '<div class="form-grid-2">'+
+          '<div class="form-row"><label>Servisní úkon – prádlomat</label><input id="sr-action" value="'+esc(row.action||'')+'"></div>'+
+          '<div class="form-row"><label>Servisní úkol – špageta</label><input id="sr-task" value="'+esc(row.task||'')+'"></div>'+
+        '</div>'+
+        '<div class="form-row"><label>Foto problému (odkaz)</label><input id="sr-photo" value="'+esc(row.photo_url||'')+'"></div>'+
+        '<div class="form-row"><label>Popis problému</label><textarea id="sr-desc" rows="3">'+esc(row.description||'')+'</textarea></div>'+
+        '<div class="form-row"><label>Servis objednal *</label><input id="sr-ordered" value="'+esc(row.ordered_by||'')+'"></div>'+
+        (isNew?'':(
+          '<div class="form-grid-2">'+
+            '<div class="form-row"><label>Stav</label><select id="sr-status">'+['novy','reseni','vyreseno','zamitnuto'].map(function(s){ return '<option value="'+s+'"'+(row.status===s?' selected':'')+'>'+STL[s][0]+'</option>'; }).join('')+'</select></div>'+
+            '<div class="form-row"><label>Řešitel (kdo řeší)</label><select id="sr-assignee">'+peopleOptions(row.assignee_id)+'</select></div>'+
+          '</div>'+
+          '<div class="form-row"><label>Způsob řešení (jak se řeší)</label><textarea id="sr-resolution" rows="3">'+esc(row.resolution||'')+'</textarea></div>'
+        ))+
+        '<div class="modal-actions">'+
+          (isNew?'':'<button class="btn btn-danger" id="sr-del">Smazat</button>')+
+          '<button class="btn btn-secondary" id="sr-cancel">Zrušit</button>'+
+          '<button class="btn btn-primary" id="sr-save">💾 Uložit</button>'+
+        '</div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      function val(id){ var el=ov.querySelector('#'+id); return el?el.value.trim():''; }
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#sr-cancel').addEventListener('click',close);
+      var delBtn=ov.querySelector('#sr-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat požadavek?')) return; fetchJSON(API+'/requests/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
+      ov.querySelector('#sr-save').addEventListener('click',function(){
+        var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };
+        if(!body.problem){ alert('Vyplň Problém na stroji.'); return; }
+        if(!body.ordered_by){ alert('Vyplň Servis objednal.'); return; }
+        if(!isNew){ body.status=val('sr-status'); var a=val('sr-assignee'); body.assignee_id=a?parseInt(a,10):null; body.resolution=val('sr-resolution'); }
+        var p=isNew?fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/requests/'+row.id,{method:'PATCH',body:JSON.stringify(body)});
+        p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+      });
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      var newBtn=document.getElementById('sr-new-btn'); if(newBtn) newBtn.addEventListener('click',function(){ openModal(null); });
+      var f=document.getElementById('sr-filter-status'); if(f) f.addEventListener('change',load);
+      var loaded=false;
+      function ensure(){ if(loaded) return; loaded=true; loadPeople().then(load); }
+      var tabBtn=document.querySelector('.section-tab[data-section="pozadavky"]');
+      if(tabBtn) tabBtn.addEventListener('click',ensure);
+    });
+  })();
+  </script>
   <script src="modules/servis/app.js?v=2026-05-17-7"></script>
 </body>
 </html>

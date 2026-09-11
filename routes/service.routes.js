@@ -714,4 +714,75 @@ router.get('/chat-sessions/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Servisní požadavky ──────────────────────────────────────────────────────
+const REQUEST_STATUSES = ['novy', 'reseni', 'vyreseno', 'zamitnuto'];
+
+// Doplní ke každému požadavku jméno řešitele (Person) — bez Prisma relace.
+async function _attachAssignees(rows) {
+  const ids = Array.from(new Set(rows.map((r) => r.assignee_id).filter((x) => x != null)));
+  let map = {};
+  if (ids.length) {
+    const people = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true } });
+    people.forEach((p) => { map[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id); });
+  }
+  return rows.map((r) => Object.assign({}, r, { assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null }));
+}
+
+router.get('/requests', async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.status && REQUEST_STATUSES.includes(req.query.status)) where.status = req.query.status;
+    const rows = await prisma.serviceRequest.findMany({ where, orderBy: { created_at: 'desc' } });
+    res.json(await _attachAssignees(rows));
+  } catch (err) { next(err); }
+});
+
+const requestSchema = z.object({
+  problem: z.string().min(1).max(255),
+  action: z.string().max(255).optional().nullable(),
+  task: z.string().max(255).optional().nullable(),
+  description: z.string().optional().nullable(),
+  photo_url: z.string().max(500).optional().nullable(),
+  ordered_by: z.string().min(1).max(120),
+});
+
+router.post('/requests', async (req, res, next) => {
+  try {
+    const parsed = requestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const row = await prisma.serviceRequest.create({ data: Object.assign({}, parsed.data, { status: 'novy' }) });
+    res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+const requestPatchSchema = z.object({
+  problem: z.string().min(1).max(255).optional(),
+  action: z.string().max(255).optional().nullable(),
+  task: z.string().max(255).optional().nullable(),
+  description: z.string().optional().nullable(),
+  photo_url: z.string().max(500).optional().nullable(),
+  ordered_by: z.string().min(1).max(120).optional(),
+  status: z.enum(['novy', 'reseni', 'vyreseno', 'zamitnuto']).optional(),
+  assignee_id: z.number().int().optional().nullable(),
+  resolution: z.string().optional().nullable(),
+});
+
+router.patch('/requests/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = requestPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const row = await prisma.serviceRequest.update({ where: { id }, data: parsed.data });
+    res.json(row);
+  } catch (err) { next(err); }
+});
+
+router.delete('/requests/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.serviceRequest.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
