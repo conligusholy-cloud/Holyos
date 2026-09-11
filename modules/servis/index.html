@@ -601,6 +601,16 @@
           <button class="btn btn-sm btn-secondary" id="sr-copy-btn" title="Zkopírovat odkaz">📋 Kopírovat</button>
           <a href="modules/servis/pozadavek.html" target="_blank" class="btn btn-sm btn-secondary" title="Otevřít formulář">↗ Otevřít</a>
         </div>
+        <!-- Odkaz na mobilní prostředí servisáka (moje úkoly, přijetí, cesta/km, řešení) -->
+        <div style="margin:4px 0 4px; background:linear-gradient(135deg, rgba(167,139,250,0.10), rgba(139,92,246,0.04)); border:1px solid rgba(167,139,250,0.30); border-radius:12px; padding:12px 18px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+          <div style="font-size:22px;">🔧</div>
+          <div style="flex:1; min-width:240px;">
+            <div style="font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:2px;">Prostředí pro servisáka (mobil) — moje úkoly, přijetí, cesta a km, způsob řešení + foto</div>
+            <div style="font-size:14px; font-weight:600;"><span id="sr-tech-url" style="font-family:'Consolas',monospace; color:#a78bfa; word-break:break-all;">…</span></div>
+          </div>
+          <button class="btn btn-sm btn-secondary" id="sr-tech-copy-btn" title="Zkopírovat odkaz">📋 Kopírovat</button>
+          <a href="modules/servis/servisak.html" target="_blank" class="btn btn-sm btn-secondary" title="Otevřít prostředí servisáka">↗ Otevřít</a>
+        </div>
         <div class="toolbar">
           <button class="btn btn-primary" id="sr-new-btn">+ Nový požadavek</button>
           <div class="filters">
@@ -1572,6 +1582,15 @@
         function ok(){ var t=copyBtn.textContent; copyBtn.textContent='✅ Zkopírováno'; setTimeout(function(){ copyBtn.textContent=t; },1500); }
         if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(shareUrl).then(ok,function(){ window.prompt('Zkopíruj odkaz:',shareUrl); }); }
         else { window.prompt('Zkopíruj odkaz:',shareUrl); }
+      });
+      // Odkaz na mobilní prostředí servisáka + kopírování
+      var techUrl=location.origin+'/modules/servis/servisak.html';
+      var techUrlEl=document.getElementById('sr-tech-url'); if(techUrlEl) techUrlEl.textContent=techUrl;
+      var techCopyBtn=document.getElementById('sr-tech-copy-btn');
+      if(techCopyBtn) techCopyBtn.addEventListener('click',function(){
+        function ok(){ var t=techCopyBtn.textContent; techCopyBtn.textContent='✅ Zkopírováno'; setTimeout(function(){ techCopyBtn.textContent=t; },1500); }
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(techUrl).then(ok,function(){ window.prompt('Zkopíruj odkaz:',techUrl); }); }
+        else { window.prompt('Zkopíruj odkaz:',techUrl); }
       });
       var tabBtn=document.querySelector('.section-tab[data-section="pozadavky"]');
       if(tabBtn) tabBtn.addEventListener('click',ensure);

@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#0e1a22">
+  <title>Servis — moje úkoly</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root{ --bg:#0b0f14; --card:#141c26; --card2:#1b2530; --border:#26333f; --text:#e8eef3; --text2:#8ea1b3; --acc:#22d3ee; --acc2:#06b6d4; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; --purple:#a78bfa; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    body{ min-height:100dvh; }
+    .wrap{ max-width:600px; margin:0 auto; padding:16px 14px 40px; }
+    .top{ display:flex; align-items:center; gap:10px; padding:6px 2px 12px; }
+    .top .logo{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--acc),var(--acc2)); color:#04222b; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; }
+    .top h1{ font-size:18px; margin:0; font-weight:700; }
+    .top .sub{ font-size:12px; color:var(--text2); margin-top:1px; }
+    .who{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:9px 14px; font-size:13px; color:var(--text2); margin-bottom:8px; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+    .who b{ color:var(--text); }
+    .who .rf{ background:transparent; border:1px solid var(--border); color:var(--text2); border-radius:8px; padding:5px 10px; font-size:12px; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:12px; }
+    .card h3{ margin:0 0 4px; font-size:16px; }
+    .row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .badge{ font-size:11px; font-weight:700; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+    .b-novy{ background:rgba(34,211,238,.15); color:var(--acc); }
+    .b-reseni{ background:rgba(245,158,11,.15); color:var(--warn); }
+    .b-vyreseno{ background:rgba(34,197,94,.15); color:var(--ok); }
+    .b-zamitnuto{ background:rgba(148,163,184,.15); color:#94a3b8; }
+    .meta{ font-size:13px; color:var(--text2); margin-top:6px; line-height:1.55; }
+    .meta b{ color:var(--text); font-weight:600; }
+    .thumb{ margin-top:10px; }
+    .thumb img{ width:100%; max-height:220px; object-fit:cover; border-radius:12px; border:1px solid var(--border); display:block; }
+    .acts{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .btn{ border:none; border-radius:11px; padding:12px 14px; font-size:14px; font-weight:700; cursor:pointer; flex:1; min-width:130px; }
+    .btn-primary{ background:var(--acc); color:#04222b; }
+    .btn-ok{ background:var(--ok); color:#04120a; }
+    .btn-warn{ background:var(--warn); color:#241800; }
+    .btn-ghost{ background:var(--card2); color:var(--text); border:1px solid var(--border); }
+    .btn-danger{ background:transparent; color:var(--err); border:1px solid rgba(239,68,68,.5); }
+    .btn:disabled{ opacity:.55; }
+    textarea,input,select{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:11px; color:var(--text); font-size:16px; padding:12px; font-family:inherit; margin-top:8px; }
+    textarea:focus,input:focus{ outline:none; border-color:var(--acc); }
+    textarea{ min-height:80px; resize:vertical; }
+    label{ display:block; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--text2); margin-top:12px; }
+    label .req{ color:var(--acc); }
+    .trip{ background:var(--card2); border:1px solid var(--border); border-radius:11px; padding:9px 12px; font-size:12px; color:var(--text2); margin-top:10px; }
+    .trip b{ color:var(--text); }
+    .fixphotos{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+    .fixphotos img{ width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid var(--border); }
+    .msg{ font-size:12px; margin-top:8px; min-height:16px; }
+    .msg.err{ color:var(--err); } .msg.ok{ color:var(--ok); }
+    .screen{ text-align:center; padding:60px 20px; }
+    .screen .big{ font-size:44px; margin-bottom:12px; }
+    .screen h2{ font-size:20px; margin:0 0 8px; }
+    .screen p{ color:var(--text2); font-size:14px; line-height:1.6; margin:0 auto 18px; max-width:340px; }
+    .screen .btn{ max-width:280px; margin:0 auto; display:inline-block; text-decoration:none; }
+    .hidden{ display:none !important; }
+    /* Modal (přijmout + cesta) */
+    .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-end; justify-content:center; z-index:50; }
+    .overlay.open{ display:flex; }
+    .sheet{ background:var(--card); border:1px solid var(--border); border-radius:18px 18px 0 0; width:100%; max-width:600px; padding:18px 16px calc(18px + env(safe-area-inset-bottom)); }
+    .sheet h2{ margin:0 0 2px; font-size:17px; }
+    .sheet .desc{ font-size:12px; color:var(--text2); }
+  </style>
+</head>
+<body>
+  <div id="loading" class="screen"><div class="big">⏳</div><p>Načítám…</p></div>
+
+  <div id="gate" class="screen hidden">
+    <div class="big">🔒</div>
+    <h2>Nutné přihlášení</h2>
+    <p>Servisní prostředí je jen pro přihlášené techniky HolyOS. Přihlas se a otevři tento odkaz znovu.</p>
+    <a class="btn btn-primary" href="/">Přihlásit se do HolyOS</a>
+  </div>
+
+  <div id="app" class="wrap hidden">
+    <div class="top">
+      <div class="logo">🔧</div>
+      <div>
+        <h1>Moje servisní úkoly</h1>
+        <div class="sub">Přijmi úkol, vyjeď, vyřeš a zapiš</div>
+      </div>
+    </div>
+    <div class="who">👤 <span>Technik: <b id="who-name">—</b></span> <button class="rf" id="refresh">↻ Obnovit</button></div>
+    <div id="list"></div>
+  </div>
+
+  <!-- Modal: Přijmout + zadat cestu -->
+  <div class="overlay" id="ov">
+    <div class="sheet">
+      <h2>Přijmout úkol a vyjet</h2>
+      <div class="desc">Úkol se rozjede až po zadání cesty (kvůli evidenci ujetých km).</div>
+      <label>Odkud vyjíždíš <span class="req">*</span></label>
+      <input id="t-origin" autocomplete="off" placeholder="např. Rychnov n. Kn. — dílna">
+      <label>Kam jedeš (místo zásahu) <span class="req">*</span></label>
+      <input id="t-dest" autocomplete="off" placeholder="např. prádlomat Tesco Rychnov">
+      <label>Ujeté km (nepovinné, můžeš doplnit po příjezdu)</label>
+      <input id="t-km" type="number" inputmode="decimal" placeholder="např. 24">
+      <label>Poznámka k cestě (nepovinné)</label>
+      <input id="t-note" autocomplete="off" placeholder="např. beru náhradní čerpadlo">
+      <div class="acts">
+        <button class="btn btn-ghost" id="t-cancel">Zrušit</button>
+        <button class="btn btn-primary" id="t-go">Přijmout a vyjet</button>
+      </div>
+      <div class="msg" id="t-msg"></div>
+    </div>
+  </div>
+
+  <input id="fix-file" type="file" accept="image/*" capture="environment" class="hidden">
+
+  <script>
+  (function(){
+    var API='/api/service';
+    var me=null, rows=[], acceptId=null, fixTargetId=null;
+    function $(id){ return document.getElementById(id); }
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function show(id){ ['loading','gate','app'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); }
+    function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
+    function fmtDate(d){ try{ return new Date(d).toLocaleString('cs-CZ'); }catch(e){ return ''; } }
+    var STAT={ novy:['Nový','b-novy'], reseni:['V řešení','b-reseni'], vyreseno:['Vyřešeno','b-vyreseno'], zamitnuto:['Zamítnuto','b-zamitnuto'] };
+
+    // 1) Ověř přihlášení
+    api('/api/auth/me').then(function(r){
+      if(r.status===401||r.status===403){ show('gate'); return null; }
+      if(!r.ok) throw new Error('me '+r.status);
+      return r.json();
+    }).then(function(j){
+      if(!j) return;
+      me=j.user||{};
+      $('who-name').textContent = me.displayName || me.username || ('#'+me.id);
+      show('app'); load();
+    }).catch(function(){ show('gate'); });
+
+    $('refresh').addEventListener('click', load);
+
+    function load(){
+      $('list').innerHTML='<div style="color:var(--text2);padding:10px;">Načítám úkoly…</div>';
+      api(API+'/requests?mine=1').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
+        rows=Array.isArray(list)?list:[];
+        if(!rows.length){ $('list').innerHTML='<div class="card" style="color:var(--text2);text-align:center;">Zatím ti není přiřazený žádný servisní úkol.</div>'; return; }
+        // pořadí: nejdřív nové, pak v řešení, pak uzavřené
+        var ord={ novy:0, reseni:1, vyreseno:2, zamitnuto:3 };
+        rows.sort(function(a,b){ return (ord[a.status]||9)-(ord[b.status]||9); });
+        $('list').innerHTML=rows.map(card).join('');
+        rows.forEach(function(c){ if(c.status==='reseni'||c.status==='vyreseno'||c.status==='zamitnuto') loadTrips(c.id); });
+      }).catch(function(e){ $('list').innerHTML='<div class="card" style="color:var(--err);">Chyba: '+esc(e.message)+'</div>'; });
+    }
+
+    function card(c){
+      var st=STAT[c.status]||[c.status,'b-novy'];
+      var photo=c.photo_url?('<div class="thumb"><a href="'+esc(c.photo_url)+'" target="_blank"><img src="'+esc(c.photo_url)+'" alt="Foto závady"></a></div>'):'';
+      var fix=(Array.isArray(c.fix_photo_urls)&&c.fix_photo_urls.length)?('<div class="fixphotos">'+c.fix_photo_urls.map(function(u){return '<a href="'+esc(u)+'" target="_blank"><img src="'+esc(u)+'"></a>';}).join('')+'</div>'):'';
+      var meta='<div class="meta">'
+        +(c.description?('📝 '+esc(c.description)+'<br>'):'')
+        +(c.action?('🔧 Úkon: <b>'+esc(c.action)+'</b><br>'):'')
+        +(c.task?('📋 Úkol: <b>'+esc(c.task)+'</b><br>'):'')
+        +'👤 Zadal: <b>'+esc(c.ordered_by||c.created_by_name||'—')+'</b> · '+esc(fmtDate(c.created_at))
+        +'</div>';
+      var acts='';
+      if(c.status==='novy'){
+        acts='<div class="acts"><button class="btn btn-primary" onclick="openAccept('+c.id+')">🚗 Přijmout a vyjet</button></div>';
+      } else if(c.status==='reseni'){
+        acts='<div id="trips-'+c.id+'"></div>'
+          +'<label>Způsob řešení</label>'
+          +'<textarea id="res-'+c.id+'" placeholder="Co jsi udělal, co bylo příčinou…">'+esc(c.resolution||'')+'</textarea>'
+          +'<div class="acts">'
+          +'<button class="btn btn-ghost" onclick="saveRes('+c.id+')">💾 Uložit řešení</button>'
+          +'<button class="btn btn-ghost" onclick="addFix('+c.id+')">📷 Přidat foto opravy</button>'
+          +'</div>'
+          +fix
+          +'<div class="acts">'
+          +'<button class="btn btn-ok" onclick="setStatus('+c.id+',\'vyreseno\')">✅ Vyřešeno</button>'
+          +'<button class="btn btn-danger" onclick="setStatus('+c.id+',\'zamitnuto\')">⛔ Zamítnout</button>'
+          +'</div>';
+      } else {
+        // uzavřené
+        acts='<div id="trips-'+c.id+'"></div>'
+          +(c.resolution?('<div class="meta" style="margin-top:10px;">✅ Řešení: <b>'+esc(c.resolution)+'</b></div>'):'')
+          +fix;
+      }
+      return '<div class="card"><div class="row"><h3>'+esc(c.problem||'—')+'</h3><span class="badge '+st[1]+'">'+esc(st[0])+'</span></div>'
+        +meta+photo+acts+'<div class="msg" id="m-'+c.id+'"></div></div>';
+    }
+
+    function loadTrips(id){
+      api(API+'/requests/'+id+'/trips').then(function(r){ return r.ok?r.json():[]; }).then(function(tr){
+        var box=$('trips-'+id); if(!box) return;
+        if(!Array.isArray(tr)||!tr.length){ box.innerHTML=''; return; }
+        box.innerHTML=tr.map(function(t){
+          var km=(t.km!=null&&t.km!=='')?(Number(t.km)+' km'):'—';
+          var open=!t.ended_at;
+          var fin=open?('<button class="btn btn-ghost" style="margin-top:8px;" onclick="finishTrip('+t.id+','+id+')">🏁 Zapsat km / ukončit cestu</button>'):'';
+          return '<div class="trip">🚗 <b>'+esc(t.origin)+'</b> → <b>'+esc(t.destination)+'</b> · '+km+(open?' · <span style="color:var(--warn);">cesta otevřená</span>':'')+(t.note?(' · '+esc(t.note)):'')+fin+'</div>';
+        }).join('');
+      }).catch(function(){});
+    }
+
+    // ── Přijmout + cesta ──
+    window.openAccept=function(id){ acceptId=id; var c=rows.filter(function(x){return x.id===id;})[0]||{}; $('t-origin').value=''; $('t-dest').value=c.problem||''; $('t-km').value=''; $('t-note').value=''; $('t-msg').textContent=''; $('ov').classList.add('open'); };
+    $('t-cancel').addEventListener('click', function(){ $('ov').classList.remove('open'); });
+    $('t-go').addEventListener('click', function(){
+      var origin=$('t-origin').value.trim(), dest=$('t-dest').value.trim();
+      var m=$('t-msg'); m.className='msg';
+      if(!origin||!dest){ m.className='msg err'; m.textContent='Vyplň, odkud vyjíždíš a kam jedeš.'; return; }
+      var kmv=$('t-km').value.trim(); var body={ origin:origin, destination:dest, note:$('t-note').value.trim()||null };
+      if(kmv!==''){ var n=Number(kmv.replace(',','.')); if(!isNaN(n)) body.km=n; }
+      var btn=$('t-go'); btn.disabled=true; btn.textContent='Odesílám…';
+      api(API+'/requests/'+acceptId+'/accept',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); })
+        .then(function(res){ if(!res.ok) throw new Error((res.j&&res.j.error)||'Nepodařilo se přijmout'); $('ov').classList.remove('open'); load(); })
+        .catch(function(e){ m.className='msg err'; m.textContent=e.message; })
+        .then(function(){ btn.disabled=false; btn.textContent='Přijmout a vyjet'; });
+    });
+
+    // ── Uložit způsob řešení ──
+    window.saveRes=function(id){
+      var val=($('res-'+id)||{}).value||''; var m=$('m-'+id); m.className='msg'; m.textContent='Ukládám…';
+      patch(id,{ resolution: val.trim()||null }).then(function(){ m.className='msg ok'; m.textContent='✅ Uloženo'; })
+        .catch(function(e){ m.className='msg err'; m.textContent=e.message; });
+    };
+
+    // ── Změna stavu ──
+    window.setStatus=function(id,st){
+      var label=st==='vyreseno'?'Označit jako vyřešeno?':'Zamítnout tento požadavek?';
+      if(!confirm(label)) return;
+      var m=$('m-'+id); m.className='msg'; m.textContent='Ukládám…';
+      var extra={}; if(st==='vyreseno'){ var rv=($('res-'+id)||{}).value; if(rv&&rv.trim()) extra.resolution=rv.trim(); }
+      patch(id, Object.assign({ status: st }, extra)).then(function(){ load(); }).catch(function(e){ m.className='msg err'; m.textContent=e.message; });
+    };
+
+    // ── Foto opravy ──
+    window.addFix=function(id){ fixTargetId=id; $('fix-file').value=''; $('fix-file').click(); };
+    $('fix-file').addEventListener('change', function(){
+      var file=this.files&&this.files[0]; if(!file||!fixTargetId) return;
+      var id=fixTargetId; var m=$('m-'+id); m.className='msg'; m.textContent='Nahrávám foto…';
+      compress(file).then(function(blob){
+        var fd=new FormData(); fd.append('photo', blob, 'oprava.jpg');
+        return api(API+'/requests/photo',{ method:'POST', body:fd }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok,j:j}; }); });
+      }).then(function(res){
+        if(!res.ok) throw new Error((res.j&&res.j.error)||'Foto se nepodařilo nahrát');
+        var c=rows.filter(function(x){return x.id===id;})[0]||{}; var arr=(Array.isArray(c.fix_photo_urls)?c.fix_photo_urls:[]).concat([res.j.url]);
+        return patch(id,{ fix_photo_urls: arr }).then(function(){ if(c) c.fix_photo_urls=arr; });
+      }).then(function(){ m.className='msg ok'; m.textContent='✅ Foto přidáno'; load(); })
+        .catch(function(e){ m.className='msg err'; m.textContent=e.message; });
+    });
+
+    // ── Ukončit cestu / zapsat km ──
+    window.finishTrip=function(tripId, reqId){
+      var v=prompt('Ujeté km pro tuto cestu (nech prázdné, jen ukončit):','');
+      if(v===null) return;
+      var body={}; if(v.trim()!==''){ var n=Number(v.replace(',','.')); if(!isNaN(n)) body.km=n; }
+      api(API+'/trips/'+tripId+'/finish',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+        .then(function(r){ if(!r.ok) throw new Error('Nepodařilo se uložit'); loadTrips(reqId); })
+        .catch(function(e){ var m=$('m-'+reqId); if(m){ m.className='msg err'; m.textContent=e.message; } });
+    };
+
+    function patch(id, data){
+      return api(API+'/requests/'+id,{ method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+        .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error((j&&j.error)||('Uložení selhalo ('+r.status+')')); return j; }); });
+    }
+
+    // Klientská komprese fotky (max 1600 px, JPEG 0.82)
+    function compress(file){
+      return new Promise(function(resolve){
+        var reader=new FileReader();
+        reader.onload=function(e){
+          var img=new Image();
+          img.onload=function(){
+            var max=1600,w=img.width,h=img.height;
+            if(w>max||h>max){ if(w>=h){ h=Math.round(h*max/w); w=max; } else { w=Math.round(w*max/h); h=max; } }
+            var cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(img,0,0,w,h);
+            cv.toBlob(function(b){ resolve(b||file); },'image/jpeg',0.82);
+          };
+          img.onerror=function(){ resolve(file); };
+          img.src=e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  })();
+  </script>
+  <script src="/js/version-watcher.js"></script>
+</body>
+</html>

@@ -800,12 +800,73 @@ async function _attachAssignees(rows) {
   }));
 }
 
+// Person.id přihlášeného uživatele (řešitel = Person). Cache na req.
+async function myPersonId(req) {
+  try {
+    if (req.user && req.user.person && req.user.person.id) return req.user.person.id;
+    const p = await prisma.person.findFirst({ where: { user_id: req.user && req.user.id }, select: { id: true } });
+    return p ? p.id : null;
+  } catch (_) { return null; }
+}
+
 router.get('/requests', async (req, res, next) => {
   try {
     const where = {};
     if (req.query.status && REQUEST_STATUSES.includes(req.query.status)) where.status = req.query.status;
+    // ?mine=1 → jen požadavky přiřazené přihlášenému servisákovi.
+    if (req.query.mine === '1') {
+      const pid = await myPersonId(req);
+      where.assignee_id = pid || -1; // -1 = nikdo (když nemá Person, nevidí nic)
+    }
     const rows = await prisma.serviceRequest.findMany({ where, orderBy: { created_at: 'desc' } });
     res.json(await _attachAssignees(rows));
+  } catch (err) { next(err); }
+});
+
+// GET /api/service/requests/:id/trips — cesty (km) k požadavku.
+router.get('/requests/:id/trips', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const trips = await prisma.serviceTrip.findMany({ where: { request_id: id }, orderBy: { started_at: 'asc' } });
+    res.json(trips);
+  } catch (err) { next(err); }
+});
+
+// POST /api/service/requests/:id/accept — servisák úkol přijme. NEROZJEDE se,
+// dokud nezadá odkud vyjíždí a kam jede (kvůli logování ujetých km). Založí cestu,
+// přiřadí požadavek přihlášenému a přepne stav na „reseni".
+const acceptSchema = z.object({
+  origin: z.string().min(1).max(255),
+  destination: z.string().min(1).max(255),
+  km: z.number().nonnegative().optional().nullable(),
+  note: z.string().max(2000).optional().nullable(),
+});
+router.post('/requests/:id/accept', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = acceptSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Vyplň, odkud vyjíždíš a kam jedeš.', detail: parsed.error.flatten() });
+    const reqRow = await prisma.serviceRequest.findUnique({ where: { id } });
+    if (!reqRow) return res.status(404).json({ error: 'Požadavek nenalezen' });
+    const pid = await myPersonId(req);
+    const trip = await prisma.serviceTrip.create({
+      data: { request_id: id, person_id: pid, origin: parsed.data.origin, destination: parsed.data.destination, km: parsed.data.km ?? null, note: parsed.data.note || null },
+    });
+    const updated = await prisma.serviceRequest.update({ where: { id }, data: { status: 'reseni', assignee_id: pid || reqRow.assignee_id } });
+    res.json({ ok: true, request: updated, trip });
+  } catch (err) { next(err); }
+});
+
+// POST /api/service/trips/:id/finish — uzavře cestu a doplní ujeté km (když je znáš až po příjezdu).
+router.post('/trips/:id/finish', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const data = { ended_at: new Date() };
+    const km = req.body && req.body.km != null ? Number(req.body.km) : null;
+    if (km != null && !Number.isNaN(km)) data.km = km;
+    if (req.body && req.body.note != null) data.note = String(req.body.note);
+    const trip = await prisma.serviceTrip.update({ where: { id }, data });
+    res.json({ ok: true, trip });
   } catch (err) { next(err); }
 });
 
@@ -840,6 +901,7 @@ const requestPatchSchema = z.object({
   status: z.enum(['novy', 'reseni', 'vyreseno', 'zamitnuto']).optional(),
   assignee_id: z.number().int().optional().nullable(),
   resolution: z.string().optional().nullable(),
+  fix_photo_urls: z.array(z.string().max(500)).optional().nullable(),
 });
 
 router.patch('/requests/:id', async (req, res, next) => {

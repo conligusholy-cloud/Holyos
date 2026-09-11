@@ -4745,6 +4745,7 @@ model ServiceRequest {
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
   resolution  String?  @db.Text           // způsob řešení
+  fix_photo_urls Json?  // fotodokumentace opravy (pole URL) — servisák fotí z telefonu
   created_by_user_id Int?   // kdo požadavek zadal (přihlášený uživatel) — u mobilního formuláře povinné z tokenu
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
@@ -4753,6 +4754,25 @@ model ServiceRequest {
   @@index([assignee_id])
   @@index([created_by_user_id])
   @@map("service_requests")
+}
+
+// Cesta servisáka k zásahu — logování ujetých km. Vytvoří se při „Přijmout":
+// dokud servisák nezadá odkud vyjíždí a kam jede, úkol se nerozjede.
+model ServiceTrip {
+  id          Int       @id @default(autoincrement())
+  request_id  Int       // ServiceRequest
+  person_id   Int?      // technik (Person), který cestu jede
+  origin      String    @db.VarChar(255)  // odkud vyjíždí
+  destination String    @db.VarChar(255)  // kam jede (místo zásahu)
+  km          Decimal?  @db.Decimal(8, 1) // ujeté km (zatím ručně, později auto z mapy)
+  note        String?   @db.Text
+  started_at  DateTime  @default(now())
+  ended_at    DateTime?
+  created_at  DateTime  @default(now())
+
+  @@index([request_id])
+  @@index([person_id])
+  @@map("service_trips")
 }
 
 // Stroj v provozu — evidence reálně běžících strojů (prádlomaty, výrobní stroje…).
