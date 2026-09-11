@@ -1097,13 +1097,17 @@
         try{
           var rows=await api('/calls?line='+INFO_LINE+'&limit=100');
           if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
+          // Kolikrát každé číslo volalo (z načtené historie).
+          var counts={};
+          rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
           var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>SMS</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
+            var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
             var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
             html+='<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
               +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
-              +'<td>'+esc(num||'')+'</td>'
+              +'<td'+(rep?' style="color:#eab308;font-weight:600;" title="Opakovaný volající"':'')+'>'+esc(num||'')+' ('+cnt+'×)'+'</td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
               +'<td style="text-align:center;">'+smsCell(c)+'</td>'
