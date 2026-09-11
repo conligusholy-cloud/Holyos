@@ -826,6 +826,7 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         audio_url: true,
         handoff: true,
         transfer_log: true,
+        sms_log: true,
       },
     });
     res.json(calls);

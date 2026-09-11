@@ -979,7 +979,7 @@
         try{
           var rows=await api('/calls?line='+INFO_LINE+'&limit=100');
           if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>SMS</th><th>Přesměrováno</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
             var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
@@ -988,11 +988,12 @@
               +'<td>'+esc(num||'')+'</td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
+              +'<td style="text-align:center;">'+smsCell(c)+'</td>'
               +'<td>'+transferCell(c)+'</td>'
               +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoToggleCall(\''+c.id+'\')" title="Celý přepis" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="8" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="9" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
           });
           html+='</tbody></table></div>';
           body.innerHTML=html;
@@ -1013,11 +1014,24 @@
         var rows=log.map(function(a){ var st=trStatusLabel(a.status); return '<div style="margin:2px 0;">'+esc(fmtDate(a.at))+' · <b>'+esc(transferWho(a))+'</b>'+((a.number&&a.name)?(' <span style="color:var(--text2);">('+esc(a.number)+')</span>'):'')+' → <span style="color:'+st[1]+';">'+esc(st[0])+'</span></div>'; }).join('');
         return '<div style="margin-bottom:10px;"><b>Přesměrování na kolegy:</b><div style="margin-top:4px;font-size:13px;">'+rows+'</div></div>';
       }
+      function smsCell(c){
+        var log=Array.isArray(c.sms_log)?c.sms_log:[];
+        if(!log.length) return '<span style="color:var(--text2);">—</span>';
+        var ok=log.filter(function(a){ return (a.status||'').toLowerCase()==='sent'; }).length;
+        if(ok) return '<span style="color:#22c55e;" title="SMS odeslána">✅ odeslána'+(log.length>1?(' ('+ok+')'):'')+'</span>';
+        return '<span style="color:#ef4444;" title="Odeslání selhalo">⚠️ chyba</span>';
+      }
+      function smsDetail(c){
+        var log=Array.isArray(c.sms_log)?c.sms_log:[];
+        if(!log.length) return '';
+        var rows=log.map(function(a){ var okS=(a.status||'').toLowerCase()==='sent'; var lab=okS?['odesláno','#22c55e']:['chyba','#ef4444']; return '<div style="margin:2px 0;">'+esc(fmtDate(a.at))+' · na <b>'+esc(a.to||'—')+'</b> → <span style="color:'+lab[1]+';">'+lab[0]+'</span>'+((!okS&&a.error)?(' <span style="color:var(--text2);">('+esc(a.error)+')</span>'):'')+'</div>'; }).join('');
+        return '<div style="margin-bottom:10px;"><b>Odeslané SMS (odkaz na formulář):</b><div style="margin-top:4px;font-size:13px;">'+rows+'</div></div>';
+      }
       function callDetail(c){
         var t=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div style="margin:3px 0;"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
         var s = c.summary ? '<div style="margin-bottom:10px;"><b>Shrnutí:</b> '+esc(c.summary)+'</div>' : '';
         var audio = c.audio_url ? '<div style="margin-bottom:10px;"><b>Nahrávka:</b><br><div style="margin-top:4px;">'+recPlayer(c.id)+'</div></div>' : '';
-        return s + transferDetail(c) + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
+        return s + transferDetail(c) + smsDetail(c) + audio + '<div style="font-size:13px;">'+(t||'<span style="color:var(--text2);">Bez přepisu.</span>')+'</div>';
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
       // Dotáhne chybějící nahrávky přímo z Twilia (podle CallSid).

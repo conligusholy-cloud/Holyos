@@ -253,6 +253,7 @@ function attach(server) {
       mode,
       handedOff: false,
       formSmsSent: false,
+      smsLog: [],
       targetId,
       target: null,
       campaign: null,
@@ -436,11 +437,13 @@ function attach(server) {
                   link = (await getSetting(lineKey('sms_form_link'))) || '';
                 }
                 const body = composeFormSms(tpl, link);
-                if (!body) { console.warn('[voice] SMS formulář: prázdný text i odkaz → nic neposílám.'); return; }
+                if (!body) { state.formSmsSent = false; console.warn('[voice] SMS formulář: prázdný text i odkaz → nic neposílám.'); return; }
                 await require('./sms').sendSms(state.from, body, { context: 'form_link', callSid: state.callSid, line });
+                state.smsLog.push({ context: 'form_link', to: state.from, status: 'sent', at: new Date().toISOString() });
                 console.log('[voice] SMS s odkazem na formulář odeslána na ' + state.from);
               } catch (e) {
                 state.formSmsSent = false; // dovol další pokus, pokud selhalo
+                state.smsLog.push({ context: 'form_link', to: state.from, status: 'failed', at: new Date().toISOString(), error: (e && e.message) || String(e) });
                 console.warn('[voice] odeslání SMS s formulářem selhalo:', e.message);
               }
             })();
@@ -497,6 +500,7 @@ function attach(server) {
             caller_name: callerName,
             caller_intent: callerIntent,
             campaign_target_id: state.targetId || null,
+            sms_log: state.smsLog && state.smsLog.length ? state.smsLog : undefined,
           };
           // UPSERT podle callSid: nahrávka mohla dorazit dřív a záznam už existuje
           // (jen s audio_url) → doplníme ho, ať nevznikne duplikát a nepřijdeme o nahrávku.

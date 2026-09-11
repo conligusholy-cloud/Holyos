@@ -6155,6 +6155,7 @@ model VoiceCall {
   campaign_target_id String? // odchozí obvolávání — VoiceCampaignTarget
   handoff         Boolean   @default(false)
   transfer_log    Json?     // [{ number, name, status, at }] — pokusy o přesměrování na kolegu
+  sms_log         Json?     // [{ context, to, status, at, error? }] — SMS odeslané během hovoru (např. odkaz na formulář)
   cost_usd        Decimal?  @db.Decimal(10, 4)
   created_at      DateTime  @default(now())
 
