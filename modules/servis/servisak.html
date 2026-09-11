@@ -363,7 +363,19 @@
     }
     window.repairStart=function(tid,rid){ api(API+'/trips/'+tid+'/repair-start',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit opravu.'); }); };
     window.repairEnd=function(tid,rid){ api(API+'/trips/'+tid+'/repair-end',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit opravu.'); }); };
-    window.returnStart=function(tid,rid,kind){ var d=prompt('Kam jedeš? (domů / adresa dalšího úkolu)', kind==='domů'?'domů':''); if(d===null) return; api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:d||kind})}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit cestu.'); }); };
+    window.returnStart=function(tid,rid,kind){
+      if(kind==='domů'){
+        var d=prompt('Kam domů? (adresa / obec)','domů'); if(d===null) return;
+        api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:d||'domů'})})
+          .then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); })
+          .catch(function(){ alert('Nepodařilo se zahájit cestu domů.'); });
+      } else {
+        // Na další úkol → zaznamenej odjezd a vrať se na seznam úkolů, kde si vybereš další a znovu ho zahájíš.
+        api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({destination:'další úkol'})})
+          .then(function(){ if(typeof load==='function') load(); try{ window.scrollTo(0,0); }catch(_){}} )
+          .catch(function(){ if(typeof load==='function') load(); });
+      }
+    };
     window.returnEnd=function(tid,rid){ var km=prompt('Kolik km cesty zpět? (nepovinné)',''); api(API+'/trips/'+tid+'/return-end',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({km:km?Number(km.replace(',','.')):null})}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit cestu.'); }); };
 
     // ── Přijmout + cesta ──
