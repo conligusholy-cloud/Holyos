@@ -428,24 +428,18 @@
             <div id="info-op-list" style="display:flex;flex-direction:column;gap:6px;"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
           </div>
 
-          <!-- Rozpis směn (14 dní) -->
+          <!-- Rozpis směn (po týdnech) -->
           <div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;">
-            <div style="font-weight:700;font-size:14px;margin-bottom:4px;">🗓️ Rozpis směn (14 dní)</div>
-            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">U každého dne vyber hlavního a záložního operátora (z lidí výše). Ukládá se hned.</p>
-
-            <div style="background:var(--bg);border:1px solid rgba(34,197,94,0.4);border-radius:8px;padding:10px;margin-bottom:12px;">
-              <div style="font-size:13px;font-weight:600;margin-bottom:6px;">👷 V pracovní době volat nejdřív na (přednostní)</div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
-                <div style="flex:1;min-width:200px;"><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">Osoba v práci</label>
-                  <select id="info-work-person" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;color:var(--text);font-size:12px;"><option value="">— nikdo —</option></select></div>
-                <div><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">Od</label>
-                  <input id="info-work-from" type="time" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;"></div>
-                <div><label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">Do</label>
-                  <input id="info-work-to" type="time" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;"></div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+              <div style="font-weight:700;font-size:14px;">🗓️ Rozpis směn</div>
+              <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+                <button class="btn btn-secondary" style="padding:4px 10px;" onclick="shiftWeek(-1)">◀</button>
+                <span id="info-week-label" style="font-size:13px;min-width:180px;text-align:center;color:var(--text);"></span>
+                <button class="btn btn-secondary" style="padding:4px 10px;" onclick="shiftWeek(1)">▶</button>
+                <button class="btn btn-secondary" style="padding:4px 10px;" onclick="shiftWeek(0)">Tento týden</button>
               </div>
-              <div style="font-size:11px;color:var(--text2);margin-top:6px;">V uvedeném čase se hovor přepojí <b>nejdřív na tuto osobu</b>, teprve pak na hlavního a záložního operátora dne a nakonec na statická čísla. Ukládá se hned.</div>
             </div>
-
+            <p style="color:var(--text2);font-size:12px;margin:0 0 10px;">U každého dne vyber osobu „v práci" + pracovní dobu (přednostní) a hlavního/záložního operátora. V pracovní době se volá nejdřív osoba v práci, pak hlavní, pak záložní, nakonec statická čísla. Ukládá se hned.</p>
             <div id="info-shift-roster"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>
           </div>
 
@@ -681,7 +675,6 @@
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
           _ops=Array.isArray(c.operator_ids)?c.operator_ids.slice():[];
           _shifts=(c.shifts&&typeof c.shifts==='object'&&!Array.isArray(c.shifts))?c.shifts:{};
-          _work={ person: parseInt(c.work_person_id,10)||null, from: c.work_from||'', to: c.work_to||'' };
           if(!_people.length){ loadPeople(); } else { fillOpSelect(); renderOps(); renderShiftRoster(); }
           var te=el('info-transfer-enabled'); if(te) te.checked = c.transfer_enabled!==false;
           var tf=el('info-transfer-fallback'); if(tf) tf.value = c.transfer_fallback_numbers||'';
@@ -715,7 +708,7 @@
       };
 
       // ── Operátoři Infolinky (tým z Lidí a HR) ──
-      var _people=[], _ops=[], _shifts={}, _work={};
+      var _people=[], _ops=[], _shifts={};
       function loadPeople(){
         return fetch('/api/hr/people',{credentials:'include'}).then(function(r){return r.ok?r.json():[];}).then(function(list){
           var arr=Array.isArray(list)?list:((list&&list.items)||[]);
@@ -757,41 +750,41 @@
       function shYmd(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
       function shDayLabel(d){ var dn=['Ne','Po','Út','St','Čt','Pá','So']; return dn[d.getDay()]+' '+d.getDate()+'. '+(d.getMonth()+1)+'.'; }
       function shOpts(sel){ return '<option value="">— nikdo —</option>'+_ops.map(function(id){ return '<option value="'+id+'"'+(String(sel)===String(id)?' selected':'')+'>'+esc(opName(id))+'</option>'; }).join(''); }
+      var _weekOffset=0;
+      window.shiftWeek=function(delta){ _weekOffset=(delta===0)?0:(_weekOffset+delta); renderShiftRoster(); };
+      function weekMonday(offset){ var d=new Date(); d.setHours(0,0,0,0); var dow=(d.getDay()+6)%7; d.setDate(d.getDate()-dow+offset*7); return d; }
       function renderShiftRoster(){
         var box=el('info-shift-roster'); if(!box) return;
-        if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Nejdřív přidej operátory výše, pak jim tady přiřadíš směny.</span>'; return; }
-        var today=new Date(); today.setHours(0,0,0,0);
-        var head='<div style="display:grid;grid-template-columns:140px 1fr 1fr;gap:8px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>Hlavní</div><div>Záložní</div></div>';
+        var lbl=el('info-week-label');
+        if(!_ops.length){ box.innerHTML='<span style="color:var(--text2);font-size:12px;">Nejdřív přidej operátory výše, pak jim tady přiřadíš směny.</span>'; if(lbl) lbl.textContent=''; return; }
+        var mon=weekMonday(_weekOffset); var sun=new Date(mon.getTime()+6*86400000);
+        if(lbl) lbl.textContent=mon.getDate()+'. '+(mon.getMonth()+1)+'. – '+sun.getDate()+'. '+(sun.getMonth()+1)+'. '+sun.getFullYear()+(_weekOffset===0?' · tento týden':'');
+        var todayKey=shYmd(new Date());
+        var cols='110px 1.2fr 74px 74px 1.2fr 1.2fr';
+        var head='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;padding-bottom:4px;"><div>Den</div><div>V práci (přednostní)</div><div>Od</div><div>Do</div><div>Hlavní</div><div>Záložní</div></div>';
+        var inp='background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;width:100%;box-sizing:border-box;';
         var rows='';
-        for(var i=0;i<14;i++){
-          var d=new Date(today.getTime()+i*86400000); var key=shYmd(d); var sh=_shifts[key]||{};
-          var we=(d.getDay()===0||d.getDay()===6);
-          rows+='<div style="display:grid;grid-template-columns:140px 1fr 1fr;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.65;':'')+'">'
-            +'<div style="font-size:13px;'+(i===0?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(i===0?' · dnes':'')+'</div>'
-            +'<select data-sh-key="'+key+'" data-sh-role="main" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;">'+shOpts(sh.main)+'</select>'
-            +'<select data-sh-key="'+key+'" data-sh-role="backup" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:12px;">'+shOpts(sh.backup)+'</select>'
+        for(var i=0;i<7;i++){
+          var d=new Date(mon.getTime()+i*86400000); var key=shYmd(d); var sh=_shifts[key]||{};
+          var we=(d.getDay()===0||d.getDay()===6); var isToday=(key===todayKey);
+          rows+='<div style="display:grid;grid-template-columns:'+cols+';gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);'+(we?'opacity:.7;':'')+'">'
+            +'<div style="font-size:13px;'+(isToday?'font-weight:700;color:#22d3ee;':'')+'">'+esc(shDayLabel(d))+(isToday?' · dnes':'')+'</div>'
+            +'<select data-sh-key="'+key+'" data-sh-role="wperson" style="'+inp+'">'+shOpts(sh.wperson)+'</select>'
+            +'<input data-sh-key="'+key+'" data-sh-role="wfrom" type="time" value="'+esc(sh.wfrom||'')+'" style="'+inp+'">'
+            +'<input data-sh-key="'+key+'" data-sh-role="wto" type="time" value="'+esc(sh.wto||'')+'" style="'+inp+'">'
+            +'<select data-sh-key="'+key+'" data-sh-role="main" style="'+inp+'">'+shOpts(sh.main)+'</select>'
+            +'<select data-sh-key="'+key+'" data-sh-role="backup" style="'+inp+'">'+shOpts(sh.backup)+'</select>'
             +'</div>';
         }
         box.innerHTML=head+rows;
-        box.querySelectorAll('select[data-sh-key]').forEach(function(s){ s.addEventListener('change', onShiftChange); });
-        fillWorkUI();
-      }
-      function fillWorkUI(){
-        var sel=el('info-work-person');
-        if(sel){ sel.innerHTML='<option value="">— nikdo —</option>'+_ops.map(function(id){ return '<option value="'+id+'"'+(String(_work.person)===String(id)?' selected':'')+'>'+esc(opName(id))+'</option>'; }).join(''); if(!sel.__b){ sel.__b=1; sel.addEventListener('change', onWorkChange); } }
-        var wf=el('info-work-from'); if(wf){ wf.value=_work.from||''; if(!wf.__b){ wf.__b=1; wf.addEventListener('change', onWorkChange); } }
-        var wt=el('info-work-to'); if(wt){ wt.value=_work.to||''; if(!wt.__b){ wt.__b=1; wt.addEventListener('change', onWorkChange); } }
-      }
-      function onWorkChange(){
-        _work={ person: parseInt((el('info-work-person')||{}).value,10)||null, from:((el('info-work-from')||{}).value||''), to:((el('info-work-to')||{}).value||'') };
-        var m=el('info-msg-shifts'); if(m) m.textContent='Ukládám…';
-        api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ work_person_id:_work.person, work_from:_work.from, work_to:_work.to }) })
-          .then(function(){ if(m) m.textContent='✅ Uloženo'; }).catch(function(){ if(m) m.textContent='Chyba uložení'; });
+        box.querySelectorAll('[data-sh-key]').forEach(function(s){ s.addEventListener('change', onShiftChange); });
       }
       function onShiftChange(e){
-        var s=e.target; var key=s.getAttribute('data-sh-key'); var role=s.getAttribute('data-sh-role'); var val=parseInt(s.value,10)||null;
-        var cur=_shifts[key]||{}; cur[role]=val;
-        if(!cur.main && !cur.backup){ delete _shifts[key]; } else { _shifts[key]=cur; }
+        var s=e.target; var key=s.getAttribute('data-sh-key'); var role=s.getAttribute('data-sh-role');
+        var val = (role==='wfrom'||role==='wto') ? ((s.value||'')||null) : (parseInt(s.value,10)||null);
+        var cur=_shifts[key]||{};
+        if(val==null){ delete cur[role]; } else { cur[role]=val; }
+        if(!cur.main && !cur.backup && !cur.wperson && !cur.wfrom && !cur.wto){ delete _shifts[key]; } else { _shifts[key]=cur; }
         persistShifts();
       }
       function persistShifts(){

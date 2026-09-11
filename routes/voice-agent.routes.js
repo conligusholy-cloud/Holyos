@@ -239,21 +239,8 @@ async function resolveTransferPlan(mode, targetId, line) {
     enabled = enRaw === undefined || enRaw === null ? true : (enRaw === true || enRaw === 'true' || enRaw === 1 || enRaw === '1');
     timeout = get ? parseInt(await get(cfgKey(line, 'transfer_ring_timeout')), 10) || 20 : 20;
     rounds = get ? parseInt(await get(cfgKey(line, 'transfer_rounds')), 10) || 2 : 2;
-    // 0a) V PRACOVNÍ DOBĚ přednostně osoba, která je v práci (volá se úplně první).
-    try {
-      const wf = get ? (await get(cfgKey(line, 'work_from'))) || '' : '';
-      const wt = get ? (await get(cfgKey(line, 'work_to'))) || '' : '';
-      let wp = get ? await get(cfgKey(line, 'work_person_id')) : null; wp = parseInt(wp, 10) || 0;
-      if (wp && wf && wt) {
-        const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
-        const a = toMin(wf), b = toMin(wt);
-        const now = new Date(); const cur = now.getHours() * 60 + now.getMinutes();
-        if (a != null && b != null && cur >= a && cur < b) {
-          try { const p = await prisma.person.findUnique({ where: { id: wp }, select: { phone: true, active: true } }); if (p && p.active !== false && p.phone) base.push(p.phone); } catch (_) { /* přeskoč */ }
-        }
-      }
-    } catch (_) { /* pracovní doba nepovinná */ }
-    // 0) Dnešní směna: hlavní → záložní operátor (mají přednost před statickými čísly).
+    // 0) Dnešní směna: v pracovní době osoba „v práci" → hlavní → záložní operátor
+    //    (vše z rozpisu daného dne; mají přednost před statickými čísly).
     try {
       let shifts = get ? await get(cfgKey(line, 'shifts')) : {};
       if (typeof shifts === 'string') { try { shifts = JSON.parse(shifts); } catch (_) { shifts = {}; } }
@@ -261,14 +248,18 @@ async function resolveTransferPlan(mode, targetId, line) {
       const ymd = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
       const sh = shifts && shifts[ymd];
       if (sh) {
-        for (const pid of [sh.main, sh.backup]) {
-          const id = parseInt(pid, 10);
-          if (!id) continue;
-          try {
-            const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } });
-            if (p && p.active !== false && p.phone) base.push(p.phone);
-          } catch (_) { /* přeskoč */ }
+        const pushPerson = async (pid) => {
+          const id = parseInt(pid, 10); if (!id) return;
+          try { const p = await prisma.person.findUnique({ where: { id }, select: { phone: true, active: true } }); if (p && p.active !== false && p.phone) base.push(p.phone); } catch (_) { /* přeskoč */ }
+        };
+        // v pracovní době dne přednostně osoba „v práci"
+        if (sh.wperson && sh.wfrom && sh.wto) {
+          const toMin = (s) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(s).trim()); return m ? (parseInt(m[1], 10) * 60 + parseInt(m[2], 10)) : null; };
+          const a = toMin(sh.wfrom), b = toMin(sh.wto), cur = now.getHours() * 60 + now.getMinutes();
+          if (a != null && b != null && cur >= a && cur < b) await pushPerson(sh.wperson);
         }
+        await pushPerson(sh.main);
+        await pushPerson(sh.backup);
       }
     } catch (_) { /* směny nejsou povinné */ }
     // 1) statická čísla (hlavní + záložní) jako další fallback
