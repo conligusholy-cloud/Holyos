@@ -20,6 +20,23 @@ function client() {
   return twilioLib(SID, TOKEN);
 }
 
+// Infolinka může být na JINÉM Twilio (sub)účtu než hlavní číslo. Když jsou
+// nastavené její vlastní údaje, použij je pro API volání dané linky (nahrávky…).
+const INFO_SID = process.env.TWILIO_INFOLINKA_ACCOUNT_SID || '';
+const INFO_TOKEN = process.env.TWILIO_INFOLINKA_AUTH_TOKEN || '';
+
+// Twilio klient pro konkrétní linku (infolinka → vlastní účet, jinak hlavní).
+function clientFor(line) {
+  if (String(line) === 'infolinka' && twilioLib && INFO_SID && INFO_TOKEN) return twilioLib(INFO_SID, INFO_TOKEN);
+  return client();
+}
+
+// Přihlašovací údaje (pro Basic auth při stahování nahrávek) dle linky.
+function credsFor(line) {
+  if (String(line) === 'infolinka' && INFO_SID && INFO_TOKEN) return { sid: INFO_SID, token: INFO_TOKEN };
+  return { sid: SID, token: TOKEN };
+}
+
 function isConfigured() {
   return !!client();
 }
@@ -69,4 +86,4 @@ async function placeCall(target, campaign) {
   return call.sid;
 }
 
-module.exports = { placeCall, isConfigured, client, toE164 };
+module.exports = { placeCall, isConfigured, client, clientFor, credsFor, toE164 };

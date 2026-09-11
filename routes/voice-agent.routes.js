@@ -331,11 +331,11 @@ const form = express.urlencoded({ extended: false });
 // Spustí nahrávání příchozího hovoru přes REST. Voláno AŽ po odeslání TwiML
 // (fire-and-forget) a s opakováním — při webhooku hovor ještě nemusí být
 // „in-progress" (Twilio vrací 21220), tak zkusíme znovu za 1,5 a 4 s.
-function startInboundRecording(sid) {
+function startInboundRecording(sid, line) {
   if (!sid) return;
   let c;
-  try { c = require('../services/voice/outbound').client(); } catch (e) { c = null; }
-  if (!c) { console.warn('[voice] start nahrávky (příchozí): Twilio klient není k dispozici'); return; }
+  try { c = require('../services/voice/outbound').clientFor(line); } catch (e) { c = null; }
+  if (!c) { console.warn('[voice] start nahrávky (příchozí): Twilio klient není k dispozici (linka ' + line + ')'); return; }
   const delays = [0, 1500, 4000];
   (function tryOnce(i) {
     if (i >= delays.length) return;
@@ -374,7 +374,7 @@ router.post('/incoming', form, async (req, res) => {
   res.type('text/xml').send(twimlConnect(relayUrl('wg=1&line=' + encodeURIComponent(line)), action, greeting));
   // Nahrávání spustíme až teď (po odeslání TwiML) a s opakováním — hovor v tuto
   // chvíli přechází do „in-progress", takže recordings.create už projde.
-  startInboundRecording(sid);
+  startInboundRecording(sid, line);
 });
 
 // POST /api/voice/outgoing — TwiML pro odchozí hovor (kampaň). Twilio ho volá
@@ -1250,7 +1250,7 @@ router.post('/calls/backfill-recordings', requireAuth, async (req, res, next) =>
       select: { id: true, twilio_call_sid: true },
     });
     if (!calls.length) return res.json({ ok: true, fixed: 0, checked: 0 });
-    const c = require('../services/voice/outbound').client();
+    const c = require('../services/voice/outbound').clientFor(req.query.line !== undefined ? normLine(req.query.line) : null);
     if (!c) return res.status(500).json({ error: 'Twilio není nakonfigurováno' });
     let fixed = 0;
     for (const call of calls) {

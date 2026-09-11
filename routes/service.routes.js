@@ -22,6 +22,21 @@ if (!fs.existsSync(MANUALS_DIR)) {
   fs.mkdirSync(MANUALS_DIR, { recursive: true });
 }
 
+// Fotky k servisním požadavkům (vyfoceno mobilem). Persistentní volume /app/data.
+const REQUEST_PHOTOS_DIR = path.join(__dirname, '..', 'data', 'service-request-photos');
+if (!fs.existsSync(REQUEST_PHOTOS_DIR)) {
+  fs.mkdirSync(REQUEST_PHOTOS_DIR, { recursive: true });
+}
+// Multer jen pro obrázky (foto problému), do 15 MB.
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (/^image\//i.test(file.mimetype || '')) return cb(null, true);
+    cb(new Error('Nahraj prosím obrázek (foto).'), false);
+  },
+});
+
 // Multer — memory storage, 50 MB limit
 const manualUpload = multer({
   storage: multer.memoryStorage(),
@@ -717,7 +732,7 @@ router.get('/chat-sessions/:id', async (req, res, next) => {
 // ─── Servisní požadavky ──────────────────────────────────────────────────────
 const REQUEST_STATUSES = ['novy', 'reseni', 'vyreseno', 'zamitnuto'];
 
-// Doplní ke každému požadavku jméno řešitele (Person) — bez Prisma relace.
+// Doplní ke každému požadavku jméno řešitele (Person) + jméno zadavatele (User).
 async function _attachAssignees(rows) {
   const ids = Array.from(new Set(rows.map((r) => r.assignee_id).filter((x) => x != null)));
   let map = {};
@@ -725,7 +740,17 @@ async function _attachAssignees(rows) {
     const people = await prisma.person.findMany({ where: { id: { in: ids } }, select: { id: true, first_name: true, last_name: true } });
     people.forEach((p) => { map[p.id] = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || ('#' + p.id); });
   }
-  return rows.map((r) => Object.assign({}, r, { assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null }));
+  // Zadavatel (created_by_user_id → User.display_name/username)
+  const uids = Array.from(new Set(rows.map((r) => r.created_by_user_id).filter((x) => x != null)));
+  let umap = {};
+  if (uids.length) {
+    const users = await prisma.user.findMany({ where: { id: { in: uids } }, select: { id: true, display_name: true, username: true } });
+    users.forEach((u) => { umap[u.id] = u.display_name || u.username || ('#' + u.id); });
+  }
+  return rows.map((r) => Object.assign({}, r, {
+    assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null,
+    created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,
+  }));
 }
 
 router.get('/requests', async (req, res, next) => {
@@ -750,7 +775,10 @@ router.post('/requests', async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
-    const row = await prisma.serviceRequest.create({ data: Object.assign({}, parsed.data, { status: 'novy' }) });
+    // Zadavatel = přihlášený uživatel (autoritativně z tokenu, ne z klienta).
+    const row = await prisma.serviceRequest.create({
+      data: Object.assign({}, parsed.data, { status: 'novy', created_by_user_id: (req.user && req.user.id) || null }),
+    });
     res.status(201).json(row);
   } catch (err) { next(err); }
 });
@@ -782,6 +810,33 @@ router.delete('/requests/:id', async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     await prisma.serviceRequest.delete({ where: { id } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/service/requests/photo — nahraje foto problému (vyfoceno mobilem).
+// Vrací { url } pro uložení do pole photo_url požadavku. Za requireAuth (globálně).
+router.post('/requests/photo', photoUpload.single('photo'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Chybí foto (form field "photo")' });
+    const mt = (req.file.mimetype || '').toLowerCase();
+    const ext = mt.indexOf('png') >= 0 ? '.png' : mt.indexOf('webp') >= 0 ? '.webp' : mt.indexOf('heic') >= 0 ? '.heic' : '.jpg';
+    const name = Date.now() + '_' + Math.random().toString(36).slice(2, 8) + ext;
+    await fsp.writeFile(path.join(REQUEST_PHOTOS_DIR, name), req.file.buffer);
+    res.status(201).json({ url: '/api/service/requests/photo/' + name });
+  } catch (err) {
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'Foto je větší než 15 MB' });
+    next(err);
+  }
+});
+
+// GET /api/service/requests/photo/:name — servíruje foto (jen přihlášeným).
+router.get('/requests/photo/:name', async (req, res, next) => {
+  try {
+    const name = String(req.params.name || '').replace(/[^a-zA-Z0-9._-]/g, '');
+    if (!name) return res.status(404).send('Foto nenalezeno');
+    const abs = path.join(REQUEST_PHOTOS_DIR, name);
+    if (!fs.existsSync(abs)) return res.status(404).send('Foto nenalezeno');
+    res.sendFile(abs);
   } catch (err) { next(err); }
 });
 

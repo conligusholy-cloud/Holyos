@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <meta name="theme-color" content="#0e1a22">
+  <title>Nový servisní požadavek</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root{ --bg:#0b0f14; --card:#141c26; --card2:#1b2530; --border:#26333f; --text:#e8eef3; --text2:#8ea1b3; --acc:#22d3ee; --acc2:#06b6d4; --ok:#22c55e; --err:#ef4444; }
+    *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+    body{ min-height:100dvh; }
+    .wrap{ max-width:560px; margin:0 auto; padding:16px 16px 120px; }
+    .top{ display:flex; align-items:center; gap:10px; padding:6px 2px 14px; }
+    .top .logo{ width:34px; height:34px; border-radius:9px; background:linear-gradient(135deg,var(--acc),var(--acc2)); color:#04222b; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; }
+    .top h1{ font-size:18px; margin:0; font-weight:700; }
+    .top .sub{ font-size:12px; color:var(--text2); margin-top:1px; }
+    .who{ background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px 14px; font-size:13px; color:var(--text2); margin-bottom:14px; display:flex; align-items:center; gap:8px; }
+    .who b{ color:var(--text); }
+    label{ display:block; font-size:12px; text-transform:uppercase; letter-spacing:.4px; color:var(--text2); margin:14px 0 6px; }
+    label .req{ color:var(--acc); }
+    input,textarea,select{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:14px; font-family:inherit; }
+    input:focus,textarea:focus,select:focus{ outline:none; border-color:var(--acc); }
+    textarea{ min-height:96px; resize:vertical; }
+    .hint{ font-size:12px; color:var(--text2); margin-top:6px; }
+    /* Foto */
+    .photo-box{ margin-top:6px; }
+    .photo-btn{ display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:18px; border:1.5px dashed var(--border); border-radius:14px; background:var(--card2); color:var(--text); font-size:16px; font-weight:600; cursor:pointer; }
+    .photo-btn:active{ border-color:var(--acc); }
+    .photo-btn .ico{ font-size:26px; }
+    .photo-preview{ margin-top:10px; position:relative; display:none; }
+    .photo-preview img{ width:100%; border-radius:14px; border:1px solid var(--border); display:block; }
+    .photo-preview .rm{ position:absolute; top:8px; right:8px; background:rgba(0,0,0,.65); color:#fff; border:none; border-radius:20px; padding:8px 12px; font-size:13px; font-weight:600; }
+    /* Sticky odeslat */
+    .bar{ position:fixed; left:0; right:0; bottom:0; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(180deg,transparent,var(--bg) 22%); }
+    .bar .inner{ max-width:560px; margin:0 auto; }
+    .btn{ width:100%; border:none; border-radius:14px; padding:16px; font-size:17px; font-weight:800; cursor:pointer; }
+    .btn-primary{ background:var(--acc); color:#04222b; }
+    .btn-primary:disabled{ opacity:.55; }
+    .msg{ text-align:center; font-size:13px; margin-top:8px; min-height:18px; }
+    .msg.err{ color:var(--err); }
+    .msg.ok{ color:var(--ok); }
+    /* Gate / success */
+    .screen{ text-align:center; padding:60px 20px; }
+    .screen .big{ font-size:44px; margin-bottom:12px; }
+    .screen h2{ font-size:20px; margin:0 0 8px; }
+    .screen p{ color:var(--text2); font-size:14px; line-height:1.6; margin:0 auto 18px; max-width:340px; }
+    .screen .btn{ max-width:280px; margin:0 auto; display:inline-block; text-decoration:none; text-align:center; }
+    .hidden{ display:none !important; }
+  </style>
+</head>
+<body>
+  <!-- Načítání -->
+  <div id="loading" class="screen"><div class="big">⏳</div><p>Načítám…</p></div>
+
+  <!-- Nepřihlášen -->
+  <div id="gate" class="screen hidden">
+    <div class="big">🔒</div>
+    <h2>Nutné přihlášení</h2>
+    <p>Servisní požadavek může zadat jen přihlášený uživatel HolyOS — ať víme, kdo podnět nahlásil. Přihlas se a otevři tento odkaz znovu.</p>
+    <a class="btn btn-primary" href="/">Přihlásit se do HolyOS</a>
+  </div>
+
+  <!-- Formulář -->
+  <div id="app" class="wrap hidden">
+    <div class="top">
+      <div class="logo">🔧</div>
+      <div>
+        <h1>Nový servisní požadavek</h1>
+        <div class="sub">Nahlášení poruchy stroje</div>
+      </div>
+    </div>
+
+    <div class="who">👤 Zadává: <b id="who-name">—</b></div>
+
+    <label>Problém na stroji <span class="req">*</span></label>
+    <input id="f-problem" list="machines" autocomplete="off" placeholder="Vyber stroj nebo napiš vlastní">
+    <datalist id="machines"></datalist>
+
+    <label>Servisní úkon – prádlomat</label>
+    <input id="f-action" autocomplete="off" placeholder="nepovinné">
+
+    <label>Servisní úkol – špageta</label>
+    <input id="f-task" autocomplete="off" placeholder="nepovinné">
+
+    <label>Foto problému</label>
+    <div class="photo-box">
+      <div class="photo-btn" id="photo-btn"><span class="ico">📷</span> <span>Vyfotit / vybrat foto</span></div>
+      <input id="f-photo" type="file" accept="image/*" capture="environment" class="hidden">
+      <div class="photo-preview" id="photo-preview">
+        <img id="photo-img" alt="Náhled">
+        <button type="button" class="rm" id="photo-rm">✕ Odebrat</button>
+      </div>
+      <div class="hint" id="photo-hint">Vyfoť závadu přímo mobilem. Foto se přiloží k požadavku.</div>
+    </div>
+
+    <label>Popis problému</label>
+    <textarea id="f-desc" placeholder="Co se děje, kdy to začalo, co bliká…"></textarea>
+  </div>
+
+  <!-- Odesláno -->
+  <div id="done" class="screen hidden">
+    <div class="big">✅</div>
+    <h2>Požadavek odeslán</h2>
+    <p>Díky! Servisní požadavek byl zaznamenán a je vidět v HolyOS.</p>
+    <button class="btn btn-primary" id="again" style="max-width:280px;">Zadat další</button>
+  </div>
+
+  <!-- Sticky lišta s odesláním (jen u formuláře) -->
+  <div class="bar hidden" id="bar">
+    <div class="inner">
+      <button class="btn btn-primary" id="submit">Odeslat požadavek</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    var API='/api/service';
+    var me=null, photoDataFile=null;
+    function $(id){ return document.getElementById(id); }
+    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); }
+    function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
+
+    // 1) Ověř přihlášení
+    api('/api/auth/me').then(function(r){
+      if(r.status===401 || r.status===403){ show('gate'); return null; }
+      if(!r.ok) throw new Error('me '+r.status);
+      return r.json();
+    }).then(function(j){
+      if(!j) return;
+      me=j.user||{};
+      $('who-name').textContent = me.displayName || me.username || ('#'+me.id);
+      show('app');
+      loadMachines();
+    }).catch(function(){ show('gate'); });
+
+    // 2) Stroje v provozu → datalist
+    function loadMachines(){
+      api(API+'/machines?status=v_provozu').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
+        var dl=$('machines'); dl.innerHTML=(Array.isArray(list)?list:[]).map(function(m){
+          return '<option value="'+String(m.name||'').replace(/"/g,'&quot;')+'">'+String(m.type||'').replace(/</g,'&lt;')+'</option>';
+        }).join('');
+      }).catch(function(){});
+    }
+
+    // 3) Foto — otevře fotoaparát, náhled, klientská komprese
+    $('photo-btn').addEventListener('click', function(){ $('f-photo').click(); });
+    $('photo-rm').addEventListener('click', function(){ photoDataFile=null; $('f-photo').value=''; $('photo-preview').style.display='none'; $('photo-hint').style.display=''; });
+    $('f-photo').addEventListener('change', function(){
+      var file=this.files && this.files[0]; if(!file) return;
+      var reader=new FileReader();
+      reader.onload=function(e){
+        var img=new Image();
+        img.onload=function(){
+          // Zmenši na max 1600 px delší strany (rychlejší upload na mobilních datech)
+          var max=1600, w=img.width, h=img.height;
+          if(w>max||h>max){ if(w>=h){ h=Math.round(h*max/w); w=max; } else { w=Math.round(w*max/h); h=max; } }
+          var cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+          cv.getContext('2d').drawImage(img,0,0,w,h);
+          cv.toBlob(function(blob){
+            photoDataFile = blob || file;
+            $('photo-img').src = URL.createObjectURL(photoDataFile);
+            $('photo-preview').style.display='block';
+            $('photo-hint').style.display='none';
+          }, 'image/jpeg', 0.82);
+        };
+        img.onerror=function(){ photoDataFile=file; $('photo-img').src=e.target.result; $('photo-preview').style.display='block'; $('photo-hint').style.display='none'; };
+        img.src=e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // 4) Odeslat
+    $('submit').addEventListener('click', async function(){
+      var problem=$('f-problem').value.trim();
+      var msg=$('msg'); msg.className='msg'; msg.textContent='';
+      if(!problem){ msg.className='msg err'; msg.textContent='Vyplň „Problém na stroji".'; return; }
+      var btn=$('submit'); btn.disabled=true; btn.textContent='Odesílám…';
+      try{
+        // 4a) foto (pokud je) → upload → url
+        var photoUrl=null;
+        if(photoDataFile){
+          msg.className='msg'; msg.textContent='Nahrávám foto…';
+          var fd=new FormData(); fd.append('photo', photoDataFile, 'foto.jpg');
+          var pr=await api(API+'/requests/photo',{ method:'POST', body:fd });
+          if(!pr.ok){ var pe={}; try{ pe=await pr.json(); }catch(_){}
+            throw new Error(pe.error||('Foto se nepodařilo nahrát ('+pr.status+')')); }
+          photoUrl=(await pr.json()).url;
+        }
+        // 4b) požadavek
+        msg.textContent='Odesílám požadavek…';
+        var body={
+          problem: problem,
+          action: $('f-action').value.trim() || null,
+          task: $('f-task').value.trim() || null,
+          description: $('f-desc').value.trim() || null,
+          photo_url: photoUrl,
+          ordered_by: ($('who-name').textContent || 'Přihlášený uživatel')
+        };
+        var rr=await api(API+'/requests',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+        if(!rr.ok){ var re={}; try{ re=await rr.json(); }catch(_){}
+          throw new Error(re.error||('Uložení selhalo ('+rr.status+')')); }
+        show('done');
+      }catch(e){
+        msg.className='msg err'; msg.textContent=e.message||'Chyba odeslání.';
+        btn.disabled=false; btn.textContent='Odeslat požadavek';
+      }
+    });
+
+    // 5) Zadat další
+    $('again').addEventListener('click', function(){
+      $('f-problem').value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value='';
+      photoDataFile=null; $('f-photo').value=''; $('photo-preview').style.display='none'; $('photo-hint').style.display='';
+      var b=$('submit'); b.disabled=false; b.textContent='Odeslat požadavek'; $('msg').textContent='';
+      show('app');
+    });
+  })();
+  </script>
+</body>
+</html>

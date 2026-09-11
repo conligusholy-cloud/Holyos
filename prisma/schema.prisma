@@ -4745,11 +4745,13 @@ model ServiceRequest {
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
   resolution  String?  @db.Text           // způsob řešení
+  created_by_user_id Int?   // kdo požadavek zadal (přihlášený uživatel) — u mobilního formuláře povinné z tokenu
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
   @@index([status])
   @@index([assignee_id])
+  @@index([created_by_user_id])
   @@map("service_requests")
 }
 
