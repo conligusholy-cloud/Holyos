@@ -106,17 +106,12 @@
         return '<div class="a">'+esc(l)+'</div>';
       }).join('');
     }
-    // Přepis: celý (Whisper) má přednost; jinak AI část + tlačítko na přepis celého hovoru.
+    // Přepis: jen kompletní (Whisper+Claude). Když ještě není, ukáže se tlačítko na jeho vytvoření.
     function transcriptBlock(c){
       var full=(c.full_transcript||'').trim();
-      var ai=(c.transcript||[]).map(function(x){ var who=x.role==='agent'?'🤖 AI':'🧑 Volající'; return '<div class="a"><b>'+who+':</b> '+esc(x.text)+'</div>'; }).join('');
-      var inner, label;
-      if(full){ inner=fmtFull(full); label='📄 Celý přepis'; }
-      else if(ai){ inner=ai+(c.audio_url?'<div style="margin-top:8px;color:var(--text2);font-size:12px;">Zatím jen část s AI. Celý hovor (i s technikem) přepíšeš tlačítkem „Přepsat celý hovor".</div>':''); label='📄 Přepis'; }
-      else { inner='<div style="color:var(--text2);">Bez přepisu.</div>'; label='📄 Přepis'; }
-      var trBtn='<button class="tr-toggle" onclick="var d=document.getElementById(\'tr-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">'+label+'</button>';
+      var trBtn = full ? '<button class="tr-toggle" onclick="var d=document.getElementById(\'tr-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">📄 Celý přepis</button>' : '';
       var wBtn=c.audio_url?('<button class="tr-toggle" onclick="transcribeCall(\''+c.id+'\', this, '+(full?'true':'false')+')">'+(full?'🔁 Přepsat znovu':'📝 Přepsat celý hovor')+'</button>'):'';
-      return trBtn+wBtn+'<div class="transcript" id="tr-'+c.id+'">'+inner+'</div>';
+      return trBtn+wBtn+'<div class="transcript" id="tr-'+c.id+'">'+(full?fmtFull(full):'')+'</div>';
     }
     window.transcribeCall = function(id, btn, force){
       if(btn){ btn.disabled=true; btn.textContent='Přepisuji… (chvíli to trvá)'; }
