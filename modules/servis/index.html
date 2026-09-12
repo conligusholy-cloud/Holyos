@@ -1331,7 +1331,7 @@
           // Kolikrát každé číslo volalo (z načtené historie).
           var counts={};
           rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th title="Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?">Servis</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
             var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
@@ -1341,6 +1341,7 @@
               +'<td><a onclick="event.stopPropagation();infoNumHistory(\''+k+'\')" title="Historie tohoto čísla (časová osa)" style="cursor:pointer;text-decoration:underline;'+(rep?'color:#eab308;font-weight:600;':'color:#22d3ee;')+'">'+esc(num||'')+' ('+cnt+'×)</a></td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
+              +'<td style="text-align:center;">'+serviceCell(c)+'</td>'
               +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
               +'<td style="text-align:center;">'+smsCell(c)+'</td>'
               +'<td>'+transferCell(c)+'</td>'
@@ -1348,7 +1349,7 @@
               +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Kompletní přepis přes OpenAI Whisper (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="11" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="12" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
           });
           html+='</tbody></table></div>';
           body.innerHTML=html;
@@ -1368,6 +1369,11 @@
         if(!log.length) return '';
         var rows=log.map(function(a){ var st=trStatusLabel(a.status); return '<div style="margin:2px 0;">'+esc(fmtDate(a.at))+' · <b>'+esc(transferWho(a))+'</b>'+((a.number&&a.name)?(' <span style="color:var(--text2);">('+esc(a.number)+')</span>'):'')+' → <span style="color:'+st[1]+';">'+esc(st[0])+'</span></div>'; }).join('');
         return '<div style="margin-bottom:10px;"><b>Přesměrování na kolegy:</b><div style="margin-top:4px;font-size:13px;">'+rows+'</div></div>';
+      }
+      function serviceCell(c){
+        if(!c.service_needed) return '<span style="color:var(--text2);">—</span>';
+        if(c.service_created) return '<span style="color:#22c55e;" title="Servisní požadavek vznikl do 5 min po hovoru">✅ požadavek</span>';
+        return '<span style="color:#ef4444;font-weight:700;" title="Hovor vypadá na poruchu, ale do 5 min po hovoru nevznikl servisní požadavek!">❗❗ chybí</span>';
       }
       function smsCell(c){
         var log=Array.isArray(c.sms_log)?c.sms_log:[];

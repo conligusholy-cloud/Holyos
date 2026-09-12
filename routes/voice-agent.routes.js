@@ -987,6 +987,29 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         full_transcript_at: true,
       },
     });
+    // Kontrola servisních požadavků: z hovoru pozná, že měl vzniknout servisní
+    // požadavek (technická porucha/reklamace…) a ověří, že do konce hovoru + 5 min
+    // nějaký požadavek reálně vznikl. Když ne → alarm (vykřičníky).
+    try {
+      const SERVICE_RE = /(poruch|nefunguj|nespust|nenapoušt|nevypoušt|zasek|chyba|závad|zavad|rozbi|teče|neto[cč]í|reklamac|mincovn|nejde|vrácení pen|vraceni pen|technik|servis|oprav)/i;
+      const needs = (c) => SERVICE_RE.test(((c.caller_intent || '') + ' ' + (c.summary || '')));
+      const flagged = calls.filter((c) => c.ended_at && needs(c));
+      let reqs = [];
+      if (flagged.length && prisma.serviceRequest) {
+        const times = flagged.map((c) => new Date(c.ended_at).getTime());
+        const lo = new Date(Math.min.apply(null, times) - 60000);
+        const hi = new Date(Math.max.apply(null, times) + 6 * 60000);
+        reqs = await prisma.serviceRequest.findMany({ where: { created_at: { gte: lo, lte: hi } }, select: { created_at: true } });
+      }
+      const reqTimes = reqs.map((r) => new Date(r.created_at).getTime());
+      calls.forEach((c) => {
+        if (!(c.ended_at && needs(c))) { c.service_needed = false; c.service_created = null; return; }
+        c.service_needed = true;
+        const end = new Date(c.ended_at).getTime();
+        // požadavek vytvořený v okně [konec hovoru − 1 min, konec + 5 min]
+        c.service_created = reqTimes.some((t) => t >= end - 60000 && t <= end + 5 * 60000);
+      });
+    } catch (e) { console.warn('[voice] service check:', e.message); }
     res.json(calls);
   } catch (err) {
     next(err);
