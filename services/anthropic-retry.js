@@ -30,6 +30,23 @@ function isRetryableError(err) {
   return false;
 }
 
+// Rozpozná „došel kredit na AI" (Anthropic 400 invalid_request_error: credit balance too low).
+function isCreditError(err) {
+  if (!err) return false;
+  const msg = (err.message || '') + ' ' + (err.error && err.error.message ? err.error.message : '');
+  return /credit balance is too low|insufficient.*credit|too low to access the Anthropic API/i.test(msg);
+}
+const AI_NO_CREDIT_MSG = 'Došel kredit na AI. Dobij prosím kredit v Anthropic Console (Plans & Billing) — AI funkce se pak samy zprovozní.';
+// Převede libovolnou chybu AI na srozumitelnou českou hlášku pro uživatele.
+function humanizeAiError(err) {
+  if (isCreditError(err)) return AI_NO_CREDIT_MSG;
+  const status = err && (err.status || err.statusCode);
+  if (status === 429) return 'AI je momentálně vytížená (limit požadavků). Zkus to prosím za chvíli.';
+  if (status === 529) return 'AI je přetížená. Zkus to prosím za chvíli.';
+  if (status === 401 || status === 403) return 'AI klíč není platný (401/403). Zkontroluj ANTHROPIC_API_KEY.';
+  return (err && err.message) ? err.message : 'AI se nepodařilo zavolat.';
+}
+
 function getRetryAfterMs(err) {
   // Anthropic SDK vystavuje response headers v err.headers
   const headers = err?.headers || err?.response?.headers || {};
@@ -56,6 +73,8 @@ async function messagesCreate(client, params, options = {}) {
       return await client.messages.create(params);
     } catch (err) {
       lastErr = err;
+      // Vyčerpaný kredit nemá smysl opakovat — rovnou srozumitelná hláška.
+      if (isCreditError(err)) { const e = new Error(AI_NO_CREDIT_MSG); e.code = 'ai_no_credit'; e.status = 402; throw e; }
       const retryable = isRetryableError(err);
       const isLast = attempt === maxAttempts - 1;
       if (!retryable || isLast) throw err;
@@ -79,4 +98,7 @@ async function messagesCreate(client, params, options = {}) {
 module.exports = {
   messagesCreate,
   isRetryableError,
+  isCreditError,
+  humanizeAiError,
+  AI_NO_CREDIT_MSG,
 };

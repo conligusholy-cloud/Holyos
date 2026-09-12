@@ -857,7 +857,13 @@ router.get('/ai-specialist-today-analysis', requireAuth, async (req, res, next) 
     let analysis = String(text || '').replace(/\*\*/g, '').replace(/(^|\n)#{1,6}\s*/g, '$1');
     if (truncated) analysis += '\n\n(Analyzováno prvních ' + maxLeads + ' z ' + leads.length + ' kontaktů.)';
     res.json({ ok: true, analysis, count: leads.length });
-  } catch (err) { next(err); }
+  } catch (err) {
+    // Srozumitelná hláška místo syrové chyby (např. došlý kredit AI).
+    try {
+      const { humanizeAiError } = require('../services/anthropic-retry');
+      return res.json({ ok: true, analysis: '⚠️ ' + humanizeAiError(err), count: 0, ai_error: true });
+    } catch (_) { next(err); }
+  }
 });
 
 // Kompletní statistika AI specialisty: odeslané odkazy → otevření → chat → schůzky/zavolání.
@@ -4206,7 +4212,10 @@ router.post('/my-funnel-analysis', requireAuth, async (req, res, next) => {
         actions: Array.isArray(j.actions) ? j.actions.slice(0, 8).map((a) => String(a).slice(0, 300)) : [],
       },
     });
-  } catch (err) { next(err); }
+  } catch (err) {
+    try { const { humanizeAiError, isCreditError } = require('../services/anthropic-retry'); return res.status(isCreditError(err) ? 402 : 502).json({ error: humanizeAiError(err), ai_error: true }); }
+    catch (_) { next(err); }
+  }
 });
 
 // ─── SIS API proxy: hodnota lokalit prádlomatů (kiosk-values) ──────────────
