@@ -985,9 +985,17 @@ router.get('/trips/active', async (req, res, next) => {
       const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true, action: true, task: true, est_repair_min: true } });
       reqs.forEach((r) => { rmap[r.id] = r; });
     }
-    // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = jízda k úkolu / oprava).
-    // Vyřešené/zamítnuté/nové ani „cesta domů" (návrat) na mapě nechceme.
-    const activeTrips = trips.filter((t) => { const r = rmap[t.request_id]; return r && r.status === 'reseni' && !t.return_started_at; });
+    // Živý přehled: úkoly, na kterých se aktuálně dělá (stav „reseni" = jízda k úkolu / oprava),
+    // PLUS probíhající cesta domů/na další úkol — tu ukazujeme, dokud neuplyne odhad příjezdu.
+    const nowMs = Date.now();
+    const activeTrips = trips.filter((t) => {
+      const r = rmap[t.request_id];
+      if (t.return_started_at && !t.return_ended_at) {
+        const durMs = ((t.return_duration_min || 30) + 5) * 60000; // odhad + rezerva
+        return nowMs < (new Date(t.return_started_at).getTime() + durMs);
+      }
+      return r && r.status === 'reseni';
+    });
     const out = activeTrips.map((t) => {
       var r = rmap[t.request_id] || {};
       return {

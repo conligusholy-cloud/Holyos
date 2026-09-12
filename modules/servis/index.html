@@ -2028,7 +2028,7 @@
     function tripStatus(t, now){
       now=now||Date.now();
       function mins(ts){ return ts?Math.round((now-new Date(ts).getTime())/60000):null; }
-      if(t.return_started_at) return { label:'✅ hotovo — jede zpět', overdue:false };
+      if(t.return_started_at){ var re=mins(t.return_started_at)||0, rd=t.return_duration_min||0; return { label:'✅ hotovo — jede '+(t.return_destination||'zpět')+(rd?(' (~'+Math.max(0,rd-re)+' min)'):' ('+re+' min)'), overdue:false }; }
       if(t.repair_started_at){
         var e=mins(t.repair_started_at)||0;
         if(t.est_repair_min && e>t.est_repair_min) return { label:'🔧 opravuje — překročeno o '+(e-t.est_repair_min)+' min (odhad '+t.est_repair_min+' min)', overdue:true };
