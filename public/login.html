@@ -141,9 +141,9 @@
   <script>
     var isSetupMode = false;
 
-    // Pokud už je přihlášen, přesměruj na dashboard
+    // Pokud už je přihlášen, přesměruj na redirect (pokud je) nebo dashboard
     fetch('/api/auth/me', { credentials: 'include' })
-      .then(function(r) { if (r.ok) window.location.href = '/'; })
+      .then(function(r) { if (r.ok) { var rd=new URLSearchParams(window.location.search).get('redirect'); window.location.href = rd || '/'; } })
       .catch(function() {});
 
     // Zkontroluj jestli je potřeba prvotní setup (žádní uživatelé v DB)
@@ -187,11 +187,12 @@
       })
       .then(function(data) {
         // Token je nastaven jako httpOnly cookie serverem.
+        // Explicitní ?redirect= má přednost (návrat na konkrétní stránku, ze které se odhlásil).
+        var redirect = new URLSearchParams(window.location.search).get('redirect');
+        if (redirect) { window.location.href = redirect; return; }
         // Sales-only uživatel (jen obchodní obrazovka) → rovnou na svou obrazovku.
         if (data && data.sales_only && data.home) { window.location.href = data.home; return; }
-        // Jinak na původní stránku nebo dashboard.
-        var redirect = new URLSearchParams(window.location.search).get('redirect') || '/';
-        window.location.href = redirect;
+        window.location.href = '/';
       })
       .catch(function(err) {
         errEl.textContent = err.message;

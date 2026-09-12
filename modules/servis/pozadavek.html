@@ -59,7 +59,7 @@
     <div class="big">🔒</div>
     <h2>Nutné přihlášení</h2>
     <p>Servisní požadavek může zadat jen přihlášený uživatel HolyOS — ať víme, kdo podnět nahlásil. Přihlas se a otevři tento odkaz znovu.</p>
-    <a class="btn btn-primary" href="/">Přihlásit se do HolyOS</a>
+    <a class="btn btn-primary" id="gate-login" href="/">Přihlásit se do HolyOS</a>
   </div>
 
   <!-- Formulář -->
@@ -153,7 +153,7 @@
     var API='/api/service';
     var me=null, photoDataFile=null;
     function $(id){ return document.getElementById(id); }
-    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); }
+    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); if(id==='gate'){ var g=$('gate-login'); if(g){ g.href='/login.html?redirect='+encodeURIComponent(location.pathname+location.search); } } }
     function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
 
     // 1) Ověř přihlášení
@@ -243,8 +243,20 @@
           ordered_by: ($('who-name').textContent || 'Přihlášený uživatel')
         };
         var rr=await api(API+'/requests',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-        if(!rr.ok){ var re={}; try{ re=await rr.json(); }catch(_){}
-          throw new Error(re.error||('Uložení selhalo ('+rr.status+')')); }
+        var rj={}; try{ rj=await rr.json(); }catch(_){}
+        if(!rr.ok) throw new Error(rj.error||('Uložení selhalo ('+rr.status+')'));
+        // Duplicita: na tento stroj už je otevřený požadavek → nabídni přidat volajícího.
+        if(rj&&rj.duplicate&&rj.existing){
+          var ex=rj.existing;
+          if(confirm('⚠️ Na tento stroj už je otevřený požadavek #'+ex.id+'.\n\n[OK] = Přidat jen tvoje hlášení k němu (bez duplikátu)\n[Zrušit] = přesto vytvořit nový')){
+            var ar=await api(API+'/requests/'+ex.id+'/report-caller',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone:body.phone||null, note:'Další hlášení: '+(body.ordered_by||'')}) });
+            if(!ar.ok) throw new Error('Nepodařilo se přidat k existujícímu.');
+          } else {
+            body.force=true;
+            var fr=await api(API+'/requests',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+            if(!fr.ok) throw new Error('Uložení selhalo.');
+          }
+        }
         show('done');
       }catch(e){
         msg.className='msg err'; msg.textContent=e.message||'Chyba odeslání.';

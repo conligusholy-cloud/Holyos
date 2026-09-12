@@ -71,7 +71,7 @@
     <div class="big">🔒</div>
     <h2>Nutné přihlášení</h2>
     <p>Servisní prostředí je jen pro přihlášené techniky HolyOS. Přihlas se a otevři tento odkaz znovu.</p>
-    <a class="btn btn-primary" href="/">Přihlásit se do HolyOS</a>
+    <a class="btn btn-primary" id="gate-login" href="/">Přihlásit se do HolyOS</a>
   </div>
 
   <div id="app" class="wrap hidden">
@@ -212,7 +212,7 @@
     var me=null, rows=[], acceptId=null, fixTargetId=null;
     function $(id){ return document.getElementById(id); }
     function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-    function show(id){ ['loading','gate','app'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); }
+    function show(id){ ['loading','gate','app'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); if(id==='gate'){ var g=$('gate-login'); if(g){ g.href='/login.html?redirect='+encodeURIComponent(location.pathname+location.search); } } }
     function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
     function fmtDate(d){ try{ return new Date(d).toLocaleString('cs-CZ'); }catch(e){ return ''; } }
     var STAT={ novy:['Nový','b-novy'], reseni:['V řešení','b-reseni'], vyreseno:['Vyřešeno','b-vyreseno'], zamitnuto:['Zamítnuto','b-zamitnuto'] };

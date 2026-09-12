@@ -51,7 +51,7 @@
     <div class="big">🔒</div>
     <h2>Nutné přihlášení</h2>
     <p>Odečty může zadat jen přihlášený uživatel HolyOS. Přihlas se a otevři tento odkaz znovu.</p>
-    <a class="btn" href="/">Přihlásit se do HolyOS</a>
+    <a class="btn" id="gate-login" href="/">Přihlásit se do HolyOS</a>
   </div>
 
   <div id="app" class="wrap hidden">
@@ -98,7 +98,7 @@
     var API='/api/service';
     var me=null, photos={ water:null, elek:null };
     function $(id){ return document.getElementById(id); }
-    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); }
+    function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); if(id==='gate'){ var g=$('gate-login'); if(g){ g.href='/login.html?redirect='+encodeURIComponent(location.pathname+location.search); } } }
     function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
 
     api('/api/auth/me').then(function(r){
