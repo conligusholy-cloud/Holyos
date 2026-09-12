@@ -993,21 +993,29 @@ router.get('/calls', requireAuth, async (req, res, next) => {
     try {
       const SERVICE_RE = /(poruch|nefunguj|nespust|nenapoušt|nevypoušt|zasek|chyba|závad|zavad|rozbi|teče|neto[cč]í|reklamac|mincovn|nejde|vrácení pen|vraceni pen|technik|servis|oprav)/i;
       const needs = (c) => SERVICE_RE.test(((c.caller_intent || '') + ' ' + (c.summary || '')));
+      const tail = (p) => String(p || '').replace(/\D/g, '').slice(-9);
       const flagged = calls.filter((c) => c.ended_at && needs(c));
       let reqs = [];
       if (flagged.length && prisma.serviceRequest) {
         const times = flagged.map((c) => new Date(c.ended_at).getTime());
+        // Širší okno kvůli párování podle telefonu (přesné) i časového fallbacku.
         const lo = new Date(Math.min.apply(null, times) - 60000);
-        const hi = new Date(Math.max.apply(null, times) + 6 * 60000);
-        reqs = await prisma.serviceRequest.findMany({ where: { created_at: { gte: lo, lte: hi } }, select: { created_at: true } });
+        const hi = new Date(Math.max.apply(null, times) + 31 * 60000);
+        reqs = await prisma.serviceRequest.findMany({ where: { created_at: { gte: lo, lte: hi } }, select: { created_at: true, phone: true } });
       }
-      const reqTimes = reqs.map((r) => new Date(r.created_at).getTime());
+      const reqs2 = reqs.map((r) => ({ t: new Date(r.created_at).getTime(), tail: tail(r.phone) }));
       calls.forEach((c) => {
-        if (!(c.ended_at && needs(c))) { c.service_needed = false; c.service_created = null; return; }
+        if (!(c.ended_at && needs(c))) { c.service_needed = false; c.service_created = null; c.service_matched_by = null; return; }
         c.service_needed = true;
         const end = new Date(c.ended_at).getTime();
-        // požadavek vytvořený v okně [konec hovoru − 1 min, konec + 5 min]
-        c.service_created = reqTimes.some((t) => t >= end - 60000 && t <= end + 5 * 60000);
+        const callTail = tail(c.from_number);
+        // 1) Přesné párování podle telefonu (okno konec −1 min … +30 min).
+        if (callTail && reqs2.some((r) => r.tail && r.tail === callTail && r.t >= end - 60000 && r.t <= end + 30 * 60000)) {
+          c.service_created = true; c.service_matched_by = 'phone'; return;
+        }
+        // 2) Fallback: časové okno konec −1 min … +5 min (bez telefonu).
+        c.service_created = reqs2.some((r) => r.t >= end - 60000 && r.t <= end + 5 * 60000);
+        c.service_matched_by = c.service_created ? 'time' : null;
       });
     } catch (e) { console.warn('[voice] service check:', e.message); }
     res.json(calls);

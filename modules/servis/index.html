@@ -1372,8 +1372,11 @@
       }
       function serviceCell(c){
         if(!c.service_needed) return '<span style="color:var(--text2);">—</span>';
-        if(c.service_created) return '<span style="color:#22c55e;" title="Servisní požadavek vznikl do 5 min po hovoru">✅ požadavek</span>';
-        return '<span style="color:#ef4444;font-weight:700;" title="Hovor vypadá na poruchu, ale do 5 min po hovoru nevznikl servisní požadavek!">❗❗ chybí</span>';
+        if(c.service_created){
+          if(c.service_matched_by==='phone') return '<span style="color:#22c55e;" title="Požadavek spárován podle telefonu volajícího">✅ 📞 požadavek</span>';
+          return '<span style="color:#22c55e;" title="Požadavek vznikl do 5 min po hovoru (dle času)">✅ požadavek</span>';
+        }
+        return '<span style="color:#ef4444;font-weight:700;" title="Hovor vypadá na poruchu, ale nevznikl servisní požadavek volajícího!">❗❗ chybí</span>';
       }
       function smsCell(c){
         var log=Array.isArray(c.sms_log)?c.sms_log:[];
@@ -1670,7 +1673,10 @@
         '</div>'+
         '<div class="form-row"><label>Foto problému (odkaz)</label><input id="sr-photo" value="'+esc(row.photo_url||'')+'"></div>'+
         '<div class="form-row"><label>Popis problému</label><textarea id="sr-desc" rows="3">'+esc(row.description||'')+'</textarea></div>'+
-        '<div class="form-row"><label>Servis objednal *</label><input id="sr-ordered" value="'+esc(row.ordered_by||'')+'"></div>'+
+        '<div class="form-grid-2">'+
+          '<div class="form-row"><label>Servis objednal *</label><input id="sr-ordered" value="'+esc(row.ordered_by||'')+'"></div>'+
+          '<div class="form-row"><label>Telefon volajícího (párování s hovorem)</label><input id="sr-phone" type="tel" placeholder="+420…" value="'+esc(row.phone||'')+'"></div>'+
+        '</div>'+
         '<div class="form-row"><label>Odhad opravy (min) — pro časomíru servisáka</label><input id="sr-est" type="number" min="0" placeholder="např. 45" value="'+(row.est_repair_min!=null?row.est_repair_min:'')+'"></div>'+
         (isNew?'':(
           '<div class="form-grid-2">'+
@@ -1708,6 +1714,7 @@
       var delBtn=ov.querySelector('#sr-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat požadavek?')) return; fetchJSON(API+'/requests/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sr-save').addEventListener('click',function(){
         var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };
+        body.phone = val('sr-phone')||null;
         var estv=val('sr-est'); body.est_repair_min = estv!=='' ? (parseInt(estv,10)||0) : null;
         if(!body.problem){ alert('Vyplň Problém na stroji.'); return; }
         if(!body.ordered_by){ alert('Vyplň Servis objednal.'); return; }

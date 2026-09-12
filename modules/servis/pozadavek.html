@@ -127,6 +127,9 @@
 
     <label>Popis problému</label>
     <textarea id="f-desc" placeholder="Co se děje, kdy to začalo, co bliká…"></textarea>
+
+    <label>Telefon volajícího (pro spárování s hovorem)</label>
+    <input id="f-phone" type="tel" autocomplete="off" placeholder="+420…">
   </div>
 
   <!-- Odesláno -->
@@ -236,6 +239,7 @@
           task: $('f-task').value.trim() || null,
           description: $('f-desc').value.trim() || null,
           photo_url: photoUrl,
+          phone: ($('f-phone').value||'').trim() || null,
           ordered_by: ($('who-name').textContent || 'Přihlášený uživatel')
         };
         var rr=await api(API+'/requests',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
@@ -250,7 +254,7 @@
 
     // 5) Zadat další
     $('again').addEventListener('click', function(){
-      $('f-problem').value=''; $('f-problem').style.display='none'; var ms=$('f-machine-sel'); if(ms) ms.value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value='';
+      $('f-problem').value=''; $('f-problem').style.display='none'; var ms=$('f-machine-sel'); if(ms) ms.value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value=''; $('f-phone').value='';
       photoDataFile=null; $('f-photo').value=''; $('photo-preview').style.display='none'; $('photo-hint').style.display='';
       var b=$('submit'); b.disabled=false; b.textContent='Odeslat požadavek'; $('msg').textContent='';
       show('app');

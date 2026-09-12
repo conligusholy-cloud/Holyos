@@ -4742,6 +4742,7 @@ model ServiceRequest {
   description String?  @db.Text           // Popis problému
   photo_url   String?  @db.VarChar(500)   // Foto problému (odkaz)
   ordered_by  String   @db.VarChar(120)   // Servis objednal
+  phone       String?  @db.VarChar(40)     // telefon volajícího/zákazníka — pro párování s hovorem Infolinky
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
   resolution  String?  @db.Text           // způsob řešení

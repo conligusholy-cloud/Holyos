@@ -1104,6 +1104,7 @@ const requestSchema = z.object({
   description: z.string().optional().nullable(),
   photo_url: z.string().max(500).optional().nullable(),
   ordered_by: z.string().min(1).max(120),
+  phone: z.string().max(40).optional().nullable(),
   est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
@@ -1150,6 +1151,7 @@ const requestPatchSchema = z.object({
   description: z.string().optional().nullable(),
   photo_url: z.string().max(500).optional().nullable(),
   ordered_by: z.string().min(1).max(120).optional(),
+  phone: z.string().max(40).optional().nullable(),
   status: z.enum(['novy', 'reseni', 'vyreseno', 'zamitnuto']).optional(),
   assignee_id: z.number().int().optional().nullable(),
   resolution: z.string().optional().nullable(),
