@@ -1614,8 +1614,14 @@
       });
     }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
-    function erCell(est,real){
-      var e=(est!=null)?(est+''):'—', r=(real!=null)?(real+''):'—';
+    function erCell(est,real,since){
+      var e=(est!=null)?(est+''):'—';
+      // Živě běžící čas (od `since`) — tiká každou vteřinu; jinak statická reálná hodnota.
+      if(since){
+        var mNow=Math.max(0,Math.floor((Date.now()-new Date(since).getTime())/60000));
+        return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b class="sr-live" data-since="'+esc(since)+'"'+(est!=null?(' data-est="'+est+'"'):'')+' style="color:#22d3ee;">'+mNow+'</b> min ⏱</td>';
+      }
+      var r=(real!=null)?(real+''):'—';
       var over=(est!=null&&real!=null&&real>est);
       if(est==null&&real==null) return '<td style="color:var(--text2)">—</td>';
       return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(over?'#ef4444':'#22c55e')+'">'+r+'</b> min</td>';
@@ -1631,8 +1637,8 @@
           '<td>'+esc(r.ordered_by||'—')+'</td>'+
           '<td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
           '<td>'+esc(r.assignee_name||'—')+'</td>'+
-          erCell(r.est_travel_min, r.real_travel_min)+
-          erCell(r.est_work_min, r.real_work_min)+
+          erCell(r.est_travel_min, r.real_travel_min, r.travel_since)+
+          erCell(r.est_work_min, r.real_work_min, r.work_since)+
           '<td style="color:var(--text2)">'+esc(r.resolution||'—')+'</td>'+
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.created_at)+'</td>'+
           '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button> <button class="btn btn-sm btn-danger" data-del="'+r.id+'" title="Smazat požadavek">🗑</button></td>'+
@@ -1707,7 +1713,18 @@
       var f=document.getElementById('sr-filter-status'); if(f) f.addEventListener('change',load);
       var settBtn=document.getElementById('sr-settings-btn'); if(settBtn) settBtn.addEventListener('click',function(){ Promise.all([loadPeople(), loadSolvers()]).then(openSolverSettings).catch(openSolverSettings); });
       var loaded=false;
-      function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadSolvers(); loadPeople().then(load); }
+      function ensure(){ if(loaded) return; loaded=true; loadMachines(); loadSolvers(); loadPeople().then(load);
+        // Živé tikání běžících časů (cesta/práce) a průběžná obnova dat.
+        if(!window.__srLiveTick){ window.__srLiveTick=setInterval(function(){
+          document.querySelectorAll('#sr-tbody .sr-live').forEach(function(el){
+            var since=el.getAttribute('data-since'); if(!since) return;
+            var m=Math.max(0,Math.floor((Date.now()-new Date(since).getTime())/60000));
+            el.textContent=m; var est=parseFloat(el.getAttribute('data-est'));
+            el.style.color=(!isNaN(est)&&m>est)?'#ef4444':'#22d3ee';
+          });
+        }, 1000); }
+        if(!window.__srReload){ window.__srReload=setInterval(function(){ var sec=document.querySelector('.section-panel.active'); if(sec&&sec.id==='section-pozadavky') load(); }, 30000); }
+      }
       window.srEnsure=ensure; // volá se i při obnově sekce po refreshi
       // Odkaz na mobilní formulář (dle aktuální domény) + kopírování
       var shareUrl=location.origin+'/modules/servis/pozadavek.html';

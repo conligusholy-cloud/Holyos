@@ -835,17 +835,23 @@ async function _attachAssignees(rows) {
       const trips = await prisma.serviceTrip.findMany({
         where: { request_id: { in: rqIds } },
         orderBy: { started_at: 'asc' },
-        select: { request_id: true, started_at: true, repair_started_at: true, return_started_at: true, duration_min: true, est_repair_min: true },
+        select: { request_id: true, started_at: true, repair_started_at: true, repair_ended_at: true, return_started_at: true, ended_at: true, duration_min: true },
       });
       const diffMin = (a, b) => (a && b) ? Math.max(0, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)) : null;
+      const iso = (d) => d ? new Date(d).toISOString() : null;
       trips.forEach((t) => { tmap[t.request_id] = t; }); // poslední (nejnovější) přepíše
       Object.keys(tmap).forEach((k) => {
         const t = tmap[k];
+        // Cesta tam: reálně start výjezdu → zahájení opravy; běží, dokud technik nedojel (nezahájil opravu).
+        const travelRunning = !!t.started_at && !t.repair_started_at && !t.ended_at;
+        // Práce: reálně zahájení opravy → ukončení opravy; běží, dokud oprava neskončí.
+        const workRunning = !!t.repair_started_at && !t.repair_ended_at;
         tmap[k] = {
           est_travel_min: t.duration_min != null ? t.duration_min : null,
           real_travel_min: diffMin(t.started_at, t.repair_started_at),
-          est_work_min: t.est_repair_min != null ? t.est_repair_min : null,
-          real_work_min: diffMin(t.repair_started_at, t.return_started_at),
+          travel_since: travelRunning ? iso(t.started_at) : null,
+          real_work_min: diffMin(t.repair_started_at, t.repair_ended_at),
+          work_since: workRunning ? iso(t.repair_started_at) : null,
         };
       });
     }
@@ -853,10 +859,12 @@ async function _attachAssignees(rows) {
   return rows.map((r) => Object.assign({}, r, {
     assignee_name: r.assignee_id != null ? (map[r.assignee_id] || ('#' + r.assignee_id)) : null,
     created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,
-    est_travel_min: (tmap[r.id] && tmap[r.id].est_travel_min != null) ? tmap[r.id].est_travel_min : (r.est_travel_min != null ? r.est_travel_min : null),
+    est_travel_min: (tmap[r.id] && tmap[r.id].est_travel_min != null) ? tmap[r.id].est_travel_min : null,
     real_travel_min: tmap[r.id] ? tmap[r.id].real_travel_min : null,
-    est_work_min: (tmap[r.id] && tmap[r.id].est_work_min != null) ? tmap[r.id].est_work_min : (r.est_repair_min != null ? r.est_repair_min : null),
+    travel_since: tmap[r.id] ? tmap[r.id].travel_since : null,
+    est_work_min: r.est_repair_min != null ? r.est_repair_min : null,
     real_work_min: tmap[r.id] ? tmap[r.id].real_work_min : null,
+    work_since: tmap[r.id] ? tmap[r.id].work_since : null,
   }));
 }
 
