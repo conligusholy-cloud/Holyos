@@ -977,9 +977,9 @@ router.get('/trips/active', async (req, res, next) => {
       const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: rids } }, select: { id: true, problem: true, status: true, action: true, task: true, est_repair_min: true } });
       reqs.forEach((r) => { rmap[r.id] = r; });
     }
-    // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = cesta/práce).
-    // Vyřešené/zamítnuté/nové na mapě nechceme.
-    const activeTrips = trips.filter((t) => { const r = rmap[t.request_id]; return r && r.status === 'reseni'; });
+    // Živý přehled: jen úkoly, na kterých se aktuálně dělá (stav „reseni" = jízda k úkolu / oprava).
+    // Vyřešené/zamítnuté/nové ani „cesta domů" (návrat) na mapě nechceme.
+    const activeTrips = trips.filter((t) => { const r = rmap[t.request_id]; return r && r.status === 'reseni' && !t.return_started_at; });
     const out = activeTrips.map((t) => {
       var r = rmap[t.request_id] || {};
       return {
