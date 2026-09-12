@@ -1112,6 +1112,20 @@ router.post('/requests', async (req, res, next) => {
   try {
     const parsed = requestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    // KONTROLA DUPLICIT: na stejný stroj (pole „problem") už může být otevřený požadavek
+    // (novy/reseni) — víc zákazníků volá kvůli jedné závadě. Bez force nevytvoř duplikát,
+    // vrať existující, ať UI nabídne „přidat volajícího k existujícímu".
+    const force = !!(req.body && req.body.force);
+    if (!force && parsed.data.problem) {
+      const dup = await prisma.serviceRequest.findFirst({
+        where: { status: { in: ['novy', 'reseni'] }, problem: { equals: parsed.data.problem, mode: 'insensitive' } },
+        orderBy: { created_at: 'desc' },
+      });
+      if (dup) {
+        const [d2] = await _attachAssignees([dup]);
+        return res.status(200).json({ duplicate: true, existing: d2 });
+      }
+    }
     // Zadavatel = přihlášený uživatel (autoritativně z tokenu, ne z klienta).
     const row = await prisma.serviceRequest.create({
       data: Object.assign({}, parsed.data, { status: 'novy', created_by_user_id: (req.user && req.user.id) || null }),
@@ -1120,6 +1134,23 @@ router.post('/requests', async (req, res, next) => {
     res.status(201).json(row);
     // Na pozadí: AI odhad času opravy + odhad cesty ze základny ke stroji (nezdržuje odpověď).
     estimateForRequest(row).catch((e) => console.warn('[service] estimateForRequest:', e.message));
+  } catch (err) { next(err); }
+});
+
+// POST /api/service/requests/:id/report-caller { phone, note } — přidá dalšího volajícího
+// k JIŽ EXISTUJÍCÍMU požadavku (víc lidí volá kvůli jedné závadě) místo duplikátu.
+router.post('/requests/:id/report-caller', express.json(), async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const cur = await prisma.serviceRequest.findUnique({ where: { id }, select: { id: true, extra_callers: true, problem: true } });
+    if (!cur) return res.status(404).json({ error: 'Požadavek nenalezen' });
+    const phone = (req.body && req.body.phone ? String(req.body.phone) : '').trim().slice(0, 40);
+    const note = (req.body && req.body.note ? String(req.body.note) : '').trim().slice(0, 500);
+    const list = Array.isArray(cur.extra_callers) ? cur.extra_callers.slice() : [];
+    list.push({ phone: phone || null, note: note || null, at: new Date().toISOString() });
+    const row = await prisma.serviceRequest.update({ where: { id }, data: { extra_callers: list } });
+    await logReq(id, req, 'duplicate_call', 'Další volající k téže závadě' + (phone ? (' · ' + phone) : '') + (note ? (' · ' + note) : '') + ' (celkem hlášení: ' + (list.length + 1) + ')');
+    res.json({ ok: true, request: row, callers: list.length });
   } catch (err) { next(err); }
 });
 

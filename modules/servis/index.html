@@ -1719,8 +1719,21 @@
         if(!body.problem){ alert('Vyplň Problém na stroji.'); return; }
         if(!body.ordered_by){ alert('Vyplň Servis objednal.'); return; }
         if(!isNew){ body.status=val('sr-status'); var a=val('sr-assignee'); body.assignee_id=a?parseInt(a,10):null; body.resolution=val('sr-resolution'); }
-        var p=isNew?fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/requests/'+row.id,{method:'PATCH',body:JSON.stringify(body)});
-        p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+        if(!isNew){ fetchJSON(API+'/requests/'+row.id,{method:'PATCH',body:JSON.stringify(body)}).then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); }); return; }
+        // Nový požadavek — nejdřív kontrola duplicity (stejný stroj, otevřený požadavek).
+        fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}).then(function(res){
+          if(res&&res.duplicate&&res.existing){
+            var ex=res.existing, stav=(STL[ex.status]||[ex.status])[0];
+            var ok=confirm('⚠️ Na stroj „'+body.problem+'" už existuje otevřený požadavek #'+ex.id+' ('+stav+', řešitel '+(ex.assignee_name||'—')+').\n\n[OK] = Přidat tohoto volajícího k existujícímu (bez duplikátu)\n[Zrušit] = přesto vytvořit nový samostatný požadavek');
+            if(ok){
+              fetchJSON(API+'/requests/'+ex.id+'/report-caller',{method:'POST',body:JSON.stringify({phone:body.phone||null, note:'Další hlášení: '+(body.ordered_by||'')})}).then(function(){ alert('Přidáno k existujícímu požadavku #'+ex.id+'.'); close(); load(); }).catch(function(){ alert('Nepodařilo se přidat k existujícímu.'); });
+            } else {
+              body.force=true; fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}).then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+            }
+            return;
+          }
+          close(); load();
+        }).catch(function(){ alert('Uložení selhalo.'); });
       });
     }
     document.addEventListener('DOMContentLoaded',function(){
