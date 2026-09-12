@@ -346,14 +346,18 @@
           +'</div>'; }
         h+='<button class="btn btn-warn" style="margin-top:8px;" onclick="repairEnd('+t.id+','+id+')">⏹️ Ukončit vlastní opravu</button>';
       } else if(!t.return_started_at){
-        // Fáze 3: oprava hotová — souhrn + srovnání normočas vs skutečnost + volba cesty zpět
+        // Fáze 3: oprava hotová → POVINNĚ popsat řešení, pak volba domů / další úkol.
         var there=ms(t.started_at,t.repair_started_at), rep=ms(t.repair_started_at,t.repair_ended_at);
+        var curRes=(rows.filter(function(x){return x.id===id;})[0]||{}).resolution||'';
         h+='<div style="margin-top:8px;font-size:12px;color:var(--text2);">✅ Oprava hotová · 🚗 cesta tam '+fmtMin(there)+' · 🔧 oprava '+fmtMin(rep)+'</div>'
           +cmpNorm(rep, est)
+          +'<label style="display:block;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin-top:12px;">Jak jsi úkol vyřešil? <span style="color:var(--err);">*</span></label>'
+          +'<textarea id="fin-res-'+id+'" placeholder="Popiš přesně příčinu a co jsi udělal…" style="width:100%;">'+esc(curRes)+'</textarea>'
           +'<div class="acts" style="margin-top:8px;">'
-          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'domů\','+t.origin_lat+','+t.origin_lon+','+t.dest_lat+','+t.dest_lon+')">🏠 Cesta domů</button>'
-          +'<button class="btn btn-ghost" onclick="returnStart('+t.id+','+id+',\'další\','+t.origin_lat+','+t.origin_lon+','+t.dest_lat+','+t.dest_lon+')">➡️ Na další úkol</button>'
-          +'</div>';
+          +'<button class="btn btn-ok" onclick="finishHome('+t.id+','+id+','+t.dest_lat+','+t.dest_lon+')">🏠 Hotovo → jedu domů</button>'
+          +'<button class="btn btn-primary" onclick="finishNext('+t.id+','+id+')">➡️ Hotovo → na další úkol</button>'
+          +'</div>'
+          +'<div class="msg" id="fin-msg-'+id+'"></div>';
       } else {
         // Fáze 4: jede zpět — časomíra + ukončení
         h+='<div style="margin-top:8px;font-size:13px;">🏠 Cesta '+esc(t.return_destination||'zpět')+': <b class="live-timer" data-since="'+t.return_started_at+'">…</b></div>'
@@ -364,6 +368,41 @@
     }
     window.repairStart=function(tid,rid){ api(API+'/trips/'+tid+'/repair-start',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se zahájit opravu.'); }); };
     window.repairEnd=function(tid,rid){ api(API+'/trips/'+tid+'/repair-end',{method:'POST'}).then(function(){ loadTrips(rid, (rows.filter(function(x){return x.id===rid;})[0]||{}).est_repair_min); }).catch(function(){ alert('Nepodařilo se ukončit opravu.'); }); };
+    // Získá popis řešení z pole fáze 3 (povinné).
+    function finRes(rid){ var el=$('fin-res-'+rid); return el?el.value.trim():''; }
+    // Uloží řešení + nastaví stav vyřešeno.
+    function saveResAndDone(rid, res){ return api(API+'/requests/'+rid,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ resolution:res, status:'vyreseno' })}); }
+    // 🏠 Hotovo → jedu domů: uloží řešení, spočítá čas cesty domů (napočítá se k úkolu), úkol ukončí.
+    window.finishHome=function(tid,rid,dLat,dLon){
+      var res=finRes(rid), m=$('fin-msg-'+rid);
+      if(!res){ if(m){ m.className='msg err'; m.textContent='Nejdřív popiš, jak jsi úkol vyřešil.'; } var r=$('fin-res-'+rid); if(r) r.focus(); return; }
+      var home=prompt('Kam jedeš domů? (adresa / obec)',''); if(home===null) return;
+      if(m){ m.className='msg'; m.textContent='Ukládám a počítám cestu domů…'; }
+      // geokóduj domov + spočítej dobu jízdy ze stroje domů
+      function fin(retLat,retLon,dur){
+        var body={ destination:(home||'domů') }; if(retLat!=null){ body.return_lat=retLat; body.return_lon=retLon; } if(dur!=null) body.return_duration_min=dur;
+        saveResAndDone(rid,res)
+          .then(function(){ return api(API+'/trips/'+tid+'/return-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); })
+          .then(function(){ if(m){ m.className='msg ok'; m.textContent='✅ Úkol vyřešen, cesta domů započítána.'; } load(); })
+          .catch(function(){ if(m){ m.className='msg err'; m.textContent='Uložení selhalo.'; } });
+      }
+      if(home && home.trim()){
+        fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&accept-language=cs&countrycodes=cz&q='+encodeURIComponent(home))
+          .then(function(r){ return r.ok?r.json():[]; }).then(function(a){
+            if(a&&a[0]){ var la=parseFloat(a[0].lat), lo=parseFloat(a[0].lon); computeDur(dLat,dLon,la,lo).then(function(min){ fin(la,lo,min); }); }
+            else fin(null,null,null);
+          }).catch(function(){ fin(null,null,null); });
+      } else fin(null,null,null);
+    };
+    // ➡️ Hotovo → na další úkol: uloží řešení, úkol ukončí, zpět na seznam (další úkol jedeš z aktuální GPS).
+    window.finishNext=function(tid,rid){
+      var res=finRes(rid), m=$('fin-msg-'+rid);
+      if(!res){ if(m){ m.className='msg err'; m.textContent='Nejdřív popiš, jak jsi úkol vyřešil.'; } var r=$('fin-res-'+rid); if(r) r.focus(); return; }
+      if(m){ m.className='msg'; m.textContent='Ukládám…'; }
+      saveResAndDone(rid,res)
+        .then(function(){ if(m){ m.className='msg ok'; m.textContent='✅ Úkol vyřešen. Vyber další úkol.'; } load(); try{ window.scrollTo(0,0); }catch(_){}} )
+        .catch(function(){ if(m){ m.className='msg err'; m.textContent='Uložení selhalo.'; } });
+    };
     // Doba jízdy autem mezi dvěma body (min) přes OSRM; null při selhání.
     function computeDur(oLat,oLon,dLat,dLon){
       if(oLat==null||dLat==null) return Promise.resolve(null);
