@@ -1614,17 +1614,19 @@
       });
     }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
+    function fmtDurSec(sec){ sec=Math.max(0,Math.floor(sec)); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h?(h+':'+('0'+m).slice(-2)):m)+':'+('0'+s).slice(-2); }
     function erCell(est,real,since){
-      var e=(est!=null)?(est+''):'—';
-      // Živě běžící čas (od `since`) — tiká každou vteřinu; jinak statická reálná hodnota.
+      var e=(est!=null)?(est+' min'):'—';
+      // Živě běžící čas (od `since`) — tiká na vteřiny; jinak statická reálná hodnota.
       if(since){
-        var mNow=Math.max(0,Math.floor((Date.now()-new Date(since).getTime())/60000));
-        return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b class="sr-live" data-since="'+esc(since)+'"'+(est!=null?(' data-est="'+est+'"'):'')+' style="color:#22d3ee;">'+mNow+'</b> min ⏱</td>';
+        var el=Math.max(0,(Date.now()-new Date(since).getTime())/1000);
+        var over=(est!=null&&el>est*60);
+        return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b class="sr-live" data-since="'+esc(since)+'"'+(est!=null?(' data-est="'+est+'"'):'')+' style="color:'+(over?'#ef4444':'#22d3ee')+';">'+fmtDurSec(el)+'</b> ⏱</td>';
       }
-      var r=(real!=null)?(real+''):'—';
-      var over=(est!=null&&real!=null&&real>est);
+      var r=(real!=null)?(real+' min'):'—';
+      var overR=(est!=null&&real!=null&&real>est);
       if(est==null&&real==null) return '<td style="color:var(--text2)">—</td>';
-      return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(over?'#ef4444':'#22c55e')+'">'+r+'</b> min</td>';
+      return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(overR?'#ef4444':'#22c55e')+'">'+r+'</b></td>';
     }
     function render(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
@@ -1718,9 +1720,9 @@
         if(!window.__srLiveTick){ window.__srLiveTick=setInterval(function(){
           document.querySelectorAll('#sr-tbody .sr-live').forEach(function(el){
             var since=el.getAttribute('data-since'); if(!since) return;
-            var m=Math.max(0,Math.floor((Date.now()-new Date(since).getTime())/60000));
-            el.textContent=m; var est=parseFloat(el.getAttribute('data-est'));
-            el.style.color=(!isNaN(est)&&m>est)?'#ef4444':'#22d3ee';
+            var elapsed=Math.max(0,(Date.now()-new Date(since).getTime())/1000);
+            el.textContent=fmtDurSec(elapsed); var est=parseFloat(el.getAttribute('data-est'));
+            el.style.color=(!isNaN(est)&&elapsed>est*60)?'#ef4444':'#22d3ee';
           });
         }, 1000); }
         if(!window.__srReload){ window.__srReload=setInterval(function(){ var sec=document.querySelector('.section-panel.active'); if(sec&&sec.id==='section-pozadavky') load(); }, 30000); }
