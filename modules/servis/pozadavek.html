@@ -75,8 +75,8 @@
     <div class="who">👤 Zadává: <b id="who-name">—</b></div>
 
     <label>Problém na stroji <span class="req">*</span></label>
-    <input id="f-problem" list="machines" autocomplete="off" placeholder="Vyber stroj nebo napiš vlastní">
-    <datalist id="machines"></datalist>
+    <select id="f-machine-sel"><option value="">— vyber stroj v provozu —</option><option value="__other">✏️ Jiný / napsat ručně</option></select>
+    <input id="f-problem" autocomplete="off" placeholder="Napiš stroj / popis" style="margin-top:8px;display:none;">
 
     <label>Servisní úkon – prádlomat</label>
     <select id="f-action">
@@ -169,11 +169,20 @@
     // 2) Stroje v provozu → datalist
     function loadMachines(){
       api(API+'/machines?status=v_provozu').then(function(r){ return r.ok?r.json():[]; }).then(function(list){
-        var dl=$('machines'); dl.innerHTML=(Array.isArray(list)?list:[]).map(function(m){
-          return '<option value="'+String(m.name||'').replace(/"/g,'&quot;')+'">'+String(m.type||'').replace(/</g,'&lt;')+'</option>';
+        var sel=$('f-machine-sel'); if(!sel) return;
+        var opts=(Array.isArray(list)?list:[]).map(function(m){
+          var nm=String(m.name||'').replace(/</g,'&lt;'), ty=m.type?(' · '+String(m.type).replace(/</g,'&lt;')):'';
+          return '<option value="'+nm.replace(/"/g,'&quot;')+'">'+nm+ty+'</option>';
         }).join('');
+        sel.innerHTML='<option value="">— vyber stroj v provozu —</option>'+opts+'<option value="__other">✏️ Jiný / napsat ručně</option>';
       }).catch(function(){});
     }
+    // Výběr stroje ze seznamu → nastaví hodnotu; „Jiný" odkryje textové pole.
+    $('f-machine-sel').addEventListener('change', function(){
+      var v=this.value, inp=$('f-problem');
+      if(v==='__other'){ inp.style.display=''; inp.value=''; inp.focus(); }
+      else { inp.style.display='none'; inp.value=v; }
+    });
 
     // 3) Foto — otevře fotoaparát, náhled, klientská komprese
     $('photo-btn').addEventListener('click', function(){ $('f-photo').click(); });
@@ -241,7 +250,7 @@
 
     // 5) Zadat další
     $('again').addEventListener('click', function(){
-      $('f-problem').value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value='';
+      $('f-problem').value=''; $('f-problem').style.display='none'; var ms=$('f-machine-sel'); if(ms) ms.value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value='';
       photoDataFile=null; $('f-photo').value=''; $('photo-preview').style.display='none'; $('photo-hint').style.display='';
       var b=$('submit'); b.disabled=false; b.textContent='Odeslat požadavek'; $('msg').textContent='';
       show('app');
