@@ -108,10 +108,12 @@
     }
     // Přepis: jen kompletní (Whisper+Claude). Když ještě není, ukáže se tlačítko na jeho vytvoření.
     function transcriptBlock(c){
+      // Přepis na mobilní stránce operátorů NEDĚLÁME (šetříme AI náklady) — jen pokud
+      // už kompletní přepis existuje (vytvořený v HolyOS na kliknutí), jde si ho zobrazit.
       var full=(c.full_transcript||'').trim();
-      var trBtn = full ? '<button class="tr-toggle" onclick="var d=document.getElementById(\'tr-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">📄 Celý přepis</button>' : '';
-      var wBtn=c.audio_url?('<button class="tr-toggle" onclick="transcribeCall(\''+c.id+'\', this, '+(full?'true':'false')+')">'+(full?'🔁 Přepsat znovu':'📝 Přepsat celý hovor')+'</button>'):'';
-      return trBtn+wBtn+'<div class="transcript" id="tr-'+c.id+'">'+(full?fmtFull(full):'')+'</div>';
+      if(!full) return '';
+      var trBtn='<button class="tr-toggle" onclick="var d=document.getElementById(\'tr-'+c.id+'\');d.style.display=d.style.display===\'block\'?\'none\':\'block\'">📄 Celý přepis</button>';
+      return trBtn+'<div class="transcript" id="tr-'+c.id+'">'+fmtFull(full)+'</div>';
     }
     window.transcribeCall = function(id, btn, force){
       if(btn){ btn.disabled=true; btn.textContent='Přepisuji… (chvíli to trvá)'; }

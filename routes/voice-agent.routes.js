@@ -799,11 +799,11 @@ router.post('/recording', form, async (req, res) => {
           });
         } catch (e) { console.warn('[voice] recording pre-create:', e.message); }
       }
-      // Předstáhni nahrávku na disk (ať je hned k přehrání) a rovnou přepiš celý
-      // hovor přes Whisper (vč. části zákazník–technik). Obojí non-fatal.
+      // Předstáhni nahrávku na disk (ať je hned k přehrání). Kompletní Whisper přepis
+      // se NEDĚLÁ automaticky (šetříme AI náklady) — spustí se jen na kliknutí v HolyOS.
       try {
         const call = await prisma.voiceCall.findFirst({ where: { twilio_call_sid: sid }, select: { id: true, line: true } });
-        if (call) ensureLocalRecording(call.id, url, call.line).then(() => maybeTranscribeCall(call.id)).catch(() => {});
+        if (call) ensureLocalRecording(call.id, url, call.line).catch(() => {});
       } catch (_) { /* nevadí, stáhne se při prvním přehrání */ }
     }
   } catch (e) {
