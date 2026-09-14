@@ -3355,7 +3355,14 @@
     function printPreview() {
       const content = document.getElementById('gen-preview-content').innerHTML;
       const win = window.open('', '_blank');
-      win.document.write('<html><head><title>Tisk dokumentu</title><style>body{font-family:serif;padding:40px;line-height:1.8;color:#000;}h1,h2,h3{text-align:center;}hr{margin:20px 0;}@media print{body{padding:20mm;}}</style></head><body>' + content + '</body></html>');
+      if (!win) { alert('Povol vyskakovací okna pro tisk.'); return; }
+      var css = 'body{font-family:serif;padding:40px;line-height:1.8;color:#000;}'
+        + 'h1,h2,h3{text-align:center;}hr{margin:20px 0;}'
+        + '@media print{body{padding:20mm;}}';
+      var doc = '<html><head><meta charset="utf-8"><title>Tisk dokumentu</title>'
+        + '<style>' + css + '</style></head><body>' + content + '</body></' + 'html>';
+      win.document.open();
+      win.document.write(doc);
       win.document.close();
       win.print();
     }
