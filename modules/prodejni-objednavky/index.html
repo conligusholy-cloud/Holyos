@@ -625,6 +625,7 @@
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen zajímavé (horké) kontakty"><input type="checkbox" id="cmp-hot-only" onchange="loadCompounderLeads()"> ⭐ Jen zajímavé</label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty z FB reklamy"><input type="checkbox" id="cmp-ads-only" onchange="cmpApplyLeadFilters()"> 📢 Jen z reklamy</label>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer;" title="Zobrazit jen ty, co dnes chatovali se specialistou"><input type="checkbox" id="cmp-chat-today-only" onchange="cmpApplyLeadFilters()"> 💬 Dnes chatovali</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#ef4444;font-weight:600;white-space:nowrap;cursor:pointer;" title="Zobrazit jen kontakty, které jsou na black listu (neoslovovat)"><input type="checkbox" id="cmp-blacklist-only" onchange="loadCompounderLeads()"> ❗ Jen z black listu <span id="cmp-bl-count" style="display:none;background:rgba(239,68,68,0.18);color:#ef4444;border-radius:10px;padding:1px 8px;font-size:12px;"></span></label>
         <button class="btn" onclick="loadCompounderLeads()">↻ Obnovit</button>
         <button class="btn" onclick="openFbForms()" title="Napojení FB reklam — kontakty z formulářů se přiřadí obchodníkovi a označí kampaní">📢 FB reklamy</button>
         <button class="btn" style="display:none" onclick="cmpStartDiscountAll(this)" title="Spustí akční cenu (slevu) od dneška všem leadům, kteří už byli na portálu">🏷️ Akce všem</button>
@@ -3531,6 +3532,14 @@
         if ((document.getElementById('cmp-hot-only')||{}).checked) {
           leads = leads.filter(function(l){ return l.is_hot; });
           if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný zajímavý kontakt.</div>'; return; }
+        }
+        // Počítadlo kontaktů z black listu (z aktuálně načtené sady) + volitelný filtr „jen z black listu".
+        var _blCount = leads.filter(function(l){ return l.blacklisted; }).length;
+        var _blChip = document.getElementById('cmp-bl-count');
+        if (_blChip) { if (_blCount > 0) { _blChip.textContent = _blCount; _blChip.style.display = 'inline-block'; } else { _blChip.style.display = 'none'; } }
+        if ((document.getElementById('cmp-blacklist-only')||{}).checked) {
+          leads = leads.filter(function(l){ return l.blacklisted; });
+          if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádný kontakt z black listu v této sadě.</div>'; return; }
         }
         if (!leads.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Zatím žádné registrace.</div>'; return; }
         _cmpLeadsCache = leads;
