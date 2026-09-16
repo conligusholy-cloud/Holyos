@@ -6338,3 +6338,42 @@ model InboundSms {
   @@index([created_at])
   @@map("inbound_sms")
 }
+
+// =============================================================================
+// PŘEKLADAČ — živý „chatovací" překladač na mobilu (Web Speech + AI překlad)
+// =============================================================================
+// Jedna session = jeden rozhovor. Přepis běží zdarma v prohlížeči (Web Speech API),
+// každá dokončená promluva se přeloží přes AI do cílového jazyka a uloží jako řádek
+// (originál + překlad + řečník 1/2 dle pauz). Historie se dá později znovu otevřít.
+model TranslatorSession {
+  id              Int       @id @default(autoincrement())
+  title           String?   @db.VarChar(200)  // krátký popis (např. auto z prvního řádku)
+  target_lang     String    @db.VarChar(8)    // cílový jazyk (ISO), do kterého se překládá
+  source_lang     String?   @db.VarChar(8)    // převažující rozpoznaný zdrojový jazyk
+  created_by_user_id Int?
+  created_by_name String?   @db.VarChar(160)
+  lines_count     Int       @default(0)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  lines           TranslatorLine[]
+
+  @@index([created_at])
+  @@index([created_by_user_id])
+  @@map("translator_sessions")
+}
+
+model TranslatorLine {
+  id          Int      @id @default(autoincrement())
+  session_id  Int
+  speaker     String   @default("1") @db.VarChar(40) // "1" | "2" | případně jméno
+  original    String   @db.Text                       // co bylo slyšet v originále
+  translated  String?  @db.Text                       // překlad do cílového jazyka
+  source_lang String?  @db.VarChar(8)                 // rozpoznaný jazyk této promluvy
+  created_at  DateTime @default(now())
+
+  session     TranslatorSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id])
+  @@map("translator_lines")
+}

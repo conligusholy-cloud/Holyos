@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <title>Překladač — HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="/logo-holyos-icon.svg">
+  <style>
+    :root{
+      --bg:#0f1220; --surface:#1a1e33; --surface2:#232840; --border:#333a5c;
+      --text:#e7e9f5; --text2:#9aa0c4; --accent:#6c8cff; --accent2:#4ecdc4;
+      --s1:#2563eb; --s1bg:rgba(37,99,235,0.16); --s2:#0f9d7a; --s2bg:rgba(15,157,122,0.16);
+      --danger:#ef4444;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    html,body{height:100%;}
+    body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);
+      display:flex;flex-direction:column;min-height:100dvh;}
+    .hidden{display:none!important;}
+
+    header{background:linear-gradient(135deg,#2b2f4e,#1a1e33);padding:calc(env(safe-area-inset-top) + 12px) 14px 12px;
+      border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20;}
+    .htop{display:flex;align-items:center;gap:10px;}
+    .htop h1{font-size:17px;font-weight:700;flex:1;}
+    .htop .logo{width:26px;height:26px;}
+    .hist-btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+      border-radius:9px;padding:7px 11px;font-size:13px;cursor:pointer;}
+
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px;}
+    .field{flex:1;min-width:120px;}
+    .field label{display:block;font-size:11px;color:var(--text2);margin-bottom:3px;}
+    select{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);
+      border-radius:9px;padding:9px 8px;font-size:14px;outline:none;}
+    .hint{font-size:11px;color:var(--text2);margin-top:8px;line-height:1.4;}
+
+    .spkrow{display:flex;gap:8px;margin-top:9px;align-items:center;}
+    .spkrow .seg{display:flex;background:var(--surface2);border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+    .spkrow .seg button{background:transparent;border:none;color:var(--text2);padding:8px 12px;font-size:13px;cursor:pointer;}
+    .spkrow .seg button.on{background:var(--accent);color:#fff;font-weight:600;}
+    .spkrow .swap{margin-left:auto;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+      border-radius:9px;padding:8px 12px;font-size:13px;cursor:pointer;}
+    .spkrow .swap:disabled{opacity:.4;}
+
+    main{flex:1;overflow-y:auto;padding:14px 12px 8px;display:flex;flex-direction:column;gap:10px;}
+    .empty{margin:auto;text-align:center;color:var(--text2);max-width:280px;}
+    .empty .big{font-size:40px;margin-bottom:8px;}
+
+    .row{display:flex;flex-direction:column;max-width:86%;}
+    .row.s1{align-self:flex-start;align-items:flex-start;}
+    .row.s2{align-self:flex-end;align-items:flex-end;}
+    .who{font-size:11px;color:var(--text2);margin:0 4px 3px;display:flex;gap:6px;align-items:center;}
+    .bubble{border-radius:14px;padding:9px 12px;font-size:15.5px;line-height:1.35;word-break:break-word;}
+    .row.s1 .bubble{background:var(--s1bg);border:1px solid rgba(37,99,235,.35);border-bottom-left-radius:5px;}
+    .row.s2 .bubble{background:var(--s2bg);border:1px solid rgba(15,157,122,.35);border-bottom-right-radius:5px;}
+    .orig{font-size:12.5px;color:var(--text2);margin-top:5px;font-style:italic;}
+    .pending{opacity:.6;}
+    .time{font-size:10px;color:var(--text2);margin:2px 5px 0;}
+
+    .interim{align-self:center;color:var(--text2);font-style:italic;font-size:14px;padding:4px 10px;
+      background:var(--surface);border:1px dashed var(--border);border-radius:10px;max-width:92%;}
+
+    footer{padding:10px 14px calc(env(safe-area-inset-bottom) + 12px);border-top:1px solid var(--border);
+      background:var(--surface);position:sticky;bottom:0;z-index:20;}
+    .mic{width:100%;border:none;border-radius:13px;padding:15px;font-size:16px;font-weight:700;color:#fff;cursor:pointer;
+      background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;gap:9px;}
+    .mic.rec{background:linear-gradient(135deg,#ef4444,#dc2626);animation:pulse 1.3s infinite;}
+    @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5);}50%{box-shadow:0 0 0 10px rgba(239,68,68,0);}}
+    .status{text-align:center;font-size:12px;color:var(--text2);margin-top:7px;min-height:14px;}
+
+    /* Gate */
+    .gate{margin:auto;text-align:center;padding:40px 24px;}
+    .btn-primary{display:inline-block;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;
+      text-decoration:none;border-radius:10px;padding:12px 20px;font-weight:600;margin-top:14px;}
+
+    /* Historie overlay */
+    .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;flex-direction:column;}
+    .sheet .panel{margin-top:auto;background:var(--bg);border-top-left-radius:16px;border-top-right-radius:16px;
+      max-height:88dvh;display:flex;flex-direction:column;border-top:1px solid var(--border);}
+    .sheet .phead{display:flex;align-items:center;gap:10px;padding:14px;border-bottom:1px solid var(--border);}
+    .sheet .phead h2{font-size:16px;flex:1;}
+    .sheet .phead .x{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:7px 12px;cursor:pointer;}
+    .sheet .plist{overflow-y:auto;padding:8px 12px 16px;}
+    .hitem{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 12px;margin-bottom:9px;cursor:pointer;}
+    .hitem .t{font-size:14px;font-weight:600;margin-bottom:3px;}
+    .hitem .m{font-size:12px;color:var(--text2);}
+    .hitem .del{float:right;color:var(--danger);background:transparent;border:none;font-size:15px;cursor:pointer;padding:2px 4px;}
+    .backbar{padding:10px 12px;border-bottom:1px solid var(--border);}
+    .backbar button{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:8px 12px;cursor:pointer;}
+  </style>
+</head>
+<body>
+  <!-- LOADING -->
+  <div id="loading" class="gate">Načítám…</div>
+
+  <!-- GATE (nepřihlášen) -->
+  <div id="gate" class="gate hidden">
+    <div style="font-size:40px;">🔒</div>
+    <h1 style="font-size:20px;margin:10px 0;">Přihlas se do HOLYOS</h1>
+    <p style="color:var(--text2);">Překladač je jen pro přihlášené.</p>
+    <a id="gate-login" class="btn-primary" href="/login.html">Přihlásit se</a>
+  </div>
+
+  <!-- APP -->
+  <div id="app" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+    <header>
+      <div class="htop">
+        <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="22" fill="#6C5CE7"/><rect x="22" y="22" width="10" height="56" rx="4" fill="#fff"/><rect x="68" y="22" width="10" height="56" rx="4" fill="#fff"/><rect x="32" y="42" width="36" height="10" rx="4" fill="#fff"/></svg>
+        <h1>🗣️ Překladač</h1>
+        <button class="hist-btn" onclick="openHistory()">🕘 Historie</button>
+      </div>
+      <div class="controls">
+        <div class="field">
+          <label>Poslouchám (jazyk mluvčího)</label>
+          <select id="src-lang"></select>
+        </div>
+        <div class="field">
+          <label>Překládat do</label>
+          <select id="tgt-lang"></select>
+        </div>
+      </div>
+      <div class="spkrow">
+        <div class="seg" id="spk-seg">
+          <button data-n="1" onclick="setSpeakers(1)">1 mluvčí</button>
+          <button data-n="2" class="on" onclick="setSpeakers(2)">2 mluvčí</button>
+        </div>
+        <button class="swap" id="swap-btn" onclick="manualSwap()" title="Přepnout, kdo právě mluví">⇄ Přepnout mluvčího</button>
+      </div>
+      <div class="hint">Přepis běží zdarma přímo v telefonu (Android Chrome). Nastav jazyk, kterým mluvčí mluví, ať je přepis přesný — AI pak jazyk potvrdí a přeloží do tvého. Řečníci se střídají podle pauz.</div>
+    </header>
+
+    <main id="chat">
+      <div class="empty" id="empty">
+        <div class="big">🎙️</div>
+        <div>Zmáčkni <b>Start</b> a mluv. Co uslyším, budu ti hned překládat a ukazovat jako chat.</div>
+      </div>
+    </main>
+
+    <footer>
+      <button id="mic" class="mic" onclick="toggleRec()">🎙️ Start</button>
+      <div class="status" id="status"></div>
+    </footer>
+  </div>
+
+  <!-- HISTORIE -->
+  <div id="history" class="sheet hidden">
+    <div class="panel">
+      <div class="phead">
+        <h2 id="hist-title">🕘 Historie překladů</h2>
+        <button class="x" onclick="closeHistory()">Zavřít</button>
+      </div>
+      <div id="hist-back" class="backbar hidden"><button onclick="backToList()">← Zpět na seznam</button></div>
+      <div class="plist" id="hist-list"></div>
+    </div>
+  </div>
+
+  <script>
+    function $(id){return document.getElementById(id);}
+    function api(path,opts){return fetch(path,Object.assign({credentials:'include'},opts||{}));}
+    function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+    // Jazyky pro rozpoznávání (BCP-47) — value je i 2-písm. ISO pro překlad.
+    var SRC_LANGS=[
+      ['cs-CZ','Čeština'],['sk-SK','Slovenština'],['en-US','Angličtina'],['de-DE','Němčina'],
+      ['pl-PL','Polština'],['uk-UA','Ukrajinština'],['ru-RU','Ruština'],['es-ES','Španělština'],
+      ['it-IT','Italština'],['fr-FR','Francouzština'],['pt-PT','Portugalština'],['nl-NL','Nizozemština'],
+      ['hu-HU','Maďarština'],['ro-RO','Rumunština'],['hr-HR','Chorvatština'],['bg-BG','Bulharština'],
+      ['vi-VN','Vietnamština'],['tr-TR','Turečtina'],['ar-SA','Arabština'],['zh-CN','Čínština']
+    ];
+    var TGT_LANGS=[
+      ['cs','Čeština'],['sk','Slovenština'],['en','Angličtina'],['de','Němčina'],['pl','Polština'],
+      ['uk','Ukrajinština'],['ru','Ruština'],['es','Španělština'],['it','Italština'],['fr','Francouzština'],
+      ['pt','Portugalština'],['nl','Nizozemština'],['hu','Maďarština'],['ro','Rumunština'],['hr','Chorvatština'],
+      ['bg','Bulharština'],['vi','Vietnamština'],['tr','Turečtina'],['ar','Arabština'],['zh','Čínština']
+    ];
+
+    var state={
+      rec:null, recording:false, sessionId:null,
+      speakers:2, current:1, lastFinalAt:0, forceSwap:false,
+      PAUSE_MS:1600, restartWanted:false,
+    };
+
+    function fillSelects(){
+      var s=$('src-lang'), t=$('tgt-lang');
+      SRC_LANGS.forEach(function(l){var o=document.createElement('option');o.value=l[0];o.textContent=l[1];s.appendChild(o);});
+      TGT_LANGS.forEach(function(l){var o=document.createElement('option');o.value=l[0];o.textContent=l[1];t.appendChild(o);});
+      // Výchozí: poslouchá angličtinu (typicky cizinec), překládá do češtiny.
+      s.value='en-US'; t.value='cs';
+    }
+
+    function setSpeakers(n){
+      state.speakers=n; state.current=1;
+      Array.prototype.forEach.call(document.querySelectorAll('#spk-seg button'),function(b){b.classList.toggle('on',Number(b.dataset.n)===n);});
+      $('swap-btn').disabled=(n===1);
+    }
+    function manualSwap(){ if(state.speakers===2){ state.current=state.current===1?2:1; state.forceSwap=false; setStatus('Další promluva → mluvčí '+state.current); } }
+
+    function setStatus(t){ $('status').textContent=t||''; }
+
+    // ─── Web Speech ──────────────────────────────────────────────
+    function supported(){ return ('webkitSpeechRecognition' in window)||('SpeechRecognition' in window); }
+
+    async function ensureSession(){
+      if(state.sessionId) return state.sessionId;
+      var r=await api('/api/translator/sessions',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({targetLang:$('tgt-lang').value})});
+      if(!r.ok) throw new Error('Nepodařilo se založit rozhovor.');
+      var j=await r.json(); state.sessionId=j.id; return j.id;
+    }
+
+    function toggleRec(){ if(state.recording) stopRec(); else startRec(); }
+
+    function startRec(){
+      if(!supported()){ alert('Tento prohlížeč neumí rozpoznávání řeči. Otevři stránku v Chrome na Androidu.'); return; }
+      var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      var rec=new SR();
+      rec.lang=$('src-lang').value;
+      rec.continuous=true;
+      rec.interimResults=true;
+      rec.maxAlternatives=1;
+      rec.onresult=onResult;
+      rec.onerror=function(e){ if(e.error==='not-allowed'||e.error==='service-not-allowed'){ setStatus('❌ Přístup k mikrofonu zamítnut.'); stopRec(); } else if(e.error==='no-speech'){ /* ticho, jede dál */ } };
+      rec.onend=function(){ if(state.restartWanted){ try{rec.start();}catch(e){} } };
+      state.rec=rec; state.restartWanted=true; state.recording=true; state.lastFinalAt=0; state.current=1;
+      try{ rec.start(); }catch(e){}
+      $('mic').classList.add('rec'); $('mic').innerHTML='⏹️ Stop';
+      setStatus('Poslouchám…');
+      // založíme session hned (ať se stíhá ukládat)
+      ensureSession().catch(function(){ setStatus('⚠️ Ukládání se nepodařilo spustit, překlad ale poběží.'); });
+    }
+
+    function stopRec(){
+      state.restartWanted=false; state.recording=false;
+      if(state.rec){ try{state.rec.stop();}catch(e){} }
+      $('mic').classList.remove('rec'); $('mic').innerHTML='🎙️ Start';
+      setStatus(state.sessionId?'Uloženo do historie.':'');
+      clearInterim();
+    }
+
+    function onResult(ev){
+      var interim='';
+      for(var i=ev.resultIndex;i<ev.results.length;i++){
+        var res=ev.results[i];
+        if(res.isFinal){
+          var txt=(res[0]&&res[0].transcript||'').trim();
+          if(txt) handleFinal(txt);
+        } else {
+          interim+=res[0]&&res[0].transcript||'';
+        }
+      }
+      showInterim(interim);
+    }
+
+    function decideSpeaker(){
+      if(state.speakers===1) return '1';
+      var now=Date.now();
+      if(state.lastFinalAt && (now-state.lastFinalAt)>state.PAUSE_MS){ state.current=state.current===1?2:1; }
+      state.lastFinalAt=now;
+      return String(state.current);
+    }
+
+    async function handleFinal(text){
+      clearInterim();
+      var speaker=decideSpeaker();
+      var el=addBubble(speaker, text, null, true);
+      try{
+        var sid=await ensureSession();
+        var r=await api('/api/translator/sessions/'+sid+'/lines',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({original:text,speaker:speaker})});
+        var j=await r.json().catch(function(){return {};});
+        if(j && j.aiError){ fillBubble(el, '('+j.aiError+')', text, true); }
+        else { fillBubble(el, j.translated||'', text, false); }
+      }catch(e){ fillBubble(el, '(překlad se nepodařil)', text, true); }
+    }
+
+    // ─── Bubliny ─────────────────────────────────────────────────
+    function speakerName(s){ return s==='2'?'Mluvčí 2':'Mluvčí 1'; }
+    function nowTime(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
+
+    function addBubble(speaker, original, translated, pending){
+      var em=$('empty'); if(em) em.remove();
+      var row=document.createElement('div'); row.className='row s'+(speaker==='2'?'2':'1');
+      row.innerHTML='<div class="who">'+(speaker==='2'?'🟢':'🔵')+' '+esc(speakerName(speaker))+'</div>'+
+        '<div class="bubble'+(pending?' pending':'')+'"><span class="tr">'+(pending?'…':esc(translated||''))+'</span>'+
+        '<div class="orig">'+esc(original||'')+'</div></div>'+
+        '<div class="time">'+nowTime()+'</div>';
+      var chat=$('chat'); chat.appendChild(row); chat.scrollTop=chat.scrollHeight;
+      return row;
+    }
+    function fillBubble(row, translated, original, isNote){
+      if(!row) return;
+      var b=row.querySelector('.bubble'); if(b) b.classList.remove('pending');
+      var tr=row.querySelector('.tr'); if(tr){ tr.textContent=translated||''; if(isNote) tr.style.color='var(--text2)'; }
+      var or=row.querySelector('.orig'); if(or) or.textContent=original||'';
+      var chat=$('chat'); chat.scrollTop=chat.scrollHeight;
+    }
+
+    var _interimEl=null;
+    function showInterim(t){
+      if(!t){ clearInterim(); return; }
+      if(!_interimEl){ _interimEl=document.createElement('div'); _interimEl.className='interim'; $('chat').appendChild(_interimEl); }
+      _interimEl.textContent='🎙️ '+t;
+      $('chat').scrollTop=$('chat').scrollHeight;
+    }
+    function clearInterim(){ if(_interimEl){ _interimEl.remove(); _interimEl=null; } }
+
+    // ─── Historie ────────────────────────────────────────────────
+    async function openHistory(){
+      $('history').classList.remove('hidden'); backToList();
+      var list=$('hist-list'); list.innerHTML='<div style="color:var(--text2);padding:14px;">Načítám…</div>';
+      try{
+        var r=await api('/api/translator/sessions'); var arr=await r.json();
+        if(!arr.length){ list.innerHTML='<div style="color:var(--text2);padding:14px;">Zatím žádné uložené rozhovory.</div>'; return; }
+        list.innerHTML=arr.map(function(s){
+          var when=new Date(s.created_at).toLocaleString('cs-CZ');
+          return '<div class="hitem" onclick="openSession('+s.id+')">'+
+            '<button class="del" onclick="event.stopPropagation();delSession('+s.id+')" title="Smazat">🗑</button>'+
+            '<div class="t">'+esc(s.title||('Rozhovor #'+s.id))+'</div>'+
+            '<div class="m">'+when+' · '+(s.lines_count||0)+' promluv · do '+esc((s.target_lang||'').toUpperCase())+
+            (s.created_by_name?(' · '+esc(s.created_by_name)):'')+'</div></div>';
+        }).join('');
+      }catch(e){ list.innerHTML='<div style="color:var(--danger);padding:14px;">Chyba načítání.</div>'; }
+    }
+    function closeHistory(){ $('history').classList.add('hidden'); }
+    function backToList(){ $('hist-back').classList.add('hidden'); $('hist-title').textContent='🕘 Historie překladů'; openHistoryList=true; }
+    var openHistoryList=true;
+
+    async function openSession(id){
+      var list=$('hist-list'); list.innerHTML='<div style="color:var(--text2);padding:14px;">Načítám…</div>';
+      $('hist-back').classList.remove('hidden'); $('hist-title').textContent='Rozhovor #'+id;
+      try{
+        var r=await api('/api/translator/sessions/'+id); var s=await r.json();
+        var html=(s.lines||[]).map(function(l){
+          var sp=l.speaker==='2'?'2':'1';
+          return '<div class="row s'+sp+'" style="max-width:100%;">'+
+            '<div class="who">'+(sp==='2'?'🟢':'🔵')+' '+esc(speakerName(sp))+'</div>'+
+            '<div class="bubble"><span class="tr">'+esc(l.translated||'')+'</span>'+
+            '<div class="orig">'+esc(l.original||'')+'</div></div></div>';
+        }).join('');
+        list.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;">'+(html||'<div style="color:var(--text2);">Prázdné.</div>')+'</div>';
+      }catch(e){ list.innerHTML='<div style="color:var(--danger);padding:14px;">Chyba načítání.</div>'; }
+    }
+    async function delSession(id){
+      if(!confirm('Smazat tento rozhovor i s překladem?')) return;
+      try{ await api('/api/translator/sessions/'+id,{method:'DELETE'}); openHistory(); }catch(e){ alert('Smazání selhalo.'); }
+    }
+
+    // ─── Init + login gate ───────────────────────────────────────
+    function show(id){ ['loading','gate','app'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); }
+    api('/api/auth/me').then(function(r){
+      if(!r.ok){ var g=$('gate-login'); if(g) g.href='/login.html?redirect='+encodeURIComponent(location.pathname+location.search); show('gate'); return; }
+      fillSelects(); setSpeakers(2); show('app');
+      if(!supported()) setStatus('⚠️ Tento prohlížeč neumí rozpoznávání řeči — otevři v Chrome na Androidu.');
+    }).catch(function(){ show('gate'); });
+  </script>
+</body>
+</html>

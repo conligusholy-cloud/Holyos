@@ -29,6 +29,7 @@ function renderSidebar(activeModule) {
     { id: 'normovani-prehled',    name: 'Normy',               icon: '&#128202;', color: '#8b5cf6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
     { id: 'servis',               name: 'Servis',              icon: '&#128295;', color: '#22d3ee', active: true },
+    { id: 'prekladac',            name: 'Překladač',           icon: '&#128483;', color: '#4ecdc4', active: true },
     { id: 'spare-parts',          name: 'Spare Parts Shop',    icon: '&#128722;', color: '#f59e0b', active: true },
     { id: 'doprava',              name: 'Doprava',             icon: '&#128666;', color: '#a78bfa', active: true },
     { id: 'site-development',     name: 'Site Development',    icon: '&#128506;', color: '#14b8a6', active: true },
