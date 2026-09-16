@@ -824,7 +824,7 @@
       } catch (e) { console.error('Load people error:', e); }
     }
 
-    const TYPE_LABELS = { employee: 'Zaměstnanec', contact: 'Kontakt', customer: 'Zákazník', supplier: 'Dodavatel', external: 'Externí' };
+    const TYPE_LABELS = { employee: 'Zaměstnanec', former: 'Bývalý zaměstnanec', contact: 'Kontakt', customer: 'Zákazník', supplier: 'Dodavatel', external: 'Externí' };
     const CONTRACT_LABELS = { HPP: 'HPP', DPP: 'DPP', DPC: 'DPČ', 'OSVČ': 'OSVČ', other: 'Jiný' };
 
     function renderPeopleTable() {
@@ -941,6 +941,7 @@
                   <option value="customer" ${p.type === 'customer' ? 'selected' : ''}>Zákazník</option>
                   <option value="supplier" ${p.type === 'supplier' ? 'selected' : ''}>Dodavatel</option>
                   <option value="external" ${p.type === 'external' ? 'selected' : ''}>Externí spolupracovník</option>
+                  <option value="former" ${p.type === 'former' ? 'selected' : ''}>Bývalý zaměstnanec</option>
                 </select>
               </div>
               <div class="form-group">
@@ -2244,7 +2245,7 @@
         return;
       }
 
-      const activePeople = people.filter(p => p.active == 1);
+      const activePeople = people.filter(p => p.active == 1 && p.type !== 'former');
 
       const companiesMap = {};
       for (const r of roles) {

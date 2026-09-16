@@ -618,9 +618,28 @@ router.use(requireAuth);
 
 // ─── LIDÉ ──────────────────────────────────────────────────────────────────
 
+// Rekonciliace „bývalých zaměstnanců": komu skončil pracovní poměr (end_date v
+// minulosti) → type 'former'; komu se datum smaže/posune do budoucna a byl 'former'
+// → zpět 'employee'. Volá se před čtením lidí/statistik, ať je stav vždy aktuální
+// bez nutnosti cronu. (Požadavek #102)
+async function reconcileFormerEmployees() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  try {
+    await prisma.person.updateMany({
+      where: { type: 'employee', end_date: { lt: today } },
+      data: { type: 'former' },
+    });
+    await prisma.person.updateMany({
+      where: { type: 'former', OR: [{ end_date: null }, { end_date: { gte: today } }] },
+      data: { type: 'employee' },
+    });
+  } catch (e) { console.warn('[hr] reconcileFormerEmployees:', e.message); }
+}
+
 // GET /api/hr/people
 router.get('/people', async (req, res, next) => {
   try {
+    await reconcileFormerEmployees();
     const { search, type, department_id, active } = req.query;
 
     const where = {};
@@ -1520,10 +1539,12 @@ router.get('/stats', async (req, res, next) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    await reconcileFormerEmployees(); // bývalí (skončený poměr) → 'former', ať se nepočítají
 
     const [employees, contacts, departments, presentToday] = await Promise.all([
       prisma.person.count({ where: { active: true, type: 'employee' } }),
-      prisma.person.count({ where: { active: true, type: { not: 'employee' } } }),
+      // Bývalí zaměstnanci se nepočítají ani do „kontaktů".
+      prisma.person.count({ where: { active: true, type: { notIn: ['employee', 'former'] } } }),
       prisma.department.count(),
       prisma.attendance.count({ where: { date: today, clock_in: { not: null }, clock_out: null } }),
     ]);
