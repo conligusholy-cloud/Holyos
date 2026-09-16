@@ -53,8 +53,20 @@
     .interim{align-self:center;color:var(--text2);font-style:italic;font-size:14px;padding:4px 10px;
       background:var(--surface);border:1px dashed var(--border);border-radius:10px;max-width:92%;}
 
+    /* Moje odpověď (obousměrně) */
+    .row.s-me{align-self:flex-end;align-items:flex-end;}
+    .row.s-me .bubble{background:rgba(108,92,231,.18);border:1px solid rgba(108,92,231,.45);border-bottom-right-radius:5px;}
+
     footer{padding:10px 14px calc(env(safe-area-inset-bottom) + 12px);border-top:1px solid var(--border);
       background:var(--surface);position:sticky;bottom:0;z-index:20;}
+    .replybar{display:flex;gap:6px;align-items:center;margin-bottom:9px;}
+    .replybar select{width:auto;flex:0 0 auto;max-width:96px;padding:9px 6px;font-size:12px;}
+    .replybar input{flex:1;min-width:0;background:var(--surface2);color:var(--text);border:1px solid var(--border);
+      border-radius:9px;padding:10px 10px;font-size:14px;outline:none;}
+    .replybar button{flex:0 0 auto;border:1px solid var(--border);background:var(--surface2);color:var(--text);
+      border-radius:9px;padding:9px 11px;font-size:16px;cursor:pointer;}
+    .replybar button.rmic.on{background:var(--danger);color:#fff;border-color:var(--danger);}
+    .replybar button.send{background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;border:none;}
     .mic{width:100%;border:none;border-radius:13px;padding:15px;font-size:16px;font-weight:700;color:#fff;cursor:pointer;
       background:linear-gradient(135deg,#22c55e,#16a34a);display:flex;align-items:center;justify-content:center;gap:9px;}
     .mic.rec{background:linear-gradient(135deg,#ef4444,#dc2626);animation:pulse 1.3s infinite;}
@@ -105,7 +117,7 @@
           <select id="tgt-lang"></select>
         </div>
       </div>
-      <div class="hint">Dej Start a mluvte. AI sama pozná, jakým jazykem kdo mluví, přeloží to do tvého jazyka a rozliší jednotlivé mluvčí. Vše se ukládá do historie. (Chrome na Androidu.)</div>
+      <div class="hint">Dej Start a mluvte. AI sama pozná, jakým jazykem kdo mluví, přeloží to do tvého jazyka a rozliší mluvčí. Chceš odpovědět? Dole napiš nebo nadiktuj (🎤) odpověď — přeloží se do jeho jazyka a telefon ji nahlas přečte. Vše se ukládá do historie. (Chrome na Androidu.)</div>
     </header>
 
     <main id="chat">
@@ -116,6 +128,12 @@
     </main>
 
     <footer>
+      <div class="replybar">
+        <select id="reply-lang" title="Přeložit odpověď do jeho jazyka"></select>
+        <input id="reply-text" placeholder="Odpovědět druhému…" onkeydown="if(event.key==='Enter')replySend()">
+        <button id="reply-mic" class="rmic" onclick="replyDictate()" title="Nadiktovat odpověď">🎤</button>
+        <button id="reply-send" class="send" onclick="replySend()" title="Přeložit a přečíst nahlas">▶️</button>
+      </div>
       <button id="mic" class="mic" onclick="toggleRec()">🎙️ Start</button>
       <div class="status" id="status"></div>
     </footer>
@@ -144,12 +162,33 @@
       ['bg','Bulharština'],['vi','Vietnamština'],['tr','Turečtina'],['ar','Arabština'],['zh','Čínština']
     ];
 
-    var state={ recording:false, sessionId:null, ws:null, rec:null, stream:null, starting:false };
+    // ISO 2-písm. → BCP-47 (pro rozpoznávání i čtení nahlas)
+    var BCP={cs:'cs-CZ',sk:'sk-SK',en:'en-US',de:'de-DE',pl:'pl-PL',uk:'uk-UA',ru:'ru-RU',es:'es-ES',
+      it:'it-IT',fr:'fr-FR',pt:'pt-PT',nl:'nl-NL',hu:'hu-HU',ro:'ro-RO',hr:'hr-HR',bg:'bg-BG',
+      vi:'vi-VN',tr:'tr-TR',ar:'ar-SA',zh:'zh-CN'};
+    function bcp(iso){ var c=String(iso||'').toLowerCase().slice(0,2); return BCP[c]||c; }
+
+    var state={ recording:false, sessionId:null, ws:null, rec:null, stream:null, starting:false,
+      otherLang:null, replyRec:null, replyDictating:false };
 
     function fillSelects(){
-      var t=$('tgt-lang');
-      TGT_LANGS.forEach(function(l){var o=document.createElement('option');o.value=l[0];o.textContent=l[1];t.appendChild(o);});
+      var t=$('tgt-lang'), rl=$('reply-lang');
+      TGT_LANGS.forEach(function(l){
+        var o=document.createElement('option');o.value=l[0];o.textContent=l[1];t.appendChild(o);
+        var o2=document.createElement('option');o2.value=l[0];o2.textContent='→ '+l[1];rl.appendChild(o2);
+      });
       t.value='cs';
+      rl.value='en'; // předvyplní se automaticky jazykem druhého, jakmile promluví
+    }
+
+    // Když AI u druhého rozpozná jazyk, předvyplníme jazyk odpovědi (jen když je jiný než můj).
+    function noteOtherLang(iso){
+      if(!iso) return;
+      var c=String(iso).toLowerCase().slice(0,2);
+      if(c===$('tgt-lang').value) return; // to je můj jazyk, ne jazyk druhého
+      state.otherLang=c;
+      var rl=$('reply-lang');
+      if(rl && [].some.call(rl.options,function(o){return o.value===c;})) rl.value=c;
     }
     function setStatus(t){ $('status').textContent=t||''; }
 
@@ -254,14 +293,15 @@
           body:JSON.stringify({original:text,speaker:speaker})});
         var j=await r.json().catch(function(){return {};});
         if(j && j.aiError){ fillBubble(el,'('+j.aiError+')',text,true); }
-        else{ fillBubble(el, j.translated||'', text, false); }
+        else{ fillBubble(el, j.translated||'', text, false); noteOtherLang(j.sourceLang); }
       }catch(e){ fillBubble(el,'(překlad se nepodařil)',text,true); }
     }
 
     // ─── Bubliny ─────────────────────────────────────────────────
-    function speakerName(s){ return 'Mluvčí '+s; }
-    function speakerCls(s){ return (Number(s)%2===1)?'s1':'s2'; }
-    function speakerDot(s){ return (Number(s)%2===1)?'🔵':'🟢'; }
+    function isMe(s){ return s==='Já'||s==='me'; }
+    function speakerName(s){ return isMe(s)?'Já':('Mluvčí '+s); }
+    function speakerCls(s){ return isMe(s)?'s-me':((Number(s)%2===1)?'s1':'s2'); }
+    function speakerDot(s){ return isMe(s)?'🟣':((Number(s)%2===1)?'🔵':'🟢'); }
     function nowTime(){ var d=new Date(); return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }
 
     function addBubble(speaker, original, translated, pending){
@@ -290,6 +330,59 @@
       $('chat').scrollTop=$('chat').scrollHeight;
     }
     function clearInterim(){ if(_interimEl){ _interimEl.remove(); _interimEl=null; } }
+
+    // ─── Odpověď druhému (obousměrně) ────────────────────────────
+    function pauseMain(){ try{ if(state.rec && state.rec.state==='recording') state.rec.pause(); }catch(e){} }
+    function resumeMain(){ try{ if(state.rec && state.rec.state==='paused') state.rec.resume(); }catch(e){} }
+
+    function replyDictate(){
+      if(state.replyDictating){ if(state.replyRec){ try{state.replyRec.stop();}catch(e){} } return; }
+      var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+      if(!SR){ alert('Diktování v tomto prohlížeči nejde — napiš odpověď.'); return; }
+      pauseMain();
+      var rec=new SR();
+      rec.lang=bcp($('tgt-lang').value); // odpovídám svým jazykem
+      rec.interimResults=true; rec.continuous=false; rec.maxAlternatives=1;
+      rec.onresult=function(ev){ var t=''; for(var i=0;i<ev.results.length;i++){ t+=ev.results[i][0].transcript; } $('reply-text').value=t; };
+      rec.onerror=function(){};
+      rec.onend=function(){ state.replyDictating=false; $('reply-mic').classList.remove('on'); resumeMain(); };
+      state.replyRec=rec; state.replyDictating=true; $('reply-mic').classList.add('on');
+      setStatus('Diktuj odpověď…');
+      try{ rec.start(); }catch(e){ state.replyDictating=false; $('reply-mic').classList.remove('on'); resumeMain(); }
+    }
+
+    async function replySend(){
+      var text=($('reply-text').value||'').trim();
+      if(!text) return;
+      var toLang=$('reply-lang').value;
+      pauseMain();
+      var el=addBubble('Já', text, null, true);
+      $('reply-text').value='';
+      try{
+        var sid=await ensureSession();
+        var r=await api('/api/translator/sessions/'+sid+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({text:text,toLang:toLang})});
+        var j=await r.json().catch(function(){return {};});
+        if(j && j.aiError){ fillBubble(el,'('+j.aiError+')',text,true); resumeMain(); }
+        else { fillBubble(el, j.translated||'', text, false); speak(j.translated||'', toLang, resumeMain); }
+      }catch(e){ fillBubble(el,'(překlad se nepodařil)',text,true); resumeMain(); }
+    }
+
+    function speak(text, iso, done){
+      try{
+        if(!('speechSynthesis' in window) || !text){ if(done) done(); return; }
+        window.speechSynthesis.cancel();
+        var u=new SpeechSynthesisUtterance(text);
+        u.lang=bcp(iso);
+        var c=String(iso||'').toLowerCase().slice(0,2);
+        var vs=window.speechSynthesis.getVoices()||[];
+        var v=vs.filter(function(x){return x.lang && x.lang.toLowerCase().indexOf(c)===0;})[0];
+        if(v) u.voice=v;
+        u.onend=function(){ if(done) done(); };
+        u.onerror=function(){ if(done) done(); };
+        window.speechSynthesis.speak(u);
+      }catch(e){ if(done) done(); }
+    }
 
     // ─── Historie ────────────────────────────────────────────────
     async function openHistory(){

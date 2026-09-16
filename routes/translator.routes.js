@@ -146,6 +146,41 @@ router.post('/sessions/:id/lines', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/translator/sessions/:id/reply — moje odpověď přeložená do jazyka druhého
+const replySchema = z.object({
+  text: z.string().min(1).max(4000),
+  toLang: z.string().min(2).max(8),
+});
+router.post('/sessions/:id/reply', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const parsed = replySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data' });
+    const session = await prisma.translatorSession.findUnique({ where: { id }, select: { id: true } });
+    if (!session) return res.status(404).json({ error: 'Rozhovor nenalezen' });
+
+    let translated = null, sourceLang = null;
+    try {
+      const r = await translateText(parsed.data.text, parsed.data.toLang);
+      translated = r.translated; sourceLang = r.sourceLang;
+    } catch (e) {
+      return res.status(200).json({ translated: null, aiError: humanizeAiError(e) });
+    }
+    await prisma.translatorLine.create({
+      data: {
+        session_id: id,
+        speaker: 'Já',
+        original: parsed.data.text,
+        translated,
+        source_lang: sourceLang,
+      },
+    });
+    await prisma.translatorSession.update({ where: { id }, data: { lines_count: { increment: 1 } } });
+    res.status(201).json({ translated });
+  } catch (err) { next(err); }
+});
+
 // GET /api/translator/sessions — historie (nejnovější první)
 router.get('/sessions', async (req, res, next) => {
   try {
