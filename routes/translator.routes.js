@@ -55,6 +55,30 @@ async function translateText(text, targetLang) {
   };
 }
 
+// POST /api/translator/deepgram-token — krátkodobý token pro přímé streamování
+// z prohlížeče do Deepgramu (hlavní klíč DEEPGRAM_API_KEY zůstává na serveru).
+router.post('/deepgram-token', async (req, res, next) => {
+  try {
+    const key = process.env.DEEPGRAM_API_KEY;
+    if (!key) return res.status(400).json({ error: 'Chybí DEEPGRAM_API_KEY na serveru. Doplň ho do .env i do Railway proměnných.' });
+    const r = await fetch('https://api.deepgram.com/v1/auth/grant', {
+      method: 'POST',
+      headers: { 'Authorization': 'Token ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl_seconds: 60 }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[translator] Deepgram grant selhal:', r.status, data);
+      return res.status(502).json({ error: 'Deepgram token se nepodařilo získat (' + r.status + '). Zkontroluj DEEPGRAM_API_KEY.' });
+    }
+    // Deepgram vrací { access_token, expires_in }
+    res.json({ access_token: data.access_token, expires_in: data.expires_in });
+  } catch (err) {
+    console.error('[translator] deepgram-token chyba:', err.message);
+    res.status(500).json({ error: 'Chyba při získávání Deepgram tokenu.' });
+  }
+});
+
 // POST /api/translator/sessions — založí nový rozhovor
 const createSchema = z.object({
   targetLang: z.string().min(2).max(8),

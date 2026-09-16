@@ -804,10 +804,16 @@
   <div id="toast" class="toast"></div>
 
   <!-- Sidebar -->
-  <script type="module">
-    import { renderSidebar, initDate } from '../../dist/client/client/js/sidebar.js';
-    renderSidebar('pracovni-postup');
-    initDate();
+  <script>
+    // Živý sidebar.js (jako ostatní moduly) — injektuje i horní lištu s ikonami
+    // (reproduktor, chat, zvoneček, AI asistent, požadavek na úpravu).
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function() {
+      renderSidebar('pracovni-postup');
+      if (typeof initDate === 'function') initDate();
+    };
+    document.head.appendChild(s);
   </script>
 
   <script>
