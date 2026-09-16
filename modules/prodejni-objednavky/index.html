@@ -307,6 +307,7 @@
       <button type="button" class="tab-btn" data-tab="blacklist" onclick="switchTab('blacklist')">🚫 Black list</button>
       <button type="button" class="tab-btn" data-tab="bankovni-plan" onclick="switchTab('bankovni-plan')">🏦 Bankovní plán</button>
       <button type="button" class="tab-btn" data-tab="ai-asistent" onclick="switchTab('ai-asistent')">📞 AI telefonní asistent</button>
+      <button type="button" class="tab-btn" data-tab="prekladac" onclick="switchTab('prekladac')">🗣️ Překladač</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -395,6 +396,36 @@
     <!-- TAB: Bankovní Business Plan (vložený modul přes iframe) -->
     <div id="tab-bankovni-plan" style="display:none;">
       <iframe id="bp-frame" title="Bankovní Business Plan" style="width:100%; border:0; min-height:calc(100vh - 220px); display:block;"></iframe>
+    </div>
+
+    <!-- TAB: Překladač -->
+    <div id="tab-prekladac" style="display:none; padding:24px;">
+      <div style="max-width:640px;margin:0 auto;background:var(--surface,#1a1e33);border:1px solid var(--border,#333a5c);border-radius:14px;padding:24px;">
+        <h2 style="font-size:20px;margin-bottom:6px;">🗣️ Živý překladač</h2>
+        <p style="color:var(--text2,#9aa0c4);font-size:14px;line-height:1.5;margin-bottom:18px;">
+          Mobilní chatovací překladač — zvolíš jazyk mluvčího a jazyk, do kterého překládat, dáš Start a mluvíš.
+          Co uslyší, hned přeloží a ukáže jako chat (řečníci se rozlišují podle pauz). Vše se ukládá do historie.
+          Nejlépe funguje v Chrome na Androidu.
+        </p>
+        <a href="/modules/prekladac/index.html" target="_blank" rel="noopener"
+           style="display:inline-block;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;text-decoration:none;border-radius:10px;padding:13px 22px;font-weight:700;font-size:15px;">
+          ▶️ Otevřít překladač
+        </a>
+        <div style="margin-top:20px;">
+          <div style="font-size:12px;color:var(--text2,#9aa0c4);margin-bottom:6px;">Odkaz na telefon (zkopíruj nebo naskenuj QR):</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <input id="prekladac-url" type="text" readonly value="https://app.holyos.cz/modules/prekladac/index.html"
+                   style="flex:1;min-width:240px;background:var(--surface2,#232840);color:var(--text,#e7e9f5);border:1px solid var(--border,#333a5c);border-radius:8px;padding:10px 12px;font-size:13px;">
+            <button class="btn" onclick="prekladacCopy()" style="white-space:nowrap;">📋 Kopírovat</button>
+          </div>
+          <div style="margin-top:16px;">
+            <img alt="QR kód na překladač" width="150" height="150"
+                 style="background:#fff;padding:8px;border-radius:10px;"
+                 src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https%3A%2F%2Fapp.holyos.cz%2Fmodules%2Fprekladac%2Findex.html"
+                 onerror="this.style.display='none'">
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- TAB: AI telefonní asistent -->
@@ -6053,8 +6084,17 @@
       catch(e){ alert('Chyba: '+e.message); }
     }
 
+    function prekladacCopy() {
+      var el = document.getElementById('prekladac-url');
+      if (!el) return;
+      el.select();
+      try { navigator.clipboard.writeText(el.value); } catch (e) { document.execCommand('copy'); }
+      alert('Odkaz zkopírován: ' + el.value);
+    }
+    window.prekladacCopy = prekladacCopy;
+
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent'].forEach(function(t) {
+      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
