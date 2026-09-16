@@ -368,7 +368,23 @@
       }catch(e){ fillBubble(el,'(překlad se nepodařil)',text,true); resumeMain(); }
     }
 
-    function speak(text, iso, done){
+    // Přirozený hlas: nejdřív server (OpenAI TTS), při chybě hlas prohlížeče.
+    async function speak(text, iso, done){
+      if(!text){ if(done) done(); return; }
+      try{
+        var r=await api('/api/translator/tts',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({text:text, lang:iso})});
+        if(!r.ok) throw new Error('tts '+r.status);
+        var blob=await r.blob();
+        var url=URL.createObjectURL(blob);
+        var a=new Audio(url);
+        a.onended=function(){ URL.revokeObjectURL(url); if(done) done(); };
+        a.onerror=function(){ URL.revokeObjectURL(url); browserSpeak(text,iso,done); };
+        try{ await a.play(); }catch(e){ URL.revokeObjectURL(url); browserSpeak(text,iso,done); }
+      }catch(e){ browserSpeak(text,iso,done); }
+    }
+
+    function browserSpeak(text, iso, done){
       try{
         if(!('speechSynthesis' in window) || !text){ if(done) done(); return; }
         window.speechSynthesis.cancel();

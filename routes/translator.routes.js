@@ -79,6 +79,36 @@ router.post('/deepgram-token', async (req, res, next) => {
   }
 });
 
+// POST /api/translator/tts — přirozený hlas (OpenAI TTS) pro čtení odpovědi nahlas.
+// Vrací audio/mpeg. Když není OPENAI_API_KEY, klient si přečte hlasem prohlížeče.
+const ttsSchema = z.object({ text: z.string().min(1).max(2000), lang: z.string().max(8).optional() });
+router.post('/tts', async (req, res, next) => {
+  try {
+    const parsed = ttsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data' });
+    if (!process.env.OPENAI_API_KEY) return res.status(501).json({ error: 'OPENAI_API_KEY chybí — použije se hlas prohlížeče.' });
+    const model = process.env.TRANSLATOR_TTS_MODEL || 'gpt-4o-mini-tts';
+    const voice = process.env.TRANSLATOR_TTS_VOICE || 'nova';
+    const r = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + process.env.OPENAI_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, voice, input: parsed.data.text, response_format: 'mp3' }),
+    });
+    if (!r.ok) {
+      const errTxt = await r.text().catch(() => '');
+      console.error('[translator] OpenAI TTS selhal:', r.status, errTxt.slice(0, 200));
+      return res.status(502).json({ error: 'TTS se nepodařilo (' + r.status + ').' });
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'no-store');
+    res.send(buf);
+  } catch (err) {
+    console.error('[translator] tts chyba:', err.message);
+    res.status(500).json({ error: 'Chyba TTS.' });
+  }
+});
+
 // POST /api/translator/sessions — založí nový rozhovor
 const createSchema = z.object({
   targetLang: z.string().min(2).max(8),
