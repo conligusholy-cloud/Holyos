@@ -1661,7 +1661,9 @@
 
         // Předej linked_product_id z API (spolehlivé propojení materiál → výrobek)
         const lpId = m.linked_product_id || '';
-        return '<div class="ss-item" onmousedown="selectSearchItem(this, ' + m.id + ', \'' + esc(m.name).replace(/'/g, "\\'") + '\', \'' + esc(m.code).replace(/'/g, "\\'") + '\', \'' + esc(m.unit || 'ks') + '\', \'' + lpId + '\')">' +
+        // Data v data-* atributech (bezpečně escapované) — vyhne se rozbití inline
+        // handleru u názvů s uvozovkami/apostrofy (BUG #96).
+        return '<div class="ss-item" data-id="' + m.id + '" data-name="' + attr(m.name) + '" data-code="' + attr(m.code) + '" data-unit="' + attr(m.unit || 'ks') + '" data-lp="' + attr(lpId) + '" onmousedown="selectSearchItemEl(this)">' +
           '<span class="ss-name">' + esc(m.name) + '</span>' +
           '<span class="ss-code">' + esc(m.code) + '</span>' +
           '<span class="ss-type ' + typeCls + '">' + typeLabel + '</span>' +
@@ -1670,6 +1672,10 @@
       }).join('');
     }
 
+    // Přečte data z položky nabídky (data-* atributy) a vybere materiál.
+    function selectSearchItemEl(el) {
+      selectSearchItem(el, parseInt(el.dataset.id, 10), el.dataset.name || '', el.dataset.code || '', el.dataset.unit || 'ks', el.dataset.lp || '');
+    }
     function selectSearchItem(item, id, name, code, unit, linkedProductId) {
       const ss = item.closest('.search-select');
       const row = ss.closest('.mat-row');
@@ -2165,6 +2171,14 @@
       const d = document.createElement('div');
       d.textContent = s;
       return d.innerHTML;
+    }
+    // Escape pro HODNOTU HTML atributu (na rozdíl od esc() escapuje i uvozovky).
+    // BUG #96: názvy dílů s uvozovkami (3/4") rozbíjely inline onmousedown atribut,
+    // takže klik na položku v nabídce nevložil materiál a rozpiska se nedala uložit.
+    function attr(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     // === Požadavek #83: označení dílu (BS, NA, ISO…) = kód zboží ===
