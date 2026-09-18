@@ -3336,6 +3336,16 @@ router.post('/service-subscriptions/:id/bill-now', requireAuth, async (req, res,
   }
 });
 
+// GET /leads/:id — základní údaje leadu pro předvyplnění průvodce objednávkou.
+router.get('/leads/:id(\\d+)', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, phone: true, company: true } });
+    if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
+    res.json(lead);
+  } catch (err) { next(err); }
+});
+
 router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
