@@ -2037,18 +2037,54 @@
 
     // ─── Podpis objednávky ───────────────────────────────────────────────────
     (function(){
-      var sig=document.getElementById('ow-sig'), ctx=sig?sig.getContext('2d'):null, drawing=false, has=false, last=null;
-      function fit(){ if(!sig)return; var w=sig.parentNode.clientWidth-2; sig.width=w; sig.height=170; ctx.lineWidth=2.4; ctx.lineCap='round'; ctx.strokeStyle='#14141a'; }
-      function pos(e){ var r=sig.getBoundingClientRect(), t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; }
-      function start(e){ e.preventDefault(); drawing=true; last=pos(e); }
-      function move(e){ if(!drawing)return; e.preventDefault(); var p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; has=true; var h=document.getElementById('ow-sig-hint'); if(h)h.style.display='none'; }
-      function end(){ drawing=false; }
-      if(sig){ sig.addEventListener('mousedown',start); sig.addEventListener('mousemove',move); window.addEventListener('mouseup',end); sig.addEventListener('touchstart',start,{passive:false}); sig.addEventListener('touchmove',move,{passive:false}); sig.addEventListener('touchend',end); }
-      window.owSigClear=function(){ if(ctx){ctx.clearRect(0,0,sig.width,sig.height);} has=false; var h=document.getElementById('ow-sig-hint'); if(h)h.style.display=''; };
+      // Canvas #ow-sig je v DOM až ZA tímto skriptem, proto inicializujeme líně
+      // (až při prvním otevření okna) a se správným škálováním pro dotyk i retina.
+      var sig=null, ctx=null, drawing=false, has=false, last=null, wired=false;
+      function fit(){
+        if(!sig||!ctx) return;
+        var r=sig.getBoundingClientRect();
+        var dpr=window.devicePixelRatio||1;
+        var w=Math.max(1, Math.round((r.width||sig.parentNode.clientWidth||300)));
+        var h=170;
+        sig.width=Math.round(w*dpr); sig.height=Math.round(h*dpr);
+        sig.style.height=h+'px';
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.lineWidth=2.6; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#14141a';
+      }
+      function pos(e){
+        var r=sig.getBoundingClientRect();
+        var t=(e.touches&&e.touches[0])?e.touches[0]:(e.changedTouches&&e.changedTouches[0])?e.changedTouches[0]:e;
+        return { x:(t.clientX-r.left), y:(t.clientY-r.top) };
+      }
+      function start(e){ if(!sig)return; e.preventDefault(); drawing=true; last=pos(e); }
+      function move(e){ if(!drawing||!ctx)return; e.preventDefault(); var p=pos(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; has=true; var hh=document.getElementById('ow-sig-hint'); if(hh)hh.style.display='none'; }
+      function end(e){ if(drawing&&e){e.preventDefault&&e.preventDefault();} drawing=false; }
+      function wire(){
+        if(wired) return;
+        sig=document.getElementById('ow-sig'); if(!sig) return;
+        ctx=sig.getContext('2d');
+        // Pointer Events pokryjí myš i dotyk jednotně; fallback na touch/mouse.
+        if(window.PointerEvent){
+          sig.addEventListener('pointerdown',function(e){ sig.setPointerCapture&&sig.setPointerCapture(e.pointerId); start(e); });
+          sig.addEventListener('pointermove',move);
+          sig.addEventListener('pointerup',end);
+          sig.addEventListener('pointercancel',end);
+        } else {
+          sig.addEventListener('mousedown',start); window.addEventListener('mousemove',move); window.addEventListener('mouseup',end);
+          sig.addEventListener('touchstart',start,{passive:false}); sig.addEventListener('touchmove',move,{passive:false}); sig.addEventListener('touchend',end,{passive:false});
+        }
+        wired=true;
+      }
+      window.owSigClear=function(){ if(ctx){ctx.clearRect(0,0,sig.width,sig.height);} has=false; var hh=document.getElementById('ow-sig-hint'); if(hh)hh.style.display=''; };
       window.openSig=function(){
         var errs=(typeof validateConfiguration==='function')?validateConfiguration():[];
         if(errs&&errs.length){ alert(t('fill_required')+'\n\n'+errs.join('\n')); return; }
-        document.getElementById('ow-sig-ovl').style.display='flex'; setTimeout(fit,30);
+        document.getElementById('ow-sig-ovl').style.display='flex';
+        wire();
+        has=false; drawing=false;
+        // Dvojí fit (po zobrazení a po dokončení animace panelu) — jinak by canvas mohl mít nulovou šířku.
+        setTimeout(function(){ fit(); window.owSigClear(); }, 60);
+        setTimeout(fit, 350);
         var d=new Date(); document.getElementById('ow-sig-date').textContent=d.toLocaleDateString('cs-CZ')+' '+d.toLocaleTimeString('cs-CZ').slice(0,5);
       };
       window.closeSig=function(){ document.getElementById('ow-sig-ovl').style.display='none'; };
