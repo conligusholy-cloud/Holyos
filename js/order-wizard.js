@@ -83,6 +83,9 @@
   function variants(ver) {
     var seen = {}, out = [];
     st.items.forEach(function (it) { if ((it.model_version || '—') === ver) { var v = it.model_variant || '—'; if (!seen[v]) { seen[v] = 1; out.push(v); } } });
+    // Pořadí variant (výška): H2 = standard první (výchozí), H1 = snížený druhý.
+    var ORDER = ['H2', 'H1'];
+    out.sort(function (a, b) { var ia = ORDER.indexOf(a), ib = ORDER.indexOf(b); if (ia < 0) ia = 99; if (ib < 0) ib = 99; return ia - ib; });
     return out;
   }
   function machinesFor(ver, va) {
