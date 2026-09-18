@@ -9889,8 +9889,9 @@
         var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
         var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
         var rowStyle = it.product ? '' : 'background:rgba(239,68,68,0.08);';
+        var typeCode = (it.model_version || '') + (it.model_variant || '') + (it.machine_code || '');
         var h = '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
-        h += '<td style="font-weight:700;color:#eab308;">' + (it.machine_code ? esc(it.machine_code) : '<span style="color:var(--text2)">—</span>') + '</td>';
+        h += '<td style="font-weight:700;color:#eab308;letter-spacing:0.5px;">' + (typeCode ? esc(typeCode) : '<span style="color:var(--text2)">—</span>') + '</td>';
         h += '<td class="person-name">' + esc(it.name_cs) + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_czk, 'Kč') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_eur, '€') + '</td>';
@@ -9906,7 +9907,7 @@
       }
       function tableFor(rows) {
         var h = '<div style="overflow-x:auto;margin:0 0 6px 0;"><table class="data-table"><thead><tr>' +
-          '<th>Stroj</th><th>Název</th>' +
+          '<th>Typ stroje</th><th>Název</th>' +
           '<th style="text-align:right" title="Maloobchodní">Cena CZK</th>' +
           '<th style="text-align:right" title="Maloobchodní">Cena EUR</th>' +
           '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 CZK</th>' +
@@ -9973,9 +9974,11 @@
                 '<div class="form-group"><label>Varianta</label><select name="model_variant">' +
                   [['', '—'], ['S', 'S — standard'], ['G', 'G — snížený do garáže']].map(function(o) { return '<option value="' + o[0] + '"' + ((item.model_variant || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
                 '</select></div>' +
-                '<div class="form-group full"><label>Stroj (např. 8W18D, 18W18D18D)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(item.machine_code || '') + '" placeholder="8W18D" maxlength="60"><datalist id="pl-machine-list">' +
+                '<div class="form-group full"><label>Rozměr / typ stroje (např. W18D18)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(item.machine_code || '') + '" placeholder="W18D18" maxlength="60"><datalist id="pl-machine-list">' +
                   (Array.isArray(window._plMachineCodes) ? window._plMachineCodes.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') : '') +
-                '</datalist></div>' +
+                '</datalist>' +
+                  '<div style="margin-top:6px;font-size:11px;color:var(--text2);">Výsledný <b>typ stroje</b> ve sloupci vznikne složením: Verze + Varianta + tohle pole (např. V2 + S + W18D18 = <b style="color:#eab308;">V2SW18D18</b>).</div>' +
+                '</div>' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prádlomat V3 S 8W18D"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Laundromat V3 S 8W18D"></div>' +
                 '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
