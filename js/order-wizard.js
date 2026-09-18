@@ -22,11 +22,11 @@
     if (document.getElementById('ow-css')) return;
     var s = document.createElement('style'); s.id = 'ow-css';
     s.textContent = [
-      '.ow-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:flex-end;justify-content:center;}',
-      '@media(min-width:640px){.ow-ov{align-items:center;}}',
-      '.ow-card{background:#1a1e33;color:#e7e9f5;width:100%;max-width:420px;max-height:94vh;display:flex;flex-direction:column;border:1px solid #333a5c;border-radius:16px 16px 0 0;font-family:"Segoe UI",system-ui,sans-serif;}',
-      '@media(min-width:640px){.ow-card{border-radius:16px;}}',
-      '.ow-hd{padding:14px 16px 10px;border-bottom:1px solid #333a5c;}',
+      '.ow-ov{position:fixed;inset:0;background:#0f1220;z-index:100000;display:flex;align-items:stretch;justify-content:center;}',
+      '@media(min-width:640px){.ow-ov{align-items:center;background:rgba(0,0,0,.6);}}',
+      '.ow-card{background:#1a1e33;color:#e7e9f5;width:100%;max-width:100%;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;display:flex;flex-direction:column;border:none;border-radius:0;font-family:"Segoe UI",system-ui,sans-serif;}',
+      '@media(min-width:640px){.ow-card{max-width:520px;height:auto;max-height:92vh;border:1px solid #333a5c;border-radius:16px;}}',
+      '.ow-hd{padding:calc(14px + env(safe-area-inset-top,0px)) 16px 10px;border-bottom:1px solid #333a5c;}',
       '.ow-hd .r{display:flex;align-items:center;gap:8px;}',
       '.ow-hd h3{font-size:16px;font-weight:600;flex:1;margin:0;}',
       '.ow-x{background:#232840;border:1px solid #333a5c;color:#e7e9f5;border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px;}',
@@ -34,7 +34,7 @@
       '.ow-bar{height:4px;background:#0f1220;border-radius:999px;margin-top:10px;overflow:hidden;}',
       '.ow-bar>div{height:100%;background:#6c8cff;border-radius:999px;transition:width .2s;}',
       '.ow-bd{padding:16px;overflow-y:auto;flex:1;}',
-      '.ow-ft{display:flex;gap:10px;padding:12px 16px 16px;border-top:1px solid #333a5c;}',
+      '.ow-ft{display:flex;gap:10px;padding:12px 16px calc(16px + env(safe-area-inset-bottom,0px));border-top:1px solid #333a5c;}',
       '.ow-bd label{display:block;font-size:13px;color:#9aa0c4;margin-bottom:6px;}',
       '.ow-bd .sm{font-size:12px;color:#6b7099;}',
       '.ow-in{width:100%;background:#232840;color:#e7e9f5;border:1px solid #333a5c;border-radius:9px;padding:10px 12px;font-size:14px;outline:none;box-sizing:border-box;}',
