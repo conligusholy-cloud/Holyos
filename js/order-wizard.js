@@ -156,6 +156,23 @@
     ];
   }
 
+  // Telefon vždy s předvolbou: +420 000 000 000 (národní část po trojicích)
+  function fmtPhone(raw) {
+    if (raw == null) return '';
+    var s = String(raw).trim();
+    if (!s) return '';
+    var plus = s.charAt(0) === '+';
+    var d = s.replace(/\D/g, '');
+    if (!d) return '';
+    var cc, nat;
+    if (d.length > 9) { cc = d.slice(0, d.length - 9); nat = d.slice(d.length - 9); }
+    else { cc = '420'; nat = d; }               // bez/špatná předvolba → doplň českou +420
+    var groups = [];
+    for (var i = 0; i < nat.length; i += 3) groups.push(nat.slice(i, i + 3));
+    return '+' + cc + (groups.length ? ' ' + groups.join(' ') : '');
+  }
+  function leadHasContact(l) { l = l || {}; return !!(l.name || l.email || l.phone); }
+
   function renderCustomer() {
     var l = st.lead || {};
     return ''
@@ -166,9 +183,12 @@
       + '<button data-v="foreign" class="' + (foreign() ? 'on' : '') + '">Zahraniční</button></div></div>'
       + (foreign() ? renderForeign() : renderCz())
       + '<div style="border-top:1px solid #333a5c;margin-top:8px;padding-top:12px;">'
-      + '<label>Odpovědná osoba</label><input class="ow-in ow-mb" id="ow-resp" value="' + esc(st.resp || l.name || '') + '">'
+      + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px;"><label style="margin:0;">Odpovědná osoba</label>'
+      + (leadHasContact(l) ? '<button class="ow-btn" id="ow-fromlead" type="button" style="padding:4px 10px;font-size:12px;white-space:nowrap;">↧ Načíst z leadu</button>' : '')
+      + '</div>'
+      + '<input class="ow-in ow-mb" id="ow-resp" value="' + esc(st.resp || l.name || '') + '">'
       + '<div class="ow-row"><div><label>E-mail</label><input class="ow-in" id="ow-email" value="' + esc(st.email || l.email || '') + '"></div>'
-      + '<div><label>Telefon</label><input class="ow-in" id="ow-phone" value="' + esc(st.phone || l.phone || '') + '"></div></div></div>';
+      + '<div><label>Telefon</label><input class="ow-in" id="ow-phone" placeholder="+420 000 000 000" value="' + esc(fmtPhone(st.phone || l.phone || '')) + '"></div></div></div>';
   }
   function renderCz() {
     return '<div id="ow-cz">'
@@ -355,7 +375,7 @@
     function v(id) { var e = document.getElementById(id); return e ? e.value : undefined; }
     if (v('ow-resp') !== undefined) st.resp = v('ow-resp').trim();
     if (v('ow-email') !== undefined) st.email = v('ow-email').trim();
-    if (v('ow-phone') !== undefined) st.phone = v('ow-phone').trim();
+    if (v('ow-phone') !== undefined) st.phone = fmtPhone(v('ow-phone'));
     if (v('ow-name') !== undefined) st.name = v('ow-name').trim();
     if (v('ow-ico') !== undefined) st.ico = v('ow-ico').trim();
     if (v('ow-dic') !== undefined) st.dic = v('ow-dic').trim();
@@ -404,6 +424,16 @@
   function bindStep() {
     // Odběratel
     bindSeg('origin', function (v) { collect(); st.origin = (v === 'foreign') ? 'foreign' : 'cz'; paint(); });
+    var fromLead = document.getElementById('ow-fromlead');
+    if (fromLead) fromLead.addEventListener('click', function () {
+      collect(); var l = st.lead || {};
+      st.resp = l.name || st.resp || '';
+      st.email = l.email || st.email || '';
+      st.phone = fmtPhone(l.phone || st.phone || '');
+      paint();
+    });
+    var phEl = document.getElementById('ow-phone');
+    if (phEl) phEl.addEventListener('blur', function () { this.value = fmtPhone(this.value); collect(); });
     var ares = document.getElementById('ow-ares');
     if (ares) ares.addEventListener('click', function () {
       collect(); var ico = (st.ico || '').replace(/\D/g, '');
