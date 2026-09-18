@@ -19,6 +19,16 @@ const NOTIFY_SETTING_KEY = 'compounder.velin_notify_person_ids';
 const OWNER_EMAILS_DEFAULT = 'jan.holy@bestseries.cz,tomas.holy@bestseries.cz';
 const LINK = '/modules/prodejni-objednavky/index.html';
 
+// Jméno přiřazeného obchodníka (Person) k leadu — pro zobrazení v notifikaci.
+async function ownerNameById(prisma, id) {
+  if (!id) return null;
+  try {
+    const p = await prisma.person.findUnique({ where: { id }, select: { first_name: true, last_name: true } });
+    if (p) return (`${p.first_name || ''} ${p.last_name || ''}`).trim() || null;
+  } catch (_) {}
+  return null;
+}
+
 // Osoby, které lze zvolit jako příjemce — jen lidé s aktivovaným Velínem a
 // alespoň jedním aktivním zařízením (push jim reálně dorazí).
 async function getEligibleVelinPeople(prisma) {
@@ -272,10 +282,12 @@ async function notifyChatStarted(prisma, { lead, ownerPersonId, preview }) {
     const who = lead.name || lead.email || lead.phone || ('lead #' + lead.id);
     const raw = preview ? String(preview).replace(/\s+/g, ' ').trim() : '';
     const snippet = raw.slice(0, 120);
+    const owner = await ownerNameById(prisma, ownerPersonId || (lead && lead.owner_person_id));
     const title = '💬 Začal chatovat — ' + who;
     const body = 'Zájemce právě začal psát s AI specialistou'
       + (snippet ? (': „' + snippet + (raw.length > 120 ? '…' : '') + '"') : '.')
-      + (lead.phone ? (' Tel: ' + lead.phone + '.') : '');
+      + (lead.phone ? (' Tel: ' + lead.phone + '.') : '')
+      + (' Obchodník: ' + (owner || 'nepřiřazeno') + '.');
     const data = { type: 'compounder_chat_started', lead_id: lead.id };
     await dispatch(prisma, { title, body, data });
     if (ownerPersonId) {
@@ -291,9 +303,11 @@ async function notifyMeetingRequest(prisma, { lead, terms, note, source }) {
     const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
     const termsTxt = Array.isArray(terms) && terms.length ? terms.join(' | ') : (terms || 'termín neuveden');
     const kde = source === 'hovor' ? 'v telefonním hovoru' : 'v chatu se specialistou';
+    const owner = await ownerNameById(prisma, lead && lead.owner_person_id);
     const title = '📅 Zájem o schůzku — ' + who;
     const body = 'Zájemce ' + kde + ' chce schůzku. Navržené termíny: ' + termsTxt + '.'
       + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : '')
+      + (' Obchodník: ' + (owner || 'nepřiřazeno') + '.')
       + (note ? (' ' + note) : '');
     await dispatch(prisma, { title, body, data: { type: 'compounder_meeting_request', lead_id: (lead && lead.id) ? lead.id : null } });
   } catch (e) { console.error('[compounder-notify] meeting request', e.message); }
@@ -304,10 +318,12 @@ async function notifyCallbackRequest(prisma, { lead, when, note, source }) {
   try {
     const who = (lead && (lead.name || lead.email || lead.phone)) ? (lead.name || lead.email || lead.phone) : ('lead #' + (lead && lead.id));
     const kde = source === 'hovor' ? 'v telefonním hovoru' : 'v chatu';
+    const owner = await ownerNameById(prisma, lead && lead.owner_person_id);
     const title = '📞 Žádost o zavolání — ' + who;
     const body = 'Zájemce ' + kde + ' chce, abychom mu zavolali.'
       + (when ? (' Kdy: ' + when + '.') : '')
       + (lead && lead.phone ? (' Tel: ' + lead.phone + '.') : ' (telefon není u kontaktu vyplněn)')
+      + (' Obchodník: ' + (owner || 'nepřiřazeno') + '.')
       + (note ? (' ' + note) : '');
     await dispatch(prisma, { title, body, data: { type: 'compounder_callback_request', lead_id: (lead && lead.id) ? lead.id : null } });
   } catch (e) { console.error('[compounder-notify] callback request', e.message); }

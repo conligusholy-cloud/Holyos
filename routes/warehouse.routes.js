@@ -2057,7 +2057,7 @@ router.get('/pricelist/:id', async (req, res, next) => {
 // POST /api/wh/pricelist
 router.post('/pricelist', async (req, res, next) => {
   try {
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, truck_capacity, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
       return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
     }
@@ -2070,6 +2070,7 @@ router.post('/pricelist', async (req, res, next) => {
         price_eur: parsePrice(price_eur),
         truck_price_czk: parsePrice(truck_price_czk),
         truck_price_eur: parsePrice(truck_price_eur),
+        truck_capacity: (truck_capacity === undefined || truck_capacity === null || truck_capacity === '') ? null : (parseInt(truck_capacity, 10) || null),
         model_version: normModelVersion(model_version),
         model_variant: normModelVariant(model_variant),
         machine_code: normMachineCode(machine_code),
@@ -2092,7 +2093,7 @@ router.post('/pricelist', async (req, res, next) => {
 router.put('/pricelist/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, truck_capacity, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
     const data = {};
     if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
@@ -2100,6 +2101,7 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (price_eur !== undefined) data.price_eur = parsePrice(price_eur);
     if (truck_price_czk !== undefined) data.truck_price_czk = parsePrice(truck_price_czk);
     if (truck_price_eur !== undefined) data.truck_price_eur = parsePrice(truck_price_eur);
+    if (truck_capacity !== undefined) data.truck_capacity = (truck_capacity === null || truck_capacity === '') ? null : (parseInt(truck_capacity, 10) || null);
     if (model_version !== undefined) data.model_version = normModelVersion(model_version);
     if (model_variant !== undefined) data.model_variant = normModelVariant(model_variant);
     if (machine_code !== undefined) data.machine_code = normMachineCode(machine_code);

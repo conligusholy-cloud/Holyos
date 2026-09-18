@@ -70,6 +70,7 @@
       api('/leads/' + leadId).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
       api('/pricelist').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; }),
       api('/pricelist-config').then(function (r) { return r.ok ? r.json() : { config_options: [] }; }).catch(function () { return { config_options: [] }; }),
+      api('/slots-free').then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; }),
     ]);
   }
 
@@ -89,6 +90,13 @@
   }
   function selItem() { return st.items.filter(function (it) { return it.id === st.machineId; })[0] || null; }
   function foreign() { return st.origin === 'foreign'; }
+  function capacity() { var it = selItem(); return num(it && it.truck_capacity) || 0; }
+  function autoKamion() { var c = capacity(); return c > 0 && (st.qty || 1) >= c; }
+  function slotLabel(s) {
+    var d1 = s.start_date ? new Date(s.start_date) : null, d2 = s.end_date ? new Date(s.end_date) : null;
+    var r = (d1 ? d1.toLocaleDateString('cs-CZ') : '') + (d2 ? ('–' + d2.toLocaleDateString('cs-CZ')) : '');
+    return (s.name || ('Slot #' + s.id)) + (r ? (' · ' + r) : '');
+  }
 
   function unitPrice(it, kamion) {
     if (!it) return 0;
@@ -117,6 +125,7 @@
       { t: 'Odběratel', r: renderCustomer },
       { t: 'Stroj', r: renderMachine },
       { t: 'Výbava a počet kusů', r: renderConfig },
+      { t: 'Výrobní sloty', r: renderSlots },
       { t: 'Platba', r: renderPay },
       { t: 'Servis', r: renderServis },
       { t: 'Souhrn a potvrzení', r: renderSummary },
@@ -206,11 +215,25 @@
       + '<button class="ow-btn" id="ow-qminus" style="width:44px;">−</button>'
       + '<input class="ow-in" id="ow-qty" type="number" min="1" max="50" value="' + (st.qty || 1) + '" style="flex:1;text-align:center;font-size:16px;">'
       + '<button class="ow-btn" id="ow-qplus" style="width:44px;">+</button></div>';
-    var it = selItem();
-    if (it && unitPrice(it, true)) {
-      h += '<label class="ow-chk" style="margin-top:10px;"><input type="checkbox" id="ow-kamion"' + (st.kamion ? ' checked' : '') + '> Účtovat velkoobchodní (kamionovou) cenu za kus</label>';
-    }
+    h += '<div id="ow-kamion-note" class="ow-note" style="margin-top:10px;"></div>';
     h += '<div class="sm" id="ow-price-note" style="margin-top:6px;"></div></div>';
+    return h;
+  }
+
+  function renderSlots() {
+    var n = st.qty || 1; var free = st.slotsFree || []; st.slotSel = st.slotSel || [];
+    var h = '<div class="ow-note acc"><span>Vyber volný výrobní slot pro každý kus. Sloty se zarezervují na 3 dny do zaplacení zálohy; po uplynutí se uvolní.</span></div>';
+    if (!free.length) h += '<div class="ow-note warn" style="margin-top:8px;"><span>Teď nejsou volné výrobní sloty — objednávku můžeš založit i bez slotu a přiřadit později.</span></div>';
+    h += '<div style="margin-top:12px;">';
+    for (var i = 0; i < n; i++) {
+      var cur = st.slotSel[i];
+      if (cur == null && free[i]) cur = free[i].id;
+      h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:56px;flex:0 0 auto;font-size:13px;color:#9aa0c4;">Kus ' + (i + 1) + '</span>'
+        + '<select class="ow-in" data-slot="' + i + '" style="flex:1;"><option value="">— bez slotu —</option>'
+        + free.map(function (s) { return '<option value="' + s.id + '"' + (String(cur) === String(s.id) ? ' selected' : '') + '>' + esc(slotLabel(s)) + '</option>'; }).join('')
+        + '</select></div>';
+    }
+    h += '</div>';
     return h;
   }
 
@@ -246,7 +269,7 @@
   function renderSummary() {
     collect();
     var it = selItem();
-    var full = st.kamion;
+    var full = autoKamion();
     var unit = unitPrice(it, full);
     var q = st.qty || 1;
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva (13 % z obratu vč. DPH)');
@@ -261,6 +284,7 @@
       + row('Počet kusů', q)
       + row('Cena / ks', money(unit) + (full ? ' (kamionová)' : ' (maloobchodní)'))
       + row('Celkem bez DPH', money(unit * q))
+      + row('Výrobní sloty', slotsSummary())
       + row('Platba', payTxt)
       + row('Úvěr', st.loan ? 'Ano' : 'Ne')
       + row('Servis', svc)
@@ -286,6 +310,15 @@
     return parts.join(' · ');
   }
 
+  function slotsSummary() {
+    var n = st.qty || 1; var sel = st.slotSel || []; var free = st.slotsFree || []; var out = [];
+    for (var i = 0; i < n; i++) {
+      var id = sel[i]; var s = id ? free.filter(function (x) { return x.id === id; })[0] : null;
+      out.push('Kus ' + (i + 1) + ' → ' + (s ? slotLabel(s) : 'bez slotu'));
+    }
+    return out.join(' · ');
+  }
+
   // ---- sběr hodnot z DOM (volá se před přechodem/souhrnem) ----
   function collect() {
     function v(id) { var e = document.getElementById(id); return e ? e.value : undefined; }
@@ -298,7 +331,6 @@
     if (v('ow-addr') !== undefined) st.addr = v('ow-addr').trim();
     if (v('ow-country') !== undefined) st.country = v('ow-country').trim();
     if (v('ow-qty') !== undefined) st.qty = Math.max(1, Math.min(50, Number(v('ow-qty')) || 1));
-    if (document.getElementById('ow-kamion')) st.kamion = document.getElementById('ow-kamion').checked;
     if (v('ow-dep') !== undefined) st.dep = Math.max(0, Math.min(100, Number(v('ow-dep')) || 0));
     if (v('ow-depd') !== undefined) st.depDays = Math.max(0, Number(v('ow-depd')) || 0);
     if (v('ow-restd') !== undefined) st.restDays = Math.max(0, Number(v('ow-restd')) || 0);
@@ -307,6 +339,8 @@
     // config selecty
     document.querySelectorAll('[data-cfg]').forEach(function (selEl) { st.config = st.config || {}; st.config[selEl.getAttribute('data-cfg')] = selEl.value; });
     document.querySelectorAll('[data-cfgmulti]').forEach(function (c) { st.configMulti = st.configMulti || {}; st.configMulti[c.getAttribute('data-cfgmulti')] = c.checked ? { name: c.getAttribute('data-name'), opt: c.getAttribute('data-opt') } : null; });
+    // výrobní sloty per kus
+    if (document.querySelector('[data-slot]')) { st.slotSel = st.slotSel || []; document.querySelectorAll('[data-slot]').forEach(function (sel) { st.slotSel[Number(sel.getAttribute('data-slot'))] = sel.value ? Number(sel.value) : null; }); }
   }
 
   // ---- render + navigace ----
@@ -371,9 +405,18 @@
   }
 
   function updatePriceNote() {
-    var el = document.getElementById('ow-price-note'); if (!el) return;
-    var it = selItem(); var q = st.qty || 1; var unit = unitPrice(it, st.kamion);
-    el.textContent = 'Cena/ks ' + money(unit) + (st.kamion ? ' (kamionová)' : ' (maloobchodní)') + ' · Celkem ' + money(unit * q) + ' bez DPH';
+    var el = document.getElementById('ow-price-note');
+    var kn = document.getElementById('ow-kamion-note');
+    var it = selItem(); var q = st.qty || 1; var c = capacity(); var full = autoKamion();
+    if (kn) {
+      if (c > 0) {
+        kn.className = 'ow-note ' + (full ? 'ok' : 'acc');
+        kn.innerHTML = '<span>' + (full
+          ? '🚚 Plný kamion (' + c + '+ ks) — účtuje se velkoobchodní (kamionová) cena za kus.'
+          : ('Kapacita kamionu: ' + c + ' ks. Do velkoobchodní ceny chybí ' + (c - q) + ' ks.')) + '</span>';
+      } else { kn.className = 'ow-note'; kn.innerHTML = ''; kn.style.display = 'none'; }
+    }
+    if (el) { var unit = unitPrice(it, full); el.textContent = 'Cena/ks ' + money(unit) + (full ? ' (kamionová)' : ' (maloobchodní)') + ' · Celkem ' + money(unit * q) + ' bez DPH'; }
   }
   function updatePayNote() {
     var el = document.getElementById('ow-pay-note'); if (!el) return;
@@ -386,7 +429,8 @@
     var it = selItem();
     if (!it) { showResult('err', 'Vyber stroj.'); st.step = 1; paint(); return; }
     if (!buyerName()) { showResult('err', 'Chybí odběratel.'); st.step = 0; paint(); return; }
-    var full = st.kamion; var unit = unitPrice(it, full); var q = st.qty || 1;
+    var full = autoKamion(); var unit = unitPrice(it, full); var q = st.qty || 1;
+    var slots = (st.slotSel || []).slice(0, q).filter(function (x) { return x; });
     var cfgTxt = configSummary();
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva 13 % z obratu (vč. DPH)');
     var payTxt = st.pay === 'full' ? '100 % předem'
@@ -400,6 +444,7 @@
     noteLines.push('Platba: ' + payTxt);
     noteLines.push('Servis: ' + svc);
     if (st.loan) noteLines.push('Financováno úvěrem: ano');
+    if (slots.length) noteLines.push('Výrobní sloty (rezervace 3 dny): ' + slotsSummary());
     var itemName = (it.name_cs || it.machine_code) + (cfgTxt ? ' — ' + cfgTxt : '');
     var body = {
       buyer_type: foreign() ? 'firma' : 'firma',
@@ -415,6 +460,7 @@
       expected_delivery: st.delDate || null,
       note: noteLines.join('\n'),
       items: [{ name: itemName.slice(0, 250), quantity: q, unit: 'ks', unit_price: unit }],
+      slots: slots,
     };
     var next = document.getElementById('ow-next'); next.disabled = true; next.textContent = 'Zakládám…';
     api('/leads/' + st.leadId + '/create-sales-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -444,7 +490,7 @@
   function open(leadId, opts) {
     opts = opts || {};
     injectCss();
-    st = { leadId: leadId, step: 0, origin: 'cz', qty: 1, pay: 'zaloha', dep: 30, depDays: 3, restDays: 14, restWhen: 'Před dodáním stroje', svc: 'smlouva', config: {}, configMulti: {}, items: [], sharedConfig: [], lead: null, onDone: opts.onDone };
+    st = { leadId: leadId, step: 0, origin: 'cz', qty: 1, pay: 'zaloha', dep: 30, depDays: 3, restDays: 14, restWhen: 'Před dodáním stroje', svc: 'smlouva', config: {}, configMulti: {}, items: [], sharedConfig: [], slotsFree: [], slotSel: [], lead: null, onDone: opts.onDone };
     var ov = document.createElement('div'); ov.className = 'ow-ov'; ov.id = 'ow-ov';
     ov.innerHTML = '<div class="ow-card">'
       + '<div class="ow-hd"><div class="r"><span style="font-size:18px;">🧾</span><h3>Nová objednávka</h3>'
@@ -461,8 +507,8 @@
       if (st.done) return;
       collect();
       if (st.step === st._defs.length - 1) { submit(); return; }
-      // validace platby
-      if (st.step === 3 && st.pay !== 'full' && (st.dep < 0 || st.dep > 100)) { alert('Záloha musí být 0–100 %.'); return; }
+      // validace platby (krok Platba = index 4)
+      if (st.step === 4 && st.pay !== 'full' && (st.dep < 0 || st.dep > 100)) { alert('Záloha musí být 0–100 %.'); return; }
       st.step++; paint();
     });
 
@@ -470,6 +516,7 @@
       st.lead = res[0] || {};
       st.items = Array.isArray(res[1]) ? res[1] : [];
       st.sharedConfig = (res[2] && Array.isArray(res[2].config_options)) ? res[2].config_options : [];
+      st.slotsFree = Array.isArray(res[3]) ? res[3] : [];
       if (!st.items.length) { document.getElementById('ow-bd').innerHTML = '<div class="ow-note err"><span>Ceník je prázdný — přidej stroje v záložce Ceník.</span></div>'; return; }
       paint();
     });
