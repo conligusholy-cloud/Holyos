@@ -521,6 +521,8 @@
     if (st.loan) noteLines.push('Financováno úvěrem: ano');
     if (slots.length) noteLines.push('Výrobní sloty (rezervace 3 dny): ' + slotsSummary());
     var itemName = (it.name_cs || it.machine_code) + (cfgTxt ? ' — ' + cfgTxt : '');
+    // Typ stroje (kód) = verze + varianta + kód stroje, např. L1H2W18D18 — pro doklad objednávky.
+    var typeCode = String((st.ver || '') + (st.va || '') + (it.machine_code || '')).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     var body = {
       buyer_type: foreign() ? 'firma' : 'firma',
       company_name: buyerName(),
@@ -534,7 +536,7 @@
       currency: foreign() ? 'EUR' : 'CZK',
       expected_delivery: st.delDate || null,
       note: noteLines.join('\n'),
-      items: [{ name: itemName.slice(0, 250), quantity: q, unit: 'ks', unit_price: unit }],
+      items: [{ name: itemName.slice(0, 250), quantity: q, unit: 'ks', unit_price: unit, type_code: typeCode || null }],
       slots: slots,
       payment_split: st.pay !== 'full',
       deposit_percent: st.pay !== 'full' ? st.dep : null,

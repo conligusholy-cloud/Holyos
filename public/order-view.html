@@ -999,7 +999,7 @@
     .odoc .tbl td.nm .code{display:block;font-weight:700;font-size:11px;color:var(--gold);letter-spacing:.06em;margin-top:3px}
     .odoc .tbl td.amt{font-weight:800;color:var(--ink);line-height:1.3;font-size:13.5px}
     .odoc .tbl td.amt span{display:block;font-weight:600;font-size:9.5px;color:var(--muted);white-space:nowrap;margin-top:1px;letter-spacing:-.01em}
-    .odoc .tbl td.dt{font-weight:700;font-size:12.5px;color:var(--ink2);line-height:1.3}
+    .odoc .tbl td.dt{font-weight:700;font-size:12.5px;color:var(--ink2);line-height:1.3;word-break:normal;overflow-wrap:normal}
     .odoc .tbl td.dt span{display:block;color:var(--muted);font-weight:600;font-size:11.5px;white-space:nowrap}
     .odoc .tbl td.num{text-align:center;vertical-align:middle;font-weight:800;color:var(--gold);font-size:15px;padding-left:16px;padding-right:4px}
     .odoc .tbl td:nth-child(3),.odoc .tbl th:nth-child(3){padding-right:16px}
@@ -1617,9 +1617,10 @@
       var ys = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
       return Math.ceil((((dt - ys) / 86400000) + 1) / 7);
     }
-    function itemTerm(item) {
-      if (!item.expected_delivery) return { main: 'dle výrobních termínů', sub: '' };
-      var d = new Date(item.expected_delivery);
+    function termFromDate(dateStr) {
+      if (!dateStr) return { main: '—', sub: '' };
+      var d = new Date(dateStr);
+      if (isNaN(d)) return { main: '—', sub: '' };
       return { main: 'Týden ' + isoWeek(d), sub: d.toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' }) };
     }
 
@@ -1684,21 +1685,28 @@
         '<div><div class="k">Počet strojů</div><div class="v">' + machineCount + ' ks</div></div>' +
         '</div>';
 
+      // Kód typu stroje: nejdřív z type_code (z průvodce), fallback parsování z názvu.
+      function itemCode(item) {
+        return parseMachineCode(item.type_code) || parseMachineCode(item.name);
+      }
+      var slotDates = Array.isArray(o.slot_dates) ? o.slot_dates : [];
       var rows = [];
       o.items.forEach(function (item) {
         var qty = Math.max(1, Math.round(Number(item.quantity) || 1));
-        var mc = parseMachineCode(item.name);
+        var mc = itemCode(item);
         var nm = (item.name || '').replace(/\n/g, ' — ').split(' — ')[0].replace(/\bL\d+H\d+(?:[WD]\d+)+\b/i, '').trim();
         for (var q = 0; q < qty; q++) rows.push({ item: item, name: nm || item.name, mc: mc });
       });
 
       html += '<table class="tbl">' +
-        '<colgroup><col style="width:30px"><col><col style="width:38px"><col style="width:74px"><col style="width:98px"></colgroup>' +
+        '<colgroup><col style="width:28px"><col><col style="width:34px"><col style="width:82px"><col style="width:96px"></colgroup>' +
         '<thead><tr><th class="c">#</th><th>Popis</th><th class="r">Ks</th><th>Termín</th><th class="r">Cena bez DPH</th></tr></thead><tbody>';
       rows.forEach(function (r, idx) {
         var up = Number(r.item.unit_price) || 0;
         var upVat = Math.round(up * 1.21);
-        var term = itemTerm(r.item);
+        // Termín: 1 slot = 1 stroj → vezmi datum ze seřazených slotů dle pořadí řádku,
+        // fallback na expected_delivery položky.
+        var term = termFromDate(slotDates[idx] || r.item.expected_delivery);
         html += '<tr>' +
           '<td class="num">' + (idx + 1) + '</td>' +
           '<td class="nm">' + esc(r.name) + (r.mc ? '<span class="code">' + esc(r.mc.code) + '</span>' : '') + '</td>' +
@@ -1710,7 +1718,7 @@
       html += '</tbody></table>';
 
       var firstMc = null;
-      for (var mi = 0; mi < o.items.length; mi++) { firstMc = parseMachineCode(o.items[mi].name); if (firstMc) break; }
+      for (var mi = 0; mi < o.items.length; mi++) { firstMc = itemCode(o.items[mi]); if (firstMc) break; }
       if (hasConfigurableItems && !isConfirmed) {
         html += '<div class="cfgbox"><h3>Konfigurace strojů</h3>';
         if (firstMc) html += '<p class="cfgdesc">' + machineConfigDesc(firstMc) + '</p>';
@@ -1765,14 +1773,14 @@
 
       html += '<div class="fine"><h4>Podmínky objednávky</h4><ul>' +
         '<li>Stroj zůstává až do úplného zaplacení kupní ceny majetkem výrobce (výhrada vlastnictví).</li>' +
-        '<li>Není-li stroj servisován prostřednictvím servisní smlouvy (13 % z obratu), je součástí softwarový poplatek <b>100 € / měsíc</b> (≈ 2 430 Kč / měsíc).</li>' +
+        '<li>Není-li stroj servisován prostřednictvím servisní smlouvy (13 % z obratu), je součástí softwarový poplatek <b>2 500 Kč / měsíc</b> (100 € / měsíc).</li>' +
+        '<li>Uvedené výrobní termíny budou splněny za předpokladu, že platby proběhnou vždy před nebo v termín splatnosti jednotlivých dokladů (zálohové i konečné faktury).</li>' +
+        '<li>Objednávku je nutné <b>potvrdit a podepsat do 24 hodin</b>. V opačném případě se rezervované výrobní sloty uvolní a mohou být nabídnuty jinému zákazníkovi.</li>' +
         '</ul></div>';
 
       if (isConfirmed) {
         html += '<div class="cbanner">✓ ' + t('confirmed_banner') + '</div>';
       } else {
-        html += '<div style="padding:6px 22px 0">' + renderSlotSection(false) + '</div>';
-        html += '<div class="cnote"><label>' + t('your_note') + '</label><textarea id="customer-note" placeholder="' + t('note_placeholder') + '"></textarea></div>';
         html += '<div class="steps"><h4>Co bude následovat</h4><ol>' +
           '<li>Zkontrolujte prosím údaje objednávky.</li>' +
           '<li>Klikněte na „Potvrdit objednávku“ a podepište ji.</li>' +

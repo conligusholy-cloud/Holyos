@@ -624,6 +624,8 @@ model Order {
   signed_at              DateTime? // kdy zákazník podepsal
   authorized_at          DateTime? // kdy autorizoval Tomáš/Jan
   authorized_by_user_id  Int? // User, který objednávku autorizoval
+  // Objednávka nepodepsaná do 24 h → worker uvolní rezervované sloty a nastaví status 'expired'.
+  expired_at             DateTime? // kdy objednávka vypršela (nebyla podepsána včas)
 
   // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
   // payment_split: false = jedna platba na celou částku;

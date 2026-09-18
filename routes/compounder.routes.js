@@ -3377,12 +3377,16 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
       company = await prisma.company.create({ data: {
         name: buyerName, ico: ico || null, dic: dic || null,
         address: address || null, type: 'customer',
+        contact_person: responsible || null, email: email || null, phone: phone ? String(phone).slice(0, 20) : null,
       } });
     } else {
-      // Doplň chybějící fakturační údaje na existující firmě.
+      // Doplň chybějící fakturační a kontaktní údaje na existující firmě.
       const patch = {};
       if (dic && !company.dic) patch.dic = dic;
       if (address && !company.address) patch.address = address;
+      if (responsible && !company.contact_person) patch.contact_person = responsible;
+      if (email && !company.email) patch.email = email;
+      if (phone && !company.phone) patch.phone = String(phone).slice(0, 20);
       if (Object.keys(patch).length) { try { await prisma.company.update({ where: { id: company.id }, data: patch }); } catch (e) {} }
     }
 
@@ -3390,7 +3394,9 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     const oItems = items.map((it) => {
       const q = Math.max(0, Number(it.quantity) || 1);
       const up = Math.max(0, Number(it.unit_price) || 0);
-      return { name: String(it.name).trim().slice(0, 255), quantity: q, unit: String(it.unit || 'ks').slice(0, 20), unit_price: up, total_price: Math.round(q * up * 100) / 100 };
+      // Typ stroje (kód, např. L1H2W18D18) uložíme do note ve tvaru "TYP:<kód>" — doklad ho pak zobrazí pod názvem.
+      const typeCode = it.type_code ? String(it.type_code).replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 40) : null;
+      return { name: String(it.name).trim().slice(0, 255), quantity: q, unit: String(it.unit || 'ks').slice(0, 20), unit_price: up, total_price: Math.round(q * up * 100) / 100, note: typeCode ? ('TYP:' + typeCode) : null };
     });
     const total = oItems.reduce((s, it) => s + it.total_price, 0);
     const orderNumber = 'SO-' + Date.now().toString(36).toUpperCase();

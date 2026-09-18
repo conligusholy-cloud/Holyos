@@ -166,6 +166,7 @@ function sendOrderLocked(res, order) {
   const statusLabel = {
     new: 'Nový', quoted: 'Poptáno', ordered: 'Objednáno', awaiting_customer: 'Čeká na potvrzení',
     signed: 'Podepsáno — čeká na autorizaci', confirmed: 'Potvrzeno', delivered: 'Doručeno', cancelled: 'Zrušeno',
+    expired: 'Vypršelo — sloty uvolněny',
   }[order?.status] || order?.status || 'neznámý';
   return res.status(410).json({
     error: `Tento odkaz už není aktivní. Objednávka je ve stavu "${statusLabel}" — konfiguraci už nelze měnit.`,
@@ -246,6 +247,7 @@ app.get('/api/public/order/:token', async (req, res) => {
           console.error('Chyba načítání konfigurace produktu:', e);
         }
       }
+      const typeCode = (it.note && (it.note.match(/TYP:([A-Za-z0-9]+)/i) || [])[1]) || null;
       return {
         id: it.id,
         name: it.name,
@@ -255,6 +257,7 @@ app.get('/api/public/order/:token', async (req, res) => {
         unit_price: it.unit_price,
         total_price: it.total_price,
         expected_delivery: it.expected_delivery,
+        type_code: typeCode,
         configs: it.configs.map(c => ({
           group_name: c.option?.group?.name || '',
           option_name: c.option?.name || '',
@@ -277,6 +280,19 @@ app.get('/api/public/order/:token', async (req, res) => {
         })),
       };
     }));
+
+    // Termíny z rezervovaných výrobních slotů (1 slot = 1 stroj), seřazené vzestupně.
+    let slotDates = [];
+    try {
+      const asg = await prisma.slotAssignment.findMany({
+        where: { order_id: order.id },
+        include: { slot: { select: { start_date: true, end_date: true } } },
+      });
+      slotDates = asg
+        .map((a) => a.slot && (a.slot.end_date || a.slot.start_date))
+        .filter(Boolean)
+        .sort((x, y) => new Date(x) - new Date(y));
+    } catch (e) {}
 
     const c = order.company || {};
     const base = Number(order.total_amount) || 0;
@@ -305,6 +321,7 @@ app.get('/api/public/order/:token', async (req, res) => {
       vat_amount: vatAmount,
       grand_total: grand,
       expected_delivery: order.expected_delivery,
+      slot_dates: slotDates,
       note: publicSafeNote(order.note),
       created_at: order.created_at,
       supplier,
@@ -1169,6 +1186,12 @@ server.listen(PORT, async () => {
     serviceBillingWorker.start();
   } catch (err) {
     console.error('[app] service-billing-worker nelze spustit:', err.message);
+  }
+  try {
+    const unsignedOrderWorker = require('./services/orders/unsigned-order-worker');
+    unsignedOrderWorker.start();
+  } catch (err) {
+    console.error('[app] unsigned-order-worker nelze spustit:', err.message);
   }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');

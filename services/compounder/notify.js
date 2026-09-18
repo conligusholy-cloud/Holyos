@@ -368,6 +368,19 @@ async function notifyOrderSigned(prisma, { order }) {
   } catch (e) { console.error('[compounder-notify] order signed', e.message); }
 }
 
+// Objednávka nebyla podepsána do 24 h → worker uvolnil sloty a nastavil status 'expired'.
+// Push + zvonek do Velína majitelům.
+async function notifyOrderExpired(prisma, { order, slotCount }) {
+  try {
+    if (!order) return;
+    const who = (order.company && order.company.name) || ('objednávka ' + order.order_number);
+    const title = '⌛ Objednávka nepodepsána včas — ' + order.order_number;
+    const body = 'Objednávka ' + order.order_number + ' (' + who + ') nebyla podepsána do 24 h. '
+      + 'Uvolněno výrobních slotů: ' + (slotCount || 0) + '. Odkaz pro zákazníka byl deaktivován.';
+    await dispatch(prisma, { title, body, data: { type: 'order_expired', order_id: order.id } });
+  } catch (e) { console.error('[compounder-notify] order expired', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   notifyChatStarted,
@@ -375,6 +388,7 @@ module.exports = {
   notifyCallbackRequest,
   notifyTransferFailed,
   notifyOrderSigned,
+  notifyOrderExpired,
   getEligibleVelinPeople,
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,
