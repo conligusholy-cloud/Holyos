@@ -273,10 +273,10 @@
       + '<button data-v="zaloha" class="' + (st.pay !== 'full' ? 'on' : '') + '">Záloha + doplatek</button>'
       + '<button data-v="full" class="' + (st.pay === 'full' ? 'on' : '') + '">100 % předem</button></div>';
     if (st.pay !== 'full') {
-      h += '<div class="ow-row"><div><label>Záloha (%)</label><input class="ow-in" id="ow-dep" type="number" min="0" max="100" value="' + (st.dep != null ? st.dep : 30) + '"></div>'
+      h += '<div class="ow-row"><div><label>Záloha (%)</label><input class="ow-in" id="ow-dep" type="number" min="0" max="100" value="' + (st.dep != null ? st.dep : 75) + '"></div>'
         + '<div><label>Splatnost zálohy (dní)</label><input class="ow-in" id="ow-depd" type="number" min="0" value="' + (st.depDays != null ? st.depDays : 3) + '"></div></div>';
       h += '<label>Doplatek splatný</label><div class="ow-seg" data-seg="restwhen">'
-        + '<button data-v="Před dodáním stroje" class="' + (st.restWhen !== 'Po dodání stroje' ? 'on' : '') + '">Před dodáním</button>'
+        + '<button data-v="Před expedicí stroje" class="' + (st.restWhen !== 'Po dodání stroje' ? 'on' : '') + '">Před expedicí</button>'
         + '<button data-v="Po dodání stroje" class="' + (st.restWhen === 'Po dodání stroje' ? 'on' : '') + '">Po dodání</button></div>';
       h += '<div class="ow-row"><div><label>Splatnost doplatku (dní)</label><input class="ow-in" id="ow-restd" type="number" min="0" value="' + (st.restDays != null ? st.restDays : 14) + '"></div><div></div></div>';
       h += '<div class="sm" id="ow-pay-note"></div>';
@@ -306,7 +306,7 @@
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva (13 % z obratu vč. DPH)');
     function row(k, v) { return '<div class="ow-sm"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'; }
     var cfgTxt = configSummary();
-    var payTxt = st.pay === 'full' ? '100 % předem' : ('Záloha ' + (st.dep) + ' % (' + st.depDays + ' dní) + doplatek ' + (100 - st.dep) + ' % · ' + (st.restWhen || 'Před dodáním stroje') + ' (' + st.restDays + ' dní)');
+    var payTxt = st.pay === 'full' ? '100 % předem' : ('Záloha ' + (st.dep) + ' % (' + st.depDays + ' dní) + doplatek ' + (100 - st.dep) + ' % · ' + (st.restWhen || 'Před expedicí stroje') + ' (' + st.restDays + ' dní)');
     var h = '<div id="ow-sum">'
       + row('Odběratel', buyerName() + (foreign() && st.country ? ' · ' + st.country : ''))
       + row('Odpovědná osoba', st.resp || '—')
@@ -459,7 +459,7 @@
   }
   function updatePayNote() {
     var el = document.getElementById('ow-pay-note'); if (!el) return;
-    var d = st.dep != null ? st.dep : 30;
+    var d = st.dep != null ? st.dep : 75;
     el.textContent = 'Doplatek se dopočítá do 100 %: ' + (100 - d) + ' %.';
   }
 
@@ -473,7 +473,7 @@
     var cfgTxt = configSummary();
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva 13 % z obratu (vč. DPH)');
     var payTxt = st.pay === 'full' ? '100 % předem'
-      : ('Záloha ' + st.dep + ' % / ' + st.depDays + ' dní + doplatek ' + (100 - st.dep) + ' % · ' + (st.restWhen || 'Před dodáním stroje') + ' / ' + st.restDays + ' dní');
+      : ('Záloha ' + st.dep + ' % / ' + st.depDays + ' dní + doplatek ' + (100 - st.dep) + ' % · ' + (st.restWhen || 'Před expedicí stroje') + ' / ' + st.restDays + ' dní');
     var noteLines = [];
     noteLines.push('— KONFIGURACE (z průvodce) —');
     noteLines.push('Stroj: ' + (it.name_cs || it.machine_code) + ' (' + st.ver + '/' + st.va + ', ' + (it.machine_code || '') + ')');
@@ -536,7 +536,7 @@
   function open(leadId, opts) {
     opts = opts || {};
     injectCss();
-    st = { leadId: leadId, step: 0, origin: 'cz', qty: 1, pay: 'zaloha', dep: 30, depDays: 3, restDays: 14, restWhen: 'Před dodáním stroje', svc: 'smlouva', config: {}, configMulti: {}, items: [], sharedConfig: [], slotsFree: [], slotSel: [], lead: null, onDone: opts.onDone };
+    st = { leadId: leadId, step: 0, origin: 'cz', qty: 1, pay: 'zaloha', dep: 75, depDays: 3, restDays: 14, restWhen: 'Před expedicí stroje', svc: 'smlouva', config: {}, configMulti: {}, items: [], sharedConfig: [], slotsFree: [], slotSel: [], lead: null, onDone: opts.onDone };
     var ov = document.createElement('div'); ov.className = 'ow-ov'; ov.id = 'ow-ov';
     ov.innerHTML = '<div class="ow-card">'
       + '<div class="ow-hd"><div class="r"><span style="font-size:18px;">🧾</span><h3>Nová objednávka</h3>'
