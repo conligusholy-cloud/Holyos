@@ -1997,8 +1997,12 @@ function normConfigOptions(v) {
     const required = !!g.required;
     const options = [];
     for (const o of (Array.isArray(g.options) ? g.options : [])) {
-      const on = String((o && typeof o === 'object') ? o.name : o || '').trim().slice(0, 120);
-      if (on) options.push({ name: on });
+      const isObj = o && typeof o === 'object';
+      const on = String(isObj ? o.name : o || '').trim().slice(0, 120);
+      if (!on) continue;
+      const pc = isObj && o.price_czk != null && o.price_czk !== '' ? Number(o.price_czk) : null;
+      const pe = isObj && o.price_eur != null && o.price_eur !== '' ? Number(o.price_eur) : null;
+      options.push({ name: on, price_czk: Number.isFinite(pc) ? pc : null, price_eur: Number.isFinite(pe) ? pe : null });
     }
     groups.push({ name, type, required, options });
   }
