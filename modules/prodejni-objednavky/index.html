@@ -295,7 +295,6 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
-      <button type="button" class="tab-btn" data-tab="accessories" onclick="switchTab('accessories')">🧴 Příslušenství</button>
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
@@ -738,6 +737,7 @@
     <div id="tab-accessories" style="display:none;">
       <div class="content">
         <div class="toolbar">
+          <button class="btn" onclick="switchTab('pricelist')" title="Zpět na ceník strojů" style="margin-right:8px;">← Ceník</button>
           <input type="text" id="acc-search" placeholder="Hledat příslušenství (CZ / EN)..." onkeyup="loadAccessories()">
           <select id="acc-filter" onchange="loadAccessories()">
             <option value="">Všechny</option>
