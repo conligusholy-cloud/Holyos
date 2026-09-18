@@ -1924,8 +1924,8 @@ function parsePrice(v) {
 }
 
 // Ceník struktura: povolené hodnoty verze/varianty (prázdné = nezařazeno)
-const PRICELIST_VERSIONS = ['V2', 'V3', 'V4'];
-const PRICELIST_VARIANTS = ['S', 'G'];
+const PRICELIST_VERSIONS = ['L1', 'L2', 'L3', 'L4']; // délka
+const PRICELIST_VARIANTS = ['H1', 'H2']; // výška: H1 = nižší, H2 = standard
 function normModelVersion(v) {
   const s = String(v || '').trim().toUpperCase();
   return PRICELIST_VERSIONS.includes(s) ? s : null;

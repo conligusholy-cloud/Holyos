@@ -9944,8 +9944,8 @@
         return h;
       }
 
-      var VERS = ['V2', 'V3', 'V4'];
-      var VARS = [['S', 'S — standard'], ['G', 'G — snížený do garáže']];
+      var VERS = ['L1', 'L2', 'L3', 'L4'];
+      var VARS = [['H1', 'H1 — nižší'], ['H2', 'H2 — standard']];
       var verList = VERS.concat(list.some(function(it) { return !it.model_version; }) ? [''] : []);
       var html = '';
 
@@ -9994,16 +9994,16 @@
             '<form onsubmit="savePricelistItem(event, ' + (id || 'null') + ')">' +
               '<div class="form-grid">' +
                 '<div class="form-group full" style="grid-column:1/-1;margin-bottom:2px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Zařazení</label></div>' +
-                '<div class="form-group"><label>Verze (základní model)</label><select name="model_version">' +
-                  ['', 'V2', 'V3', 'V4'].map(function(v) { return '<option value="' + v + '"' + ((item.model_version || '') === v ? ' selected' : '') + '>' + (v || '—') + '</option>'; }).join('') +
+                '<div class="form-group"><label>Verze — délka</label><select name="model_version">' +
+                  ['', 'L1', 'L2', 'L3', 'L4'].map(function(v) { return '<option value="' + v + '"' + ((item.model_version || '') === v ? ' selected' : '') + '>' + (v || '—') + '</option>'; }).join('') +
                 '</select></div>' +
-                '<div class="form-group"><label>Varianta</label><select name="model_variant">' +
-                  [['', '—'], ['S', 'S — standard'], ['G', 'G — snížený do garáže']].map(function(o) { return '<option value="' + o[0] + '"' + ((item.model_variant || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+                '<div class="form-group"><label>Varianta — výška</label><select name="model_variant">' +
+                  [['', '—'], ['H1', 'H1 — nižší'], ['H2', 'H2 — standard']].map(function(o) { return '<option value="' + o[0] + '"' + ((item.model_variant || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
                 '</select></div>' +
                 '<div class="form-group full"><label>Rozměr / typ stroje (např. W18D18)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(plNormMachine(item.machine_code)) + '" placeholder="W18D18" maxlength="60"><datalist id="pl-machine-list">' +
                   (Array.isArray(window._plMachineCodes) ? window._plMachineCodes.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') : '') +
                 '</datalist>' +
-                  '<div style="margin-top:6px;font-size:11px;color:var(--text2);">Zapiš výbavu jako spotřebič+velikost (W = pračka, D = sušička), např. <b>W18W18</b> = dvě pračky 18 kg. Ve sloupci <b>Typ stroje</b> se zkrátí a složí: Verze + Varianta + výbava — např. V2 + S + W18W18 = <b style="color:#eab308;">V2SW218</b>.</div>' +
+                  '<div style="margin-top:6px;font-size:11px;color:var(--text2);">Zapiš výbavu jako spotřebič+velikost (W = pračka, D = sušička), např. <b>W18W18</b> = dvě pračky 18 kg. Ve sloupci <b>Typ stroje</b> se zkrátí a složí: Verze(délka) + Varianta(výška) + výbava — např. L2 + H2 + W18W18 = <b style="color:#eab308;">L2H2W218</b>.</div>' +
                 '</div>' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prádlomat V3 S 8W18D"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Laundromat V3 S 8W18D"></div>' +
