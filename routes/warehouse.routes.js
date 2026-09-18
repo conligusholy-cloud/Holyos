@@ -1941,6 +1941,25 @@ function normMachineCode(v) {
   if (/^\d/.test(s)) s = s.replace(/(\d+)([A-Z])/g, (m, n, c) => c + n);
   return s || null;
 }
+// Výbava/konfigurace: pole skupin [{name,type:'single'|'multi',required,options:[{name}]}]
+function normConfigOptions(v) {
+  if (!Array.isArray(v)) return null;
+  const groups = [];
+  for (const g of v) {
+    if (!g || typeof g !== 'object') continue;
+    const name = String(g.name || '').trim().slice(0, 100);
+    if (!name) continue;
+    const type = g.type === 'multi' ? 'multi' : 'single';
+    const required = !!g.required;
+    const options = [];
+    for (const o of (Array.isArray(g.options) ? g.options : [])) {
+      const on = String((o && typeof o === 'object') ? o.name : o || '').trim().slice(0, 120);
+      if (on) options.push({ name: on });
+    }
+    groups.push({ name, type, required, options });
+  }
+  return groups.length ? groups : null;
+}
 
 // GET /api/wh/pricelist?active=true&search=...&product_id=X
 router.get('/pricelist', async (req, res, next) => {
@@ -1985,7 +2004,7 @@ router.get('/pricelist/:id', async (req, res, next) => {
 // POST /api/wh/pricelist
 router.post('/pricelist', async (req, res, next) => {
   try {
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
       return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
     }
@@ -2001,6 +2020,7 @@ router.post('/pricelist', async (req, res, next) => {
         model_version: normModelVersion(model_version),
         model_variant: normModelVariant(model_variant),
         machine_code: normMachineCode(machine_code),
+        config_options: normConfigOptions(config_options),
         product_id: product_id ? parseInt(product_id, 10) : null,
         note: note || null,
         active: active === undefined ? true : !!active,
@@ -2017,7 +2037,7 @@ router.post('/pricelist', async (req, res, next) => {
 router.put('/pricelist/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, product_id, note, active } = req.body || {};
     const data = {};
     if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
@@ -2028,6 +2048,7 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (model_version !== undefined) data.model_version = normModelVersion(model_version);
     if (model_variant !== undefined) data.model_variant = normModelVariant(model_variant);
     if (machine_code !== undefined) data.machine_code = normMachineCode(machine_code);
+    if (config_options !== undefined) data.config_options = normConfigOptions(config_options);
     if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;

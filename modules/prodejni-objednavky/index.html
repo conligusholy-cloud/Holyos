@@ -9893,6 +9893,65 @@
       return out;
     }
 
+    // ---- Builder výbavy/konfigurace u položky ceníku ----
+    function plAttr(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function plCfgOptionRow(name) {
+      return '<div class="pl-cfg-opt-row" style="display:flex;gap:6px;margin-bottom:5px;">' +
+        '<input type="text" class="pl-cfg-oname" value="' + plAttr(name) + '" placeholder="Volba (např. Fe natíraný)" style="flex:1;">' +
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="this.closest(\'.pl-cfg-opt-row\').remove()">✕</button>' +
+        '</div>';
+    }
+    function plCfgGroupBlock(g) {
+      g = g || {};
+      var opts = Array.isArray(g.options) ? g.options : [];
+      if (!opts.length) opts = [{ name: '' }];
+      var optRows = opts.map(function(o) { return plCfgOptionRow((o && o.name) || ''); }).join('');
+      return '<div class="pl-cfg-group" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:rgba(255,255,255,0.02);">' +
+        '<div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap;">' +
+          '<div style="flex:1;min-width:140px;"><label style="font-size:11px;color:var(--text2);">Skupina</label><input type="text" class="pl-cfg-gname" value="' + plAttr(g.name) + '" placeholder="Např. Rám, Barva"></div>' +
+          '<div style="width:150px;"><label style="font-size:11px;color:var(--text2);">Výběr</label><select class="pl-cfg-gtype"><option value="single"' + (g.type !== 'multi' ? ' selected' : '') + '>Jedna volba</option><option value="multi"' + (g.type === 'multi' ? ' selected' : '') + '>Více voleb</option></select></div>' +
+          '<label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;white-space:nowrap;padding-bottom:9px;"><input type="checkbox" class="pl-cfg-greq"' + (g.required ? ' checked' : '') + '> povinné</label>' +
+          '<button type="button" class="btn btn-danger btn-sm" onclick="this.closest(\'.pl-cfg-group\').remove()" style="margin-bottom:2px;">🗑️</button>' +
+        '</div>' +
+        '<div class="pl-cfg-opts">' + optRows + '</div>' +
+        '<button type="button" class="btn btn-secondary btn-sm" onclick="plAddCfgOption(this)" style="margin-top:4px;">+ Volba</button>' +
+        '</div>';
+    }
+    function plAddCfgGroup() {
+      var wrap = document.getElementById('pl-config-wrap');
+      if (wrap) wrap.insertAdjacentHTML('beforeend', plCfgGroupBlock({}));
+    }
+    function plAddCfgOption(btn) {
+      var grp = btn.closest('.pl-cfg-group');
+      if (grp) grp.querySelector('.pl-cfg-opts').insertAdjacentHTML('beforeend', plCfgOptionRow(''));
+    }
+    function plInitConfig(list) {
+      var wrap = document.getElementById('pl-config-wrap');
+      if (!wrap) return;
+      var arr = Array.isArray(list) ? list : [];
+      wrap.innerHTML = arr.map(function(g) { return plCfgGroupBlock(g); }).join('');
+    }
+    function plCollectConfig() {
+      var groups = [];
+      var blocks = document.querySelectorAll('#pl-config-wrap .pl-cfg-group');
+      blocks.forEach(function(b) {
+        var gnameEl = b.querySelector('.pl-cfg-gname');
+        var name = gnameEl ? (gnameEl.value || '').trim() : '';
+        if (!name) return;
+        var typeEl = b.querySelector('.pl-cfg-gtype');
+        var reqEl = b.querySelector('.pl-cfg-greq');
+        var options = [];
+        b.querySelectorAll('.pl-cfg-oname').forEach(function(inp) {
+          var v = (inp.value || '').trim();
+          if (v) options.push({ name: v });
+        });
+        groups.push({ name: name, type: typeEl ? typeEl.value : 'single', required: reqEl ? !!reqEl.checked : false, options: options });
+      });
+      return groups;
+    }
+
     function renderPricelist(list) {
       var el = document.getElementById('pricelist-table');
       // Ulož označení strojů pro našeptávání v modalu
@@ -9918,7 +9977,9 @@
         var typeCode = (it.model_version || '') + (it.model_variant || '') + plCompactMachine(it.machine_code);
         var h = '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
         h += '<td style="font-weight:700;color:#eab308;letter-spacing:0.5px;">' + (typeCode ? esc(typeCode) : '<span style="color:var(--text2)">—</span>') + '</td>';
-        h += '<td class="person-name">' + esc(it.name_cs) + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
+        var cfgN = (Array.isArray(it.config_options) ? it.config_options.length : 0);
+        var cfgBadge = cfgN ? ' <span style="display:inline-block;background:rgba(139,92,246,0.15);color:#a78bfa;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ ' + cfgN + ' skup. voleb</span>' : '';
+        h += '<td class="person-name">' + esc(it.name_cs) + cfgBadge + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_czk, 'Kč') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_eur, '€') + '</td>';
         h += '<td style="text-align:right;">' + money(it.truck_price_czk, 'Kč', '#0ea5e9') + '</td>';
@@ -10016,6 +10077,8 @@
                 '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
                   '<div id="pl-product-warning" style="display:' + (item.product_id ? 'none' : 'flex') + ';margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1.5px solid #ef4444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;align-items:center;gap:10px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠️ <span>Položka není napojena na výrobek! Zvažte výběr výrobku pro propojení s výrobou.</span></div>' +
                 '</div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:6px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Výbava / konfigurace (volby pro objednávku)</label><div style="font-size:11px;color:var(--text2);margin-bottom:8px;">Skupiny voleb (Rám, Barva, Vytápění…), které se nabídnou při konfiguraci objednávky. Zatím bez příplatků.</div></div>' +
+                '<div class="form-group full"><div id="pl-config-wrap"></div><button type="button" class="btn btn-secondary btn-sm" onclick="plAddCfgGroup()">+ Přidat skupinu voleb</button></div>' +
                 '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
                 '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
               '</div>' +
@@ -10026,6 +10089,7 @@
             '</form>' +
           '</div>' +
         '</div>';
+      plInitConfig(item.config_options);
     }
 
     async function savePricelistItem(e, id) {
@@ -10041,6 +10105,7 @@
         model_version: form.get('model_version') || null,
         model_variant: form.get('model_variant') || null,
         machine_code: form.get('machine_code') ? form.get('machine_code').trim() : null,
+        config_options: plCollectConfig(),
         product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
         note: form.get('note') || null,
         active: form.has('active'),
