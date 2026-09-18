@@ -2387,6 +2387,7 @@
             '<h2 style="margin:0;">' + order.order_number + '</h2>' +
             '<div style="display:flex;gap:8px;align-items:center;">' +
               (order.status === 'prodano' ? '<button class="btn" style="background:#06b6d4;color:#04121c;font-weight:700;" onclick="generateOrderFromSold(' + id + ')" title="Podrobnosti níže jsou vyplněné — vygenerovat objednávku a posunout na Objednáno">📝 Vygenerovat objednávku →</button>' : '') +
+              '<button class="btn" onclick="makeDeliveryNote(' + id + ')" title="Vytvořit a otevřít dodací list (PDF)">📦 Dodací list</button>' +
               '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
               renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
             '</div>' +
@@ -3021,6 +3022,15 @@
       } catch (e) { alert('Vygenerování objednávky selhalo: ' + (e.message || '')); }
     }
     window.generateOrderFromSold = generateOrderFromSold;
+
+    async function makeDeliveryNote(id) {
+      try {
+        var r = await fetch('/api/wh/orders/' + id + '/delivery-note', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        var j = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        window.open('/api/wh/delivery-notes/' + j.id + '/pdf', '_blank');
+      } catch (e) { alert('Dodací list se nepodařilo vytvořit: ' + (e.message || '')); }
+    }
 
     async function deleteOrder(id) {
       if (!confirm('Opravdu smazat tuto objednávku?')) return;

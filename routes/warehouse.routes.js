@@ -2159,4 +2159,51 @@ router.put('/pricelist-config-default', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── DODACÍ LIST ─────────────────────────────────────────────────────────────
+// POST /api/wh/orders/:id/delivery-note — vytvoří dodací list z položek objednávky
+router.post('/orders/:id/delivery-note', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.order.findUnique({ where: { id }, include: { items: true, company: true } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    const year = new Date().getFullYear();
+    const pfx = 'DL-' + year + '-';
+    const last = await prisma.deliveryNote.findFirst({ where: { number: { startsWith: pfx } }, orderBy: { number: 'desc' }, select: { number: true } });
+    let seq = 1;
+    if (last) { const m = last.number.match(/(\d+)$/); if (m) seq = parseInt(m[1], 10) + 1; }
+    const number = pfx + String(seq).padStart(5, '0');
+    const items = (order.items || []).map(function (it) {
+      return { name: it.name, quantity: Number(it.quantity) || 1, unit: it.unit || 'ks', serial_number: it.serial_number || null };
+    });
+    const dn = await prisma.deliveryNote.create({
+      data: {
+        number, order_id: order.id, company_id: order.company_id || null,
+        customer_name: order.company ? order.company.name : null,
+        items, note: (req.body && req.body.note) ? String(req.body.note).slice(0, 2000) : null,
+        created_by_user_id: (req.user && req.user.id) || null,
+      },
+    });
+    res.status(201).json({ id: dn.id, number: dn.number });
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/delivery-notes/:id/pdf — PDF dodacího listu
+router.get('/delivery-notes/:id/pdf', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const dn = await prisma.deliveryNote.findUnique({ where: { id } });
+    if (!dn) return res.status(404).json({ error: 'Dodací list nenalezen' });
+    let orderNumber = null;
+    if (dn.order_id) { const o = await prisma.order.findUnique({ where: { id: dn.order_id }, select: { order_number: true } }); orderNumber = o && o.order_number; }
+    const { generateDeliveryNotePdf } = require('../services/pdf/delivery-note-pdf');
+    const buf = await generateDeliveryNotePdf(
+      { number: dn.number, date_issued: dn.date_issued, customer_name: dn.customer_name, order_number: orderNumber, note: dn.note, items: dn.items },
+      { name: 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '' }
+    );
+    res.set('Content-Type', 'application/pdf');
+    res.set('Content-Disposition', 'inline; filename="' + dn.number + '.pdf"');
+    res.send(buf);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -2946,6 +2946,23 @@ model Invoice {
 }
 
 // Řádek faktury. Cost-center umožňuje kategorizaci (auto/osoba/stroj/projekt).
+// Dodací list k prodejní objednávce (jednoduchá evidence + PDF).
+model DeliveryNote {
+  id                 Int      @id @default(autoincrement())
+  number             String   @unique @db.VarChar(30) // DL-2026-00001
+  order_id           Int? // vazba na Order (bez formální relace kvůli jednoduchosti)
+  company_id         Int?
+  customer_name      String?  @db.VarChar(255)
+  date_issued        DateTime @default(now())
+  items              Json     @default("[]") // [{name,quantity,unit,serial_number?}]
+  note               String?  @db.Text
+  created_by_user_id Int?
+  created_at         DateTime @default(now())
+
+  @@index([order_id])
+  @@map("delivery_notes")
+}
+
 model InvoiceItem {
   id         Int     @id @default(autoincrement())
   invoice_id Int

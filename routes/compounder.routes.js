@@ -3344,13 +3344,49 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
       }
     }
 
+    // Koncept ZÁLOHOVÉ faktury (proforma_issued, role deposit) — best-effort.
+    // DPH: český odběratel standard 21 %, zahraniční reverse-charge 0 %. Necháváme jako draft pro účetní.
+    let depositInvoice = null;
+    if (paymentSplit && depositAmount > 0) {
+      try {
+        const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
+        const depDueDays = (b.deposit_due_days != null && Number.isFinite(Number(b.deposit_due_days))) ? Math.max(0, Math.round(Number(b.deposit_due_days))) : 3;
+        const invNo = await generateInvoiceNumber('proforma_issued', { prisma });
+        const isForeign = (buyerType === 'firma' && !ico); // zahraniční = firma bez IČO (obchodník volí zvlášť)
+        const vatRate = isForeign ? 0 : 21;
+        const sub = Math.round(depositAmount * 100) / 100;
+        const vat = Math.round(sub * vatRate) / 100;
+        const tot = Math.round((sub + vat) * 100) / 100;
+        const dueDate = new Date(Date.now() + depDueDays * 86400000);
+        depositInvoice = await prisma.invoice.create({
+          data: {
+            invoice_number: invNo, type: 'proforma_issued', direction: 'ar',
+            company_id: company.id, order_id: order.id,
+            currency, subtotal: sub, vat_amount: vat, total: tot,
+            vat_regime: isForeign ? 'reverse_charge' : 'standard',
+            date_issued: new Date(), date_due: dueDate,
+            variable_symbol: (invNo.match(/(\d+)$/) || [])[1] || null,
+            status: 'draft', invoice_role: 'deposit', source: 'from_order',
+            created_by_user_id: (req.user && req.user.id) || null,
+            note: 'Zálohová faktura ' + (depositPercent || '') + ' % k objednávce ' + orderNumber,
+            items: { create: [{
+              line_order: 0,
+              description: 'Záloha ' + (depositPercent || '') + ' % — ' + (oItems[0] ? oItems[0].name : orderNumber),
+              quantity: 1, unit: 'ks', unit_price: sub,
+              vat_rate: vatRate, subtotal: sub, vat_amount: vat, total: tot,
+            }] },
+          },
+        });
+      } catch (e) { console.error('[compounder] záloha faktura selhala:', e.message); }
+    }
+
     // Lead → Prodáno + zápis do aktivit.
     try {
       const line = _actionStamp('💰 Vytvořena prodejní objednávka ' + orderNumber + ' (' + total.toLocaleString('cs-CZ') + ' ' + currency + ')');
       await prisma.compounderLead.update({ where: { id }, data: { status: 'prodano', activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
     } catch (e) {}
 
-    res.status(201).json({ ok: true, order_id: order.id, order_number: orderNumber, total, currency });
+    res.status(201).json({ ok: true, order_id: order.id, order_number: orderNumber, total, currency, deposit_invoice_number: depositInvoice ? depositInvoice.invoice_number : null });
   } catch (err) { next(err); }
 });
 

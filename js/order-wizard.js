@@ -463,6 +463,7 @@
       slots: slots,
       payment_split: st.pay !== 'full',
       deposit_percent: st.pay !== 'full' ? st.dep : null,
+      deposit_due_days: st.depDays,
       final_invoice_lead_days: st.restDays,
       release_on_deposit: true,
     };
@@ -474,7 +475,9 @@
         document.getElementById('ow-bd').innerHTML = '<div style="text-align:center;padding:24px 8px;">'
           + '<div style="font-size:38px;">✅</div>'
           + '<div style="font-size:16px;font-weight:600;margin-top:8px;">Objednávka založena</div>'
-          + '<div class="sm" style="margin-top:4px;">Číslo: ' + esc(res.j.order_number) + ' · ' + money(res.j.total) + '</div></div>';
+          + '<div class="sm" style="margin-top:4px;">Číslo: ' + esc(res.j.order_number) + ' · ' + money(res.j.total) + '</div>'
+          + (res.j.deposit_invoice_number ? '<div class="sm" style="margin-top:4px;">Zálohová faktura: ' + esc(res.j.deposit_invoice_number) + ' (koncept)</div>' : '')
+          + '</div>';
         document.getElementById('ow-back').style.visibility = 'hidden';
         next.style.display = 'none';
         var xb = document.getElementById('ow-xbtn'); if (xb) xb.textContent = 'Zavřít';
