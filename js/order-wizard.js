@@ -174,7 +174,7 @@
     for (var i = 0; i < nat.length; i += 3) groups.push(nat.slice(i, i + 3));
     return '+' + cc + (groups.length ? ' ' + groups.join(' ') : '');
   }
-  function leadHasContact(l) { l = l || {}; return !!(l.name || l.email || l.phone); }
+  function leadHasContact(l) { l = l || {}; return !!(l.name || l.email || l.phone || l.company); }
 
   function renderCustomer() {
     var l = st.lead || {};
@@ -409,7 +409,7 @@
     bindStep();
     var back = document.getElementById('ow-back'); back.style.visibility = st.step === 0 ? 'hidden' : 'visible';
     var next = document.getElementById('ow-next');
-    next.textContent = (st.step === defs.length - 1) ? 'Potvrdit objednávku' : 'Další →';
+    next.textContent = (st.step === defs.length - 1) ? 'Odeslat k potvrzení' : 'Další →';
     if (st.step === 2) updatePriceNote();
   }
 
@@ -461,6 +461,9 @@
     if (qp) qp.addEventListener('click', function () { qi.value = Math.min(50, (Number(qi.value) || 1) + 1); collect(); updatePriceNote(); });
     if (qi) qi.addEventListener('input', function () { collect(); updatePriceNote(); });
     var km = document.getElementById('ow-kamion'); if (km) km.addEventListener('change', function () { collect(); updatePriceNote(); });
+    // Výbava: přepočítej cenu v reálném čase při každé změně (select i checkbox)
+    document.querySelectorAll('[data-cfg]').forEach(function (sel) { sel.addEventListener('change', function () { collect(); updatePriceNote(); }); });
+    document.querySelectorAll('[data-cfgmulti]').forEach(function (cb) { cb.addEventListener('change', function () { collect(); updatePriceNote(); }); });
     // Platba
     bindSeg('pay', function (v) { collect(); st.pay = v; paint(); });
     bindSeg('restwhen', function (v) { collect(); st.restWhen = v; });
@@ -543,7 +546,7 @@
     api('/leads/' + st.leadId + '/create-sales-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        if (!res.ok || !res.j.ok) { next.disabled = false; next.textContent = 'Potvrdit objednávku'; showResult('err', (res.j && res.j.error) || 'Objednávku se nepodařilo založit.'); return; }
+        if (!res.ok || !res.j.ok) { next.disabled = false; next.textContent = 'Odeslat k potvrzení'; showResult('err', (res.j && res.j.error) || 'Objednávku se nepodařilo založit.'); return; }
         document.getElementById('ow-bd').innerHTML = '<div style="text-align:center;padding:24px 8px;">'
           + '<div style="font-size:38px;">✅</div>'
           + '<div style="font-size:16px;font-weight:600;margin-top:8px;">Objednávka založena</div>'
@@ -556,7 +559,7 @@
         st.done = true;
         if (typeof st.onDone === 'function') { try { st.onDone(res.j); } catch (e) {} }
       })
-      .catch(function () { next.disabled = false; next.textContent = 'Potvrdit objednávku'; showResult('err', 'Chyba spojení.'); });
+      .catch(function () { next.disabled = false; next.textContent = 'Odeslat k potvrzení'; showResult('err', 'Chyba spojení.'); });
   }
   function showResult(kind, msg) {
     var el = document.getElementById('ow-result');
