@@ -2072,4 +2072,32 @@ router.delete('/pricelist/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Společná (výchozí) výbava/konfigurace pro všechny položky ceníku — uložená
+// v AppSetting. Položky bez vlastní výbavy dědí tuhle společnou.
+const PRICELIST_DEFAULT_CONFIG_KEY = 'sales.pricelist_default_config';
+
+// GET /api/wh/pricelist-config-default
+router.get('/pricelist-config-default', async (req, res, next) => {
+  try {
+    const s = await prisma.appSetting.findUnique({ where: { key: PRICELIST_DEFAULT_CONFIG_KEY } });
+    let arr = [];
+    if (s && s.value) { try { arr = JSON.parse(s.value); } catch (_) { arr = []; } }
+    res.json({ config_options: Array.isArray(arr) ? arr : [] });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/wh/pricelist-config-default { config_options: [...] }
+router.put('/pricelist-config-default', async (req, res, next) => {
+  try {
+    const groups = normConfigOptions((req.body || {}).config_options) || [];
+    const value = JSON.stringify(groups);
+    await prisma.appSetting.upsert({
+      where: { key: PRICELIST_DEFAULT_CONFIG_KEY },
+      create: { key: PRICELIST_DEFAULT_CONFIG_KEY, value, value_type: 'json', scope: 'sales', description: 'Společná výbava/konfigurace pro položky ceníku' },
+      update: { value, value_type: 'json' },
+    });
+    res.json({ config_options: groups });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

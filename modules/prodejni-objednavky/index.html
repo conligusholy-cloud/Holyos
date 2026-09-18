@@ -725,6 +725,7 @@
             <option value="inactive">Zrušené</option>
           </select>
           <div style="flex:1"></div>
+          <button class="btn" onclick="openDefaultConfigModal()" title="Společná výbava pro všechny stroje" style="margin-right:8px;">⚙ Společná výbava</button>
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
         <div id="pricelist-table"></div>
@@ -9861,6 +9862,7 @@
       if (filter === 'inactive') params.push('active=false');
       if (params.length) url += '?' + params.join('&');
       try {
+        try { var dc = await fetch('/api/wh/pricelist-config-default').then(function(r) { return r.json(); }); window._plDefaultConfig = (dc && dc.config_options) || []; } catch(e) {}
         var res = await fetch(url);
         var items = await res.json();
         renderPricelist(items);
@@ -9951,6 +9953,40 @@
       });
       return groups;
     }
+    // Načte společnou výbavu do právě otevřeného builderu (kopie, ať se sdílená needituje)
+    function plLoadSharedConfig() {
+      var src = Array.isArray(window._plDefaultConfig) ? window._plDefaultConfig : [];
+      plInitConfig(src.map(function(g) {
+        return { name: g.name, type: g.type, required: g.required, options: (g.options || []).map(function(o) { return { name: (o && o.name) || o || '' }; }) };
+      }));
+    }
+    // Editor společné výbavy (platí pro všechny položky bez vlastní výbavy)
+    async function openDefaultConfigModal() {
+      var existing = [];
+      try { var r = await fetch('/api/wh/pricelist-config-default'); var d = await r.json(); existing = (d && d.config_options) || []; window._plDefaultConfig = existing; } catch (e) {}
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="width:640px;max-width:95vw;">' +
+            '<h2>⚙ Společná výbava</h2>' +
+            '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Nadefinuj skupiny voleb jednou — použijí se u všech položek ceníku, které nemají vlastní výbavu. Nemusíš je zadávat u každého stroje.</div>' +
+            '<div id="pl-config-wrap"></div>' +
+            '<button type="button" class="btn btn-secondary btn-sm" onclick="plAddCfgGroup()">+ Přidat skupinu voleb</button>' +
+            '<div class="modal-actions">' +
+              '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+              '<button type="button" class="btn btn-primary" onclick="saveDefaultConfig()">Uložit</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      plInitConfig(existing);
+    }
+    async function saveDefaultConfig() {
+      try {
+        var r = await fetch('/api/wh/pricelist-config-default', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config_options: plCollectConfig() }) });
+        if (!r.ok) throw new Error('Uložení selhalo (' + r.status + ')');
+        var d = await r.json(); window._plDefaultConfig = (d && d.config_options) || [];
+        closeModal(); loadPricelist();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
 
     function renderPricelist(list) {
       var el = document.getElementById('pricelist-table');
@@ -9977,8 +10013,11 @@
         var typeCode = (it.model_version || '') + (it.model_variant || '') + plCompactMachine(it.machine_code);
         var h = '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
         h += '<td style="font-weight:700;color:#eab308;letter-spacing:0.5px;">' + (typeCode ? esc(typeCode) : '<span style="color:var(--text2)">—</span>') + '</td>';
-        var cfgN = (Array.isArray(it.config_options) ? it.config_options.length : 0);
-        var cfgBadge = cfgN ? ' <span style="display:inline-block;background:rgba(139,92,246,0.15);color:#a78bfa;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ ' + cfgN + ' skup. voleb</span>' : '';
+        var ownN = (Array.isArray(it.config_options) ? it.config_options.length : 0);
+        var shN = (Array.isArray(window._plDefaultConfig) ? window._plDefaultConfig.length : 0);
+        var cfgBadge = ownN
+          ? ' <span style="display:inline-block;background:rgba(139,92,246,0.15);color:#a78bfa;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ ' + ownN + ' skup. (vlastní)</span>'
+          : (shN ? ' <span style="display:inline-block;background:rgba(148,163,184,0.15);color:#94a3b8;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ společná (' + shN + ')</span>' : '');
         h += '<td class="person-name">' + esc(it.name_cs) + cfgBadge + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_czk, 'Kč') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_eur, '€') + '</td>';
@@ -10014,8 +10053,11 @@
         var inVer = list.filter(function(it) { return (it.model_version || '') === ver; });
         if (!inVer.length) return;
         var verLbl = ver ? ('Verze ' + ver) : 'Bez zařazení verze';
+        var TRUCK_CAP = { L1: 4, L2: 4, L3: 3, L4: 3 };
+        var capChip = (ver && TRUCK_CAP[ver]) ? '<span style="font-size:11px;font-weight:700;color:#0ea5e9;background:rgba(14,165,233,0.12);border-radius:6px;padding:1px 8px;">🚛 ' + TRUCK_CAP[ver] + ' ks/kamion</span>' : '';
         html += '<div style="display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:8px 14px;background:linear-gradient(135deg,rgba(234,179,8,0.18),rgba(234,179,8,0.04));border-left:4px solid #eab308;border-radius:8px;">' +
           '<span style="font-size:16px;font-weight:800;letter-spacing:0.5px;">' + esc(verLbl) + '</span>' +
+          capChip +
           '<span style="font-size:12px;color:var(--text2);">' + inVer.length + ' pol.</span></div>';
 
         var varKeys = VARS.map(function(v) { return v[0]; }).concat(inVer.some(function(it) { return !it.model_variant; }) ? [''] : []);
@@ -10077,8 +10119,8 @@
                 '<div class="form-group full"><label>Výrobek (volitelné — propojí cenu s existujícím kusem ve výrobě)</label><select name="product_id" id="pl-product-select" onchange="updatePlProductWarning()"><option value="">— Bez napojení —</option>' + prodOpts + '</select>' +
                   '<div id="pl-product-warning" style="display:' + (item.product_id ? 'none' : 'flex') + ';margin-top:8px;padding:10px 14px;background:rgba(239,68,68,0.12);border:1.5px solid #ef4444;border-radius:8px;color:#ef4444;font-size:13px;font-weight:600;align-items:center;gap:10px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠️ <span>Položka není napojena na výrobek! Zvažte výběr výrobku pro propojení s výrobou.</span></div>' +
                 '</div>' +
-                '<div class="form-group full" style="grid-column:1/-1;margin-top:6px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Výbava / konfigurace (volby pro objednávku)</label><div style="font-size:11px;color:var(--text2);margin-bottom:8px;">Skupiny voleb (Rám, Barva, Vytápění…), které se nabídnou při konfiguraci objednávky. Zatím bez příplatků.</div></div>' +
-                '<div class="form-group full"><div id="pl-config-wrap"></div><button type="button" class="btn btn-secondary btn-sm" onclick="plAddCfgGroup()">+ Přidat skupinu voleb</button></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-top:6px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Výbava / konfigurace (volby pro objednávku)</label><div style="font-size:11px;color:var(--text2);margin-bottom:8px;">Necháš-li prázdné, použije se <b>společná výbava</b> (⚙ nahoře). Vyplň jen když má tenhle stroj jinou výbavu.</div></div>' +
+                '<div class="form-group full"><div id="pl-config-wrap"></div><div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;"><button type="button" class="btn btn-secondary btn-sm" onclick="plAddCfgGroup()">+ Přidat skupinu voleb</button><button type="button" class="btn btn-secondary btn-sm" onclick="plLoadSharedConfig()">⚙ Načíst společnou výbavu</button></div></div>' +
                 '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
                 '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka (zobrazí se v nabídce při tvorbě objednávky)</span></label></div>' +
               '</div>' +
