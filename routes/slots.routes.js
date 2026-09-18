@@ -210,6 +210,36 @@ router.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/slots/generate — materializace slotů z rozvrhu. Klient (modul Výrobní
+// sloty) pošle vypočtená okna; pro každé okno bez existujícího slotu (podle dne
+// začátku) vytvoří reálný ProductionSlot 'open'. Idempotentní — existující přeskočí.
+// Díky tomu vidí modul i objednávkový průvodce stejné reálné sloty.
+router.post('/generate', async (req, res, next) => {
+  try {
+    const wins = Array.isArray(req.body && req.body.windows) ? req.body.windows : [];
+    const capacity = (req.body && req.body.capacity_hours) ? parseFloat(req.body.capacity_hours) : 8;
+    let created = 0, skipped = 0;
+    for (const w of wins) {
+      if (!w || !w.start_date || !w.end_date) { skipped++; continue; }
+      const start = new Date(w.start_date), end = new Date(w.end_date);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) { skipped++; continue; }
+      const dayStart = new Date(start); dayStart.setHours(0, 0, 0, 0);
+      const dayNext = new Date(dayStart); dayNext.setDate(dayNext.getDate() + 1);
+      const exists = await prisma.productionSlot.findFirst({ where: { start_date: { gte: dayStart, lt: dayNext } } });
+      if (exists) { skipped++; continue; }
+      await prisma.productionSlot.create({
+        data: {
+          name: w.name ? String(w.name).slice(0, 120) : ('Slot ' + dayStart.toLocaleDateString('cs-CZ')),
+          start_date: start, end_date: end,
+          capacity_hours: capacity, status: 'open', color: '#3b82f6',
+        },
+      });
+      created++;
+    }
+    res.json({ ok: true, created, skipped });
+  } catch (err) { next(err); }
+});
+
 router.put('/:id', async (req, res, next) => {
   try {
     const { name, workstation_id, start_date, end_date, capacity_hours, status, color, note } = req.body;

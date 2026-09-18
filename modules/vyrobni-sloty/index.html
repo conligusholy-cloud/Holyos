@@ -255,6 +255,7 @@
         <div id="settings-info"></div>
         <div id="capacity-summary"></div>
         <div style="flex:1;"></div>
+        <button class="btn" onclick="generateSlotsFromScheme()" title="Vytvoří reálné výrobní sloty z rozvrhu, aby je viděl i objednávkový průvodce" style="margin-right:8px;">&#128296; Vygenerovat sloty z rozvrhu</button>
         <button class="btn" onclick="openSettingsModal()">&#9881; Nastavení slotů</button>
       </div>
 
@@ -712,6 +713,26 @@
       var todayX = (typeof window.__slotTodayX === 'number') ? window.__slotTodayX : 0;
       // Scrollni tak aby dnešek byl zhruba v první třetině
       wrapper.scrollLeft = Math.max(0, todayX - wrapper.clientWidth / 3);
+    }
+
+    // Vytvoří reálné výrobní sloty z rozvrhu (okna kalendáře) do konce příštího roku,
+    // aby stejné sloty viděl i objednávkový průvodce. Idempotentní — existující přeskočí.
+    async function generateSlotsFromScheme() {
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      var horizon = new Date(today.getFullYear() + 1, 11, 31);
+      var wins = generateSlotWindows().filter(function (w) { return w.end >= today && w.start <= horizon; });
+      if (!wins.length) { alert('Nejsou žádná budoucí okna rozvrhu. Zkontroluj Nastavení slotů.'); return; }
+      if (!confirm('Vygenerovat výrobní sloty z rozvrhu do ' + horizon.toLocaleDateString('cs-CZ') + '?\n\nOken k vytvoření: ' + wins.length + '.\nExistující sloty se přeskočí — nic se nepřepíše.')) return;
+      var payload = { windows: wins.map(function (w) {
+        return { name: (w.window_name ? (w.window_name + ' ') : 'Slot ') + formatDS(w.start) + '–' + formatDS(w.end), start_date: toISO(w.start), end_date: toISO(w.end) };
+      }) };
+      try {
+        var res = await fetch('/api/slots/generate', { method: 'POST', headers: headers, credentials: 'include', body: JSON.stringify(payload) });
+        if (!res.ok) { alert('Generování selhalo (' + res.status + ').'); return; }
+        var d = await res.json();
+        alert('Hotovo. Vytvořeno ' + (d.created || 0) + ' slotů, přeskočeno ' + (d.skipped || 0) + ' (už existovaly).');
+        await loadAllSlots();
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     // ─── Klik na slot ────────────────────────────────────────────────────────
