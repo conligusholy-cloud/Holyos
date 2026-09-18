@@ -222,15 +222,22 @@
 
   function renderSlots() {
     var n = st.qty || 1; var free = st.slotsFree || []; st.slotSel = st.slotSel || [];
-    var h = '<div class="ow-note acc"><span>Vyber volný výrobní slot pro každý kus. Sloty se zarezervují na 3 dny do zaplacení zálohy; po uplynutí se uvolní.</span></div>';
+    // Auto-předvyplnění: každému kusu jiný volný slot (1 slot = 1 stroj), jen když ještě nic nevybráno.
+    var anySel = st.slotSel.slice(0, n).some(function (x) { return x; });
+    if (!anySel) { for (var k = 0; k < n; k++) { st.slotSel[k] = free[k] ? free[k].id : null; } }
+    var h = '<div class="ow-note acc"><span>Vyber volný výrobní slot pro každý kus. <b>Jeden slot = jeden stroj.</b> Sloty se zarezervují na 3 dny do zaplacení zálohy; po uplynutí se uvolní.</span></div>';
     if (!free.length) h += '<div class="ow-note warn" style="margin-top:8px;"><span>Teď nejsou volné výrobní sloty — objednávku můžeš založit i bez slotu a přiřadit později.</span></div>';
+    else if (free.length < n) h += '<div class="ow-note warn" style="margin-top:8px;"><span>Volných slotů je jen ' + free.length + ' z ' + n + ' kusů — zbytek přiřadíš později.</span></div>';
     h += '<div style="margin-top:12px;">';
     for (var i = 0; i < n; i++) {
       var cur = st.slotSel[i];
-      if (cur == null && free[i]) cur = free[i].id;
+      // sloty vybrané u jiných kusů — ať je nejde zvolit dvakrát
+      var takenByOthers = {};
+      for (var j = 0; j < n; j++) { if (j !== i && st.slotSel[j]) takenByOthers[st.slotSel[j]] = 1; }
+      var opts = free.filter(function (s) { return !takenByOthers[s.id] || String(s.id) === String(cur); });
       h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:56px;flex:0 0 auto;font-size:13px;color:#9aa0c4;">Kus ' + (i + 1) + '</span>'
         + '<select class="ow-in" data-slot="' + i + '" style="flex:1;"><option value="">— bez slotu —</option>'
-        + free.map(function (s) { return '<option value="' + s.id + '"' + (String(cur) === String(s.id) ? ' selected' : '') + '>' + esc(slotLabel(s)) + '</option>'; }).join('')
+        + opts.map(function (s) { return '<option value="' + s.id + '"' + (String(cur) === String(s.id) ? ' selected' : '') + '>' + esc(slotLabel(s)) + '</option>'; }).join('')
         + '</select></div>';
     }
     h += '</div>';
@@ -389,6 +396,8 @@
     bindSeg('va', function (v) { collect(); st.va = v; st.machineId = null; paint(); });
     var mc = document.querySelector('.ow-cards[data-cards="machine"]');
     if (mc) mc.querySelectorAll('button').forEach(function (b) { b.addEventListener('click', function () { mc.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); }); b.classList.add('on'); st.machineId = Number(b.getAttribute('data-id')); }); });
+    // Výrobní sloty: po výběru překresli, ať zmizí sloty obsazené jiným kusem (1 slot = 1 stroj)
+    document.querySelectorAll('[data-slot]').forEach(function (sel) { sel.addEventListener('change', function () { collect(); paint(); }); });
     // Výbava + počet
     var qm = document.getElementById('ow-qminus'), qp = document.getElementById('ow-qplus'), qi = document.getElementById('ow-qty');
     if (qm) qm.addEventListener('click', function () { qi.value = Math.max(1, (Number(qi.value) || 1) - 1); collect(); updatePriceNote(); });

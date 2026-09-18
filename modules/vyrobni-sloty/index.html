@@ -639,10 +639,20 @@
         });
 
         // ─── Červená čára DNES ───
-        var startDate = getStartDate();
-        var daysSinceStart = Math.round((today - startDate) / 86400000);
-        var weeksSinceStart = daysSinceStart / 7;
-        var todayX = weeksSinceStart * SLOT_W;
+        // Pozice se počítá podle skutečných sloupců (oken), ne „1 týden = 1 sloupec":
+        // slotů je víc za týden (Po–St, St–Pá), takže starý výpočet dny/7 dával čáru v půlce.
+        var todayX = null;
+        for (var _wi = 0; _wi < windows.length; _wi++) {
+          var _w = windows[_wi];
+          if (today >= _w.start && today <= _w.end) {
+            var _span = (_w.end - _w.start) || 1;
+            todayX = (_wi + Math.min(1, Math.max(0, (today - _w.start) / _span))) * SLOT_W;
+            break;
+          }
+          if (today < _w.start) { todayX = _wi * SLOT_W; break; } // dnešek je v mezeře před tímto oknem
+        }
+        if (todayX == null) todayX = windows.length * SLOT_W; // dnešek za posledním oknem
+        window.__slotTodayX = todayX;
         if (todayX > 0 && todayX < totalW) {
           html += '<div class="today-line" style="left:' + todayX.toFixed(1) + 'px;"></div>';
         }
@@ -697,11 +707,9 @@
 
     function scrollToToday() {
       var wrapper = document.getElementById('timeline-wrapper');
-      var startDate = getStartDate();
-      var today = new Date(); today.setHours(0,0,0,0);
-      var daysSinceStart = Math.round((today - startDate) / 86400000);
-      var weeksSinceStart = daysSinceStart / 7;
-      var todayX = weeksSinceStart * SLOT_W;
+      if (!wrapper) return;
+      // Použij pozici spočítanou při vykreslení (podle skutečných sloupců).
+      var todayX = (typeof window.__slotTodayX === 'number') ? window.__slotTodayX : 0;
       // Scrollni tak aby dnešek byl zhruba v první třetině
       wrapper.scrollLeft = Math.max(0, todayX - wrapper.clientWidth / 3);
     }
