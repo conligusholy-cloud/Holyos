@@ -461,6 +461,10 @@
       note: noteLines.join('\n'),
       items: [{ name: itemName.slice(0, 250), quantity: q, unit: 'ks', unit_price: unit }],
       slots: slots,
+      payment_split: st.pay !== 'full',
+      deposit_percent: st.pay !== 'full' ? st.dep : null,
+      final_invoice_lead_days: st.restDays,
+      release_on_deposit: true,
     };
     var next = document.getElementById('ow-next'); next.disabled = true; next.textContent = 'Zakládám…';
     api('/leads/' + st.leadId + '/create-sales-order', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

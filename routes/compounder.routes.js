@@ -3300,17 +3300,30 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     inv.push('Z Compounder leadu #' + id + ' (' + (lead.name || '') + ')');
     const noteFull = (b.note ? String(b.note).slice(0, 1500) + '\n\n' : '') + inv.join('\n');
 
-    const order = await prisma.order.create({
-      data: {
-        order_number: orderNumber, type: 'sales', company_id: company.id, status: 'ordered',
-        currency, items_count: oItems.length, total_amount: total,
-        note: noteFull.slice(0, 4000),
-        expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
-        created_by: (req.user && req.user.id) || null,
-        items: { create: oItems },
-      },
-      include: { items: true },
-    });
+    // Platební rozvržení z průvodce (napojení na fakturaci + rozpad do výroby po záloze).
+    const paymentSplit = !!b.payment_split;
+    let depositPercent = null, depositAmount = null;
+    if (paymentSplit && b.deposit_percent != null) {
+      depositPercent = Math.max(0, Math.min(100, Math.round(Number(b.deposit_percent) || 0)));
+      depositAmount = Math.round(total * depositPercent) / 100; // total * % / 100, na 2 des.
+    }
+    const finalLeadDays = (b.final_invoice_lead_days != null && Number.isFinite(Number(b.final_invoice_lead_days)))
+      ? Math.max(0, Math.round(Number(b.final_invoice_lead_days))) : undefined;
+
+    const orderData = {
+      order_number: orderNumber, type: 'sales', company_id: company.id, status: 'ordered',
+      currency, items_count: oItems.length, total_amount: total,
+      note: noteFull.slice(0, 4000),
+      expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
+      created_by: (req.user && req.user.id) || null,
+      payment_split: paymentSplit,
+      deposit_percent: depositPercent,
+      deposit_amount: depositAmount,
+      release_on_deposit: b.release_on_deposit === false ? false : true,
+      items: { create: oItems },
+    };
+    if (finalLeadDays !== undefined) orderData.final_invoice_lead_days = finalLeadDays;
+    const order = await prisma.order.create({ data: orderData, include: { items: true } });
 
     // Rezervace výrobních slotů na 3 dny (72 h) — jeden assignment na vybraný slot.
     // Po zaplacení zálohy se auto-potvrdí (warehouse payment endpoint), jinak je uvolní worker.
