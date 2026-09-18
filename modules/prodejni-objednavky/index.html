@@ -958,6 +958,8 @@
       new: { label: 'Nový', color: '#3b82f6' },
       quoted: { label: 'Poptáno', color: '#3b82f6' },
       prodano: { label: 'Prodáno', color: '#06b6d4' },
+      awaiting_customer: { label: 'Čeká na potvrzení', color: '#eab308' },
+      signed: { label: 'Podepsáno — čeká na autorizaci', color: '#c9a24b' },
       ordered: { label: 'Objednáno', color: '#8b5cf6' },
       confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
       delivered: { label: 'Doručeno', color: '#10b981' },
@@ -2444,6 +2446,23 @@
           // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
           (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
 
+          // ─── Panel Podpis + Autorizace (stav signed) ───
+          (order.status === 'signed'
+            ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+                '<h3 style="font-size:14px;margin-bottom:8px;">✍️ Podpis zákazníka — čeká na autorizaci</h3>' +
+                '<div style="background:rgba(201,162,75,0.08);border:1px solid rgba(201,162,75,0.28);border-radius:10px;padding:14px;">' +
+                  (order.signature_data
+                    ? '<img src="' + order.signature_data + '" alt="Podpis" style="max-width:280px;max-height:120px;background:#fff;border-radius:6px;padding:6px;display:block;margin-bottom:8px;">'
+                    : '<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Podpis není k dispozici.</div>') +
+                  '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;">' +
+                    (order.signature_place ? 'Místo: <strong style="color:var(--text);">' + esc(order.signature_place) + '</strong> · ' : '') +
+                    (order.signed_at ? 'Podepsáno: <strong style="color:var(--text);">' + new Date(order.signed_at).toLocaleString('cs-CZ') + '</strong>' : '') +
+                  '</div>' +
+                  '<button class="btn" style="background:linear-gradient(135deg,#f6e6ad 0%,#cda454 42%,#9a7a34 100%);color:#0a0a0b;font-weight:800;" onclick="authorizeOrder(' + id + ')" title="Autorizovat a potvrdit objednávku — zákazníkovi se odešle potvrzení + faktura">✅ Autorizovat objednávku</button>' +
+                '</div>' +
+              '</div>'
+            : '') +
+
           // ─── Odkaz pro zákazníka ───
           '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
@@ -2851,6 +2870,25 @@
 
     // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
     // Fáze 6 — Vystavit fakturu z objednávky
+    // Autorizace podepsané objednávky (Tomáš/Jan) → stav confirmed + odeslání dokladů zákazníkovi.
+    async function authorizeOrder(orderId) {
+      if (!confirm('Autorizovat a potvrdit objednávku?\n\nZákazníkovi se automaticky odešle potvrzení objednávky a faktura (zálohová při platbě se zálohou, plná při platbě předem).')) return;
+      var token = sessionStorage.getItem('token') || '';
+      try {
+        var res = await fetch('/api/wh/orders/' + orderId + '/authorize', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) { alert(data.error || 'Autorizace selhala.'); return; }
+        alert('✅ Objednávka autorizována a potvrzena. Zákazníkovi byly odeslány doklady.');
+        openOrderDetail(orderId);
+      } catch (e) {
+        alert('Chyba při autorizaci: ' + (e && e.message));
+      }
+    }
+
     async function createInvoiceFromOrder(orderId) {
       if (!confirm('Vystavit fakturu z této objednávky?\n\nFaktura se vytvoří jako draft a otevře se v novém okně modulu Účetní doklady.')) return;
 

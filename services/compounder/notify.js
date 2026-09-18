@@ -354,12 +354,27 @@ async function notifyTransferFailed(prisma, { who, phone, leadId, campaignName, 
   } catch (e) { console.error('[compounder-notify] transfer failed', e.message); }
 }
 
+// Zákazník podepsal prodejní objednávku → čeká na autorizaci (Tomáš/Jan).
+// Push + zvonek do Velína majitelům (default Jan + Tomáš).
+async function notifyOrderSigned(prisma, { order }) {
+  try {
+    if (!order) return;
+    const who = (order.company && order.company.name) || ('objednávka ' + order.order_number);
+    const title = '✍️ Objednávka podepsána — ' + order.order_number;
+    const body = 'Zákazník ' + who + ' podepsal objednávku ' + order.order_number
+      + ' (' + Number(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '). Čeká na autorizaci.'
+      + (order.signature_place ? (' Podepsáno v ' + order.signature_place + '.') : '');
+    await dispatch(prisma, { title, body, data: { type: 'order_signed', order_id: order.id } });
+  } catch (e) { console.error('[compounder-notify] order signed', e.message); }
+}
+
 module.exports = {
   NOTIFY_SETTING_KEY,
   notifyChatStarted,
   notifyMeetingRequest,
   notifyCallbackRequest,
   notifyTransferFailed,
+  notifyOrderSigned,
   getEligibleVelinPeople,
   defaultRecipientPersonIds,
   resolveRecipientPersonIds,

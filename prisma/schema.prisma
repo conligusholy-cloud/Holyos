@@ -615,10 +615,15 @@ model Order {
   share_token       String?   @unique @db.VarChar(64)
 
   // Zákaznické potvrzení objednávky přes veřejný odkaz /order/<token>
-  // status 'awaiting_customer' = čeká na potvrzení zákazníkem; po potvrzení 'confirmed'.
+  // Tok: awaiting_customer → signed (zákazník podepsal, čeká na autorizaci) → confirmed (Tomáš/Jan autorizoval).
   customer_email         String?   @db.VarChar(255)
   customer_confirmed_at  DateTime?
-  customer_docs_sent_at  DateTime? // kdy odešly PDF objednávky + zálohové faktury zákazníkovi
+  customer_docs_sent_at  DateTime? // kdy odešly PDF objednávky + faktury zákazníkovi
+  signature_data         String?   @db.Text // base64 PNG podpisu zákazníka
+  signature_place        String?   @db.VarChar(120) // místo podpisu
+  signed_at              DateTime? // kdy zákazník podepsal
+  authorized_at          DateTime? // kdy autorizoval Tomáš/Jan
+  authorized_by_user_id  Int? // User, který objednávku autorizoval
 
   // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
   // payment_split: false = jedna platba na celou částku;

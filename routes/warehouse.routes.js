@@ -1153,6 +1153,25 @@ router.delete('/order-items/:id', async (req, res, next) => {
   }
 });
 
+// POST /api/wh/orders/:id/authorize — Tomáš/Jan autorizuje podepsanou objednávku.
+// Stav 'signed' → 'confirmed'; poté se zákazníkovi automaticky odešle potvrzení
+// objednávky + faktura (zálohová při záloze, plná při platbě celé částky předem).
+router.post('/orders/:id/authorize', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.status === 'confirmed') return res.json({ ok: true, already: true });
+    if (order.status !== 'signed') return res.status(400).json({ error: 'Autorizovat lze jen podepsanou objednávku.' });
+    await prisma.order.update({ where: { id }, data: {
+      status: 'confirmed', authorized_at: new Date(),
+      authorized_by_user_id: (req.user && req.user.id) || null,
+    } });
+    require('../services/order-docs').sendOrderConfirmationDocs(id).catch((e) => console.error('[order-authorize] doklady:', e && e.message));
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // ─── SKLADY ───────────────────────────────────────────────────────────────
 
 // GET /api/wh/warehouses
