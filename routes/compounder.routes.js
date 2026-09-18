@@ -3192,6 +3192,34 @@ router.post('/leads/:id(\\d+)/hot', requireAuth, async (req, res, next) => {
 });
 
 // POST /leads/:id/create-sales-order — z leadu vytvoří prodejní objednávku (Order) a nastaví stav Prodáno.
+// GET /api/compounder/pricelist — ceník strojů pro průvodce objednávkou (read-only).
+// Vystaveno pod /api/compounder, aby ho mohla volat i obchodníkova doména (nemá přístup na /api/wh).
+router.get('/pricelist', requireAuth, async (req, res, next) => {
+  try {
+    const items = await prisma.salesPricelistItem.findMany({
+      where: { active: true, kind: 'machine' },
+      select: {
+        id: true, name_cs: true, name_en: true, machine_code: true,
+        model_version: true, model_variant: true,
+        price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true,
+        config_options: true,
+      },
+      orderBy: [{ model_version: 'asc' }, { model_variant: 'asc' }, { name_cs: 'asc' }],
+    });
+    res.json(items);
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/pricelist-config — Společná výbava (skupiny voleb), read-only.
+router.get('/pricelist-config', requireAuth, async (req, res, next) => {
+  try {
+    const s = await prisma.appSetting.findUnique({ where: { key: 'sales.pricelist_default_config' } });
+    let arr = [];
+    if (s && s.value) { try { arr = JSON.parse(s.value); } catch (_) { arr = []; } }
+    res.json({ config_options: Array.isArray(arr) ? arr : [] });
+  } catch (err) { next(err); }
+});
+
 router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);

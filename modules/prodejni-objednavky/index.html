@@ -3982,7 +3982,8 @@
       row.firstChild.textContent='▾';
       var tr = document.createElement('tr'); tr.className='cmp-act-row';
       var td = document.createElement('td'); td.colSpan = 12; td.style.background='rgba(234,179,8,0.04)'; td.style.padding='14px 18px';
-      td.innerHTML = cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
+      td.innerHTML = '<div style="margin-bottom:12px;"><button onclick="OrderWizard.open('+id+')" style="background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;">🧾 Nová objednávka (průvodce)</button></div>'
+        + cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
         + cmpInviteBlock(id, parseInt(row.getAttribute('data-sent-count')||'0',10), row.getAttribute('data-sent-at')||'', row.getAttribute('data-phone')||'', row.getAttribute('data-la')||'')
         + cmpDiscountBlock(id) + cmpVersionBlock(id, row.getAttribute('data-version')||'V3') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpAiSpecialistBlock(id, row.getAttribute('data-aispec')==='1', row.getAttribute('data-aispecsms')||'', row.getAttribute('data-aispecsmsstat')||'') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
@@ -10330,5 +10331,6 @@
       if (anyExpired) loadAvailableSlots().catch(function(){});
     }, 60 * 1000);
   </script>
+  <script src="/js/order-wizard.js"></script>
 </body>
 </html>
