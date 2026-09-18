@@ -118,6 +118,30 @@
     var own = it && Array.isArray(it.config_options) ? it.config_options : null;
     return (own && own.length) ? own : (st.sharedConfig || []);
   }
+  // Příplatek jedné volby v aktuální měně (u zahraniční EUR, jinak Kč; dopočet kurzem když druhá měna chybí)
+  function optPrice(o) {
+    if (!o) return 0;
+    if (foreign()) return num(o.price_eur) || (num(o.price_czk) ? Math.round(num(o.price_czk) / RATE) : 0);
+    return num(o.price_czk) || (num(o.price_eur) ? Math.round(num(o.price_eur) * RATE) : 0);
+  }
+  function priceSuffix(o) { var p = optPrice(o); return p > 0 ? ' (+' + money(p) + ')' : ''; }
+  // Součet příplatků za aktuálně vybrané volby výbavy (za 1 kus)
+  function configSurcharge() {
+    var cfg = effectiveConfig(); var sum = 0;
+    cfg.forEach(function (g, gi) {
+      var opts = Array.isArray(g.options) ? g.options : [];
+      if (g.type === 'multi') {
+        opts.forEach(function (o, oi) { var key = gi + ':' + oi; if (st.configMulti && st.configMulti[key]) sum += optPrice(o); });
+      } else {
+        var nm = g.name || ('Skupina ' + (gi + 1));
+        var o = opts.filter(function (x) { return x.name === (st.config && st.config[nm]); })[0];
+        sum += optPrice(o);
+      }
+    });
+    return sum;
+  }
+  // Cena za kus včetně výbavy (příplatků)
+  function unitAll(it, kamion) { return unitPrice(it, kamion) + configSurcharge(); }
 
   // ---- kroky ----
   function stepDefs() {
@@ -201,12 +225,12 @@
       if (g.type === 'multi') {
         opts.forEach(function (o, oi) {
           var key = gi + ':' + oi; var checked = st.configMulti && st.configMulti[key];
-          h += '<label class="ow-chk"><input type="checkbox" data-cfgmulti="' + key + '" data-name="' + esc(name) + '" data-opt="' + esc(o.name) + '"' + (checked ? ' checked' : '') + '> ' + esc(o.name) + '</label>';
+          h += '<label class="ow-chk"><input type="checkbox" data-cfgmulti="' + key + '" data-name="' + esc(name) + '" data-opt="' + esc(o.name) + '"' + (checked ? ' checked' : '') + '> ' + esc(o.name) + priceSuffix(o) + '</label>';
         });
       } else {
         if (st.config[name] == null && opts[0]) st.config[name] = opts[0].name;
         h += '<select class="ow-in ow-mb" data-cfg="' + esc(name) + '">'
-          + opts.map(function (o) { return '<option' + (st.config[name] === o.name ? ' selected' : '') + '>' + esc(o.name) + '</option>'; }).join('') + '</select>';
+          + opts.map(function (o) { return '<option value="' + esc(o.name) + '"' + (st.config[name] === o.name ? ' selected' : '') + '>' + esc(o.name) + priceSuffix(o) + '</option>'; }).join('') + '</select>';
       }
     });
     h += '</div><div style="border-top:1px solid #333a5c;margin-top:8px;padding-top:12px;">'
@@ -277,7 +301,7 @@
     collect();
     var it = selItem();
     var full = autoKamion();
-    var unit = unitPrice(it, full);
+    var unit = unitAll(it, full);
     var q = st.qty || 1;
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva (13 % z obratu vč. DPH)');
     function row(k, v) { return '<div class="ow-sm"><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>'; }
@@ -431,7 +455,7 @@
           : 'Kamionová cena se neúčtuje (v ceníku není kapacita ani velkoobchodní cena) — účtuje se maloobchodní.') + '</span>';
       }
     }
-    if (el) { var unit = unitPrice(it, full); el.textContent = 'Cena/ks ' + money(unit) + (full ? ' (kamionová)' : ' (maloobchodní)') + ' · Celkem ' + money(unit * q) + ' bez DPH'; }
+    if (el) { var unit = unitAll(it, full); var sur = configSurcharge(); el.textContent = 'Cena/ks ' + money(unit) + (full ? ' (kamionová' : ' (maloobchodní') + (sur > 0 ? ' vč. výbavy +' + money(sur) : '') + ') · Celkem ' + money(unit * q) + ' bez DPH'; }
   }
   function updatePayNote() {
     var el = document.getElementById('ow-pay-note'); if (!el) return;
@@ -444,7 +468,7 @@
     var it = selItem();
     if (!it) { showResult('err', 'Vyber stroj.'); st.step = 1; paint(); return; }
     if (!buyerName()) { showResult('err', 'Chybí odběratel.'); st.step = 0; paint(); return; }
-    var full = autoKamion(); var unit = unitPrice(it, full); var q = st.qty || 1;
+    var full = autoKamion(); var unit = unitAll(it, full); var q = st.qty || 1;
     var slots = (st.slotSel || []).slice(0, q).filter(function (x) { return x; });
     var cfgTxt = configSummary();
     var svc = foreign() ? 'Zákazník řeší sám' : (st.svc === 'sam' ? 'Zákazník řeší sám' : 'Servisní smlouva 13 % z obratu (vč. DPH)');

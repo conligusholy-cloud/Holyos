@@ -10032,9 +10032,14 @@
     function plAttr(s) {
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
-    function plCfgOptionRow(name) {
-      return '<div class="pl-cfg-opt-row" style="display:flex;gap:6px;margin-bottom:5px;">' +
-        '<input type="text" class="pl-cfg-oname" value="' + plAttr(name) + '" placeholder="Volba (např. Fe natíraný)" style="flex:1;">' +
+    function plCfgOptionRow(o) {
+      var nm = (typeof o === 'string') ? o : ((o && o.name) || '');
+      var pc = (o && o.price_czk != null) ? o.price_czk : '';
+      var pe = (o && o.price_eur != null) ? o.price_eur : '';
+      return '<div class="pl-cfg-opt-row" style="display:flex;gap:6px;margin-bottom:5px;align-items:center;">' +
+        '<input type="text" class="pl-cfg-oname" value="' + plAttr(nm) + '" placeholder="Volba (např. Fe natíraný)" style="flex:1;min-width:110px;">' +
+        '<input type="number" step="0.01" min="0" class="pl-cfg-oczk" value="' + plAttr(pc) + '" placeholder="+Kč" title="Příplatek v Kč (prázdné = v ceně)" style="width:90px;">' +
+        '<input type="number" step="0.01" min="0" class="pl-cfg-oeur" value="' + plAttr(pe) + '" placeholder="+€" title="Příplatek v EUR (prázdné = v ceně)" style="width:80px;">' +
         '<button type="button" class="btn btn-secondary btn-sm" onclick="this.closest(\'.pl-cfg-opt-row\').remove()">✕</button>' +
         '</div>';
     }
@@ -10042,7 +10047,7 @@
       g = g || {};
       var opts = Array.isArray(g.options) ? g.options : [];
       if (!opts.length) opts = [{ name: '' }];
-      var optRows = opts.map(function(o) { return plCfgOptionRow((o && o.name) || ''); }).join('');
+      var optRows = opts.map(function(o) { return plCfgOptionRow(o); }).join('');
       return '<div class="pl-cfg-group" style="border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:rgba(255,255,255,0.02);">' +
         '<div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;flex-wrap:wrap;">' +
           '<div style="flex:1;min-width:140px;"><label style="font-size:11px;color:var(--text2);">Skupina</label><input type="text" class="pl-cfg-gname" value="' + plAttr(g.name) + '" placeholder="Např. Rám, Barva"></div>' +
@@ -10078,9 +10083,14 @@
         var typeEl = b.querySelector('.pl-cfg-gtype');
         var reqEl = b.querySelector('.pl-cfg-greq');
         var options = [];
-        b.querySelectorAll('.pl-cfg-oname').forEach(function(inp) {
-          var v = (inp.value || '').trim();
-          if (v) options.push({ name: v });
+        b.querySelectorAll('.pl-cfg-opt-row').forEach(function(row) {
+          var nmEl = row.querySelector('.pl-cfg-oname');
+          var v = nmEl ? (nmEl.value || '').trim() : '';
+          if (!v) return;
+          var czEl = row.querySelector('.pl-cfg-oczk'), euEl = row.querySelector('.pl-cfg-oeur');
+          var pc = (czEl && czEl.value !== '') ? parseFloat(czEl.value) : null;
+          var pe = (euEl && euEl.value !== '') ? parseFloat(euEl.value) : null;
+          options.push({ name: v, price_czk: isFinite(pc) ? pc : null, price_eur: isFinite(pe) ? pe : null });
         });
         groups.push({ name: name, type: typeEl ? typeEl.value : 'single', required: reqEl ? !!reqEl.checked : false, options: options });
       });
@@ -10090,7 +10100,9 @@
     function plLoadSharedConfig() {
       var src = Array.isArray(window._plDefaultConfig) ? window._plDefaultConfig : [];
       plInitConfig(src.map(function(g) {
-        return { name: g.name, type: g.type, required: g.required, options: (g.options || []).map(function(o) { return { name: (o && o.name) || o || '' }; }) };
+        return { name: g.name, type: g.type, required: g.required, options: (g.options || []).map(function(o) {
+          return { name: (o && o.name) || o || '', price_czk: (o && o.price_czk != null) ? o.price_czk : null, price_eur: (o && o.price_eur != null) ? o.price_eur : null };
+        }) };
       }));
     }
     // Editor společné výbavy (platí pro všechny položky bez vlastní výbavy)
