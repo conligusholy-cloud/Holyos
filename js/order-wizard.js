@@ -423,7 +423,13 @@
         kn.innerHTML = '<span>' + (full
           ? '🚚 Plný kamion (' + c + '+ ks) — účtuje se velkoobchodní (kamionová) cena za kus.'
           : ('Kapacita kamionu: ' + c + ' ks. Do velkoobchodní ceny chybí ' + (c - q) + ' ks.')) + '</span>';
-      } else { kn.className = 'ow-note'; kn.innerHTML = ''; kn.style.display = 'none'; }
+      } else {
+        var hasTruck = it && (num(it.truck_price_czk) || num(it.truck_price_eur));
+        kn.style.display = 'flex'; kn.className = 'ow-note warn';
+        kn.innerHTML = '<span>' + (hasTruck
+          ? 'Stroj má kamionovou cenu, ale v ceníku není „Kapacita ks/kamion" — účtuje se maloobchodní. Doplň kapacitu v ceníku.'
+          : 'Kamionová cena se neúčtuje (v ceníku není kapacita ani velkoobchodní cena) — účtuje se maloobchodní.') + '</span>';
+      }
     }
     if (el) { var unit = unitPrice(it, full); el.textContent = 'Cena/ks ' + money(unit) + (full ? ' (kamionová)' : ' (maloobchodní)') + ' · Celkem ' + money(unit * q) + ' bez DPH'; }
   }
