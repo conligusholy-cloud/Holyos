@@ -9867,6 +9867,32 @@
       } catch(e) { console.error(e); }
     }
 
+    // Sjednocení rozměru na tvar „písmeno+číslo" (18W18D → W18D18). Když už začíná
+    // písmenem, bere se jako kanonický a nechá se být.
+    function plNormMachine(code) {
+      var s = String(code || '').trim().toUpperCase();
+      if (!s) return '';
+      if (/^\d/.test(s)) s = s.replace(/(\d+)([A-Z])/g, function(_, n, c) { return c + n; });
+      return s;
+    }
+    // Zkrácení pro štítek: sloučí opakující se stejný spotřebič+velikost na
+    // písmeno+počet+velikost (W18W18 → W218 = pračka 2× 18 kg).
+    function plCompactMachine(code) {
+      var s = plNormMachine(code);
+      if (!s) return '';
+      var groups = s.match(/[A-Z]\d+/g);
+      if (!groups) return s;
+      var out = '', i = 0;
+      while (i < groups.length) {
+        var g = groups[i], j = i + 1;
+        while (j < groups.length && groups[j] === g) j++;
+        var count = j - i;
+        out += g.charAt(0) + (count > 1 ? count : '') + g.slice(1);
+        i = j;
+      }
+      return out;
+    }
+
     function renderPricelist(list) {
       var el = document.getElementById('pricelist-table');
       // Ulož označení strojů pro našeptávání v modalu
@@ -9889,7 +9915,7 @@
         var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
         var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
         var rowStyle = it.product ? '' : 'background:rgba(239,68,68,0.08);';
-        var typeCode = (it.model_version || '') + (it.model_variant || '') + (it.machine_code || '');
+        var typeCode = (it.model_version || '') + (it.model_variant || '') + plCompactMachine(it.machine_code);
         var h = '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
         h += '<td style="font-weight:700;color:#eab308;letter-spacing:0.5px;">' + (typeCode ? esc(typeCode) : '<span style="color:var(--text2)">—</span>') + '</td>';
         h += '<td class="person-name">' + esc(it.name_cs) + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
@@ -9974,10 +10000,10 @@
                 '<div class="form-group"><label>Varianta</label><select name="model_variant">' +
                   [['', '—'], ['S', 'S — standard'], ['G', 'G — snížený do garáže']].map(function(o) { return '<option value="' + o[0] + '"' + ((item.model_variant || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
                 '</select></div>' +
-                '<div class="form-group full"><label>Rozměr / typ stroje (např. W18D18)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(item.machine_code || '') + '" placeholder="W18D18" maxlength="60"><datalist id="pl-machine-list">' +
+                '<div class="form-group full"><label>Rozměr / typ stroje (např. W18D18)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(plNormMachine(item.machine_code)) + '" placeholder="W18D18" maxlength="60"><datalist id="pl-machine-list">' +
                   (Array.isArray(window._plMachineCodes) ? window._plMachineCodes.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') : '') +
                 '</datalist>' +
-                  '<div style="margin-top:6px;font-size:11px;color:var(--text2);">Výsledný <b>typ stroje</b> ve sloupci vznikne složením: Verze + Varianta + tohle pole (např. V2 + S + W18D18 = <b style="color:#eab308;">V2SW18D18</b>).</div>' +
+                  '<div style="margin-top:6px;font-size:11px;color:var(--text2);">Zapiš výbavu jako spotřebič+velikost (W = pračka, D = sušička), např. <b>W18W18</b> = dvě pračky 18 kg. Ve sloupci <b>Typ stroje</b> se zkrátí a složí: Verze + Varianta + výbava — např. V2 + S + W18W18 = <b style="color:#eab308;">V2SW218</b>.</div>' +
                 '</div>' +
                 '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prádlomat V3 S 8W18D"></div>' +
                 '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Laundromat V3 S 8W18D"></div>' +

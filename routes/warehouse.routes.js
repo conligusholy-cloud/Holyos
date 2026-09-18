@@ -1934,6 +1934,13 @@ function normModelVariant(v) {
   const s = String(v || '').trim().toUpperCase();
   return PRICELIST_VARIANTS.includes(s) ? s : null;
 }
+// Sjednocení rozměru na tvar „písmeno+číslo" (18W18D → W18D18)
+function normMachineCode(v) {
+  if (!v) return null;
+  let s = String(v).trim().toUpperCase().slice(0, 60);
+  if (/^\d/.test(s)) s = s.replace(/(\d+)([A-Z])/g, (m, n, c) => c + n);
+  return s || null;
+}
 
 // GET /api/wh/pricelist?active=true&search=...&product_id=X
 router.get('/pricelist', async (req, res, next) => {
@@ -1993,7 +2000,7 @@ router.post('/pricelist', async (req, res, next) => {
         truck_price_eur: parsePrice(truck_price_eur),
         model_version: normModelVersion(model_version),
         model_variant: normModelVariant(model_variant),
-        machine_code: machine_code ? String(machine_code).trim().slice(0, 60) : null,
+        machine_code: normMachineCode(machine_code),
         product_id: product_id ? parseInt(product_id, 10) : null,
         note: note || null,
         active: active === undefined ? true : !!active,
@@ -2020,7 +2027,7 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (truck_price_eur !== undefined) data.truck_price_eur = parsePrice(truck_price_eur);
     if (model_version !== undefined) data.model_version = normModelVersion(model_version);
     if (model_variant !== undefined) data.model_variant = normModelVariant(model_variant);
-    if (machine_code !== undefined) data.machine_code = machine_code ? String(machine_code).trim().slice(0, 60) : null;
+    if (machine_code !== undefined) data.machine_code = normMachineCode(machine_code);
     if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;
