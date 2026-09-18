@@ -89,16 +89,18 @@ async function dispatch(prisma, { title, body, data, recipientPersonIds }) {
     select: { id: true, user_id: true },
   });
 
+  // Vlastní odkaz z dat (např. přímo na konkrétní objednávku) má přednost před obecným LINK.
+  const targetLink = (data && data.link) || LINK;
   for (const p of persons) {
     notifyPerson(prisma, p.id, {
       title, body,
-      data: Object.assign({ link: LINK }, data || {}),
+      data: Object.assign({ link: targetLink }, data || {}),
       sound: 'default',
     }).catch((e) => console.warn('[compounder-notify] push', p.id, ':', e.message));
 
     // Zvonek v HolyOS (jen když má účet). Typ 'system' nepushuje web push → bez duplicit.
     if (p.user_id) {
-      createNotification({ userId: p.user_id, type: 'system', title, body, link: LINK })
+      createNotification({ userId: p.user_id, type: 'system', title, body, link: targetLink })
         .catch((e) => console.warn('[compounder-notify] zvonek', p.user_id, ':', e.message));
     }
   }
@@ -364,7 +366,7 @@ async function notifyOrderSigned(prisma, { order }) {
     const body = 'Zákazník ' + who + ' podepsal objednávku ' + order.order_number
       + ' (' + Number(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '). Čeká na autorizaci.'
       + (order.signature_place ? (' Podepsáno v ' + order.signature_place + '.') : '');
-    await dispatch(prisma, { title, body, data: { type: 'order_signed', order_id: order.id } });
+    await dispatch(prisma, { title, body, data: { type: 'order_signed', order_id: order.id, link: LINK + '?order=' + order.id + '&authorize=1' } });
   } catch (e) { console.error('[compounder-notify] order signed', e.message); }
 }
 

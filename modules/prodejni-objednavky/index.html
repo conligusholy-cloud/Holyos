@@ -10481,6 +10481,26 @@
     loadStats();
     loadOrders();
 
+    // Deep-link z notifikace Velína: ?order=<id> → rovnou otevři detail objednávky
+    // (u podepsaných je tam tlačítko Autorizovat). ?authorize=1 = zvýrazni akci.
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        var oid = parseInt(params.get('order'), 10);
+        if (oid && !isNaN(oid)) {
+          setTimeout(function () {
+            openOrderDetail(oid);
+            if (params.get('authorize') === '1') {
+              setTimeout(function () {
+                var btn = document.querySelector('[onclick^="authorizeOrder"]');
+                if (btn) { btn.scrollIntoView({ behavior: 'smooth', block: 'center' }); btn.style.boxShadow = '0 0 0 3px rgba(201,162,75,0.6)'; }
+              }, 600);
+            }
+          }, 400);
+        }
+      } catch (e) { /* deep-link je best-effort */ }
+    })();
+
     // Countdown tick — každou minutu aktualizuje text "Zbývá Xd Yh" u rezervací.
     setInterval(function() {
       var els = document.querySelectorAll('.stl-countdown[data-reserved-until]');
