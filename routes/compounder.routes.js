@@ -3419,8 +3419,11 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     const finalLeadDays = (b.final_invoice_lead_days != null && Number.isFinite(Number(b.final_invoice_lead_days)))
       ? Math.max(0, Math.round(Number(b.final_invoice_lead_days))) : undefined;
 
+    // Schvalovací flow: objednávka čeká na potvrzení zákazníkem přes veřejný odkaz.
+    const shareToken = require('crypto').randomBytes(24).toString('hex');
     const orderData = {
-      order_number: orderNumber, type: 'sales', company_id: company.id, status: 'ordered',
+      order_number: orderNumber, type: 'sales', company_id: company.id, status: 'awaiting_customer',
+      share_token: shareToken, customer_email: email || null,
       currency, items_count: oItems.length, total_amount: total,
       note: noteFull.slice(0, 4000),
       expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
@@ -3507,7 +3510,25 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
       await prisma.compounderLead.update({ where: { id }, data: { status: 'prodano', activity_log: line + (lead.activity_log ? '\n' + lead.activity_log : '') } });
     } catch (e) {}
 
-    res.status(201).json({ ok: true, order_id: order.id, order_number: orderNumber, total, currency, deposit_invoice_number: depositInvoice ? depositInvoice.invoice_number : null });
+    // Fáze B: e-mail zákazníkovi s odkazem na potvrzení objednávky.
+    let approvalUrl = null;
+    try {
+      if (email) {
+        const { buildShareUrl } = require('../services/share-url');
+        approvalUrl = buildShareUrl('/order/' + shareToken);
+        const body = 'Dobrý den,\n\npřipravili jsme pro Vás objednávku ' + orderNumber + ' v celkové hodnotě '
+          + total.toLocaleString('cs-CZ') + ' ' + currency + ' bez DPH.\n\n'
+          + 'Prosíme o kontrolu údajů a potvrzení objednávky kliknutím na tlačítko níže. '
+          + 'Po potvrzení Vám obratem zašleme potvrzení objednávky a zálohovou fakturu.';
+        await sendMail({
+          to: email, subject: 'Objednávka ' + orderNumber + ' k potvrzení',
+          body, from: compounderMailFrom(), fromName: compounderMailFromName(),
+          link: approvalUrl, linkLabel: 'Zobrazit a potvrdit objednávku', brand: 'compounder',
+        });
+      }
+    } catch (e) { console.error('[order] e-mail k potvrzení selhal:', e.message); }
+
+    res.status(201).json({ ok: true, order_id: order.id, order_number: orderNumber, total, currency, approval_url: approvalUrl, deposit_invoice_number: depositInvoice ? depositInvoice.invoice_number : null });
   } catch (err) { next(err); }
 });
 

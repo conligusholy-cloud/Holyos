@@ -149,12 +149,12 @@ if (process.env.NODE_ENV !== 'production') {
 // Ve všech ostatních stavech vracíme 410 Gone se srozumitelným textem
 // pro konfigurátor (order-view.html zobrazí hezkou chybovou stránku).
 function orderLinkLocked(order) {
-  // Nový = aktivní odkaz. Cokoliv jiného = zamčeno.
-  return !order || order.status !== 'new';
+  // Aktivní odkaz: 'new' (starý konfigurátor) nebo 'awaiting_customer' (čeká na potvrzení).
+  return !order || (order.status !== 'new' && order.status !== 'awaiting_customer');
 }
 function sendOrderLocked(res, order) {
   const statusLabel = {
-    new: 'Nový', quoted: 'Poptáno', ordered: 'Objednáno',
+    new: 'Nový', quoted: 'Poptáno', ordered: 'Objednáno', awaiting_customer: 'Čeká na potvrzení',
     confirmed: 'Potvrzeno', delivered: 'Doručeno', cancelled: 'Zrušeno',
   }[order?.status] || order?.status || 'neznámý';
   return res.status(410).json({
@@ -480,6 +480,61 @@ app.post('/api/public/order/:token/remove-slot', async (req, res) => {
     res.status(500).json({ error: 'Interní chyba serveru' });
   }
 });
+
+// Zákazník potvrdí objednávku (veřejné, bez auth) → stav 'confirmed' + odeslání dokladů.
+app.post('/api/public/order/:token/confirm', async (req, res) => {
+  try {
+    const order = await prisma.order.findUnique({ where: { share_token: req.params.token } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (order.status === 'confirmed') return res.json({ ok: true, already: true });
+    if (order.status !== 'awaiting_customer' && order.status !== 'new') return sendOrderLocked(res, order);
+    await prisma.order.update({ where: { id: order.id }, data: { status: 'confirmed', customer_confirmed_at: new Date() } });
+    // Doklady (PDF objednávky + zálohová faktura) na pozadí — neblokujeme odpověď.
+    sendOrderConfirmationDocs(order.id).catch((e) => console.error('[order-confirm] doklady selhaly:', e && e.message));
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Chyba potvrzení objednávky:', err);
+    res.status(500).json({ error: 'Interní chyba serveru' });
+  }
+});
+
+// Fáze D+E: po potvrzení pošle zákazníkovi souhrn objednávky + PDF zálohové faktury.
+async function sendOrderConfirmationDocs(orderId) {
+  const { sendMail } = require('./services/email');
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { company: true, items: true } });
+  if (!order) return;
+  const to = order.customer_email || (order.company && order.company.email) || null;
+  if (!to) { console.warn('[order-confirm] chybí e-mail zákazníka — doklady neodeslány'); return; }
+
+  let ourCompany = null;
+  try { ourCompany = await require('./services/settings').getOurCompany(); } catch (e) {}
+  const fromEmail = (ourCompany && ourCompany.email) || process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || null;
+  const ourName = (ourCompany && ourCompany.name) || 'Best Series s.r.o.';
+
+  const cur = order.currency || 'CZK';
+  const lines = (order.items || []).map((it) => '• ' + it.name + ' — ' + Number(it.quantity) + ' ' + (it.unit || 'ks') + ' × ' + Number(it.unit_price).toLocaleString('cs-CZ') + ' = ' + Number(it.total_price).toLocaleString('cs-CZ') + ' ' + cur);
+  let body = 'Dobrý den,\n\nděkujeme za potvrzení objednávky ' + order.order_number + '.\n\nSouhrn objednávky:\n'
+    + lines.join('\n') + '\n\nCelkem bez DPH: ' + Number(order.total_amount).toLocaleString('cs-CZ') + ' ' + cur + '\n\n';
+
+  const attachments = [];
+  try {
+    const dep = await prisma.invoice.findFirst({ where: { order_id: order.id, invoice_role: 'deposit' }, include: { items: true, company: true }, orderBy: { id: 'desc' } });
+    if (dep && ourCompany) {
+      const { generateInvoicePdf } = require('./services/pdf/invoice-pdf');
+      const pdf = await generateInvoicePdf(dep, ourCompany);
+      attachments.push({ filename: dep.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' });
+      body += 'V příloze zasíláme zálohovou fakturu ' + dep.invoice_number + ' na částku ' + Number(dep.total).toLocaleString('cs-CZ') + ' ' + dep.currency + ' se splatností ' + (dep.date_due ? new Date(dep.date_due).toLocaleDateString('cs-CZ') : '—') + '.\n\n';
+      try { await prisma.invoice.update({ where: { id: dep.id }, data: { status: 'issued' } }); } catch (e) {}
+    }
+  } catch (e) { console.error('[order-confirm] záloha PDF selhala:', e && e.message); }
+
+  body += 'S pozdravem\n' + ourName;
+
+  try {
+    await sendMail({ from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
+    await prisma.order.update({ where: { id: order.id }, data: { customer_docs_sent_at: new Date() } }).catch(() => {});
+  } catch (e) { console.error('[order-confirm] e-mail dokladů selhal:', e && e.message); }
+}
 
 // Veřejná stránka pro prohlížení objednávky
 app.get('/order/:token', (req, res) => {

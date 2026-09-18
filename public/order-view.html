@@ -952,6 +952,7 @@
       status_new:         { cs: 'Nov\u00e1',             en: 'New',                de: 'Neu',                es: 'Nueva',                hr: 'Nova' },
       status_pending:     { cs: '\u010cek\u00e1 na vy\u0159\u00edzen\u00ed', en: 'Pending',            de: 'Ausstehend',         es: 'Pendiente',            hr: 'Na \u010dekanju' },
       status_ordered:     { cs: 'Objedn\u00e1no',          en: 'Ordered',            de: 'Bestellt',           es: 'Pedido',               hr: 'Naru\u010deno' },
+      status_awaiting_customer: { cs: '\u010cek\u00e1 na potvrzen\u00ed', en: 'Awaiting confirmation', de: 'Wartet auf Best\u00e4tigung', es: 'Pendiente de confirmaci\u00f3n', hr: '\u010ceka potvrdu' },
       status_confirmed:   { cs: 'Potvrzena',         en: 'Confirmed',          de: 'Best\u00e4tigt',        es: 'Confirmada',           hr: 'Potvr\u0111ena' },
       status_in_production:{ cs: 'Ve v\u00fdrob\u011b',      en: 'In production',      de: 'In Produktion',      es: 'En producci\u00f3n',       hr: 'U proizvodnji' },
       status_delivered:   { cs: 'Dod\u00e1no',            en: 'Delivered',          de: 'Geliefert',          es: 'Entregado',            hr: 'Isporu\u010deno' },
@@ -978,7 +979,7 @@
       note_placeholder:   { cs: 'P\u0159idejte pozn\u00e1mku, po\u017eadavky, dotazy...', en: 'Add a note, requirements, questions...', de: 'F\u00fcgen Sie eine Anmerkung, Anforderungen, Fragen hinzu...', es: 'A\u00f1ada una nota, requisitos, preguntas...', hr: 'Dodajte napomenu, zahtjeve, pitanja...' },
 
       // ─── Tla\u010d\u00edtko ───
-      confirm_btn:        { cs: 'Potvrdit konfiguraci', en: 'Confirm configuration', de: 'Konfiguration best\u00e4tigen', es: 'Confirmar configuraci\u00f3n', hr: 'Potvrdite konfiguraciju' },
+      confirm_btn:        { cs: 'Potvrdit objedn\u00e1vku', en: 'Confirm order', de: 'Bestellung best\u00e4tigen', es: 'Confirmar pedido', hr: 'Potvrdite narud\u017ebu' },
       submitting:         { cs: 'Odes\u00edl\u00e1m...',        en: 'Submitting...',      de: 'Wird gesendet...',   es: 'Enviando...',          hr: '\u0160aljem...' },
 
       // ─── Validace & chyby ───
@@ -1791,6 +1792,9 @@
 
         const result = await resp.json();
         if (!resp.ok) throw new Error(result.error || t('error_save'));
+
+        // Finalizace objednávky (stav → potvrzeno) + odeslání dokladů e-mailem. Best-effort.
+        try { await fetch('/api/public/order/' + token + '/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); } catch (e) {}
 
         _submitted = true;
         renderApp();

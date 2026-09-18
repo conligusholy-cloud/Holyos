@@ -614,6 +614,12 @@ model Order {
   delivered_at      DateTime? @db.Date
   share_token       String?   @unique @db.VarChar(64)
 
+  // Zákaznické potvrzení objednávky přes veřejný odkaz /order/<token>
+  // status 'awaiting_customer' = čeká na potvrzení zákazníkem; po potvrzení 'confirmed'.
+  customer_email         String?   @db.VarChar(255)
+  customer_confirmed_at  DateTime?
+  customer_docs_sent_at  DateTime? // kdy odešly PDF objednávky + zálohové faktury zákazníkovi
+
   // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
   // payment_split: false = jedna platba na celou částku;
   //                true  = záloha + doplatek (split payment)
