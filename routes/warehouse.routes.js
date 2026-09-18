@@ -1923,6 +1923,18 @@ function parsePrice(v) {
   return isNaN(n) ? null : n;
 }
 
+// Ceník struktura: povolené hodnoty verze/varianty (prázdné = nezařazeno)
+const PRICELIST_VERSIONS = ['V2', 'V3', 'V4'];
+const PRICELIST_VARIANTS = ['S', 'G'];
+function normModelVersion(v) {
+  const s = String(v || '').trim().toUpperCase();
+  return PRICELIST_VERSIONS.includes(s) ? s : null;
+}
+function normModelVariant(v) {
+  const s = String(v || '').trim().toUpperCase();
+  return PRICELIST_VARIANTS.includes(s) ? s : null;
+}
+
 // GET /api/wh/pricelist?active=true&search=...&product_id=X
 router.get('/pricelist', async (req, res, next) => {
   try {
@@ -1934,6 +1946,7 @@ router.get('/pricelist', async (req, res, next) => {
       where.OR = [
         { name_cs: { contains: search, mode: 'insensitive' } },
         { name_en: { contains: search, mode: 'insensitive' } },
+        { machine_code: { contains: search, mode: 'insensitive' } },
       ];
     }
     const items = await prisma.salesPricelistItem.findMany({
@@ -1965,7 +1978,7 @@ router.get('/pricelist/:id', async (req, res, next) => {
 // POST /api/wh/pricelist
 router.post('/pricelist', async (req, res, next) => {
   try {
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
       return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
     }
@@ -1978,6 +1991,9 @@ router.post('/pricelist', async (req, res, next) => {
         price_eur: parsePrice(price_eur),
         truck_price_czk: parsePrice(truck_price_czk),
         truck_price_eur: parsePrice(truck_price_eur),
+        model_version: normModelVersion(model_version),
+        model_variant: normModelVariant(model_variant),
+        machine_code: machine_code ? String(machine_code).trim().slice(0, 60) : null,
         product_id: product_id ? parseInt(product_id, 10) : null,
         note: note || null,
         active: active === undefined ? true : !!active,
@@ -1994,7 +2010,7 @@ router.post('/pricelist', async (req, res, next) => {
 router.put('/pricelist/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, product_id, note, active } = req.body || {};
     const data = {};
     if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
@@ -2002,6 +2018,9 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (price_eur !== undefined) data.price_eur = parsePrice(price_eur);
     if (truck_price_czk !== undefined) data.truck_price_czk = parsePrice(truck_price_czk);
     if (truck_price_eur !== undefined) data.truck_price_eur = parsePrice(truck_price_eur);
+    if (model_version !== undefined) data.model_version = normModelVersion(model_version);
+    if (model_variant !== undefined) data.model_variant = normModelVariant(model_variant);
+    if (machine_code !== undefined) data.machine_code = machine_code ? String(machine_code).trim().slice(0, 60) : null;
     if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;

@@ -1307,6 +1307,9 @@ model SalesPricelistItem {
   price_eur       Decimal? @db.Decimal(12, 2) // maloobchodní cena EUR bez DPH
   truck_price_czk Decimal? @db.Decimal(12, 2) // kamionová (velkoobchodní) cena Kč bez DPH
   truck_price_eur Decimal? @db.Decimal(12, 2) // kamionová cena EUR bez DPH
+  model_version   String?  @db.VarChar(8) // základní model: V2 / V3 / V4
+  model_variant   String?  @db.VarChar(8) // varianta: S = standard / G = snížený do garáže
+  machine_code    String?  @db.VarChar(60) // označení stroje (např. 8W18D, 18W18D18D)
   product_id      Int? // volitelné propojení na Product (když prázdné, UI upozorní červeně)
   product         Product? @relation(fields: [product_id], references: [id], onDelete: SetNull)
   active          Boolean  @default(true) // aktivní / zrušená položka
@@ -1317,6 +1320,7 @@ model SalesPricelistItem {
 
   @@index([product_id])
   @@index([active])
+  @@index([model_version, model_variant])
   @@map("sales_pricelist_items")
 }
 

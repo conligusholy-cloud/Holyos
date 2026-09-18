@@ -9869,37 +9869,78 @@
 
     function renderPricelist(list) {
       var el = document.getElementById('pricelist-table');
+      // Ulož označení strojů pro našeptávání v modalu
+      try {
+        var codeSet = {};
+        list.forEach(function(it) { if (it.machine_code) codeSet[it.machine_code] = 1; });
+        window._plMachineCodes = Object.keys(codeSet).sort();
+      } catch (e) {}
+
       if (!list.length) {
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Prázdný ceník</h3><p>Vytvořte první položku prodejního ceníku.</p></div>';
         return;
       }
-      var html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
-        '<th>Název (CZ)</th><th>Název (EN)</th>' +
-        '<th style="text-align:right" title="Maloobchodni">Cena CZK</th>' +
-        '<th style="text-align:right" title="Maloobchodni">Cena EUR</th>' +
-        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 CZK</th>' +
-        '<th style="text-align:right" title="Kamionova / velkoobchodni">🚛 EUR</th>' +
-        '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
-      for (var i = 0; i < list.length; i++) {
-        var it = list[i];
+
+      function money(v, sym, color) {
+        if (v == null) return '<span style="color:var(--text2)">—</span>';
+        return '<span style="font-weight:600;' + (color ? 'color:' + color + ';' : '') + '">' + parseFloat(v).toLocaleString('cs-CZ') + ' ' + sym + '</span>';
+      }
+      function rowHtml(it) {
         var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
         var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
         var rowStyle = it.product ? '' : 'background:rgba(239,68,68,0.08);';
-        html += '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
-        html += '<td class="person-name">' + esc(it.name_cs) + '</td>';
-        html += '<td>' + (it.name_en ? esc(it.name_en) : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td style="text-align:right;font-weight:600;">' + (it.price_czk != null ? parseFloat(it.price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td style="text-align:right;font-weight:600;">' + (it.price_eur != null ? parseFloat(it.price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_czk != null ? parseFloat(it.truck_price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td style="text-align:right;font-weight:600;color:#0ea5e9;">' + (it.truck_price_eur != null ? parseFloat(it.truck_price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
-        html += '<td>' + (it.product
+        var h = '<tr style="' + rowStyle + '" onclick="openPricelistModal(' + it.id + ')">';
+        h += '<td style="font-weight:700;color:#eab308;">' + (it.machine_code ? esc(it.machine_code) : '<span style="color:var(--text2)">—</span>') + '</td>';
+        h += '<td class="person-name">' + esc(it.name_cs) + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
+        h += '<td style="text-align:right;">' + money(it.price_czk, 'Kč') + '</td>';
+        h += '<td style="text-align:right;">' + money(it.price_eur, '€') + '</td>';
+        h += '<td style="text-align:right;">' + money(it.truck_price_czk, 'Kč', '#0ea5e9') + '</td>';
+        h += '<td style="text-align:right;">' + money(it.truck_price_eur, '€', '#0ea5e9') + '</td>';
+        h += '<td>' + (it.product
           ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name)
           : '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠ Nenapojeno</span>') + '</td>';
-        html += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
-        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
-        html += '</tr>';
+        h += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
+        h += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
+        h += '</tr>';
+        return h;
       }
-      html += '</tbody></table></div>';
+      function tableFor(rows) {
+        var h = '<div style="overflow-x:auto;margin:0 0 6px 0;"><table class="data-table"><thead><tr>' +
+          '<th>Stroj</th><th>Název</th>' +
+          '<th style="text-align:right" title="Maloobchodní">Cena CZK</th>' +
+          '<th style="text-align:right" title="Maloobchodní">Cena EUR</th>' +
+          '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 CZK</th>' +
+          '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 EUR</th>' +
+          '<th>Výrobek</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+        h += rows.map(rowHtml).join('');
+        h += '</tbody></table></div>';
+        return h;
+      }
+
+      var VERS = ['V2', 'V3', 'V4'];
+      var VARS = [['S', 'S — standard'], ['G', 'G — snížený do garáže']];
+      var verList = VERS.concat(list.some(function(it) { return !it.model_version; }) ? [''] : []);
+      var html = '';
+
+      verList.forEach(function(ver) {
+        var inVer = list.filter(function(it) { return (it.model_version || '') === ver; });
+        if (!inVer.length) return;
+        var verLbl = ver ? ('Verze ' + ver) : 'Bez zařazení verze';
+        html += '<div style="display:flex;align-items:center;gap:10px;margin:18px 0 8px;padding:8px 14px;background:linear-gradient(135deg,rgba(234,179,8,0.18),rgba(234,179,8,0.04));border-left:4px solid #eab308;border-radius:8px;">' +
+          '<span style="font-size:16px;font-weight:800;letter-spacing:0.5px;">' + esc(verLbl) + '</span>' +
+          '<span style="font-size:12px;color:var(--text2);">' + inVer.length + ' pol.</span></div>';
+
+        var varKeys = VARS.map(function(v) { return v[0]; }).concat(inVer.some(function(it) { return !it.model_variant; }) ? [''] : []);
+        varKeys.forEach(function(vk) {
+          var rows = inVer.filter(function(it) { return (it.model_variant || '') === vk; });
+          if (!rows.length) return;
+          var vm = VARS.filter(function(v) { return v[0] === vk; })[0];
+          var varLbl = vm ? vm[1] : 'Bez varianty';
+          html += '<div style="margin:8px 0 4px 6px;font-size:13px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">▸ ' + esc(varLbl) + ' <span style="opacity:0.7;font-weight:500;">(' + rows.length + ')</span></div>';
+          html += tableFor(rows);
+        });
+      });
+
       el.innerHTML = html;
     }
 
@@ -9925,8 +9966,18 @@
             '<h2>' + (id ? '✏️ Upravit položku ceníku' : '➕ Nová položka ceníku') + '</h2>' +
             '<form onsubmit="savePricelistItem(event, ' + (id || 'null') + ')">' +
               '<div class="form-grid">' +
-                '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Stůl dubový 120cm"></div>' +
-                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Oak table 120cm"></div>' +
+                '<div class="form-group full" style="grid-column:1/-1;margin-bottom:2px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Zařazení</label></div>' +
+                '<div class="form-group"><label>Verze (základní model)</label><select name="model_version">' +
+                  ['', 'V2', 'V3', 'V4'].map(function(v) { return '<option value="' + v + '"' + ((item.model_version || '') === v ? ' selected' : '') + '>' + (v || '—') + '</option>'; }).join('') +
+                '</select></div>' +
+                '<div class="form-group"><label>Varianta</label><select name="model_variant">' +
+                  [['', '—'], ['S', 'S — standard'], ['G', 'G — snížený do garáže']].map(function(o) { return '<option value="' + o[0] + '"' + ((item.model_variant || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+                '</select></div>' +
+                '<div class="form-group full"><label>Stroj (např. 8W18D, 18W18D18D)</label><input type="text" name="machine_code" list="pl-machine-list" value="' + esc(item.machine_code || '') + '" placeholder="8W18D" maxlength="60"><datalist id="pl-machine-list">' +
+                  (Array.isArray(window._plMachineCodes) ? window._plMachineCodes.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') : '') +
+                '</datalist></div>' +
+                '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prádlomat V3 S 8W18D"></div>' +
+                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '" placeholder="e.g. Laundromat V3 S 8W18D"></div>' +
                 '<div class="form-group full" style="grid-column:1/-1;margin-top:4px;"><label style="display:block;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;">Maloobchodní cena (bez DPH)</label></div>' +
                 '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
                 '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
@@ -9958,6 +10009,9 @@
         price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
         truck_price_czk: form.get('truck_price_czk') ? parseFloat(form.get('truck_price_czk')) : null,
         truck_price_eur: form.get('truck_price_eur') ? parseFloat(form.get('truck_price_eur')) : null,
+        model_version: form.get('model_version') || null,
+        model_variant: form.get('model_variant') || null,
+        machine_code: form.get('machine_code') ? form.get('machine_code').trim() : null,
         product_id: form.get('product_id') ? parseInt(form.get('product_id'), 10) : null,
         note: form.get('note') || null,
         active: form.has('active'),
