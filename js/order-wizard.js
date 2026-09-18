@@ -248,7 +248,7 @@
     var n = st.qty || 1; var free = st.slotsFree || []; st.slotSel = st.slotSel || [];
     // Auto-předvyplnění: každému kusu jiný volný slot (1 slot = 1 stroj), jen když ještě nic nevybráno.
     var anySel = st.slotSel.slice(0, n).some(function (x) { return x; });
-    if (!anySel) { for (var k = 0; k < n; k++) { st.slotSel[k] = free[k] ? free[k].id : null; } }
+    if (!anySel) { for (var k = 0; k < n; k++) { st.slotSel[k] = free[k] ? free[k].ref : null; } }
     var h = '<div class="ow-note acc"><span>Vyber volný výrobní slot pro každý kus. <b>Jeden slot = jeden stroj.</b> Sloty se zarezervují na 3 dny do zaplacení zálohy; po uplynutí se uvolní.</span></div>';
     if (!free.length) h += '<div class="ow-note warn" style="margin-top:8px;"><span>Teď nejsou volné výrobní sloty — objednávku můžeš založit i bez slotu a přiřadit později.</span></div>';
     else if (free.length < n) h += '<div class="ow-note warn" style="margin-top:8px;"><span>Volných slotů je jen ' + free.length + ' z ' + n + ' kusů — zbytek přiřadíš později.</span></div>';
@@ -258,10 +258,10 @@
       // sloty vybrané u jiných kusů — ať je nejde zvolit dvakrát
       var takenByOthers = {};
       for (var j = 0; j < n; j++) { if (j !== i && st.slotSel[j]) takenByOthers[st.slotSel[j]] = 1; }
-      var opts = free.filter(function (s) { return !takenByOthers[s.id] || String(s.id) === String(cur); });
+      var opts = free.filter(function (s) { return !takenByOthers[s.ref] || String(s.ref) === String(cur); });
       h += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="width:56px;flex:0 0 auto;font-size:13px;color:#9aa0c4;">Kus ' + (i + 1) + '</span>'
         + '<select class="ow-in" data-slot="' + i + '" style="flex:1;"><option value="">— bez slotu —</option>'
-        + opts.map(function (s) { return '<option value="' + s.id + '"' + (String(cur) === String(s.id) ? ' selected' : '') + '>' + esc(slotLabel(s)) + '</option>'; }).join('')
+        + opts.map(function (s) { return '<option value="' + esc(s.ref) + '"' + (String(cur) === String(s.ref) ? ' selected' : '') + '>' + esc(slotLabel(s)) + '</option>'; }).join('')
         + '</select></div>';
     }
     h += '</div>';
@@ -344,7 +344,7 @@
   function slotsSummary() {
     var n = st.qty || 1; var sel = st.slotSel || []; var free = st.slotsFree || []; var out = [];
     for (var i = 0; i < n; i++) {
-      var id = sel[i]; var s = id ? free.filter(function (x) { return x.id === id; })[0] : null;
+      var ref = sel[i]; var s = ref ? free.filter(function (x) { return String(x.ref) === String(ref); })[0] : null;
       out.push('Kus ' + (i + 1) + ' → ' + (s ? slotLabel(s) : 'bez slotu'));
     }
     return out.join(' · ');
@@ -371,7 +371,7 @@
     document.querySelectorAll('[data-cfg]').forEach(function (selEl) { st.config = st.config || {}; st.config[selEl.getAttribute('data-cfg')] = selEl.value; });
     document.querySelectorAll('[data-cfgmulti]').forEach(function (c) { st.configMulti = st.configMulti || {}; st.configMulti[c.getAttribute('data-cfgmulti')] = c.checked ? { name: c.getAttribute('data-name'), opt: c.getAttribute('data-opt') } : null; });
     // výrobní sloty per kus
-    if (document.querySelector('[data-slot]')) { st.slotSel = st.slotSel || []; document.querySelectorAll('[data-slot]').forEach(function (sel) { st.slotSel[Number(sel.getAttribute('data-slot'))] = sel.value ? Number(sel.value) : null; }); }
+    if (document.querySelector('[data-slot]')) { st.slotSel = st.slotSel || []; document.querySelectorAll('[data-slot]').forEach(function (sel) { st.slotSel[Number(sel.getAttribute('data-slot'))] = sel.value || null; }); }
   }
 
   // ---- render + navigace ----

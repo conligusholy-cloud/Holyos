@@ -3210,21 +3210,45 @@ router.get('/pricelist', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/compounder/slots-free?from= — volné výrobní sloty pro průvodce (read-only).
-// Volný = ProductionSlot status 'open' bez přiřazení. Vystaveno pod /api/compounder kvůli obchodníkově doméně.
+// ISO číslo týdne
+function _isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = (t.getUTCDay() + 6) % 7;
+  t.setUTCDate(t.getUTCDate() - day + 3);
+  const first = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((t - first) / 86400000 - 3 + ((first.getUTCDay() + 6) % 7)) / 7);
+}
+// GET /api/compounder/slots-free — nadcházející výrobní týdny (jeden slot = jeden stroj).
+// Vrací nejbližší volné týdny; už založené a prázdné ProductionSloty použije, obsazené/blokované vynechá,
+// zbytek nabídne jako „nový" týden (ref NEW|start|end), který se v DB vytvoří až při rezervaci.
 router.get('/slots-free', requireAuth, async (req, res, next) => {
   try {
-    const from = req.query.from ? new Date(String(req.query.from)) : new Date();
-    const slots = await prisma.productionSlot.findMany({
-      where: { status: 'open', end_date: { gte: from } },
-      include: { _count: { select: { assignments: true } } },
-      orderBy: { start_date: 'asc' },
-      take: 80,
+    const weeksAhead = 14;
+    const persisted = await prisma.productionSlot.findMany({
+      where: { status: { notIn: ['blocked', 'closed'] } },
+      include: { _count: { select: { assignments: true } }, blocks: { select: { id: true } } },
     });
-    const free = slots
-      .filter(function (s) { return (s._count && s._count.assignments || 0) === 0; })
-      .map(function (s) { return { id: s.id, name: s.name, start_date: s.start_date, end_date: s.end_date }; });
-    res.json(free);
+    const byStart = {};
+    persisted.forEach(function (s) { byStart[new Date(s.start_date).toISOString().slice(0, 10)] = s; });
+    const base = new Date(); base.setHours(0, 0, 0, 0);
+    const dow = (base.getDay() + 6) % 7;
+    const monday0 = new Date(base); monday0.setDate(base.getDate() - dow);
+    const out = [];
+    for (let w = 0; w < weeksAhead; w++) {
+      const mon = new Date(monday0); mon.setDate(monday0.getDate() + w * 7);
+      const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+      if (fri < base) continue;
+      const key = mon.toISOString().slice(0, 10);
+      const label = 'Týden ' + _isoWeek(mon);
+      const ps = byStart[key];
+      if (ps) {
+        if ((ps.blocks && ps.blocks.length) || (ps._count && ps._count.assignments || 0) > 0) continue; // obsazený / blokovaný
+        out.push({ ref: String(ps.id), name: ps.name || label, start_date: ps.start_date, end_date: ps.end_date });
+      } else {
+        out.push({ ref: 'NEW|' + key + '|' + fri.toISOString().slice(0, 10), name: label, start_date: mon, end_date: fri });
+      }
+    }
+    res.json(out);
   } catch (err) { next(err); }
 });
 
@@ -3331,8 +3355,9 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     const phone = b.phone ? String(b.phone).trim().slice(0, 40) : (lead.phone || null);
     const version = b.version ? String(b.version).trim().slice(0, 20) : null;
     const currency = String(b.currency || 'CZK').toUpperCase().slice(0, 3);
-    // Výrobní sloty k rezervaci (id z /api/compounder/slots-free), jeden na kus.
-    const slotIds = Array.isArray(b.slots) ? b.slots.map(function (x) { return parseInt(x, 10); }).filter(function (n) { return Number.isInteger(n); }) : [];
+    // Výrobní sloty k rezervaci (ref z /api/compounder/slots-free), jeden na kus.
+    // ref je buď číslo (existující ProductionSlot), nebo 'NEW|<startISO>|<endISO>' (týden se založí).
+    const slotRefs = Array.isArray(b.slots) ? b.slots.map(function (x) { return String(x || '').trim(); }).filter(Boolean) : [];
 
     // Najdi/založ odběratele (firma nebo fyzická osoba jako customer).
     let company = null;
@@ -3401,13 +3426,25 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
 
     // Rezervace výrobních slotů na 3 dny (72 h) — jeden assignment na vybraný slot.
     // Po zaplacení zálohy se auto-potvrdí (warehouse payment endpoint), jinak je uvolní worker.
-    if (slotIds.length) {
+    if (slotRefs.length) {
       const until = new Date(Date.now() + 72 * 3600 * 1000);
       const firstItemId = (order.items && order.items[0] && order.items[0].id) || null;
       const pname = (oItems[0] && oItems[0].name) || buyerName;
-      for (let si = 0; si < slotIds.length; si++) {
-        const slotId = slotIds[si];
+      for (let si = 0; si < slotRefs.length; si++) {
+        const ref = slotRefs[si];
+        let slotId = null;
         try {
+          if (/^\d+$/.test(ref)) {
+            slotId = parseInt(ref, 10);
+          } else if (ref.indexOf('NEW|') === 0) {
+            const parts = ref.split('|');
+            const sd = new Date(parts[1]), ed = new Date(parts[2]);
+            if (!isNaN(sd.getTime()) && !isNaN(ed.getTime())) {
+              const created = await prisma.productionSlot.create({ data: { name: 'Výrobní týden ' + parts[1], start_date: sd, end_date: ed, status: 'open' } }).catch(function () { return null; });
+              if (created) slotId = created.id;
+            }
+          }
+          if (!slotId) continue;
           await prisma.slotAssignment.create({ data: {
             slot_id: slotId, order_id: order.id, order_item_id: firstItemId,
             product_name: pname, customer_name: buyerName, quantity: 1, estimated_hours: 0,
