@@ -913,6 +913,42 @@
     .slot-tl-slot.mine { background: #ede7f6; color: #7c3aed; border: 2px solid #a78bfa; }
     .slot-tl-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc2626; z-index: 2; pointer-events: none; }
     .slot-tl-today-label { position: absolute; top: -14px; font-size: 9px; color: #dc2626; font-weight: 700; white-space: nowrap; transform: translateX(-50%); }
+    /* ── Profesionální vzhled (override) ─────────────────────────── */
+    body { background: linear-gradient(160deg,#0f172a 0%,#1e293b 55%,#334155 100%); padding: 0; }
+    .container { max-width: 720px; border-radius: 0; box-shadow: none; padding: 0; min-height: 100vh; position: relative; overflow: hidden; }
+    .container::before { content:''; display:block; height:6px; background:linear-gradient(90deg,#6C5CE7,#0984E3,#00b894); }
+    @media (min-width:640px){ body{padding:32px 16px;} .container{border-radius:20px; box-shadow:0 30px 80px rgba(0,0,0,.45); min-height:0; margin:0 auto;} }
+    .header { text-align:left; padding:26px 26px 18px; border-bottom:1px solid #eef0f4; margin-bottom:0; }
+    .header h1 { font-size:22px; font-weight:800; color:#0f172a; letter-spacing:-.3px; }
+    .header p { color:#94a3b8; font-size:13px; margin-top:4px; }
+    .order-info { padding:20px 26px 4px; gap:12px; margin:0; }
+    .info-block { background:#f8fafc; border:1px solid #eef0f4; border-left:4px solid #6C5CE7; border-radius:12px; padding:12px 14px; }
+    .info-block label { color:#94a3b8; }
+    .info-block .value { font-size:15px; font-weight:700; color:#0f172a; }
+    .status { display:inline-block; padding:4px 12px; border-radius:999px; font-size:12px; font-weight:800; letter-spacing:.3px; background:#eef2ff; color:#4338ca; }
+    .status.awaiting_customer { background:#fff7ed; color:#c2410c; }
+    .status.confirmed, .status.ordered { background:#ecfdf5; color:#047857; }
+    .status.cancelled { background:#fef2f2; color:#b91c1c; }
+    .items-section, .note-section, .price-summary, .customer-note-section, .slot-section, .slots-section { padding-left:26px; padding-right:26px; }
+    .items-section h2 { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:#64748b; margin:22px 0 12px; }
+    .order-item { background:#fff; border:1px solid #eef0f4; border-radius:14px; padding:16px; margin-bottom:12px; box-shadow:0 2px 10px rgba(15,23,42,.04); }
+    .item-header { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; }
+    .item-name { font-size:16px; font-weight:800; color:#0f172a; flex:1 1 100%; }
+    .item-qty { font-size:13px; color:#64748b; font-weight:600; }
+    .item-price { margin-left:auto; font-size:15px; font-weight:800; color:#0984E3; white-space:nowrap; }
+    .existing-config .chips, .config-section .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .chip { background:#eef2ff; color:#4338ca; border:1px solid #e0e7ff; border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600; }
+    .next-steps { background:#f0f9ff; border:1px solid #bae6fd; border-radius:14px; padding:16px 18px; margin:8px 26px 16px; }
+    .next-steps h3 { font-size:14px; color:#0369a1; margin-bottom:8px; }
+    .next-steps ol { margin:0; padding-left:18px; color:#334155; font-size:13.5px; line-height:1.7; }
+    .confirm-section { padding:6px 26px 30px; position:sticky; bottom:0; background:linear-gradient(180deg,rgba(255,255,255,0) 0%,#fff 30%); }
+    .btn-confirm { width:100%; padding:16px; font-size:16px; font-weight:800; color:#fff; border:none; border-radius:14px; cursor:pointer; background:linear-gradient(135deg,#6C5CE7,#0984E3); box-shadow:0 10px 24px rgba(9,132,227,.35); transition:filter .15s; }
+    .btn-confirm:hover { filter:brightness(1.06); }
+    .btn-confirm:disabled { opacity:.7; cursor:default; }
+    .confirmed-banner { margin:16px 26px; border-radius:12px; }
+    .price-summary { margin-top:8px; }
+    .footer { padding:20px 26px 26px; color:#94a3b8; }
+    .success-message { padding:52px 26px; text-align:center; }
   </style>
 </head>
 <body>
@@ -940,7 +976,7 @@
       // ─── Hlavička ───
       order_title:        { cs: 'Objedn\u00e1vka \u010d.',   en: 'Order No.',        de: 'Bestellung Nr.',    es: 'Pedido N\u00ba',          hr: 'Narud\u017eba br.' },
       subtitle_config:    { cs: 'Vyberte si konfiguraci va\u0161ich produkt\u016f a potvr\u010fte objedn\u00e1vku', en: 'Select your product configuration and confirm the order', de: 'W\u00e4hlen Sie Ihre Produktkonfiguration und best\u00e4tigen Sie die Bestellung', es: 'Seleccione la configuraci\u00f3n de sus productos y confirme el pedido', hr: 'Odaberite konfiguraciju proizvoda i potvrdite narud\u017ebu' },
-      subtitle_preview:   { cs: 'N\u00e1hled objedn\u00e1vky \u2014 HolyOS', en: 'Order preview \u2014 HolyOS', de: 'Bestell\u00fcbersicht \u2014 HolyOS', es: 'Vista previa del pedido \u2014 HolyOS', hr: 'Pregled narud\u017ebe \u2014 HolyOS' },
+      subtitle_preview:   { cs: 'Zkontrolujte pros\u00edm \u00fadaje a potvr\u010fte objedn\u00e1vku', en: 'Please review the details and confirm your order', de: 'Bitte pr\u00fcfen Sie die Angaben und best\u00e4tigen Sie', es: 'Revise los datos y confirme su pedido', hr: 'Provjerite podatke i potvrdite narud\u017ebu' },
 
       // ─── Info bloky ───
       company:            { cs: 'Spole\u010dnost',       en: 'Company',            de: 'Unternehmen',        es: 'Empresa',              hr: 'Tvrtka' },
@@ -980,6 +1016,10 @@
 
       // ─── Tla\u010d\u00edtko ───
       confirm_btn:        { cs: 'Potvrdit objedn\u00e1vku', en: 'Confirm order', de: 'Bestellung best\u00e4tigen', es: 'Confirmar pedido', hr: 'Potvrdite narud\u017ebu' },
+      next_title:         { cs: 'Co bude n\u00e1sledovat', en: 'What happens next', de: 'Wie es weitergeht', es: 'Qu\u00e9 sigue', hr: '\u0160to slijedi' },
+      next_1:             { cs: 'Zkontrolujte pros\u00edm \u00fadaje objedn\u00e1vky.', en: 'Please review the order details.', de: 'Bitte pr\u00fcfen Sie die Bestelldaten.', es: 'Revise los datos del pedido.', hr: 'Provjerite podatke narud\u017ebe.' },
+      next_2:             { cs: 'Kliknut\u00edm na \u201ePotvrdit objedn\u00e1vku\u201c ji z\u00e1vazn\u011b potvrd\u00edte.', en: 'Click \u201cConfirm order\u201d to confirm it.', de: 'Klicken Sie auf \u201eBestellung best\u00e4tigen\u201c.', es: 'Haga clic en \u201cConfirmar pedido\u201d.', hr: 'Kliknite \u201ePotvrdite narud\u017ebu\u201c.' },
+      next_3:             { cs: 'Obratem V\u00e1m e-mailem za\u0161leme potvrzen\u00ed objedn\u00e1vky a z\u00e1lohovou fakturu.', en: 'We will email you the order confirmation and a proforma invoice.', de: 'Wir senden Ihnen Best\u00e4tigung und Proformarechnung per E-Mail.', es: 'Le enviaremos la confirmaci\u00f3n y la factura proforma por correo.', hr: 'Poslat \u0107emo potvrdu i predra\u010dun e-po\u0161tom.' },
       submitting:         { cs: 'Odes\u00edl\u00e1m...',        en: 'Submitting...',      de: 'Wird gesendet...',   es: 'Enviando...',          hr: '\u0160aljem...' },
 
       // ─── Validace & chyby ───
@@ -1507,16 +1547,24 @@
       o.items.forEach(item => {
         html += '<div class="order-item">';
         html += '<div class="item-header">';
-        var __nameParts2 = (item.name || '').split('\n');
-        var __nameTop2 = esc(__nameParts2[0] || '');
-        var __nameSub2 = __nameParts2.length > 1 ? esc(__nameParts2.slice(1).join(' ')) : '';
-        html += '<span class="item-name" style="display:inline-flex;flex-direction:column;line-height:1.2;">' +
-          '<span>' + __nameTop2 + '</span>' +
-          (__nameSub2 ? '<span style="font-size:11px;color:#888;font-weight:400;font-style:italic;margin-top:2px;">' + __nameSub2 + '</span>' : '') +
-        '</span>';
+        // Rozdělení názvu: stroj (před „ — ") a výbava (za ním, oddělená „ · ").
+        var __raw = (item.name || '').replace(/\n/g, ' — ');
+        var __split = __raw.split(' — ');
+        var __machine = esc(__split[0] || '');
+        var __cfgTxt = __split.slice(1).join(' — ').trim();
+        html += '<span class="item-name">' + __machine + '</span>';
         html += '<span class="item-qty">' + formatPrice(item.quantity) + ' ' + esc(item.unit) + '</span>';
         html += '<span class="item-price">' + formatPrice(item.unit_price) + ' ' + cur + ' ' + t('excl_vat') + '</span>';
         html += '</div>';
+
+        // Výbava z názvu jako čipy (když nejsou strukturované config_groups/configs).
+        if (__cfgTxt && !(item.config_groups && item.config_groups.length) && !(item.configs && item.configs.length)) {
+          html += '<div class="existing-config"><div class="chips">';
+          __cfgTxt.split(/\s*·\s*/).filter(Boolean).forEach(function (part) {
+            html += '<span class="chip">' + esc(part) + '</span>';
+          });
+          html += '</div></div>';
+        }
 
         if (item.config_groups && item.config_groups.length > 0) {
           html += '<div class="config-section">';
@@ -1556,8 +1604,12 @@
         html += '<label>' + t('your_note') + '</label>';
         html += '<textarea id="customer-note" placeholder="' + t('note_placeholder') + '"></textarea>';
         html += '</div>';
+        html += '<div class="next-steps">'
+          + '<h3>' + t('next_title') + '</h3>'
+          + '<ol><li>' + t('next_1') + '</li><li>' + t('next_2') + '</li><li>' + t('next_3') + '</li></ol>'
+          + '</div>';
         html += '<div class="confirm-section">';
-        html += '<button class="btn-confirm" id="btn-confirm" onclick="submitConfiguration()">' + t('confirm_btn') + '</button>';
+        html += '<button class="btn-confirm" id="btn-confirm" onclick="submitConfiguration()">' + t('confirm_btn') + ' &rarr;</button>';
         html += '</div>';
       }
 

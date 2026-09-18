@@ -152,6 +152,16 @@ function orderLinkLocked(order) {
   // Aktivní odkaz: 'new' (starý konfigurátor) nebo 'awaiting_customer' (čeká na potvrzení).
   return !order || (order.status !== 'new' && order.status !== 'awaiting_customer');
 }
+// Poznámka pro zákazníka — odstraní interní bloky (konfigurace z průvodce, fakturační
+// údaje, IČO, odkaz na Compounder lead). Vrátí jen případnou skutečnou poznámku obchodníka.
+function publicSafeNote(note) {
+  if (!note) return null;
+  let s = String(note);
+  const cut = s.search(/—\s*(KONFIGURACE|FAKTURAČNÍ|FAKTURACNI)/i);
+  if (cut >= 0) s = s.slice(0, cut);
+  s = s.replace(/Z Compounder leadu.*$/gim, '').trim();
+  return s || null;
+}
 function sendOrderLocked(res, order) {
   const statusLabel = {
     new: 'Nový', quoted: 'Poptáno', ordered: 'Objednáno', awaiting_customer: 'Čeká na potvrzení',
@@ -253,7 +263,7 @@ app.get('/api/public/order/:token', async (req, res) => {
       currency: order.currency,
       total_amount: order.total_amount,
       expected_delivery: order.expected_delivery,
-      note: order.note,
+      note: publicSafeNote(order.note),
       items: itemsWithConfig,
     });
   } catch (err) {
