@@ -899,6 +899,66 @@ router.delete('/orders/:id', async (req, res, next) => {
 
 // ─── POLOŽKY OBJEDNÁVEK ───────────────────────────────────────────────────
 
+// Kapacita kamionu podle délky (verze): kolik stejných strojů se vejde na 1 kamion.
+const TRUCK_CAPACITY = { L1: 4, L2: 4, L3: 3, L4: 3 };
+
+// Automatické přepnutí ceny za kus na kamionovou, když počet stejného stroje na
+// objednávce dosáhne kapacity kamionu dané délky. Sahá jen na ceny, které odpovídají
+// známé maloobchodní nebo kamionové ceně z ceníku — ručně přepsané ceny nechává být.
+// Nakonec přepočítá celkovou částku objednávky.
+async function applyTruckPricing(orderId) {
+  const oid = parseInt(orderId, 10);
+  if (!oid) return;
+  const order = await prisma.order.findUnique({ where: { id: oid }, select: { id: true, currency: true } });
+  const items = await prisma.orderItem.findMany({ where: { order_id: oid }, orderBy: { id: 'asc' } });
+  if (order && items.length) {
+    const cur = order.currency === 'EUR' ? 'EUR' : 'CZK';
+    const pls = await prisma.salesPricelistItem.findMany({
+      where: { active: true },
+      select: { id: true, name_cs: true, name_en: true, product_id: true, model_version: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true },
+    });
+    const num = (d) => (d == null ? null : Number(d));
+    const matchPl = (it) => {
+      if (it.product_id) { const byP = pls.find((p) => p.product_id && p.product_id === it.product_id); if (byP) return byP; }
+      const nm = String(it.name || '').trim();
+      return pls.find((p) => {
+        const cs = (p.name_cs || '').trim(), en = (p.name_en || '').trim();
+        return nm === cs || (en && nm === en) || (en && cs && nm === (en + '\n' + cs)) || (en && cs && nm === (cs + '\n' + en));
+      });
+    };
+    const groups = new Map();   // pl.id -> count
+    const itemPl = new Map();   // orderItem.id -> pl
+    for (const it of items) {
+      const p = matchPl(it);
+      if (!p) continue;
+      itemPl.set(it.id, p);
+      groups.set(p.id, (groups.get(p.id) || 0) + 1);
+    }
+    const eps = 0.005;
+    for (const it of items) {
+      const p = itemPl.get(it.id);
+      if (!p) continue;
+      const cap = TRUCK_CAPACITY[p.model_version];
+      if (!cap) continue;
+      const retail = cur === 'EUR' ? num(p.price_eur) : num(p.price_czk);
+      const truck = cur === 'EUR' ? num(p.truck_price_eur) : num(p.truck_price_czk);
+      if (truck == null) continue; // bez kamionové ceny neřešíme
+      const target = (groups.get(p.id) >= cap) ? truck : retail;
+      if (target == null) continue;
+      const cp = num(it.unit_price) || 0;
+      const recognized = cp === 0 || (retail != null && Math.abs(cp - retail) < eps) || Math.abs(cp - truck) < eps;
+      if (!recognized) continue; // ruční cena — nesahat
+      if (Math.abs(cp - target) > eps) {
+        const qty = Number(it.quantity) || 1;
+        await prisma.orderItem.update({ where: { id: it.id }, data: { unit_price: target, total_price: qty * target } });
+      }
+    }
+  }
+  const all = await prisma.orderItem.findMany({ where: { order_id: oid } });
+  const total = all.reduce((s, i) => s + Number(i.total_price || 0), 0);
+  await prisma.order.update({ where: { id: oid }, data: { total_amount: total, items_count: all.length } });
+}
+
 // GET /api/wh/orders/:id/items
 router.get('/orders/:id/items', async (req, res, next) => {
   try {
@@ -932,19 +992,8 @@ router.post('/orders/:id/items', async (req, res, next) => {
         serial_number: serial_number ? String(serial_number).trim() || null : null,
       },
     });
-    // Aktualizovat celkovou cenu objednávky
-    const agg = await prisma.orderItem.aggregate({
-      where: { order_id: parseInt(req.params.id) },
-      _sum: { total_price: true },
-      _count: true,
-    });
-    await prisma.order.update({
-      where: { id: parseInt(req.params.id) },
-      data: {
-        total_amount: agg._sum.total_price || 0,
-        items_count: agg._count,
-      },
-    });
+    // Auto kamionová cena při plném kamionu + přepočet celkové částky
+    await applyTruckPricing(req.params.id);
     res.status(201).json(item);
   } catch (err) {
     next(err);
@@ -1034,6 +1083,7 @@ router.delete('/orders/:orderId/items/:itemId', async (req, res, next) => {
       }
     }
     await prisma.orderItem.delete({ where: { id: itemId } });
+    await applyTruckPricing(req.params.orderId);
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -1074,16 +1124,8 @@ router.post('/orders/:orderId/items/:itemId/duplicate', async (req, res, next) =
       include: { configs: { include: { option: { include: { group: true } } } } },
     });
 
-    // Přepočítej celkovou cenu a počet položek
-    const agg = await prisma.orderItem.aggregate({
-      where: { order_id: orderId },
-      _sum: { total_price: true },
-      _count: true,
-    });
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { total_amount: agg._sum.total_price || 0, items_count: agg._count },
-    });
+    // Auto kamionová cena při plném kamionu + přepočet celkové částky
+    await applyTruckPricing(orderId);
     res.status(201).json(clone);
   } catch (err) { next(err); }
 });
@@ -1092,6 +1134,7 @@ router.post('/orders/:orderId/items/:itemId/duplicate', async (req, res, next) =
 router.delete('/order-items/:id', async (req, res, next) => {
   try {
     const itemId = parseInt(req.params.id);
+    const oiRow = await prisma.orderItem.findUnique({ where: { id: itemId }, select: { order_id: true } });
     // Uvolni sloty přiřazené k této položce
     const assignments = await prisma.slotAssignment.findMany({ where: { order_item_id: itemId } });
     const slotIds = [...new Set(assignments.map(a => a.slot_id))];
@@ -1103,6 +1146,7 @@ router.delete('/order-items/:id', async (req, res, next) => {
       }
     }
     await prisma.orderItem.delete({ where: { id: itemId } });
+    if (oiRow) await applyTruckPricing(oiRow.order_id);
     res.json({ ok: true });
   } catch (err) {
     next(err);
