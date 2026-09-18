@@ -286,11 +286,11 @@ function buildDefaults(type, site, our) {
     return {
       ...base,
       location_desc: loc,
-      fee_pct: String(site?._servicePct != null ? site._servicePct : 15),
+      fee_pct: String(site?._servicePct != null ? site._servicePct : 13),
       fee_base: 'z obratu s DPH dosaženého provozem kiosku za příslušné období',
       billing_period: 'kalendářní měsíc',
       due_days: '14',
-      settlement: 'Poskytovatel inkasuje tržby (výběry) z kiosku, sráží si odměnu 15 % a zbývající částku poukazuje objednateli.',
+      settlement: 'Poskytovatel inkasuje tržby (výběry) z kiosku, sráží si odměnu ' + String(site?._servicePct != null ? site._servicePct : 13) + ' % a zbývající částku poukazuje objednateli.',
       system_value: '100 EUR / měsíc',
       term_type: 'neurčitou',
       notice_months: '3',

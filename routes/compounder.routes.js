@@ -3238,6 +3238,80 @@ router.get('/pricelist-config', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── SERVISNÍ SMLOUVY / opakovaná fakturace ─────────────────────────────────
+router.get('/service-subscriptions', requireAuth, async (req, res, next) => {
+  try {
+    const subs = await prisma.serviceSubscription.findMany({ orderBy: [{ active: 'desc' }, { kiosk_code: 'asc' }] });
+    res.json(subs);
+  } catch (err) { next(err); }
+});
+const subSchema = z.object({
+  kiosk_code: z.string().min(1).max(40),
+  company_id: z.number().int().optional().nullable(),
+  buyer_ico: z.string().max(20).optional().nullable(),
+  customer_name: z.string().max(255).optional().nullable(),
+  email: z.string().max(255).optional().nullable(),
+  fee_pct: z.number().optional(),
+  currency: z.string().max(3).optional(),
+  vat_rate: z.number().optional(),
+  active: z.boolean().optional(),
+  auto_send: z.boolean().optional(),
+  billing_day: z.number().int().optional(),
+  contract_id: z.number().int().optional().nullable(),
+  note: z.string().max(2000).optional().nullable(),
+});
+router.post('/service-subscriptions', requireAuth, async (req, res, next) => {
+  try {
+    const p = subSchema.safeParse(req.body);
+    if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
+    const d = p.data;
+    const data = {
+      kiosk_code: d.kiosk_code.trim(), company_id: d.company_id || null, buyer_ico: d.buyer_ico || null,
+      customer_name: d.customer_name || null, email: d.email || null,
+      fee_pct: d.fee_pct != null ? d.fee_pct : 13, currency: (d.currency || 'CZK').toUpperCase().slice(0, 3),
+      vat_rate: d.vat_rate != null ? d.vat_rate : 21, active: d.active !== false,
+      auto_send: !!d.auto_send, billing_day: d.billing_day != null ? d.billing_day : 3,
+      contract_id: d.contract_id || null, note: d.note || null,
+      created_by_user_id: (req.user && req.user.id) || null,
+    };
+    // upsert dle kiosk_code (jeden aktivní záznam na stroj)
+    const sub = await prisma.serviceSubscription.upsert({
+      where: { kiosk_code: data.kiosk_code },
+      update: data, create: data,
+    });
+    res.status(201).json(sub);
+  } catch (err) { next(err); }
+});
+router.put('/service-subscriptions/:id', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const p = subSchema.partial().safeParse(req.body);
+    if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
+    const d = p.data; const data = {};
+    ['company_id', 'buyer_ico', 'customer_name', 'email', 'currency', 'contract_id', 'note'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] || null; });
+    ['fee_pct', 'vat_rate', 'billing_day'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k]; });
+    ['active', 'auto_send'].forEach(function (k) { if (d[k] !== undefined) data[k] = !!d[k]; });
+    const sub = await prisma.serviceSubscription.update({ where: { id }, data });
+    res.json(sub);
+  } catch (err) { next(err); }
+});
+router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) => {
+  try { await prisma.serviceSubscription.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
+  catch (err) { next(err); }
+});
+router.post('/service-subscriptions/:id/bill-now', requireAuth, async (req, res, next) => {
+  try {
+    const sub = await prisma.serviceSubscription.findUnique({ where: { id: Number(req.params.id) } });
+    if (!sub) return res.status(404).json({ error: 'Nenalezeno' });
+    const { billSubscription } = require('../services/compounder/service-billing-worker');
+    const r = await billSubscription(sub, { force: true });
+    res.json(r);
+  } catch (err) {
+    if (err && err.code === 'SIS_NOT_CONFIGURED') return res.status(400).json({ error: 'SIS není nakonfigurovaný (chybí SIS_KIOSK_API_KEY).' });
+    next(err);
+  }
+});
+
 router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);

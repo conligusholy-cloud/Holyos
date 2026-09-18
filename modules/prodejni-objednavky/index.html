@@ -308,6 +308,7 @@
       <button type="button" class="tab-btn" data-tab="bankovni-plan" onclick="switchTab('bankovni-plan')">🏦 Bankovní plán</button>
       <button type="button" class="tab-btn" data-tab="ai-asistent" onclick="switchTab('ai-asistent')">📞 AI telefonní asistent</button>
       <button type="button" class="tab-btn" data-tab="prekladac" onclick="switchTab('prekladac')">🗣️ Překladač</button>
+      <button type="button" class="tab-btn" data-tab="servis-smlouvy" onclick="switchTab('servis-smlouvy')">🔧 Servisní smlouvy</button>
     </div>
 
     <!-- TAB: Compounding — hodnota lokalit prádlomatů ze SIS API -->
@@ -426,6 +427,16 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- TAB: Servisní smlouvy / měsíční fakturace -->
+    <div id="tab-servis-smlouvy" style="display:none; padding:20px 24px 24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <h3 style="margin:0;font-size:16px;">🔧 Servisní smlouvy — měsíční fakturace 13 % z obratu</h3>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="openServiceSubForm()">➕ Nová smlouva</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Worker každý měsíc spočítá obrat stroje ze SIS a vytvoří servisní fakturu (13 % vč. DPH). Odešle se automaticky jen u smluv s „Auto‑odeslání" (a když je zapnutý přepínač na serveru), jinak zůstane koncept k odsouhlasení.</div>
+      <div id="servis-subs-table"><div style="color:var(--text2);">Načítám…</div></div>
     </div>
 
     <!-- TAB: AI telefonní asistent -->
@@ -3031,6 +3042,97 @@
         window.open('/api/wh/delivery-notes/' + j.id + '/pdf', '_blank');
       } catch (e) { alert('Dodací list se nepodařilo vytvořit: ' + (e.message || '')); }
     }
+
+    async function loadServiceSubs() {
+      var box = document.getElementById('servis-subs-table'); if (!box) return;
+      box.innerHTML = '<div style="color:var(--text2);">Načítám…</div>';
+      try {
+        var r = await fetch('/api/compounder/service-subscriptions', { credentials: 'include' });
+        var arr = await r.json(); window._serviceSubs = arr;
+        if (!arr.length) { box.innerHTML = '<div style="color:var(--text2);padding:16px;">Zatím žádné servisní smlouvy. Přidej první tlačítkem „Nová smlouva".</div>'; return; }
+        var h = '<table class="data-table" style="width:100%;"><thead><tr><th>Kiosk</th><th>Odběratel</th><th>%</th><th>Auto</th><th>Naposledy</th><th>Stav</th><th></th></tr></thead><tbody>';
+        arr.forEach(function (s) {
+          h += '<tr><td><b>' + esc(s.kiosk_code) + '</b></td>'
+            + '<td>' + esc(s.customer_name || ('#' + (s.company_id || '—'))) + (s.buyer_ico ? (' · IČO ' + esc(s.buyer_ico)) : '') + '<br><span style="font-size:11px;color:var(--text2);">' + esc(s.email || '') + '</span></td>'
+            + '<td>' + esc(s.fee_pct) + ' %</td>'
+            + '<td>' + (s.auto_send ? '✅' : '—') + '</td>'
+            + '<td>' + esc(s.last_billed_ym || '—') + '</td>'
+            + '<td>' + (s.active ? '<span style="color:#22c55e;">Aktivní</span>' : '<span style="color:var(--text2);">Neaktivní</span>') + '</td>'
+            + '<td style="white-space:nowrap;text-align:right;">'
+            + '<button class="btn btn-sm" onclick="billNowSub(' + s.id + ')" title="Servisní faktura za předchozí měsíc">💸</button> '
+            + '<button class="btn btn-sm" onclick="genServiceContract(' + s.id + ')" title="Servisní smlouva (PDF)">📄</button> '
+            + '<button class="btn btn-sm" onclick="openServiceSubForm(' + s.id + ')">✏️</button> '
+            + '<button class="btn btn-danger btn-sm" onclick="delServiceSub(' + s.id + ')">🗑️</button></td></tr>';
+        });
+        box.innerHTML = h + '</tbody></table>';
+      } catch (e) { box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání.</div>'; }
+    }
+    function _findSub(id) { return (window._serviceSubs || []).filter(function (x) { return x.id === id; })[0] || {}; }
+    function openServiceSubForm(id) {
+      var s = id ? _findSub(id) : {};
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:520px;max-width:94vw;">'
+        + '<h2 style="margin:0 0 14px;">' + (id ? 'Upravit' : '+ Nová') + ' servisní smlouva</h2>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'
+        + '<div class="form-group"><label>Kód kiosku (SIS) *</label><input id="ss-kiosk" ' + (id ? 'readonly' : '') + ' value="' + esc(s.kiosk_code || '') + '"></div>'
+        + '<div class="form-group"><label>% z obratu</label><input id="ss-fee" type="number" step="0.01" value="' + (s.fee_pct != null ? s.fee_pct : 13) + '"></div>'
+        + '<div class="form-group"><label>Odběratel (název)</label><input id="ss-name" value="' + esc(s.customer_name || '') + '"></div>'
+        + '<div class="form-group"><label>IČO odběratele</label><input id="ss-ico" value="' + esc(s.buyer_ico || '') + '"></div>'
+        + '<div class="form-group"><label>E-mail pro fakturu</label><input id="ss-email" value="' + esc(s.email || '') + '"></div>'
+        + '<div class="form-group"><label>Měna</label><input id="ss-cur" value="' + esc(s.currency || 'CZK') + '"></div>'
+        + '<div class="form-group"><label>Den fakturace</label><input id="ss-day" type="number" min="1" max="28" value="' + (s.billing_day != null ? s.billing_day : 3) + '"></div>'
+        + '<div class="form-group"><label>DPH (%)</label><input id="ss-vat" type="number" value="' + (s.vat_rate != null ? s.vat_rate : 21) + '"></div>'
+        + '<div class="form-group"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input id="ss-active" type="checkbox" ' + (s.active === false ? '' : 'checked') + '> Aktivní</label></div>'
+        + '<div class="form-group"><label style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input id="ss-auto" type="checkbox" ' + (s.auto_send ? 'checked' : '') + '> Auto‑odeslání e‑mailem</label></div>'
+        + '</div>'
+        + '<div class="modal-actions" style="margin-top:16px;"><button class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button class="btn btn-primary" onclick="saveServiceSub(' + (id || 0) + ')">Uložit</button></div>'
+        + '</div></div>';
+    }
+    async function saveServiceSub(id) {
+      var body = {
+        kiosk_code: document.getElementById('ss-kiosk').value.trim(),
+        fee_pct: parseFloat(document.getElementById('ss-fee').value) || 13,
+        customer_name: document.getElementById('ss-name').value.trim() || null,
+        buyer_ico: document.getElementById('ss-ico').value.trim() || null,
+        email: document.getElementById('ss-email').value.trim() || null,
+        currency: (document.getElementById('ss-cur').value || 'CZK').trim(),
+        billing_day: parseInt(document.getElementById('ss-day').value, 10) || 3,
+        vat_rate: parseFloat(document.getElementById('ss-vat').value) || 21,
+        active: document.getElementById('ss-active').checked,
+        auto_send: document.getElementById('ss-auto').checked,
+      };
+      if (!body.kiosk_code) { alert('Zadej kód kiosku.'); return; }
+      try {
+        var url = id ? ('/api/compounder/service-subscriptions/' + id) : '/api/compounder/service-subscriptions';
+        var r = await fetch(url, { method: id ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) { var j = await r.json().catch(function () { return {}; }); throw new Error(j.error || ('HTTP ' + r.status)); }
+        closeModal(); loadServiceSubs();
+      } catch (e) { alert('Uložení selhalo: ' + (e.message || '')); }
+    }
+    async function delServiceSub(id) {
+      if (!confirm('Smazat servisní smlouvu?')) return;
+      try { await fetch('/api/compounder/service-subscriptions/' + id, { method: 'DELETE', credentials: 'include' }); loadServiceSubs(); } catch (e) { alert('Smazání selhalo.'); }
+    }
+    async function billNowSub(id) {
+      if (!confirm('Vytvořit servisní fakturu za předchozí měsíc (koncept)?')) return;
+      try {
+        var r = await fetch('/api/compounder/service-subscriptions/' + id + '/bill-now', { method: 'POST', credentials: 'include' });
+        var j = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        if (j.skipped) alert('Nefakturováno: ' + (j.reason === 'no_revenue' ? 'nulový obrat za předchozí měsíc' : 'už bylo fakturováno tento měsíc'));
+        else alert('Faktura ' + j.invoice_number + ' (' + Math.round(j.total).toLocaleString('cs-CZ') + ' ' + j.currency + ') ' + (j.sent ? 'odeslána' : 'vytvořena jako koncept') + '. Najdeš ji v Účetních dokladech.');
+        loadServiceSubs();
+      } catch (e) { alert('Fakturace selhala: ' + (e.message || '')); }
+    }
+    async function genServiceContract(id) {
+      var s = _findSub(id);
+      var fields = { fee_pct: String(s.fee_pct != null ? s.fee_pct : 13), buyer_name: s.customer_name || '', buyer_ico: s.buyer_ico || '', kiosk_code: s.kiosk_code || '' };
+      try {
+        var r = await fetch('/api/compounder/contracts/servisni/pdf', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: fields, code: s.kiosk_code || '' }) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var blob = await r.blob(); window.open(URL.createObjectURL(blob), '_blank');
+      } catch (e) { alert('Smlouvu se nepodařilo vygenerovat: ' + (e.message || '')); }
+    }
+    window.loadServiceSubs = loadServiceSubs; window.openServiceSubForm = openServiceSubForm; window.saveServiceSub = saveServiceSub; window.delServiceSub = delServiceSub; window.billNowSub = billNowSub; window.genServiceContract = genServiceContract;
 
     async function deleteOrder(id) {
       if (!confirm('Opravdu smazat tuto objednávku?')) return;
@@ -6125,7 +6227,7 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -6142,6 +6244,7 @@
       if (name === 'externi') renderExternalTrade();
       if (name === 'externisti') loadExternalReps();
       if (name === 'blacklist') loadBlacklist();
+      if (name === 'servis-smlouvy') loadServiceSubs();
       if (name === 'bankovni-plan') {
         var fr = document.getElementById('bp-frame');
         if (fr && !fr.getAttribute('data-loaded')) { fr.src = '/modules/bankovni-plan/index.html?embed=1'; fr.setAttribute('data-loaded', '1'); }

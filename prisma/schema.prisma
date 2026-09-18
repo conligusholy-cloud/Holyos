@@ -2946,6 +2946,31 @@ model Invoice {
 }
 
 // Řádek faktury. Cost-center umožňuje kategorizaci (auto/osoba/stroj/projekt).
+// Servisní předplatné / opakovaná fakturace 13 % z obratu stroje (kiosku) v terénu.
+model ServiceSubscription {
+  id                 Int      @id @default(autoincrement())
+  kiosk_code         String   @unique @db.VarChar(40) // stroj v terénu (SIS)
+  contract_id        Int? // CompoundingContract (servisní smlouva)
+  company_id         Int? // odběratel (Company) pro fakturu
+  buyer_ico          String?  @db.VarChar(20)
+  customer_name      String?  @db.VarChar(255)
+  email              String?  @db.VarChar(255) // kam poslat fakturu
+  fee_pct            Decimal  @default(13) @db.Decimal(5, 2) // % z obratu (vč. DPH)
+  currency           String   @default("CZK") @db.VarChar(3)
+  vat_rate           Decimal  @default(21) @db.Decimal(5, 2) // DPH servisu (ČR 21 %)
+  active             Boolean  @default(true)
+  auto_send          Boolean  @default(false) // odeslat fakturu automaticky e-mailem (jinak jen koncept)
+  billing_day        Int      @default(3) // den v měsíci, odkdy fakturovat předchozí měsíc
+  last_billed_ym     String?  @db.VarChar(7) // "2026-08" — naposledy vyfakturovaný měsíc (idempotence)
+  note               String?  @db.Text
+  created_by_user_id Int?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@index([active])
+  @@map("service_subscriptions")
+}
+
 // Dodací list k prodejní objednávce (jednoduchá evidence + PDF).
 model DeliveryNote {
   id                 Int      @id @default(autoincrement())

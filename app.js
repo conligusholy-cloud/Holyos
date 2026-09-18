@@ -1053,6 +1053,12 @@ server.listen(PORT, async () => {
   } catch (err) {
     console.error('[app] voice-outbound-worker nelze spustit:', err.message);
   }
+  try {
+    const serviceBillingWorker = require('./services/compounder/service-billing-worker');
+    serviceBillingWorker.start();
+  } catch (err) {
+    console.error('[app] service-billing-worker nelze spustit:', err.message);
+  }
   console.log('=========================================');
   console.log('  HolyOS v0.5.0');
   console.log('  Listening on port ' + PORT);
