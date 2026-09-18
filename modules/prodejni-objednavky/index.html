@@ -295,6 +295,7 @@
     <div class="tab-bar">
       <button type="button" class="tab-btn active" data-tab="orders" onclick="switchTab('orders')">📋 Objednávky</button>
       <button type="button" class="tab-btn" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Ceník</button>
+      <button type="button" class="tab-btn" data-tab="accessories" onclick="switchTab('accessories')">🧴 Příslušenství</button>
       <button type="button" class="tab-btn" data-tab="cashflow" onclick="switchTab('cashflow')">💸 Cash flow</button>
       <button type="button" class="tab-btn" data-tab="tools" onclick="switchTab('tools')">🧰 Obchodní pomůcky</button>
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
@@ -729,6 +730,23 @@
           <button class="btn btn-primary" onclick="openPricelistModal()">+ Nová položka</button>
         </div>
         <div id="pricelist-table"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Příslušenství -->
+    <div id="tab-accessories" style="display:none;">
+      <div class="content">
+        <div class="toolbar">
+          <input type="text" id="acc-search" placeholder="Hledat příslušenství (CZ / EN)..." onkeyup="loadAccessories()">
+          <select id="acc-filter" onchange="loadAccessories()">
+            <option value="">Všechny</option>
+            <option value="active" selected>Aktivní</option>
+            <option value="inactive">Zrušené</option>
+          </select>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="openAccessoryModal()">+ Nové příslušenství</button>
+        </div>
+        <div id="accessories-table"></div>
       </div>
     </div>
 
@@ -2168,7 +2186,7 @@
         // Aktivni polozky ceniku pro dropdown 'Z ceniku' pri pridavani polozky
         let pricelistItems = [];
         try {
-          const plRes = await fetch('/api/wh/pricelist?active=true');
+          const plRes = await fetch('/api/wh/pricelist?active=true&kind=machine');
           if (plRes.ok) pricelistItems = await plRes.json();
         } catch(e) { console.warn('pricelist fetch fail', e); }
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
@@ -6095,7 +6113,7 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -9856,11 +9874,11 @@
       var search = document.getElementById('pricelist-search') ? document.getElementById('pricelist-search').value : '';
       var filter = document.getElementById('pricelist-filter') ? document.getElementById('pricelist-filter').value : '';
       var url = '/api/wh/pricelist';
-      var params = [];
+      var params = ['kind=machine'];
       if (search) params.push('search=' + encodeURIComponent(search));
       if (filter === 'active') params.push('active=true');
       if (filter === 'inactive') params.push('active=false');
-      if (params.length) url += '?' + params.join('&');
+      url += '?' + params.join('&');
       try {
         try { var dc = await fetch('/api/wh/pricelist-config-default').then(function(r) { return r.json(); }); window._plDefaultConfig = (dc && dc.config_options) || []; } catch(e) {}
         var res = await fetch(url);
@@ -10172,6 +10190,120 @@
         if (!res.ok) { alert('Chyba při mazání'); return; }
         loadPricelist();
       } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    // ================= PŘÍSLUŠENSTVÍ (kind=accessory) =================
+    var ACC_DEFAULT_CATS = ['Detergenty', 'Náhradní díly', 'Nářadí'];
+
+    async function loadAccessories() {
+      var search = document.getElementById('acc-search') ? document.getElementById('acc-search').value : '';
+      var filter = document.getElementById('acc-filter') ? document.getElementById('acc-filter').value : '';
+      var params = ['kind=accessory'];
+      if (search) params.push('search=' + encodeURIComponent(search));
+      if (filter === 'active') params.push('active=true');
+      if (filter === 'inactive') params.push('active=false');
+      try {
+        var res = await fetch('/api/wh/pricelist?' + params.join('&'));
+        var items = await res.json();
+        renderAccessories(Array.isArray(items) ? items : []);
+      } catch (e) { console.error(e); }
+    }
+
+    function accCategories(list) {
+      var set = {};
+      ACC_DEFAULT_CATS.forEach(function(c) { set[c] = 1; });
+      (list || []).forEach(function(it) { if (it.category) set[it.category] = 1; });
+      return Object.keys(set);
+    }
+
+    function renderAccessories(list) {
+      window._accCats = accCategories(list);
+      var el = document.getElementById('accessories-table');
+      if (!list.length) {
+        el.innerHTML = '<div class="empty-state"><div class="empty-icon">🧴</div><h3>Zatím žádné příslušenství</h3><p>Přidej detergenty, náhradní díly nebo nářadí s cenou.</p></div>';
+        return;
+      }
+      var byCat = {}, order = [];
+      list.forEach(function(it) { var c = it.category || 'Bez kategorie'; if (!byCat[c]) { byCat[c] = []; order.push(c); } byCat[c].push(it); });
+      order.sort(function(a, b) { var ia = ACC_DEFAULT_CATS.indexOf(a), ib = ACC_DEFAULT_CATS.indexOf(b); if (ia < 0) ia = 99; if (ib < 0) ib = 99; return ia - ib || a.localeCompare(b, 'cs'); });
+      var html = '';
+      order.forEach(function(cat) {
+        var rows = byCat[cat];
+        html += '<div style="display:flex;align-items:center;gap:10px;margin:16px 0 6px;padding:8px 14px;background:linear-gradient(135deg,rgba(16,185,129,0.16),rgba(16,185,129,0.04));border-left:4px solid #10b981;border-radius:8px;">' +
+          '<span style="font-size:15px;font-weight:800;">' + esc(cat) + '</span><span style="font-size:12px;color:var(--text2);">' + rows.length + ' pol.</span></div>';
+        html += '<div style="overflow-x:auto;margin-bottom:6px;"><table class="data-table"><thead><tr><th>Název</th><th style="text-align:right">Cena CZK</th><th style="text-align:right">Cena EUR</th><th>Stav</th><th>Akce</th></tr></thead><tbody>';
+        rows.forEach(function(it) {
+          var statusCss = it.active ? 'background:rgba(16,185,129,0.12);color:#10b981' : 'background:rgba(156,163,175,0.12);color:#9ca3af';
+          var statusLbl = it.active ? 'Aktivní' : 'Zrušeno';
+          html += '<tr onclick="openAccessoryModal(' + it.id + ')">';
+          html += '<td class="person-name">' + esc(it.name_cs) + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
+          html += '<td style="text-align:right;font-weight:600;">' + (it.price_czk != null ? parseFloat(it.price_czk).toLocaleString('cs-CZ') + ' Kč' : '<span style="color:var(--text2)">—</span>') + '</td>';
+          html += '<td style="text-align:right;font-weight:600;">' + (it.price_eur != null ? parseFloat(it.price_eur).toLocaleString('cs-CZ') + ' €' : '<span style="color:var(--text2)">—</span>') + '</td>';
+          html += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
+          html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteAccessory(' + it.id + ')">🗑️</button></td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+      el.innerHTML = html;
+    }
+
+    async function openAccessoryModal(id) {
+      var item = {};
+      if (id) { try { var r = await fetch('/api/wh/pricelist/' + id); item = await r.json(); } catch (e) {} }
+      var cats = (Array.isArray(window._accCats) && window._accCats.length) ? window._accCats : ACC_DEFAULT_CATS;
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal" style="width:560px;max-width:95vw;">' +
+            '<h2>' + (id ? '✏️ Upravit příslušenství' : '➕ Nové příslušenství') + '</h2>' +
+            '<form onsubmit="saveAccessory(event, ' + (id || 'null') + ')">' +
+              '<div class="form-grid">' +
+                '<div class="form-group full"><label>Kategorie</label><input type="text" name="category" list="acc-cat-list" value="' + esc(item.category || '') + '" placeholder="Např. Detergenty"><datalist id="acc-cat-list">' + cats.map(function(c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
+                '<div class="form-group full"><label>Název (česky) *</label><input type="text" name="name_cs" required value="' + esc(item.name_cs || '') + '" placeholder="Např. Prací prášek 20 kg"></div>' +
+                '<div class="form-group full"><label>Název (anglicky)</label><input type="text" name="name_en" value="' + esc(item.name_en || '') + '"></div>' +
+                '<div class="form-group"><label>Cena v Kč</label><input type="number" step="0.01" min="0" name="price_czk" value="' + (item.price_czk != null ? item.price_czk : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group"><label>Cena v EUR</label><input type="number" step="0.01" min="0" name="price_eur" value="' + (item.price_eur != null ? item.price_eur : '') + '" placeholder="0.00"></div>' +
+                '<div class="form-group full"><label>Poznámka</label><textarea name="note" rows="2" placeholder="Interní poznámka...">' + esc(item.note || '') + '</textarea></div>' +
+                '<div class="form-group full"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="active"' + (item.active === false ? '' : ' checked') + '> <span>Aktivní položka</span></label></div>' +
+              '</div>' +
+              '<div class="modal-actions">' +
+                '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
+              '</div>' +
+            '</form>' +
+          '</div>' +
+        '</div>';
+    }
+
+    async function saveAccessory(e, id) {
+      e.preventDefault();
+      var form = new FormData(e.target);
+      var data = {
+        kind: 'accessory',
+        category: form.get('category') || null,
+        name_cs: form.get('name_cs'),
+        name_en: form.get('name_en') || null,
+        price_czk: form.get('price_czk') ? parseFloat(form.get('price_czk')) : null,
+        price_eur: form.get('price_eur') ? parseFloat(form.get('price_eur')) : null,
+        note: form.get('note') || null,
+        active: form.has('active'),
+      };
+      try {
+        var url = id ? ('/api/wh/pricelist/' + id) : '/api/wh/pricelist';
+        var method = id ? 'PUT' : 'POST';
+        var res = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        if (!res.ok) { var err = await res.json().catch(function() { return {}; }); throw new Error(err.error || ('Chyba (' + res.status + ')')); }
+        closeModal(); loadAccessories();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+
+    async function deleteAccessory(id) {
+      if (!confirm('Opravdu smazat toto příslušenství?')) return;
+      try {
+        var res = await fetch('/api/wh/pricelist/' + id, { method: 'DELETE' });
+        if (!res.ok) { alert('Chyba při mazání'); return; }
+        loadAccessories();
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     // ============================================================

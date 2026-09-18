@@ -1307,6 +1307,8 @@ model SalesPricelistItem {
   price_eur       Decimal? @db.Decimal(12, 2) // maloobchodní cena EUR bez DPH
   truck_price_czk Decimal? @db.Decimal(12, 2) // kamionová (velkoobchodní) cena Kč bez DPH
   truck_price_eur Decimal? @db.Decimal(12, 2) // kamionová cena EUR bez DPH
+  kind            String   @default("machine") @db.VarChar(20) // 'machine' = stroj, 'accessory' = příslušenství
+  category        String?  @db.VarChar(80) // kategorie u příslušenství (Detergenty, Náhradní díly, Nářadí…)
   model_version   String?  @db.VarChar(8) // základní model / délka: L1–L4
   model_variant   String?  @db.VarChar(8) // varianta / výška: H1 = nižší, H2 = standard
   machine_code    String?  @db.VarChar(60) // označení stroje (např. W18D18, W18D18D18)
@@ -1322,6 +1324,7 @@ model SalesPricelistItem {
   @@index([product_id])
   @@index([active])
   @@index([model_version, model_variant])
+  @@index([kind, category])
   @@map("sales_pricelist_items")
 }
 

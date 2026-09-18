@@ -914,7 +914,7 @@ async function applyTruckPricing(orderId) {
   if (order && items.length) {
     const cur = order.currency === 'EUR' ? 'EUR' : 'CZK';
     const pls = await prisma.salesPricelistItem.findMany({
-      where: { active: true },
+      where: { active: true, kind: 'machine' },
       select: { id: true, name_cs: true, name_en: true, product_id: true, model_version: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true },
     });
     const num = (d) => (d == null ? null : Number(d));
@@ -2004,14 +2004,23 @@ function normConfigOptions(v) {
   }
   return groups.length ? groups : null;
 }
+function normKind(v) {
+  return String(v || '').trim().toLowerCase() === 'accessory' ? 'accessory' : 'machine';
+}
+function normCategory(v) {
+  const s = String(v == null ? '' : v).trim().slice(0, 80);
+  return s || null;
+}
 
 // GET /api/wh/pricelist?active=true&search=...&product_id=X
 router.get('/pricelist', async (req, res, next) => {
   try {
-    const { search, active, product_id } = req.query;
+    const { search, active, product_id, kind, category } = req.query;
     const where = {};
     if (active !== undefined) where.active = active === 'true';
     if (product_id) where.product_id = parseInt(product_id, 10);
+    if (kind) where.kind = String(kind);
+    if (category) where.category = String(category);
     if (search) {
       where.OR = [
         { name_cs: { contains: search, mode: 'insensitive' } },
@@ -2048,7 +2057,7 @@ router.get('/pricelist/:id', async (req, res, next) => {
 // POST /api/wh/pricelist
 router.post('/pricelist', async (req, res, next) => {
   try {
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
     if (!name_cs || !String(name_cs).trim()) {
       return res.status(400).json({ error: 'Povinny je cesky nazev (name_cs).' });
     }
@@ -2065,6 +2074,8 @@ router.post('/pricelist', async (req, res, next) => {
         model_variant: normModelVariant(model_variant),
         machine_code: normMachineCode(machine_code),
         config_options: normConfigOptions(config_options),
+        kind: normKind(kind),
+        category: normCategory(category),
         product_id: product_id ? parseInt(product_id, 10) : null,
         note: note || null,
         active: active === undefined ? true : !!active,
@@ -2081,7 +2092,7 @@ router.post('/pricelist', async (req, res, next) => {
 router.put('/pricelist/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, product_id, note, active } = req.body || {};
+    const { name_cs, name_en, price_czk, price_eur, truck_price_czk, truck_price_eur, model_version, model_variant, machine_code, config_options, kind, category, product_id, note, active } = req.body || {};
     const data = {};
     if (name_cs !== undefined) data.name_cs = String(name_cs).trim();
     if (name_en !== undefined) data.name_en = name_en ? String(name_en).trim() : null;
@@ -2093,6 +2104,8 @@ router.put('/pricelist/:id', async (req, res, next) => {
     if (model_variant !== undefined) data.model_variant = normModelVariant(model_variant);
     if (machine_code !== undefined) data.machine_code = normMachineCode(machine_code);
     if (config_options !== undefined) data.config_options = normConfigOptions(config_options);
+    if (kind !== undefined) data.kind = normKind(kind);
+    if (category !== undefined) data.category = normCategory(category);
     if (product_id !== undefined) data.product_id = product_id ? parseInt(product_id, 10) : null;
     if (note !== undefined) data.note = note || null;
     if (active !== undefined) data.active = !!active;
