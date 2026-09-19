@@ -7,11 +7,54 @@
 
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const { prisma } = require('../config/database');
 const { sendMail } = require('./email');
 
+const ORDER_DOCS_DIR = path.join(__dirname, '..', 'data', 'order-docs');
+
 async function getOurCompanySafe() {
   try { return await require('./settings').getOurCompany(); } catch (e) { return null; }
+}
+
+// Termíny z rezervovaných slotů (1 slot = 1 stroj), seřazené vzestupně.
+async function loadSlotDates(orderId) {
+  try {
+    const asg = await prisma.slotAssignment.findMany({
+      where: { order_id: orderId },
+      include: { slot: { select: { start_date: true, end_date: true } } },
+    });
+    return asg.map((a) => a.slot && (a.slot.end_date || a.slot.start_date)).filter(Boolean)
+      .sort((x, y) => new Date(x) - new Date(y));
+  } catch (e) { return []; }
+}
+
+// Obchodník (kdo objednávku vyřizuje) pro hlavičku dokladu.
+async function loadOwner(order) {
+  try {
+    if (!order.created_by) return null;
+    const p = await prisma.person.findUnique({ where: { id: order.created_by }, select: { first_name: true, last_name: true, email: true, phone: true } });
+    if (!p) return null;
+    return { name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null, email: p.email || null, phone: p.phone || null };
+  } catch (e) { return null; }
+}
+
+// Vygeneruje PDF potvrzené objednávky, uloží na data volume a vrátí { buffer, filePath }.
+async function buildAndStoreOrderPdf(order, ourCompany) {
+  const { generateOrderPdf } = require('./pdf/order-pdf');
+  const owner = await loadOwner(order);
+  const slotDates = await loadSlotDates(order.id);
+  const buffer = await generateOrderPdf(order, ourCompany || {}, { owner, slotDates });
+  let filePath = null;
+  try {
+    fs.mkdirSync(ORDER_DOCS_DIR, { recursive: true });
+    const safeNo = String(order.order_number || ('order-' + order.id)).replace(/[^A-Za-z0-9_-]/g, '_');
+    filePath = path.join(ORDER_DOCS_DIR, safeNo + '.pdf');
+    fs.writeFileSync(filePath, buffer);
+    await prisma.order.update({ where: { id: order.id }, data: { confirmation_pdf_path: filePath } }).catch(() => {});
+  } catch (e) { console.error('[order-docs] uložení PDF objednávky selhalo:', e && e.message); }
+  return { buffer, filePath };
 }
 
 // Vrátí (a případně vytvoří) fakturu k odeslání zákazníkovi.
@@ -61,23 +104,28 @@ async function ensureInvoiceForOrder(order) {
   });
 }
 
-// Hlavní: po autorizaci odešle zákazníkovi potvrzení objednávky + fakturu (PDF).
+// Hlavní: po autorizaci vygeneruje PDF potvrzené objednávky (uloží k objednávce),
+// přiloží fakturu (zálohovou / plnou) a odešle zákazníkovi e-mailem.
 async function sendOrderConfirmationDocs(orderId) {
   const order = await prisma.order.findUnique({ where: { id: Number(orderId) }, include: { company: true, items: true } });
-  if (!order) return;
-  const to = order.customer_email || (order.company && order.company.email) || null;
-  if (!to) { console.warn('[order-docs] chybí e-mail zákazníka — doklady neodeslány'); return; }
+  if (!order) { console.warn('[order-docs] objednávka nenalezena:', orderId); return; }
 
   const ourCompany = await getOurCompanySafe();
   const fromEmail = (ourCompany && ourCompany.email) || process.env.COMPOUNDER_MAIL_FROM || process.env.SMTP_FROM || null;
   const ourName = (ourCompany && ourCompany.name) || 'Best Series s.r.o.';
   const cur = order.currency || 'CZK';
-
-  const lines = (order.items || []).map((it) => '• ' + it.name + ' — ' + Number(it.quantity) + ' ' + (it.unit || 'ks') + ' × ' + Number(it.unit_price).toLocaleString('cs-CZ') + ' = ' + Number(it.total_price).toLocaleString('cs-CZ') + ' ' + cur);
-  let body = 'Dobrý den,\n\nVaše objednávka ' + order.order_number + ' byla potvrzena a autorizována. Děkujeme.\n\nSouhrn objednávky:\n'
-    + lines.join('\n') + '\n\nCelkem bez DPH: ' + Number(order.total_amount).toLocaleString('cs-CZ') + ' ' + cur + '\n\n';
-
   const attachments = [];
+
+  // 1) PDF POTVRZENÉ OBJEDNÁVKY — vždy vygeneruj a ulož k objednávce (i bez ourCompany).
+  try {
+    const { buffer } = await buildAndStoreOrderPdf(order, ourCompany);
+    if (buffer && buffer.length) {
+      attachments.push({ filename: 'Objednavka-' + order.order_number + '.pdf', content: buffer, contentType: 'application/pdf' });
+    }
+  } catch (e) { console.error('[order-docs] PDF objednávky selhalo:', e && e.message); }
+
+  // 2) FAKTURA (zálohová / plná) — přílohou.
+  let invoiceNote = '';
   try {
     const inv = await ensureInvoiceForOrder(order);
     if (inv && ourCompany) {
@@ -85,18 +133,31 @@ async function sendOrderConfirmationDocs(orderId) {
       const pdf = await generateInvoicePdf(inv, ourCompany);
       const label = inv.invoice_role === 'deposit' ? 'zálohovou fakturu' : 'fakturu';
       attachments.push({ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' });
-      body += 'V příloze zasíláme ' + label + ' ' + inv.invoice_number + ' na částku ' + Number(inv.total).toLocaleString('cs-CZ') + ' ' + (inv.currency || cur)
+      invoiceNote = 'V příloze zasíláme ' + label + ' ' + inv.invoice_number + ' na částku ' + Number(inv.total).toLocaleString('cs-CZ') + ' ' + (inv.currency || cur)
         + (inv.date_due ? (' se splatností ' + new Date(inv.date_due).toLocaleDateString('cs-CZ')) : '') + '.\n\n';
       try { await prisma.invoice.update({ where: { id: inv.id }, data: { status: 'issued' } }); } catch (e) {}
     }
   } catch (e) { console.error('[order-docs] faktura PDF selhala:', e && e.message); }
 
-  body += 'S pozdravem\n' + ourName;
+  // 3) E-mail zákazníkovi.
+  const to = order.customer_email || (order.company && order.company.email) || null;
+  if (!to) { console.warn('[order-docs] chybí e-mail zákazníka — PDF objednávky uloženo, e-mail neodeslán (objednávka ' + order.order_number + ')'); return; }
+
+  const lines = (order.items || []).map((it) => '• ' + it.name + ' — ' + Number(it.quantity) + ' ' + (it.unit || 'ks') + ' × ' + Number(it.unit_price).toLocaleString('cs-CZ') + ' = ' + Number(it.total_price).toLocaleString('cs-CZ') + ' ' + cur);
+  let body = 'Dobrý den,\n\nVaše objednávka ' + order.order_number + ' byla potvrzena a autorizována. Děkujeme.\n\n'
+    + 'V příloze najdete potvrzenou objednávku (PDF).\n\nSouhrn objednávky:\n'
+    + lines.join('\n') + '\n\nCelkem bez DPH: ' + Number(order.total_amount).toLocaleString('cs-CZ') + ' ' + cur + '\n\n'
+    + invoiceNote + 'S pozdravem\n' + ourName;
 
   try {
-    await sendMail({ from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
-    await prisma.order.update({ where: { id: order.id }, data: { customer_docs_sent_at: new Date() } }).catch(() => {});
+    const res = await sendMail({ from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
+    if (res && res.sent) {
+      await prisma.order.update({ where: { id: order.id }, data: { customer_docs_sent_at: new Date() } }).catch(() => {});
+      console.log('[order-docs] doklady odeslány zákazníkovi ' + to + ' (objednávka ' + order.order_number + ', příloh: ' + attachments.length + ')');
+    } else {
+      console.error('[order-docs] e-mail se neodeslal (objednávka ' + order.order_number + '):', res && (res.skipped || res.error));
+    }
   } catch (e) { console.error('[order-docs] e-mail dokladů selhal:', e && e.message); }
 }
 
-module.exports = { sendOrderConfirmationDocs, ensureInvoiceForOrder };
+module.exports = { sendOrderConfirmationDocs, ensureInvoiceForOrder, buildAndStoreOrderPdf };

@@ -626,6 +626,8 @@ model Order {
   authorized_by_user_id  Int? // User, který objednávku autorizoval
   // Objednávka nepodepsaná do 24 h → worker uvolní rezervované sloty a nastaví status 'expired'.
   expired_at             DateTime? // kdy objednávka vypršela (nebyla podepsána včas)
+  // Cesta k vygenerovanému PDF potvrzené objednávky (data volume) — uloženo po autorizaci.
+  confirmation_pdf_path  String?   @db.VarChar(500)
 
   // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
   // payment_split: false = jedna platba na celou částku;

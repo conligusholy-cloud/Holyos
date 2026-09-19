@@ -1172,6 +1172,32 @@ router.post('/orders/:id/authorize', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/wh/orders/:id/confirmation-pdf — PDF potvrzené objednávky (uložené, nebo vygenerované on-the-fly).
+router.get('/orders/:id/confirmation-pdf', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.order.findUnique({ where: { id }, include: { company: true, items: true } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+
+    const fs = require('fs');
+    // Uložené PDF z data volume má přednost.
+    if (order.confirmation_pdf_path && fs.existsSync(order.confirmation_pdf_path)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="Objednavka-' + order.order_number + '.pdf"');
+      return fs.createReadStream(order.confirmation_pdf_path).pipe(res);
+    }
+    // Fallback: vygeneruj on-the-fly.
+    let ourCompany = null;
+    try { ourCompany = await require('../services/settings').getOurCompany(); } catch (e) {}
+    const { buildAndStoreOrderPdf } = require('../services/order-docs');
+    const { buffer } = await buildAndStoreOrderPdf(order, ourCompany);
+    if (!buffer || !buffer.length) return res.status(500).json({ error: 'PDF se nepodařilo vygenerovat' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="Objednavka-' + order.order_number + '.pdf"');
+    res.end(buffer);
+  } catch (err) { next(err); }
+});
+
 // ─── SKLADY ───────────────────────────────────────────────────────────────
 
 // GET /api/wh/warehouses

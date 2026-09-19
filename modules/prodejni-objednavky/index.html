@@ -2464,6 +2464,20 @@
               '</div>'
             : '') +
 
+          // ─── Potvrzená objednávka (PDF) — po autorizaci ───
+          (['confirmed','ordered','delivered','in_production'].includes(order.status)
+            ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+                '<h3 style="font-size:14px;margin-bottom:8px;">📄 Potvrzená objednávka</h3>' +
+                (order.signature_data
+                  ? '<div style="margin-bottom:10px;"><img src="' + order.signature_data + '" alt="Podpis" style="max-width:220px;max-height:100px;background:#fff;border-radius:6px;padding:6px;display:block;">' +
+                    '<div style="font-size:12px;color:var(--text2);margin-top:6px;">' +
+                    (order.signature_place ? 'Podepsáno v ' + esc(order.signature_place) : '') +
+                    (order.signed_at ? ' · ' + new Date(order.signed_at).toLocaleString('cs-CZ') : '') + '</div></div>'
+                  : '') +
+                '<a class="btn btn-sm" href="/api/wh/orders/' + id + '/confirmation-pdf" target="_blank" rel="noopener" style="background:rgba(201,162,75,0.15);color:#c9a24b;border:1px solid rgba(201,162,75,0.35);text-decoration:none;display:inline-block;">📄 Otevřít PDF objednávky</a>' +
+              '</div>'
+            : '') +
+
           // ─── Odkaz pro zákazníka ───
           '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
             '<h3 style="font-size:14px;margin-bottom:8px;">🔗 Odkaz pro zákazníka' +
