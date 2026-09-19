@@ -909,7 +909,20 @@ router.get('/requests', async (req, res, next) => {
       where.assignee_id = pid || -1; // -1 = nikdo (když nemá Person, nevidí nic)
     }
     const rows = await prisma.serviceRequest.findMany({ where, orderBy: { created_at: 'desc' } });
-    res.json(await _attachAssignees(rows));
+    const withAssignees = await _attachAssignees(rows);
+    // Doplň info o hovoru Infolinky, ze kterého požadavek vznikl (chip „z hovoru").
+    try {
+      const callIds = [...new Set(withAssignees.map((r) => r.voice_call_id).filter(Boolean))];
+      if (callIds.length && prisma.voiceCall) {
+        const calls = await prisma.voiceCall.findMany({
+          where: { id: { in: callIds } },
+          select: { id: true, from_number: true, started_at: true, caller_name: true },
+        });
+        const byId = {}; calls.forEach((c) => { byId[c.id] = c; });
+        withAssignees.forEach((r) => { r.voice_call = r.voice_call_id ? (byId[r.voice_call_id] || null) : null; });
+      }
+    } catch (e) { console.warn('[service] voice_call enrich:', e.message); }
+    res.json(withAssignees);
   } catch (err) { next(err); }
 });
 
@@ -1105,6 +1118,7 @@ const requestSchema = z.object({
   photo_url: z.string().max(500).optional().nullable(),
   ordered_by: z.string().min(1).max(120),
   phone: z.string().max(40).optional().nullable(),
+  voice_call_id: z.string().max(64).optional().nullable(),
   est_repair_min: z.number().int().nonnegative().optional().nullable(),
 });
 
@@ -1142,13 +1156,17 @@ router.post('/requests', async (req, res, next) => {
 router.post('/requests/:id/report-caller', express.json(), async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const cur = await prisma.serviceRequest.findUnique({ where: { id }, select: { id: true, extra_callers: true, problem: true } });
+    const cur = await prisma.serviceRequest.findUnique({ where: { id }, select: { id: true, extra_callers: true, problem: true, voice_call_id: true } });
     if (!cur) return res.status(404).json({ error: 'Požadavek nenalezen' });
     const phone = (req.body && req.body.phone ? String(req.body.phone) : '').trim().slice(0, 40);
     const note = (req.body && req.body.note ? String(req.body.note) : '').trim().slice(0, 500);
+    const voiceCallId = (req.body && req.body.voice_call_id ? String(req.body.voice_call_id) : '').trim().slice(0, 64);
     const list = Array.isArray(cur.extra_callers) ? cur.extra_callers.slice() : [];
     list.push({ phone: phone || null, note: note || null, at: new Date().toISOString() });
-    const row = await prisma.serviceRequest.update({ where: { id }, data: { extra_callers: list } });
+    const data = { extra_callers: list };
+    // Přiřaď vazbu na hovor, pokud požadavek ještě žádnou nemá.
+    if (voiceCallId && !cur.voice_call_id) data.voice_call_id = voiceCallId;
+    const row = await prisma.serviceRequest.update({ where: { id }, data });
     await logReq(id, req, 'duplicate_call', 'Další volající k téže závadě' + (phone ? (' · ' + phone) : '') + (note ? (' · ' + note) : '') + ' (celkem hlášení: ' + (list.length + 1) + ')');
     res.json({ ok: true, request: row, callers: list.length });
   } catch (err) { next(err); }

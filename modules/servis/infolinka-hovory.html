@@ -200,6 +200,9 @@
             +'<div class="actions">'
               +(tel? '<a class="call-btn" href="tel:'+esc(tel)+'" onclick="markCallback(\''+c.id+'\')">Zavolat zpět</a>' : '')
               +(tel? '<a class="call-btn" style="background:#8b5cf6;color:#fff;" href="sms:'+esc(tel)+'?&body='+encodeURIComponent(smsBody())+'" onclick="markSms(\''+c.id+'\')">✉️ SMS - Doklad/reklamace</a>' : '')
+              +(c.service_request_id
+                  ? '<a class="call-btn" style="background:#0e3a2a;color:#22c55e;border:1px solid #22c55e;" href="/modules/servis/index.html#request='+esc(c.service_request_id)+'">✅ Požadavek #'+esc(c.service_request_id)+'</a>'
+                  : '<a class="call-btn" style="background:#22d3ee;color:#04222b;" href="/modules/servis/pozadavek.html?call='+encodeURIComponent(c.id)+'&phone='+encodeURIComponent(num||'')+'&desc='+encodeURIComponent(want||'')+'">🔧 Servisní požadavek</a>')
               +(rec||'')
               +transcriptBlock(c)
             +'</div>'

@@ -987,6 +987,21 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         full_transcript_at: true,
       },
     });
+    // PŘÍMÁ vazba: servisní požadavek založený tlačítkem „Servisní požadavek" u hovoru
+    // (ServiceRequest.voice_call_id == call.id) — nejsilnější signál, přebíjí heuristiku.
+    try {
+      if (prisma.serviceRequest && calls.length) {
+        const ids = calls.map((c) => c.id);
+        const linked = await prisma.serviceRequest.findMany({
+          where: { voice_call_id: { in: ids } },
+          select: { id: true, voice_call_id: true },
+          orderBy: { created_at: 'desc' },
+        });
+        const byCall = {};
+        linked.forEach((r) => { if (!byCall[r.voice_call_id]) byCall[r.voice_call_id] = r.id; });
+        calls.forEach((c) => { if (byCall[c.id]) c.service_request_id = byCall[c.id]; });
+      }
+    } catch (e) { console.warn('[voice] linked service req:', e.message); }
     // Kontrola servisních požadavků: z hovoru pozná, že měl vzniknout servisní
     // požadavek (technická porucha/reklamace…) a ověří, že do konce hovoru + 5 min
     // nějaký požadavek reálně vznikl. Když ne → alarm (vykřičníky).
@@ -1005,6 +1020,8 @@ router.get('/calls', requireAuth, async (req, res, next) => {
       }
       const reqs2 = reqs.map((r) => ({ t: new Date(r.created_at).getTime(), tail: tail(r.phone) }));
       calls.forEach((c) => {
+        // Přímá vazba (tlačítko u hovoru) vyhrává nad heuristikou.
+        if (c.service_request_id) { c.service_needed = true; c.service_created = true; c.service_matched_by = 'link'; return; }
         if (!(c.ended_at && needs(c))) { c.service_needed = false; c.service_created = null; c.service_matched_by = null; return; }
         c.service_needed = true;
         const end = new Date(c.ended_at).getTime();

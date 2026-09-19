@@ -4812,6 +4812,7 @@ model ServiceRequest {
   photo_url   String?  @db.VarChar(500)   // Foto problému (odkaz)
   ordered_by  String   @db.VarChar(120)   // Servis objednal
   phone       String?  @db.VarChar(40)     // telefon volajícího/zákazníka — pro párování s hovorem Infolinky
+  voice_call_id String? @db.VarChar(64)     // VoiceCall.id — z kterého hovoru Infolinky požadavek vznikl (přímá vazba)
   extra_callers Json?  // další volající k TÉ SAMÉ závadě [{phone,note,at}] — proti duplicitám
   status      String   @default("novy") @db.VarChar(20)
   assignee_id Int?     // řešitel (Person)
@@ -4826,6 +4827,7 @@ model ServiceRequest {
   @@index([status])
   @@index([assignee_id])
   @@index([created_by_user_id])
+  @@index([voice_call_id])
   @@map("service_requests")
 }
 

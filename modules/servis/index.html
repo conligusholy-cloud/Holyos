@@ -1643,7 +1643,7 @@
       tb.innerHTML=rows.map(function(r){
         var st=STL[r.status]||['?','badge-draft']; var ukon=[r.action,r.task].filter(Boolean).join(' · ');
         return '<tr>'+
-          '<td><b>'+esc(r.problem)+'</b>'+(r.description?('<div style="color:var(--text2);font-size:12px;margin-top:2px">'+esc(String(r.description).slice(0,120))+'</div>'):'')+'</td>'+
+          '<td><b>'+esc(r.problem)+'</b>'+(r.description?('<div style="color:var(--text2);font-size:12px;margin-top:2px">'+esc(String(r.description).slice(0,120))+'</div>'):'')+(r.voice_call?('<div style="margin-top:4px"><span class="badge" style="background:rgba(34,211,238,0.15);color:#22d3ee;">📞 z hovoru '+esc(r.voice_call.from_number||'')+(r.voice_call.started_at?(' · '+fmtDate(r.voice_call.started_at)):'')+'</span></div>'):'')+'</td>'+
           '<td style="color:var(--text2)">'+esc(ukon||'—')+'</td>'+
           '<td>'+esc(r.ordered_by||'—')+'</td>'+
           '<td><span class="badge '+st[1]+'">'+st[0]+'</span></td>'+
