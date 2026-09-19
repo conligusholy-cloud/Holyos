@@ -168,11 +168,12 @@
 
       <!-- TABS NAVIGATION -->
       <div class="tab-nav">
-        <button type="button" class="tab-btn active" onclick="switchAccountingTab('invoices')">📄 Faktury</button>
-        <button type="button" class="tab-btn" onclick="switchAccountingTab('payments')">💳 K platbě</button>
-        <button type="button" class="tab-btn" onclick="switchAccountingTab('bank')">🏦 Banka</button>
-        <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders')">📨 Upomínky</button>
-        <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers')">📦 Účetní firma</button>
+        <button type="button" class="tab-btn active" onclick="switchAccountingTab('invoices','ar',event)">📤 Vydané (naše)</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('invoices','ap',event)">📥 Přijaté (dodavatelé)</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('payments',null,event)">💳 K platbě</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('bank',null,event)">🏦 Banka</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders',null,event)">📨 Upomínky</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers',null,event)">📦 Účetní firma</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -180,8 +181,7 @@
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <div class="filters">
-          <label>Směr:</label>
-          <select id="f-direction" onchange="loadInvoices()">
+          <select id="f-direction" onchange="loadInvoices()" style="display:none;">
             <option value="">Oba</option>
             <option value="ap">Přijaté (AP)</option>
             <option value="ar">Vydané (AR)</option>
@@ -1512,13 +1512,22 @@
     });
 
     // ─── Tab switching (Faktury / K platbě) ─────────────────────────────
-    window.switchAccountingTab = function(name) {
+    window.switchAccountingTab = function(name, dir, ev) {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-      const btnIdxMap = { invoices: 0, payments: 1, bank: 2, reminders: 3, handovers: 4 };
-      const btnIdx = btnIdxMap[name] ?? 0;
-      document.querySelectorAll('.tab-btn')[btnIdx].classList.add('active');
+      // Zvýrazni kliknuté tlačítko (u faktur jsou dvě – Vydané / Přijaté)
+      if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
+      else {
+        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5 };
+        const b = document.querySelectorAll('.tab-btn')[btnIdxMap[name] ?? 0];
+        if (b) b.classList.add('active');
+      }
       document.getElementById('tab-' + name).classList.add('active');
+      if (name === 'invoices') {
+        const sel = document.getElementById('f-direction');
+        if (sel && dir != null) sel.value = dir;
+        loadInvoices();
+      }
       if (name === 'payments') loadPaymentsTab();
       if (name === 'reminders') loadRemindersTab();
       if (name === 'handovers') loadHandovers();
@@ -2437,8 +2446,8 @@
 
     // ─── Hook na switchAccountingTab — načti data při přepnutí na "bank" ──
     const _origSwitchTab = window.switchAccountingTab;
-    window.switchAccountingTab = function(name) {
-      _origSwitchTab(name);
+    window.switchAccountingTab = function(name, dir, ev) {
+      _origSwitchTab(name, dir, ev);
       if (name === 'bank') {
         loadBankAccountsForFilter().then(loadStatements);
       }
@@ -2446,6 +2455,8 @@
 
     // ─── Init ────────────────────────────────────────────────────────────
     loadSummary();
+    // Výchozí sekce = Vydané (naše) faktury
+    (function(){ const sel = document.getElementById('f-direction'); if (sel) sel.value = 'ar'; })();
     loadInvoices();
 
     // Hash-link: pokud URL obsahuje #invoice=ID, otevři detail po načtení.
