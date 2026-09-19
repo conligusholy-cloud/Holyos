@@ -325,7 +325,9 @@ async function generateInvoicePdf(invoice, ourCompany, opts = {}) {
     const pdfRaw = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' },
+      // Okraje řídí CSS @page v šabloně (preferCSSPageSize), aby se tisklo na A4 s rezervou.
+      preferCSSPageSize: true,
+      margin: { top: '0', right: '0', bottom: '0', left: '0' },
     });
     // Puppeteer v22+ vrací Uint8Array, ne Buffer. Express `res.send(uint8Array)`
     // by ho serializoval jako JSON object (klíč/hodnota); konverze na Buffer
