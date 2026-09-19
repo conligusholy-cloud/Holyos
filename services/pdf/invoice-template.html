@@ -79,6 +79,11 @@
   .qr img { width: 170px; height: 170px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
   .qr-label { font-size: 8pt; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
 
+  .cfg { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--soft); }
+  .cfg h3 { font-size: 9pt; text-transform: uppercase; letter-spacing: .1em; color: var(--gold); font-weight: 800; margin-bottom: 6px; }
+  .cfg .cfgline { font-size: 9.5pt; color: var(--ink2); margin: 3px 0; }
+  .cfg .cfgline b { color: #14141a; }
+
   .note { margin-top: 18px; padding: 10px 14px; background: #fbf6e9; border: 1px solid #ecdcae; border-radius: 8px; font-size: 9.5pt; color: #6b5320; }
   .note strong { color: #4a3a12; }
 
@@ -157,6 +162,15 @@
         {{/each}}
       </tbody>
     </table>
+
+    {{#if has_config}}
+    <div class="cfg">
+      <h3>Konfigurace / výbava</h3>
+      {{#each config_notes}}
+      <p class="cfgline"><b>{{name}}</b> — {{cfg}}</p>
+      {{/each}}
+    </div>
+    {{/if}}
 
     <div class="summary">
       <div class="row">

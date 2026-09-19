@@ -177,17 +177,33 @@ function buildTemplateData(invoice, ourCompany) {
   if (!invoice) throw new Error('buildTemplateData: chybí invoice');
 
   const partner = invoice.company || {};
-  const items = (invoice.items || []).map(it => ({
-    line_order: it.line_order,
-    description: it.description,
-    quantity: fmtAmountPlain(it.quantity),
-    unit: it.unit || 'ks',
-    unit_price: fmtAmountPlain(it.unit_price),
-    vat_rate: `${Number(it.vat_rate || 0)}%`,
-    subtotal: fmtAmountPlain(it.subtotal),
-    vat_amount: fmtAmountPlain(it.vat_amount),
-    total: fmtAmountPlain(it.total),
-  }));
+  // Do tabulky jde jen krátký název položky; výbava/konfigurace se přesune do
+  // odstavce pod tabulku (segmenty s „·" nebo Rám:/Barva:/Akceptory:/Vytápění:).
+  const configNotes = [];
+  const items = (invoice.items || []).map(it => {
+    const full = String(it.description || '');
+    const segs = full.split(' — ');
+    const nameSegs = [];
+    const cfgSegs = [];
+    segs.forEach((s) => {
+      if (/[·•]|Rám:|Barva:|Akceptor|Vytáp|Výbava:/i.test(s)) cfgSegs.push(s.replace(/^Výbava:\s*/i, '').trim());
+      else nameSegs.push(s.trim());
+    });
+    const shortName = nameSegs.filter(Boolean).join(' — ').trim() || full;
+    const cfg = cfgSegs.filter(Boolean).join(' · ').trim();
+    if (cfg) configNotes.push({ name: shortName, cfg });
+    return {
+      line_order: it.line_order,
+      description: shortName,
+      quantity: fmtAmountPlain(it.quantity),
+      unit: it.unit || 'ks',
+      unit_price: fmtAmountPlain(it.unit_price),
+      vat_rate: `${Number(it.vat_rate || 0)}%`,
+      subtotal: fmtAmountPlain(it.subtotal),
+      vat_amount: fmtAmountPlain(it.vat_amount),
+      total: fmtAmountPlain(it.total),
+    };
+  });
 
   // Bankovní účet pro QR — preferujeme partner_bank_account z faktury,
   // jinak bank_account z our company. Pro AR fakturu má smysl jen ourCompany.
@@ -239,6 +255,8 @@ function buildTemplateData(invoice, ourCompany) {
 
     // Položky
     items,
+    has_config: configNotes.length > 0,
+    config_notes: configNotes,
 
     // Sumy
     subtotal: fmtAmount(invoice.subtotal, invoice.currency || 'CZK'),
