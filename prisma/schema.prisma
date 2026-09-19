@@ -628,6 +628,9 @@ model Order {
   expired_at             DateTime? // kdy objednávka vypršela (nebyla podepsána včas)
   // Cesta k vygenerovanému PDF potvrzené objednávky (data volume) — uloženo po autorizaci.
   confirmation_pdf_path  String?   @db.VarChar(500)
+  // Podpis dodavatele (Jan/Tomáš) při autorizaci — „objednávku potvrzuji a autorizuji".
+  authorizer_signature_data String? @db.Text // base64 PNG podpisu autorizujícího
+  authorizer_place          String? @db.VarChar(120)
 
   // Sledování platby (prodejní objednávka) — Fáze "Platba před výrobou"
   // payment_split: false = jedna platba na celou částku;

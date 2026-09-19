@@ -1163,9 +1163,14 @@ router.post('/orders/:id/authorize', async (req, res, next) => {
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
     if (order.status === 'confirmed') return res.json({ ok: true, already: true });
     if (order.status !== 'signed') return res.status(400).json({ error: 'Autorizovat lze jen podepsanou objednávku.' });
+    // Volitelný podpis dodavatele (Jan/Tomáš) — „objednávku potvrzuji a autorizuji".
+    const sig = (req.body && typeof req.body.signature === 'string' && /^data:image\//.test(req.body.signature)) ? req.body.signature.slice(0, 600000) : null;
+    const place = (req.body && req.body.place) ? String(req.body.place).slice(0, 120) : null;
     await prisma.order.update({ where: { id }, data: {
       status: 'confirmed', authorized_at: new Date(),
       authorized_by_user_id: (req.user && req.user.id) || null,
+      authorizer_signature_data: sig,
+      authorizer_place: place,
     } });
     require('../services/order-docs').sendOrderConfirmationDocs(id).catch((e) => console.error('[order-authorize] doklady:', e && e.message));
     res.json({ ok: true });

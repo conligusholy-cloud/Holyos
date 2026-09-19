@@ -40,12 +40,23 @@ async function loadOwner(order) {
   } catch (e) { return null; }
 }
 
+// Autorizující (Jan/Tomáš) — jméno pro blok „Za dodavatele".
+async function loadAuthorizer(order) {
+  try {
+    if (!order.authorized_by_user_id) return null;
+    const u = await prisma.user.findUnique({ where: { id: order.authorized_by_user_id }, select: { display_name: true, username: true } });
+    if (!u) return null;
+    return { name: u.display_name || u.username || null };
+  } catch (e) { return null; }
+}
+
 // Vygeneruje PDF potvrzené objednávky, uloží na data volume a vrátí { buffer, filePath }.
 async function buildAndStoreOrderPdf(order, ourCompany) {
   const { generateOrderPdf } = require('./pdf/order-pdf');
   const owner = await loadOwner(order);
   const slotDates = await loadSlotDates(order.id);
-  const buffer = await generateOrderPdf(order, ourCompany || {}, { owner, slotDates });
+  const authorizer = await loadAuthorizer(order);
+  const buffer = await generateOrderPdf(order, ourCompany || {}, { owner, slotDates, authorizer });
   let filePath = null;
   try {
     fs.mkdirSync(ORDER_DOCS_DIR, { recursive: true });

@@ -2093,13 +2093,26 @@
         wired=true;
       }
       window.owSigClear=function(){ if(ctx){ctx.clearRect(0,0,sig.width,sig.height);} has=false; var hh=document.getElementById('ow-sig-hint'); if(hh)hh.style.display=''; };
-      window.openSig=function(){
-        var errs=(typeof validateConfiguration==='function')?validateConfiguration():[];
-        if(errs&&errs.length){ alert(t('fill_required')+'\n\n'+errs.join('\n')); return; }
+      window.openSig=function(mode){
+        window.__sigMode = (mode === 'authorize') ? 'authorize' : 'customer';
+        if (window.__sigMode !== 'authorize') {
+          var errs=(typeof validateConfiguration==='function')?validateConfiguration():[];
+          if(errs&&errs.length){ alert(t('fill_required')+'\n\n'+errs.join('\n')); return; }
+        }
+        // Přizpůsob text okna režimu.
+        var hd=document.getElementById('ow-sig-hd'), p=document.getElementById('ow-sig-intro'), b1=document.getElementById('ow-sig-b1');
+        if (window.__sigMode === 'authorize') {
+          if(hd) hd.textContent='Autorizace objednávky';
+          if(p) p.textContent='Podpisem objednávku za dodavatele (Best Series s.r.o.) potvrzujete a autorizujete.';
+          if(b1) b1.textContent='Podepsat a autorizovat';
+        } else {
+          if(hd) hd.textContent='Podpis objednávky';
+          if(p) p.textContent='Podpisem závazně potvrzujete objednávku a souhlasíte s uvedenými podmínkami. Objednávku následně autorizuje Best Series s.r.o.';
+          if(b1) b1.textContent='Podepsat a potvrdit';
+        }
         document.getElementById('ow-sig-ovl').style.display='flex';
         wire();
         has=false; drawing=false;
-        // Dvojí fit (po zobrazení a po dokončení animace panelu) — jinak by canvas mohl mít nulovou šířku.
         setTimeout(function(){ fit(); window.owSigClear(); }, 60);
         setTimeout(fit, 350);
         var d=new Date(); document.getElementById('ow-sig-date').textContent=d.toLocaleDateString('cs-CZ')+' '+d.toLocaleTimeString('cs-CZ').slice(0,5);
@@ -2109,20 +2122,31 @@
         if(!has){ alert('Prosím podepište se.'); return; }
         var place=(document.getElementById('ow-sig-place').value||'').trim();
         if(!place){ alert('Zadejte prosím místo podpisu.'); document.getElementById('ow-sig-place').focus(); return; }
-        window.__owSig = sig.toDataURL('image/png'); window.__owPlace = place;
+        var dataUrl = sig.toDataURL('image/png');
         document.getElementById('ow-sig-ovl').style.display='none';
-        submitConfiguration();
+        if (window.__sigMode === 'authorize') {
+          if (typeof window.__doAuthorize === 'function') window.__doAuthorize(dataUrl, place);
+        } else {
+          window.__owSig = dataUrl; window.__owPlace = place;
+          submitConfiguration();
+        }
       };
     })();
 
     // ─── Autorizace majitelem (Tomáš/Jan) přímo z dokladu ───────────────────
     // Vyžaduje přihlášení do HolyOS (cookie session) — endpoint /api/wh je chráněný.
-    window.authorizeOrderView = async function () {
+    // Nejdřív se majitel podepíše (Za dodavatele), pak se odešle autorizace.
+    window.authorizeOrderView = function () {
       if (!orderData || !orderData.id) return;
-      if (!confirm('Autorizovat a potvrdit objednávku ' + (orderData.order_number || '') + '?\n\nZákazníkovi se automaticky odešle potvrzení objednávky a faktura.')) return;
+      if (typeof window.openSig === 'function') { window.openSig('authorize'); return; }
+      window.__doAuthorize(null, null);
+    };
+    window.__doAuthorize = async function (signature, place) {
+      if (!orderData || !orderData.id) return;
       try {
         var res = await fetch('/api/wh/orders/' + orderData.id + '/authorize', {
           method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ signature: signature || null, place: place || null }),
         });
         var d = await res.json().catch(function () { return {}; });
         if (res.status === 401 || res.status === 403) { alert('Pro autorizaci se prosím přihlaste do HolyOS (app.holyos.cz) a otevřete odkaz znovu.'); return; }
@@ -2143,14 +2167,14 @@
 
   <div class="ow-sig-ovl" id="ow-sig-ovl">
     <div class="ow-sig-sheet">
-      <div class="ow-sig-hd"><b>Podpis objednávky</b><button class="ow-sig-x" onclick="closeSig()">✕</button></div>
-      <p class="ow-sig-p">Podpisem závazně potvrzujete objednávku a souhlasíte s uvedenými podmínkami. Objednávku následně autorizuje Best Series s.r.o.</p>
+      <div class="ow-sig-hd"><b id="ow-sig-hd">Podpis objednávky</b><button class="ow-sig-x" onclick="closeSig()">✕</button></div>
+      <p class="ow-sig-p" id="ow-sig-intro">Podpisem závazně potvrzujete objednávku a souhlasíte s uvedenými podmínkami. Objednávku následně autorizuje Best Series s.r.o.</p>
       <div class="ow-sig-fl">Podpis</div>
       <div class="ow-sig-wrap"><canvas id="ow-sig"></canvas><span class="ow-sig-hint" id="ow-sig-hint">podepište se prstem nebo myší</span><button type="button" class="ow-sig-clr" onclick="owSigClear()">Vymazat</button></div>
       <div class="ow-sig-fl">Místo podpisu</div>
       <input id="ow-sig-place" type="text" placeholder="Např. Brno" autocomplete="off">
       <div class="ow-sig-meta">Datum a čas podpisu: <b id="ow-sig-date">—</b></div>
-      <div class="ow-sig-act"><button class="ow-sig-b2" onclick="closeSig()">Zrušit</button><button class="ow-sig-b1" onclick="owSigSubmit()">Podepsat a potvrdit</button></div>
+      <div class="ow-sig-act"><button class="ow-sig-b2" onclick="closeSig()">Zrušit</button><button class="ow-sig-b1" id="ow-sig-b1" onclick="owSigSubmit()">Podepsat a potvrdit</button></div>
     </div>
   </div>
 </body>

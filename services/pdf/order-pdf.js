@@ -96,6 +96,8 @@ function buildHtml(order, our, opts) {
   var desc = codeDesc(firstCode);
   var machineCount = (order.items || []).reduce(function (s, it) { return s + (Number(it.quantity) || 0); }, 0);
   var sig = order.signature_data && /^data:image/.test(order.signature_data) ? order.signature_data : null;
+  var authSig = order.authorizer_signature_data && /^data:image/.test(order.authorizer_signature_data) ? order.authorizer_signature_data : null;
+  var authName = (opts.authorizer && opts.authorizer.name) || null;
 
   return '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><style>'
     + '*{margin:0;padding:0;box-sizing:border-box}'
@@ -118,7 +120,7 @@ function buildHtml(order, our, opts) {
     + '.terms{padding:14px 22px 0}.terms h3{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#a9822f;font-weight:800;margin-bottom:8px}'
     + '.pay{display:flex;gap:10px}.pc{flex:1;background:#faf8f3;border:1px solid #e7e4dc;border-radius:8px;padding:9px}.pk{font-size:9.5px;text-transform:uppercase;color:#8a8a95;font-weight:700}.pv{font-size:14px;font-weight:800;margin-top:2px}.ps{font-size:11px;color:#5b5b66}'
     + '.fine{margin:12px 22px 0;border:1px solid #e7e4dc;border-radius:8px;padding:10px 13px;background:#faf8f3}.fine h4{font-size:10px;text-transform:uppercase;color:#a9822f;font-weight:800;margin-bottom:6px}.fine ul{margin:0;padding-left:15px;color:#5b5b66;font-size:11px}.fine li{margin-bottom:4px}.fine b{color:#14141a}'
-    + '.sig{margin:16px 22px 0;padding-top:10px;border-top:1px solid #e7e4dc}.sig h4{font-size:10px;text-transform:uppercase;color:#a9822f;font-weight:800;margin-bottom:6px}.sig img{max-width:240px;max-height:110px;border:1px solid #e7e4dc;border-radius:6px;padding:4px;background:#fff}.sig .m{font-size:11.5px;color:#5b5b66;margin-top:6px}.sig .m b{color:#14141a}'
+    + '.sig{margin:16px 22px 0;padding-top:10px;border-top:1px solid #e7e4dc;display:flex;gap:20px}.sigcol{flex:1}.sig h4{font-size:10px;text-transform:uppercase;color:#a9822f;font-weight:800;margin-bottom:6px}.sig img{max-width:220px;max-height:100px;border:1px solid #e7e4dc;border-radius:6px;padding:4px;background:#fff}.sig .box{height:104px;border:1px solid #e7e4dc;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#b7ad97;font-size:11px}.sig .nm{font-size:14px;font-weight:800;color:#14141a}.sig .m{font-size:11px;color:#5b5b66;margin-top:6px}.sig .m b{color:#14141a}.sig .st{font-size:11px;color:#5b5b66;font-style:italic;margin-top:4px}'
     + '.foot{text-align:center;color:#8a8a95;font-size:10px;padding:16px 22px 10px}'
     + '</style></head><body>'
     + '<div class="top"><div class="logo"><b>BEST</b> SERIES<span class="t">Prádlomat · Compounder</span></div>'
@@ -157,9 +159,15 @@ function buildHtml(order, our, opts) {
     + '<li>Není-li stroj servisován prostřednictvím servisní smlouvy (13 % z obratu), je součástí softwarový poplatek <b>2 500 Kč / měsíc</b> (100 € / měsíc).</li>'
     + '<li>Uvedené výrobní termíny budou splněny za předpokladu, že platby proběhnou vždy před nebo v termín splatnosti jednotlivých dokladů.</li>'
     + '</ul></div>'
-    + '<div class="sig"><h4>Podpis zákazníka</h4>'
-    + (sig ? '<img src="' + sig + '">' : '<div class="m">Bez podpisu</div>')
-    + '<div class="m">' + (order.signature_place ? 'Místo: <b>' + esc(order.signature_place) + '</b>' : '') + (order.signed_at ? ' · Podepsáno: <b>' + new Date(order.signed_at).toLocaleString('cs-CZ') + '</b>' : '') + '</div></div>'
+    + '<div class="sig">'
+    + '<div class="sigcol"><h4>Za odběratele</h4>'
+    + (sig ? '<img src="' + sig + '">' : '<div class="box">Bez podpisu</div>')
+    + '<div class="m">' + (order.signature_place ? 'Místo: <b>' + esc(order.signature_place) + '</b>' : '') + (order.signed_at ? ' · ' + new Date(order.signed_at).toLocaleString('cs-CZ') : '') + '</div></div>'
+    + '<div class="sigcol"><h4>Za dodavatele (Best Series s.r.o.)</h4>'
+    + (authSig ? '<img src="' + authSig + '">' : '<div class="box">' + (authName ? esc(authName) : 'Autorizováno') + '</div>')
+    + '<div class="st">Objednávku potvrzuji a autorizuji.</div>'
+    + '<div class="m">' + (authName ? '<b>' + esc(authName) + '</b>' : '') + (order.authorizer_place ? ' · ' + esc(order.authorizer_place) : '') + (order.authorized_at ? ' · ' + new Date(order.authorized_at).toLocaleString('cs-CZ') : '') + '</div></div>'
+    + '</div>'
     + '<div class="foot">Best Series s.r.o. · potvrzená objednávka ' + esc(order.order_number) + '</div>'
     + '</body></html>';
 }
