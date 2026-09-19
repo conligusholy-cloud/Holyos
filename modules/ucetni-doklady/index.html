@@ -831,7 +831,8 @@
               (canMarkReadyToPay ? '<button class="btn btn-primary" onclick="markReadyToPay(' + inv.id + ')">Označit jako k platbě</button>' : '') +
               // AR — Fáze 6: PDF + odeslat zákazníkovi
               (inv.direction === 'ar'
-                ? '<button class="btn btn-secondary" onclick="downloadInvoicePdf(' + inv.id + ')">📄 Stáhnout PDF</button>' +
+                ? '<button class="btn btn-secondary" onclick="viewInvoicePdf(' + inv.id + ')">👁️ Zobrazit fakturu</button>' +
+                  '<button class="btn btn-secondary" onclick="downloadInvoicePdf(' + inv.id + ')">📄 Stáhnout PDF</button>' +
                   '<button class="btn btn-primary" onclick="sendInvoiceToCustomer(' + inv.id + ', \'' + escapeHtml(inv.company?.email || '') + '\', \'' + escapeHtml(inv.invoice_number) + '\')">📧 Odeslat zákazníkovi</button>'
                 : '') +
             '</div>' +
@@ -928,6 +929,34 @@
     };
 
     // ─── Fáze 6: AR PDF + odeslat zákazníkovi ─────────────────────────────
+    window.viewInvoicePdf = async function(id) {
+      // Otevři PDF v nové záložce (bez stahování). Okno otevřeme hned kvůli blokování popupů.
+      const win = window.open('', '_blank');
+      try {
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const resp = await fetch('/api/accounting/invoices/' + id + '/pdf', {
+          credentials: 'include',
+          headers,
+        });
+        if (!resp.ok) {
+          const txt = await resp.text();
+          let err = 'HTTP ' + resp.status;
+          try { err = JSON.parse(txt).error || err; } catch {}
+          if (win) win.close();
+          return alert('Chyba: ' + err);
+        }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        if (win) { win.location = url; }
+        else { window.open(url, '_blank'); }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) {
+        if (win) win.close();
+        alert('Zobrazení selhalo: ' + e.message);
+      }
+    };
+
     window.downloadInvoicePdf = async function(id) {
       // Použijeme fetch + blob, abychom zachovali Authorization header
       try {
