@@ -580,6 +580,17 @@ router.get('/orders/:id', async (req, res, next) => {
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
     const [enriched] = await enrichOrdersWithProductionDates([order]);
+    // Účetní doklady navázané na objednávku (faktury) + jejich stavy.
+    try {
+      enriched.invoices = await prisma.invoice.findMany({
+        where: { order_id: order.id },
+        orderBy: { id: 'asc' },
+        select: {
+          id: true, invoice_number: true, type: true, invoice_role: true, direction: true,
+          total: true, currency: true, status: true, date_issued: true, date_due: true, paid_amount: true,
+        },
+      });
+    } catch (e) { enriched.invoices = []; }
     res.json(enriched);
   } catch (err) { next(err); }
 });

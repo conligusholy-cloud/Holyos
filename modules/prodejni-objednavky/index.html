@@ -2447,6 +2447,9 @@
           // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
           (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
 
+          // ─── Účetní doklady k objednávce ───
+          renderOrderInvoices(order) +
+
           // ─── Panel Podpis + Autorizace (stav signed) ───
           (order.status === 'signed'
             ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
@@ -2885,6 +2888,47 @@
 
     // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
     // Fáze 6 — Vystavit fakturu z objednávky
+    // Panel s účetními doklady (fakturami) navázanými na objednávku + jejich stavy.
+    function renderOrderInvoices(order) {
+      var invs = (order && order.invoices) || [];
+      if (!invs.length) return '';
+      var STAT = {
+        draft: { label: 'Koncept', color: '#9ca3af' },
+        issued: { label: 'Vystavena', color: '#3b82f6' },
+        sent: { label: 'Odeslána', color: '#3b82f6' },
+        partially_paid: { label: 'Částečně zaplacena', color: '#eab308' },
+        paid: { label: 'Zaplacena', color: '#10b981' },
+        overdue: { label: 'Po splatnosti', color: '#ef4444' },
+        cancelled: { label: 'Storno', color: '#ef4444' },
+      };
+      function invLabel(inv) {
+        if (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') return 'Zálohová faktura';
+        if (inv.invoice_role === 'full' || inv.type === 'issued') return 'Faktura';
+        return 'Doklad';
+      }
+      function fmt(d) { return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
+      var rows = invs.map(function (inv) {
+        var st = STAT[inv.status] || { label: inv.status || '—', color: '#9ca3af' };
+        var overdue = inv.status !== 'paid' && inv.status !== 'cancelled' && inv.date_due && new Date(inv.date_due) < new Date();
+        if (overdue) st = STAT.overdue;
+        var cur = inv.currency || 'CZK';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;flex-wrap:wrap;">' +
+          '<div style="min-width:180px;">' +
+            '<div style="font-weight:700;font-size:13px;">' + esc(invLabel(inv)) + ' · ' + esc(inv.invoice_number || ('#' + inv.id)) + '</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">Vystaveno ' + fmt(inv.date_issued) + ' · Splatnost ' + fmt(inv.date_due) + '</div>' +
+          '</div>' +
+          '<div style="text-align:right;">' +
+            '<div style="font-weight:800;font-size:13px;">' + Number(inv.total || 0).toLocaleString('cs-CZ') + ' ' + cur + '</div>' +
+            (Number(inv.paid_amount) > 0 ? '<div style="font-size:11px;color:#10b981;">Uhrazeno ' + Number(inv.paid_amount).toLocaleString('cs-CZ') + ' ' + cur + '</div>' : '') +
+          '</div>' +
+          '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + esc(st.label) + '</span>' +
+          '<a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;">📄 PDF</a>' +
+        '</div>';
+      }).join('');
+      return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:8px;">🧾 Účetní doklady</h3>' + rows + '</div>';
+    }
+
     // Autorizace podepsané objednávky (Tomáš/Jan) → stav confirmed + odeslání dokladů zákazníkovi.
     async function authorizeOrder(orderId) {
       if (!confirm('Autorizovat a potvrdit objednávku?\n\nZákazníkovi se automaticky odešle potvrzení objednávky a faktura (zálohová při platbě se zálohou, plná při platbě předem).')) return;
