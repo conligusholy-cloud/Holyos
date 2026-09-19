@@ -1778,7 +1778,24 @@
         '<li>Objednávku je nutné <b>potvrdit a podepsat do 24 hodin</b>. V opačném případě se rezervované výrobní sloty uvolní a mohou být nabídnuty jinému zákazníkovi.</li>' +
         '</ul></div>';
 
-      if (isConfirmed) {
+      var authMode = false;
+      try { authMode = new URLSearchParams(window.location.search).get('authorize') === '1'; } catch (e) {}
+
+      if (o.status === 'signed') {
+        // Podepsaná objednávka — ukaž podpis zákazníka. Majitel (authorize mód) může autorizovat.
+        html += '<div style="padding:16px 22px 4px"><h3 style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#c9a24b;font-weight:800;margin-bottom:8px">Podpis zákazníka</h3>' +
+          (o.signature_data ? '<img src="' + o.signature_data + '" alt="Podpis" style="max-width:260px;max-height:120px;background:#fff;border:1px solid #e7e4dc;border-radius:8px;padding:6px;display:block">' : '') +
+          '<div style="font-size:12.5px;color:#5b5b66;margin-top:8px">' +
+            (o.signature_place ? 'Místo: <b style="color:#14141a">' + esc(o.signature_place) + '</b>' : '') +
+            (o.signed_at ? ' · Podepsáno: <b style="color:#14141a">' + new Date(o.signed_at).toLocaleString('cs-CZ') + '</b>' : '') +
+          '</div></div>';
+        if (authMode) {
+          html += '<div class="cta"><button class="btn-confirm" onclick="authorizeOrderView()">✅ Autorizovat objednávku</button></div>';
+          html += '<div style="text-align:center;font-size:12px;color:#8a8a95;padding:0 22px 6px">Autorizací objednávku potvrdíte a zákazníkovi se odešle potvrzení + faktura.</div>';
+        } else {
+          html += '<div class="cbanner">✍️ Objednávka byla podepsána a čeká na autorizaci Best Series s.r.o.</div>';
+        }
+      } else if (isConfirmed) {
         html += '<div class="cbanner">✓ ' + t('confirmed_banner') + '</div>';
       } else {
         html += '<div class="steps"><h4>Co bude následovat</h4><ol>' +
@@ -2097,6 +2114,26 @@
         submitConfiguration();
       };
     })();
+
+    // ─── Autorizace majitelem (Tomáš/Jan) přímo z dokladu ───────────────────
+    // Vyžaduje přihlášení do HolyOS (cookie session) — endpoint /api/wh je chráněný.
+    window.authorizeOrderView = async function () {
+      if (!orderData || !orderData.id) return;
+      if (!confirm('Autorizovat a potvrdit objednávku ' + (orderData.order_number || '') + '?\n\nZákazníkovi se automaticky odešle potvrzení objednávky a faktura.')) return;
+      try {
+        var res = await fetch('/api/wh/orders/' + orderData.id + '/authorize', {
+          method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        });
+        var d = await res.json().catch(function () { return {}; });
+        if (res.status === 401 || res.status === 403) { alert('Pro autorizaci se prosím přihlaste do HolyOS (app.holyos.cz) a otevřete odkaz znovu.'); return; }
+        if (!res.ok) { alert(d.error || 'Autorizace se nezdařila.'); return; }
+        orderData.status = 'confirmed';
+        renderApp();
+        alert('✅ Objednávka autorizována a potvrzena. Zákazníkovi byly odeslány doklady.');
+      } catch (e) {
+        alert('Chyba při autorizaci: ' + (e && e.message));
+      }
+    };
 
     // ─── Pomocné ─────────────────────────────────────────────────────────────
     function statusLabel(s) {

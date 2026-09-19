@@ -196,7 +196,8 @@ app.get('/api/public/order/:token', async (req, res) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
-    if (orderLinkLocked(order)) return sendOrderLocked(res, order);
+    // Náhled dokladu je čitelný v jakémkoli stavu (zákazník i majitel při autorizaci).
+    // Zápisové akce (configure/confirm/select-slot) si zamčení hlídají samy přes orderLinkLocked.
 
     // Dodavatel (naše firma) + obchodník (kdo objednávku vyřizuje) — bezpečná data pro doklad.
     let supplier = null;
@@ -312,9 +313,13 @@ app.get('/api/public/order/:token', async (req, res) => {
 
     // Vrať bezpečná data + konfiguraci pro zákaznický konfigurátor
     res.json({
+      id: order.id,
       order_number: order.order_number,
       company_name: c.name || '—',
       status: order.status,
+      signature_data: order.signature_data || null,
+      signature_place: order.signature_place || null,
+      signed_at: order.signed_at || null,
       currency: order.currency,
       total_amount: order.total_amount,
       vat_rate: vatRate,

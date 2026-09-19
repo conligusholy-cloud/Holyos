@@ -366,7 +366,10 @@ async function notifyOrderSigned(prisma, { order }) {
     const body = 'Zákazník ' + who + ' podepsal objednávku ' + order.order_number
       + ' (' + Number(order.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (order.currency || 'CZK') + '). Čeká na autorizaci.'
       + (order.signature_place ? (' Podepsáno v ' + order.signature_place + '.') : '');
-    await dispatch(prisma, { title, body, data: { type: 'order_signed', order_id: order.id, link: LINK + '?order=' + order.id + '&authorize=1' } });
+    // Odkaz vede přímo na zákaznický doklad v režimu autorizace (majitel vidí objednávku
+    // stejně jako zákazník + podpis a na konci tlačítko Autorizovat). Fallback na modul.
+    const signedLink = order.share_token ? ('/order/' + order.share_token + '?authorize=1') : (LINK + '?order=' + order.id + '&authorize=1');
+    await dispatch(prisma, { title, body, data: { type: 'order_signed', order_id: order.id, link: signedLink } });
   } catch (e) { console.error('[compounder-notify] order signed', e.message); }
 }
 
