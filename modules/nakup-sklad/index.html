@@ -1104,9 +1104,21 @@
       });
       var pillsHtml = pills.length ? '<div style="margin-top:6px;">' + pills.join('') + '</div>' : '<div style="color:var(--text2);font-size:12px;">Žádné soubory.</div>';
 
-      // Kusovník — komponenty sestavy (napříč konfiguracemi).
-      var comps = [];
-      (d.configurations || []).forEach(function (cfg) { (cfg.components || []).forEach(function (co) { comps.push(co); }); });
+      // Kusovník — komponenty sestavy (napříč konfiguracemi), sloučené podle
+      // názvu bez instanční přípony „-<číslo>" (ISO 4762…-37) + konfigurace, sečtené kusy.
+      var rawComps = [];
+      (d.configurations || []).forEach(function (cfg) { (cfg.components || []).forEach(function (co) { rawComps.push(co); }); });
+      var comps = (function () {
+        var map = new Map();
+        rawComps.forEach(function (co) {
+          var base = String(co.name || '').replace(/[-_]\d+\s*$/, '').trim() || String(co.name || '');
+          var key = base.toLowerCase() + '|' + (co.configuration || '') + '|' + ((co.material && co.material.code) || '');
+          var q = Number(co.quantity) || 1;
+          if (map.has(key)) { map.get(key).quantity += q; }
+          else { map.set(key, Object.assign({}, co, { name: base, quantity: q })); }
+        });
+        return Array.from(map.values());
+      })();
       var bomHtml = '';
       if (comps.length) {
         var rows = comps.map(function (co, idx) {
