@@ -702,11 +702,22 @@
         const pdf = c.pdf_path ? `/api/cad/assets/${c.pdf_path}` : null;
         const props = Object.entries(c.custom_properties || {}).slice(0, 12).map(([k,v]) =>
           `<div><b>${escapeHtml(k)}:</b> ${escapeHtml(v)}</div>`).join('');
-        const bom = (c.components || []);
-        const bomRows = bom.map(b => `
+        // Sloučení instancí téhož dílu (název bez přípony „-<číslo>") + součet kusů.
+        const bomAgg = (function () {
+          const map = new Map();
+          for (const b of (c.components || [])) {
+            const base = String(b.name || '').replace(/[-_]\d+\s*$/, '').trim() || String(b.name || '');
+            const key = base.toLowerCase() + '|' + (b.configuration || '') + '|' + ((b.material && b.material.code) || '') + '|' + (b.is_unknown ? 'u' : 'k');
+            const q = Number(b.quantity) || 1;
+            if (map.has(key)) { map.get(key).quantity += q; }
+            else { map.set(key, Object.assign({}, b, { name: base, quantity: q })); }
+          }
+          return Array.from(map.values());
+        })();
+        const bomRows = bomAgg.map(b => `
           <tr>
             <td>${b.is_unknown ? '<span class="badge badge-unknown">nerozpoznáno</span>' : ''} ${escapeHtml(b.name)}</td>
-            <td>${b.quantity}</td>
+            <td>${b.quantity}×</td>
             <td>${escapeHtml(b.configuration || '')}</td>
             <td>${b.material ? escapeHtml(b.material.code + ' · ' + b.material.name) : '—'}</td>
           </tr>`).join('');
