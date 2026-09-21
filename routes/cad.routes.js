@@ -394,6 +394,13 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     const created = [], updated = [], notChanged = [], errors = [];
     const unknownOut = [];
 
+    // Diagnostika importu — vypíšeme, co přišlo (názvy souborů), ať víme, jestli
+    // klient vrchní sestavu vůbec poslal (viz „chybějící vrchní sestava").
+    try {
+      console.log('[cad-import] projekt=' + (project.code || project.id) + ' přišlo souborů=' + DrawingFiles.length
+        + ' → ' + DrawingFiles.map((x) => x.DrawingFileName + (x.Extension ? '' : '')).join(', ').slice(0, 1000));
+    } catch (e) {}
+
     for (const f of DrawingFiles) {
       try {
         // Uložit všechny konfigurace - nejdřív zpracovat assety
@@ -638,9 +645,16 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         if (action === 'created') created.push(payload);
         else if (action === 'updated') updated.push(payload);
       } catch (e) {
+        // Chyba jednoho souboru nesmí shodit celý import — ale MUSÍME ji zalogovat,
+        // jinak „odevzdal bez chyb" a přitom vrchní sestava tiše zmizí.
+        console.error('[cad-import] ❌ SELHAL soubor "' + f.DrawingFileName + '": ' + (e && e.message), e && e.stack ? '\n' + e.stack : '');
         errors.push({ file: f.DrawingFileName, message: e.message });
       }
     }
+
+    console.log('[cad-import] hotovo — vytvořeno=' + created.length + ' aktualizováno=' + updated.length
+      + ' bezezměny=' + notChanged.length + ' chyby=' + errors.length
+      + (errors.length ? (' → ' + errors.map((x) => x.file + ': ' + x.message).join(' | ')) : ''));
 
     res.json({
       Success: errors.length === 0,
