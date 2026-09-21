@@ -322,6 +322,10 @@ const importSchema = z.object({
   }),
   goodsBlockId: z.number().int().optional().nullable(),
   overwrite: z.boolean().optional(),
+  // Volitelné časové/systémové statistiky z desktop exportéru (klient PC):
+  // { machine_name, user, solidworks_version, exporter_version, started_at, finished_at,
+  //   total_ms, export_ms, upload_ms, files:[{file, export_ms, png_ms, pdf_ms, stl_ms, size_bytes}] }
+  ExporterStats: z.any().optional().nullable(),
   DrawingFiles: z.array(z.object({
     Name: z.string().optional(),
     DrawingFileName: z.string(),
@@ -691,6 +695,8 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             created, updated, not_changed: notChanged,
             unknown: unknownOut || [], errors,
             steps, file_timings: fileTimings, total_ms: totalMs,
+            // Statistiky z desktop exportéru (klient PC) — pokud je exportér poslal.
+            exporter_stats: (parsed.data.ExporterStats || (req.body && req.body.ExporterStats) || null),
           },
         },
       });

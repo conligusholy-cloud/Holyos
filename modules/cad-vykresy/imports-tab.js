@@ -135,6 +135,37 @@
         '<tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:left;padding:4px 8px;">Akce</th><th style="text-align:right;padding:4px 8px;">Trvání</th></tr>' +
         ftRows + '</table>') : '';
 
+      // Statistiky z desktop exportéru (klient PC) — pokud je exportér poslal.
+      var es = d.exporter_stats || null;
+      var expBlock = '';
+      if (es) {
+        function kb(n) { if (n == null) return '—'; n = Number(n); if (!isFinite(n)) return '—'; return n < 1024 ? n + ' B' : (n < 1048576 ? (n / 1024).toFixed(0) + ' kB' : (n / 1048576).toFixed(1) + ' MB'); }
+        var meta = [];
+        if (es.machine_name) meta.push('PC: <b>' + esc(es.machine_name) + '</b>');
+        if (es.user) meta.push('uživatel: <b>' + esc(es.user) + '</b>');
+        if (es.solidworks_version) meta.push('SolidWorks: <b>' + esc(es.solidworks_version) + '</b>');
+        if (es.exporter_version) meta.push('exportér: <b>' + esc(es.exporter_version) + '</b>');
+        var times = [];
+        if (es.total_ms != null) times.push('celkem na klientu: <b>' + fmtMs(es.total_ms) + '</b>');
+        if (es.export_ms != null) times.push('export ze SW: <b>' + fmtMs(es.export_ms) + '</b>');
+        if (es.upload_ms != null) times.push('upload: <b>' + fmtMs(es.upload_ms) + '</b>');
+        var efRows = (es.files || []).slice().sort(function (a, c) { return (c.export_ms || 0) - (a.export_ms || 0); }).map(function (t) {
+          return '<tr><td style="padding:4px 8px;">' + esc(t.file || '') + '</td>' +
+            '<td style="padding:4px 8px;text-align:right;white-space:nowrap;">' + fmtMs(t.export_ms) + '</td>' +
+            '<td style="padding:4px 8px;text-align:right;white-space:nowrap;">' + fmtMs(t.png_ms) + '</td>' +
+            '<td style="padding:4px 8px;text-align:right;white-space:nowrap;">' + fmtMs(t.pdf_ms) + '</td>' +
+            '<td style="padding:4px 8px;text-align:right;white-space:nowrap;">' + fmtMs(t.stl_ms) + '</td>' +
+            '<td style="padding:4px 8px;text-align:right;white-space:nowrap;">' + kb(t.size_bytes) + '</td></tr>';
+        }).join('');
+        var efTable = (es.files && es.files.length) ? ('<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;">' +
+          '<tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:right;padding:4px 8px;">Export SW</th><th style="text-align:right;padding:4px 8px;">PNG</th><th style="text-align:right;padding:4px 8px;">PDF</th><th style="text-align:right;padding:4px 8px;">STL</th><th style="text-align:right;padding:4px 8px;">Velikost</th></tr>' +
+          efRows + '</table>') : '';
+        expBlock = '<h4 style="margin:14px 0 4px;color:#a78bfa;">Statistiky exportéru (klient PC)</h4>' +
+          (meta.length ? '<div style="font-size:12px;color:var(--text2);margin-bottom:2px;">' + meta.join(' · ') + '</div>' : '') +
+          (times.length ? '<div style="font-size:12px;color:var(--text2);">' + times.join(' · ') + '</div>' : '') +
+          efTable;
+      }
+
       var inner =
         '<div id="cad-protocol-print">' +
         '<h2 style="margin:0 0 4px;">Protokol o importu CAD výkresů</h2>' +
@@ -149,6 +180,7 @@
         '<span style="color:#9ca3af;">Beze změny: <b>' + (b.count_not_changed || 0) + '</b></span>' +
         '<span style="color:#ef4444;">Chyby: <b>' + (b.count_errors || 0) + '</b></span>' +
         '</div>' +
+        expBlock +
         stepsTable + ftTable +
         section('Vytvořené výkresy', d.created, '#10b981') +
         section('Aktualizované výkresy', d.updated, '#3b82f6') +
