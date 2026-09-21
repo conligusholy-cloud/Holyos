@@ -2926,7 +2926,7 @@
     // Panel s účetními doklady (fakturami) navázanými na objednávku + jejich stavy.
     function renderOrderInvoices(order) {
       var invs = (order && order.invoices) || [];
-      if (!invs.length) return '';
+      var cur = (order && order.currency) || 'CZK';
       var STAT = {
         draft: { label: 'Koncept', color: '#9ca3af' },
         issued: { label: 'Vystavena', color: '#3b82f6' },
@@ -2936,32 +2936,115 @@
         overdue: { label: 'Po splatnosti', color: '#ef4444' },
         cancelled: { label: 'Storno', color: '#ef4444' },
       };
+      var DEL = {
+        not_sent: { label: 'Neodesláno', color: '#9ca3af' },
+        queued: { label: 'Odesílá se', color: '#eab308' },
+        sent: { label: 'Odesláno', color: '#10b981' },
+        failed: { label: 'Chyba odeslání', color: '#ef4444' },
+      };
       function invLabel(inv) {
+        if (inv.type === 'tax_receipt') return 'Daňový doklad k platbě';
+        if (inv.type === 'credit_note_issued') return 'Opravný daňový doklad';
         if (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') return 'Zálohová faktura';
+        if (inv.invoice_role === 'final') return 'Konečná faktura';
         if (inv.invoice_role === 'full' || inv.type === 'issued') return 'Faktura';
         return 'Doklad';
       }
       function fmt(d) { return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
+
+      // ─── Finanční přehled (§24, §31) ───
+      var total = Number((order && order.total_amount) || 0);
+      var dppps = invs.filter(function (i) { return i.type === 'tax_receipt' && i.status !== 'cancelled'; });
+      var received = dppps.reduce(function (s, i) { return s + Number(i.total || 0); }, 0);
+      received = Math.round(received * 100) / 100;
+      var kUhrade = Math.round((total - received) * 100) / 100;
+      var unsent = dppps.filter(function (i) { return i.delivery_status !== 'sent'; }).length;
+      var overpay = Math.round((received - total) * 100) / 100;
+      function money(n) { return Number(n).toLocaleString('cs-CZ') + ' ' + cur; }
+      function box(label, val, color) {
+        return '<div style="flex:1;min-width:120px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;">' +
+          '<div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);">' + label + '</div>' +
+          '<div style="font-weight:800;font-size:14px;margin-top:2px;' + (color ? 'color:' + color + ';' : '') + '">' + val + '</div></div>';
+      }
+      var summary = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
+        box('Celková cena', money(total)) +
+        box('Přijaté zálohy (DD)', money(received), received > 0 ? '#10b981' : null) +
+        box('Zbývá uhradit', money(kUhrade > 0 ? kUhrade : 0), kUhrade > 0 ? '#eab308' : '#10b981') +
+        box('Daňové doklady', String(dppps.length) + (unsent ? ' · ' + unsent + ' neodesláno' : '')) +
+        '</div>' +
+        (overpay > 0.01 ? '<div class="ow-note" style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#ef4444;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;">⚠️ Přeplatek ' + money(overpay) + ' — přijaté zálohy převyšují cenu objednávky. Rozhodni o vypořádání (další záloha / vrácení).</div>' : '');
+
+      if (!invs.length) {
+        return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+          '<h3 style="font-size:14px;margin-bottom:8px;">🧾 Účetní doklady</h3>' + summary +
+          '<div style="font-size:12px;color:var(--text2);">Zatím žádné doklady.</div></div>';
+      }
+
       var rows = invs.map(function (inv) {
         var st = STAT[inv.status] || { label: inv.status || '—', color: '#9ca3af' };
         var overdue = inv.status !== 'paid' && inv.status !== 'cancelled' && inv.date_due && new Date(inv.date_due) < new Date();
         if (overdue) st = STAT.overdue;
-        var cur = inv.currency || 'CZK';
+        var icur = inv.currency || 'CZK';
+        var isDppp = inv.type === 'tax_receipt';
+        var del = DEL[inv.delivery_status] || DEL.not_sent;
+        var delBadge = isDppp ? '<span class="badge" style="background:' + del.color + '22;color:' + del.color + ';">✉️ ' + esc(del.label) + '</span>' : '';
+        var actions = '<a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;">📄 PDF</a>';
+        if (isDppp && inv.status !== 'cancelled') {
+          var sendLabel = (inv.delivery_status === 'sent') ? '↻ Znovu odeslat' : '✉️ Odeslat';
+          actions += ' <button class="btn btn-sm" onclick="sendTaxReceipt(' + inv.id + ',' + order.id + ')">' + sendLabel + '</button>';
+          actions += ' <button class="btn btn-sm btn-secondary" onclick="makeCorrection(' + inv.id + ',' + order.id + ')">↩ Opravný</button>';
+        }
         return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;flex-wrap:wrap;">' +
           '<div style="min-width:180px;">' +
             '<div style="font-weight:700;font-size:13px;">' + esc(invLabel(inv)) + ' · ' + esc(inv.invoice_number || ('#' + inv.id)) + '</div>' +
-            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">Vystaveno ' + fmt(inv.date_issued) + ' · Splatnost ' + fmt(inv.date_due) + '</div>' +
+            '<div style="font-size:11px;color:var(--text2);margin-top:2px;">Vystaveno ' + fmt(inv.date_issued) + (isDppp ? ' · DUZP ' + fmt(inv.date_taxable) : ' · Splatnost ' + fmt(inv.date_due)) +
+              (isDppp && inv.sent_at ? ' · odesláno ' + fmt(inv.sent_at) + (inv.sent_to ? ' → ' + esc(inv.sent_to) : '') : '') +
+              (isDppp && inv.delivery_status === 'failed' && inv.send_error ? ' · <span style="color:#ef4444;">' + esc(String(inv.send_error).slice(0, 80)) + '</span>' : '') + '</div>' +
           '</div>' +
           '<div style="text-align:right;">' +
-            '<div style="font-weight:800;font-size:13px;">' + Number(inv.total || 0).toLocaleString('cs-CZ') + ' ' + cur + '</div>' +
-            (Number(inv.paid_amount) > 0 ? '<div style="font-size:11px;color:#10b981;">Uhrazeno ' + Number(inv.paid_amount).toLocaleString('cs-CZ') + ' ' + cur + '</div>' : '') +
+            '<div style="font-weight:800;font-size:13px;">' + Number(inv.total || 0).toLocaleString('cs-CZ') + ' ' + icur + '</div>' +
+            (Number(inv.paid_amount) > 0 ? '<div style="font-size:11px;color:#10b981;">Uhrazeno ' + Number(inv.paid_amount).toLocaleString('cs-CZ') + ' ' + icur + '</div>' : '') +
           '</div>' +
           '<span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + esc(st.label) + '</span>' +
-          '<a class="btn btn-sm" href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="text-decoration:none;">📄 PDF</a>' +
+          delBadge +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + actions + '</div>' +
         '</div>';
       }).join('');
       return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
-        '<h3 style="font-size:14px;margin-bottom:8px;">🧾 Účetní doklady</h3>' + rows + '</div>';
+        '<h3 style="font-size:14px;margin-bottom:8px;">🧾 Účetní doklady</h3>' + summary + rows + '</div>';
+    }
+
+    // Ruční (znovu)odeslání daňového dokladu k platbě zákazníkovi.
+    async function sendTaxReceipt(invoiceId, orderId) {
+      if (!confirm('Odeslat daňový doklad k přijaté platbě zákazníkovi e-mailem?')) return;
+      var token = sessionStorage.getItem('token') || '';
+      try {
+        var r = await fetch('/api/accounting/invoices/' + invoiceId + '/send-tax-receipt', {
+          method: 'POST', credentials: 'include', headers: { 'Authorization': 'Bearer ' + token },
+        });
+        var j = {}; try { j = await r.json(); } catch (e) {}
+        if (!r.ok) { alert('Odeslání selhalo: ' + (j.reason || j.error || r.status)); }
+        else { alert('Daňový doklad odeslán zákazníkovi.'); }
+      } catch (e) { alert('Chyba: ' + e.message); }
+      if (typeof openOrderDetail === 'function') openOrderDetail(orderId);
+    }
+
+    // Opravný daňový doklad (ODD) k daňovému dokladu k platbě.
+    async function makeCorrection(invoiceId, orderId) {
+      var reason = prompt('Důvod opravného dokladu (nepovinné):', '');
+      if (reason === null) return;
+      var token = sessionStorage.getItem('token') || '';
+      try {
+        var r = await fetch('/api/accounting/invoices/' + invoiceId + '/correction', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason || null }),
+        });
+        var j = {}; try { j = await r.json(); } catch (e) {}
+        if (!r.ok) { alert('Nepodařilo se vystavit opravný doklad: ' + (j.error || r.status)); }
+        else { alert('Vystaven opravný daňový doklad ' + ((j.correction && j.correction.invoice_number) || '') + '.'); }
+      } catch (e) { alert('Chyba: ' + e.message); }
+      if (typeof openOrderDetail === 'function') openOrderDetail(orderId);
     }
 
     // Autorizace podepsané objednávky (Tomáš/Jan) → stav confirmed + odeslání dokladů zákazníkovi.

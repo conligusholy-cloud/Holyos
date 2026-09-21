@@ -2226,6 +2226,75 @@ router.post('/invoices/:id/send', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/invoices/:id/send-tax-receipt — ruční (znovu)odeslání
+// daňového dokladu k přijaté platbě (DPPP) zákazníkovi; eviduje stav odeslání (§14,§15).
+router.post('/invoices/:id/send-tax-receipt', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné id' });
+    const inv = await prisma.invoice.findUnique({ where: { id }, select: { id: true, type: true, invoice_number: true } });
+    if (!inv) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (inv.type !== 'tax_receipt') return res.status(400).json({ error: 'Není daňový doklad k přijaté platbě' });
+    const { sendDepositTaxDoc } = require('../services/accountant/deposit-tax-doc');
+    const r = await sendDepositTaxDoc(id);
+    await logAudit({
+      user: req.user, action: 'send', entity: 'invoice', entity_id: id,
+      description: `DPPP ${inv.invoice_number} odeslání: ${r.ok ? 'OK' : ('CHYBA ' + (r.reason || ''))}`,
+      snapshot: r,
+    }).catch(() => {});
+    if (!r.ok) return res.status(502).json({ error: 'Odeslání selhalo', reason: r.reason, detail: r.error });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/correction — opravný daňový doklad (ODD) k DPPP (§26).
+// Vytvoří NOVÝ dokument (řada ODD) se zápornými částkami, naváže na původní a ten
+// označí jako stornovaný. Číslo původního se nikdy znovu nepoužije.
+router.post('/invoices/:id/correction', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné id' });
+    const src = await prisma.invoice.findUnique({ where: { id }, include: { items: true } });
+    if (!src) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (src.type !== 'tax_receipt') return res.status(400).json({ error: 'Opravný doklad umíme zatím jen k daňovému dokladu k platbě' });
+    const existing = await prisma.invoice.findFirst({ where: { type: 'credit_note_issued', parent_invoice_id: src.id }, select: { id: true, invoice_number: true } });
+    if (existing) return res.json({ ok: true, already: true, correction: existing });
+    const { generateInvoiceNumber } = require('../services/accountant/invoice-numbering');
+    const reason = (req.body && req.body.reason) ? String(req.body.reason).slice(0, 500) : null;
+    const odd = await prisma.$transaction(async (tx) => {
+      const number = await generateInvoiceNumber('credit_note_issued', { prisma: tx });
+      const created = await tx.invoice.create({
+        data: {
+          invoice_number: number, type: 'credit_note_issued', direction: 'ar', invoice_role: 'correction',
+          company_id: src.company_id, order_id: src.order_id, parent_invoice_id: src.id,
+          currency: src.currency, exchange_rate: src.exchange_rate,
+          subtotal: (-Number(src.subtotal)).toFixed(2), vat_amount: (-Number(src.vat_amount)).toFixed(2), total: (-Number(src.total)).toFixed(2),
+          vat_regime: src.vat_regime, date_issued: new Date(), date_taxable: new Date(), date_due: new Date(),
+          payment_method: 'bank_transfer', status: 'issued', source: 'manual_correction',
+          note: 'Opravný daňový doklad k ' + src.invoice_number + (reason ? (' — ' + reason) : ''),
+          created_by_user_id: req.user?.id || null,
+          items: {
+            create: (src.items || []).map((it, ix) => ({
+              line_order: ix + 1, description: 'Storno: ' + it.description,
+              quantity: it.quantity, unit: it.unit, unit_price: (-Number(it.unit_price)),
+              vat_rate: it.vat_rate, subtotal: (-Number(it.subtotal)).toFixed(2),
+              vat_amount: (-Number(it.vat_amount)).toFixed(2), total: (-Number(it.total)).toFixed(2),
+            })),
+          },
+        },
+      });
+      await tx.invoice.update({ where: { id: src.id }, data: { status: 'cancelled' } });
+      return created;
+    });
+    await logAudit({
+      user: req.user, action: 'correction', entity: 'invoice', entity_id: src.id,
+      description: `Vystaven opravný doklad ${odd.invoice_number} k ${src.invoice_number}`,
+      snapshot: { correction_id: odd.id, reason },
+    }).catch(() => {});
+    res.status(201).json({ ok: true, correction: odd });
+  } catch (err) { next(err); }
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // OVĚŘENÍ BANKOVNÍHO ÚČTU (anti-podvod whitelist)
 // ────────────────────────────────────────────────────────────────────────────

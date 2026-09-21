@@ -84,11 +84,34 @@ async function issueFinalInvoiceForOrder(orderId, opts = {}) {
   }
 
   const total = parseFloat(order.total_amount || 0);
-  const deposit = computeDepositValue(order);
-  const finalAmount = Math.max(0, Math.round((total - deposit) * 100) / 100);
-  if (finalAmount <= 0) {
-    return { created: false, reason: 'final_amount_zero' };
+  if (total <= 0) return { created: false, reason: 'order_total_zero' };
+
+  // §20–22: finální faktura automaticky odečte VŠECHNY daňové doklady k přijatým
+  // platbám (DPPP, type='tax_receipt') této objednávky.
+  const dppps = await db.invoice.findMany({
+    where: { order_id: order.id, type: 'tax_receipt' },
+    select: { id: true, invoice_number: true, total: true, subtotal: true, vat_amount: true, date_taxable: true },
+    orderBy: { id: 'asc' },
+  });
+  let deducted = dppps.reduce((s, d) => s + Number(d.total), 0);
+  // Fallback pro starší objednávky bez DPPP: odečti evidovanou zálohu, ať nedojde
+  // k dvojímu naúčtování už zaplacené zálohy.
+  if (deducted === 0 && order.deposit_paid) {
+    const legacy = computeDepositValue(order);
+    if (legacy > 0) deducted = legacy;
   }
+  deducted = Math.round(deducted * 100) / 100;
+  const finalAmount = Math.max(0, Math.round((total - deducted) * 100) / 100);
+
+  // DPH režim: CZK = standard 21 %, cizí měna = reverse charge 0 % (jako u zálohových).
+  const isForeign = (order.currency || 'CZK') !== 'CZK';
+  const rate = isForeign ? 0 : 21;
+  const vatRegime = isForeign ? 'reverse_charge' : 'standard';
+  const splitGross = (gross) => {
+    const sub = rate > 0 ? +(gross / (1 + rate / 100)).toFixed(2) : +Number(gross).toFixed(2);
+    const vat = +(Number(gross) - sub).toFixed(2);
+    return { sub, vat };
+  };
 
   // Generuj číslo + datumy
   const invoiceNumber = await generateInvoiceNumber('issued', { prisma: db });
@@ -96,19 +119,43 @@ async function issueFinalInvoiceForOrder(orderId, opts = {}) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const due = new Date(today.getTime() + dueDays * 86400000);
-
-  // VS — invoice_number bez prefixu, jen cifry
   const vs = invoiceNumber.replace(/\D/g, '').slice(-10);
 
-  // VAT — pro jednoduchost (V1) bereme rovnou s DPH = total_amount * 21% (standard).
-  // Tomášovo zadání: zatím počítáme částku doplatku bez detailního VAT rozkladu —
-  // řádek faktury vznikne jako "Doplatek za <číslo objednávky>" s totalAmount = finalAmount.
-  // Při ručních úpravách v účetních dokladech může Tomáš upravit.
-  const defaultVatRate = 21;
-  // finalAmount je celková částka s DPH (počítáno z Order.total_amount, který je s DPH)
-  // Subtotal = finalAmount / 1.21, vat = subtotal * 0.21
-  const lineSubtotal = +(finalAmount / (1 + defaultVatRate / 100)).toFixed(2);
-  const lineVat = +(finalAmount - lineSubtotal).toFixed(2);
+  // Řádky: 1) celkové plnění, 2..n) odečty zaplacených záloh (dle DPPP).
+  const plneni = splitGross(total);
+  const items = [{
+    line_order: 1,
+    description: `Celkové plnění — prodejní objednávka ${order.order_number}`,
+    quantity: 1, unit: 'ks', unit_price: total, vat_rate: rate,
+    subtotal: plneni.sub, vat_amount: plneni.vat, total: total,
+  }];
+  let dedSub = 0, dedVat = 0, li = 2;
+  for (const d of dppps) {
+    const dt = Number(d.total);
+    const s = Number(d.subtotal);
+    const v = Number(d.vat_amount);
+    dedSub += s; dedVat += v;
+    items.push({
+      line_order: li++,
+      description: `Odečet zaplacené zálohy dle ${d.invoice_number}` +
+        (d.date_taxable ? ` ze dne ${new Date(d.date_taxable).toLocaleDateString('cs-CZ')}` : ''),
+      quantity: 1, unit: 'ks', unit_price: -dt, vat_rate: rate,
+      subtotal: -s, vat_amount: -v, total: -dt,
+    });
+  }
+  if (!dppps.length && deducted > 0) {
+    const sp = splitGross(deducted);
+    dedSub += sp.sub; dedVat += sp.vat;
+    items.push({
+      line_order: li++,
+      description: 'Odečet zaplacené zálohy',
+      quantity: 1, unit: 'ks', unit_price: -deducted, vat_rate: rate,
+      subtotal: -sp.sub, vat_amount: -sp.vat, total: -deducted,
+    });
+  }
+  const invSubtotal = +(plneni.sub - dedSub).toFixed(2);
+  const invVat = +(plneni.vat - dedVat).toFixed(2);
+  const invTotal = finalAmount;
 
   const invoice = await db.invoice.create({
     data: {
@@ -119,10 +166,10 @@ async function issueFinalInvoiceForOrder(orderId, opts = {}) {
       order_id: order.id,
       currency: order.currency || 'CZK',
       exchange_rate: 1,
-      subtotal: lineSubtotal.toFixed(2),
-      vat_amount: lineVat.toFixed(2),
-      total: finalAmount.toFixed(2),
-      vat_regime: 'standard',
+      subtotal: invSubtotal.toFixed(2),
+      vat_amount: invVat.toFixed(2),
+      total: invTotal.toFixed(2),
+      vat_regime: vatRegime,
       date_issued: today,
       date_taxable: today,
       date_due: due,
@@ -131,23 +178,11 @@ async function issueFinalInvoiceForOrder(orderId, opts = {}) {
       status: 'issued',
       source: 'auto_final_invoice',
       invoice_role: 'final',
+      note: deducted > 0
+        ? `Konečné vyúčtování. Započtené zálohy: ${deducted.toLocaleString('cs-CZ')} ${order.currency || 'CZK'}. K úhradě: ${invTotal.toLocaleString('cs-CZ')} ${order.currency || 'CZK'}.`
+        : null,
       created_by_user_id: opts.createdByUserId || null,
-      items: {
-        create: [
-          {
-            line_order: 1,
-            description: `Doplatek za prodejní objednávku ${order.order_number}` +
-              (deposit > 0 ? ` (po zaplacené záloze ${deposit.toLocaleString('cs-CZ')} ${order.currency || 'CZK'})` : ''),
-            quantity: 1,
-            unit: 'ks',
-            unit_price: finalAmount,
-            vat_rate: defaultVatRate,
-            subtotal: lineSubtotal.toFixed(2),
-            vat_amount: lineVat.toFixed(2),
-            total: finalAmount.toFixed(2),
-          },
-        ],
-      },
+      items: { create: items },
     },
     include: { items: true, company: true },
   });

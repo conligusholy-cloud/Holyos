@@ -612,7 +612,8 @@ router.get('/orders/:id', async (req, res, next) => {
         orderBy: { id: 'asc' },
         select: {
           id: true, invoice_number: true, type: true, invoice_role: true, direction: true,
-          total: true, currency: true, status: true, date_issued: true, date_due: true, paid_amount: true,
+          total: true, currency: true, status: true, date_issued: true, date_taxable: true, date_due: true, paid_amount: true,
+          parent_invoice_id: true, delivery_status: true, sent_at: true, sent_to: true, send_error: true, send_attempts: true,
         },
       });
     } catch (e) { enriched.invoices = []; }
