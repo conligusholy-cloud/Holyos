@@ -1605,21 +1605,23 @@
     try {
       // Zapamatuj si HNED (než se cokoli překreslí), že kontakt ukládáme → ✓ a přestane se ptát.
       try { localStorage.setItem('ob.saved.'+id, String(Date.now())); } catch(e){}
-      var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
-      var url = URL.createObjectURL(blob);
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (iOS) {
-        // iOS: navigace na vizitku je spolehlivější než skrytý <a download> (jinak „Scene was invalidated").
-        window.location.href = url;
+        // iOS Safari neumí spolehlivě otevřít blob:/data: vizitku (padá na
+        // „Scene was invalidated"). Otevřeme skutečnou serverovou URL s
+        // Content-Type text/vcard — iOS ji zobrazí jako nativní kartu kontaktu.
+        window.location.href = API + '/leads/' + id + '/vcard';
       } else {
+        var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
         a.download = (String(name).replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'kontakt') + '.vcf';
         document.body.appendChild(a); a.click();
         // Odebrání odkazu i překreslení AŽ po chvíli, ať se neruší otevírání vizitky.
         setTimeout(function(){ try{ document.body.removeChild(a); }catch(e){} try{ if(typeof render==='function') render(); }catch(e){} }, 300);
+        setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
       }
-      setTimeout(function(){ try{ URL.revokeObjectURL(url); }catch(e){} }, 4000);
     } catch(e){ alert('Kontakt se nepodařilo připravit.'); }
   }
   window.saveContact = saveContact;
@@ -2008,18 +2010,33 @@
     var errEl = document.getElementById('a-err');
     if (email && email.indexOf('@')===-1){ errEl.textContent='Neplatný e-mail.'; return; }
     if (!email && !phone){ errEl.textContent='Zadej aspoň jeden kontakt — e-mail nebo telefon.'; return; }
-    var btn = document.getElementById('a-save'); btn.disabled=true; btn.textContent='Ukládám…';
+    var btn = document.getElementById('a-save'); btn.disabled=true; btn.textContent='Ukládám…'; errEl.innerHTML='';
+    var body = JSON.stringify({ name:name, first_name:first, last_name:last, company:company, city:city, country:country, email:email, lang:lang, phone:phone });
     try {
-      var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:name, first_name:first, last_name:last, company:company, city:city, country:country, email:email, lang:lang, phone:phone }) });
-      var j = await r.json().catch(function(){return {};});
-      if (!r.ok){
-        var msg = esc(j.error || ('Chyba HTTP '+r.status));
-        if (j.owner_email){ msg += ' <a href="mailto:'+esc(j.owner_email)+'?subject='+encodeURIComponent('Compounder kontakt: '+email)+'" style="color:var(--primary);text-decoration:underline">Napsat kolegovi</a>'; }
-        errEl.innerHTML = msg; return;
+      // Odolné uložení: potvrdí jen server (žádný falešný úspěch). Při výpadku
+      // spojení / 5xx (typicky během aktualizace HolyOS) to 3× zopakuje a při
+      // neúspěchu nechá data ve formuláři, ať se nic neztratí.
+      for (var attempt = 1; attempt <= 3; attempt++){
+        try {
+          var r = await api('/leads', { method:'POST', headers:{'Content-Type':'application/json'}, body: body });
+          var j = await r.json().catch(function(){return {};});
+          if (!r.ok){
+            if (r.status >= 500 && attempt < 3){ await new Promise(function(res){ setTimeout(res, 1500); }); continue; }
+            var msg = esc(j.error || ('Chyba HTTP '+r.status));
+            if (j.owner_email){ msg += ' <a href="mailto:'+esc(j.owner_email)+'?subject='+encodeURIComponent('Compounder kontakt: '+email)+'" style="color:var(--primary);text-decoration:underline">Napsat kolegovi</a>'; }
+            errEl.innerHTML = msg; return; // formulář zůstává vyplněný
+          }
+          // Uloženo — potvrzeno serverem.
+          ['a-first','a-last','a-company','a-city','a-country','a-email','a-phone'].forEach(function(id){ document.getElementById(id).value=''; });
+          closeAdd(); try { await load(); } catch(e){}
+          return;
+        } catch(e){
+          if (String(e && e.message) === '401') return; // 401 řeší api() (přesměrování na přihlášení)
+          if (attempt < 3){ await new Promise(function(res){ setTimeout(res, 1500); }); }
+        }
       }
-      ['a-first','a-last','a-company','a-city','a-country','a-email','a-phone'].forEach(function(id){ document.getElementById(id).value=''; });
-      closeAdd(); await load();
-    } catch(e){ errEl.textContent='Nepodařilo se uložit.'; }
+      errEl.textContent = 'Nepodařilo se uložit — možná právě probíhá aktualizace HolyOS. Údaje jsou vyplněné, zkus to prosím za chvíli znovu.';
+    }
     finally { btn.disabled=false; btn.textContent='Uložit kontakt'; }
   }
 

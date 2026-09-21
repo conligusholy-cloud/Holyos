@@ -3346,6 +3346,40 @@ router.get('/leads/:id(\\d+)', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /leads/:id/vcard — vizitka (.vcf) pro uložení kontaktu do telefonu.
+// Servírováno ze serveru (skutečná URL), protože iOS Safari neumí spolehlivě
+// otevřít blob:/data: vizitku (padá na „Scene was invalidated"). Reálná URL
+// s Content-Type text/vcard iOS zobrazí jako nativní kartu „Přidat do kontaktů".
+router.get('/leads/:id(\\d+)/vcard', requireAuth, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const lead = await prisma.compounderLead.findUnique({
+      where: { id },
+      select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, company: true },
+    });
+    if (!lead) return res.status(404).send('Lead nenalezen');
+    const vesc = (s) => String(s == null ? '' : s).replace(/([,;\\])/g, '\\$1').replace(/\r?\n/g, '\\n');
+    const name = lead.name || lead.email || 'Compounder lead';
+    let first = lead.first_name || '', last = lead.last_name || '';
+    if (!first && !last) { const p = String(name).trim().split(/\s+/); first = p[0] || ''; last = p.slice(1).join(' '); }
+    const noteParts = ['Compounder lead'];
+    if (lead.company) noteParts.push(lead.company);
+    if (lead.email) noteParts.push(lead.email);
+    const vcard = 'BEGIN:VCARD\r\nVERSION:3.0\r\n'
+      + 'N:' + vesc(last) + ';' + vesc(first) + ';;;\r\n'
+      + 'FN:' + vesc(name) + '\r\n'
+      + 'ORG:Compounder\r\n'
+      + (lead.phone ? 'TEL;TYPE=CELL:' + vesc(lead.phone) + '\r\n' : '')
+      + (lead.email ? 'EMAIL;TYPE=INTERNET:' + vesc(lead.email) + '\r\n' : '')
+      + 'NOTE:' + vesc(noteParts.join(' · ')) + '\r\n'
+      + 'END:VCARD\r\n';
+    const fname = (String(name).replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'kontakt') + '.vcf';
+    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+    res.setHeader('Content-Disposition', 'inline; filename="' + fname + '"');
+    res.send(vcard);
+  } catch (err) { next(err); }
+});
+
 router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
