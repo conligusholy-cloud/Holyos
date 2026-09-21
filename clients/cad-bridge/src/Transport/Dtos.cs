@@ -73,6 +73,37 @@ public sealed class DrawingsImportRequest
     public int? GoodsBlockId { get; set; }
     public bool Overwrite { get; set; }
     public List<DrawingFileDto> DrawingFiles { get; set; } = new();
+    /// <summary>Volitelné časové/systémové statistiky z klienta (PC exportéru) — zobrazí se v protokolu importu.</summary>
+    public ExporterStatsDto? ExporterStats { get; set; }
+}
+
+// ── Statistiky exportéru (klient PC) — zobrazí se v protokolu importu ─────────
+// Klíče musí být snake_case, aby je frontend (imports-tab.js) přečetl.
+public sealed class ExporterStatsDto
+{
+    [JsonPropertyName("machine_name")] public string? MachineName { get; set; }
+    [JsonPropertyName("user")] public string? User { get; set; }
+    [JsonPropertyName("solidworks_version")] public string? SolidworksVersion { get; set; }
+    [JsonPropertyName("exporter_version")] public string? ExporterVersion { get; set; }
+    [JsonPropertyName("started_at")] public DateTimeOffset? StartedAt { get; set; }
+    [JsonPropertyName("finished_at")] public DateTimeOffset? FinishedAt { get; set; }
+    /// <summary>Celkový čas na klientu (export + upload), ms.</summary>
+    [JsonPropertyName("total_ms")] public long? TotalMs { get; set; }
+    /// <summary>Čas exportu ze SolidWorks (součet), ms.</summary>
+    [JsonPropertyName("export_ms")] public long? ExportMs { get; set; }
+    /// <summary>Čas uploadu do HolyOS, ms.</summary>
+    [JsonPropertyName("upload_ms")] public long? UploadMs { get; set; }
+    [JsonPropertyName("files")] public List<ExporterFileStatDto> Files { get; set; } = new();
+}
+
+public sealed class ExporterFileStatDto
+{
+    [JsonPropertyName("file")] public string File { get; set; } = "";
+    [JsonPropertyName("export_ms")] public long? ExportMs { get; set; }
+    [JsonPropertyName("png_ms")] public long? PngMs { get; set; }
+    [JsonPropertyName("pdf_ms")] public long? PdfMs { get; set; }
+    [JsonPropertyName("stl_ms")] public long? StlMs { get; set; }
+    [JsonPropertyName("size_bytes")] public long? SizeBytes { get; set; }
 }
 
 public sealed class ProjectRef

@@ -616,6 +616,13 @@ public sealed class SubmitForm : Form
         catch { return null; }
     }
 
+    /// <summary>Velikost souboru v bajtech (pro statistiky exportéru), nebo null.</summary>
+    private static long? SafeFileSize(string? path)
+    {
+        try { return (!string.IsNullOrEmpty(path) && File.Exists(path)) ? new FileInfo(path).Length : (long?)null; }
+        catch { return null; }
+    }
+
     /// <summary>
     /// Pozná virtuální sestavu podle custom property Typ = "virtualni".
     /// Hledá case-insensitive přes klíče "Typ" / "typ" / "TYP" a porovnává hodnotu.
@@ -1626,6 +1633,29 @@ public sealed class SubmitForm : Form
                     }
                 }).ToList()
             };
+
+            // Statistiky exportéru (klient PC) — čas odevzdání + systémové info.
+            // Zobrazí se v HolyOS v protokolu importu (záložka Importy).
+            try
+            {
+                var elapsedMs = (long)(DateTime.UtcNow - submitStartUtc).TotalMilliseconds;
+                payload.ExporterStats = new ExporterStatsDto
+                {
+                    MachineName = Environment.MachineName,
+                    User = Environment.UserName,
+                    ExporterVersion = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(),
+                    StartedAt = (DateTimeOffset)submitStartUtc,
+                    FinishedAt = DateTimeOffset.UtcNow,
+                    TotalMs = elapsedMs,
+                    UploadMs = elapsedMs, // Bridge 2.x nespouští SW; celý čas je příprava + upload
+                    Files = _rows.Where(r => !r.IsVirtualAssembly).Select(r => new ExporterFileStatDto
+                    {
+                        File = r.FileName,
+                        SizeBytes = SafeFileSize(r.Path),
+                    }).ToList(),
+                };
+            }
+            catch (Exception ex) { Diagnostics.LogException("ExporterStats", ex); }
 
             var resp = await _client.ImportDrawingsAsync(payload);
 
