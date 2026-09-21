@@ -959,7 +959,10 @@
             '<div class="form-group"><label>Doba dodání (dny)</label><input type="number" name="lead_time_days" value="' + v('lead_time_days',0) + '" step="1"></div>' +
             // CAD výkres spárovaný podle kódu (data + soubory ke stažení).
             '<div class="form-group full" style="grid-column:1/-1;border-top:1px solid var(--border);margin-top:8px;padding-top:12px;">' +
-              '<label style="font-size:13px;font-weight:700;">📐 CAD výkres (dle kódu)</label>' +
+              '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+                '<label style="font-size:13px;font-weight:700;">📐 CAD výkres (dle kódu)</label>' +
+                '<button type="button" class="btn btn-sm btn-secondary" onclick="openWhereUsed()">🔎 Kde se používá</button>' +
+              '</div>' +
               '<div id="cad-panel" style="color:var(--text2);font-size:13px;margin-top:6px;">Načítám CAD výkres…</div>' +
             '</div>' +
           '</div>' +
@@ -1057,8 +1060,9 @@
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
           '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
         '</div></form></div></div>';
-      // Kód pro spárování s CAD výkresem (načte se až po kliknutí na záložku CAD).
+      // Kód + id pro spárování s CAD výkresem / „kde se používá" (načte se po kliknutí na záložku).
       window.__cadMatCode = (m && m.code) ? String(m.code) : '';
+      window.__matId = (m && m.id) ? m.id : (id || null);
     }
 
     // Most kusovník → katalog: najde zboží podle kódu a otevře jeho kartu (nebo nabídne založení).
@@ -1075,6 +1079,59 @@
         if (arr.length > 1) { alert('Kód „' + code + '" má v katalogu více shod — otevři modul Zboží a vyber ručně.'); return; }
         if (confirm('Zboží s kódem „' + code + '" není v katalogu.\n\nChceš založit nové zboží?')) openMaterialModal(null);
       } catch (e) { alert('Chyba hledání zboží: ' + (e && e.message)); }
+    };
+
+    // === KDE SE POUŽÍVÁ — přehled sestav (konstrukční CAD + pracovní postup) ===
+    window.openWhereUsed = async function () {
+      var id = window.__matId;
+      if (!id) { alert('Nejdřív zboží ulož — přehled se páruje podle uloženého kódu.'); return; }
+      var ex = document.getElementById('where-used-ovl'); if (ex) ex.remove();
+      var ovl = document.createElement('div');
+      ovl.id = 'where-used-ovl';
+      ovl.style.cssText = 'position:fixed;inset:0;background:rgba(6,10,20,0.72);z-index:12000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      ovl.onclick = function (e) { if (e.target === ovl) ovl.remove(); };
+      ovl.innerHTML = '<div style="background:var(--surface,#0f1524);border:1px solid var(--border,#233);border-radius:14px;max-width:1000px;width:100%;max-height:88vh;overflow:auto;padding:20px;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">' +
+          '<h2 style="margin:0;font-size:18px;">🔎 Kde se díl používá</h2>' +
+          '<button class="btn btn-sm btn-secondary" onclick="document.getElementById(\'where-used-ovl\').remove()">Zavřít</button>' +
+        '</div>' +
+        '<div id="where-used-body" style="color:var(--text2);">Načítám…</div>' +
+      '</div>';
+      document.body.appendChild(ovl);
+      var data = null;
+      try { var r = await fetch('/api/wh/materials/' + id + '/where-used'); if (r.ok) data = await r.json(); } catch (e) {}
+      var body = document.getElementById('where-used-body');
+      if (!body) return;
+      if (!data) { body.innerHTML = '<div style="color:#ef4444;">Přehled se nepodařilo načíst.</div>'; return; }
+      var head = '<div style="font-size:13px;margin-bottom:14px;">Díl <b style="color:var(--text);">' + esc(data.material.code || '') + '</b> · ' + esc(data.material.name || '') + '</div>';
+      function cadTable(rows) {
+        if (!rows.length) return '<div style="color:var(--text2);font-size:13px;">V žádné konstrukční sestavě (CAD).</div>';
+        return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;">' +
+          '<th style="padding:4px 8px;">Sestava</th><th style="padding:4px 8px;">Projekt</th><th style="padding:4px 8px;text-align:right;">Ks</th></tr></thead><tbody>' +
+          rows.map(function (d) {
+            var code = String(d.file_name || '').replace(/\.[^.]+$/, '');
+            return '<tr style="cursor:pointer;" title="Otevřít kartu sestavy" onclick="openMaterialByCode(\'' + code.replace(/\x27/g, "\\\x27") + '\')" onmouseover="this.style.background=\'rgba(201,162,75,0.10)\'" onmouseout="this.style.background=\'\'">' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(code) + (d.title ? ' <span style="color:var(--text2);font-weight:400;">· ' + esc(d.title) + '</span>' : '') + ' <span style="color:var(--text2);font-size:11px;">v' + (d.version || 1) + ' ↗</span></td>' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);">' + esc(d.project || '—') + '</td>' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;">' + d.quantity + '×</td></tr>';
+          }).join('') + '</tbody></table>';
+      }
+      function routingTable(rows) {
+        if (!rows.length) return '<div style="color:var(--text2);font-size:13px;">V žádném kusovníku pracovního postupu.</div>';
+        return '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;">' +
+          '<th style="padding:4px 8px;">Výrobek / sestava</th><th style="padding:4px 8px;">Úroveň</th><th style="padding:4px 8px;text-align:right;">Ks</th></tr></thead><tbody>' +
+          rows.map(function (p) {
+            return '<tr>' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(p.code ? (p.code + ' · ') : '') + esc(p.name || '—') + '</td>' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);">' + esc(p.level || '—') + '</td>' +
+              '<td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;">' + p.quantity + '×</td></tr>';
+          }).join('') + '</tbody></table>';
+      }
+      body.innerHTML = head +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">' +
+          '<div><h3 style="font-size:14px;margin:0 0 8px;">📐 Konstrukční kusovník (CAD) <span style="color:var(--text2);font-weight:400;font-size:12px;">' + data.cad.length + '</span></h3>' + cadTable(data.cad) + '</div>' +
+          '<div><h3 style="font-size:14px;margin:0 0 8px;">🛠️ Kusovník pracovního postupu <span style="color:var(--text2);font-weight:400;font-size:12px;">' + data.routing.length + '</span></h3>' + routingTable(data.routing) + '</div>' +
+        '</div>';
     };
 
     // === ZÁLOŽKA CAD — spárování zboží s CAD výkresem podle kódu ===

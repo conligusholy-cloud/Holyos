@@ -310,6 +310,84 @@ router.get('/materials/:id', async (req, res, next) => {
   }
 });
 
+// GET /api/wh/materials/:id/where-used — kde se díl používá: konstrukční kusovník (CAD)
+// + kusovník pracovního postupu (FY BOM). Páruje se podle material_id, kódu a názvu.
+router.get('/materials/:id/where-used', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const mat = await prisma.material.findUnique({ where: { id }, select: { id: true, code: true, name: true } });
+    if (!mat) return res.status(404).json({ error: 'Materiál nenalezen' });
+    const code = (mat.code || '').trim();
+    const name = (mat.name || '').trim();
+    const baseName = (n) => String(n || '').replace(/[-_]\d+\s*$/, '').trim();
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const keys = new Set([norm(code), norm(name)].filter(Boolean));
+
+    // ── Konstrukční kusovník (CAD) ──
+    const orCad = [{ material_id: id }];
+    if (code) orCad.push({ name: { contains: code, mode: 'insensitive' } });
+    if (name) orCad.push({ name: { contains: name, mode: 'insensitive' } });
+    const comps = await prisma.cadComponent.findMany({
+      where: { OR: orCad },
+      include: { parent_config: { include: { drawing: { include: { project: { select: { code: true, name: true } } } } } } },
+      take: 2000,
+    });
+    const cadMap = new Map();
+    for (const c of comps) {
+      // Přesná shoda dílu (název bez instanční přípony) proti kódu/názvu — jinak přeskoč.
+      if (c.material_id !== id && !keys.has(norm(baseName(c.name)))) continue;
+      const dr = c.parent_config && c.parent_config.drawing;
+      if (!dr) continue;
+      const key = dr.id;
+      const q = Number(c.quantity) || 1;
+      if (cadMap.has(key)) { cadMap.get(key).quantity += q; }
+      else {
+        cadMap.set(key, {
+          drawing_id: dr.id,
+          file_name: dr.file_name,
+          title: dr.title || null,
+          version: dr.version,
+          project: dr.project ? (dr.project.code || dr.project.name) : null,
+          quantity: q,
+        });
+      }
+    }
+
+    // ── Kusovník pracovního postupu (FY BOM) ──
+    const orBom = [];
+    if (name) orBom.push({ name: { equals: name, mode: 'insensitive' } });
+    if (code) orBom.push({ name: { contains: code, mode: 'insensitive' } });
+    let bomItems = [];
+    if (orBom.length) {
+      bomItems = await prisma.productFyBomItem.findMany({
+        where: { OR: orBom },
+        include: { fy_bom: { include: { product: { select: { id: true, code: true, name: true } } } } },
+        take: 2000,
+      });
+    }
+    const bomMap = new Map();
+    for (const it of bomItems) {
+      const p = it.fy_bom && it.fy_bom.product;
+      if (!p) continue;
+      const key = p.id;
+      const q = Number(it.quantity) || 1;
+      if (bomMap.has(key)) { bomMap.get(key).quantity += q; }
+      else {
+        bomMap.set(key, {
+          product_id: p.id, code: p.code || null, name: p.name || null,
+          level: it.level || null, quantity: q,
+        });
+      }
+    }
+
+    res.json({
+      material: mat,
+      cad: Array.from(cadMap.values()).sort((a, b) => String(a.file_name).localeCompare(String(b.file_name))),
+      routing: Array.from(bomMap.values()).sort((a, b) => String(a.code || a.name).localeCompare(String(b.code || b.name))),
+    });
+  } catch (err) { next(err); }
+});
+
 // POST /api/wh/materials
 router.post('/materials', async (req, res, next) => {
   try {
