@@ -1076,7 +1076,7 @@
       var norm = function (s) { return String(s || '').replace(/\.[^./\\]+$/, '').trim().toLowerCase(); };
       var matches = (Array.isArray(list) ? list : []).filter(function (d) { return norm(d.file_name) === code.toLowerCase(); });
       if (!matches.length) {
-        el.innerHTML = '<div style="padding:12px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--text2);">K tomuto kódu (<b>' + esc(code) + '</b>) zatím není spárovaný žádný CAD výkres.<br><a href="/modules/cad-vykresy/index.html" target="_blank" rel="noopener" style="color:#818cf8;">Otevřít CAD výkresy ↗</a></div>';
+        el.innerHTML = '<div style="padding:12px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--text2);">K tomuto kódu (<b>' + esc(code) + '</b>) zatím není spárovaný žádný CAD výkres.</div>';
         return;
       }
       // Nejvyšší verze.
@@ -1130,9 +1130,8 @@
 
       var row = function (k, val) { return val ? ('<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><div style="min-width:130px;color:var(--text2);">' + k + '</div><div style="font-weight:600;">' + esc(val) + '</div></div>') : ''; };
       el.innerHTML =
-        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">' +
+        '<div style="margin-bottom:10px;">' +
           '<div style="font-weight:800;font-size:15px;">' + esc(code) + ' <span style="color:var(--text2);font-weight:400;font-size:12px;">(' + esc(typ) + ' · v' + (d.version || 1) + ')</span></div>' +
-          '<a href="/modules/cad-vykresy/index.html" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="text-decoration:none;">Otevřít v CAD výkresech ↗</a>' +
         '</div>' +
         row('Název', d.title) +
         row('Popis', d.description) +
