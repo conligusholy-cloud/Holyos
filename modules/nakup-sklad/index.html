@@ -892,13 +892,12 @@
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay"><div class="modal modal-wide" style="max-height:94vh"><h2>' + (id?'✏️ Upravit zboží':'➕ Nové zboží') + '</h2>' +
         '<div class="sub-tabs" style="margin-bottom:12px">' +
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
-          '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\')">Výkres / Tech</div>' +
+          '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\');loadCadPanel()">Výkres / Tech</div>' +
           '<div class="sub-tab mat-tab" data-tab="planning" onclick="switchMatTab(\'planning\')">Plánování</div>' +
           '<div class="sub-tab mat-tab" data-tab="properties" onclick="switchMatTab(\'properties\')">Vlastnosti</div>' +
           (showSnTab ? '<div class="sub-tab mat-tab" data-tab="serials" onclick="switchMatTab(\'serials\');loadSerialPanel(' + id + ')">🔖 Sériová čísla</div>' : '') +
           (showLotTab ? '<div class="sub-tab mat-tab" data-tab="lots" onclick="switchMatTab(\'lots\');loadLotPanel(' + id + ')">📦 Šarže</div>' : '') +
           '<div class="sub-tab mat-tab" data-tab="notes" onclick="switchMatTab(\'notes\')">Poznámky</div>' +
-          '<div class="sub-tab mat-tab" data-tab="cad" onclick="switchMatTab(\'cad\');loadCadPanel()">📐 CAD</div>' +
         '</div>' +
         '<form onsubmit="saveMaterial(event,' + (id||'null') + ')" style="max-height:76vh;overflow-y:auto;padding-right:8px">' +
           // === TAB: Obecné ===
@@ -958,6 +957,11 @@
             '<div class="form-group"><label>Rozměr</label><input type="text" name="dimension" value="' + v('dimension') + '"></div>' +
             '<div class="form-group"><label>Název Solid</label><input type="text" name="solid_name" value="' + v('solid_name') + '"></div>' +
             '<div class="form-group"><label>Doba dodání (dny)</label><input type="number" name="lead_time_days" value="' + v('lead_time_days',0) + '" step="1"></div>' +
+            // CAD výkres spárovaný podle kódu (data + soubory ke stažení).
+            '<div class="form-group full" style="grid-column:1/-1;border-top:1px solid var(--border);margin-top:8px;padding-top:12px;">' +
+              '<label style="font-size:13px;font-weight:700;">📐 CAD výkres (dle kódu)</label>' +
+              '<div id="cad-panel" style="color:var(--text2);font-size:13px;margin-top:6px;">Načítám CAD výkres…</div>' +
+            '</div>' +
           '</div>' +
           // === TAB: Plánování ===
           '<div class="form-grid mat-grid mat-tab-content" data-tab="planning" style="display:none">' +
@@ -1046,10 +1050,6 @@
           '<div class="form-grid mat-grid mat-tab-content" data-tab="notes" style="display:none">' +
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
             '<div class="form-group full"><label>Poznámka pro výrobu</label><textarea name="production_note" rows="4">' + v('production_note') + '</textarea></div>' +
-          '</div>' +
-          // === TAB: CAD (spárováno s modulem CAD výkresy podle kódu) ===
-          '<div class="form-grid mat-grid mat-tab-content" data-tab="cad" style="display:none">' +
-            '<div class="form-group full" style="grid-column:1/-1"><div id="cad-panel" style="color:var(--text2);font-size:13px;">Načítám CAD výkres…</div></div>' +
           '</div>' +
         '<div class="modal-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);gap:8px">' +
           (id ? '<button type="button" class="btn btn-secondary" onclick="printMaterialLabel(' + id + ')">🖨 Tisknout etiketu</button>' : '') +
