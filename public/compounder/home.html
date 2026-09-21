@@ -265,7 +265,44 @@
     .mark{font-size:15px;letter-spacing:.12em}.btn{padding:9px 13px;font-size:12.5px}.hnav{gap:7px}
     h1.title{font-size:clamp(30px,10.5vw,44px)}.count{gap:6px}.cbox{padding:12px 3px 8px}
   }
-  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+  /* ── „Sexy" vrstva ──────────────────────────────────────────── */
+  /* Sheen přejíždějící přes zlatý nápis */
+  h1.title .g{background:linear-gradient(100deg,#9a7a34 0%,#cda454 28%,#fff3cf 50%,#cda454 72%,#9a7a34 100%);
+    background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 28px rgba(201,162,75,.35));animation:sheen 6s linear infinite}
+  @keyframes sheen{0%{background-position:130% 0}100%{background-position:-130% 0}}
+  /* Zlatá záře sledující kurzor v hero */
+  #cursorGlow{position:absolute;width:540px;height:540px;border-radius:50%;left:50%;top:40%;
+    transform:translate(-50%,-50%);pointer-events:none;z-index:-1;opacity:0;transition:opacity .45s ease;
+    background:radial-gradient(circle,rgba(201,162,75,.18),transparent 62%);mix-blend-mode:screen}
+  .hero:hover #cursorGlow{opacity:1}
+  /* Hover + glow na boxech odpočtu */
+  .cbox{transition:transform .2s ease,box-shadow .28s ease}
+  .cbox:hover{transform:translateY(-5px);
+    box-shadow:0 28px 64px rgba(0,0,0,.55),0 0 0 1px rgba(201,162,75,.45),0 0 46px rgba(201,162,75,.28)}
+  /* Efektní nástup hero prvků při načtení */
+  @media (prefers-reduced-motion: no-preference){
+    .hero .wrap > *{opacity:0;transform:translateY(24px);animation:heroIn .9s cubic-bezier(.2,.7,.2,1) forwards}
+    .hero .wrap > *:nth-child(1){animation-delay:.06s}
+    .hero .wrap > *:nth-child(2){animation-delay:.16s}
+    .hero .wrap > *:nth-child(3){animation-delay:.28s}
+    .hero .wrap > *:nth-child(4){animation-delay:.42s}
+    .hero .wrap > *:nth-child(5){animation-delay:.54s}
+    .hero .wrap > *:nth-child(6){animation-delay:.66s}
+    @keyframes heroIn{to{opacity:1;transform:none}}
+  }
+  /* Scroll indikátor */
+  .scrollcue{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:4;
+    display:flex;flex-direction:column;align-items:center;gap:7px;color:var(--muted2);
+    font-size:10.5px;letter-spacing:.24em;text-transform:uppercase;animation:cueFade 3s ease-in-out infinite}
+  .scrollcue .mouse{width:22px;height:36px;border:1.5px solid rgba(216,189,120,.5);border-radius:12px;position:relative}
+  .scrollcue .mouse::after{content:"";position:absolute;left:50%;top:7px;width:3px;height:7px;border-radius:2px;
+    background:var(--gold-soft);transform:translateX(-50%);animation:wheel 1.6s ease-in-out infinite}
+  @keyframes wheel{0%{opacity:0;transform:translate(-50%,0)}30%{opacity:1}100%{opacity:0;transform:translate(-50%,12px)}}
+  @keyframes cueFade{0%,100%{opacity:.5}50%{opacity:1}}
+  @media(max-width:640px){.scrollcue{display:none}}
+
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}.hero .wrap > *{opacity:1;transform:none}}
 </style>
 </head>
 <body>
@@ -296,6 +333,7 @@
   <div class="hero-media"></div>
   <div class="hero-rays"></div>
   <canvas id="heroCanvas"></canvas>
+  <div id="cursorGlow"></div>
   <div class="hero-script"><span class="script" data-i="script">Svoboda<br>není náhoda</span></div>
   <div class="wrap">
   <span class="pill"><span class="dot"></span><span data-i="pill">Mega projekt · odpočet spuštěn</span></span>
@@ -320,6 +358,7 @@
     <div class="microtrust" data-i="cap_trust">Žádný spam. Jen jedna zpráva — až to začne.</div>
   </div>
   </div>
+  <div class="scrollcue"><div class="mouse"></div><span>Scroll</span></div>
 </section>
 
 <!-- MARQUEE -->
@@ -610,6 +649,12 @@
     window.addEventListener('resize',size,{passive:true});
     document.addEventListener('visibilitychange',function(){ if(document.hidden){run=false;cancelAnimationFrame(raf);} else if(!run){run=true;frame();} });
     size(); frame();
+  })();
+
+  /* ── Zlatá záře sledující kurzor v hero ───────────── */
+  (function(){
+    var hero=document.querySelector('.hero'), g=document.getElementById('cursorGlow'); if(!hero||!g) return;
+    hero.addEventListener('mousemove',function(e){ var r=hero.getBoundingClientRect(); g.style.left=(e.clientX-r.left)+'px'; g.style.top=(e.clientY-r.top)+'px'; },{passive:true});
   })();
 
   /* ── Email capture → /api/compounder/register ─────── */
