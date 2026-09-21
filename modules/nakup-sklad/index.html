@@ -1061,6 +1061,22 @@
       window.__cadMatCode = (m && m.code) ? String(m.code) : '';
     }
 
+    // Most kusovník → katalog: najde zboží podle kódu a otevře jeho kartu (nebo nabídne založení).
+    window.openMaterialByCode = async function (code) {
+      code = String(code || '').trim();
+      if (!code) return;
+      try {
+        var r = await fetch('/api/wh/materials?search=' + encodeURIComponent(code));
+        var list = r.ok ? await r.json() : [];
+        var arr = Array.isArray(list) ? list : (list.items || []);
+        var exact = arr.filter(function (m) { return String(m.code || '').toLowerCase() === code.toLowerCase() || String(m.name || '').toLowerCase() === code.toLowerCase(); });
+        var hit = exact[0] || (arr.length === 1 ? arr[0] : null);
+        if (hit) { openMaterialModal(hit.id); return; }
+        if (arr.length > 1) { alert('Kód „' + code + '" má v katalogu více shod — otevři modul Zboží a vyber ručně.'); return; }
+        if (confirm('Zboží s kódem „' + code + '" není v katalogu.\n\nChceš založit nové zboží?')) openMaterialModal(null);
+      } catch (e) { alert('Chyba hledání zboží: ' + (e && e.message)); }
+    };
+
     // === ZÁLOŽKA CAD — spárování zboží s CAD výkresem podle kódu ===
     async function loadCadPanel() {
       var el = document.getElementById('cad-panel');
@@ -1130,21 +1146,19 @@
       var bomHtml = '';
       if (comps.length) {
         var rows = comps.map(function (co, idx) {
-          var unknown = !!co.is_unknown;
           var mat = co.material || null;
           var popis = cpop(co);
-          // Most na kartu zboží: když je komponenta spárovaná s katalogem, řádek otevře její kartu.
-          var clickable = mat && mat.id;
-          var trAttr = clickable
-            ? ' style="cursor:pointer;" title="Otevřít kartu zboží ' + esc(mat.code || '') + '" onclick="openMaterialModal(' + mat.id + ')"'
-            : '';
-          var hover = clickable ? ' onmouseover="this.style.background=\'var(--surface2,rgba(255,255,255,0.04))\'" onmouseout="this.style.background=\'\'"' : '';
-          return '<tr' + trAttr + hover + '>' +
+          var code = String(co.name || '').trim();
+          // Každý řádek je most na kartu zboží: buď přímo (napárováno), nebo hledáním podle kódu.
+          var onclick = (mat && mat.id)
+            ? 'openMaterialModal(' + mat.id + ')'
+            : "openMaterialByCode('" + code.replace(/'/g, "\\'") + "')";
+          return '<tr style="cursor:pointer;" title="Otevřít / napárovat kartu zboží" onclick="' + onclick + '"' +
+            ' onmouseover="this.style.background=\'rgba(201,162,75,0.10)\'" onmouseout="this.style.background=\'\'">' +
             '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);text-align:center;">' + (idx + 1) + '</td>' +
-            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(co.name || '—') +
-              (clickable ? ' <span style="font-size:10px;color:#22c55e;">✓ ' + esc(mat.code || 'v katalogu') + ' ↗</span>' : (unknown ? ' <span style="font-size:10px;color:#f59e0b;">(nespárováno)</span>' : '')) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(code || '—') +
+              (mat && mat.id ? ' <span style="font-size:10px;color:#22c55e;">✓ ↗</span>' : ' <span style="font-size:10px;color:#818cf8;">↗</span>') + '</td>' +
             '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text);font-size:12px;">' + (popis ? esc(popis) : '<span style="color:var(--text2);">—</span>') + '</td>' +
-            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);font-size:12px;">' + esc(co.configuration || '') + '</td>' +
             '<td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">' + (co.quantity != null ? co.quantity : 1) + ' ks</td>' +
           '</tr>';
         }).join('');
@@ -1152,9 +1166,9 @@
           '<div style="margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);font-weight:700;">Kusovník (' + comps.length + ' položek)</div>' +
           '<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;">' +
             '<thead><tr style="text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;">' +
-              '<th style="padding:4px 8px;width:34px;text-align:center;">#</th><th style="padding:4px 8px;">Kód / díl</th><th style="padding:4px 8px;">Název položky</th><th style="padding:4px 8px;">Konfigurace</th><th style="padding:4px 8px;text-align:right;">Množství</th>' +
+              '<th style="padding:4px 8px;width:34px;text-align:center;">#</th><th style="padding:4px 8px;">Kód / díl</th><th style="padding:4px 8px;">Název položky</th><th style="padding:4px 8px;text-align:right;">Množství</th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table>' +
-            '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Řádky se ✓ jsou spárované s katalogem — kliknutím otevřeš kartu zboží.</div>';
+            '<div style="font-size:11px;color:var(--text2);margin-top:4px;">Klikni na řádek → otevře kartu zboží (podle kódu). ✓ = už spárováno.</div>';
       }
 
       var row = function (k, val) { return val ? ('<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><div style="min-width:130px;color:var(--text2);">' + k + '</div><div style="font-weight:600;">' + esc(val) + '</div></div>') : ''; };
