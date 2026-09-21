@@ -1649,9 +1649,10 @@ public sealed class SubmitForm : Form
                 Project = new ProjectRef { Id = _selectedProjectId },
                 GoodsBlockId = _selectedBlockId,
                 Overwrite = _chkOverwrite.Checked,
-                // Virtuální sestavy (custom property Typ=virtualni) vynecháváme z uploadu —
-                // jejich komponenty se ale odevzdaly samostatně díky auto-expanzi.
-                DrawingFiles = _rows.Where(r => !r.IsVirtualAssembly).Select(r => new DrawingFileDto
+                // Odesíláme POUZE rowsToUpload — ta už vynechává virtuální sestavy A potlačené
+                // díly (podle identity souboru). Dřív se tu bralo _rows, takže se filtr obcházel
+                // a potlačený díl (NAYAX) se do payloadu dostal.
+                DrawingFiles = rowsToUpload.Select(r => new DrawingFileDto
                 {
                     Name = Path.GetFileNameWithoutExtension(r.FileName),
                     DrawingFileName = r.FileName,
@@ -1708,7 +1709,7 @@ public sealed class SubmitForm : Form
                     FinishedAt = DateTimeOffset.UtcNow,
                     TotalMs = elapsedMs,
                     UploadMs = elapsedMs, // Bridge 2.x nespouští SW; celý čas je příprava + upload
-                    Files = _rows.Where(r => !r.IsVirtualAssembly).Select(r => new ExporterFileStatDto
+                    Files = rowsToUpload.Select(r => new ExporterFileStatDto
                     {
                         File = r.FileName,
                         SizeBytes = SafeFileSize(r.Path),
