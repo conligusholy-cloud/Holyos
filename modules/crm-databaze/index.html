@@ -155,5 +155,7 @@
 
   (async function(){ try{ await loadStats(); await reload(1);}catch(e){} })();
 </script>
+  <!-- Globální vyhledávání (CTRL+PAUSE) — stránka nemá sidebar.js, který ho jinak načítá -->
+  <script src="/js/global-search.js"></script>
 </body>
 </html>

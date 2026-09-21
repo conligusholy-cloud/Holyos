@@ -228,6 +228,7 @@ function renderSidebar(activeModule) {
     { id: 'holyos-events-script', src: 'js/holyos-events.js' },
     { id: 'holyos-chat-widget-script', src: 'js/user-chat-widget.js' },
     { id: 'holyos-topbar-script', src: 'js/top-bar.js' },
+    { id: 'holyos-global-search-script', src: 'js/global-search.js' }, // okno CTRL+PAUSE
   ];
   tbScripts.forEach(function(s) {
     if (!document.getElementById(s.id)) {
@@ -460,28 +461,114 @@ var _aiChatState = {
   screenshot: null,
   pagePath: '',
   pageTitle: '',
+  moduleId: null,
+  moduleName: null,
+  moduleParts: [],
   answers: {}
 };
+
+// === Registr modulů pro AI kontext =========================================
+// Klíč = složka v /modules/<id>/. Díky tomuhle ví AI (Alan i asistenti), ZE
+// KTERÉHO modulu požadavek přišel — bez toho se ptal obecně a nevyplnil modul.
+// `parts` = co na stránce reálně je; AI se pak doptává konkrétně.
+// Nový modul stačí doplnit sem — nikde jinde se nic upravovat nemusí.
+var HOLYOS_AI_MODULES = {
+  'pracovni-postup': {
+    name: 'Pracovní postup',
+    parts: ['seznam výrobků a polotovarů', 'detail pracovního postupu (operace, pořadí, pracoviště, časy)',
+            'kusovník (BOM) výrobku', 'nářezové plány', 'karty operací'],
+  },
+  'nakup-sklad': {
+    name: 'Nákup a sklad',
+    parts: ['společnosti a dodavatele', 'nákupní a kooperační objednávky', 'kartotéku zboží',
+            'skladové zásoby a pohyby', 'inventury', 'výhled nákupu', 'kategorie zboží'],
+  },
+  'lide-hr': {
+    name: 'Lidé a HR',
+    parts: ['tabulku zaměstnanců', 'docházku', 'org. strukturu (strom rolí)', 'správu rolí s oprávněními'],
+  },
+  'obchod': { name: 'Obchod', parts: ['seznam obchodních případů', 'nabídky', 'kontakty'] },
+  'prodejni-objednavky': { name: 'Prodejní objednávky', parts: ['seznam objednávek', 'detail objednávky', 'doklady k objednávce'] },
+  'vyrobni-sloty': { name: 'Výrobní sloty', parts: ['kalendář slotů', 'rezervace slotů'] },
+  'planovani-vyroby': { name: 'Plánování výroby', parts: ['plán výroby', 'kapacity pracovišť'] },
+  'programovani-vyroby': { name: 'Programování výroby', parts: ['rozmísťování pracovišť', 'logistické trasy'] },
+  'simulace-vyroby': { name: 'Simulace výroby', parts: ['běh simulace', 'výsledky simulace'] },
+  'vytvoreni-arealu': { name: 'Vytvoření areálu', parts: ['editor půdorysu', 'kreslení hal a cest'] },
+  'pracoviste': { name: 'Pracoviště', parts: ['seznam pracovišť', 'parametry a kapacity'] },
+  'normovani-fy': { name: 'Normování', parts: ['normy operací', 'výpočty časů'] },
+  'normovani-prehled': { name: 'Normy', parts: ['přehled norem'] },
+  'sklady': { name: 'Sklady', parts: ['seznam skladů', 'skladové lokace'] },
+  'doklady': { name: 'Skladové doklady', parts: ['příjemky a výdejky'] },
+  'ucetni-doklady': { name: 'Účetní doklady', parts: ['faktury', 'párování dokladů'] },
+  'banky': { name: 'Banky', parts: ['bankovní účty', 'transakce'] },
+  'banka-pravidla': { name: 'Pravidla párování', parts: ['pravidla párování transakcí'] },
+  'pokladna': { name: 'Pokladna', parts: ['pokladní doklady'] },
+  'naklady': { name: 'Náklady', parts: ['přehled nákladů', 'grafy'] },
+  'davky': { name: 'Pickovací dávky', parts: ['seznam dávek', 'pickování'] },
+  'vozovy-park': { name: 'Vozový park', parts: ['seznam vozidel', 'servisní záznamy'] },
+  'servis': { name: 'Servis', parts: ['servisní zakázky', 'infolinku', 'rozpisy směn'] },
+  'doprava': { name: 'Doprava', parts: ['přepravy', 'plán rozvozů'] },
+  'kiosky': { name: 'Kiosky', parts: ['seznam kiosků', 'stavy kiosků'] },
+  'tiskarny': { name: 'Tiskárny', parts: ['seznam tiskáren', 'tiskové fronty'] },
+  'prekladac': { name: 'Překladač', parts: ['přepis a překlad hovoru'] },
+  'chat': { name: 'Zprávy', parts: ['kanály', 'konverzace'] },
+  'velin': { name: 'Velín (mobil)', parts: ['přehled událostí', 'push notifikace'] },
+  'metodicke-pokyny': { name: 'Metodické pokyny a směrnice', parts: ['seznam směrnic', 'detail dokumentu'] },
+  'muj-profil': { name: 'Můj profil', parts: ['osobní údaje', 'moje požadavky'] },
+  'sprava-uzivatelu': { name: 'Správa uživatelů', parts: ['uživatele', 'role a oprávnění'] },
+  'admin-tasks': { name: 'Požadavky', parts: ['seznam požadavků', 'statusy', 'deploy specifikace'] },
+  'audit-log': { name: 'Historie změn', parts: ['seznam změn', 'rollback', 'filtry'] },
+  'ai-agenti': { name: 'AI Agenti', parts: ['seznam asistentů', 'nastavení asistentů'] },
+  'ai-vyvojar': { name: 'AI Vývojář', parts: ['běhy agenta', 'logy a diffy'] },
+  'cad-vykresy': { name: 'CAD výkresy', parts: ['seznam výkresů', 'náhledy'] },
+  'spare-parts': { name: 'Spare Parts Shop', parts: ['katalog dílů', 'košík'] },
+  'site-development': { name: 'Site Development', parts: ['mapa lokalit', 'detail lokality'] },
+};
+
+// ID modulu z URL — /modules/<id>/cokoliv.html → '<id>'
+function getCurrentModuleId() {
+  var m = String(window.location.pathname || '').match(/\/modules\/([^\/]+)\//);
+  return m ? m[1] : null;
+}
 
 function getCurrentPageInfo() {
   var path = window.location.pathname;
   var title = document.title || '';
-  // Try to get a nicer page name
+  var moduleId = getCurrentModuleId();
+  var mod = moduleId ? HOLYOS_AI_MODULES[moduleId] : null;
+
+  // Modul známe z URL — název i obsah bereme z registru (nejpřesnější).
+  if (mod) {
+    return {
+      path: path,
+      title: mod.name,
+      moduleId: moduleId,
+      moduleName: mod.name,
+      parts: mod.parts || [],
+    };
+  }
+
+  // Zbytek (stránky mimo /modules/<id>/) — starý pageMap jako fallback.
   var pageMap = {
     '/': 'Dashboard',
-    '/modules/lide-hr/index.html': 'Lidé a HR',
-    '/modules/vytvoreni-arealu/': 'Vytvoření areálu',
-    '/modules/programovani-vyroby/': 'Programování výroby',
-    '/modules/simulace-vyroby/': 'Simulace výroby',
-    '/modules/pracovni-postup/': 'Pracovní postup',
-    '/modules/audit-log/index.html': 'Historie změn',
     '/modules/holyos-mindmap.html': 'Myšlenková mapa',
   };
   for (var key in pageMap) {
-    if (path.indexOf(key) !== -1 && key !== '/') return { path: path, title: pageMap[key] };
+    if (path.indexOf(key) !== -1 && key !== '/') {
+      return { path: path, title: pageMap[key], moduleId: moduleId, moduleName: null, parts: [] };
+    }
   }
-  if (path === '/' || path === '/index.html') return { path: '/', title: 'Dashboard' };
-  return { path: path, title: title || path };
+  if (path === '/' || path === '/index.html') {
+    return { path: '/', title: 'Dashboard', moduleId: null, moduleName: null, parts: [] };
+  }
+  // Neznámý modul — pořád vrať jeho id, ať se požadavek naváže aspoň na složku.
+  return {
+    path: path,
+    title: title || path,
+    moduleId: moduleId,
+    moduleName: moduleId ? (title || moduleId) : null,
+    parts: [],
+  };
 }
 
 function analyzeRequest(description, pageTitle) {
@@ -547,21 +634,16 @@ function analyzeRequest(description, pageTitle) {
 }
 
 function getPageContext(page) {
+  // Primárně podle modulu z URL — registr HOLYOS_AI_MODULES je jediný zdroj pravdy.
+  var mod = HOLYOS_AI_MODULES[getCurrentModuleId()];
+  if (mod && mod.parts && mod.parts.length) return { elements: mod.parts.slice() };
+
+  // Fallback podle názvu stránky (stránky mimo /modules/<id>/).
   var ctx = { elements: [] };
-  if (page.includes('hr') || page.includes('lidé')) {
-    ctx.elements = ['tabulku zaměstnanců', 'docházku', 'org. strukturu (strom rolí)', 'správu rolí s oprávněními', 'společnosti'];
-  } else if (page.includes('mindmap') || page.includes('myšlenk')) {
+  if (page.includes('mindmap') || page.includes('myšlenk')) {
     ctx.elements = ['myšlenkovou mapu modulů', 'deploy wizard', 'statusy nasazení'];
   } else if (page.includes('dashboard') || page.includes('přehled')) {
     ctx.elements = ['karty modulů', 'sidebar navigaci', 'statistiky'];
-  } else if (page.includes('areál')) {
-    ctx.elements = ['editor půdorysu', 'kreslení hal a cest'];
-  } else if (page.includes('výrob') || page.includes('programov')) {
-    ctx.elements = ['rozmísťování pracovišť', 'logistické trasy'];
-  } else if (page.includes('audit') || page.includes('historie')) {
-    ctx.elements = ['seznam změn', 'rollback', 'filtry'];
-  } else if (page.includes('požadav') || page.includes('task')) {
-    ctx.elements = ['seznam požadavků', 'statusy', 'deploy specifikace'];
   }
   return ctx;
 }
@@ -603,6 +685,9 @@ function _persistAiChatState() {
       history: _aiChatState.history,
       pagePath: _aiChatState.pagePath,
       pageTitle: _aiChatState.pageTitle,
+      moduleId: _aiChatState.moduleId,
+      moduleName: _aiChatState.moduleName,
+      moduleParts: _aiChatState.moduleParts,
       answers: _aiChatState.answers,
       savedAt: Date.now(),
     };
@@ -660,6 +745,9 @@ function openAiChat() {
       attachments: [],
       pagePath: restored.pagePath || page.path,
       pageTitle: restored.pageTitle || page.title,
+      moduleId: restored.moduleId || page.moduleId,
+      moduleName: restored.moduleName || page.moduleName,
+      moduleParts: restored.moduleParts || page.parts,
       answers: restored.answers || {},
     };
     // Hlavička indikující recovery + tlačítko Začít znova
@@ -684,13 +772,21 @@ function openAiChat() {
     attachments: [],      // další soubory — PDF, Word, Excel, obrázky navíc atd.
     pagePath: page.path,
     pageTitle: page.title,
+    moduleId: page.moduleId,
+    moduleName: page.moduleName,
+    moduleParts: page.parts || [],
     answers: {}
   };
 
   // Add initial bot message
+  // Úvodní hláška pojmenuje MODUL (ne jen stránku) — uživatel hned vidí,
+  // na co se požadavek naváže.
+  var introHead = page.moduleName
+    ? 'Ahoj! 👋 Vidím, že jste v modulu <strong>' + page.moduleName + '</strong> — požadavek na něj rovnou navážu.'
+    : 'Ahoj! 👋 Vidím, že jste na stránce <strong>' + page.title + '</strong>.';
   _aiChatState.messages.push({
     role: 'bot',
-    text: 'Ahoj! 👋 Vidím, že jste na stránce <strong>' + page.title + '</strong>.\n\nPopište, co byste chtěli upravit nebo přidat. Můžete také nahrát screenshot pro přesnější vyjádření.'
+    text: introHead + '\n\nPopište, co byste chtěli upravit nebo přidat. Můžete také nahrát screenshot pro přesnější vyjádření.'
   });
 
   renderAiChat();
@@ -1075,7 +1171,13 @@ function sendAiMessage() {
     message: text,
     history: _aiChatState.history || [],
     draft: _aiChatState.draft || {},
-    page_context: { path: _aiChatState.pagePath, title: _aiChatState.pageTitle },
+    page_context: {
+      path: _aiChatState.pagePath,
+      title: _aiChatState.pageTitle,
+      module_id: _aiChatState.moduleId || null,
+      module_name: _aiChatState.moduleName || null,
+      module_parts: _aiChatState.moduleParts || [],
+    },
   });
 
   // Auto-retry s exponential backoff (max 4 pokusy, 2/4/8/15 s)
@@ -1185,7 +1287,9 @@ function submitAiTask() {
     page_title: draft.page_title || _aiChatState.pageTitle || (userMessages[0] || '').slice(0, 100),
     description: draft.description || userMessages.join('\n---\n'),
     acceptance_criteria: draft.acceptance_criteria || null,
-    affected_module: draft.affected_module || null,
+    // Když Alan modul nevyplnil, doplň ho z modulu, ze kterého uživatel chat otevřel —
+    // požadavek tak zůstane navázaný na správný modul.
+    affected_module: draft.affected_module || _aiChatState.moduleName || null,
     change_type: draft.change_type || null,
     autonomy_override: draft.autonomy_override || null,
     ai_questions: _aiChatState.history || [],

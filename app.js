@@ -738,6 +738,7 @@ app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veře
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)
 app.use('/api/voice', require('./routes/voice-agent.routes')); // Hlasový AI agent — Twilio ConversationRelay webhooky (příchozí hovory)
 app.use('/api/translator', require('./routes/translator.routes')); // Překladač — živý chatovací překladač na mobilu (Web Speech + AI překlad)
+app.use('/api/search', require('./routes/search.routes')); // Globální vyhledávání — okno CTRL+PAUSE nad zbožím, výrobky a činnostmi
 
 // ─── Legacy storage proxy (kompatibilita s persistent-storage.js) ──────────
 
