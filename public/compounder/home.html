@@ -81,7 +81,14 @@
   /* ── Hero ───────────────────────────────────────────────────── */
   .hero{position:relative;z-index:3;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;
     padding:120px 0 60px;text-align:left}
-  .hero-media{position:absolute;inset:0;z-index:-2;background:#080809 url("assets/hero.jpg") center 35%/cover no-repeat}
+  .hero-media{position:absolute;inset:0;z-index:-2;background:#080809 url("assets/hero.jpg") center 35%/cover no-repeat;
+    transform-origin:60% 40%;animation:kenburns 32s ease-in-out infinite alternate;will-change:transform}
+  @keyframes kenburns{0%{transform:scale(1.06) translate3d(0,0,0)}100%{transform:scale(1.18) translate3d(-1.6%,-1.4%,0)}}
+  .hero-rays{position:absolute;inset:-10%;z-index:-1;pointer-events:none;mix-blend-mode:screen;opacity:.55;
+    background:linear-gradient(115deg,transparent 34%,rgba(246,230,173,.20) 48%,rgba(216,189,120,.10) 54%,transparent 68%);
+    background-size:260% 260%;animation:rays 11s ease-in-out infinite}
+  @keyframes rays{0%{background-position:0% 0%}50%{background-position:100% 100%}100%{background-position:0% 0%}}
+  #heroCanvas{position:absolute;inset:0;z-index:-1;pointer-events:none}
   .hero-media::after{content:"";position:absolute;inset:0;
     background:linear-gradient(90deg,rgba(8,8,9,.94) 0%,rgba(8,8,9,.78) 38%,rgba(8,8,9,.32) 72%,rgba(8,8,9,.55) 100%),
       linear-gradient(0deg,rgba(8,8,9,.96) 2%,transparent 45%),linear-gradient(180deg,rgba(8,8,9,.7) 0%,transparent 22%)}
@@ -287,6 +294,8 @@
 <!-- HERO -->
 <section class="hero">
   <div class="hero-media"></div>
+  <div class="hero-rays"></div>
+  <canvas id="heroCanvas"></canvas>
   <div class="hero-script"><span class="script" data-i="script">Svoboda<br>není náhoda</span></div>
   <div class="wrap">
   <span class="pill"><span class="dot"></span><span data-i="pill">Mega projekt · odpočet spuštěn</span></span>
@@ -582,6 +591,24 @@
     window.addEventListener('mouseout',function(){ mouse.x=-9999; mouse.y=-9999; });
     // pause when tab hidden
     document.addEventListener('visibilitychange',function(){ if(document.hidden){ running=false; cancelAnimationFrame(raf); } else if(!running){ running=true; frame(); } });
+    size(); frame();
+  })();
+
+  /* ── Hero částice (přes fotku, dojem živého videa) ── */
+  (function(){
+    if(reduce) return;
+    var cv=document.getElementById('heroCanvas'); var ctx=cv&&cv.getContext&&cv.getContext('2d'); if(!ctx) return;
+    var hero=document.querySelector('.hero'); if(!hero) return;
+    var w,h,pts=[],raf,run=true;
+    function size(){ var r=hero.getBoundingClientRect(); w=cv.width=Math.max(1,r.width); h=cv.height=Math.max(1,r.height);
+      var n=Math.min(70,Math.floor(w*h/22000)); pts=[];
+      for(var i=0;i<n;i++)pts.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*1.5+.5,a:Math.random()*.5+.3}); }
+    function frame(){ if(!run)return; ctx.clearRect(0,0,w,h);
+      for(var i=0;i<pts.length;i++){var p=pts[i];p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;
+        ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.283);ctx.fillStyle='rgba(216,189,120,'+p.a+')';ctx.fill();}
+      raf=requestAnimationFrame(frame);}
+    window.addEventListener('resize',size,{passive:true});
+    document.addEventListener('visibilitychange',function(){ if(document.hidden){run=false;cancelAnimationFrame(raf);} else if(!run){run=true;frame();} });
     size(); frame();
   })();
 
