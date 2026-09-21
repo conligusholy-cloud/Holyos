@@ -266,6 +266,9 @@ function buildTemplateData(invoice, ourCompany) {
     total: fmtAmount(invoice.total, invoice.currency || 'CZK'),
     currency: invoice.currency || 'CZK',
 
+    // Přenesení daňové povinnosti (EU plátce DPH) — právní doložka na faktuře.
+    reverse_charge: invoice.vat_regime === 'reverse_charge',
+
     // Poznámka
     note: invoice.note || '',
 

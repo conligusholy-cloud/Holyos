@@ -207,8 +207,10 @@
     return '<div id="ow-foreign">'
       + '<label>Země</label><input class="ow-in ow-mb" id="ow-country" value="' + esc(st.country || '') + '" placeholder="např. Velká Británie">'
       + '<label>Název firmy</label><input class="ow-in ow-mb" id="ow-name" value="' + esc(st.name || (st.lead && st.lead.company) || '') + '">'
-      + '<div class="ow-row"><div><label>VAT / DIČ</label><input class="ow-in" id="ow-dic" value="' + esc(st.dic || '') + '"></div>'
-      + '<div><label>Adresa</label><input class="ow-in" id="ow-addr" value="' + esc(st.addr || '') + '"></div></div></div>';
+      + '<div class="ow-row"><div><label>VAT / DIČ</label><input class="ow-in" id="ow-dic" value="' + esc(st.dic || '') + '" placeholder="např. DE123456789"></div>'
+      + '<div><label>Adresa</label><input class="ow-in" id="ow-addr" value="' + esc(st.addr || '') + '"></div></div>'
+      + '<div class="ow-note acc" style="margin-top:10px;"><span>🇪🇺 Zahraniční firma (plátce DPH v EU): faktury se vystavují <b>v EUR bez DPH</b> — přenesení daňové povinnosti (reverse charge). Vyplň prosím platné VAT / DIČ.</span></div>'
+      + '</div>';
   }
 
   function renderMachine() {
