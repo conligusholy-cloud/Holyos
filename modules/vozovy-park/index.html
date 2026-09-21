@@ -522,9 +522,11 @@
       const f = new FormData(e.target);
       const data = {};
       for (const [k, v] of f.entries()) {
+        // Odpovědná osoba (řidič): prázdná hodnota = „bez přiřazení" → pošli null,
+        // ať se přiřazení skutečně zruší (jinak se pole vynechá a zůstane staré).
+        if (k === 'driver_id') { data.driver_id = (v === '') ? null : parseInt(v); continue; }
         if (v === '') continue;
         if (k === 'year' || k === 'current_km') data[k] = parseInt(v);
-        else if (k === 'driver_id') data[k] = parseInt(v);
         else data[k] = v;
       }
       data.active = e.target.active.checked;
