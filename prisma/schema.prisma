@@ -2495,6 +2495,28 @@ model CadDrawingChangeLog {
   @@map("cad_drawing_change_logs")
 }
 
+// Protokol jednoho CAD importu — co konkrétní běh importu udělal (souhrn + detaily).
+model CadImportBatch {
+  id                Int      @id @default(autoincrement())
+  created_at        DateTime @default(now())
+  source            String?  @db.VarChar(50)  // 'cad_exporter' | 'api' | ...
+  author            String?  @db.VarChar(160) // kdo import spustil (jméno / username)
+  project_label     String?  @db.VarChar(255) // volitelný popis projektu/dávky
+  success           Boolean  @default(true)
+  count_files       Int      @default(0)
+  count_created     Int      @default(0)
+  count_updated     Int      @default(0)
+  count_not_changed Int      @default(0)
+  count_errors      Int      @default(0)
+  duration_ms       Int?     // celková doba běhu importu (ms)
+  // Detailní položky + časování: { created:[…], updated:[…], not_changed:[…], errors:[…], unknown:[…],
+  //   steps:[{name, ms}], file_timings:[{file, action, ms}], total_ms }
+  details           Json?
+
+  @@index([created_at])
+  @@map("cad_import_batches")
+}
+
 // Konfigurace výkresu — SolidWorks umí mít více konfigurací v jednom souboru
 // (varianty rozměrů, provedení). Pro každou se generuje vlastní PDF/PNG.
 model CadDrawingConfig {

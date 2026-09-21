@@ -381,6 +381,14 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     }
     const { Project, goodsBlockId, overwrite, DrawingFiles } = parsed.data;
 
+    // ─── Časování kroků procesu (protokol „jak dlouho krok trval") ──────────────
+    const _t0 = Date.now();
+    let _tMark = _t0;
+    const steps = [];
+    const step = (name) => { const now = Date.now(); steps.push({ name, ms: now - _tMark }); _tMark = now; };
+    const fileTimings = [];
+    step('Validace vstupu');
+
     // Najít projekt (preferujeme Id, jinak Code)
     const project = Project.Id
       ? await prisma.cadProject.findUnique({ where: { id: Project.Id } })
@@ -388,6 +396,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     if (!project) {
       return res.status(404).json({ Success: false, Message: 'Projekt nenalezen' });
     }
+    step('Nalezení projektu');
 
     const authorPersonId = req.user?.person_id || null;
 
@@ -402,6 +411,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     } catch (e) {}
 
     for (const f of DrawingFiles) {
+      const _tf = Date.now();
       try {
         // Uložit všechny konfigurace - nejdřív zpracovat assety
         const configPayloads = [];
@@ -638,23 +648,55 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         const payload = {
           Id: drawing.id,
           DrawingFileName: drawing.file_name,
+          Title: drawing.title || null,
           Version: drawing.version,
           ProjectId: drawing.project_id,
           BlockId: drawing.block_id,
         };
         if (action === 'created') created.push(payload);
         else if (action === 'updated') updated.push(payload);
+        fileTimings.push({ file: f.DrawingFileName, action: action || 'not_changed', ms: Date.now() - _tf });
       } catch (e) {
         // Chyba jednoho souboru nesmí shodit celý import — ale MUSÍME ji zalogovat,
         // jinak „odevzdal bez chyb" a přitom vrchní sestava tiše zmizí.
         console.error('[cad-import] ❌ SELHAL soubor "' + f.DrawingFileName + '": ' + (e && e.message), e && e.stack ? '\n' + e.stack : '');
         errors.push({ file: f.DrawingFileName, message: e.message });
+        fileTimings.push({ file: f.DrawingFileName, action: 'error', ms: Date.now() - _tf });
       }
     }
+    step('Zpracování výkresů (' + DrawingFiles.length + ' souborů)');
 
     console.log('[cad-import] hotovo — vytvořeno=' + created.length + ' aktualizováno=' + updated.length
       + ' bezezměny=' + notChanged.length + ' chyby=' + errors.length
       + (errors.length ? (' → ' + errors.map((x) => x.file + ': ' + x.message).join(' | ')) : ''));
+
+    // Protokol importu — ať je dohledatelné, co konkrétní běh udělal (záložka Importy).
+    const totalMs = Date.now() - _t0;
+    try {
+      const author = (req.user && (req.user.displayName || req.user.username)) || null;
+      step('Uložení protokolu');
+      await prisma.cadImportBatch.create({
+        data: {
+          source: (req.body && req.body.Source) ? String(req.body.Source).slice(0, 50) : 'cad_exporter',
+          author: author ? String(author).slice(0, 160) : null,
+          project_label: (req.body && req.body.ProjectLabel) ? String(req.body.ProjectLabel).slice(0, 255) : (project.code || null),
+          success: errors.length === 0,
+          count_files: created.length + updated.length + notChanged.length + errors.length,
+          count_created: created.length,
+          count_updated: updated.length,
+          count_not_changed: notChanged.length,
+          count_errors: errors.length,
+          duration_ms: totalMs,
+          details: {
+            created, updated, not_changed: notChanged,
+            unknown: unknownOut || [], errors,
+            steps, file_timings: fileTimings, total_ms: totalMs,
+          },
+        },
+      });
+    } catch (logErr) {
+      console.error('[cad-import] Nepodařilo se uložit protokol importu:', logErr?.message || logErr);
+    }
 
     res.json({
       Success: errors.length === 0,
@@ -665,6 +707,36 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
       UnknownComponents: unknownOut,
       Errors: errors,
     });
+  } catch (err) { next(err); }
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// GET /api/cad/imports — seznam protokolů importů (nejnovější první)
+// GET /api/cad/imports/:id — detail protokolu (co bylo v importu provedeno)
+// ───────────────────────────────────────────────────────────────────────────
+router.get('/imports', async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+    const rows = await prisma.cadImportBatch.findMany({
+      orderBy: { created_at: 'desc' },
+      take: limit,
+      select: {
+        id: true, created_at: true, source: true, author: true, project_label: true,
+        success: true, count_files: true, count_created: true, count_updated: true,
+        count_not_changed: true, count_errors: true, duration_ms: true,
+      },
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+router.get('/imports/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'Neplatné id' });
+    const batch = await prisma.cadImportBatch.findUnique({ where: { id } });
+    if (!batch) return res.status(404).json({ error: 'Protokol nenalezen' });
+    res.json(batch);
   } catch (err) { next(err); }
 });
 
