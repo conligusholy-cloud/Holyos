@@ -846,6 +846,11 @@ function serveCompounderPortal(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'portal', 'index.html'));
 }
+function serveCompounderHome(req, res) {
+  // Veřejná teaser stránka s odpočtem do startu (10. 10. 2026).
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'home.html'));
+}
 function serveAiSpecialist(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'ai', 'index.html'));
@@ -860,6 +865,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/share/') || req.path.startsWith('/modules/') ||
       req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
       req.path.startsWith('/dist/')) return next();
+  if (req.path === '/home' || req.path === '/home/') return serveCompounderHome(req, res);
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
@@ -886,6 +892,8 @@ app.get('/compounder', (req, res, next) => {
   next();
 });
 app.get('/compounder/', serveCompounderHtml);
+app.get('/compounder/home', serveCompounderHome);
+app.get('/compounder/home/', serveCompounderHome);
 app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
 app.get('/compounder/ai', serveAiSpecialist);
