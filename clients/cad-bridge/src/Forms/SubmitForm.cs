@@ -1367,31 +1367,54 @@ public sealed class SubmitForm : Form
         // sesbíráme názvy potlačených komponent napříč všemi odesílanými sestavami
         // a takové soubory z uploadu vyřadíme (pokud nejsou zároveň někde použité
         // jako plnohodnotná = nepotlačená komponenta).
-        // Klíčujeme podle IDENTITY SOUBORU (plná cesta k .SLDPRT/.SLDASM), NE podle názvu.
-        // Soubor, který je aspoň jednou referencovaný jako NEpotlačená komponenta, zůstává;
-        // soubor referencovaný výhradně potlačeně se vyřadí. Tím se pozná potlačení podle
-        // vlastnosti souboru, ne podle jeho jména.
-        var suppressedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var resolvedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var r in _rows)
+        // Klíčujeme podle IDENTITY SOUBORU — plná cesta I NÁZEV souboru (a základ bez
+        // přípony / instanční přípony "-1"). Samotná cesta nestačí: SolidWorks u reference
+        // vrací OneDrive cestu ("OneDrive - Best Series s.r.o\PRÁDLOMAT"), kdežto naskenovaný
+        // soubor může mít lokální/jinak zapsanou cestu — pak se nespárují. Název souboru je
+        // taky vlastnost souboru (žádný natvrdo zadaný díl). Soubor referencovaný aspoň jednou
+        // jako NEpotlačená komponenta zůstává; referencovaný výhradně potlačeně se vyřadí.
+        var suppressedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolvedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void addCompKeys(HashSet<string> set, AssemblyComponent c)
         {
-            foreach (var c in (r.Components ?? new List<AssemblyComponent>()))
+            if (!string.IsNullOrWhiteSpace(c.Path))
             {
-                if (string.IsNullOrWhiteSpace(c.Path)) continue;
-                string full;
-                try { full = Path.GetFullPath(c.Path); } catch { continue; }
-                if (c.IsSuppressed) suppressedPaths.Add(full); else resolvedPaths.Add(full);
+                try { set.Add(Path.GetFullPath(c.Path)); } catch { }
+                set.Add(Path.GetFileName(c.Path));
+                set.Add(Path.GetFileNameWithoutExtension(c.Path));
+            }
+            if (!string.IsNullOrWhiteSpace(c.Name))
+            {
+                var nm = c.Name.Trim();
+                var at = nm.IndexOf('@');
+                if (at > 0) nm = nm.Substring(0, at);
+                var baseNm = System.Text.RegularExpressions.Regex.Replace(nm, @"-\d+$", "").Trim();
+                if (baseNm.Length > 0) set.Add(baseNm);
             }
         }
-        bool isSuppressedByPath(FileRow r)
+        foreach (var r in _rows)
+            foreach (var c in (r.Components ?? new List<AssemblyComponent>()))
+                addCompKeys(c.IsSuppressed ? suppressedKeys : resolvedKeys, c);
+        bool isSuppressedFile(FileRow r)
         {
-            if (string.IsNullOrWhiteSpace(r.Path)) return false;
-            string full;
-            try { full = Path.GetFullPath(r.Path); } catch { return false; }
-            return suppressedPaths.Contains(full) && !resolvedPaths.Contains(full);
+            var cands = new List<string>();
+            if (!string.IsNullOrWhiteSpace(r.Path))
+            {
+                try { cands.Add(Path.GetFullPath(r.Path)); } catch { }
+                cands.Add(Path.GetFileName(r.Path));
+                cands.Add(Path.GetFileNameWithoutExtension(r.Path));
+            }
+            if (!string.IsNullOrWhiteSpace(r.FileName))
+            {
+                cands.Add(r.FileName);
+                cands.Add(Path.GetFileNameWithoutExtension(r.FileName));
+            }
+            bool sup = cands.Any(k => !string.IsNullOrWhiteSpace(k) && suppressedKeys.Contains(k));
+            bool res = cands.Any(k => !string.IsNullOrWhiteSpace(k) && resolvedKeys.Contains(k));
+            return sup && !res;
         }
         var rowsToUpload = _rows.Where(r =>
-            !r.IsVirtualAssembly && !r.IsSuppressed && !isSuppressedByPath(r)
+            !r.IsVirtualAssembly && !r.IsSuppressed && !isSuppressedFile(r)
         ).ToList();
 
         // REKURZIVNÍ INDEX sourozenců napříč celým DefaultCadFolder — jednorázově
