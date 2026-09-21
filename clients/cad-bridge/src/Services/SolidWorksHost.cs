@@ -591,29 +591,26 @@ public sealed class SolidWorksHost : IDisposable
                 //   4 = swComponentEmbedded
                 // Preferujeme property Suppression (SW 2022+ doporučovaná cesta).
                 // IsSuppressed() je deprecated a v některých verzích vrací nepoužitelnou hodnotu.
+                // state == 0 (swComponentSuppressed) => potlačený. Zkoušíme víc cest v
+                // pořadí spolehlivosti; dřív se spoléhalo jen na property "Suppression",
+                // která ale často vrací null (ne výjimku) a fallback se nespustil → potlačené
+                // díly proklouzly a exportovaly se. Teď zkusíme metody i property i bool.
                 bool isSuppressed = false;
-                try
+                bool suppKnown = false;
+                Action<object?> tryState = (o) =>
                 {
-                    var stateObj = GetProp(ch, "Suppression");
-                    if (stateObj is int state)
-                    {
-                        isSuppressed = (state == 0);
-                    }
-                    else if (stateObj is short shortState)
-                    {
-                        isSuppressed = (shortState == 0);
-                    }
-                }
-                catch
-                {
-                    // Fallback na GetSuppression2(0) — 0 = swThisConfiguration
-                    try
-                    {
-                        var stateObj = Invoke(ch, "GetSuppression2", (int)0);
-                        if (stateObj is int state) isSuppressed = (state == 0);
-                    }
-                    catch { /* vlastnost nemusí být v každé verzi SW dostupná */ }
-                }
+                    if (suppKnown || o == null) return;
+                    if (o is int i) { isSuppressed = (i == 0); suppKnown = true; }
+                    else if (o is short s) { isSuppressed = (s == 0); suppKnown = true; }
+                };
+                // 1) GetSuppression2(0) — 0 = swThisConfiguration (doporučená metoda)
+                try { tryState(Invoke(ch, "GetSuppression2", (int)0)); } catch { }
+                // 2) GetSuppression() — starší varianta
+                if (!suppKnown) { try { tryState(Invoke(ch, "GetSuppression")); } catch { } }
+                // 3) property Suppression
+                if (!suppKnown) { try { tryState(GetProp(ch, "Suppression")); } catch { } }
+                // 4) IsSuppressed() — vrací bool (deprecated, ale jako poslední pojistka)
+                if (!suppKnown) { try { var o = Invoke(ch, "IsSuppressed"); if (o is bool b) { isSuppressed = b; suppKnown = true; } } catch { } }
 
                 // Vyloučit z kusovníku — property ExcludeFromBOM (bool).
                 // V novějších verzích SW je to ExcludeFromBOM2.
