@@ -2929,8 +2929,27 @@ model Invoice {
   //   'deposit' — záloha (proforma_issued nebo issued se sníženou částkou)
   //   'final'   — doplatek (zbytek po záloze)
   //   'full'    — jednorázová platba (default chování, pokud Order.payment_split=false)
+  //   'deposit_tax' — daňový doklad k přijaté platbě (DPPP, type='tax_receipt')
   //   null      — legacy / běžná faktura nesouvisející s platebním schématem
   invoice_role String? @db.VarChar(20)
+
+  // ─── Daňový doklad k přijaté platbě (DPPP) — vazby a idempotence ──────────
+  // DPPP (type='tax_receipt') vzniká automaticky po spárování platby se zálohovou
+  // fakturou. parent_invoice = zálohová faktura (proforma_issued), ze které vznikl.
+  parent_invoice_id Int?
+  parent_invoice    Invoice?  @relation("InvoiceParent", fields: [parent_invoice_id], references: [id])
+  child_invoices    Invoice[] @relation("InvoiceParent")
+  // Z jaké platby / bankovní transakce doklad vznikl (audit + idempotence).
+  source_payment_id          Int?
+  source_bank_transaction_id Int? // jen evidenční, ne unique (1 platba může krýt víc záloh)
+
+  // Odeslání dokladu zákazníkovi — vedeno ODDĚLENĚ od účetního `status` (§25 zadání).
+  delivery_status String    @default("not_sent") @db.VarChar(20) // not_sent, queued, sent, failed
+  sent_at         DateTime?
+  sent_to         String?   @db.VarChar(255)
+  send_error      String?   @db.Text
+  send_message_id String?   @db.VarChar(255)
+  send_attempts   Int       @default(0)
 
   // Zdroj dokumentu
   source          String?      @db.VarChar(30) // manual, email, api, import_xml, factorify
@@ -2981,7 +3000,22 @@ model Invoice {
   @@index([external_number])
   @@index([variable_symbol])
   @@index([invoice_role])
+  @@index([parent_invoice_id])
+  // Idempotence DPPP: max 1 daňový doklad na dvojici (platba, zálohová faktura).
+  @@unique([source_payment_id, parent_invoice_id])
   @@map("invoices")
+}
+
+// Atomický čítač číselných řad dokladů (§5 zadání — bezpečné proti souběhu).
+// Číslo se přiděluje transakčně přes UPDATE ... RETURNING nad jedním řádkem série,
+// takže dva souběžné požadavky nikdy nedostanou stejné číslo.
+model DocumentCounter {
+  id         Int      @id @default(autoincrement())
+  series     String   @unique @db.VarChar(30) // např. "DD-2026", "ZA-2026", "FV-2026"
+  last_seq   Int      @default(0)
+  updated_at DateTime @updatedAt
+
+  @@map("document_counters")
 }
 
 // Řádek faktury. Cost-center umožňuje kategorizaci (auto/osoba/stroj/projekt).

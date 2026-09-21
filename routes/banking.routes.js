@@ -575,6 +575,18 @@ router.post('/statements/:id/auto-match', async (req, res, next) => {
     // zůstane unmatched a může se opakovat.
     const summary = await matcher.autoMatchStatement(id, prisma, req.user, opts);
 
+    // §10 trigger PAYMENT MATCHED → daňové doklady k přijatým platbám (best-effort).
+    try {
+      const { processPaymentForDepositTaxDocs } = require('../services/accountant/deposit-tax-doc');
+      if (Array.isArray(summary.matched_ids) && summary.matched_ids.length) {
+        const pays = await prisma.payment.findMany({
+          where: { bank_transaction_id: { in: summary.matched_ids } },
+          select: { id: true },
+        });
+        for (const p of pays) await processPaymentForDepositTaxDocs(p.id);
+      }
+    } catch (e) { console.warn('[banking] DPPP po auto-matchi selhalo:', e.message); }
+
     await logAudit({
       user: req.user,
       action: 'auto_match',
@@ -655,6 +667,12 @@ router.post('/transactions/:id/match', async (req, res, next) => {
       description: `Spárováno s ${allocations.length} fakturou(ami), Payment #${result.payment.id}`,
       snapshot: { allocations, payment_id: result.payment.id },
     });
+
+    // §10 trigger PAYMENT MATCHED → daňový doklad k přijaté platbě (best-effort, po commitu).
+    try {
+      const { processPaymentForDepositTaxDocs } = require('../services/accountant/deposit-tax-doc');
+      await processPaymentForDepositTaxDocs(result.payment.id);
+    } catch (e) { console.warn('[banking] DPPP po ručním párování selhalo:', e.message); }
 
     res.json(result);
   } catch (err) {

@@ -223,7 +223,9 @@ function buildTemplateData(invoice, ourCompany) {
     invoice_number: invoice.invoice_number,
     external_number: invoice.external_number || '',
     type_label: typeLabel(invoice.type),
-    direction_label: invoice.direction === 'ar' ? 'FAKTURA — daňový doklad' : 'FAKTURA PŘIJATÁ',
+    direction_label: invoice.type === 'tax_receipt'
+      ? 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ'
+      : (invoice.direction === 'ar' ? 'FAKTURA — daňový doklad' : 'FAKTURA PŘIJATÁ'),
 
     // Datumy
     date_issued: fmtDate(invoice.date_issued),
@@ -282,7 +284,8 @@ function typeLabel(t) {
     credit_note_received: 'Dobropis přijatý',
     credit_note_issued: 'Dobropis vydaný',
     proforma_received: 'Záloha přijatá',
-    proforma_issued: 'Záloha vydaná',
+    proforma_issued: 'Zálohová faktura',
+    tax_receipt: 'Daňový doklad k platbě',
   };
   return map[t] || t;
 }
