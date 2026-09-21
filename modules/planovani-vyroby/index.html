@@ -156,12 +156,12 @@
   <div class="content">
     <!-- Záložky modulu -->
     <div class="pv-tabs" style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border);">
-      <button id="pvtab-batches" onclick="switchPvTab('batches')" style="background:none; border:none; border-bottom:2px solid var(--primary); color:var(--text); font-weight:700; font-size:13px; padding:8px 12px; cursor:pointer;">🗂️ Výrobní dávky</button>
-      <button id="pvtab-orders" onclick="switchPvTab('orders')" style="background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-weight:600; font-size:13px; padding:8px 12px; cursor:pointer;">🧾 Objednávky do výroby</button>
+      <button id="pvtab-orders" onclick="switchPvTab('orders')" style="background:none; border:none; border-bottom:2px solid var(--primary); color:var(--text); font-weight:700; font-size:13px; padding:8px 12px; cursor:pointer;">🧾 Objednávky do výroby</button>
+      <button id="pvtab-batches" onclick="switchPvTab('batches')" style="background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-weight:600; font-size:13px; padding:8px 12px; cursor:pointer;">🗂️ Výrobní dávky</button>
     </div>
 
     <!-- POHLED: Výrobní dávky -->
-    <div id="view-batches">
+    <div id="view-batches" style="display:none;">
     <!-- Rychlé filtry -->
     <div class="quick-filters">
       <select class="filter-select" id="qfStatus" onchange="applyFilters()">
@@ -194,7 +194,7 @@
     </div><!-- /view-batches -->
 
     <!-- POHLED: Objednávky do výroby (zaplacené prodejní objednávky) -->
-    <div id="view-orders" style="display:none;">
+    <div id="view-orders">
       <div class="quick-filters">
         <input class="filter-select" id="ordSearch" placeholder="Hledat číslo / zákazníka / stroj…" oninput="renderProductionOrders()" style="min-width:260px;">
         <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface);">
@@ -1359,11 +1359,15 @@
     rows.forEach(o => {
       const items = Array.isArray(o.items) ? o.items : [];
       const itemsTxt = items.map(i => escHtml((i.name || '') + (i.quantity ? ' ×' + i.quantity : ''))).join('<br>');
+      const unlinked = items.filter(i => !i.product_id && !i.product).length;
+      const readyWarn = unlinked > 0
+        ? '<div style="margin-top:4px;color:#ef4444;font-weight:700;font-size:11px;">⚠ ' + unlinked + ' z ' + items.length + ' položek nemá přiřazený výrobek — nelze do výroby</div>'
+        : '';
       const cur = o.currency || 'CZK';
-      h += '<tr style="cursor:pointer;" onclick="openProductionOrder(' + o.id + ')">' +
+      h += '<tr style="cursor:pointer;' + (unlinked > 0 ? 'box-shadow: inset 3px 0 0 #ef4444;' : '') + '" onclick="openProductionOrder(' + o.id + ')">' +
         '<td style="font-weight:700;color:var(--primary);">' + escHtml(o.order_number) + '</td>' +
         '<td>' + escHtml((o.company && o.company.name) || o.company_name || '—') + '</td>' +
-        '<td style="font-size:12px;">' + (itemsTxt || '—') + '</td>' +
+        '<td style="font-size:12px;">' + (itemsTxt || '—') + readyWarn + '</td>' +
         '<td style="font-weight:600;white-space:nowrap;">' + Number(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + cur + '</td>' +
         '<td>' + payBadge(o) + '</td>' +
         '<td style="white-space:nowrap;">' + (o.production_finish_last ? fmtDate(o.production_finish_last) : (o.expected_delivery ? fmtDate(o.expected_delivery) : '—')) + '</td>' +
@@ -1400,10 +1404,18 @@
       };
       const itemShortName = (it) => String(it.name || '').split(' — ')[0].replace(/\s+/g, ' ').trim() || (it.name || '—');
 
+      const unlinkedCount = items.filter(it => !it.product_id && !it.product).length;
+      const readyBanner = unlinkedCount > 0
+        ? '<div style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;font-weight:600;">⚠ ' + unlinkedCount + ' z ' + items.length + ' položek nemá přiřazený výrobek. Objednávku NELZE pustit do výroby, dokud se položky nenapojí na výrobek (Prodejní objednávky → detail položky).</div>'
+        : '<div style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.35);color:#10b981;border-radius:8px;padding:8px 12px;margin-bottom:14px;font-size:13px;font-weight:600;">✅ Všechny položky mají přiřazený výrobek — připraveno do výroby.</div>';
       const itemsRows = items.map(it => {
         const parts = itemConfigParts(it);
-        return '<tr>' +
-          '<td style="font-weight:600;">' + escHtml(itemShortName(it)) + (it.product ? ' <span style="color:var(--text2);font-size:11px;">(' + escHtml(it.product.code || '') + ')</span>' : '') + '</td>' +
+        const linked = !!(it.product_id || it.product);
+        const nameCell = linked
+          ? escHtml(itemShortName(it)) + (it.product ? ' <span style="color:var(--text2);font-size:11px;">(' + escHtml(it.product.code || '') + ')</span>' : '')
+          : escHtml(itemShortName(it)) + ' <span style="color:#ef4444;font-weight:700;font-size:11px;">⚠ bez výrobku</span>';
+        return '<tr' + (linked ? '' : ' style="background:rgba(239,68,68,0.08);"') + '>' +
+          '<td style="font-weight:600;">' + nameCell + '</td>' +
           '<td style="text-align:center;">' + (it.quantity || 1) + ' ks</td>' +
           '<td style="font-size:11px;color:var(--text2);">' + (parts.join(' · ') || '—') + '</td>' +
           '<td style="white-space:nowrap;">' + (it.production_start ? fmtDate(it.production_start) : '—') + ' – ' + (it.production_finish ? fmtDate(it.production_finish) : '—') + '</td>' +
@@ -1458,6 +1470,7 @@
         '</div>' +
         '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;">' +
           '<strong>Platba:</strong> ' + payLine + '</div>' +
+        readyBanner +
         '<h3 style="font-size:13px;margin:0 0 6px;">Položky k výrobě</h3>' +
         '<table class="dense" style="width:100%;margin-bottom:14px;"><thead><tr class="head-titles"><th>Stroj / položka</th><th>Ks</th><th>Konfigurace / výbava</th><th>Výrobní slot</th></tr></thead><tbody>' +
           (itemsRows || '<tr><td colspan="4" style="color:var(--text2);">Bez položek</td></tr>') + '</tbody></table>' +
@@ -1477,6 +1490,8 @@
 
   // ─── Init ─────────────────────────────────────────────────────────────────
   loadAll();
+  // Výchozí záložka: Objednávky do výroby (na prvním místě).
+  switchPvTab('orders');
 })();
 </script>
 
