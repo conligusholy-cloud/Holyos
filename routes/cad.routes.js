@@ -167,6 +167,8 @@ router.get('/drawings', async (req, res, next) => {
         project: { select: { id: true, code: true, name: true } },
         block:   { select: { id: true, name: true } },
         creator: { select: { id: true, first_name: true, last_name: true, email: true } },
+        // Napojená položka v katalogu zboží (Material) — pro proklik ze sloupce „Zboží".
+        material: { select: { id: true, code: true, name: true, type: true } },
         configurations: {
           select: {
             id: true, config_name: true, quantity: true,

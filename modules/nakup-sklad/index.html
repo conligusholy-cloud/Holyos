@@ -1081,6 +1081,18 @@
       } catch (e) { alert('Chyba hledání zboží: ' + (e && e.message)); }
     };
 
+    // Deep-link z jiných modulů (CAD výkresy → proklik na zboží):
+    //   ?material=<id>  → otevři kartu položky
+    //   ?code=<kód>     → najdi podle kódu a otevři
+    (function () {
+      try {
+        var p = new URLSearchParams(location.search);
+        var mid = p.get('material'), code = p.get('code');
+        if (mid) { setTimeout(function () { try { openMaterialModal(parseInt(mid, 10)); } catch (e) {} }, 700); }
+        else if (code) { setTimeout(function () { try { openMaterialByCode(code); } catch (e) {} }, 700); }
+      } catch (e) { }
+    })();
+
     // === KDE SE POUŽÍVÁ — přehled sestav (konstrukční CAD + pracovní postup) ===
     window.openWhereUsed = async function () {
       var id = window.__matId;
