@@ -159,6 +159,21 @@
     .tl-slot-inner.occupied .slot-title { color: #fb923c; font-size: 12px; font-weight: 700; }
     .tl-slot-inner.occupied .slot-customer { color: var(--text); font-size: 11px; font-weight: 600; }
     .tl-slot-inner.occupied .slot-sub { color: var(--text2); font-size: 10px; }
+    /* Zaplacený (potvrzený) slot — lze vyrábět a objednávat díly */
+    .tl-slot-inner.occupied.paid {
+      background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(5,150,105,0.22));
+      border: 1px solid rgba(16,185,129,0.5);
+    }
+    .tl-slot-inner.occupied.paid:hover { background: linear-gradient(135deg, rgba(16,185,129,0.28), rgba(5,150,105,0.32)); }
+    .tl-slot-inner.occupied.paid .slot-title { color: #34d399; }
+    /* Rezervovaný, ale NEzaplacený slot — čeká na platbu, nevyrábět */
+    .tl-slot-inner.occupied.reserved-unpaid {
+      background: linear-gradient(135deg, rgba(234,179,8,0.14), rgba(202,138,4,0.2));
+      border: 1px dashed rgba(234,179,8,0.7);
+    }
+    .tl-slot-inner.occupied.reserved-unpaid:hover { background: linear-gradient(135deg, rgba(234,179,8,0.24), rgba(202,138,4,0.3)); }
+    .tl-slot-inner.occupied.reserved-unpaid .slot-title { color: #facc15; }
+    .slot-pay { font-size: 10px; font-weight: 700; margin-top: 3px; }
 
     /* Blokovaný slot */
     .tl-slot-inner.blocked {
@@ -490,7 +505,7 @@
       endOfYear.setHours(23,59,59,999);
 
       var windows = generateSlotWindows();
-      var free = 0, occupied = 0, blocked = 0, total = 0;
+      var free = 0, occupied = 0, blocked = 0, total = 0, unpaid = 0;
       windows.forEach(function(win) {
         // Slot do konce roku počítáme podle data DODÁNÍ (win.end), aby slot
         // překlenující rok přes silvestra spadl do správného období.
@@ -501,10 +516,12 @@
         if (!matched) { free++; return; }
         if (matched.status === 'blocked') { blocked++; return; }
         var hasAsgn = matched.assignments && matched.assignments.length > 0;
-        if (hasAsgn) occupied++;
-        else free++;
+        if (hasAsgn) {
+          occupied++;
+          if (matched.assignments.some(function(a){ return a.reservation_status === 'reserved'; })) unpaid++;
+        } else free++;
       });
-      return { free: free, occupied: occupied, blocked: blocked, total: total, year: today.getFullYear() };
+      return { free: free, occupied: occupied, blocked: blocked, total: total, unpaid: unpaid, year: today.getFullYear() };
     }
 
     function renderCapacitySummary() {
@@ -523,7 +540,10 @@
           ' &nbsp;<span style="color:var(--text2);">(' + s.occupied + ' obsazených' +
           (s.blocked ? ', ' + s.blocked + ' blokovaných' : '') +
           ' / ' + s.total + ' celkem)</span>' +
-        '</div>';
+        '</div>' +
+        (s.unpaid ? '<div class="settings-badge" title="Rezervované sloty bez zaplacené zálohy — nevyrábět, neobjednávat díly" ' +
+            'style="background:rgba(234,179,8,0.12);border-color:rgba(234,179,8,0.4);">' +
+          '⏳ <strong style="color:#facc15;font-size:14px;">' + s.unpaid + '</strong>&nbsp;čeká na platbu</div>' : '');
     }
 
     function render() {
@@ -601,7 +621,9 @@
               var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
               // F5.1+ health badge — vytížení slotu
               var hc = slotHealthClient(matched);
-              html += '<div class="tl-slot-inner occupied" style="position:relative;">';
+              // Rozlišení: rezervováno bez platby (nevyrábět) vs. zaplaceno/potvrzeno (lze vyrábět).
+              var unpaid = a.reservation_status === 'reserved';
+              html += '<div class="tl-slot-inner occupied ' + (unpaid ? 'reserved-unpaid' : 'paid') + '" style="position:relative;">';
               if (hc) {
                 html += '<div class="slot-health-bar" title="Vytížení ' + hc.label + '" style="position:absolute; top:0; left:0; right:0; height:3px; background:' + hc.color + '; border-radius:6px 6px 0 0;"></div>';
                 html += '<div class="slot-health-pct" style="position:absolute; top:4px; right:6px; font-size:10px; font-weight:700; color:' + hc.color + ';">' + hc.label + '</div>';
@@ -612,6 +634,8 @@
                 html += '<div class="slot-sub" style="font-family:monospace;color:#fbbf24;font-weight:700;">🔢 ' + esc(serial) + '</div>';
               }
               html += '<div class="slot-sub">Dodání: ' + deliveryDate + '</div>';
+              html += '<div class="slot-pay" style="color:' + (unpaid ? '#facc15' : '#34d399') + ';">' +
+                (unpaid ? '⏳ Čeká na platbu — nevyrábět' : '✅ Zaplaceno — lze vyrábět') + '</div>';
               html += '</div>';
             } else if (isPast) {
               html += '<div class="tl-slot-inner blocked">';
@@ -781,6 +805,12 @@
             html += '<div style="font-size:12px;margin-top:4px;"><span style="font-family:monospace;font-weight:700;background:rgba(251,191,36,0.15);color:#fbbf24;padding:3px 8px;border-radius:6px;">🔢 ' + esc(serial) + '</span></div>';
           }
           html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + a.quantity + ' ks</div>';
+          var aUnpaid = a.reservation_status === 'reserved';
+          if (a.reservation_status) {
+            html += '<div style="font-size:11px;font-weight:700;margin-top:4px;color:' + (aUnpaid ? '#facc15' : '#34d399') + ';">' +
+              (aUnpaid ? '⏳ Rezervováno — čeká na platbu (nevyrábět, neobjednávat díly)' : '✅ Zaplaceno — lze vyrábět a objednávat díly') +
+              (aUnpaid && a.reserved_until ? ' · do ' + new Date(a.reserved_until).toLocaleDateString('cs-CZ') : '') + '</div>';
+          }
           html += '</div>';
         });
       }
