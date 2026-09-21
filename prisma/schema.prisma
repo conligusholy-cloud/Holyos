@@ -611,6 +611,8 @@ model Order {
   created_by        Int?
   approved_by       Int? // legacy Person FK — zachováno; nově preferujeme approved_by_user_id
   expected_delivery DateTime? @db.Date
+  // true = datum zadal ručně obchodník (neautomatizovat); false = dopočítá se z posledního výrobního slotu + 10 dní
+  expected_delivery_manual Boolean @default(false)
   delivered_at      DateTime? @db.Date
   share_token       String?   @unique @db.VarChar(64)
 
