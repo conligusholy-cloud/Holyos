@@ -1355,7 +1355,45 @@ public sealed class SubmitForm : Form
         //   + 1 krok za finální /drawings-import
         // Vylučujeme virtuální sestavy (Typ=virtualni) a potlačené komponenty
         // (IsSuppressed=true). Obojí je v gridu vidět, ale do HolyOSu nejde.
-        var rowsToUpload = _rows.Where(r => !r.IsVirtualAssembly && !r.IsSuppressed).ToList();
+        //
+        // NAVÍC: potlačený díl se do seznamu může dostat i jako SAMOSTATNÝ soubor
+        // (naskenovaný ze složky), který nemá IsSuppressed na řádku. Proto si
+        // sesbíráme názvy potlačených komponent napříč všemi odesílanými sestavami
+        // a takové soubory z uploadu vyřadíme (pokud nejsou zároveň někde použité
+        // jako plnohodnotná = nepotlačená komponenta).
+        // Klíče porovnáváme jak podle názvu souboru (BS-x.SLDPRT), tak podle base-name
+        // bez přípony (potlačená komponenta nemusí mít cestu, jen název).
+        var suppressedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolvedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in _rows)
+        {
+            foreach (var c in (r.Components ?? new List<AssemblyComponent>()))
+            {
+                var keys = new List<string>();
+                if (!string.IsNullOrWhiteSpace(c.Path))
+                {
+                    keys.Add(Path.GetFileName(c.Path));
+                    keys.Add(Path.GetFileNameWithoutExtension(c.Path));
+                }
+                if (!string.IsNullOrWhiteSpace(c.Name)) keys.Add(c.Name.Trim());
+                foreach (var k in keys)
+                {
+                    if (string.IsNullOrWhiteSpace(k)) continue;
+                    if (c.IsSuppressed) suppressedKeys.Add(k); else resolvedKeys.Add(k);
+                }
+            }
+        }
+        bool isSuppressedByName(FileRow r)
+        {
+            var fn = r.FileName ?? "";
+            var bn = Path.GetFileNameWithoutExtension(fn);
+            bool sup = suppressedKeys.Contains(fn) || suppressedKeys.Contains(bn);
+            bool res = resolvedKeys.Contains(fn) || resolvedKeys.Contains(bn);
+            return sup && !res;
+        }
+        var rowsToUpload = _rows.Where(r =>
+            !r.IsVirtualAssembly && !r.IsSuppressed && !isSuppressedByName(r)
+        ).ToList();
 
         // REKURZIVNÍ INDEX sourozenců napříč celým DefaultCadFolder — jednorázově
         // projde všechny podsložky a grupuje soubory podle base-name. Fixuje
