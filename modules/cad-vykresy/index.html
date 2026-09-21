@@ -747,7 +747,7 @@
               ${png ? `<img src="${png}" class="preview-thumb" alt="náhled">` : '<div></div>'}
               <div>
                 <div class="prop-list">${props || '<i style="color:var(--text2)">bez custom properties</i>'}</div>
-                ${bom.length ? `
+                ${bomAgg.length ? `
                   <table class="bom-table">
                     <thead><tr><th>Díl</th><th>ks</th><th>Konfig.</th><th>Materiál (katalog)</th></tr></thead>
                     <tbody>${bomRows}</tbody>
