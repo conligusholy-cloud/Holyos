@@ -178,6 +178,39 @@
   footer .mark{font-size:16px;color:var(--muted);margin-bottom:8px}
 
   @media(max-width:520px){.sec{padding:64px 0}.manifesto{padding:70px 0}}
+
+  /* ── Mobil ──────────────────────────────────────────────────── */
+  @media(max-width:640px){
+    .wrap{padding:0 18px}
+    .hbar{height:58px}
+    .mark{font-size:16px;letter-spacing:.16em;margin-left:.16em}
+    .hnav{gap:9px}
+    .btn{padding:10px 15px;font-size:13px}
+    .lang button{padding:6px 9px;font-size:11px}
+    .hero{padding:48px 0 30px}
+    .pill{font-size:11px;padding:6px 12px}
+    h1.title{font-size:clamp(32px,10.5vw,52px)}
+    .subline{font-size:16px;margin-top:16px}
+    .count{gap:7px;margin:34px 0 10px}
+    .cbox{min-width:0;flex:1 1 0;padding:13px 4px 9px;border-radius:13px}
+    .cnum{font-size:clamp(26px,9.5vw,40px)}
+    .clab{font-size:9.5px;letter-spacing:.1em;margin-top:6px}
+    .launch-date{font-size:12px;letter-spacing:.2em}
+    form.cta{flex-direction:column}
+    form.cta input,form.cta .btn{width:100%;flex:1 1 auto}
+    .cards{gap:14px}
+    .card2{padding:22px 18px}
+    .tl{padding-left:22px}
+    .tl .row{padding-left:18px}
+  }
+  @media(max-width:380px){
+    .mark{font-size:15px;letter-spacing:.12em}
+    .btn{padding:9px 13px;font-size:12.5px}
+    .hnav{gap:7px}
+    h1.title{font-size:clamp(30px,10.5vw,44px)}
+    .count{gap:6px}
+    .cbox{padding:12px 3px 8px}
+  }
   @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
 </style>
 </head>
