@@ -749,7 +749,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         //   BS-D* nebo díl (.sldprt)     → 'semi_product' (vyráběný díl)
         //   NA*, číselné/normalizované   → 'material'      (nakupované)
         // Uživatel může typ následně upravit ručně v katalogu.
-        let matId = null, matCreated = false, matCodeOut = null;
+        let matId = null, matCreated = false, matCodeOut = null, matUpdated = false;
         try {
           const matCode = String(f.DrawingFileName || '').replace(/\.[^.]+$/, '').trim().slice(0, 50);
           matCodeOut = matCode || null;
@@ -764,13 +764,59 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
             else if (ext.includes('sldasm')) mtype = 'product';
             else if (ext.includes('sldprt')) mtype = 'semi_product';
             else mtype = 'material';
-            let mat = await prisma.material.findUnique({ where: { code: matCode }, select: { id: true } }).catch(() => null);
+
+            // ── Co o dílu víme z CAD ─────────────────────────────────────────
+            // Vytáhneme custom properties vybrané konfigurace + hmotnost a
+            // namapujeme je na pole katalogu zboží (Material). Klíče čteme
+            // case-insensitive a zvládneme objekt i pole {Name,Value}.
+            const selCfg = configPayloads.find((c) => c.selected) || configPayloads[0] || null;
+            const cp = selCfg ? selCfg.custom_properties : null;
+            const massG = selCfg ? Number(selCfg.mass_grams) : NaN;
+            const cpGet = (...keys) => {
+              if (!cp) return null;
+              const map = {};
+              if (Array.isArray(cp)) {
+                for (const it of cp) {
+                  const n = it && (it.Name || it.name || it.Key || it.key);
+                  const v = it && (it.ResolvedValue || it.resolvedValue || it.Value || it.value);
+                  if (n != null) map[String(n).toLowerCase()] = v;
+                }
+              } else if (typeof cp === 'object') {
+                for (const k of Object.keys(cp)) map[k.toLowerCase()] = cp[k];
+              }
+              for (const key of keys) {
+                const v = map[String(key).toLowerCase()];
+                if (v != null && String(v).trim() !== '') return String(v).trim();
+              }
+              return null;
+            };
+            const known = {};
+            const _desc = cpGet('Description', 'Popis', 'Popis1', 'Description1', 'Nazev', 'Název');
+            if (_desc) known.description = _desc.slice(0, 2000);
+            const _mat = cpGet('Material', 'Materiál', 'Material1', 'SW-Material', 'PolotovarMaterial');
+            if (_mat) known.material_ref = _mat.slice(0, 100);
+            const _rev = cpGet('Revision', 'Revize', 'Rev');
+            if (_rev) known.revision_number = _rev.slice(0, 50);
+            const _drawn = cpGet('DrawnBy', 'Kreslil', 'Author', 'Autor', 'Zpracoval', 'CreatedBy');
+            if (_drawn) known.drawn_by = _drawn.slice(0, 100);
+            const _norm = cpGet('Norm', 'Norma', 'Standard');
+            if (_norm) known.norm = _norm.slice(0, 100);
+            const _dim = cpGet('Dimensions', 'Rozměr', 'Rozmer', 'Size', 'Polotovar', 'StockSize', 'Rozmery');
+            if (_dim) known.dimension = _dim.slice(0, 255);
+            if (Number.isFinite(massG) && massG > 0) known.weight = Math.round(massG) / 1000; // kg
+            known.solid_name = matCode.slice(0, 100);
+
+            let mat = await prisma.material.findUnique({
+              where: { code: matCode },
+              select: { id: true, description: true, material_ref: true, revision_number: true, drawn_by: true, norm: true, dimension: true, weight: true, solid_name: true },
+            }).catch(() => null);
             if (!mat) {
               mat = await prisma.material.create({
                 data: {
                   code: matCode,
                   name: (drawing.title || matCode).slice(0, 255),
                   type: mtype, unit: 'ks', sector: 'vyroba', status: 'active',
+                  ...known,
                 },
                 select: { id: true },
               }).catch(async (e) => {
@@ -779,6 +825,19 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
                 return null;
               });
               if (mat && mat.id) matCreated = true; // nově založeno v katalogu
+            } else {
+              // Doplnit jen prázdná pole — ručně vyplněné hodnoty nikdy nepřepisujeme.
+              const empty = (v) => v == null || String(v).trim() === '';
+              const patch = {};
+              for (const [k, v] of Object.entries(known)) {
+                if (v == null || String(v).trim() === '') continue;
+                if (k === 'weight') { if (mat.weight == null) patch.weight = v; continue; }
+                if (empty(mat[k])) patch[k] = v;
+              }
+              if (Object.keys(patch).length) {
+                await prisma.material.update({ where: { id: mat.id }, data: patch }).catch(() => {});
+                matUpdated = true;
+              }
             }
             if (mat && mat.id) matId = mat.id;
             if (mat && mat.id && !drawing.material_id) {
@@ -797,6 +856,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           MaterialId: matId,
           MaterialCode: matCodeOut,
           MaterialCreated: matCreated,
+          MaterialUpdated: matUpdated,
         };
         if (action === 'created') created.push(payload);
         else if (action === 'updated') updated.push(payload);

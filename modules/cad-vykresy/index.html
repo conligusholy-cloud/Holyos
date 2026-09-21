@@ -330,7 +330,7 @@
       // fetch nebo selhal, použijeme data ze seznamu (max 1 log, bez detailu).
       const full = state.detailsCache.get(d.id) || d;
       return '<tr class="expanded-detail" data-parent-id="' + d.id + '">' +
-        '<td colspan="12" style="padding:18px 24px 22px 50px;background:rgba(148,163,184,0.04);border-left:3px solid rgba(99,102,241,0.5);">' +
+        '<td colspan="13" style="padding:18px 24px 22px 50px;background:rgba(148,163,184,0.04);border-left:3px solid rgba(99,102,241,0.5);">' +
           buildFullDetailHtml(full) +
         '</td>' +
       '</tr>';
@@ -499,6 +499,7 @@
           })()}</td>
           <td style="font-size:12px;">${creatorName}</td>
           <td>${fmt(d.last_import_at)}</td>
+          <td style="white-space:nowrap;" onclick="event.stopPropagation();">${d.material ? '<a href="/modules/nakup-sklad/index.html?material=' + d.material.id + '" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:none;font-size:12px;" title="Otev\u0159\u00edt v katalogu zbo\u017e\u00ed">\ud83d\udce6 ' + escapeHtml(d.material.code || '') + '</a>' : '<span style="color:#94a3b8;">\u2014</span>'}</td>
           <td style="white-space:nowrap;" onclick="event.stopPropagation();">
             <button class="btn btn-sm" style="background:rgba(59,130,246,0.12);color:#3b82f6;border-color:rgba(59,130,246,0.3);padding:3px 8px;font-size:11px;" onclick="openEditDrawing(${d.id})" title="Upravit">\u270f\ufe0f</button>
             <button class="btn btn-sm btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px;" onclick="deleteDrawing(${d.id})" title="Smazat">\ud83d\uddd1\ufe0f</button>
@@ -509,7 +510,7 @@
         <table class="data-table">
           <thead><tr>
             <th>Typ</th><th>Kód</th><th>Projekt</th><th>Blok</th><th>Verze</th><th>Poznámka</th>
-            <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Akce</th>
+            <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Zboží</th><th>Akce</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>`;
