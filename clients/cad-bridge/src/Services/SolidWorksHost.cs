@@ -34,16 +34,25 @@ public sealed class SolidWorksHost : IDisposable
             throw new InvalidOperationException(
                 "Není nainstalován SolidWorks (nebo chybí COM registrace SldWorks.Application).");
 
+        // Zjisti, jestli už SolidWorks běží (tj. uživatelova instance). Pokud ano,
+        // NEZASAHUJEME do okna/viditelnosti (jinak bychom mu SW schovali/minimalizovali
+        // a rušili práci). Jen když jsme SW spustili my, necháme ho skrytý na pozadí.
+        bool wasRunning = false;
+        try { wasRunning = System.Diagnostics.Process.GetProcessesByName("SLDWORKS").Length > 0; } catch { }
+        _launchedByUs = !wasRunning;
+
         _swApp = Activator.CreateInstance(type);
 
-        // SolidWorks běží skrytě (žádná problikávající okna při otevírání dokumentů).
-        // Při ručním spuštění SW uživatelem (už předtím běžící instance) tento setter
-        // respektuje aktuální viditelnost, takže ho nezměníme násilně — připojujeme se
-        // jen k existující instanci bez zásahu do UI.
-        try { SetProp("Visible", false); } catch { }
-        try { SetProp("UserControl", false); } catch { }
-        try { SetProp("FrameState", 0); } catch { } // 0 = swWindowMinimized — minimalizované okno
+        if (_launchedByUs)
+        {
+            // My jsme SW spustili → drž ho skrytý, ať nebliká na ploše.
+            try { SetProp("Visible", false); } catch { }
+            try { SetProp("UserControl", false); } catch { }
+        }
+        // Když už SW běžel (uživatel v něm pracuje), viditelnost ani stav okna NEMĚNÍME.
     }
+
+    private bool _launchedByUs = false;
 
     public void Dispose()
     {
@@ -104,6 +113,13 @@ public sealed class SolidWorksHost : IDisposable
         mods[4] = true; // Errors je ref
         mods[5] = true; // Warnings je ref
 
+        // Otevři dokument NEVIDITELNĚ — DocumentVisible(false, type) způsobí, že se
+        // následně otevřený dokument nezobrazí v okně SolidWorksu. Tím nebliká a
+        // uživatelovo aktivní okno/dokument zůstává nerušené. Po otevření hodnotu
+        // vrátíme, ať uživatelovy vlastní otevření souborů zůstanou viditelná.
+        bool visToggled = false;
+        try { if (docType != 0) { InvokeSw("DocumentVisible", false, docType); visToggled = true; } } catch { }
+
         object? model;
         try
         {
@@ -120,6 +136,10 @@ public sealed class SolidWorksHost : IDisposable
         catch (TargetInvocationException tie) when (tie.InnerException != null)
         {
             throw tie.InnerException;
+        }
+        finally
+        {
+            if (visToggled) { try { InvokeSw("DocumentVisible", true, docType); } catch { } }
         }
 
         int errors   = args[4] is int e ? e : 0;
