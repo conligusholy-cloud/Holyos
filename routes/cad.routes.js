@@ -335,6 +335,12 @@ const importSchema = z.object({
     SourcePath: z.string().optional().nullable(),
     Checksum: z.string().optional().nullable(),
     FeatureHash: z.string().optional().nullable(),
+    // Příznak potlačení dílu v SolidWorks (různí klienti používají různé názvy) —
+    // schema má .passthrough(), takže neznámé názvy projdou a vyhodnotí se v kódu.
+    Suppressed: z.boolean().optional().nullable(),
+    IsSuppressed: z.boolean().optional().nullable(),
+    Excluded: z.boolean().optional().nullable(),
+    State: z.string().optional().nullable(),
     // Volitelná váha + poznámka ke změně — konstruktér vyplní v Bridge před uploadem
     // u každého výkresu, který má blesk (Nový / Změněný). Server z toho skládá
     // záznam do cad_drawing_change_logs pro historii změn.
@@ -404,8 +410,52 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
 
     const authorPersonId = req.user?.person_id || null;
 
-    const created = [], updated = [], notChanged = [], errors = [];
+    const created = [], updated = [], notChanged = [], errors = [], ignored = [];
     const unknownOut = [];
+
+    // Volitelný ruční blocklist podle názvu (default PRÁZDNÝ — nechceme vylučovat podle jména).
+    // Zdroj: AppSetting 'cad.import_ignore' (čárkou oddělené podřetězce) → env CAD_IMPORT_IGNORE.
+    let ignorePatterns = [];
+    try {
+      let raw = null;
+      try { const s = await prisma.appSetting.findUnique({ where: { key: 'cad.import_ignore' } }); if (s && s.value) raw = s.value; } catch (e) {}
+      if (!raw) raw = process.env.CAD_IMPORT_IGNORE || '';
+      ignorePatterns = String(raw).split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+    } catch (e) { ignorePatterns = []; }
+    const isIgnored = (f) => {
+      if (!ignorePatterns.length) return false;
+      const hay = ((f.DrawingFileName || '') + ' ' + (f.Name || '')).toLowerCase();
+      return ignorePatterns.some((p) => hay.indexOf(p) >= 0);
+    };
+
+    // Potlačený díl v SolidWorks (Potlačit) — hlavní pravidlo. Exportér posílá příznak;
+    // názvy se u klientů liší, proto hledáme v RAW payloadu (parsed.data zod ořízne neznámé klíče).
+    const rawFiles = (req.body && Array.isArray(req.body.DrawingFiles)) ? req.body.DrawingFiles : [];
+    const rawByName = {};
+    rawFiles.forEach((rf) => { if (rf && rf.DrawingFileName) rawByName[rf.DrawingFileName] = rf; });
+    const truthyFlag = (v) => v === true || v === 1 || (typeof v === 'string' && /^(1|true|yes|ano|suppress|suppressed|potla)/i.test(v.trim()));
+    const isSuppressed = (f) => {
+      const raw = rawByName[f.DrawingFileName] || f;
+      for (const k of Object.keys(raw)) {
+        if (/suppress|potla|exclud|vylou/i.test(k) && truthyFlag(raw[k])) return true;
+      }
+      // Textový stav typu State/Status = "Suppressed"/"Potlačeno".
+      const st = String(raw.State || raw.Status || '').toLowerCase();
+      if (/suppress|potla/.test(st)) return true;
+      return false;
+    };
+
+    // Diagnostika — vypíšeme klíče prvního souboru + případné suppress-ish příznaky,
+    // ať přesně víme, jak exportér potlačení hlásí.
+    try {
+      if (rawFiles.length) {
+        console.log('[cad-import] klíče DrawingFile[0]:', Object.keys(rawFiles[0]).join(', '));
+        rawFiles.forEach((rf) => {
+          const sup = Object.keys(rf).filter((k) => /suppress|potla|exclud|vylou|state|status|selected/i.test(k)).map((k) => k + '=' + JSON.stringify(rf[k]));
+          if (sup.length) console.log('[cad-import] ' + rf.DrawingFileName + ' → ' + sup.join(' '));
+        });
+      }
+    } catch (e) {}
 
     // Diagnostika importu — vypíšeme, co přišlo (názvy souborů), ať víme, jestli
     // klient vrchní sestavu vůbec poslal (viz „chybějící vrchní sestava").
@@ -417,6 +467,16 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     for (const f of DrawingFiles) {
       const _tf = Date.now();
       try {
+        // Potlačený díl v SolidWorks (nebo ruční blocklist) → přeskoč a smaž případný existující záznam.
+        const supp = isSuppressed(f);
+        if (supp || isIgnored(f)) {
+          try {
+            const dupes = await prisma.cadDrawing.findMany({ where: { project_id: project.id, file_name: f.DrawingFileName }, select: { id: true } });
+            if (dupes.length) await prisma.cadDrawing.deleteMany({ where: { id: { in: dupes.map((x) => x.id) } } });
+          } catch (e) {}
+          ignored.push({ file: f.DrawingFileName, reason: supp ? 'potlačený díl' : 'blocklist' });
+          continue;
+        }
         // Uložit všechny konfigurace - nejdřív zpracovat assety
         const configPayloads = [];
         for (const cfg of f.Configurations) {
@@ -723,8 +783,9 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     step('Zpracování výkresů (' + DrawingFiles.length + ' souborů)');
 
     console.log('[cad-import] hotovo — vytvořeno=' + created.length + ' aktualizováno=' + updated.length
-      + ' bezezměny=' + notChanged.length + ' chyby=' + errors.length
-      + (errors.length ? (' → ' + errors.map((x) => x.file + ': ' + x.message).join(' | ')) : ''));
+      + ' bezezměny=' + notChanged.length + ' ignorováno=' + ignored.length + ' chyby=' + errors.length
+      + (ignored.length ? (' → ignorováno: ' + ignored.map((x) => x.file).join(', ')) : '')
+      + (errors.length ? (' → chyby: ' + errors.map((x) => x.file + ': ' + x.message).join(' | ')) : ''));
 
     // Protokol importu — ať je dohledatelné, co konkrétní běh udělal (záložka Importy).
     const totalMs = Date.now() - _t0;
@@ -745,7 +806,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           duration_ms: totalMs,
           details: {
             created, updated, not_changed: notChanged,
-            unknown: unknownOut || [], errors,
+            ignored, unknown: unknownOut || [], errors,
             steps, file_timings: fileTimings, total_ms: totalMs,
             // Statistiky z desktop exportéru (klient PC) — pokud je exportér poslal.
             exporter_stats: (parsed.data.ExporterStats || (req.body && req.body.ExporterStats) || null),
@@ -762,6 +823,7 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
       Created: created,
       Updated: updated,
       NotChanged: notChanged,
+      Ignored: ignored,
       UnknownComponents: unknownOut,
       Errors: errors,
     });
