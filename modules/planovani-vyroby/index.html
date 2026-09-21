@@ -154,6 +154,14 @@
   </div>
 
   <div class="content">
+    <!-- Záložky modulu -->
+    <div class="pv-tabs" style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border);">
+      <button id="pvtab-batches" onclick="switchPvTab('batches')" style="background:none; border:none; border-bottom:2px solid var(--primary); color:var(--text); font-weight:700; font-size:13px; padding:8px 12px; cursor:pointer;">🗂️ Výrobní dávky</button>
+      <button id="pvtab-orders" onclick="switchPvTab('orders')" style="background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-weight:600; font-size:13px; padding:8px 12px; cursor:pointer;">🧾 Objednávky do výroby</button>
+    </div>
+
+    <!-- POHLED: Výrobní dávky -->
+    <div id="view-batches">
     <!-- Rychlé filtry -->
     <div class="quick-filters">
       <select class="filter-select" id="qfStatus" onchange="applyFilters()">
@@ -183,6 +191,20 @@
 
     <!-- Hustá tabulka -->
     <div class="table-wrap" id="tableWrap"></div>
+    </div><!-- /view-batches -->
+
+    <!-- POHLED: Objednávky do výroby (zaplacené prodejní objednávky) -->
+    <div id="view-orders" style="display:none;">
+      <div class="quick-filters">
+        <input class="filter-select" id="ordSearch" placeholder="Hledat číslo / zákazníka / stroj…" oninput="renderProductionOrders()" style="min-width:260px;">
+        <label style="font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px; cursor:pointer; padding:6px 10px; border:1px solid var(--border); border-radius:6px; background:var(--surface);">
+          <input type="checkbox" id="ordAll" onchange="renderProductionOrders()" style="margin:0;"> Zobrazit i nezaplacené
+        </label>
+        <button class="btn btn-secondary" onclick="loadProductionOrders()">🔄 Obnovit</button>
+        <span style="color:var(--text2); font-size:12px; margin-left:auto;" id="ordCount"></span>
+      </div>
+      <div class="table-wrap" id="ordersWrap"></div>
+    </div>
   </div>
 </div>
 
@@ -1268,6 +1290,163 @@
       btn.disabled = false; btn.textContent = 'Vytvořit dávku';
     }
   }
+
+  // ═══ OBJEDNÁVKY DO VÝROBY ══════════════════════════════════════════════════
+  let _prodOrders = [];
+  let _prodOrdersLoaded = false;
+
+  window.switchPvTab = function(name) {
+    const isOrders = name === 'orders';
+    document.getElementById('view-batches').style.display = isOrders ? 'none' : '';
+    document.getElementById('view-orders').style.display = isOrders ? '' : 'none';
+    const tb = document.getElementById('pvtab-batches'), to = document.getElementById('pvtab-orders');
+    tb.style.borderBottomColor = isOrders ? 'transparent' : 'var(--primary)';
+    tb.style.color = isOrders ? 'var(--text2)' : 'var(--text)';
+    tb.style.fontWeight = isOrders ? '600' : '700';
+    to.style.borderBottomColor = isOrders ? 'var(--primary)' : 'transparent';
+    to.style.color = isOrders ? 'var(--text)' : 'var(--text2)';
+    to.style.fontWeight = isOrders ? '700' : '600';
+    if (isOrders && !_prodOrdersLoaded) loadProductionOrders();
+  };
+
+  // Zaplaceno = alespoň zaplacená záloha (deposit_paid) nebo plná platba (final_paid),
+  // tj. objednávka, kterou lze uvolnit do výroby.
+  function isOrderPaid(o) {
+    return !!(o.deposit_paid || o.final_paid ||
+      ['confirmed', 'in_production', 'released', 'delivered'].includes(o.status));
+  }
+
+  window.loadProductionOrders = async function() {
+    const wrap = document.getElementById('ordersWrap');
+    wrap.innerHTML = '<div style="padding:20px;color:var(--text2);">Načítám objednávky…</div>';
+    try {
+      const r = await fetch('/api/wh/orders?type=sales', { headers: authHeaders() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      _prodOrders = await r.json();
+      _prodOrdersLoaded = true;
+      renderProductionOrders();
+    } catch (e) {
+      wrap.innerHTML = '<div style="padding:20px;color:#ef4444;">Chyba: ' + escHtml(e.message) + '</div>';
+    }
+  };
+
+  window.renderProductionOrders = function() {
+    const wrap = document.getElementById('ordersWrap');
+    const showAll = document.getElementById('ordAll') && document.getElementById('ordAll').checked;
+    const q = ((document.getElementById('ordSearch') || {}).value || '').trim().toLowerCase();
+    let rows = (_prodOrders || []).filter(o => showAll || isOrderPaid(o));
+    if (q) {
+      rows = rows.filter(o => {
+        const hay = [o.order_number, (o.company && o.company.name), (o.items || []).map(i => i.name).join(' ')].join(' ').toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+    }
+    const cnt = document.getElementById('ordCount');
+    if (cnt) cnt.textContent = rows.length + ' objednávek';
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><h3>Žádné objednávky</h3><p>' +
+        (showAll ? 'Zatím tu nejsou žádné prodejní objednávky.' : 'Žádná zaplacená objednávka k výrobě. Zaškrtni „Zobrazit i nezaplacené".') + '</p></div>';
+      return;
+    }
+    const payBadge = (o) => {
+      if (o.final_paid) return '<span class="badge" style="background:rgba(16,185,129,0.18);color:#10b981;">Doplaceno</span>';
+      if (o.deposit_paid) return '<span class="badge" style="background:rgba(16,185,129,0.18);color:#10b981;">Záloha zaplacena</span>';
+      return '<span class="badge" style="background:rgba(234,179,8,0.18);color:#eab308;">Čeká na platbu</span>';
+    };
+    let h = '<table class="dense" style="width:100%;"><thead><tr class="head-titles">' +
+      '<th>Číslo</th><th>Zákazník</th><th>Položky</th><th>Celkem</th><th>Platba</th><th>Výroba do</th><th>Stav</th><th></th>' +
+      '</tr></thead><tbody>';
+    rows.forEach(o => {
+      const items = Array.isArray(o.items) ? o.items : [];
+      const itemsTxt = items.map(i => escHtml((i.name || '') + (i.quantity ? ' ×' + i.quantity : ''))).join('<br>');
+      const cur = o.currency || 'CZK';
+      h += '<tr style="cursor:pointer;" onclick="openProductionOrder(' + o.id + ')">' +
+        '<td style="font-weight:700;color:var(--primary);">' + escHtml(o.order_number) + '</td>' +
+        '<td>' + escHtml((o.company && o.company.name) || o.company_name || '—') + '</td>' +
+        '<td style="font-size:12px;">' + (itemsTxt || '—') + '</td>' +
+        '<td style="font-weight:600;white-space:nowrap;">' + Number(o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + cur + '</td>' +
+        '<td>' + payBadge(o) + '</td>' +
+        '<td style="white-space:nowrap;">' + (o.production_finish_last ? fmtDate(o.production_finish_last) : (o.expected_delivery ? fmtDate(o.expected_delivery) : '—')) + '</td>' +
+        '<td>' + statusBadge(o.status === 'confirmed' ? 'released' : (o.status || '')) + '</td>' +
+        '<td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openProductionOrder(' + o.id + ')">Detail →</button></td>' +
+        '</tr>';
+    });
+    h += '</tbody></table>';
+    wrap.innerHTML = h;
+  };
+
+  // Detail objednávky pro výrobu — read-only, veškeré informace.
+  window.openProductionOrder = async function(id) {
+    const root = document.getElementById('modalRoot');
+    root.innerHTML = '<div class="modal-backdrop" id="mb" onclick="if(event.target.id===\'mb\')document.getElementById(\'modalRoot\').innerHTML=\'\'"><div class="modal" style="width:820px;max-width:96vw;max-height:92vh;overflow:auto;"><div style="padding:24px;color:var(--text2);">Načítám…</div></div></div>';
+    try {
+      const r = await fetch('/api/wh/orders/' + id, { headers: authHeaders() });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const o = await r.json();
+      const cur = o.currency || 'CZK';
+      const items = Array.isArray(o.items) ? o.items : [];
+      const money = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' ' + cur;
+
+      const itemsRows = items.map(it => {
+        const cfg = (it.configs || []).map(c => {
+          const g = c.option && c.option.group ? c.option.group.name + ': ' : '';
+          return escHtml(g + (c.option ? c.option.name : ''));
+        }).filter(Boolean).join(' · ');
+        return '<tr>' +
+          '<td style="font-weight:600;">' + escHtml(it.name || '—') + (it.product ? ' <span style="color:var(--text2);font-size:11px;">(' + escHtml(it.product.code || '') + ')</span>' : '') + '</td>' +
+          '<td style="text-align:center;">' + (it.quantity || 1) + ' ks</td>' +
+          '<td style="font-size:11px;color:var(--text2);">' + (cfg || '—') + '</td>' +
+          '<td style="white-space:nowrap;">' + (it.production_start ? fmtDate(it.production_start) : '—') + ' – ' + (it.production_finish ? fmtDate(it.production_finish) : '—') + '</td>' +
+          '</tr>';
+      }).join('');
+
+      const invs = Array.isArray(o.invoices) ? o.invoices : [];
+      const invLabel = (i) => i.type === 'tax_receipt' ? 'Daňový doklad' : (i.type === 'proforma_issued' ? 'Zálohová' : (i.invoice_role === 'final' ? 'Konečná' : 'Faktura'));
+      const invRows = invs.length ? invs.map(i =>
+        '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">' +
+        '<span>' + escHtml(invLabel(i) + ' · ' + (i.invoice_number || ('#' + i.id))) + '</span>' +
+        '<span style="white-space:nowrap;">' + money(i.total) + ' · ' + escHtml(i.status || '') + '</span></div>'
+      ).join('') : '<div style="font-size:12px;color:var(--text2);">Žádné doklady.</div>';
+
+      const payLine = o.payment_split
+        ? ('Záloha ' + (o.deposit_percent != null ? o.deposit_percent + ' %' : money(o.deposit_amount)) +
+           ' — ' + (o.deposit_paid ? '✅ zaplacena' : '⏳ nezaplacena') +
+           ' · Doplatek ' + (o.final_paid ? '✅ zaplacen' : '⏳ nezaplacen'))
+        : (o.final_paid ? '✅ Zaplaceno (jednorázově)' : '⏳ Nezaplaceno');
+
+      const box = (label, val) => '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;flex:1;min-width:150px;">' +
+        '<div style="font-size:10px;text-transform:uppercase;color:var(--text2);">' + label + '</div>' +
+        '<div style="font-weight:700;font-size:13px;margin-top:2px;">' + val + '</div></div>';
+
+      const html =
+        '<div class="modal-backdrop" id="mb" onclick="if(event.target.id===\'mb\')document.getElementById(\'modalRoot\').innerHTML=\'\'">' +
+        '<div class="modal" style="width:820px;max-width:96vw;max-height:92vh;overflow:auto;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;">' +
+          '<h2 style="margin:0;">🧾 ' + escHtml(o.order_number) + '</h2>' +
+          '<button class="btn btn-sm btn-secondary" onclick="document.getElementById(\'modalRoot\').innerHTML=\'\'">Zavřít</button>' +
+        '</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
+          box('Zákazník', escHtml((o.company && o.company.name) || o.company_name || '—')) +
+          box('Celkem', money(o.total_amount)) +
+          box('Výroba do', o.production_finish_last ? fmtDate(o.production_finish_last) : (o.expected_delivery ? fmtDate(o.expected_delivery) : '—')) +
+          box('Stav', escHtml(o.status || '—')) +
+        '</div>' +
+        '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;">' +
+          '<strong>Platba:</strong> ' + payLine + '</div>' +
+        '<h3 style="font-size:13px;margin:0 0 6px;">Položky k výrobě</h3>' +
+        '<table class="dense" style="width:100%;margin-bottom:14px;"><thead><tr class="head-titles"><th>Stroj / položka</th><th>Ks</th><th>Konfigurace / výbava</th><th>Výrobní slot</th></tr></thead><tbody>' +
+          (itemsRows || '<tr><td colspan="4" style="color:var(--text2);">Bez položek</td></tr>') + '</tbody></table>' +
+        (o.note ? '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;"><strong>Poznámka:</strong> ' + escHtml(o.note) + '</div>' : '') +
+        '<h3 style="font-size:13px;margin:0 0 6px;">Účetní doklady</h3>' + invRows +
+        '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">' +
+          '<a class="btn btn-sm btn-secondary" href="/modules/prodejni-objednavky/index.html" target="_blank" rel="noopener" style="text-decoration:none;">Otevřít v Prodejních objednávkách ↗</a>' +
+        '</div>' +
+        '</div></div>';
+      root.innerHTML = html;
+    } catch (e) {
+      root.innerHTML = '<div class="modal-backdrop" id="mb" onclick="if(event.target.id===\'mb\')document.getElementById(\'modalRoot\').innerHTML=\'\'"><div class="modal" style="width:420px;"><div style="padding:20px;color:#ef4444;">Chyba: ' + escHtml(e.message) + '</div></div></div>';
+    }
+  };
 
   // ─── Init ─────────────────────────────────────────────────────────────────
   loadAll();
