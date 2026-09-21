@@ -2785,6 +2785,19 @@
         }, 200);
       }
     })();
+
+    // Deep link — ?material=<id> (z protokolu CAD importu) → otevři kartu zboží.
+    (function handleMaterialDeepLink() {
+      try {
+        var mid = parseInt(new URLSearchParams(window.location.search).get('material'), 10);
+        if (mid && !isNaN(mid)) {
+          setTimeout(function () {
+            if (typeof switchTab === 'function') switchTab('materials');
+            setTimeout(function () { if (typeof openMaterialModal === 'function') openMaterialModal(mid); }, 300);
+          }, 200);
+        }
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

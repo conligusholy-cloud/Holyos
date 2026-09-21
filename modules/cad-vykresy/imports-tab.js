@@ -97,11 +97,18 @@
     if (!items || !items.length) return '';
     var rows = items.map(function (it) {
       if (mode === 'error') return '<tr><td style="padding:4px 8px;">' + esc(it.file || '') + '</td><td style="padding:4px 8px;color:#ef4444;">' + esc(it.message || '') + '</td></tr>';
-      return '<tr><td style="padding:4px 8px;">' + esc(it.DrawingFileName || it.file || '') + '</td><td style="padding:4px 8px;">' + esc(it.Title || '') + '</td><td style="padding:4px 8px;text-align:center;">' + (it.Version != null ? ('v' + it.Version) : '—') + '</td></tr>';
+      var zbozi = '<span style="color:var(--text2);">—</span>';
+      if (it.MaterialId) {
+        var lbl = it.MaterialCreated ? '✚ založeno' : ('✓ ' + esc(it.MaterialCode || 'v katalogu'));
+        zbozi = '<a href="/modules/nakup-sklad/index.html?material=' + it.MaterialId + '" target="_blank" rel="noopener" style="color:#22c55e;text-decoration:none;font-weight:600;">' + lbl + ' ↗</a>';
+      } else if (it.MaterialCode) {
+        zbozi = '<span style="color:var(--text2);">' + esc(it.MaterialCode) + '</span>';
+      }
+      return '<tr><td style="padding:4px 8px;">' + esc(it.DrawingFileName || it.file || '') + '</td><td style="padding:4px 8px;">' + esc(it.Title || '') + '</td><td style="padding:4px 8px;text-align:center;">' + (it.Version != null ? ('v' + it.Version) : '—') + '</td><td style="padding:4px 8px;">' + zbozi + '</td></tr>';
     }).join('');
     var head = mode === 'error'
       ? '<tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:left;padding:4px 8px;">Chyba</th></tr>'
-      : '<tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:left;padding:4px 8px;">Název</th><th style="padding:4px 8px;">Verze</th></tr>';
+      : '<tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:left;padding:4px 8px;">Název</th><th style="padding:4px 8px;">Verze</th><th style="text-align:left;padding:4px 8px;">Zboží</th></tr>';
     return '<h4 style="margin:14px 0 4px;color:' + color + ';">' + title + ' (' + items.length + ')</h4>' +
       '<table style="width:100%;border-collapse:collapse;font-size:12px;">' + head + rows + '</table>';
   }

@@ -747,8 +747,10 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
         //   BS-D* nebo díl (.sldprt)     → 'semi_product' (vyráběný díl)
         //   NA*, číselné/normalizované   → 'material'      (nakupované)
         // Uživatel může typ následně upravit ručně v katalogu.
+        let matId = null, matCreated = false, matCodeOut = null;
         try {
           const matCode = String(f.DrawingFileName || '').replace(/\.[^.]+$/, '').trim().slice(0, 50);
+          matCodeOut = matCode || null;
           if (matCode) {
             const cu = matCode.toUpperCase();
             const ext = String(f.Extension || '').toLowerCase();
@@ -774,7 +776,9 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
                 console.warn('[cad-import] auto-material selhalo pro', matCode, e && e.message);
                 return null;
               });
+              if (mat && mat.id) matCreated = true; // nově založeno v katalogu
             }
+            if (mat && mat.id) matId = mat.id;
             if (mat && mat.id && !drawing.material_id) {
               await prisma.cadDrawing.update({ where: { id: drawing.id }, data: { material_id: mat.id } }).catch(() => {});
             }
@@ -788,6 +792,9 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           Version: drawing.version,
           ProjectId: drawing.project_id,
           BlockId: drawing.block_id,
+          MaterialId: matId,
+          MaterialCode: matCodeOut,
+          MaterialCreated: matCreated,
         };
         if (action === 'created') created.push(payload);
         else if (action === 'updated') updated.push(payload);
