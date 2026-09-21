@@ -99,7 +99,7 @@
       if (mode === 'error') return '<tr><td style="padding:4px 8px;">' + esc(it.file || '') + '</td><td style="padding:4px 8px;color:#ef4444;">' + esc(it.message || '') + '</td></tr>';
       var zbozi = '<span style="color:var(--text2);">—</span>';
       if (it.MaterialId) {
-        var lbl = it.MaterialCreated ? '✚ založeno' : ('✓ ' + esc(it.MaterialCode || 'v katalogu'));
+        var lbl = it.MaterialCreated ? '✚ založeno' : (it.MaterialUpdated ? '↻ doplněno' : ('✓ ' + esc(it.MaterialCode || 'v katalogu')));
         zbozi = '<a href="/modules/nakup-sklad/index.html?material=' + it.MaterialId + '" target="_blank" rel="noopener" style="color:#22c55e;text-decoration:none;font-weight:600;">' + lbl + ' ↗</a>';
       } else if (it.MaterialCode) {
         zbozi = '<span style="color:var(--text2);">' + esc(it.MaterialCode) + '</span>';
