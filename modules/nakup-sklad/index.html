@@ -1104,6 +1104,30 @@
       });
       var pillsHtml = pills.length ? '<div style="margin-top:6px;">' + pills.join('') + '</div>' : '<div style="color:var(--text2);font-size:12px;">Žádné soubory.</div>';
 
+      // Kusovník — komponenty sestavy (napříč konfiguracemi).
+      var comps = [];
+      (d.configurations || []).forEach(function (cfg) { (cfg.components || []).forEach(function (co) { comps.push(co); }); });
+      var bomHtml = '';
+      if (comps.length) {
+        var rows = comps.map(function (co, idx) {
+          var unknown = !!co.is_unknown;
+          var mat = co.material || null;
+          return '<tr>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);text-align:center;">' + (idx + 1) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);font-weight:600;">' + esc(co.name || '—') +
+              (mat ? ' <span style="font-size:10px;color:#22c55e;">✓ ' + esc(mat.code || 'v katalogu') + '</span>' : (unknown ? ' <span style="font-size:10px;color:#f59e0b;">(nespárováno)</span>' : '')) + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);font-size:12px;">' + esc(co.configuration || '') + '</td>' +
+            '<td style="padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;">' + (co.quantity != null ? co.quantity : 1) + ' ks</td>' +
+          '</tr>';
+        }).join('');
+        bomHtml =
+          '<div style="margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);font-weight:700;">Kusovník (' + comps.length + ' položek)</div>' +
+          '<table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;">' +
+            '<thead><tr style="text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;">' +
+              '<th style="padding:4px 8px;width:34px;text-align:center;">#</th><th style="padding:4px 8px;">Položka</th><th style="padding:4px 8px;">Konfigurace</th><th style="padding:4px 8px;text-align:right;">Množství</th>' +
+            '</tr></thead><tbody>' + rows + '</tbody></table>';
+      }
+
       var row = function (k, val) { return val ? ('<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><div style="min-width:130px;color:var(--text2);">' + k + '</div><div style="font-weight:600;">' + esc(val) + '</div></div>') : ''; };
       el.innerHTML =
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">' +
@@ -1120,6 +1144,7 @@
         row('Poznámka konstruktéra', lastNote) +
         '<div style="margin-top:12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);font-weight:700;">Soubory ke stažení</div>' +
         pillsHtml +
+        bomHtml +
         (matches.length > 1 ? '<div style="margin-top:10px;font-size:11px;color:var(--text2);">Nalezeno více verzí (' + matches.length + '), zobrazena nejnovější.</div>' : '');
     }
 
