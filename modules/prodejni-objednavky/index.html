@@ -2894,14 +2894,38 @@
     // Časová osa — co se s objednávkou dělo a kdy (z časových polí objednávky + faktur).
     function renderOrderTimeline(order) {
       if (!order) return '';
-      function invLabel(inv) { return (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'zálohová faktura' : 'faktura'; }
+      function invLabel(inv) { return (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'Zálohová faktura' : 'Faktura'; }
+      // Stav dokladu (vč. detekce po splatnosti) — pro barevný odznak u odeslaných dokladů.
+      var DOCSTAT = {
+        draft: { label: 'Koncept', color: '#9ca3af' }, issued: { label: 'Vystavena', color: '#3b82f6' },
+        sent: { label: 'Odeslána', color: '#3b82f6' }, partially_paid: { label: 'Částečně zaplacena', color: '#eab308' },
+        paid: { label: 'Zaplacena', color: '#10b981' }, overdue: { label: 'Po splatnosti', color: '#ef4444' },
+        cancelled: { label: 'Storno', color: '#ef4444' },
+      };
+      function invStat(inv) {
+        var s = DOCSTAT[inv.status] || { label: inv.status || '—', color: '#9ca3af' };
+        if (inv.status !== 'paid' && inv.status !== 'cancelled' && inv.date_due && new Date(inv.date_due) < new Date()) s = DOCSTAT.overdue;
+        return s;
+      }
+      var chipCss = 'display:inline-flex;align-items:center;gap:6px;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;color:var(--text);';
       var ev = [];
-      function add(ts, label, detail) { if (ts) ev.push({ ts: new Date(ts), label: label, detail: detail || '' }); }
+      function add(ts, label, detail, html) { if (ts) ev.push({ ts: new Date(ts), label: label, detail: detail || '', html: html || '' }); }
       add(order.created_at, 'Objednávka vytvořena', order.order_number);
       if (order.customer_email) add(order.created_at, 'Odesláno zákazníkovi k potvrzení', order.customer_email);
       add(order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : '');
       add(order.authorized_at, 'Autorizováno dodavatelem', '');
-      add(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', '');
+      // Doklady odeslány zákazníkovi → vypiš KTERÉ, s odkazem na PDF a stavem.
+      var docChips = [];
+      if (order.confirmation_pdf_path || ['signed', 'confirmed', 'ordered', 'delivered', 'in_production'].indexOf(order.status) >= 0) {
+        docChips.push('<a href="/api/wh/orders/' + order.id + '/confirmation-pdf" target="_blank" rel="noopener" style="' + chipCss + '">📄 Objednávka ' + esc(order.order_number) + '</a>');
+      }
+      (order.invoices || []).forEach(function (inv) {
+        var s = invStat(inv);
+        docChips.push('<a href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="' + chipCss + '">📄 ' + esc(invLabel(inv)) + ' ' + esc(inv.invoice_number || ('#' + inv.id)) +
+          ' <span class="badge" style="background:' + s.color + '22;color:' + s.color + ';">' + esc(s.label) + '</span></a>');
+      });
+      var docsHtml = docChips.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">' + docChips.join('') + '</div>' : '';
+      add(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', '', docsHtml);
       (order.invoices || []).forEach(function (inv) { add(inv.date_issued, 'Vystavena ' + invLabel(inv), inv.invoice_number || ''); });
       add(order.deposit_paid_at, 'Záloha zaplacena', '');
       add(order.final_paid_at, 'Doplatek zaplacen', '');
@@ -2914,7 +2938,7 @@
         return '<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;">' +
           '<div style="min-width:112px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;">' + e.ts.toLocaleString('cs-CZ') + '</div>' +
           '<div style="width:8px;height:8px;border-radius:50%;background:#c9a24b;margin-top:5px;flex:none;"></div>' +
-          '<div style="font-size:13px;"><strong>' + esc(e.label) + '</strong>' + (e.detail ? ' <span style="color:var(--text2);">· ' + esc(e.detail) + '</span>' : '') + '</div>' +
+          '<div style="font-size:13px;flex:1;"><strong>' + esc(e.label) + '</strong>' + (e.detail ? ' <span style="color:var(--text2);">· ' + esc(e.detail) + '</span>' : '') + (e.html || '') + '</div>' +
         '</div>';
       }).join('');
       return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
