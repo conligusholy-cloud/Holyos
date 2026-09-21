@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="assets/icon-180.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=Dancing+Script:wght@600;700&display=swap" rel="stylesheet" />
 <style>
   :root{
     --bg:#080809; --bg2:#0e0e12; --surface:#141417; --surface2:#1a1a1f;
@@ -79,7 +79,17 @@
   .btn.ghost::after{display:none}
 
   /* ── Hero ───────────────────────────────────────────────────── */
-  .hero{position:relative;z-index:3;padding:84px 0 46px;text-align:center}
+  .hero{position:relative;z-index:3;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;
+    padding:120px 0 60px;text-align:left}
+  .hero-media{position:absolute;inset:0;z-index:-2;background:#080809 url("assets/hero.jpg") center 35%/cover no-repeat}
+  .hero-media::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(90deg,rgba(8,8,9,.94) 0%,rgba(8,8,9,.78) 38%,rgba(8,8,9,.32) 72%,rgba(8,8,9,.55) 100%),
+      linear-gradient(0deg,rgba(8,8,9,.96) 2%,transparent 45%),linear-gradient(180deg,rgba(8,8,9,.7) 0%,transparent 22%)}
+  .script{font-family:'Dancing Script',cursive;font-weight:700;font-size:clamp(26px,4vw,44px);line-height:1.05;
+    background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 2px 18px rgba(201,162,75,.35));transform:rotate(-4deg)}
+  .hero-script{position:absolute;top:16%;right:4%;text-align:right;z-index:4;display:none}
+  @media(min-width:900px){.hero-script{display:block}}
   .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:999px;
     padding:7px 15px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-soft);
     background:rgba(201,162,75,.06);backdrop-filter:blur(4px)}
@@ -107,6 +117,12 @@
   .clab{margin-top:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted2)}
   .launch-date{margin-top:8px;font-size:14px;letter-spacing:.3em;color:var(--gold-soft);text-transform:uppercase;
     text-shadow:0 0 24px rgba(201,162,75,.3)}
+  /* Hero left-aligned (foto vede) */
+  .hero .subline{margin-left:0}
+  .hero .count{justify-content:flex-start}
+  .hero .capture{margin-left:0}
+  .hero .pill{backdrop-filter:none}
+  #space{opacity:.5}
 
   /* ── Email capture ──────────────────────────────────────────── */
   .capture{margin:32px auto 0;max-width:540px}
@@ -193,9 +209,21 @@
   details[open] summary .pm{transform:rotate(45deg)}
   details .a{padding:0 0 18px;color:var(--muted);font-size:14.5px;font-weight:300}
 
-  /* ── Final CTA ──────────────────────────────────────────────── */
-  .final{position:relative;z-index:3;text-align:center;padding:96px 0;
-    background:radial-gradient(90% 120% at 50% 120%, rgba(201,162,75,.16), transparent 60%)}
+  /* ── Fotopás (story) ────────────────────────────────────────── */
+  .photoband{position:relative;z-index:3;min-height:440px;display:flex;align-items:center;overflow:hidden}
+  .photoband .pimg{position:absolute;inset:0;z-index:-1;background-size:cover;background-position:center}
+  .photoband.story .pimg{background-image:url("assets/story.jpg")}
+  .photoband .pimg::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(90deg,rgba(8,8,9,.92) 0%,rgba(8,8,9,.7) 45%,rgba(8,8,9,.2) 100%)}
+  .photoband .pin{max-width:560px}
+  .photoband h2{margin-bottom:14px}
+  .photoband p{color:var(--muted);font-size:16px;font-weight:300;margin-top:6px}
+
+  /* ── Final CTA (Země) ───────────────────────────────────────── */
+  .final{position:relative;z-index:3;text-align:center;padding:120px 0;overflow:hidden}
+  .final .pimg{position:absolute;inset:0;z-index:-1;background:url("assets/earth.jpg") center/cover}
+  .final .pimg::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(90% 120% at 50% 50%, rgba(8,8,9,.35), rgba(8,8,9,.82) 78%),linear-gradient(0deg,rgba(8,8,9,.9),transparent 60%)}
 
   /* ── Footer ─────────────────────────────────────────────────── */
   footer{position:relative;z-index:3;border-top:1px solid var(--line-soft);padding:34px 0;text-align:center;color:var(--muted2);font-size:12.5px}
@@ -257,7 +285,10 @@
 </header>
 
 <!-- HERO -->
-<section class="hero wrap">
+<section class="hero">
+  <div class="hero-media"></div>
+  <div class="hero-script"><span class="script" data-i="script">Svoboda<br>není náhoda</span></div>
+  <div class="wrap">
   <span class="pill"><span class="dot"></span><span data-i="pill">Mega projekt · odpočet spuštěn</span></span>
   <h1 class="title" data-i="h1">Startuje <span class="g">Compounder</span></h1>
   <p class="subline" data-i="sub">Nová éra automatizace, technologie a svobody. <b>10. 10. 2026</b> se otevírá to, co mění pravidla hry.</p>
@@ -279,18 +310,20 @@
     <div class="cmsg" id="cmsg" role="status"></div>
     <div class="microtrust" data-i="cap_trust">Žádný spam. Jen jedna zpráva — až to začne.</div>
   </div>
+  </div>
 </section>
 
 <!-- MARQUEE -->
 <div class="marquee" aria-hidden="true"><div class="track" id="mtrack"></div></div>
 
-<!-- ABOUT -->
-<section class="sec wrap" id="o">
-  <div class="reveal">
+<!-- ABOUT / STORY BAND -->
+<section class="photoband story" id="o">
+  <div class="pimg"></div>
+  <div class="wrap"><div class="pin reveal">
     <div class="eyebrow" data-i="ab_eye">Co je Compounder</div>
     <h2 data-i="ab_h">Hodnota, která <span class="g">roste sama</span>.</h2>
-    <p class="intro" data-i="ab_p">Compounder je platforma i filozofie zároveň. Spojuje moderní technologii, chytrou automatizaci a data do jednoho systému, který pracuje za tebe — den i noc. Výsledek je jen jeden: svoboda rozhodovat, růst a žít po svém.</p>
-  </div>
+    <p data-i="ab_p">Compounder je platforma i filozofie zároveň. Spojuje moderní technologii, chytrou automatizaci a data do jednoho systému, který pracuje za tebe — den i noc. Výsledek je jen jeden: svoboda rozhodovat, růst a žít po svém.</p>
+  </div></div>
 </section>
 
 <!-- FEATURES -->
@@ -369,6 +402,7 @@
 
 <!-- FINAL CTA -->
 <section class="final">
+  <div class="pimg"></div>
   <div class="wrap reveal">
     <div class="eyebrow center" data-i="fc_eye">Poslední výzva</div>
     <h2 class="center" data-i="fc_h">Buď u toho, <span class="g">až to začne</span>.</h2>
@@ -423,7 +457,7 @@
       q2:'Kolik to stojí?',q2a:'Podmínky zveřejníme před startem. Ranní ptáčata, která jsou u toho teď, budou mít nejlepší vstupní podmínky.',
       q3:'Pro koho je Compounder?',q3a:'Pro každého, kdo chce, aby technologie pracovala za něj — a kdo si cení svobody a výsledků víc než rutiny.',
       q4:'Jak se přihlásím?',q4a:'Zadej e-mail v poli výše. Jakmile se brány otevřou, ozveme se ti jako prvním.',
-      fc_eye:'Poslední výzva',fc_h:'Buď u toho, <span class="g">až to začne</span>.',ft:'Kde hodnota roste sama.',
+      fc_eye:'Poslední výzva',fc_h:'Buď u toho, <span class="g">až to začne</span>.',ft:'Kde hodnota roste sama.',script:'Svoboda<br>není náhoda',
       okmsg:'Hotovo! Jsi na seznamu — ozveme se ti jako prvním. 🚀',dupmsg:'Tenhle e-mail už na seznamu máme — jsi u toho. ✓',
       errmail:'Zadej platný e-mail.',errnet:'Nepodařilo se odeslat. Zkus to prosím znovu.',sending:'Odesílám…'},
     en:{nav_about:'Project',nav_tech:'Technology',nav_road:'Journey',nav_faq:'FAQ',nav_cta:'Be there',
@@ -454,7 +488,7 @@
       q2:'How much does it cost?',q2a:'We’ll announce terms before launch. Early birds who are here now get the best entry conditions.',
       q3:'Who is Compounder for?',q3a:'For anyone who wants technology to work for them — and who values freedom and results over routine.',
       q4:'How do I sign up?',q4a:'Enter your email in the field above. The moment the gates open, you’ll be the first to hear.',
-      fc_eye:'Final call',fc_h:'Be there <span class="g">when it begins</span>.',ft:'Where value grows on its own.',
+      fc_eye:'Final call',fc_h:'Be there <span class="g">when it begins</span>.',ft:'Where value grows on its own.',script:'Freedom<br>is no accident',
       okmsg:'Done! You’re on the list — we’ll reach out first. 🚀',dupmsg:'This email is already on the list — you’re in. ✓',
       errmail:'Enter a valid email.',errnet:'Couldn’t send. Please try again.',sending:'Sending…'}
   };
