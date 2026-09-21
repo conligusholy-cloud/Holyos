@@ -10,6 +10,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const { z } = require('zod');
 
 let settings = null;
 try {
@@ -114,6 +115,35 @@ function e164(num) {
   if (/^\d{9}$/.test(num)) return '+420' + num;
   return num;
 }
+// ─── Kredit telefonního čísla (Infolinka) ────────────────────────────────────
+// Kredit se páruje podle POSLEDNÍCH 9 ČÍSLIC, ať je jedno, jestli číslo dorazí
+// jako +420777123456, 00420777123456 nebo 777 123 456.
+function phoneTail(num) {
+  const d = String(num || '').replace(/\D/g, '');
+  return d.length >= 6 ? d.slice(-9) : '';
+}
+// Načte kredity pro seznam čísel → mapa { tail: {amount, currency, note, ...} }.
+async function creditMapFor(numbers) {
+  const map = {};
+  try {
+    if (!prisma.phoneCredit) return map;
+    const tails = [...new Set((numbers || []).map(phoneTail).filter(Boolean))];
+    if (!tails.length) return map;
+    const rows = await prisma.phoneCredit.findMany({ where: { phone_tail: { in: tails } } });
+    rows.forEach((r) => {
+      map[r.phone_tail] = {
+        phone: r.phone,
+        phone_tail: r.phone_tail,
+        amount: Number(r.amount),
+        currency: r.currency,
+        note: r.note || null,
+        updated_at: r.updated_at,
+      };
+    });
+  } catch (e) { console.warn('[voice] creditMapFor:', e.message); }
+  return map;
+}
+
 function encList(arr) {
   return Buffer.from(JSON.stringify(arr || []), 'utf8').toString('base64');
 }
@@ -1035,6 +1065,12 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         c.service_matched_by = c.service_created ? 'time' : null;
       });
     } catch (e) { console.warn('[voice] service check:', e.message); }
+    // Kredit přiřazený volajícímu číslu — ať ho operátor vidí u hovoru.
+    // Když číslo kredit nemá, pole zůstane null a v UI se nic nezobrazuje.
+    try {
+      const credits = await creditMapFor(calls.map((c) => c.from_number));
+      calls.forEach((c) => { c.credit = credits[phoneTail(c.from_number)] || null; });
+    } catch (e) { console.warn('[voice] credit join:', e.message); }
     res.json(calls);
   } catch (err) {
     next(err);
@@ -1205,6 +1241,118 @@ router.post('/calls/backfill-locations', requireAuth, async (req, res, next) => 
       } catch (e) { console.warn('[voice] backfill location', c.id, e.message); }
     }
     res.json({ ok: true, fixed, checked });
+  } catch (err) { next(err); }
+});
+
+// ═══ KREDIT TELEFONNÍHO ČÍSLA (Infolinka) ════════════════════════════════════
+// Operátor přiřadí číslu, které už volalo, kredit (výši volí sám). Při dalším
+// hovoru z téhož čísla se kredit ukáže na jeho obrazovce. Změna i smazání jsou
+// v tomtéž seznamu volajících čísel.
+
+// GET /api/voice/phone-credits — všechny přiřazené kredity (pro správu).
+router.get('/phone-credits', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.phoneCredit) return res.json([]);
+    const rows = await prisma.phoneCredit.findMany({ orderBy: { updated_at: 'desc' }, take: 500 });
+    res.json(rows.map((r) => ({
+      phone: r.phone,
+      phone_tail: r.phone_tail,
+      amount: Number(r.amount),
+      currency: r.currency,
+      note: r.note || null,
+      updated_at: r.updated_at,
+    })));
+  } catch (err) { next(err); }
+});
+
+// PUT /api/voice/phone-credits — vytvoří nebo změní kredit u čísla (upsert).
+// Tělo: { phone, amount, currency?, note? }
+router.put('/phone-credits', requireAuth, express.json(), async (req, res, next) => {
+  try {
+    if (!prisma.phoneCredit) return res.status(503).json({ error: 'Kredity nejsou dostupné.' });
+    // Částku bereme i s desetinnou čárkou („150,5") — operátoři ji tak píšou.
+    const amountIn = z.preprocess(
+      (v) => (typeof v === 'string' ? Number(v.replace(',', '.').trim()) : v),
+      z.number({ error: 'Zadej platnou částku.' }).refine(Number.isFinite, 'Zadej platnou částku.')
+    );
+    const schema = z.object({
+      phone: z.string().min(6, 'Zadej telefonní číslo.'),
+      amount: amountIn,
+      currency: z.string().trim().min(1).max(8).optional(),
+      note: z.string().max(2000).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(' ') });
+    }
+    const { phone, amount, currency, note } = parsed.data;
+    const tail = phoneTail(phone);
+    if (!tail) return res.status(400).json({ error: 'Telefonní číslo není platné.' });
+    const userId = (req.user && req.user.id) || null;
+    const data = {
+      phone: e164(phone) || String(phone),
+      amount,
+      currency: (currency || 'CZK').toUpperCase(),
+      note: note ? String(note).trim() : null,
+      updated_by_user_id: userId,
+    };
+    const row = await prisma.phoneCredit.upsert({
+      where: { phone_tail: tail },
+      update: data,
+      create: Object.assign({ phone_tail: tail, created_by_user_id: userId }, data),
+    });
+    res.json({
+      ok: true,
+      credit: {
+        phone: row.phone,
+        phone_tail: row.phone_tail,
+        amount: Number(row.amount),
+        currency: row.currency,
+        note: row.note || null,
+        updated_at: row.updated_at,
+      },
+    });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/voice/phone-credits/:phone — smaže kredit u čísla.
+// Po smazání se u čísla nic nezobrazuje (jako by kredit nikdy nemělo).
+router.delete('/phone-credits/:phone', requireAuth, async (req, res, next) => {
+  try {
+    if (!prisma.phoneCredit) return res.status(503).json({ error: 'Kredity nejsou dostupné.' });
+    const tail = phoneTail(req.params.phone);
+    if (!tail) return res.status(400).json({ error: 'Telefonní číslo není platné.' });
+    await prisma.phoneCredit.deleteMany({ where: { phone_tail: tail } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/voice/active?line=infolinka — hovory, které PRÁVĚ TEĎ běží (AI je na
+// lince). Bere se živý stav z ConversationRelay WS. Operátor díky tomu vidí
+// kredit volajícího ještě během hovoru, než se hovor uloží do záznamů.
+router.get('/active', requireAuth, async (req, res, next) => {
+  try {
+    let live = null;
+    try { live = require('../services/voice/relay-ws').calls; } catch (_) { live = null; }
+    if (!live || typeof live.forEach !== 'function') return res.json([]);
+    const wantLine = req.query.line !== undefined ? normLine(req.query.line) : null;
+    const out = [];
+    live.forEach((st, sid) => {
+      if (!st || st.mode === 'outbound') return;
+      const stLine = normLine(st.line);
+      if (wantLine && stLine !== wantLine) return;
+      out.push({
+        call_sid: sid,
+        line: stLine,
+        from_number: st.from || '',
+        to_number: st.to || '',
+        started_at: st.startedAt || null,
+      });
+    });
+    const credits = await creditMapFor(out.map((c) => c.from_number));
+    out.forEach((c) => { c.credit = credits[phoneTail(c.from_number)] || null; });
+    out.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0));
+    res.json(out);
   } catch (err) { next(err); }
 });
 

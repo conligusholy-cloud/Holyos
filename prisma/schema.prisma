@@ -6465,6 +6465,27 @@ model InboundSms {
   @@map("inbound_sms")
 }
 
+// Kredit přiřazený telefonnímu číslu (Infolinka). Operátor ho zadá u čísla, které
+// už na Infolinku volalo; při dalším hovoru z téhož čísla se kredit ukáže na
+// obrazovce operátora. Když kredit u čísla není, nic se nezobrazuje.
+// Párování je podle POSLEDNÍCH 9 ČÍSLIC (phone_tail) — ať je jedno, jestli číslo
+// přijde jako +420777123456, 00420777123456 nebo 777 123 456.
+model PhoneCredit {
+  id                 Int      @id @default(autoincrement())
+  phone              String   @db.VarChar(40)  // číslo tak, jak ho operátor zadal / jak volalo
+  phone_tail         String   @unique @db.VarChar(16) // posledních 9 číslic — klíč pro párování
+  amount             Decimal  @db.Decimal(12, 2)      // výše kreditu (volí operátor)
+  currency           String   @default("CZK") @db.VarChar(8)
+  note               String?  @db.Text                 // volitelná poznámka (za co kredit je)
+  created_by_user_id Int?
+  updated_by_user_id Int?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@index([phone])
+  @@map("phone_credits")
+}
+
 // =============================================================================
 // PŘEKLADAČ — živý „chatovací" překladač na mobilu (Web Speech + AI překlad)
 // =============================================================================

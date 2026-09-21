@@ -251,6 +251,7 @@ function attach(server) {
       welcomeByTwilio,
       startedAt: new Date(),
       mode,
+      line, // příchozí linka (obchod | infolinka) — kvůli přehledu právě běžících hovorů
       handedOff: false,
       formSmsSent: false,
       smsLog: [],

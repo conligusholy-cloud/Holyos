@@ -1331,7 +1331,7 @@
           // Kolikrát každé číslo volalo (z načtené historie).
           var counts={};
           rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th title="Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?">Servis</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th title="Kredit přiřazený tomuto číslu — operátor ho vidí i při dalším hovoru">Kredit</th><th>Kdo</th><th>Co chtěl</th><th title="Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?">Servis</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
           rows.forEach(function(c){
             var num=c.from_number;
             var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
@@ -1339,6 +1339,7 @@
             html+='<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
               +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
               +'<td><a onclick="event.stopPropagation();infoNumHistory(\''+k+'\')" title="Historie tohoto čísla (časová osa)" style="cursor:pointer;text-decoration:underline;'+(rep?'color:#eab308;font-weight:600;':'color:#22d3ee;')+'">'+esc(num||'')+' ('+cnt+'×)</a></td>'
+              +'<td onclick="event.stopPropagation()">'+creditCell(c)+'</td>'
               +'<td>'+esc(c.caller_name||'—')+'</td>'
               +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
               +'<td style="text-align:center;">'+serviceCell(c)+'</td>'
@@ -1349,11 +1350,71 @@
               +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Kompletní přepis přes OpenAI Whisper (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
               +'<td onclick="event.stopPropagation()">'+rec+'</td>'
               +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="12" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="13" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
           });
           html+='</tbody></table></div>';
           body.innerHTML=html;
         }catch(e){ body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+esc(e.message)+'</div>'; }
+      };
+      // ── Kredit telefonního čísla ────────────────────────────────────────────
+      // Kredit se zobrazuje jen u čísel, která ho mají přiřazený. Operátor ho
+      // tady zadá, změní nebo smaže; při dalším hovoru ho uvidí na obrazovce.
+      function infoMoney(a, cur){
+        var n=Number(a); if(!isFinite(n)) return '';
+        return n.toLocaleString('cs-CZ',{minimumFractionDigits:(n%1?2:0),maximumFractionDigits:2})+' '+(cur||'CZK');
+      }
+      function creditOf(tail){
+        var found=null;
+        (_infoCalls||[]).forEach(function(c){ if(String(c.from_number||'').replace(/\D/g,'').slice(-9)===tail && c.credit) found=c.credit; });
+        return found;
+      }
+      function creditCell(c){
+        var num=c.from_number||'';
+        var btn='<button class="btn btn-secondary" onclick="event.stopPropagation();infoEditCredit(\''+esc(num)+'\')" title="Přiřadit / změnit / smazat kredit" style="padding:3px 8px;font-size:12px;margin-left:6px;">💰</button>';
+        if(!c.credit) return '<span style="color:var(--text2);">—</span>'+btn;
+        var note=c.credit.note?(' title="'+esc(c.credit.note)+'"'):'';
+        return '<span style="color:#facc15;font-weight:700;"'+note+'>'+esc(infoMoney(c.credit.amount,c.credit.currency))+'</span>'+btn;
+      }
+      // Dialog: přiřazení, změna i smazání kreditu (stejné chování jako na mobilu).
+      window.infoEditCredit = function(phone){
+        var tail=String(phone||'').replace(/\D/g,'').slice(-9);
+        if(!tail){ alert('Neplatné telefonní číslo.'); return; }
+        var cur=creditOf(tail);
+        var ov=document.createElement('div'); ov.className='modal-overlay';
+        ov.innerHTML='<div class="modal" style="width:420px;max-width:96vw;">'
+          +'<h2 style="margin-bottom:4px;">💰 Kredit k číslu</h2>'
+          +'<div style="color:var(--text2);font-size:13px;margin-bottom:14px;">'+esc(phone||'')+'</div>'
+          +'<div class="form-row"><label>Výše kreditu (Kč)</label><input id="cr-amount" type="number" step="0.01" placeholder="např. 200" value="'+(cur?esc(String(cur.amount)):'')+'"></div>'
+          +'<div class="form-row"><label>Poznámka (nepovinné)</label><input id="cr-note" type="text" placeholder="za co kredit je" value="'+(cur&&cur.note?esc(cur.note):'')+'"></div>'
+          +'<div id="cr-err" style="color:#ef4444;font-size:12px;min-height:16px;"></div>'
+          +'<div class="modal-actions">'
+            +(cur?'<button class="btn btn-secondary" id="cr-del" style="color:#ef4444;margin-right:auto;">🗑 Smazat kredit</button>':'')
+            +'<button class="btn btn-secondary" id="cr-cancel">Zrušit</button>'
+            +'<button class="btn btn-primary" id="cr-save">Uložit</button>'
+          +'</div></div>';
+        document.getElementById('modal-root').appendChild(ov);
+        function close(){ ov.remove(); }
+        ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+        var err=ov.querySelector('#cr-err');
+        ov.querySelector('#cr-cancel').onclick=close;
+        ov.querySelector('#cr-save').onclick=function(){
+          var v=ov.querySelector('#cr-amount').value;
+          var note=ov.querySelector('#cr-note').value;
+          if(String(v).trim()===''||isNaN(Number(String(v).replace(',','.')))){ err.textContent='Zadej výši kreditu.'; return; }
+          err.textContent='Ukládám…';
+          api('/phone-credits',{ method:'PUT', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ phone: phone, amount: Number(String(v).replace(',','.')), note: note||'' }) })
+            .then(function(){ close(); window.infoLoadCalls(); })
+            .catch(function(e){ err.textContent='Uložení se nepovedlo: '+e.message; });
+        };
+        var del=ov.querySelector('#cr-del');
+        if(del) del.onclick=function(){
+          if(!confirm('Opravdu smazat kredit u čísla '+phone+'? Číslo se pak bude chovat, jako by kredit nikdy nemělo.')) return;
+          err.textContent='Mažu…';
+          api('/phone-credits/'+encodeURIComponent(tail),{ method:'DELETE' })
+            .then(function(){ close(); window.infoLoadCalls(); })
+            .catch(function(e){ err.textContent='Smazání se nepovedlo: '+e.message; });
+        };
       };
       function trStatusLabel(s){ s=(s||'').toLowerCase(); if(s==='completed'||s==='answered') return ['zvednuto','#22c55e']; if(s==='no-answer'||s==='noanswer') return ['nikdo nezvedl','#f59e0b']; if(s==='busy') return ['obsazeno','#f59e0b']; if(s==='failed') return ['chyba','#ef4444']; if(s==='canceled') return ['zrušeno','#94a3b8']; return [s||'—','#94a3b8']; }
       function transferWho(a){ return a.name || a.number || '—'; }
@@ -1370,13 +1431,18 @@
         var rows=log.map(function(a){ var st=trStatusLabel(a.status); return '<div style="margin:2px 0;">'+esc(fmtDate(a.at))+' · <b>'+esc(transferWho(a))+'</b>'+((a.number&&a.name)?(' <span style="color:var(--text2);">('+esc(a.number)+')</span>'):'')+' → <span style="color:'+st[1]+';">'+esc(st[0])+'</span></div>'; }).join('');
         return '<div style="margin-bottom:10px;"><b>Přesměrování na kolegy:</b><div style="margin-top:4px;font-size:13px;">'+rows+'</div></div>';
       }
+      // Ikona ➕ — založí servisní požadavek přímo z tohoto hovoru (předvyplní volajícího, telefon, místo i shrnutí).
+      function srAddBtn(c){
+        return '<button class="btn btn-secondary" onclick="event.stopPropagation();infoNewServiceRequest(\''+c.id+'\')" title="Vytvořit servisní požadavek z tohoto hovoru" style="padding:2px 8px;font-size:14px;line-height:1.4;">🛠️+</button>';
+      }
       function serviceCell(c){
-        if(!c.service_needed) return '<span style="color:var(--text2);">—</span>';
         if(c.service_created){
+          if(c.service_matched_by==='link') return '<span style="color:#22c55e;" title="Požadavek založený přímo z tohoto hovoru">✅ 🔗 požadavek</span>';
           if(c.service_matched_by==='phone') return '<span style="color:#22c55e;" title="Požadavek spárován podle telefonu volajícího">✅ 📞 požadavek</span>';
           return '<span style="color:#22c55e;" title="Požadavek vznikl do 5 min po hovoru (dle času)">✅ požadavek</span>';
         }
-        return '<span style="color:#ef4444;font-weight:700;" title="Hovor vypadá na poruchu, ale nevznikl servisní požadavek volajícího!">❗❗ chybí</span>';
+        if(!c.service_needed) return '<span style="color:var(--text2);margin-right:6px;">—</span>'+srAddBtn(c);
+        return '<span style="color:#ef4444;font-weight:700;margin-right:6px;" title="Hovor vypadá na poruchu, ale nevznikl servisní požadavek volajícího!">❗❗ chybí</span>'+srAddBtn(c);
       }
       function smsCell(c){
         var log=Array.isArray(c.sms_log)?c.sms_log:[];
@@ -1428,9 +1494,32 @@
         // 2) Kompletní přepis — OpenAI Whisper z nahrávky (vč. technika).
         var ftInner = full ? fmtFull(full) : (c.audio_url ? '<span style="color:var(--text2);">Klikni na 📝 Vytvořit pro kompletní přepis (OpenAI Whisper + rozlišení mluvčích, vč. technika).</span>' : '<span style="color:var(--text2);">Bez nahrávky k přepisu.</span>');
         var ft = '<div style="font-size:13px;border-left:3px solid #eab308;padding-left:10px;"><b>Kompletní přepis</b> <span style="color:var(--text2);">(OpenAI Whisper — vč. technika)</span> <button class="btn btn-secondary" style="font-size:11px;padding:2px 8px;" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\',true)">'+(full?'🔁 Přepsat znovu':'📝 Vytvořit')+'</button><div id="ft-'+c.id+'" data-has="'+(full?'1':'')+'" style="margin-top:6px;">'+ftInner+'</div></div>';
-        return s + transferDetail(c) + smsDetail(c) + audio + tw + ft;
+        var srBtn = c.service_created
+          ? '<div style="margin-bottom:10px;color:#22c55e;font-size:13px;">🛠️ K tomuto hovoru už servisní požadavek existuje.</div>'
+          : '<div style="margin-bottom:10px;"><button class="btn btn-primary" onclick="event.stopPropagation();infoNewServiceRequest(\''+c.id+'\')" style="font-size:13px;padding:6px 12px;">🛠️ + Servisní požadavek z hovoru</button></div>';
+        return s + srBtn + transferDetail(c) + smsDetail(c) + audio + tw + ft;
       }
       window.infoToggleCall = function(id){ var r=el('info-call-'+id); if(r) r.style.display=(r.style.display==='none')?'':'none'; };
+      // Vytvoření servisního požadavku z konkrétního hovoru na Infolinku.
+      // Předvyplní formulář v sekci „Servisní požadavky" a uloží vazbu na hovor (voice_call_id).
+      window.infoNewServiceRequest = function(id){
+        var c=(_infoCalls||[]).filter(function(x){ return String(x.id)===String(id); })[0];
+        if(!c){ alert('Hovor se nepodařilo najít — obnov seznam hovorů.'); return; }
+        if(typeof window.srOpenFromCall!=='function'){ alert('Formulář servisních požadavků se ještě nenačetl. Zkus to prosím za chvíli.'); return; }
+        var kdy=fmtDate(c.started_at);
+        var popis=[];
+        if(c.caller_intent) popis.push('Co chtěl: '+c.caller_intent);
+        if(c.summary && c.summary!==c.caller_intent) popis.push('Shrnutí hovoru: '+c.summary);
+        if(c.location) popis.push('Místo: '+c.location);
+        popis.push('Zdroj: hovor na Infolinku '+kdy+' ('+(c.from_number||'')+')');
+        window.srOpenFromCall({
+          problem: c.location||'',
+          ordered_by: c.caller_name||c.from_number||'',
+          phone: c.from_number||'',
+          description: popis.join('\n'),
+          voice_call_id: c.id
+        }, function(){ window.infoLoadCalls(); });
+      };
       // Časová osa hovorů jednoho čísla (klik na číslo v tabulce).
       window.infoNumHistory = function(tail){
         var list=(_infoCalls||[]).filter(function(c){ return String(c.from_number||'').replace(/\D/g,'').slice(-9)===tail; });
@@ -1452,6 +1541,10 @@
         var ov=document.createElement('div'); ov.className='modal-overlay';
         ov.innerHTML='<div class="modal" style="width:640px;max-width:96vw;"><h2 style="margin-bottom:6px;">📞 '+esc(num)+'</h2>'
           +'<div style="color:var(--text2);font-size:13px;margin-bottom:14px;">'+list.length+'× volal na Infolinku'+(kdo?(' · '+esc(kdo)):'')+' — časová osa (od nejstaršího):</div>'
+          +'<div style="margin-bottom:14px;padding:10px 12px;border:1px solid rgba(250,204,21,0.4);background:rgba(250,204,21,0.07);border-radius:10px;font-size:13px;">'
+            +'💰 <b>Kredit:</b> '+(creditOf(tail)?('<span style="color:#facc15;font-weight:700;">'+esc(infoMoney(creditOf(tail).amount,creditOf(tail).currency))+'</span>'+(creditOf(tail).note?('<span style="color:var(--text2);"> — '+esc(creditOf(tail).note)+'</span>'):'')):'<span style="color:var(--text2);">nepřiřazen</span>')
+            +' <button class="btn btn-secondary" style="padding:3px 10px;font-size:12px;margin-left:8px;" onclick="infoEditCredit(\''+esc(num)+'\')">Upravit</button>'
+          +'</div>'
           +'<div style="max-height:60vh;overflow:auto;">'+items+'</div>'
           +'<div class="modal-actions"><button class="btn btn-secondary" onclick="this.closest(\'.modal-overlay\').remove()">Zavřít</button></div></div>';
         document.getElementById('modal-root').appendChild(ov);
@@ -1622,6 +1715,19 @@
           .catch(function(e){ if(m){ m.style.color='#ef4444'; m.textContent='Uložení selhalo: '+e.message; } });
       });
     }
+    // Zkusí najít stroj v provozu podle textu (místo z hovoru). Bez shody vrátí původní text.
+    function norm(s){ return (s==null?'':String(s)).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim(); }
+    function matchMachine(text){
+      var t=norm(text); if(!t || !_machines.length) return text;
+      var exact=_machines.filter(function(m){ return norm(m.name)===t; })[0];
+      if(exact) return exact.name;
+      var part=_machines.filter(function(m){ var n=norm(m.name); return n && (n.indexOf(t)>=0 || t.indexOf(n)>=0); })[0];
+      if(part) return part.name;
+      // Shoda přes slova (např. „Rychnov nad Kněžnou" ↔ „Prádlomat Rychnov").
+      var words=t.split(' ').filter(function(w){ return w.length>3; });
+      var byWord=_machines.filter(function(m){ var n=norm(m.name); return words.some(function(w){ return n.indexOf(w)>=0; }); })[0];
+      return byWord ? byWord.name : text;
+    }
     function loadMachines(){ return fetchJSON(API+'/machines?status=v_provozu').then(function(list){ _machines=Array.isArray(list)?list:[]; }).catch(function(){ _machines=[]; }); }
     function fmtDurSec(sec){ sec=Math.max(0,Math.floor(sec)); var h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60; return (h?(h+':'+('0'+m).slice(-2)):m)+':'+('0'+s).slice(-2); }
     function erCell(est,real,since){
@@ -1662,8 +1768,10 @@
       var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
       fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="10" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
     }
-    function openModal(row){
-      row=row||{}; var isNew=!row.id;
+    function openModal(row,opts){
+      row=row||{}; opts=opts||{}; var isNew=!row.id;
+      // Po uložení: zavřít, obnovit seznam a dát vědět volajícímu (např. tabulce hovorů Infolinky).
+      function done(){ close(); load(); if(typeof opts.onSaved==='function'){ try{ opts.onSaved(); }catch(e){} } }
       var ov=document.createElement('div'); ov.className='modal-overlay';
       ov.innerHTML='<div class="modal" style="width:640px"><h2>'+(isNew?'Nový servisní požadavek':'Servisní požadavek')+'</h2>'+
         '<div class="form-row"><label>Problém na stroji *</label><input id="sr-problem" list="sr-machine-list" autocomplete="off" placeholder="Vyber stroj v provozu nebo napiš vlastní" value="'+esc(row.problem||'')+'"><datalist id="sr-machine-list">'+_machines.map(function(m){ return '<option value="'+esc(m.name)+'">'+esc(m.type||'')+'</option>'; }).join('')+'</datalist></div>'+
@@ -1715,24 +1823,26 @@
       ov.querySelector('#sr-save').addEventListener('click',function(){
         var body={ problem:val('sr-problem'), action:val('sr-action'), task:val('sr-task'), photo_url:val('sr-photo'), description:val('sr-desc'), ordered_by:val('sr-ordered') };
         body.phone = val('sr-phone')||null;
+        // Vazba na hovor Infolinky (požadavek založený ikonou u hovoru).
+        if(isNew && row.voice_call_id) body.voice_call_id = row.voice_call_id;
         var estv=val('sr-est'); body.est_repair_min = estv!=='' ? (parseInt(estv,10)||0) : null;
         if(!body.problem){ alert('Vyplň Problém na stroji.'); return; }
         if(!body.ordered_by){ alert('Vyplň Servis objednal.'); return; }
         if(!isNew){ body.status=val('sr-status'); var a=val('sr-assignee'); body.assignee_id=a?parseInt(a,10):null; body.resolution=val('sr-resolution'); }
-        if(!isNew){ fetchJSON(API+'/requests/'+row.id,{method:'PATCH',body:JSON.stringify(body)}).then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); }); return; }
+        if(!isNew){ fetchJSON(API+'/requests/'+row.id,{method:'PATCH',body:JSON.stringify(body)}).then(done).catch(function(){ alert('Uložení selhalo.'); }); return; }
         // Nový požadavek — nejdřív kontrola duplicity (stejný stroj, otevřený požadavek).
         fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}).then(function(res){
           if(res&&res.duplicate&&res.existing){
             var ex=res.existing, stav=(STL[ex.status]||[ex.status])[0];
             var ok=confirm('⚠️ Na stroj „'+body.problem+'" už existuje otevřený požadavek #'+ex.id+' ('+stav+', řešitel '+(ex.assignee_name||'—')+').\n\n[OK] = Přidat tohoto volajícího k existujícímu (bez duplikátu)\n[Zrušit] = přesto vytvořit nový samostatný požadavek');
             if(ok){
-              fetchJSON(API+'/requests/'+ex.id+'/report-caller',{method:'POST',body:JSON.stringify({phone:body.phone||null, note:'Další hlášení: '+(body.ordered_by||'')})}).then(function(){ alert('Přidáno k existujícímu požadavku #'+ex.id+'.'); close(); load(); }).catch(function(){ alert('Nepodařilo se přidat k existujícímu.'); });
+              fetchJSON(API+'/requests/'+ex.id+'/report-caller',{method:'POST',body:JSON.stringify({phone:body.phone||null, note:'Další hlášení: '+(body.ordered_by||''), voice_call_id:body.voice_call_id||null})}).then(function(){ alert('Přidáno k existujícímu požadavku #'+ex.id+'.'); done(); }).catch(function(){ alert('Nepodařilo se přidat k existujícímu.'); });
             } else {
-              body.force=true; fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}).then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+              body.force=true; fetchJSON(API+'/requests',{method:'POST',body:JSON.stringify(body)}).then(done).catch(function(){ alert('Uložení selhalo.'); });
             }
             return;
           }
-          close(); load();
+          done();
         }).catch(function(){ alert('Uložení selhalo.'); });
       });
     }
@@ -1754,6 +1864,19 @@
         if(!window.__srReload){ window.__srReload=setInterval(function(){ var sec=document.querySelector('.section-panel.active'); if(sec&&sec.id==='section-pozadavky') load(); }, 30000); }
       }
       window.srEnsure=ensure; // volá se i při obnově sekce po refreshi
+      // Otevře formulář nového požadavku předvyplněný z hovoru Infolinky (ikona 🛠️+ u hovoru).
+      // pref = { problem, ordered_by, phone, description, voice_call_id }, onSaved = obnova tabulky hovorů.
+      window.srOpenFromCall=function(pref,onSaved){
+        ensure();
+        Promise.all([ _machines.length?Promise.resolve():loadMachines(), _solvers.length?Promise.resolve():loadSolvers() ])
+          .catch(function(){})
+          .then(function(){
+            pref=pref||{};
+            // Místo z hovoru zkus napárovat na konkrétní stroj v provozu (kvůli kontrole duplicit).
+            if(pref.problem) pref.problem=matchMachine(pref.problem);
+            openModal(pref, { onSaved:onSaved });
+          });
+      };
       // Odkaz na mobilní formulář (dle aktuální domény) + kopírování
       var shareUrl=location.origin+'/modules/servis/pozadavek.html';
       var urlEl=document.getElementById('sr-share-url'); if(urlEl) urlEl.textContent=shareUrl;
