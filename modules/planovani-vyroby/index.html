@@ -1387,18 +1387,43 @@
       const items = Array.isArray(o.items) ? o.items : [];
       const money = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' ' + cur;
 
+      // Konfigurace stroje pro výrobu — strukturovaná (it.configs) nebo z názvu za „ — ".
+      const itemConfigParts = (it) => {
+        const parts = [];
+        if (it.configs && it.configs.length) {
+          it.configs.forEach(c => { const g = c.option && c.option.group ? c.option.group.name + ': ' : ''; const v = (g + (c.option ? c.option.name : '')).trim(); if (v) parts.push(v); });
+        } else {
+          const seg = String(it.name || '').split(' — ').slice(1).join(' — ');
+          if (seg) seg.split(/\s*·\s*/).forEach(p => { if (p.trim()) parts.push(p.trim()); });
+        }
+        return parts;
+      };
+      const itemShortName = (it) => String(it.name || '').split(' — ')[0].replace(/\s+/g, ' ').trim() || (it.name || '—');
+
       const itemsRows = items.map(it => {
-        const cfg = (it.configs || []).map(c => {
-          const g = c.option && c.option.group ? c.option.group.name + ': ' : '';
-          return escHtml(g + (c.option ? c.option.name : ''));
-        }).filter(Boolean).join(' · ');
+        const parts = itemConfigParts(it);
         return '<tr>' +
-          '<td style="font-weight:600;">' + escHtml(it.name || '—') + (it.product ? ' <span style="color:var(--text2);font-size:11px;">(' + escHtml(it.product.code || '') + ')</span>' : '') + '</td>' +
+          '<td style="font-weight:600;">' + escHtml(itemShortName(it)) + (it.product ? ' <span style="color:var(--text2);font-size:11px;">(' + escHtml(it.product.code || '') + ')</span>' : '') + '</td>' +
           '<td style="text-align:center;">' + (it.quantity || 1) + ' ks</td>' +
-          '<td style="font-size:11px;color:var(--text2);">' + (cfg || '—') + '</td>' +
+          '<td style="font-size:11px;color:var(--text2);">' + (parts.join(' · ') || '—') + '</td>' +
           '<td style="white-space:nowrap;">' + (it.production_start ? fmtDate(it.production_start) : '—') + ' – ' + (it.production_finish ? fmtDate(it.production_finish) : '—') + '</td>' +
           '</tr>';
       }).join('');
+
+      // Výrobní checklist — konfigurace po strojích jako odškrtávací seznam (pro dílnu).
+      const checklistHtml = items.map(it => {
+        const parts = itemConfigParts(it);
+        const qty = it.quantity || 1;
+        const lis = parts.length
+          ? parts.map(p => '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;"><input type="checkbox" style="width:16px;height:16px;"> ' + escHtml(p) + '</label>').join('')
+          : '<div style="font-size:12px;color:var(--text2);">Bez konfigurace.</div>';
+        return '<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;">' +
+          '<div style="font-weight:700;font-size:13px;margin-bottom:6px;">' + escHtml(itemShortName(it)) + ' <span style="color:var(--text2);font-weight:400;">× ' + qty + ' ks</span></div>' +
+          lis + '</div>';
+      }).join('');
+
+      // Servisní smlouva — vytažená z poznámky (řádek „Servis: ...").
+      const svcLine = (o.note && (o.note.match(/Servis:\s*([^\n]+)/i) || [])[1]) ? o.note.match(/Servis:\s*([^\n]+)/i)[1].trim() : null;
 
       const invs = Array.isArray(o.invoices) ? o.invoices : [];
       const invLabel = (i) => i.type === 'tax_receipt' ? 'Daňový doklad' : (i.type === 'proforma_issued' ? 'Zálohová' : (i.invoice_role === 'final' ? 'Konečná' : 'Faktura'));
@@ -1436,7 +1461,9 @@
         '<h3 style="font-size:13px;margin:0 0 6px;">Položky k výrobě</h3>' +
         '<table class="dense" style="width:100%;margin-bottom:14px;"><thead><tr class="head-titles"><th>Stroj / položka</th><th>Ks</th><th>Konfigurace / výbava</th><th>Výrobní slot</th></tr></thead><tbody>' +
           (itemsRows || '<tr><td colspan="4" style="color:var(--text2);">Bez položek</td></tr>') + '</tbody></table>' +
-        (o.note ? '<div style="font-size:12px;color:var(--text2);margin-bottom:12px;"><strong>Poznámka:</strong> ' + escHtml(o.note) + '</div>' : '') +
+        '<h3 style="font-size:13px;margin:0 0 6px;">🛠️ Výrobní checklist</h3>' +
+        '<div style="margin-bottom:12px;">' + (checklistHtml || '<div style="font-size:12px;color:var(--text2);">Bez konfigurace.</div>') + '</div>' +
+        (svcLine ? '<div style="font-size:13px;margin-bottom:14px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;"><strong>Servisní smlouva:</strong> ' + escHtml(svcLine) + '</div>' : '') +
         '<h3 style="font-size:13px;margin:0 0 6px;">Účetní doklady</h3>' + invRows +
         '<div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end;">' +
           '<a class="btn btn-sm btn-secondary" href="/modules/prodejni-objednavky/index.html" target="_blank" rel="noopener" style="text-decoration:none;">Otevřít v Prodejních objednávkách ↗</a>' +
