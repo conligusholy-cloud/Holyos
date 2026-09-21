@@ -1356,7 +1356,7 @@
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;font-weight:700" onclick="OrderWizard.open('+l.id+')">🧾 Nová objednávka (průvodce)</button></div>' +
-        (l.phone ? '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" onclick="saveContact('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</button></div>' : '') +
+        (l.phone ? '<div class="field" style="margin-top:6px"><a class="btn btn-g" style="width:100%;display:block;text-align:center;text-decoration:none'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" href="'+API+'/leads/'+l.id+'/vcard" onclick="obMarkSaved('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</a></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
         obDiscHtml(l) +
@@ -1607,10 +1607,17 @@
       try { localStorage.setItem('ob.saved.'+id, String(Date.now())); } catch(e){}
       var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
       if (iOS) {
-        // iOS Safari neumí spolehlivě otevřít blob:/data: vizitku (padá na
-        // „Scene was invalidated"). Otevřeme skutečnou serverovou URL s
-        // Content-Type text/vcard — iOS ji zobrazí jako nativní kartu kontaktu.
-        window.location.href = API + '/leads/' + id + '/vcard';
+        // iOS (hlavně appka přidaná na plochu / standalone): navigace téže scény
+        // na stažení/náhled padá na „Scene was invalidated". Řešení = otevřít
+        // serverovou vizitku jako skutečný odkaz do NOVÉHO panelu (target=_blank),
+        // čímž iOS vyskočí do Safari, které kartu „Přidat do kontaktů" zobrazí.
+        var va = document.createElement('a');
+        va.href = API + '/leads/' + id + '/vcard';
+        va.target = '_blank';
+        va.rel = 'noopener';
+        document.body.appendChild(va);
+        va.click();
+        setTimeout(function(){ try{ document.body.removeChild(va); }catch(e){} }, 800);
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
         var url = URL.createObjectURL(blob);
@@ -1628,6 +1635,10 @@
   // Bylo už na tomhle telefonu uloženo přes tlačítko „Uložit kontakt"? (localStorage, per zařízení)
   function obContactSaved(id){ try{ return !!localStorage.getItem('ob.saved.'+id); }catch(e){ return false; } }
   window.obContactSaved = obContactSaved;
+  // Ozn. „uloženo v telefonu" + log — volá se z odkazu na vizitku (bez preventDefault,
+  // aby iOS otevřel nativní kartu kontaktu). Nepřekresluje hned, ať se navigace neztratí.
+  function obMarkSaved(id){ try{ localStorage.setItem('ob.saved.'+id, String(Date.now())); }catch(e){} try{ obLogAction(id,'save_contact','📇 Uložen kontakt do telefonu'); }catch(e){} }
+  window.obMarkSaved = obMarkSaved;
   // Odstraní markdown značky (hvězdičky, mřížky) z textu — pro čitelné shrnutí.
   function obStripMd(s){ return String(s==null?'':s).replace(/\*\*/g,'').replace(/(^|\n)#{1,6}\s*/g,'$1').replace(/\*/g,'').trim(); }
   window.obStripMd = obStripMd;
