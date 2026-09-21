@@ -196,6 +196,10 @@ app.get('/api/public/order/:token', async (req, res) => {
       },
     });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    // První zobrazení dokladu zákazníkem (best-effort, jen jednou).
+    if (order.status === 'awaiting_customer' || order.status === 'new') {
+      require('./services/order-events').logOrderEventOnce(order.id, { type: 'customer_viewed', label: 'Zákazník zobrazil objednávku', actor: 'zákazník' });
+    }
     // Náhled dokladu je čitelný v jakémkoli stavu (zákazník i majitel při autorizaci).
     // Zápisové akce (configure/confirm/select-slot) si zamčení hlídají samy přes orderLinkLocked.
 
@@ -582,6 +586,7 @@ app.post('/api/public/order/:token/confirm', async (req, res) => {
       status: 'signed', signed_at: new Date(), customer_confirmed_at: new Date(),
       signature_data: sig, signature_place: place,
     } });
+    require('./services/order-events').logOrderEvent(order.id, { type: 'customer_signed', label: 'Zákazník podepsal objednávku', detail: place ? ('místo: ' + place) : null, actor: 'zákazník' });
     notifyOrderSigned(order.id).catch((e) => console.error('[order-signed] notifikace selhala:', e && e.message));
     res.json({ ok: true });
   } catch (err) {

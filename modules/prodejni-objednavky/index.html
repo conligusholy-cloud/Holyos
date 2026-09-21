@@ -2533,6 +2533,8 @@
           document.addEventListener('mouseup', function() { drag = false; if (stlEl) stlEl.style.cursor = 'grab'; });
           document.addEventListener('mousemove', function(e) { if (!drag) return; e.preventDefault(); stlEl.scrollLeft = sl - (e.pageX - sx); });
         }
+        // Načti historii procesu (události) do panelu.
+        if (document.getElementById('order-history-panel')) loadOrderHistory(id);
       } catch(e) { console.error(e); }
     }
 
@@ -2891,59 +2893,34 @@
 
     // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
     // Fáze 6 — Vystavit fakturu z objednávky
-    // Časová osa — co se s objednávkou dělo a kdy (z časových polí objednávky + faktur).
+    // Časová osa — placeholder; naplní se z /api/wh/orders/:id/history (plné události procesu).
     function renderOrderTimeline(order) {
       if (!order) return '';
-      function invLabel(inv) { return (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'Zálohová faktura' : 'Faktura'; }
-      // Stav dokladu (vč. detekce po splatnosti) — pro barevný odznak u odeslaných dokladů.
-      var DOCSTAT = {
-        draft: { label: 'Koncept', color: '#9ca3af' }, issued: { label: 'Vystavena', color: '#3b82f6' },
-        sent: { label: 'Odeslána', color: '#3b82f6' }, partially_paid: { label: 'Částečně zaplacena', color: '#eab308' },
-        paid: { label: 'Zaplacena', color: '#10b981' }, overdue: { label: 'Po splatnosti', color: '#ef4444' },
-        cancelled: { label: 'Storno', color: '#ef4444' },
-      };
-      function invStat(inv) {
-        var s = DOCSTAT[inv.status] || { label: inv.status || '—', color: '#9ca3af' };
-        if (inv.status !== 'paid' && inv.status !== 'cancelled' && inv.date_due && new Date(inv.date_due) < new Date()) s = DOCSTAT.overdue;
-        return s;
-      }
-      var chipCss = 'display:inline-flex;align-items:center;gap:6px;text-decoration:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;color:var(--text);';
-      var ev = [];
-      function add(ts, label, detail, html) { if (ts) ev.push({ ts: new Date(ts), label: label, detail: detail || '', html: html || '' }); }
-      add(order.created_at, 'Objednávka vytvořena', order.order_number);
-      if (order.customer_email) add(order.created_at, 'Odesláno zákazníkovi k potvrzení', order.customer_email);
-      add(order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : '');
-      add(order.authorized_at, 'Autorizováno dodavatelem', '');
-      // Doklady odeslány zákazníkovi → vypiš KTERÉ, s odkazem na PDF a stavem.
-      var docChips = [];
-      if (order.confirmation_pdf_path || ['signed', 'confirmed', 'ordered', 'delivered', 'in_production'].indexOf(order.status) >= 0) {
-        docChips.push('<a href="/api/wh/orders/' + order.id + '/confirmation-pdf" target="_blank" rel="noopener" style="' + chipCss + '">📄 Objednávka ' + esc(order.order_number) + '</a>');
-      }
-      (order.invoices || []).forEach(function (inv) {
-        var s = invStat(inv);
-        docChips.push('<a href="/api/accounting/invoices/' + inv.id + '/pdf" target="_blank" rel="noopener" style="' + chipCss + '">📄 ' + esc(invLabel(inv)) + ' ' + esc(inv.invoice_number || ('#' + inv.id)) +
-          ' <span class="badge" style="background:' + s.color + '22;color:' + s.color + ';">' + esc(s.label) + '</span></a>');
-      });
-      var docsHtml = docChips.length ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">' + docChips.join('') + '</div>' : '';
-      add(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', '', docsHtml);
-      (order.invoices || []).forEach(function (inv) { add(inv.date_issued, 'Vystavena ' + invLabel(inv), inv.invoice_number || ''); });
-      add(order.deposit_paid_at, 'Záloha zaplacena', '');
-      add(order.final_paid_at, 'Doplatek zaplacen', '');
-      add(order.released_at, 'Uvolněno do výroby', '');
-      add(order.expired_at, 'Vypršelo — sloty uvolněny', '');
-      add(order.delivered_at, 'Doručeno', '');
-      if (!ev.length) return '';
-      ev.sort(function (a, b) { return a.ts - b.ts; });
-      var rows = ev.map(function (e) {
-        return '<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;">' +
-          '<div style="min-width:112px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;">' + e.ts.toLocaleString('cs-CZ') + '</div>' +
-          '<div style="width:8px;height:8px;border-radius:50%;background:#c9a24b;margin-top:5px;flex:none;"></div>' +
-          '<div style="font-size:13px;flex:1;"><strong>' + esc(e.label) + '</strong>' + (e.detail ? ' <span style="color:var(--text2);">· ' + esc(e.detail) + '</span>' : '') + (e.html || '') + '</div>' +
-        '</div>';
-      }).join('');
       return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
         '<h3 style="font-size:14px;margin-bottom:8px;">🕓 Historie objednávky</h3>' +
-        '<div>' + rows + '</div></div>';
+        '<div id="order-history-panel"><div style="color:var(--text2);font-size:12px;">Načítám historii…</div></div></div>';
+    }
+
+    // Načte celou historii procesu (události vč. doručení dokladů zákazníkovi) a vykreslí osu.
+    async function loadOrderHistory(orderId) {
+      var el = document.getElementById('order-history-panel');
+      if (!el) return;
+      var token = sessionStorage.getItem('token') || '';
+      var data = null;
+      try {
+        var res = await fetch('/api/wh/orders/' + orderId + '/history', { credentials: 'include', headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        if (res.ok) data = await res.json();
+      } catch (e) {}
+      if (!data || !data.timeline || !data.timeline.length) { el.innerHTML = '<div style="color:var(--text2);font-size:12px;">Zatím žádné události.</div>'; return; }
+      el.innerHTML = data.timeline.map(function (e) {
+        return '<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;">' +
+          '<div style="min-width:120px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;">' + new Date(e.ts).toLocaleString('cs-CZ') + '</div>' +
+          '<div style="width:8px;height:8px;border-radius:50%;background:#c9a24b;margin-top:5px;flex:none;"></div>' +
+          '<div style="font-size:13px;flex:1;"><strong>' + esc(e.label) + '</strong>' +
+            (e.detail ? ' <span style="color:var(--text2);">· ' + esc(e.detail) + '</span>' : '') +
+            (e.actor ? ' <span style="color:#c9a24b;font-size:11px;">(' + esc(e.actor) + ')</span>' : '') +
+          '</div></div>';
+      }).join('');
     }
 
     // Panel s účetními doklady (fakturami) navázanými na objednávku + jejich stavy.

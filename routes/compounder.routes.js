@@ -3442,6 +3442,9 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
     };
     if (finalLeadDays !== undefined) orderData.final_invoice_lead_days = finalLeadDays;
     const order = await prisma.order.create({ data: orderData, include: { items: true } });
+    const _evt = require('../services/order-events');
+    const _actor = (req.user && (req.user.display_name || req.user.username)) || 'obchodník';
+    _evt.logOrderEvent(order.id, { type: 'order_created', label: 'Objednávka vytvořena', detail: orderNumber + ' · ' + total.toLocaleString('cs-CZ') + ' ' + currency, actor: _actor });
 
     // Rezervace výrobních slotů na 3 dny (72 h) — jeden assignment na vybraný slot.
     // Po zaplacení zálohy se auto-potvrdí (warehouse payment endpoint), jinak je uvolní worker.
@@ -3507,6 +3510,7 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
             }] },
           },
         });
+        _evt.logOrderEvent(order.id, { type: 'invoice_created', label: 'Vytvořena zálohová faktura', detail: depositInvoice.invoice_number + ' · ' + Number(depositInvoice.total).toLocaleString('cs-CZ') + ' ' + currency, actor: _actor });
       } catch (e) { console.error('[compounder] záloha faktura selhala:', e.message); }
     }
 
@@ -3526,10 +3530,16 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
           + total.toLocaleString('cs-CZ') + ' ' + currency + ' bez DPH.\n\n'
           + 'Prosíme o kontrolu údajů a potvrzení objednávky kliknutím na tlačítko níže. '
           + 'Po potvrzení Vám obratem zašleme potvrzení objednávky a zálohovou fakturu.';
-        await sendMail({
+        const mr = await sendMail({
           to: email, subject: 'Objednávka ' + orderNumber + ' k potvrzení',
           body, from: compounderMailFrom(), fromName: compounderMailFromName(),
           link: approvalUrl, linkLabel: 'Zobrazit a potvrdit objednávku', brand: 'compounder',
+        });
+        _evt.logOrderEvent(order.id, {
+          type: 'link_sent',
+          label: (mr && mr.sent) ? 'Odkaz na potvrzení odeslán zákazníkovi' : 'Odeslání odkazu zákazníkovi selhalo',
+          detail: email + ((mr && mr.sent) ? '' : ' · ' + ((mr && (mr.error || mr.skipped)) || 'chyba')),
+          actor: 'systém',
         });
       }
     } catch (e) { console.error('[order] e-mail k potvrzení selhal:', e.message); }

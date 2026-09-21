@@ -64,6 +64,7 @@ async function buildAndStoreOrderPdf(order, ourCompany) {
     filePath = path.join(ORDER_DOCS_DIR, safeNo + '.pdf');
     fs.writeFileSync(filePath, buffer);
     await prisma.order.update({ where: { id: order.id }, data: { confirmation_pdf_path: filePath } }).catch(() => {});
+    require('./order-events').logOrderEvent(order.id, { type: 'order_pdf_created', label: 'Vygenerováno PDF potvrzené objednávky', actor: 'systém' });
   } catch (e) { console.error('[order-docs] uložení PDF objednávky selhalo:', e && e.message); }
   return { buffer, filePath };
 }
@@ -100,7 +101,7 @@ async function ensureInvoiceForOrder(order) {
   const vatAmount = items.reduce((s, i) => s + Number(i.vat_amount), 0);
   const total = items.reduce((s, i) => s + Number(i.total), 0);
   const due = new Date(Date.now() + 14 * 86400000);
-  return prisma.invoice.create({
+  const created = await prisma.invoice.create({
     data: {
       invoice_number: invNo, type: 'issued', direction: 'ar',
       company_id: order.company_id, order_id: order.id,
@@ -113,6 +114,8 @@ async function ensureInvoiceForOrder(order) {
     },
     include: { items: true, company: true },
   });
+  require('./order-events').logOrderEvent(order.id, { type: 'invoice_created', label: 'Vytvořena faktura', detail: created.invoice_number + ' · ' + Number(created.total).toLocaleString('cs-CZ') + ' ' + (created.currency || 'CZK'), actor: 'systém' });
+  return created;
 }
 
 // Hlavní: po autorizaci vygeneruje PDF potvrzené objednávky (uloží k objednávce),
@@ -162,10 +165,13 @@ async function sendOrderConfirmationDocs(orderId) {
 
   try {
     const res = await sendMail({ from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
+    const evt = require('./order-events');
     if (res && res.sent) {
       await prisma.order.update({ where: { id: order.id }, data: { customer_docs_sent_at: new Date() } }).catch(() => {});
+      evt.logOrderEvent(order.id, { type: 'docs_emailed', label: 'Potvrzená objednávka + faktura odeslány zákazníkovi', detail: 'na ' + to + ' · příloh: ' + attachments.length, actor: 'systém' });
       console.log('[order-docs] doklady odeslány zákazníkovi ' + to + ' (objednávka ' + order.order_number + ', příloh: ' + attachments.length + ')');
     } else {
+      evt.logOrderEvent(order.id, { type: 'docs_email_failed', label: 'Odeslání dokladů zákazníkovi selhalo', detail: 'na ' + to + ' · ' + ((res && (res.error || res.skipped)) || 'chyba'), actor: 'systém' });
       console.error('[order-docs] e-mail se neodeslal (objednávka ' + order.order_number + '):', res && (res.skipped || res.error));
     }
   } catch (e) { console.error('[order-docs] e-mail dokladů selhal:', e && e.message); }

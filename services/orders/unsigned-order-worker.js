@@ -68,6 +68,9 @@ async function runOnce() {
         try {
           require('../compounder/notify').notifyOrderExpired(prisma, { order, slotCount: released });
         } catch (e) { /* notifikace nesmí shodit worker */ }
+        try {
+          require('../order-events').logOrderEvent(order.id, { type: 'expired', label: 'Vypršelo — sloty uvolněny (nepodepsáno do 24 h)', detail: 'uvolněno slotů: ' + released, actor: 'systém' });
+        } catch (e) {}
         console.log('[unsigned-order-worker] Objednávka ' + order.order_number + ' nepodepsána do '
           + DEADLINE_HOURS + ' h → status expired, uvolněno slotů: ' + released);
       } catch (e) {

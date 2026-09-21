@@ -1212,6 +1212,9 @@ router.post('/orders/:id/authorize', async (req, res, next) => {
       authorizer_signature_data: sig,
       authorizer_place: place,
     } });
+    let _authName = null;
+    try { if (req.user && req.user.id) { const u = await prisma.user.findUnique({ where: { id: req.user.id }, select: { display_name: true, username: true } }); _authName = u && (u.display_name || u.username); } } catch (e) {}
+    require('../services/order-events').logOrderEvent(id, { type: 'authorized', label: 'Objednávka autorizována dodavatelem', detail: place ? ('místo: ' + place) : null, actor: _authName || 'dodavatel' });
     require('../services/order-docs').sendOrderConfirmationDocs(id).catch((e) => console.error('[order-authorize] doklady:', e && e.message));
     res.json({ ok: true });
   } catch (err) { next(err); }
@@ -1241,19 +1244,27 @@ router.get('/orders/:id/history', async (req, res, next) => {
     const invLabel = (inv) => (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'Zálohová faktura' : 'Faktura';
 
     // ── Časová osa ──
-    const tl = [];
-    const push = (ts, label, detail) => { if (ts) tl.push({ ts: new Date(ts).toISOString(), label, detail: detail || null }); };
-    push(order.created_at, 'Objednávka vytvořena', order.order_number);
-    if (order.customer_email) push(order.created_at, 'Odesláno zákazníkovi k potvrzení', order.customer_email);
-    push(order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : null);
-    push(order.authorized_at, 'Autorizováno dodavatelem', authorizerName);
-    push(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', null);
-    invoices.forEach((inv) => push(inv.date_issued, 'Vystavena ' + invLabel(inv).toLowerCase(), inv.invoice_number));
-    push(order.deposit_paid_at, 'Záloha zaplacena', null);
-    push(order.final_paid_at, 'Doplatek zaplacen', null);
-    push(order.released_at, 'Uvolněno do výroby', null);
-    push(order.expired_at, 'Vypršelo — sloty uvolněny', null);
-    push(order.delivered_at, 'Doručeno', null);
+    // Primárně z logu událostí (OrderEvent); doplníme odvozené milníky, které
+    // v logu nejsou (starší objednávky, platby označené ručně). Bez duplicit.
+    let events = [];
+    try {
+      events = await prisma.orderEvent.findMany({ where: { order_id: id }, orderBy: { ts: 'asc' } });
+    } catch (e) {}
+    const tl = events.map((e) => ({ ts: new Date(e.ts).toISOString(), label: e.label, detail: e.detail || null, actor: e.actor || null }));
+    const loggedTypes = new Set(events.map((e) => e.type));
+    const derive = (cond, ts, label, detail) => { if (cond && ts) tl.push({ ts: new Date(ts).toISOString(), label, detail: detail || null, actor: null }); };
+    // Odvozené doplňky jen když chybí odpovídající událost:
+    derive(!loggedTypes.has('order_created'), order.created_at, 'Objednávka vytvořena', order.order_number);
+    derive(!loggedTypes.has('customer_signed'), order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : null);
+    derive(!loggedTypes.has('authorized'), order.authorized_at, 'Autorizováno dodavatelem', authorizerName);
+    derive(!loggedTypes.has('docs_emailed'), order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', null);
+    if (!loggedTypes.has('invoice_created')) invoices.forEach((inv) => derive(true, inv.date_issued, 'Vystavena ' + invLabel(inv).toLowerCase(), inv.invoice_number));
+    // Platby, uvolnění, doručení, vypršení — vždy z polí (nelogují se jako událost jinde):
+    derive(true, order.deposit_paid_at, 'Záloha zaplacena', null);
+    derive(true, order.final_paid_at, 'Doplatek zaplacen', null);
+    derive(true, order.released_at, 'Uvolněno do výroby', null);
+    derive(!loggedTypes.has('expired'), order.expired_at, 'Vypršelo — sloty uvolněny', null);
+    derive(true, order.delivered_at, 'Doručeno', null);
     tl.sort((a, b) => new Date(a.ts) - new Date(b.ts));
 
     // ── Související doklady ──

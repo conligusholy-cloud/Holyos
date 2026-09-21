@@ -699,6 +699,7 @@ model Order {
   items         OrderItem[]
   invoices      Invoice[]   @relation("InvoiceOrder")
   final_invoice Invoice?    @relation("OrderFinalInvoice", fields: [final_invoice_id], references: [id])
+  events        OrderEvent[]
 
   @@index([type])
   @@index([status])
@@ -712,6 +713,24 @@ model Order {
   @@index([released_at])
   @@index([final_invoice_id])
   @@map("orders")
+}
+
+// Záznamník událostí objednávky — sledování celého procesu (vytvoření dokladů,
+// odeslání zákazníkovi + výsledek doručení, zobrazení, podpis, autorizace, platby).
+model OrderEvent {
+  id       Int      @id @default(autoincrement())
+  order_id Int
+  ts       DateTime @default(now())
+  type     String   @db.VarChar(40) // strojový typ (order_created, link_sent, customer_viewed, docs_emailed, ...)
+  label    String   @db.VarChar(160) // lidský popis
+  detail   String?  @db.Text // doplněk (příjemce, číslo dokladu, výsledek doručení)
+  actor    String?  @db.VarChar(120) // kdo akci provedl (uživatel / systém / zákazník)
+
+  order Order @relation(fields: [order_id], references: [id], onDelete: Cascade)
+
+  @@index([order_id])
+  @@index([type])
+  @@map("order_events")
 }
 
 model OrderItem {
