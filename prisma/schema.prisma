@@ -1002,6 +1002,7 @@ model Material {
   cutting_plan_outputs    CuttingPlanOutput[]    @relation("CuttingPlanOutputMaterial") // nářezové plány, kde je výstupním dílem
   config_option_materials ConfigOptionMaterial[] // konfigurace, které tento materiál používají
   cad_components          CadComponent[] // komponenty v CAD kusovníkách namapované na tento materiál
+  cad_drawings            CadDrawing[]           @relation("CadDrawingMaterial") // CAD výkresy napojené na tuto položku
   stock                   Stock[] // SKLAD 2.0 — zásoby po lokacích (rychlý lookup)
   batch_items             BatchItem[] // SKLAD 2.0 — položky v pickovacích dávkách
   serial_numbers          SerialNumber[] // SKLAD 2.0 — sériová čísla per kus (pokud save_sn_first_scan)
@@ -2433,9 +2434,10 @@ model CadBlock {
 
 // Výkres / díl / sestava — jeden soubor ze SolidWorksu
 model CadDrawing {
-  id         Int  @id @default(autoincrement())
-  project_id Int
-  block_id   Int?
+  id          Int  @id @default(autoincrement())
+  project_id  Int
+  block_id    Int?
+  material_id Int? // napojení na katalog zboží (Material) — auto při importu
 
   // Identifikace
   file_name     String  @db.VarChar(255) // např. "12345-01.SLDDRW"
@@ -2462,12 +2464,14 @@ model CadDrawing {
   project        CadProject            @relation(fields: [project_id], references: [id], onDelete: Cascade)
   block          CadBlock?             @relation(fields: [block_id], references: [id], onDelete: SetNull)
   creator        Person?               @relation("CadDrawingCreator", fields: [created_by_id], references: [id], onDelete: SetNull)
+  material       Material?             @relation("CadDrawingMaterial", fields: [material_id], references: [id], onDelete: SetNull)
   configurations CadDrawingConfig[]
   change_logs    CadDrawingChangeLog[]
 
   @@unique([project_id, file_name, version])
   @@index([project_id])
   @@index([block_id])
+  @@index([material_id])
   @@index([extension])
   @@index([file_name])
   @@map("cad_drawings")
