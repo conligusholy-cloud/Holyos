@@ -245,6 +245,8 @@ router.get('/materials', async (req, res, next) => {
       include: {
         supplier: { select: { id: true, name: true } },
         category: { select: { id: true, name: true, parent_id: true } },
+        // Počet napojených CAD výkresů — pro sloupec „Dokumentace" (od konstruktéra).
+        _count: { select: { cad_drawings: true } },
       },
       orderBy: { name: 'asc' },
     });

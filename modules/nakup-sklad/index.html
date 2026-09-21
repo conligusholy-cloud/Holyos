@@ -812,7 +812,7 @@
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; updateMatBulkBar(); return; }
       let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
         '<th style="width:34px"><input type="checkbox" id="mat-check-all" onclick="event.stopPropagation();toggleAllMatSelection(this.checked)"></th>' +
-        '<th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Kategorie</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
+        '<th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Kategorie</th><th title="Dokumentace od konstruktéra (CAD výkres)">Dok.</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
       for (const m of list) {
         const stock = Number(m.current_stock) || 0;
         const minStock = Number(m.min_stock) || 0;
@@ -838,6 +838,10 @@
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
         html += '<td class="person-name">' + m.name + '</td>';
         html += '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + catLabel + '</td>';
+        const cadCount = (m._count && m._count.cad_drawings) || 0;
+        html += '<td style="text-align:center">' + (cadCount > 0
+          ? '<span class="badge" title="' + cadCount + ' výkres(ů) od konstruktéra" style="background:#10b98122;color:#10b981">📐 ' + cadCount + '</span>'
+          : '<span title="Bez dokumentace" style="color:var(--text2);opacity:.5">—</span>') + '</td>';
         html += '<td><span class="badge" style="background:' + sColor + '22;color:' + sColor + '">' + sLabel + '</span></td>';
         html += '<td>' + (m.unit||'ks') + '</td>';
         html += '<td>' + price.toLocaleString('cs-CZ') + ' Kč</td>';
