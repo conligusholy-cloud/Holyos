@@ -1099,6 +1099,14 @@ try {
 
 server.listen(PORT, async () => {
   await ensureAdminUser();
+  // Pojistka: idempotentně dožene schéma fakturace (DPPP + čítače řad), kdyby
+  // se migrace nestihla spustit proti DB (nedostupný veřejný proxy apod.).
+  try {
+    const { ensureInvoiceSchema } = require('./services/accountant/ensure-invoice-schema');
+    await ensureInvoiceSchema();
+  } catch (err) {
+    console.error('[app] ensureInvoiceSchema selhal:', err.message);
+  }
   runExpiredLotsSweep();
   setInterval(runExpiredLotsSweep, SWEEP_INTERVAL_MS);
   try {
