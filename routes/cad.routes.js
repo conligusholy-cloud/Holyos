@@ -161,7 +161,7 @@ router.get('/drawings', async (req, res, next) => {
 
     const drawings = await prisma.cadDrawing.findMany({
       where,
-      take: Math.min(parseInt(limit) || 100, 500),
+      take: Math.min(parseInt(limit) || 100, 5000),
       orderBy: [{ last_import_at: 'desc' }],
       include: {
         project: { select: { id: true, code: true, name: true } },

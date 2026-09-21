@@ -194,7 +194,7 @@
       if (state.activeProjectId) params.set('projectId', state.activeProjectId);
       if (state.activeBlockId) params.set('blockId', state.activeBlockId);
       if (state.query) params.set('q', state.query);
-      params.set('limit', '200');
+      params.set('limit', '5000');
 
       const res = await fetch('/api/cad/drawings?' + params, fetchOpts());
       if (!res.ok) throw new Error('Načtení výkresů selhalo');
