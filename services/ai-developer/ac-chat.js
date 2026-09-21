@@ -312,15 +312,25 @@ async function chatDraft({ draft = {}, history = [], userMessage, pageContext = 
   - autonomy_override (volitelné: full_auto | pr_review | plan_review)
 
 KONTEXT STRÁNKY (odkud uživatel chat vyvolal):
+- modul: ${pageContext.module_name || pageContext.module_id || '(neuvedeno)'}
 - path: ${pageContext.path || '(neuvedeno)'}
 - title: ${pageContext.title || '(neuvedeno)'}
+- co na té stránce je: ${(Array.isArray(pageContext.module_parts) && pageContext.module_parts.length) ? pageContext.module_parts.join(', ') : '(neuvedeno)'}
+
+NÁVAZNOST NA MODUL (důležité):
+- Požadavek VŽDY patří k modulu uvedenému výše. Na modul se NEPTEJ — rovnou ho
+  vyplň v update_ac_fields.affected_module přesně tou hodnotou.
+- Doptávej se v rámci tohoto modulu: používej jeho části vypsané výše
+  ("co na té stránce je") a ptej se konkrétně, které z nich se změna týká.
+- Jen pokud uživatel sám výslovně řekne, že jde o jinou část HolyOSu, přepiš
+  affected_module podle něj.
 
 SOUČASNÝ STAV DRAFTU:
 ${JSON.stringify(draft, null, 2)}
 
 POSTUP:
 1. První zpráva uživatele = HRUBÝ POPIS toho co chce. Zachyť ho přes update_basic_fields (page_title + description).
-2. Doptej se postupně: definice hotovo, modul, typ změny. Jedna otázka per zpráva.
+2. Doptej se postupně: definice hotovo a typ změny (modul už znáš z kontextu výše — na ten se neptej). Jedna otázka per zpráva.
 3. PRŮBĚŽNĚ aktualizuj draft přes update_ac_fields.
 4. Když máš všechna povinná pole + dokážeš shrnout úkol do tvaru "Když uživatel udělá X, systém má udělat Y, a poznáme to podle Z", zavolej finalize_with_ac.
 5. Pokud uživatel opakovaně řekne "nevím" / "rozhodni sám", zavolej request_human.

@@ -719,7 +719,19 @@ router.post('/draft-chat', async (req, res, next) => {
 
     const history = Array.isArray(req.body && req.body.history) ? req.body.history : [];
     const draft = (req.body && req.body.draft && typeof req.body.draft === 'object') ? req.body.draft : {};
-    const pageContext = (req.body && req.body.page_context && typeof req.body.page_context === 'object') ? req.body.page_context : {};
+    // Kontext stránky z frontendu — bereme jen známá pole a ořízneme délku,
+    // ať do system promptu neteče cokoliv z klienta.
+    const rawPageCtx = (req.body && req.body.page_context && typeof req.body.page_context === 'object') ? req.body.page_context : {};
+    const trim = (v, max) => (v == null ? null : String(v).slice(0, max));
+    const pageContext = {
+      path: trim(rawPageCtx.path, 300),
+      title: trim(rawPageCtx.title, 200),
+      module_id: trim(rawPageCtx.module_id, 100),
+      module_name: trim(rawPageCtx.module_name, 100),
+      module_parts: Array.isArray(rawPageCtx.module_parts)
+        ? rawPageCtx.module_parts.slice(0, 20).map((x) => trim(x, 120)).filter(Boolean)
+        : [],
+    };
 
     let result;
     try {
