@@ -623,8 +623,19 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
                 is_unknown: true,
               })),
             ];
-            if (componentsData.length) {
-              await prisma.cadComponent.createMany({ data: componentsData });
+            // Sloučení instancí téhož dílu — SolidWorks posílá každou instanci zvlášť
+            // s příponou „-<číslo>" (ISO 4762…-37). Uložíme unikátní díl 1× se součtem kusů,
+            // ať v DB nejsou desítky duplicit a kusovník sedí.
+            const baseName = (n) => String(n || '').replace(/[-_]\d+\s*$/, '').trim() || String(n || '');
+            const aggMap = new Map();
+            for (const cd of componentsData) {
+              const key = baseName(cd.name).toLowerCase() + '|' + (cd.configuration || '') + '|' + (cd.material_id || '') + '|' + (cd.is_unknown ? 'u' : 'k');
+              if (aggMap.has(key)) { aggMap.get(key).quantity += (Number(cd.quantity) || 1); }
+              else { aggMap.set(key, Object.assign({}, cd, { name: baseName(cd.name), quantity: Number(cd.quantity) || 1 })); }
+            }
+            const aggComponents = Array.from(aggMap.values());
+            if (aggComponents.length) {
+              await prisma.cadComponent.createMany({ data: aggComponents });
             }
             if (c.unknown.length) unknownOut.push(...c.unknown);
           }
