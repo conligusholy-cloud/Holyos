@@ -660,6 +660,47 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           console.error('[cad-import] Nepodařilo se zapsat change-log:', logErr?.message || logErr);
         }
 
+        // ── Auto-založení do katalogu zboží (Material) ─────────────────────────
+        // Každý importovaný díl, který v katalogu ještě není, se automaticky založí.
+        // Typ se odhadne z kódu (název souboru bez přípony) / typu souboru:
+        //   BS-S* nebo sestava (.sldasm) → 'product'      (výrobek)
+        //   BS-D* nebo díl (.sldprt)     → 'semi_product' (vyráběný díl)
+        //   NA*, číselné/normalizované   → 'material'      (nakupované)
+        // Uživatel může typ následně upravit ručně v katalogu.
+        try {
+          const matCode = String(f.DrawingFileName || '').replace(/\.[^.]+$/, '').trim().slice(0, 50);
+          if (matCode) {
+            const cu = matCode.toUpperCase();
+            const ext = String(f.Extension || '').toLowerCase();
+            let mtype;
+            if (cu.startsWith('BS-S')) mtype = 'product';
+            else if (cu.startsWith('BS-D')) mtype = 'semi_product';
+            else if (cu.startsWith('NA')) mtype = 'material';
+            else if (/^\d/.test(cu)) mtype = 'material';
+            else if (ext.includes('sldasm')) mtype = 'product';
+            else if (ext.includes('sldprt')) mtype = 'semi_product';
+            else mtype = 'material';
+            let mat = await prisma.material.findUnique({ where: { code: matCode }, select: { id: true } }).catch(() => null);
+            if (!mat) {
+              mat = await prisma.material.create({
+                data: {
+                  code: matCode,
+                  name: (drawing.title || matCode).slice(0, 255),
+                  type: mtype, unit: 'ks', sector: 'vyroba', status: 'active',
+                },
+                select: { id: true },
+              }).catch(async (e) => {
+                if (e && e.code === 'P2002') return prisma.material.findUnique({ where: { code: matCode }, select: { id: true } }).catch(() => null);
+                console.warn('[cad-import] auto-material selhalo pro', matCode, e && e.message);
+                return null;
+              });
+            }
+            if (mat && mat.id && !drawing.material_id) {
+              await prisma.cadDrawing.update({ where: { id: drawing.id }, data: { material_id: mat.id } }).catch(() => {});
+            }
+          }
+        } catch (e) { console.warn('[cad-import] auto-material blok selhal:', e && e.message); }
+
         const payload = {
           Id: drawing.id,
           DrawingFileName: drawing.file_name,
