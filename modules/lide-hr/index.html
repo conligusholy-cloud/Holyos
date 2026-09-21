@@ -88,6 +88,14 @@
     .badge-supplier { background: rgba(245,158,11,0.2); color: #fbbf24; }
     .badge-customer { background: rgba(16,185,129,0.2); color: #34d399; }
     .badge-external { background: rgba(156,163,175,0.2); color: #9ca3af; }
+    /* Bývalý zaměstnanec — tlumená šedá, ať je archiv na první pohled odlišený (Požadavek #103) */
+    .badge-former { background: rgba(120,113,108,0.25); color: #a8a29e; }
+    .archive-note {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+      padding: 8px 12px; border-radius: 8px; font-size: 12px;
+      background: rgba(120,113,108,0.12); color: var(--text2);
+      border: 1px solid rgba(120,113,108,0.25);
+    }
     .badge-active { background: rgba(34,197,94,0.2); color: #4ade80; }
     .badge-inactive { background: rgba(239,68,68,0.2); color: #f87171; }
     .badge-HPP { background: rgba(108,92,231,0.2); color: #a78bfa; }
@@ -355,12 +363,14 @@
         <div class="toolbar">
           <input type="text" id="search-people" placeholder="🔍 Hledat osobu..." oninput="loadPeople()">
           <select id="filter-type" onchange="loadPeople()">
-            <option value="">Všechny typy</option>
+            <option value="">Všechny typy (bez bývalých)</option>
             <option value="employee">Zaměstnanci</option>
             <option value="contact">Kontakty</option>
             <option value="customer">Zákazníci</option>
             <option value="supplier">Dodavatelé</option>
             <option value="external">Externí</option>
+            <!-- Archiv — bývalí zaměstnanci se ve výchozím výpisu nezobrazují (Požadavek #103) -->
+            <option value="former">📦 Archiv — bývalí zaměstnanci</option>
           </select>
           <div style="flex:1"></div>
           <button class="btn btn-primary" onclick="openPersonModal()">+ Nová osoba</button>
@@ -829,23 +839,37 @@
 
     function renderPeopleTable() {
       const el = document.getElementById('people-table');
+      // Archivní pohled = uživatel si v filtru vybral „Bývalí zaměstnanci". Jen tam
+      // se bývalí zobrazují; jinde jsou skrytí. (Požadavek #103)
+      const isArchive = (document.getElementById('filter-type').value === 'former');
+      const archiveNote = isArchive
+        ? `<div class="archive-note">📦 Archiv bývalých zaměstnanců — tito lidé se nezobrazují v organizační struktuře, v běžném seznamu ani se nepočítají do statistik.</div>`
+        : '';
+
       if (people.length === 0) {
-        el.innerHTML = `<div class="empty-state">
-          <div class="empty-icon">👥</div>
-          <h3>Zatím žádné osoby</h3>
-          <p>Klikněte na "+ Nová osoba" pro přidání prvního záznamu</p>
-        </div>`;
+        el.innerHTML = archiveNote + (isArchive
+          ? `<div class="empty-state">
+              <div class="empty-icon">📦</div>
+              <h3>Archiv je prázdný</h3>
+              <p>Zatím nikomu neskončil pracovní poměr</p>
+            </div>`
+          : `<div class="empty-state">
+              <div class="empty-icon">👥</div>
+              <h3>Zatím žádné osoby</h3>
+              <p>Klikněte na "+ Nová osoba" pro přidání prvního záznamu</p>
+            </div>`);
         return;
       }
 
-      let html = `<table class="data-table"><thead><tr>
-        <th>Jméno</th><th>Typ</th><th>E-mail</th><th>Telefon</th><th>Společnost</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
+      let html = archiveNote + `<table class="data-table"><thead><tr>
+        <th>Jméno</th><th>Typ</th>${isArchive ? '<th>Konec zaměstnání</th>' : ''}<th>E-mail</th><th>Telefon</th><th>Společnost</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
       </tr></thead><tbody>`;
 
       for (const p of people) {
         html += `<tr onclick="openPersonModal(${p.id})">
           <td class="person-name"><div style="display:flex;align-items:center;gap:8px;"><span style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:11px;color:var(--text2);">${p.photo_url ? '<img src="' + p.photo_url + '" style="width:100%;height:100%;object-fit:cover;">' : p.first_name.charAt(0).toUpperCase()}</span>${p.last_name} ${p.first_name}${!p.active ? ' <span style="color:var(--text2)">(neaktivní)</span>' : ''}${p.is_super_admin ? ' <span style="font-size:9px;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 5px;border-radius:4px;">SA</span>' : ''}</div></td>
           <td><span class="badge badge-${p.type}">${TYPE_LABELS[p.type] || p.type}</span></td>
+          ${isArchive ? '<td>' + (p.end_date ? new Date(p.end_date).toLocaleDateString('cs-CZ') : '—') + '</td>' : ''}
           <td>${p.email || '—'}</td>
           <td>${p.phone || '—'}</td>
           <td>${p.department_name || '—'}</td>
@@ -858,6 +882,10 @@
       html += '</tbody></table>';
       el.innerHTML = html;
     }
+
+    // Typy osob, které mají plnou kartu zaměstnance (včetně bývalých zaměstnanců).
+    // Bývalému zaměstnanci se karta nijak neredukuje — data zůstávají viditelná. (Požadavek #105)
+    const EMPLOYEE_CARD_TYPES = ['employee', 'former'];
 
     async function openPersonModal(id) {
       let person = null;
@@ -905,7 +933,10 @@
       } catch (e) {}
 
 
-      const showEmp = (p.type || 'employee') === 'employee';
+      // Bývalý zaměstnanec ('former') má stejnou kartu jako aktivní zaměstnanec —
+      // všechny sekce (zaměstnanecké, osobní údaje, nouzový kontakt, admin, účet)
+      // zůstávají viditelné, mění se jen typ osoby. (Požadavek #105)
+      const showEmp = EMPLOYEE_CARD_TYPES.includes(p.type || 'employee');
       // Prisma vrací DateTime jako ISO 8601 ("2020-01-15T00:00:00.000Z"),
       // ale <input type="date"> očekává jen "YYYY-MM-DD" — jinak zůstane prázdné.
       const dateOnly = (v) => (v ? String(v).slice(0, 10) : '');
@@ -1352,7 +1383,7 @@
     });
 
     function toggleEmployeeFields(type) {
-      const show = type === 'employee';
+      const show = EMPLOYEE_CARD_TYPES.includes(type);
       ['employee-fields', 'personal-fields', 'emergency-fields', 'admin-fields', 'account-section'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = show ? '' : 'none';
@@ -1425,7 +1456,7 @@
         let personId = id || (resData.id ? resData.id : null);
 
         // Create account if credentials provided and this is an employee
-        if ((data.type || 'employee') === 'employee' && personId) {
+        if (EMPLOYEE_CARD_TYPES.includes(data.type || 'employee') && personId) {
           const accUsername = document.getElementById('acc-username');
           const accPassword = document.getElementById('acc-password');
           const accRole = document.getElementById('acc-role');
@@ -1680,9 +1711,14 @@
     async function loadShifts() {
       try {
         const res = await fetch('/api/hr/shifts');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const shifts = await res.json();
         renderShifts(shifts);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        console.error(e);
+        const el = document.getElementById('shifts-table');
+        if (el) el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Směny se nepodařilo načíst</h3><p>' + escHtml(e.message || e) + '</p></div>';
+      }
     }
 
     function renderShifts(shifts) {
@@ -1694,16 +1730,16 @@
       let html = '<table class="data-table"><thead><tr><th>Název</th><th>Typ</th><th>Čas</th><th>Fond hodin</th><th>Přestávka</th><th></th></tr></thead><tbody>';
       for (const s of shifts) {
         const typeLabel = s.type === 'fixed' ? 'Pevná' : 'Pružná';
-        const timeStr = s.type === 'fixed' && s.start && s.end ? `${s.start} – ${s.end}` : '—';
+        const timeStr = s.type === 'fixed' && s.start_time && s.end_time ? `${escHtml(s.start_time)} – ${escHtml(s.end_time)}` : '—';
         html += `<tr>
-          <td><strong>${s.name}</strong></td>
+          <td><strong>${escHtml(s.name)}</strong></td>
           <td><span class="shift-type ${s.type}">${typeLabel}</span></td>
           <td>${timeStr}</td>
           <td>${s.hours_fund || 8}h</td>
           <td>${s.break_minutes || 30} min</td>
           <td>
             <button class="btn btn-sm" onclick="openShiftModal(${s.id})">✏️</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteShift(${s.id})">✕</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteShift(${s.id}, ${(s._count && s._count.people) || 0})">✕</button>
           </td>
         </tr>`;
       }
@@ -1712,7 +1748,7 @@
     }
 
     async function openShiftModal(editId) {
-      let shift = { name: '', type: 'fixed', start: '07:00', end: '15:30', hours_fund: 8, break_minutes: 30 };
+      let shift = { name: '', type: 'fixed', start_time: '07:00', end_time: '15:30', hours_fund: 8, break_minutes: 30 };
       if (editId) {
         try {
           const res = await fetch('/api/hr/shifts');
@@ -1727,7 +1763,7 @@
             <div class="form-grid">
               <div class="form-group">
                 <label>Název *</label>
-                <input type="text" name="name" value="${shift.name}" required>
+                <input type="text" name="name" value="${escHtml(shift.name)}" required>
               </div>
               <div class="form-group">
                 <label>Typ</label>
@@ -1738,11 +1774,11 @@
               </div>
               <div class="form-group shift-time-fields" ${shift.type==='flexible'?'style="display:none"':''}>
                 <label>Začátek</label>
-                <input type="time" name="start" value="${shift.start || '07:00'}">
+                <input type="time" name="start_time" value="${escHtml(shift.start_time || '07:00')}">
               </div>
               <div class="form-group shift-time-fields" ${shift.type==='flexible'?'style="display:none"':''}>
                 <label>Konec</label>
-                <input type="time" name="end" value="${shift.end || '15:30'}">
+                <input type="time" name="end_time" value="${escHtml(shift.end_time || '15:30')}">
               </div>
               <div class="form-group">
                 <label>Hodinový fond (h/den)</label>
@@ -1771,24 +1807,66 @@
     async function saveShift(e, editId) {
       e.preventDefault();
       const form = new FormData(e.target);
-      const data = {};
-      for (const [k, v] of form.entries()) data[k] = v;
-      if (data.hours_fund) data.hours_fund = parseFloat(data.hours_fund);
-      if (data.break_minutes) data.break_minutes = parseInt(data.break_minutes);
-
-      if (editId) {
-        await fetch('/api/hr/shifts/' + editId, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-      } else {
-        await fetch('/api/hr/shifts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+      // Názvy polí musí odpovídat modelu Shift (start_time / end_time), jinak Prisma neuloží nic
+      const data = {
+        name: (form.get('name') || '').trim(),
+        type: form.get('type') || 'fixed',
+        start_time: form.get('start_time') || null,
+        end_time: form.get('end_time') || null,
+        hours_fund: parseFloat(form.get('hours_fund')),
+        break_minutes: parseInt(form.get('break_minutes'), 10),
+      };
+      // Pružná směna nemá pevný začátek ani konec
+      if (data.type === 'flexible') {
+        data.start_time = null;
+        data.end_time = null;
       }
-      closeModal();
-      loadShifts();
+      if (!Number.isFinite(data.hours_fund)) data.hours_fund = 8;
+      if (!Number.isInteger(data.break_minutes)) data.break_minutes = 30;
+
+      const btn = e.target.querySelector('button[type="submit"]');
+      if (btn) btn.disabled = true;
+      try {
+        const url = editId ? '/api/hr/shifts/' + editId : '/api/hr/shifts';
+        const res = await fetch(url, {
+          method: editId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+          // Modal zůstává otevřený, aby uživatel mohl data opravit
+          let msg = 'HTTP ' + res.status;
+          try { const err = await res.json(); if (err && err.error) msg = err.error; } catch (_) {}
+          alert('Směnu se nepodařilo uložit: ' + msg);
+          return;
+        }
+        closeModal();
+        await loadShifts();
+      } catch (err) {
+        alert('Směnu se nepodařilo uložit: ' + (err.message || err));
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
-    async function deleteShift(id) {
-      if (!confirm('Smazat směnu?')) return;
-      await fetch('/api/hr/shifts/' + id, { method: 'DELETE' });
-      loadShifts();
+    async function deleteShift(id, peopleCount) {
+      // Smazáním směny se přiřazeným lidem vynuluje shift_id — upozorni na to
+      const warn = peopleCount
+        ? `Smazat směnu? Je přiřazena ${peopleCount} osobám — těm se přiřazení zruší.`
+        : 'Smazat směnu?';
+      if (!confirm(warn)) return;
+      try {
+        const res = await fetch('/api/hr/shifts/' + id, { method: 'DELETE' });
+        if (!res.ok) {
+          let msg = 'HTTP ' + res.status;
+          try { const err = await res.json(); if (err && err.error) msg = err.error; } catch (_) {}
+          alert('Směnu se nepodařilo smazat: ' + msg);
+          return;
+        }
+        await loadShifts();
+      } catch (err) {
+        alert('Směnu se nepodařilo smazat: ' + (err.message || err));
+      }
     }
 
     // ============================================================
@@ -2245,6 +2323,10 @@
         return;
       }
 
+      // Do organizační struktury patří jen aktivní lidé s trvajícím poměrem —
+      // bývalí zaměstnanci (type 'former') se nezobrazují ani nepočítají do
+      // čítačů u firem. Backend je už ve výchozím výpisu nevrací, tohle je
+      // pojistka pro případ, že se seznam načte i s archivem. (Požadavek #103)
       const activePeople = people.filter(p => p.active == 1 && p.type !== 'former');
 
       const companiesMap = {};
@@ -3405,6 +3487,9 @@
     // ============================================================
     // HELPERS
     // ============================================================
+    // Načte lidi pro organizační strukturu a výběrová pole. Bez parametru type
+    // vrací API pouze osoby s trvajícím poměrem — bývalí zaměstnanci zůstávají
+    // jen v archivu (filtr „Bývalí zaměstnanci"). (Požadavek #103)
     async function loadPeopleData() {
       const res = await fetch('/api/hr/people');
       people = await res.json();

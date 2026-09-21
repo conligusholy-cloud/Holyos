@@ -7,6 +7,7 @@ const router = express.Router();
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const { logAudit, diffObjects, makeSnapshot } = require('../services/audit');
+const { z } = require('zod');
 
 // ─── Časové zóny ────────────────────────────────────────────────────────
 // Node proces na Railway běží v UTC, ale docházka musí být v Europe/Prague.
@@ -640,10 +641,18 @@ async function reconcileFormerEmployees() {
 router.get('/people', async (req, res, next) => {
   try {
     await reconcileFormerEmployees();
-    const { search, type, department_id, active } = req.query;
+    const { search, type, department_id, active, include_former } = req.query;
 
     const where = {};
-    if (type) where.type = type;
+    // Bývalí zaměstnanci (type 'former') se ve výchozím výpisu nezobrazují —
+    // zmizí ze seznamu HR lidí i z organizační struktury a nepočítají se do
+    // statistik. Zůstávají dostupní v archivu přes explicitní ?type=former
+    // (případně ?include_former=1 pro kompletní výpis). (Požadavek #103)
+    if (type) {
+      where.type = type;
+    } else if (!(include_former === 'true' || include_former === '1')) {
+      where.type = { not: 'former' };
+    }
     if (department_id) where.department_id = parseInt(department_id);
     if (active !== undefined) where.active = active === 'true' || active === '1';
     if (search) {
@@ -756,6 +765,19 @@ function sanitizePersonData(body, currentUser, opts = {}) {
   return data;
 }
 
+// Ruční nastavení typu „bývalý zaměstnanec" bez data konce by rekonciliace
+// hned vrátila zpět na 'employee' (rozhoduje se podle end_date), proto se
+// v takovém případě doplní dnešní datum konce. (Požadavek #103)
+function ensureFormerEndDate(data, before) {
+  if (data.type !== 'former') return data;
+  const existing = data.end_date !== undefined ? data.end_date : (before ? before.end_date : null);
+  if (!existing) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    data.end_date = today;
+  }
+  return data;
+}
+
 // Sanitizace dat pro Role (whitelist povolených polí)
 function sanitizeRoleData(body) {
   const data = {};
@@ -776,7 +798,7 @@ function sanitizeRoleData(body) {
 router.post('/people', async (req, res, next) => {
   try {
     const person = await prisma.person.create({
-      data: sanitizePersonData(req.body, req.user, { mode: 'create' }),
+      data: ensureFormerEndDate(sanitizePersonData(req.body, req.user, { mode: 'create' }), null),
       include: { department: true, role: true, company: true },
     });
     await logAudit({
@@ -796,7 +818,7 @@ router.put('/people/:id', async (req, res, next) => {
     const before = await prisma.person.findUnique({ where: { id: parseInt(req.params.id) } });
     const person = await prisma.person.update({
       where: { id: parseInt(req.params.id) },
-      data: sanitizePersonData(req.body, req.user, { mode: 'update' }),
+      data: ensureFormerEndDate(sanitizePersonData(req.body, req.user, { mode: 'update' }), before),
       include: { department: true, role: true, company: true },
     });
     const changes = diffObjects(before, person);
@@ -977,7 +999,42 @@ router.delete('/roles/:id', async (req, res, next) => {
   }
 });
 
-// ─── SMĚNY ─────────────────────────────────────────────────────────────────
+// ─── SMĚNY ───────────────────────────────────────────────────
+
+// Validace dat směny — whitelist povolených polí, aby neznámé pole neshodilo Prismu
+const shiftBaseSchema = z.object({
+  name: z.string().trim().min(1, 'Název směny je povinný').max(255, 'Název směny je příliš dlouhý'),
+  type: z.enum(['fixed', 'flexible']).default('fixed'),
+  start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Začátek musí být ve formátu HH:MM').nullable().default(null),
+  end_time: z.string().regex(/^\d{2}:\d{2}$/, 'Konec musí být ve formátu HH:MM').nullable().default(null),
+  hours_fund: z.coerce.number('Fond hodin musí být číslo').min(0, 'Fond hodin nemůže být negativní').max(24, 'Fond hodin nemůže přesáhnout 24 h').default(8),
+  break_minutes: z.coerce.number('Přestávka musí být číslo').int('Přestávka musí být celé číslo').min(0, 'Přestávka nemůže být negativní').max(480, 'Přestávka nemůže přesáhnout 480 min').default(30),
+});
+
+// U pevné směny musí být vyplněný začátek i konec
+const shiftCreateSchema = shiftBaseSchema.refine(
+  (d) => d.type !== 'fixed' || (d.start_time && d.end_time),
+  { message: 'U pevné směny je nutné zadat začátek i konec', path: ['start_time'] },
+);
+
+// Normalizace těla requestu: prázdné stringy → null, pružná směna nemá časy
+function normalizeShiftBody(body) {
+  const raw = { ...(body || {}) };
+  for (const f of ['start_time', 'end_time']) {
+    if (raw[f] === '' || raw[f] === undefined) raw[f] = null;
+  }
+  if (raw.type === 'flexible') {
+    raw.start_time = null;
+    raw.end_time = null;
+  }
+  return raw;
+}
+
+// První chybová hláška ze zod — aby uživatel viděl konkrétní důvod
+function firstZodMessage(error) {
+  const issue = error.issues && error.issues[0];
+  return issue ? issue.message : 'Neplatná data směny';
+}
 
 // GET /api/hr/shifts
 router.get('/shifts', async (req, res, next) => {
@@ -995,7 +1052,16 @@ router.get('/shifts', async (req, res, next) => {
 // POST /api/hr/shifts
 router.post('/shifts', async (req, res, next) => {
   try {
-    const shift = await prisma.shift.create({ data: req.body });
+    const parsed = shiftCreateSchema.safeParse(normalizeShiftBody(req.body));
+    if (!parsed.success) {
+      return res.status(400).json({ error: firstZodMessage(parsed.error), details: parsed.error.issues });
+    }
+    const shift = await prisma.shift.create({ data: parsed.data });
+    await logAudit({
+      action: 'create', entity: 'shift', entity_id: shift.id,
+      description: `Vytvořena směna: ${shift.name}`,
+      snapshot: makeSnapshot(shift), user: req.user,
+    });
     res.status(201).json(shift);
   } catch (err) {
     next(err);
@@ -1005,10 +1071,27 @@ router.post('/shifts', async (req, res, next) => {
 // PUT /api/hr/shifts/:id
 router.put('/shifts/:id', async (req, res, next) => {
   try {
-    const shift = await prisma.shift.update({
-      where: { id: parseInt(req.params.id) },
-      data: req.body,
-    });
+    const id = parseInt(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'Neplatné ID směny' });
+    }
+    const parsed = shiftCreateSchema.safeParse(normalizeShiftBody(req.body));
+    if (!parsed.success) {
+      return res.status(400).json({ error: firstZodMessage(parsed.error), details: parsed.error.issues });
+    }
+    const before = await prisma.shift.findUnique({ where: { id } });
+    if (!before) {
+      return res.status(404).json({ error: 'Směna nenalezena' });
+    }
+    const shift = await prisma.shift.update({ where: { id }, data: parsed.data });
+    const changes = diffObjects(before, shift);
+    if (changes) {
+      await logAudit({
+        action: 'update', entity: 'shift', entity_id: shift.id,
+        description: `Upravena směna: ${shift.name}`,
+        changes, snapshot: makeSnapshot(before), user: req.user,
+      });
+    }
     res.json(shift);
   } catch (err) {
     next(err);
@@ -1018,7 +1101,17 @@ router.put('/shifts/:id', async (req, res, next) => {
 // DELETE /api/hr/shifts/:id
 router.delete('/shifts/:id', async (req, res, next) => {
   try {
-    await prisma.shift.delete({ where: { id: parseInt(req.params.id) } });
+    const id = parseInt(req.params.id);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'Neplatné ID směny' });
+    }
+    const before = await prisma.shift.findUnique({ where: { id } });
+    await prisma.shift.delete({ where: { id } });
+    await logAudit({
+      action: 'delete', entity: 'shift', entity_id: id,
+      description: `Smazána směna: ${before ? before.name : id}`,
+      snapshot: makeSnapshot(before), user: req.user,
+    });
     res.json({ ok: true });
   } catch (err) {
     next(err);
