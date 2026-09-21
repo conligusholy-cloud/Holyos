@@ -820,6 +820,8 @@
 
             (inv.note ? '<h3 style="margin-top:18px;">Poznámka</h3><div style="white-space:pre-wrap;">' + escapeHtml(inv.note) + '</div>' : '') +
 
+            (inv.order_id ? '<div id="order-history-panel" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám historii objednávky…</div></div>' : '') +
+
             '<div class="modal-actions">' +
               '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
               (window.currentUser?.isSuperAdmin
@@ -839,6 +841,52 @@
           '</div>' +
         '</div>'
       );
+      if (inv.order_id) loadOrderHistoryPanel(inv.order_id);
+    };
+
+    // Historie objednávky + související doklady (data z /api/wh/orders/:id/history).
+    async function loadOrderHistoryPanel(orderId) {
+      const el = document.getElementById('order-history-panel');
+      if (!el) return;
+      let data = null;
+      try { const r = await api('GET', '/api/wh/orders/' + orderId + '/history'); if (r.status === 200) data = r.data; } catch (e) {}
+      if (!data) { el.innerHTML = ''; return; }
+      const STAT = { draft: ['Koncept', '#9ca3af'], issued: ['Vystavena', '#3b82f6'], sent: ['Odeslána', '#3b82f6'], partially_paid: ['Částečně', '#eab308'], paid: ['Zaplacena', '#10b981'], overdue: ['Po splatnosti', '#ef4444'], cancelled: ['Storno', '#ef4444'] };
+      const tl = (data.timeline || []).map(function (e) {
+        return '<div style="display:flex;gap:10px;align-items:flex-start;padding:5px 0;">' +
+          '<div style="min-width:120px;font-size:11px;color:#6b7280;">' + new Date(e.ts).toLocaleString('cs-CZ') + '</div>' +
+          '<div style="width:8px;height:8px;border-radius:50%;background:#c9a24b;margin-top:5px;flex:none;"></div>' +
+          '<div style="font-size:13px;"><strong>' + escapeHtml(e.label) + '</strong>' + (e.detail ? ' <span style="color:#6b7280;">· ' + escapeHtml(e.detail) + '</span>' : '') + '</div>' +
+        '</div>';
+      }).join('');
+      const docs = (data.documents || []).map(function (d) {
+        const st = STAT[d.status] || [d.status || '—', '#9ca3af'];
+        const isInv = d.kind === 'invoice';
+        return '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;flex-wrap:wrap;">' +
+          '<div style="font-weight:600;font-size:13px;">' + escapeHtml(d.title) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:8px;">' +
+            '<span style="background:' + st[1] + '22;color:' + st[1] + ';padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;">' + escapeHtml(st[0]) + '</span>' +
+            '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="openDocBlob(\'' + d.url + '\')">📄 PDF</button>' +
+          '</div></div>';
+      }).join('');
+      el.innerHTML =
+        '<h3 style="margin-top:4px;">🕓 Historie objednávky ' + escapeHtml(data.order_number || '') + '</h3>' +
+        '<div style="margin:6px 0 14px;">' + (tl || '<span style="color:#6b7280;">Zatím žádné události.</span>') + '</div>' +
+        '<h3>🔗 Související doklady</h3>' +
+        '<div style="margin-top:6px;">' + (docs || '<span style="color:#6b7280;">Žádné doklady.</span>') + '</div>';
+    }
+
+    // Otevře PDF (objednávka i faktura) přes blob — kvůli Authorization headeru.
+    window.openDocBlob = async function (url) {
+      const win = window.open('', '_blank');
+      try {
+        const token = sessionStorage.getItem('token') || '';
+        const res = await fetch(url, { credentials: 'include', headers: token ? { Authorization: 'Bearer ' + token } : {} });
+        if (!res.ok) { if (win) win.close(); alert('Doklad se nepodařilo otevřít.'); return; }
+        const blob = await res.blob();
+        const objUrl = URL.createObjectURL(blob);
+        if (win) win.location = objUrl; else window.open(objUrl, '_blank');
+      } catch (e) { if (win) win.close(); alert('Chyba při otevírání dokladu: ' + (e && e.message)); }
     };
 
     // ─── Akce na faktuře ─────────────────────────────────────────────────

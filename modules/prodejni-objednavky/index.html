@@ -1283,7 +1283,7 @@
             '</div>' +
           '</div>' +
           '<div class="form-grid">' +
-            '<div class="form-group"><label>Očekávané datum zákazník</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '" title="Kdy jsme zákazníkovi slíbili dodání. Datum pro výrobu se dopočítá ze slotů."></div>' +
+            '<div class="form-group"><label>Datum slíbené zákazníkovi</label><input type="date" name="expected_delivery" value="' + (o.expected_delivery ? o.expected_delivery.split('T')[0] : '') + '" title="Necháš-li prázdné, dopočítá se automaticky = konec posledního výrobního slotu + 10 dní. Vyplněné datum = ruční override."><div style="font-size:11px;color:var(--text2);margin-top:4px;">Prázdné = automaticky konec posledního slotu + 10 dní.</div></div>' +
             '<div class="form-group"><label>Měna</label><select name="currency" onchange="renderPendingItems()"><option value="CZK"' + ((o.currency||'CZK')==='CZK'?' selected':'') + '>CZK (Kč)</option><option value="EUR"' + (o.currency==='EUR'?' selected':'') + '>EUR (€)</option></select></div>' +
           '</div>' +
 
@@ -2447,6 +2447,9 @@
           // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
           (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
 
+          // ─── Historie objednávky ───
+          renderOrderTimeline(order) +
+
           // ─── Účetní doklady k objednávce ───
           renderOrderInvoices(order) +
 
@@ -2888,6 +2891,37 @@
 
     // Uloží rozepsanou položku z formuláře (pokud je vyplněná) a zavře modal
     // Fáze 6 — Vystavit fakturu z objednávky
+    // Časová osa — co se s objednávkou dělo a kdy (z časových polí objednávky + faktur).
+    function renderOrderTimeline(order) {
+      if (!order) return '';
+      function invLabel(inv) { return (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'zálohová faktura' : 'faktura'; }
+      var ev = [];
+      function add(ts, label, detail) { if (ts) ev.push({ ts: new Date(ts), label: label, detail: detail || '' }); }
+      add(order.created_at, 'Objednávka vytvořena', order.order_number);
+      if (order.customer_email) add(order.created_at, 'Odesláno zákazníkovi k potvrzení', order.customer_email);
+      add(order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : '');
+      add(order.authorized_at, 'Autorizováno dodavatelem', '');
+      add(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', '');
+      (order.invoices || []).forEach(function (inv) { add(inv.date_issued, 'Vystavena ' + invLabel(inv), inv.invoice_number || ''); });
+      add(order.deposit_paid_at, 'Záloha zaplacena', '');
+      add(order.final_paid_at, 'Doplatek zaplacen', '');
+      add(order.released_at, 'Uvolněno do výroby', '');
+      add(order.expired_at, 'Vypršelo — sloty uvolněny', '');
+      add(order.delivered_at, 'Doručeno', '');
+      if (!ev.length) return '';
+      ev.sort(function (a, b) { return a.ts - b.ts; });
+      var rows = ev.map(function (e) {
+        return '<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;">' +
+          '<div style="min-width:112px;font-size:11px;color:var(--text2);font-variant-numeric:tabular-nums;">' + e.ts.toLocaleString('cs-CZ') + '</div>' +
+          '<div style="width:8px;height:8px;border-radius:50%;background:#c9a24b;margin-top:5px;flex:none;"></div>' +
+          '<div style="font-size:13px;"><strong>' + esc(e.label) + '</strong>' + (e.detail ? ' <span style="color:var(--text2);">· ' + esc(e.detail) + '</span>' : '') + '</div>' +
+        '</div>';
+      }).join('');
+      return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:8px;">🕓 Historie objednávky</h3>' +
+        '<div>' + rows + '</div></div>';
+    }
+
     // Panel s účetními doklady (fakturami) navázanými na objednávku + jejich stavy.
     function renderOrderInvoices(order) {
       var invs = (order && order.invoices) || [];

@@ -484,7 +484,9 @@ async function enrichOrdersWithProductionDates(orders) {
   }
 
   // Aplikuj na položky + agreguj na úroveň objednávky
-  return orders.map(o => {
+  const DELIVERY_LEAD_DAYS = 10; // datum slíbené zákazníkovi = konec posledního slotu + 10 dní
+  const toPersist = [];
+  const result = orders.map(o => {
     let orderLatestStart = null;
     let orderLatestEnd = null;
     let orderEarliestStart = null; // nejranější start ze všech slotů (kdy výroba reálně začne)
@@ -503,9 +505,24 @@ async function enrichOrdersWithProductionDates(orders) {
       }
       return { ...it, production_start: ps, production_finish: pe };
     }) : [];
+
+    // Datum slíbené zákazníkovi — automaticky = konec posledního výrobního slotu + 10 dní,
+    // pokud ho obchodník nezadal ručně (expected_delivery_manual). Uloží se, ať teče i do faktur/PDF.
+    let expected = o.expected_delivery;
+    if (!o.expected_delivery_manual && orderLatestEnd) {
+      const auto = new Date(orderLatestEnd);
+      auto.setDate(auto.getDate() + DELIVERY_LEAD_DAYS);
+      const cur = expected ? new Date(expected) : null;
+      if (!cur || cur.getTime() !== auto.getTime()) {
+        expected = auto;
+        toPersist.push({ id: o.id, expected_delivery: auto });
+      }
+    }
+
     return {
       ...o,
       items,
+      expected_delivery: expected,
       production_start_last: orderLatestStart,   // start NEJPOZDĚJŠÍHO slotu
       production_finish_last: orderLatestEnd,    // end NEJPOZDĚJŠÍHO slotu (= kdy je objednávka hotová)
       production_start_first: orderEarliestStart, // start NEJRANĚJŠÍHO slotu (= kdy výroba reálně začne)
@@ -513,6 +530,14 @@ async function enrichOrdersWithProductionDates(orders) {
       share_url: o.share_token ? buildOrderShareUrl('/order/' + o.share_token) : null,
     };
   });
+
+  // Best-effort persistence dopočítaných termínů (jen když se změnily).
+  if (toPersist.length) {
+    await Promise.all(toPersist.map(u =>
+      prisma.order.update({ where: { id: u.id }, data: { expected_delivery: u.expected_delivery } }).catch(() => {})
+    ));
+  }
+  return result;
 }
 
 // POST /api/wh/orders
@@ -857,7 +882,11 @@ router.put('/orders/:id', async (req, res, next) => {
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
     if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
-    if (allowed.expected_delivery !== undefined) allowed.expected_delivery = parseDate(allowed.expected_delivery);
+    if (allowed.expected_delivery !== undefined) {
+      allowed.expected_delivery = parseDate(allowed.expected_delivery);
+      // Zadané datum = ruční override (neautomatizovat). Vymazané = zpět na auto z posledního slotu.
+      allowed.expected_delivery_manual = !!allowed.expected_delivery;
+    }
 
     // Při zrušení objednávky uvolni sloty
     if (allowed.status === 'cancelled') {
@@ -1185,6 +1214,58 @@ router.post('/orders/:id/authorize', async (req, res, next) => {
     } });
     require('../services/order-docs').sendOrderConfirmationDocs(id).catch((e) => console.error('[order-authorize] doklady:', e && e.message));
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/orders/:id/history — časová osa (co se s objednávkou dělo) + související doklady.
+router.get('/orders/:id/history', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const order = await prisma.order.findUnique({ where: { id } });
+    if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
+
+    // Autorizující (jméno) pro popisek.
+    let authorizerName = null;
+    if (order.authorized_by_user_id) {
+      try {
+        const u = await prisma.user.findUnique({ where: { id: order.authorized_by_user_id }, select: { display_name: true, username: true } });
+        if (u) authorizerName = u.display_name || u.username || null;
+      } catch (e) {}
+    }
+
+    const invoices = await prisma.invoice.findMany({
+      where: { order_id: id }, orderBy: { id: 'asc' },
+      select: { id: true, invoice_number: true, type: true, invoice_role: true, total: true, currency: true, status: true, date_issued: true, date_due: true, paid_amount: true },
+    });
+
+    const invLabel = (inv) => (inv.invoice_role === 'deposit' || inv.type === 'proforma_issued') ? 'Zálohová faktura' : 'Faktura';
+
+    // ── Časová osa ──
+    const tl = [];
+    const push = (ts, label, detail) => { if (ts) tl.push({ ts: new Date(ts).toISOString(), label, detail: detail || null }); };
+    push(order.created_at, 'Objednávka vytvořena', order.order_number);
+    if (order.customer_email) push(order.created_at, 'Odesláno zákazníkovi k potvrzení', order.customer_email);
+    push(order.signed_at, 'Zákazník podepsal', order.signature_place ? ('místo: ' + order.signature_place) : null);
+    push(order.authorized_at, 'Autorizováno dodavatelem', authorizerName);
+    push(order.customer_docs_sent_at, 'Doklady odeslány zákazníkovi', null);
+    invoices.forEach((inv) => push(inv.date_issued, 'Vystavena ' + invLabel(inv).toLowerCase(), inv.invoice_number));
+    push(order.deposit_paid_at, 'Záloha zaplacena', null);
+    push(order.final_paid_at, 'Doplatek zaplacen', null);
+    push(order.released_at, 'Uvolněno do výroby', null);
+    push(order.expired_at, 'Vypršelo — sloty uvolněny', null);
+    push(order.delivered_at, 'Doručeno', null);
+    tl.sort((a, b) => new Date(a.ts) - new Date(b.ts));
+
+    // ── Související doklady ──
+    const documents = [];
+    if (['signed', 'confirmed', 'ordered', 'delivered', 'in_production'].includes(order.status) || order.confirmation_pdf_path) {
+      documents.push({ kind: 'order', title: 'Potvrzená objednávka ' + order.order_number, status: order.status, url: '/api/wh/orders/' + id + '/confirmation-pdf' });
+    }
+    invoices.forEach((inv) => {
+      documents.push({ kind: 'invoice', title: invLabel(inv) + ' ' + (inv.invoice_number || ('#' + inv.id)), status: inv.status, total: inv.total, currency: inv.currency, paid_amount: inv.paid_amount, date_due: inv.date_due, url: '/api/accounting/invoices/' + inv.id + '/pdf' });
+    });
+
+    res.json({ order_id: id, order_number: order.order_number, status: order.status, timeline: tl, documents });
   } catch (err) { next(err); }
 });
 
