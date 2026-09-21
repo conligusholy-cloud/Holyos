@@ -433,15 +433,35 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
     const rawFiles = (req.body && Array.isArray(req.body.DrawingFiles)) ? req.body.DrawingFiles : [];
     const rawByName = {};
     rawFiles.forEach((rf) => { if (rf && rf.DrawingFileName) rawByName[rf.DrawingFileName] = rf; });
-    const truthyFlag = (v) => v === true || v === 1 || (typeof v === 'string' && /^(1|true|yes|ano|suppress|suppressed|potla)/i.test(v.trim()));
+    const truthyFlag = (v) => v === true || v === 1 || (typeof v === 'string' && /^(1|true|yes|ano|suppress|suppressed|potla|exclud|vylou)/i.test(v.trim()));
+    const flagKey = (obj) => {
+      if (!obj || typeof obj !== 'object') return false;
+      for (const k of Object.keys(obj)) {
+        if (/suppress|potla|exclud|vylou/i.test(k) && truthyFlag(obj[k])) return true;
+      }
+      const st = String(obj.State || obj.Status || '').toLowerCase();
+      if (/suppress|potla|exclud|vylou/.test(st)) return true;
+      // Custom property, jejíž HODNOTA hlásí vyloučení/potlačení (např. Popis: „Vyloučen z kusovníku").
+      var cp = obj.CustomProperties || obj.custom_properties;
+      if (cp && typeof cp === 'object') {
+        for (const kk of Object.keys(cp)) {
+          const vv = String(cp[kk] == null ? '' : cp[kk]).toLowerCase();
+          if (/vylou(č|c)en|suppress|potla(č|c)/.test(vv)) return true;
+        }
+      }
+      return false;
+    };
     const isSuppressed = (f) => {
       const raw = rawByName[f.DrawingFileName] || f;
-      for (const k of Object.keys(raw)) {
-        if (/suppress|potla|exclud|vylou/i.test(k) && truthyFlag(raw[k])) return true;
+      if (flagKey(raw)) return true;
+      // Konfigurace: exportér u vyloučeného dílu typicky nastaví SelectedToSubmit=false
+      // (nebo příznak/property přímo na konfiguraci). Když je vyloučeno VŠE, díl přeskoč.
+      const cfgs = (raw.Configurations || f.Configurations || []);
+      if (cfgs.length) {
+        const anyFlagged = cfgs.some((c) => flagKey(c));
+        const allNotSelected = cfgs.every((c) => c && c.SelectedToSubmit === false);
+        if (anyFlagged || allNotSelected) return true;
       }
-      // Textový stav typu State/Status = "Suppressed"/"Potlačeno".
-      const st = String(raw.State || raw.Status || '').toLowerCase();
-      if (/suppress|potla/.test(st)) return true;
       return false;
     };
 
@@ -807,6 +827,14 @@ router.post('/drawings-import', requireCadWrite, async (req, res, next) => {
           details: {
             created, updated, not_changed: notChanged,
             ignored, unknown: unknownOut || [], errors,
+            // Diagnostika payloadu — jaké příznaky exportér u každého souboru poslal
+            // (klíče + vše kolem suppress/exclude/selected). Pomáhá poznat vyloučené díly.
+            diagnostics: rawFiles.slice(0, 200).map((rf) => {
+              const flags = {};
+              Object.keys(rf || {}).forEach((k) => { if (/suppress|potla|exclud|vylou|state|status|selected/i.test(k)) flags[k] = rf[k]; });
+              const cfgFlags = (rf.Configurations || []).map((c) => ({ name: c && c.ConfigurationName, SelectedToSubmit: c && c.SelectedToSubmit }));
+              return { file: rf.DrawingFileName, keys: Object.keys(rf || {}), flags, configs: cfgFlags };
+            }),
             steps, file_timings: fileTimings, total_ms: totalMs,
             // Statistiky z desktop exportéru (klient PC) — pokud je exportér poslal.
             exporter_stats: (parsed.data.ExporterStats || (req.body && req.body.ExporterStats) || null),

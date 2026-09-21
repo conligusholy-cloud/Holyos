@@ -185,8 +185,21 @@
         section('Vytvořené výkresy', d.created, '#10b981') +
         section('Aktualizované výkresy', d.updated, '#3b82f6') +
         section('Beze změny', d.not_changed, '#9ca3af') +
+        section('Ignorováno (potlačené/vyloučené)', d.ignored, '#f59e0b') +
         section('Neznámé komponenty', d.unknown, '#eab308') +
         section('Chyby', d.errors, '#ef4444', 'error') +
+        (function () {
+          var diag = d.diagnostics || [];
+          if (!diag.length) return '';
+          var rows = diag.map(function (x) {
+            var fl = (x.flags && Object.keys(x.flags).length) ? Object.keys(x.flags).map(function (k) { return k + '=' + JSON.stringify(x.flags[k]); }).join(', ') : '—';
+            var cf = (x.configs || []).map(function (c) { return (c.name || '?') + ': Sel=' + String(c.SelectedToSubmit); }).join('  ·  ') || '—';
+            return '<tr><td style="padding:4px 8px;">' + esc(x.file || '') + '</td><td style="padding:4px 8px;">' + esc(fl) + '</td><td style="padding:4px 8px;">' + esc(cf) + '</td></tr>';
+          }).join('');
+          return '<h4 style="margin:14px 0 4px;color:#eab308;">Diagnostika payloadu (příznaky z exportéru)</h4>' +
+            '<div style="font-size:11px;color:var(--text2);margin-bottom:4px;">Hledá se příznak vyloučení/potlačení. Když je „Příznaky" = — a Sel=undefined, exportér stav vyloučení vůbec neposílá (pak to musí doplnit exportér).</div>' +
+            '<table style="width:100%;border-collapse:collapse;font-size:11px;"><tr style="color:var(--text2);"><th style="text-align:left;padding:4px 8px;">Soubor</th><th style="text-align:left;padding:4px 8px;">Příznaky</th><th style="text-align:left;padding:4px 8px;">Konfigurace</th></tr>' + rows + '</table>';
+        })() +
         '</div>' +
         '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">' +
         '<button class="btn btn-secondary" onclick="cadImports.print()">🖨️ Tisk / PDF</button>' +
