@@ -898,6 +898,7 @@
           (showSnTab ? '<div class="sub-tab mat-tab" data-tab="serials" onclick="switchMatTab(\'serials\');loadSerialPanel(' + id + ')">🔖 Sériová čísla</div>' : '') +
           (showLotTab ? '<div class="sub-tab mat-tab" data-tab="lots" onclick="switchMatTab(\'lots\');loadLotPanel(' + id + ')">📦 Šarže</div>' : '') +
           '<div class="sub-tab mat-tab" data-tab="notes" onclick="switchMatTab(\'notes\')">Poznámky</div>' +
+          '<div class="sub-tab mat-tab" data-tab="cad" onclick="switchMatTab(\'cad\');loadCadPanel()">📐 CAD</div>' +
         '</div>' +
         '<form onsubmit="saveMaterial(event,' + (id||'null') + ')" style="max-height:76vh;overflow-y:auto;padding-right:8px">' +
           // === TAB: Obecné ===
@@ -1046,12 +1047,80 @@
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
             '<div class="form-group full"><label>Poznámka pro výrobu</label><textarea name="production_note" rows="4">' + v('production_note') + '</textarea></div>' +
           '</div>' +
+          // === TAB: CAD (spárováno s modulem CAD výkresy podle kódu) ===
+          '<div class="form-grid mat-grid mat-tab-content" data-tab="cad" style="display:none">' +
+            '<div class="form-group full" style="grid-column:1/-1"><div id="cad-panel" style="color:var(--text2);font-size:13px;">Načítám CAD výkres…</div></div>' +
+          '</div>' +
         '<div class="modal-actions" style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);gap:8px">' +
           (id ? '<button type="button" class="btn btn-secondary" onclick="printMaterialLabel(' + id + ')">🖨 Tisknout etiketu</button>' : '') +
           '<div style="flex:1"></div>' +
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
           '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
         '</div></form></div></div>';
+      // Kód pro spárování s CAD výkresem (načte se až po kliknutí na záložku CAD).
+      window.__cadMatCode = (m && m.code) ? String(m.code) : '';
+    }
+
+    // === ZÁLOŽKA CAD — spárování zboží s CAD výkresem podle kódu ===
+    async function loadCadPanel() {
+      var el = document.getElementById('cad-panel');
+      if (!el) return;
+      var code = (window.__cadMatCode || '').trim();
+      if (!code) { el.innerHTML = '<div style="color:var(--text2);">Zadejte a uložte nejdřív kód zboží — CAD výkres se páruje podle kódu.</div>'; return; }
+      el.innerHTML = '<div style="color:var(--text2);">Hledám CAD výkres pro kód <b>' + esc(code) + '</b>…</div>';
+      var list = [];
+      try {
+        var r = await fetch('/api/cad/drawings?q=' + encodeURIComponent(code) + '&limit=50');
+        if (r.ok) list = await r.json();
+      } catch (e) {}
+      var norm = function (s) { return String(s || '').replace(/\.[^./\\]+$/, '').trim().toLowerCase(); };
+      var matches = (Array.isArray(list) ? list : []).filter(function (d) { return norm(d.file_name) === code.toLowerCase(); });
+      if (!matches.length) {
+        el.innerHTML = '<div style="padding:12px 14px;border:1px dashed var(--border);border-radius:8px;color:var(--text2);">K tomuto kódu (<b>' + esc(code) + '</b>) zatím není spárovaný žádný CAD výkres.<br><a href="/modules/cad-vykresy/index.html" target="_blank" rel="noopener" style="color:#818cf8;">Otevřít CAD výkresy ↗</a></div>';
+        return;
+      }
+      // Nejvyšší verze.
+      matches.sort(function (a, b) { return (b.version || 0) - (a.version || 0); });
+      var d = matches[0];
+      var typ = ({ sldprt: 'Díl', sldasm: 'Sestava', slddrw: 'Výkres', stl: '3D model' })[(d.extension || '').toLowerCase()] || (d.extension || '—');
+      var lastNote = (d.change_logs && d.change_logs[0] && d.change_logs[0].note) || '';
+      var creator = d.creator ? [d.creator.first_name, d.creator.last_name].filter(Boolean).join(' ') : '';
+
+      // Přílohy napříč konfiguracemi (PDF + attachments + STL/PNG).
+      var pills = [];
+      var pillCss = 'display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0;padding:4px 10px;border-radius:10px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.35);font-size:12px;font-weight:600;text-decoration:none;';
+      var inlineTypes = ['pdf', 'png', 'jpg', 'jpeg', 'svg', 'webp', 'gif', 'stl'];
+      var seen = {};
+      (d.configurations || []).forEach(function (cfg) {
+        if (cfg.pdf_path && !seen['pdf' + cfg.pdf_path]) { seen['pdf' + cfg.pdf_path] = 1; pills.push('<a href="/api/cad/assets/' + encodeURI(cfg.pdf_path) + '" target="_blank" style="' + pillCss + 'background:rgba(239,68,68,0.12);color:#ef4444;border-color:rgba(239,68,68,0.3);">📄 PDF</a>'); }
+        if (cfg.stl_path && !seen['stl' + cfg.stl_path]) { seen['stl' + cfg.stl_path] = 1; pills.push('<a href="/api/cad/assets/' + encodeURI(cfg.stl_path) + '" target="_blank" download style="' + pillCss + 'background:rgba(34,197,94,0.12);color:#22c55e;border-color:rgba(34,197,94,0.3);">🧊 STL</a>'); }
+        (cfg.attachments || []).forEach(function (a) {
+          if (!a || !a.path || seen[a.path]) return; seen[a.path] = 1;
+          var k = (a.kind || a.filename || '').toLowerCase();
+          var isInline = inlineTypes.some(function (t) { return k.indexOf(t) >= 0; });
+          var dl = isInline ? '' : ' download="' + esc(a.filename || '') + '"';
+          pills.push('<a href="/api/cad/assets/' + encodeURI(a.path) + '" target="_blank"' + dl + ' title="' + esc(a.filename || '') + '" style="' + pillCss + '">📦 ' + esc((a.kind || '').toUpperCase() || 'SOUBOR') + '</a>');
+        });
+      });
+      var pillsHtml = pills.length ? '<div style="margin-top:6px;">' + pills.join('') + '</div>' : '<div style="color:var(--text2);font-size:12px;">Žádné soubory.</div>';
+
+      var row = function (k, val) { return val ? ('<div style="display:flex;gap:10px;padding:3px 0;font-size:13px;"><div style="min-width:130px;color:var(--text2);">' + k + '</div><div style="font-weight:600;">' + esc(val) + '</div></div>') : ''; };
+      el.innerHTML =
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">' +
+          '<div style="font-weight:800;font-size:15px;">' + esc(code) + ' <span style="color:var(--text2);font-weight:400;font-size:12px;">(' + esc(typ) + ' · v' + (d.version || 1) + ')</span></div>' +
+          '<a href="/modules/cad-vykresy/index.html" target="_blank" rel="noopener" class="btn btn-sm btn-secondary" style="text-decoration:none;">Otevřít v CAD výkresech ↗</a>' +
+        '</div>' +
+        row('Název', d.title) +
+        row('Popis', d.description) +
+        row('Projekt', d.project ? (d.project.code ? d.project.code + ' · ' + (d.project.name || '') : d.project.name) : '') +
+        row('Blok', d.block ? d.block.name : '') +
+        row('Soubor', d.file_name) +
+        row('Konstruktér', creator) +
+        row('Poslední import', d.last_import_at ? new Date(d.last_import_at).toLocaleString('cs-CZ') : '') +
+        row('Poznámka konstruktéra', lastNote) +
+        '<div style="margin-top:12px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);font-weight:700;">Soubory ke stažení</div>' +
+        pillsHtml +
+        (matches.length > 1 ? '<div style="margin-top:10px;font-size:11px;color:var(--text2);">Nalezeno více verzí (' + matches.length + '), zobrazena nejnovější.</div>' : '');
     }
 
     // === UPLOAD FOTOGRAFIE ===
