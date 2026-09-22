@@ -99,10 +99,20 @@ function toPublic(s) {
     parking_distance_m: s.parking_distance_m,
     population: s.population,
     anchor_count: s.anchor_count,
+    competition_count: s.competition_count,
+    score: s.score,
     cover_image_url: s.cover_image_url,
     gallery: Array.isArray(s.gallery) ? s.gallery : [],
     status: s.status,
   };
+}
+
+// Vzdálenost dvou bodů v km (haversine).
+function distKm(lat1, lon1, lat2, lon2) {
+  const R = 6371, toR = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toR, dLon = (lon2 - lon1) * toR;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // Interní podoba (vše).
@@ -193,7 +203,22 @@ router.get('/public', async (req, res, next) => {
       where: { status: { in: ['published', 'reserved'] } },
       orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
     });
-    res.json(spots.map(toPublic));
+    // Dopočítej vzdálenost k nejbližšímu provozovanému prádlomatu (z Google My Maps).
+    let existing = [];
+    try { existing = await fetchExistingLaundromats(); } catch (_) { existing = []; }
+    const out = spots.map((s) => {
+      const pub = toPublic(s);
+      if (s.latitude != null && s.longitude != null && existing.length) {
+        let best = null;
+        for (const w of existing) {
+          const d = distKm(Number(s.latitude), Number(s.longitude), w.lat, w.lon);
+          if (best === null || d < best.d) best = { d, name: w.name };
+        }
+        if (best) { pub.nearest_laundromat_km = Math.round(best.d * 10) / 10; pub.nearest_laundromat_name = best.name; }
+      }
+      return pub;
+    });
+    res.json(out);
   } catch (err) { next(err); }
 });
 

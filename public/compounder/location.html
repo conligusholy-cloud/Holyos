@@ -88,6 +88,7 @@
   .rowspot .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto}
   .chip{font-size:12px;color:#c3d6e8;background:var(--card2);border:.5px solid rgba(46,140,224,.28);border-radius:8px;padding:5px 9px;white-space:nowrap}
   .chip.g{background:rgba(34,197,94,.14);color:#7ee2a4;border-color:rgba(34,197,94,.4)}
+  .chip.w{background:rgba(234,179,8,.13);color:#f2d675;border-color:rgba(234,179,8,.4)}
   .rowspot .cta{flex:0 0 auto;align-self:center;padding:0 16px;display:flex;flex-direction:column;align-items:center;gap:9px}
   .rowspot .cta .btn2{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
   .rowspot .cta .btn2:hover{filter:brightness(1.08)}
@@ -253,6 +254,13 @@
   function infoChips(s){
     var c = [];
     if(s.has_parking) c.push('<span class="chip g">🅿️ parkoviště'+(s.parking_distance_m!=null?' '+s.parking_distance_m+' m':'')+'</span>');
+    if(s.nearest_laundromat_km!=null){
+      var far = s.nearest_laundromat_km >= 8;
+      c.push('<span class="chip '+(far?'g':'')+'">🧺 nejbližší prádlomat '+s.nearest_laundromat_km.toLocaleString('cs-CZ')+' km'+(s.nearest_laundromat_name?(' · '+esc(cap(s.nearest_laundromat_name))):'')+'</span>');
+    }
+    if(s.competition_count!=null){
+      c.push('<span class="chip '+(s.competition_count===0?'g':'w')+'">⚔️ konkurence v okolí: '+(s.competition_count===0?'žádná':s.competition_count)+'</span>');
+    }
     if(s.population!=null && s.population>0) c.push('<span class="chip">👥 spádovost ~'+Number(s.population).toLocaleString('cs-CZ')+'</span>');
     if(s.anchor_count!=null && s.anchor_count>0) c.push('<span class="chip">🏪 obchody v okolí '+s.anchor_count+'</span>');
     if(s.area_m2!=null) c.push('<span class="chip">📐 '+esc(fmtArea(s.area_m2))+'</span>');
@@ -260,6 +268,8 @@
     if(s.availability_note) c.push('<span class="chip">🗓️ '+esc(s.availability_note)+'</span>');
     return c;
   }
+  // Hezčí zápis názvu pobočky z KML (AŠ - Tesco → Aš – Tesco).
+  function cap(t){ t=String(t||''); if(t.length>28) t=t.slice(0,27)+'…'; return t.charAt(0)+t.slice(1).toLowerCase().replace(/ - /g,' – '); }
 
   function card(s){
     var pinIcon = '<svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="#4aa3ea" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6.1 7-12a7 7 0 1 0-14 0c0 5.9 7 12 7 12z"/><circle cx="12" cy="10" r="2.6"/></svg>';
@@ -307,6 +317,8 @@
       ? '<div class="gallery">'+s.gallery.map(function(u){return '<img src="'+esc(u)+'" alt="">';}).join('')+'</div>' : '';
     var facts = ''
       + mfact('Parkoviště', s.has_parking ? ('ano'+(s.parking_distance_m!=null?' · '+s.parking_distance_m+' m':'')) : null)
+      + mfact('Nejbližší prádlomat', s.nearest_laundromat_km!=null ? (s.nearest_laundromat_km.toLocaleString('cs-CZ')+' km'+(s.nearest_laundromat_name?(' ('+cap(s.nearest_laundromat_name)+')'):'')) : null)
+      + mfact('Konkurence v okolí', s.competition_count!=null ? (s.competition_count===0?'žádná':String(s.competition_count)) : null)
       + mfact('Spádovost', (s.population!=null && s.population>0) ? ('~'+Number(s.population).toLocaleString('cs-CZ')+' lidí') : s.footfall_note)
       + mfact('Obchody v okolí', (s.anchor_count!=null && s.anchor_count>0) ? String(s.anchor_count) : null)
       + mfact('Plocha', fmtArea(s.area_m2))
