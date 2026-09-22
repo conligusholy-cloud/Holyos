@@ -323,6 +323,20 @@ router.post('/finder/save-candidate', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/pradlomat-spots/finder/area-analysis — analýza spádové oblasti (kruh + hustota + AI).
+router.post('/finder/area-analysis', async (req, res, next) => {
+  try {
+    const area = String((req.body && req.body.area) || '').trim();
+    if (area.length < 2) return res.status(400).json({ error: 'Zadej město nebo oblast.' });
+    const radiusKm = Number(req.body && req.body.radius_km) || 15;
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const result = await finder.analyzeArea(area, radiusKm, cfg, { ai: req.body && req.body.ai !== false });
+    if (result && result.error) return res.status(404).json(result);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // POST /api/pradlomat-spots/finder/save-candidates — hromadné založení kandidátů.
 router.post('/finder/save-candidates', async (req, res, next) => {
   try {

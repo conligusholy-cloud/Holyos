@@ -310,4 +310,92 @@ async function aiReport(facts) {
   } catch (e) { return null; }
 }
 
-module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea };
+// ─── Analýza spádové oblasti (kružítko kolem města) ──────────────────────────
+// Obce s populací v okruhu (GeoNames → fallback OSM). Vrací i vzdálenost.
+async function placesWithin(lat, lon, radiusKm) {
+  const user = process.env.GEONAMES_USERNAME;
+  if (user) {
+    const url = 'https://secure.geonames.org/findNearbyPlaceNameJSON?lat=' + lat + '&lng=' + lon
+      + '&radius=' + radiusKm + '&maxRows=500&style=FULL&featureClass=P&username=' + encodeURIComponent(user);
+    const j = await fetchJson(url, null, 15000);
+    if (j && Array.isArray(j.geonames)) {
+      const places = j.geonames.map((g) => ({
+        name: g.name, lat: Number(g.lat), lon: Number(g.lng),
+        population: parseInt(g.population, 10) || 0,
+        dist_km: g.distance != null ? Math.round(Number(g.distance) * 10) / 10 : null,
+      })).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
+      return { places, source: 'GeoNames' };
+    }
+  }
+  // Fallback: OSM place nodes s populací.
+  const q = '[out:json][timeout:40];node(around:' + Math.round(radiusKm * 1000) + ',' + lat + ',' + lon + ')[place][population];out 500;';
+  const j = await overpass(q);
+  const els = (j && j.elements) || [];
+  const places = els.map((e) => ({
+    name: (e.tags && (e.tags.name || e.tags['name:en'])) || '?',
+    lat: e.lat, lon: e.lon,
+    population: parseInt(String((e.tags && e.tags.population) || '').replace(/[^0-9]/g, ''), 10) || 0,
+    dist_km: Math.round(haversineM(lat, lon, e.lat, e.lon) / 100) / 10,
+  })).filter((p) => Number.isFinite(p.lat) && p.population > 0);
+  return { places, source: 'OpenStreetMap' };
+}
+
+async function analyzeArea(query, radiusKm, rawCfg, opts) {
+  const cfg = mergeConfig(rawCfg);
+  opts = opts || {};
+  radiusKm = Number(radiusKm) > 0 ? Number(radiusKm) : (cfg.population_radius_km || 15);
+  if (radiusKm > 60) radiusKm = 60;
+  const area = await geocodeArea(query);
+  if (!area) return { error: 'Oblast se nepodařilo najít.' };
+  const pw = await placesWithin(area.lat, area.lon, radiusKm);
+  const places = (pw.places || []).filter((p) => p.population > 0).sort((a, b) => b.population - a.population);
+  if (!places.length && pw.source === 'OpenStreetMap' && !process.env.GEONAMES_USERNAME) {
+    // OSM má populaci jen sporadicky — dej najevo, že chybí GeoNames.
+  }
+  const total = places.reduce((s, p) => s + p.population, 0);
+  const areaKm2 = Math.PI * radiusKm * radiusKm;
+  const density = areaKm2 > 0 ? Math.round(total / areaKm2) : null;
+
+  let ai = null;
+  if (opts.ai !== false) {
+    ai = await areaReport({
+      center: area.display_name, radius_km: radiusKm,
+      total_population: total, density_per_km2: density,
+      places_count: places.length,
+      top_places: places.slice(0, 12).map((p) => ({ name: p.name, population: p.population, dist_km: p.dist_km })),
+    });
+  }
+  return {
+    center: { lat: area.lat, lon: area.lon, display_name: area.display_name },
+    radius_km: radiusKm, source: pw.source,
+    total_population: total, density_per_km2: density,
+    places_count: places.length,
+    places: places.slice(0, 300),
+    ai,
+  };
+}
+
+async function areaReport(facts) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.SPOT_FINDER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi analytik spádové oblasti pro venkovní samoobslužný prádlomat. '
+      + 'Dostaneš střed oblasti, poloměr (km), celkovou populaci v okruhu, hustotu (obyv./km²) a seznam největších obcí se vzdáleností. '
+      + 'Napiš stručné zhodnocení spádové oblasti z pohledu potenciálu pro prádlomat: velikost a rozložení populace (koncentrovaná ve městě vs. rozptýlená), dojezdovost, kde by dávalo smysl prádlomat umístit. '
+      + 'Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět>","density_label":"<např. Vysoká/Střední/Nízká hustota>","recommendation":"<1-2 věty kam mířit>"}. Piš česky.';
+    const usr = 'Data (JSON):\n' + JSON.stringify(facts);
+    const msg = await client.messages.create({ model, max_tokens: 600, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    text = text.replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    const j = JSON.parse(text);
+    return {
+      summary: String(j.summary || '').slice(0, 1200),
+      density_label: String(j.density_label || '').slice(0, 40),
+      recommendation: String(j.recommendation || '').slice(0, 600),
+    };
+  } catch (e) { return null; }
+}
+
+module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea, analyzeArea };

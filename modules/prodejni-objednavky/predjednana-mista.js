@@ -459,7 +459,12 @@
       + '  <div class="pmf-searchrow">'
       + '    <input id="pmf-area" placeholder="Zadej město nebo oblast (např. Kolín, Praha 4, Kladno)…">'
       + '    <button class="pm-btn ghost" id="pmf-cfgbtn" title="Nastavení logiky">⚙️ Konfigurace</button>'
-      + '    <button class="pm-btn primary" id="pmf-go">Hledat</button>'
+      + '    <button class="pm-btn primary" id="pmf-go" title="Najít konkrétní kandidátní místa">🔎 Hledat místa</button>'
+      + '  </div>'
+      + '  <div class="pmf-searchrow" style="margin-top:-4px">'
+      + '    <span style="font-size:12.5px;color:var(--text2)">Spádová oblast:</span>'
+      + '    <label style="font-size:12.5px;color:var(--text2);display:flex;align-items:center;gap:6px">poloměr <input id="pmf-radius" type="number" value="15" style="width:64px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px"> km</label>'
+      + '    <button class="pm-btn find" id="pmf-areabtn" title="Kružítko kolem města — populace a hustota v okruhu">🎯 Analýza oblasti</button>'
       + '  </div>'
       + '  <div id="pmf-cfgwrap" style="display:none"></div>'
       + '  <div class="pm-msg" id="pmf-msg"></div>'
@@ -470,6 +475,7 @@
     document.getElementById('pmf-go').onclick = runSearch;
     document.getElementById('pmf-area').addEventListener('keydown', function (e) { if (e.key === 'Enter') runSearch(); });
     document.getElementById('pmf-cfgbtn').onclick = toggleCfg;
+    document.getElementById('pmf-areabtn').onclick = runAreaAnalysis;
     loadConfig();
   }
 
@@ -718,6 +724,65 @@
       load();
       setTimeout(function () { btn.disabled = false; updateSelCount(); }, 1500);
     }).catch(function (e) { btn.disabled = false; updateSelCount(); alert('Nepodařilo se založit: ' + e.message); });
+  }
+
+  // ── Analýza spádové oblasti (kružítko kolem města) ──
+  function popColor(p) { return p >= 50000 ? '#7f0000' : p >= 20000 ? '#b30000' : p >= 10000 ? '#d7301f' : p >= 5000 ? '#ef6548' : p >= 2000 ? '#fc8d59' : p >= 1000 ? '#fdbb84' : p >= 500 ? '#fdd49e' : '#fee8c8'; }
+  function popRadius(p) { return Math.max(4, Math.min(34, Math.sqrt(p) / 3)); }
+
+  function runAreaAnalysis() {
+    var area = document.getElementById('pmf-area').value.trim();
+    var radius = parseInt(document.getElementById('pmf-radius').value, 10) || 15;
+    var msg = document.getElementById('pmf-msg');
+    if (area.length < 2) { msg.className = 'pm-msg err'; msg.textContent = 'Zadej město nebo oblast.'; return; }
+    msg.className = 'pm-msg'; msg.textContent = 'Analyzuji spádovou oblast ' + radius + ' km… (počítám populaci a hustotu)';
+    document.getElementById('pmf-results').innerHTML = '';
+    var btn = document.getElementById('pmf-areabtn'); btn.disabled = true;
+    fapi('/area-analysis', { method: 'POST', body: { area: area, radius_km: radius } }).then(function (r) {
+      btn.disabled = false; msg.textContent = ''; fstate.area = r; renderArea(r);
+    }).catch(function (e) { btn.disabled = false; msg.className = 'pm-msg err'; msg.textContent = e.message; });
+  }
+
+  function renderArea(r) {
+    var box = document.getElementById('pmf-results');
+    document.getElementById('pmf-map').style.display = '';
+    var tot = r.total_population != null ? r.total_population.toLocaleString('cs-CZ') : '—';
+    var dens = r.density_per_km2 != null ? r.density_per_km2.toLocaleString('cs-CZ') : '—';
+    var ai = r.ai;
+    var top = r.places.slice(0, 10).map(function (p) {
+      return '<span class="pmf-chip"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + popColor(p.population) + ';margin-right:5px"></span>' + esc(p.name) + ' — ' + p.population.toLocaleString('cs-CZ') + (p.dist_km != null ? ' · ' + p.dist_km + ' km' : '') + '</span>';
+    }).join('');
+    var bands = [['<500', '#fee8c8'], ['500+', '#fdd49e'], ['1k+', '#fdbb84'], ['2k+', '#fc8d59'], ['5k+', '#ef6548'], ['10k+', '#d7301f'], ['20k+', '#b30000'], ['50k+', '#7f0000']];
+    var legend = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center"><span style="font-size:11.5px;color:var(--text2)">Velikost obce:</span>'
+      + bands.map(function (x) { return '<span style="font-size:11px;display:inline-flex;align-items:center;gap:4px;color:var(--text2)"><span style="width:12px;height:12px;border-radius:50%;background:' + x[1] + ';border:1px solid rgba(255,255,255,.35)"></span>' + x[0] + '</span>'; }).join('') + '</div>';
+    var noData = (!r.places.length) ? '<div class="pm-hint" style="margin-top:8px;color:#f2d675">⚠️ Nenašla se data o populaci obcí. Pro přesnou spádovou populaci nastav na serveru <b>GEONAMES_USERNAME</b> (zdarma na geonames.org).</div>' : '';
+    box.innerHTML = '<div class="pmf-card">'
+      + '<div class="top"><div><div style="font-weight:700;font-size:16px">🎯 Spádová oblast ' + r.radius_km + ' km — ' + esc((r.center.display_name || '').split(',')[0]) + '</div>'
+      + '<div style="font-size:12px;color:var(--text2);margin-top:2px">Zdroj dat: ' + esc(r.source || '') + ' · obcí v okruhu: ' + (r.places_count || r.places.length) + '</div></div>'
+      + '<div style="text-align:right"><div class="pmf-score" style="color:#4aa3ea">' + tot + '</div><div style="font-size:11px;color:var(--text2)">obyvatel · ' + dens + ' /km²</div></div></div>'
+      + (ai ? ('<div class="pmf-ai" style="display:block">' + (ai.density_label ? '<b>' + esc(ai.density_label) + '</b> · ' : '') + esc(ai.summary || '') + (ai.recommendation ? '<div class="pm-hint" style="margin-top:6px">💡 ' + esc(ai.recommendation) + '</div>' : '') + '</div>') : '')
+      + noData + legend
+      + (top ? ('<div style="font-size:11.5px;color:var(--text2);margin-top:12px;margin-bottom:4px">Největší obce v okruhu</div><div class="pmf-chips">' + top + '</div>') : '')
+      + '</div>';
+    setTimeout(function () { drawAreaMap(r); }, 60);
+  }
+
+  function drawAreaMap(r) {
+    if (typeof L === 'undefined') return;
+    var el = document.getElementById('pmf-map'); if (!el) return;
+    if (fstate.map) { try { fstate.map.remove(); } catch (e) {} fstate.map = null; }
+    fstate.markers = [];
+    try {
+      fstate.map = L.map('pmf-map', { scrollWheelZoom: false }).setView([r.center.lat, r.center.lon], 10);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(fstate.map);
+      var ring = L.circle([r.center.lat, r.center.lon], { radius: r.radius_km * 1000, color: '#1e86e0', weight: 2, fill: true, fillColor: '#1e86e0', fillOpacity: .04, dashArray: '6 6' }).addTo(fstate.map);
+      L.circleMarker([r.center.lat, r.center.lon], { radius: 5, color: '#fff', weight: 2, fillColor: '#1e86e0', fillOpacity: 1 }).addTo(fstate.map).bindTooltip('Střed oblasti', { direction: 'top' });
+      r.places.forEach(function (p) {
+        L.circleMarker([p.lat, p.lon], { radius: popRadius(p.population), color: 'rgba(0,0,0,.4)', weight: .5, fillColor: popColor(p.population), fillOpacity: .82 })
+          .addTo(fstate.map).bindTooltip(esc(p.name) + ': ' + p.population.toLocaleString('cs-CZ'), { direction: 'top' });
+      });
+      try { fstate.map.fitBounds(ring.getBounds(), { padding: [20, 20] }); } catch (e) {}
+    } catch (e) {}
   }
 
   window.__pmfClose = closeFinder;
