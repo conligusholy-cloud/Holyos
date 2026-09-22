@@ -6625,8 +6625,18 @@ model PradlomatSpot {
   latitude    Decimal? @db.Decimal(10, 7)
   longitude   Decimal? @db.Decimal(10, 7)
 
+  // Veřejný (anonymizovaný) název — co uvidí zákazník místo jména partnera.
+  public_title       String? @db.VarChar(255)
   public_description String? @db.Text // hlavní veřejný popis místa
   highlight          String? @db.VarChar(160) // krátký odznak, např. "Bez konkurence do 2 km"
+
+  // Parametry z analýzy okolí (vyhledávač je vyplní, lze ručně upravit).
+  has_parking        Boolean?
+  parking_distance_m Int?
+  population         Int?     // spádová populace v okruhu
+  anchor_count       Int?     // počet tahounů provozu v okolí
+  competition_count  Int?     // počet konkurenčních prádelen v okolí
+  score              Int?     // skóre vhodnosti 0–100
   area_m2            Decimal? @db.Decimal(10, 2)
   rent_monthly       Decimal? @db.Decimal(12, 2)
   rent_currency      String?  @default("CZK") @db.VarChar(3)

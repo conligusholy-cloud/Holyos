@@ -69,6 +69,23 @@
 
   .empty{grid-column:1/-1;text-align:center;color:var(--muted2);padding:50px 10px;font-size:15px}
 
+  /* Řádkový layout */
+  .rows{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+  .rowspot{display:flex;gap:0;align-items:stretch;background:var(--card);border:.5px solid var(--line);border-radius:14px;overflow:hidden;cursor:pointer;transition:border-color .15s,box-shadow .2s}
+  .rowspot:hover{border-color:var(--blue);box-shadow:0 10px 26px -16px rgba(30,134,224,.55)}
+  .rowspot .thumb{width:150px;flex:0 0 150px;background:#0e1e33 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:12px}
+  .rowspot .main{flex:1;min-width:0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+  .rowspot .rline1{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+  .rowspot h3{font-size:17px;font-weight:700;line-height:1.25}
+  .rowspot .loc{font-size:12px;color:var(--blue-soft)}
+  .rowspot .chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:auto}
+  .chip{font-size:12px;color:#c3d6e8;background:var(--card2);border:.5px solid rgba(46,140,224,.28);border-radius:8px;padding:5px 9px;white-space:nowrap}
+  .chip.g{background:rgba(34,197,94,.14);color:#7ee2a4;border-color:rgba(34,197,94,.4)}
+  .rowspot .cta{flex:0 0 auto;align-self:center;padding:0 16px}
+  .rowspot .cta .btn2{background:var(--blue);color:#fff;border:none;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .rowspot .cta .btn2:hover{filter:brightness(1.08)}
+  @media(max-width:640px){.rowspot{flex-direction:column}.rowspot .thumb{width:100%;height:120px;flex:none}.rowspot .cta{align-self:stretch;padding:0 16px 14px}.rowspot .cta .btn2{width:100%}}
+
   /* Detail modal */
   .ov{position:fixed;inset:0;background:rgba(4,10,18,.72);backdrop-filter:blur(3px);z-index:1000;display:none;
     align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
@@ -166,51 +183,51 @@
     }).addTo(map);
   }
 
-  function spotIcon(s){
-    var color = s.status==='reserved' ? '#eab308' : '#1e86e0';
-    return L.divIcon({
-      className:'', iconSize:[26,26], iconAnchor:[13,26],
-      html:'<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);'
-        +'background:'+color+';border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>'
-    });
-  }
-
   function renderMarkers(list){
     markers.forEach(function(m){ map.removeLayer(m); }); markers = [];
     var pts = [];
     list.forEach(function(s){
       if(s.latitude==null||s.longitude==null) return;
-      var m = L.marker([s.latitude, s.longitude], { icon:spotIcon(s) }).addTo(map);
-      m.bindTooltip(esc(s.title), { direction:'top', offset:[0,-24] });
-      m.on('click', function(){ openModal(s.code); });
-      markers.push(m); pts.push([s.latitude, s.longitude]);
+      var color = s.status==='reserved' ? '#eab308' : '#1e86e0';
+      // Přibližná poloha — kroužek místo přesného bodu.
+      var c = L.circle([s.latitude, s.longitude], { radius:1200, color:color, weight:1.5, fillColor:color, fillOpacity:.18 }).addTo(map);
+      c.bindTooltip(esc(s.name), { direction:'top' });
+      c.on('click', function(){ openModal(s.code); });
+      markers.push(c); pts.push([s.latitude, s.longitude]);
     });
-    if(pts.length){ try{ map.fitBounds(pts, { padding:[40,40], maxZoom:12 }); }catch(e){} }
+    if(pts.length){ try{ map.fitBounds(pts, { padding:[40,40], maxZoom:11 }); }catch(e){} }
+  }
+
+  function infoChips(s){
+    var c = [];
+    if(s.has_parking) c.push('<span class="chip g">🅿️ parkoviště'+(s.parking_distance_m!=null?' '+s.parking_distance_m+' m':'')+'</span>');
+    if(s.population!=null && s.population>0) c.push('<span class="chip">👥 spádovost ~'+Number(s.population).toLocaleString('cs-CZ')+'</span>');
+    if(s.anchor_count!=null && s.anchor_count>0) c.push('<span class="chip">🏪 obchody v okolí '+s.anchor_count+'</span>');
+    if(s.area_m2!=null) c.push('<span class="chip">📐 '+esc(fmtArea(s.area_m2))+'</span>');
+    if(s.rent_monthly!=null) c.push('<span class="chip">💰 '+esc(fmtMoney(s.rent_monthly,s.rent_currency))+' /měs</span>');
+    if(s.availability_note) c.push('<span class="chip">🗓️ '+esc(s.availability_note)+'</span>');
+    return c;
   }
 
   function card(s){
-    var facts = [];
-    if(s.area_m2!=null) facts.push('<span class="fact">📐 '+esc(fmtArea(s.area_m2))+'</span>');
-    if(s.rent_monthly!=null) facts.push('<span class="fact">💰 '+esc(fmtMoney(s.rent_monthly,s.rent_currency))+' /měs</span>');
-    if(s.availability_note) facts.push('<span class="fact">🗓️ '+esc(s.availability_note)+'</span>');
-    var ph = s.cover_image_url
-      ? '<div class="ph" style="background-image:url(\''+esc(s.cover_image_url)+'\')">'
-      : '<div class="ph"><span class="noimg">🧺 bez fotky</span>';
+    var thumb = s.cover_image_url
+      ? '<div class="thumb" style="background-image:url(\''+esc(s.cover_image_url)+'\')"></div>'
+      : '<div class="thumb">🧺 bez fotky</div>';
     var stt = s.status==='reserved' ? '<span class="stt reserved">Rezervováno</span>' : '<span class="stt published">Volné</span>';
-    var hl = s.highlight ? '<span class="hl">'+esc(s.highlight)+'</span>' : '';
-    return '<div class="spot" onclick="__openSpot(\''+esc(s.code)+'\')">'
-      + ph + hl + stt + '</div>'
-      + '<div class="body">'
-      +   '<div class="loc">📍 '+esc(locLine(s))+'</div>'
-      +   '<h3>'+esc(s.title)+'</h3>'
-      +   (s.public_description ? '<div class="desc">'+esc(s.public_description)+'</div>' : '')
-      +   '<div class="facts">'+facts.join('')+'</div>'
+    return '<div class="rowspot" onclick="__openSpot(\''+esc(s.code)+'\')">'
+      + thumb
+      + '<div class="main">'
+      +   '<div class="rline1"><div><div class="loc">📍 '+esc(locLine(s))+' · přibližná poloha</div><h3>'+esc(s.name)+'</h3></div>'+stt+'</div>'
+      +   (s.highlight ? '<div style="font-size:13px;color:#a9cdec">'+esc(s.highlight)+'</div>' : '')
+      +   '<div class="chips">'+infoChips(s).join('')+'</div>'
       + '</div>'
+      + '<div class="cta"><button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Mám zájem</button></div>'
       + '</div>';
   }
 
   function render(list){
     var grid = document.getElementById('grid');
+    grid.className = 'rows';
     document.getElementById('count').textContent = list.length ? (list.length+' '+plural(list.length)) : '';
     if(!list.length){ grid.innerHTML = '<div class="empty">Zatím tu nejsou žádná místa. Ozvěte se nám a najdeme ho společně.</div>'; return; }
     grid.innerHTML = list.map(card).join('');
@@ -220,7 +237,7 @@
   function applyFilter(){
     var q = document.getElementById('search').value.trim().toLowerCase();
     var list = !q ? all : all.filter(function(s){
-      return [s.title,s.city,s.region].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;
+      return [s.name,s.city,s.region].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;
     });
     render(list); renderMarkers(list);
   }
@@ -236,18 +253,19 @@
     var gallery = (s.gallery&&s.gallery.length)
       ? '<div class="gallery">'+s.gallery.map(function(u){return '<img src="'+esc(u)+'" alt="">';}).join('')+'</div>' : '';
     var facts = ''
+      + mfact('Parkoviště', s.has_parking ? ('ano'+(s.parking_distance_m!=null?' · '+s.parking_distance_m+' m':'')) : null)
+      + mfact('Spádovost', (s.population!=null && s.population>0) ? ('~'+Number(s.population).toLocaleString('cs-CZ')+' lidí') : s.footfall_note)
+      + mfact('Obchody v okolí', (s.anchor_count!=null && s.anchor_count>0) ? String(s.anchor_count) : null)
       + mfact('Plocha', fmtArea(s.area_m2))
       + mfact('Nájem', fmtMoney(s.rent_monthly, s.rent_currency) ? fmtMoney(s.rent_monthly, s.rent_currency)+' /měs' : null)
-      + mfact('Spádovost', s.footfall_note)
       + mfact('Dostupné', s.availability_note);
-    if(s.show_address && s.address) facts += mfact('Adresa', s.address);
     var hasMap = s.latitude!=null && s.longitude!=null;
 
     document.getElementById('modal').innerHTML =
       cover
       + '<div class="inner">'
-      +   '<h2>'+esc(s.title)+'</h2>'
-      +   '<div class="mloc">📍 '+esc(locLine(s))+'</div>'
+      +   '<h2>'+esc(s.name)+'</h2>'
+      +   '<div class="mloc">📍 '+esc(locLine(s))+' · přibližná poloha</div>'
       +   (s.highlight ? '<span class="mhl">'+esc(s.highlight)+'</span>' : '')
       +   (s.public_description ? '<div class="mdesc">'+esc(s.public_description)+'</div>' : '')
       +   (facts ? '<div class="mfacts">'+facts+'</div>' : '')
@@ -261,9 +279,10 @@
     if(hasMap){
       setTimeout(function(){
         try{
-          mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 14);
+          mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 12);
           L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Tiles &copy; Esri' }).addTo(mmap);
-          L.marker([s.latitude,s.longitude], { icon:spotIcon(s) }).addTo(mmap);
+          var col = s.status==='reserved' ? '#eab308' : '#1e86e0';
+          L.circle([s.latitude,s.longitude], { radius:1200, color:col, weight:1.5, fillColor:col, fillOpacity:.18 }).addTo(mmap);
         }catch(e){}
       }, 60);
     }

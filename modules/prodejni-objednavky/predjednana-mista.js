@@ -239,6 +239,7 @@
       + '  </select></div>'
       + '  <div class="pm-f"><label>Kód (URL)</label><input id="pmf-code" value="' + attr(v('code')) + '" placeholder="automaticky z názvu"></div>'
       + '  <div class="pm-f full"><div class="pm-hint">🌐 Na <b>pradlomaty.info/location</b> se místo zobrazí automaticky při stavu <b>Zveřejněné</b> nebo <b>Rezervováno</b>. Ve stavu Rozpracované/Obsazené/Archiv je skryté.</div></div>'
+      + '  <div class="pm-f full"><label>👁️ Veřejný název <span style="color:var(--text2)">(co uvidí zákazník místo jména partnera)</span></label><input id="pmf-public_title" value="' + attr(v('public_title')) + '" placeholder="např. Lokalita u supermarketu – Rychnov n. Kn."></div>'
       + '  <div class="pm-f full"><label>Odznak (highlight)</label><input id="pmf-highlight" value="' + attr(v('highlight')) + '" placeholder="např. Bez konkurence do 2 km"></div>'
       + '</div>'
 
@@ -270,6 +271,15 @@
       + '  <div class="pm-f full"><label>Dostupnost</label><input id="pmf-avail" value="' + attr(v('availability_note')) + '" placeholder="např. Volné od 09/2026"></div>'
       + '</div>'
 
+      + '<div class="pm-sect">📊 Parametry z analýzy <span style="font-weight:400;text-transform:none;color:var(--text2)">(vyhledávač vyplní, lze upravit — zobrazí se zákazníkovi)</span></div>'
+      + '<div class="pm-grid three">'
+      + '  <div class="pm-f"><label class="pm-check"><input type="checkbox" id="pmf-has_parking" ' + chk('has_parking') + '> 🅿️ Parkoviště poblíž</label></div>'
+      + '  <div class="pm-f"><label>Vzdálenost parkoviště (m)</label><input id="pmf-parking_distance_m" value="' + attr(v('parking_distance_m')) + '"></div>'
+      + '  <div class="pm-f"><label>👥 Spádová populace</label><input id="pmf-population" value="' + attr(v('population')) + '"></div>'
+      + '  <div class="pm-f"><label>🏪 Tahouni provozu (počet)</label><input id="pmf-anchor_count" value="' + attr(v('anchor_count')) + '"></div>'
+      + '  <div class="pm-f"><label>⚔️ Konkurence (počet)</label><input id="pmf-competition_count" value="' + attr(v('competition_count')) + '"></div>'
+      + '  <div class="pm-f"><label>⭐ Skóre vhodnosti (0–100)</label><input id="pmf-score" value="' + attr(v('score')) + '"></div>'
+      + '</div>'
       + '<div class="pm-sect">Veřejný popis a fotky</div>'
       + '<div class="pm-grid">'
       + '  <div class="pm-f full"><label>Veřejný popis (zobrazí se návštěvníkovi)</label><textarea id="pmf-desc">' + esc(v('public_description')) + '</textarea></div>'
@@ -294,6 +304,13 @@
       title: val('pmf-title'),
       code: val('pmf-code') || undefined,
       status: val('pmf-status'),
+      public_title: val('pmf-public_title'),
+      has_parking: chk('pmf-has_parking'),
+      parking_distance_m: num(val('pmf-parking_distance_m')),
+      population: num(val('pmf-population')),
+      anchor_count: num(val('pmf-anchor_count')),
+      competition_count: num(val('pmf-competition_count')),
+      score: num(val('pmf-score')),
       highlight: val('pmf-highlight'),
       city: val('pmf-city'), region: val('pmf-region'), country: val('pmf-country'),
       address: val('pmf-address'), show_address: chk('pmf-showaddr'),
@@ -642,7 +659,7 @@
     var city = (fstate.result.area.display_name || '').split(',')[0].trim();
     var note = 'Z vyhledávače lokalit — skóre ' + c.score + '/100 (' + c.verdict + '). '
       + 'Parkoviště: ' + (c.metrics.parking.count ? 'ano' : 'ne') + ', konkurence v okruhu: ' + c.metrics.competition.count + ', tahouni: ' + c.metrics.anchors.count + '.';
-    fapi('/save-candidate', { method: 'POST', body: { lat: c.lat, lon: c.lon, name: c.name, city: city, score: c.score, verdict: c.verdict, note: note } })
+    fapi('/save-candidate', { method: 'POST', body: candPayload(c, city, note) })
       .then(function () {
         var btn = document.querySelector('#pmf-card-' + i + ' .pm-btn.primary'); if (btn) { btn.textContent = '✓ Založeno'; btn.disabled = true; }
         load();
@@ -675,13 +692,25 @@
     var sa = document.getElementById('pmf-selall'); if (sa) sa.checked = false;
     updateSelCount();
   }
+  function candPayload(c, city, note) {
+    var m = c.metrics || {};
+    return {
+      lat: c.lat, lon: c.lon, name: c.name, city: city, score: c.score, verdict: c.verdict, note: note,
+      has_parking: !!(m.parking && m.parking.count > 0),
+      parking_distance_m: (m.parking && m.parking.nearest_m != null) ? m.parking.nearest_m : null,
+      population: fstate.result ? fstate.result.population : null,
+      anchor_count: m.anchors ? m.anchors.count : null,
+      competition_count: m.competition ? m.competition.count : null
+    };
+  }
+
   function saveSelected() {
     var idx = Object.keys(fstate.selected); if (!idx.length) { alert('Nejdřív zaškrtni aspoň jedno místo.'); return; }
     var city = (fstate.result.area.display_name || '').split(',')[0].trim();
     var items = idx.map(function (i) {
       var c = fstate.result.candidates[i];
-      return { lat: c.lat, lon: c.lon, name: c.name, city: city, score: c.score, verdict: c.verdict,
-        note: 'Z vyhledávače lokalit — skóre ' + c.score + '/100 (' + c.verdict + '). Parkoviště: ' + (c.metrics.parking.count ? 'ano' : 'ne') + ', konkurence: ' + c.metrics.competition.count + ', tahouni: ' + c.metrics.anchors.count + '.' };
+      var note = 'Z vyhledávače lokalit — skóre ' + c.score + '/100 (' + c.verdict + '). Parkoviště: ' + (c.metrics.parking.count ? 'ano' : 'ne') + ', konkurence: ' + c.metrics.competition.count + ', tahouni: ' + c.metrics.anchors.count + '.';
+      return candPayload(c, city, note);
     });
     var btn = document.getElementById('pmf-savesel'); btn.disabled = true; btn.textContent = 'Zakládám…';
     fapi('/save-candidates', { method: 'POST', body: { candidates: items } }).then(function (r) {

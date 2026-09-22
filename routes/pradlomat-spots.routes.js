@@ -32,6 +32,21 @@ function actorPersonId(req) {
   return req.user && req.user.person ? req.user.person.id : null;
 }
 
+// Z payloadu kandidáta (z vyhledávače) vytáhne strukturované metriky pro uložení.
+// Přijme jak ploché hodnoty, tak vnořený objekt metrics.
+function candidateMetrics(b) {
+  const m = (b && b.metrics) || {};
+  const iOrNull = (v) => (v != null && isFinite(v)) ? Math.round(Number(v)) : null;
+  return {
+    has_parking: b.has_parking != null ? !!b.has_parking : (b.metrics ? ((m.parking && m.parking.count) > 0) : null),
+    parking_distance_m: b.parking_distance_m != null ? iOrNull(b.parking_distance_m) : (m.parking ? iOrNull(m.parking.nearest_m) : null),
+    population: iOrNull(b.population),
+    anchor_count: b.anchor_count != null ? iOrNull(b.anchor_count) : (m.anchors ? iOrNull(m.anchors.count) : null),
+    competition_count: b.competition_count != null ? iOrNull(b.competition_count) : (m.competition ? iOrNull(m.competition.count) : null),
+    score: iOrNull(b.score),
+  };
+}
+
 // Diakritika pryč, mezery→pomlčky, jen [a-z0-9-].
 function slugify(s) {
   return String(s || '')
@@ -58,17 +73,21 @@ async function uniqueCode(base) {
 // Serializace Decimalů → number (aby na frontendu nebyly stringy).
 function num(v) { return v == null ? null : Number(v); }
 
-// Veřejná podoba místa (jen to, co má vidět návštěvník webu).
+// Přibližná souřadnice (zaokrouhlení ~1 km), ať zákazník nevidí přesné místo.
+function fuzz(v) { return v == null ? null : Math.round(Number(v) * 100) / 100; }
+
+// Veřejná podoba místa — ANONYMIZOVANÁ. Bez jména partnera (title), bez přesné
+// adresy a s přibližnou polohou. Zákazník vidí jen veřejný název a parametry.
 function toPublic(s) {
   return {
     code: s.code,
-    title: s.title,
+    name: s.public_title || s.highlight || ('Připravená lokalita' + (s.city ? ' – ' + s.city : '')),
     city: s.city,
     region: s.region,
     country: s.country,
-    address: s.show_address ? s.address : null,
-    latitude: num(s.latitude),
-    longitude: num(s.longitude),
+    latitude: fuzz(s.latitude),
+    longitude: fuzz(s.longitude),
+    approx: true,
     public_description: s.public_description,
     highlight: s.highlight,
     area_m2: num(s.area_m2),
@@ -76,6 +95,10 @@ function toPublic(s) {
     rent_currency: s.rent_currency,
     footfall_note: s.footfall_note,
     availability_note: s.availability_note,
+    has_parking: s.has_parking,
+    parking_distance_m: s.parking_distance_m,
+    population: s.population,
+    anchor_count: s.anchor_count,
     cover_image_url: s.cover_image_url,
     gallery: Array.isArray(s.gallery) ? s.gallery : [],
     status: s.status,
@@ -97,6 +120,7 @@ function toAdmin(s) {
     show_address: s.show_address,
     latitude: num(s.latitude),
     longitude: num(s.longitude),
+    public_title: s.public_title,
     public_description: s.public_description,
     highlight: s.highlight,
     area_m2: num(s.area_m2),
@@ -104,6 +128,12 @@ function toAdmin(s) {
     rent_currency: s.rent_currency,
     footfall_note: s.footfall_note,
     availability_note: s.availability_note,
+    has_parking: s.has_parking,
+    parking_distance_m: s.parking_distance_m,
+    population: s.population,
+    anchor_count: s.anchor_count,
+    competition_count: s.competition_count,
+    score: s.score,
     cover_image_url: s.cover_image_url,
     gallery: Array.isArray(s.gallery) ? s.gallery : [],
     owner_name: s.owner_name,
@@ -281,13 +311,13 @@ router.post('/finder/save-candidate', async (req, res, next) => {
     if (b.note) notes = String(b.note).slice(0, 4000);
     else if (b.score != null) notes = 'Z vyhledávače lokalit — skóre ' + Math.round(b.score) + '/100 (' + (b.verdict || '') + ').';
     const created = await prisma.pradlomatSpot.create({
-      data: {
+      data: Object.assign({
         code, title, status: 'draft', is_public: false,
         city: b.city ? String(b.city).slice(0, 120) : null,
         latitude: lat, longitude: lon,
         internal_notes: notes || null,
         created_by_id: actorPersonId(req),
-      },
+      }, candidateMetrics(b)),
     });
     res.status(201).json(toAdmin(created));
   } catch (err) { next(err); }
@@ -306,13 +336,13 @@ router.post('/finder/save-candidates', async (req, res, next) => {
       const title = String(b.name || '').trim() || (b.city ? String(b.city) : 'Nové místo');
       const code = await uniqueCode(b.city ? (b.city + '-' + title) : title);
       await prisma.pradlomatSpot.create({
-        data: {
+        data: Object.assign({
           code, title, status: 'draft', is_public: false,
           city: b.city ? String(b.city).slice(0, 120) : null,
           latitude: lat, longitude: lon,
           internal_notes: b.note ? String(b.note).slice(0, 4000) : null,
           created_by_id: personId,
-        },
+        }, candidateMetrics(b)),
       });
       created += 1;
     }
@@ -376,6 +406,13 @@ const spotSchema = z.object({
   code: z.string().trim().max(80).optional(),
   status: z.enum(['draft', 'published', 'reserved', 'taken', 'archived']).optional(),
   is_public: z.boolean().optional(),
+  public_title: z.string().trim().max(255).optional().nullable(),
+  has_parking: z.boolean().optional().nullable(),
+  parking_distance_m: z.number().int().optional().nullable(),
+  population: z.number().int().optional().nullable(),
+  anchor_count: z.number().int().optional().nullable(),
+  competition_count: z.number().int().optional().nullable(),
+  score: z.number().int().optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   region: z.string().trim().max(120).optional().nullable(),
   country: z.string().trim().max(60).optional().nullable(),
@@ -425,7 +462,11 @@ router.post('/', async (req, res, next) => {
         city: emptyToNull(d.city), region: emptyToNull(d.region), country: emptyToNull(d.country) || 'CZ',
         address: emptyToNull(d.address), show_address: !!d.show_address,
         latitude: d.latitude ?? null, longitude: d.longitude ?? null,
+        public_title: emptyToNull(d.public_title),
         public_description: emptyToNull(d.public_description), highlight: emptyToNull(d.highlight),
+        has_parking: d.has_parking ?? null, parking_distance_m: d.parking_distance_m ?? null,
+        population: d.population ?? null, anchor_count: d.anchor_count ?? null,
+        competition_count: d.competition_count ?? null, score: d.score ?? null,
         area_m2: d.area_m2 ?? null, rent_monthly: d.rent_monthly ?? null,
         rent_currency: emptyToNull(d.rent_currency) || 'CZK',
         footfall_note: emptyToNull(d.footfall_note), availability_note: emptyToNull(d.availability_note),
@@ -474,7 +515,11 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     if (d.country !== undefined) data.country = emptyToNull(d.country) || 'CZ';
     setIf('address', emptyToNull(d.address)); setIf('show_address', d.show_address);
     setIf('latitude', d.latitude); setIf('longitude', d.longitude);
+    setIf('public_title', emptyToNull(d.public_title));
     setIf('public_description', emptyToNull(d.public_description)); setIf('highlight', emptyToNull(d.highlight));
+    setIf('has_parking', d.has_parking); setIf('parking_distance_m', d.parking_distance_m);
+    setIf('population', d.population); setIf('anchor_count', d.anchor_count);
+    setIf('competition_count', d.competition_count); setIf('score', d.score);
     setIf('area_m2', d.area_m2); setIf('rent_monthly', d.rent_monthly);
     if (d.rent_currency !== undefined) data.rent_currency = emptyToNull(d.rent_currency) || 'CZK';
     setIf('footfall_note', emptyToNull(d.footfall_note)); setIf('availability_note', emptyToNull(d.availability_note));
