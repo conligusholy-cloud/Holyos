@@ -756,12 +756,24 @@
     var legend = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center"><span style="font-size:11.5px;color:var(--text2)">Velikost obce:</span>'
       + bands.map(function (x) { return '<span style="font-size:11px;display:inline-flex;align-items:center;gap:4px;color:var(--text2)"><span style="width:12px;height:12px;border-radius:50%;background:' + x[1] + ';border:1px solid rgba(255,255,255,.35)"></span>' + x[0] + '</span>'; }).join('') + '</div>';
     var noData = (!r.places.length) ? '<div class="pm-hint" style="margin-top:8px;color:#f2d675">⚠️ Nenašla se data o populaci obcí. Pro přesnou spádovou populaci nastav na serveru <b>GEONAMES_USERNAME</b> (zdarma na geonames.org).</div>' : '';
+    var cap = r.capacity, capHtml = '';
+    if (cap && cap.recommended > 0) {
+      var allocChips = (cap.allocation || []).map(function (a) {
+        return '<span class="pmf-chip"><b style="color:#4aa3ea">' + a.units + '×</b>&nbsp;' + esc(a.name) + ' <span style="color:var(--text2)">· ' + a.population.toLocaleString('cs-CZ') + ' obyv.</span></span>';
+      }).join('');
+      capHtml = '<div style="margin-top:12px;padding:12px 14px;border-radius:10px;background:rgba(30,134,224,.09);border:1px solid rgba(30,134,224,.28)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+        + '<div style="font-weight:700;font-size:14px;color:#4aa3ea">📦 Kapacita oblasti: ' + cap.recommended + '× prádlomat</div>'
+        + '<div style="font-size:11px;color:var(--text2)">přepočet 1 prádlomat / ' + cap.per_pradlomat.toLocaleString('cs-CZ') + ' obyvatel</div></div>'
+        + (allocChips ? ('<div style="font-size:11.5px;color:var(--text2);margin:9px 0 5px">Návrh rozmístění podle počtu obyvatel</div><div class="pmf-chips">' + allocChips + '</div>') : '')
+        + '</div>';
+    }
     box.innerHTML = '<div class="pmf-card">'
       + '<div class="top"><div><div style="font-weight:700;font-size:16px">🎯 Spádová oblast ' + r.radius_km + ' km — ' + esc((r.center.display_name || '').split(',')[0]) + '</div>'
       + '<div style="font-size:12px;color:var(--text2);margin-top:2px">Zdroj dat: ' + esc(r.source || '') + ' · obcí v okruhu: ' + (r.places_count || r.places.length) + '</div></div>'
       + '<div style="text-align:right"><div class="pmf-score" style="color:#4aa3ea">' + tot + '</div><div style="font-size:11px;color:var(--text2)">obyvatel · ' + dens + ' /km²</div></div></div>'
       + (ai ? ('<div class="pmf-ai" style="display:block">' + (ai.density_label ? '<b>' + esc(ai.density_label) + '</b> · ' : '') + esc(ai.summary || '') + (ai.recommendation ? '<div class="pm-hint" style="margin-top:6px">💡 ' + esc(ai.recommendation) + '</div>' : '') + '</div>') : '')
-      + noData + legend
+      + capHtml + noData + legend
       + (top ? ('<div style="font-size:11.5px;color:var(--text2);margin-top:12px;margin-bottom:4px">Největší obce v okruhu</div><div class="pmf-chips">' + top + '</div>') : '')
       + '</div>';
     setTimeout(function () { drawAreaMap(r); }, 60);

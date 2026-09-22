@@ -23,6 +23,7 @@ const DEFAULT_CONFIG = {
   weights: { parking: 30, competition: 30, population: 20, anchors: 20 },
   min_score: 55,              // práh „vhodné"
   max_candidates: 60,         // strop kandidátů na jedno hledání
+  people_per_pradlomat: 15000,// obyvatel na 1 prádlomat (přepočet kapacity oblasti)
 };
 
 // Odfiltruje null/undefined/NaN, aby prázdné pole z formuláře nepřepsalo výchozí.
@@ -356,12 +357,32 @@ async function analyzeArea(query, radiusKm, rawCfg, opts) {
   const areaKm2 = Math.PI * radiusKm * radiusKm;
   const density = areaKm2 > 0 ? Math.round(total / areaKm2) : null;
 
+  // Kapacita oblasti: kolik prádlomatů uživí (přepočet obyvatel na 1 prádlomat)
+  // a rozložení tohoto počtu na obce podle jejich populace (metoda největšího zbytku).
+  const perP = Number(cfg.people_per_pradlomat) > 0 ? Number(cfg.people_per_pradlomat) : 15000;
+  const recommended = perP > 0 ? Math.round(total / perP) : 0;
+  let allocation = [];
+  if (recommended > 0 && places.length) {
+    const rows = places.map((p) => ({ name: p.name, population: p.population, dist_km: p.dist_km,
+      units: Math.floor(p.population / perP), rem: (p.population % perP) / perP }));
+    let rest = recommended - rows.reduce((s, r) => s + r.units, 0);
+    if (rest > 0) {
+      const byRem = rows.slice().sort((a, b) => b.rem - a.rem || b.population - a.population);
+      for (let i = 0; i < byRem.length && rest > 0; i++) { byRem[i].units += 1; rest--; }
+    }
+    allocation = rows.filter((r) => r.units > 0)
+      .sort((a, b) => b.units - a.units || b.population - a.population)
+      .map((r) => ({ name: r.name, population: r.population, dist_km: r.dist_km, units: r.units }));
+  }
+  const capacity = { per_pradlomat: perP, recommended, allocation };
+
   let ai = null;
   if (opts.ai !== false) {
     ai = await areaReport({
       center: area.display_name, radius_km: radiusKm,
       total_population: total, density_per_km2: density,
       places_count: places.length,
+      people_per_pradlomat: perP, recommended_pradlomats: recommended,
       top_places: places.slice(0, 12).map((p) => ({ name: p.name, population: p.population, dist_km: p.dist_km })),
     });
   }
@@ -371,6 +392,7 @@ async function analyzeArea(query, radiusKm, rawCfg, opts) {
     total_population: total, density_per_km2: density,
     places_count: places.length,
     places: places.slice(0, 300),
+    capacity,
     ai,
   };
 }
@@ -382,8 +404,8 @@ async function areaReport(facts) {
     const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const model = process.env.SPOT_FINDER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
     const sys = 'Jsi analytik spádové oblasti pro venkovní samoobslužný prádlomat. '
-      + 'Dostaneš střed oblasti, poloměr (km), celkovou populaci v okruhu, hustotu (obyv./km²) a seznam největších obcí se vzdáleností. '
-      + 'Napiš stručné zhodnocení spádové oblasti z pohledu potenciálu pro prádlomat: velikost a rozložení populace (koncentrovaná ve městě vs. rozptýlená), dojezdovost, kde by dávalo smysl prádlomat umístit. '
+      + 'Dostaneš střed oblasti, poloměr (km), celkovou populaci v okruhu, hustotu (obyv./km²), doporučený počet prádlomatů (recommended_pradlomats, přepočet 1 na people_per_pradlomat obyvatel) a seznam největších obcí se vzdáleností. '
+      + 'Napiš stručné zhodnocení spádové oblasti z pohledu potenciálu pro prádlomat: velikost a rozložení populace (koncentrovaná ve městě vs. rozptýlená), kolik prádlomatů oblast uživí a kam by je bylo rozumné rozmístit, dojezdovost. '
       + 'Odpověz POUZE platným JSON bez markdownu: {"summary":"<3-5 vět>","density_label":"<např. Vysoká/Střední/Nízká hustota>","recommendation":"<1-2 věty kam mířit>"}. Piš česky.';
     const usr = 'Data (JSON):\n' + JSON.stringify(facts);
     const msg = await client.messages.create({ model, max_tokens: 600, system: sys, messages: [{ role: 'user', content: usr }] });
