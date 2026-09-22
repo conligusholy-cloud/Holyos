@@ -212,6 +212,15 @@
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       attribution:'Tiles &copy; Esri', maxZoom:19
     }).addTo(map);
+    var lg = L.control({ position:'bottomleft' });
+    lg.onAdd = function(){
+      var d = L.DomUtil.create('div','maplegend');
+      d.style.cssText = 'background:rgba(12,24,38,.82);padding:7px 10px;border-radius:8px;font-size:11.5px;color:#cfe0f0;display:flex;flex-direction:column;gap:3px;border:1px solid rgba(255,255,255,.14);line-height:1.5';
+      function row(c,t){ return '<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:'+c+';border:1px solid rgba(255,255,255,.5)"></span>'+t+'</span>'; }
+      d.innerHTML = row('#1e86e0','připravené místo') + row('#eab308','rezervováno') + row('#e0403a','už pereme');
+      return d;
+    };
+    lg.addTo(map);
   }
 
   function renderMarkers(list){
@@ -227,6 +236,18 @@
       markers.push(c); pts.push([s.latitude, s.longitude]);
     });
     if(pts.length){ try{ map.fitBounds(pts, { padding:[40,40], maxZoom:11 }); }catch(e){} }
+  }
+
+  // Provozované prádlomaty (kdepereme.cz) — červené body, jako kontext k připraveným místům.
+  var existingLayers = [];
+  function renderExisting(list){
+    existingLayers.forEach(function(m){ try{ map.removeLayer(m); }catch(e){} }); existingLayers=[];
+    (list||[]).forEach(function(w){
+      if(w.lat==null||w.lon==null) return;
+      var m = L.circleMarker([w.lat, w.lon], { radius:5, color:'#fff', weight:1.4, fillColor:'#e0403a', fillOpacity:.95 }).addTo(map);
+      m.bindTooltip('🧺 '+esc(w.name)+(w.note?('<br><span style="opacity:.75">'+esc(w.note)+'</span>'):''), { direction:'top' });
+      existingLayers.push(m);
+    });
   }
 
   function infoChips(s){
@@ -423,6 +444,8 @@
   }).catch(function(){
     document.getElementById('grid').innerHTML = '<div class="empty">Nepodařilo se načíst místa. Zkuste to prosím později.</div>';
   });
+  fetch(API+'/existing-laundromats').then(function(r){ return r.json(); })
+    .then(function(list){ renderExisting(Array.isArray(list)?list:[]); }).catch(function(){});
 })();
 </script>
 </body>

@@ -223,6 +223,49 @@ router.get('/public/area-analysis', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/pradlomat-spots/public/existing-laundromats — provozované prádlomaty
+// (z veřejné Google My Maps „WHERE WE LAUNDRY [EU]"), parsováno z KML, cache 6 h.
+const MYMAPS_MID = process.env.KDEPEREME_MYMAPS_MID || '1kTO9nPigGvqmmEhm_iTcW2z9LkJYgmY';
+let _kmlCache = { at: 0, data: null };
+async function fetchExistingLaundromats() {
+  const now = Date.now();
+  if (_kmlCache.data && now - _kmlCache.at < 6 * 3600 * 1000) return _kmlCache.data;
+  const url = 'https://www.google.com/maps/d/kml?forcekml=1&mid=' + MYMAPS_MID;
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 15000);
+  let xml = '';
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': NOMINATIM_UA } });
+    if (r.ok) xml = await r.text();
+  } catch (_) { /* ponech starou cache */ } finally { clearTimeout(to); }
+  if (!xml) return _kmlCache.data || [];
+  const decode = (s) => String(s || '')
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
+  const out = [];
+  const folderRe = /<Folder>([\s\S]*?)<\/Folder>/g; let fm;
+  while ((fm = folderRe.exec(xml))) {
+    const block = fm[1];
+    const country = decode((block.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || '');
+    const pmRe = /<Placemark>([\s\S]*?)<\/Placemark>/g; let pm;
+    while ((pm = pmRe.exec(block))) {
+      const p = pm[1];
+      const name = decode((p.match(/<name>([\s\S]*?)<\/name>/) || [])[1] || '');
+      const note = decode((p.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || '');
+      const coord = (p.match(/<coordinates>([\s\S]*?)<\/coordinates>/) || [])[1] || '';
+      const parts = coord.trim().split(',');
+      const lon = parseFloat(parts[0]); const lat = parseFloat(parts[1]);
+      if (Number.isFinite(lat) && Number.isFinite(lon)) out.push({ name, note: note || null, lat, lon, country });
+    }
+  }
+  if (out.length) _kmlCache = { at: now, data: out };
+  return _kmlCache.data || out;
+}
+router.get('/public/existing-laundromats', async (req, res) => {
+  try { res.json(await fetchExistingLaundromats()); }
+  catch (e) { res.json((_kmlCache && _kmlCache.data) || []); }
+});
+
 // GET /api/pradlomat-spots/public/:code — detail jednoho místa.
 router.get('/public/:code', async (req, res, next) => {
   try {
