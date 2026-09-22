@@ -6637,6 +6637,8 @@ model PradlomatSpot {
   anchor_count       Int?     // počet tahounů provozu v okolí
   competition_count  Int?     // počet konkurenčních prádelen v okolí
   score              Int?     // skóre vhodnosti 0–100
+  potential_report      String?   @db.Text   // AI analýza zákaznického potenciálu (markdown)
+  potential_generated_at DateTime?           // kdy byla analýza naposledy vygenerována
   area_m2            Decimal? @db.Decimal(10, 2)
   rent_monthly       Decimal? @db.Decimal(12, 2)
   rent_currency      String?  @default("CZK") @db.VarChar(3)

@@ -53,6 +53,16 @@
       + '.pm-modal .pm-x{background:none;border:none;color:var(--text2);font-size:24px;cursor:pointer;line-height:1}'
       + '.pm-modal .pm-body{padding:18px 20px 22px;max-height:76vh;overflow-y:auto}'
       + '.pm-sect{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin:18px 0 8px}'
+      + '.pm-report{font-size:13.5px;line-height:1.6;color:var(--text)}'
+      + '.pm-report h2{font-size:16px;font-weight:700;margin:16px 0 6px;color:#4aa3ea}'
+      + '.pm-report h3{font-size:14px;font-weight:700;margin:13px 0 5px}'
+      + '.pm-report p{margin:7px 0}'
+      + '.pm-report ul,.pm-report ol{margin:7px 0;padding-left:20px}'
+      + '.pm-report li{margin:3px 0}'
+      + '.pm-report table{border-collapse:collapse;width:100%;margin:10px 0;font-size:12.5px}'
+      + '.pm-report th,.pm-report td{border:1px solid var(--border);padding:6px 9px;text-align:left;vertical-align:top}'
+      + '.pm-report th{background:var(--bg);font-weight:700}'
+      + '.pm-report strong{color:#cfe0f0}'
       + '.pm-sect:first-child{margin-top:0}'
       + '.pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}'
       + '.pm-grid.three{grid-template-columns:1fr 1fr 1fr}'
@@ -349,6 +359,7 @@
       ov.innerHTML = '<div class="pm-modal"><div class="pm-head"><h2>' + (spot ? 'Upravit místo' : 'Nové předjednané místo') + '</h2><button class="pm-x" onclick="__pmClose()">×</button></div>'
         + '<div class="pm-body">'
         + fieldsHtml(spot)
+        + (spot ? potentialHtml(spot) : '')
         + (spot ? ('<div class="pm-sect">Poptávky z webu</div>' + inquiriesHtml(spot.inquiries)) : '')
         + '<div class="pm-foot">'
         + (spot ? '<a class="pm-hint" href="https://pradlomaty.info/location" target="_blank" rel="noopener">🌐 Zobrazit veřejný přehled</a>' : '<span></span>')
@@ -421,6 +432,67 @@
     if (state.editMap) { try { state.editMap.remove(); } catch (e) {} state.editMap = null; state.editMarker = null; }
     state.editing = null;
   }
+
+  // ── Analýza zákaznického potenciálu (AI) ──
+  function potentialHtml(s) {
+    var gen = s.potential_generated_at ? new Date(s.potential_generated_at).toLocaleString('cs-CZ') : null;
+    var noGps = (s.latitude == null || s.longitude == null);
+    var body = s.potential_report
+      ? mdToHtml(s.potential_report)
+      : '<div class="pm-hint">Zatím nevygenerováno. AI analýza spočítá spádovou populaci (GeoNames), konkurenci a firmy v okolí (OpenStreetMap) a vzdálenost k našim provozovaným prádlomatům, a sestaví potenciál po skupinách a scénářích.</div>';
+    return '<div class="pm-sect">Analýza zákaznického potenciálu (AI)</div>'
+      + '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">'
+      + '<button type="button" class="pm-btn primary" id="pm-potential" ' + (noGps ? 'disabled title="Nejdřív umísti lokalitu na mapě (GPS)"' : 'onclick="__pmPotential(' + s.id + ')"') + '>🧠 ' + (s.potential_report ? 'Přegenerovat analýzu' : 'Spustit AI analýzu') + '</button>'
+      + (gen ? '<span class="pm-hint">Naposledy: ' + esc(gen) + '</span>' : '')
+      + '<span class="pm-msg" id="pm-potmsg"></span></div>'
+      + '<div id="pm-potreport" class="pm-report">' + body + '</div>';
+  }
+
+  // Kompaktní Markdown → HTML (nadpisy, tučné, seznamy, tabulky, odstavce).
+  function mdToHtml(md) {
+    if (!md) return '';
+    var inline = function (t) {
+      return esc(t).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>');
+    };
+    var lines = String(md).replace(/\r/g, '').split('\n');
+    var html = '', i = 0;
+    function flushList(tag, items) { return items.length ? ('<' + tag + '>' + items.map(function (x) { return '<li>' + inline(x) + '</li>'; }).join('') + '</' + tag + '>') : ''; }
+    while (i < lines.length) {
+      var ln = lines[i];
+      if (/^\s*$/.test(ln)) { i++; continue; }
+      // Tabulka: |...| a druhý řádek oddělovač ---
+      if (/^\s*\|.*\|\s*$/.test(ln) && i + 1 < lines.length && /^\s*\|?[\s:\-|]+\|?\s*$/.test(lines[i + 1])) {
+        var head = ln.trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); });
+        i += 2; var rows = [];
+        while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) { rows.push(lines[i].trim().replace(/^\||\|$/g, '').split('|').map(function (c) { return c.trim(); })); i++; }
+        html += '<table><thead><tr>' + head.map(function (h) { return '<th>' + inline(h) + '</th>'; }).join('') + '</tr></thead><tbody>'
+          + rows.map(function (r) { return '<tr>' + r.map(function (c) { return '<td>' + inline(c) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table>';
+        continue;
+      }
+      var h = ln.match(/^(#{1,4})\s+(.*)$/);
+      if (h) { var lvl = Math.min(3, h[1].length + 1); html += '<h' + lvl + '>' + inline(h[2]) + '</h' + lvl + '>'; i++; continue; }
+      if (/^\s*[-*]\s+/.test(ln)) { var ul = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) { ul.push(lines[i].replace(/^\s*[-*]\s+/, '')); i++; } html += flushList('ul', ul); continue; }
+      if (/^\s*\d+[.)]\s+/.test(ln)) { var ol = []; while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) { ol.push(lines[i].replace(/^\s*\d+[.)]\s+/, '')); i++; } html += flushList('ol', ol); continue; }
+      var para = [];
+      while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+[.)]\s+/.test(lines[i]) && !/^#{1,4}\s+/.test(lines[i]) && !/^\s*\|.*\|\s*$/.test(lines[i])) { para.push(lines[i]); i++; }
+      html += '<p>' + inline(para.join(' ')) + '</p>';
+    }
+    return html;
+  }
+
+  window.__pmPotential = function (id) {
+    var btn = document.getElementById('pm-potential'), msg = document.getElementById('pm-potmsg'), rep = document.getElementById('pm-potreport');
+    if (btn) { btn.disabled = true; }
+    if (msg) { msg.className = 'pm-msg'; msg.textContent = 'Analyzuji lokalitu… (~20–40 s)'; }
+    api('/' + id + '/potential-analysis', { method: 'POST', body: {} }).then(function (r) {
+      if (rep) rep.innerHTML = mdToHtml(r.report_md || '');
+      if (msg) { msg.className = 'pm-msg ok'; msg.textContent = 'Hotovo · ' + new Date(r.generated_at).toLocaleString('cs-CZ'); }
+      if (btn) { btn.disabled = false; btn.textContent = '🧠 Přegenerovat analýzu'; }
+    }).catch(function (e) {
+      if (msg) { msg.className = 'pm-msg err'; msg.textContent = e.message || 'Analýzu se nepodařilo spustit.'; }
+      if (btn) btn.disabled = false;
+    });
+  };
 
   // ── Globální handlery (onclick z HTML) ──
   window.__pmEdit = function (id) { openEditor(id); };

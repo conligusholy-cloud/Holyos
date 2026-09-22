@@ -144,6 +144,8 @@ function toAdmin(s) {
     anchor_count: s.anchor_count,
     competition_count: s.competition_count,
     score: s.score,
+    potential_report: s.potential_report,
+    potential_generated_at: s.potential_generated_at,
     cover_image_url: s.cover_image_url,
     gallery: Array.isArray(s.gallery) ? s.gallery : [],
     owner_name: s.owner_name,
@@ -602,6 +604,27 @@ router.get('/:id(\\d+)', async (req, res, next) => {
     const out = toAdmin(s);
     out.inquiries = s.inquiries;
     res.json(out);
+  } catch (err) { next(err); }
+});
+
+// POST /api/pradlomat-spots/:id/potential-analysis — AI analýza zákaznického
+// potenciálu (GeoNames + OSM + naše provozované prádlomaty), uloží se k lokalitě.
+router.post('/:id(\\d+)/potential-analysis', async (req, res, next) => {
+  try {
+    const s = await prisma.pradlomatSpot.findUnique({ where: { id: Number(req.params.id) } });
+    if (!s) return res.status(404).json({ error: 'Místo nenalezeno' });
+    if (s.latitude == null || s.longitude == null) return res.status(400).json({ error: 'Lokalita nemá GPS souřadnice — nejdřív ji umísti na mapě.' });
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    let existing = []; try { existing = await fetchExistingLaundromats(); } catch (_) {}
+    const result = await finder.analyzePotential(Number(s.latitude), Number(s.longitude), cfg, {
+      existing, address: s.address, city: s.city, placeType: s.footfall_note, name: s.title,
+    });
+    if (!result || result.error) return res.status(400).json({ error: (result && result.error) || 'Analýzu se nepodařilo spustit.' });
+    if (!result.report_md) return res.status(502).json({ error: 'AI report se nepodařilo vytvořit (chybí ANTHROPIC_API_KEY nebo výpadek).', facts: result.facts });
+    const genAt = new Date();
+    await prisma.pradlomatSpot.update({ where: { id: s.id }, data: { potential_report: result.report_md, potential_generated_at: genAt } });
+    res.json({ ok: true, report_md: result.report_md, generated_at: genAt.toISOString(), facts: result.facts });
   } catch (err) { next(err); }
 });
 

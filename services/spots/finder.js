@@ -420,4 +420,99 @@ async function areaReport(facts) {
   } catch (e) { return null; }
 }
 
-module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea, analyzeArea };
+// ─── Analýza zákaznického potenciálu (AI report na lokalitu) ─────────────────
+// Firmy/služby v okolí (Overpass, jeden dotaz) — pro segment B2B (ubytování, gastro…).
+async function nearbyBusinesses(lat, lon, radiusM) {
+  const q = '[out:json][timeout:60];('
+    + 'nwr(around:' + radiusM + ',' + lat + ',' + lon + ')[tourism~"^(hotel|guest_house|apartment|hostel|motel|chalet|camp_site|caravan_site)$"];'
+    + 'nwr(around:' + radiusM + ',' + lat + ',' + lon + ')[amenity~"^(restaurant|cafe|fast_food|pub|bar)$"];'
+    + 'nwr(around:' + radiusM + ',' + lat + ',' + lon + ')[leisure=fitness_centre];'
+    + 'nwr(around:' + radiusM + ',' + lat + ',' + lon + ')[shop~"^(beauty|hairdresser|massage)$"];'
+    + ');out center 900;';
+  const j = await overpass(q);
+  if (!j) return null;
+  const cats = { ubytovani: 0, kempy: 0, restaurace_gastro: 0, fitness: 0, salony_wellness: 0 };
+  const examples = { ubytovani: [], restaurace_gastro: [] };
+  (j.elements || []).forEach((e) => {
+    const t = e.tags || {}; const nm = t.name || t.brand || '';
+    if (t.tourism) {
+      if (t.tourism === 'camp_site' || t.tourism === 'caravan_site') cats.kempy++;
+      else { cats.ubytovani++; if (nm && examples.ubytovani.length < 8) examples.ubytovani.push(nm); }
+    } else if (t.amenity) { cats.restaurace_gastro++; if (nm && examples.restaurace_gastro.length < 8) examples.restaurace_gastro.push(nm); }
+    else if (t.leisure === 'fitness_centre') cats.fitness++;
+    else if (t.shop) cats.salony_wellness++;
+  });
+  return { counts: cats, examples };
+}
+
+async function analyzePotential(lat, lon, rawCfg, opts) {
+  const cfg = mergeConfig(rawCfg);
+  opts = opts || {};
+  lat = Number(lat); lon = Number(lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { error: 'Lokalita nemá souřadnice.' };
+
+  // 1) Populace + obce po dojezdových pásmech (aproximace km, GeoNames → OSM).
+  const pw = await placesWithin(lat, lon, 20);
+  const places = (pw.places || []).filter((p) => p.population > 0).sort((a, b) => (a.dist_km || 0) - (b.dist_km || 0));
+  const rings = { r5: 0, r10: 0, r15: 0, r20: 0 };
+  places.forEach((p) => { const d = p.dist_km == null ? 999 : p.dist_km; if (d <= 5) rings.r5 += p.population; else if (d <= 10) rings.r10 += p.population; else if (d <= 15) rings.r15 += p.population; else if (d <= 20) rings.r20 += p.population; });
+  const totalPop = places.reduce((s, p) => s + p.population, 0);
+
+  // 2) OSM okolí — parkoviště, tahouni, konkurenční prádelny/čistírny.
+  const feat = await fetchAreaFeatures({ s: lat - 0.09, n: lat + 0.09, w: lon - 0.13, e: lon + 0.13 }); // ~10 km
+  const m = pointMetrics(lat, lon, feat || { retail: [], parking: [], competition: [] }, cfg);
+  const comp = (feat && feat.competition || []).map((p) => ({ name: p.name || 'Prádelna/čistírna', km: Math.round(haversineM(lat, lon, p.lat, p.lon) / 100) / 10 }))
+    .filter((c) => c.km <= 20).sort((a, b) => a.km - b.km).slice(0, 12);
+
+  // 3) Firmy/služby (B2B potenciál).
+  const biz = await nearbyBusinesses(lat, lon, 12000);
+
+  // 4) Provozované prádlomaty (kdepereme.cz) — vzdálenosti.
+  const existing = Array.isArray(opts.existing) ? opts.existing : [];
+  const exWithDist = existing.map((w) => ({ name: w.name, km: Math.round(haversineM(lat, lon, w.lat, w.lon) / 100) / 10 })).sort((a, b) => a.km - b.km);
+  const nearestOwn = exWithDist[0] || null;
+
+  const facts = {
+    datum_analyzy: new Date().toISOString().slice(0, 10),
+    lokalita: { lat, lon, adresa: opts.address || null, mesto: opts.city || null, typ_umisteni: opts.placeType || null, nazev: opts.name || null },
+    parametry_pradlomatu: opts.machineParams || null,
+    parkovani: { je_v_okoli: m.parking.count > 0, nejblizsi_m: m.parking.nearest_m, pocet_do_250m: m.parking.count },
+    tahouni_provozu: { pocet_do_400m: m.anchors.count, priklady: m.anchors.list.map((a) => a.name || a.type).slice(0, 8) },
+    populace: { celkem_do_20km: totalPop, pasma_priblizne: rings, zdroj: pw.source, nejvetsi_obce: places.slice(0, 14).map((p) => ({ nazev: p.name, obyvatel: p.population, km: p.dist_km })) },
+    konkurence_osm: { pocet_do_20km: comp.length, nejblizsi_km: comp.length ? comp[0].km : null, seznam: comp },
+    firmy_v_okoli_do_12km: biz ? biz.counts : null,
+    firmy_priklady: biz ? biz.examples : null,
+    provozovane_pradlomaty: { nejblizsi_km: nearestOwn ? nearestOwn.km : null, nejblizsi_nazev: nearestOwn ? nearestOwn.name : null, do_25km: exWithDist.filter((x) => x.km <= 25).slice(0, 12) },
+    zdroje: {
+      populace: pw.source === 'GeoNames' ? 'GeoNames (geonames.org)' : 'OpenStreetMap',
+      firmy_konkurence: 'OpenStreetMap přes Overpass API',
+      provozovane_pradlomaty: 'Google My Maps „WHERE WE LAUNDRY [EU]" (kdepereme.cz)',
+    },
+  };
+
+  const report_md = await potentialReport(facts);
+  return { facts, report_md, generated_at: new Date().toISOString() };
+}
+
+async function potentialReport(facts) {
+  if (!process.env.ANTHROPIC_API_KEY) return null;
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.SPOT_POTENTIAL_MODEL || process.env.SPOT_FINDER_MODEL || process.env.COMPOUNDER_LOCATION_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi analytik zákaznického potenciálu pro venkovní samoobslužný prádlomat (18kg pračka + sušička, samoobsluha, non-stop). '
+      + 'Dostaneš strukturovaná fakta o lokalitě (JSON). Vycházej POUZE z těchto dat a z obecně známých demografických poměrů ČR; nic si nevymýšlej a nepředstírej, že jsi lokalitu prověřil na místě. '
+      + 'Data pocházejí z GeoNames (populace), OpenStreetMap/Overpass (firmy, konkurence) a Google My Maps kdepereme.cz (naše provozované prádlomaty) — u zdrojů uveď tyto názvy a datum z pole datum_analyzy. '
+      + 'Kde chybí přímá data (např. věk 50+, počet domácností), použij standardní poměry ČR (populace 50+ ≈ 40 %, průměrná domácnost ≈ 2,3 osoby) a VÝSLOVNĚ to označ jako odhad. '
+      + 'Jasně odlišuj OVĚŘENÁ FAKTA, ODHADY a NEOVĚŘENÉ PŘEDPOKLADY. '
+      + 'Postupuj podle těchto bodů: 1) spádová oblast a populace (pásma 5/10/15/20 min ~ km, nezapočítávej lidi opakovaně), 2) tři skupiny zákazníků: A) firmy/podnikatelé/chataři (ubytování, gastro, wellness, úklid), B) lidé 50+, C) běžné domácnosti (peřiny, poruchy praček, spojení s nákupem), 3) konkurence a alternativy (i naše nejbližší provozované prádlomaty), 4) zhodnocení konkrétního umístění (parkování, viditelnost — co nejde ověřit na dálku, označ jako „ověřit na místě"), 5) transparentní výpočet potenciálu pro každou skupinu ve třech scénářích (konzervativní/střední/optimistický) s odhadem placených pracích cyklů/měsíc, sušení zvlášť, zvlášť první 3 měsíce / ustálený stav po 12 měsících / sezónní špičky, 6) obchodní doporučení (silná/průměrná/slabá/nelze rozhodnout; nosná skupina; očekávaná praní/měsíc konzervativně a středně; 3 rizika; co ověřit na místě; jak získat první zákazníky v každé skupině). '
+      + 'Výstup je ČESKY v Markdownu a začíná krátkým ROZHODOVACÍM SHRNUTÍM (3–5 vět). '
+      + 'Pak přidej: tabulku skupiny × scénáře (Markdown tabulka), popis spádové oblasti, seznam konkurentů, podrobný výpočet a na konci sekci „Zdroje" s názvy zdrojů a datem. Nepoužívej nadpis h1 (#), začni rovnou textem shrnutí.';
+    const usr = 'Fakta o lokalitě (JSON):\n' + JSON.stringify(facts);
+    const msg = await client.messages.create({ model, max_tokens: 4500, system: sys, messages: [{ role: 'user', content: usr }] });
+    let text = (msg && msg.content && msg.content[0] && msg.content[0].text) || '';
+    return text.trim() || null;
+  } catch (e) { return null; }
+}
+
+module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea, analyzeArea, analyzePotential };

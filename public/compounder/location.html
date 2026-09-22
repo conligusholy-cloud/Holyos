@@ -218,7 +218,7 @@
       var d = L.DomUtil.create('div','maplegend');
       d.style.cssText = 'background:rgba(12,24,38,.82);padding:7px 10px;border-radius:8px;font-size:11.5px;color:#cfe0f0;display:flex;flex-direction:column;gap:3px;border:1px solid rgba(255,255,255,.14);line-height:1.5';
       function row(c,t){ return '<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:'+c+';border:1px solid rgba(255,255,255,.5)"></span>'+t+'</span>'; }
-      d.innerHTML = row('#1e86e0','připravené místo') + row('#eab308','rezervováno') + row('#e0403a','už pereme');
+      d.innerHTML = row('#00e676','připravené místo') + row('#eab308','rezervováno') + row('#1e86e0','už pereme');
       return d;
     };
     lg.addTo(map);
@@ -229,7 +229,7 @@
     var pts = [];
     list.forEach(function(s){
       if(s.latitude==null||s.longitude==null) return;
-      var color = s.status==='reserved' ? '#eab308' : '#1e86e0';
+      var color = s.status==='reserved' ? '#eab308' : '#00e676';
       // Přibližná poloha — kroužek místo přesného bodu.
       var c = L.circle([s.latitude, s.longitude], { radius:1200, color:color, weight:1.5, fillColor:color, fillOpacity:.18 }).addTo(map);
       c.bindTooltip(esc(s.name), { direction:'top' });
@@ -245,7 +245,7 @@
     existingLayers.forEach(function(m){ try{ map.removeLayer(m); }catch(e){} }); existingLayers=[];
     (list||[]).forEach(function(w){
       if(w.lat==null||w.lon==null) return;
-      var m = L.circleMarker([w.lat, w.lon], { radius:5, color:'#fff', weight:1.4, fillColor:'#e0403a', fillOpacity:.95 }).addTo(map);
+      var m = L.circleMarker([w.lat, w.lon], { radius:5, color:'#fff', weight:1.4, fillColor:'#1e86e0', fillOpacity:.95 }).addTo(map);
       m.bindTooltip('🧺 '+esc(w.name)+(w.note?('<br><span style="opacity:.75">'+esc(w.note)+'</span>'):''), { direction:'top' });
       existingLayers.push(m);
     });
@@ -346,7 +346,7 @@
         try{
           mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 12);
           L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Tiles &copy; Esri' }).addTo(mmap);
-          var col = s.status==='reserved' ? '#eab308' : '#1e86e0';
+          var col = s.status==='reserved' ? '#eab308' : '#00e676';
           L.circle([s.latitude,s.longitude], { radius:1200, color:col, weight:1.5, fillColor:col, fillOpacity:.18 }).addTo(mmap);
         }catch(e){}
       }, 60);
