@@ -116,20 +116,26 @@ async function fetchAreaFeatures(bbox) {
     + 'nwr[amenity=parking](' + bb + ');'
     + 'nwr[shop~"^(laundry|dry_cleaning)$"](' + bb + ');'
     + 'nwr[amenity=laundry](' + bb + ');'
+    + 'nwr[amenity~"^(fuel|car_wash)$"](' + bb + ');'
+    + 'nwr[amenity=parcel_locker](' + bb + ');'
+    + 'nwr[vending=parcel_pickup](' + bb + ');'
     + ');out center 3000;';
   const j = await overpass(q);
   if (!j) return null; // Overpass selhal (rate-limit/timeout) — odlišit od „nic nenalezeno".
   const els = (j && j.elements) || [];
-  const retail = [], parking = [], competition = [];
+  const retail = [], parking = [], competition = [], extra = [];
   els.forEach((e) => {
     const ll = e.center || e; if (ll.lat == null) return;
     const t = e.tags || {};
     const point = { lat: ll.lat, lon: ll.lon, name: t.name || t.brand || '', tags: t };
     if (t.amenity === 'parking') { parking.push(point); return; }
     if (t.shop === 'laundry' || t.shop === 'dry_cleaning' || t.amenity === 'laundry') { competition.push(point); return; }
+    // Extra kandidáti (amenity, ne shop): benzínky, myčky, výdejní/poštovní boxy.
+    if (t.amenity === 'fuel' || t.amenity === 'car_wash') { point.shop = t.amenity; extra.push(point); return; }
+    if (t.amenity === 'parcel_locker' || t.vending === 'parcel_pickup') { point.shop = 'parcel_locker'; extra.push(point); return; }
     if (t.shop) { point.shop = t.shop; retail.push(point); }
   });
-  return { retail, parking, competition };
+  return { retail, parking, competition, extra };
 }
 
 // ─── Populace (GeoNames → OSM fallback), počítá se 1× na oblast ──────────────
@@ -227,14 +233,15 @@ async function searchArea(query, rawCfg) {
   if (!feat) {
     return { error: 'OpenStreetMap (Overpass) je právě přetížený nebo nedostupný. Zkus to prosím za chvíli znovu.' };
   }
-  if (!feat.retail.length) {
+  const pool = feat.retail.concat(feat.extra || []);
+  if (!pool.length) {
     return { area: area, config: cfg, candidates: [], population: null,
-      note: 'V oblasti se nenašli žádní vhodní tahouni provozu (supermarkety apod.).' };
+      note: 'V oblasti se nenašli žádní vhodní kandidáti (supermarkety, benzínky apod.).' };
   }
 
-  // Kandidáti = retail zvolených typů, shluknuté.
+  // Kandidáti = zvolené typy (retail i extra: benzínky/myčky/boxy), shluknuté.
   const wanted = new Set(cfg.candidate_types);
-  let cands = feat.retail.filter((r) => wanted.has(r.shop));
+  let cands = pool.filter((r) => wanted.has(r.shop));
   cands = clusterPoints(cands, 150).slice(0, cfg.max_candidates);
 
   // Populace 1× na oblast (spádová populace města je pro všechny body podobná).
@@ -264,7 +271,7 @@ async function searchArea(query, rawCfg) {
 }
 
 function shopLabel(s) {
-  const m = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum', department_store: 'Obchodní dům', wholesale: 'Velkoobchod', convenience: 'Večerka' };
+  const m = { supermarket: 'Supermarket', hypermarket: 'Hypermarket', mall: 'Obchodní centrum', department_store: 'Obchodní dům', wholesale: 'Velkoobchod', convenience: 'Večerka', fuel: 'Benzínka', car_wash: 'Samoobslužná myčka', parcel_locker: 'Výdejní/poštovní box' };
   return m[s] || s;
 }
 

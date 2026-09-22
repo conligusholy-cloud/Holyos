@@ -594,7 +594,8 @@
   var CAND_TYPES = [
     { k: 'supermarket', l: 'Supermarkety' }, { k: 'hypermarket', l: 'Hypermarkety' },
     { k: 'mall', l: 'Obch. centra' }, { k: 'department_store', l: 'Obch. domy' },
-    { k: 'wholesale', l: 'Velkoobchody' }, { k: 'convenience', l: 'Večerky' }
+    { k: 'wholesale', l: 'Velkoobchody' }, { k: 'convenience', l: 'Večerky' },
+    { k: 'fuel', l: 'Benzínky' }, { k: 'car_wash', l: 'Samoobsl. myčky' }, { k: 'parcel_locker', l: 'Výdejní boxy' }
   ];
 
   function fapi(path, opts) { return api('/finder' + path, opts); }
