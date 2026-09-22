@@ -451,7 +451,7 @@
           <button class="btn btn-sm" onclick="msWeek(0)" title="Aktuální týden">Dnes</button>
         </div>
       </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Klikni na půlhodinu → otevřeš možnost schůzky (30 min). Otevřené termíny se hned nabízejí na pradlomaty.info/home. <span style="color:#1e86e0;">■</span> volno · <span style="color:#1f7a45;">■</span> rezervováno.</div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Táhni přes prázdná políčka → hromadně otevřeš možnosti schůzek (30 min). Táhni přes <span style="color:#1e86e0;">volno</span> → hromadně smažeš. Otevřené termíny se hned nabízejí na pradlomaty.info/home. <span style="color:#1e86e0;">■</span> volno · <span style="color:#1f7a45;">■</span> rezervováno.</div>
       <div id="ms-grid" style="overflow-x:auto;"><div style="color:var(--text2);">Načítám…</div></div>
     </div>
 
@@ -6507,7 +6507,7 @@
     // TERMÍNY SCHŮZEK — tab "terminy" (rezervace pradlomaty.info)
     // ============================================================
     var MS_STATE={ weekStart:null, slots:[] };
-    var MS_DRAG={ on:false, did:false, sel:{} }; // stav tažení pro hromadné otevírání
+    var MS_DRAG={ on:false, did:false, mode:null, sel:{}, sids:{} }; // stav tažení: create=otevírání, delete=mazání
     var MS_START_H=7, MS_END_H=21; // rozsah hodin v mřížce
     function msMonday(d){ var x=new Date(d); var day=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-day); return x; }
     function msKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()+'-'+d.getHours()+'-'+d.getMinutes(); }
@@ -6535,14 +6535,14 @@
           html+='<tr><td style="color:var(--text2);text-align:right;padding:0 8px;white-space:nowrap;height:26px;">'+h+':'+(mm===0?'00':'30')+'</td>';
           days.forEach(function(d){
             var cell=new Date(d); cell.setHours(h,mm,0,0);
-            var s=map[msKey(cell)]; var past=cell.getTime()<now;
+            var s=map[msKey(cell)]; var past=cell.getTime()<now; var isBooked=false;
             var bg='transparent', label='', col='var(--text2)';
             if(s){ var booked=(s.reservations||[]).filter(function(x){return x.status==='booked';});
-              if(booked.length){ bg='#1f7a45'; col='#fff'; label='● '+msEsc((booked[0].name||'rez.').slice(0,10)); }
+              if(booked.length){ isBooked=true; bg='#1f7a45'; col='#fff'; label='● '+msEsc((booked[0].name||'rez.').slice(0,10)); }
               else { bg='#1e86e0'; col='#fff'; label='volno'; } }
             var clickable = s || !past;
             var style='border:1px solid var(--line,#2a2a2e);height:26px;text-align:center;font-size:11px;background:'+bg+';color:'+col+';'+(past?'opacity:.4;':'')+'cursor:'+(clickable?'pointer':'default')+';';
-            html+='<td class="ms-cell" data-k="'+cell.toISOString()+'"'+(s?(' data-sid="'+s.id+'"'):'')+(past&&!s?' data-past="1"':'')+' style="'+style+'">'+label+'</td>';
+            html+='<td class="ms-cell" data-k="'+cell.toISOString()+'"'+(s?(' data-sid="'+s.id+'"'):'')+(isBooked?' data-booked="1"':'')+(past&&!s?' data-past="1"':'')+' style="'+style+'">'+label+'</td>';
           });
           html+='</tr>';
         }
@@ -6551,40 +6551,53 @@
       grid.innerHTML=html;
       grid.style.userSelect='none'; grid.style.webkitUserSelect='none';
       grid.querySelectorAll('.ms-cell').forEach(function(td){
-        if(td.dataset.sid){ td.addEventListener('click',function(){ if(!MS_DRAG.did) msCellClick(td); }); }
-        td.addEventListener('mousedown',function(e){ if(td.dataset.sid||td.getAttribute('data-past')==='1') return; e.preventDefault(); MS_DRAG.on=true; MS_DRAG.did=false; MS_DRAG.sel={}; msSelAdd(td); });
-        td.addEventListener('mouseenter',function(){ if(MS_DRAG.on && !td.dataset.sid && td.getAttribute('data-past')!=='1'){ MS_DRAG.did=true; msSelAdd(td); } });
+        // Booked políčko: jen klik pro zobrazení rezervace (nedá se táhnout).
+        if(td.dataset.booked==='1'){ td.addEventListener('click',function(){ msShowBooking(td); }); return; }
+        td.addEventListener('mousedown',function(e){
+          if(td.getAttribute('data-past')==='1') return;           // minulé prázdné políčko
+          e.preventDefault();
+          MS_DRAG.on=true; MS_DRAG.did=false; MS_DRAG.sel={}; MS_DRAG.sids={};
+          if(td.dataset.sid){ MS_DRAG.mode='delete'; msSelDel(td); }  // táhnu přes volno → mazání
+          else { MS_DRAG.mode='create'; msSelAdd(td); }               // táhnu přes prázdno → otevírání
+        });
+        td.addEventListener('mouseenter',function(){
+          if(!MS_DRAG.on) return;
+          if(MS_DRAG.mode==='create'){ if(!td.dataset.sid && td.getAttribute('data-past')!=='1'){ MS_DRAG.did=true; msSelAdd(td); } }
+          else if(MS_DRAG.mode==='delete'){ if(td.dataset.sid && td.dataset.booked!=='1'){ MS_DRAG.did=true; msSelDel(td); } }
+        });
       });
       if(!window.__msUpBound){ window.__msUpBound=true; document.addEventListener('mouseup', msFinishDrag); }
     }
     function msSelAdd(td){ MS_DRAG.sel[td.dataset.k]=true; td.style.background='rgba(30,134,224,.55)'; td.style.color='#fff'; }
+    function msSelDel(td){ MS_DRAG.sids[td.dataset.sid]=true; td.style.background='#b91c1c'; td.style.color='#fff'; td.textContent='smazat'; }
     async function msFinishDrag(){
       if(!MS_DRAG.on) return; MS_DRAG.on=false;
+      var mode=MS_DRAG.mode; MS_DRAG.mode=null;
+      if(mode==='delete'){
+        var sids=Object.keys(MS_DRAG.sids); MS_DRAG.sids={};
+        if(!sids.length) return;
+        var msg = sids.length===1 ? 'Smazat tuto volnou možnost schůzky?' : ('Smazat '+sids.length+' volných možností schůzky?');
+        if(!confirm(msg)){ loadMeetingSlots(); return; }
+        try{ await Promise.all(sids.map(function(id){ return fetch('/api/compounder/admin/meeting-slots/'+id,{method:'DELETE',credentials:'include'}); })); }catch(e){}
+        loadMeetingSlots(); return;
+      }
+      // create
       var keys=Object.keys(MS_DRAG.sel); MS_DRAG.sel={};
       if(!keys.length) return;
       keys.sort();
-      var msg = keys.length===1 ? ('Otevřít možnost schůzky '+msWhen(new Date(keys[0]))+'? (30 min)') : ('Otevřít '+keys.length+' možností schůzky po 30 min?');
-      if(!confirm(msg)){ loadMeetingSlots(); return; }
+      var cmsg = keys.length===1 ? ('Otevřít možnost schůzky '+msWhen(new Date(keys[0]))+'? (30 min)') : ('Otevřít '+keys.length+' možností schůzky po 30 min?');
+      if(!confirm(cmsg)){ loadMeetingSlots(); return; }
       try{
         await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
           body:JSON.stringify({ slots: keys.map(function(iso){ return { starts_at:iso, duration_min:30, capacity:1 }; }) })});
       }catch(e){}
       loadMeetingSlots();
     }
-    async function msCellClick(td){
-      var when=new Date(td.dataset.k); var sid=td.dataset.sid;
-      if(sid){
-        var s=(MS_STATE.slots||[]).filter(function(x){return String(x.id)===String(sid);})[0];
-        var booked=s&&(s.reservations||[]).filter(function(x){return x.status==='booked';});
-        if(booked&&booked.length){ alert('Rezervováno ('+msWhen(when)+'):\n'+booked.map(function(x){return (x.name||'—')+' · '+(x.phone||x.email||'');}).join('\n')); return; }
-        if(!confirm('Zrušit tuto volnou možnost schůzky '+msWhen(when)+'?')) return;
-        try{ await fetch('/api/compounder/admin/meeting-slots/'+sid,{method:'DELETE',credentials:'include'}); }catch(e){}
-        loadMeetingSlots(); return;
-      }
-      if(when.getTime()<Date.now()) return;
-      if(!confirm('Otevřít možnost schůzky '+msWhen(when)+'? (30 min)')) return;
-      try{ await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({ starts_at:when.toISOString(), duration_min:30, capacity:1 })}); }catch(e){}
-      loadMeetingSlots();
+    function msShowBooking(td){
+      var when=new Date(td.dataset.k), sid=td.dataset.sid;
+      var s=(MS_STATE.slots||[]).filter(function(x){return String(x.id)===String(sid);})[0];
+      var booked=s&&(s.reservations||[]).filter(function(x){return x.status==='booked';});
+      if(booked&&booked.length){ alert('Rezervováno ('+msWhen(when)+'):\n'+booked.map(function(x){return (x.name||'—')+' · '+(x.phone||x.email||'')+(x.note?(' · '+x.note):'');}).join('\n')); }
     }
     function msEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
