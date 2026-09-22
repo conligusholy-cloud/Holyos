@@ -47,6 +47,26 @@ function candidateMetrics(b) {
   };
 }
 
+// Automaticky dopočítá parametry okolí z GPS (Overpass + GeoNames, bez AI).
+// Vrací pole pro uložení, nebo null při selhání. Používá se při zveřejnění místa.
+async function analyzeAndFill(lat, lon) {
+  try {
+    if (lat == null || lon == null) return null;
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const r = await finder.analyzePoint(Number(lat), Number(lon), cfg, { ai: false });
+    const m = r.metrics || {};
+    return {
+      has_parking: !!(m.parking && m.parking.count > 0),
+      parking_distance_m: (m.parking && m.parking.nearest_m != null) ? Math.round(m.parking.nearest_m) : null,
+      population: r.population != null ? Math.round(r.population) : null,
+      anchor_count: m.anchors ? m.anchors.count : null,
+      competition_count: m.competition ? m.competition.count : null,
+      score: r.score != null ? r.score : null,
+    };
+  } catch (e) { console.warn('[spots] analyzeAndFill:', e && e.message); return null; }
+}
+
 // Diakritika pryč, mezery→pomlčky, jen [a-z0-9-].
 function slugify(s) {
   return String(s || '')
@@ -252,13 +272,91 @@ router.get('/public/area-analysis', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/pradlomat-spots/public/existing-laundromats — provozované prádlomaty
-// (z veřejné Google My Maps „WHERE WE LAUNDRY [EU]"), parsováno z KML, cache 6 h.
+// GET /api/pradlomat-spots/public/existing-laundromats — NAŠE stávající lokality.
+// Zdroj pravdy = SIS kiosk-values (tab Compounding, 69 lokalit). SIS nevrací GPS,
+// takže adresy (kiosk.label) geokódujeme přes Nominatim a výsledek trvale cachujeme
+// v AppSetting. Fallback: Google My Maps KML, kdyby SIS nebylo dostupné.
+const KIOSK_GEOCODE_KEY = 'pradlomat.kiosk_geocode';   // { "<adresa>": {lat,lon} }
 const MYMAPS_MID = process.env.KDEPEREME_MYMAPS_MID || '1kTO9nPigGvqmmEhm_iTcW2z9LkJYgmY';
-let _kmlCache = { at: 0, data: null };
+let _existingCache = { at: 0, data: null };
+let _geoRunning = false;
+
+// SIS kiosky (server-side klíč). Vrací [] když SIS není nakonfigurováno / selže.
+async function fetchSisKiosks() {
+  const apiKey = process.env.SIS_KIOSK_API_KEY;
+  if (!apiKey) return [];
+  const apiUrl = process.env.SIS_KIOSK_API_URL || 'https://sis-test.infinitygrid.cloud/api/public/kiosk-values';
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const r = await fetch(apiUrl, { headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' }, signal: ctrl.signal });
+    if (!r.ok) return [];
+    const payload = await r.json();
+    return Array.isArray(payload.kiosks) ? payload.kiosks : [];
+  } catch (_) { return []; } finally { clearTimeout(to); }
+}
+
+async function loadGeoCache() {
+  try { const row = await prisma.appSetting.findUnique({ where: { key: KIOSK_GEOCODE_KEY } }); return (row && row.value) ? JSON.parse(row.value) : {}; }
+  catch (_) { return {}; }
+}
+async function saveGeoCache(map) {
+  try { await prisma.appSetting.upsert({ where: { key: KIOSK_GEOCODE_KEY }, update: { value: JSON.stringify(map) }, create: { key: KIOSK_GEOCODE_KEY, value: JSON.stringify(map) } }); } catch (_) {}
+}
+async function geocodeAddr(addr) {
+  const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cz,pl,ie&q=' + encodeURIComponent(addr);
+  const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': NOMINATIM_UA, 'Accept-Language': 'cs' } });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (Array.isArray(j) && j.length) return { lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon) };
+  } catch (_) {} finally { clearTimeout(to); }
+  return null;
+}
+// Na pozadí doplní chybějící geokódy (Nominatim, 1,2 s/dotaz), uloží do cache.
+async function backfillGeocodes(kiosks, geo) {
+  if (_geoRunning) return; _geoRunning = true;
+  try {
+    let changed = false, done = 0;
+    for (const k of kiosks) {
+      const addr = (k.label || '').trim(); if (!addr || geo[addr]) continue;
+      const g = await geocodeAddr(addr + ', Česko');
+      geo[addr] = g || { lat: null, lon: null }; changed = true; done++;
+      if (done % 5 === 0) await saveGeoCache(geo);
+      await new Promise((r) => setTimeout(r, 1200)); // respektuj Nominatim rate-limit
+      if (done >= 200) break;
+    }
+    if (changed) { await saveGeoCache(geo); _existingCache = { at: 0, data: null }; }
+  } catch (_) {} finally { _geoRunning = false; }
+}
+
 async function fetchExistingLaundromats() {
   const now = Date.now();
-  if (_kmlCache.data && now - _kmlCache.at < 6 * 3600 * 1000) return _kmlCache.data;
+  if (_existingCache.data && now - _existingCache.at < 6 * 3600 * 1000) return _existingCache.data;
+  const kiosks = await fetchSisKiosks();
+  if (kiosks.length) {
+    const geo = await loadGeoCache();
+    const out = [];
+    let missing = 0;
+    for (const k of kiosks) {
+      const addr = (k.label || '').trim(); if (!addr) continue;
+      const g = geo[addr];
+      if (g && g.lat != null && g.lon != null) {
+        out.push({ name: addr, lat: g.lat, lon: g.lon, note: (k.companyName || '') + (k.inIncubator ? ' · inkubátor' : ' · zavedená') });
+      } else if (!g) { missing++; }
+    }
+    if (missing) backfillGeocodes(kiosks, geo); // doběhne na pozadí, další načtení bude úplnější
+    if (out.length) { _existingCache = { at: now, data: out }; return out; }
+    // zatím nic nezgeokódováno → zkus fallback, ať mapa není prázdná
+  }
+  const kml = await fetchKmlLaundromats();
+  _existingCache = { at: now, data: kml };
+  return kml;
+}
+
+// Fallback zdroj: Google My Maps „WHERE WE LAUNDRY [EU]" (KML).
+async function fetchKmlLaundromats() {
   const url = 'https://www.google.com/maps/d/kml?forcekml=1&mid=' + MYMAPS_MID;
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 15000);
@@ -266,8 +364,8 @@ async function fetchExistingLaundromats() {
   try {
     const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': NOMINATIM_UA } });
     if (r.ok) xml = await r.text();
-  } catch (_) { /* ponech starou cache */ } finally { clearTimeout(to); }
-  if (!xml) return _kmlCache.data || [];
+  } catch (_) {} finally { clearTimeout(to); }
+  if (!xml) return [];
   const decode = (s) => String(s || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
@@ -287,12 +385,11 @@ async function fetchExistingLaundromats() {
       if (Number.isFinite(lat) && Number.isFinite(lon)) out.push({ name, note: note || null, lat, lon, country });
     }
   }
-  if (out.length) _kmlCache = { at: now, data: out };
-  return _kmlCache.data || out;
+  return out;
 }
 router.get('/public/existing-laundromats', async (req, res) => {
   try { res.json(await fetchExistingLaundromats()); }
-  catch (e) { res.json((_kmlCache && _kmlCache.data) || []); }
+  catch (e) { res.json((_existingCache && _existingCache.data) || []); }
 });
 
 // GET /api/pradlomat-spots/public/:code — detail jednoho místa.
@@ -615,7 +712,14 @@ router.post('/', async (req, res, next) => {
         sort_order: d.sort_order ?? 0,
       },
     });
-    res.status(201).json(toAdmin(created));
+    // Auto-analýza okolí při rovnou zveřejněném místě bez zadaných dat.
+    let out = created;
+    if (is_public && created.latitude != null && created.longitude != null
+        && d.has_parking == null) {
+      const auto = await analyzeAndFill(created.latitude, created.longitude);
+      if (auto) out = await prisma.pradlomatSpot.update({ where: { id: created.id }, data: auto });
+    }
+    res.status(201).json(toAdmin(out));
   } catch (err) { next(err); }
 });
 
@@ -691,6 +795,20 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     // Na web jde místo podle stavu (Zveřejněné/Rezervováno). is_public se dopočítá.
     const finalStatus = data.status || existing.status;
     data.is_public = ['published', 'reserved'].includes(finalStatus);
+
+    // Auto-analýza okolí při zveřejnění — každé místo, které jde na web, projde
+    // analyzátorem (pokud ještě nemá data a nejsou zadaná ručně v tomto uložení).
+    if (data.is_public) {
+      const lat = data.latitude !== undefined ? data.latitude : existing.latitude;
+      const lon = data.longitude !== undefined ? data.longitude : existing.longitude;
+      // has_parking == null = místo analýzou nikdy neprošlo (analyzátor vždy nastaví true/false).
+      const alreadyHas = existing.has_parking != null;
+      const settingNow = data.has_parking !== undefined;
+      if (lat != null && lon != null && !alreadyHas && !settingNow) {
+        const auto = await analyzeAndFill(lat, lon);
+        if (auto) Object.assign(data, auto);
+      }
+    }
 
     const updated = await prisma.pradlomatSpot.update({ where: { id: existing.id }, data });
     res.json(toAdmin(updated));

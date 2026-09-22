@@ -218,7 +218,7 @@
       var d = L.DomUtil.create('div','maplegend');
       d.style.cssText = 'background:rgba(12,24,38,.82);padding:7px 10px;border-radius:8px;font-size:11.5px;color:#cfe0f0;display:flex;flex-direction:column;gap:3px;border:1px solid rgba(255,255,255,.14);line-height:1.5';
       function row(c,t){ return '<span style="display:flex;align-items:center;gap:6px"><span style="width:10px;height:10px;border-radius:50%;background:'+c+';border:1px solid rgba(255,255,255,.5)"></span>'+t+'</span>'; }
-      d.innerHTML = row('#00e676','připravené místo') + row('#eab308','rezervováno') + row('#1e86e0','už pereme');
+      d.innerHTML = row('#00e676','připravené místo') + row('#eab308','rezervováno') + row('#1e86e0','naše lokalita');
       return d;
     };
     lg.addTo(map);
