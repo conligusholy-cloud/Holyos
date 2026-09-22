@@ -442,22 +442,17 @@
 
     <!-- TAB: Termíny schůzek (pradlomaty.info rezervace) -->
     <div id="tab-terminy" style="display:none; padding:20px 24px 24px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
         <h3 style="margin:0;font-size:16px;">📅 Termíny schůzek — pradlomaty.info</h3>
-        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="msToggleForm()">➕ Přidat termín</button>
-      </div>
-      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Volné termíny, které se nabízejí zájemcům na pradlomaty.info/home. Zájemce si vybere termín, rezervace se naváže na jeho lead.</div>
-      <div id="ms-form" style="display:none;background:var(--surface,#171a21);border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:14px;margin-bottom:14px;">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
-          <label style="font-size:12px;color:var(--text2)">Datum a čas<input id="ms-when" type="datetime-local" style="width:100%"></label>
-          <label style="font-size:12px;color:var(--text2)">Délka (min)<input id="ms-dur" type="number" value="17" style="width:100%"></label>
-          <label style="font-size:12px;color:var(--text2)">Kapacita<input id="ms-cap" type="number" value="1" style="width:100%"></label>
-          <label style="font-size:12px;color:var(--text2)">Forma<select id="ms-mode" style="width:100%"><option value="">online i osobně</option><option value="online">online</option><option value="osobne">osobně</option></select></label>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:6px;">
+          <button class="btn btn-sm" onclick="msWeek(-1)" title="Předchozí týden">←</button>
+          <span id="ms-week-label" style="font-size:13px;min-width:150px;text-align:center;font-weight:600;"></span>
+          <button class="btn btn-sm" onclick="msWeek(1)" title="Další týden">→</button>
+          <button class="btn btn-sm" onclick="msWeek(0)" title="Aktuální týden">Dnes</button>
         </div>
-        <div style="margin-top:8px;"><input id="ms-note" type="text" placeholder="Poznámka (volitelné)" style="width:100%"></div>
-        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="msCreate()">Uložit termín</button><button class="btn btn-sm" onclick="msToggleForm()">Zrušit</button><span id="ms-form-msg" style="font-size:12px;color:var(--text2);"></span></div>
       </div>
-      <div id="ms-list"><div style="color:var(--text2);">Načítám…</div></div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Klikni na půlhodinu → otevřeš možnost schůzky (30 min). Otevřené termíny se hned nabízejí na pradlomaty.info/home. <span style="color:#1e86e0;">■</span> volno · <span style="color:#1f7a45;">■</span> rezervováno.</div>
+      <div id="ms-grid" style="overflow-x:auto;"><div style="color:var(--text2);">Načítám…</div></div>
     </div>
 
     <!-- TAB: AI telefonní asistent -->
@@ -6511,45 +6506,66 @@
     // ============================================================
     // TERMÍNY SCHŮZEK — tab "terminy" (rezervace pradlomaty.info)
     // ============================================================
-    function msEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-    function msFmt(d){ var D=['Ne','Po','Út','St','Čt','Pá','So']; return D[d.getDay()]+' '+d.getDate()+'.'+(d.getMonth()+1)+'. '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
-    function msToggleForm(){ var f=document.getElementById('ms-form'); f.style.display=(f.style.display==='none'||!f.style.display)?'block':'none'; }
+    var MS_STATE={ weekStart:null, slots:[] };
+    var MS_START_H=7, MS_END_H=21; // rozsah hodin v mřížce
+    function msMonday(d){ var x=new Date(d); var day=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-day); return x; }
+    function msKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()+'-'+d.getHours()+'-'+d.getMinutes(); }
+    function msWhen(d){ var DAYSH=['Ne','Po','Út','St','Čt','Pá','So']; return DAYSH[d.getDay()]+' '+d.getDate()+'.'+(d.getMonth()+1)+'. '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
+    function msWeek(dir){ if(!MS_STATE.weekStart||dir===0){ MS_STATE.weekStart=msMonday(new Date()); } else { MS_STATE.weekStart=new Date(MS_STATE.weekStart.getTime()+dir*7*86400000); } loadMeetingSlots(); }
     async function loadMeetingSlots(){
-      var box=document.getElementById('ms-list'); if(!box)return; box.innerHTML='<div style="color:var(--text2)">Načítám…</div>';
-      try{
-        var r=await fetch('/api/compounder/admin/meeting-slots',{credentials:'include'});
-        var slots=await r.json();
-        if(!Array.isArray(slots)||!slots.length){ box.innerHTML='<div style="color:var(--text2)">Zatím žádné termíny. Přidej první přes „➕ Přidat termín".</div>'; return; }
-        var now=Date.now();
-        box.innerHTML=slots.map(function(s){
-          var d=new Date(s.starts_at); var past=d.getTime()<now;
-          var resv=(s.reservations||[]).filter(function(x){return x.status==='booked';});
-          var cap=s.capacity||1; var full=resv.length>=cap;
-          var rows=resv.map(function(x){ return '<div style="font-size:12px;color:var(--text2);padding:2px 0;display:flex;gap:8px;align-items:center;"><span>• '+msEsc(x.name||'—')+' · '+msEsc(x.phone||x.email||'')+'</span><button class="btn btn-sm" style="padding:1px 7px;" onclick="msCancelResv('+x.id+')" title="Zrušit rezervaci">✕</button></div>'; }).join('');
-          return '<div style="background:var(--surface,#171a21);border:1px solid '+(past?'var(--line,#2a2a2e)':'#2b7fd4')+';border-radius:12px;padding:12px 14px;margin-bottom:10px;'+(past?'opacity:.55;':'')+'">'
-            +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-            +'<div style="font-weight:700;">'+msFmt(d)+'</div>'
-            +'<span style="font-size:12px;color:var(--text2);">'+(s.duration_min||17)+' min · '+(s.mode==='online'?'online':(s.mode==='osobne'?'osobně':'online i osobně'))+'</span>'
-            +'<span style="margin-left:auto;font-size:12px;color:'+(full?'#ef4444':'#22c55e')+'">'+resv.length+' / '+cap+' obsazeno</span>'
-            +'<button class="btn btn-sm" onclick="msDelete('+s.id+')" title="Smazat termín">🗑</button>'
-            +'</div>'+(rows?('<div style="margin-top:6px;border-top:1px solid var(--line,#2a2a2e);padding-top:6px;">'+rows+'</div>'):'')+'</div>';
-        }).join('');
-      }catch(e){ box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst termíny.</div>'; }
+      if(!MS_STATE.weekStart) MS_STATE.weekStart=msMonday(new Date());
+      var grid=document.getElementById('ms-grid'); if(!grid)return; grid.innerHTML='<div style="color:var(--text2)">Načítám…</div>';
+      try{ var r=await fetch('/api/compounder/admin/meeting-slots',{credentials:'include'}); MS_STATE.slots=await r.json(); }
+      catch(e){ grid.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst termíny.</div>'; return; }
+      msRenderWeek();
     }
-    async function msCreate(){
-      var when=document.getElementById('ms-when').value; var msg=document.getElementById('ms-form-msg');
-      if(!when){ msg.textContent='Zadej datum a čas.'; return; }
-      msg.textContent='Ukládám…';
-      try{
-        var r=await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
-          body:JSON.stringify({ starts_at:new Date(when).toISOString(), duration_min:parseInt(document.getElementById('ms-dur').value,10)||17, capacity:parseInt(document.getElementById('ms-cap').value,10)||1, mode:document.getElementById('ms-mode').value||null, note:document.getElementById('ms-note').value||null })});
-        var d=await r.json();
-        if(d&&d.ok){ msg.textContent=''; document.getElementById('ms-when').value=''; document.getElementById('ms-note').value=''; msToggleForm(); loadMeetingSlots(); }
-        else { msg.textContent=(d&&d.error)||'Chyba při ukládání.'; }
-      }catch(e){ msg.textContent='Chyba při ukládání.'; }
+    function msRenderWeek(){
+      var grid=document.getElementById('ms-grid'); var ws=MS_STATE.weekStart;
+      var we=new Date(ws.getTime()+6*86400000);
+      var lbl=document.getElementById('ms-week-label'); if(lbl) lbl.textContent=ws.getDate()+'.'+(ws.getMonth()+1)+'. – '+we.getDate()+'.'+(we.getMonth()+1)+'.';
+      var DAYSH=['Po','Út','St','Čt','Pá','So','Ne']; var now=Date.now();
+      var map={}; (MS_STATE.slots||[]).forEach(function(s){ map[msKey(new Date(s.starts_at))]=s; });
+      var days=[]; for(var i=0;i<7;i++) days.push(new Date(ws.getTime()+i*86400000));
+      var html='<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:660px;"><thead><tr><th style="width:52px;"></th>';
+      days.forEach(function(d,i){ var today=(new Date(d).setHours(0,0,0,0)===new Date().setHours(0,0,0,0)); html+='<th style="padding:6px 4px;text-align:center;color:'+(today?'#1e86e0':'var(--text2)')+';font-weight:600;">'+DAYSH[i]+'<br><span style="font-weight:400;">'+d.getDate()+'.'+(d.getMonth()+1)+'.</span></th>'; });
+      html+='</tr></thead><tbody>';
+      for(var h=MS_START_H; h<MS_END_H; h++){
+        for(var mm=0; mm<60; mm+=30){
+          html+='<tr><td style="color:var(--text2);text-align:right;padding:0 8px;white-space:nowrap;height:26px;">'+h+':'+(mm===0?'00':'30')+'</td>';
+          days.forEach(function(d){
+            var cell=new Date(d); cell.setHours(h,mm,0,0);
+            var s=map[msKey(cell)]; var past=cell.getTime()<now;
+            var bg='transparent', label='', col='var(--text2)';
+            if(s){ var booked=(s.reservations||[]).filter(function(x){return x.status==='booked';});
+              if(booked.length){ bg='#1f7a45'; col='#fff'; label='● '+msEsc((booked[0].name||'rez.').slice(0,10)); }
+              else { bg='#1e86e0'; col='#fff'; label='volno'; } }
+            var clickable = s || !past;
+            var style='border:1px solid var(--line,#2a2a2e);height:26px;text-align:center;font-size:11px;background:'+bg+';color:'+col+';'+(past?'opacity:.4;':'')+'cursor:'+(clickable?'pointer':'default')+';';
+            html+='<td class="ms-cell" data-k="'+cell.toISOString()+'"'+(s?(' data-sid="'+s.id+'"'):'')+' style="'+style+'">'+label+'</td>';
+          });
+          html+='</tr>';
+        }
+      }
+      html+='</tbody></table>';
+      grid.innerHTML=html;
+      grid.querySelectorAll('.ms-cell').forEach(function(td){ td.addEventListener('click',function(){ msCellClick(td); }); });
     }
-    async function msDelete(id){ if(!confirm('Smazat termín i jeho rezervace?'))return; try{ await fetch('/api/compounder/admin/meeting-slots/'+id,{method:'DELETE',credentials:'include'}); loadMeetingSlots(); }catch(e){} }
-    async function msCancelResv(id){ if(!confirm('Zrušit tuto rezervaci?'))return; try{ await fetch('/api/compounder/admin/meeting-reservations/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({status:'canceled'})}); loadMeetingSlots(); }catch(e){} }
+    async function msCellClick(td){
+      var when=new Date(td.dataset.k); var sid=td.dataset.sid;
+      if(sid){
+        var s=(MS_STATE.slots||[]).filter(function(x){return String(x.id)===String(sid);})[0];
+        var booked=s&&(s.reservations||[]).filter(function(x){return x.status==='booked';});
+        if(booked&&booked.length){ alert('Rezervováno ('+msWhen(when)+'):\n'+booked.map(function(x){return (x.name||'—')+' · '+(x.phone||x.email||'');}).join('\n')); return; }
+        if(!confirm('Zrušit tuto volnou možnost schůzky '+msWhen(when)+'?')) return;
+        try{ await fetch('/api/compounder/admin/meeting-slots/'+sid,{method:'DELETE',credentials:'include'}); }catch(e){}
+        loadMeetingSlots(); return;
+      }
+      if(when.getTime()<Date.now()) return;
+      if(!confirm('Otevřít možnost schůzky '+msWhen(when)+'? (30 min)')) return;
+      try{ await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({ starts_at:when.toISOString(), duration_min:30, capacity:1 })}); }catch(e){}
+      loadMeetingSlots();
+    }
+    function msEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
     // ============================================================
     // DATABÁZE LEADŮ (CRM import) — tab "databaze"
