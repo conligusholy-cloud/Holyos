@@ -6541,14 +6541,34 @@
               else { bg='#1e86e0'; col='#fff'; label='volno'; } }
             var clickable = s || !past;
             var style='border:1px solid var(--line,#2a2a2e);height:26px;text-align:center;font-size:11px;background:'+bg+';color:'+col+';'+(past?'opacity:.4;':'')+'cursor:'+(clickable?'pointer':'default')+';';
-            html+='<td class="ms-cell" data-k="'+cell.toISOString()+'"'+(s?(' data-sid="'+s.id+'"'):'')+' style="'+style+'">'+label+'</td>';
+            html+='<td class="ms-cell" data-k="'+cell.toISOString()+'"'+(s?(' data-sid="'+s.id+'"'):'')+(past&&!s?' data-past="1"':'')+' style="'+style+'">'+label+'</td>';
           });
           html+='</tr>';
         }
       }
       html+='</tbody></table>';
       grid.innerHTML=html;
-      grid.querySelectorAll('.ms-cell').forEach(function(td){ td.addEventListener('click',function(){ msCellClick(td); }); });
+      grid.style.userSelect='none'; grid.style.webkitUserSelect='none';
+      grid.querySelectorAll('.ms-cell').forEach(function(td){
+        if(td.dataset.sid){ td.addEventListener('click',function(){ if(!MS_DRAG.did) msCellClick(td); }); }
+        td.addEventListener('mousedown',function(e){ if(td.dataset.sid||td.getAttribute('data-past')==='1') return; e.preventDefault(); MS_DRAG.on=true; MS_DRAG.did=false; MS_DRAG.sel={}; msSelAdd(td); });
+        td.addEventListener('mouseenter',function(){ if(MS_DRAG.on && !td.dataset.sid && td.getAttribute('data-past')!=='1'){ MS_DRAG.did=true; msSelAdd(td); } });
+      });
+      if(!window.__msUpBound){ window.__msUpBound=true; document.addEventListener('mouseup', msFinishDrag); }
+    }
+    function msSelAdd(td){ MS_DRAG.sel[td.dataset.k]=true; td.style.background='rgba(30,134,224,.55)'; td.style.color='#fff'; }
+    async function msFinishDrag(){
+      if(!MS_DRAG.on) return; MS_DRAG.on=false;
+      var keys=Object.keys(MS_DRAG.sel); MS_DRAG.sel={};
+      if(!keys.length) return;
+      keys.sort();
+      var msg = keys.length===1 ? ('Otevřít možnost schůzky '+msWhen(new Date(keys[0]))+'? (30 min)') : ('Otevřít '+keys.length+' možností schůzky po 30 min?');
+      if(!confirm(msg)){ loadMeetingSlots(); return; }
+      try{
+        await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+          body:JSON.stringify({ slots: keys.map(function(iso){ return { starts_at:iso, duration_min:30, capacity:1 }; }) })});
+      }catch(e){}
+      loadMeetingSlots();
     }
     async function msCellClick(td){
       var when=new Date(td.dataset.k); var sid=td.dataset.sid;
