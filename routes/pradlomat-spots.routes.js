@@ -17,7 +17,9 @@ const router = express.Router();
 const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
+const finder = require('../services/spots/finder');
 
+const FINDER_CONFIG_KEY = 'pradlomat.finder_config';
 const SPOT_STATUSES = ['draft', 'published', 'reserved', 'taken', 'archived'];
 const NOMINATIM_UA = 'HolyOS-Pradlomaty/1.0 (+https://pradlomaty.info; tomas.holy@bestseries.cz)';
 
@@ -217,6 +219,79 @@ router.post('/public/:code/inquiry', async (req, res, next) => {
 // INTERNÍ ENDPOINTY (vyžadují přihlášení)
 // =============================================================================
 router.use(requireAuth);
+
+// ─── Vyhledávač lokalit (AI + OSM) ──────────────────────────────────────────
+
+// GET /api/pradlomat-spots/finder/config — konfigurace logiky (s výchozími).
+router.get('/finder/config', async (req, res, next) => {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let saved = {};
+    if (row && row.value) { try { saved = JSON.parse(row.value); } catch (_) { saved = {}; } }
+    res.json({ config: finder.mergeConfig(saved), defaults: finder.DEFAULT_CONFIG });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/pradlomat-spots/finder/config — uložení konfigurace.
+router.put('/finder/config', async (req, res, next) => {
+  try {
+    const cfg = finder.mergeConfig(req.body || {});
+    const value = JSON.stringify(cfg);
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    if (row) await prisma.appSetting.update({ where: { key: FINDER_CONFIG_KEY }, data: { value, value_type: 'json' } });
+    else await prisma.appSetting.create({ data: { key: FINDER_CONFIG_KEY, value, value_type: 'json' } });
+    res.json({ config: cfg });
+  } catch (err) { next(err); }
+});
+
+// POST /api/pradlomat-spots/finder/search  { area } — plošné hledání kandidátů.
+router.post('/finder/search', async (req, res, next) => {
+  try {
+    const area = String((req.body && req.body.area) || '').trim();
+    if (area.length < 2) return res.status(400).json({ error: 'Zadej město nebo oblast.' });
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const result = await finder.searchArea(area, cfg);
+    if (result && result.error) return res.status(404).json(result);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// POST /api/pradlomat-spots/finder/analyze  { lat, lon } — hloubková analýza bodu + AI.
+router.post('/finder/analyze', async (req, res, next) => {
+  try {
+    const lat = Number(req.body && req.body.lat), lon = Number(req.body && req.body.lon);
+    if (!isFinite(lat) || !isFinite(lon)) return res.status(400).json({ error: 'Chybí souřadnice.' });
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const result = await finder.analyzePoint(lat, lon, cfg, { ai: req.body && req.body.ai !== false });
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
+// POST /api/pradlomat-spots/finder/save-candidate — založí kandidáta jako místo (draft).
+router.post('/finder/save-candidate', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const lat = Number(b.lat), lon = Number(b.lon);
+    const title = String(b.name || '').trim() || (b.city ? String(b.city) : 'Nové místo');
+    if (!isFinite(lat) || !isFinite(lon)) return res.status(400).json({ error: 'Chybí souřadnice.' });
+    const code = await uniqueCode(b.city ? (b.city + '-' + title) : title);
+    let notes = '';
+    if (b.note) notes = String(b.note).slice(0, 4000);
+    else if (b.score != null) notes = 'Z vyhledávače lokalit — skóre ' + Math.round(b.score) + '/100 (' + (b.verdict || '') + ').';
+    const created = await prisma.pradlomatSpot.create({
+      data: {
+        code, title, status: 'draft', is_public: false,
+        city: b.city ? String(b.city).slice(0, 120) : null,
+        latitude: lat, longitude: lon,
+        internal_notes: notes || null,
+        created_by_id: actorPersonId(req),
+      },
+    });
+    res.status(201).json(toAdmin(created));
+  } catch (err) { next(err); }
+});
 
 // GET /api/pradlomat-spots/geocode?q=adresa — proxy na Nominatim.
 router.get('/geocode', async (req, res) => {
