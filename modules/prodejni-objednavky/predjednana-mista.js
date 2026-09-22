@@ -78,8 +78,24 @@
       + '.pm-btn.find{background:#2a3550;color:#cfe0ff;border:1px solid #3b4a6b}'
       // finder panel
       + '.pmf-modal{width:100%;max-width:1000px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}'
-      + '.pmf-cfg{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px}'
-      + '.pmf-cfg .pm-grid.three{gap:10px}'
+      + '.pmf-cfg{background:linear-gradient(180deg,rgba(42,53,80,.35),var(--bg));border:1px solid var(--border);border-radius:14px;padding:18px 18px 20px;margin-bottom:16px}'
+      + '.pmf-cfg .pm-grid.three{gap:12px 14px}'
+      + '.pmf-cfg .pm-f label{font-size:11.5px;color:var(--text2);text-transform:none}'
+      + '.pmf-cfg .pm-f input{width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px 11px;color:var(--text);font-size:14px}'
+      + '.pmf-cfg .pm-f input:focus{outline:none;border-color:#eab308;box-shadow:0 0 0 3px rgba(234,179,8,.14)}'
+      + '.pmf-cfg .pm-sect{color:#eab308;border-top:1px solid var(--border);padding-top:14px}'
+      + '.pmf-cfg .pm-sect:first-child{border-top:none;padding-top:0}'
+      + '.pmf-types{display:flex;flex-wrap:wrap;gap:10px}'
+      + '.pmf-types label{display:flex;align-items:center;gap:7px;font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:7px 13px;cursor:pointer;user-select:none}'
+      + '.pmf-types label:has(input:checked){background:rgba(234,179,8,.14);border-color:rgba(234,179,8,.5);color:#f2d675}'
+      + '.pmf-types input{width:15px;height:15px;accent-color:#eab308}'
+      // lišta výběru + checkboxy kandidátů
+      + '.pmf-bulk{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:10px;padding:9px 12px;margin-bottom:10px}'
+      + '.pmf-bulk .cnt{font-size:13px;color:var(--text);font-weight:600}'
+      + '.pmf-bulk .sp{flex:1}'
+      + '.pmf-card{position:relative;padding-left:44px}'
+      + '.pmf-card .pick{position:absolute;left:14px;top:14px;width:20px;height:20px;accent-color:#eab308;cursor:pointer}'
+      + '.pmf-card.sel{border-color:#eab308;box-shadow:0 0 0 1px #eab308 inset}'
       + '.pmf-searchrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}'
       + '.pmf-searchrow input{flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 13px;color:var(--text);font-size:14px}'
       + '#pmf-map{height:280px;border-radius:10px;border:1px solid var(--border);background:var(--bg);margin-bottom:12px}'
@@ -342,7 +358,7 @@
       var zoom = (spot && spot.latitude != null) ? 14 : 7;
       try {
         state.editMap = L.map('pm-editmap', { scrollWheelZoom: false }).setView([lat, lng], zoom);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(state.editMap);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(state.editMap);
         if (spot && spot.latitude != null) placeMarker(lat, lng);
         state.editMap.on('click', function (e) { placeMarker(e.latlng.lat, e.latlng.lng); setLatLng(e.latlng.lat, e.latlng.lng); });
       } catch (e) {}
@@ -406,7 +422,7 @@
   // ==========================================================================
   // VYHLEDÁVAČ LOKALIT (AI + OSM)
   // ==========================================================================
-  var fstate = { config: null, result: null, map: null, markers: [], cfgOpen: false };
+  var fstate = { config: null, defaults: null, result: null, map: null, markers: [], cfgOpen: false, selected: {} };
   var CAND_TYPES = [
     { k: 'supermarket', l: 'Supermarkety' }, { k: 'hypermarket', l: 'Hypermarkety' },
     { k: 'mall', l: 'Obch. centra' }, { k: 'department_store', l: 'Obch. domy' },
@@ -441,7 +457,7 @@
   }
 
   function loadConfig() {
-    fapi('/config').then(function (r) { fstate.config = r.config; }).catch(function () { fstate.config = null; });
+    fapi('/config').then(function (r) { fstate.config = r.config; fstate.defaults = r.defaults; }).catch(function () { fstate.config = null; });
   }
 
   function toggleCfg() {
@@ -449,40 +465,47 @@
     fstate.cfgOpen = !fstate.cfgOpen;
     if (!fstate.cfgOpen) { wrap.style.display = 'none'; return; }
     wrap.style.display = ''; wrap.innerHTML = '<div class="pmf-cfg">Načítám…</div>';
-    fapi('/config').then(function (r) { fstate.config = r.config; wrap.innerHTML = cfgHtml(r.config); wireCfg(); })
+    fapi('/config').then(function (r) { fstate.config = r.config; fstate.defaults = r.defaults; wrap.innerHTML = cfgHtml(r.config); wireCfg(); })
       .catch(function () { wrap.innerHTML = '<div class="pmf-cfg" style="color:#f7a1a1">Konfiguraci se nepodařilo načíst.</div>'; });
   }
 
   function cfgHtml(c) {
-    function inp(id, val, w) { return '<input id="' + id + '" value="' + attr(val) + '" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;width:' + (w || 100) + 'px">'; }
+    function inp(id, val) { return '<input id="' + id + '" type="number" inputmode="numeric" value="' + attr(val) + '">'; }
     var types = CAND_TYPES.map(function (t) {
       var on = (c.candidate_types || []).indexOf(t.k) >= 0;
-      return '<label class="pm-check" style="font-size:12.5px"><input type="checkbox" data-ctype="' + t.k + '" ' + (on ? 'checked' : '') + '> ' + t.l + '</label>';
+      return '<label><input type="checkbox" data-ctype="' + t.k + '" ' + (on ? 'checked' : '') + '> ' + t.l + '</label>';
     }).join('');
     return '<div class="pmf-cfg">'
-      + '<div class="pm-sect" style="margin-top:0">Poloměry a prahy</div>'
+      + '<div class="pm-sect">📏 Poloměry a prahy</div>'
       + '<div class="pm-grid three">'
-      + '  <div class="pm-f"><label>Parkoviště do (m)</label>' + inp('cfg-parking_radius', c.parking_radius) + '</div>'
-      + '  <div class="pm-f"><label>Konkurence do (m)</label>' + inp('cfg-competition_radius', c.competition_radius) + '</div>'
-      + '  <div class="pm-f"><label>Tahouni provozu do (m)</label>' + inp('cfg-anchor_radius', c.anchor_radius) + '</div>'
-      + '  <div class="pm-f"><label>Populace — okruh (km)</label>' + inp('cfg-population_radius_km', c.population_radius_km) + '</div>'
-      + '  <div class="pm-f"><label>Min. spádová populace</label>' + inp('cfg-min_population', c.min_population) + '</div>'
-      + '  <div class="pm-f"><label>Práh „vhodné" (skóre)</label>' + inp('cfg-min_score', c.min_score) + '</div>'
+      + '  <div class="pm-f"><label>🅿️ Parkoviště do (m)</label>' + inp('cfg-parking_radius', c.parking_radius) + '</div>'
+      + '  <div class="pm-f"><label>⚔️ Konkurence do (m)</label>' + inp('cfg-competition_radius', c.competition_radius) + '</div>'
+      + '  <div class="pm-f"><label>🏪 Tahouni provozu do (m)</label>' + inp('cfg-anchor_radius', c.anchor_radius) + '</div>'
+      + '  <div class="pm-f"><label>👥 Populace — okruh (km)</label>' + inp('cfg-population_radius_km', c.population_radius_km) + '</div>'
+      + '  <div class="pm-f"><label>👥 Min. spádová populace</label>' + inp('cfg-min_population', c.min_population) + '</div>'
+      + '  <div class="pm-f"><label>✅ Práh „vhodné" (skóre 0–100)</label>' + inp('cfg-min_score', c.min_score) + '</div>'
       + '</div>'
-      + '<div class="pm-sect">Váhy faktorů (poměr ve skóre)</div>'
+      + '<div class="pm-sect">⚖️ Váhy faktorů <span style="font-weight:400;text-transform:none;color:var(--text2)">(jejich poměr určuje výsledné skóre)</span></div>'
       + '<div class="pm-grid three">'
       + '  <div class="pm-f"><label>Parkování</label>' + inp('cfg-w-parking', c.weights.parking) + '</div>'
       + '  <div class="pm-f"><label>Konkurence (bez ní)</label>' + inp('cfg-w-competition', c.weights.competition) + '</div>'
       + '  <div class="pm-f"><label>Populace</label>' + inp('cfg-w-population', c.weights.population) + '</div>'
       + '  <div class="pm-f"><label>Tahouni provozu</label>' + inp('cfg-w-anchors', c.weights.anchors) + '</div>'
-      + '  <div class="pm-f"><label>Max. kandidátů</label>' + inp('cfg-max_candidates', c.max_candidates) + '</div>'
+      + '  <div class="pm-f"><label>🔢 Max. kandidátů</label>' + inp('cfg-max_candidates', c.max_candidates) + '</div>'
       + '</div>'
-      + '<div class="pm-sect">Co brát jako kandidáta</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:14px">' + types + '</div>'
-      + '<div style="margin-top:12px;display:flex;gap:10px;align-items:center"><button class="pm-btn primary" id="cfg-save">Uložit konfiguraci</button><span class="pm-msg" id="cfg-msg"></span></div>'
+      + '<div class="pm-sect">🎯 Co brát jako kandidáta</div>'
+      + '<div class="pmf-types">' + types + '</div>'
+      + '<div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="pm-btn primary" id="cfg-save">💾 Uložit konfiguraci</button><button class="pm-btn ghost" id="cfg-reset">↺ Výchozí</button><span class="pm-msg" id="cfg-msg"></span></div>'
       + '</div>';
   }
-  function wireCfg() { var b = document.getElementById('cfg-save'); if (b) b.onclick = saveConfig; }
+  function wireCfg() {
+    var b = document.getElementById('cfg-save'); if (b) b.onclick = saveConfig;
+    var r = document.getElementById('cfg-reset'); if (r) r.onclick = function () {
+      var d = fstate.defaults; if (!d) return;
+      var wrap = document.getElementById('pmf-cfgwrap'); wrap.innerHTML = cfgHtml(d); wireCfg();
+      var m = document.getElementById('cfg-msg'); if (m) { m.className = 'pm-msg'; m.textContent = 'Výchozí hodnoty — nezapomeň uložit.'; }
+    };
+  }
 
   function collectCfg() {
     function n(id) { var el = document.getElementById(id); return el ? num(el.value) : null; }
@@ -529,8 +552,20 @@
       + '<span>Kandidátů: <b>' + r.candidates.length + '</b></span>'
       + '<span>Konkurence v oblasti: <b>' + (r.counts ? r.counts.competition : '?') + '</b></span>'
       + '</div>';
-    box.innerHTML = sum + r.candidates.map(cardHtml).join('');
+    fstate.selected = {};
+    var bulk = '<div class="pmf-bulk">'
+      + '<input type="checkbox" id="pmf-selall" title="Vybrat vše" style="width:18px;height:18px;accent-color:#eab308">'
+      + '<span class="cnt" id="pmf-selcnt">Vybráno: 0</span>'
+      + '<span class="sp"></span>'
+      + '<button class="pm-btn ghost" id="pmf-selsuit">Vybrat vhodné</button>'
+      + '<button class="pm-btn primary" id="pmf-savesel">＋ Založit vybraná</button>'
+      + '</div>';
+    box.innerHTML = sum + bulk + r.candidates.map(cardHtml).join('');
     document.getElementById('pmf-map').style.display = '';
+    document.getElementById('pmf-selall').onchange = function () { toggleAll(this.checked); };
+    document.getElementById('pmf-selsuit').onclick = selectSuitable;
+    document.getElementById('pmf-savesel').onclick = saveSelected;
+    updateSelCount();
     setTimeout(function () { drawMap(r); }, 60);
   }
 
@@ -544,6 +579,7 @@
     chips += '<span class="pmf-chip">🏪 tahouni ' + m.anchors.count + '</span>';
     var addr = c.name ? esc(c.name) : 'Místo';
     return '<div class="pmf-card" id="pmf-card-' + i + '">'
+      + '<input type="checkbox" class="pick" data-pick="' + i + '" onchange="__pmfPick(' + i + ',this.checked)">'
       + '<div class="top"><div><div style="font-weight:700;font-size:15px">' + addr + (c.shop ? ' <span style="font-size:12px;color:var(--text2)">· ' + esc(c.shop) + '</span>' : '') + '</div>'
       + '<div style="font-size:12px;color:var(--text2);margin-top:2px">' + c.lat.toFixed(5) + ', ' + c.lon.toFixed(5) + ' · <span style="color:' + scoreColor(c.score) + '">' + esc(c.verdict) + '</span></div></div>'
       + '<div class="pmf-score" style="color:' + scoreColor(c.score) + '">' + c.score + '</div></div>'
@@ -565,7 +601,7 @@
     fstate.markers = [];
     try {
       fstate.map = L.map('pmf-map', { scrollWheelZoom: false }).setView([r.area.lat, r.area.lon], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(fstate.map);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Tiles &copy; Esri' }).addTo(fstate.map);
       var pts = [];
       r.candidates.forEach(function (c, i) {
         var col = scoreColor(c.score);
@@ -612,6 +648,48 @@
         load();
       }).catch(function (e) { alert('Nepodařilo se založit: ' + e.message); });
   };
+
+  // ── Výběr kandidátů + hromadné založení ──
+  window.__pmfPick = function (i, on) {
+    if (on) fstate.selected[i] = true; else delete fstate.selected[i];
+    var card = document.getElementById('pmf-card-' + i); if (card) card.classList.toggle('sel', !!on);
+    updateSelCount();
+  };
+  function selCount() { return Object.keys(fstate.selected).length; }
+  function updateSelCount() {
+    var el = document.getElementById('pmf-selcnt'); if (el) el.textContent = 'Vybráno: ' + selCount();
+    var sv = document.getElementById('pmf-savesel'); if (sv) sv.textContent = '＋ Založit vybraná' + (selCount() ? ' (' + selCount() + ')' : '');
+  }
+  function toggleAll(on) {
+    if (!fstate.result) return;
+    fstate.selected = {};
+    fstate.result.candidates.forEach(function (c, i) { if (on) fstate.selected[i] = true; });
+    document.querySelectorAll('[data-pick]').forEach(function (cb) { cb.checked = on; var card = cb.closest('.pmf-card'); if (card) card.classList.toggle('sel', on); });
+    updateSelCount();
+  }
+  function selectSuitable() {
+    if (!fstate.result) return;
+    fstate.selected = {};
+    fstate.result.candidates.forEach(function (c, i) { if (c.suitable) fstate.selected[i] = true; });
+    document.querySelectorAll('[data-pick]').forEach(function (cb) { var i = Number(cb.getAttribute('data-pick')); var on = !!fstate.selected[i]; cb.checked = on; var card = cb.closest('.pmf-card'); if (card) card.classList.toggle('sel', on); });
+    var sa = document.getElementById('pmf-selall'); if (sa) sa.checked = false;
+    updateSelCount();
+  }
+  function saveSelected() {
+    var idx = Object.keys(fstate.selected); if (!idx.length) { alert('Nejdřív zaškrtni aspoň jedno místo.'); return; }
+    var city = (fstate.result.area.display_name || '').split(',')[0].trim();
+    var items = idx.map(function (i) {
+      var c = fstate.result.candidates[i];
+      return { lat: c.lat, lon: c.lon, name: c.name, city: city, score: c.score, verdict: c.verdict,
+        note: 'Z vyhledávače lokalit — skóre ' + c.score + '/100 (' + c.verdict + '). Parkoviště: ' + (c.metrics.parking.count ? 'ano' : 'ne') + ', konkurence: ' + c.metrics.competition.count + ', tahouni: ' + c.metrics.anchors.count + '.' };
+    });
+    var btn = document.getElementById('pmf-savesel'); btn.disabled = true; btn.textContent = 'Zakládám…';
+    fapi('/save-candidates', { method: 'POST', body: { candidates: items } }).then(function (r) {
+      btn.textContent = '✓ Založeno: ' + (r.created || items.length);
+      load();
+      setTimeout(function () { btn.disabled = false; updateSelCount(); }, 1500);
+    }).catch(function (e) { btn.disabled = false; updateSelCount(); alert('Nepodařilo se založit: ' + e.message); });
+  }
 
   window.__pmfClose = closeFinder;
   function closeFinder() {

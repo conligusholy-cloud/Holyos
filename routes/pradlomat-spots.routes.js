@@ -293,6 +293,33 @@ router.post('/finder/save-candidate', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/pradlomat-spots/finder/save-candidates — hromadné založení kandidátů.
+router.post('/finder/save-candidates', async (req, res, next) => {
+  try {
+    const items = Array.isArray(req.body && req.body.candidates) ? req.body.candidates : [];
+    if (!items.length) return res.status(400).json({ error: 'Nic k založení.' });
+    const personId = actorPersonId(req);
+    let created = 0;
+    for (const b of items) {
+      const lat = Number(b.lat), lon = Number(b.lon);
+      if (!isFinite(lat) || !isFinite(lon)) continue;
+      const title = String(b.name || '').trim() || (b.city ? String(b.city) : 'Nové místo');
+      const code = await uniqueCode(b.city ? (b.city + '-' + title) : title);
+      await prisma.pradlomatSpot.create({
+        data: {
+          code, title, status: 'draft', is_public: false,
+          city: b.city ? String(b.city).slice(0, 120) : null,
+          latitude: lat, longitude: lon,
+          internal_notes: b.note ? String(b.note).slice(0, 4000) : null,
+          created_by_id: personId,
+        },
+      });
+      created += 1;
+    }
+    res.status(201).json({ created });
+  } catch (err) { next(err); }
+});
+
 // GET /api/pradlomat-spots/geocode?q=adresa — proxy na Nominatim.
 router.get('/geocode', async (req, res) => {
   const q = String(req.query.q || '').trim();

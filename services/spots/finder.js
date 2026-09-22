@@ -90,12 +90,23 @@ async function geocodeArea(query) {
 
 // ─── Overpass: jeden dotaz na celou oblast ───────────────────────────────────
 const RETAIL_RX = 'supermarket|hypermarket|mall|department_store|wholesale|convenience';
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+// Zkusí postupně několik veřejných Overpass mirrorů (rate-limit/timeout na jednom
+// nemá shodit hledání). Vrací JSON, nebo null když selžou všechny.
 async function overpass(query) {
-  return fetchJson('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    headers: { 'User-Agent': UA(), 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: 'data=' + encodeURIComponent(query),
-  }, 60000);
+  for (let i = 0; i < OVERPASS_ENDPOINTS.length; i++) {
+    const j = await fetchJson(OVERPASS_ENDPOINTS[i], {
+      method: 'POST',
+      headers: { 'User-Agent': UA(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query),
+    }, 45000);
+    if (j && Array.isArray(j.elements)) return j;
+  }
+  return null;
 }
 async function fetchAreaFeatures(bbox) {
   const bb = bbox.s + ',' + bbox.w + ',' + bbox.n + ',' + bbox.e;
@@ -106,6 +117,7 @@ async function fetchAreaFeatures(bbox) {
     + 'nwr[amenity=laundry](' + bb + ');'
     + ');out center 3000;';
   const j = await overpass(q);
+  if (!j) return null; // Overpass selhal (rate-limit/timeout) — odlišit od „nic nenalezeno".
   const els = (j && j.elements) || [];
   const retail = [], parking = [], competition = [];
   els.forEach((e) => {
@@ -211,7 +223,10 @@ async function searchArea(query, rawCfg) {
   if (!area) return { error: 'Oblast se nepodařilo najít.' };
 
   const feat = await fetchAreaFeatures(area.bbox);
-  if (!feat || !feat.retail.length) {
+  if (!feat) {
+    return { error: 'OpenStreetMap (Overpass) je právě přetížený nebo nedostupný. Zkus to prosím za chvíli znovu.' };
+  }
+  if (!feat.retail.length) {
     return { area: area, config: cfg, candidates: [], population: null,
       note: 'V oblasti se nenašli žádní vhodní tahouni provozu (supermarkety apod.).' };
   }
