@@ -5916,6 +5916,16 @@ model CompounderLead {
   ai_specialist_email_sent_at DateTime?
   ai_specialist_email_status  String?
 
+  // Varianta oslovení: 'specialist' (AI specialista) nebo 'schuzka' (cesta k rozhodnutí
+  // s rezervací termínu). Pojistka: jednomu leadovi se posílá jen jedna varianta.
+  outreach_variant        String?   @db.VarChar(20)
+  // Odeslaná SMS s odkazem na „cestu k rozhodnutí" (pradlomaty.info/home) — A/B ke specialistovi.
+  schuzka_sms_sent_at     DateTime?
+  schuzka_sms_id          String?
+  schuzka_sms_status      String?
+  schuzka_sms_channel     String?
+  schuzka_opened_at       DateTime?
+
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
 
@@ -5982,6 +5992,46 @@ model CompounderLead {
   @@index([is_test])
   @@index([meta_form_id])
   @@map("compounder_leads")
+}
+
+// Volný termín schůzky (kalendář na pradlomaty.info/home). Zakládá/upravuje se
+// v Prodejních objednávkách. capacity = kolik rezervací lze na termín přijmout.
+model MeetingSlot {
+  id                   Int      @id @default(autoincrement())
+  starts_at            DateTime
+  duration_min         Int      @default(17)
+  capacity             Int      @default(1)
+  mode                 String?  @db.VarChar(20) // 'online' | 'osobne' | null
+  note                 String?  @db.Text
+  active               Boolean  @default(true)
+  created_by_person_id Int?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  reservations MeetingReservation[]
+
+  @@index([starts_at])
+  @@index([active])
+  @@map("meeting_slots")
+}
+
+// Rezervace termínu schůzky. Váže se na volný termín a (volitelně) na Compounder leada.
+model MeetingReservation {
+  id                 Int      @id @default(autoincrement())
+  slot_id            Int
+  compounder_lead_id Int?
+  name               String?  @db.VarChar(255)
+  email              String?  @db.VarChar(255)
+  phone              String?  @db.VarChar(60)
+  status             String   @default("booked") @db.VarChar(20) // booked | canceled | done
+  note               String?  @db.Text
+  created_at         DateTime @default(now())
+
+  slot MeetingSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
+
+  @@index([slot_id])
+  @@index([compounder_lead_id])
+  @@map("meeting_reservations")
 }
 
 // Historie komunikace s leadem — každé oslovení / zpráva napříč kanály (LinkedIn,
@@ -6549,4 +6599,88 @@ model TranslatorLine {
 
   @@index([session_id])
   @@map("translator_lines")
+}
+
+// ─── Předjednaná místa pro prádlomat (veřejný přehled pradlomaty.info/location) ──
+// Samostatný koncept, ZÁMĚRNĚ oddělený od modelu Site (nabídky z bestseries.global).
+// Zde jde o místa, která už máme předjednaná a nabízíme je zájemcům/provozovatelům.
+model PradlomatSpot {
+  id     Int    @id @default(autoincrement())
+  // Krátký kód do veřejné URL a pro referenci (např. "praha-nusle-01").
+  code   String @unique @db.VarChar(80)
+  title  String @db.VarChar(255)
+
+  // draft = rozpracované, published = veřejně na webu, reserved = někdo projevil vážný zájem,
+  // taken = obsazené (už se realizuje), archived = staženo.
+  status    String  @default("draft") @db.VarChar(20)
+  // Ruční pojistka viditelnosti na webu (musí být true ZÁROVEŇ se status=published).
+  is_public Boolean @default(false)
+
+  // ── Veřejné údaje (zobrazují se návštěvníkovi) ──
+  city        String? @db.VarChar(120)
+  region      String? @db.VarChar(120) // kraj / oblast
+  country     String? @default("CZ") @db.VarChar(60)
+  address     String? @db.VarChar(500) // interní přesná adresa (na webu se nemusí ukazovat celá)
+  show_address Boolean @default(false) // zveřejnit přesnou adresu?
+  latitude    Decimal? @db.Decimal(10, 7)
+  longitude   Decimal? @db.Decimal(10, 7)
+
+  public_description String? @db.Text // hlavní veřejný popis místa
+  highlight          String? @db.VarChar(160) // krátký odznak, např. "Bez konkurence do 2 km"
+  area_m2            Decimal? @db.Decimal(10, 2)
+  rent_monthly       Decimal? @db.Decimal(12, 2)
+  rent_currency      String?  @default("CZK") @db.VarChar(3)
+  footfall_note      String?  @db.VarChar(255) // spádovost / návštěvnost
+  availability_note  String?  @db.VarChar(255) // od kdy volné
+  cover_image_url    String?  @db.VarChar(500) // hlavní fotka
+  gallery            Json?    // pole URL dalších fotek: ["https://…", …]
+
+  // ── Interní údaje ──
+  owner_name     String? @db.VarChar(255)
+  owner_phone    String? @db.VarChar(40)
+  owner_email    String? @db.VarChar(255)
+  internal_notes String? @db.Text
+  electricity_kw Decimal? @db.Decimal(8, 2)
+  water_supply   Boolean?
+  sewage         Boolean?
+
+  // Skalární FK (bez Prisma relace, aby se nemusel měnit model Person).
+  assigned_to_id Int?
+  created_by_id  Int?
+
+  sort_order Int      @default(0)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  inquiries PradlomatSpotInquiry[]
+
+  @@index([status])
+  @@index([is_public])
+  @@index([city])
+  @@index([sort_order])
+  @@index([assigned_to_id])
+  @@map("pradlomat_spots")
+}
+
+// Poptávka z veřejné stránky ("Mám zájem o toto místo").
+model PradlomatSpotInquiry {
+  id      Int           @id @default(autoincrement())
+  spot_id Int
+  spot    PradlomatSpot @relation(fields: [spot_id], references: [id], onDelete: Cascade)
+
+  name    String? @db.VarChar(255)
+  phone   String? @db.VarChar(40)
+  email   String? @db.VarChar(255)
+  message String? @db.Text
+
+  status  String  @default("new") @db.VarChar(20) // new = nová, handled = vyřízená
+  source  String? @db.VarChar(60)                 // "pradlomaty.info/location"
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([spot_id])
+  @@index([status])
+  @@index([created_at])
+  @@map("pradlomat_spot_inquiries")
 }

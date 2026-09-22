@@ -126,6 +126,140 @@ router.post('/track', async (req, res) => {
   res.status(204).end();
 });
 
+// ─── VEŘEJNÉ: termíny schůzek + rezervace (pradlomaty.info „cesta k rozhodnutí") ──
+// GET /api/compounder/meeting-slots — volné budoucí termíny (kapacita > počet rezervací).
+router.get('/meeting-slots', async (req, res) => {
+  try {
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 45, 1), 120);
+    const now = new Date();
+    const until = new Date(now.getTime() + days * 86400000);
+    const slots = await prisma.meetingSlot.findMany({
+      where: { active: true, starts_at: { gte: now, lte: until } },
+      orderBy: { starts_at: 'asc' },
+      include: { _count: { select: { reservations: true } } },
+    });
+    const free = slots
+      .filter((s) => (s._count.reservations || 0) < s.capacity)
+      .map((s) => ({ id: s.id, starts_at: s.starts_at, duration_min: s.duration_min, mode: s.mode,
+        remaining: s.capacity - (s._count.reservations || 0) }));
+    res.json(free);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/compounder/meeting-reservation — rezervace termínu.
+// { t?: portalToken (z SMS), slot_id, name?, email?, phone? }. Token spáruje leada.
+router.post('/meeting-reservation', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const slotId = parseInt(b.slot_id, 10);
+    if (!Number.isInteger(slotId)) return res.status(400).json({ ok: false, error: 'Chybí termín' });
+    const leadId = b.t ? verifyPortalToken(String(b.t)) : null;
+
+    const slot = await prisma.meetingSlot.findUnique({
+      where: { id: slotId },
+      include: { _count: { select: { reservations: true } } },
+    });
+    if (!slot || !slot.active) return res.status(404).json({ ok: false, error: 'Termín není dostupný' });
+    if (slot.starts_at < new Date()) return res.status(400).json({ ok: false, error: 'Termín už proběhl' });
+    if ((slot._count.reservations || 0) >= slot.capacity) return res.status(409).json({ ok: false, error: 'Termín je již obsazený' });
+
+    // Údaje: přednostně z leada (znáš ho z reklamy), jinak z formuláře.
+    let name = (b.name || '').trim() || null;
+    let email = (b.email || '').trim() || null;
+    let phone = (b.phone || '').trim() || null;
+    if (leadId) {
+      const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, email: true, phone: true } }).catch(() => null);
+      if (lead) { name = name || lead.name; email = email || lead.email; phone = phone || lead.phone; }
+      // Jeden lead = jedna aktivní rezervace: starší zrušíme.
+      await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => {});
+    }
+    if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
+
+    const resv = await prisma.meetingReservation.create({
+      data: { slot_id: slotId, compounder_lead_id: leadId || null, name, email, phone, status: 'booked' },
+      select: { id: true },
+    });
+    if (leadId) {
+      await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_domluvena', schuzka_opened_at: new Date() } }).catch(() => {});
+    }
+    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode: slot.mode });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// ─── ADMIN: správa termínů (Prodejní objednávky) ────────────────────────────
+router.get('/admin/meeting-slots', requireAuth, async (req, res) => {
+  try {
+    const slots = await prisma.meetingSlot.findMany({
+      orderBy: { starts_at: 'asc' },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true } } },
+    });
+    res.json(slots.map((s) => ({ ...s, booked: s.reservations.filter((r) => r.status === 'booked').length })));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/admin/meeting-slots', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    // Hromadné zakládání: přijmi buď jeden termín, nebo pole `slots`.
+    const items = Array.isArray(b.slots) ? b.slots : [b];
+    const personId = (req.user && req.user.person_id) || (req.user && req.user.id) || null;
+    const created = [];
+    for (const it of items) {
+      if (!it || !it.starts_at) continue;
+      const d = new Date(it.starts_at);
+      if (isNaN(d)) continue;
+      const s = await prisma.meetingSlot.create({
+        data: {
+          starts_at: d,
+          duration_min: parseInt(it.duration_min, 10) || 17,
+          capacity: parseInt(it.capacity, 10) || 1,
+          mode: it.mode ? String(it.mode).slice(0, 20) : null,
+          note: it.note ? String(it.note) : null,
+          active: it.active === false ? false : true,
+          created_by_person_id: personId,
+        },
+        select: { id: true },
+      });
+      created.push(s.id);
+    }
+    res.status(201).json({ ok: true, created });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+router.patch('/admin/meeting-slots/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const b = req.body || {};
+    const data = {};
+    if (b.starts_at) { const d = new Date(b.starts_at); if (!isNaN(d)) data.starts_at = d; }
+    if (b.duration_min != null) data.duration_min = parseInt(b.duration_min, 10) || 17;
+    if (b.capacity != null) data.capacity = parseInt(b.capacity, 10) || 1;
+    if (b.mode !== undefined) data.mode = b.mode ? String(b.mode).slice(0, 20) : null;
+    if (b.note !== undefined) data.note = b.note ? String(b.note) : null;
+    if (b.active !== undefined) data.active = !!b.active;
+    await prisma.meetingSlot.update({ where: { id }, data });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+router.delete('/admin/meeting-slots/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.meetingSlot.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
+// Zrušit konkrétní rezervaci (admin).
+router.patch('/admin/meeting-reservations/:id', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const status = (req.body && req.body.status) ? String(req.body.status).slice(0, 20) : 'canceled';
+    await prisma.meetingReservation.update({ where: { id }, data: { status } });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+
 // Vstup leada na portál spustí „dosledování": přepne stav (jen z rané fáze) a nastaví konec
 // slevy (discount_until = teď + validDays z Compounding nastavení), pokud ještě není nastaven.
 async function _startFollowUp(leadId) {

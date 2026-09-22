@@ -734,6 +734,7 @@ app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (be
 app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
+app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes')); // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)
 app.use('/api/voice', require('./routes/voice-agent.routes')); // Hlasový AI agent — Twilio ConversationRelay webhooky (příchozí hovory)
@@ -861,6 +862,11 @@ function serveAiSpecialist(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'ai', 'index.html'));
 }
+// Předjednaná místa — veřejný přehled (pradlomaty.info/location).
+function serveLocationOverview(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'location.html'));
+}
 
 // (1) Vlastní doména compounder.world → web na rootu domény (+ /portal gated stránka).
 app.use((req, res, next) => {
@@ -878,6 +884,7 @@ app.use((req, res, next) => {
     return serveCompounderHome(req, res);
   }
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
+  if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {
@@ -911,6 +918,8 @@ app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
 app.get('/compounder/ai', serveAiSpecialist);
 app.get('/compounder/ai/', serveAiSpecialist);
+app.get('/compounder/location', serveLocationOverview);
+app.get('/compounder/location/', serveLocationOverview);
 app.use('/compounder', compounderStatic);
 
 // ─── Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat) ──
