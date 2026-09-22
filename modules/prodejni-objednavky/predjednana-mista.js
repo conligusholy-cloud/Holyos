@@ -203,7 +203,8 @@
     if (!list.length) { tb.innerHTML = '<tr><td colspan="7" style="color:var(--text2);padding:16px">Žádná místa. Klikni na „＋ Nové místo".</td></tr>'; return; }
     tb.innerHTML = list.map(function (s) {
       var stt = '<span class="pm-badge" style="background:' + STATUS_COLOR[s.status] + '22;color:' + STATUS_COLOR[s.status] + ';border:.5px solid ' + STATUS_COLOR[s.status] + '66">' + esc(STATUS_LABEL[s.status] || s.status) + '</span>';
-      var pub = s.is_public ? '<span class="pm-pub" style="color:#22c55e">● Ano</span>' : '<span class="pm-pub" style="color:var(--text2)">○ Ne</span>';
+      var onWeb = ['published', 'reserved'].indexOf(s.status) >= 0;
+      var pub = onWeb ? '<span class="pm-pub" style="color:#22c55e">● Ano</span>' : '<span class="pm-pub" style="color:var(--text2)">○ Ne</span>';
       var inqN = s.new_inquiries || 0, inqT = s.inquiries_count || 0;
       var inq = '<span class="pm-inq' + (inqN ? ' hot' : '') + '" title="' + inqT + ' celkem, ' + inqN + ' nových">' + (inqN ? inqN + ' / ' : '') + inqT + '</span>';
       var loc = [s.city, s.region].filter(Boolean).join(', ') || '<span style="color:var(--text2)">—</span>';
@@ -237,7 +238,7 @@
       +      opt('draft', 'Rozpracované', cur) + opt('published', 'Zveřejněné', cur) + opt('reserved', 'Rezervováno', cur) + opt('taken', 'Obsazené', cur) + opt('archived', 'Archiv', cur)
       + '  </select></div>'
       + '  <div class="pm-f"><label>Kód (URL)</label><input id="pmf-code" value="' + attr(v('code')) + '" placeholder="automaticky z názvu"></div>'
-      + '  <div class="pm-f full"><label class="pm-check"><input type="checkbox" id="pmf-public" ' + chk('is_public') + '> Zveřejnit na pradlomaty.info/location</label><div class="pm-hint">Zveřejní se jen při stavu „Zveřejněné" nebo „Rezervováno".</div></div>'
+      + '  <div class="pm-f full"><div class="pm-hint">🌐 Na <b>pradlomaty.info/location</b> se místo zobrazí automaticky při stavu <b>Zveřejněné</b> nebo <b>Rezervováno</b>. Ve stavu Rozpracované/Obsazené/Archiv je skryté.</div></div>'
       + '  <div class="pm-f full"><label>Odznak (highlight)</label><input id="pmf-highlight" value="' + attr(v('highlight')) + '" placeholder="např. Bez konkurence do 2 km"></div>'
       + '</div>'
 
@@ -293,7 +294,6 @@
       title: val('pmf-title'),
       code: val('pmf-code') || undefined,
       status: val('pmf-status'),
-      is_public: chk('pmf-public'),
       highlight: val('pmf-highlight'),
       city: val('pmf-city'), region: val('pmf-region'), country: val('pmf-country'),
       address: val('pmf-address'), show_address: chk('pmf-showaddr'),

@@ -160,7 +160,7 @@ async function notifyOwners({ title, body }) {
 router.get('/public', async (req, res, next) => {
   try {
     const spots = await prisma.pradlomatSpot.findMany({
-      where: { is_public: true, status: { in: ['published', 'reserved'] } },
+      where: { status: { in: ['published', 'reserved'] } },
       orderBy: [{ sort_order: 'asc' }, { created_at: 'desc' }],
     });
     res.json(spots.map(toPublic));
@@ -171,7 +171,7 @@ router.get('/public', async (req, res, next) => {
 router.get('/public/:code', async (req, res, next) => {
   try {
     const s = await prisma.pradlomatSpot.findUnique({ where: { code: String(req.params.code || '') } });
-    if (!s || !s.is_public || !['published', 'reserved'].includes(s.status)) {
+    if (!s || !['published', 'reserved'].includes(s.status)) {
       return res.status(404).json({ error: 'Místo nenalezeno' });
     }
     res.json(toPublic(s));
@@ -193,7 +193,7 @@ router.post('/public/:code/inquiry', async (req, res, next) => {
     if (!d.phone && !d.email) return res.status(400).json({ error: 'Zadejte telefon nebo e-mail.' });
 
     const spot = await prisma.pradlomatSpot.findUnique({ where: { code: String(req.params.code || '') } });
-    if (!spot || !spot.is_public) return res.status(404).json({ error: 'Místo nenalezeno' });
+    if (!spot || !['published', 'reserved'].includes(spot.status)) return res.status(404).json({ error: 'Místo nenalezeno' });
 
     await prisma.pradlomatSpotInquiry.create({
       data: {
@@ -412,10 +412,9 @@ router.post('/', async (req, res, next) => {
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.issues });
     const d = parsed.data;
     const code = d.code ? await uniqueCode(d.code) : await uniqueCode(d.city ? `${d.city}-${d.title}` : d.title);
-    // Pojistka: zveřejnit lze jen se statusem published/reserved.
-    let is_public = !!d.is_public;
+    // Na web jde místo podle stavu (Zveřejněné/Rezervováno). is_public se dopočítá.
     const status = d.status || 'draft';
-    if (is_public && !['published', 'reserved'].includes(status)) is_public = false;
+    const is_public = ['published', 'reserved'].includes(status);
 
     const created = await prisma.pradlomatSpot.create({
       data: {
@@ -486,11 +485,9 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     setIf('electricity_kw', d.electricity_kw); setIf('water_supply', d.water_supply); setIf('sewage', d.sewage);
     setIf('assigned_to_id', d.assigned_to_id); setIf('sort_order', d.sort_order);
 
-    // Pojistka viditelnosti: is_public jen s published/reserved.
-    if (d.is_public !== undefined) data.is_public = !!d.is_public;
+    // Na web jde místo podle stavu (Zveřejněné/Rezervováno). is_public se dopočítá.
     const finalStatus = data.status || existing.status;
-    const finalPublic = data.is_public !== undefined ? data.is_public : existing.is_public;
-    if (finalPublic && !['published', 'reserved'].includes(finalStatus)) data.is_public = false;
+    data.is_public = ['published', 'reserved'].includes(finalStatus);
 
     const updated = await prisma.pradlomatSpot.update({ where: { id: existing.id }, data });
     res.json(toAdmin(updated));
