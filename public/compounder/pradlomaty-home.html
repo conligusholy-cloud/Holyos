@@ -68,6 +68,13 @@
   .status{min-height:20px;margin-top:12px;font-size:14px;color:var(--blue-soft);text-align:center}
   .foot{margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
   .bk-title{font-size:15px;font-weight:600;margin:2px 0 12px}
+  .modebtn{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:center;gap:8px;
+    border:1px solid var(--line);background:#0e1e33;border-radius:12px;padding:20px 14px;color:var(--text);
+    cursor:pointer;font-family:inherit;font-size:15px;font-weight:500;transition:border-color .15s,background .15s}
+  .modebtn:hover{border-color:var(--blue);background:#12294a}
+  .modebtn svg{width:26px;height:26px;stroke:var(--blue-soft);fill:none;stroke-width:1.7}
+  .modebtn small{font-size:12px;color:var(--muted2);font-weight:400}
+  .bk-back{background:none;border:none;color:var(--muted2);font-size:13px;cursor:pointer;padding:0;margin-bottom:10px;font-family:inherit}
   .day{margin-bottom:16px}
   .day-h{font-size:13px;color:var(--muted2);margin-bottom:8px;text-transform:capitalize}
   .slots{display:flex;flex-wrap:wrap;gap:8px}
@@ -133,14 +140,24 @@
         <button type="button" class="btn" id="pickBtn">Vybrat termín schůzky</button>
       </div>
 
-      <div id="slotsPanel" style="display:none">
-        <p class="bk-title">Vyberte termín schůzky</p>
-        <div id="slotList"></div>
-        <div id="guestFields" style="display:none;margin-top:12px">
-          <div class="field"><label for="name">Jméno</label><input id="name" type="text" autocomplete="name" placeholder="Jan Novák" /></div>
-          <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="email" placeholder="vas@email.cz" /></div>
-          <div class="field"><label for="phone">Telefon</label><input id="phone" type="tel" autocomplete="tel" placeholder="+420 …" /></div>
+      <div id="modePanel" style="display:none">
+        <p class="bk-title">Jak chcete schůzku vést?</p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="modebtn" data-mode="osobne">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+            Osobní schůzka<small>u nás nebo u vás</small>
+          </button>
+          <button type="button" class="modebtn" data-mode="online">
+            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
+            Online<small>video hovor</small>
+          </button>
         </div>
+      </div>
+
+      <div id="slotsPanel" style="display:none">
+        <button type="button" class="bk-back" id="slotBack">← zpět na výběr</button>
+        <p class="bk-title" id="slotTitle">Vyberte termín schůzky</p>
+        <div id="slotList"></div>
       </div>
 
       <div id="bookDone" class="done" style="display:none">
@@ -164,7 +181,9 @@
   var status=document.getElementById('status');
   var pickBtn=document.getElementById('pickBtn'), bookStart=document.getElementById('bookStart');
   var slotsPanel=document.getElementById('slotsPanel'), slotList=document.getElementById('slotList');
-  var guestFields=document.getElementById('guestFields'), bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText');
+  var modePanel=document.getElementById('modePanel'), slotBack=document.getElementById('slotBack'), slotTitle=document.getElementById('slotTitle');
+  var bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText');
+  var chosenMode='';
 
   var DAYS=['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
   var MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
@@ -172,24 +191,47 @@
   function hhmm(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
   function setStatus(msg,err){ status.style.color=err?'#ff8f8f':'var(--blue-soft)'; status.textContent=msg||''; }
 
+  // Krok 1: tlačítko „Vybrat termín" → nabídne způsob schůzky
   pickBtn.addEventListener('click', function(){
-    pickBtn.disabled=true; setStatus('Načítám volné termíny…');
+    bookStart.style.display='none';
+    modePanel.style.display='block';
+    setStatus('');
+  });
+
+  // Krok 2: výběr způsobu (osobně / online) → načte volné termíny
+  var modeLabels={ osobne:'osobní schůzka', online:'online video hovor' };
+  document.querySelectorAll('#modePanel .modebtn').forEach(function(b){
+    b.addEventListener('click', function(){
+      chosenMode=b.dataset.mode||'osobne';
+      modePanel.style.display='none';
+      slotsPanel.style.display='block';
+      if(slotTitle) slotTitle.textContent='Vyberte termín — '+(modeLabels[chosenMode]||'');
+      loadSlots();
+    });
+  });
+
+  // zpět na výběr způsobu
+  if(slotBack) slotBack.addEventListener('click', function(){
+    slotsPanel.style.display='none';
+    modePanel.style.display='block';
+    setStatus('');
+  });
+
+  function loadSlots(){
+    setStatus('Načítám volné termíny…');
+    slotList.innerHTML='';
     fetch('/api/compounder/meeting-slots?days=45',{credentials:'include'})
       .then(function(r){ return r.json(); })
       .then(function(slots){
         setStatus('');
-        bookStart.style.display='none'; slotsPanel.style.display='block';
-        if(!token) guestFields.style.display='block';
         if(!Array.isArray(slots) || !slots.length){
-          slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Necháme si na vás kontakt a ozveme se hned, jak se uvolní.</p>';
-          if(!token) guestFields.style.display='block';
-          renderFallback();
+          slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Ozveme se vám hned, jak se nějaký uvolní.</p>';
           return;
         }
         renderSlots(slots);
       })
-      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); pickBtn.disabled=false; });
-  });
+      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
+  }
 
   function renderSlots(slots){
     var byDay={}, order=[];
@@ -200,25 +242,17 @@
       html+='<div class="day"><div class="day-h">'+dayHead(d)+'</div><div class="slots">';
       byDay[k].forEach(function(s){
         var t=new Date(s.starts_at);
-        html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'<span class="m">'+(s.mode==='online'?'online':(s.mode==='osobne'?'osobně':'online i osobně'))+'</span></button>';
+        html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>';
       });
       html+='</div></div>';
     });
     slotList.innerHTML=html;
     slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10), b); }); });
   }
-  function renderFallback(){ /* bez termínů: klik na „Vybrat" už jen ukáže guestFields; rezervace přes /register */ }
 
   function book(slotId, btnEl){
-    var payload={ slot_id:slotId };
-    if(token){ payload.t=token; }
-    else {
-      var email=(document.getElementById('email').value||'').trim();
-      var phone=(document.getElementById('phone').value||'').trim();
-      var name=(document.getElementById('name').value||'').trim();
-      if(!email && !phone){ setStatus('Zadejte prosím e-mail nebo telefon.',true); return; }
-      payload.email=email||undefined; payload.phone=phone||undefined; payload.name=name||undefined;
-    }
+    if(!token){ setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.',true); return; }
+    var payload={ slot_id:slotId, t:token, mode:chosenMode };
     slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=true; });
     setStatus('Rezervuji termín…');
     fetch('/api/compounder/meeting-reservation',{
@@ -229,7 +263,7 @@
       if(d && d.ok){
         var dt=new Date(d.starts_at);
         slotsPanel.style.display='none'; setStatus('');
-        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+'. Potvrzení vám pošleme.';
+        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+' ('+(modeLabels[chosenMode]||'')+'). Potvrzení vám pošleme.';
         bookDone.style.display='block';
       } else {
         setStatus((d&&d.error)||'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true);

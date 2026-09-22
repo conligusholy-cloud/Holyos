@@ -175,14 +175,18 @@ router.post('/meeting-reservation', async (req, res) => {
     }
     if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
 
+    // Způsob schůzky vybraný zákazníkem (osobně / online video hovor).
+    const modeRaw = String(b.mode || '').trim();
+    const modeLabel = modeRaw === 'online' ? 'Online video hovor' : (modeRaw === 'osobne' ? 'Osobní schůzka' : null);
+
     const resv = await prisma.meetingReservation.create({
-      data: { slot_id: slotId, compounder_lead_id: leadId || null, name, email, phone, status: 'booked' },
+      data: { slot_id: slotId, compounder_lead_id: leadId || null, name, email, phone, status: 'booked', note: modeLabel },
       select: { id: true },
     });
     if (leadId) {
       await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_domluvena', schuzka_opened_at: new Date() } }).catch(() => {});
     }
-    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode: slot.mode });
+    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode: modeRaw || null });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
@@ -191,7 +195,7 @@ router.get('/admin/meeting-slots', requireAuth, async (req, res) => {
   try {
     const slots = await prisma.meetingSlot.findMany({
       orderBy: { starts_at: 'asc' },
-      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true } } },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true } } },
     });
     res.json(slots.map((s) => ({ ...s, booked: s.reservations.filter((r) => r.status === 'booked').length })));
   } catch (err) { res.status(500).json({ error: err.message }); }
