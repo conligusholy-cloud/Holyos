@@ -6507,6 +6507,7 @@
     // TERMÍNY SCHŮZEK — tab "terminy" (rezervace pradlomaty.info)
     // ============================================================
     var MS_STATE={ weekStart:null, slots:[] };
+    var MS_DRAG={ on:false, did:false, sel:{} }; // stav tažení pro hromadné otevírání
     var MS_START_H=7, MS_END_H=21; // rozsah hodin v mřížce
     function msMonday(d){ var x=new Date(d); var day=(x.getDay()+6)%7; x.setHours(0,0,0,0); x.setDate(x.getDate()-day); return x; }
     function msKey(d){ return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()+'-'+d.getHours()+'-'+d.getMinutes(); }
