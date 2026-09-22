@@ -302,6 +302,8 @@
       + '  <div class="pm-f"><label>⚔️ Konkurence (počet)</label><input id="pmf-competition_count" value="' + attr(v('competition_count')) + '"></div>'
       + '  <div class="pm-f"><label>⭐ Skóre vhodnosti (0–100)</label><input id="pmf-score" value="' + attr(v('score')) + '"></div>'
       + '</div>'
+      + '<div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button type="button" class="pm-btn ghost" id="pmf-analyze-btn">🔎 Analyzovat okolí (z GPS)</button><span class="pm-msg" id="pmf-analyze-msg"></span></div>'
+      + '<div class="pm-hint">Dopočítá parkoviště + vzdálenost, spádovost, tahouny a konkurenci z OpenStreetMap podle souřadnic. Potom ulož.</div>'
       + '<div class="pm-sect">Veřejný popis a fotky</div>'
       + '<div class="pm-grid">'
       + '  <div class="pm-f full"><label>Veřejný popis (zobrazí se návštěvníkovi)</label><textarea id="pmf-desc">' + esc(v('public_description')) + '</textarea></div>'
@@ -386,10 +388,34 @@
       var geo = document.getElementById('pmf-geocode'); if (geo) geo.onclick = doGeocode;
       setupEditMap(spot);
       wireLeadSearch();
+      var ab = document.getElementById('pmf-analyze-btn'); if (ab) ab.onclick = analyzeSpot;
     }
 
     if (id) { api('/' + id).then(build).catch(function (e) { alert('Nepodařilo se načíst: ' + e.message); }); }
     else build(null);
+  }
+
+  function analyzeSpot() {
+    var lat = num((document.getElementById('pmf-lat') || {}).value);
+    var lon = num((document.getElementById('pmf-lng') || {}).value);
+    var msg = document.getElementById('pmf-analyze-msg');
+    if (lat == null || lon == null) { msg.className = 'pm-msg err'; msg.textContent = 'Nejdřív vyplň souřadnice (nebo „Najít z adresy").'; return; }
+    var btn = document.getElementById('pmf-analyze-btn'); btn.disabled = true;
+    msg.className = 'pm-msg'; msg.textContent = 'Analyzuji okolí…';
+    api('/analyze', { method: 'POST', body: { lat: lat, lon: lon, ai: false } }).then(function (r) {
+      btn.disabled = false;
+      var m = r.metrics || {};
+      var setV = function (id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; };
+      var setChk = function (id, val) { var el = document.getElementById(id); if (el) el.checked = !!val; };
+      setChk('pmf-has_parking', m.parking && m.parking.count > 0);
+      if (m.parking && m.parking.nearest_m != null) setV('pmf-parking_distance_m', Math.round(m.parking.nearest_m));
+      if (r.population != null) setV('pmf-population', r.population);
+      if (m.anchors) setV('pmf-anchor_count', m.anchors.count);
+      if (m.competition) setV('pmf-competition_count', m.competition.count);
+      if (r.score != null) setV('pmf-score', r.score);
+      msg.className = 'pm-msg ok';
+      msg.textContent = '✓ Hotovo — parkoviště ' + (m.parking && m.parking.count > 0 ? ((m.parking.nearest_m != null ? m.parking.nearest_m + ' m' : 'ano')) : 'ne') + ', spádovost ' + (r.population != null ? r.population.toLocaleString('cs-CZ') : '—') + '. Nezapomeň uložit.';
+    }).catch(function (e) { btn.disabled = false; msg.className = 'pm-msg err'; msg.textContent = e.message; });
   }
 
   function wireLeadSearch() {
