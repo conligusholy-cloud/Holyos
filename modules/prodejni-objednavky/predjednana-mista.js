@@ -40,6 +40,9 @@
       + '#tab-predjednana .pm-toolbar input.pm-search{flex:1;min-width:180px}'
       + '#tab-predjednana .pm-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}'
       + '#tab-predjednana .pm-pub{font-size:12px;font-weight:700}'
+      + '#tab-predjednana .pm-webtoggle{font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--text2)}'
+      + '#tab-predjednana .pm-webtoggle:hover{border-color:#22c55e;color:#7ee2a4}'
+      + '#tab-predjednana .pm-webtoggle.on{background:rgba(34,197,94,.16);color:#7ee2a4;border-color:rgba(34,197,94,.5)}'
       + '#tab-predjednana .pm-inq{display:inline-block;min-width:20px;text-align:center;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--surface2);color:var(--text2)}'
       + '#tab-predjednana .pm-inq.hot{background:rgba(239,68,68,.18);color:#f7a1a1}'
       + '#tab-predjednana .pm-actions button{background:none;border:none;cursor:pointer;font-size:15px;padding:3px 5px;opacity:.85}'
@@ -223,7 +226,7 @@
       var stt = '<span class="pm-badge" style="background:' + STATUS_COLOR[s.status] + '22;color:' + STATUS_COLOR[s.status] + ';border:.5px solid ' + STATUS_COLOR[s.status] + '66">' + esc(STATUS_LABEL[s.status] || s.status) + '</span>';
       if (s.status === 'reserved' && s.reserved_lead_label) stt += '<div style="font-size:11px;color:var(--text2);margin-top:3px">🔖 ' + esc(s.reserved_lead_label) + '</div>';
       var onWeb = ['published', 'reserved'].indexOf(s.status) >= 0;
-      var pub = onWeb ? '<span class="pm-pub" style="color:#22c55e">● Ano</span>' : '<span class="pm-pub" style="color:var(--text2)">○ Ne</span>';
+      var pub = '<button class="pm-webtoggle' + (onWeb ? ' on' : '') + '" title="' + (onWeb ? 'Skrýt z webu' : 'Zveřejnit na pradlomaty.info') + '" onclick="event.stopPropagation();__pmPublish(' + s.id + ',' + (onWeb ? 'false' : 'true') + ')">' + (onWeb ? '● Zveřejněno' : 'Zveřejnit') + '</button>';
       var inqN = s.new_inquiries || 0, inqT = s.inquiries_count || 0;
       var inq = '<span class="pm-inq' + (inqN ? ' hot' : '') + '" title="' + inqT + ' celkem, ' + inqN + ' nových">' + (inqN ? inqN + ' / ' : '') + inqT + '</span>';
       var loc = [s.city, s.region].filter(Boolean).join(', ') || '<span style="color:var(--text2)">—</span>';
@@ -248,7 +251,8 @@
     function v(k) { return s[k] == null ? '' : s[k]; }
     function chk(k) { return s[k] ? 'checked' : ''; }
     function opt(val, lbl, cur) { return '<option value="' + val + '"' + (cur === val ? ' selected' : '') + '>' + lbl + '</option>'; }
-    var cur = s.status || 'draft';
+    var isNew = !s.id;
+    var cur = s.status || (isNew ? 'published' : 'draft'); // nové místo je defaultně Zveřejněné
     return ''
       + '<div class="pm-sect">Základní</div>'
       + '<div class="pm-grid">'
@@ -568,6 +572,10 @@
   // ── Globální handlery (onclick z HTML) ──
   window.__pmEdit = function (id) { openEditor(id); };
   window.__pmClose = closeEditor;
+  window.__pmPublish = function (id, publish) {
+    api('/' + id, { method: 'PUT', body: { status: publish ? 'published' : 'draft' } })
+      .then(load).catch(function (e) { alert('Nepodařilo se změnit: ' + e.message); });
+  };
   window.__pmDelete = function (id, title) {
     if (!confirm('Opravdu smazat místo „' + title + '"? Smažou se i jeho poptávky.')) return;
     api('/' + id, { method: 'DELETE' }).then(load).catch(function (e) { alert('Nepodařilo se smazat: ' + e.message); });
