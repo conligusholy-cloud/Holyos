@@ -321,7 +321,7 @@
       var zoom = (spot && spot.latitude != null) ? 14 : 7;
       try {
         state.editMap = L.map('pm-editmap', { scrollWheelZoom: false }).setView([lat, lng], zoom);
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, attribution: '&copy; Esri' }).addTo(state.editMap);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(state.editMap);
         if (spot && spot.latitude != null) placeMarker(lat, lng);
         state.editMap.on('click', function (e) { placeMarker(e.latlng.lat, e.latlng.lng); setLatLng(e.latlng.lat, e.latlng.lng); });
       } catch (e) {}

@@ -161,8 +161,8 @@
 
   function initMap(){
     map = L.map('map', { scrollWheelZoom:false }).setView(CZ, 7);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
-      attribution:'&copy; Esri', maxZoom:16
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'&copy; OpenStreetMap', maxZoom:19
     }).addTo(map);
   }
 
@@ -262,7 +262,7 @@
       setTimeout(function(){
         try{
           mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 14);
-          L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom:16, attribution:'&copy; Esri' }).addTo(mmap);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(mmap);
           L.marker([s.latitude,s.longitude], { icon:spotIcon(s) }).addTo(mmap);
         }catch(e){}
       }, 60);
