@@ -408,7 +408,7 @@
     if (lat == null || lon == null) { msg.className = 'pm-msg err'; msg.textContent = 'Nejdřív vyplň souřadnice (nebo „Najít z adresy").'; return; }
     var btn = document.getElementById('pmf-analyze-btn'); btn.disabled = true;
     msg.className = 'pm-msg'; msg.textContent = 'Analyzuji okolí…';
-    api('/analyze', { method: 'POST', body: { lat: lat, lon: lon, ai: false } }).then(function (r) {
+    fapi('/analyze', { method: 'POST', body: { lat: lat, lon: lon, ai: false } }).then(function (r) {
       btn.disabled = false;
       var m = r.metrics || {};
       var setV = function (id, val) { var el = document.getElementById(id); if (el && val != null) el.value = val; };
