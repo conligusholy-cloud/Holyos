@@ -777,6 +777,53 @@ public sealed class SubmitForm : Form
                             if (c.ExcludeFromBom)
                             {
                                 _excludedComponents.Add((c.Name, "Vyloučená z kusovníku (ExcludeFromBOM)", row.FileName));
+                                // Když je vyloučený díl/sestava zároveň naskenován ze složky jako
+                                // samostatný řádek, označíme ho, ať se do HolyOSu nepošle a je to
+                                // v gridu vidět. Řádek NEPŘIDÁVÁME (na rozdíl od suppressed), abychom
+                                // omylem nerozbalili jeho podstrom — vyloučená sestava nesmí protlačit
+                                // své děti. Filtrování při submitu stejně zajišťuje isBlockedFile().
+                                if (!string.IsNullOrWhiteSpace(c.Path))
+                                {
+                                    string? exNorm = null;
+                                    try { exNorm = Path.GetFullPath(c.Path); } catch { }
+                                    var exRow = _rows.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.Path)
+                                        && exNorm != null
+                                        && string.Equals(Path.GetFullPath(r.Path), exNorm, StringComparison.OrdinalIgnoreCase));
+                                    if (exRow != null)
+                                    {
+                                        exRow.IsExcludedFromBom = true;
+                                        exRow.Status = "Vyloučená z BOM (vynechá se)";
+                                        for (int gi = _filesGrid.Rows.Count - 1; gi >= 0; gi--)
+                                        {
+                                            if ((string?)_filesGrid.Rows[gi].Cells["File"].Value == exRow.FileName)
+                                            {
+                                                _filesGrid.Rows[gi].DefaultCellStyle.ForeColor = Color.FromArgb(202, 138, 4);
+                                                _filesGrid.Rows[gi].DefaultCellStyle.Font = new Font(_filesGrid.Font, FontStyle.Italic);
+                                                _filesGrid.Rows[gi].Cells["Status"].Value = exRow.Status;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                            if (c.BlockedByAncestor)
+                            {
+                                // Potomek potlačené/vyloučené sestavy — nerozbalovat ani neposílat.
+                                _excludedComponents.Add((c.Name, "Uvnitř vyřazené sestavy", row.FileName));
+                                if (!string.IsNullOrWhiteSpace(c.Path))
+                                {
+                                    string? bNorm = null;
+                                    try { bNorm = Path.GetFullPath(c.Path); } catch { }
+                                    var bRow = _rows.FirstOrDefault(r => !string.IsNullOrWhiteSpace(r.Path)
+                                        && bNorm != null
+                                        && string.Equals(Path.GetFullPath(r.Path), bNorm, StringComparison.OrdinalIgnoreCase));
+                                    if (bRow != null)
+                                    {
+                                        bRow.IsExcludedFromBom = true;
+                                        bRow.Status = "Uvnitř vyřazené sestavy (vynechá se)";
+                                    }
+                                }
                                 continue;
                             }
                             if (string.IsNullOrWhiteSpace(c.Path) || !File.Exists(c.Path))
@@ -1255,7 +1302,7 @@ public sealed class SubmitForm : Form
         // aspoň u jednoho řádku "new" nebo "changed". Beze změny = nic neukázat.
         // Když uživatel klikne Zrušit, submit se přeruší.
         var changedRows = _rows.Where(r =>
-            !r.IsVirtualAssembly &&
+            !r.IsVirtualAssembly && !r.IsSuppressed && !r.IsExcludedFromBom &&
             (r.ChangeState == "new" || r.ChangeState == "changed"))
             .ToList();
 
@@ -1373,7 +1420,12 @@ public sealed class SubmitForm : Form
         // soubor může mít lokální/jinak zapsanou cestu — pak se nespárují. Název souboru je
         // taky vlastnost souboru (žádný natvrdo zadaný díl). Soubor referencovaný aspoň jednou
         // jako NEpotlačená komponenta zůstává; referencovaný výhradně potlačeně se vyřadí.
-        var suppressedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // „Blokované" = komponenta je v nadřazené sestavě potlačená (Suppressed) NEBO
+        // vyloučená z kusovníku (ExcludeFromBOM). Obojí — u dílů i u sestav — se do
+        // HolyOSu neposílá. „Resolved" = komponenta je plnohodnotně použitá (ani
+        // potlačená, ani vyloučená) aspoň v jedné sestavě → její soubor si necháme,
+        // i kdyby byl jinde blokovaný (stejný díl použitý různě).
+        var blockedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var resolvedKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void addCompKeys(HashSet<string> set, AssemblyComponent c)
         {
@@ -1394,8 +1446,11 @@ public sealed class SubmitForm : Form
         }
         foreach (var r in _rows)
             foreach (var c in (r.Components ?? new List<AssemblyComponent>()))
-                addCompKeys(c.IsSuppressed ? suppressedKeys : resolvedKeys, c);
-        bool isSuppressedFile(FileRow r)
+            {
+                bool blocked = c.IsSuppressed || c.ExcludeFromBom || c.BlockedByAncestor;
+                addCompKeys(blocked ? blockedKeys : resolvedKeys, c);
+            }
+        bool isBlockedFile(FileRow r)
         {
             var cands = new List<string>();
             if (!string.IsNullOrWhiteSpace(r.Path))
@@ -1409,13 +1464,30 @@ public sealed class SubmitForm : Form
                 cands.Add(r.FileName);
                 cands.Add(Path.GetFileNameWithoutExtension(r.FileName));
             }
-            bool sup = cands.Any(k => !string.IsNullOrWhiteSpace(k) && suppressedKeys.Contains(k));
+            bool blk = cands.Any(k => !string.IsNullOrWhiteSpace(k) && blockedKeys.Contains(k));
             bool res = cands.Any(k => !string.IsNullOrWhiteSpace(k) && resolvedKeys.Contains(k));
-            return sup && !res;
+            return blk && !res;
         }
         var rowsToUpload = _rows.Where(r =>
-            !r.IsVirtualAssembly && !r.IsSuppressed && !isSuppressedFile(r)
+            !r.IsVirtualAssembly && !r.IsSuppressed && !r.IsExcludedFromBom && !isBlockedFile(r)
         ).ToList();
+
+        // Diagnostika — do logu vypíšeme rozhodnutí pro KAŽDÝ řádek, ať je jasné,
+        // proč se soubor (ne)poslal. blocked* klíče vypíšeme taky.
+        try
+        {
+            Diagnostics.Log("SUBMIT", $"řádků={_rows.Count}, k odeslání={rowsToUpload.Count}, blockedKeys={blockedKeys.Count}, resolvedKeys={resolvedKeys.Count}");
+            foreach (var r in _rows)
+            {
+                bool blk = isBlockedFile(r);
+                bool send = !r.IsVirtualAssembly && !r.IsSuppressed && !r.IsExcludedFromBom && !blk;
+                if (!send)
+                    Diagnostics.Log("SUBMIT", $"VYNECHÁN '{r.FileName}' — virt={r.IsVirtualAssembly} sup={r.IsSuppressed} excl={r.IsExcludedFromBom} blockedFile={blk}");
+                else if (blk)
+                    Diagnostics.Log("SUBMIT", $"POZOR '{r.FileName}' by byl blokovaný, ale je resolved jinde → posílá se");
+            }
+        }
+        catch { }
 
         // REKURZIVNÍ INDEX sourozenců napříč celým DefaultCadFolder — jednorázově
         // projde všechny podsložky a grupuje soubory podle base-name. Fixuje
@@ -1681,7 +1753,7 @@ public sealed class SubmitForm : Form
                             // se zcela vynechávají — v Bridge se jen zobrazí barevně
                             // pro vizuální kontrolu, ale na server jdou pouze "normální" díly.
                             Components = r.Components
-                                .Where(c => !c.IsSuppressed && !c.ExcludeFromBom)
+                                .Where(c => !c.IsSuppressed && !c.ExcludeFromBom && !c.BlockedByAncestor)
                                 .Select(c => new ComponentDto
                                 {
                                     Name = c.Name,
@@ -1898,6 +1970,10 @@ public sealed class SubmitForm : Form
         /// <summary>Komponenta v nadřazené sestavě je potlačená (Suppressed). Do HolyOSu
         /// se neexportuje, v Bridge gridu je označena modrou barvou pro orientaci.</summary>
         public bool IsSuppressed { get; set; }
+
+        /// <summary>Komponenta v nadřazené sestavě je označena "Vyloučit z kusovníku"
+        /// (ExcludeFromBOM). Do HolyOSu se neexportuje, v gridu je označena žlutě.</summary>
+        public bool IsExcludedFromBom { get; set; }
 
         /// <summary>Sestava má custom property "Typ" = "virtualni" → do HolyOSu se neexportuje,
         /// ale její komponenty ano.</summary>

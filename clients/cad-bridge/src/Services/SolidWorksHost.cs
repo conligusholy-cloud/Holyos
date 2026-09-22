@@ -588,7 +588,7 @@ public sealed class SolidWorksHost : IDisposable
         return list;
     }
 
-    private void Walk(object component, List<AssemblyComponent> acc, int depth)
+    private void Walk(object component, List<AssemblyComponent> acc, int depth, bool ancestorBlocked = false)
     {
         if (depth > 32) return; // ochrana proti zacyklení
         var childrenObj = Invoke(component, "GetChildren");
@@ -617,15 +617,28 @@ public sealed class SolidWorksHost : IDisposable
                 // díly proklouzly a exportovaly se. Teď zkusíme metody i property i bool.
                 bool isSuppressed = false;
                 bool suppKnown = false;
+                // Suppression může přijít jako int/short/long, bool, NEBO POLE (multi-config:
+                // GetSuppression() vrací stav pro každou konfiguraci). Dřív se braly jen
+                // int/short a při návratu pole detekce tiše selhala → potlačený díl proklouzl.
+                // state == 0 (swComponentSuppressed) = potlačený.
                 Action<object?> tryState = (o) =>
                 {
                     if (suppKnown || o == null) return;
-                    if (o is int i) { isSuppressed = (i == 0); suppKnown = true; }
-                    else if (o is short s) { isSuppressed = (s == 0); suppKnown = true; }
+                    var vals = new List<object?>();
+                    if (o is string) vals.Add(o);
+                    else if (o is System.Collections.IEnumerable en) { foreach (var it in en) vals.Add(it); }
+                    else vals.Add(o);
+                    foreach (var v in vals)
+                    {
+                        if (v == null) continue;
+                        if (v is bool b) { isSuppressed = isSuppressed || b; suppKnown = true; continue; }
+                        int? iv = v is int i ? i : v is short s ? s : v is long l ? (int)l : (int?)null;
+                        if (iv.HasValue) { if (iv.Value == 0) isSuppressed = true; suppKnown = true; }
+                    }
                 };
                 // 1) GetSuppression2(0) — 0 = swThisConfiguration (doporučená metoda)
                 try { tryState(Invoke(ch, "GetSuppression2", (int)0)); } catch { }
-                // 2) GetSuppression() — starší varianta
+                // 2) GetSuppression() — starší varianta (často vrací POLE stavů přes konfigurace)
                 if (!suppKnown) { try { tryState(Invoke(ch, "GetSuppression")); } catch { } }
                 // 3) property Suppression
                 if (!suppKnown) { try { tryState(GetProp(ch, "Suppression")); } catch { } }
@@ -666,6 +679,15 @@ public sealed class SolidWorksHost : IDisposable
                 }
                 catch { /* potlačená / virtuální komponenta — props nejsou */ }
 
+                // Diagnostika — do denního logu zapíšeme, co jsme u komponenty zjistili.
+                // Když se potlačený/vyloučený díl přesto naimportuje, z logu poznáme,
+                // jestli selhala detekce (flag=false) nebo párování souboru.
+                try
+                {
+                    Diagnostics.Log("WALK", $"'{name}' sup={isSuppressed}(known={suppKnown}) excl={excludeFromBom} ancBlk={ancestorBlocked} path='{path}'");
+                }
+                catch { }
+
                 acc.Add(new AssemblyComponent
                 {
                     Name = name,
@@ -674,10 +696,17 @@ public sealed class SolidWorksHost : IDisposable
                     Quantity = 1,
                     IsSuppressed = isSuppressed,
                     ExcludeFromBom = excludeFromBom,
+                    BlockedByAncestor = ancestorBlocked,
                     CustomProperties = compProps,
                 });
-                // Nepotlačené komponenty rozbalíme rekurzivně (potlačené nemají podstromy).
-                if (!isSuppressed) Walk(ch, acc, depth + 1);
+                // Rozbal podstrom. Potlačené (Suppressed) nejsou v paměti načtené,
+                // takže jejich děti stejně nevytáhneme — přeskočíme. Vyloučené
+                // (ExcludeFromBOM) a jejich potomci se PROJDOU, ale předáváme dolů
+                // příznak blokace, ať se ani jeden potomek nepošle do HolyOSu
+                // (pokud není zároveň plnohodnotně použitý jinde). To řeší případ,
+                // kdy do vyřazené sestavy vstupují díly/podsestavy a „propadávaly".
+                bool blockedHere = ancestorBlocked || isSuppressed || excludeFromBom;
+                if (!isSuppressed) Walk(ch, acc, depth + 1, blockedHere);
             }
             catch { /* ignoruj vadné uzly */ }
         }
@@ -701,6 +730,10 @@ public sealed class AssemblyComponent
 
     /// <summary>Komponenta je označena "Vyloučit z kusovníku" (ExcludeFromBOM).</summary>
     public bool ExcludeFromBom { get; set; }
+
+    /// <summary>Komponenta je potomkem potlačené/vyloučené sestavy — dědí blokaci.
+    /// Do HolyOSu se neposílá (pokud není zároveň plnohodnotně použitá jinde).</summary>
+    public bool BlockedByAncestor { get; set; }
 
     /// <summary>Custom properties komponenty ze SolidWorks (Norma, Popis, Materiál,
     /// Hmotnost, Název, Author, Datum, …). Merge General + Config-specific.</summary>

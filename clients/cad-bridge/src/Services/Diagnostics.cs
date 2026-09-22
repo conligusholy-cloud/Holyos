@@ -97,6 +97,27 @@ public static class Diagnostics
     }
 
     /// <summary>
+    /// Zapíše informační řádek do denního logu (bez výjimky) — pro diagnostiku
+    /// rozhodování (které soubory se vyloučily a proč).
+    /// </summary>
+    public static void Log(string context, string message)
+    {
+        try
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "HolyOsCadBridge", "logs");
+            Directory.CreateDirectory(dir);
+            var file = Path.Combine(dir, $"{DateTime.Now:yyyy-MM-dd}.log");
+            var stamp = DateTime.Now.ToString("HH:mm:ss.fff");
+            using var sw = new StreamWriter(file, append: true);
+            sw.WriteLine($"[{stamp}] {context}: {message}");
+            sw.Flush();
+        }
+        catch { /* log errors never propagate */ }
+    }
+
+    /// <summary>
     /// Cesta ke dnešnímu log souboru (pro odkazy v UI / "otevřít log" tlačítko).
     /// </summary>
     public static string CurrentLogFilePath =>

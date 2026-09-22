@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Předjednaná místa pro prádlomat</title>
+<meta name="description" content="Přehled předjednaných míst pro prádlomat. Vybrané lokality, které máme domluvené a nabízíme provozovatelům — mapa, plocha, nájem a dostupnost." />
+<meta name="theme-color" content="#0c1826" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z' fill='%231e86e0'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  :root{
+    --bg:#0c1826; --card:#13233a; --card2:#102a45; --line:rgba(46,140,224,.3);
+    --blue:#1e86e0; --blue-soft:#4aa3ea; --text:#e9f0f7; --muted:#9db6cd; --muted2:#7fa6c8;
+    --green:#22c55e; --amber:#eab308;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 70% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
+  a{color:inherit;text-decoration:none}
+  .wrap{width:100%;max-width:1120px;margin:0 auto;padding:24px 20px 70px}
+
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:26px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+  .brand .drop{width:34px;height:34px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center}
+  .brand .drop svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:1.8}
+  .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#a9cdec;background:rgba(30,134,224,.14);
+    border:.5px solid rgba(46,140,224,.4);padding:6px 13px;border-radius:999px}
+
+  .hero{margin-bottom:24px}
+  .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-soft);margin-bottom:10px}
+  h1{font-weight:700;font-size:clamp(28px,5.5vw,42px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{color:var(--blue-soft)}
+  .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:640px;margin-top:14px}
+
+  .layout{display:grid;grid-template-columns:1fr;gap:20px}
+  #map{width:100%;height:360px;border-radius:16px;border:.5px solid var(--line);background:#0e1e33;z-index:0}
+  .leaflet-container{font-family:inherit}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:22px 0 6px}
+  .toolbar .count{font-size:13px;color:var(--muted2)}
+  .search{flex:1;min-width:180px;background:#0e1e33;border:1px solid var(--line);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;font-family:inherit}
+  .search:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,134,224,.15)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-top:16px}
+  .spot{background:var(--card);border:.5px solid var(--line);border-radius:16px;overflow:hidden;cursor:pointer;
+    display:flex;flex-direction:column;transition:transform .15s,border-color .15s,box-shadow .2s}
+  .spot:hover{transform:translateY(-3px);border-color:var(--blue);box-shadow:0 12px 30px -12px rgba(30,134,224,.4)}
+  .spot .ph{height:158px;background:#0e1e33 center/cover no-repeat;position:relative;display:flex;align-items:center;justify-content:center}
+  .spot .ph .noimg{color:var(--muted2);font-size:13px}
+  .spot .hl{position:absolute;top:10px;left:10px;background:rgba(12,24,38,.86);color:#a9cdec;font-size:11.5px;font-weight:600;
+    padding:5px 10px;border-radius:999px;border:.5px solid rgba(46,140,224,.5)}
+  .spot .stt{position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;padding:4px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.03em}
+  .stt.published{background:rgba(34,197,94,.16);color:#7ee2a4;border:.5px solid rgba(34,197,94,.5)}
+  .stt.reserved{background:rgba(234,179,8,.16);color:#f2d675;border:.5px solid rgba(234,179,8,.5)}
+  .spot .body{padding:15px 16px 17px;flex:1;display:flex;flex-direction:column;gap:8px}
+  .spot h3{font-size:16.5px;font-weight:700;line-height:1.25}
+  .spot .loc{font-size:13px;color:var(--blue-soft);display:flex;align-items:center;gap:6px}
+  .spot .desc{font-size:13.5px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .spot .facts{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;padding-top:6px}
+  .fact{font-size:12px;color:#c3d6e8;background:var(--card2);border:.5px solid rgba(46,140,224,.28);border-radius:8px;padding:5px 9px}
+
+  .empty{grid-column:1/-1;text-align:center;color:var(--muted2);padding:50px 10px;font-size:15px}
+
+  /* Detail modal */
+  .ov{position:fixed;inset:0;background:rgba(4,10,18,.72);backdrop-filter:blur(3px);z-index:1000;display:none;
+    align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+  .ov.open{display:flex}
+  .modal{width:100%;max-width:720px;background:var(--card);border:.5px solid var(--line);border-radius:18px;overflow:hidden}
+  .modal .cover{height:240px;background:#0e1e33 center/cover no-repeat;position:relative}
+  .modal .cover .x{position:absolute;top:12px;right:12px;width:36px;height:36px;border-radius:50%;background:rgba(12,24,38,.8);
+    border:.5px solid var(--line);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .modal .inner{padding:22px 24px 26px}
+  .modal h2{font-size:23px;font-weight:700;line-height:1.2}
+  .modal .mloc{font-size:14px;color:var(--blue-soft);margin-top:6px;display:flex;align-items:center;gap:6px}
+  .modal .mhl{display:inline-block;margin-top:12px;background:rgba(30,134,224,.14);color:#a9cdec;font-size:12.5px;font-weight:600;
+    padding:6px 12px;border-radius:999px;border:.5px solid rgba(46,140,224,.4)}
+  .modal .mdesc{font-size:15px;color:#c3d6e8;margin-top:16px;white-space:pre-wrap;line-height:1.65}
+  .mfacts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:18px}
+  .mfact{background:var(--card2);border:.5px solid rgba(46,140,224,.28);border-radius:12px;padding:12px 14px}
+  .mfact .k{font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.04em}
+  .mfact .v{font-size:16px;font-weight:700;margin-top:3px}
+  .gallery{display:flex;gap:8px;overflow-x:auto;margin-top:16px;padding-bottom:4px}
+  .gallery img{height:92px;width:auto;border-radius:10px;border:.5px solid var(--line);object-fit:cover;flex:0 0 auto}
+  #mmap{height:220px;border-radius:12px;border:.5px solid var(--line);margin-top:18px;background:#0e1e33}
+
+  form{margin-top:22px;background:var(--card2);border:.5px solid var(--line);border-radius:14px;padding:18px}
+  form h3{font-size:17px;font-weight:600;margin-bottom:4px}
+  form .sub{font-size:13px;color:var(--muted);margin-bottom:14px}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+  .field label{font-size:12.5px;color:var(--muted)}
+  .field input,.field textarea{background:#0e1e33;border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;font-family:inherit}
+  .field textarea{resize:vertical;min-height:74px}
+  .field input:focus,.field textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,134,224,.15)}
+  .btn{width:100%;border:none;border-radius:10px;padding:15px;font-size:16px;font-weight:600;color:#fff;
+    background:var(--blue);cursor:pointer;font-family:inherit;transition:filter .2s,transform .15s}
+  .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn:disabled{opacity:.6;cursor:default}
+  .fstatus{min-height:20px;margin-top:10px;font-size:14px;text-align:center}
+  .fstatus.ok{color:#7ee2a4}.fstatus.err{color:#f7a1a1}
+
+  .foot{margin-top:44px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  @media (max-width:540px){ .frow{grid-template-columns:1fr} #map{height:280px} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand">
+        <span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span>
+        <span class="name">PRÁDLOMAT</span>
+      </span>
+      <span class="badge">📍 Předjednaná místa</span>
+    </div>
+
+    <div class="hero">
+      <div class="eyebrow">Vybrané lokality</div>
+      <h1>Místa <span class="g">připravená</span> pro váš prádlomat</h1>
+      <p class="intro">Tohle jsou lokality, které už máme <b>předjednané</b> — vytipované, ověřené a domluvené s majiteli.
+        Prohlédněte si je na mapě, projděte parametry a u místa, které vás zaujme, nám dejte vědět. Ozveme se vám.</p>
+    </div>
+
+    <div class="layout">
+      <div id="map"></div>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" class="search" id="search" placeholder="Hledat město nebo název místa…" />
+      <span class="count" id="count"></span>
+    </div>
+
+    <div class="grid" id="grid">
+      <div class="empty">Načítám místa…</div>
+    </div>
+
+    <div class="foot">© Best Series s.r.o. · <a href="/" style="color:var(--blue-soft)">pradlomaty.info</a></div>
+  </div>
+
+  <!-- Detail modal -->
+  <div class="ov" id="ov" onclick="if(event.target===this)closeModal()">
+    <div class="modal" id="modal"></div>
+  </div>
+
+<script>
+(function(){
+  var API = '/api/pradlomat-spots/public';
+  var all = [];
+  var map, markers = [], mmap;
+  var CZ = [49.82, 15.47];
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function fmtMoney(v, cur){ if(v==null) return null; return Math.round(v).toLocaleString('cs-CZ')+' '+(cur||'CZK'); }
+  function fmtArea(v){ if(v==null) return null; return (Math.round(v*10)/10).toLocaleString('cs-CZ')+' m²'; }
+  function locLine(s){ return [s.city, s.region].filter(Boolean).join(', ') || s.country || ''; }
+
+  function initMap(){
+    map = L.map('map', { scrollWheelZoom:false }).setView(CZ, 7);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19
+    }).addTo(map);
+  }
+
+  function spotIcon(s){
+    var color = s.status==='reserved' ? '#eab308' : '#1e86e0';
+    return L.divIcon({
+      className:'', iconSize:[26,26], iconAnchor:[13,26],
+      html:'<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);'
+        +'background:'+color+';border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.5)"></div>'
+    });
+  }
+
+  function renderMarkers(list){
+    markers.forEach(function(m){ map.removeLayer(m); }); markers = [];
+    var pts = [];
+    list.forEach(function(s){
+      if(s.latitude==null||s.longitude==null) return;
+      var m = L.marker([s.latitude, s.longitude], { icon:spotIcon(s) }).addTo(map);
+      m.bindTooltip(esc(s.title), { direction:'top', offset:[0,-24] });
+      m.on('click', function(){ openModal(s.code); });
+      markers.push(m); pts.push([s.latitude, s.longitude]);
+    });
+    if(pts.length){ try{ map.fitBounds(pts, { padding:[40,40], maxZoom:12 }); }catch(e){} }
+  }
+
+  function card(s){
+    var facts = [];
+    if(s.area_m2!=null) facts.push('<span class="fact">📐 '+esc(fmtArea(s.area_m2))+'</span>');
+    if(s.rent_monthly!=null) facts.push('<span class="fact">💰 '+esc(fmtMoney(s.rent_monthly,s.rent_currency))+' /měs</span>');
+    if(s.availability_note) facts.push('<span class="fact">🗓️ '+esc(s.availability_note)+'</span>');
+    var ph = s.cover_image_url
+      ? '<div class="ph" style="background-image:url(\''+esc(s.cover_image_url)+'\')">'
+      : '<div class="ph"><span class="noimg">🧺 bez fotky</span>';
+    var stt = s.status==='reserved' ? '<span class="stt reserved">Rezervováno</span>' : '<span class="stt published">Volné</span>';
+    var hl = s.highlight ? '<span class="hl">'+esc(s.highlight)+'</span>' : '';
+    return '<div class="spot" onclick="__openSpot(\''+esc(s.code)+'\')">'
+      + ph + hl + stt + '</div>'
+      + '<div class="body">'
+      +   '<div class="loc">📍 '+esc(locLine(s))+'</div>'
+      +   '<h3>'+esc(s.title)+'</h3>'
+      +   (s.public_description ? '<div class="desc">'+esc(s.public_description)+'</div>' : '')
+      +   '<div class="facts">'+facts.join('')+'</div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function render(list){
+    var grid = document.getElementById('grid');
+    document.getElementById('count').textContent = list.length ? (list.length+' '+plural(list.length)) : '';
+    if(!list.length){ grid.innerHTML = '<div class="empty">Zatím tu nejsou žádná místa. Ozvěte se nám a najdeme ho společně.</div>'; return; }
+    grid.innerHTML = list.map(card).join('');
+  }
+  function plural(n){ return n===1?'místo':(n>=2&&n<=4?'místa':'míst'); }
+
+  function applyFilter(){
+    var q = document.getElementById('search').value.trim().toLowerCase();
+    var list = !q ? all : all.filter(function(s){
+      return [s.title,s.city,s.region].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;
+    });
+    render(list); renderMarkers(list);
+  }
+
+  function mfact(k,v){ return v==null?'':'<div class="mfact"><div class="k">'+esc(k)+'</div><div class="v">'+esc(v)+'</div></div>'; }
+
+  function openModal(code){
+    var s = all.filter(function(x){return x.code===code;})[0];
+    if(!s) return;
+    var cover = s.cover_image_url
+      ? '<div class="cover" style="background-image:url(\''+esc(s.cover_image_url)+'\')"><div class="x" onclick="__closeModal()">×</div></div>'
+      : '<div class="cover" style="display:flex;align-items:center;justify-content:center"><span style="font-size:48px">🧺</span><div class="x" onclick="__closeModal()">×</div></div>';
+    var gallery = (s.gallery&&s.gallery.length)
+      ? '<div class="gallery">'+s.gallery.map(function(u){return '<img src="'+esc(u)+'" alt="">';}).join('')+'</div>' : '';
+    var facts = ''
+      + mfact('Plocha', fmtArea(s.area_m2))
+      + mfact('Nájem', fmtMoney(s.rent_monthly, s.rent_currency) ? fmtMoney(s.rent_monthly, s.rent_currency)+' /měs' : null)
+      + mfact('Spádovost', s.footfall_note)
+      + mfact('Dostupné', s.availability_note);
+    if(s.show_address && s.address) facts += mfact('Adresa', s.address);
+    var hasMap = s.latitude!=null && s.longitude!=null;
+
+    document.getElementById('modal').innerHTML =
+      cover
+      + '<div class="inner">'
+      +   '<h2>'+esc(s.title)+'</h2>'
+      +   '<div class="mloc">📍 '+esc(locLine(s))+'</div>'
+      +   (s.highlight ? '<span class="mhl">'+esc(s.highlight)+'</span>' : '')
+      +   (s.public_description ? '<div class="mdesc">'+esc(s.public_description)+'</div>' : '')
+      +   (facts ? '<div class="mfacts">'+facts+'</div>' : '')
+      +   gallery
+      +   (hasMap ? '<div id="mmap"></div>' : '')
+      +   inquiryForm(s.code)
+      + '</div>';
+    document.getElementById('ov').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    if(hasMap){
+      setTimeout(function(){
+        try{
+          mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 14);
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(mmap);
+          L.marker([s.latitude,s.longitude], { icon:spotIcon(s) }).addTo(mmap);
+        }catch(e){}
+      }, 60);
+    }
+  }
+
+  function inquiryForm(code){
+    return '<form onsubmit="return __submitInquiry(event,\''+esc(code)+'\')">'
+      + '<h3>Mám zájem o toto místo</h3>'
+      + '<div class="sub">Nechte nám kontakt a my se vám ozveme s detaily.</div>'
+      + '<div class="field"><label>Jméno</label><input name="name" type="text" autocomplete="name"></div>'
+      + '<div class="frow">'
+      +   '<div class="field"><label>Telefon</label><input name="phone" type="tel" autocomplete="tel" placeholder="+420…"></div>'
+      +   '<div class="field"><label>E-mail</label><input name="email" type="email" autocomplete="email"></div>'
+      + '</div>'
+      + '<div class="field"><label>Zpráva (nepovinné)</label><textarea name="message" placeholder="Např. kdy byste chtěli začít…"></textarea></div>'
+      + '<button class="btn" type="submit">Odeslat zájem</button>'
+      + '<div class="fstatus" data-fstatus></div>'
+      + '</form>';
+  }
+
+  window.__submitInquiry = function(ev, code){
+    ev.preventDefault();
+    var f = ev.target;
+    var st = f.querySelector('[data-fstatus]');
+    var body = {
+      name: f.name.value.trim(), phone: f.phone.value.trim(),
+      email: f.email.value.trim(), message: f.message.value.trim()
+    };
+    if(!body.phone && !body.email){ st.className='fstatus err'; st.textContent='Zadejte prosím telefon nebo e-mail.'; return false; }
+    var btn = f.querySelector('button'); btn.disabled = true; st.className='fstatus'; st.textContent='Odesílám…';
+    fetch(API+'/'+encodeURIComponent(code)+'/inquiry', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)
+    }).then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if(res.ok){ st.className='fstatus ok'; st.textContent='Děkujeme! Ozveme se vám co nejdřív.'; f.reset(); }
+        else { st.className='fstatus err'; st.textContent=(res.j&&res.j.error)||'Nepodařilo se odeslat.'; btn.disabled=false; }
+      }).catch(function(){ st.className='fstatus err'; st.textContent='Chyba spojení, zkuste to prosím znovu.'; btn.disabled=false; });
+    return false;
+  };
+
+  window.__openSpot = openModal;
+  window.__closeModal = closeModal;
+  function closeModal(){ document.getElementById('ov').classList.remove('open'); document.body.style.overflow=''; if(mmap){ try{mmap.remove();}catch(e){} mmap=null; } }
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
+
+  document.getElementById('search').addEventListener('input', applyFilter);
+
+  initMap();
+  fetch(API).then(function(r){ return r.json(); }).then(function(data){
+    all = Array.isArray(data)?data:[];
+    render(all); renderMarkers(all);
+  }).catch(function(){
+    document.getElementById('grid').innerHTML = '<div class="empty">Nepodařilo se načíst místa. Zkuste to prosím později.</div>';
+  });
+})();
+</script>
+</body>
+</html>
