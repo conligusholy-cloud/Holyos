@@ -439,10 +439,19 @@
     var legend='<div class="legend"><span class="t">Velikost obce:</span>'+bands.map(function(x){return '<span class="li"><span class="d" style="background:'+x[1]+'"></span>'+x[0]+'</span>';}).join('')+'</div>';
     var towns=(r.places||[]).slice(0,10).map(function(p){return '<span class="town"><span class="d" style="background:'+popColor(p.population)+'"></span>'+esc(p.name)+' — '+p.population.toLocaleString('cs-CZ')+(p.dist_km!=null?' · '+p.dist_km+' km':'')+'</span>';}).join('');
     var note=(!r.places||!r.places.length)?'<div class="note">Podrobná data o populaci v této oblasti zatím nejsou dostupná.</div>':'';
+    var plur=function(n){ return n===1?'prádelna':(n>=2&&n<=4?'prádelny':'prádelen'); };
+    var op=(r.operating||[]);
+    var oper = op.length
+      ? '<div style="margin-top:12px;background:rgba(30,134,224,.12);border:1px solid rgba(46,140,224,.45);border-radius:12px;padding:12px 14px">'
+        + '<b style="color:#7fb7ea">🧺 V tomto okruhu už '+(op.length===1?'funguje':'fungují')+' '+op.length+' '+plur(op.length)+':</b>'
+        + '<div style="margin-top:7px;display:flex;flex-wrap:wrap;gap:7px">'
+        + op.slice(0,12).map(function(w){return '<span class="town"><span class="d" style="background:#1e86e0"></span>'+esc(w.name)+' · '+w.dist_km+' km</span>';}).join('')
+        + '</div></div>'
+      : '<div style="margin-top:12px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.35);border-radius:12px;padding:12px 14px;color:#7ee2a4">✓ V okruhu '+rk2+' km zatím žádný prádlomat v provozu není.</div>';
     document.getElementById('analysis').innerHTML='<div class="an">'
       +'<div class="anh"><div><h2>🎯 Spádová oblast '+rk2+' km — '+esc(title)+'</h2><div class="sub">Počet obyvatel v okruhu '+rk2+' km od středu města · zdroj: '+esc(r.source||'')+'</div></div>'
       +'<div class="big"><div class="n">'+tot+'</div><div class="l">obyvatel · '+dens+' /km²</div></div></div>'
-      + note + legend
+      + oper + note + legend
       + (towns?('<div class="towns">'+towns+'</div>'):'')
       +'</div>';
 

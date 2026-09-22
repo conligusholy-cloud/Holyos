@@ -268,6 +268,18 @@ router.get('/public/area-analysis', async (req, res, next) => {
     const radiusKm = Number(req.query.radius_km) || 15;
     const result = await finder.analyzeArea(area, radiusKm, cfg, { ai: false });
     if (result && result.error) return res.status(404).json(result);
+    // Provozované prádelny („už pereme") ve spádovém okruhu — kolik a kde.
+    try {
+      if (result && result.center) {
+        const ex = await fetchExistingLaundromats();
+        const within = (ex || [])
+          .filter((w) => w.lat != null && w.lon != null)
+          .map((w) => ({ name: w.name, dist_km: Math.round(distKm(result.center.lat, result.center.lon, w.lat, w.lon) * 10) / 10 }))
+          .filter((w) => w.dist_km <= radiusKm)
+          .sort((a, b) => a.dist_km - b.dist_km);
+        result.operating = within;
+      }
+    } catch (_) { /* neblokuj analýzu */ }
     res.json(result);
   } catch (err) { next(err); }
 });
