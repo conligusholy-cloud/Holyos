@@ -439,6 +439,16 @@
     var legend='<div class="legend"><span class="t">Velikost obce:</span>'+bands.map(function(x){return '<span class="li"><span class="d" style="background:'+x[1]+'"></span>'+x[0]+'</span>';}).join('')+'</div>';
     var towns=(r.places||[]).slice(0,10).map(function(p){return '<span class="town"><span class="d" style="background:'+popColor(p.population)+'"></span>'+esc(p.name)+' — '+p.population.toLocaleString('cs-CZ')+(p.dist_km!=null?' · '+p.dist_km+' km':'')+'</span>';}).join('');
     var note=(!r.places||!r.places.length)?'<div class="note">Podrobná data o populaci v této oblasti zatím nejsou dostupná.</div>':'';
+    var cap=r.capacity, capHtml='';
+    if(cap && cap.recommended>0){
+      var allocChips=(cap.allocation||[]).map(function(a){ return '<span class="town"><b style="color:#4aa3ea">'+a.units+'×</b>&nbsp;'+esc(a.name)+' <span style="color:var(--muted2)">· '+a.population.toLocaleString('cs-CZ')+' obyv.</span></span>'; }).join('');
+      capHtml='<div style="margin-top:12px;padding:12px 14px;border-radius:12px;background:rgba(30,134,224,.10);border:1px solid rgba(46,140,224,.35)">'
+        + '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">'
+        + '<div style="font-weight:700;font-size:15px;color:#7fb7ea">📦 Kapacita oblasti: '+cap.recommended+'× prádlomat</div>'
+        + '<div style="font-size:11.5px;color:var(--muted2)">přepočet 1 prádlomat / '+cap.per_pradlomat.toLocaleString('cs-CZ')+' obyvatel</div></div>'
+        + (allocChips?('<div style="font-size:12px;color:var(--muted2);margin:9px 0 6px">Návrh rozmístění podle počtu obyvatel</div><div class="towns">'+allocChips+'</div>'):'')
+        + '</div>';
+    }
     var plur=function(n){ return n===1?'prádelna':(n>=2&&n<=4?'prádelny':'prádelen'); };
     var op=(r.operating||[]);
     var oper = op.length
@@ -451,7 +461,7 @@
     document.getElementById('analysis').innerHTML='<div class="an">'
       +'<div class="anh"><div><h2>🎯 Spádová oblast '+rk2+' km — '+esc(title)+'</h2><div class="sub">Počet obyvatel v okruhu '+rk2+' km od středu města · zdroj: '+esc(r.source||'')+'</div></div>'
       +'<div class="big"><div class="n">'+tot+'</div><div class="l">obyvatel · '+dens+' /km²</div></div></div>'
-      + oper + note + legend
+      + capHtml + oper + note + legend
       + (towns?('<div class="towns">'+towns+'</div>'):'')
       +'</div>';
 
