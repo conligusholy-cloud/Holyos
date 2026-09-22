@@ -851,6 +851,12 @@ function serveCompounderHome(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'home.html'));
 }
+// Prádlomat — modrá „cesta k rozhodnutí" (kvalifikační časová osa, přijde z SMS).
+const PRADLOMATY_HOSTS = new Set(['pradlomaty.info', 'www.pradlomaty.info']);
+function serveCompounderPradlomaty(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'pradlomaty-home.html'));
+}
 function serveAiSpecialist(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'ai', 'index.html'));
@@ -865,7 +871,12 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/share/') || req.path.startsWith('/modules/') ||
       req.path.startsWith('/css/') || req.path.startsWith('/js/') ||
       req.path.startsWith('/dist/')) return next();
-  if (req.path === '/home' || req.path === '/home/') return serveCompounderHome(req, res);
+  if (req.path === '/cesta' || req.path === '/cesta/') return serveCompounderPradlomaty(req, res);
+  if (req.path === '/home' || req.path === '/home/') {
+    // Na doménách prádlomatů je /home modrá „cesta k rozhodnutí"; jinde teaser Compounderu.
+    if (PRADLOMATY_HOSTS.has(reqHostname(req))) return serveCompounderPradlomaty(req, res);
+    return serveCompounderHome(req, res);
+  }
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
@@ -894,6 +905,8 @@ app.get('/compounder', (req, res, next) => {
 app.get('/compounder/', serveCompounderHtml);
 app.get('/compounder/home', serveCompounderHome);
 app.get('/compounder/home/', serveCompounderHome);
+app.get('/compounder/cesta', serveCompounderPradlomaty);
+app.get('/compounder/cesta/', serveCompounderPradlomaty);
 app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
 app.get('/compounder/ai', serveAiSpecialist);

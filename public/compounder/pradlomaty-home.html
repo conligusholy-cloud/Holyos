@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prádlomat — ať přesně víte, co vás čeká</title>
+<meta name="description" content="Cesta k vlastnímu prádlomatu ve třech krocích. Naším cílem je, abyste do 10 dní od schůzky měli všechny informace ke kvalifikovanému rozhodnutí." />
+<meta name="theme-color" content="#0c1826" />
+<meta name="robots" content="noindex,nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0c1826; --card:#13233a; --card2:#102a45; --line:rgba(46,140,224,.3);
+    --blue:#1e86e0; --blue-soft:#4aa3ea; --text:#e9f0f7; --muted:#9db6cd; --muted2:#7fa6c8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
+  .wrap{width:100%;max-width:720px;margin:0 auto;padding:26px 22px 60px}
+  a{color:inherit;text-decoration:none}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+  .brand .drop{width:32px;height:32px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center}
+  .brand .drop svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.8}
+  .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#a9cdec;background:rgba(30,134,224,.14);
+    border:0.5px solid rgba(46,140,224,.4);padding:6px 13px;border-radius:999px}
+  .badge svg{width:15px;height:15px;stroke:var(--blue-soft);fill:none;stroke-width:1.8}
+  .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-soft);margin:14px 0 10px}
+  h1{font-weight:600;font-size:clamp(30px,7vw,44px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{color:var(--blue-soft)}
+  .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:520px;margin:14px 0 20px}
+  .goal{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:0.5px solid rgba(46,140,224,.45);
+    border-radius:12px;padding:15px 17px;margin-bottom:30px}
+  .goal svg{width:22px;height:22px;stroke:var(--blue-soft);fill:none;stroke-width:1.7;flex:0 0 auto;margin-top:1px}
+  .goal p{font-size:14.5px;line-height:1.55;color:#c3d6e8}
+  .goal b{color:#fff;font-weight:600}
+  .tl{position:relative;padding-left:38px}
+  .tl:before{content:"";position:absolute;left:12px;top:8px;bottom:34px;width:2px;
+    background:linear-gradient(var(--blue),rgba(30,134,224,.25))}
+  .step{position:relative;margin-bottom:24px}
+  .dot{position:absolute;left:-38px;top:0;width:26px;height:26px;border-radius:50%;background:var(--bg);
+    border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--blue-soft);font-weight:500}
+  .dot.done{background:var(--blue);border-color:var(--blue);color:#fff}
+  .dot.done svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.4}
+  .step .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .step h3{font-size:16.5px;font-weight:600}
+  .step .when{font-size:12.5px;color:var(--blue-soft);white-space:nowrap}
+  .step p{font-size:14px;color:var(--muted);margin-top:4px}
+  .step.final .box{border:2px solid var(--blue);border-radius:14px;padding:16px 18px;background:var(--card2)}
+  .step.final .when{color:#a9cdec}
+  .step.final p{color:#a9cdec}
+  form{margin-top:30px;background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:20px}
+  form h2{font-size:18px;font-weight:600;margin-bottom:4px}
+  form .sub{font-size:13.5px;color:var(--muted);margin-bottom:16px}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+  .field label{font-size:13px;color:var(--muted)}
+  .field input{background:#0e1e33;border:1px solid var(--line);border-radius:10px;padding:14px 15px;color:var(--text);font-size:15px;font-family:inherit}
+  .field input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,134,224,.15)}
+  .btn{width:100%;border:none;border-radius:10px;padding:16px;font-size:16px;font-weight:600;color:#fff;
+    background:var(--blue);cursor:pointer;font-family:inherit;transition:filter .2s,transform .15s}
+  .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn:disabled{opacity:.6;cursor:default}
+  .status{min-height:20px;margin-top:12px;font-size:14px;color:var(--blue-soft);text-align:center}
+  .foot{margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand">
+        <span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span>
+        <span class="name">PRÁDLOMAT</span>
+      </span>
+      <span class="badge"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6"/></svg>zájem převyšuje kapacitu</span>
+    </div>
+
+    <div class="reveal in">
+      <p class="eyebrow">Děkujeme za velký zájem</p>
+      <h1>Ať přesně víte,<br><span class="g">co vás čeká</span></h1>
+      <p class="intro">Zájemců máme hodně. Abychom se každému věnovali pořádně, dali jsme začátku jasný řád — tři kroky. Vážíme si svého i vašeho času a věříme, že úspěšní lidé s opravdovým zájmem to ocení.</p>
+
+      <div class="goal">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        <p><b>Náš cíl: do 10 dní od schůzky</b> budete mít v ruce všechny informace, abyste se mohli kvalifikovaně rozhodnout — ano, nebo ne.</p>
+      </div>
+    </div>
+
+    <div class="tl reveal">
+      <div class="step">
+        <span class="dot">1</span>
+        <div class="row"><h3>Schůzka — online i osobně</h3><span class="when">17 min</span></div>
+        <p>Odpovědi na to hlavní: ekonomika a návratnost, vhodná lokalita a zákazníci.</p>
+      </div>
+      <div class="step">
+        <span class="dot">2</span>
+        <div class="row"><h3>Návštěva výroby s majiteli</h3><span class="when">60 min</span></div>
+        <p>Prohlídka české výroby a osobní seznámení. Poznáme se navzájem.</p>
+      </div>
+      <div class="step final">
+        <span class="dot done"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+        <div class="box">
+          <div class="row"><h3>Kvalifikované rozhodnutí</h3><span class="when">do 10 dní od schůzky</span></div>
+          <p>Do 10 dní budete mít všechno potřebné a rozhodnete se — ano, nebo ne. Rozhodujeme se oba: prádlomat svěřujeme jen partnerům, se kterými si sedneme.</p>
+        </div>
+      </div>
+    </div>
+
+    <form id="leadForm" class="reveal" novalidate>
+      <h2>Domluvit schůzku</h2>
+      <p class="sub">Nechte nám kontakt a ozveme se s termínem. Nezávazně a zdarma.</p>
+      <div class="field">
+        <label for="name">Jméno</label>
+        <input id="name" name="name" type="text" autocomplete="name" placeholder="Jan Novák" />
+      </div>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" name="email" type="email" autocomplete="email" placeholder="vas@email.cz" required />
+      </div>
+      <div class="field">
+        <label for="phone">Telefon</label>
+        <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="+420 …" />
+      </div>
+      <button type="submit" class="btn" id="submitBtn">Domluvit schůzku</button>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <p class="foot">Nezávazně, zdarma. Počet partnerů je omezený.</p>
+    </form>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, {threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  var form=document.getElementById('leadForm'), btn=document.getElementById('submitBtn'), status=document.getElementById('status');
+  var emailEl=document.getElementById('email'), nameEl=document.getElementById('name'), phoneEl=document.getElementById('phone');
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var email=(emailEl.value||'').trim();
+    if(!email || email.indexOf('@')===-1){ status.style.color='#ff8f8f'; status.textContent='Zadejte prosím platný e-mail.'; return; }
+    var name=(nameEl.value||'').trim() || email.split('@')[0];
+    var old=btn.textContent; btn.disabled=true; btn.textContent='Odesílám…'; status.textContent='';
+    fetch('/api/compounder/register',{
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
+      body:JSON.stringify({ name:name, email:email, phone:(phoneEl.value||'').trim()||undefined, role:'compounder', lang:'cs', ref:'pradlomaty-cesta' })
+    })
+    .then(function(r){ return r.json().catch(function(){return {};}); })
+    .then(function(d){
+      if(d && (d.ok || d.id)){
+        status.style.color='var(--blue-soft)';
+        status.textContent = d.existing ? 'Už vás máme v evidenci — ozveme se s termínem.' : 'Děkujeme! Ozveme se vám s termínem schůzky.';
+        btn.textContent='Odesláno ✓'; form.reset();
+      } else { status.style.color='#ff8f8f'; status.textContent=(d&&d.error)||'Nepodařilo se odeslat. Zkuste to prosím znovu.'; btn.disabled=false; btn.textContent=old; }
+    })
+    .catch(function(){ status.style.color='#ff8f8f'; status.textContent='Nepodařilo se odeslat. Zkuste to prosím znovu.'; btn.disabled=false; btn.textContent=old; });
+  });
+})();
+</script>
+</body>
+</html>
