@@ -124,8 +124,29 @@
   .fstatus{min-height:20px;margin-top:10px;font-size:14px;text-align:center}
   .fstatus.ok{color:#7ee2a4}.fstatus.err{color:#f7a1a1}
 
+  .searchbtn{background:var(--blue);color:#fff;border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit}
+  .searchbtn:hover{filter:brightness(1.08)}
+  .searchbtn:disabled{opacity:.6;cursor:default}
+
+  /* Analýza spádové oblasti (pod mapou) */
+  .an{background:var(--card);border:.5px solid var(--line);border-radius:16px;padding:18px 20px;margin-top:16px}
+  .an .anh{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .an .anh h2{font-size:19px;font-weight:700}
+  .an .anh .sub{font-size:12.5px;color:var(--muted2);margin-top:3px}
+  .an .big{text-align:right}
+  .an .big .n{font-size:26px;font-weight:800;color:var(--blue-soft);line-height:1}
+  .an .big .l{font-size:11.5px;color:var(--muted2);margin-top:3px}
+  .an .legend{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px;align-items:center}
+  .an .legend .t{font-size:11.5px;color:var(--muted2)}
+  .an .li{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+  .an .li .d{width:12px;height:12px;border-radius:50%;border:1px solid rgba(255,255,255,.35)}
+  .an .towns{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+  .an .town{font-size:12px;color:#c3d6e8;background:var(--card2);border:.5px solid rgba(46,140,224,.28);border-radius:8px;padding:5px 9px;display:inline-flex;align-items:center;gap:6px}
+  .an .town .d{width:9px;height:9px;border-radius:50%}
+  .an .note{font-size:12.5px;color:#f2d675;margin-top:10px}
+
   .foot{margin-top:44px;text-align:center;font-size:12.5px;color:var(--muted2)}
-  @media (max-width:540px){ .frow{grid-template-columns:1fr} #map{height:280px} }
+  @media (max-width:540px){ .frow{grid-template-columns:1fr} #map{height:280px} .searchbtn{width:100%} }
 </style>
 </head>
 <body>
@@ -148,9 +169,12 @@
     </div>
 
     <div class="toolbar">
-      <input type="text" class="search" id="search" placeholder="Hledat město nebo název místa…" />
+      <input type="text" class="search" id="search" placeholder="Zadejte své město — ukážeme spádovou oblast i připravená místa…" />
+      <button type="button" class="searchbtn" id="searchbtn">🔎 Vyhledat</button>
       <span class="count" id="count"></span>
     </div>
+
+    <div id="analysis"></div>
 
     <div class="grid" id="grid">
       <div class="empty">Načítám místa…</div>
@@ -328,7 +352,61 @@
   function closeModal(){ document.getElementById('ov').classList.remove('open'); document.body.style.overflow=''; if(mmap){ try{mmap.remove();}catch(e){} mmap=null; } }
   document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeModal(); });
 
+  // ── Veřejná analýza spádové oblasti ──
+  var areaLayers = [];
+  function popColor(p){ return p>=50000?'#7f0000':p>=20000?'#b30000':p>=10000?'#d7301f':p>=5000?'#ef6548':p>=2000?'#fc8d59':p>=1000?'#fdbb84':p>=500?'#fdd49e':'#fee8c8'; }
+  function popRadius(p){ return Math.max(4, Math.min(30, Math.sqrt(p)/3)); }
+  function clearArea(){ areaLayers.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} }); areaLayers=[]; }
+
+  function runPublicArea(){
+    var q = document.getElementById('search').value.trim();
+    applyFilter(); // vždy taky filtruj karty
+    if(q.length<2){ clearArea(); document.getElementById('analysis').innerHTML=''; return; }
+    var btn = document.getElementById('searchbtn'); var old = btn.textContent; btn.disabled=true; btn.textContent='Hledám…';
+    var an = document.getElementById('analysis');
+    an.innerHTML = '<div class="an" style="color:var(--muted)">Analyzuji spádovou oblast '+esc(q)+' (15 km)…</div>';
+    fetch(API+'/area-analysis?area='+encodeURIComponent(q)+'&radius_km=15')
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){ btn.disabled=false; btn.textContent=old;
+        if(!res.ok){ an.innerHTML='<div class="an" style="color:#f7a1a1">'+esc((res.j&&res.j.error)||'Analýzu se nepodařilo spustit.')+'</div>'; return; }
+        renderPublicArea(res.j, q);
+      })
+      .catch(function(){ btn.disabled=false; btn.textContent=old; an.innerHTML='<div class="an" style="color:#f7a1a1">Chyba spojení, zkuste to prosím znovu.</div>'; });
+  }
+
+  function renderPublicArea(r, q){
+    clearArea();
+    if(r.center){
+      var rk = r.radius_km || 15;
+      var ring = L.circle([r.center.lat,r.center.lon], { radius:rk*1000, color:'#1e86e0', weight:2, fill:true, fillColor:'#1e86e0', fillOpacity:.05, dashArray:'6 6' }).addTo(map);
+      areaLayers.push(ring);
+      areaLayers.push(L.circleMarker([r.center.lat,r.center.lon], { radius:5, color:'#fff', weight:2, fillColor:'#1e86e0', fillOpacity:1 }).addTo(map).bindTooltip('Střed', {direction:'top'}));
+      (r.places||[]).forEach(function(p){
+        var cm = L.circleMarker([p.lat,p.lon], { radius:popRadius(p.population), color:'rgba(0,0,0,.35)', weight:.5, fillColor:popColor(p.population), fillOpacity:.8 }).addTo(map);
+        cm.bindTooltip(esc(p.name)+': '+p.population.toLocaleString('cs-CZ'), {direction:'top'});
+        areaLayers.push(cm);
+      });
+      try{ map.fitBounds(ring.getBounds(), {padding:[20,20]}); }catch(e){}
+    }
+    var title = (r.center && r.center.display_name) ? r.center.display_name.split(',')[0] : q;
+    var rk2 = r.radius_km || 15;
+    var tot = r.total_population!=null ? r.total_population.toLocaleString('cs-CZ') : '—';
+    var dens = r.density_per_km2!=null ? r.density_per_km2.toLocaleString('cs-CZ') : '—';
+    var bands=[['<500','#fee8c8'],['500+','#fdd49e'],['1k+','#fdbb84'],['2k+','#fc8d59'],['5k+','#ef6548'],['10k+','#d7301f'],['20k+','#b30000'],['50k+','#7f0000']];
+    var legend='<div class="legend"><span class="t">Velikost obce:</span>'+bands.map(function(x){return '<span class="li"><span class="d" style="background:'+x[1]+'"></span>'+x[0]+'</span>';}).join('')+'</div>';
+    var towns=(r.places||[]).slice(0,10).map(function(p){return '<span class="town"><span class="d" style="background:'+popColor(p.population)+'"></span>'+esc(p.name)+' — '+p.population.toLocaleString('cs-CZ')+(p.dist_km!=null?' · '+p.dist_km+' km':'')+'</span>';}).join('');
+    var note=(!r.places||!r.places.length)?'<div class="note">Podrobná data o populaci v této oblasti zatím nejsou dostupná.</div>':'';
+    document.getElementById('analysis').innerHTML='<div class="an">'
+      +'<div class="anh"><div><h2>🎯 Spádová oblast '+rk2+' km — '+esc(title)+'</h2><div class="sub">Počet obyvatel v okruhu '+rk2+' km od středu města · zdroj: '+esc(r.source||'')+'</div></div>'
+      +'<div class="big"><div class="n">'+tot+'</div><div class="l">obyvatel · '+dens+' /km²</div></div></div>'
+      + note + legend
+      + (towns?('<div class="towns">'+towns+'</div>'):'')
+      +'</div>';
+  }
+
   document.getElementById('search').addEventListener('input', applyFilter);
+  document.getElementById('searchbtn').addEventListener('click', runPublicArea);
+  document.getElementById('search').addEventListener('keydown', function(e){ if(e.key==='Enter') runPublicArea(); });
 
   initMap();
   fetch(API).then(function(r){ return r.json(); }).then(function(data){

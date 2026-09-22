@@ -197,6 +197,32 @@ router.get('/public', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/pradlomat-spots/public/area-analysis?area=…&radius_km=… — VEŘEJNÁ analýza
+// spádové oblasti (bez AI, s rate-limitem). Pro web pradlomaty.info/location.
+const _pubAreaHits = new Map();
+function pubAreaRateOk(ip) {
+  const now = Date.now(), win = 60 * 60 * 1000, max = 40;
+  const arr = (_pubAreaHits.get(ip) || []).filter((t) => now - t < win);
+  if (arr.length >= max) { _pubAreaHits.set(ip, arr); return false; }
+  arr.push(now); _pubAreaHits.set(ip, arr);
+  if (_pubAreaHits.size > 5000) _pubAreaHits.clear();
+  return true;
+}
+router.get('/public/area-analysis', async (req, res, next) => {
+  try {
+    const area = String(req.query.area || '').trim();
+    if (area.length < 2) return res.status(400).json({ error: 'Zadej město nebo oblast.' });
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+    if (!pubAreaRateOk(ip)) return res.status(429).json({ error: 'Příliš mnoho dotazů. Zkus to prosím za chvíli.' });
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const radiusKm = Number(req.query.radius_km) || 15;
+    const result = await finder.analyzeArea(area, radiusKm, cfg, { ai: false });
+    if (result && result.error) return res.status(404).json(result);
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // GET /api/pradlomat-spots/public/:code — detail jednoho místa.
 router.get('/public/:code', async (req, res, next) => {
   try {
