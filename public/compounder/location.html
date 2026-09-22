@@ -161,8 +161,8 @@
 
   function initMap(){
     map = L.map('map', { scrollWheelZoom:false }).setView(CZ, 7);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution:'&copy; OpenStreetMap &copy; CARTO', subdomains:'abcd', maxZoom:20
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'&copy; OpenStreetMap', maxZoom:19
     }).addTo(map);
   }
 
@@ -262,7 +262,7 @@
       setTimeout(function(){
         try{
           mmap = L.map('mmap', { scrollWheelZoom:false, dragging:true }).setView([s.latitude,s.longitude], 14);
-          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { subdomains:'abcd', maxZoom:20, attribution:'&copy; OpenStreetMap &copy; CARTO' }).addTo(mmap);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap' }).addTo(mmap);
           L.marker([s.latitude,s.longitude], { icon:spotIcon(s) }).addTo(mmap);
         }catch(e){}
       }, 60);

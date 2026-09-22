@@ -152,7 +152,7 @@
       + '  <button class="pm-btn ghost" id="pm-refresh">↻ Obnovit</button>'
       + '  <button class="pm-btn find" id="pm-finder">🔎 Vyhledávač lokalit</button>'
       + '  <button class="pm-btn primary" id="pm-new">＋ Nové místo</button>'
-      + '  <a class="pm-btn ghost" href="/compounder/location" target="_blank" rel="noopener" title="Náhled veřejné stránky">🌐 Veřejný přehled</a>'
+      + '  <a class="pm-btn ghost" href="https://pradlomaty.info/location" target="_blank" rel="noopener" title="Náhled veřejné stránky">🌐 Veřejný přehled</a>'
       + '</div>'
       + '<div style="overflow-x:auto"><table class="data-table" id="pm-table">'
       + '  <thead><tr><th>Místo</th><th>Lokalita</th><th>Stav</th><th title="Zveřejněno na pradlomaty.info/location">Web</th><th>Nájem</th><th title="Poptávky z webu">Poptávky</th><th>Akce</th></tr></thead>'
@@ -200,7 +200,7 @@
         + '<td>' + inq + '</td>'
         + '<td class="pm-actions" onclick="event.stopPropagation()">'
         + '  <button title="Upravit" onclick="__pmEdit(' + s.id + ')">✏️</button>'
-        + (s.is_public ? '<button title="Otevřít na webu" onclick="window.open(\'/compounder/location\',\'_blank\')">🌐</button>' : '')
+        + (s.is_public ? '<button title="Otevřít na webu" onclick="window.open(\'https://pradlomaty.info/location\',\'_blank\')">🌐</button>' : '')
         + '  <button title="Smazat" onclick="__pmDelete(' + s.id + ',\'' + attr(s.title) + '\')">🗑️</button>'
         + '</td></tr>';
     }).join('');
@@ -318,7 +318,7 @@
         + fieldsHtml(spot)
         + (spot ? ('<div class="pm-sect">Poptávky z webu</div>' + inquiriesHtml(spot.inquiries)) : '')
         + '<div class="pm-foot">'
-        + (spot ? '<a class="pm-hint" href="/compounder/location" target="_blank" rel="noopener">🌐 Zobrazit veřejný přehled</a>' : '<span></span>')
+        + (spot ? '<a class="pm-hint" href="https://pradlomaty.info/location" target="_blank" rel="noopener">🌐 Zobrazit veřejný přehled</a>' : '<span></span>')
         + '<div style="display:flex;gap:10px;align-items:center"><span class="pm-msg" id="pm-savemsg"></span>'
         + '<button class="pm-btn ghost" onclick="__pmClose()">Zrušit</button>'
         + '<button class="pm-btn primary" id="pm-save">' + (spot ? 'Uložit změny' : 'Vytvořit místo') + '</button></div>'
