@@ -144,6 +144,8 @@ function toAdmin(s) {
     anchor_count: s.anchor_count,
     competition_count: s.competition_count,
     score: s.score,
+    reserved_lead_id: s.reserved_lead_id,
+    reserved_lead_label: s.reserved_lead_label,
     potential_report: s.potential_report,
     potential_generated_at: s.potential_generated_at,
     cover_image_url: s.cover_image_url,
@@ -481,6 +483,27 @@ router.get('/geocode', async (req, res) => {
   }
 });
 
+// GET /api/pradlomat-spots/leads-search?q= — našeptávač leadů (CompounderLead) pro rezervaci.
+router.get('/leads-search', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json([]);
+    const leads = await prisma.compounderLead.findMany({
+      where: {
+        OR: [
+          { name: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { company: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, name: true, phone: true, email: true, city: true, company: true },
+      orderBy: { id: 'desc' }, take: 12,
+    });
+    res.json(leads);
+  } catch (err) { next(err); }
+});
+
 // GET /api/pradlomat-spots — seznam všech (správa).
 router.get('/', async (req, res, next) => {
   try {
@@ -523,6 +546,8 @@ const spotSchema = z.object({
   anchor_count: z.number().int().optional().nullable(),
   competition_count: z.number().int().optional().nullable(),
   score: z.number().int().optional().nullable(),
+  reserved_lead_id: z.number().int().optional().nullable(),
+  reserved_lead_label: z.string().trim().max(255).optional().nullable(),
   city: z.string().trim().max(120).optional().nullable(),
   region: z.string().trim().max(120).optional().nullable(),
   country: z.string().trim().max(60).optional().nullable(),
@@ -577,6 +602,7 @@ router.post('/', async (req, res, next) => {
         has_parking: d.has_parking ?? null, parking_distance_m: d.parking_distance_m ?? null,
         population: d.population ?? null, anchor_count: d.anchor_count ?? null,
         competition_count: d.competition_count ?? null, score: d.score ?? null,
+        reserved_lead_id: d.reserved_lead_id ?? null, reserved_lead_label: emptyToNull(d.reserved_lead_label),
         area_m2: d.area_m2 ?? null, rent_monthly: d.rent_monthly ?? null,
         rent_currency: emptyToNull(d.rent_currency) || 'CZK',
         footfall_note: emptyToNull(d.footfall_note), availability_note: emptyToNull(d.availability_note),
@@ -651,6 +677,7 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     setIf('has_parking', d.has_parking); setIf('parking_distance_m', d.parking_distance_m);
     setIf('population', d.population); setIf('anchor_count', d.anchor_count);
     setIf('competition_count', d.competition_count); setIf('score', d.score);
+    setIf('reserved_lead_id', d.reserved_lead_id); setIf('reserved_lead_label', emptyToNull(d.reserved_lead_label));
     setIf('area_m2', d.area_m2); setIf('rent_monthly', d.rent_monthly);
     if (d.rent_currency !== undefined) data.rent_currency = emptyToNull(d.rent_currency) || 'CZK';
     setIf('footfall_note', emptyToNull(d.footfall_note)); setIf('availability_note', emptyToNull(d.availability_note));

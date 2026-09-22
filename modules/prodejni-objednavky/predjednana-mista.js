@@ -85,6 +85,12 @@
       + '.pm-msg{min-height:18px;font-size:13px}'
       + '.pm-msg.ok{color:#7ee2a4}.pm-msg.err{color:#f7a1a1}'
       + '.pm-hint{font-size:12px;color:var(--text2);margin-top:4px}'
+      + '.pm-leadwrap{position:relative}'
+      + '.pm-leaddrop{position:absolute;left:0;right:0;top:100%;z-index:10;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:8px;margin-top:3px;max-height:220px;overflow-y:auto;display:none;box-shadow:0 8px 24px -10px rgba(0,0,0,.6)}'
+      + '.pm-leaddrop.open{display:block}'
+      + '.pm-leaddrop .it{padding:8px 11px;cursor:pointer;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05)}'
+      + '.pm-leaddrop .it:hover{background:rgba(234,179,8,.1)}'
+      + '.pm-leaddrop .it .s{font-size:11px;color:var(--text2)}'
       + '.pm-btn.find{background:#2a3550;color:#cfe0ff;border:1px solid #3b4a6b}'
       // finder panel
       + '.pmf-modal{width:100%;max-width:1000px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}'
@@ -213,6 +219,7 @@
     if (!list.length) { tb.innerHTML = '<tr><td colspan="7" style="color:var(--text2);padding:16px">Žádná místa. Klikni na „＋ Nové místo".</td></tr>'; return; }
     tb.innerHTML = list.map(function (s) {
       var stt = '<span class="pm-badge" style="background:' + STATUS_COLOR[s.status] + '22;color:' + STATUS_COLOR[s.status] + ';border:.5px solid ' + STATUS_COLOR[s.status] + '66">' + esc(STATUS_LABEL[s.status] || s.status) + '</span>';
+      if (s.status === 'reserved' && s.reserved_lead_label) stt += '<div style="font-size:11px;color:var(--text2);margin-top:3px">🔖 ' + esc(s.reserved_lead_label) + '</div>';
       var onWeb = ['published', 'reserved'].indexOf(s.status) >= 0;
       var pub = onWeb ? '<span class="pm-pub" style="color:#22c55e">● Ano</span>' : '<span class="pm-pub" style="color:var(--text2)">○ Ne</span>';
       var inqN = s.new_inquiries || 0, inqT = s.inquiries_count || 0;
@@ -249,6 +256,11 @@
       + '  </select></div>'
       + '  <div class="pm-f"><label>Kód (URL)</label><input id="pmf-code" value="' + attr(v('code')) + '" placeholder="automaticky z názvu"></div>'
       + '  <div class="pm-f full"><div class="pm-hint">🌐 Na <b>pradlomaty.info/location</b> se místo zobrazí automaticky při stavu <b>Zveřejněné</b> nebo <b>Rezervováno</b>. Ve stavu Rozpracované/Obsazené/Archiv je skryté.</div></div>'
+      + '  <div class="pm-f full pm-leadwrap"><label>🔖 Rezervoval (lead) <span style="color:var(--text2)">— vyplň u stavu Rezervováno</span></label>'
+      + '    <input id="pmf-reserved_lead_label" value="' + attr(v('reserved_lead_label')) + '" placeholder="Hledat lead podle jména / telefonu / e-mailu…" autocomplete="off">'
+      + '    <input type="hidden" id="pmf-reserved_lead_id" value="' + attr(v('reserved_lead_id')) + '">'
+      + '    <div class="pm-leaddrop" id="pmf-lead-results"></div>'
+      + '  </div>'
       + '  <div class="pm-f full"><label>👁️ Veřejný název <span style="color:var(--text2)">(co uvidí zákazník místo jména partnera)</span></label><input id="pmf-public_title" value="' + attr(v('public_title')) + '" placeholder="např. Lokalita u supermarketu – Rychnov n. Kn."></div>'
       + '  <div class="pm-f full"><label>Odznak (highlight)</label><input id="pmf-highlight" value="' + attr(v('highlight')) + '" placeholder="např. Bez konkurence do 2 km"></div>'
       + '</div>'
@@ -321,6 +333,8 @@
       anchor_count: num(val('pmf-anchor_count')),
       competition_count: num(val('pmf-competition_count')),
       score: num(val('pmf-score')),
+      reserved_lead_id: num(val('pmf-reserved_lead_id')),
+      reserved_lead_label: val('pmf-reserved_lead_label'),
       highlight: val('pmf-highlight'),
       city: val('pmf-city'), region: val('pmf-region'), country: val('pmf-country'),
       address: val('pmf-address'), show_address: chk('pmf-showaddr'),
@@ -371,10 +385,39 @@
       document.getElementById('pm-save').onclick = save;
       var geo = document.getElementById('pmf-geocode'); if (geo) geo.onclick = doGeocode;
       setupEditMap(spot);
+      wireLeadSearch();
     }
 
     if (id) { api('/' + id).then(build).catch(function (e) { alert('Nepodařilo se načíst: ' + e.message); }); }
     else build(null);
+  }
+
+  function wireLeadSearch() {
+    var inp = document.getElementById('pmf-reserved_lead_label');
+    var hid = document.getElementById('pmf-reserved_lead_id');
+    var box = document.getElementById('pmf-lead-results');
+    if (!inp || !box) return;
+    var t = null;
+    inp.addEventListener('input', function () {
+      hid.value = ''; // ruční změna zruší vazbu, dokud znovu nevybere ze seznamu
+      var q = inp.value.trim();
+      if (t) clearTimeout(t);
+      if (q.length < 2) { box.classList.remove('open'); box.innerHTML = ''; return; }
+      t = setTimeout(function () {
+        api('/leads-search?q=' + encodeURIComponent(q)).then(function (list) {
+          if (!list || !list.length) { box.innerHTML = '<div class="it" style="color:var(--text2)">Nic nenalezeno</div>'; box.classList.add('open'); return; }
+          box.innerHTML = list.map(function (l) {
+            var sub = [l.phone, l.email, l.city, l.company].filter(Boolean).join(' · ');
+            return '<div class="it" data-id="' + l.id + '" data-label="' + attr(l.name) + '">' + esc(l.name) + '<div class="s">' + esc(sub) + '</div></div>';
+          }).join('');
+          box.classList.add('open');
+          box.querySelectorAll('.it[data-id]').forEach(function (el) {
+            el.onclick = function () { hid.value = el.getAttribute('data-id'); inp.value = el.getAttribute('data-label'); box.classList.remove('open'); box.innerHTML = ''; };
+          });
+        }).catch(function () { box.classList.remove('open'); });
+      }, 250);
+    });
+    document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== inp) box.classList.remove('open'); });
   }
 
   function setupEditMap(spot) {

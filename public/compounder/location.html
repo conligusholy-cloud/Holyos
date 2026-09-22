@@ -284,7 +284,7 @@
       +   (s.highlight ? '<div style="font-size:13px;color:#a9cdec">'+esc(s.highlight)+'</div>' : '')
       +   '<div class="chips">'+infoChips(s).join('')+'</div>'
       + '</div>'
-      + '<div class="cta">'+stt+'<button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Mám zájem</button></div>'
+      + '<div class="cta">'+stt+'<button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Zobrazit detail</button></div>'
       + '</div>';
   }
 
@@ -336,7 +336,6 @@
       +   (facts ? '<div class="mfacts">'+facts+'</div>' : '')
       +   gallery
       +   (hasMap ? '<div id="mmap"></div>' : '')
-      +   inquiryForm(s.code)
       + '</div>';
     document.getElementById('ov').classList.add('open');
     document.body.style.overflow = 'hidden';

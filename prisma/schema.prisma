@@ -6637,6 +6637,11 @@ model PradlomatSpot {
   anchor_count       Int?     // počet tahounů provozu v okolí
   competition_count  Int?     // počet konkurenčních prádelen v okolí
   score              Int?     // skóre vhodnosti 0–100
+
+  // Rezervace místa — který lead (CompounderLead) si ho zarezervoval (přišel přes SMS,
+  // kontakt už známe). Skalární FK bez Prisma relace + denormalizovaný popisek.
+  reserved_lead_id    Int?
+  reserved_lead_label String? @db.VarChar(255)
   potential_report      String?   @db.Text   // AI analýza zákaznického potenciálu (markdown)
   potential_generated_at DateTime?           // kdy byla analýza naposledy vygenerována
   area_m2            Decimal? @db.Decimal(10, 2)
