@@ -892,12 +892,23 @@ app.use((req, res, next) => {
     if (url) return res.redirect(302, url);
     return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
   }
+  // Zkrácený odkaz na „cestu k rozhodnutí" (rezervace termínu): /c/<kód> → /home?t=<token>.
+  if (req.path.startsWith('/c/')) {
+    const url = compounderRoutes.shortCodeToCestaUrl(decodeURIComponent(req.path.slice(3)));
+    if (url) return res.redirect(302, url);
+    return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
+  }
   compounderStatic(req, res, () => serveCompounderHtml(req, res));
 });
 
 // Zkrácený odkaz i na app.holyos.cz (fallback, kdyby ho někdo otevřel tam).
 app.get('/s/:code', (req, res) => {
   const url = compounderRoutes.shortCodeToAiUrl(String(req.params.code || ''), req.query && req.query.c);
+  if (url) return res.redirect(302, url);
+  return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
+});
+app.get('/c/:code', (req, res) => {
+  const url = compounderRoutes.shortCodeToCestaUrl(String(req.params.code || ''));
   if (url) return res.redirect(302, url);
   return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
 });

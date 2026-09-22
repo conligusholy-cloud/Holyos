@@ -300,6 +300,7 @@
       <button type="button" class="tab-btn" data-tab="compounder" onclick="switchTab('compounder')">🌐 Compounder</button>
       <button type="button" class="tab-btn" data-tab="compounding" onclick="switchTab('compounding')">🧺 Compounding</button>
       <button type="button" class="tab-btn" data-tab="rezervace" onclick="switchTab('rezervace')">📋 Rezervace</button>
+      <button type="button" class="tab-btn" data-tab="terminy" onclick="switchTab('terminy')">📅 Termíny schůzek</button>
       <button type="button" class="tab-btn" data-tab="databaze" onclick="switchTab('databaze')">🗃️ Databáze</button>
       <button type="button" class="tab-btn" data-tab="lokality" onclick="switchTab('lokality')">📍 Lokality</button>
       <button type="button" class="tab-btn" data-tab="externi" onclick="switchTab('externi')">🤝 Externí obchod</button>
@@ -437,6 +438,26 @@
       </div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Worker každý měsíc spočítá obrat stroje ze SIS a vytvoří servisní fakturu (13 % vč. DPH). Odešle se automaticky jen u smluv s „Auto‑odeslání" (a když je zapnutý přepínač na serveru), jinak zůstane koncept k odsouhlasení.</div>
       <div id="servis-subs-table"><div style="color:var(--text2);">Načítám…</div></div>
+    </div>
+
+    <!-- TAB: Termíny schůzek (pradlomaty.info rezervace) -->
+    <div id="tab-terminy" style="display:none; padding:20px 24px 24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <h3 style="margin:0;font-size:16px;">📅 Termíny schůzek — pradlomaty.info</h3>
+        <button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="msToggleForm()">➕ Přidat termín</button>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Volné termíny, které se nabízejí zájemcům na pradlomaty.info/home. Zájemce si vybere termín, rezervace se naváže na jeho lead.</div>
+      <div id="ms-form" style="display:none;background:var(--surface,#171a21);border:1px solid var(--line,#2a2a2e);border-radius:12px;padding:14px;margin-bottom:14px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+          <label style="font-size:12px;color:var(--text2)">Datum a čas<input id="ms-when" type="datetime-local" style="width:100%"></label>
+          <label style="font-size:12px;color:var(--text2)">Délka (min)<input id="ms-dur" type="number" value="17" style="width:100%"></label>
+          <label style="font-size:12px;color:var(--text2)">Kapacita<input id="ms-cap" type="number" value="1" style="width:100%"></label>
+          <label style="font-size:12px;color:var(--text2)">Forma<select id="ms-mode" style="width:100%"><option value="">online i osobně</option><option value="online">online</option><option value="osobne">osobně</option></select></label>
+        </div>
+        <div style="margin-top:8px;"><input id="ms-note" type="text" placeholder="Poznámka (volitelné)" style="width:100%"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><button class="btn btn-primary btn-sm" onclick="msCreate()">Uložit termín</button><button class="btn btn-sm" onclick="msToggleForm()">Zrušit</button><span id="ms-form-msg" style="font-size:12px;color:var(--text2);"></span></div>
+      </div>
+      <div id="ms-list"><div style="color:var(--text2);">Načítám…</div></div>
     </div>
 
     <!-- TAB: AI telefonní asistent -->
@@ -586,6 +607,13 @@
           <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (nezaškrtnuté nic = všichni):</div>
           <div id="ai-as-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + zaškrtnutí Tomáš a Jan → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
+          <div style="margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">📅 Varianta SCHŮZKA (rezervace termínu na pradlomaty.info/home)</div>
+            <div style="font-size:12px;color:var(--text2);margin:0 0 6px;">Leadům těchto obchodníků se místo specialisty pošle odkaz na výběr termínu schůzky. <b>Pojistka:</b> jednomu leadovi se nikdy nepošle obojí.</div>
+            <div id="ai-as-schuzka-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
+            <div style="font-size:12px;color:var(--text2);margin:8px 0 4px;">Text SMS pro schůzku (<code>{link}</code>):</div>
+            <textarea id="ai-as-schuzka-text" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="PRADLOMATY: vyberte si termin schuzky {link}"></textarea>
+          </div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAutosend()" style="background:#8b5cf6;color:#fff;font-weight:700;">💾 Uložit automatické odesílání</button> <span id="ai-as-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
           <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><b style="font-size:13px;color:var(--text);">📊 Odeslané SMS specialisty</b><button class="btn" onclick="aiLoadSmsStats()" style="font-size:12px;padding:4px 10px;">↻ Načíst statistiku</button><span id="ai-as-stats-sum" style="font-size:12px;color:var(--text2);"></span></div>
@@ -5916,6 +5944,15 @@
           if(!list.length){ box.innerHTML='<span>Žádní obchodníci k dispozici.</span>'; }
           else box.innerHTML=list.map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<label style="display:inline-flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;"><input type="checkbox" class="ai-as-owner" value="'+s.id+'"'+(sel.indexOf(Number(s.id))!==-1?' checked':'')+'> '+cmpEsc(nm)+'</label>'; }).join('');
         }
+        // Varianta SCHŮZKA — kteří obchodníci + text
+        var sel2 = (c.schuzkaOwnerPersonIds||[]).map(Number);
+        var sbox=document.getElementById('ai-as-schuzka-owners-box');
+        if(sbox){
+          var slist=(typeof CMP_SELLERS!=='undefined' && Array.isArray(CMP_SELLERS))?CMP_SELLERS:[];
+          if(!slist.length){ sbox.innerHTML='<span>Žádní obchodníci k dispozici.</span>'; }
+          else sbox.innerHTML=slist.map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<label style="display:inline-flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;"><input type="checkbox" class="ai-as-schuzka-owner" value="'+s.id+'"'+(sel2.indexOf(Number(s.id))!==-1?' checked':'')+'> '+cmpEsc(nm)+'</label>'; }).join('');
+        }
+        var st=document.getElementById('ai-as-schuzka-text'); if(st) st.value=c.schuzkaText||'PRADLOMATY: vyberte si termin schuzky {link}';
       }catch(e){}
     }
     async function aiSaveAutosend(){
@@ -5930,7 +5967,9 @@
           onlyNew: document.getElementById('ai-as-new').checked,
           skipBlacklist: document.getElementById('ai-as-nobl').checked,
           emailEnabled: !!(document.getElementById('ai-as-email')||{}).checked,
-          ownerPersonIds: owners
+          ownerPersonIds: owners,
+          schuzkaOwnerPersonIds: Array.prototype.slice.call(document.querySelectorAll('.ai-as-schuzka-owner:checked')).map(function(c){return parseInt(c.value,10);}).filter(Boolean),
+          schuzkaText: (document.getElementById('ai-as-schuzka-text')||{}).value || 'PRADLOMATY: vyberte si termin schuzky {link}'
         })});
         if(!r.ok) throw new Error('HTTP '+r.status);
         if(msg) msg.textContent='✅ Uloženo';
@@ -6442,7 +6481,7 @@
     window.prekladacCopy = prekladacCopy;
 
     function switchTab(name) {
-      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
+      ['orders', 'pricelist', 'accessories', 'cashflow', 'tools', 'compounder', 'compounding', 'rezervace', 'terminy', 'databaze', 'lokality', 'externi', 'externisti', 'blacklist', 'bankovni-plan', 'ai-asistent', 'prekladac', 'servis-smlouvy'].forEach(function(t) {
         var el = document.getElementById('tab-' + t);
         if (el) el.style.display = (t === name) ? '' : 'none';
         var btn = document.querySelector('.tab-btn[data-tab="' + t + '"]');
@@ -6454,6 +6493,7 @@
       if (name === 'compounder') loadCompounderLeads();
       if (name === 'compounding') loadKioskValues();
       if (name === 'rezervace') loadReservationsPage();
+      if (name === 'terminy') loadMeetingSlots();
       if (name === 'databaze') crmInit();
       if (name === 'lokality') loadLokality();
       if (name === 'externi') renderExternalTrade();
@@ -6467,6 +6507,49 @@
       if (name === 'ai-asistent') loadAiAssistant();
       else if (typeof aiStopPoll === 'function') aiStopPoll();
     }
+
+    // ============================================================
+    // TERMÍNY SCHŮZEK — tab "terminy" (rezervace pradlomaty.info)
+    // ============================================================
+    function msEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+    function msFmt(d){ var D=['Ne','Po','Út','St','Čt','Pá','So']; return D[d.getDay()]+' '+d.getDate()+'.'+(d.getMonth()+1)+'. '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
+    function msToggleForm(){ var f=document.getElementById('ms-form'); f.style.display=(f.style.display==='none'||!f.style.display)?'block':'none'; }
+    async function loadMeetingSlots(){
+      var box=document.getElementById('ms-list'); if(!box)return; box.innerHTML='<div style="color:var(--text2)">Načítám…</div>';
+      try{
+        var r=await fetch('/api/compounder/admin/meeting-slots',{credentials:'include'});
+        var slots=await r.json();
+        if(!Array.isArray(slots)||!slots.length){ box.innerHTML='<div style="color:var(--text2)">Zatím žádné termíny. Přidej první přes „➕ Přidat termín".</div>'; return; }
+        var now=Date.now();
+        box.innerHTML=slots.map(function(s){
+          var d=new Date(s.starts_at); var past=d.getTime()<now;
+          var resv=(s.reservations||[]).filter(function(x){return x.status==='booked';});
+          var cap=s.capacity||1; var full=resv.length>=cap;
+          var rows=resv.map(function(x){ return '<div style="font-size:12px;color:var(--text2);padding:2px 0;display:flex;gap:8px;align-items:center;"><span>• '+msEsc(x.name||'—')+' · '+msEsc(x.phone||x.email||'')+'</span><button class="btn btn-sm" style="padding:1px 7px;" onclick="msCancelResv('+x.id+')" title="Zrušit rezervaci">✕</button></div>'; }).join('');
+          return '<div style="background:var(--surface,#171a21);border:1px solid '+(past?'var(--line,#2a2a2e)':'#2b7fd4')+';border-radius:12px;padding:12px 14px;margin-bottom:10px;'+(past?'opacity:.55;':'')+'">'
+            +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+            +'<div style="font-weight:700;">'+msFmt(d)+'</div>'
+            +'<span style="font-size:12px;color:var(--text2);">'+(s.duration_min||17)+' min · '+(s.mode==='online'?'online':(s.mode==='osobne'?'osobně':'online i osobně'))+'</span>'
+            +'<span style="margin-left:auto;font-size:12px;color:'+(full?'#ef4444':'#22c55e')+'">'+resv.length+' / '+cap+' obsazeno</span>'
+            +'<button class="btn btn-sm" onclick="msDelete('+s.id+')" title="Smazat termín">🗑</button>'
+            +'</div>'+(rows?('<div style="margin-top:6px;border-top:1px solid var(--line,#2a2a2e);padding-top:6px;">'+rows+'</div>'):'')+'</div>';
+        }).join('');
+      }catch(e){ box.innerHTML='<div style="color:#ef4444">Nepodařilo se načíst termíny.</div>'; }
+    }
+    async function msCreate(){
+      var when=document.getElementById('ms-when').value; var msg=document.getElementById('ms-form-msg');
+      if(!when){ msg.textContent='Zadej datum a čas.'; return; }
+      msg.textContent='Ukládám…';
+      try{
+        var r=await fetch('/api/compounder/admin/meeting-slots',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',
+          body:JSON.stringify({ starts_at:new Date(when).toISOString(), duration_min:parseInt(document.getElementById('ms-dur').value,10)||17, capacity:parseInt(document.getElementById('ms-cap').value,10)||1, mode:document.getElementById('ms-mode').value||null, note:document.getElementById('ms-note').value||null })});
+        var d=await r.json();
+        if(d&&d.ok){ msg.textContent=''; document.getElementById('ms-when').value=''; document.getElementById('ms-note').value=''; msToggleForm(); loadMeetingSlots(); }
+        else { msg.textContent=(d&&d.error)||'Chyba při ukládání.'; }
+      }catch(e){ msg.textContent='Chyba při ukládání.'; }
+    }
+    async function msDelete(id){ if(!confirm('Smazat termín i jeho rezervace?'))return; try{ await fetch('/api/compounder/admin/meeting-slots/'+id,{method:'DELETE',credentials:'include'}); loadMeetingSlots(); }catch(e){} }
+    async function msCancelResv(id){ if(!confirm('Zrušit tuto rezervaci?'))return; try{ await fetch('/api/compounder/admin/meeting-reservations/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({status:'canceled'})}); loadMeetingSlots(); }catch(e){} }
 
     // ============================================================
     // DATABÁZE LEADŮ (CRM import) — tab "databaze"
