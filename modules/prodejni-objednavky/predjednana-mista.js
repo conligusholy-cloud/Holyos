@@ -609,7 +609,7 @@
     ov.innerHTML = '<div class="pmf-modal"><div class="pm-head"><h2>🔎 Vyhledávač lokalit</h2><button class="pm-x" onclick="__pmfClose()">×</button></div>'
       + '<div class="pm-body">'
       + '  <div class="pmf-searchrow">'
-      + '    <input id="pmf-area" placeholder="Zadej město nebo oblast (např. Kolín, Praha 4, Kladno)…">'
+      + '    <input id="pmf-searchq" placeholder="Zadej město nebo oblast (např. Kolín, Praha 4, Kladno)…">'
       + '    <button class="pm-btn ghost" id="pmf-cfgbtn" title="Nastavení logiky">⚙️ Konfigurace</button>'
       + '    <button class="pm-btn primary" id="pmf-go" title="Najít konkrétní kandidátní místa">🔎 Hledat místa</button>'
       + '  </div>'
@@ -625,7 +625,7 @@
       + '</div></div>';
     ov.classList.add('open'); document.body.style.overflow = 'hidden';
     document.getElementById('pmf-go').onclick = runSearch;
-    document.getElementById('pmf-area').addEventListener('keydown', function (e) { if (e.key === 'Enter') runSearch(); });
+    document.getElementById('pmf-searchq').addEventListener('keydown', function (e) { if (e.key === 'Enter') runSearch(); });
     document.getElementById('pmf-cfgbtn').onclick = toggleCfg;
     document.getElementById('pmf-areabtn').onclick = runAreaAnalysis;
     loadConfig();
@@ -702,7 +702,7 @@
   }
 
   function runSearch() {
-    var area = document.getElementById('pmf-area').value.trim();
+    var area = document.getElementById('pmf-searchq').value.trim();
     var msg = document.getElementById('pmf-msg');
     if (area.length < 2) { msg.className = 'pm-msg err'; msg.textContent = 'Zadej město nebo oblast.'; return; }
     msg.className = 'pm-msg'; msg.textContent = 'Hledám v OpenStreetMap… (může to pár sekund trvat)';
@@ -883,7 +883,7 @@
   function popRadius(p) { return Math.max(4, Math.min(34, Math.sqrt(p) / 3)); }
 
   function runAreaAnalysis() {
-    var area = document.getElementById('pmf-area').value.trim();
+    var area = document.getElementById('pmf-searchq').value.trim();
     var radius = parseInt(document.getElementById('pmf-radius').value, 10) || 15;
     var msg = document.getElementById('pmf-msg');
     if (area.length < 2) { msg.className = 'pm-msg err'; msg.textContent = 'Zadej město nebo oblast.'; return; }
