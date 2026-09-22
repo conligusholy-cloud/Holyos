@@ -253,6 +253,7 @@
 
   function infoChips(s){
     var c = [];
+    if(s.__center_km!=null) c.push('<span class="chip g">📍 '+s.__center_km.toLocaleString('cs-CZ')+' km od '+esc(s.__center_name||'hledaného města')+'</span>');
     if(s.has_parking) c.push('<span class="chip g">🅿️ parkoviště'+(s.parking_distance_m!=null?' '+s.parking_distance_m+' m':'')+'</span>');
     if(s.nearest_laundromat_km!=null){
       var far = s.nearest_laundromat_km >= 8;
@@ -299,6 +300,7 @@
 
   function applyFilter(){
     var q = document.getElementById('search').value.trim().toLowerCase();
+    all.forEach(function(s){ s.__center_km = null; s.__center_name = null; }); // zruš předchozí filtr podle vzdálenosti
     var list = !q ? all : all.filter(function(s){
       return [s.name,s.city,s.region].filter(Boolean).join(' ').toLowerCase().indexOf(q)>=0;
     });
@@ -394,6 +396,7 @@
 
   // ── Veřejná analýza spádové oblasti ──
   var areaLayers = [];
+  function distKmF(lat1,lon1,lat2,lon2){ var R=6371,tR=Math.PI/180; var dLa=(lat2-lat1)*tR,dLo=(lon2-lon1)*tR; var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(lat1*tR)*Math.cos(lat2*tR)*Math.sin(dLo/2)*Math.sin(dLo/2); return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)); }
   function popColor(p){ return p>=50000?'#7f0000':p>=20000?'#b30000':p>=10000?'#d7301f':p>=5000?'#ef6548':p>=2000?'#fc8d59':p>=1000?'#fdbb84':p>=500?'#fdd49e':'#fee8c8'; }
   function popRadius(p){ return Math.max(4, Math.min(30, Math.sqrt(p)/3)); }
   function clearArea(){ areaLayers.forEach(function(l){ try{ map.removeLayer(l); }catch(e){} }); areaLayers=[]; }
@@ -442,6 +445,17 @@
       + note + legend
       + (towns?('<div class="towns">'+towns+'</div>'):'')
       +'</div>';
+
+    // Karty: jen připravená místa do radiusu, seřazená od nejbližšího k centru.
+    if(r.center){
+      var rkm = r.radius_km || 15;
+      var near = all.filter(function(s){ return s.latitude!=null && s.longitude!=null; })
+        .map(function(s){ s.__center_km = Math.round(distKmF(r.center.lat,r.center.lon,s.latitude,s.longitude)*10)/10; s.__center_name = title; return s; })
+        .filter(function(s){ return s.__center_km <= rkm; })
+        .sort(function(a,b){ return a.__center_km - b.__center_km; });
+      render(near);
+      var cnt=document.getElementById('count'); if(cnt) cnt.textContent = near.length+' míst do '+rkm+' km';
+    }
   }
 
   document.getElementById('search').addEventListener('input', applyFilter);
