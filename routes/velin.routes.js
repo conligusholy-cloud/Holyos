@@ -1009,6 +1009,20 @@ mobile.get('/me', async (req, res) => {
   });
 });
 
+// GET /api/velin/me/assistant — konfigurace osobního asistenta pro přihlášené zařízení.
+mobile.get('/me/assistant', async (req, res, next) => {
+  try {
+    const line = paLine(req.velin.person.id);
+    const g = _paSettings.getSetting;
+    res.json({
+      enabled: !!(await g('voice.' + line + '.enabled')),
+      number: (await g('voice.' + line + '.number')) || '',
+      transfer_enabled: !!(await g('voice.' + line + '.transfer_enabled')),
+      transfer_number: (await g('voice.' + line + '.transfer_inbound_number')) || '',
+    });
+  } catch (err) { next(err); }
+});
+
 // GET /api/velin/my-day
 mobile.get('/my-day', async (req, res, next) => {
   try {

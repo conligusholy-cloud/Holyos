@@ -3,24 +3,47 @@
 // =============================================================================
 
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { loadAuth, clearAuth, AuthSnapshot } from '../lib/auth';
-import { API_BASE } from '../lib/api';
+import { API_BASE, api } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
 import type { RootStackParamList } from '../App';
 import Constants from 'expo-constants';
 
 export default function Me() {
   const [auth, setAuth] = useState<AuthSnapshot | null>(null);
+  const [assistant, setAssistant] = useState<{ enabled: boolean; number: string } | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   useEffect(() => {
-    loadAuth().then(setAuth);
+    loadAuth().then((a) => {
+      setAuth(a);
+      if (a?.jwt) {
+        api.myAssistant(a.jwt)
+          .then((r) => setAssistant({ enabled: !!r.enabled, number: r.number || '' }))
+          .catch(() => setAssistant(null));
+      }
+    });
   }, []);
+
+  // GSM kód pro podmíněné přesměrování — otevře volání (appka to nezvládne potichu).
+  function dialForward(prefix: string) {
+    const num = assistant?.number || '';
+    if (!num) return;
+    const code = `${prefix}*${num}#`;
+    Linking.openURL('tel:' + code.replace(/#/g, '%23')).catch(() =>
+      Alert.alert('Nelze otevřít volání', 'Zadej kód ručně: ' + code)
+    );
+  }
+  function cancelForward() {
+    Linking.openURL('tel:' + '##002%23').catch(() =>
+      Alert.alert('Nelze otevřít volání', 'Zadej ručně: ##002#')
+    );
+  }
 
   function confirmLogout() {
     Alert.alert(
@@ -58,6 +81,30 @@ export default function Me() {
           <Row label="HolyOS" value={API_BASE} />
           <Row label="Verze aplikace" value={appVersion} />
         </View>
+
+        {assistant && assistant.number ? (
+          <View style={styles.paCard}>
+            <Text style={styles.paTitle}>📞 Osobní asistent</Text>
+            <Text style={styles.paSub}>
+              {assistant.enabled ? 'Aktivní' : 'Vypnutý'} · {assistant.number}
+            </Text>
+            <Text style={styles.paHint}>
+              Přesměruj nezvednuté hovory na asistenta. Ťukni → otevře se volání, které to nastaví u operátora.
+            </Text>
+            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**61')}>
+              <Text style={styles.paBtnText}>Zapnout — když neberu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**67')}>
+              <Text style={styles.paBtnText}>Zapnout — když mám obsazeno</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**62')}>
+              <Text style={styles.paBtnText}>Zapnout — když jsem nedostupný</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.paCancelBtn} onPress={cancelForward}>
+              <Text style={styles.paCancelText}>Zrušit přesměrování</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={styles.reflectionBtn}
@@ -129,6 +176,36 @@ const styles = StyleSheet.create({
   },
   rowLabel: { color: colors.text2, fontSize: 13 },
   rowValue: { color: colors.text, fontSize: 13, flexShrink: 1, textAlign: 'right' },
+  paCard: {
+    width: '100%',
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    marginTop: spacing.xl,
+  },
+  paTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  paSub: { color: colors.text2, fontSize: 13, marginTop: 2 },
+  paHint: { color: colors.text2, fontSize: 12, marginTop: spacing.sm, lineHeight: 17 },
+  paBtn: {
+    backgroundColor: 'rgba(99,102,241,0.15)',
+    borderColor: 'rgba(99,102,241,0.35)',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    alignItems: 'center',
+  },
+  paBtnText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  paCancelBtn: {
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.sm,
+    alignItems: 'center',
+  },
+  paCancelText: { color: colors.danger, fontWeight: '600', fontSize: 13 },
   reflectionBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.md,

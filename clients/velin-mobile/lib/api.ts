@@ -232,6 +232,12 @@ export const api = {
       timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
     }),
 
+  // Velín — konfigurace osobního AI asistenta (číslo, zapnuto)
+  myAssistant: (jwt: string) =>
+    request<{ enabled: boolean; number: string; transfer_enabled: boolean; transfer_number: string }>(
+      'GET', '/api/velin/me/assistant', { jwt }
+    ),
+
   myDay: (jwt: string) =>
     request<{ date: string; plan: any; overdue: any[] }>('GET', '/api/velin/my-day', {
       jwt,
