@@ -88,7 +88,7 @@ function xmlAttr(s) {
 // TwiML pro spojení hovoru s ConversationRelay. actionUrl = kam Twilio zavolá,
 // až AI relace skončí (buď zákazník zavěsí, nebo AI pošle {type:'end'} kvůli
 // přepojení na živého člověka). Bez action by hovor po konci relace jen spadl.
-function twimlConnect(wsUrl, actionUrl, welcomeGreeting) {
+function twimlConnect(wsUrl, actionUrl, welcomeGreeting, voiceId) {
   const u = xmlAttr(wsUrl);
   const act = actionUrl ? ` action="${xmlAttr(actionUrl)}" method="POST"` : '';
   // Úvodní věta jako welcomeGreeting → Twilio ji řekne stejným hlasem (ElevenLabs)
@@ -96,6 +96,8 @@ function twimlConnect(wsUrl, actionUrl, welcomeGreeting) {
   const wg = welcomeGreeting && String(welcomeGreeting).trim()
     ? ` welcomeGreeting="${xmlAttr(String(welcomeGreeting).trim())}" welcomeGreetingInterruptible="none"`
     : '';
+  // Konkrétní hlas (mužský/ženský) — ElevenLabs voice ID. Prázdné → default hlas.
+  const vc = voiceId && String(voiceId).trim() ? ` voice="${xmlAttr(String(voiceId).trim())}"` : '';
   // interruptible="none" → AI NEjde přerušit řečí ani po celou dobu hovoru: vždy
   // dořekne větu a teprve pak nechá prostor druhé straně (žádné skákání do řeči).
   return (
@@ -103,11 +105,16 @@ function twimlConnect(wsUrl, actionUrl, welcomeGreeting) {
     '<Response>\n' +
     `  <Connect${act}>\n` +
     `    <ConversationRelay url="${u}" language="cs-CZ" ` +
-    `ttsProvider="${TTS_PROVIDER}" transcriptionProvider="${STT_PROVIDER}" interruptible="none"${wg} />\n` +
+    `ttsProvider="${TTS_PROVIDER}"${vc} transcriptionProvider="${STT_PROVIDER}" interruptible="none"${wg} />\n` +
     '  </Connect>\n' +
     '</Response>'
   );
 }
+// ElevenLabs voice ID podle pohlaví (mužský/ženský hlas asistenta). Konfigurovatelné
+// přes env; prázdné → Twilio použije výchozí hlas providera.
+const TTS_VOICE_FEMALE = process.env.VOICE_TTS_VOICE_FEMALE || '';
+const TTS_VOICE_MALE = process.env.VOICE_TTS_VOICE_MALE || '';
+function ttsVoiceId(gender) { return gender === 'male' ? TTS_VOICE_MALE : TTS_VOICE_FEMALE; }
 
 // E.164 normalizace (české 9místné → +420…, 00… → +…).
 function e164(num) {
@@ -536,16 +543,19 @@ router.post('/incoming', form, async (req, res) => {
   const action = `${PUBLIC_BASE}/api/voice/relay-end?mode=inbound&line=${encodeURIComponent(line)}`;
   const sid = req.body && req.body.CallSid;
   let greeting = '';
+  let voiceId = '';
   try {
     const get = settings ? settings.getSetting : null;
     greeting = (get ? await get(cfgKey(line, 'inbound_greeting')) : '') || '';
+    const gender = (get ? await get(cfgKey(line, 'tts_voice')) : '') || 'female';
+    voiceId = ttsVoiceId(gender);
   } catch (_) { greeting = ''; }
   if (!String(greeting).trim()) {
     greeting = 'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?';
   }
   // wg=1 → WS ví, že úvod řekne Twilio (welcomeGreeting), takže ho sám neposílá.
   // line=… → WS načte scénář/podklady správné linky a uloží ho k hovoru.
-  res.type('text/xml').send(twimlConnect(relayUrl('wg=1&line=' + encodeURIComponent(line)), action, greeting));
+  res.type('text/xml').send(twimlConnect(relayUrl('wg=1&line=' + encodeURIComponent(line)), action, greeting, voiceId));
   // Nahrávání spustíme až teď (po odeslání TwiML) a s opakováním — hovor v tuto
   // chvíli přechází do „in-progress", takže recordings.create už projde.
   startInboundRecording(sid, line);

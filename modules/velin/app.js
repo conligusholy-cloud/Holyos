@@ -400,6 +400,13 @@
           <input id="pa-number" value="${escapeHtml(cfg.number || '')}" placeholder="+420…">
         </div>
         <div class="form-group full">
+          <label>Hlas asistenta</label>
+          <select id="pa-voice">
+            <option value="female"${cfg.tts_voice !== 'male' ? ' selected' : ''}>👩 Ženský hlas (asistentka)</option>
+            <option value="male"${cfg.tts_voice === 'male' ? ' selected' : ''}>👨 Mužský hlas (asistent)</option>
+          </select>
+        </div>
+        <div class="form-group full">
           <label>Co AI řekne na začátku (uvítání)</label>
           <textarea id="pa-greeting" rows="3">${escapeHtml(g)}</textarea>
         </div>
@@ -427,6 +434,7 @@
       const body = {
         enabled: document.getElementById('pa-enabled').checked,
         number: document.getElementById('pa-number').value.trim(),
+        tts_voice: document.getElementById('pa-voice').value,
         inbound_greeting: document.getElementById('pa-greeting').value.trim(),
         inbound_prompt: document.getElementById('pa-prompt').value.trim(),
         transfer_enabled: document.getElementById('pa-transfer-enabled').checked,

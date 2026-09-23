@@ -729,6 +729,7 @@ admin.get('/personal-assistant/:personId', async (req, res, next) => {
       inbound_prompt: (await g('voice.' + line + '.inbound_prompt')) || '',
       transfer_enabled: !!(await g('voice.' + line + '.transfer_enabled')),
       transfer_number: (await g('voice.' + line + '.transfer_inbound_number')) || '',
+      tts_voice: (await g('voice.' + line + '.tts_voice')) || 'female',
     };
     res.json({ config: cfg });
   } catch (err) { next(err); }
@@ -753,6 +754,7 @@ admin.put('/personal-assistant/:personId', async (req, res, next) => {
     await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
     await s('voice.' + line + '.transfer_enabled', !!b.transfer_enabled, { type: 'boolean' });
     await s('voice.' + line + '.transfer_inbound_number', transferNumber, { type: 'string' });
+    await s('voice.' + line + '.tts_voice', (b.tts_voice === 'male' ? 'male' : 'female'), { type: 'string' });
     await s('voice.' + line + '.owner_person_id', personId, { type: 'number' });
 
     // Aktualizuj mapu číslo → linka (voice.line_numbers). Odeber staré číslo této linky.
