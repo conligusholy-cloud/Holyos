@@ -1020,9 +1020,59 @@ mobile.get('/me/assistant', async (req, res, next) => {
     res.json({
       enabled: !!(await g('voice.' + line + '.enabled')),
       number: (await g('voice.' + line + '.number')) || '',
+      inbound_greeting: (await g('voice.' + line + '.inbound_greeting')) || '',
+      inbound_prompt: (await g('voice.' + line + '.inbound_prompt')) || '',
       transfer_enabled: !!(await g('voice.' + line + '.transfer_enabled')),
       transfer_number: (await g('voice.' + line + '.transfer_inbound_number')) || '',
+      tts_voice: (await g('voice.' + line + '.tts_voice')) || 'female',
     });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/velin/me/assistant — uloží vlastní konfiguraci asistenta (z mobilu).
+mobile.put('/me/assistant', async (req, res, next) => {
+  try {
+    const personId = req.velin.person.id;
+    const line = paLine(personId);
+    const b = req.body || {};
+    const s = _paSettings.setSetting;
+    const number = paE164(b.number);
+    const transferNumber = paE164(b.transfer_number);
+    await s('voice.' + line + '.enabled', !!b.enabled, { type: 'boolean' });
+    await s('voice.' + line + '.number', number, { type: 'string' });
+    if (b.inbound_greeting !== undefined) await s('voice.' + line + '.inbound_greeting', String(b.inbound_greeting || '').slice(0, 2000), { type: 'string' });
+    if (b.inbound_prompt !== undefined) await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
+    await s('voice.' + line + '.transfer_enabled', !!b.transfer_enabled, { type: 'boolean' });
+    await s('voice.' + line + '.transfer_inbound_number', transferNumber, { type: 'string' });
+    if (b.tts_voice !== undefined) await s('voice.' + line + '.tts_voice', (b.tts_voice === 'male' ? 'male' : 'female'), { type: 'string' });
+    await s('voice.' + line + '.owner_person_id', personId, { type: 'number' });
+    // Mapa číslo → linka
+    let map = await _paSettings.getSetting('voice.line_numbers');
+    if (typeof map === 'string') { try { map = JSON.parse(map); } catch (_) { map = {}; } }
+    if (!map || typeof map !== 'object') map = {};
+    for (const k of Object.keys(map)) { if (String(map[k]) === line) delete map[k]; }
+    if (b.enabled && number) map[number] = line;
+    await s('voice.line_numbers', map, { type: 'json' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// GET /api/velin/me/assistant/calls — vlastní hovory/vzkazy asistenta (s nahrávkou + přepisem).
+mobile.get('/me/assistant/calls', async (req, res, next) => {
+  try {
+    const personId = req.velin.person.id;
+    const line = paLine(personId);
+    const calls = await prisma.voiceCall.findMany({
+      where: { OR: [{ line }, { owner_person_id: personId, agent_kind: 'personal' }] },
+      orderBy: { started_at: 'desc' },
+      take: 50,
+      select: {
+        id: true, from_number: true, caller_name: true, caller_intent: true, summary: true,
+        started_at: true, duration_sec: true, handoff: true, audio_url: true,
+        transcript: true, full_transcript: true,
+      },
+    });
+    res.json({ calls });
   } catch (err) { next(err); }
 });
 
