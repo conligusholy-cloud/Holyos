@@ -380,6 +380,12 @@
   }
 
   // ─── Doplňkové služby — Osobní AI asistent (zmeškané hovory) ───────────
+  window.__paCopy = function (text, btn) {
+    try {
+      navigator.clipboard.writeText(text);
+      if (btn) { const o = btn.textContent; btn.textContent = '✓ Zkopírováno'; setTimeout(() => { btn.textContent = o; }, 1500); }
+    } catch (e) { alert('Zkopíruj ručně: ' + text); }
+  };
   async function openAssistantModal(personId, name) {
     let cfg = {};
     try { const r = await apiGet('/admin/personal-assistant/' + personId); cfg = r.config || {}; } catch (_) {}
@@ -421,6 +427,21 @@
           <label>Číslo pro přepojení (tvůj telefon)</label>
           <input id="pa-transfer-number" value="${escapeHtml(cfg.transfer_number || '')}" placeholder="+420…">
         </div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div style="font-weight:700;margin-bottom:4px">📲 Přesměrování hovorů na asistenta</div>
+        <div style="color:var(--text2);font-size:12px;margin-bottom:10px">Zadej tyhle kódy na svém <b>telefonu</b> (napiš do vytáčení a stiskni volat). Asistent pak bere hovory, které nestihneš vzít. ${cfg.number ? '' : '<b style="color:#f2d675">Nejdřív ulož Twilio číslo výše.</b>'}</div>
+        ${cfg.number ? [
+          ['Když nezvednu', '**61*' + cfg.number + '#'],
+          ['Když mám obsazeno', '**67*' + cfg.number + '#'],
+          ['Když jsem nedostupný', '**62*' + cfg.number + '#'],
+          ['Zrušit přesměrování', '##002#'],
+        ].map((r) => `<div style="display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap">
+            <span style="font-size:12.5px;color:var(--text2);min-width:150px">${r[0]}</span>
+            <code style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px">${escapeHtml(r[1])}</code>
+            <button class="btn btn-sm btn-secondary" onclick="__paCopy('${r[1].replace(/'/g, '')}', this)">Kopírovat</button>
+          </div>`).join('') : ''}
+        <div style="color:var(--text2);font-size:11.5px;margin-top:8px">Pozor: nastav jen podmíněné přesměrování (nezvednuto/obsazeno/nedostupný), NE „přesměrovat vše" — jinak by ti telefon nikdy nezvonil.</div>
       </div>
       <div id="pa-msg" style="min-height:18px;font-size:13px;margin-top:8px"></div>
       <div class="modal-actions">
