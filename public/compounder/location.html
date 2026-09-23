@@ -286,10 +286,7 @@
       +   (s.highlight ? '<div style="font-size:13px;color:#a9cdec">'+esc(s.highlight)+'</div>' : '')
       +   '<div class="chips">'+infoChips(s).join('')+'</div>'
       + '</div>'
-      + '<div class="cta">'+stt+(s.status==='reserved'
-          ? '<button class="btn2" disabled style="opacity:.55;cursor:default">Rezervováno</button>'
-          : '<button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Blokovat lokalitu</button>')
-        +'</div>'
+      + '<div class="cta">'+stt+'</div>'
       + '</div>';
   }
 
