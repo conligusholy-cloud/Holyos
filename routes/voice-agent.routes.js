@@ -36,7 +36,10 @@ const VOICE_DEFAULT_FROM = process.env.VOICE_DEFAULT_FROM || '';
 // 'infolinka' = samostatná linka v modulu Servis. Config klíče voice.infolinka.<base>.
 // Mapa volané číslo → linka je v AppSetting voice.line_numbers = { "+420…":"infolinka" }.
 function normLine(l) {
-  return String(l || '').toLowerCase() === 'infolinka' ? 'infolinka' : 'obchod';
+  const s = String(l || '').toLowerCase();
+  if (s === 'infolinka') return 'infolinka';
+  if (/^osobni-\d+$/.test(s)) return s; // osobní AI asistent Velína (per-uživatelská linka)
+  return 'obchod';
 }
 // Klíč nastavení pro danou linku. Obchod = legacy (voice.<base>), ostatní = voice.<line>.<base>.
 function cfgKey(line, base) {

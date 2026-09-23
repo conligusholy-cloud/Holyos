@@ -235,8 +235,11 @@ function attach(server) {
 
     const targetId = q.target || null;
     const mode = targetId ? 'outbound' : 'inbound';
-    // Příchozí linka (dle volaného čísla): 'obchod' (výchozí) | 'infolinka'.
-    const line = (q.line === 'infolinka') ? 'infolinka' : 'obchod';
+    // Příchozí linka (dle volaného čísla): 'obchod' (výchozí) | 'infolinka' |
+    // 'osobni-<personId>' (osobní AI asistent Velína).
+    const line = (q.line === 'infolinka')
+      ? 'infolinka'
+      : (/^osobni-\d+$/.test(String(q.line || '')) ? String(q.line) : 'obchod');
     // Klíč nastavení pro tuto linku (obchod = legacy voice.<base>, jinak voice.<line>.<base>).
     const lineKey = (base) => (line === 'obchod') ? ('voice.' + base) : ('voice.' + line + '.' + base);
     // Úvod řekne Twilio přes welcomeGreeting (neinteruptovatelně) → WS ho sám neposílá.
@@ -504,6 +507,9 @@ function attach(server) {
             campaign_target_id: state.targetId || null,
             sms_log: state.smsLog && state.smsLog.length ? state.smsLog : undefined,
           };
+          // Osobní asistent (linka osobni-<personId>) → přiřaď majitele hovoru.
+          const _paM = /^osobni-(\d+)$/.exec(String(line || ''));
+          if (_paM) data.owner_person_id = parseInt(_paM[1], 10);
           // UPSERT podle callSid: nahrávka mohla dorazit dřív a záznam už existuje
           // (jen s audio_url) → doplníme ho, ať nevznikne duplikát a nepřijdeme o nahrávku.
           let existing = null;

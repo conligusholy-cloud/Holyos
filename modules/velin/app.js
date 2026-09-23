@@ -315,7 +315,7 @@
       wrap.innerHTML = `
         <table class="data-table">
           <thead>
-            <tr><th>Jméno</th><th>Zařízení</th><th>Platforma</th><th>Naposledy aktivní</th><th>Stav</th></tr>
+            <tr><th>Jméno</th><th>Zařízení</th><th>Platforma</th><th>Naposledy aktivní</th><th>Stav</th><th>Doplňkové služby</th></tr>
           </thead>
           <tbody>${users.map((u) => {
             const name = escapeHtml(((u.person.first_name || '') + ' ' + (u.person.last_name || '')).trim() || '—');
@@ -328,11 +328,15 @@
               <td>${plat}</td>
               <td>${last}</td>
               <td>${stav}</td>
+              <td><button class="btn btn-sm btn-secondary" data-assistant="${u.person.id}" data-name="${escapeHtml(name)}" title="Doplňkové služby">⚙️</button></td>
             </tr>`;
           }).join('')}
           </tbody>
         </table>
       `;
+      wrap.querySelectorAll('[data-assistant]').forEach((b) => b.addEventListener('click', () => {
+        openAssistantModal(parseInt(b.dataset.assistant, 10), b.dataset.name || '');
+      }));
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
@@ -373,6 +377,87 @@
         `;
       } catch (e) { alert('Chyba: ' + e.message); }
     });
+  }
+
+  // ─── Doplňkové služby — Osobní AI asistent (zmeškané hovory) ───────────
+  async function openAssistantModal(personId, name) {
+    let cfg = {};
+    try { const r = await apiGet('/admin/personal-assistant/' + personId); cfg = r.config || {}; } catch (_) {}
+    const g = (cfg.inbound_greeting) || 'Dobrý den, dovolali jste se na osobního asistenta. Kolega teď nemůže hovor přijmout. Řekněte mi prosím, kdo volá a co potřebujete — předám mu to.';
+    openModal(`
+      <h2>⚙️ Doplňkové služby — ${escapeHtml(name)}</h2>
+      <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-size:20px">📞</span>
+          <div><div style="font-weight:700">Osobní asistent na zmeškané hovory</div>
+          <div style="color:var(--text2);font-size:12px">Přesměruj nezvednuté/odmítnuté hovory na Twilio číslo asistenta. AI zvedne, řekne tvůj text, zjistí kdo volá a co potřebuje, a zapíše ti to.</div></div>
+        </div>
+        <label class="pa-chk" style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:14px">
+          <input type="checkbox" id="pa-enabled" ${cfg.enabled ? 'checked' : ''}> <b>Služba zapnutá</b>
+        </label>
+        <div class="form-group full" style="margin-top:8px">
+          <label>Twilio číslo asistenta (koupené v Twilio)</label>
+          <input id="pa-number" value="${escapeHtml(cfg.number || '')}" placeholder="+420…">
+        </div>
+        <div class="form-group full">
+          <label>Co AI řekne na začátku (uvítání)</label>
+          <textarea id="pa-greeting" rows="3">${escapeHtml(g)}</textarea>
+        </div>
+        <div class="form-group full">
+          <label>Instrukce pro AI (nepovinné — jak se má chovat, co zjišťovat)</label>
+          <textarea id="pa-prompt" rows="3" placeholder="Např. Zjisti jméno, telefon a důvod hovoru. Buď stručný a milý.">${escapeHtml(cfg.inbound_prompt || '')}</textarea>
+        </div>
+        <label class="pa-chk" style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px">
+          <input type="checkbox" id="pa-transfer-enabled" ${cfg.transfer_enabled ? 'checked' : ''}> Nejdřív zkusit přepojit na mé číslo
+        </label>
+        <div class="form-group full">
+          <label>Číslo pro přepojení (tvůj telefon)</label>
+          <input id="pa-transfer-number" value="${escapeHtml(cfg.transfer_number || '')}" placeholder="+420…">
+        </div>
+      </div>
+      <div id="pa-msg" style="min-height:18px;font-size:13px;margin-top:8px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="__velinCloseModal()">Zavřít</button>
+        <button class="btn btn-primary" id="pa-save">Uložit</button>
+      </div>
+      <h3 style="margin:20px 0 8px;font-size:15px">📋 Poslední hovory asistenta</h3>
+      <div id="pa-calls"><div class="empty-state">Načítám…</div></div>
+    `);
+    document.getElementById('pa-save').addEventListener('click', async () => {
+      const body = {
+        enabled: document.getElementById('pa-enabled').checked,
+        number: document.getElementById('pa-number').value.trim(),
+        inbound_greeting: document.getElementById('pa-greeting').value.trim(),
+        inbound_prompt: document.getElementById('pa-prompt').value.trim(),
+        transfer_enabled: document.getElementById('pa-transfer-enabled').checked,
+        transfer_number: document.getElementById('pa-transfer-number').value.trim(),
+      };
+      const msg = document.getElementById('pa-msg');
+      if (body.enabled && !body.number) { msg.style.color = '#ef4444'; msg.textContent = 'Zadej Twilio číslo asistenta.'; return; }
+      if (body.transfer_enabled && !body.transfer_number) { msg.style.color = '#ef4444'; msg.textContent = 'Zapnul jsi přepojení — zadej číslo pro přepojení.'; return; }
+      const btn = document.getElementById('pa-save'); btn.disabled = true; msg.style.color = 'var(--text2)'; msg.textContent = 'Ukládám…';
+      try { await apiSend('PUT', '/admin/personal-assistant/' + personId, body); msg.style.color = '#22c55e'; msg.textContent = '✓ Uloženo'; btn.disabled = false; }
+      catch (e) { msg.style.color = '#ef4444'; msg.textContent = 'Chyba: ' + e.message; btn.disabled = false; }
+    });
+    // Přehled hovorů
+    try {
+      const { calls } = await apiGet('/admin/personal-assistant/' + personId + '/calls');
+      const box = document.getElementById('pa-calls');
+      if (!calls || !calls.length) { box.innerHTML = '<div class="empty-state" style="padding:16px">Zatím žádné hovory.</div>'; }
+      else {
+        box.innerHTML = `<table class="data-table"><thead><tr><th>Kdy</th><th>Kdo volal</th><th>Číslo</th><th>Co potřeboval</th><th>Přepojeno</th></tr></thead><tbody>${
+          calls.map((c) => `<tr>
+            <td>${new Date(c.started_at).toLocaleString('cs-CZ')}</td>
+            <td>${escapeHtml(c.caller_name || '—')}</td>
+            <td>${escapeHtml(c.from_number || '—')}</td>
+            <td style="max-width:340px">${escapeHtml(c.caller_intent || c.summary || '—')}</td>
+            <td>${c.handoff ? '<span class="badge b-done">Ano</span>' : '<span class="badge b-cancelled">Vzkaz</span>'}</td>
+          </tr>`).join('')
+        }</tbody></table>`;
+      }
+    } catch (e) {
+      const box = document.getElementById('pa-calls'); if (box) box.innerHTML = `<div class="empty-state" style="color:#ef4444;padding:16px">Chyba: ${escapeHtml(e.message)}</div>`;
+    }
   }
 
   // ─── Tab: Skill profily ────────────────────────────────────────────────
