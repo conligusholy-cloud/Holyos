@@ -349,32 +349,52 @@ async function backfillGeocodes(kiosks, geo) {
   } catch (_) {} finally { _geoRunning = false; }
 }
 
+// Klíč města z názvu/adresy (bez diakritiky, první slovo) — pro spárování KML×SIS.
+function cityKey(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9, ]/g, ' ').trim().split(/[\s,]+/)[0] || '';
+}
+
 async function fetchExistingLaundromats() {
   const now = Date.now();
   if (_existingCache.data && _existingCache.data.length && now - _existingCache.at < 6 * 3600 * 1000) return _existingCache.data;
-  const kiosks = await fetchSisKiosks();
-  if (kiosks.length) {
-    const geo = await loadGeoCache();
-    const out = [];
-    let missing = 0;
-    for (const k of kiosks) {
-      const addr = (k.label || '').trim();
-      if (!isRealAddr(addr)) continue; // přeskoč testovací/neúplné
-      const g = geo[addr];
-      if (g && g.lat != null && g.lon != null) {
-        out.push({ name: addr, lat: g.lat, lon: g.lon, note: (k.companyName || '') + (k.inIncubator ? ' · inkubátor' : ' · zavedená') });
-      } else if (!g) { missing++; }
+
+  // 1) PRIMÁRNÍ zdroj souřadnic: kdepereme (Google My Maps KML) — přesné GPS.
+  const list = (await fetchKmlLaundromats()).slice();
+  const kmlCities = new Set(list.map((p) => cityKey(p.name)));
+
+  // 2) DOPLNĚK: SIS lokality, které v KML (dle města) nejsou — přes geokódovanou cache.
+  try {
+    const kiosks = await fetchSisKiosks();
+    if (kiosks.length) {
+      const geo = await loadGeoCache();
+      let missing = 0;
+      for (const k of kiosks) {
+        const addr = (k.label || '').trim();
+        if (!isRealAddr(addr) || kmlCities.has(cityKey(addr))) continue;
+        const g = geo[addr];
+        if (g && g.lat != null && g.lon != null) {
+          list.push({ name: addr, lat: g.lat, lon: g.lon, note: (k.companyName || '') + (k.inIncubator ? ' · inkubátor' : ' · zavedená') });
+        } else if (!g) { missing++; }
+      }
+      if (missing) backfillGeocodes(kiosks, geo); // doplní GPS chybějících na pozadí
     }
-    if (missing) backfillGeocodes(kiosks, geo); // doběhne na pozadí
-    // Cachuj jen KOMPLETNÍ výsledek (nic nechybí). Dokud se dogeokódovává,
-    // vracíme rostoucí částečný seznam BEZ cache, ať se job příště zas nakopne.
-    if (out.length && missing === 0) { _existingCache = { at: now, data: out }; return out; }
-    if (out.length) return out;
-  }
-  return await fetchKmlLaundromats(); // fallback (necachujeme, ať to zkusí SIS znovu)
+  } catch (_) { /* SIS doplněk je best-effort */ }
+
+  if (list.length) _existingCache = { at: now, data: list };
+  return list;
 }
 
-// Fallback zdroj: Google My Maps „WHERE WE LAUNDRY [EU]" (KML).
+// Primární zdroj souřadnic: Google My Maps „WHERE WE LAUNDRY [EU]" (KML).
+// Poslední úspěšné načtení držíme v AppSetting, aby výpadek Googlu nevynuloval mapu.
+const KML_SNAPSHOT_KEY = 'pradlomat.kml_snapshot';
+async function loadKmlSnapshot() {
+  try { const row = await prisma.appSetting.findUnique({ where: { key: KML_SNAPSHOT_KEY } }); const j = row && row.value ? JSON.parse(row.value) : null; return (j && Array.isArray(j.list)) ? j.list : []; }
+  catch (_) { return []; }
+}
+async function saveKmlSnapshot(list) {
+  try { await prisma.appSetting.upsert({ where: { key: KML_SNAPSHOT_KEY }, update: { value: JSON.stringify({ list, at: Date.now() }) }, create: { key: KML_SNAPSHOT_KEY, value: JSON.stringify({ list, at: Date.now() }) } }); } catch (_) {}
+}
 async function fetchKmlLaundromats() {
   const url = 'https://www.google.com/maps/d/kml?forcekml=1&mid=' + MYMAPS_MID;
   const ctrl = new AbortController();
@@ -384,7 +404,7 @@ async function fetchKmlLaundromats() {
     const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': NOMINATIM_UA } });
     if (r.ok) xml = await r.text();
   } catch (_) {} finally { clearTimeout(to); }
-  if (!xml) return [];
+  if (!xml) return await loadKmlSnapshot(); // Google nedostupný → poslední uložený stav
   const decode = (s) => String(s || '')
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
@@ -404,7 +424,8 @@ async function fetchKmlLaundromats() {
       if (Number.isFinite(lat) && Number.isFinite(lon)) out.push({ name, note: note || null, lat, lon, country });
     }
   }
-  return out;
+  if (out.length) { saveKmlSnapshot(out); return out; }
+  return await loadKmlSnapshot();
 }
 router.get('/public/existing-laundromats', async (req, res) => {
   try { res.json(await fetchExistingLaundromats()); }
