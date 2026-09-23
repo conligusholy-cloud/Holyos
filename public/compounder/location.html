@@ -504,15 +504,18 @@
       + (towns?('<div class="towns">'+towns+'</div>'):'')
       +'</div>';
 
-    // Karty: jen připravená místa do radiusu, seřazená od nejbližšího k centru.
+    // Karty: připravená místa do radiusu, od nejbližšího. Zákazníkovi ale
+    // neukazujeme celý sklad — jen realisticky 1–2 nejbližší (dle velikosti města).
     if(r.center){
       var rkm = r.radius_km || 15;
       var near = all.filter(function(s){ return s.latitude!=null && s.longitude!=null; })
         .map(function(s){ s.__center_km = Math.round(distKmF(r.center.lat,r.center.lon,s.latitude,s.longitude)*10)/10; s.__center_name = title; return s; })
         .filter(function(s){ return s.__center_km <= rkm; })
         .sort(function(a,b){ return a.__center_km - b.__center_km; });
-      render(near);
-      var cnt=document.getElementById('count'); if(cnt) cnt.textContent = near.length+' míst do '+rkm+' km';
+      var showMax = (r.capacity && r.capacity.recommended != null && r.capacity.recommended < 2) ? 1 : 2;
+      var shown = near.slice(0, showMax);
+      render(shown);
+      var cnt=document.getElementById('count'); if(cnt) cnt.textContent = shown.length ? ('nabízíme '+shown.length+' '+plural(shown.length)) : '';
     }
   }
 
