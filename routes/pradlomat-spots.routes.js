@@ -480,6 +480,38 @@ router.post('/public/:code/inquiry', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/pradlomat-spots/public/:code/block — „Opravdu blokovat" z webu.
+// Založí poptávku a lokalitu překlopí na rezervováno (stáhne z nabídky).
+router.post('/public/:code/block', async (req, res, next) => {
+  try {
+    const parsed = inquirySchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatný formulář' });
+    const d = parsed.data;
+    if (!d.phone && !d.email) return res.status(400).json({ error: 'Zadejte telefon nebo e-mail.' });
+
+    const spot = await prisma.pradlomatSpot.findUnique({ where: { code: String(req.params.code || '') } });
+    if (!spot || !['published', 'reserved'].includes(spot.status)) return res.status(404).json({ error: 'Místo nenalezeno' });
+    if (spot.status === 'reserved') return res.status(409).json({ error: 'Tuto lokalitu už si někdo zablokoval.' });
+
+    await prisma.pradlomatSpotInquiry.create({
+      data: {
+        spot_id: spot.id,
+        name: d.name || null, phone: d.phone || null, email: d.email || null,
+        message: '🔒 BLOKACE lokality přes web' + (d.message ? (' — ' + d.message) : ''),
+        source: 'pradlomaty.info/location (blokace)',
+      },
+    });
+    await prisma.pradlomatSpot.update({ where: { id: spot.id }, data: { status: 'reserved', is_public: true } });
+
+    notifyOwners({
+      title: '🔒 Blokace lokality',
+      body: `${d.name || d.phone || d.email || 'Zájemce'} zablokoval(a): ${spot.title}`,
+    });
+
+    res.status(201).json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // =============================================================================
 // INTERNÍ ENDPOINTY (vyžadují přihlášení)
 // =============================================================================

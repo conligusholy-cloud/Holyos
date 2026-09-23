@@ -115,6 +115,7 @@
   .gallery{display:flex;gap:8px;overflow-x:auto;margin-top:16px;padding-bottom:4px}
   .gallery img{height:92px;width:auto;border-radius:10px;border:.5px solid var(--line);object-fit:cover;flex:0 0 auto}
   #mmap{height:220px;border-radius:12px;border:.5px solid var(--line);margin-top:18px;background:#0e1e33}
+  .mblock.reserved{margin-top:22px;padding:16px;background:var(--card2);border:.5px solid rgba(234,179,8,.4);border-radius:14px;color:#f2d675;font-weight:600;text-align:center}
 
   form{margin-top:22px;background:var(--card2);border:.5px solid var(--line);border-radius:14px;padding:18px}
   form h3{font-size:17px;font-weight:600;margin-bottom:4px}
@@ -285,7 +286,10 @@
       +   (s.highlight ? '<div style="font-size:13px;color:#a9cdec">'+esc(s.highlight)+'</div>' : '')
       +   '<div class="chips">'+infoChips(s).join('')+'</div>'
       + '</div>'
-      + '<div class="cta">'+stt+'<button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Zobrazit detail</button></div>'
+      + '<div class="cta">'+stt+(s.status==='reserved'
+          ? '<button class="btn2" disabled style="opacity:.55;cursor:default">Rezervováno</button>'
+          : '<button class="btn2" onclick="event.stopPropagation();__openSpot(\''+esc(s.code)+'\')">Blokovat lokalitu</button>')
+        +'</div>'
       + '</div>';
   }
 
@@ -338,6 +342,7 @@
       +   (facts ? '<div class="mfacts">'+facts+'</div>' : '')
       +   gallery
       +   (hasMap ? '<div id="mmap"></div>' : '')
+      +   blockForm(s)
       + '</div>';
     document.getElementById('ov').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -352,6 +357,43 @@
         }catch(e){}
       }, 60);
     }
+  }
+
+  function blockForm(s){
+    if(s.status==='reserved') return '<div class="mblock reserved">🔒 Tato lokalita je již rezervovaná.</div>';
+    return '<div class="mblock">'
+      + '<h3>Blokovat lokalitu</h3>'
+      + '<div class="sub">Zablokujte si toto místo — dočasně ho stáhneme z nabídky a obchodník se vám ozve. Nezávazné.</div>'
+      + '<form onsubmit="return __submitBlock(event,\''+esc(s.code)+'\')">'
+      +   '<div class="field"><label>Jméno</label><input name="name" type="text" autocomplete="name"></div>'
+      +   '<div class="frow">'
+      +     '<div class="field"><label>Telefon</label><input name="phone" type="tel" autocomplete="tel" placeholder="+420…"></div>'
+      +     '<div class="field"><label>E-mail</label><input name="email" type="email" autocomplete="email"></div>'
+      +   '</div>'
+      +   '<button class="btn" type="submit">🔒 Opravdu blokovat</button>'
+      +   '<div class="fstatus" data-fstatus></div>'
+      + '</form></div>';
+  }
+
+  window.__submitBlock = function(ev, code){
+    ev.preventDefault();
+    var f = ev.target; var st = f.querySelector('[data-fstatus]');
+    var body = { name:f.name.value.trim(), phone:f.phone.value.trim(), email:f.email.value.trim() };
+    if(!body.phone && !body.email){ st.className='fstatus err'; st.textContent='Zadejte prosím telefon nebo e-mail.'; return false; }
+    if(!confirm('Opravdu chcete zablokovat tuto lokalitu? Stáhneme ji z nabídky a ozveme se vám.')) return false;
+    var btn = f.querySelector('button'); btn.disabled=true; st.className='fstatus'; st.textContent='Blokuji…';
+    fetch(API+'/'+encodeURIComponent(code)+'/block', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+      .then(function(res){
+        if(res.ok){ st.className='fstatus ok'; st.textContent='Hotovo — lokalita je pro vás zablokovaná. Ozveme se vám.'; btn.textContent='✓ Zablokováno';
+          setTimeout(function(){ closeModal(); reloadSpots(); }, 1600); }
+        else { st.className='fstatus err'; st.textContent=(res.j&&res.j.error)||'Nepodařilo se zablokovat.'; btn.disabled=false; }
+      }).catch(function(){ st.className='fstatus err'; st.textContent='Chyba spojení, zkuste to prosím znovu.'; btn.disabled=false; });
+    return false;
+  };
+
+  function reloadSpots(){
+    fetch(API).then(function(r){ return r.json(); }).then(function(data){ all=Array.isArray(data)?data:[]; applyFilter(); renderMarkers(all); }).catch(function(){});
   }
 
   function inquiryForm(code){
