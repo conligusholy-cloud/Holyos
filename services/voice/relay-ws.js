@@ -526,6 +526,24 @@ function attach(server) {
         console.warn('[voice] uložení hovoru selhalo:', e.message);
       }
 
+      // Osobní asistent: nový vzkaz → push + zvoneček majiteli (do Velína/HolyOS).
+      try {
+        if (saved && saved.agent_kind === 'personal' && saved.owner_person_id) {
+          const who = saved.caller_name || saved.from_number || 'Neznámý volající';
+          const what = saved.caller_intent || saved.summary || 'Nový vzkaz od asistenta';
+          const title = saved.handoff ? '📞 Přepojený hovor' : '📩 Nový vzkaz asistenta';
+          const bodyTxt = who + ': ' + String(what).slice(0, 140);
+          let notifyPerson = null, createNotification = null;
+          try { notifyPerson = require('../push/expo-push').notifyPerson; } catch (_) {}
+          try { createNotification = require('../../routes/notifications.routes').createNotification; } catch (_) {}
+          if (notifyPerson) Promise.resolve(notifyPerson(prisma, saved.owner_person_id, { title, body: bodyTxt, data: { link: '/modules/velin/index.html' }, sound: 'default' })).catch(() => {});
+          if (createNotification) {
+            const p = await prisma.person.findUnique({ where: { id: saved.owner_person_id }, select: { user_id: true } }).catch(() => null);
+            if (p && p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body: bodyTxt, link: '/modules/velin/index.html' }).catch(() => {});
+          }
+        }
+      } catch (e) { console.warn('[voice] notifikace osobního asistenta selhala:', e.message); }
+
       if (mode === 'outbound' && state.target) {
         // Aktualizuj cíl kampaně. Pozor: pokud AMD mezitím označil záznamník
         // (no_answer/failed), neklobrč to na 'done'.

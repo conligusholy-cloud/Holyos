@@ -782,6 +782,7 @@ admin.get('/personal-assistant/:personId/calls', async (req, res, next) => {
       select: {
         id: true, from_number: true, caller_name: true, caller_intent: true, summary: true,
         started_at: true, duration_sec: true, handoff: true, audio_url: true,
+        transcript: true, full_transcript: true,
       },
     });
     res.json({ calls });

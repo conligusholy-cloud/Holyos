@@ -453,12 +453,15 @@
       const box = document.getElementById('pa-calls');
       if (!calls || !calls.length) { box.innerHTML = '<div class="empty-state" style="padding:16px">Zatím žádné hovory.</div>'; }
       else {
-        box.innerHTML = `<table class="data-table"><thead><tr><th>Kdy</th><th>Kdo volal</th><th>Číslo</th><th>Co potřeboval</th><th>Přepojeno</th></tr></thead><tbody>${
+        window.__paCalls = {}; calls.forEach((c) => { window.__paCalls[c.id] = c; });
+        box.innerHTML = `<table class="data-table"><thead><tr><th>Kdy</th><th>Kdo volal</th><th>Číslo</th><th>Co potřeboval</th><th>Nahrávka</th><th>Přepis</th><th>Přepojeno</th></tr></thead><tbody>${
           calls.map((c) => `<tr>
             <td>${new Date(c.started_at).toLocaleString('cs-CZ')}</td>
             <td>${escapeHtml(c.caller_name || '—')}</td>
             <td>${escapeHtml(c.from_number || '—')}</td>
-            <td style="max-width:340px">${escapeHtml(c.caller_intent || c.summary || '—')}</td>
+            <td style="max-width:300px">${escapeHtml(c.caller_intent || c.summary || '—')}</td>
+            <td>${c.audio_url ? `<audio controls preload="none" src="${escapeHtml(c.audio_url)}" style="height:30px;max-width:180px"></audio>` : '<span style="color:var(--text2)">—</span>'}</td>
+            <td>${((c.full_transcript && c.full_transcript.trim()) || (Array.isArray(c.transcript) && c.transcript.length)) ? `<button class="btn btn-secondary btn-sm" onclick="__paShowTranscript('${c.id}')">📄 Přečíst</button>` : '<span style="color:var(--text2)">—</span>'}</td>
             <td>${c.handoff ? '<span class="badge b-done">Ano</span>' : '<span class="badge b-cancelled">Vzkaz</span>'}</td>
           </tr>`).join('')
         }</tbody></table>`;
@@ -467,6 +470,31 @@
       const box = document.getElementById('pa-calls'); if (box) box.innerHTML = `<div class="empty-state" style="color:#ef4444;padding:16px">Chyba: ${escapeHtml(e.message)}</div>`;
     }
   }
+
+  // Přehrání/přečtení vzkazu — otevře přepis hovoru asistenta.
+  window.__paShowTranscript = function (id) {
+    const c = (window.__paCalls || {})[id]; if (!c) return;
+    let body = '';
+    if (c.full_transcript && c.full_transcript.trim()) {
+      body = '<div style="white-space:pre-wrap;line-height:1.6;font-size:14px">' + escapeHtml(c.full_transcript.trim()) + '</div>';
+    } else if (Array.isArray(c.transcript) && c.transcript.length) {
+      body = c.transcript.map((t) => {
+        const who = t.role === 'agent' ? 'Asistent' : 'Volající';
+        const col = t.role === 'agent' ? '#8b5cf6' : '#22c55e';
+        return '<div style="margin:6px 0"><b style="color:' + col + '">' + who + ':</b> ' + escapeHtml(t.text || '') + '</div>';
+      }).join('');
+    } else { body = '<div class="empty-state">Přepis není k dispozici.</div>'; }
+    const audio = c.audio_url ? '<audio controls preload="none" src="' + escapeHtml(c.audio_url) + '" style="width:100%;margin:8px 0 14px"></audio>' : '';
+    const meta = (c.caller_name ? '<b>' + escapeHtml(c.caller_name) + '</b> · ' : '') + escapeHtml(c.from_number || '') + ' · ' + new Date(c.started_at).toLocaleString('cs-CZ');
+    openModal(`
+      <h2>📄 Vzkaz asistenta</h2>
+      <div style="color:var(--text2);font-size:13px;margin-bottom:6px">${meta}</div>
+      ${c.summary ? '<div style="background:var(--surface2,#1a1d24);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px">🧠 ' + escapeHtml(c.summary) + '</div>' : ''}
+      ${audio}
+      <div style="max-height:50vh;overflow-y:auto;border-top:1px solid var(--border);padding-top:10px">${body}</div>
+      <div class="modal-actions"><button class="btn btn-primary" onclick="__velinCloseModal()">Zavřít</button></div>
+    `);
+  };
 
   // ─── Tab: Skill profily ────────────────────────────────────────────────
   let _peopleSkillsCache = [];
