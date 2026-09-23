@@ -99,6 +99,26 @@
     new_machines_y10: 1
   };
 
+  // ── Režim DPH: 'payer' = plátce (vše bez DPH), 'nonpayer' = neplátce (vše s DPH) ──
+  // Neplátce si DPH neodečítá ani neodvádí → všechny částky se zobrazí × (1+DPH),
+  // ale MODEL (STATE) drží pořád základ bez DPH (jeden zdroj pravdy).
+  var VAT_MODE = 'payer';
+  function _vatMul() { return VAT_MODE === 'nonpayer' ? (1 + (Number(STATE && STATE.dph) || 0.21)) : 1; }
+  function _dphLbl() { return VAT_MODE === 'nonpayer' ? _t('s DPH') : _t('bez DPH'); }
+  // Klíče, které se v režimu neplátce přepočítají × (1+DPH). Ceník služeb (s DPH)
+  // se NEškáluje — to je referenční cena, kterou zákazník platí tak jako tak.
+  var VAT_SCALE = {
+    cena_pradlomatu: 1, cena_projekt: 1, cena_pripojek: 1, investice_celkem: 1,
+    obrat_na_zakaznika: 1, obrat_den: 1, obrat_mesic: 1,
+    naklad_pracich_cyklu_mesic: 1, naklad_na_zakaznika: 1,
+    udrzba: 1, software: 1, internet: 1, infolinka: 1, pojisteni: 1, najem: 1, servis: 1, fixni_mesic: 1,
+    cena_elektriny: 1, cena_vodne: 1, cena_stocne: 1, e_elektriny: 1, e_vodne: 1, e_stocne: 1,
+    cena_prasku: 1, cena_avivaze: 1,
+    naklad_voda_velka: 1, naklad_el_velka: 1, naklad_prasek_velka: 1, naklad_aviv_velka: 1, naklad_velka_bez_aviv: 1, naklad_velka_s_aviv: 1, naklad_velka_prumer: 1,
+    naklad_voda_mala: 1, naklad_el_mala: 1, naklad_prasek_mala: 1, naklad_aviv_mala: 1, naklad_mala_bez_aviv: 1, naklad_mala_s_aviv: 1, naklad_mala_prumer: 1,
+    naklad_susicka_15: 1, naklad_susicka_30: 1, naklad_susicka_45: 1, prumer_prani: 1, prumer_suseni: 1
+  };
+
   // ── Měna zobrazení (model je bázově v EUR; přepínač přepočítá stav i symbol) ──
   var CUR = { code: 'EUR', sym: '€' };
   // Peněžní pole (převádějí se při změně měny). Spotřeby (voda/el/prášek/aviváž),
@@ -157,6 +177,16 @@
     ['CZK', 'EUR', 'USD', 'GBP'].forEach(function (c) {
       var on = c === CUR.code;
       html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setCur(\'' + c + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + CUR_SYMS[c] + '</button>';
+    });
+    return html;
+  }
+  // Přepínač režimu DPH (plátce / neplátce) — pro porovnání pohledů.
+  function vatButtons() {
+    var opts = [['payer', _t('Plátce DPH')], ['nonpayer', _t('Neplátce DPH')]];
+    var html = '<span style="font-size:12px;color:var(--text2);margin:0 4px 0 2px">' + _t('DPH') + ':</span>';
+    opts.forEach(function (o) {
+      var on = o[0] === VAT_MODE;
+      html += '<button type="button" class="btn btn-sm" onclick="window.PradlomatTool._setVat(\'' + o[0] + '\')" style="padding:6px 10px;' + (on ? 'background:#c9a24b;border-color:#c9a24b;color:#241c05;font-weight:700;' : '') + '">' + o[1] + '</button>';
     });
     return html;
   }
@@ -427,7 +457,7 @@
     var inputCell;
     if (ENFORCE_LOCKS && locked) {
       // Inline aktuální hodnotu (bindInputs readonly chipy neřeší)
-      var displayVal = formatInputValue(STATE[key], dec);
+      var displayVal = formatInputValue(STATE[key] * (VAT_SCALE[key] ? _vatMul() : 1), dec);
       inputCell = '<div class="pe-readonly pe-locked-display" data-key="' + key + '">' + displayVal + '</div>';
     } else {
       inputCell = '<input type="number" class="pe-input' + (locked && LOCKABLE ? ' pe-input-locked' : '') +
@@ -495,6 +525,7 @@
         '<span class="pe-legend"><span class="pe-sw ro"></span> ' + _t('Vypočítané') + '</span>' +
         '<div style="flex:1"></div>' +
         '<span class="pe-ver" style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">' + verButtons() + '</span>' +
+        '<span class="pe-vat" style="display:inline-flex;align-items:center;gap:4px;margin-right:10px">' + vatButtons() + '</span>' +
         '<span class="pe-cur" style="display:inline-flex;align-items:center;gap:4px;margin-right:6px">' + curButtons() + '</span>' +
         saveDefaultsBtn +
         '<button class="btn btn-secondary btn-sm" onclick="window.PradlomatTool.resetDefaults()">' + _t('↺ Tovární hodnoty') + '</button>' +
@@ -517,9 +548,9 @@
     // Výsledky nahoře (sticky-feel)
     html +=
       '<div class="pe-results" id="pe-results-block">' +
-        '<div class="pe-result-card" id="pe-rc-investice"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + ' · ' + _t('bez DPH') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-investice"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + ' · ' + _dphLbl() + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-obrat"><div class="pe-rc-label">' + _t('Obrat / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-obrat-sub">—' + _t(' zákazníků / měs') + '</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + ' · ' + _t('bez DPH') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + ' · ' + _dphLbl() + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-navratnost"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Návratnost') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">—' + _t(' měsíců') + '</div></div>' +
       '</div>';
 
@@ -529,18 +560,18 @@
       inputRow(_t('Ø cena projekt + povolení'), 'cena_projekt', '€', 10, 0) +
       inputRow(_t('Ø cena přípojek'), 'cena_pripojek', '€', 10, 0) +
       outRow(_t('Investice celkem'), 'investice_celkem', '€', true);
-    html += (NO_PRICE ? '<div style="display:none">' : '') + section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové') + ' · ' + _t('bez DPH'), s1) + (NO_PRICE ? '</div>' : '');
+    html += (NO_PRICE ? '<div style="display:none">' : '') + section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové') + ' · ' + _dphLbl(), s1) + (NO_PRICE ? '</div>' : '');
 
     // Sekce: Modelace
     var s2 =
-      inputRow(_t('Ø obrat na zákazníka') + ' (' + _t('bez DPH') + ')', 'obrat_na_zakaznika', '€', 0.1, 2) +
+      inputRow(_t('Ø obrat na zákazníka') + ' (' + _dphLbl() + ')', 'obrat_na_zakaznika', '€', 0.1, 2) +
       inputRow(_t('Počet zákazníků za den'), 'zakazniku_za_den', _t('ks/den'), 0.1, 1) +
       outRow(_t('Počet zákazníků za měsíc'), 'zakazniku_mesic', _t('ks')) +
       outRow(_t('Obrat / den'), 'obrat_den', '€') +
       outRow(_t('Obrat / měsíc'), 'obrat_mesic', '€', true) +
       outRow(_t('Náklad pracích cyklů / měsíc'), 'naklad_pracich_cyklu_mesic', '€') +
       outRow(_t('Celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
-    html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup') + ' · ' + _t('bez DPH'), s2);
+    html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup') + ' · ' + _dphLbl(), s2);
 
     // Sekce: Měsíční fixní náklady
     var s3 =
@@ -552,14 +583,14 @@
       inputRow(_t('Nájem'), 'najem', _t('€/měs'), 1, 0) +
       inputRow(_t('Servis'), 'servis', _t('€/měs'), 1, 0) +
       outRow(_t('Fixní náklady celkem'), 'fixni_mesic', _t('€/měs'), true);
-    html += section('fixni', '💸', _t('Měsíční fixní náklady'), _t('bez DPH'), s3);
+    html += section('fixni', '💸', _t('Měsíční fixní náklady'), _dphLbl(), s3);
 
     // Sekce: Cena energií
     var s4 =
       inputRow(_t('Elektrika'), 'cena_elektriny', _t('€/kWh'), 0.001, 4) +
       inputRow(_t('Vodné'), 'cena_vodne', _t('€/m³'), 0.001, 3) +
       inputRow(_t('Stočné'), 'cena_stocne', _t('€/m³'), 0.001, 3);
-    html += section('energie', '⚡', _t('Cena energií'), _t('zdrojová data') + ' · ' + _t('bez DPH'), s4, true);
+    html += section('energie', '⚡', _t('Cena energií'), _t('zdrojová data') + ' · ' + _dphLbl(), s4, true);
 
     // Sekce: DPH + ceny služeb (s DPH → bez DPH)
     var s5 =
@@ -587,7 +618,7 @@
     var s6 =
       inputRow(_t('Cena prášku'), 'cena_prasku', _t('€/l'), 0.01, 3) +
       inputRow(_t('Cena aviváže'), 'cena_avivaze', _t('€/l'), 0.01, 3);
-    html += section('detergenty', '🧴', _t('Cena detergentů'), _t('zdrojová data') + ' · ' + _t('bez DPH'), s6, true);
+    html += section('detergenty', '🧴', _t('Cena detergentů'), _t('zdrojová data') + ' · ' + _dphLbl(), s6, true);
 
     // Sekce: Velká pračka spotřeba
     var s7 =
@@ -692,7 +723,7 @@
     for (var i = 0; i < inputs.length; i++) {
       var inp = inputs[i];
       var key = inp.getAttribute('data-key');
-      inp.value = formatInputValue(STATE[key], inp.getAttribute('data-decimals'));
+      inp.value = formatInputValue(STATE[key] * (VAT_SCALE[key] ? _vatMul() : 1), inp.getAttribute('data-decimals'));
       inp.addEventListener('input', onInputChange);
       inp.addEventListener('change', onInputChange);
     }
@@ -718,7 +749,8 @@
     var key = e.target.getAttribute('data-key');
     var v = parseFloat(e.target.value.replace(',', '.'));
     if (isNaN(v)) v = 0;
-    STATE[key] = v;
+    // V režimu neplátce se zadává hodnota s DPH → ulož zpět základ bez DPH.
+    STATE[key] = (VAT_SCALE[key] && _vatMul() !== 1) ? (v / _vatMul()) : v;
     recalcAndRender();
     if (typeof ON_CHANGE === 'function') {
       try { ON_CHANGE(STATE, lastResult); } catch (e2) { /* noop */ }
@@ -752,6 +784,7 @@
       var els = ROOT.querySelectorAll('#pe-out-' + fields[i][0]);
       var v = r[fields[i][0]];
       if (typeof v !== 'number') continue;
+      if (VAT_SCALE[fields[i][0]]) v *= _vatMul(); // neplátce → zobraz s DPH
       var txt = fmtNum(v, fields[i][1]);
       for (var j = 0; j < els.length; j++) {
         els[j].textContent = txt;
@@ -759,9 +792,9 @@
     }
 
     // Hlavní výsledky
-    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem, 0), _t('na jedno místo') + ' · ' + _t('bez DPH'));
-    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic, 0), fmtNum(r.zakazniku_mesic, 0) + _t(' zákazníků / měs') + ' · ' + _t('bez DPH'));
-    setResultCard('pe-rc-zisk', fmtEur(r.zisk, 0), (r.zisk >= 0 ? _t('po všech nákladech vč. servisu') + ' · ' + _t('bez DPH') : _t('ZTRÁTOVÝ provoz')), r.zisk < 0 ? 'neg' : 'ok');
+    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem * _vatMul(), 0), _t('na jedno místo') + ' · ' + _dphLbl());
+    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic * _vatMul(), 0), fmtNum(r.zakazniku_mesic, 0) + _t(' zákazníků / měs') + ' · ' + _dphLbl());
+    setResultCard('pe-rc-zisk', fmtEur(r.zisk * _vatMul(), 0), (r.zisk >= 0 ? _t('po všech nákladech vč. servisu') + ' · ' + _dphLbl() : _t('ZTRÁTOVÝ provoz')), r.zisk < 0 ? 'neg' : 'ok');
     if (isFinite(r.navratnost_mesicu) && r.navratnost_mesicu > 0) {
       setResultCard('pe-rc-navratnost', fmtNum(r.navratnost_roku, 1) + _t(' let'), fmtNum(r.navratnost_mesicu, 0) + _t(' měsíců'));
     } else {
@@ -1156,6 +1189,15 @@
     if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
   }
   function getVersion() { return VER; }
+  // Přepnutí režimu DPH (plátce/neplátce) — jen zobrazení, STATE zůstává bez DPH.
+  function _setVat(mode) {
+    if (mode !== 'payer' && mode !== 'nonpayer') return;
+    if (mode === VAT_MODE) return;
+    VAT_MODE = mode;
+    if (ROOT) { ROOT.innerHTML = buildHTML(); bindInputs(); }
+  }
+  function setVatMode(mode) { _setVat(mode); }
+  function getVatMode() { return VAT_MODE; }
 
   // Přepnutí měny: nastaví symbol a přepočítá peněžní pole stavu poměrem kurzů
   // (ratio = kolik nové měny za 1 jednotku staré). Payback/ROI/% zůstávají (poměry).
@@ -1210,6 +1252,9 @@
     getCurrency: getCurrency,
     _setCur: _setCur,
     _setVer: _setVer,
+    _setVat: _setVat,
+    setVatMode: setVatMode,
+    getVatMode: getVatMode,
     setVersion: setVersion,
     getVersion: getVersion,
     _zoomPhoto: _zoomPhoto,
