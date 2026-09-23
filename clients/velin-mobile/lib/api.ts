@@ -204,6 +204,30 @@ export type AppNotification = {
   created_at: string;
 };
 
+export type MyAssistantConfig = {
+  enabled: boolean;
+  number: string;
+  inbound_greeting?: string;
+  inbound_prompt?: string;
+  transfer_enabled: boolean;
+  transfer_number: string;
+  tts_voice?: 'female' | 'male';
+};
+
+export type AssistantCall = {
+  id: string;
+  from_number: string | null;
+  caller_name: string | null;
+  caller_intent: string | null;
+  summary: string | null;
+  started_at: string;
+  duration_sec: number | null;
+  handoff: boolean;
+  audio_url: string | null;
+  transcript: Array<{ role?: string; text?: string }> | null;
+  full_transcript: string | null;
+};
+
 export const api = {
   // HolyOS auth
   login: (username: string, password: string) =>
@@ -234,9 +258,18 @@ export const api = {
 
   // Velín — konfigurace osobního AI asistenta (číslo, zapnuto)
   myAssistant: (jwt: string) =>
-    request<{ enabled: boolean; number: string; transfer_enabled: boolean; transfer_number: string }>(
-      'GET', '/api/velin/me/assistant', { jwt }
-    ),
+    request<MyAssistantConfig>('GET', '/api/velin/me/assistant', { jwt }),
+
+  // Uložení vlastní konfigurace asistenta z mobilu
+  saveMyAssistant: (jwt: string, body: Partial<MyAssistantConfig>) =>
+    request<{ ok: boolean }>('PUT', '/api/velin/me/assistant', { jwt, body }),
+
+  // Vzkazy/hovory osobního asistenta (s nahrávkou + přepisem)
+  myAssistantCalls: (jwt: string) =>
+    request<{ calls: AssistantCall[] }>('GET', '/api/velin/me/assistant/calls', {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
 
   myDay: (jwt: string) =>
     request<{ date: string; plan: any; overdue: any[] }>('GET', '/api/velin/my-day', {

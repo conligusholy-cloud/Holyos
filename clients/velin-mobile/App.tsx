@@ -43,6 +43,7 @@ import EveningReflection from './screens/EveningReflection';
 import Attendance from './screens/Attendance';
 import NewGeoFence from './screens/NewGeoFence';
 import SignContract from './screens/SignContract';
+import AssistantSettings from './screens/AssistantSettings';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -66,6 +67,7 @@ export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   TaskDetail: { taskId: number };
+  AssistantSettings: undefined;
   ChatThread: { channelId: string; channelTitle?: string };
   NewChat: undefined;
   EveningReflection: undefined;
@@ -281,6 +283,11 @@ export default function App() {
           <Stack.Screen
             name="SignContract"
             component={SignContract}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="AssistantSettings"
+            component={AssistantSettings}
             options={{ animation: 'slide_from_right' }}
           />
         </Stack.Navigator>

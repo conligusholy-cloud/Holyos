@@ -146,7 +146,7 @@
   var DISC_INFO = { active: false, endsAt: null, pctByVer: {} }; // sleva leada (pro vlaječku)
   var VARIANTS = {
     V3: { cena_pradlomatu: 52000, cena_pripojek: 2889, obrat_na_zakaznika: 11.33, najem: 165, truck: 47000, noSmall: false, zakazniku_za_den: 8 },
-    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 16.52, najem: 120, truck: 33000, noSmall: true, zakazniku_za_den: 5 }
+    V2: { cena_pradlomatu: 35000, cena_pripojek: 1926, obrat_na_zakaznika: 14.8, najem: 120, truck: 33000, noSmall: true, zakazniku_za_den: 5 }
   };
   // Přepínač varianty do lišty nástroje (vedle měny).
   function verButtons() {

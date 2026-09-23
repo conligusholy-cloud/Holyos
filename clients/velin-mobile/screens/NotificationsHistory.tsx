@@ -16,7 +16,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { loadAuth } from '../lib/auth';
 import { api, API_BASE, AppNotification } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
@@ -49,6 +49,13 @@ export default function NotificationsHistory() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const navigation = useNavigation<any>();
+
+  // Vzkaz osobního asistenta → otevři přímo v aplikaci (ne v prohlížeči).
+  function isAssistant(item: AppNotification): boolean {
+    const t = (item.title || '') + ' ' + (item.link || '');
+    return /vzkaz asistenta|Přepojený hovor|osobn[íi] asistent/i.test(t);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,11 +182,15 @@ export default function NotificationsHistory() {
                   </Text>
                 )}
                 <Text style={styles.when}>{fmtWhen(item.created_at)}</Text>
-                {isOpen && !!item.link && (
+                {isOpen && isAssistant(item) ? (
+                  <TouchableOpacity style={styles.linkBtn} onPress={() => navigation.navigate('AssistantSettings')}>
+                    <Text style={styles.linkText}>Otevřít vzkaz v aplikaci</Text>
+                  </TouchableOpacity>
+                ) : isOpen && !!item.link ? (
                   <TouchableOpacity style={styles.linkBtn} onPress={() => openLink(item.link!)}>
                     <Text style={styles.linkText}>Otevřít v prohlížeči</Text>
                   </TouchableOpacity>
-                )}
+                ) : null}
               </TouchableOpacity>
             );
           }}

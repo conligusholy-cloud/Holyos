@@ -103,8 +103,18 @@ export default function Me() {
             <TouchableOpacity style={styles.paCancelBtn} onPress={cancelForward}>
               <Text style={styles.paCancelText}>Zrušit přesměrování</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.paSettingsBtn} onPress={() => navigation.navigate('AssistantSettings')}>
+              <Text style={styles.paSettingsText}>⚙️  Nastavení a vzkazy</Text>
+            </TouchableOpacity>
           </View>
-        ) : null}
+        ) : (
+          <TouchableOpacity
+            style={[styles.reflectionBtn, { marginTop: spacing.xl }]}
+            onPress={() => navigation.navigate('AssistantSettings')}
+          >
+            <Text style={styles.reflectionBtnText}>📞  Osobní asistent</Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.reflectionBtn}
@@ -206,6 +216,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   paCancelText: { color: colors.danger, fontWeight: '600', fontSize: 13 },
+  paSettingsBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  paSettingsText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   reflectionBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.md,

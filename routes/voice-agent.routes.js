@@ -114,7 +114,13 @@ function twimlConnect(wsUrl, actionUrl, welcomeGreeting, voiceId) {
 // přes env; prázdné → Twilio použije výchozí hlas providera.
 const TTS_VOICE_FEMALE = process.env.VOICE_TTS_VOICE_FEMALE || '';
 const TTS_VOICE_MALE = process.env.VOICE_TTS_VOICE_MALE || '';
-function ttsVoiceId(gender) { return gender === 'male' ? TTS_VOICE_MALE : TTS_VOICE_FEMALE; }
+// Vrať jen PLATNÉ ElevenLabs voice ID (alfanumerické). Prázdné, placeholder
+// („<…>") nebo cokoliv s mezerami/závorkami → '' = default hlas providera.
+// (Neplatná hodnota by jinak shodila hovor: Twilio error 64101 „Invalid tts settings".)
+function ttsVoiceId(gender) {
+  const v = String((gender === 'male' ? TTS_VOICE_MALE : TTS_VOICE_FEMALE) || '').trim();
+  return /^[A-Za-z0-9]{6,64}$/.test(v) ? v : '';
+}
 
 // E.164 normalizace (české 9místné → +420…, 00… → +…).
 function e164(num) {
