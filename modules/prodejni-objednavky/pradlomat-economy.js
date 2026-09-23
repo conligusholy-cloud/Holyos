@@ -529,7 +529,7 @@
       inputRow(_t('Ø cena projekt + povolení'), 'cena_projekt', '€', 10, 0) +
       inputRow(_t('Ø cena přípojek'), 'cena_pripojek', '€', 10, 0) +
       outRow(_t('Investice celkem'), 'investice_celkem', '€', true);
-    html += (NO_PRICE ? '<div style="display:none">' : '') + section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové'), s1) + (NO_PRICE ? '</div>' : '');
+    html += (NO_PRICE ? '<div style="display:none">' : '') + section('investice', '🏗️', _t('Investiční náklady'), _t('jednorázové') + ' · ' + _t('bez DPH'), s1) + (NO_PRICE ? '</div>' : '');
 
     // Sekce: Modelace
     var s2 =
@@ -540,7 +540,7 @@
       outRow(_t('Obrat / měsíc'), 'obrat_mesic', '€', true) +
       outRow(_t('Náklad pracích cyklů / měsíc'), 'naklad_pracich_cyklu_mesic', '€') +
       outRow(_t('Celkem na zákazníka'), 'naklad_na_zakaznika', '€', true);
-    html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup'), s2);
+    html += section('modelace', '📈', _t('Modelace — měsíční'), _t('klíčový vstup') + ' · ' + _t('bez DPH'), s2);
 
     // Sekce: Měsíční fixní náklady
     var s3 =
@@ -552,14 +552,14 @@
       inputRow(_t('Nájem'), 'najem', _t('€/měs'), 1, 0) +
       inputRow(_t('Servis'), 'servis', _t('€/měs'), 1, 0) +
       outRow(_t('Fixní náklady celkem'), 'fixni_mesic', _t('€/měs'), true);
-    html += section('fixni', '💸', _t('Měsíční fixní náklady'), '', s3);
+    html += section('fixni', '💸', _t('Měsíční fixní náklady'), _t('bez DPH'), s3);
 
     // Sekce: Cena energií
     var s4 =
       inputRow(_t('Elektrika'), 'cena_elektriny', _t('€/kWh'), 0.001, 4) +
       inputRow(_t('Vodné'), 'cena_vodne', _t('€/m³'), 0.001, 3) +
       inputRow(_t('Stočné'), 'cena_stocne', _t('€/m³'), 0.001, 3);
-    html += section('energie', '⚡', _t('Cena energií'), _t('zdrojová data'), s4, true);
+    html += section('energie', '⚡', _t('Cena energií'), _t('zdrojová data') + ' · ' + _t('bez DPH'), s4, true);
 
     // Sekce: DPH + ceny služeb (s DPH → bez DPH)
     var s5 =
@@ -587,7 +587,7 @@
     var s6 =
       inputRow(_t('Cena prášku'), 'cena_prasku', _t('€/l'), 0.01, 3) +
       inputRow(_t('Cena aviváže'), 'cena_avivaze', _t('€/l'), 0.01, 3);
-    html += section('detergenty', '🧴', _t('Cena detergentů'), _t('zdrojová data'), s6, true);
+    html += section('detergenty', '🧴', _t('Cena detergentů'), _t('zdrojová data') + ' · ' + _t('bez DPH'), s6, true);
 
     // Sekce: Velká pračka spotřeba
     var s7 =
