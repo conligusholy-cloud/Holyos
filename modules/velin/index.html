@@ -101,6 +101,7 @@
         <button class="tab active" data-tab="today">📅 Dnes</button>
         <button class="tab" data-tab="tasks">✅ Úkoly</button>
         <button class="tab" data-tab="devices">📱 Zařízení</button>
+        <button class="tab" data-tab="users">👥 Uživatelé</button>
         <button class="tab" data-tab="skills">⭐ Skill profily</button>
         <button class="tab" data-tab="fences">🗺️ Geo fence</button>
         <button class="tab" data-tab="reflections">🌙 Reflexe</button>
@@ -133,6 +134,13 @@
           <button class="btn btn-primary btn-sm" id="btn-activate-device">+ Aktivovat zařízení</button>
         </div>
         <div id="devices-table-wrap"></div>
+      </div>
+
+      <div class="tab-panel" id="tab-users">
+        <div class="filter-row">
+          <span id="users-summary" style="color:var(--text2);font-size:12px;"></span>
+        </div>
+        <div id="users-table-wrap"></div>
       </div>
 
       <div class="tab-panel" id="tab-skills">

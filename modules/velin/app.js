@@ -284,6 +284,60 @@
   }
   $('#btn-activate-device').addEventListener('click', openActivationModal);
 
+  // ─── Seznam uživatelů Velína (osoby s registrovaným zařízením) ─────────
+  async function loadUsers() {
+    const wrap = $('#users-table-wrap');
+    const sum = $('#users-summary');
+    wrap.innerHTML = '<div class="empty-state">Načítám…</div>';
+    if (sum) sum.textContent = '';
+    try {
+      const { devices } = await apiGet('/admin/devices');
+      // Seskup podle osoby.
+      const byPerson = {};
+      (devices || []).forEach((d) => {
+        if (!d.person) return;
+        const id = d.person.id;
+        if (!byPerson[id]) byPerson[id] = { person: d.person, devices: [], active: 0, platforms: {}, last: null };
+        const u = byPerson[id];
+        u.devices.push(d);
+        if (d.active) u.active++;
+        if (d.platform) u.platforms[d.platform] = true;
+        const t = d.last_seen_at ? new Date(d.last_seen_at).getTime() : 0;
+        if (t && (!u.last || t > u.last)) u.last = t;
+      });
+      const users = Object.values(byPerson).sort((a, b) => (b.last || 0) - (a.last || 0));
+      const activeUsers = users.filter((u) => u.active > 0).length;
+      if (sum) sum.textContent = users.length + ' uživatelů · ' + activeUsers + ' s aktivním zařízením';
+      if (users.length === 0) {
+        wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><h3>Zatím žádní uživatelé</h3><p>Uživatelé se objeví, jakmile jim v záložce <b>Zařízení</b> aktivuješ přístup.</p></div>`;
+        return;
+      }
+      wrap.innerHTML = `
+        <table class="data-table">
+          <thead>
+            <tr><th>Jméno</th><th>Zařízení</th><th>Platforma</th><th>Naposledy aktivní</th><th>Stav</th></tr>
+          </thead>
+          <tbody>${users.map((u) => {
+            const name = escapeHtml(((u.person.first_name || '') + ' ' + (u.person.last_name || '')).trim() || '—');
+            const plat = Object.keys(u.platforms).map((p) => `<span class="badge b-platform-${p}">${p}</span>`).join(' ') || '—';
+            const last = u.last ? new Date(u.last).toLocaleString('cs-CZ') : '—';
+            const stav = u.active > 0 ? '<span class="badge b-done">Aktivní</span>' : '<span class="badge b-cancelled">Neaktivní</span>';
+            return `<tr>
+              <td><b>${name}</b></td>
+              <td>${u.devices.length}${u.active < u.devices.length ? ` <span style="color:var(--text2)">(${u.active} akt.)</span>` : ''}</td>
+              <td>${plat}</td>
+              <td>${last}</td>
+              <td>${stav}</td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (e) {
+      wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
+    }
+  }
+
   async function openActivationModal() {
     let people = [];
     try {
@@ -778,6 +832,7 @@
     if (name === 'today')       return loadToday();
     if (name === 'tasks')       return loadTasks();
     if (name === 'devices')     return loadDevices();
+    if (name === 'users')       return loadUsers();
     if (name === 'skills')      return loadSkills();
     if (name === 'fences')      return loadFences();
     if (name === 'reflections') return loadReflections();
