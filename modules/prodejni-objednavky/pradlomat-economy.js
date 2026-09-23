@@ -517,9 +517,9 @@
     // Výsledky nahoře (sticky-feel)
     html +=
       '<div class="pe-results" id="pe-results-block">' +
-        '<div class="pe-result-card" id="pe-rc-investice"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-investice"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Investice celkem') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('na jedno místo') + ' · ' + _t('bez DPH') + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-obrat"><div class="pe-rc-label">' + _t('Obrat / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-obrat-sub">—' + _t(' zákazníků / měs') + '</div></div>' +
-        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + '</div></div>' +
+        '<div class="pe-result-card" id="pe-rc-zisk"><div class="pe-rc-label">' + _t('Zisk / měsíc') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub">' + _t('po všech nákladech vč. servisu') + ' · ' + _t('bez DPH') + '</div></div>' +
         '<div class="pe-result-card" id="pe-rc-navratnost"' + (NO_PRICE ? ' style="display:none"' : '') + '><div class="pe-rc-label">' + _t('Návratnost') + '</div><div class="pe-rc-value">—</div><div class="pe-rc-sub" id="pe-rc-navratnost-sub">—' + _t(' měsíců') + '</div></div>' +
       '</div>';
 
@@ -533,7 +533,7 @@
 
     // Sekce: Modelace
     var s2 =
-      inputRow(_t('Ø obrat na zákazníka'), 'obrat_na_zakaznika', '€', 0.1, 2) +
+      inputRow(_t('Ø obrat na zákazníka') + ' (' + _t('bez DPH') + ')', 'obrat_na_zakaznika', '€', 0.1, 2) +
       inputRow(_t('Počet zákazníků za den'), 'zakazniku_za_den', _t('ks/den'), 0.1, 1) +
       outRow(_t('Počet zákazníků za měsíc'), 'zakazniku_mesic', _t('ks')) +
       outRow(_t('Obrat / den'), 'obrat_den', '€') +
@@ -759,9 +759,9 @@
     }
 
     // Hlavní výsledky
-    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem, 0), _t('na jedno místo'));
-    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic, 0), fmtNum(r.zakazniku_mesic, 0) + _t(' zákazníků / měs'));
-    setResultCard('pe-rc-zisk', fmtEur(r.zisk, 0), r.zisk >= 0 ? _t('po všech nákladech vč. servisu') : _t('ZTRÁTOVÝ provoz'), r.zisk < 0 ? 'neg' : 'ok');
+    setResultCard('pe-rc-investice', fmtEur(r.investice_celkem, 0), _t('na jedno místo') + ' · ' + _t('bez DPH'));
+    setResultCard('pe-rc-obrat', fmtEur(r.obrat_mesic, 0), fmtNum(r.zakazniku_mesic, 0) + _t(' zákazníků / měs') + ' · ' + _t('bez DPH'));
+    setResultCard('pe-rc-zisk', fmtEur(r.zisk, 0), (r.zisk >= 0 ? _t('po všech nákladech vč. servisu') + ' · ' + _t('bez DPH') : _t('ZTRÁTOVÝ provoz')), r.zisk < 0 ? 'neg' : 'ok');
     if (isFinite(r.navratnost_mesicu) && r.navratnost_mesicu > 0) {
       setResultCard('pe-rc-navratnost', fmtNum(r.navratnost_roku, 1) + _t(' let'), fmtNum(r.navratnost_mesicu, 0) + _t(' měsíců'));
     } else {
