@@ -327,17 +327,23 @@ async function geocodeAddr(addr) {
   return null;
 }
 // Na pozadí doplní chybějící geokódy (Nominatim, 1,2 s/dotaz), uloží do cache.
+// Vynech testovací / neúplné adresy ze SIS (bez čísla popisného, „ABCD", „TEST"…).
+function isRealAddr(label) {
+  const a = String(label || '').trim();
+  return a.length >= 6 && /\d/.test(a);
+}
+
 async function backfillGeocodes(kiosks, geo) {
   if (_geoRunning) return; _geoRunning = true;
   try {
-    let changed = false, done = 0;
+    let changed = false;
     for (const k of kiosks) {
-      const addr = (k.label || '').trim(); if (!addr || geo[addr]) continue;
+      const addr = (k.label || '').trim();
+      if (!isRealAddr(addr) || geo[addr]) continue;
       const g = await geocodeAddr(addr + ', Česko');
-      geo[addr] = g || { lat: null, lon: null }; changed = true; done++;
-      if (done % 5 === 0) await saveGeoCache(geo);
+      geo[addr] = g || { lat: null, lon: null }; changed = true;
+      await saveGeoCache(geo); // ukládej průběžně, ať se postup neztratí
       await new Promise((r) => setTimeout(r, 1200)); // respektuj Nominatim rate-limit
-      if (done >= 200) break;
     }
     if (changed) { await saveGeoCache(geo); _existingCache = { at: 0, data: null }; }
   } catch (_) {} finally { _geoRunning = false; }
@@ -345,26 +351,27 @@ async function backfillGeocodes(kiosks, geo) {
 
 async function fetchExistingLaundromats() {
   const now = Date.now();
-  if (_existingCache.data && now - _existingCache.at < 6 * 3600 * 1000) return _existingCache.data;
+  if (_existingCache.data && _existingCache.data.length && now - _existingCache.at < 6 * 3600 * 1000) return _existingCache.data;
   const kiosks = await fetchSisKiosks();
   if (kiosks.length) {
     const geo = await loadGeoCache();
     const out = [];
     let missing = 0;
     for (const k of kiosks) {
-      const addr = (k.label || '').trim(); if (!addr) continue;
+      const addr = (k.label || '').trim();
+      if (!isRealAddr(addr)) continue; // přeskoč testovací/neúplné
       const g = geo[addr];
       if (g && g.lat != null && g.lon != null) {
         out.push({ name: addr, lat: g.lat, lon: g.lon, note: (k.companyName || '') + (k.inIncubator ? ' · inkubátor' : ' · zavedená') });
       } else if (!g) { missing++; }
     }
-    if (missing) backfillGeocodes(kiosks, geo); // doběhne na pozadí, další načtení bude úplnější
-    if (out.length) { _existingCache = { at: now, data: out }; return out; }
-    // zatím nic nezgeokódováno → zkus fallback, ať mapa není prázdná
+    if (missing) backfillGeocodes(kiosks, geo); // doběhne na pozadí
+    // Cachuj jen KOMPLETNÍ výsledek (nic nechybí). Dokud se dogeokódovává,
+    // vracíme rostoucí částečný seznam BEZ cache, ať se job příště zas nakopne.
+    if (out.length && missing === 0) { _existingCache = { at: now, data: out }; return out; }
+    if (out.length) return out;
   }
-  const kml = await fetchKmlLaundromats();
-  _existingCache = { at: now, data: kml };
-  return kml;
+  return await fetchKmlLaundromats(); // fallback (necachujeme, ať to zkusí SIS znovu)
 }
 
 // Fallback zdroj: Google My Maps „WHERE WE LAUNDRY [EU]" (KML).
