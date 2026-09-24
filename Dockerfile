@@ -24,8 +24,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # 1) Závislosti — cache vrstva (přebuildí se jen při změně package*.json).
+#    npm install (ne ci): tolerantní k drobnému nesouladu package.json ↔ lock.
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm install --omit=dev --no-audit --no-fund
 
 # 2) Prisma client (potřebuje schema).
 COPY prisma ./prisma

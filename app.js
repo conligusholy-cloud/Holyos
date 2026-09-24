@@ -863,6 +863,11 @@ function serveAiSpecialist(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(COMPOUNDER_DIR, 'ai', 'index.html'));
 }
+// Prádlomat — stránka s klíčovými informacemi (+ rezervace schůzky), z /home.
+function serveCompounderInfo(req, res) {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(COMPOUNDER_DIR, 'info.html'));
+}
 // Předjednaná místa — veřejný přehled (pradlomaty.info/location).
 function serveLocationOverview(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -884,6 +889,7 @@ app.use((req, res, next) => {
     if (PRADLOMATY_HOSTS.has(reqHostname(req))) return serveCompounderPradlomaty(req, res);
     return serveCompounderHome(req, res);
   }
+  if (req.path === '/info' || req.path === '/info/') return serveCompounderInfo(req, res);
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
@@ -930,6 +936,8 @@ app.get('/compounder/portal', serveCompounderPortal);
 app.get('/compounder/portal/', serveCompounderPortal);
 app.get('/compounder/ai', serveAiSpecialist);
 app.get('/compounder/ai/', serveAiSpecialist);
+app.get('/compounder/info', serveCompounderInfo);
+app.get('/compounder/info/', serveCompounderInfo);
 app.get('/compounder/location', serveLocationOverview);
 app.get('/compounder/location/', serveLocationOverview);
 app.use('/compounder', compounderStatic);
