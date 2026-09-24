@@ -53,8 +53,9 @@
   .rev-label svg{width:16px;height:16px;stroke:var(--green);fill:none;stroke-width:2}
   .big-num{position:relative;white-space:nowrap;font-size:clamp(34px,11vw,60px);font-weight:800;letter-spacing:-.03em;line-height:1;
     background:linear-gradient(90deg,#4aa3ea,#8fd0ff 55%,#3ee08a);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .big-num .dash{font-weight:600;opacity:.8;margin:0 .06em}
-  .big-num .cur{font-size:.5em;font-weight:700;letter-spacing:0;margin-left:.14em}
+  /* iOS Safari nevykreslí vnořené spany v background-clip:text → vlastní barva */
+  .big-num .dash{font-weight:700;margin:0 .08em;color:#7cc4f8;-webkit-text-fill-color:#7cc4f8}
+  .big-num .cur{font-size:.5em;font-weight:700;letter-spacing:0;margin-left:.14em;color:#5fe0a0;-webkit-text-fill-color:#5fe0a0}
   .rev-per{position:relative;font-size:15px;color:#dceaf6;font-weight:500;margin-top:10px}
   .note{position:relative;font-size:12px;color:var(--muted2);margin-top:6px}
 
@@ -133,7 +134,6 @@
     <p class="eyebrow">To nejdůležitější</p>
     <h1>Podnikání s <span class="g">prádlomatem 24/7</span></h1>
     <p class="lead">Samoobslužná prádelna, která běží nonstop bez obsluhy. Vy vlastníte lokalitu a stroj — o zbytek se postaráme my.</p>
-    <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
 
     <!-- Hlavní sdělení: první klíčová otázka + dvě cesty -->
     <div class="qcard">
@@ -173,44 +173,6 @@
       </div>
     </div>
 
-    <!-- Rezervace schůzky — skrytá, otevře se jen přes info#book (z podstránek) -->
-    <div class="qcard" id="bookCard" style="display:none;margin-top:30px">
-      <div class="qcard-inner">
-        <div class="book" id="book">
-          <div id="bookStart" style="display:none">
-            <button type="button" class="btn-ghost" id="pickBtn">Domluvit schůzku</button>
-          </div>
-
-          <div id="modePanel" style="display:none">
-            <p class="bk-title">Jak chcete schůzku vést?</p>
-            <div style="display:flex;gap:10px;flex-wrap:wrap;">
-              <button type="button" class="modebtn" data-mode="osobne">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-                Osobní schůzka<small>u nás nebo u vás</small>
-              </button>
-              <button type="button" class="modebtn" data-mode="online">
-                <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
-                Online<small>video hovor</small>
-              </button>
-            </div>
-          </div>
-
-          <div id="slotsPanel" style="display:none">
-            <button type="button" class="bk-back" id="slotBack">← zpět na výběr</button>
-            <p class="bk-title" id="slotTitle">Vyberte termín schůzky</p>
-            <div id="slotList"></div>
-          </div>
-
-          <div id="bookDone" class="done" style="display:none">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
-            <h3>Termín rezervován</h3>
-            <p id="doneText"></p>
-          </div>
-
-          <div class="status" id="status" role="status" aria-live="polite"></div>
-        </div>
-      </div>
-    </div>
   </div>
 
 <script>
@@ -224,81 +186,6 @@
     var po=document.getElementById('pathOwn'), pf=document.getElementById('pathFin');
     if(po) po.href='vlastni-kapital'+q;
     if(pf) pf.href='financovani'+q;
-  }
-  if(location.hash==='#book'){ setTimeout(function(){ var c=document.getElementById('bookCard'); if(c) c.style.display='block'; var p=document.getElementById('pickBtn'); if(p) p.click(); document.getElementById('book').scrollIntoView({block:'center'}); },50); }
-
-  var status=document.getElementById('status');
-  var pickBtn=document.getElementById('pickBtn'), bookStart=document.getElementById('bookStart');
-  var slotsPanel=document.getElementById('slotsPanel'), slotList=document.getElementById('slotList');
-  var modePanel=document.getElementById('modePanel'), slotBack=document.getElementById('slotBack'), slotTitle=document.getElementById('slotTitle');
-  var bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText');
-  var chosenMode='';
-
-  var DAYS=['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
-  var MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
-  function dayHead(d){ return DAYS[d.getDay()]+' '+d.getDate()+'. '+MON[d.getMonth()]; }
-  function hhmm(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
-  function setStatus(msg,err){ status.style.color=err?'#ff8f8f':'var(--blue-soft)'; status.textContent=msg||''; }
-
-  pickBtn.addEventListener('click', function(){ bookStart.style.display='none'; modePanel.style.display='block'; setStatus(''); });
-
-  var modeLabels={ osobne:'osobní schůzka', online:'online video hovor' };
-  document.querySelectorAll('#modePanel .modebtn').forEach(function(b){
-    b.addEventListener('click', function(){
-      chosenMode=b.dataset.mode||'osobne';
-      modePanel.style.display='none'; slotsPanel.style.display='block';
-      if(slotTitle) slotTitle.textContent='Vyberte termín — '+(modeLabels[chosenMode]||'');
-      loadSlots();
-    });
-  });
-
-  if(slotBack) slotBack.addEventListener('click', function(){ slotsPanel.style.display='none'; modePanel.style.display='block'; setStatus(''); });
-
-  function loadSlots(){
-    setStatus('Načítám volné termíny…'); slotList.innerHTML='';
-    fetch('/api/compounder/meeting-slots?days=45',{credentials:'include'})
-      .then(function(r){ return r.json(); })
-      .then(function(slots){
-        setStatus('');
-        if(!Array.isArray(slots) || !slots.length){ slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Ozveme se vám hned, jak se nějaký uvolní.</p>'; return; }
-        renderSlots(slots);
-      })
-      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
-  }
-
-  function renderSlots(slots){
-    var byDay={}, order=[];
-    slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); if(!byDay[k]){byDay[k]=[];order.push(k);} byDay[k].push(s); });
-    var html='';
-    order.forEach(function(k){
-      var d=new Date(k);
-      html+='<div class="day"><div class="day-h">'+dayHead(d)+'</div><div class="slots">';
-      byDay[k].forEach(function(s){ var t=new Date(s.starts_at); html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>'; });
-      html+='</div></div>';
-    });
-    slotList.innerHTML=html;
-    slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10)); }); });
-  }
-
-  function book(slotId){
-    if(!token){ setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.',true); return; }
-    var payload={ slot_id:slotId, t:token, mode:chosenMode };
-    slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=true; });
-    setStatus('Rezervuji termín…');
-    fetch('/api/compounder/meeting-reservation',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) })
-    .then(function(r){ return r.json().catch(function(){return {};}); })
-    .then(function(d){
-      if(d && d.ok){
-        var dt=new Date(d.starts_at);
-        slotsPanel.style.display='none'; setStatus('');
-        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+' ('+(modeLabels[chosenMode]||'')+'). Potvrzení vám pošleme.';
-        bookDone.style.display='block';
-      } else {
-        setStatus((d&&d.error)||'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true);
-        slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; });
-      }
-    })
-    .catch(function(){ setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true); slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; }); });
   }
 })();
 </script>
