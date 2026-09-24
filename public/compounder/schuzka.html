@@ -71,11 +71,20 @@
   .modebtn small{font-size:12px;font-weight:500;color:rgba(255,255,255,.82)}
   .bk-title{font-size:15px;font-weight:600;margin:2px 0 12px}
   .bk-back{background:none;border:none;color:var(--muted2);font-size:13px;cursor:pointer;padding:0;margin-bottom:10px;font-family:inherit}
-  .day{margin-bottom:16px}
-  .day-h{font-size:13px;color:var(--muted2);margin-bottom:8px;text-transform:capitalize}
-  .slots{display:flex;flex-wrap:wrap;gap:8px}
-  .slot{border:1px solid var(--line);background:#0e1e33;border-radius:10px;padding:11px 15px;font-size:15px;
-    color:var(--text);cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
+  /* Týdenní kalendář */
+  .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+  .wd{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .wd-h{text-align:center;padding:8px 2px;border-radius:10px;background:rgba(30,134,224,.10);border:0.5px solid var(--line);line-height:1.15}
+  .wd-h .dn{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);font-weight:600}
+  .wd-h .dd{display:block;font-size:15px;font-weight:700;color:var(--text);margin-top:2px}
+  .wd.today .wd-h{background:rgba(62,224,138,.14);border-color:rgba(62,224,138,.5)}
+  .wd.today .wd-h .dn{color:var(--green)}
+  .wd.past{opacity:.38}
+  .wd-none{text-align:center;font-size:12px;color:var(--muted2);padding:8px 0}
+  .slot{width:100%;border:1px solid var(--line);background:#0e1e33;border-radius:9px;padding:9px 2px;font-size:13px;font-weight:600;
+    color:var(--text);cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s;white-space:nowrap}
+  @media(max-width:480px){.week{gap:4px}.slot{font-size:12px;padding:8px 0}.wd-h .dd{font-size:13px}.wd-h .dn{font-size:9.5px}}
+  .empty{text-align:center;padding:18px 8px;font-size:14.5px;color:var(--muted)}
   .slot:hover{border-color:var(--blue);background:#12294a}
   .slot:disabled{opacity:.5;cursor:default}
   .done{text-align:center;padding:14px}
@@ -96,6 +105,7 @@
       <a class="back" id="backLink" href="info">← zpět</a>
     </div>
 
+    <div id="intro">
     <p class="eyebrow"><span class="pulse-dot"></span>Druhý nejdůležitější krok</p>
     <h1>Schůzka, po které <span class="g">budete vědět</span></h1>
     <p class="lead">Nebudeme vám nic prodávat. Během krátkého rozhovoru společně zjistíme, jestli je prádlomat pro vás — a jestli má smysl jít dál.</p>
@@ -114,6 +124,7 @@
       <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Jasnou odpověď, jestli je to pro vás</h3><p>Upřímně a bez tlaku. Rozhodujeme se oba — prádlomat svěřujeme jen partnerům, se kterými si sedneme.</p></div></div>
       <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Čísla pro vaši lokalitu</h3><p>Kolik může prádlomat vydělávat právě u vás a jak vypadá financování ve vašem případě.</p></div></div>
       <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Další krok jasně na stole</h3><p>Odejdete s konkrétním plánem: co, kdy a jak — ať se rozhodnete ano, nebo ne.</p></div></div>
+    </div>
     </div>
 
     <div class="qcard">
@@ -136,8 +147,9 @@
 
           <div id="slotsPanel" style="display:none">
             <button type="button" class="bk-back" id="slotBack">← změnit formu schůzky</button>
-            <p class="bk-title" id="slotTitle">Vyberte termín</p>
-            <div id="slotList"></div>
+            <h2 class="q-h" id="slotTitle">Vyberte termín</h2>
+            <p class="q-sub" id="weekLabel">Tento týden</p>
+            <div class="week" id="slotList"></div>
           </div>
 
           <div id="bookDone" class="done" style="display:none">
@@ -179,34 +191,50 @@
     b.addEventListener('click', function(){
       chosenMode=b.dataset.mode||'online';
       modePanel.style.display='none'; slotsPanel.style.display='block';
-      slotTitle.textContent='Vyberte termín — '+(modeLabels[chosenMode]||'');
+      var intro=document.getElementById('intro'); if(intro) intro.style.display='none';
+      slotTitle.innerHTML='Vyberte <span class="g">termín</span>';
       loadSlots();
+      window.scrollTo({top:0,behavior:'smooth'});
     });
   });
-  slotBack.addEventListener('click', function(){ slotsPanel.style.display='none'; modePanel.style.display='block'; setStatus(''); });
+  slotBack.addEventListener('click', function(){ slotsPanel.style.display='none'; modePanel.style.display='block'; setStatus(''); var intro=document.getElementById('intro'); if(intro) intro.style.display=''; });
 
   function loadSlots(){
     setStatus('Načítám volné termíny…'); slotList.innerHTML='';
-    fetch('/api/compounder/meeting-slots?days=45',{credentials:'include'})
+    fetch('/api/compounder/meeting-slots?days=8',{credentials:'include'})
       .then(function(r){ return r.json(); })
       .then(function(slots){
         setStatus('');
-        if(!Array.isArray(slots) || !slots.length){ slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Ozveme se vám hned, jak se nějaký uvolní.</p>'; return; }
-        renderSlots(slots);
+        renderSlots(Array.isArray(slots)?slots:[]);
       })
       .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
   }
 
+  var DN=['Ne','Po','Út','St','Čt','Pá','So'];
+  function weekRange(){
+    var now=new Date(); var mon=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    var wd=(mon.getDay()+6)%7; mon.setDate(mon.getDate()-wd);
+    var sun=new Date(mon); sun.setDate(mon.getDate()+7);
+    return {mon:mon,sun:sun};
+  }
   function renderSlots(slots){
-    var byDay={}, order=[];
-    slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); if(!byDay[k]){byDay[k]=[];order.push(k);} byDay[k].push(s); });
-    var html='';
-    order.forEach(function(k){
-      var d=new Date(k);
-      html+='<div class="day"><div class="day-h">'+dayHead(d)+'</div><div class="slots">';
-      byDay[k].forEach(function(s){ var t=new Date(s.starts_at); html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>'; });
-      html+='</div></div>';
-    });
+    var r=weekRange(), now=new Date();
+    var wk=slots.filter(function(s){ var d=new Date(s.starts_at); return d>=r.mon && d<r.sun && d>now; });
+    var last=new Date(r.sun); last.setDate(last.getDate()-1);
+    document.getElementById('weekLabel').textContent='Tento týden · '+r.mon.getDate()+'. '+MON[r.mon.getMonth()]+' – '+last.getDate()+'. '+MON[last.getMonth()]+' · '+(modeLabels[chosenMode]||'');
+    if(!wk.length){ slotList.innerHTML=''; slotList.insertAdjacentHTML('afterend','<p class="empty" id="emptyMsg">Tento týden už máme plno. Ozveme se vám s nejbližším volným termínem.</p>'); return; }
+    var em=document.getElementById('emptyMsg'); if(em) em.remove();
+    var byDay={}; wk.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); (byDay[k]=byDay[k]||[]).push(s); });
+    var today=now.toDateString(), html='';
+    for(var i=0;i<7;i++){
+      var d=new Date(r.mon); d.setDate(r.mon.getDate()+i); var k=d.toDateString();
+      var list=(byDay[k]||[]).sort(function(a,b){ return new Date(a.starts_at)-new Date(b.starts_at); });
+      var cls='wd'+(k===today?' today':'')+(d<new Date(now.getFullYear(),now.getMonth(),now.getDate())?' past':'');
+      html+='<div class="'+cls+'"><div class="wd-h"><span class="dn">'+DN[d.getDay()]+'</span><span class="dd">'+d.getDate()+'.</span></div>';
+      if(!list.length) html+='<div class="wd-none">—</div>';
+      list.forEach(function(s){ var t=new Date(s.starts_at); html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>'; });
+      html+='</div>';
+    }
     slotList.innerHTML=html;
     slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10)); }); });
   }
