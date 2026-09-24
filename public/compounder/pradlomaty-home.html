@@ -34,8 +34,34 @@
   h1{font-weight:600;font-size:clamp(30px,7vw,44px);line-height:1.12;letter-spacing:-.01em}
   h1 .g{color:var(--blue-soft)}
   .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:520px;margin:14px 0 20px}
-  .hero-photo{float:right;width:min(46%,520px);margin:4px 0 16px 30px;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55);display:block}
-  @media(max-width:760px){.hero-photo{float:none;width:100%;margin:0 0 18px}}
+  .hero-wrap{position:relative;float:right;width:min(46%,520px);margin:4px 0 26px 30px}
+  .hero-photo{display:block;width:100%;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55)}
+  @media(max-width:760px){.hero-wrap{float:none;width:100%;margin:0 0 30px}}
+
+  /* Pečeť kvality — 100% český výrobek */
+  .seal{position:absolute;right:-12px;bottom:-18px;width:146px;height:146px;
+    filter:drop-shadow(0 16px 30px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(212,175,55,.25))}
+  @media(max-width:760px){.seal{width:128px;height:128px;right:8px;bottom:-18px}}
+  .seal-ring{position:absolute;inset:0;width:100%;height:100%;animation:sealspin 30s linear infinite}
+  @keyframes sealspin{to{transform:rotate(360deg)}}
+  .seal-bg{fill:#0a1728}
+  .seal-gold{fill:none;stroke:url(#sealGold);stroke-width:3.5}
+  .seal-dots{fill:none;stroke:rgba(230,196,96,.55);stroke-width:1.2;stroke-dasharray:2.5 4}
+  .seal-inner{fill:none;stroke:url(#sealGold);stroke-width:1.6}
+  .seal-text{font-family:'Inter',system-ui,sans-serif;font-weight:800;font-size:12.6px;letter-spacing:.2em;fill:#f1dc9a}
+  .seal-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none}
+  .seal-flag{width:62px;height:42px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
+  @media(max-width:760px){.seal-flag{width:54px;height:36px}}
+  .seal-100{font-size:13px;font-weight:800;letter-spacing:.06em;color:#f7e7b0;line-height:1;white-space:nowrap}
+  .seal-100 small{display:block;font-size:7.5px;letter-spacing:.22em;font-weight:700;color:#d9bd6a;margin-top:3px}
+
+  /* Štítky s čísly přes fotku */
+  .hero-stats{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:7px}
+  .hs{display:inline-flex;align-items:baseline;gap:6px;width:max-content;background:rgba(8,20,36,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(230,196,96,.5);border-radius:999px;padding:6px 13px 6px 11px;font-size:11.5px;color:#e9f0f7;letter-spacing:.02em}
+  .hs b{font-size:15px;font-weight:800;color:#f7e7b0;letter-spacing:-.01em}
+  .hs .st{width:12px;height:12px;fill:#e6c460;align-self:center;margin-right:2px}
+  @media (prefers-reduced-motion:reduce){.seal-ring{animation:none}}
   .goal{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:0.5px solid rgba(46,140,224,.45);
     border-radius:12px;padding:15px 17px;margin-bottom:30px}
   .goal svg{width:22px;height:22px;stroke:var(--blue-soft);fill:none;stroke-width:1.7;flex:0 0 auto;margin-top:1px}
@@ -131,7 +157,59 @@
     </div>
 
     <div class="reveal in">
-      <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
+      <div class="hero-wrap">
+        <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
+
+        <div class="hero-stats" aria-label="Ověřeno v praxi">
+          <span class="hs"><svg class="st" viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7L12 17.3 5.8 21.1l1.6-7L2 9.3l7.1-.7z"/></svg><b>70+</b> lokalit v ČR</span>
+          <span class="hs"><svg class="st" viewBox="0 0 24 24"><path d="M3 21V9l6-4v4l6-4v4l6-4v16H3z"/></svg><b>4 500 m²</b> vlastní výroba</span>
+        </div>
+
+        <div class="seal" role="img" aria-label="Pečeť kvality: 100% český výrobek, ověřený byznys model na více než 70 lokalitách v ČR, výroba 4 500 m²">
+          <svg class="seal-ring" viewBox="0 0 200 200">
+            <defs>
+              <linearGradient id="sealGold" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f6e3a1"/><stop offset=".45" stop-color="#d4af37"/><stop offset="1" stop-color="#8e6a1a"/>
+              </linearGradient>
+              <path id="sealPath" d="M100,100 m-79,0 a79,79 0 1,1 158,0 a79,79 0 1,1 -158,0"/>
+            </defs>
+            <circle class="seal-bg" cx="100" cy="100" r="97"/>
+            <circle class="seal-gold" cx="100" cy="100" r="95"/>
+            <circle class="seal-dots" cx="100" cy="100" r="88"/>
+            <circle class="seal-inner" cx="100" cy="100" r="66"/>
+            <text class="seal-text"><textPath href="#sealPath" startOffset="0">100% ČESKÝ VÝROBEK ★ OVĚŘENO NA 70+ LOKALITÁCH ★ VÝROBA 4 500 m² ★ </textPath></text>
+          </svg>
+          <div class="seal-center">
+            <svg class="seal-flag" viewBox="0 0 90 60" aria-hidden="true">
+              <defs>
+                <clipPath id="flagWave">
+                  <path d="M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z">
+                    <animate attributeName="d" dur="2.4s" repeatCount="indefinite"
+                      values="M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z;
+                              M0,4 Q22,8 45,4 T90,4 L90,56 Q68,52 45,56 T0,56 Z;
+                              M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z"/>
+                  </path>
+                </clipPath>
+                <linearGradient id="flagShade" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#000" stop-opacity=".22"/>
+                  <stop offset=".35" stop-color="#fff" stop-opacity=".16"/>
+                  <stop offset=".65" stop-color="#000" stop-opacity=".22"/>
+                  <stop offset="1" stop-color="#fff" stop-opacity=".12"/>
+                  <animate attributeName="x1" values="-1;0" dur="2.4s" repeatCount="indefinite"/>
+                  <animate attributeName="x2" values="0;1" dur="2.4s" repeatCount="indefinite"/>
+                </linearGradient>
+              </defs>
+              <g clip-path="url(#flagWave)">
+                <rect width="90" height="30" fill="#ffffff"/>
+                <rect y="30" width="90" height="30" fill="#d7141a"/>
+                <polygon points="0,0 45,30 0,60" fill="#11457e"/>
+                <rect width="90" height="60" fill="url(#flagShade)"/>
+              </g>
+            </svg>
+            <div class="seal-100">100 %<small>MADE IN CZ</small></div>
+          </div>
+        </div>
+      </div>
       <p class="eyebrow">Děkujeme za velký zájem</p>
       <h1>Ať přesně víte,<br><span class="g">co vás čeká</span></h1>
       <p class="intro">Zájemců máme hodně. Abychom se každému věnovali pořádně, dali jsme začátku jasný řád — tři kroky. Vážíme si svého i vašeho času a věříme, že úspěšní lidé s opravdovým zájmem to ocení.</p>
