@@ -1,0 +1,25 @@
+# =============================================================================
+# HolyOS — BASE image (staví se v GitHub Actions, ukládá do GHCR)
+# =============================================================================
+# Obsahuje to nejtěžší, co se skoro nemění: OS, systémové Chromium a node_modules.
+# Přestaví se JEN když se změní package*.json nebo tento soubor (viz workflow).
+# Railway pak z tohoto base jen přidá zdrojáky → rychlý deploy.
+
+FROM node:22-bookworm-slim
+
+ENV NODE_ENV=production \
+    PUPPETEER_SKIP_DOWNLOAD=1 \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+
+# Systémové Chromium + fonty pro headless generování PDF (faktury/objednávky/smlouvy).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium \
+      ca-certificates \
+      fonts-liberation \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Produkční závislosti (bez Chromia — to je systémové výše).
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
