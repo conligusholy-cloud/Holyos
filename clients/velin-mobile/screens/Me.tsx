@@ -3,32 +3,54 @@
 // =============================================================================
 
 import React, { useEffect, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { loadAuth, clearAuth, AuthSnapshot } from '../lib/auth';
-import { API_BASE, api } from '../lib/api';
+import { API_BASE, api, MyAssistantConfig } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
 import type { RootStackParamList } from '../App';
 import Constants from 'expo-constants';
 
 export default function Me() {
   const [auth, setAuth] = useState<AuthSnapshot | null>(null);
-  const [assistant, setAssistant] = useState<{ enabled: boolean; number: string } | null>(null);
+  const [jwt, setJwt] = useState<string | null>(null);
+  const [assistant, setAssistant] = useState<MyAssistantConfig | null>(null);
+  const [paSaving, setPaSaving] = useState(false);
+  const [paMsg, setPaMsg] = useState<string | null>(null);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const appVersion = Constants.expoConfig?.version || '0.1.0';
 
   useEffect(() => {
     loadAuth().then((a) => {
       setAuth(a);
+      setJwt(a?.jwt || null);
       if (a?.jwt) {
         api.myAssistant(a.jwt)
-          .then((r) => setAssistant({ enabled: !!r.enabled, number: r.number || '' }))
+          .then((r) => setAssistant({
+            enabled: !!r.enabled, number: r.number || '',
+            inbound_greeting: r.inbound_greeting || '', inbound_prompt: r.inbound_prompt || '',
+            transfer_enabled: !!r.transfer_enabled, transfer_number: r.transfer_number || '',
+            tts_voice: r.tts_voice === 'male' ? 'male' : 'female',
+          }))
           .catch(() => setAssistant(null));
       }
     });
   }, []);
+
+  function setPa<K extends keyof MyAssistantConfig>(k: K, v: MyAssistantConfig[K]) {
+    setAssistant((p) => (p ? { ...p, [k]: v } : p));
+  }
+  async function savePa() {
+    if (!jwt || !assistant) return;
+    if (assistant.enabled && !assistant.number.trim()) { setPaMsg('Zadej Twilio číslo asistenta.'); return; }
+    if (assistant.transfer_enabled && !assistant.transfer_number.trim()) { setPaMsg('Zapnul jsi přepojení — zadej číslo.'); return; }
+    setPaSaving(true); setPaMsg('Ukládám…');
+    try { await api.saveMyAssistant(jwt, assistant); setPaMsg('✓ Uloženo'); }
+    catch (e: any) { setPaMsg('Chyba: ' + (e?.message || 'uložení selhalo')); }
+    finally { setPaSaving(false); }
+  }
 
   // GSM kód pro podmíněné přesměrování — otevře volání (appka to nezvládne potichu).
   function dialForward(prefix: string) {
@@ -82,38 +104,61 @@ export default function Me() {
           <Row label="Verze aplikace" value={appVersion} />
         </View>
 
-        {assistant && assistant.number ? (
+        {assistant && (
           <View style={styles.paCard}>
             <Text style={styles.paTitle}>📞 Osobní asistent</Text>
-            <Text style={styles.paSub}>
-              {assistant.enabled ? 'Aktivní' : 'Vypnutý'} · {assistant.number}
-            </Text>
-            <Text style={styles.paHint}>
-              Přesměruj nezvednuté hovory na asistenta. Ťukni → otevře se volání, které to nastaví u operátora.
-            </Text>
-            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**61')}>
-              <Text style={styles.paBtnText}>Zapnout — když neberu</Text>
+            <Text style={styles.paHint}>AI zvedne nezvednuté hovory, zjistí kdo volá a co potřebuje, a založí ti vzkaz.</Text>
+
+            <View style={styles.paRow}>
+              <Text style={styles.paLabel}>Služba zapnutá</Text>
+              <Switch value={assistant.enabled} onValueChange={(v) => setPa('enabled', v)} />
+            </View>
+
+            <Text style={styles.paFieldLabel}>Twilio číslo asistenta</Text>
+            <TextInput style={styles.paInput} value={assistant.number} onChangeText={(v) => setPa('number', v)} placeholder="+420…" placeholderTextColor={colors.text2} keyboardType="phone-pad" />
+
+            <Text style={styles.paFieldLabel}>Hlas asistenta</Text>
+            <View style={styles.paSeg}>
+              {(['female', 'male'] as const).map((g) => (
+                <TouchableOpacity key={g} style={[styles.paSegItem, assistant.tts_voice === g && styles.paSegOn]} onPress={() => setPa('tts_voice', g)}>
+                  <Text style={[styles.paSegText, assistant.tts_voice === g && styles.paSegTextOn]}>{g === 'female' ? '👩 Ženský' : '👨 Mužský'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.paFieldLabel}>Uvítání (co AI řekne na začátku)</Text>
+            <TextInput style={[styles.paInput, styles.paArea]} value={assistant.inbound_greeting} onChangeText={(v) => setPa('inbound_greeting', v)} multiline placeholder="Dobrý den, dovolali jste se…" placeholderTextColor={colors.text2} />
+
+            <Text style={styles.paFieldLabel}>Instrukce pro AI (nepovinné)</Text>
+            <TextInput style={[styles.paInput, styles.paArea]} value={assistant.inbound_prompt} onChangeText={(v) => setPa('inbound_prompt', v)} multiline placeholder="Zjisti jméno, telefon a důvod hovoru…" placeholderTextColor={colors.text2} />
+
+            <View style={styles.paRow}>
+              <Text style={styles.paLabel}>Nejdřív zkusit přepojit na mé číslo</Text>
+              <Switch value={assistant.transfer_enabled} onValueChange={(v) => setPa('transfer_enabled', v)} />
+            </View>
+            {assistant.transfer_enabled && (
+              <TextInput style={styles.paInput} value={assistant.transfer_number} onChangeText={(v) => setPa('transfer_number', v)} placeholder="+420… (tvůj telefon)" placeholderTextColor={colors.text2} keyboardType="phone-pad" />
+            )}
+
+            <TouchableOpacity style={[styles.paSaveBtn, paSaving && { opacity: 0.6 }]} onPress={savePa} disabled={paSaving}>
+              <Text style={styles.paSaveText}>{paSaving ? 'Ukládám…' : 'Uložit'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**67')}>
-              <Text style={styles.paBtnText}>Zapnout — když mám obsazeno</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**62')}>
-              <Text style={styles.paBtnText}>Zapnout — když jsem nedostupný</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.paCancelBtn} onPress={cancelForward}>
-              <Text style={styles.paCancelText}>Zrušit přesměrování</Text>
-            </TouchableOpacity>
+            {paMsg ? <Text style={styles.paMsg}>{paMsg}</Text> : null}
+
+            {assistant.number ? (
+              <>
+                <Text style={[styles.paFieldLabel, { marginTop: spacing.lg }]}>Přesměrování na telefonu (u operátora)</Text>
+                <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**61')}><Text style={styles.paBtnText}>Zapnout — když neberu</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**67')}><Text style={styles.paBtnText}>Zapnout — když mám obsazeno</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.paBtn} onPress={() => dialForward('**62')}><Text style={styles.paBtnText}>Zapnout — když jsem nedostupný</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.paCancelBtn} onPress={cancelForward}><Text style={styles.paCancelText}>Zrušit přesměrování</Text></TouchableOpacity>
+              </>
+            ) : null}
+
             <TouchableOpacity style={styles.paSettingsBtn} onPress={() => navigation.navigate('AssistantSettings')}>
-              <Text style={styles.paSettingsText}>⚙️  Nastavení a vzkazy</Text>
+              <Text style={styles.paSettingsText}>📩  Vzkazy asistenta</Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <TouchableOpacity
-            style={[styles.reflectionBtn, { marginTop: spacing.xl }]}
-            onPress={() => navigation.navigate('AssistantSettings')}
-          >
-            <Text style={styles.reflectionBtnText}>📞  Osobní asistent</Text>
-          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -224,6 +269,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   paSettingsText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  paRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.md },
+  paLabel: { color: colors.text, fontSize: 14, flexShrink: 1 },
+  paFieldLabel: { color: colors.text2, fontSize: 12, marginTop: spacing.md, marginBottom: 4 },
+  paInput: { backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, color: colors.text, fontSize: 15 },
+  paArea: { minHeight: 66, textAlignVertical: 'top' },
+  paSeg: { flexDirection: 'row', gap: spacing.sm },
+  paSegItem: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.bg },
+  paSegOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  paSegText: { color: colors.text2, fontSize: 14 },
+  paSegTextOn: { color: '#fff', fontWeight: '700' },
+  paSaveBtn: { backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  paSaveText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  paMsg: { color: colors.text2, fontSize: 13, textAlign: 'center', marginTop: spacing.sm },
   reflectionBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.md,
