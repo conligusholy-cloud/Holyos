@@ -26,19 +26,46 @@
   .pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,224,138,.6)}70%{box-shadow:0 0 0 10px rgba(62,224,138,0)}100%{box-shadow:0 0 0 0 rgba(62,224,138,0)}}
   h1{font-weight:700;font-size:clamp(28px,7vw,40px);line-height:1.12;letter-spacing:-.01em}
-  h1 .g{color:var(--blue-soft)}
-  .lead{font-size:15.5px;color:var(--muted);margin:14px 0 24px}
+  h1 .g,h2 .g{color:var(--blue-soft)}
+  .lead{font-size:15.5px;color:var(--muted);margin:14px 0 26px}
+
+  /* Milník — datum */
+  .milestone{position:relative;border-radius:18px;padding:1px;margin-bottom:28px;
+    background:linear-gradient(135deg,rgba(62,224,138,.7),rgba(46,140,224,.15) 45%,rgba(30,134,224,.7));
+    box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .milestone-in{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:26px 22px;text-align:center;overflow:hidden}
+  .milestone-in:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(70% 70% at 50% 0%,rgba(62,224,138,.16),transparent 65%)}
+  .ms-label{position:relative;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:10px}
+  .ms-date{position:relative;white-space:nowrap;font-size:clamp(40px,13vw,68px);font-weight:800;letter-spacing:-.03em;line-height:1;
+    background:linear-gradient(90deg,#4aa3ea,#8fd0ff 55%,#3ee08a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .ms-title{position:relative;font-size:clamp(18px,4.6vw,22px);font-weight:700;margin-top:14px;line-height:1.3}
+  .ms-sub{position:relative;font-size:14.5px;color:#c3d6e8;margin-top:6px}
+
+  .sec-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin:0 0 10px}
+  .what{background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:28px}
+  .what p{font-size:15.5px;line-height:1.6;color:#dceaf6}
+  .what b{color:#fff}
+
   .items{display:flex;flex-direction:column;gap:12px;margin-bottom:28px}
   .item{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:17px 18px}
   .ck{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:rgba(62,224,138,.16);display:flex;align-items:center;justify-content:center;margin-top:1px}
   .ck svg{width:14px;height:14px;stroke:var(--green);fill:none;stroke-width:2.6}
   .item h3{font-size:15.5px;font-weight:600;margin-bottom:3px}
   .item p{font-size:14px;color:var(--muted);line-height:1.55}
+
+  .closing{text-align:center;margin:6px 0 22px}
+  .closing h2{font-size:clamp(22px,5.6vw,30px);font-weight:800;line-height:1.18;letter-spacing:-.01em}
+  .closing p{font-size:15px;color:#c3d6e8;margin-top:8px}
+
   .btn{display:block;width:100%;text-align:center;border-radius:11px;padding:17px;font-size:16.5px;font-weight:600;color:#fff;
-    background:linear-gradient(135deg,#1e86e0,#3aa0f0);box-shadow:0 16px 36px -12px rgba(30,134,224,.85);transition:filter .2s,transform .15s}
+    background:linear-gradient(135deg,#1e86e0,#3aa0f0);box-shadow:0 16px 36px -12px rgba(30,134,224,.85);transition:filter .2s,transform .15s;
+    animation:glow 2.8s ease-in-out infinite}
+  @keyframes glow{0%,100%{box-shadow:0 16px 36px -12px rgba(30,134,224,.7)}50%{box-shadow:0 18px 50px -8px rgba(30,134,224,1)}}
   .btn:hover{filter:brightness(1.07);transform:translateY(-2px)}
   .alt{display:block;text-align:center;margin-top:14px;font-size:14px;color:var(--blue-soft)}
   .foot{margin-top:12px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  .disc{margin-top:22px;text-align:center;font-size:11.5px;color:var(--muted2);opacity:.8}
+  @media (prefers-reduced-motion:reduce){.pulse-dot,.btn{animation:none}}
 </style>
 </head>
 <body>
@@ -47,17 +74,36 @@
       <span class="brand"><span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span><span class="name">PRÁDLOMAT</span></span>
       <a class="back" data-keep href="info">← zpět</a>
     </div>
+
     <p class="eyebrow"><span class="pulse-dot"></span>Cesta 2 · Financování</p>
     <h1>Prádlomat přes <span class="g">financování</span></h1>
-    <p class="lead">Nemusíte mít celou částku hned. Prádlomat pořídíte přes naše financující partnery a splácíte postupně.</p>
-    <div class="items">
-      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Minimum vlastních peněz na začátku</h3><p>Většinu investice pokryje financující partner.</p></div></div>
-      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Splátky z výnosu</h3><p>Prádlomat vydělává od prvního dne provozu — splátky můžete hradit z jeho příjmu.</p></div></div>
-      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Vyřídíme to s vámi</h3><p>Spolupracujeme s ověřenými leasingovými a úvěrovými společnostmi a projdeme s vámi konkrétní varianty.</p></div></div>
+    <p class="lead">Nemusíte mít celou částku hned. A od teď to platí víc než kdy dřív.</p>
+
+    <div class="milestone">
+      <div class="milestone-in">
+        <p class="ms-label">Den, který změnil historii prádlomatu</p>
+        <div class="ms-date">24. 9. 2026</div>
+        <p class="ms-title">Po 7 letech tvrdé práce</p>
+        <p class="ms-sub">bankovní domy zalistovaly prádlomat a jeho byznys model jako financovatelný.</p>
+      </div>
     </div>
-    <a class="btn" data-keep data-hash="#book" href="info">Domluvit schůzku →</a>
+
+    <p class="sec-h">Co to pro vás znamená</p>
+    <div class="items">
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Prádlomat ručí sám za sebe</h3><p>Podobně jako nemovitost — zárukou financování je samotný prádlomat a jeho výnos.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Financování i pro nové firmy</h3><p>Pořídit ho můžete i jako nově vzniklý subjekt — bez dlouhé historie hospodaření.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Rámec podle vás</h3><p>Schválit se dá v podstatě jakýkoli rámec. Je jen na vás, na kolik prádlomatů se cítíte.</p></div></div>
+    </div>
+
+    <div class="closing">
+      <h2>Příležitost <span class="g">století</span></h2>
+      <p>A je na každém, kdo u toho bude.</p>
+    </div>
+
+    <a class="btn" data-keep data-hash="#book" href="info">Chci být u toho — domluvit schůzku →</a>
     <a class="alt" data-keep href="vlastni-kapital">Máte vlastní zdroje? Podívejte se na tuto cestu →</a>
     <p class="foot">Nezávazně a zdarma · online i osobně · 17 minut</p>
+    <p class="disc">Konkrétní podmínky a schválení financování stanovuje financující partner.</p>
   </div>
 <script>
 (function(){
