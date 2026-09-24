@@ -1,0 +1,31 @@
+# Co se NEKopíruje do Docker image (rychlejší build, menší kontext).
+node_modules
+.git
+.gitignore
+
+# Klientské aplikace se nasazují zvlášť; server servíruje jen pwa-sklad/dist.
+clients/cad-bridge
+clients/velin-mobile
+clients/pwa-sklad/node_modules
+
+# Lokální data (na Railway persistent volume /app/data), podklady, zálohy, buildy.
+data
+podklady
+backups
+*.apk
+*.jar
+*.log
+*.map
+*.csv
+*.bak
+goods-*.json
+.puppeteer-cache
+npm-debug.log
+
+# Vývojářské/pomocné soubory, které runtime nepotřebuje.
+.claude
+docs
+.vscode
+.github
+src
+tsconfig.json
