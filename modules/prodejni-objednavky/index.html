@@ -602,13 +602,7 @@
           <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Jen tito obchodníci (nezaškrtnuté nic = všichni):</div>
           <div id="ai-as-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;">Příklad: zapnuto + „z reklamy" + „nové" + „přeskočit black list" + zaškrtnutí Tomáš a Jan → každý nový lead z reklamy bez ❗ přiřazený jim dostane SMS automaticky.</div>
-          <div style="margin-top:14px;border-top:1px dashed var(--border);padding-top:12px;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">📅 Varianta SCHŮZKA (rezervace termínu na pradlomaty.info/home)</div>
-            <div style="font-size:12px;color:var(--text2);margin:0 0 6px;">Leadům těchto obchodníků se místo specialisty pošle odkaz na výběr termínu schůzky. <b>Pojistka:</b> jednomu leadovi se nikdy nepošle obojí.</div>
-            <div id="ai-as-schuzka-owners-box" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);font-size:13px;color:var(--text2);">Načítám obchodníky…</div>
-            <div style="font-size:12px;color:var(--text2);margin:8px 0 4px;">Text SMS pro schůzku (<code>{link}</code>):</div>
-            <textarea id="ai-as-schuzka-text" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;font-family:inherit;" placeholder="PRADLOMATY: vyberte si termin schuzky {link}"></textarea>
-          </div>
+          <div style="font-size:11px;color:var(--text2);margin-top:8px;">📅 Varianta <b>SCHŮZKA</b> (odkaz na rezervaci termínu) má vlastní záložku <b>📨 SMS schůzka</b>. Obchodník nemůže být v obou variantách zároveň.</div>
           <div style="margin-top:10px;"><button class="btn" onclick="aiSaveAutosend()" style="background:#8b5cf6;color:#fff;font-weight:700;">💾 Uložit automatické odesílání</button> <span id="ai-as-msg" style="margin-left:10px;font-size:13px;color:var(--text2);"></span></div>
           <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><b style="font-size:13px;color:var(--text);">📊 Odeslané SMS specialisty</b><button class="btn" onclick="aiLoadSmsStats()" style="font-size:12px;padding:4px 10px;">↻ Načíst statistiku</button><span id="ai-as-stats-sum" style="font-size:12px;color:var(--text2);"></span></div>
@@ -5969,15 +5963,6 @@
           if(!list.length){ box.innerHTML='<span>Žádní obchodníci k dispozici.</span>'; }
           else box.innerHTML=list.map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<label style="display:inline-flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;"><input type="checkbox" class="ai-as-owner" value="'+s.id+'"'+(sel.indexOf(Number(s.id))!==-1?' checked':'')+'> '+cmpEsc(nm)+'</label>'; }).join('');
         }
-        // Varianta SCHŮZKA — kteří obchodníci + text
-        var sel2 = (c.schuzkaOwnerPersonIds||[]).map(Number);
-        var sbox=document.getElementById('ai-as-schuzka-owners-box');
-        if(sbox){
-          var slist=(typeof CMP_SELLERS!=='undefined' && Array.isArray(CMP_SELLERS))?CMP_SELLERS:[];
-          if(!slist.length){ sbox.innerHTML='<span>Žádní obchodníci k dispozici.</span>'; }
-          else sbox.innerHTML=slist.map(function(s){ var nm=((s.first_name||'')+' '+(s.last_name||'')).trim()||('#'+s.id); return '<label style="display:inline-flex;align-items:center;gap:6px;color:var(--text);cursor:pointer;"><input type="checkbox" class="ai-as-schuzka-owner" value="'+s.id+'"'+(sel2.indexOf(Number(s.id))!==-1?' checked':'')+'> '+cmpEsc(nm)+'</label>'; }).join('');
-        }
-        var st=document.getElementById('ai-as-schuzka-text'); if(st) st.value=c.schuzkaText||'PRADLOMATY: vyberte si termin schuzky {link}';
       }catch(e){}
     }
     async function aiSaveAutosend(){
@@ -5992,11 +5977,9 @@
           onlyNew: document.getElementById('ai-as-new').checked,
           skipBlacklist: document.getElementById('ai-as-nobl').checked,
           emailEnabled: !!(document.getElementById('ai-as-email')||{}).checked,
-          ownerPersonIds: owners,
-          schuzkaOwnerPersonIds: Array.prototype.slice.call(document.querySelectorAll('.ai-as-schuzka-owner:checked')).map(function(c){return parseInt(c.value,10);}).filter(Boolean),
-          schuzkaText: (document.getElementById('ai-as-schuzka-text')||{}).value || 'PRADLOMATY: vyberte si termin schuzky {link}'
+          ownerPersonIds: owners
         })});
-        if(!r.ok) throw new Error('HTTP '+r.status);
+        if(!r.ok){ var ej=await r.json().catch(function(){return{};}); throw new Error(ej.error||('HTTP '+r.status)); }
         if(msg) msg.textContent='✅ Uloženo';
       }catch(e){ if(msg) msg.textContent='Chyba: '+e.message; }
     }
@@ -10860,5 +10843,6 @@
   <script src="/js/order-wizard.js"></script>
   <script src="/modules/prodejni-objednavky/predjednana-mista.js"></script>
   <script src="/modules/prodejni-objednavky/leasing.js"></script>
+  <script src="/modules/prodejni-objednavky/schuzka-sms.js"></script>
 </body>
 </html>

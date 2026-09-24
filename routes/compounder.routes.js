@@ -994,22 +994,62 @@ router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
     res.json({ ok: true, config: Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}), default: AISPEC_AUTOSEND_DEFAULT });
   } catch (err) { next(err); }
 });
+// PUT — částečná aktualizace: pošli jen klíče, které měníš (specialista a schůzka se
+// ukládají z různých obrazovek). Kontrola: obchodník nesmí být zároveň u specialisty i u schůzky.
 router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   try {
     const b = req.body || {};
+    const prev = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
+    const ids = (a) => (Array.isArray(a) ? a.map((n) => parseInt(n, 10)).filter(Boolean) : []);
+    const has = (k) => Object.prototype.hasOwnProperty.call(b, k);
     const cfg = {
-      enabled: !!b.enabled,
-      text: String(b.text || 'PRADLOMATY-info: {link}').slice(0, 500),
-      sources: Array.isArray(b.sources) ? b.sources.filter((s) => ['facebook_ads', 'google_ads'].indexOf(s) !== -1) : ['facebook_ads', 'google_ads'],
-      onlyNew: b.onlyNew !== false,
-      skipBlacklist: b.skipBlacklist !== false,
-      ownerPersonIds: Array.isArray(b.ownerPersonIds) ? b.ownerPersonIds.map((n) => parseInt(n, 10)).filter(Boolean) : [],
-      emailEnabled: !!b.emailEnabled,
-      schuzkaOwnerPersonIds: Array.isArray(b.schuzkaOwnerPersonIds) ? b.schuzkaOwnerPersonIds.map((n) => parseInt(n, 10)).filter(Boolean) : [],
-      schuzkaText: String(b.schuzkaText || 'PRADLOMATY: vyberte si termin schuzky {link}').slice(0, 500),
+      enabled: has('enabled') ? !!b.enabled : !!prev.enabled,
+      text: has('text') ? String(b.text || 'PRADLOMATY-info: {link}').slice(0, 500) : prev.text,
+      sources: has('sources') ? (Array.isArray(b.sources) ? b.sources.filter((s) => ['facebook_ads', 'google_ads'].indexOf(s) !== -1) : []) : prev.sources,
+      onlyNew: has('onlyNew') ? b.onlyNew !== false : prev.onlyNew !== false,
+      skipBlacklist: has('skipBlacklist') ? b.skipBlacklist !== false : prev.skipBlacklist !== false,
+      ownerPersonIds: has('ownerPersonIds') ? ids(b.ownerPersonIds) : ids(prev.ownerPersonIds),
+      emailEnabled: has('emailEnabled') ? !!b.emailEnabled : !!prev.emailEnabled,
+      schuzkaOwnerPersonIds: has('schuzkaOwnerPersonIds') ? ids(b.schuzkaOwnerPersonIds) : ids(prev.schuzkaOwnerPersonIds),
+      schuzkaText: has('schuzkaText') ? String(b.schuzkaText || 'PRADLOMATY: vyberte si termin schuzky {link}').slice(0, 500) : prev.schuzkaText,
     };
+    const overlap = cfg.ownerPersonIds.filter((id) => cfg.schuzkaOwnerPersonIds.indexOf(id) !== -1);
+    if (overlap.length) {
+      const people = await prisma.person.findMany({ where: { id: { in: overlap } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []);
+      const names = overlap.map((id) => { const p = people.find((x) => x.id === id); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id); });
+      return res.status(400).json({ ok: false, error: 'Obchodník nemůže být zároveň u specialisty i u schůzky: ' + names.join(', ') + '. Odškrtni ho v jedné z variant.', overlap });
+    }
     await setSetting('compounder.aispec_autosend', cfg, { type: 'json', userId: req.user && req.user.id });
     res.json({ ok: true, config: cfg });
+  } catch (err) { next(err); }
+});
+
+// GET /api/compounder/schuzka-sms-stats — odeslané SMS „schůzka" + otevření + rezervace.
+router.get('/schuzka-sms-stats', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await prisma.compounderLead.findMany({
+      where: { schuzka_sms_sent_at: { not: null } },
+      select: { id: true, name: true, phone: true, source: true, owner_person_id: true, is_test: true, status: true,
+        schuzka_sms_sent_at: true, schuzka_sms_status: true, schuzka_opened_at: true, schuzka_mode: true, financing_path: true },
+      orderBy: { schuzka_sms_sent_at: 'desc' },
+      take: 500,
+    });
+    const leadIds = rows.map((r) => r.id);
+    const resv = leadIds.length ? await prisma.meetingReservation.findMany({
+      where: { compounder_lead_id: { in: leadIds }, status: 'booked' },
+      select: { compounder_lead_id: true, slot: { select: { starts_at: true } } },
+    }).catch(() => []) : [];
+    const resvBy = {}; resv.forEach((r) => { resvBy[r.compounder_lead_id] = r.slot.starts_at; });
+    const real = rows.filter((r) => !r.is_test);
+    res.json({
+      ok: true,
+      total: real.length,
+      opened: real.filter((r) => r.schuzka_opened_at).length,
+      booked: real.filter((r) => resvBy[r.id]).length,
+      list: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, source: r.source, is_test: r.is_test, status: r.status,
+        sentAt: r.schuzka_sms_sent_at, smsStatus: r.schuzka_sms_status || 'odesláno', opened: !!r.schuzka_opened_at,
+        bookedAt: resvBy[r.id] || null, mode: r.schuzka_mode, financing_path: r.financing_path })),
+    });
   } catch (err) { next(err); }
 });
 
@@ -1469,13 +1509,17 @@ router.post('/leads/:id/send-ai-specialist-sms', requireAuth, async (req, res) =
 router.post('/leads/:id/send-schuzka-sms', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, phone: true, name: true, outreach_variant: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, phone: true, name: true, outreach_variant: true, schuzka_sms_sent_at: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     if (!lead.phone) return res.status(400).json({ ok: false, error: 'Lead nemá telefonní číslo' });
-    if (lead.outreach_variant === 'specialist') return res.status(409).json({ ok: false, error: 'Tomuto leadovi už byl odeslán specialista — nelze poslat i schůzku (pojistka).' });
+    // Pojistka: specialista NEBO schůzka. `force` = testovací odeslání (vědomě ji obejít).
+    const force = !!(req.body && req.body.force);
+    if (!force && lead.outreach_variant === 'specialist') return res.status(409).json({ ok: false, error: 'Tomuto leadovi už byl odeslán specialista — nelze poslat i schůzku (pojistka). Pro test zaškrtni „Ignorovat pojistku".' });
+    if (!force && lead.schuzka_sms_sent_at) return res.status(409).json({ ok: false, error: 'SMS se schůzkou už byla tomuto leadovi odeslána ' + new Date(lead.schuzka_sms_sent_at).toLocaleString('cs-CZ') + '. Pro opakované odeslání zaškrtni „Ignorovat pojistku".' });
     const link = schuzkaShortLink(id);
-    const custom = (req.body && req.body.text) ? String(req.body.text) : '';
-    const body = (custom && custom.indexOf('{link}') !== -1) ? custom.replace('{link}', link) : ('PRADLOMATY: vyberte si termin schuzky ' + link);
+    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }).catch(() => null);
+    const custom = (req.body && req.body.text) ? String(req.body.text) : String((cfg && cfg.schuzkaText) || '');
+    const body = (custom && custom.indexOf('{link}') !== -1) ? custom.replace('{link}', link) : ((custom ? custom + ' ' : 'PRADLOMATY: vyberte si termin schuzky ') + link);
     const sms = require('../services/voice/sms');
     const sid = await sms.sendSms(lead.phone, body, { context: 'schuzka', leadId: lead.id });
     const sentAt = new Date();
