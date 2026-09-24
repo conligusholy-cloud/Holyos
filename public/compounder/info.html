@@ -135,6 +135,21 @@
     <p class="lead">Samoobslužná prádelna, která běží nonstop bez obsluhy. Vy vlastníte lokalitu a stroj — o zbytek se postaráme my.</p>
     <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
 
+    <!-- Hlavní sdělení: první klíčová otázka + dvě cesty -->
+    <div class="qcard">
+      <div class="qcard-inner">
+        <p class="q-eyebrow"><span class="pulse-dot"></span> První klíčová otázka</p>
+        <h2 class="q-h">Jak prádlomat <span class="g">pořídíte?</span></h2>
+        <p class="q-sub">Z vlastních zdrojů, nebo přes financování? Vyberte cestu, která je vám bližší — ukážeme vám, jak funguje a co pro vás znamená.</p>
+        <div class="paths">
+          <a class="path-btn" id="pathOwn" href="vlastni-kapital">Vlastní kapitál<small>z vlastních zdrojů →</small></a>
+          <a class="path-btn" id="pathFin" href="financovani">Financování<small>splátky z výnosu →</small></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="hr">Proč prádlomat</div>
+
     <div class="kpis">
       <div class="kpi hero-kpi">
         <p class="rev-label"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Výnos jednoho prádlomatu</p>
@@ -158,23 +173,12 @@
       </div>
     </div>
 
-    <div class="hr">Pod čarou</div>
-
-    <!-- První klíčová otázka + rezervace schůzky -->
-    <div class="qcard">
+    <!-- Rezervace schůzky — skrytá, otevře se jen přes info#book (z podstránek) -->
+    <div class="qcard" id="bookCard" style="display:none;margin-top:30px">
       <div class="qcard-inner">
-        <p class="q-eyebrow"><span class="pulse-dot"></span> První klíčová otázka</p>
-        <h2 class="q-h">Jak prádlomat <span class="g">pořídíte?</span></h2>
-        <p class="q-sub">Z vlastních zdrojů, nebo přes financování? Vyberte cestu, která je vám bližší — ukážeme vám, jak funguje a co pro vás znamená.</p>
-        <div class="paths">
-          <a class="path-btn" id="pathOwn" href="vlastni-kapital">Vlastní kapitál<small>z vlastních zdrojů →</small></a>
-          <a class="path-btn" id="pathFin" href="financovani">Financování<small>splátky z výnosu →</small></a>
-        </div>
-
         <div class="book" id="book">
-          <div id="bookStart">
-            <button type="button" class="btn-ghost" id="pickBtn">Nebo si rovnou domluvte schůzku</button>
-            <p class="foot">Nezávazně a zdarma · online i osobně · 17 minut</p>
+          <div id="bookStart" style="display:none">
+            <button type="button" class="btn-ghost" id="pickBtn">Domluvit schůzku</button>
           </div>
 
           <div id="modePanel" style="display:none">
@@ -221,7 +225,7 @@
     if(po) po.href='vlastni-kapital'+q;
     if(pf) pf.href='financovani'+q;
   }
-  if(location.hash==='#book'){ setTimeout(function(){ var p=document.getElementById('pickBtn'); if(p) p.click(); document.getElementById('book').scrollIntoView({block:'center'}); },50); }
+  if(location.hash==='#book'){ setTimeout(function(){ var c=document.getElementById('bookCard'); if(c) c.style.display='block'; var p=document.getElementById('pickBtn'); if(p) p.click(); document.getElementById('book').scrollIntoView({block:'center'}); },50); }
 
   var status=document.getElementById('status');
   var pickBtn=document.getElementById('pickBtn'), bookStart=document.getElementById('bookStart');
