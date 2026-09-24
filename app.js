@@ -877,6 +877,7 @@ function serveCompounderPage(file) {
 }
 const serveVlastniKapital = serveCompounderPage('vlastni-kapital.html');
 const serveFinancovani = serveCompounderPage('financovani.html');
+const serveSchuzka = serveCompounderPage('schuzka.html');
 // Předjednaná místa — veřejný přehled (pradlomaty.info/location).
 function serveLocationOverview(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -901,6 +902,7 @@ app.use((req, res, next) => {
   if (req.path === '/info' || req.path === '/info/') return serveCompounderInfo(req, res);
   if (req.path === '/vlastni-kapital' || req.path === '/vlastni-kapital/') return serveVlastniKapital(req, res);
   if (req.path === '/financovani' || req.path === '/financovani/') return serveFinancovani(req, res);
+  if (req.path === '/schuzka' || req.path === '/schuzka/') return serveSchuzka(req, res);
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
@@ -951,6 +953,7 @@ app.get('/compounder/info', serveCompounderInfo);
 app.get('/compounder/info/', serveCompounderInfo);
 app.get(['/compounder/vlastni-kapital', '/compounder/vlastni-kapital/'], serveVlastniKapital);
 app.get(['/compounder/financovani', '/compounder/financovani/'], serveFinancovani);
+app.get(['/compounder/schuzka', '/compounder/schuzka/'], serveSchuzka);
 app.get('/compounder/location', serveLocationOverview);
 app.get('/compounder/location/', serveLocationOverview);
 app.use('/compounder', compounderStatic);

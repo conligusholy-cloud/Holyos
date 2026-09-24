@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prádlomat — Schůzka 17,5 minuty</title>
+<meta name="description" content="Druhý nejdůležitější krok: 17,5 minuty, po kterých budete vědět, jestli je prádlomat pro vás. Online nebo osobně." />
+<meta name="theme-color" content="#0c1826" />
+<meta name="robots" content="noindex,nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#0c1826;--card:#13233a;--line:rgba(46,140,224,.3);--blue:#1e86e0;--blue-soft:#4aa3ea;--text:#e9f0f7;--muted:#9db6cd;--muted2:#7fa6c8;--green:#3ee08a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
+  .wrap{max-width:640px;margin:0 auto;padding:26px 22px 60px}
+  a{color:inherit;text-decoration:none}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:26px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+  .brand .drop{width:32px;height:32px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center}
+  .brand .drop svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.8}
+  .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
+  .back{font-size:13px;color:var(--blue-soft)}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:10px}
+  .pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,224,138,.6)}70%{box-shadow:0 0 0 10px rgba(62,224,138,0)}100%{box-shadow:0 0 0 0 rgba(62,224,138,0)}}
+  h1{font-weight:700;font-size:clamp(28px,7vw,40px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{color:var(--blue-soft)}
+  .lead{font-size:15.5px;color:var(--muted);margin:14px 0 24px}
+
+  /* 17,5 minuty */
+  .timebox{position:relative;border-radius:18px;padding:1px;margin-bottom:26px;
+    background:linear-gradient(135deg,rgba(62,224,138,.7),rgba(46,140,224,.15) 45%,rgba(30,134,224,.7));
+    box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .timebox-in{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:24px 22px;text-align:center;overflow:hidden}
+  .timebox-in:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(70% 70% at 50% 0%,rgba(62,224,138,.16),transparent 65%)}
+  .tb-label{position:relative;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--green);font-weight:700;margin-bottom:8px}
+  .tb-num{position:relative;white-space:nowrap;font-size:clamp(46px,15vw,76px);font-weight:800;letter-spacing:-.03em;line-height:1;
+    background:linear-gradient(90deg,#4aa3ea,#8fd0ff 55%,#3ee08a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tb-num .u{font-size:.42em;font-weight:700;letter-spacing:0;margin-left:.12em;color:#5fe0a0;-webkit-text-fill-color:#5fe0a0}
+  .tb-title{position:relative;font-size:clamp(17px,4.4vw,21px);font-weight:700;margin-top:12px;line-height:1.3}
+  .tb-sub{position:relative;font-size:14.5px;color:#c3d6e8;margin-top:6px}
+
+  .sec-h{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin:0 0 10px}
+  .items{display:flex;flex-direction:column;gap:11px;margin-bottom:28px}
+  .item{display:flex;gap:13px;align-items:flex-start;background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:15px 17px}
+  .ck{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:rgba(62,224,138,.16);display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .ck svg{width:14px;height:14px;stroke:var(--green);fill:none;stroke-width:2.6}
+  .item h3{font-size:15.5px;font-weight:600;margin-bottom:2px}
+  .item p{font-size:14px;color:var(--muted);line-height:1.5}
+
+  /* Rezervace */
+  .qcard{position:relative;border-radius:18px;padding:1px;
+    background:linear-gradient(135deg,rgba(30,134,224,.7),rgba(46,140,224,.12) 45%,rgba(30,134,224,.6));
+    box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .qcard-inner{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:24px 20px;overflow:hidden}
+  .qcard-inner:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(85% 60% at 50% -12%,rgba(30,134,224,.26),transparent 60%)}
+  .q-h{position:relative;font-size:clamp(21px,5.4vw,28px);font-weight:700;line-height:1.16;letter-spacing:-.01em;margin-bottom:6px}
+  .q-h .g{color:var(--blue-soft)}
+  .q-sub{position:relative;font-size:14.5px;color:#c3d6e8;margin-bottom:18px}
+  .book{position:relative}
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .modebtn{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;border:none;border-radius:12px;padding:20px 12px;
+    color:#fff;font-family:inherit;font-size:16px;font-weight:700;cursor:pointer;
+    background:linear-gradient(135deg,#1e86e0,#3aa0f0);box-shadow:0 14px 32px -12px rgba(30,134,224,.85);transition:filter .2s,transform .15s}
+  .modebtn:hover{filter:brightness(1.08);transform:translateY(-2px)}
+  .modebtn svg{width:30px;height:30px;stroke:#fff;fill:none;stroke-width:1.7}
+  .modebtn small{font-size:12px;font-weight:500;color:rgba(255,255,255,.82)}
+  .bk-title{font-size:15px;font-weight:600;margin:2px 0 12px}
+  .bk-back{background:none;border:none;color:var(--muted2);font-size:13px;cursor:pointer;padding:0;margin-bottom:10px;font-family:inherit}
+  .day{margin-bottom:16px}
+  .day-h{font-size:13px;color:var(--muted2);margin-bottom:8px;text-transform:capitalize}
+  .slots{display:flex;flex-wrap:wrap;gap:8px}
+  .slot{border:1px solid var(--line);background:#0e1e33;border-radius:10px;padding:11px 15px;font-size:15px;
+    color:var(--text);cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
+  .slot:hover{border-color:var(--blue);background:#12294a}
+  .slot:disabled{opacity:.5;cursor:default}
+  .done{text-align:center;padding:14px}
+  .done .ic{width:56px;height:56px;border-radius:50%;background:rgba(62,224,138,.15);display:flex;align-items:center;justify-content:center;margin:0 auto 12px}
+  .done .ic svg{width:28px;height:28px;stroke:var(--green);fill:none;stroke-width:2.4}
+  .done h3{font-size:19px;font-weight:700;margin-bottom:6px}
+  .done p{font-size:14.5px;color:#c3d6e8}
+  .status{min-height:20px;margin-top:12px;font-size:14px;color:var(--blue-soft);text-align:center}
+  .foot{position:relative;margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  .disc{margin-top:22px;text-align:center;font-size:11.5px;color:var(--muted2);opacity:.8}
+  @media (prefers-reduced-motion:reduce){.pulse-dot{animation:none}}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand"><span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span><span class="name">PRÁDLOMAT</span></span>
+      <a class="back" id="backLink" href="info">← zpět</a>
+    </div>
+
+    <p class="eyebrow"><span class="pulse-dot"></span>Druhý nejdůležitější krok</p>
+    <h1>Schůzka, po které <span class="g">budete vědět</span></h1>
+    <p class="lead">Nebudeme vám nic prodávat. Během krátkého rozhovoru společně zjistíme, jestli je prádlomat pro vás — a jestli má smysl jít dál.</p>
+
+    <div class="timebox">
+      <div class="timebox-in">
+        <p class="tb-label">Přesně tolik vám zabere</p>
+        <div class="tb-num">17,5<span class="u">minuty</span></div>
+        <p class="tb-title">Míň než jedna epizoda seriálu</p>
+        <p class="tb-sub">Ani minutu navíc. Vážíme si vašeho času stejně jako svého.</p>
+      </div>
+    </div>
+
+    <p class="sec-h">Co si z těch 17,5 minut odnesete</p>
+    <div class="items">
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Jasnou odpověď, jestli je to pro vás</h3><p>Upřímně a bez tlaku. Rozhodujeme se oba — prádlomat svěřujeme jen partnerům, se kterými si sedneme.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Čísla pro vaši lokalitu</h3><p>Kolik může prádlomat vydělávat právě u vás a jak vypadá financování ve vašem případě.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Další krok jasně na stole</h3><p>Odejdete s konkrétním plánem: co, kdy a jak — ať se rozhodnete ano, nebo ne.</p></div></div>
+    </div>
+
+    <div class="qcard">
+      <div class="qcard-inner">
+        <div class="book" id="book">
+          <div id="modePanel">
+            <h2 class="q-h">Jak vám to <span class="g">vyhovuje?</span></h2>
+            <p class="q-sub">Vyberte formu a hned uvidíte volné termíny.</p>
+            <div class="modes">
+              <button type="button" class="modebtn" data-mode="online">
+                <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
+                Online<small>video hovor z pohodlí domova</small>
+              </button>
+              <button type="button" class="modebtn" data-mode="osobne">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+                Osobně<small>u nás nebo u vás</small>
+              </button>
+            </div>
+          </div>
+
+          <div id="slotsPanel" style="display:none">
+            <button type="button" class="bk-back" id="slotBack">← změnit formu schůzky</button>
+            <p class="bk-title" id="slotTitle">Vyberte termín</p>
+            <div id="slotList"></div>
+          </div>
+
+          <div id="bookDone" class="done" style="display:none">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
+            <h3>Máte rezervováno</h3>
+            <p id="doneText"></p>
+          </div>
+
+          <div class="status" id="status" role="status" aria-live="polite"></div>
+          <p class="foot" id="footNote">Nezávazně a zdarma · 17,5 minuty · Počet partnerů je omezený</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="disc">Termín potvrdíme zprávou. Kdyby vám nevyhovoval, jednoduše se ozvete a přesuneme ho.</p>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var token = new URLSearchParams(location.search).get('t') || '';
+  var backLink=document.getElementById('backLink');
+  if(backLink && token) backLink.href='info?t='+encodeURIComponent(token);
+
+  var status=document.getElementById('status');
+  var slotsPanel=document.getElementById('slotsPanel'), slotList=document.getElementById('slotList');
+  var modePanel=document.getElementById('modePanel'), slotBack=document.getElementById('slotBack'), slotTitle=document.getElementById('slotTitle');
+  var bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText'), footNote=document.getElementById('footNote');
+  var chosenMode='';
+
+  var DAYS=['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
+  var MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
+  function dayHead(d){ return DAYS[d.getDay()]+' '+d.getDate()+'. '+MON[d.getMonth()]; }
+  function hhmm(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
+  function setStatus(msg,err){ status.style.color=err?'#ff8f8f':'var(--blue-soft)'; status.textContent=msg||''; }
+
+  var modeLabels={ osobne:'osobní schůzka', online:'online video hovor' };
+  document.querySelectorAll('#modePanel .modebtn').forEach(function(b){
+    b.addEventListener('click', function(){
+      chosenMode=b.dataset.mode||'online';
+      modePanel.style.display='none'; slotsPanel.style.display='block';
+      slotTitle.textContent='Vyberte termín — '+(modeLabels[chosenMode]||'');
+      loadSlots();
+    });
+  });
+  slotBack.addEventListener('click', function(){ slotsPanel.style.display='none'; modePanel.style.display='block'; setStatus(''); });
+
+  function loadSlots(){
+    setStatus('Načítám volné termíny…'); slotList.innerHTML='';
+    fetch('/api/compounder/meeting-slots?days=45',{credentials:'include'})
+      .then(function(r){ return r.json(); })
+      .then(function(slots){
+        setStatus('');
+        if(!Array.isArray(slots) || !slots.length){ slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Ozveme se vám hned, jak se nějaký uvolní.</p>'; return; }
+        renderSlots(slots);
+      })
+      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
+  }
+
+  function renderSlots(slots){
+    var byDay={}, order=[];
+    slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); if(!byDay[k]){byDay[k]=[];order.push(k);} byDay[k].push(s); });
+    var html='';
+    order.forEach(function(k){
+      var d=new Date(k);
+      html+='<div class="day"><div class="day-h">'+dayHead(d)+'</div><div class="slots">';
+      byDay[k].forEach(function(s){ var t=new Date(s.starts_at); html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>'; });
+      html+='</div></div>';
+    });
+    slotList.innerHTML=html;
+    slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10)); }); });
+  }
+
+  function book(slotId){
+    if(!token){ setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.',true); return; }
+    var payload={ slot_id:slotId, t:token, mode:chosenMode };
+    slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=true; });
+    setStatus('Rezervuji termín…');
+    fetch('/api/compounder/meeting-reservation',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) })
+    .then(function(r){ return r.json().catch(function(){return {};}); })
+    .then(function(d){
+      if(d && d.ok){
+        var dt=new Date(d.starts_at);
+        slotsPanel.style.display='none'; setStatus(''); if(footNote) footNote.style.display='none';
+        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+' ('+(modeLabels[chosenMode]||'')+'). Potvrzení vám pošleme.';
+        bookDone.style.display='block';
+      } else {
+        setStatus((d&&d.error)||'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true);
+        slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; });
+      }
+    })
+    .catch(function(){ setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true); slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; }); });
+  }
+})();
+</script>
+</body>
+</html>
