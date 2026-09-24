@@ -194,8 +194,9 @@ router.post('/meeting-reservation', async (req, res) => {
     if (leadId) {
       const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { name: true, email: true, phone: true } }).catch(() => null);
       if (lead) { name = name || lead.name; email = email || lead.email; phone = phone || lead.phone; }
-      // Jeden lead = jedna aktivní rezervace: starší zrušíme.
-      await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => {});
+      // Jeden lead = jedna aktivní rezervace: starší zrušíme (a zapamatujeme, že jde o přesun).
+      const canceled = await prisma.meetingReservation.updateMany({ where: { compounder_lead_id: leadId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+      req._meetingRebooked = !!(canceled && canceled.count);
     }
     if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
 
@@ -220,6 +221,12 @@ router.post('/meeting-reservation', async (req, res) => {
           props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode, financing_path: path } } });
       } catch (e) { /* timeline je bonus, rezervaci neblokuje */ }
     }
+    // Velín push + zvonek: vždy Jan a Tomáš Holý + přidělený obchodník (fire-and-forget).
+    try {
+      require('../services/meeting/notify').notifyMeetingBooked(prisma, {
+        leadId: leadId || null, reservationId: resv.id, startsAt: slot.starts_at, mode, financingPath: path, rebooked: !!req._meetingRebooked,
+      });
+    } catch (e) { console.warn('[meeting-notify] init:', e.message); }
     res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode, financing_path: path });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
