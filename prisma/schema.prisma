@@ -6701,3 +6701,26 @@ model PradlomatSpotInquiry {
   @@index([created_at])
   @@map("pradlomat_spot_inquiries")
 }
+
+// Leasingové / financující společnosti (financování prádlomatu) — záložka Leasing
+model LeasingCompany {
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(255)
+  ico           String?  @db.VarChar(20)
+  dic           String?  @db.VarChar(20)
+  address       String?  @db.VarChar(255)
+  city          String?  @db.VarChar(120)
+  zip           String?  @db.VarChar(20)
+  country       String?  @default("CZ") @db.VarChar(4)
+  contact_name  String?  @db.VarChar(255)
+  phone         String?  @db.VarChar(40)
+  email         String?  @db.VarChar(255)
+  note          String?  @db.Text
+  active        Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([active])
+  @@index([name])
+  @@map("leasing_companies")
+}
