@@ -44,11 +44,31 @@
   .kpi h3{font-size:16.5px;font-weight:600;margin-bottom:4px}
   .kpi p{font-size:14px;color:var(--muted);line-height:1.55}
   .kpi.hero-kpi{background:linear-gradient(135deg,#12294a,#0e1f36);border:1px solid rgba(46,140,224,.5)}
-  .big-num{font-size:clamp(30px,8vw,44px);font-weight:800;letter-spacing:-.02em;line-height:1;
-    background:linear-gradient(90deg,#4aa3ea,#8fd0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .big-num .u{font-size:16px;font-weight:600;color:var(--blue-soft);-webkit-text-fill-color:var(--blue-soft)}
-  .kpi.hero-kpi h3{font-size:15px;color:var(--muted);font-weight:500;margin-top:8px}
-  .note{font-size:12px;color:var(--muted2);margin-top:6px}
+  /* Výnos — hlavní karta, cena vždy na jednom řádku */
+  .kpi.hero-kpi{display:block;text-align:center;padding:24px 18px 22px;overflow:hidden}
+  .kpi.hero-kpi:before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(70% 80% at 50% 0%,rgba(62,224,138,.13),transparent 65%)}
+  .rev-label{position:relative;display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:12px}
+  .rev-label svg{width:16px;height:16px;stroke:var(--green);fill:none;stroke-width:2}
+  .big-num{position:relative;white-space:nowrap;font-size:clamp(34px,11vw,60px);font-weight:800;letter-spacing:-.03em;line-height:1;
+    background:linear-gradient(90deg,#4aa3ea,#8fd0ff 55%,#3ee08a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .big-num .dash{font-weight:600;opacity:.8;margin:0 .06em}
+  .big-num .cur{font-size:.5em;font-weight:700;letter-spacing:0;margin-left:.14em}
+  .rev-per{position:relative;font-size:15px;color:#dceaf6;font-weight:500;margin-top:10px}
+  .note{position:relative;font-size:12px;color:var(--muted2);margin-top:6px}
+
+  /* Dvě cesty financování */
+  .paths{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
+  .path-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;text-align:center;
+    border-radius:12px;padding:16px 10px;color:#fff;font-weight:700;font-size:16px;
+    background:linear-gradient(135deg,#1e86e0,#3aa0f0);box-shadow:0 14px 32px -12px rgba(30,134,224,.85);
+    transition:filter .2s,transform .15s}
+  .path-btn:hover{filter:brightness(1.08);transform:translateY(-2px)}
+  .path-btn small{font-size:12px;font-weight:500;color:rgba(255,255,255,.82)}
+  .btn-ghost{display:block;width:100%;margin-top:14px;background:none;border:1px solid var(--line);border-radius:11px;
+    padding:13px;color:var(--blue-soft);font-size:14.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:border-color .15s,background .15s}
+  .btn-ghost:hover{border-color:var(--blue);background:rgba(30,134,224,.08)}
 
   /* Čára */
   .hr{display:flex;align-items:center;gap:14px;margin:38px 0 26px;color:var(--muted2);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
@@ -117,12 +137,10 @@
 
     <div class="kpis">
       <div class="kpi hero-kpi">
-        <span class="n">1</span>
-        <div>
-          <div class="big-num">40 000 – 120 000 <span class="u">Kč / měsíc</span></div>
-          <h3>Rozsah měsíčního výnosu jednoho prádlomatu v ČR.</h3>
-          <p class="note">Podle lokality, spádové oblasti a vytížení.</p>
-        </div>
+        <p class="rev-label"><svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Výnos jednoho prádlomatu</p>
+        <div class="big-num">40<span class="dash">–</span>120<span class="cur">tis.&nbsp;Kč</span></div>
+        <p class="rev-per">měsíčně v ČR</p>
+        <p class="note">Podle lokality, spádové oblasti a vytížení.</p>
       </div>
       <div class="kpi">
         <span class="n"><svg viewBox="0 0 24 24"><path d="M14 7l3 3-9 9H5v-3z"/><path d="M13 4l3 3"/></svg></span>
@@ -147,16 +165,15 @@
       <div class="qcard-inner">
         <p class="q-eyebrow"><span class="pulse-dot"></span> První klíčová otázka</p>
         <h2 class="q-h">Jak prádlomat <span class="g">pořídíte?</span></h2>
-        <p class="q-sub">Z vlastního, na leasing, nebo přes financování? Na krátké schůzce vám ukážeme konkrétní varianty a spočítáme, co dává smysl právě pro vás — ať se rozhodujete s čísly, ne podle pocitu.</p>
-        <div class="opts">
-          <span class="opt">Vlastní kapitál</span>
-          <span class="opt">Leasing</span>
-          <span class="opt">Financování</span>
+        <p class="q-sub">Z vlastních zdrojů, nebo přes financování? Vyberte cestu, která je vám bližší — ukážeme vám, jak funguje a co pro vás znamená.</p>
+        <div class="paths">
+          <a class="path-btn" id="pathOwn" href="vlastni-kapital">Vlastní kapitál<small>z vlastních zdrojů →</small></a>
+          <a class="path-btn" id="pathFin" href="financovani">Financování<small>splátky z výnosu →</small></a>
         </div>
 
         <div class="book" id="book">
           <div id="bookStart">
-            <button type="button" class="btn" id="pickBtn">Zjistit, jak na to →</button>
+            <button type="button" class="btn-ghost" id="pickBtn">Nebo si rovnou domluvte schůzku</button>
             <p class="foot">Nezávazně a zdarma · online i osobně · 17 minut</p>
           </div>
 
@@ -198,6 +215,13 @@
   var token = new URLSearchParams(location.search).get('t') || '';
   var backLink=document.getElementById('backLink');
   if(backLink && token) backLink.href='home?t='+encodeURIComponent(token);
+  if(token){
+    var q='?t='+encodeURIComponent(token);
+    var po=document.getElementById('pathOwn'), pf=document.getElementById('pathFin');
+    if(po) po.href='vlastni-kapital'+q;
+    if(pf) pf.href='financovani'+q;
+  }
+  if(location.hash==='#book'){ setTimeout(function(){ var p=document.getElementById('pickBtn'); if(p) p.click(); document.getElementById('book').scrollIntoView({block:'center'}); },50); }
 
   var status=document.getElementById('status');
   var pickBtn=document.getElementById('pickBtn'), bookStart=document.getElementById('bookStart');

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prádlomat — Vlastní kapitál</title>
+<meta name="theme-color" content="#0c1826" />
+<meta name="robots" content="noindex,nofollow" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#0c1826;--card:#13233a;--line:rgba(46,140,224,.3);--blue:#1e86e0;--blue-soft:#4aa3ea;--text:#e9f0f7;--muted:#9db6cd;--muted2:#7fa6c8;--green:#3ee08a}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
+  .wrap{max-width:640px;margin:0 auto;padding:26px 22px 60px}
+  a{color:inherit;text-decoration:none}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:26px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+  .brand .drop{width:32px;height:32px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center}
+  .brand .drop svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:1.8}
+  .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
+  .back{font-size:13px;color:var(--blue-soft)}
+  .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:10px}
+  .pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,224,138,.6)}70%{box-shadow:0 0 0 10px rgba(62,224,138,0)}100%{box-shadow:0 0 0 0 rgba(62,224,138,0)}}
+  h1{font-weight:700;font-size:clamp(28px,7vw,40px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{color:var(--blue-soft)}
+  .lead{font-size:15.5px;color:var(--muted);margin:14px 0 24px}
+  .items{display:flex;flex-direction:column;gap:12px;margin-bottom:28px}
+  .item{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:17px 18px}
+  .ck{flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:rgba(62,224,138,.16);display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .ck svg{width:14px;height:14px;stroke:var(--green);fill:none;stroke-width:2.6}
+  .item h3{font-size:15.5px;font-weight:600;margin-bottom:3px}
+  .item p{font-size:14px;color:var(--muted);line-height:1.55}
+  .btn{display:block;width:100%;text-align:center;border-radius:11px;padding:17px;font-size:16.5px;font-weight:600;color:#fff;
+    background:linear-gradient(135deg,#1e86e0,#3aa0f0);box-shadow:0 16px 36px -12px rgba(30,134,224,.85);transition:filter .2s,transform .15s}
+  .btn:hover{filter:brightness(1.07);transform:translateY(-2px)}
+  .alt{display:block;text-align:center;margin-top:14px;font-size:14px;color:var(--blue-soft)}
+  .foot{margin-top:12px;text-align:center;font-size:12.5px;color:var(--muted2)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand"><span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span><span class="name">PRÁDLOMAT</span></span>
+      <a class="back" data-keep href="info">← zpět</a>
+    </div>
+    <p class="eyebrow"><span class="pulse-dot"></span>Cesta 1 · Vlastní kapitál</p>
+    <h1>Prádlomat z <span class="g">vlastních zdrojů</span></h1>
+    <p class="lead">Stroj pořídíte ze svého a celý výnos zůstává vám — bez splátek a bez závazků vůči třetí straně.</p>
+    <div class="items">
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Celý výnos je váš</h3><p>Žádné splátky, které by ukrajovaly z měsíčního příjmu.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Nejrychlejší rozjezd</h3><p>Bez schvalování financování — od rozhodnutí rovnou k instalaci.</p></div></div>
+      <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Servis a místo zajistíme</h3><p>Provoz, údržbu i připravenou lokalitu řešíme za vás, stejně jako u financování.</p></div></div>
+    </div>
+    <a class="btn" data-keep data-hash="#book" href="info">Domluvit schůzku →</a>
+    <a class="alt" data-keep href="financovani">Zajímá vás spíš financování? →</a>
+    <p class="foot">Nezávazně a zdarma · online i osobně · 17 minut</p>
+  </div>
+<script>
+(function(){
+  var t=new URLSearchParams(location.search).get('t')||'';
+  document.querySelectorAll('a[data-keep]').forEach(function(a){
+    var base=a.getAttribute('href'); var h=a.getAttribute('data-hash')||'';
+    a.href=base+(t?'?t='+encodeURIComponent(t):'')+h;
+  });
+})();
+</script>
+</body>
+</html>
