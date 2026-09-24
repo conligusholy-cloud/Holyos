@@ -4,23 +4,23 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Prádlomat — klíčové informace</title>
-<meta name="description" content="Klíčové informace o podnikání se samoobslužným prádlomatem 24/7 — jak to funguje, co nabízíme partnerům a jak domluvit schůzku." />
+<meta name="description" content="To nejdůležitější o podnikání se samoobslužným prádlomatem 24/7 — výnos, servis a připravená místa. A první klíčová otázka: jak prádlomat pořídíte." />
 <meta name="theme-color" content="#0c1826" />
 <meta name="robots" content="noindex,nofollow" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
   :root{
     --bg:#0c1826; --card:#13233a; --card2:#102a45; --line:rgba(46,140,224,.3);
-    --blue:#1e86e0; --blue-soft:#4aa3ea; --text:#e9f0f7; --muted:#9db6cd; --muted2:#7fa6c8;
+    --blue:#1e86e0; --blue-soft:#4aa3ea; --text:#e9f0f7; --muted:#9db6cd; --muted2:#7fa6c8; --green:#3ee08a;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);
     min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
     background:radial-gradient(120% 80% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
-  .wrap{width:100%;max-width:760px;margin:0 auto;padding:26px 22px 60px}
+  .wrap{width:100%;max-width:640px;margin:0 auto;padding:26px 22px 60px}
   a{color:inherit;text-decoration:none}
   .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:22px}
   .brand{display:inline-flex;align-items:center;gap:10px}
@@ -29,36 +29,55 @@
   .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
   .back{font-size:13px;color:var(--blue-soft)}
   .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-soft);margin:6px 0 10px}
-  h1{font-weight:600;font-size:clamp(28px,6vw,40px);line-height:1.14;letter-spacing:-.01em}
+  h1{font-weight:700;font-size:clamp(28px,6.4vw,40px);line-height:1.12;letter-spacing:-.01em}
   h1 .g{color:var(--blue-soft)}
   .lead{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:560px;margin:14px 0 22px}
-  .hero-photo{width:100%;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55);display:block;margin:4px 0 26px}
-  .sec{margin:26px 0}
-  .sec h2{font-size:20px;font-weight:600;margin-bottom:14px}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-  @media(max-width:620px){.grid{grid-template-columns:1fr}}
-  .card{background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:16px 18px}
-  .card .ic{width:34px;height:34px;border-radius:9px;background:rgba(30,134,224,.16);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
-  .card .ic svg{width:19px;height:19px;stroke:var(--blue-soft);fill:none;stroke-width:1.7}
-  .card h3{font-size:15.5px;font-weight:600;margin-bottom:5px}
-  .card p{font-size:13.5px;color:var(--muted);line-height:1.55}
-  .faq{background:var(--card);border:0.5px solid var(--line);border-radius:12px;padding:6px 18px}
-  .faq details{border-bottom:1px solid rgba(46,140,224,.15);padding:13px 0}
-  .faq details:last-child{border-bottom:none}
-  .faq summary{font-size:15px;font-weight:600;cursor:pointer;list-style:none;color:var(--text)}
-  .faq summary::-webkit-details-marker{display:none}
-  .faq summary:before{content:"+";color:var(--blue-soft);margin-right:10px;font-weight:700}
-  .faq details[open] summary:before{content:"–"}
-  .faq p{font-size:14px;color:var(--muted);margin-top:8px;line-height:1.6}
-  form,.book{margin-top:30px;background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:20px}
-  .book h2{font-size:19px;font-weight:600;margin-bottom:4px}
-  .book .sub{font-size:13.5px;color:var(--muted);margin-bottom:16px}
-  .btn{width:100%;border:none;border-radius:10px;padding:16px;font-size:16px;font-weight:600;color:#fff;
-    background:var(--blue);cursor:pointer;font-family:inherit;transition:filter .2s,transform .15s}
-  .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
-  .btn:disabled{opacity:.6;cursor:default}
+  .hero-photo{width:100%;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55);display:block;margin:4px 0 30px}
+
+  /* Tři klíčové body */
+  .kpis{display:flex;flex-direction:column;gap:14px}
+  .kpi{position:relative;display:flex;gap:15px;align-items:flex-start;background:var(--card);
+    border:0.5px solid var(--line);border-radius:15px;padding:20px 20px}
+  .kpi .n{flex:0 0 auto;width:34px;height:34px;border-radius:10px;background:rgba(30,134,224,.16);
+    display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--blue-soft);font-size:15px}
+  .kpi .n svg{width:19px;height:19px;stroke:var(--blue-soft);fill:none;stroke-width:1.8}
+  .kpi h3{font-size:16.5px;font-weight:600;margin-bottom:4px}
+  .kpi p{font-size:14px;color:var(--muted);line-height:1.55}
+  .kpi.hero-kpi{background:linear-gradient(135deg,#12294a,#0e1f36);border:1px solid rgba(46,140,224,.5)}
+  .big-num{font-size:clamp(30px,8vw,44px);font-weight:800;letter-spacing:-.02em;line-height:1;
+    background:linear-gradient(90deg,#4aa3ea,#8fd0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .big-num .u{font-size:16px;font-weight:600;color:var(--blue-soft);-webkit-text-fill-color:var(--blue-soft)}
+  .kpi.hero-kpi h3{font-size:15px;color:var(--muted);font-weight:500;margin-top:8px}
+  .note{font-size:12px;color:var(--muted2);margin-top:6px}
+
+  /* Čára */
+  .hr{display:flex;align-items:center;gap:14px;margin:38px 0 26px;color:var(--muted2);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+  .hr:before,.hr:after{content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,rgba(46,140,224,.35),transparent)}
+
+  /* Sekce s otázkou + rezervace */
+  .qcard{position:relative;border-radius:18px;padding:1px;
+    background:linear-gradient(135deg,rgba(30,134,224,.7),rgba(46,140,224,.12) 45%,rgba(30,134,224,.6));
+    box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .qcard-inner{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:26px 22px;overflow:hidden}
+  .qcard-inner:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(85% 60% at 50% -12%,rgba(30,134,224,.26),transparent 60%)}
+  .q-eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:12px}
+  .pulse-dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(62,224,138,.7);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,224,138,.6)}70%{box-shadow:0 0 0 10px rgba(62,224,138,0)}100%{box-shadow:0 0 0 0 rgba(62,224,138,0)}}
+  .q-h{position:relative;font-size:clamp(22px,5.4vw,30px);font-weight:700;line-height:1.16;letter-spacing:-.01em}
+  .q-h .g{color:var(--blue-soft)}
+  .q-sub{position:relative;font-size:14.5px;line-height:1.6;color:#c3d6e8;margin:12px 0 18px}
+  .opts{position:relative;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+  .opt{font-size:13px;color:#dceaf6;background:rgba(30,134,224,.12);border:0.5px solid rgba(46,140,224,.4);padding:7px 13px;border-radius:999px}
+
+  .book{position:relative}
+  .btn{width:100%;border:none;border-radius:11px;padding:17px;font-size:16.5px;font-weight:600;color:#fff;
+    background:linear-gradient(135deg,#1e86e0,#3aa0f0);cursor:pointer;font-family:inherit;
+    box-shadow:0 16px 36px -12px rgba(30,134,224,.85);transition:filter .2s,transform .15s;animation:glow 2.8s ease-in-out infinite}
+  @keyframes glow{0%,100%{box-shadow:0 16px 36px -12px rgba(30,134,224,.7)}50%{box-shadow:0 18px 50px -8px rgba(30,134,224,1)}}
+  .btn:hover{filter:brightness(1.07);transform:translateY(-2px)}
+  .btn:disabled{opacity:.6;cursor:default;animation:none}
   .status{min-height:20px;margin-top:12px;font-size:14px;color:var(--blue-soft);text-align:center}
-  .foot{margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  .foot{position:relative;margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
   .bk-title{font-size:15px;font-weight:600;margin:2px 0 12px}
   .modebtn{flex:1;min-width:150px;display:flex;flex-direction:column;align-items:center;gap:8px;
     border:1px solid var(--line);background:#0e1e33;border-radius:12px;padding:20px 14px;color:var(--text);
@@ -78,6 +97,7 @@
   .done .ic svg{width:26px;height:26px;stroke:var(--blue-soft);fill:none;stroke-width:2.2}
   .done h3{font-size:18px;font-weight:600;margin-bottom:6px}
   .done p{font-size:14px;color:var(--muted)}
+  @media (prefers-reduced-motion:reduce){.pulse-dot,.btn{animation:none}}
 </style>
 </head>
 <body>
@@ -90,110 +110,85 @@
       <a class="back" id="backLink" href="home">← zpět</a>
     </div>
 
-    <p class="eyebrow">Klíčové informace</p>
+    <p class="eyebrow">To nejdůležitější</p>
     <h1>Podnikání s <span class="g">prádlomatem 24/7</span></h1>
-    <p class="lead">Samoobslužná prádelna, která běží nonstop bez obsluhy. Vy vlastníte lokalitu a stroj, my se postaráme o zbytek — od výběru místa přes financování až po servis a provoz.</p>
+    <p class="lead">Samoobslužná prádelna, která běží nonstop bez obsluhy. Vy vlastníte lokalitu a stroj — o zbytek se postaráme my.</p>
     <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
 
-    <div class="sec">
-      <h2>Jak to funguje</h2>
-      <div class="grid">
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
-          <h3>Nonstop, bez obsluhy</h3>
-          <p>Provoz 24/7, platba kartou i hotově. Zákazník si vypere a usuší sám — vy nemusíte být na místě.</p>
+    <div class="kpis">
+      <div class="kpi hero-kpi">
+        <span class="n">1</span>
+        <div>
+          <div class="big-num">40 000 – 120 000 <span class="u">Kč / měsíc</span></div>
+          <h3>Rozsah měsíčního výnosu jednoho prádlomatu v ČR.</h3>
+          <p class="note">Podle lokality, spádové oblasti a vytížení.</p>
         </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="13" r="4"/></svg></div>
-          <h3>Velká kapacita</h3>
-          <p>Pračky až 18 kg a výkonná sušička — zvládnou peřiny, deky i velké prádlo, které se doma vyprat nedá.</p>
+      </div>
+      <div class="kpi">
+        <span class="n"><svg viewBox="0 0 24 24"><path d="M14 7l3 3-9 9H5v-3z"/><path d="M13 4l3 3"/></svg></span>
+        <div>
+          <h3>Servis a provoz zajistíme kompletně</h3>
+          <p>Instalaci, zaškolení, dálkový dohled, údržbu i infolinku — všechno bereme na sebe. Vy se staráte jen o svůj příjem.</p>
         </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></div>
-          <h3>Pasivní příjem</h3>
-          <p>Stroj vydělává i když u něj nejste. Dohled a údržbu řešíme dálkově, vy sledujete tržby.</p>
-        </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.1-7-12a7 7 0 1 1 14 0c0 5.9-7 12-7 12z"/><circle cx="12" cy="9" r="2.6"/></svg></div>
-          <h3>Rostoucí poptávka</h3>
-          <p>Málo domácností má sušičku, přibývá bytů bez místa na prádlo. Prádlomaty fungují ve městech i menších obcích.</p>
+      </div>
+      <div class="kpi">
+        <span class="n"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.1-7-12a7 7 0 1 1 14 0c0 5.9-7 12-7 12z"/><circle cx="12" cy="9" r="2.6"/></svg></span>
+        <div>
+          <h3>Místa máme pro vás připravená</h3>
+          <p>Předjednané lokality s dobrou spádovostí a parkováním. Vybereme spolu tu nejlepší právě pro vás.</p>
         </div>
       </div>
     </div>
 
-    <div class="sec">
-      <h2>Co pro vás zajistíme</h2>
-      <div class="grid">
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.1-7-12a7 7 0 1 1 14 0c0 5.9-7 12-7 12z"/><circle cx="12" cy="9" r="2.6"/></svg></div>
-          <h3>Připravené lokality</h3>
-          <p>Máme předjednaná místa s dobrou spádovostí a parkováním. Pomůžeme vybrat to nejlepší pro vás.</p>
-        </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18"/></svg></div>
-          <h3>Možnosti financování</h3>
-          <p>Spolupracujeme s financujícími partnery — prádlomat lze pořídit i na splátky/leasing. Spočítáme varianty.</p>
-        </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><path d="M14 7l3 3-9 9H5v-3z"/><path d="M13 4l3 3"/></svg></div>
-          <h3>Servis a provoz</h3>
-          <p>Instalace, zaškolení, dálkový dohled, infolinka a údržba. Postaráme se, aby stroj jel spolehlivě.</p>
-        </div>
-        <div class="card">
-          <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg></div>
-          <h3>Rychlý rozjezd</h3>
-          <p>Od rozhodnutí k provozu vás provedeme krok za krokem — bez zbytečného papírování.</p>
-        </div>
-      </div>
-    </div>
+    <div class="hr">Pod čarou</div>
 
-    <div class="sec">
-      <h2>Časté dotazy</h2>
-      <div class="faq">
-        <details><summary>Kolik to stojí a jaká je návratnost?</summary><p>Investice i orientační návratnost závisí na lokalitě a variantě stroje. Na schůzce vám vše spočítáme přesně na míru — dostanete konkrétní čísla, ne odhady.</p></details>
-        <details><summary>Musím u prádlomatu být?</summary><p>Ne. Provoz je samoobslužný a bezobslužný. Dohled a údržba běží dálkově, vy jen sledujete tržby.</p></details>
-        <details><summary>Kde ho můžu mít?</summary><p>Máme předjednané lokality s dobrou spádovostí. Když máte vlastní místo, posoudíme jeho potenciál.</p></details>
-        <details><summary>Jak je to s financováním?</summary><p>Prádlomat lze pořídit i na splátky nebo leasing přes naše partnery. Varianty projdeme na schůzce.</p></details>
-        <details><summary>Jak probíhá spolupráce?</summary><p>Ve třech krocích: krátká schůzka (online i osobně), návštěva výroby s majiteli a do 10 dní od schůzky máte všechny informace ke kvalifikovanému rozhodnutí.</p></details>
-      </div>
-    </div>
+    <!-- První klíčová otázka + rezervace schůzky -->
+    <div class="qcard">
+      <div class="qcard-inner">
+        <p class="q-eyebrow"><span class="pulse-dot"></span> První klíčová otázka</p>
+        <h2 class="q-h">Jak prádlomat <span class="g">pořídíte?</span></h2>
+        <p class="q-sub">Z vlastního, na leasing, nebo přes financování? Na krátké schůzce vám ukážeme konkrétní varianty a spočítáme, co dává smysl právě pro vás — ať se rozhodujete s čísly, ne podle pocitu.</p>
+        <div class="opts">
+          <span class="opt">Vlastní kapitál</span>
+          <span class="opt">Leasing</span>
+          <span class="opt">Financování</span>
+        </div>
 
-    <!-- Rezervace schůzky -->
-    <div class="book" id="book">
-      <div id="bookStart">
-        <h2>Domluvit schůzku</h2>
-        <p class="sub">Vyberte si termín, který vám sedne. Nezávazně a zdarma.</p>
-        <button type="button" class="btn" id="pickBtn">Vybrat termín schůzky</button>
-      </div>
+        <div class="book" id="book">
+          <div id="bookStart">
+            <button type="button" class="btn" id="pickBtn">Zjistit, jak na to →</button>
+            <p class="foot">Nezávazně a zdarma · online i osobně · 17 minut</p>
+          </div>
 
-      <div id="modePanel" style="display:none">
-        <p class="bk-title">Jak chcete schůzku vést?</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button type="button" class="modebtn" data-mode="osobne">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-            Osobní schůzka<small>u nás nebo u vás</small>
-          </button>
-          <button type="button" class="modebtn" data-mode="online">
-            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
-            Online<small>video hovor</small>
-          </button>
+          <div id="modePanel" style="display:none">
+            <p class="bk-title">Jak chcete schůzku vést?</p>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <button type="button" class="modebtn" data-mode="osobne">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+                Osobní schůzka<small>u nás nebo u vás</small>
+              </button>
+              <button type="button" class="modebtn" data-mode="online">
+                <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
+                Online<small>video hovor</small>
+              </button>
+            </div>
+          </div>
+
+          <div id="slotsPanel" style="display:none">
+            <button type="button" class="bk-back" id="slotBack">← zpět na výběr</button>
+            <p class="bk-title" id="slotTitle">Vyberte termín schůzky</p>
+            <div id="slotList"></div>
+          </div>
+
+          <div id="bookDone" class="done" style="display:none">
+            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
+            <h3>Termín rezervován</h3>
+            <p id="doneText"></p>
+          </div>
+
+          <div class="status" id="status" role="status" aria-live="polite"></div>
         </div>
       </div>
-
-      <div id="slotsPanel" style="display:none">
-        <button type="button" class="bk-back" id="slotBack">← zpět na výběr</button>
-        <p class="bk-title" id="slotTitle">Vyberte termín schůzky</p>
-        <div id="slotList"></div>
-      </div>
-
-      <div id="bookDone" class="done" style="display:none">
-        <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
-        <h3>Termín rezervován</h3>
-        <p id="doneText"></p>
-      </div>
-
-      <div class="status" id="status" role="status" aria-live="polite"></div>
-      <p class="foot">Nezávazně, zdarma. Počet partnerů je omezený.</p>
     </div>
   </div>
 
