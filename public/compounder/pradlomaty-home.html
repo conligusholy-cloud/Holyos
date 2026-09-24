@@ -34,6 +34,8 @@
   h1{font-weight:600;font-size:clamp(30px,7vw,44px);line-height:1.12;letter-spacing:-.01em}
   h1 .g{color:var(--blue-soft)}
   .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:520px;margin:14px 0 20px}
+  .hero-photo{float:right;width:min(46%,520px);margin:4px 0 16px 30px;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55);display:block}
+  @media(max-width:760px){.hero-photo{float:none;width:100%;margin:0 0 18px}}
   .goal{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:0.5px solid rgba(46,140,224,.45);
     border-radius:12px;padding:15px 17px;margin-bottom:30px}
   .goal svg{width:22px;height:22px;stroke:var(--blue-soft);fill:none;stroke-width:1.7;flex:0 0 auto;margin-top:1px}
@@ -103,6 +105,7 @@
     </div>
 
     <div class="reveal in">
+      <img class="hero-photo" src="assets/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
       <p class="eyebrow">Děkujeme za velký zájem</p>
       <h1>Ať přesně víte,<br><span class="g">co vás čeká</span></h1>
       <p class="intro">Zájemců máme hodně. Abychom se každému věnovali pořádně, dali jsme začátku jasný řád — tři kroky. Vážíme si svého i vašeho času a věříme, že úspěšní lidé s opravdovým zájmem to ocení.</p>
