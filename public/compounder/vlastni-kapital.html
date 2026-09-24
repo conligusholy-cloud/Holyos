@@ -39,6 +39,10 @@
   .btn:hover{filter:brightness(1.07);transform:translateY(-2px)}
   .alt{display:block;text-align:center;margin-top:14px;font-size:14px;color:var(--blue-soft)}
   .foot{margin-top:12px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  .qcard{position:relative;border-radius:18px;padding:1px;background:linear-gradient(135deg,rgba(30,134,224,.7),rgba(46,140,224,.12) 45%,rgba(30,134,224,.6));box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .qcard-inner{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:24px 20px;overflow:hidden}
+  .qcard-inner:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(85% 60% at 50% -12%,rgba(30,134,224,.26),transparent 60%)}
+  .q-eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -55,9 +59,13 @@
       <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Nejrychlejší rozjezd</h3><p>Bez schvalování financování — od rozhodnutí rovnou k instalaci.</p></div></div>
       <div class="item"><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><div><h3>Servis a místo zajistíme</h3><p>Provoz, údržbu i připravenou lokalitu řešíme za vás, stejně jako u financování.</p></div></div>
     </div>
-    <a class="btn" data-keep href="schuzka">Domluvit schůzku →</a>
+    <div class="qcard" id="bookCard">
+      <div class="qcard-inner">
+        <p class="q-eyebrow"><span class="pulse-dot"></span> Druhý nejdůležitější krok · 17,5 minuty</p>
+        <div data-booking data-path="vlastni"></div>
+      </div>
+    </div>
     <a class="alt" data-keep href="financovani">Zajímá vás spíš financování? →</a>
-    <p class="foot">Nezávazně a zdarma · online i osobně · 17,5 minuty</p>
   </div>
 <script>
 (function(){
@@ -68,5 +76,6 @@
   });
 })();
 </script>
+<script src="booking.js"></script>
 </body>
 </html>

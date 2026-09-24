@@ -127,14 +127,20 @@ router.post('/track', async (req, res) => {
 });
 
 // ─── VEŘEJNÉ: termíny schůzek + rezervace (pradlomaty.info „cesta k rozhodnutí") ──
+// Nejbližší rezervovatelný termín = 2 hodiny od aktuálního času.
+const MEETING_MIN_LEAD_MS = 2 * 3600000;
+const MEETING_MODE_LABEL = { online: 'Online video hovor', osobne: 'Osobní schůzka' };
+const FINANCING_PATH_LABEL = { vlastni: 'Vlastní kapitál', financovani: 'Financování' };
+
 // GET /api/compounder/meeting-slots — volné budoucí termíny (kapacita > počet rezervací).
 router.get('/meeting-slots', async (req, res) => {
   try {
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 45, 1), 120);
     const now = new Date();
+    const minStart = new Date(now.getTime() + MEETING_MIN_LEAD_MS);
     const until = new Date(now.getTime() + days * 86400000);
     const slots = await prisma.meetingSlot.findMany({
-      where: { active: true, starts_at: { gte: now, lte: until } },
+      where: { active: true, starts_at: { gte: minStart, lte: until } },
       orderBy: { starts_at: 'asc' },
       include: { _count: { select: { reservations: true } } },
     });
@@ -146,8 +152,25 @@ router.get('/meeting-slots', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/compounder/meeting-reservation?t=<token> — aktivní rezervace leada (aby stránka
+// ukázala „máte rezervováno" a nedovolila druhý termín bez vědomé změny).
+router.get('/meeting-reservation', async (req, res) => {
+  try {
+    const leadId = req.query.t ? verifyPortalToken(String(req.query.t)) : null;
+    if (!leadId) return res.json({ ok: true, reservation: null });
+    const r = await prisma.meetingReservation.findFirst({
+      where: { compounder_lead_id: leadId, status: 'booked', slot: { starts_at: { gte: new Date() } } },
+      orderBy: { created_at: 'desc' },
+      include: { slot: { select: { starts_at: true, duration_min: true } } },
+    });
+    if (!r) return res.json({ ok: true, reservation: null });
+    res.json({ ok: true, reservation: { id: r.id, starts_at: r.slot.starts_at, duration_min: r.slot.duration_min, mode: r.mode, financing_path: r.financing_path } });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // POST /api/compounder/meeting-reservation — rezervace termínu.
-// { t?: portalToken (z SMS), slot_id, name?, email?, phone? }. Token spáruje leada.
+// { t?: portalToken (z SMS), slot_id, mode?: online|osobne, path?: vlastni|financovani, name?, email?, phone? }.
+// Token spáruje leada. Jeden lead = jeden aktivní termín (nová rezervace nahradí starou).
 router.post('/meeting-reservation', async (req, res) => {
   try {
     const b = req.body || {};
@@ -161,6 +184,7 @@ router.post('/meeting-reservation', async (req, res) => {
     });
     if (!slot || !slot.active) return res.status(404).json({ ok: false, error: 'Termín není dostupný' });
     if (slot.starts_at < new Date()) return res.status(400).json({ ok: false, error: 'Termín už proběhl' });
+    if (slot.starts_at.getTime() < Date.now() + MEETING_MIN_LEAD_MS) return res.status(400).json({ ok: false, error: 'Termín je příliš brzy — vyberte prosím čas alespoň 2 hodiny od teď' });
     if ((slot._count.reservations || 0) >= slot.capacity) return res.status(409).json({ ok: false, error: 'Termín je již obsazený' });
 
     // Údaje: přednostně z leada (znáš ho z reklamy), jinak z formuláře.
@@ -175,18 +199,28 @@ router.post('/meeting-reservation', async (req, res) => {
     }
     if (!leadId && !email && !phone) return res.status(400).json({ ok: false, error: 'Zadejte prosím kontakt (e-mail nebo telefon)' });
 
-    // Způsob schůzky vybraný zákazníkem (osobně / online video hovor).
-    const modeRaw = String(b.mode || '').trim();
-    const modeLabel = modeRaw === 'online' ? 'Online video hovor' : (modeRaw === 'osobne' ? 'Osobní schůzka' : null);
+    // Forma schůzky (online / osobně) + zvolená cesta pořízení (vlastní kapitál / financování).
+    const mode = MEETING_MODE_LABEL[String(b.mode || '').trim()] ? String(b.mode).trim() : null;
+    const path = FINANCING_PATH_LABEL[String(b.path || '').trim()] ? String(b.path).trim() : null;
+    const note = [mode && MEETING_MODE_LABEL[mode], path && FINANCING_PATH_LABEL[path]].filter(Boolean).join(' · ') || null;
 
     const resv = await prisma.meetingReservation.create({
-      data: { slot_id: slotId, compounder_lead_id: leadId || null, name, email, phone, status: 'booked', note: modeLabel },
+      data: { slot_id: slotId, compounder_lead_id: leadId || null, name, email, phone, status: 'booked', note, mode, financing_path: path },
       select: { id: true },
     });
     if (leadId) {
-      await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'schuzka_domluvena', schuzka_opened_at: new Date() } }).catch(() => {});
+      // Stav leada dle formy (existující stavy v HolyOS: schuzka / schuzka_online) + zmapovaná cesta.
+      const data = { status: mode === 'online' ? 'schuzka_online' : 'schuzka', schuzka_opened_at: new Date() };
+      if (mode) data.schuzka_mode = mode;
+      if (path) data.financing_path = path;
+      await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
+      // Zaznamenat do cesty zákazníka (timeline u leada).
+      try {
+        await prisma.compounderEvent.create({ data: { sid: 'server:meeting:' + leadId, event: 'meeting_booked', path: '/schuzka',
+          props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode, financing_path: path } } });
+      } catch (e) { /* timeline je bonus, rezervaci neblokuje */ }
     }
-    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode: modeRaw || null });
+    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode, financing_path: path });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
@@ -195,7 +229,7 @@ router.get('/admin/meeting-slots', requireAuth, async (req, res) => {
   try {
     const slots = await prisma.meetingSlot.findMany({
       orderBy: { starts_at: 'asc' },
-      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true } } },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true } } },
     });
     res.json(slots.map((s) => ({ ...s, booked: s.reservations.filter((r) => r.status === 'booked').length })));
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -255,6 +289,28 @@ router.delete('/admin/meeting-slots/:id', requireAuth, async (req, res) => {
 });
 
 // Zrušit konkrétní rezervaci (admin).
+// GET /api/compounder/leads/:id/meeting — domluvená schůzka leada (forma + cesta) pro detail v HolyOS.
+router.get('/leads/:id/meeting', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Neplatné ID' });
+    const list = await prisma.meetingReservation.findMany({
+      where: { compounder_lead_id: id },
+      orderBy: { created_at: 'desc' },
+      take: 5,
+      include: { slot: { select: { starts_at: true, duration_min: true } } },
+    });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { schuzka_mode: true, financing_path: true, schuzka_sms_sent_at: true, schuzka_opened_at: true } }).catch(() => null);
+    res.json({
+      lead: lead || null,
+      reservations: list.map((r) => ({ id: r.id, status: r.status, starts_at: r.slot.starts_at, duration_min: r.slot.duration_min,
+        mode: r.mode, mode_label: MEETING_MODE_LABEL[r.mode] || null,
+        financing_path: r.financing_path, financing_label: FINANCING_PATH_LABEL[r.financing_path] || null,
+        note: r.note, created_at: r.created_at })),
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.patch('/admin/meeting-reservations/:id', requireAuth, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);

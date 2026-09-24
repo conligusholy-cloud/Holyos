@@ -66,6 +66,10 @@
   .foot{margin-top:12px;text-align:center;font-size:12.5px;color:var(--muted2)}
   .disc{margin-top:22px;text-align:center;font-size:11.5px;color:var(--muted2);opacity:.8}
   @media (prefers-reduced-motion:reduce){.pulse-dot,.btn{animation:none}}
+  .qcard{position:relative;border-radius:18px;padding:1px;background:linear-gradient(135deg,rgba(30,134,224,.7),rgba(46,140,224,.12) 45%,rgba(30,134,224,.6));box-shadow:0 30px 80px -34px rgba(30,134,224,.7)}
+  .qcard-inner{position:relative;background:linear-gradient(180deg,#12294a,#0e1f36);border-radius:17px;padding:24px 20px;overflow:hidden}
+  .qcard-inner:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(85% 60% at 50% -12%,rgba(30,134,224,.26),transparent 60%)}
+  .q-eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -100,9 +104,13 @@
       <p>A je na každém, kdo u toho bude.</p>
     </div>
 
-    <a class="btn" data-keep href="schuzka">Chci být u toho — domluvit schůzku →</a>
+    <div class="qcard" id="bookCard">
+      <div class="qcard-inner">
+        <p class="q-eyebrow"><span class="pulse-dot"></span> Druhý nejdůležitější krok · 17,5 minuty</p>
+        <div data-booking data-path="financovani"></div>
+      </div>
+    </div>
     <a class="alt" data-keep href="vlastni-kapital">Máte vlastní zdroje? Podívejte se na tuto cestu →</a>
-    <p class="foot">Nezávazně a zdarma · online i osobně · 17,5 minuty</p>
     <p class="disc">Konkrétní podmínky a schválení financování stanovuje financující partner.</p>
   </div>
 <script>
@@ -114,5 +122,6 @@
   });
 })();
 </script>
+<script src="booking.js"></script>
 </body>
 </html>

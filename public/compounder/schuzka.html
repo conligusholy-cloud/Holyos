@@ -129,38 +129,7 @@
 
     <div class="qcard">
       <div class="qcard-inner">
-        <div class="book" id="book">
-          <div id="modePanel">
-            <h2 class="q-h">Jak vám to <span class="g">vyhovuje?</span></h2>
-            <p class="q-sub">Vyberte formu a hned uvidíte volné termíny.</p>
-            <div class="modes">
-              <button type="button" class="modebtn" data-mode="online">
-                <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
-                Online<small>video hovor z pohodlí domova</small>
-              </button>
-              <button type="button" class="modebtn" data-mode="osobne">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-                Osobně<small>u nás nebo u vás</small>
-              </button>
-            </div>
-          </div>
-
-          <div id="slotsPanel" style="display:none">
-            <button type="button" class="bk-back" id="slotBack">← změnit formu schůzky</button>
-            <h2 class="q-h" id="slotTitle">Vyberte termín</h2>
-            <p class="q-sub" id="weekLabel">Tento týden</p>
-            <div class="week" id="slotList"></div>
-          </div>
-
-          <div id="bookDone" class="done" style="display:none">
-            <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
-            <h3>Máte rezervováno</h3>
-            <p id="doneText"></p>
-          </div>
-
-          <div class="status" id="status" role="status" aria-live="polite"></div>
-          <p class="foot" id="footNote">Nezávazně a zdarma · 17,5 minuty · Počet partnerů je omezený</p>
-        </div>
+        <div data-booking></div>
       </div>
     </div>
 
@@ -169,97 +138,11 @@
 
 <script>
 (function(){
-  "use strict";
   var token = new URLSearchParams(location.search).get('t') || '';
   var backLink=document.getElementById('backLink');
   if(backLink && token) backLink.href='info?t='+encodeURIComponent(token);
-
-  var status=document.getElementById('status');
-  var slotsPanel=document.getElementById('slotsPanel'), slotList=document.getElementById('slotList');
-  var modePanel=document.getElementById('modePanel'), slotBack=document.getElementById('slotBack'), slotTitle=document.getElementById('slotTitle');
-  var bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText'), footNote=document.getElementById('footNote');
-  var chosenMode='';
-
-  var DAYS=['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
-  var MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
-  function dayHead(d){ return DAYS[d.getDay()]+' '+d.getDate()+'. '+MON[d.getMonth()]; }
-  function hhmm(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
-  function setStatus(msg,err){ status.style.color=err?'#ff8f8f':'var(--blue-soft)'; status.textContent=msg||''; }
-
-  var modeLabels={ osobne:'osobní schůzka', online:'online video hovor' };
-  document.querySelectorAll('#modePanel .modebtn').forEach(function(b){
-    b.addEventListener('click', function(){
-      chosenMode=b.dataset.mode||'online';
-      modePanel.style.display='none'; slotsPanel.style.display='block';
-      var intro=document.getElementById('intro'); if(intro) intro.style.display='none';
-      slotTitle.innerHTML='Vyberte <span class="g">termín</span>';
-      loadSlots();
-      window.scrollTo({top:0,behavior:'smooth'});
-    });
-  });
-  slotBack.addEventListener('click', function(){ slotsPanel.style.display='none'; modePanel.style.display='block'; setStatus(''); var intro=document.getElementById('intro'); if(intro) intro.style.display=''; });
-
-  function loadSlots(){
-    setStatus('Načítám volné termíny…'); slotList.innerHTML='';
-    fetch('/api/compounder/meeting-slots?days=8',{credentials:'include'})
-      .then(function(r){ return r.json(); })
-      .then(function(slots){
-        setStatus('');
-        renderSlots(Array.isArray(slots)?slots:[]);
-      })
-      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
-  }
-
-  var DN=['Ne','Po','Út','St','Čt','Pá','So'];
-  function weekRange(){
-    var now=new Date(); var mon=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-    var wd=(mon.getDay()+6)%7; mon.setDate(mon.getDate()-wd);
-    var sun=new Date(mon); sun.setDate(mon.getDate()+7);
-    return {mon:mon,sun:sun};
-  }
-  function renderSlots(slots){
-    var r=weekRange(), now=new Date();
-    var wk=slots.filter(function(s){ var d=new Date(s.starts_at); return d>=r.mon && d<r.sun && d>now; });
-    var last=new Date(r.sun); last.setDate(last.getDate()-1);
-    document.getElementById('weekLabel').textContent='Tento týden · '+r.mon.getDate()+'. '+MON[r.mon.getMonth()]+' – '+last.getDate()+'. '+MON[last.getMonth()]+' · '+(modeLabels[chosenMode]||'');
-    if(!wk.length){ slotList.innerHTML=''; slotList.insertAdjacentHTML('afterend','<p class="empty" id="emptyMsg">Tento týden už máme plno. Ozveme se vám s nejbližším volným termínem.</p>'); return; }
-    var em=document.getElementById('emptyMsg'); if(em) em.remove();
-    var byDay={}; wk.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); (byDay[k]=byDay[k]||[]).push(s); });
-    var today=now.toDateString(), html='';
-    for(var i=0;i<7;i++){
-      var d=new Date(r.mon); d.setDate(r.mon.getDate()+i); var k=d.toDateString();
-      var list=(byDay[k]||[]).sort(function(a,b){ return new Date(a.starts_at)-new Date(b.starts_at); });
-      var cls='wd'+(k===today?' today':'')+(d<new Date(now.getFullYear(),now.getMonth(),now.getDate())?' past':'');
-      html+='<div class="'+cls+'"><div class="wd-h"><span class="dn">'+DN[d.getDay()]+'</span><span class="dd">'+d.getDate()+'.</span></div>';
-      if(!list.length) html+='<div class="wd-none">—</div>';
-      list.forEach(function(s){ var t=new Date(s.starts_at); html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>'; });
-      html+='</div>';
-    }
-    slotList.innerHTML=html;
-    slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10)); }); });
-  }
-
-  function book(slotId){
-    if(!token){ setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.',true); return; }
-    var payload={ slot_id:slotId, t:token, mode:chosenMode };
-    slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=true; });
-    setStatus('Rezervuji termín…');
-    fetch('/api/compounder/meeting-reservation',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload) })
-    .then(function(r){ return r.json().catch(function(){return {};}); })
-    .then(function(d){
-      if(d && d.ok){
-        var dt=new Date(d.starts_at);
-        slotsPanel.style.display='none'; setStatus(''); if(footNote) footNote.style.display='none';
-        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+' ('+(modeLabels[chosenMode]||'')+'). Potvrzení vám pošleme.';
-        bookDone.style.display='block';
-      } else {
-        setStatus((d&&d.error)||'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true);
-        slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; });
-      }
-    })
-    .catch(function(){ setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true); slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; }); });
-  }
 })();
 </script>
+<script src="booking.js"></script>
 </body>
 </html>

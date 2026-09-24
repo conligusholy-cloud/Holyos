@@ -4302,6 +4302,7 @@
     function cmpFmtDur(ms){ ms=Number(ms)||0; var s=Math.round(ms/1000); if(s<60) return s+' s'; var m=Math.floor(s/60); var r=s%60; return m+' min'+(r?(' '+r+' s'):''); }
     function cmpEvtLabel(e){
       var p = e.props||{}; var ev = e.event;
+      if (ev==='meeting_booked') return '🤝 Rezervoval schůzku: '+(p.starts_at?new Date(p.starts_at).toLocaleString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}):'')+(p.mode?(' · '+(p.mode==='online'?'online':'osobně')):'')+(p.financing_path?(' · '+(p.financing_path==='vlastni'?'vlastní kapitál':'financování')):'');
       if (ev==='page_view') return '👁️ Otevřel web';
       if (ev==='section_view') return '📄 Sekce: '+cmpEsc(cmpPageName(p.section));
       if (ev==='cta_click') return '🖱️ CTA: '+cmpEsc(p.label||'CTA')+(p.sec?(' ('+cmpEsc(cmpPageName(p.sec))+')'):'');
@@ -4336,6 +4337,7 @@
         + cmpAccessBlock(id, row.getAttribute('data-source')||'', row.getAttribute('data-approved')==='1')
         + cmpInviteBlock(id, parseInt(row.getAttribute('data-sent-count')||'0',10), row.getAttribute('data-sent-at')||'', row.getAttribute('data-phone')||'', row.getAttribute('data-la')||'')
         + cmpDiscountBlock(id) + cmpVersionBlock(id, row.getAttribute('data-version')||'V3') + cmpSecBlock(id, row.getAttribute('data-sections')||'') + cmpRevStatsBlock(id, row.getAttribute('data-revstats')==='1') + cmpExampleBlock(id, row.getAttribute('data-example')==='1', row.getAttribute('data-hideloss')==='1') + cmpAiSpecialistBlock(id, row.getAttribute('data-aispec')==='1', row.getAttribute('data-aispecsms')||'', row.getAttribute('data-aispecsmsstat')||'') + cmpModelBlock(id) + cmpOfferBlock(id, row.getAttribute('data-extra')||'') + cmpCommsBlock(id, row.getAttribute('data-phone')||'', row.getAttribute('data-name')||'');
+      var mtgDiv = document.createElement('div'); td.appendChild(mtgDiv); cmpMeetingBlock(id, mtgDiv);
       var resDiv = document.createElement('div'); resDiv.innerHTML = '<div style="color:var(--text2);font-size:13px;">Načítám rezervace…</div>';
       td.appendChild(resDiv);
       cmpLeadReservations(id, resDiv);
@@ -4487,6 +4489,34 @@
     }
     window.cmpBuildJourney = cmpBuildJourney;
 
+    // Domluvená schůzka (z pradlomaty.info/schuzka): termín + forma (online/osobně) + cesta (vlastní kapitál/financování).
+    async function cmpMeetingBlock(id, el) {
+      try {
+        var r = await fetch('/api/compounder/leads/' + id + '/meeting', { credentials: 'include' });
+        var j = await r.json();
+        var list = (j && j.reservations) || [];
+        var lead = (j && j.lead) || {};
+        var active = list.filter(function(x){ return x.status === 'booked' && new Date(x.starts_at) > new Date(); })[0];
+        var last = active || list[0];
+        if (!last && !lead.financing_path) { el.innerHTML = ''; return; }
+        function badge(txt, col) { return '<span style="display:inline-block;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:600;background:' + col + '22;color:' + col + ';border:1px solid ' + col + '55;">' + txt + '</span>'; }
+        var h = '<div style="margin:4px 0 12px;padding:12px 14px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.3);border-radius:10px;">' +
+          '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">🤝 Schůzka</div>';
+        if (last) {
+          var when = new Date(last.starts_at).toLocaleString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+          var st = last.status === 'booked' ? (active ? badge('rezervováno', '#10b981') : badge('proběhla', '#9aa0ad')) : badge(last.status === 'canceled' ? 'zrušeno' : last.status, '#ef4444');
+          h += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:13px;">' +
+            '<b style="color:var(--text);">' + cmpEsc(when) + '</b> ' + st +
+            (last.mode_label ? badge((last.mode === 'online' ? '💻 ' : '👤 ') + last.mode_label, '#3b82f6') : '') +
+            (last.financing_label ? badge((last.financing_path === 'vlastni' ? '💰 ' : '🏦 ') + last.financing_label, '#eab308') : '') +
+            '</div>';
+        } else if (lead.financing_path) {
+          h += '<div style="font-size:13px;">' + badge((lead.financing_path === 'vlastni' ? '💰 Vlastní kapitál' : '🏦 Financování'), '#eab308') + ' <span style="color:var(--text2);">(zvolená cesta, termín zatím nevybrán)</span></div>';
+        }
+        if (list.length > 1) h += '<div style="margin-top:6px;font-size:11.5px;color:var(--text2);">Historie: ' + list.slice(1).map(function(x){ return new Date(x.starts_at).toLocaleDateString('cs-CZ') + ' (' + (x.status === 'canceled' ? 'zrušeno' : x.status) + ')'; }).join(', ') + '</div>';
+        el.innerHTML = h + '</div>';
+      } catch (e) { el.innerHTML = ''; }
+    }
     async function cmpLeadReservations(id, el) {
       if (el) el.id = 'cmp-resv-' + id;
       try {
@@ -6538,7 +6568,7 @@
             var s=map[msKey(cell)]; var past=cell.getTime()<now; var isBooked=false;
             var bg='transparent', label='', col='var(--text2)';
             if(s){ var booked=(s.reservations||[]).filter(function(x){return x.status==='booked';});
-              if(booked.length){ isBooked=true; bg='#1f7a45'; col='#fff'; label='● '+msEsc((booked[0].name||'rez.').slice(0,10)); }
+              if(booked.length){ isBooked=true; bg=booked[0].mode==='online'?'#1d5fa8':'#1f7a45'; col='#fff'; label=(booked[0].mode==='online'?'💻 ':'👤 ')+msEsc((booked[0].name||'rez.').slice(0,9))+(booked[0].financing_path?(booked[0].financing_path==='vlastni'?' 💰':' 🏦'):''); }
               else { bg='#1e86e0'; col='#fff'; label='volno'; } }
             var clickable = s || !past;
             var style='border:1px solid var(--line,#2a2a2e);height:26px;text-align:center;font-size:11px;background:'+bg+';color:'+col+';'+(past?'opacity:.4;':'')+'cursor:'+(clickable?'pointer':'default')+';';

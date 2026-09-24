@@ -5925,6 +5925,8 @@ model CompounderLead {
   schuzka_sms_status      String?
   schuzka_sms_channel     String?
   schuzka_opened_at       DateTime?
+  schuzka_mode            String?   @db.VarChar(20) // online | osobne — forma domluvené schůzky
+  financing_path          String?   @db.VarChar(20) // vlastni | financovani — zvolená cesta pořízení
 
   // Heslo pro prihlaseni (bcrypt hash). Null = uzivatel heslo nenastavil (jen magic link).
   password_hash String? @db.Text
@@ -6025,6 +6027,8 @@ model MeetingReservation {
   phone              String?  @db.VarChar(60)
   status             String   @default("booked") @db.VarChar(20) // booked | canceled | done
   note               String?  @db.Text
+  mode               String?  @db.VarChar(20) // online | osobne
+  financing_path     String?  @db.VarChar(20) // vlastni | financovani
   created_at         DateTime @default(now())
 
   slot MeetingSlot @relation(fields: [slot_id], references: [id], onDelete: Cascade)
