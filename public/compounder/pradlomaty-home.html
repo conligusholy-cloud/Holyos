@@ -136,40 +136,10 @@
       </div>
     </div>
 
-    <div id="book" class="reveal" style="background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:20px;margin-top:30px">
-      <div id="bookStart">
-        <h2 style="font-size:18px;font-weight:600;margin-bottom:4px">Domluvit schůzku</h2>
-        <p class="sub" style="font-size:13.5px;color:var(--muted);margin-bottom:16px">Vyberte si termín, který vám sedne. Nezávazně a zdarma.</p>
-        <button type="button" class="btn" id="pickBtn">Vybrat termín schůzky</button>
-      </div>
-
-      <div id="modePanel" style="display:none">
-        <p class="bk-title">Jak chcete schůzku vést?</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button type="button" class="modebtn" data-mode="osobne">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.2"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-            Osobní schůzka<small>u nás nebo u vás</small>
-          </button>
-          <button type="button" class="modebtn" data-mode="online">
-            <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>
-            Online<small>video hovor</small>
-          </button>
-        </div>
-      </div>
-
-      <div id="slotsPanel" style="display:none">
-        <button type="button" class="bk-back" id="slotBack">← zpět na výběr</button>
-        <p class="bk-title" id="slotTitle">Vyberte termín schůzky</p>
-        <div id="slotList"></div>
-      </div>
-
-      <div id="bookDone" class="done" style="display:none">
-        <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></div>
-        <h3>Termín rezervován</h3>
-        <p id="doneText"></p>
-      </div>
-
-      <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div class="reveal" style="background:var(--card);border:0.5px solid var(--line);border-radius:14px;padding:20px;margin-top:30px">
+      <h2 style="font-size:18px;font-weight:600;margin-bottom:4px">Chcete vědět víc?</h2>
+      <p class="sub" style="font-size:13.5px;color:var(--muted);margin-bottom:16px">Připravili jsme pro vás klíčové informace o podnikání s prádlomatem — co to je, jak to funguje a co nabízíme partnerům.</p>
+      <a class="btn" id="infoBtn" href="info" style="display:block;text-align:center;text-decoration:none">Klíčové informace →</a>
       <p class="foot">Nezávazně, zdarma. Počet partnerů je omezený.</p>
     </div>
   </div>
@@ -180,101 +150,10 @@
   var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, {threshold:.12});
   document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
 
+  // Token z SMS předáme na stránku s klíčovými informacemi (tam je rezervace termínu).
   var token = new URLSearchParams(location.search).get('t') || '';
-  var status=document.getElementById('status');
-  var pickBtn=document.getElementById('pickBtn'), bookStart=document.getElementById('bookStart');
-  var slotsPanel=document.getElementById('slotsPanel'), slotList=document.getElementById('slotList');
-  var modePanel=document.getElementById('modePanel'), slotBack=document.getElementById('slotBack'), slotTitle=document.getElementById('slotTitle');
-  var bookDone=document.getElementById('bookDone'), doneText=document.getElementById('doneText');
-  var chosenMode='';
-
-  var DAYS=['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
-  var MON=['ledna','února','března','dubna','května','června','července','srpna','září','října','listopadu','prosince'];
-  function dayHead(d){ return DAYS[d.getDay()]+' '+d.getDate()+'. '+MON[d.getMonth()]; }
-  function hhmm(d){ return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0'); }
-  function setStatus(msg,err){ status.style.color=err?'#ff8f8f':'var(--blue-soft)'; status.textContent=msg||''; }
-
-  // Krok 1: tlačítko „Vybrat termín" → nabídne způsob schůzky
-  pickBtn.addEventListener('click', function(){
-    bookStart.style.display='none';
-    modePanel.style.display='block';
-    setStatus('');
-  });
-
-  // Krok 2: výběr způsobu (osobně / online) → načte volné termíny
-  var modeLabels={ osobne:'osobní schůzka', online:'online video hovor' };
-  document.querySelectorAll('#modePanel .modebtn').forEach(function(b){
-    b.addEventListener('click', function(){
-      chosenMode=b.dataset.mode||'osobne';
-      modePanel.style.display='none';
-      slotsPanel.style.display='block';
-      if(slotTitle) slotTitle.textContent='Vyberte termín — '+(modeLabels[chosenMode]||'');
-      loadSlots();
-    });
-  });
-
-  // zpět na výběr způsobu
-  if(slotBack) slotBack.addEventListener('click', function(){
-    slotsPanel.style.display='none';
-    modePanel.style.display='block';
-    setStatus('');
-  });
-
-  function loadSlots(){
-    setStatus('Načítám volné termíny…');
-    slotList.innerHTML='';
-    fetch('/api/compounder/meeting-slots?days=45',{credentials:'include'})
-      .then(function(r){ return r.json(); })
-      .then(function(slots){
-        setStatus('');
-        if(!Array.isArray(slots) || !slots.length){
-          slotList.innerHTML='<p style="font-size:14px;color:var(--muted)">Právě teď nemáme volný termín. Ozveme se vám hned, jak se nějaký uvolní.</p>';
-          return;
-        }
-        renderSlots(slots);
-      })
-      .catch(function(){ setStatus('Nepodařilo se načíst termíny. Zkuste to prosím znovu.',true); });
-  }
-
-  function renderSlots(slots){
-    var byDay={}, order=[];
-    slots.forEach(function(s){ var d=new Date(s.starts_at); var k=d.toDateString(); if(!byDay[k]){byDay[k]=[];order.push(k);} byDay[k].push(s); });
-    var html='';
-    order.forEach(function(k){
-      var d=new Date(k);
-      html+='<div class="day"><div class="day-h">'+dayHead(d)+'</div><div class="slots">';
-      byDay[k].forEach(function(s){
-        var t=new Date(s.starts_at);
-        html+='<button type="button" class="slot" data-id="'+s.id+'">'+hhmm(t)+'</button>';
-      });
-      html+='</div></div>';
-    });
-    slotList.innerHTML=html;
-    slotList.querySelectorAll('.slot').forEach(function(b){ b.addEventListener('click', function(){ book(parseInt(b.dataset.id,10), b); }); });
-  }
-
-  function book(slotId, btnEl){
-    if(!token){ setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.',true); return; }
-    var payload={ slot_id:slotId, t:token, mode:chosenMode };
-    slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=true; });
-    setStatus('Rezervuji termín…');
-    fetch('/api/compounder/meeting-reservation',{
-      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:JSON.stringify(payload)
-    })
-    .then(function(r){ return r.json().catch(function(){return {};}); })
-    .then(function(d){
-      if(d && d.ok){
-        var dt=new Date(d.starts_at);
-        slotsPanel.style.display='none'; setStatus('');
-        doneText.textContent='Těšíme se na vás '+dayHead(dt)+' v '+hhmm(dt)+' ('+(modeLabels[chosenMode]||'')+'). Potvrzení vám pošleme.';
-        bookDone.style.display='block';
-      } else {
-        setStatus((d&&d.error)||'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true);
-        slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; });
-      }
-    })
-    .catch(function(){ setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.',true); slotList.querySelectorAll('.slot').forEach(function(x){ x.disabled=false; }); });
-  }
+  var infoBtn = document.getElementById('infoBtn');
+  if (infoBtn && token) infoBtn.href = 'info?t=' + encodeURIComponent(token);
 })();
 </script>
 </body>
