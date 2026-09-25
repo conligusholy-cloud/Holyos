@@ -31,6 +31,8 @@
       + '#tab-leasing th{text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--border)}'
       + '#tab-leasing td{padding:10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}'
       + '#tab-leasing tr:hover td{background:rgba(255,255,255,.02)}'
+      + '#tab-leasing td a{color:#4aa3ea;text-decoration:none;font-weight:600}'
+      + '#tab-leasing td a:hover{color:#7cc1f5;text-decoration:underline}'
       + '#tab-leasing .lc-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}'
       + '#tab-leasing .lc-on{background:rgba(34,197,94,.16);color:#7ee2a4}'
       + '#tab-leasing .lc-off{background:rgba(107,114,128,.2);color:#9aa0ad}'
