@@ -10,6 +10,20 @@ let stats = null;
 let currentSite = null;
 let compareIds = new Set();
 
+// ─── Podzáložky modulu (interní / web / předjednaná) ────────────────────────
+// Panely mají class .sd-panel + data-sdtab-panel, tlačítka .sd-tab + data-sdtab.
+// Injektované skripty (lokality-tab.js, predjednana-mista.js) naslouchají sd:tab.
+function sdSwitchTab(name){
+  document.querySelectorAll('.sd-panel').forEach(function(p){
+    p.style.display = (p.getAttribute('data-sdtab-panel') === name) ? '' : 'none';
+  });
+  document.querySelectorAll('.sd-tab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-sdtab') === name);
+  });
+  try { document.dispatchEvent(new CustomEvent('sd:tab', { detail: { name: name } })); } catch(e){}
+}
+window.sdSwitchTab = sdSwitchTab;
+
 const ALL_COLUMNS = [
   { id:'name',         label:'Lokalita',  always:true },
   { id:'status',       label:'Stav',      def:true },

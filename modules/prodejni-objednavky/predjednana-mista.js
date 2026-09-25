@@ -138,41 +138,31 @@
     var st = document.createElement('style'); st.id = 'pm-styles'; st.textContent = css; document.head.appendChild(st);
   }
 
-  // ── Vložení tlačítka + kontejneru + napojení na switchTab ──
+  // ── Vložení tlačítka + kontejneru — modul Site Development (.sd-tabs) ──
   function injectTab() {
     if (document.getElementById('tab-predjednana')) return;
+    var bar = document.querySelector('.sd-tabs');
+    if (!bar) return; // není-li Site Development lišta, nic neděláme
     injectStyles();
 
-    var bar = document.querySelector('.tab-bar');
-    if (bar) {
-      var btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'tab-btn'; btn.setAttribute('data-tab', 'predjednana');
-      btn.textContent = '🧺📍 Předjednaná místa';
-      btn.onclick = function () { window.switchTab('predjednana'); };
-      // Za "Lokality", ať jsou geografické záložky u sebe.
-      var after = bar.querySelector('.tab-btn[data-tab="lokality"]');
-      if (after && after.nextSibling) bar.insertBefore(btn, after.nextSibling); else bar.appendChild(btn);
-    }
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'sd-tab'; btn.setAttribute('data-sdtab', 'predjednana');
+    btn.textContent = '🧺📍 Předjednaná místa';
+    btn.onclick = function () { window.sdSwitchTab('predjednana'); };
+    bar.appendChild(btn);
 
-    var host = document.getElementById('tab-orders');
-    var parent = host ? host.parentNode : document.querySelector('.main-wrapper') || document.body;
+    var host = document.getElementById('sd-tab-host') || document.querySelector('.content') || document.body;
     var div = document.createElement('div');
     div.id = 'tab-predjednana';
+    div.className = 'sd-panel';
+    div.setAttribute('data-sdtab-panel', 'predjednana');
     div.style.display = 'none';
-    div.style.padding = '20px 24px 24px';
+    div.style.padding = '4px 0 24px';
     div.innerHTML = viewHtml();
-    parent.appendChild(div);
+    host.appendChild(div);
 
-    // Obalení switchTab, ať naši záložku ukazuje/skrývá jako ostatní.
-    var orig = window.switchTab;
-    window.switchTab = function (name) {
-      if (typeof orig === 'function') { try { orig(name); } catch (e) {} }
-      var mine = document.getElementById('tab-predjednana');
-      var myBtn = document.querySelector('.tab-btn[data-tab="predjednana"]');
-      if (mine) mine.style.display = (name === 'predjednana') ? '' : 'none';
-      if (myBtn) myBtn.classList.toggle('active', name === 'predjednana');
-      if (name === 'predjednana') load();
-    };
+    // Lazy-load při přepnutí na naši záložku.
+    document.addEventListener('sd:tab', function (e) { if (e && e.detail && e.detail.name === 'predjednana') load(); });
 
     wireView();
   }

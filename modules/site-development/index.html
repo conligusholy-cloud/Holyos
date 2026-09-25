@@ -7,7 +7,15 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <!-- Leaflet — mapa v detailu nabídky lokality (přeneseno z Prodejních objednávek) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
+    /* ─── Podzáložky modulu (interní / web / předjednaná) ─── */
+    .sd-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin:8px 0 16px; flex-wrap:wrap; }
+    .sd-tab { padding:10px 16px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:600; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; }
+    .sd-tab:hover { color:var(--text); }
+    .sd-tab.active { color:#14b8a6; border-bottom-color:#14b8a6; }
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
 
     .page-header {
@@ -154,6 +162,12 @@
     </div>
 
     <div class="content">
+      <!-- Podzáložky: interní (Excel) / nabídky z webu / předjednaná místa -->
+      <div class="sd-tabs">
+        <button type="button" class="sd-tab active" data-sdtab="internal" onclick="sdSwitchTab('internal')">🗂️ Lokality (interní)</button>
+      </div>
+
+      <div class="sd-panel" data-sdtab-panel="internal">
       <!-- Statistiky -->
       <div class="stats-row" id="stats-row"></div>
 
@@ -183,6 +197,10 @@
       <div class="col-toggle" id="col-toggle"></div>
 
       <div id="sites-table"></div>
+      </div><!-- /sd-panel internal -->
+
+      <!-- Sem se injektují panely „Nabídky z webu" a „Předjednaná místa". -->
+      <div id="sd-tab-host"></div>
     </div>
   </div>
 
@@ -203,6 +221,8 @@
     document.head.appendChild(s);
   </script>
 
-  <script src="modules/site-development/app.js?v=20260925d"></script>
+  <script src="modules/site-development/app.js?v=20260925e"></script>
+  <script src="modules/site-development/lokality-tab.js?v=20260925e"></script>
+  <script src="modules/prodejni-objednavky/predjednana-mista.js?v=20260925e"></script>
 </body>
 </html>

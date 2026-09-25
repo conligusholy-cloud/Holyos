@@ -415,7 +415,9 @@ router.post('/import-excel-2026', async (req, res, next) => {
     if (!Array.isArray(SITES) || !SITES.length) return res.status(500).json({ error: 'Data předlohy jsou prázdná' });
 
     const actor = actorPersonId(req);
-    const deleted = await prisma.site.deleteMany({});
+    // Maž jen interní záznamy (public_source = null). Veřejné nabídky z webu
+    // (bestseries.global, záložka Lokality) NECHAT být.
+    const deleted = await prisma.site.deleteMany({ where: { public_source: null } });
     const created = await prisma.$transaction(SITES.map(s => prisma.site.create({
       data: {
         name: String(s.name || 'Bez názvu').slice(0, 255),
