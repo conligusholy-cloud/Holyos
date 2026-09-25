@@ -17,7 +17,9 @@
       + '#sd-tab-lokality .form-group{display:flex;flex-direction:column;gap:4px}'
       + '#sd-tab-lokality .form-group label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text2)}'
       + '#sd-tab-lokality .form-group select{padding:8px 12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:7px;font-size:13px}'
-      + '.lok-map-full{position:fixed!important;inset:3vh 3vw!important;height:auto!important;z-index:3000!important;box-shadow:0 10px 40px rgba(0,0,0,.6)}';
+      + '.lok-map-full{position:fixed!important;inset:3vh 3vw!important;height:auto!important;z-index:3000!important;box-shadow:0 10px 40px rgba(0,0,0,.6)}'
+      + '#sd-tab-lokality .stats-bar{display:flex;gap:12px;flex-wrap:wrap}'
+      + '#sd-tab-lokality .stats-bar .stat-card{flex:1;min-width:160px}';
     var st = document.createElement('style'); st.id='lok-tab-styles'; st.textContent=css; document.head.appendChild(st);
   }
 
