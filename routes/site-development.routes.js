@@ -443,6 +443,98 @@ router.post('/import-excel-2026', async (req, res, next) => {
   }
 });
 
+// ─── POST /api/sites/recover-web-offers — obnova poptávek z webu z notifikací ─
+// Poptávky z bestseries.global (public_source) byly omylem smazány importem.
+// Každá poptávka ale vytvořila i notifikaci (zvonek) se shrnutím + kontaktem,
+// takže je z ní zrekonstruujeme. Idempotentní: existující (jméno+adresa) přeskočí.
+router.post('/recover-web-offers', async (req, res, next) => {
+  try {
+    const notes = await prisma.notification.findMany({
+      where: { title: { startsWith: '📍 Nová nabídka lokality' } },
+      orderBy: { created_at: 'asc' },
+      select: { title: true, body: true, created_at: true },
+    });
+
+    // Dedup: stejná notifikace chodí více majitelům → klíč title+body, nejstarší datum.
+    const uniq = new Map();
+    for (const n of notes) {
+      const key = (n.title || '') + '\n' + (n.body || '');
+      if (!uniq.has(key)) uniq.set(key, n);
+    }
+
+    const line = (body, label) => {
+      const m = new RegExp('^' + label + ':\\s*(.*)$', 'm').exec(body || '');
+      return m ? m[1].trim() : '';
+    };
+    const DEAL = { 'Pronájem': 'rent', 'Prodej pozemku': 'purchase', 'Zatím neví': 'other' };
+
+    let created = 0, skipped = 0;
+    const createdItems = [];
+    for (const n of uniq.values()) {
+      const body = n.body || '';
+      const first = (body.split('\n')[0] || '').trim();
+      const owner_name = first.replace(/\s*nabízí místo pro prádlomat\.?\s*$/i, '').trim();
+      if (!owner_name) { skipped++; continue; }
+      const cityM = /—\s*(.+)$/.exec(n.title || '');
+      const city = cityM ? cityM[1].trim() : null;
+      const address = line(body, 'Adresa') || null;
+      const deal = DEAL[line(body, 'Zájem')] || 'rent';
+      const ownerTxt = line(body, 'Vlastník místa');
+      const is_property_owner = ownerTxt === 'Ano' ? true : (ownerTxt === 'Ne' ? false : null);
+      const contact = line(body, 'Kontakt');
+      let owner_phone = null, owner_email = null;
+      if (contact) {
+        const parts = contact.split('·').map(s => s.trim()).filter(Boolean);
+        for (const p of parts) {
+          if (p === '—') continue;
+          if (p.includes('@')) owner_email = p.slice(0, 255);
+          else if (!owner_phone) owner_phone = p.slice(0, 40);
+        }
+      }
+      const util = line(body, 'Přípojky na mapě');
+
+      // Už existuje? (obnovené / neodstraněné)
+      const exists = await prisma.site.findFirst({
+        where: {
+          public_source: { not: null },
+          owner_name: { equals: owner_name, mode: 'insensitive' },
+          ...(address ? { address: { equals: address, mode: 'insensitive' } } : {}),
+        },
+        select: { id: true },
+      });
+      if (exists) { skipped++; continue; }
+
+      const site = await prisma.site.create({
+        data: {
+          name: ('Nabídka: ' + (city ? city + ' — ' : '') + owner_name).slice(0, 255),
+          site_type: deal,
+          status: 'lead',
+          public_source: 'bestseries.global',
+          address: address ? address.slice(0, 500) : null,
+          city: city ? city.slice(0, 120) : null,
+          country: 'CZ',
+          owner_name: owner_name.slice(0, 255),
+          owner_phone,
+          owner_email,
+          is_property_owner,
+          area_m2: '6.40',
+          footprint_w_mm: 3182,
+          footprint_h_mm: 2015,
+          capacity_note: util ? ('Přípojky na mapě: ' + util + ' · (obnoveno z notifikace — poloha na mapě se nedochovala)') : '(obnoveno z notifikace — poloha na mapě se nedochovala)',
+          created_at: n.created_at,
+        },
+        select: { id: true, name: true },
+      });
+      created++;
+      createdItems.push(site);
+    }
+
+    res.status(201).json({ found: uniq.size, created, skipped, items: createdItems });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── KONTAKTY ───────────────────────────────────────────────────────────────
 
 router.post('/:id(\\d+)/contacts', async (req, res, next) => {

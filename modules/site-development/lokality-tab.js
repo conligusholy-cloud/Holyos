@@ -40,6 +40,7 @@
       + '  <button class="btn" onclick="loadLokality()">↻ Obnovit</button>'
       + '  <button class="btn" onclick="openLokalityStats()" title="Statistika návštěvnosti webu + AI návrhy na konverzi">📊 Statistika</button>'
       + '  <a class="btn" href="/lokality/" target="_blank" rel="noopener" title="Otevřít veřejný web pro nabídky lokalit">🌐 Veřejný web</a>'
+      + '  <button class="btn" onclick="recoverWebOffers()" title="Obnoví smazané poptávky z webu podle notifikací (zvonek)">♻️ Obnovit poptávky</button>'
       + '</div>'
       + '<div id="lok-summary" style="margin-bottom:14px;"></div>'
       + '<div id="lok-table"><div style="color:var(--text2);padding:20px;">Načítám…</div></div>';
@@ -393,6 +394,19 @@
     window.lokalityPersona = lokalityPersona;
     window.openLokalityDetail = openLokalityDetail;
     window.saveLokalityStatus = saveLokalityStatus;
+
+  // Obnova smazaných poptávek z webu podle notifikací (zvonek).
+  async function recoverWebOffers() {
+    if (!confirm('Obnovit poptávky z webu podle notifikací? Už existující se přeskočí.')) return;
+    try {
+      var r = await fetch('/api/sites/recover-web-offers', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      var d = await r.json().catch(function () { return {}; });
+      if (!r.ok) { alert('Obnova selhala: ' + (d.error || r.status)); return; }
+      alert('Nalezeno v notifikacích: ' + d.found + '\nObnoveno: ' + d.created + '\nPřeskočeno (už existují): ' + d.skipped);
+      loadLokality();
+    } catch (e) { alert('Obnova selhala: ' + e.message); }
+  }
+  window.recoverWebOffers = recoverWebOffers;
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
