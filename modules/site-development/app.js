@@ -55,18 +55,6 @@ let activeCols = getActiveCols();
 // ─── Helpery ───────────────────────────────────────────────────────────────
 const fetchOpts = (init) => Object.assign({ credentials:'include', headers:{'Content-Type':'application/json'} }, init || {});
 
-// Barva řádku dle Excelu — spočítá čitelnou barvu textu podle jasu pozadí.
-function hexToRgb(h){ h=String(h).replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
-function rowStyle(s){
-  if(!s || !s.row_color) return '';
-  try {
-    const [r,g,b]=hexToRgb(s.row_color);
-    const lum=(0.299*r+0.587*g+0.114*b)/255;
-    const txt = lum>0.6 ? '#111' : '#fff';
-    return `background:${s.row_color};color:${txt};`;
-  } catch(e){ return ''; }
-}
-
 // Dlouhý text do buňky — zkrátí a přidá tooltip s plným zněním.
 function cellText(v){
   if (v == null || v === '') return '—';
@@ -223,7 +211,7 @@ function renderTable() {
         default: return '<td>—</td>';
       }
     }).join('');
-    return `<tr data-id="${s.id}" onclick="openSiteModal(${s.id})" style="${rowStyle(s)}">
+    return `<tr data-id="${s.id}" onclick="openSiteModal(${s.id})">
       <td onclick="event.stopPropagation(); toggleCompare(${s.id});" title="Vybrat do porovnání" style="cursor:pointer;text-align:center;">
         <input type="checkbox" ${isCompared?'checked':''} style="cursor:pointer;">
       </td>${cells}</tr>`;
@@ -420,15 +408,6 @@ function renderBasicTab(s){
     ${txt('Poznámka k vlastníkovi','owner_note', s.owner_note)}
     ${txt('Popis lokality','description', s.description)}
     <div class="form-row span2"><label>Místní šetření</label><div class="checkbox-row">${chk('Proběhlo (ANO)','survey_done', s.survey_done)}</div></div>
-    ${sel('Barva řádku (jako v Excelu)','row_color', s.row_color, [
-      {v:'',l:'— žádná —'},
-      {v:'#92D050',l:'🟢 Zelená (OK / šetření)'},
-      {v:'#FF0000',l:'🔴 Červená (zamítnuto)'},
-      {v:'#FFC000',l:'🟠 Oranžová'},
-      {v:'#FFFF00',l:'🟡 Žlutá'},
-      {v:'#0070C0',l:'🔵 Modrá'},
-      {v:'#7030A0',l:'🟣 Fialová'},
-    ])}
     ${txt('Předschválení místa','preapproval_note', s.preapproval_note)}
     ${txt('Smlouva (stav / poznámka)','contract_note', s.contract_note)}
     ${txt('Stavební povolení / poznámka','building_permit_note', s.building_permit_note)}
