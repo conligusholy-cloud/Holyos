@@ -149,6 +149,7 @@
       </div>
       <input type="text" class="search-box" id="site-search" placeholder="Hledat název, adresu, město, vlastníka..." oninput="onSearchInput()">
       <button class="btn btn-secondary" onclick="openImportModal()" title="Hromadný import lokalit ze seznamu">📋 Import seznamu</button>
+      <button class="btn btn-secondary" onclick="importExcel2026()" title="Smaže stávající a naimportuje 53 lokalit z předlohy Excel 2026">📥 Import z Excelu 2026</button>
       <button class="btn btn-primary" onclick="openSiteModal()">+ Nová lokalita</button>
     </div>
 
@@ -202,6 +203,6 @@
     document.head.appendChild(s);
   </script>
 
-  <script src="modules/site-development/app.js?v=20260925"></script>
+  <script src="modules/site-development/app.js?v=20260925b"></script>
 </body>
 </html>

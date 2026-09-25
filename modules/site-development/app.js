@@ -762,6 +762,21 @@ async function doImport() {
 }
 window.doImport = doImport;
 
+// Jednorázový import z předlohy Excel 2026 (smaže stávající, naimportuje 53).
+async function importExcel2026() {
+  if (!confirm('POZOR: smaže VŠECHNY stávající lokality a nahradí je 53 z předlohy Excel 2026.\n\nPokračovat?')) return;
+  try {
+    const r = await fetch('/api/sites/import-excel-2026', fetchOpts({ method:'POST', body:'{}' }));
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { alert('Import selhal: ' + (data.error || r.status)); return; }
+    alert('Hotovo. Smazáno: ' + data.deleted + ', naimportováno: ' + data.created + ' lokalit.');
+    loadSites();
+  } catch (err) {
+    alert('Import selhal: ' + err.message);
+  }
+}
+window.importExcel2026 = importExcel2026;
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', loadSites);
 

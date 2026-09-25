@@ -402,6 +402,42 @@ router.post('/import', async (req, res, next) => {
   }
 });
 
+// ─── POST /api/sites/import-excel-2026 — jednorázový import z předlohy ───────
+// Smaže VŠECHNY stávající lokality a nahradí je 53 z Excelu „Tabulková verze míst".
+// Data jsou v scripts/sites-2026-data.js. Spouští se tlačítkem v modulu.
+router.post('/import-excel-2026', async (req, res, next) => {
+  try {
+    let SITES;
+    try { SITES = require('../scripts/sites-2026-data.js'); }
+    catch (e) { return res.status(500).json({ error: 'Chybí data předlohy (sites-2026-data.js)' }); }
+    if (!Array.isArray(SITES) || !SITES.length) return res.status(500).json({ error: 'Data předlohy jsou prázdná' });
+
+    const actor = actorPersonId(req);
+    const deleted = await prisma.site.deleteMany({});
+    const created = await prisma.$transaction(SITES.map(s => prisma.site.create({
+      data: {
+        name: String(s.name || 'Bez názvu').slice(0, 255),
+        site_type: 'rent',
+        status: 'lead',
+        city: s.city ? String(s.city).slice(0, 120) : null,
+        address: s.address ? String(s.address).slice(0, 500) : null,
+        owner_name: s.owner_name ? String(s.owner_name).slice(0, 255) : null,
+        owner_phone: s.owner_phone ? String(s.owner_phone).slice(0, 40) : null,
+        rent_monthly: toDecimal(s.rent_monthly),
+        survey_done: typeof s.survey_done === 'boolean' ? s.survey_done : null,
+        preapproval_note: s.preapproval_note || null,
+        contract_note: s.contract_note || null,
+        building_permit_note: s.building_permit_note || null,
+        created_by_id: actor,
+      },
+    })));
+
+    res.status(201).json({ deleted: deleted.count, created: created.length });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── KONTAKTY ───────────────────────────────────────────────────────────────
 
 router.post('/:id(\\d+)/contacts', async (req, res, next) => {
