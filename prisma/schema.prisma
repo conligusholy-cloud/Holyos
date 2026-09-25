@@ -4704,6 +4704,12 @@ model Site {
   contract_start       DateTime? @db.Date
   contract_end         DateTime? @db.Date
 
+  // ─── Excel „Tabulková verze míst" — procesní sledování lokality ───────────
+  survey_done          Boolean?           // Místní šetření proběhlo (ANO/NE)
+  preapproval_note     String?  @db.Text  // Předschválení místa (stav/poznámka)
+  contract_note        String?  @db.Text  // Smlouva (stav/poznámka)
+  building_permit_note String?  @db.Text  // Poznámka – stavební povolení
+
   area_m2          Decimal? @db.Decimal(10, 2)
   ceiling_height_m Decimal? @db.Decimal(5, 2)
   electricity_kw   Decimal? @db.Decimal(8, 2)

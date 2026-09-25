@@ -1,0 +1,750 @@
+// HolyOS — jednorázový import lokalit z Excelu „TABULKOVÁ VERZE MÍST 2026".
+// Smaže STÁVAJÍCÍ lokality (sites) a nahradí je 53 reálnými z předlohy.
+// Spuštění (lokálně proti Railway DB): node scripts/import-sites-2026.js
+// Bezpečnostní pojistka: bez příznaku jen vypíše, co by udělal (dry-run).
+//   node scripts/import-sites-2026.js --apply   ← teprve tohle reálně zapíše.
+
+const { PrismaClient } = require('@prisma/client');
+const prisma = new PrismaClient();
+
+const APPLY = process.argv.includes('--apply');
+
+const SITES = [
+  {
+    "order": 1,
+    "name": "Benešov — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Benešov",
+    "address": "Benešov, Červené vršky 2400",
+    "rent_monthly": 5500.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "čekáme až přijde podepsaná z druhé strany",
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+  },
+  {
+    "order": 2,
+    "name": "Valašské Meziříčí — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Valašské Meziříčí",
+    "address": "Rožnovská 864",
+    "rent_monthly": 5500.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "čekáme až přijde podepsaná z druhé strany",
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+  },
+  {
+    "order": 3,
+    "name": "Litomyšl — Porubský",
+    "owner_name": "Porubský",
+    "owner_phone": null,
+    "city": "Litomyšl",
+    "address": "Sokolovská 113",
+    "rent_monthly": 3000.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "ANO",
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+  },
+  {
+    "order": 4,
+    "name": "Valašské Meziříčí — Porubský",
+    "owner_name": "Porubský",
+    "owner_phone": null,
+    "city": "Valašské Meziříčí",
+    "address": "Rožnovská",
+    "rent_monthly": 3000.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "ANO",
+    "building_permit_note": "Bez SP…...již zprocesováno"
+  },
+  {
+    "order": 5,
+    "name": "Karviná — Riverenza (Pernica)",
+    "owner_name": "Riverenza (Pernica)",
+    "owner_phone": null,
+    "city": "Karviná",
+    "address": "Žižkova 2017/1b",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+  },
+  {
+    "order": 6,
+    "name": "Železná Ruda — Coop (Holeček)",
+    "owner_name": "Coop (Holeček)",
+    "owner_phone": null,
+    "city": "Železná Ruda",
+    "address": "1. máje 392",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
+    "building_permit_note": "Bez SP…...již zprocesováno"
+  },
+  {
+    "order": 7,
+    "name": "Nýrsko — Coop (Holeček)",
+    "owner_name": "Coop (Holeček)",
+    "owner_phone": null,
+    "city": "Nýrsko",
+    "address": "Nýrsko 853",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
+    "building_permit_note": "Bez SP…...již zprocesováno"
+  },
+  {
+    "order": 8,
+    "name": "Malá Čermná — Tělovýchovná jednota – Čermná nad Orlicí",
+    "owner_name": "Tělovýchovná jednota – Čermná nad Orlicí",
+    "owner_phone": null,
+    "city": "Malá Čermná",
+    "address": "Malá Čermná ,parc.č. St.29",
+    "rent_monthly": 0.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "ANO",
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+  },
+  {
+    "order": 9,
+    "name": "Plzen 4 — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Plzen 4",
+    "address": "Albert ,Rokycanská 2656/2",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "místo předschváleno",
+    "contract_note": "NE",
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , Objekt ve správě Atalianu – technik 602 803 808"
+  },
+  {
+    "order": 10,
+    "name": "Plzen 3-Skvrnany — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Plzen 3-Skvrnany",
+    "address": "Man – logistycký areál , Domažlická 1195/178a",
+    "rent_monthly": 3000.0,
+    "survey_done": true,
+    "preapproval_note": "prověřit pozemky pro přípojky , nevyužijeme (komplikované přípojky , areál se uzavírá )",
+    "contract_note": "NE",
+    "building_permit_note": ", p. Maule 725 833 600…místo schované , komplikace okolní pozemky (vedení přípojek), areál má zavírací dobu"
+  },
+  {
+    "order": 11,
+    "name": "Šumperk — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Šumperk",
+    "address": "Albert , Vřesová 2908/11",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "místo předschváleno",
+    "contract_note": "NE",
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu ,.Smrček tel 777 273 993"
+  },
+  {
+    "order": 12,
+    "name": "Havířov — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Havířov",
+    "address": "RP X park Šenov (Billa,Pepco) ,Marie Pujmanové",
+    "rent_monthly": 3500.0,
+    "survey_done": true,
+    "preapproval_note": "ANO",
+    "contract_note": "NS čeká na pročtení z naší strany",
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , pan Igor Šmíček 737 385 040 – bývá na místě většinou v pondělí"
+  },
+  {
+    "order": 13,
+    "name": "Kadan — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Kadan",
+    "address": "Albert , Na Průtahu 1856",
+    "rent_monthly": 3000.0,
+    "survey_done": true,
+    "preapproval_note": "Nají jiné umístění , druhé kolo již proběhlo",
+    "contract_note": "NE",
+    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , pan Čermák – 775 473 975."
+  },
+  {
+    "order": 14,
+    "name": "Brandýs nad Labem – Stará Boleslav — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Brandýs nad Labem – Stará Boleslav",
+    "address": "RP (Jysk) , Boleslavská",
+    "rent_monthly": 3500.0,
+    "survey_done": true,
+    "preapproval_note": "Nají jiné umístění , druhé kolo již proběhlo",
+    "contract_note": "NE",
+    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , RP (Jysk) , Boleslavská ,Brandýs nad Labem – Stará Boleslav– pan Josef Hybeš 725 101 026"
+  },
+  {
+    "order": 15,
+    "name": "Krnov – Pod Bezručovým vrchem — Traxial - Slavata,Mikeš,Fultner",
+    "owner_name": "Traxial - Slavata,Mikeš,Fultner",
+    "owner_phone": null,
+    "city": "Krnov – Pod Bezručovým vrchem",
+    "address": "Albert , Revoluční 2312/27",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "místo předschváleno",
+    "contract_note": "NE",
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , - p. Hanzel tel. 734 591 993"
+  },
+  {
+    "order": 16,
+    "name": "Havlíčkův Brod — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Havlíčkův Brod",
+    "address": "Jihlavská 895",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "zamítnuto ze strany majitele , nedohodl se se stávajícím nájeníkem objektu",
+    "contract_note": "NE",
+    "building_permit_note": "p. Razl 608 646 658 - technik , průmyslová zóna (Citroen,Toyota)"
+  },
+  {
+    "order": 17,
+    "name": "Humpolec — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Humpolec",
+    "address": "Kamarytova 1331",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "Nevhodná lokalita - bez místa..pouze prosklené plochy",
+    "contract_note": "NE",
+    "building_permit_note": "p.Šimánek 606 838 786- technik /obchodní zóna,divadlo,kavárny"
+  },
+  {
+    "order": 18,
+    "name": "Svitavy - Lačnov — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Svitavy - Lačnov",
+    "address": "Lanškrounská 350/50",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "okolí velmi zanedbané ,obchod na vyvýšené podestě",
+    "contract_note": "NE",
+    "building_permit_note": "technik není ….provozovatel Aziat / obchodní dům"
+  },
+  {
+    "order": 19,
+    "name": "Letovice — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Letovice",
+    "address": "Masarykovo nám. 1064/5",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "místo u náměstí bez pozemku (jinak schovanější místo u Baru)",
+    "contract_note": "NE",
+    "building_permit_note": "p. Kučera 739 664 844- technik / u kruháče , v obchodní zóně (menších obchodů) další technik p. Maxim 602 217 951"
+  },
+  {
+    "order": 20,
+    "name": "Nové Město na Moravě — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Nové Město na Moravě",
+    "address": "Vratislavovo nám. 7",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "nelze umístit , jde o hotel na náměstí )přední část bez pozemku a zadní skoro nepřístupná skrze autobus.nádraží",
+    "contract_note": "NE",
+    "building_permit_note": "p.Sadečka 721 278 772- technik / v centru náměstí"
+  },
+  {
+    "order": 21,
+    "name": "Havlíčkův Brod — p.Jinek",
+    "owner_name": "p.Jinek",
+    "owner_phone": "606 705889",
+    "city": "Havlíčkův Brod",
+    "address": "Žižkova 3329",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "verze umístění zamítnuta ze strany poskytovatele / budova půjde do prodeje",
+    "contract_note": "NE",
+    "building_permit_note": "p. Razl 608 646 658- technik / u kulturního domu,restaurace a zástavby"
+  },
+  {
+    "order": 22,
+    "name": "Hranice na Moravě — p.Vácha",
+    "owner_name": "p.Vácha",
+    "owner_phone": "725 075 897",
+    "city": "Hranice na Moravě",
+    "address": "OC Koloseum - tř. 1 Máje 1901",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "čekám na schválení od majitele - budou mne kontaktovat 21.9.",
+    "contract_note": "NE",
+    "building_permit_note": "Obchodní centrum"
+  },
+  {
+    "order": 23,
+    "name": "Klášterec nad Ohří — p.Kobza",
+    "owner_name": "p.Kobza",
+    "owner_phone": "777 133 266",
+    "city": "Klášterec nad Ohří",
+    "address": "ulice souběžná 523",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "majitelé si rozmysleli záměr / nemají zájem..po místním šetření",
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 24,
+    "name": "Liberec — p.Brož DRFG",
+    "owner_name": "p.Brož DRFG",
+    "owner_phone": "722 952061",
+    "city": "Liberec",
+    "address": "NS Géčko - Sousedská 599",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "bohužel páteř spl. Kanalizace je na opačné straně budovy",
+    "contract_note": "NE",
+    "building_permit_note": "Velké obchodní centrum spojené s Glóbusem , Tomáš Semelka +420 725 549 456"
+  },
+  {
+    "order": 25,
+    "name": "Ostrava — p.Brož DRFG",
+    "owner_name": "p.Brož DRFG",
+    "owner_phone": "722 952061",
+    "city": "Ostrava",
+    "address": "RP Osmo - Nákupní park Centro , Sjízdná 5602/4",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "po MŠ - čeká na předschválení",
+    "contract_note": "NE",
+    "building_permit_note": "Retailový Park"
+  },
+  {
+    "order": 26,
+    "name": "Most — p.Brož DRFG",
+    "owner_name": "p.Brož DRFG",
+    "owner_phone": "722 952061",
+    "city": "Most",
+    "address": "RP Osmo - Velebudická 1247",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "po MŠ - čeká na předschválení",
+    "contract_note": "NE",
+    "building_permit_note": "Retailový Park , p. Červený, 603 402 374"
+  },
+  {
+    "order": 27,
+    "name": "Praha 4 — p.Brož DRFG",
+    "owner_name": "p.Brož DRFG",
+    "owner_phone": "722 952061",
+    "city": "Praha 4",
+    "address": "Polygon House Office - Doudlebská 5",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "Není plocha pro umístění",
+    "contract_note": null,
+    "building_permit_note": "Office House"
+  },
+  {
+    "order": 28,
+    "name": "Jindřichův Hradec 3 — p.Brož DRFG",
+    "owner_name": "p.Brož DRFG",
+    "owner_phone": "722 952061",
+    "city": "Jindřichův Hradec 3",
+    "address": "sídliště Vajgara 730",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "po MŠ - čeká na předschválení",
+    "contract_note": "NE",
+    "building_permit_note": "u Jysku a Pepca , paní Bohuslavová, 703 114 743"
+  },
+  {
+    "order": 29,
+    "name": "Praha / Úvaly — p.Fedorová",
+    "owner_name": "p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Praha / Úvaly",
+    "address": "Pražská 250/82",
+    "rent_monthly": 10000.0,
+    "survey_done": true,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": "Místo komplet připravené vč. přípojek , aktuálně se řeší úprava výše nájmu"
+  },
+  {
+    "order": 30,
+    "name": "Ostrava — Alena Šídlová- Best Series",
+    "owner_name": "Alena Šídlová- Best Series",
+    "owner_phone": null,
+    "city": "Ostrava",
+    "address": "Zborovská 381/7",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "Na místě není plocha (pouze dvě možnosti , kdy na jednom místě hl.přívod plynu a na druhém koř. Val po objemném stromu 3x2m)",
+    "contract_note": "NE",
+    "building_permit_note": "Automyčka - místo od Retail Brokers"
+  },
+  {
+    "order": 31,
+    "name": "Brno — p. Borozdin",
+    "owner_name": "p. Borozdin",
+    "owner_phone": "605 229918",
+    "city": "Brno",
+    "address": "St, město , Václavská 6",
+    "rent_monthly": null,
+    "survey_done": true,
+    "preapproval_note": "čekám na schválení od p. Borozdin….asi bude změna umístění",
+    "contract_note": "NE",
+    "building_permit_note": "ubytovací prostory"
+  },
+  {
+    "order": 32,
+    "name": "Kladno — REÁLIE - p.Fedorová",
+    "owner_name": "REÁLIE - p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Kladno",
+    "address": "Americká 1316",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "již zde máme Prádlomat ve velké blízkosti / místo navíc schované , navíc budou tento RP PRODÁVAT",
+    "contract_note": null,
+    "building_permit_note": "již máme hned přes silnici Prádlomat u Tesca"
+  },
+  {
+    "order": 33,
+    "name": "České Budějovice — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "České Budějovice",
+    "address": "Za Otýlií 2884/3",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "čeká na vyjádření majitele",
+    "contract_note": "NE",
+    "building_permit_note": "čekáme na vyjádření developera"
+  },
+  {
+    "order": 34,
+    "name": "Jaroměř — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Jaroměř",
+    "address": "Dolecká 974",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "čeká na vyjádření majitele",
+    "contract_note": "NE",
+    "building_permit_note": "čekáme na vyjádření developera"
+  },
+  {
+    "order": 35,
+    "name": "Moravská Třebová — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Moravská Třebová",
+    "address": "Svitavská",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "Před námi projevil zájem někdo jiný , tedy zatím NE",
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 36,
+    "name": "Pelhřimov — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Pelhřimov",
+    "address": "Průběžná 2483",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "umístění v rozporu s aktuálním nájemcem",
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 37,
+    "name": "Valašské Meziříčí — REÁLIE -p.Fedorová",
+    "owner_name": "REÁLIE -p.Fedorová",
+    "owner_phone": "776 441 812",
+    "city": "Valašské Meziříčí",
+    "address": "Na Křižanově pile 944",
+    "rent_monthly": 5000.0,
+    "survey_done": true,
+    "preapproval_note": "místo neschváleno",
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 38,
+    "name": "Nymburk — Kočkovi",
+    "owner_name": "Kočkovi",
+    "owner_phone": "722 446 551",
+    "city": "Nymburk",
+    "address": "Sladkovského 902/1…ředzahrádka Maršala Koněva",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 39,
+    "name": "Mělník — r. Duchon",
+    "owner_name": "r. Duchon",
+    "owner_phone": "603 533 350",
+    "city": "Mělník",
+    "address": "Pražská - RP Billa",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": "technik p. Vodička 608 981 033"
+  },
+  {
+    "order": 40,
+    "name": "Chomutov — r. Duchon",
+    "owner_name": "r. Duchon",
+    "owner_phone": "603 533 350",
+    "city": "Chomutov",
+    "address": "OC Central , Žižkovo nám. 5762",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": "technik p. Týr 605 289 513"
+  },
+  {
+    "order": 41,
+    "name": "České Budějovice — r. Duchon",
+    "owner_name": "r. Duchon",
+    "owner_phone": "603 533 350",
+    "city": "České Budějovice",
+    "address": "OC Kruh , Na Bahnech 601",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": "technik p. Hřebík 777 366 085"
+  },
+  {
+    "order": 42,
+    "name": "Plzeň 1 - Bolevec — r. Duchon",
+    "owner_name": "r. Duchon",
+    "owner_phone": "603 533 350",
+    "city": "Plzeň 1 - Bolevec",
+    "address": "Gerská 1247/34",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": "technik p . Kratochvíl 608 666 585"
+  },
+  {
+    "order": 43,
+    "name": "Plzeň 3 - Doudlevce — r. Duchon",
+    "owner_name": "r. Duchon",
+    "owner_phone": "603 533 350",
+    "city": "Plzeň 3 - Doudlevce",
+    "address": "OC Luna , Skupova 490/24",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": "NE",
+    "building_permit_note": null
+  },
+  {
+    "order": 44,
+    "name": "Pelhřimov — p. Kuchař",
+    "owner_name": "p. Kuchař",
+    "owner_phone": "731 130 521",
+    "city": "Pelhřimov",
+    "address": "Automyčka ,Táborská 2413",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": "naplánovat MS na 39 týden!!!",
+    "contract_note": "NE",
+    "building_permit_note": "kontakt od p.Šídlové"
+  },
+  {
+    "order": 45,
+    "name": "Dvůr Kálové nad Labem — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Dvůr Kálové nad Labem",
+    "address": "Alešova 3083",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 46,
+    "name": "Frýdek Místek — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Frýdek Místek",
+    "address": "Příborská 2270",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 47,
+    "name": "Jaroměř — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Jaroměř",
+    "address": "Husova 69",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 48,
+    "name": "Jihlava — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Jihlava",
+    "address": "Brněnská 4971/74",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 49,
+    "name": "Klatovy — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Klatovy",
+    "address": "Domažlická 909",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 50,
+    "name": "Kopřivnice — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Kopřivnice",
+    "address": "Nádražní 228/2",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 51,
+    "name": "Praha Skalka — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Praha Skalka",
+    "address": "Přetlucká 3295/50",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 52,
+    "name": "Sokolov — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Sokolov",
+    "address": "Marie Majerové 2241",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  },
+  {
+    "order": 53,
+    "name": "Tachov — Tesco - p. Davidová",
+    "owner_name": "Tesco - p. Davidová",
+    "owner_phone": "702 186 919",
+    "city": "Tachov",
+    "address": "Sokolovská 2164",
+    "rent_monthly": null,
+    "survey_done": false,
+    "preapproval_note": null,
+    "contract_note": null,
+    "building_permit_note": null
+  }
+];
+
+async function main() {
+  const existing = await prisma.site.count();
+  console.log(`Stávajících lokalit v DB: ${existing}`);
+  console.log(`K importu z předlohy: ${SITES.length}`);
+
+  if (!APPLY) {
+    console.log('\n[DRY-RUN] Nic se nezapsalo. Pro reálný import spusť s příznakem --apply');
+    console.log('Ukázka prvních 3:');
+    SITES.slice(0, 3).forEach(s => console.log(' •', s.name, '| tel', s.owner_phone || '—', '| nájem', s.rent_monthly ?? '—'));
+    await prisma.$disconnect();
+    return;
+  }
+
+  // 1) Smazat stávající (děti kaskádují přes ON DELETE CASCADE).
+  const del = await prisma.site.deleteMany({});
+  console.log(`Smazáno lokalit: ${del.count}`);
+
+  // 2) Vložit nové.
+  let created = 0;
+  for (const s of SITES) {
+    await prisma.site.create({
+      data: {
+        name: s.name,
+        site_type: 'rent',
+        status: 'lead',
+        city: s.city || null,
+        address: s.address || null,
+        owner_name: s.owner_name || null,
+        owner_phone: s.owner_phone || null,
+        rent_monthly: s.rent_monthly != null ? s.rent_monthly : null,
+        survey_done: typeof s.survey_done === 'boolean' ? s.survey_done : null,
+        preapproval_note: s.preapproval_note || null,
+        contract_note: s.contract_note || null,
+        building_permit_note: s.building_permit_note || null,
+      },
+    });
+    created++;
+  }
+  console.log(`Vytvořeno lokalit: ${created}`);
+  await prisma.$disconnect();
+}
+
+main().catch(async (e) => {
+  console.error('CHYBA importu:', e);
+  await prisma.$disconnect();
+  process.exit(1);
+});

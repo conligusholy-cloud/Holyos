@@ -22,7 +22,11 @@ const ALL_COLUMNS = [
   { id:'purchase',     label:'Kupní cena',def:false },
   { id:'area',         label:'Plocha',    def:false },
   { id:'owner',        label:'Vlastník',  def:true },
-  { id:'score',        label:'Skóre',     def:true },
+  { id:'survey',       label:'Místní šetření', def:true },
+  { id:'preapp',       label:'Předschválení',  def:true },
+  { id:'contract',     label:'Smlouva',        def:true },
+  { id:'permit',       label:'Stav. povolení', def:false },
+  { id:'score',        label:'Skóre',     def:false },
   { id:'comms',        label:'Komunikace',def:false },
   { id:'updated',      label:'Změna',     def:true },
 ];
@@ -36,6 +40,14 @@ let activeCols = getActiveCols();
 
 // ─── Helpery ───────────────────────────────────────────────────────────────
 const fetchOpts = (init) => Object.assign({ credentials:'include', headers:{'Content-Type':'application/json'} }, init || {});
+
+// Dlouhý text do buňky — zkrátí a přidá tooltip s plným zněním.
+function cellText(v){
+  if (v == null || v === '') return '—';
+  const t = String(v).replace(/\s+/g, ' ').trim();
+  const short = t.length > 70 ? t.slice(0, 70) + '…' : t;
+  return `<span title="${esc(t)}">${esc(short)}</span>`;
+}
 
 function fmtCZK(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -172,6 +184,10 @@ function renderTable() {
         case 'purchase':return `<td>${fmtCZK(s.purchase_price)}</td>`;
         case 'area':    return `<td>${fmtNum(s.area_m2, 'm²')}</td>`;
         case 'owner':   return `<td>${esc(s.owner_name || (s.company && s.company.name) || '—')}</td>`;
+        case 'survey':  return `<td>${s.survey_done==null ? '—' : (s.survey_done ? '<span class="badge badge-operational">ANO</span>' : '<span class="badge badge-lost">NE</span>')}</td>`;
+        case 'preapp':  return `<td>${cellText(s.preapproval_note)}</td>`;
+        case 'contract':return `<td>${cellText(s.contract_note)}</td>`;
+        case 'permit':  return `<td>${cellText(s.building_permit_note)}</td>`;
         case 'score': {
           if (s.score == null) return '<td>—</td>';
           return `<td><span class="score-bar"><div style="width:${s.score}%"></div></span>${s.score}</td>`;
@@ -377,6 +393,10 @@ function renderBasicTab(s){
     ${inp('Odkaz na mapu','map_link', s.map_link)}
     ${txt('Poznámka k vlastníkovi','owner_note', s.owner_note)}
     ${txt('Popis lokality','description', s.description)}
+    <div class="form-row span2"><label>Místní šetření</label><div class="checkbox-row">${chk('Proběhlo (ANO)','survey_done', s.survey_done)}</div></div>
+    ${txt('Předschválení místa','preapproval_note', s.preapproval_note)}
+    ${txt('Smlouva (stav / poznámka)','contract_note', s.contract_note)}
+    ${txt('Stavební povolení / poznámka','building_permit_note', s.building_permit_note)}
   </div>`;
 }
 function renderFinanceTab(s){

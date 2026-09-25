@@ -230,6 +230,11 @@ const siteCreateSchema = z.object({
   pros: z.string().optional().nullable(),
   cons: z.string().optional().nullable(),
   assigned_to_id: z.number().int().nullable().optional(),
+  // Excel „Tabulková verze míst" — procesní pole.
+  survey_done: z.boolean().nullable().optional(),
+  preapproval_note: z.string().optional().nullable(),
+  contract_note: z.string().optional().nullable(),
+  building_permit_note: z.string().optional().nullable(),
 });
 
 router.post('/', async (req, res, next) => {
@@ -280,6 +285,10 @@ router.post('/', async (req, res, next) => {
         score: d.score ?? null,
         pros: d.pros ?? null,
         cons: d.cons ?? null,
+        survey_done: d.survey_done ?? null,
+        preapproval_note: d.preapproval_note ?? null,
+        contract_note: d.contract_note ?? null,
+        building_permit_note: d.building_permit_note ?? null,
         assigned_to_id: d.assigned_to_id ?? null,
         created_by_id: actorPersonId(req),
       },
@@ -313,8 +322,10 @@ router.put('/:id(\\d+)', async (req, res, next) => {
       'rent_currency','contract_terms','capacity_note','cadastral_area',
       'cadastral_parcel','cadastral_lv','cadastral_link','pros','cons',
       'rejection_reason','pradlomat_ref','sales_notes',
+      'preapproval_note','contract_note','building_permit_note',
     ];
     for (const k of passthrough) if (k in d) upd[k] = d[k] ?? null;
+    if ('survey_done' in d) upd.survey_done = d.survey_done ?? null;
 
     const decimals = [
       'rent_monthly','deposit','energy_deposit','energy_monthly',
@@ -377,6 +388,10 @@ router.post('/import', async (req, res, next) => {
         owner_email: it.owner_email ? String(it.owner_email).slice(0, 255) : null,
         rent_monthly: toDecimal(it.rent_monthly),
         description: it.note ? String(it.note) : null,
+        survey_done: typeof it.survey_done === 'boolean' ? it.survey_done : null,
+        preapproval_note: it.preapproval_note ? String(it.preapproval_note) : null,
+        contract_note: it.contract_note ? String(it.contract_note) : null,
+        building_permit_note: it.building_permit_note ? String(it.building_permit_note) : null,
         created_by_id: actor,
       },
     })));
