@@ -235,6 +235,7 @@ const siteCreateSchema = z.object({
   preapproval_note: z.string().optional().nullable(),
   contract_note: z.string().optional().nullable(),
   building_permit_note: z.string().optional().nullable(),
+  row_color: z.string().max(9).optional().nullable(),
 });
 
 router.post('/', async (req, res, next) => {
@@ -289,6 +290,7 @@ router.post('/', async (req, res, next) => {
         preapproval_note: d.preapproval_note ?? null,
         contract_note: d.contract_note ?? null,
         building_permit_note: d.building_permit_note ?? null,
+        row_color: d.row_color ?? null,
         assigned_to_id: d.assigned_to_id ?? null,
         created_by_id: actorPersonId(req),
       },
@@ -322,7 +324,7 @@ router.put('/:id(\\d+)', async (req, res, next) => {
       'rent_currency','contract_terms','capacity_note','cadastral_area',
       'cadastral_parcel','cadastral_lv','cadastral_link','pros','cons',
       'rejection_reason','pradlomat_ref','sales_notes',
-      'preapproval_note','contract_note','building_permit_note',
+      'preapproval_note','contract_note','building_permit_note','row_color',
     ];
     for (const k of passthrough) if (k in d) upd[k] = d[k] ?? null;
     if ('survey_done' in d) upd.survey_done = d.survey_done ?? null;
@@ -428,6 +430,7 @@ router.post('/import-excel-2026', async (req, res, next) => {
         preapproval_note: s.preapproval_note || null,
         contract_note: s.contract_note || null,
         building_permit_note: s.building_permit_note || null,
+        row_color: s.row_color || null,
         created_by_id: actor,
       },
     })));
@@ -675,20 +678,43 @@ router.post('/:id(\\d+)/documents', async (req, res, next) => {
       signed_at: z.string().optional().nullable(),
       valid_from: z.string().optional().nullable(),
       valid_to: z.string().optional().nullable(),
+      // Nahraný soubor jako data URL (data:application/pdf;base64,...). Volitelné.
+      data_url: z.string().optional().nullable(),
+      filename: z.string().max(300).optional().nullable(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.format() });
+    const d = parsed.data;
+
+    let file_path = null, size_bytes = null, mime_type = null;
+    if (d.data_url) {
+      const m = /^data:([^;]+);base64,(.+)$/.exec(d.data_url);
+      if (!m) return res.status(400).json({ error: 'Očekávám data URL (data:...;base64,...)' });
+      mime_type = m[1];
+      const buf = Buffer.from(m[2], 'base64');
+      if (buf.length > 25 * 1024 * 1024) return res.status(413).json({ error: 'Soubor je větší než 25 MB' });
+      // Bezpečná přípona z názvu souboru nebo MIME.
+      const rawExt = (d.filename && d.filename.includes('.')) ? d.filename.split('.').pop() : (mime_type.split('/')[1] || 'bin');
+      const ext = String(rawExt).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin';
+      const fname = `site-${siteId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      fs.writeFileSync(path.join(DOCS_DIR, fname), buf);
+      file_path = `site-docs/${fname}`;
+      size_bytes = buf.length;
+    }
 
     const doc = await prisma.siteDocument.create({
       data: {
         site_id: siteId,
-        doc_type: parsed.data.doc_type || 'other',
-        title: parsed.data.title,
-        external_url: parsed.data.external_url ?? null,
-        note: parsed.data.note ?? null,
-        signed_at: parsed.data.signed_at ? new Date(parsed.data.signed_at) : null,
-        valid_from: parsed.data.valid_from ? new Date(parsed.data.valid_from) : null,
-        valid_to: parsed.data.valid_to ? new Date(parsed.data.valid_to) : null,
+        doc_type: d.doc_type || 'other',
+        title: d.title,
+        external_url: d.external_url ?? null,
+        file_path,
+        size_bytes,
+        mime_type,
+        note: d.note ?? null,
+        signed_at: d.signed_at ? new Date(d.signed_at) : null,
+        valid_from: d.valid_from ? new Date(d.valid_from) : null,
+        valid_to: d.valid_to ? new Date(d.valid_to) : null,
       },
     });
     res.status(201).json(doc);
@@ -697,9 +723,31 @@ router.post('/:id(\\d+)/documents', async (req, res, next) => {
   }
 });
 
+// ─── Stažení nahraného dokumentu ────────────────────────────────────────────
+router.get('/documents/:did(\\d+)/download', async (req, res, next) => {
+  try {
+    const doc = await prisma.siteDocument.findUnique({ where: { id: parseInt(req.params.did, 10) } });
+    if (!doc || !doc.file_path) return res.status(404).json({ error: 'Soubor nenalezen' });
+    const full = path.join(DATA_ROOT, doc.file_path);
+    if (!fs.existsSync(full)) return res.status(404).json({ error: 'Soubor na disku chybí' });
+    const ext = doc.file_path.split('.').pop();
+    const safeTitle = String(doc.title || 'dokument').replace(/[^\p{L}\p{N} ._-]/gu, '_').slice(0, 100);
+    if (doc.mime_type) res.type(doc.mime_type);
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTitle}.${ext}"`);
+    res.sendFile(full);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.delete('/documents/:did(\\d+)', async (req, res, next) => {
   try {
-    await prisma.siteDocument.delete({ where: { id: parseInt(req.params.did, 10) } });
+    const id = parseInt(req.params.did, 10);
+    const doc = await prisma.siteDocument.findUnique({ where: { id } });
+    if (doc && doc.file_path) {
+      try { const full = path.join(DATA_ROOT, doc.file_path); if (fs.existsSync(full)) fs.unlinkSync(full); } catch (e) { /* ignore */ }
+    }
+    await prisma.siteDocument.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Dokument nenalezen' });

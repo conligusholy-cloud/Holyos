@@ -4709,6 +4709,7 @@ model Site {
   preapproval_note     String?  @db.Text  // Předschválení místa (stav/poznámka)
   contract_note        String?  @db.Text  // Smlouva (stav/poznámka)
   building_permit_note String?  @db.Text  // Poznámka – stavební povolení
+  row_color            String?  @db.VarChar(9)  // Barva řádku dle Excelu (#RRGGBB)
 
   area_m2          Decimal? @db.Decimal(10, 2)
   ceiling_height_m Decimal? @db.Decimal(5, 2)

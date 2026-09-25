@@ -41,6 +41,18 @@ let activeCols = getActiveCols();
 // ─── Helpery ───────────────────────────────────────────────────────────────
 const fetchOpts = (init) => Object.assign({ credentials:'include', headers:{'Content-Type':'application/json'} }, init || {});
 
+// Barva řádku dle Excelu — spočítá čitelnou barvu textu podle jasu pozadí.
+function hexToRgb(h){ h=String(h).replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rowStyle(s){
+  if(!s || !s.row_color) return '';
+  try {
+    const [r,g,b]=hexToRgb(s.row_color);
+    const lum=(0.299*r+0.587*g+0.114*b)/255;
+    const txt = lum>0.6 ? '#111' : '#fff';
+    return `background:${s.row_color};color:${txt};`;
+  } catch(e){ return ''; }
+}
+
 // Dlouhý text do buňky — zkrátí a přidá tooltip s plným zněním.
 function cellText(v){
   if (v == null || v === '') return '—';
@@ -197,7 +209,7 @@ function renderTable() {
         default: return '<td>—</td>';
       }
     }).join('');
-    return `<tr data-id="${s.id}" onclick="openSiteModal(${s.id})">
+    return `<tr data-id="${s.id}" onclick="openSiteModal(${s.id})" style="${rowStyle(s)}">
       <td onclick="event.stopPropagation(); toggleCompare(${s.id});" title="Vybrat do porovnání" style="cursor:pointer;text-align:center;">
         <input type="checkbox" ${isCompared?'checked':''} style="cursor:pointer;">
       </td>${cells}</tr>`;
@@ -394,6 +406,15 @@ function renderBasicTab(s){
     ${txt('Poznámka k vlastníkovi','owner_note', s.owner_note)}
     ${txt('Popis lokality','description', s.description)}
     <div class="form-row span2"><label>Místní šetření</label><div class="checkbox-row">${chk('Proběhlo (ANO)','survey_done', s.survey_done)}</div></div>
+    ${sel('Barva řádku (jako v Excelu)','row_color', s.row_color, [
+      {v:'',l:'— žádná —'},
+      {v:'#92D050',l:'🟢 Zelená (OK / šetření)'},
+      {v:'#FF0000',l:'🔴 Červená (zamítnuto)'},
+      {v:'#FFC000',l:'🟠 Oranžová'},
+      {v:'#FFFF00',l:'🟡 Žlutá'},
+      {v:'#0070C0',l:'🔵 Modrá'},
+      {v:'#7030A0',l:'🟣 Fialová'},
+    ])}
     ${txt('Předschválení místa','preapproval_note', s.preapproval_note)}
     ${txt('Smlouva (stav / poznámka)','contract_note', s.contract_note)}
     ${txt('Stavební povolení / poznámka','building_permit_note', s.building_permit_note)}
@@ -528,7 +549,10 @@ function renderDocsTab(s){
           ${d.valid_to?' • Do: '+esc(fmtDate(d.valid_to)):''}
         </div>
         ${d.note?`<div class="meta" style="margin-top:4px;">${esc(d.note)}</div>`:''}
-        ${d.external_url?`<a href="${esc(d.external_url)}" target="_blank" style="font-size:12px;color:#14b8a6;">Otevřít odkaz</a>`:''}
+        <div style="margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;">
+          ${d.file_path?`<a href="/api/sites/documents/${d.id}/download" style="font-size:12px;color:#14b8a6;">⬇️ Stáhnout soubor${d.size_bytes?` (${Math.max(1,Math.round(d.size_bytes/1024))} kB)`:''}</a>`:''}
+          ${d.external_url?`<a href="${esc(d.external_url)}" target="_blank" style="font-size:12px;color:#14b8a6;">🔗 Otevřít odkaz</a>`:''}
+        </div>
       </div>
       <button class="btn btn-sm btn-danger" onclick="delDoc(${d.id})">Smazat</button>
     </div>`).join('') || '<div style="color:var(--text2);font-size:13px;">Zatím žádné dokumenty.</div>';
@@ -547,6 +571,9 @@ function renderDocsTab(s){
       ${inp('Platí do','doc_valid_to','','date')}
     </div>
     ${txt('Poznámka','doc_note','')}
+    <div class="form-row span2"><label>Nahrát soubor (PDF, Word, obrázek… max 25 MB)</label>
+      <input type="file" id="doc_file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*">
+    </div>
     <button class="btn btn-secondary btn-sm" onclick="addDoc()" style="margin-top:10px;">+ Přidat</button>`;
 }
 
@@ -677,9 +704,20 @@ async function delPhoto(id) {
 window.delPhoto = delPhoto;
 
 // ─── Dokumenty ─────────────────────────────────────────────────────────────
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error('Nepodařilo se přečíst soubor'));
+    r.readAsDataURL(file);
+  });
+}
+
 async function addDoc() {
+  const fileEl = document.getElementById('doc_file');
+  const file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
   const body = {
-    title: document.querySelector('[name=doc_title]').value.trim(),
+    title: document.querySelector('[name=doc_title]').value.trim() || (file ? file.name : ''),
     doc_type: document.querySelector('[name=doc_type]').value,
     external_url: document.querySelector('[name=doc_external_url]').value.trim() || null,
     signed_at: document.querySelector('[name=doc_signed_at]').value || null,
@@ -687,9 +725,14 @@ async function addDoc() {
     valid_to: document.querySelector('[name=doc_valid_to]').value || null,
     note: document.querySelector('[name=doc_note]').value.trim() || null,
   };
-  if (!body.title) { alert('Název je povinný'); return; }
+  if (!body.title) { alert('Zadej název nebo vyber soubor'); return; }
+  if (file) {
+    if (file.size > 25 * 1024 * 1024) { alert('Soubor je větší než 25 MB'); return; }
+    try { body.data_url = await readFileAsDataURL(file); body.filename = file.name; }
+    catch (e) { alert(e.message); return; }
+  }
   const r = await fetch('/api/sites/' + currentSite.id + '/documents', fetchOpts({ method:'POST', body: JSON.stringify(body) }));
-  if (!r.ok) { alert('Chyba'); return; }
+  if (!r.ok) { const e = await r.json().catch(()=>({})); alert('Chyba: ' + (e.error || r.status)); return; }
   await refreshCurrent(); renderSiteModal(); switchTab('docs');
 }
 window.addDoc = addDoc;

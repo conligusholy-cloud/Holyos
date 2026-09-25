@@ -10,7 +10,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "čekáme až přijde podepsaná z druhé strany",
-    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka",
+    "row_color": "#92D050"
   },
   {
     "order": 2,
@@ -23,7 +24,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "čekáme až přijde podepsaná z druhé strany",
-    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka",
+    "row_color": "#92D050"
   },
   {
     "order": 3,
@@ -36,7 +38,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "ANO",
-    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka",
+    "row_color": "#92D050"
   },
   {
     "order": 4,
@@ -49,7 +52,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "ANO",
-    "building_permit_note": "Bez SP…...již zprocesováno"
+    "building_permit_note": "Bez SP…...již zprocesováno",
+    "row_color": "#92D050"
   },
   {
     "order": 5,
@@ -62,7 +66,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
-    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka",
+    "row_color": "#92D050"
   },
   {
     "order": 6,
@@ -75,7 +80,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
-    "building_permit_note": "Bez SP…...již zprocesováno"
+    "building_permit_note": "Bez SP…...již zprocesováno",
+    "row_color": "#92D050"
   },
   {
     "order": 7,
@@ -88,7 +94,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "čeká na čtení u nás , ze strany pronajímatele již připomínkováno",
-    "building_permit_note": "Bez SP…...již zprocesováno"
+    "building_permit_note": "Bez SP…...již zprocesováno",
+    "row_color": "#92D050"
   },
   {
     "order": 8,
@@ -101,7 +108,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "ANO",
-    "building_permit_note": "Potřeba podat do Portálu Stavebníka"
+    "building_permit_note": "Potřeba podat do Portálu Stavebníka",
+    "row_color": "#92D050"
   },
   {
     "order": 9,
@@ -114,7 +122,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "místo předschváleno",
     "contract_note": "NE",
-    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , Objekt ve správě Atalianu – technik 602 803 808"
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , Objekt ve správě Atalianu – technik 602 803 808",
+    "row_color": "#92D050"
   },
   {
     "order": 10,
@@ -127,7 +136,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "prověřit pozemky pro přípojky , nevyužijeme (komplikované přípojky , areál se uzavírá )",
     "contract_note": "NE",
-    "building_permit_note": ", p. Maule 725 833 600…místo schované , komplikace okolní pozemky (vedení přípojek), areál má zavírací dobu"
+    "building_permit_note": ", p. Maule 725 833 600…místo schované , komplikace okolní pozemky (vedení přípojek), areál má zavírací dobu",
+    "row_color": "#FF0000"
   },
   {
     "order": 11,
@@ -140,7 +150,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "místo předschváleno",
     "contract_note": "NE",
-    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu ,.Smrček tel 777 273 993"
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu ,.Smrček tel 777 273 993",
+    "row_color": "#92D050"
   },
   {
     "order": 12,
@@ -153,7 +164,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "ANO",
     "contract_note": "NS čeká na pročtení z naší strany",
-    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , pan Igor Šmíček 737 385 040 – bývá na místě většinou v pondělí"
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , pan Igor Šmíček 737 385 040 – bývá na místě většinou v pondělí",
+    "row_color": "#92D050"
   },
   {
     "order": 13,
@@ -166,7 +178,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Nají jiné umístění , druhé kolo již proběhlo",
     "contract_note": "NE",
-    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , pan Čermák – 775 473 975."
+    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , pan Čermák – 775 473 975.",
+    "row_color": "#92D050"
   },
   {
     "order": 14,
@@ -179,7 +192,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Nají jiné umístění , druhé kolo již proběhlo",
     "contract_note": "NE",
-    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , RP (Jysk) , Boleslavská ,Brandýs nad Labem – Stará Boleslav– pan Josef Hybeš 725 101 026"
+    "building_permit_note": "Čekáme schválení , třeba zvolit jiné místo -druhé kolo místního šetření , RP (Jysk) , Boleslavská ,Brandýs nad Labem – Stará Boleslav– pan Josef Hybeš 725 101 026",
+    "row_color": "#92D050"
   },
   {
     "order": 15,
@@ -192,7 +206,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "místo předschváleno",
     "contract_note": "NE",
-    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , - p. Hanzel tel. 734 591 993"
+    "building_permit_note": "Čekáme schválení , Traxial musí získat souhlas Albertu , - p. Hanzel tel. 734 591 993",
+    "row_color": "#92D050"
   },
   {
     "order": 16,
@@ -205,7 +220,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "zamítnuto ze strany majitele , nedohodl se se stávajícím nájeníkem objektu",
     "contract_note": "NE",
-    "building_permit_note": "p. Razl 608 646 658 - technik , průmyslová zóna (Citroen,Toyota)"
+    "building_permit_note": "p. Razl 608 646 658 - technik , průmyslová zóna (Citroen,Toyota)",
+    "row_color": "#FF0000"
   },
   {
     "order": 17,
@@ -218,7 +234,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Nevhodná lokalita - bez místa..pouze prosklené plochy",
     "contract_note": "NE",
-    "building_permit_note": "p.Šimánek 606 838 786- technik /obchodní zóna,divadlo,kavárny"
+    "building_permit_note": "p.Šimánek 606 838 786- technik /obchodní zóna,divadlo,kavárny",
+    "row_color": "#FF0000"
   },
   {
     "order": 18,
@@ -231,7 +248,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "okolí velmi zanedbané ,obchod na vyvýšené podestě",
     "contract_note": "NE",
-    "building_permit_note": "technik není ….provozovatel Aziat / obchodní dům"
+    "building_permit_note": "technik není ….provozovatel Aziat / obchodní dům",
+    "row_color": "#FF0000"
   },
   {
     "order": 19,
@@ -244,7 +262,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "místo u náměstí bez pozemku (jinak schovanější místo u Baru)",
     "contract_note": "NE",
-    "building_permit_note": "p. Kučera 739 664 844- technik / u kruháče , v obchodní zóně (menších obchodů) další technik p. Maxim 602 217 951"
+    "building_permit_note": "p. Kučera 739 664 844- technik / u kruháče , v obchodní zóně (menších obchodů) další technik p. Maxim 602 217 951",
+    "row_color": "#FF0000"
   },
   {
     "order": 20,
@@ -257,7 +276,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "nelze umístit , jde o hotel na náměstí )přední část bez pozemku a zadní skoro nepřístupná skrze autobus.nádraží",
     "contract_note": "NE",
-    "building_permit_note": "p.Sadečka 721 278 772- technik / v centru náměstí"
+    "building_permit_note": "p.Sadečka 721 278 772- technik / v centru náměstí",
+    "row_color": "#FF0000"
   },
   {
     "order": 21,
@@ -270,7 +290,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "verze umístění zamítnuta ze strany poskytovatele / budova půjde do prodeje",
     "contract_note": "NE",
-    "building_permit_note": "p. Razl 608 646 658- technik / u kulturního domu,restaurace a zástavby"
+    "building_permit_note": "p. Razl 608 646 658- technik / u kulturního domu,restaurace a zástavby",
+    "row_color": "#FF0000"
   },
   {
     "order": 22,
@@ -283,7 +304,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "čekám na schválení od majitele - budou mne kontaktovat 21.9.",
     "contract_note": "NE",
-    "building_permit_note": "Obchodní centrum"
+    "building_permit_note": "Obchodní centrum",
+    "row_color": "#92D050"
   },
   {
     "order": 23,
@@ -296,7 +318,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "majitelé si rozmysleli záměr / nemají zájem..po místním šetření",
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FF0000"
   },
   {
     "order": 24,
@@ -309,7 +332,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "bohužel páteř spl. Kanalizace je na opačné straně budovy",
     "contract_note": "NE",
-    "building_permit_note": "Velké obchodní centrum spojené s Glóbusem , Tomáš Semelka +420 725 549 456"
+    "building_permit_note": "Velké obchodní centrum spojené s Glóbusem , Tomáš Semelka +420 725 549 456",
+    "row_color": "#FF0000"
   },
   {
     "order": 25,
@@ -322,7 +346,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "po MŠ - čeká na předschválení",
     "contract_note": "NE",
-    "building_permit_note": "Retailový Park"
+    "building_permit_note": "Retailový Park",
+    "row_color": "#92D050"
   },
   {
     "order": 26,
@@ -335,7 +360,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "po MŠ - čeká na předschválení",
     "contract_note": "NE",
-    "building_permit_note": "Retailový Park , p. Červený, 603 402 374"
+    "building_permit_note": "Retailový Park , p. Červený, 603 402 374",
+    "row_color": "#92D050"
   },
   {
     "order": 27,
@@ -348,7 +374,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Není plocha pro umístění",
     "contract_note": null,
-    "building_permit_note": "Office House"
+    "building_permit_note": "Office House",
+    "row_color": "#FF0000"
   },
   {
     "order": 28,
@@ -361,7 +388,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "po MŠ - čeká na předschválení",
     "contract_note": "NE",
-    "building_permit_note": "u Jysku a Pepca , paní Bohuslavová, 703 114 743"
+    "building_permit_note": "u Jysku a Pepca , paní Bohuslavová, 703 114 743",
+    "row_color": "#92D050"
   },
   {
     "order": 29,
@@ -374,7 +402,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": "Místo komplet připravené vč. přípojek , aktuálně se řeší úprava výše nájmu"
+    "building_permit_note": "Místo komplet připravené vč. přípojek , aktuálně se řeší úprava výše nájmu",
+    "row_color": "#92D050"
   },
   {
     "order": 30,
@@ -387,7 +416,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Na místě není plocha (pouze dvě možnosti , kdy na jednom místě hl.přívod plynu a na druhém koř. Val po objemném stromu 3x2m)",
     "contract_note": "NE",
-    "building_permit_note": "Automyčka - místo od Retail Brokers"
+    "building_permit_note": "Automyčka - místo od Retail Brokers",
+    "row_color": "#FF0000"
   },
   {
     "order": 31,
@@ -400,7 +430,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "čekám na schválení od p. Borozdin….asi bude změna umístění",
     "contract_note": "NE",
-    "building_permit_note": "ubytovací prostory"
+    "building_permit_note": "ubytovací prostory",
+    "row_color": "#92D050"
   },
   {
     "order": 32,
@@ -413,7 +444,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "již zde máme Prádlomat ve velké blízkosti / místo navíc schované , navíc budou tento RP PRODÁVAT",
     "contract_note": null,
-    "building_permit_note": "již máme hned přes silnici Prádlomat u Tesca"
+    "building_permit_note": "již máme hned přes silnici Prádlomat u Tesca",
+    "row_color": "#FF0000"
   },
   {
     "order": 33,
@@ -426,7 +458,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "čeká na vyjádření majitele",
     "contract_note": "NE",
-    "building_permit_note": "čekáme na vyjádření developera"
+    "building_permit_note": "čekáme na vyjádření developera",
+    "row_color": "#92D050"
   },
   {
     "order": 34,
@@ -439,7 +472,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "čeká na vyjádření majitele",
     "contract_note": "NE",
-    "building_permit_note": "čekáme na vyjádření developera"
+    "building_permit_note": "čekáme na vyjádření developera",
+    "row_color": "#92D050"
   },
   {
     "order": 35,
@@ -452,7 +486,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "Před námi projevil zájem někdo jiný , tedy zatím NE",
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FF0000"
   },
   {
     "order": 36,
@@ -465,7 +500,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "umístění v rozporu s aktuálním nájemcem",
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FF0000"
   },
   {
     "order": 37,
@@ -478,7 +514,8 @@ module.exports = [
     "survey_done": true,
     "preapproval_note": "místo neschváleno",
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FF0000"
   },
   {
     "order": 38,
@@ -491,7 +528,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": null
   },
   {
     "order": 39,
@@ -504,7 +542,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": "technik p. Vodička 608 981 033"
+    "building_permit_note": "technik p. Vodička 608 981 033",
+    "row_color": null
   },
   {
     "order": 40,
@@ -517,7 +556,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": "technik p. Týr 605 289 513"
+    "building_permit_note": "technik p. Týr 605 289 513",
+    "row_color": null
   },
   {
     "order": 41,
@@ -530,7 +570,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": "technik p. Hřebík 777 366 085"
+    "building_permit_note": "technik p. Hřebík 777 366 085",
+    "row_color": null
   },
   {
     "order": 42,
@@ -543,7 +584,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": "technik p . Kratochvíl 608 666 585"
+    "building_permit_note": "technik p . Kratochvíl 608 666 585",
+    "row_color": null
   },
   {
     "order": 43,
@@ -556,7 +598,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": "NE",
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": null
   },
   {
     "order": 44,
@@ -569,7 +612,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": "naplánovat MS na 39 týden!!!",
     "contract_note": "NE",
-    "building_permit_note": "kontakt od p.Šídlové"
+    "building_permit_note": "kontakt od p.Šídlové",
+    "row_color": null
   },
   {
     "order": 45,
@@ -582,7 +626,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FFFF00"
   },
   {
     "order": 46,
@@ -595,7 +640,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#92D050"
   },
   {
     "order": 47,
@@ -608,7 +654,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FFFF00"
   },
   {
     "order": 48,
@@ -621,7 +668,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#0070C0"
   },
   {
     "order": 49,
@@ -634,7 +682,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#7030A0"
   },
   {
     "order": 50,
@@ -647,7 +696,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#92D050"
   },
   {
     "order": 51,
@@ -660,7 +710,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FFC000"
   },
   {
     "order": 52,
@@ -673,7 +724,8 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#FFC000"
   },
   {
     "order": 53,
@@ -686,6 +738,7 @@ module.exports = [
     "survey_done": false,
     "preapproval_note": null,
     "contract_note": null,
-    "building_permit_note": null
+    "building_permit_note": null,
+    "row_color": "#7030A0"
   }
 ];
