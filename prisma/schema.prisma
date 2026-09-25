@@ -6731,7 +6731,31 @@ model LeasingCompany {
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 
+  documents     LeasingDocument[]
+
   @@index([active])
   @@index([name])
   @@map("leasing_companies")
+}
+
+// Dokumenty, které leasingová společnost vyžaduje k žádosti o financování,
+// rozdělené podle typu žadatele: fo = fyzická osoba, po_firma = právnická osoba
+// (firma), po_zivnost = právnická osoba – živnost (OSVČ).
+model LeasingDocument {
+  id                 Int      @id @default(autoincrement())
+  leasing_company_id Int
+  company            LeasingCompany @relation(fields: [leasing_company_id], references: [id], onDelete: Cascade)
+
+  category   String  @db.VarChar(20)
+  title      String  @db.VarChar(300)
+  file_path  String? @db.VarChar(500)
+  mime_type  String? @db.VarChar(80)
+  size_bytes Int?
+  note       String? @db.Text
+
+  created_at DateTime @default(now())
+
+  @@index([leasing_company_id])
+  @@index([category])
+  @@map("leasing_documents")
 }

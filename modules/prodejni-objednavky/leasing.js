@@ -55,7 +55,26 @@
       + '.lc-btn{border:1px solid var(--border);background:var(--surface2,#232630);color:var(--text);border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer}'
       + '.lc-btn.primary{background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700}'
       + '.lc-foot{display:flex;justify-content:flex-end;gap:10px;align-items:center;margin-top:16px}'
-      + '.lc-msg{font-size:13px}';
+      + '.lc-msg{font-size:13px}'
+      // záložky v editoru + dokumenty k financování
+      + '.lc-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);padding:0 20px}'
+      + '.lc-tab{padding:10px 14px;background:none;border:none;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}'
+      + '.lc-tab.active{color:#a5b4fc;border-bottom-color:#6366f1}'
+      + '.lc-tab:disabled{opacity:.45;cursor:not-allowed}'
+      + '.lc-cat{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;background:var(--bg)}'
+      + '.lc-cat h3{font-size:13px;font-weight:700;margin:0 0 8px;display:flex;align-items:center;gap:8px}'
+      + '.lc-cat h3 .cnt{font-size:11px;font-weight:700;background:var(--surface2,#232630);color:var(--text2);padding:2px 8px;border-radius:999px}'
+      + '.lc-doc{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:13px}'
+      + '.lc-doc:last-of-type{border-bottom:none}'
+      + '.lc-doc .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
+      + '.lc-doc .m{font-size:11px;color:var(--text2)}'
+      + '.lc-doc a{color:#4aa3ea;text-decoration:none;font-weight:600;font-size:12px}'
+      + '.lc-doc a:hover{text-decoration:underline}'
+      + '.lc-doc .x{background:none;border:none;cursor:pointer;color:#ef4444;font-size:14px}'
+      + '.lc-add{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}'
+      + '.lc-add input[type=text]{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px}'
+      + '.lc-add input[type=file]{font-size:12px;color:var(--text2)}'
+      + '.lc-empty{font-size:12px;color:var(--text2);padding:4px 0}';
     var s = document.createElement('style'); s.id = 'lc-styles'; s.textContent = css; document.head.appendChild(s);
   }
 
@@ -136,7 +155,13 @@
     var v = function (k) { return attr(r[k] == null ? '' : r[k]); };
     ov().innerHTML = '<div class="lc-modal">'
       + '<div class="lc-head"><h2>' + (id ? 'Upravit společnost' : 'Nová leasingová společnost') + '</h2><button class="lc-x" onclick="__lcClose()">×</button></div>'
+      + '<div class="lc-tabs">'
+      + '  <button class="lc-tab active" data-lctab="info" onclick="__lcTab(\'info\')">🏢 Údaje</button>'
+      + '  <button class="lc-tab" data-lctab="docs" onclick="__lcTab(\'docs\')" ' + (id ? '' : 'disabled title="Nejdřív společnost ulož"') + '>📄 Potřebné dokumenty</button>'
+      + '</div>'
       + '<div class="lc-body">'
+      + '<div id="lc-pane-docs" style="display:none"></div>'
+      + '<div id="lc-pane-info">'
       + '  <div class="lc-grid">'
       + '    <div class="lc-f full"><label>IČO (načte firmu z ARES)</label><div class="lc-icorow"><input id="lc-ico" value="' + v('ico') + '" placeholder="8 číslic"><button class="lc-btn" id="lc-ares">🔎 Načíst z ARES</button></div></div>'
       + '    <div class="lc-f full"><label>Název společnosti *</label><input id="lc-name" value="' + v('name') + '"></div>'
@@ -154,11 +179,95 @@
       + '    <button class="lc-btn" onclick="__lcClose()">Zrušit</button>'
       + '    <button class="lc-btn primary" id="lc-save">' + (id ? 'Uložit změny' : 'Vytvořit') + '</button>'
       + '  </div>'
+      + '</div>' // /lc-pane-info
       + '</div></div>';
     ov().classList.add('open'); document.body.style.overflow = 'hidden';
     document.getElementById('lc-save').onclick = save;
     document.getElementById('lc-ares').onclick = aresFill;
   }
+
+  // ── Záložky editoru ──
+  function switchEditorTab(name) {
+    var info = document.getElementById('lc-pane-info'), docs = document.getElementById('lc-pane-docs');
+    if (info) info.style.display = name === 'info' ? '' : 'none';
+    if (docs) docs.style.display = name === 'docs' ? '' : 'none';
+    document.querySelectorAll('.lc-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-lctab') === name); });
+    if (name === 'docs') loadDocs();
+  }
+  window.__lcTab = switchEditorTab;
+
+  // ── Potřebné dokumenty k žádosti o financování (dle typu žadatele) ──
+  var DOC_CATS = [
+    { key: 'fo',         icon: '🧑', label: 'Fyzická osoba' },
+    { key: 'po_firma',   icon: '🏢', label: 'Právnická osoba – firma' },
+    { key: 'po_zivnost', icon: '🧾', label: 'Právnická osoba – živnost (OSVČ)' },
+  ];
+  var docsState = { items: [] };
+
+  function fmtSize(b) { if (b == null) return ''; if (b < 1024) return b + ' B'; if (b < 1024 * 1024) return Math.round(b / 1024) + ' kB'; return (b / 1024 / 1024).toFixed(1) + ' MB'; }
+
+  function loadDocs() {
+    var pane = document.getElementById('lc-pane-docs');
+    if (!pane || !state.editing) return;
+    pane.innerHTML = '<div class="lc-empty">Načítám dokumenty…</div>';
+    api('/' + state.editing + '/documents').then(function (d) {
+      docsState.items = d.items || [];
+      renderDocs();
+    }).catch(function (e) { pane.innerHTML = '<div class="lc-empty" style="color:#ef4444">Nepodařilo se načíst: ' + esc(e.message) + '</div>'; });
+  }
+
+  function renderDocs() {
+    var pane = document.getElementById('lc-pane-docs');
+    if (!pane) return;
+    pane.innerHTML = '<div class="lc-empty" style="margin-bottom:10px">Dokumenty, které tato společnost vyžaduje k žádosti o financování — podle typu žadatele.</div>'
+      + DOC_CATS.map(function (c) {
+        var items = docsState.items.filter(function (x) { return x.category === c.key; });
+        var list = items.length ? items.map(function (x) {
+          return '<div class="lc-doc">'
+            + '<div class="t" title="' + attr(x.title) + '">📄 ' + esc(x.title) + (x.note ? '<div class="m">' + esc(x.note) + '</div>' : '') + '</div>'
+            + (x.file_path ? '<a href="' + API + '/documents/' + x.id + '/download">⬇️ Stáhnout' + (x.size_bytes ? ' (' + fmtSize(x.size_bytes) + ')' : '') + '</a>' : '<span class="m">bez souboru</span>')
+            + '<button class="x" title="Smazat" onclick="__lcDocDel(' + x.id + ')">🗑️</button>'
+            + '</div>';
+        }).join('') : '<div class="lc-empty">Zatím žádné dokumenty.</div>';
+        return '<div class="lc-cat">'
+          + '<h3>' + c.icon + ' ' + esc(c.label) + ' <span class="cnt">' + items.length + '</span></h3>'
+          + list
+          + '<div class="lc-add">'
+          + '  <input type="text" id="lc-doc-title-' + c.key + '" placeholder="Název dokumentu (nebo se vezme z názvu souboru)">'
+          + '  <input type="file" id="lc-doc-file-' + c.key + '" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">'
+          + '  <button class="lc-btn primary" onclick="__lcDocAdd(\'' + c.key + '\')">＋ Přidat</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+  }
+
+  function readFileAsDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(r.result); };
+      r.onerror = function () { reject(new Error('Nepodařilo se přečíst soubor')); };
+      r.readAsDataURL(file);
+    });
+  }
+
+  window.__lcDocAdd = function (cat) {
+    if (!state.editing) return;
+    var titleEl = document.getElementById('lc-doc-title-' + cat), fileEl = document.getElementById('lc-doc-file-' + cat);
+    var file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
+    var title = (titleEl && titleEl.value || '').trim() || (file ? file.name : '');
+    if (!title) { alert('Zadej název nebo vyber soubor.'); return; }
+    if (file && file.size > 25 * 1024 * 1024) { alert('Soubor je větší než 25 MB.'); return; }
+    var body = { category: cat, title: title };
+    var p = file ? readFileAsDataURL(file).then(function (du) { body.data_url = du; body.filename = file.name; }) : Promise.resolve();
+    p.then(function () { return api('/' + state.editing + '/documents', { method: 'POST', body: body }); })
+      .then(function () { loadDocs(); })
+      .catch(function (e) { alert('Nepodařilo se přidat: ' + e.message); });
+  };
+
+  window.__lcDocDel = function (id) {
+    if (!confirm('Smazat dokument?')) return;
+    api('/documents/' + id, { method: 'DELETE' }).then(loadDocs).catch(function (e) { alert('Nepodařilo se smazat: ' + e.message); });
+  };
 
   function aresFill() {
     var ico = (document.getElementById('lc-ico').value || '').replace(/\D/g, '');
