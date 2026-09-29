@@ -372,7 +372,49 @@ router.put('/assignments/:id', async (req, res, next) => {
     if (status) data.status = status;
     if (note !== undefined) data.note = note;
     if (slot_id) data.slot_id = parseInt(slot_id);
+
+    // Napojení na položku objednávky → automaticky přepsat název výrobku
+    // (název položky + kód výrobku + zvolená konfigurace) a zákazníka z objednávky.
+    if (data.order_item_id) {
+      const item = await prisma.orderItem.findUnique({
+        where: { id: data.order_item_id },
+        include: {
+          order: { include: { company: { select: { name: true } } } },
+          product: { select: { code: true, name: true } },
+          configs: { include: { option: { include: { group: { select: { name: true } } } } } },
+        },
+      });
+      if (item) {
+        const cfg = (item.configs || []).map(c => {
+          if (c.option) return (c.option.group ? c.option.group.name + ': ' : '') + c.option.name;
+          if (c.custom_value) return c.custom_value;
+          return null;
+        }).filter(Boolean);
+        let title = item.name || (item.product && item.product.name) || 'Výrobek';
+        if (item.product && item.product.code && !title.includes(item.product.code)) title += ' (' + item.product.code + ')';
+        if (cfg.length) title += ' — ' + cfg.join(', ');
+        data.product_name = title.slice(0, 255);
+        if (item.order && item.order.company && item.order.company.name) data.customer_name = item.order.company.name;
+        if (!data.order_id && item.order_id) data.order_id = item.order_id;
+        if (item.quantity && quantity === undefined) data.quantity = Number(item.quantity);
+      }
+    } else if (data.order_id && !data.customer_name) {
+      // Jen objednávka bez položky → doplň zákazníka.
+      const ord = await prisma.order.findUnique({ where: { id: data.order_id }, include: { company: { select: { name: true } } } });
+      if (ord && ord.company && ord.company.name) data.customer_name = ord.company.name;
+    }
+
     const assignment = await prisma.slotAssignment.update({ where: { id: parseInt(req.params.id) }, data });
+
+    // Synchronizuj název slotu podle (jediné/první) zakázky ve slotu: „Výrobek — Zákazník".
+    try {
+      const slot = await prisma.productionSlot.findUnique({ where: { id: assignment.slot_id }, include: { assignments: { orderBy: { id: 'asc' }, take: 1 } } });
+      if (slot && slot.assignments[0] && slot.assignments[0].id === assignment.id) {
+        const nm = (assignment.product_name || '') + (assignment.customer_name ? ' — ' + assignment.customer_name : '');
+        if (nm.trim()) await prisma.productionSlot.update({ where: { id: slot.id }, data: { name: nm.slice(0, 255) } });
+      }
+    } catch (e) { /* název slotu je jen kosmetika */ }
+
     res.json(assignment);
   } catch (err) { next(err); }
 });

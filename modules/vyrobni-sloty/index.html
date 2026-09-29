@@ -869,6 +869,7 @@
           // Akce k přiřazení
           html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
           if (!a.batch_id) {
+            if (isManual) html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="editAssignment(' + a.id + ',' + slot.id + ')">✏️ Upravit</button>';
             if (!a.order_item_id) html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="openLinkOrder(' + a.id + ',' + slot.id + ')">🔗 Napojit na objednávku</button>';
             else html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="unlinkAssignment(' + a.id + ',' + slot.id + ')">🔓 Odpojit objednávku</button>';
             html += '<button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteAssignment(' + a.id + ',' + slot.id + ')">🗑️ Zrušit blokaci</button>';
@@ -1046,6 +1047,34 @@
       if (!r.ok) { var e = await r.json().catch(function(){ return {}; }); alert('Blokace se nepodařila: ' + (e.error || r.status)); return; }
       refreshSlotDetail(slotId);
     }
+    // Ruční úprava rezervace (stroj, zákazník, poznámka) — dokud není napojená objednávka.
+    function editAssignment(aid, slotId) {
+      var slot = slots.find(function(s) { return s.id === slotId; });
+      var a = slot && slot.assignments ? slot.assignments.find(function(x) { return x.id === aid; }) : null;
+      var box = document.getElementById('link-box-' + aid); if (!box || !a) return;
+      var inp = 'width:100%;padding:8px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;';
+      box.innerHTML = '<div style="margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px;background:var(--surface2);">'
+        + '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;">✏️ Upravit rezervaci</div>'
+        + '<input id="ea-title-' + aid + '" value="' + esc(a.product_name || '') + '" placeholder="Stroj / co se vyrobí *" style="' + inp + '">'
+        + '<input id="ea-customer-' + aid + '" value="' + esc(a.customer_name || '') + '" placeholder="Zákazník" style="' + inp + 'margin-top:6px;">'
+        + '<textarea id="ea-note-' + aid + '" placeholder="Poznámka" style="' + inp + 'margin-top:6px;min-height:52px;font-family:inherit;">' + esc(a.note || '') + '</textarea>'
+        + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;"><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="document.getElementById(\'link-box-' + aid + '\').innerHTML=\'\'">Zrušit</button><button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="saveEditAssignment(' + aid + ',' + slotId + ')">Uložit</button></div>'
+        + '</div>';
+      document.getElementById('ea-title-' + aid).focus();
+    }
+    async function saveEditAssignment(aid, slotId) {
+      var title = (document.getElementById('ea-title-' + aid).value || '').trim();
+      if (!title) { alert('Napiš, co se ve slotu vyrobí.'); return; }
+      var body = {
+        product_name: title,
+        customer_name: (document.getElementById('ea-customer-' + aid).value || '').trim() || null,
+        note: (document.getElementById('ea-note-' + aid).value || '').trim() || null,
+      };
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) { var e = await r.json().catch(function(){ return {}; }); alert('Uložení se nepodařilo: ' + (e.error || r.status)); return; }
+      refreshSlotDetail(slotId);
+    }
+
     async function deleteAssignment(aid, slotId) {
       if (!confirm('Zrušit tuto blokaci / přiřazení ve slotu?')) return;
       var r = await fetch('/api/slots/assignments/' + aid, { method: 'DELETE', credentials: 'include' });
