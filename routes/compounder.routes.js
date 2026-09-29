@@ -996,9 +996,10 @@ const AISPEC_AUTOSEND_DEFAULT = {
   schuzkaText: 'PRADLOMATY: vyberte si termin schuzky {link}',
   // E-mail k variantě SCHŮZKA (posílá se spolu s SMS, má-li lead e-mail).
   schuzkaEmailEnabled: false,
-  schuzkaEmailSubject: 'Prádlomat — 17,5 minuty, po kterých budete mít jasno',
-  schuzkaEmailBody: 'Dobrý den,\n\nděkujeme za Váš zájem o prádlomat. Připravili jsme pro Vás to nejdůležitější na jednu stránku: kolik prádlomat vydělává, jak ho pořídit z vlastních zdrojů nebo přes financování — a možnost vybrat si termín krátké schůzky (online nebo osobně, 17,5 minuty).\n\nŽádné prodávání. Jen fakta, díky kterým se rozhodnete se zdravým rozumem.',
-  schuzkaEmailLinkLabel: 'Podívat se a vybrat termín',
+  // Stejná forma jako e-mail specialisty (předmět, oslovení, tón, podpis) — jen cíl odkazu je cesta k rozhodnutí.
+  schuzkaEmailSubject: 'Prádlomat — váš specialista odpoví na vše',
+  schuzkaEmailBody: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}\n\nPrádlomaty — Best Series',
+  schuzkaEmailLinkLabel: 'Zeptat se specialisty',
 };
 const SCHUZKA_EMAIL_KEYS = ['schuzkaEmailEnabled', 'schuzkaEmailSubject', 'schuzkaEmailBody', 'schuzkaEmailLinkLabel'];
 
@@ -1011,7 +1012,7 @@ function buildSchuzkaEmail(lead, cfg, overrides) {
   const subject = fill(c.schuzkaEmailSubject || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailSubject);
   const body = fill(c.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody);
   const linkLabel = String(c.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel);
-  return { subject, body, link, linkLabel, preheader: '17,5 minuty · online nebo osobně · nezávazně' };
+  return { subject, body, link, linkLabel, preheader: null };
 }
 router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   try {
