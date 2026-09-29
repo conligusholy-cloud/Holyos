@@ -513,6 +513,7 @@
 
       var windows = generateSlotWindows();
       var free = 0, occupied = 0, blocked = 0, total = 0, unpaid = 0;
+      resetSlotWindowMatching();
       windows.forEach(function(win) {
         // Slot do konce roku počítáme podle data DODÁNÍ (win.end), aby slot
         // překlenující rok přes silvestra spadl do správného období.
@@ -601,8 +602,9 @@
         html += '<div class="tl-row-label"><span class="tl-row-label-dot" style="background:' + wsColor + ';"></span>' + esc(ws.name) + '</div>';
         html += '<div class="tl-slots-row" style="width:' + totalW + 'px;">';
 
+        resetSlotWindowMatching();
         windows.forEach(function(win, i) {
-          // Najdi slot pro toto okno
+          // Najdi slot pro toto okno (každý slot jen jednou)
           var matched = findSlotForWindow(win);
           var left = i * SLOT_W;
 
@@ -702,15 +704,29 @@
       renderCapacitySummary();
     }
 
+    // Výrobní slot = jedno okýnko na ose. Pravidla párování slot ↔ okno:
+    //  1) přednost má slot, jehož datum přesně odpovídá oknu;
+    //  2) jinak překrývající slot, ale jen pokud něco nese (zakázku/rezervaci nebo blokaci)
+    //     — prázdný širší slot okno nezabírá (klik pak nabídne založení slotu přesně na okno);
+    //  3) každý slot se vykreslí jen JEDNOU — v prvním okně, které mu odpovídá.
+    var _usedSlotIds = {};
+    function resetSlotWindowMatching() { _usedSlotIds = {}; }
     function findSlotForWindow(win) {
-      var found = null;
+      var wStart = new Date(win.start); wStart.setHours(0,0,0,0);
+      var wEnd = new Date(win.end); wEnd.setHours(0,0,0,0);
+      var exact = null, overlap = null;
       slots.forEach(function(s) {
+        if (_usedSlotIds[s.id]) return;
         var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
         var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
-        if (sStart <= win.end && sEnd >= win.start) {
-          found = s;
+        if (sStart.getTime() === wStart.getTime() && sEnd.getTime() === wEnd.getTime()) { if (!exact) exact = s; return; }
+        if (sStart <= wEnd && sEnd >= wStart) {
+          var meaningful = (s.assignments && s.assignments.length > 0) || s.status === 'blocked';
+          if (meaningful && !overlap) overlap = s;
         }
       });
+      var found = exact || overlap;
+      if (found) _usedSlotIds[found.id] = true;
       return found;
     }
 
@@ -917,7 +933,7 @@
           '<div class="form-group"><label>Typ obsazení</label>' +
           '<select id="block-type" name="block_type" onchange="toggleBlockFields(this.value)">' +
             '<option value="block">&#128683; Blokace (dovolená, údržba, skluz)</option>' +
-            '<option value="order">&#128230; Přiřadit zakázku</option>' +
+            '<option value="order">&#128230; Rezervovat slot pro stroj / zakázku</option>' +
           '</select></div>' +
 
           '<div id="block-fields">' +
@@ -925,7 +941,7 @@
           '</div>' +
 
           '<div id="order-fields" style="display:none;">' +
-            '<div class="form-group"><label>Produkt / Zakázka</label><input type="text" name="product_name" placeholder="Název produktu"></div>' +
+            '<div class="form-group"><label>Stroj / zakázka</label><input type="text" name="product_name" placeholder="např. MINI SK"></div>' +
             '<div class="form-group"><label>Zákazník</label><input type="text" name="customer_name" placeholder="Jméno zákazníka"></div>' +
             '<div class="form-group"><label>Množství (ks)</label><input type="number" name="quantity" value="1" min="1" step="1"></div>' +
           '</div>' +
@@ -974,9 +990,9 @@
               product_name: data.product_name,
               customer_name: data.customer_name || '',
               quantity: parseFloat(data.quantity) || 1,
-              estimated_hours: 0,
               priority: 0,
-              status: 'planned'
+              status: 'planned',
+              reserve_whole_slot: true // zabere celou kapacitu okna; hodiny doladí plánování výroby
             })
           });
         }
