@@ -100,7 +100,7 @@
       + '  </div>'
       + '  <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Text e-mailu:</div>'
       + '  <textarea id="ss-em-body" rows="7"></textarea>'
-      + '  <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button class="ss-btn" id="ss-em-save">💾 Uložit e-mail</button><button class="ss-btn ghost" id="ss-em-preview">👁 Náhled</button><span class="ss-msg" id="ss-em-msg"></span></div>'
+      + '  <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button class="ss-btn" id="ss-em-save">💾 Uložit e-mail</button><button class="ss-btn ghost" id="ss-em-preview">👁 Náhled</button><button class="ss-btn ghost" id="ss-em-reset" title="Vrátí předmět, text i tlačítko na výchozí znění (neuloží — potvrď tlačítkem Uložit e-mail)">↺ Výchozí text</button><span class="ss-msg" id="ss-em-msg"></span></div>'
       + '  <div class="ss-prev" id="ss-em-prev"><iframe id="ss-em-frame" title="Náhled e-mailu"></iframe></div>'
       + '</div>'
 
@@ -131,6 +131,7 @@
     document.getElementById('ss-save').onclick = save;
     document.getElementById('ss-em-save').onclick = saveEmail;
     document.getElementById('ss-em-preview').onclick = function () { previewEmail(state.lead ? state.lead.id : 0); };
+    document.getElementById('ss-em-reset').onclick = resetEmailDefaults;
     document.getElementById('ss-reload').onclick = loadStats;
     var t = null;
     document.getElementById('ss-search').addEventListener('input', function (e) {
@@ -149,7 +150,8 @@
     try {
       var j = await api('/ai-specialist-autosend');
       state.cfg = (j && j.config) || {};
-    } catch (e) { state.cfg = {}; }
+      state.def = (j && j.default) || {};
+    } catch (e) { state.cfg = {}; state.def = {}; }
     renderOwners();
     document.getElementById('ss-text').value = state.cfg.schuzkaText || 'PRADLOMATY: vyberte si termin schuzky {link}';
     document.getElementById('ss-em-on').checked = !!state.cfg.schuzkaEmailEnabled;
@@ -183,6 +185,16 @@
     } catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
   }
 
+  // Vrátí e-mail na výchozí znění ze serveru (uloží se až tlačítkem Uložit e-mail).
+  function resetEmailDefaults() {
+    var d = state.def || {};
+    if (!d.schuzkaEmailBody) { alert('Výchozí text není k dispozici (obnov stránku).'); return; }
+    if (!confirm('Nahradit předmět, text i popisek tlačítka výchozím zněním? (Uložíš tlačítkem Uložit e-mail.)')) return;
+    document.getElementById('ss-em-subject').value = d.schuzkaEmailSubject || '';
+    document.getElementById('ss-em-body').value = d.schuzkaEmailBody || '';
+    document.getElementById('ss-em-label').value = d.schuzkaEmailLinkLabel || '';
+    var msg = document.getElementById('ss-em-msg'); msg.className = 'ss-msg'; msg.textContent = 'Výchozí text načten — nezapomeň Uložit e-mail.';
+  }
   function emailFields() {
     return { schuzkaEmailEnabled: document.getElementById('ss-em-on').checked, schuzkaEmailSubject: document.getElementById('ss-em-subject').value,
       schuzkaEmailBody: document.getElementById('ss-em-body').value, schuzkaEmailLinkLabel: document.getElementById('ss-em-label').value };
