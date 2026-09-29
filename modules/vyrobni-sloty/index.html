@@ -513,7 +513,7 @@
 
       var windows = generateSlotWindows();
       var free = 0, occupied = 0, blocked = 0, total = 0, unpaid = 0;
-      resetSlotWindowMatching();
+      resetSlotWindowMatching(windows);
       windows.forEach(function(win) {
         // Slot do konce roku počítáme podle data DODÁNÍ (win.end), aby slot
         // překlenující rok přes silvestra spadl do správného období.
@@ -602,7 +602,7 @@
         html += '<div class="tl-row-label"><span class="tl-row-label-dot" style="background:' + wsColor + ';"></span>' + esc(ws.name) + '</div>';
         html += '<div class="tl-slots-row" style="width:' + totalW + 'px;">';
 
-        resetSlotWindowMatching();
+        resetSlotWindowMatching(windows);
         windows.forEach(function(win, i) {
           // Najdi slot pro toto okno (každý slot jen jednou)
           var matched = findSlotForWindow(win);
@@ -709,25 +709,44 @@
     //  2) jinak překrývající slot, ale jen pokud něco nese (zakázku/rezervaci nebo blokaci)
     //     — prázdný širší slot okno nezabírá (klik pak nabídne založení slotu přesně na okno);
     //  3) každý slot se vykreslí jen JEDNOU — v prvním okně, které mu odpovídá.
-    var _usedSlotIds = {};
-    function resetSlotWindowMatching() { _usedSlotIds = {}; }
-    function findSlotForWindow(win) {
-      var wStart = new Date(win.start); wStart.setHours(0,0,0,0);
-      var wEnd = new Date(win.end); wEnd.setHours(0,0,0,0);
-      var exact = null, overlap = null;
-      slots.forEach(function(s) {
-        if (_usedSlotIds[s.id]) return;
-        var sStart = new Date(s.start_date); sStart.setHours(0,0,0,0);
-        var sEnd = new Date(s.end_date); sEnd.setHours(0,0,0,0);
-        if (sStart.getTime() === wStart.getTime() && sEnd.getTime() === wEnd.getTime()) { if (!exact) exact = s; return; }
-        if (sStart <= wEnd && sEnd >= wStart) {
-          var meaningful = (s.assignments && s.assignments.length > 0) || s.status === 'blocked';
-          if (meaningful && !overlap) overlap = s;
+    // Předpočítá mapu okno → slot (globálně, ne popořadě), aby přesná shoda vždy
+    // vyhrála nad hraničním překryvem (okna 5.–7. a 7.–9. sdílejí den 7.10.).
+    var _winSlotMap = {};
+    function _d0(d) { var x = new Date(d); x.setHours(0,0,0,0); return x; }
+    function resetSlotWindowMatching(windows) {
+      _winSlotMap = {};
+      if (!windows || !windows.length) return;
+      var wins = windows.map(function(w) { var s = _d0(w.start), e = _d0(w.end); return { key: s.getTime(), s: s, e: e }; });
+      // 1. kolo: přesné shody (mají absolutní přednost)
+      var placed = {};
+      slots.forEach(function(slot) {
+        var sS = _d0(slot.start_date).getTime(), sE = _d0(slot.end_date).getTime();
+        for (var i = 0; i < wins.length; i++) {
+          if (wins[i].s.getTime() === sS && wins[i].e.getTime() === sE && !_winSlotMap[wins[i].key]) {
+            _winSlotMap[wins[i].key] = slot; placed[slot.id] = true; break;
+          }
         }
       });
-      var found = exact || overlap;
-      if (found) _usedSlotIds[found.id] = true;
-      return found;
+      // 2. kolo: sloty bez přesného okna → okno s největším překryvem (jen pokud něco nesou)
+      slots.forEach(function(slot) {
+        if (placed[slot.id]) return;
+        var meaningful = (slot.assignments && slot.assignments.length > 0) || slot.status === 'blocked';
+        if (!meaningful) return;
+        var sS = _d0(slot.start_date), sE = _d0(slot.end_date);
+        var best = null, bestDays = 0;
+        wins.forEach(function(w) {
+          if (_winSlotMap[w.key]) return;
+          if (sS <= w.e && sE >= w.s) {
+            var ovS = Math.max(sS.getTime(), w.s.getTime()), ovE = Math.min(sE.getTime(), w.e.getTime());
+            var days = Math.round((ovE - ovS) / 86400000) + 1;
+            if (days > bestDays) { bestDays = days; best = w; }
+          }
+        });
+        if (best) { _winSlotMap[best.key] = slot; placed[slot.id] = true; }
+      });
+    }
+    function findSlotForWindow(win) {
+      return _winSlotMap[_d0(win.start).getTime()] || null;
     }
 
     // F5.1+ — client-side health score (zrcadlí backend logiku z routes/slots.routes.js)
