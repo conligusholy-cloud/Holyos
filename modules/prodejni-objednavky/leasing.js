@@ -171,6 +171,7 @@
     return o;
   }
   function close() { var o = document.getElementById('lc-ov'); if (o) o.classList.remove('open'); document.body.style.overflow = ''; state.editing = null; }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var o = document.getElementById('lc-ov'); if (o && o.classList.contains('open')) close(); } });
 
   function openEditor(id) {
     var r = id ? (state.rows.filter(function (x) { return x.id === id; })[0] || {}) : {};
@@ -438,7 +439,8 @@
             + '<td class="src">' + r.n + ' nabíd' + (r.n === 1 ? 'ka' : r.n < 5 ? 'ky' : 'ek') + ' (' + r.refMonths + ' měs.' + (r.rate != null ? ', ~' + (r.rate * 12 * 100).toFixed(1) + ' % p.a.' : '') + ')<br>' + r.src.slice(0, 3).map(function (o) { return esc((o.client || o.title || '').slice(0, 30)); }).join(', ') + '</td></tr>';
         }).join('') + '</tbody></table>'
         : '<div class="lc-empty">Zatím žádné vytěžené nabídky' + (calcState.companyId ? ' u této společnosti' : '') + '. V záložce Nabídky klikni na „🤖 Vytěžit AI".</div>')
-      + '<div class="lc-empty" style="margin-top:12px;font-size:11.5px">Orientační odhad: splátka se odvozuje z poměru splátka/financovaná částka v nabídkách nejbližších zadané době (±6 měsíců), jiná doba se přepočítává anuitně při stejném implicitním úroku. Zůstatek jako průměrné % z ceny. Skutečnou nabídku vždy potvrď u leasingovky.</div>';
+      + '<div class="lc-empty" style="margin-top:12px;font-size:11.5px">Orientační odhad: splátka se odvozuje z poměru splátka/financovaná částka v nabídkách nejbližších zadané době (±6 měsíců), jiná doba se přepočítává anuitně při stejném implicitním úroku. Zůstatek jako průměrné % z ceny. Skutečnou nabídku vždy potvrď u leasingovky.</div>'
+      + '<div class="lc-foot" style="margin-top:12px"><button class="lc-btn" onclick="__lcClose()">Zavřít</button>' + (calcState.companyId && rows.length ? '<button class="lc-btn primary" onclick="__lcOpenTab(' + calcState.companyId + ',\'offers\')">💼 Otevřít nabídky</button>' : '') + '</div>';
     ['lcc-price', 'lcc-ak', 'lcc-months', 'lcc-vat'].forEach(function (id) {
       var el = document.getElementById(id); if (!el) return;
       el.addEventListener('change', function () { calcState.price = document.getElementById('lcc-price').value; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
