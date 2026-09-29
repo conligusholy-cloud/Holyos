@@ -102,17 +102,22 @@
     }
     .tl-row-label-dot { width: 8px; height: 8px; border-radius: 50%; }
 
+    /* Velikost slotů — přepínač v toolbaru (S/M/L/XL), uloženo v prohlížeči */
+    :root { --slot-h: 110px; --slot-pad: 6px 10px; --f-title: 12px; --f-cust: 11px; --f-sub: 10px; --f-pay: 10px; --f-pct: 10px; --f-icon: 14px; --slot-gap: 2px; }
+    body[data-slot-size="m"]  { --slot-h: 170px; --slot-pad: 10px 14px; --f-title: 15px; --f-cust: 14px; --f-sub: 12px; --f-pay: 12px; --f-pct: 12px; --f-icon: 18px; --slot-gap: 4px; }
+    body[data-slot-size="l"]  { --slot-h: 220px; --slot-pad: 14px 18px; --f-title: 18px; --f-cust: 16px; --f-sub: 13.5px; --f-pay: 13.5px; --f-pct: 13px; --f-icon: 22px; --slot-gap: 6px; }
+    body[data-slot-size="xl"] { --slot-h: 260px; --slot-pad: 16px 20px; --f-title: 21px; --f-cust: 18px; --f-sub: 15px; --f-pay: 15px; --f-pct: 14px; --f-icon: 26px; --slot-gap: 7px; }
     .tl-slots-row {
       display: flex;
       position: relative;
-      min-height: 110px;
+      min-height: var(--slot-h);
     }
 
     /* ─── Slotové buňky ─── */
     .tl-slot {
       box-sizing: border-box;
       border-right: 1px solid rgba(255,255,255,0.04);
-      min-height: 110px;
+      min-height: var(--slot-h);
       padding: 4px 3px;
       position: relative;
       cursor: pointer;
@@ -122,17 +127,29 @@
 
     .tl-slot-inner {
       height: 100%;
-      min-height: 100px;
-      border-radius: 8px;
-      padding: 6px 10px;
+      min-height: calc(var(--slot-h) - 10px);
+      border-radius: 10px;
+      padding: var(--slot-pad);
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 2px;
+      gap: var(--slot-gap);
       transition: all 0.15s;
       position: relative;
       overflow: hidden;
+      line-height: 1.3;
     }
+    .tl-slot-inner .slot-title { font-size: var(--f-title) !important; }
+    .tl-slot-inner .slot-customer { font-size: var(--f-cust) !important; }
+    .tl-slot-inner .slot-sub { font-size: var(--f-sub) !important; }
+    .tl-slot-inner .slot-pay { font-size: var(--f-pay) !important; }
+    .tl-slot-inner .slot-health-pct { font-size: var(--f-pct) !important; }
+    .tl-slot-inner .slot-noorder { font-size: var(--f-icon) !important; }
+    body[data-slot-size="l"] .tl-slot-inner.occupied.manual .slot-customer, body[data-slot-size="xl"] .tl-slot-inner.occupied.manual .slot-customer { padding-left: 30px; }
+    .size-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-right: 8px; }
+    .size-switch button { background: var(--surface); color: var(--text2); border: none; border-right: 1px solid var(--border); padding: 7px 11px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .size-switch button:last-child { border-right: none; }
+    .size-switch button.on { background: rgba(249,115,22,0.25); color: #fb923c; }
 
     /* Volný slot */
     .tl-slot-inner.free {
@@ -299,6 +316,7 @@
         <div id="settings-info"></div>
         <div id="capacity-summary"></div>
         <div style="flex:1;"></div>
+        <span class="size-switch" title="Velikost okének slotů"><button data-size="s" onclick="setSlotSize('s')">S</button><button data-size="m" onclick="setSlotSize('m')">M</button><button data-size="l" onclick="setSlotSize('l')">L</button><button data-size="xl" onclick="setSlotSize('xl')">XL</button></span>
         <button class="btn" onclick="generateSlotsFromScheme()" title="Vytvoří reálné výrobní sloty z rozvrhu, aby je viděl i objednávkový průvodce" style="margin-right:8px;">&#128296; Vygenerovat sloty z rozvrhu</button>
         <button class="btn" onclick="openSettingsModal()">&#9881; Nastavení slotů</button>
       </div>
@@ -323,7 +341,23 @@
     var DAYS_CS = ['Ne','Po','Út','St','Čt','Pá','So'];
     var DAYS_FULL = ['Neděle','Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota'];
     var MONTHS_CS = ['Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
-    var SLOT_W = 160; // šířka jednoho slotu v px
+    // Šířka slotu dle zvolené velikosti (XL ≈ 5× větší plocha než původních 160×110).
+    var SLOT_SIZES = { s: 160, m: 250, l: 320, xl: 360 };
+    var SLOT_SIZE = (function(){ try { var v = localStorage.getItem('vs_slot_size'); return SLOT_SIZES[v] ? v : 'xl'; } catch(e){ return 'xl'; } })();
+    var SLOT_W = SLOT_SIZES[SLOT_SIZE]; // šířka jednoho slotu v px
+    function applySlotSize(){
+      document.body.setAttribute('data-slot-size', SLOT_SIZE);
+      document.querySelectorAll('.size-switch button').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-size') === SLOT_SIZE); });
+    }
+    function setSlotSize(s){
+      if (!SLOT_SIZES[s]) return;
+      SLOT_SIZE = s; SLOT_W = SLOT_SIZES[s];
+      try { localStorage.setItem('vs_slot_size', s); } catch(e){}
+      applySlotSize();
+      if (typeof render === 'function') { try { render(); } catch(e){} }
+    }
+    window.setSlotSize = setSlotSize;
+    document.addEventListener('DOMContentLoaded', applySlotSize);
 
     // ─── Konfigurace (multi-scheme s časovou platností) ─────────────────────
     // slotSchemes je pole z DB seřazené sestupně podle valid_from (nejnovější
