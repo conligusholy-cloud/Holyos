@@ -22,7 +22,8 @@ const LEASING_DOCS_DIR = path.join(DATA_ROOT, 'leasing-docs');
 try { if (!fs.existsSync(LEASING_DOCS_DIR)) fs.mkdirSync(LEASING_DOCS_DIR, { recursive: true }); } catch (e) { /* ignore */ }
 
 // Kategorie žadatele o financování.
-const DOC_CATEGORIES = ['fo', 'po_firma', 'po_zivnost'];
+// fo/po_firma/po_zivnost = podklady k žádosti dle typu žadatele; nabidka = nabídky financování zaslané pro naše klienty
+const DOC_CATEGORIES = ['fo', 'po_firma', 'po_zivnost', 'nabidka'];
 
 const emptyToNull = (v) => { const s = (v == null ? '' : String(v)).trim(); return s ? s : null; };
 

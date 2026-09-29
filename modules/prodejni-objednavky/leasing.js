@@ -158,9 +158,11 @@
       + '<div class="lc-tabs">'
       + '  <button class="lc-tab active" data-lctab="info" onclick="__lcTab(\'info\')">🏢 Údaje</button>'
       + '  <button class="lc-tab" data-lctab="docs" onclick="__lcTab(\'docs\')" ' + (id ? '' : 'disabled title="Nejdřív společnost ulož"') + '>📄 Potřebné dokumenty</button>'
+      + '  <button class="lc-tab" data-lctab="offers" onclick="__lcTab(\'offers\')" ' + (id ? '' : 'disabled title="Nejdřív společnost ulož"') + '>💼 Nabídky</button>'
       + '</div>'
       + '<div class="lc-body">'
       + '<div id="lc-pane-docs" style="display:none"></div>'
+      + '<div id="lc-pane-offers" style="display:none"></div>'
       + '<div id="lc-pane-info">'
       + '  <div class="lc-grid">'
       + '    <div class="lc-f full"><label>IČO (načte firmu z ARES)</label><div class="lc-icorow"><input id="lc-ico" value="' + v('ico') + '" placeholder="8 číslic"><button class="lc-btn" id="lc-ares">🔎 Načíst z ARES</button></div></div>'
@@ -188,11 +190,13 @@
 
   // ── Záložky editoru ──
   function switchEditorTab(name) {
-    var info = document.getElementById('lc-pane-info'), docs = document.getElementById('lc-pane-docs');
+    var info = document.getElementById('lc-pane-info'), docs = document.getElementById('lc-pane-docs'), offers = document.getElementById('lc-pane-offers');
     if (info) info.style.display = name === 'info' ? '' : 'none';
     if (docs) docs.style.display = name === 'docs' ? '' : 'none';
+    if (offers) offers.style.display = name === 'offers' ? '' : 'none';
     document.querySelectorAll('.lc-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-lctab') === name); });
     if (name === 'docs') loadDocs();
+    if (name === 'offers') loadOffers();
   }
   window.__lcTab = switchEditorTab;
 
@@ -267,6 +271,61 @@
   window.__lcDocDel = function (id) {
     if (!confirm('Smazat dokument?')) return;
     api('/documents/' + id, { method: 'DELETE' }).then(loadDocs).catch(function (e) { alert('Nepodařilo se smazat: ' + e.message); });
+  };
+
+  // ── Nabídky financování, které nám tato společnost zaslala pro naše klienty ──
+  var offersState = { items: [] };
+  function fmtDate(s) { try { return new Date(s).toLocaleDateString('cs-CZ'); } catch (e) { return ''; } }
+  function loadOffers() {
+    var pane = document.getElementById('lc-pane-offers');
+    if (!pane || !state.editing) return;
+    pane.innerHTML = '<div class="lc-empty">Načítám nabídky…</div>';
+    api('/' + state.editing + '/documents').then(function (d) {
+      offersState.items = (d.items || []).filter(function (x) { return x.category === 'nabidka'; }).sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); });
+      renderOffers();
+    }).catch(function (e) { pane.innerHTML = '<div class="lc-empty" style="color:#ef4444">Nepodařilo se načíst: ' + esc(e.message) + '</div>'; });
+  }
+  function renderOffers() {
+    var pane = document.getElementById('lc-pane-offers'); if (!pane) return;
+    var q = (offersState.q || '').toLowerCase();
+    var items = offersState.items.filter(function (x) { return !q || ((x.title || '') + ' ' + (x.note || '')).toLowerCase().indexOf(q) !== -1; });
+    var list = items.length ? items.map(function (x) {
+      return '<div class="lc-doc" style="align-items:flex-start">'
+        + '<div class="t" style="white-space:normal"><b>💼 ' + esc(x.title) + '</b>' + (x.note ? '<div class="m" style="white-space:pre-wrap">' + esc(x.note) + '</div>' : '') + '<div class="m">přidáno ' + fmtDate(x.created_at) + '</div></div>'
+        + (x.file_path ? '<a href="' + API + '/documents/' + x.id + '/download">⬇️ Stáhnout' + (x.size_bytes ? ' (' + fmtSize(x.size_bytes) + ')' : '') + '</a>' : '<span class="m">bez souboru</span>')
+        + '<button class="x" title="Smazat" onclick="__lcOfferDel(' + x.id + ')">🗑️</button>'
+        + '</div>';
+    }).join('') : '<div class="lc-empty">' + (q ? 'Nic neodpovídá hledání.' : 'Zatím žádné nabídky.') + '</div>';
+    pane.innerHTML = '<div class="lc-empty" style="margin-bottom:10px">Nabídky financování, které nám tato společnost poslala pro naše klienty (kalkulace, indikativní nabídky, schválení). Do názvu dej klienta a stroj, ať se to dá najít.</div>'
+      + '<div class="lc-cat">'
+      + '<h3>💼 Zaslané nabídky <span class="cnt">' + offersState.items.length + '</span>'
+      + '<input type="text" id="lc-off-q" placeholder="Hledat klienta / stroj…" value="' + attr(offersState.q || '') + '" style="margin-left:auto;font-weight:400;font-size:12px;padding:5px 9px;background:var(--surface2,#232630);border:1px solid var(--border);border-radius:6px;color:var(--text);width:200px"></h3>'
+      + list
+      + '<div class="lc-add" style="grid-template-columns:1fr 1fr auto">'
+      + '  <input type="text" id="lc-off-title" placeholder="Klient + stroj (např. Novák – MINI SK) *">'
+      + '  <input type="file" id="lc-off-file" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.msg,.eml">'
+      + '  <button class="lc-btn primary" onclick="__lcOfferAdd()">＋ Přidat nabídku</button>'
+      + '  <textarea id="lc-off-note" placeholder="Poznámka: částka, splátka, doba, akontace, platnost nabídky…" style="grid-column:1/-1;min-height:54px;background:var(--surface2,#232630);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-family:inherit"></textarea>'
+      + '</div></div>';
+    var qi = document.getElementById('lc-off-q');
+    if (qi) qi.addEventListener('input', function (e) { offersState.q = e.target.value; var pos = e.target.selectionStart; renderOffers(); var n = document.getElementById('lc-off-q'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (er) {} } });
+  }
+  window.__lcOfferAdd = function () {
+    if (!state.editing) return;
+    var titleEl = document.getElementById('lc-off-title'), fileEl = document.getElementById('lc-off-file'), noteEl = document.getElementById('lc-off-note');
+    var file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
+    var title = (titleEl && titleEl.value || '').trim() || (file ? file.name : '');
+    if (!title) { alert('Zadej klienta / stroj nebo vyber soubor.'); return; }
+    if (file && file.size > 25 * 1024 * 1024) { alert('Soubor je větší než 25 MB.'); return; }
+    var body = { category: 'nabidka', title: title, note: (noteEl && noteEl.value || '').trim() || null };
+    var p = file ? readFileAsDataURL(file).then(function (du) { body.data_url = du; body.filename = file.name; }) : Promise.resolve();
+    p.then(function () { return api('/' + state.editing + '/documents', { method: 'POST', body: body }); })
+      .then(function () { loadOffers(); })
+      .catch(function (e) { alert('Nepodařilo se přidat: ' + e.message); });
+  };
+  window.__lcOfferDel = function (id) {
+    if (!confirm('Smazat nabídku?')) return;
+    api('/documents/' + id, { method: 'DELETE' }).then(loadOffers).catch(function (e) { alert('Nepodařilo se smazat: ' + e.message); });
   };
 
   function aresFill() {
