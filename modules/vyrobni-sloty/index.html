@@ -180,6 +180,14 @@
     }
     .tl-slot-inner.occupied.manual:hover { background: linear-gradient(135deg, rgba(236,72,153,0.26), rgba(168,85,247,0.3)); }
     .tl-slot-inner.occupied.manual .slot-title { color: #f472b6; }
+    /* Blikající upozornění: rezervace bez přiřazené objednávky */
+    @keyframes slotNoOrderBlink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.25; transform: scale(0.85); } }
+    .slot-noorder {
+      position: absolute; top: 3px; left: 6px; font-size: 14px; line-height: 1; cursor: help;
+      animation: slotNoOrderBlink 1.1s ease-in-out infinite;
+      filter: drop-shadow(0 0 4px rgba(250,204,21,0.9));
+    }
+    .tl-slot-inner.occupied.manual .slot-customer { padding-left: 20px; }
     /* Drag & drop přesun rezervace */
     .tl-slot.tl-drag { cursor: grab; }
     .tl-slot.tl-drag:active { cursor: grabbing; }
@@ -660,7 +668,8 @@
               }
               html += '<div class="slot-sub">Dodání: ' + deliveryDate + '</div>';
               if (isManualA) {
-                html += '<div class="slot-pay" style="color:#f472b6;">✍️ Rezervováno ručně — čeká na objednávku / plánování</div>';
+                html += '<div class="slot-noorder" title="Není přiřazena prodejní objednávka — otevři slot a klikni „Napojit na objednávku"">⚠️</div>';
+                html += '<div class="slot-pay" style="color:#f472b6;">✍️ Rezervováno ručně — <b>bez objednávky</b></div>';
               } else {
                 html += '<div class="slot-pay" style="color:' + (unpaid ? '#facc15' : '#34d399') + ';">' +
                   (unpaid ? '⏳ Čeká na platbu — nevyrábět' : '✅ Zaplaceno — lze vyrábět') + '</div>';
