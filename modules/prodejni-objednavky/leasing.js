@@ -37,6 +37,9 @@
       + '#tab-leasing .lc-on{background:rgba(34,197,94,.16);color:#7ee2a4}'
       + '#tab-leasing .lc-off{background:rgba(107,114,128,.2);color:#9aa0ad}'
       + '#tab-leasing .lc-act{background:none;border:none;cursor:pointer;font-size:15px;padding:4px 6px}'
+      + '#tab-leasing .lc-cnt{display:inline-block;padding:3px 10px;border-radius:999px;background:rgba(99,102,241,.16);color:#a5b4fc;font-weight:700;font-size:12px;text-decoration:none}'
+      + '#tab-leasing .lc-cnt:hover{background:rgba(99,102,241,.3)}'
+      + '#tab-leasing .lc-cnt.zero{background:rgba(255,255,255,.05);color:var(--text2);font-weight:600}'
       + '.lc-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;overflow-y:auto;padding:40px 16px}'
       + '.lc-ov.open{display:flex}'
       + '.lc-modal{width:100%;max-width:640px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}'
@@ -126,7 +129,7 @@
     var rows = state.rows.filter(function (r) { return !q || ((r.name || '') + ' ' + (r.ico || '') + ' ' + (r.city || '') + ' ' + (r.contact_name || '')).toLowerCase().indexOf(q) !== -1; });
     var box = document.getElementById('lc-list'); if (!box) return;
     if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:20px 0">Zatím žádné leasingové společnosti. Přidej první přes „+ Nová společnost".</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>Stav</th><th></th></tr></thead><tbody>'
+    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>Stav</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         return '<tr onclick="__lcEdit(' + r.id + ')" style="cursor:pointer">'
           + '<td><b>' + esc(r.name) + '</b>' + (r.note ? '<div style="font-size:11px;color:var(--text2);max-width:260px">' + esc(String(r.note).slice(0, 80)) + '</div>' : '') + '</td>'
@@ -135,6 +138,8 @@
           + '<td>' + (r.phone ? '<a href="tel:' + attr(r.phone) + '" onclick="event.stopPropagation()">' + esc(r.phone) + '</a>' : '—') + '</td>'
           + '<td>' + (r.email ? '<a href="mailto:' + attr(r.email) + '" onclick="event.stopPropagation()">' + esc(r.email) + '</a>' : '—') + '</td>'
           + '<td>' + esc(r.city || '—') + '</td>'
+          + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.docs_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'docs\');return false" title="Otevřít potřebné dokumenty">📄 ' + (r.docs_count || 0) + '</a></td>'
+          + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.offers_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'offers\');return false" title="Otevřít nabídky">💼 ' + (r.offers_count || 0) + '</a></td>'
           + '<td><span class="lc-badge ' + (r.active ? 'lc-on' : 'lc-off') + '">' + (r.active ? 'Aktivní' : 'Neaktivní') + '</span></td>'
           + '<td class="lc-actions" onclick="event.stopPropagation()"><button class="lc-act" title="Upravit" onclick="__lcEdit(' + r.id + ')">✏️</button>'
           + '<button class="lc-act" title="Smazat" onclick="__lcDelete(' + r.id + ",'" + attr(r.name) + "')\">🗑️</button></td>"
@@ -359,6 +364,7 @@
   }
 
   window.__lcEdit = function (id) { openEditor(id); };
+  window.__lcOpenTab = function (id, tab) { openEditor(id); switchEditorTab(tab); };
   window.__lcClose = close;
   window.__lcDelete = function (id, name) {
     if (!confirm('Opravdu smazat „' + name + '"?')) return;

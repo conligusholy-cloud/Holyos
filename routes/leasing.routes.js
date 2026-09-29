@@ -55,7 +55,11 @@ router.get('/', async (req, res, next) => {
       { contact_name: { contains: q, mode: 'insensitive' } },
     ];
     const rows = await prisma.leasingCompany.findMany({ where, orderBy: [{ active: 'desc' }, { name: 'asc' }] });
-    res.json(rows);
+    // Počty dokumentů / nabídek pro sloupce v seznamu.
+    const counts = rows.length ? await prisma.leasingDocument.groupBy({ by: ['leasing_company_id', 'category'], where: { leasing_company_id: { in: rows.map((x) => x.id) } }, _count: { _all: true } }).catch(() => []) : [];
+    const byId = {};
+    counts.forEach((c) => { const o = (byId[c.leasing_company_id] = byId[c.leasing_company_id] || { docs: 0, offers: 0 }); if (c.category === 'nabidka') o.offers += c._count._all; else o.docs += c._count._all; });
+    res.json(rows.map((x) => Object.assign({}, x, { docs_count: (byId[x.id] || {}).docs || 0, offers_count: (byId[x.id] || {}).offers || 0 })));
   } catch (err) { next(err); }
 });
 
