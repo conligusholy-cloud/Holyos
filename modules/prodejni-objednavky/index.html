@@ -5992,13 +5992,13 @@
         var j=await r.json().catch(function(){return{};});
         if(!r.ok||!j.ok){ if(sum) sum.textContent='Chyba načtení'; return; }
         var bs=j.byStatus||{}; var parts=Object.keys(bs).map(function(k){return k+': '+bs[k];});
-        if(sum) sum.innerHTML='Celkem <b style="color:var(--text)">'+j.total+'</b> SMS · otevřelo odkaz '+j.opened+(parts.length?(' · '+parts.join(' · ')):'');
+        if(sum) sum.innerHTML='Celkem <b style="color:var(--text)">'+j.total+'</b> SMS · otevřelo <b>z SMS</b> '+j.opened+(j.openedAny!=null?(' <span title="Otevřeno jakkoli: i z e-mailu, portálu nebo z HolyOS — nesrovnávat s SMS" style="color:var(--text2);">(jakkoli '+j.openedAny+')</span>'):'')+(parts.length?(' · '+parts.join(' · ')):'');
         var list=j.list||[];
         if(!list.length){ box.innerHTML='<span>Zatím žádná odeslaná SMS.</span>'; return; }
         var h='<table class="data-table" style="width:100%;font-size:12px;"><thead><tr><th>Kontakt</th><th>Telefon</th><th>Odesláno</th><th>Stav</th><th>Otevřel</th></tr></thead><tbody>';
         list.forEach(function(x){
           var stcol = x.status==='doručeno'?'#10b981':(x.status==='nedoručeno'?'#ef4444':'#eab308');
-          h+='<tr><td>'+cmpEsc(x.name||'—')+'</td><td>'+cmpEsc(x.phone||'—')+'</td><td style="white-space:nowrap;">'+aiFmtDt2(x.sentAt)+'</td><td style="color:'+stcol+';">'+cmpEsc(x.status)+'</td><td>'+(x.opened?'✓':'—')+'</td></tr>';
+          h+='<tr><td>'+cmpEsc(x.name||'—')+'</td><td>'+cmpEsc(x.phone||'—')+'</td><td style="white-space:nowrap;">'+aiFmtDt2(x.sentAt)+'</td><td style="color:'+stcol+';">'+cmpEsc(x.status)+'</td><td title="'+(x.opened?'otevřel z SMS':(x.openedAny?'otevřel, ale ne z SMS (e-mail / portál / HolyOS)':'neotevřel'))+'">'+(x.opened?'✓':(x.openedAny?'<span style=\"color:var(--text2);\">(✓)</span>':'—'))+'</td></tr>';
         });
         h+='</tbody></table>';
         box.innerHTML=h;

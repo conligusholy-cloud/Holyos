@@ -211,7 +211,7 @@ router.post('/meeting-reservation', async (req, res) => {
     });
     if (leadId) {
       // Stav leada dle formy (existující stavy v HolyOS: schuzka / schuzka_online) + zmapovaná cesta.
-      const data = { status: mode === 'online' ? 'schuzka_online' : 'schuzka', schuzka_opened_at: new Date() };
+      const data = { status: mode === 'online' ? 'schuzka_online' : 'schuzka' };
       if (mode) data.schuzka_mode = mode;
       if (path) data.financing_path = path;
       await prisma.compounderLead.update({ where: { id: leadId }, data }).catch(() => {});
@@ -1234,22 +1234,33 @@ router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
       orderBy: { ai_specialist_sms_sent_at: 'desc' },
       take: 1000,
     });
+    // „Otevřel" počítáme JEN z kliknutí na odkaz z SMS (event aispec_open_sms, odkaz má ?c=sms).
+    // Obecné ai_specialist_opened_at se zapisuje i při otevření z e-mailu / portálu / HolyOS,
+    // a tím dřív nafukovalo konverzi SMS.
+    const smsOpen = new Set();
+    try {
+      const evs = await prisma.compounderEvent.findMany({ where: { event: 'aispec_open_sms' }, select: { props: true }, take: 20000 });
+      evs.forEach((e) => { const lid = e.props && e.props.lead_id; if (lid) smsOpen.add(Number(lid)); });
+    } catch (e) { /* bez eventů = 0 otevření z SMS */ }
     const byStatus = {};
-    let opened = 0;
+    let opened = 0, openedAny = 0;
     rows.forEach((r) => {
       const s = r.ai_specialist_sms_status || 'odesláno';
       byStatus[s] = (byStatus[s] || 0) + 1;
-      if (r.ai_specialist_opened_at) opened += 1;
+      if (smsOpen.has(r.id)) opened += 1;
+      if (r.ai_specialist_opened_at) openedAny += 1;
     });
     res.json({
       ok: true,
       total: rows.length,
-      opened,
+      opened,          // otevřeno z SMS (srovnatelné se schůzkou)
+      openedAny,       // otevřeno jakkoli (e-mail, portál, HolyOS…) — jen pro informaci
       byStatus,
       list: rows.map((r) => ({
         id: r.id, name: r.name, phone: r.phone, source: r.source,
         sentAt: r.ai_specialist_sms_sent_at, status: r.ai_specialist_sms_status || 'odesláno',
-        opened: !!r.ai_specialist_opened_at,
+        opened: smsOpen.has(r.id),
+        openedAny: !!r.ai_specialist_opened_at,
       })),
     });
   } catch (err) { next(err); }
@@ -7072,6 +7083,9 @@ function schuzkaShortLink(id) {
 function shortCodeToCestaUrl(code) {
   const id = verifyShortCode(code);
   if (!id) return null;
+  // Klik na odkaz z SMS = „otevřel odkaz" (jen první otevření; rezervace ho už nepřepisuje).
+  prisma.compounderLead.updateMany({ where: { id, schuzka_opened_at: null }, data: { schuzka_opened_at: new Date() } }).catch(() => {});
+  prisma.compounderEvent.create({ data: { sid: 'server', event: 'schuzka_open', path: '/c', props: { lead_id: id } } }).catch(() => {});
   return schuzkaBase() + '/home?t=' + makePortalToken(id);
 }
 function portalBase() {
