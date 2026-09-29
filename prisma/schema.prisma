@@ -6754,6 +6754,7 @@ model LeasingDocument {
   mime_type  String? @db.VarChar(80)
   size_bytes Int?
   note       String? @db.Text
+  params     Json?   // AI vytěžené parametry nabídky (cena, akontace, doba, splátka, zůstatek…)
 
   created_at DateTime @default(now())
 

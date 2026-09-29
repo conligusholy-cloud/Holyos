@@ -40,6 +40,22 @@
       + '#tab-leasing .lc-cnt{display:inline-block;padding:3px 10px;border-radius:999px;background:rgba(99,102,241,.16);color:#a5b4fc;font-weight:700;font-size:12px;text-decoration:none}'
       + '#tab-leasing .lc-cnt:hover{background:rgba(99,102,241,.3)}'
       + '#tab-leasing .lc-cnt.zero{background:rgba(255,255,255,.05);color:var(--text2);font-weight:600}'
+      + '#tab-leasing .lc-calcbtn{background:rgba(234,179,8,.16);color:#fbbf24;border:1px solid rgba(234,179,8,.4);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer}'
+      + '#tab-leasing .lc-calcbtn:hover{background:rgba(234,179,8,.3)}'
+      + '.lc-params{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}'
+      + '.lc-chip{font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(99,102,241,.14);color:#c7d2fe;white-space:nowrap}'
+      + '.lc-chip.k{background:rgba(234,179,8,.16);color:#fde68a;font-weight:700}'
+      + '.lc-ai{background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.5);border-radius:6px;padding:3px 9px;font-size:11.5px;font-weight:600;cursor:pointer;white-space:nowrap}'
+      + '.lc-calc{padding:4px 0}'
+      + '.lc-calc .in{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}'
+      + '.lc-calc .in label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text2)}'
+      + '.lc-calc .in input,.lc-calc .in select{background:var(--surface2,#232630);border:1px solid var(--border);border-radius:8px;padding:8px 10px;color:var(--text);font-size:14px;font-weight:600;font-family:inherit}'
+      + '.lc-calc table{width:100%;border-collapse:collapse;font-size:13px}'
+      + '.lc-calc th{text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--border)}'
+      + '.lc-calc td{padding:8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}'
+      + '.lc-calc td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}'
+      + '.lc-calc tr.best td{background:rgba(34,197,94,.08)}'
+      + '.lc-calc .src{font-size:11px;color:var(--text2)}'
       + '.lc-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;overflow-y:auto;padding:40px 16px}'
       + '.lc-ov.open{display:flex}'
       + '.lc-modal{width:100%;max-width:640px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}'
@@ -100,6 +116,7 @@
     div.innerHTML = ''
       + '<div class="lc-toolbar">'
       + '  <input id="lc-search" placeholder="Hledat firmu / IČO / město / kontakt…">'
+      + '  <button class="lc-btn" onclick="__lcCalc(0)" title="Porovnat všechny leasingovky">🧮 Kalkulačka</button>'
       + '  <button class="lc-btn primary" id="lc-new">+ Nová společnost</button>'
       + '</div>'
       + '<div id="lc-list"><div style="color:var(--text2)">Načítám…</div></div>';
@@ -129,7 +146,7 @@
     var rows = state.rows.filter(function (r) { return !q || ((r.name || '') + ' ' + (r.ico || '') + ' ' + (r.city || '') + ' ' + (r.contact_name || '')).toLowerCase().indexOf(q) !== -1; });
     var box = document.getElementById('lc-list'); if (!box) return;
     if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:20px 0">Zatím žádné leasingové společnosti. Přidej první přes „+ Nová společnost".</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>Stav</th><th></th></tr></thead><tbody>'
+    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>🧮 Kalkulačka</th><th>Stav</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         return '<tr onclick="__lcEdit(' + r.id + ')" style="cursor:pointer">'
           + '<td><b>' + esc(r.name) + '</b>' + (r.note ? '<div style="font-size:11px;color:var(--text2);max-width:260px">' + esc(String(r.note).slice(0, 80)) + '</div>' : '') + '</td>'
@@ -140,6 +157,7 @@
           + '<td>' + esc(r.city || '—') + '</td>'
           + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.docs_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'docs\');return false" title="Otevřít potřebné dokumenty">📄 ' + (r.docs_count || 0) + '</a></td>'
           + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.offers_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'offers\');return false" title="Otevřít nabídky">💼 ' + (r.offers_count || 0) + '</a></td>'
+          + '<td onclick="event.stopPropagation()"><button class="lc-calcbtn" onclick="__lcCalc(' + r.id + ')" title="Rychlá kalkulačka z nabídek této společnosti"' + (r.offers_count ? '' : ' disabled style="opacity:.4"') + '>🧮 Spočítat</button></td>'
           + '<td><span class="lc-badge ' + (r.active ? 'lc-on' : 'lc-off') + '">' + (r.active ? 'Aktivní' : 'Neaktivní') + '</span></td>'
           + '<td class="lc-actions" onclick="event.stopPropagation()"><button class="lc-act" title="Upravit" onclick="__lcEdit(' + r.id + ')">✏️</button>'
           + '<button class="lc-act" title="Smazat" onclick="__lcDelete(' + r.id + ",'" + attr(r.name) + "')\">🗑️</button></td>"
@@ -295,15 +313,34 @@
     var q = (offersState.q || '').toLowerCase();
     var items = offersState.items.filter(function (x) { return !q || ((x.title || '') + ' ' + (x.note || '')).toLowerCase().indexOf(q) !== -1; });
     var list = items.length ? items.map(function (x) {
+      var p = x.params || null;
+      var chips = '';
+      if (p) {
+        var c = [];
+        if (p.client) c.push('👤 ' + p.client); if (p.machine) c.push('⚙️ ' + p.machine); if (p.product) c.push(p.product);
+        if (p.calc && p.calc.price) c.push('cena ' + fmtKc(p.calc.price));
+        if (p.akontace_pct != null) c.push('akontace ' + p.akontace_pct + ' %');
+        if (p.months) c.push(p.months + ' měs.');
+        if (p.calc && p.calc.monthly) c.push('splátka ' + fmtKc(p.calc.monthly) + '/měs');
+        if (p.residual_value) c.push('zůstatek ' + fmtKc(p.residual_value));
+        if (p.interest_rate_pct != null) c.push('úrok ' + p.interest_rate_pct + ' %');
+        chips = '<div class="lc-params">' + c.map(function (s) { return '<span class="lc-chip">' + esc(s) + '</span>'; }).join('')
+          + (p.calc && p.calc.overpay_pct != null ? '<span class="lc-chip k">navýšení ' + p.calc.overpay_pct + ' %</span>' : '') + '</div>'
+          + (p.notes ? '<div class="m" style="margin-top:3px">🤖 ' + esc(p.notes) + '</div>' : '');
+      }
       return '<div class="lc-doc" style="align-items:flex-start">'
-        + '<div class="t" style="white-space:normal"><b>💼 ' + esc(x.title) + '</b>' + (x.note ? '<div class="m" style="white-space:pre-wrap">' + esc(x.note) + '</div>' : '') + '<div class="m">přidáno ' + fmtDate(x.created_at) + '</div></div>'
+        + '<div class="t" style="white-space:normal"><b>💼 ' + esc(x.title) + '</b>' + (x.note ? '<div class="m" style="white-space:pre-wrap">' + esc(x.note) + '</div>' : '') + chips + '<div class="m">přidáno ' + fmtDate(x.created_at) + (p && p.extracted_at ? ' · vytěženo AI ' + fmtDate(p.extracted_at) : '') + '</div></div>'
+        + (x.file_path ? '<button class="lc-ai" onclick="__lcExtract(' + x.id + ',this)" title="Nechat AI přečíst nabídku a vytáhnout parametry">' + (p ? '🔁 AI znovu' : '🤖 Vytěžit AI') + '</button>' : '')
         + (x.file_path ? '<a href="' + API + '/documents/' + x.id + '/download">⬇️ Stáhnout' + (x.size_bytes ? ' (' + fmtSize(x.size_bytes) + ')' : '') + '</a>' : '<span class="m">bez souboru</span>')
         + '<button class="x" title="Smazat" onclick="__lcOfferDel(' + x.id + ')">🗑️</button>'
         + '</div>';
     }).join('') : '<div class="lc-empty">' + (q ? 'Nic neodpovídá hledání.' : 'Zatím žádné nabídky.') + '</div>';
+    var missing = offersState.items.filter(function (x) { return x.file_path && !x.params; }).length;
     pane.innerHTML = '<div class="lc-empty" style="margin-bottom:10px">Nabídky financování, které nám tato společnost poslala pro naše klienty (kalkulace, indikativní nabídky, schválení). Do názvu dej klienta a stroj, ať se to dá najít.</div>'
       + '<div class="lc-cat">'
       + '<h3>💼 Zaslané nabídky <span class="cnt">' + offersState.items.length + '</span>'
+      + (missing ? '<button class="lc-ai" onclick="__lcExtractAll(this)">🤖 Vytěžit AI vše (' + missing + ')</button>' : '')
+      + '<button class="lc-calcbtn" onclick="__lcCalc(' + state.editing + ')">🧮 Kalkulačka</button>'
       + '<input type="text" id="lc-off-q" placeholder="Hledat klienta / stroj…" value="' + attr(offersState.q || '') + '" style="margin-left:auto;font-weight:400;font-size:12px;padding:5px 9px;background:var(--surface2,#232630);border:1px solid var(--border);border-radius:6px;color:var(--text);width:200px"></h3>'
       + list
       + '<div class="lc-add" style="grid-template-columns:1fr 1fr auto">'
@@ -332,6 +369,88 @@
     if (!confirm('Smazat nabídku?')) return;
     api('/documents/' + id, { method: 'DELETE' }).then(loadOffers).catch(function (e) { alert('Nepodařilo se smazat: ' + e.message); });
   };
+
+  function fmtKc(n) { return Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' Kč'; }
+  window.__lcExtract = function (id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI čte…'; }
+    api('/documents/' + id + '/extract', { method: 'POST', body: {} }).then(function () { loadOffers(); })
+      .catch(function (e) { alert('Vytěžení selhalo: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = '🤖 Vytěžit AI'; } });
+  };
+  window.__lcExtractAll = function (btn) {
+    if (!state.editing) return;
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ AI čte nabídky…'; }
+    api('/' + state.editing + '/documents/extract-all', { method: 'POST', body: {} }).then(function (r) {
+      var errs = (r.results || []).filter(function (x) { return x.error; });
+      if (errs.length) alert('Některé nabídky se nepodařilo vytěžit:\n' + errs.map(function (x) { return '#' + x.id + ': ' + x.error; }).join('\n'));
+      loadOffers();
+    }).catch(function (e) { alert('Vytěžení selhalo: ' + e.message); loadOffers(); });
+  };
+
+  // ── Rychlá kalkulačka: z vytěžených nabídek odvodí koeficienty a přepočte na zadanou cenu ──
+  var calcState = { data: null, companyId: 0, price: 1500000, months: 60, ak: 10, vat: false };
+  window.__lcCalc = function (companyId) {
+    calcState.companyId = companyId || 0;
+    var o = ov();
+    o.innerHTML = '<div class="lc-modal" style="max-width:860px">'
+      + '<div class="lc-head"><h2>🧮 Rychlá kalkulačka financování</h2><button class="lc-x" onclick="__lcClose()">×</button></div>'
+      + '<div class="lc-body"><div class="lc-calc" id="lc-calc"><div class="lc-empty">Načítám nabídky…</div></div></div></div>';
+    o.classList.add('open'); document.body.style.overflow = 'hidden';
+    api('/calc-data').then(function (d) { calcState.data = d; renderCalc(); }).catch(function (e) { document.getElementById('lc-calc').innerHTML = '<div class="lc-empty" style="color:#ef4444">' + esc(e.message) + '</div>'; });
+  };
+  function renderCalc() {
+    var box = document.getElementById('lc-calc'); if (!box) return;
+    var d = calcState.data || { companies: [] };
+    var cos = d.companies.filter(function (c) { return !calcState.companyId || c.company_id === calcState.companyId; });
+    var price = Number(calcState.price) || 0, months = Number(calcState.months) || 0, akPct = Number(calcState.ak) || 0;
+    var ak = price * akPct / 100, financed = price - ak;
+    var rows = cos.map(function (c) {
+      // Vyber nabídky nejbližší zadané době; koeficient splátky vztáhnout na financovanou částku.
+      var offs = c.offers.slice().sort(function (a, b) { return Math.abs((a.months || 0) - months) - Math.abs((b.months || 0) - months); });
+      var best = offs.filter(function (o) { return Math.abs((o.months || 0) - months) <= 6; });
+      if (!best.length) best = offs.slice(0, 1);
+      if (!best.length) return null;
+      var mf = best.reduce(function (s, o) { return s + o.monthly_factor; }, 0) / best.length;
+      // Když je doba jiná než v nabídce, přepočti koeficient anuitně na stejné implicitní úrokové míře.
+      var refMonths = best[0].months || months;
+      var monthly = financed * mf;
+      if (refMonths && months && refMonths !== months) {
+        var r = solveRate(mf, refMonths); // měsíční úrok z koeficientu
+        monthly = r != null ? financed * annuityFactor(r, months) : financed * mf * refMonths / months;
+      }
+      var rvPct = best.reduce(function (s, o) { return s + ((o.residual_value || 0) / (o.price || 1)); }, 0) / best.length;
+      var rv = price * rvPct;
+      var total = ak + monthly * months + rv;
+      return { c: c, monthly: monthly, total: total, rv: rv, overpay: (total / price - 1) * 100, src: best, n: best.length, refMonths: refMonths, rate: solveRate(mf, refMonths) };
+    }).filter(Boolean).sort(function (a, b) { return a.total - b.total; });
+    var vat = calcState.vat ? 1.21 : 1;
+    box.innerHTML = '<div class="in">'
+      + '<label>Cena stroje bez DPH (Kč)<input type="number" id="lcc-price" value="' + price + '" step="10000"></label>'
+      + '<label>Akontace (%)<input type="number" id="lcc-ak" value="' + akPct + '" step="5" min="0" max="90"></label>'
+      + '<label>Doba (měsíců)<select id="lcc-months">' + [24, 36, 48, 60, 72, 84].map(function (m) { return '<option value="' + m + '"' + (m === months ? ' selected' : '') + '>' + m + ' měsíců</option>'; }).join('') + '</select></label>'
+      + '<label>Zobrazit<select id="lcc-vat"><option value="0"' + (!calcState.vat ? ' selected' : '') + '>bez DPH</option><option value="1"' + (calcState.vat ? ' selected' : '') + '>s DPH 21 %</option></select></label>'
+      + '</div>'
+      + '<div style="font-size:12.5px;color:var(--text2);margin-bottom:10px">Akontace <b style="color:var(--text)">' + fmtKc(ak * vat) + '</b> · financováno <b style="color:var(--text)">' + fmtKc(financed * vat) + '</b>' + (calcState.companyId ? ' · <a href="#" onclick="__lcCalc(0);return false" style="color:#4aa3ea">porovnat všechny společnosti</a>' : '') + '</div>'
+      + (rows.length ? '<table><thead><tr><th>Společnost</th><th style="text-align:right">Měsíční splátka</th><th style="text-align:right">Zůstatek</th><th style="text-align:right">Zaplaceno celkem</th><th style="text-align:right">Navýšení</th><th>Odvozeno z</th></tr></thead><tbody>'
+        + rows.map(function (r, i) {
+          return '<tr' + (i === 0 && rows.length > 1 ? ' class="best"' : '') + '><td><b>' + esc(r.c.company) + '</b>' + (i === 0 && rows.length > 1 ? ' <span class="lc-chip" style="background:rgba(34,197,94,.18);color:#86efac">nejlevnější</span>' : '') + '</td>'
+            + '<td class="n">' + fmtKc(r.monthly * vat) + '</td><td class="n">' + fmtKc(r.rv * vat) + '</td><td class="n">' + fmtKc(r.total * vat) + '</td>'
+            + '<td class="n" style="color:' + (r.overpay < 15 ? '#86efac' : r.overpay < 30 ? '#fde68a' : '#fca5a5') + '">' + r.overpay.toFixed(1) + ' %</td>'
+            + '<td class="src">' + r.n + ' nabíd' + (r.n === 1 ? 'ka' : r.n < 5 ? 'ky' : 'ek') + ' (' + r.refMonths + ' měs.' + (r.rate != null ? ', ~' + (r.rate * 12 * 100).toFixed(1) + ' % p.a.' : '') + ')<br>' + r.src.slice(0, 3).map(function (o) { return esc((o.client || o.title || '').slice(0, 30)); }).join(', ') + '</td></tr>';
+        }).join('') + '</tbody></table>'
+        : '<div class="lc-empty">Zatím žádné vytěžené nabídky' + (calcState.companyId ? ' u této společnosti' : '') + '. V záložce Nabídky klikni na „🤖 Vytěžit AI".</div>')
+      + '<div class="lc-empty" style="margin-top:12px;font-size:11.5px">Orientační odhad: splátka se odvozuje z poměru splátka/financovaná částka v nabídkách nejbližších zadané době (±6 měsíců), jiná doba se přepočítává anuitně při stejném implicitním úroku. Zůstatek jako průměrné % z ceny. Skutečnou nabídku vždy potvrď u leasingovky.</div>';
+    ['lcc-price', 'lcc-ak', 'lcc-months', 'lcc-vat'].forEach(function (id) {
+      var el = document.getElementById(id); if (!el) return;
+      el.addEventListener('change', function () { calcState.price = document.getElementById('lcc-price').value; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
+    });
+  }
+  function annuityFactor(r, n) { return r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)); }
+  function solveRate(mf, n) { // najdi měsíční úrok r, aby annuityFactor(r,n) == mf (bisekce)
+    if (!mf || !n || mf <= 1 / n) return 0;
+    var lo = 0, hi = 0.1;
+    for (var i = 0; i < 60; i++) { var mid = (lo + hi) / 2; if (annuityFactor(mid, n) > mf) hi = mid; else lo = mid; }
+    return (lo + hi) / 2;
+  }
 
   function aresFill() {
     var ico = (document.getElementById('lc-ico').value || '').replace(/\D/g, '');
