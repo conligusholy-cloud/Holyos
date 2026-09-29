@@ -340,8 +340,11 @@ router.post('/reservations/sweep', async (req, res, next) => {
 
 router.put('/assignments/:id', async (req, res, next) => {
   try {
-    const { product_name, customer_name, quantity, estimated_hours, priority, status, note, slot_id } = req.body;
+    const { product_name, customer_name, quantity, estimated_hours, priority, status, note, slot_id, order_id, order_item_id } = req.body;
     const data = {};
+    // Napojení ruční blokace na prodejní objednávku + položku (null = odpojit).
+    if (order_id !== undefined) data.order_id = order_id ? parseInt(order_id) : null;
+    if (order_item_id !== undefined) data.order_item_id = order_item_id ? parseInt(order_item_id) : null;
     if (product_name !== undefined) data.product_name = product_name;
     if (customer_name !== undefined) data.customer_name = customer_name;
     if (quantity !== undefined) data.quantity = parseFloat(quantity);

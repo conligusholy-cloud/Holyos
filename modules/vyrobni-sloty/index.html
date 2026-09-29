@@ -804,22 +804,52 @@
           if (serial) {
             html += '<div style="font-size:12px;margin-top:4px;"><span style="font-family:monospace;font-weight:700;background:rgba(251,191,36,0.15);color:#fbbf24;padding:3px 8px;border-radius:6px;">🔢 ' + esc(serial) + '</span></div>';
           }
-          html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + a.quantity + ' ks</div>';
+          html += '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + a.quantity + ' ks' + (a.estimated_hours ? ' · ' + a.estimated_hours + ' h' : '') + '</div>';
           var aUnpaid = a.reservation_status === 'reserved';
           if (a.reservation_status) {
             html += '<div style="font-size:11px;font-weight:700;margin-top:4px;color:' + (aUnpaid ? '#facc15' : '#34d399') + ';">' +
               (aUnpaid ? '⏳ Rezervováno — čeká na platbu (nevyrábět, neobjednávat díly)' : '✅ Zaplaceno — lze vyrábět a objednávat díly') +
               (aUnpaid && a.reserved_until ? ' · do ' + new Date(a.reserved_until).toLocaleDateString('cs-CZ') : '') + '</div>';
           }
+          // Ruční blokace = přiřazení bez objednávky/položky/dávky.
+          var isManual = !a.order_id && !a.order_item_id && !a.batch_id;
+          if (isManual) {
+            html += '<div style="font-size:11px;font-weight:700;margin-top:4px;color:#f472b6;">✍️ Ruční blokace — zatím bez objednávky</div>';
+          } else if (a.order_id || a.order_item_id) {
+            html += '<div style="font-size:11px;margin-top:4px;color:#93c5fd;">🔗 Napojeno na objednávku' + (a.order_id ? ' #' + a.order_id : '') + (a.order_item_id ? ' · položka #' + a.order_item_id : '') + '</div>';
+          }
+          if (a.note) html += '<div style="font-size:11px;color:var(--text2);margin-top:4px;"><em>' + esc(a.note) + '</em></div>';
+          // Akce k přiřazení
+          html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
+          if (!a.batch_id) {
+            if (!a.order_item_id) html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="openLinkOrder(' + a.id + ',' + slot.id + ')">🔗 Napojit na objednávku</button>';
+            else html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="unlinkAssignment(' + a.id + ',' + slot.id + ')">🔓 Odpojit objednávku</button>';
+            html += '<button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteAssignment(' + a.id + ',' + slot.id + ')">🗑️ Zrušit blokaci</button>';
+          }
+          html += '</div>';
+          html += '<div id="link-box-' + a.id + '"></div>';
           html += '</div>';
         });
       }
+
+      // Formulář ruční blokace (skrytý, otevře tlačítko níže).
+      html += '<div id="manual-block-form" style="display:none;background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:12px;margin-top:10px;">';
+      html += '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">✍️ Ruční blokace slotu</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+      html += '<input id="mb-title" placeholder="Co / pro koho blokuješ *" style="grid-column:1/-1;padding:8px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;">';
+      html += '<input id="mb-customer" placeholder="Zákazník (volitelné)" style="padding:8px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;">';
+      html += '<input id="mb-hours" type="number" step="0.5" min="0" placeholder="Hodiny (blokovaná kapacita)" style="padding:8px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;">';
+      html += '<textarea id="mb-note" placeholder="Poznámka" style="grid-column:1/-1;min-height:56px;padding:8px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;"></textarea>';
+      html += '</div>';
+      html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;"><button class="btn btn-secondary" onclick="toggleManualBlock(false)">Zrušit</button><button class="btn btn-primary" onclick="saveManualBlock(' + slot.id + ')">🔒 Zablokovat</button></div>';
+      html += '</div>';
 
       if (slot.note) {
         html += '<div style="font-size:12px;color:var(--text2);margin-top:8px;"><em>' + esc(slot.note) + '</em></div>';
       }
 
       html += '<div class="modal-actions">';
+      html += '<button class="btn btn-secondary" onclick="toggleManualBlock(true)">🔒 Zablokovat ručně</button>';
       html += '<button class="btn btn-danger" onclick="deleteSlot(' + slot.id + ')">&#128465; Smazat slot</button>';
       html += '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>';
       html += '</div>';
@@ -943,6 +973,91 @@
       closeModal();
       await loadAllSlots();
       render();
+    }
+
+    // ─── Ruční blokace slotu + napojení na prodejní objednávku ───────────────
+    function toggleManualBlock(show) {
+      var f = document.getElementById('manual-block-form'); if (!f) return;
+      f.style.display = show ? '' : 'none';
+      if (show) { var t = document.getElementById('mb-title'); if (t) t.focus(); }
+    }
+    async function refreshSlotDetail(slotId) {
+      try { await loadAllSlots(); } catch (e) {}
+      openSlotDetail(slotId);
+    }
+    async function saveManualBlock(slotId) {
+      var title = (document.getElementById('mb-title').value || '').trim();
+      if (!title) { alert('Napiš, co / pro koho slot blokuješ.'); return; }
+      var body = {
+        product_name: title,
+        customer_name: (document.getElementById('mb-customer').value || '').trim() || null,
+        estimated_hours: parseFloat(document.getElementById('mb-hours').value) || 0,
+        note: (document.getElementById('mb-note').value || '').trim() || null,
+        quantity: 1,
+      };
+      var r = await fetch('/api/slots/' + slotId + '/assignments', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) { var e = await r.json().catch(function(){ return {}; }); alert('Blokace se nepodařila: ' + (e.error || r.status)); return; }
+      refreshSlotDetail(slotId);
+    }
+    async function deleteAssignment(aid, slotId) {
+      if (!confirm('Zrušit tuto blokaci / přiřazení ve slotu?')) return;
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'DELETE', credentials: 'include' });
+      if (!r.ok) { alert('Nepodařilo se zrušit.'); return; }
+      refreshSlotDetail(slotId);
+    }
+    var _linkOrdersCache = null;
+    async function openLinkOrder(aid, slotId) {
+      var box = document.getElementById('link-box-' + aid); if (!box) return;
+      box.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-top:8px;">Načítám objednávky…</div>';
+      try {
+        if (!_linkOrdersCache) {
+          var r = await fetch('/api/wh/orders?type=sales', { credentials: 'include' });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var d = await r.json();
+          _linkOrdersCache = Array.isArray(d) ? d : (d.items || d.orders || []);
+        }
+        var orders = _linkOrdersCache.slice().sort(function(a, b) { return (b.id || 0) - (a.id || 0); });
+        var opts = '<option value="">— vyber objednávku —</option>' + orders.map(function(o) {
+          return '<option value="' + o.id + '">' + esc((o.order_number || ('#' + o.id)) + ' · ' + ((o.company && o.company.name) || '') + (o.status ? ' · ' + o.status : '')) + '</option>';
+        }).join('');
+        box.innerHTML = '<div style="margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px;background:var(--surface2);">'
+          + '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;">🔗 Napojit na prodejní objednávku</div>'
+          + '<select id="lo-order-' + aid + '" onchange="onLinkOrderChange(' + aid + ')" style="width:100%;padding:8px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;">' + opts + '</select>'
+          + '<select id="lo-item-' + aid + '" style="width:100%;margin-top:6px;padding:8px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;" disabled><option value="">— nejdřív vyber objednávku —</option></select>'
+          + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;"><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="document.getElementById(\'link-box-' + aid + '\').innerHTML=\'\'">Zrušit</button><button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="saveLinkOrder(' + aid + ',' + slotId + ')">Uložit vazbu</button></div>'
+          + '</div>';
+      } catch (e) { box.innerHTML = '<div style="font-size:12px;color:#ef4444;margin-top:8px;">Objednávky se nepodařilo načíst: ' + esc(e.message) + '</div>'; }
+    }
+    function onLinkOrderChange(aid) {
+      var oid = parseInt(document.getElementById('lo-order-' + aid).value, 10);
+      var sel = document.getElementById('lo-item-' + aid);
+      var o = (_linkOrdersCache || []).find(function(x) { return x.id === oid; });
+      if (!o) { sel.disabled = true; sel.innerHTML = '<option value="">— nejdřív vyber objednávku —</option>'; return; }
+      var items = o.items || [];
+      sel.disabled = false;
+      sel.innerHTML = '<option value="">— položka (volitelné, celá objednávka) —</option>' + items.map(function(it) {
+        return '<option value="' + it.id + '">' + esc(it.name + ' · ' + it.quantity + ' ks' + (it.serial_number ? ' · 🔢 ' + it.serial_number : '')) + '</option>';
+      }).join('');
+    }
+    async function saveLinkOrder(aid, slotId) {
+      var oid = document.getElementById('lo-order-' + aid).value;
+      if (!oid) { alert('Vyber objednávku.'); return; }
+      var iid = document.getElementById('lo-item-' + aid).value || null;
+      var o = (_linkOrdersCache || []).find(function(x) { return x.id === parseInt(oid, 10); });
+      var it = o && iid ? (o.items || []).find(function(x) { return x.id === parseInt(iid, 10); }) : null;
+      var body = { order_id: parseInt(oid, 10), order_item_id: iid ? parseInt(iid, 10) : null };
+      // Doplň název/zákazníka z objednávky, pokud je položka vybraná.
+      if (it) body.product_name = it.name;
+      if (o && o.company && o.company.name) body.customer_name = o.company.name;
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!r.ok) { var e = await r.json().catch(function(){ return {}; }); alert('Napojení se nepodařilo: ' + (e.error || r.status)); return; }
+      refreshSlotDetail(slotId);
+    }
+    async function unlinkAssignment(aid, slotId) {
+      if (!confirm('Odpojit objednávku od této blokace? Blokace ve slotu zůstane.')) return;
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: null, order_item_id: null }) });
+      if (!r.ok) { alert('Odpojení se nepodařilo.'); return; }
+      refreshSlotDetail(slotId);
     }
 
     async function deleteSlot(id) {
