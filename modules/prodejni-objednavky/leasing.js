@@ -56,6 +56,15 @@
       + '.lc-calc td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}'
       + '.lc-calc tr.best td{background:rgba(34,197,94,.08)}'
       + '.lc-calc .src{font-size:11px;color:var(--text2)}'
+      + '.lc-offer{margin-top:16px;border:1px solid rgba(234,179,8,.45);border-radius:12px;padding:16px 18px;background:rgba(234,179,8,.05)}'
+      + '.lc-offer h3{margin:0 0 6px;font-size:15px}'
+      + '.lc-offer .kv{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}'
+      + '.lc-offer .kv div{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px}'
+      + '.lc-offer .kv small{display:block;font-size:10.5px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}'
+      + '.lc-offer .kv b{font-size:15px}'
+      + '.lc-offer h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin:12px 0 4px}'
+      + '.lc-offer ul{margin:0;padding-left:18px;font-size:13px;line-height:1.5}'
+      + '.lc-offer .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}'
       + '.lc-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;overflow-y:auto;padding:40px 16px}'
       + '.lc-ov.open{display:flex}'
       + '.lc-modal{width:100%;max-width:640px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}'
@@ -327,7 +336,8 @@
         if (p.interest_rate_pct != null) c.push('úrok ' + p.interest_rate_pct + ' %');
         chips = '<div class="lc-params">' + c.map(function (s) { return '<span class="lc-chip">' + esc(s) + '</span>'; }).join('')
           + (p.calc && p.calc.overpay_pct != null ? '<span class="lc-chip k">navýšení ' + p.calc.overpay_pct + ' %</span>' : '') + '</div>'
-          + (p.notes ? '<div class="m" style="margin-top:3px">🤖 ' + esc(p.notes) + '</div>' : '');
+          + (p.warnings && p.warnings.length ? '<div class="m" style="margin-top:4px;color:#fbbf24">⚠️ ' + p.warnings.map(esc).join(' · ') + '</div>' : '')
+          + '<div class="m" style="margin-top:3px">🤖 vyčteno: cena bez DPH ' + (p.price_excl_vat != null ? fmtKc(p.price_excl_vat) : '—') + ', s DPH ' + (p.price_incl_vat != null ? fmtKc(p.price_incl_vat) : '—') + ' · splátka bez DPH ' + (p.monthly_excl_vat != null ? fmtKc(p.monthly_excl_vat) : '—') + ', s DPH ' + (p.monthly_incl_vat != null ? fmtKc(p.monthly_incl_vat) : '—') + (p.notes ? ' · ' + esc(p.notes) : '') + '</div>';
       }
       return '<div class="lc-doc" style="align-items:flex-start">'
         + '<div class="t" style="white-space:normal"><b>💼 ' + esc(x.title) + '</b>' + (x.note ? '<div class="m" style="white-space:pre-wrap">' + esc(x.note) + '</div>' : '') + chips + '<div class="m">přidáno ' + fmtDate(x.created_at) + (p && p.extracted_at ? ' · vytěženo AI ' + fmtDate(p.extracted_at) : '') + '</div></div>'
@@ -421,7 +431,8 @@
       var rvPct = best.reduce(function (s, o) { return s + ((o.residual_value || 0) / (o.price || 1)); }, 0) / best.length;
       var rv = price * rvPct;
       var total = ak + monthly * months + rv;
-      return { c: c, monthly: monthly, total: total, rv: rv, overpay: (total / price - 1) * 100, src: best, n: best.length, refMonths: refMonths, rate: solveRate(mf, refMonths) };
+      var warns = []; best.forEach(function (o) { (o.warnings || []).forEach(function (w) { if (warns.indexOf(w) === -1) warns.push(w); }); });
+      return { c: c, monthly: monthly, total: total, rv: rv, overpay: (total / price - 1) * 100, src: best, n: best.length, refMonths: refMonths, rate: solveRate(mf, refMonths), warns: warns };
     }).filter(Boolean).sort(function (a, b) { return a.total - b.total; });
     var vat = calcState.vat ? 1.21 : 1;
     box.innerHTML = '<div class="in">'
@@ -430,10 +441,16 @@
       + '<label>Doba (měsíců)<select id="lcc-months">' + [24, 36, 48, 60, 72, 84].map(function (m) { return '<option value="' + m + '"' + (m === months ? ' selected' : '') + '>' + m + ' měsíců</option>'; }).join('') + '</select></label>'
       + '<label>Zobrazit<select id="lcc-vat"><option value="0"' + (!calcState.vat ? ' selected' : '') + '>bez DPH</option><option value="1"' + (calcState.vat ? ' selected' : '') + '>s DPH 21 %</option></select></label>'
       + '</div>'
+      + '<div class="in" style="grid-template-columns:1fr 1fr auto;align-items:end">'
+      + '<label>Klient (volitelné)<input type="text" id="lcc-client" value="' + attr(calcState.client || '') + '" placeholder="např. Jan Novák / Firma s.r.o."></label>'
+      + '<label>Stroj<input type="text" id="lcc-machine" value="' + attr(calcState.machine || 'Prádlomat MINI') + '"></label>'
+      + '<button class="lc-btn primary" id="lcc-gen" style="padding:10px 16px"' + (rows.length ? '' : ' disabled title="Nejdřív nech AI přečíst nabídky"') + '>✨ Vytvořit nabídku' + (calcState.companyId ? '' : ' (nejlevnější)') + '</button>'
+      + '</div>'
       + '<div style="font-size:12.5px;color:var(--text2);margin-bottom:10px">Akontace <b style="color:var(--text)">' + fmtKc(ak * vat) + '</b> · financováno <b style="color:var(--text)">' + fmtKc(financed * vat) + '</b>' + (calcState.companyId ? ' · <a href="#" onclick="__lcCalc(0);return false" style="color:#4aa3ea">porovnat všechny společnosti</a>' : '') + '</div>'
       + (rows.length ? '<table><thead><tr><th>Společnost</th><th style="text-align:right">Měsíční splátka</th><th style="text-align:right">Zůstatek</th><th style="text-align:right">Zaplaceno celkem</th><th style="text-align:right">Navýšení</th><th>Odvozeno z</th></tr></thead><tbody>'
         + rows.map(function (r, i) {
-          return '<tr' + (i === 0 && rows.length > 1 ? ' class="best"' : '') + '><td><b>' + esc(r.c.company) + '</b>' + (i === 0 && rows.length > 1 ? ' <span class="lc-chip" style="background:rgba(34,197,94,.18);color:#86efac">nejlevnější</span>' : '') + '</td>'
+          return '<tr' + (i === 0 && rows.length > 1 && !r.warns.length ? ' class="best"' : '') + '><td><b>' + esc(r.c.company) + '</b>' + (i === 0 && rows.length > 1 && !r.warns.length ? ' <span class="lc-chip" style="background:rgba(34,197,94,.18);color:#86efac">nejlevnější</span>' : '')
+            + (r.warns.length ? '<div style="font-size:11px;color:#fbbf24;margin-top:3px">⚠️ ' + r.warns.map(esc).join('<br>⚠️ ') + '<br><a href="#" onclick="__lcOpenTab(' + r.c.company_id + ',\'offers\');return false" style="color:#4aa3ea">zkontrolovat nabídky</a></div>' : '') + '</td>'
             + '<td class="n">' + fmtKc(r.monthly * vat) + '</td><td class="n">' + fmtKc(r.rv * vat) + '</td><td class="n">' + fmtKc(r.total * vat) + '</td>'
             + '<td class="n" style="color:' + (r.overpay < 15 ? '#86efac' : r.overpay < 30 ? '#fde68a' : '#fca5a5') + '">' + r.overpay.toFixed(1) + ' %</td>'
             + '<td class="src">' + r.n + ' nabíd' + (r.n === 1 ? 'ka' : r.n < 5 ? 'ky' : 'ek') + ' (' + r.refMonths + ' měs.' + (r.rate != null ? ', ~' + (r.rate * 12 * 100).toFixed(1) + ' % p.a.' : '') + ')<br>' + r.src.slice(0, 3).map(function (o) { return esc((o.client || o.title || '').slice(0, 30)); }).join(', ') + '</td></tr>';
@@ -441,10 +458,22 @@
         : '<div class="lc-empty" style="text-align:center;padding:18px 0">Zatím žádné vytěžené nabídky' + (calcState.companyId ? ' u této společnosti' : '') + '.<br><span style="font-size:12px">Nahrané PDF nabídky musí nejdřív přečíst AI (cena, splátka, doba…) — trvá to pár sekund na nabídku.</span><br>'
           + '<button class="lc-btn primary" style="margin-top:12px" onclick="__lcCalcExtract(this)">🤖 Přečíst nabídky AI a spočítat</button></div>')
       + '<div class="lc-empty" style="margin-top:12px;font-size:11.5px">Orientační odhad: splátka se odvozuje z poměru splátka/financovaná částka v nabídkách nejbližších zadané době (±6 měsíců), jiná doba se přepočítává anuitně při stejném implicitním úroku. Zůstatek jako průměrné % z ceny. Skutečnou nabídku vždy potvrď u leasingovky.</div>'
+      + '<div id="lcc-offer">' + (calcState.offer ? renderOffer(calcState.offer) : '') + '</div>'
       + '<div class="lc-foot" style="margin-top:12px"><button class="lc-btn" onclick="__lcClose()">Zavřít</button>' + (calcState.companyId && rows.length ? '<button class="lc-btn primary" onclick="__lcOpenTab(' + calcState.companyId + ',\'offers\')">💼 Otevřít nabídky</button>' : '') + '</div>';
+    var gen = document.getElementById('lcc-gen');
+    if (gen) gen.onclick = function () {
+      var target = calcState.companyId || (rows[0] && rows[0].c.company_id);
+      if (!target) return;
+      calcState.client = document.getElementById('lcc-client').value; calcState.machine = document.getElementById('lcc-machine').value;
+      gen.disabled = true; gen.textContent = '⏳ AI sestavuje nabídku…';
+      api('/' + target + '/generate-offer', { method: 'POST', body: { price: price, akontace_pct: akPct, months: months, vat: calcState.vat, client: calcState.client, machine: calcState.machine } })
+        .then(function (o) { calcState.offer = o; renderCalc(); var el = document.getElementById('lcc-offer'); if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' }); })
+        .catch(function (e) { alert('Nabídku se nepodařilo vytvořit: ' + e.message); gen.disabled = false; gen.textContent = '✨ Vytvořit nabídku'; });
+    };
+    ['lcc-client', 'lcc-machine'].forEach(function (id) { var el = document.getElementById(id); if (el) el.addEventListener('change', function () { calcState.client = document.getElementById('lcc-client').value; calcState.machine = document.getElementById('lcc-machine').value; }); });
     ['lcc-price', 'lcc-ak', 'lcc-months', 'lcc-vat'].forEach(function (id) {
       var el = document.getElementById(id); if (!el) return;
-      el.addEventListener('change', function () { calcState.price = Number(String(document.getElementById('lcc-price').value).replace(/[^0-9]/g, '')) || 0; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
+      el.addEventListener('change', function () { calcState.offer = null; calcState.price = Number(String(document.getElementById('lcc-price').value).replace(/[^0-9]/g, '')) || 0; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
     });
   }
   window.__lcCalcExtract = function (btn) {
@@ -456,6 +485,60 @@
       return api('/calc-data');
     }).then(function (d) { calcState.data = d; renderCalc(); })
       .catch(function (e) { alert('Vytěžení selhalo: ' + e.message); btn.disabled = false; btn.textContent = '🤖 Přečíst nabídky AI a spočítat'; });
+  };
+  function renderOffer(o) {
+    var c = o.calc, ai = o.ai || {}, vat = o.input && o.input.vat ? 1.21 : 1, dph = vat > 1 ? ' s DPH' : ' bez DPH';
+    var li = function (arr) { return (arr && arr.length) ? '<ul>' + arr.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' : '<div class="src">—</div>'; };
+    return '<div class="lc-offer" id="lc-offer-print">'
+      + '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start"><div><h3>✨ ' + esc(ai.title || 'Indikativní nabídka financování') + '</h3>'
+      + '<div class="src">' + esc(o.company.name) + (o.company.contact_name ? ' · ' + esc(o.company.contact_name) : '') + (o.company.phone ? ' · ' + esc(o.company.phone) : '') + ' · vytvořeno ' + new Date(o.generated_at).toLocaleString('cs-CZ') + '</div></div>'
+      + '<div class="src">' + (o.input.client ? 'Klient: <b style="color:var(--text)">' + esc(o.input.client) + '</b> · ' : '') + 'Předmět: <b style="color:var(--text)">' + esc(o.input.machine || 'prádlomat') + '</b></div></div>'
+      + (ai.summary ? '<p style="font-size:13.5px;line-height:1.55;margin:10px 0 0">' + esc(ai.summary) + '</p>' : '')
+      + '<div class="kv">'
+      + '<div><small>Cena' + dph + '</small><b>' + fmtKc(c.price * vat) + '</b></div>'
+      + '<div><small>Akontace ' + c.akontace_pct + ' %</small><b>' + fmtKc(c.akontace * vat) + '</b></div>'
+      + '<div><small>Měsíční splátka' + dph + '</small><b style="color:#fbbf24">' + (c.monthly != null ? fmtKc(c.monthly * vat) : '—') + '</b></div>'
+      + '<div><small>Doba</small><b>' + c.months + ' měsíců</b></div>'
+      + '<div><small>Zůstatek / odkup</small><b>' + fmtKc(c.residual * vat) + '</b></div>'
+      + '<div><small>Poplatky</small><b>' + fmtKc(c.fees * vat) + '</b></div>'
+      + '<div><small>Pojištění / měs.</small><b>' + (c.insurance_monthly ? fmtKc(c.insurance_monthly) : '—') + '</b></div>'
+      + '<div><small>Celkem zaplaceno</small><b>' + fmtKc(c.total * vat) + '</b> <span class="src">(navýšení ' + c.overpay_pct + ' %' + (c.rate_pa_pct != null ? ', ~' + c.rate_pa_pct + ' % p.a.' : '') + ')</span></div>'
+      + '</div>'
+      + '<h4>Podmínky (z podkladů ' + esc(o.company.name) + ')</h4>' + li(ai.conditions)
+      + (ai.required_docs && ai.required_docs.length ? '<h4>Klient doloží</h4>' + li(ai.required_docs) : '')
+      + '<h4>Předpoklady / k potvrzení u leasingovky</h4>' + li(ai.assumptions)
+      + '<h4>Další kroky</h4>' + li(ai.next_steps)
+      + '<div class="src" style="margin-top:8px">Odvozeno z nabídek: ' + esc((c.based_on || []).join(', ') || '—') + '. Indikativní výpočet Best Series — nezávazné, konečnou nabídku vystaví leasingová společnost.</div>'
+      + '<div class="acts"><button class="lc-btn" onclick="__lcOfferCopy()">📋 Kopírovat text</button><button class="lc-btn" onclick="__lcOfferPrint()">🖨️ Tisk / PDF</button><button class="lc-btn primary" onclick="__lcOfferSave(this)">💾 Uložit mezi nabídky</button></div>'
+      + '</div>';
+  }
+  function offerAsText(o) {
+    var c = o.calc, ai = o.ai || {}, vat = o.input && o.input.vat ? 1.21 : 1, dph = vat > 1 ? 's DPH' : 'bez DPH';
+    var L = [];
+    L.push((ai.title || 'Indikativní nabídka financování').toUpperCase()); L.push(o.company.name + (o.company.contact_name ? ' · ' + o.company.contact_name : '') + (o.company.phone ? ' · ' + o.company.phone : '')); L.push('');
+    if (o.input.client) L.push('Klient: ' + o.input.client); L.push('Předmět: ' + (o.input.machine || 'prádlomat')); L.push('');
+    if (ai.summary) { L.push(ai.summary); L.push(''); }
+    L.push('Cena ' + dph + ': ' + fmtKc(c.price * vat)); L.push('Akontace ' + c.akontace_pct + ' %: ' + fmtKc(c.akontace * vat)); L.push('Měsíční splátka ' + dph + ': ' + (c.monthly != null ? fmtKc(c.monthly * vat) : '—')); L.push('Doba: ' + c.months + ' měsíců');
+    L.push('Zůstatek / odkup: ' + fmtKc(c.residual * vat)); L.push('Poplatky: ' + fmtKc(c.fees * vat)); if (c.insurance_monthly) L.push('Pojištění: ' + fmtKc(c.insurance_monthly) + ' / měs.'); L.push('Celkem zaplaceno: ' + fmtKc(c.total * vat) + ' (navýšení ' + c.overpay_pct + ' %)'); L.push('');
+    var sec = function (t, arr) { if (arr && arr.length) { L.push(t + ':'); arr.forEach(function (s) { L.push('• ' + s); }); L.push(''); } };
+    sec('Podmínky', ai.conditions); sec('Klient doloží', ai.required_docs); sec('Předpoklady / k potvrzení', ai.assumptions); sec('Další kroky', ai.next_steps);
+    L.push('Indikativní výpočet Best Series s.r.o. — nezávazné, konečnou nabídku vystaví leasingová společnost.');
+    return L.join('\n');
+  }
+  window.__lcOfferCopy = function () { if (!calcState.offer) return; var t = offerAsText(calcState.offer); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { alert('Text nabídky zkopírován.'); }).catch(function () { prompt('Zkopíruj text:', t); }); };
+  window.__lcOfferPrint = function () {
+    var el = document.getElementById('lc-offer-print'); if (!el) return;
+    var w = window.open('', '_blank'); if (!w) return;
+    w.document.write('<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><title>Nabídka financování</title><style>body{font-family:Segoe UI,Arial,sans-serif;color:#111;padding:28px;max-width:760px;margin:0 auto}h3{margin:0 0 4px}h4{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#666;margin:14px 0 4px}.kv{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}.kv div{border:1px solid #ddd;border-radius:8px;padding:8px 10px}.kv small{display:block;font-size:10px;color:#666;text-transform:uppercase}.kv b{font-size:15px}.src{font-size:11px;color:#666}ul{padding-left:18px;font-size:13px;line-height:1.5}.acts{display:none}p{font-size:13.5px}</style></head><body>' + el.innerHTML + '<p class="src" style="margin-top:20px">Best Series s.r.o. · IČO 05643724 · ' + new Date().toLocaleDateString('cs-CZ') + '</p></body></html>');
+    w.document.close(); setTimeout(function () { w.print(); }, 300);
+  };
+  window.__lcOfferSave = function (btn) {
+    var o = calcState.offer; if (!o) return;
+    btn.disabled = true; btn.textContent = 'Ukládám…';
+    var title = 'Kalkulace ' + (o.input.client ? o.input.client + ' – ' : '') + (o.input.machine || 'prádlomat') + ' – ' + new Date().toLocaleDateString('cs-CZ');
+    api('/' + o.company.id + '/documents', { method: 'POST', body: { category: 'nabidka', title: title, note: offerAsText(o) } })
+      .then(function () { btn.textContent = '✅ Uloženo mezi nabídky'; load(); })
+      .catch(function (e) { alert('Uložení selhalo: ' + e.message); btn.disabled = false; btn.textContent = '💾 Uložit mezi nabídky'; });
   };
   function annuityFactor(r, n) { return r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)); }
   function solveRate(mf, n) { // najdi měsíční úrok r, aby annuityFactor(r,n) == mf (bisekce)

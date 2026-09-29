@@ -241,7 +241,8 @@ const EXTRACT_PROMPT = `Jsi analytik financování. Z přiložené nabídky leas
  "offer_number": string|null,      // číslo nabídky
  "notes": string|null              // krátká poznámka o podmínkách (max 300 znaků)
 }
-Čísla zapisuj jako čistá čísla (bez mezer, měny, %). Pokud je v nabídce více variant, vyber tu hlavní/doporučenou a do notes napiš, že existují další varianty. Když údaj chybí, dej null.`;
+Čísla zapisuj jako čistá čísla (bez mezer, měny, %). Pokud je v nabídce více variant, vyber tu hlavní/doporučenou a do notes napiš, že existují další varianty. Když údaj chybí, dej null.
+DŮLEŽITÉ: Pečlivě rozliš částky BEZ DPH a S DPH (s DPH = 1,21× bez DPH) — nikdy nemíchej cenu s DPH se splátkou bez DPH. Pokud je uvedena jen jedna z hodnot, druhou NEdopočítávej, nech null. Splátka = pravidelná měsíční splátka za financování BEZ pojištění (pojištění dej zvlášť). Doba = počet měsíčních splátek. Zůstatková/odkupní hodnota = částka placená na konci; pokud není uvedena (typicky finanční leasing s odkupem za symbolickou cenu), dej 0.`;
 
 async function extractOfferParams(doc) {
   const Anthropic = require('@anthropic-ai/sdk');
@@ -282,6 +283,18 @@ async function extractOfferParams(doc) {
       overpay_pct: Math.round(((ak + monthly * out.months + rv + (out.fees || 0)) / price - 1) * 1000) / 10,
     };
   }
+  // Kontrola věrohodnosti — typické chyby čtení PDF (míchání DPH, špatná doba, splátka s pojištěním).
+  const warns = [];
+  if (out.price_excl_vat && out.price_incl_vat) { const r = out.price_incl_vat / out.price_excl_vat; if (r < 1.15 || r > 1.27) warns.push('cena s DPH / bez DPH nesedí (poměr ' + r.toFixed(2) + ', čekám 1,21)'); }
+  if (out.monthly_excl_vat && out.monthly_incl_vat) { const r = out.monthly_incl_vat / out.monthly_excl_vat; if (r < 1.15 || r > 1.27) warns.push('splátka s DPH / bez DPH nesedí (poměr ' + r.toFixed(2) + ')'); }
+  if (out.calc) {
+    const o = out.calc.overpay_pct, n = out.months;
+    if (o < 3) warns.push('navýšení jen ' + o + ' % — pravděpodobně cena s DPH vs. splátka bez DPH, nebo chybí zůstatek');
+    else if (n <= 36 && o > 25) warns.push('navýšení ' + o + ' % na ' + n + ' měs. je neobvykle vysoké — zkontroluj splátku (pojištění?) a DPH');
+    else if (n > 36 && o > 40) warns.push('navýšení ' + o + ' % na ' + n + ' měs. je neobvykle vysoké — zkontroluj splátku (pojištění?) a DPH');
+    if (n && (n < 12 || n > 96)) warns.push('doba ' + n + ' měsíců je neobvyklá');
+  } else warns.push('chybí cena, splátka nebo doba — nabídku nelze použít v kalkulačce');
+  out.warnings = warns;
   return out;
 }
 
@@ -326,6 +339,78 @@ router.post('/extract-all', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/leasing/:id/generate-offer — AI sestaví nabídku pro zadání z podmínek známých z uložených nabídek společnosti.
+// Body: { price, akontace_pct, months, vat?, client?, machine? }
+router.post('/:id(\\d+)/generate-offer', async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    const b = req.body || {};
+    const price = Number(b.price) || 0, akPct = Number(b.akontace_pct) || 0, months = Number(b.months) || 60;
+    if (!price || !months) return res.status(400).json({ error: 'Zadej cenu a dobu' });
+    const company = await prisma.leasingCompany.findUnique({ where: { id: companyId } });
+    if (!company) return res.status(404).json({ error: 'Společnost nenalezena' });
+    const docs = await prisma.leasingDocument.findMany({ where: { leasing_company_id: companyId, category: 'nabidka' }, orderBy: { created_at: 'desc' } });
+    const known = docs.filter((d) => d.params).map((d) => Object.assign({ title: d.title, note: d.note }, d.params));
+    if (!known.length) return res.status(400).json({ error: 'Tato společnost nemá žádnou vytěženou nabídku — nejdřív nech AI přečíst nabídky.' });
+
+    // Deterministická matematika (stejná jako v kalkulačce): koeficient z nejbližších nabídek, anuitní přepočet doby.
+    const ak = price * akPct / 100, financed = price - ak;
+    const withCalc = known.filter((p) => p.calc && p.calc.monthly_factor);
+    let best = withCalc.slice().sort((a, b2) => Math.abs((a.months || 0) - months) - Math.abs((b2.months || 0) - months));
+    const near = best.filter((o) => Math.abs((o.months || 0) - months) <= 6); if (near.length) best = near; else best = best.slice(0, 1);
+    const annuity = (r, n) => (r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)));
+    const solveRate = (mf, n) => { if (!mf || !n || mf <= 1 / n) return 0; let lo = 0, hi = 0.1; for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (annuity(mid, n) > mf) hi = mid; else lo = mid; } return (lo + hi) / 2; };
+    let monthly = null, rate = null, rvPct = 0;
+    if (best.length) {
+      const mf = best.reduce((s, o) => s + o.calc.monthly_factor, 0) / best.length;
+      const refMonths = best[0].months || months;
+      rate = solveRate(mf, refMonths);
+      monthly = (refMonths !== months) ? financed * annuity(rate, months) : financed * mf;
+      rvPct = best.reduce((s, o) => s + ((o.residual_value || 0) / (o.calc.price || 1)), 0) / best.length;
+    }
+    const residual = price * rvPct;
+    const fees = best.length ? Math.round(best.reduce((s, o) => s + (o.fees || 0), 0) / best.length) : 0;
+    const insurance = best.length ? Math.round(best.reduce((s, o) => s + (o.insurance_monthly || 0), 0) / best.length) : 0;
+    const total = ak + (monthly || 0) * months + residual + fees;
+    const calc = { price, akontace_pct: akPct, akontace: Math.round(ak), financed: Math.round(financed), months, monthly: monthly != null ? Math.round(monthly) : null,
+      residual: Math.round(residual), fees, insurance_monthly: insurance, total: Math.round(total), overpay_pct: Math.round((total / price - 1) * 1000) / 10,
+      rate_pa_pct: rate != null ? Math.round(rate * 12 * 1000) / 10 : null, based_on: best.map((o) => o.title) };
+
+    // AI: sestaví text nabídky + podmínky známé z podkladů (nic nevymýšlí, co v nabídkách není).
+    const Anthropic = require('@anthropic-ai/sdk');
+    const { messagesCreate } = require('../services/anthropic-retry');
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY není nakonfigurovaný' });
+    const client = new Anthropic({ apiKey });
+    const prompt = `Jsi obchodní specialista na financování strojů (prádlomatů) společnosti Best Series s.r.o. Připrav INDIKATIVNÍ NABÍDKU financování přes leasingovou společnost „${company.name}" pro klienta.
+
+ZADÁNÍ:
+- Klient: ${b.client || '(nevyplněno)'}; Předmět: ${b.machine || 'prádlomat'}
+- Cena bez DPH: ${price} Kč, akontace ${akPct} % (${Math.round(ak)} Kč), doba ${months} měsíců, financováno ${Math.round(financed)} Kč
+- Vypočtené (použij PŘESNĚ tato čísla, nepřepočítávej): měsíční splátka bez DPH ${calc.monthly} Kč, zůstatek ${calc.residual} Kč, poplatky ${fees} Kč, pojištění ${insurance} Kč/měs, celkem zaplaceno ${calc.total} Kč, navýšení ${calc.overpay_pct} %, implicitní úrok ~${calc.rate_pa_pct} % p.a.
+
+ZNÁMÉ PODMÍNKY této společnosti (vytěženo z jejích dřívějších nabídek — JSON):
+${JSON.stringify(known.slice(0, 8), null, 0)}
+
+Poznámka o společnosti: ${company.note || '—'}
+
+Vrať POUZE JSON:
+{
+ "title": string,                 // název nabídky (např. "Indikativní nabídka financování – MINI SK – 3V leasing")
+ "summary": string,               // 2–3 věty pro klienta (česky, srozumitelně, bez přehánění)
+ "conditions": string[],          // konkrétní podmínky vyplývající z podkladů (typ produktu, co je v ceně, pojištění, poplatky, DPH, odkup, platnost) – jen to, co je v podkladech známé
+ "required_docs": string[],       // co bude klient potřebovat doložit, pokud je to z podkladů známé (jinak prázdné pole)
+ "assumptions": string[],         // co je odhad / co je třeba potvrdit u leasingovky
+ "next_steps": string[]           // 2–4 kroky
+}`;
+    const resp = await messagesCreate(client, { model: 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] });
+    const txt = (resp.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+    const m = txt.match(/\{[\s\S]*\}/);
+    const ai = m ? JSON.parse(m[0]) : { title: 'Indikativní nabídka financování', summary: '', conditions: [], required_docs: [], assumptions: [], next_steps: [] };
+    res.json({ ok: true, company: { id: company.id, name: company.name, contact_name: company.contact_name, phone: company.phone, email: company.email }, input: { client: b.client || null, machine: b.machine || null, vat: !!b.vat }, calc, ai, generated_at: new Date().toISOString() });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 // GET /api/leasing/calc-data — všechny vytěžené nabídky (pro kalkulačku), seskupené po společnostech
 router.get('/calc-data', async (req, res, next) => {
   try {
@@ -340,7 +425,7 @@ router.get('/calc-data', async (req, res, next) => {
       const c = (byCo[d.company.id] = byCo[d.company.id] || { company_id: d.company.id, company: d.company.name, active: d.company.active, offers: [] });
       c.offers.push({ id: d.id, title: d.title, client: p.client, machine: p.machine, product: p.product, months: p.months, akontace_pct: p.akontace_pct,
         price: p.calc.price, monthly: p.calc.monthly, residual_value: p.residual_value || 0, fees: p.fees || 0, interest_rate_pct: p.interest_rate_pct,
-        monthly_factor: p.calc.monthly_factor, overpay_pct: p.calc.overpay_pct, created_at: d.created_at });
+        monthly_factor: p.calc.monthly_factor, overpay_pct: p.calc.overpay_pct, warnings: p.warnings || [], created_at: d.created_at });
     });
     res.json({ companies: Object.values(byCo), total_offers: docs.length });
   } catch (err) { next(err); }
