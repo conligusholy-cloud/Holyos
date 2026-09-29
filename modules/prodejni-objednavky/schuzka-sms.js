@@ -240,6 +240,11 @@
       + '  <button class="ss-btn green" id="ss-send"' + (l.phone ? '' : ' disabled') + '>📨 Odeslat testovací SMS</button>'
       + '  <button class="ss-btn" id="ss-send-em"' + (l.email ? '' : ' disabled') + '>📧 Odeslat testovací e-mail</button>'
       + '  <button class="ss-btn ghost" id="ss-prev-em">👁 Náhled e-mailu pro tento lead</button>'
+      + '</div>'
+      + '<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--text2);">'
+      + '  <span>Pro srovnání — e-mail <b>AI specialisty</b> (text je napevno v kódu):</span>'
+      + '  <button class="ss-btn ghost" id="ss-prev-spec">👁 Náhled</button>'
+      + '  <button class="ss-btn ghost" id="ss-send-spec"' + (l.email ? '' : ' disabled') + ' title="Pošle skutečný e-mail specialisty a označí leada jako oslovený specialistou — používej jen na testovací lead">📧 Poslat na tento lead</button>'
       + '  <label style="font-size:12.5px;color:var(--text2);display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ss-force"> Ignorovat pojistku (opakované / po specialistovi)</label>'
       + '  <span class="ss-msg" id="ss-send-msg"></span>'
       + '</div>'
@@ -249,6 +254,17 @@
     document.getElementById('ss-send').onclick = sendTest;
     document.getElementById('ss-send-em').onclick = sendTestEmail;
     document.getElementById('ss-prev-em').onclick = function () { previewEmail(l.id); };
+    document.getElementById('ss-prev-spec').onclick = function () {
+      var box = document.getElementById('ss-em-prev'); box.style.display = '';
+      document.getElementById('ss-em-frame').src = '/api/compounder/ai-specialist-email-preview?lead_id=' + l.id;
+      box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    document.getElementById('ss-send-spec').onclick = async function () {
+      if (!confirm('Odeslat e-mail AI SPECIALISTY na ' + (l.email || '?') + '?\n\nPozor: lead bude označen jako oslovený specialistou (bez pojistky). Použij jen testovací lead.')) return;
+      var msg = document.getElementById('ss-send-msg'); msg.className = 'ss-msg'; msg.textContent = 'Odesílám e-mail specialisty…';
+      try { var j = await api('/leads/' + l.id + '/send-ai-specialist-email', { method: 'POST', body: {} }); msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ E-mail specialisty odeslán (' + fmtDt(j.sentAt) + ')'; }
+      catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
+    };
   }
   async function sendTest() {
     var l = state.lead; if (!l) return;

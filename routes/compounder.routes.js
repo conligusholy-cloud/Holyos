@@ -1648,6 +1648,19 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
+// GET /api/compounder/ai-specialist-email-preview?lead_id= — HTML náhled e-mailu specialisty (pro srovnání se schůzkou).
+router.get('/ai-specialist-email-preview', requireAuth, async (req, res) => {
+  try {
+    const id = parseInt(req.query.lead_id, 10);
+    const leadId = Number.isInteger(id) && id > 0 ? id : 0;
+    const link = specialistShortLink(leadId, 'email');
+    const subject = 'Prádlomat — váš specialista odpoví na vše';
+    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+    const { renderEmailHtml } = require('../services/email');
+    res.set('Content-Type', 'text/html; charset=utf-8').send(renderEmailHtml({ title: subject, body, link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' }));
+  } catch (err) { res.status(500).send('Chyba náhledu: ' + err.message); }
+});
+
 // POST /api/compounder/leads/:id/send-ai-specialist-email — pošle odkaz na specialistu E-MAILEM.
 router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res) => {
   try {
