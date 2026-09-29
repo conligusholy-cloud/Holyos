@@ -425,7 +425,7 @@
     }).filter(Boolean).sort(function (a, b) { return a.total - b.total; });
     var vat = calcState.vat ? 1.21 : 1;
     box.innerHTML = '<div class="in">'
-      + '<label>Cena stroje bez DPH (Kč)<input type="number" id="lcc-price" value="' + price + '" step="10000"></label>'
+      + '<label>Cena stroje bez DPH (Kč)<input type="text" inputmode="numeric" id="lcc-price" value="' + Math.round(price).toLocaleString('cs-CZ') + '"></label>'
       + '<label>Akontace (%)<input type="number" id="lcc-ak" value="' + akPct + '" step="5" min="0" max="90"></label>'
       + '<label>Doba (měsíců)<select id="lcc-months">' + [24, 36, 48, 60, 72, 84].map(function (m) { return '<option value="' + m + '"' + (m === months ? ' selected' : '') + '>' + m + ' měsíců</option>'; }).join('') + '</select></label>'
       + '<label>Zobrazit<select id="lcc-vat"><option value="0"' + (!calcState.vat ? ' selected' : '') + '>bez DPH</option><option value="1"' + (calcState.vat ? ' selected' : '') + '>s DPH 21 %</option></select></label>'
@@ -443,7 +443,7 @@
       + '<div class="lc-foot" style="margin-top:12px"><button class="lc-btn" onclick="__lcClose()">Zavřít</button>' + (calcState.companyId && rows.length ? '<button class="lc-btn primary" onclick="__lcOpenTab(' + calcState.companyId + ',\'offers\')">💼 Otevřít nabídky</button>' : '') + '</div>';
     ['lcc-price', 'lcc-ak', 'lcc-months', 'lcc-vat'].forEach(function (id) {
       var el = document.getElementById(id); if (!el) return;
-      el.addEventListener('change', function () { calcState.price = document.getElementById('lcc-price').value; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
+      el.addEventListener('change', function () { calcState.price = Number(String(document.getElementById('lcc-price').value).replace(/[^0-9]/g, '')) || 0; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
     });
   }
   function annuityFactor(r, n) { return r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)); }
