@@ -180,6 +180,12 @@
     }
     .tl-slot-inner.occupied.manual:hover { background: linear-gradient(135deg, rgba(236,72,153,0.26), rgba(168,85,247,0.3)); }
     .tl-slot-inner.occupied.manual .slot-title { color: #f472b6; }
+    /* Drag & drop přesun rezervace */
+    .tl-slot.tl-drag { cursor: grab; }
+    .tl-slot.tl-drag:active { cursor: grabbing; }
+    .tl-slot.dragging { opacity: 0.45; }
+    body.tl-dragging .tl-slot.tl-drop .tl-slot-inner.free { border-style: dashed; border-color: rgba(236,72,153,0.7); }
+    .tl-slot.drop-hover .tl-slot-inner.free { background: rgba(236,72,153,0.22) !important; outline: 2px dashed #f472b6; outline-offset: -2px; transform: scale(1.03); }
     .slot-pay { font-size: 10px; font-weight: 700; margin-top: 3px; }
 
     /* Blokovaný slot */
@@ -608,8 +614,17 @@
           var matched = findSlotForWindow(win);
           var left = i * SLOT_W;
 
-          html += '<div class="tl-slot" style="width:' + SLOT_W + 'px;" onclick="onSlotClick(' +
-            (matched ? matched.id : 'null') + ',null,\'' + toISO(win.start) + '\',\'' + toISO(win.end) + '\')">';
+          // Drag & drop: rezervaci (slot se zakázkou, ne dávku z plánovače) lze přetáhnout do volného okna.
+          var isPastW = win.end < today;
+          var canDrag = !!(matched && matched.status !== 'blocked' && matched.assignments && matched.assignments.length > 0
+                           && !matched.assignments.some(function(a) { return a.batch_id; }));
+          var canDrop = !matched && !isPastW;
+
+          html += '<div class="tl-slot' + (canDrop ? ' tl-drop' : '') + (canDrag ? ' tl-drag' : '') + '" style="width:' + SLOT_W + 'px;" '
+            + 'data-ws="' + toISO(win.start) + '" data-we="' + toISO(win.end) + '" '
+            + (canDrag ? 'draggable="true" ondragstart="onSlotDragStart(event,' + matched.id + ')" ondragend="onSlotDragEnd(event)" ' : '')
+            + (canDrop ? 'ondragover="onSlotDragOver(event)" ondragleave="onSlotDragLeave(event)" ondrop="onSlotDrop(event)" ' : '')
+            + 'onclick="onSlotClick(' + (matched ? matched.id : 'null') + ',null,\'' + toISO(win.start) + '\',\'' + toISO(win.end) + '\')">';
 
           // Neobsazený slot v minulosti → automaticky blokován
           var isPast = win.end < today;
@@ -1019,6 +1034,40 @@
       } catch(e) { console.error(e); }
 
       closeModal();
+      await loadAllSlots();
+      render();
+    }
+
+    // ─── Drag & drop: přesun rezervace do jiného (volného) okna ──────────────
+    var _dragSlotId = null;
+    function onSlotDragStart(e, slotId) {
+      _dragSlotId = slotId;
+      try { e.dataTransfer.setData('text/plain', String(slotId)); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+      e.currentTarget.classList.add('dragging');
+      document.body.classList.add('tl-dragging');
+    }
+    function onSlotDragEnd(e) {
+      e.currentTarget.classList.remove('dragging');
+      document.body.classList.remove('tl-dragging');
+      document.querySelectorAll('.tl-slot.drop-hover').forEach(function(el) { el.classList.remove('drop-hover'); });
+      _dragSlotId = null;
+    }
+    function onSlotDragOver(e) {
+      if (_dragSlotId == null) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = 'move'; } catch (_) {}
+      e.currentTarget.classList.add('drop-hover');
+    }
+    function onSlotDragLeave(e) { e.currentTarget.classList.remove('drop-hover'); }
+    async function onSlotDrop(e) {
+      e.preventDefault(); e.stopPropagation();
+      var el = e.currentTarget; el.classList.remove('drop-hover');
+      var id = _dragSlotId; if (id == null) { try { id = parseInt(e.dataTransfer.getData('text/plain'), 10); } catch (_) {} }
+      _dragSlotId = null; document.body.classList.remove('tl-dragging');
+      var ws = el.getAttribute('data-ws'), we = el.getAttribute('data-we');
+      if (!id || !ws || !we) return;
+      var r = await fetch('/api/slots/' + id, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ start_date: ws, end_date: we }) });
+      if (!r.ok) { alert('Přesun rezervace se nepodařil.'); return; }
       await loadAllSlots();
       render();
     }
