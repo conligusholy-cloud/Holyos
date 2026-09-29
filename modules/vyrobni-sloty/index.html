@@ -1421,6 +1421,8 @@
       wrap.addEventListener('mousedown', function(e) {
         // Ignoruj klik na tlačítka a selecty
         if (e.target.closest('button, select, a, input')) return;
+        // Rezervovaná karta se přetahuje nativně (drag & drop) — osu neposouvat.
+        if (e.target.closest('.tl-slot.tl-drag')) return;
         isDragging = true;
         dragMoved = false;
         wrap.classList.add('dragging');
