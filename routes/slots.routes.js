@@ -265,8 +265,27 @@ router.delete('/:id', async (req, res, next) => {
 // Rezervace + přiřazení
 router.post('/:id/assignments', async (req, res, next) => {
   try {
-    const { order_id, order_item_id, product_name, customer_name, quantity, estimated_hours, priority, note, reserve, reserved_until, reservation_hours } = req.body;
+    const { order_id, order_item_id, product_name, customer_name, quantity, priority, note, reserve, reserved_until, reservation_hours, reserve_whole_slot } = req.body;
+    let { estimated_hours } = req.body;
     if (!product_name) return res.status(400).json({ error: 'Název produktu je povinný' });
+
+    // Ruční rezervace celého slotu: hodiny = celá zbývající kapacita slotu
+    // (pracovní dny × kapacita/den − už přiřazené). Přesné hodiny doplní plánování výroby.
+    if (reserve_whole_slot === true || reserve_whole_slot === 'true') {
+      const slot = await prisma.productionSlot.findUnique({
+        where: { id: parseInt(req.params.id) },
+        include: { assignments: { select: { estimated_hours: true, status: true } } },
+      });
+      if (!slot) return res.status(404).json({ error: 'Slot nenalezen' });
+      let workingDays = 0;
+      for (let d = new Date(slot.start_date); d <= new Date(slot.end_date); d.setDate(d.getDate() + 1)) {
+        const dow = d.getDay(); if (dow >= 1 && dow <= 5) workingDays++;
+      }
+      if (workingDays === 0) workingDays = 1;
+      const capacityTotal = (Number(slot.capacity_hours) || 0) * workingDays;
+      const used = slot.assignments.reduce((s, a) => s + (a.status === 'cancelled' ? 0 : Number(a.estimated_hours || 0)), 0);
+      estimated_hours = Math.max(0, +(capacityTotal - used).toFixed(2));
+    }
     const reservationData = {};
     const wantsReservation = reserve === true || reserve === 'true' || !!reserved_until;
     if (wantsReservation) {
