@@ -52,7 +52,11 @@
       + '#tab-' + TAB + ' th{text-align:left;color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--border)}'
       + '#tab-' + TAB + ' td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}'
       + '#tab-' + TAB + ' .ss-kpi{display:inline-block;margin-right:14px;font-size:13px;color:var(--text2)}'
-      + '#tab-' + TAB + ' .ss-kpi b{color:var(--text);font-size:15px}';
+      + '#tab-' + TAB + ' .ss-kpi b{color:var(--text);font-size:15px}'
+      + '#tab-' + TAB + ' .ss-grid2{display:grid;grid-template-columns:1fr 220px;gap:10px}'
+      + '@media(max-width:700px){#tab-' + TAB + ' .ss-grid2{grid-template-columns:1fr}}'
+      + '#tab-' + TAB + ' .ss-prev{margin-top:12px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#eaf2ff;display:none}'
+      + '#tab-' + TAB + ' .ss-prev iframe{width:100%;height:560px;border:0;display:block;background:#eaf2ff}';
     var st = document.createElement('style'); st.id = 'ss-styles'; st.textContent = css; document.head.appendChild(st);
   }
 
@@ -86,6 +90,20 @@
       + '  <div style="margin-top:10px;"><button class="ss-btn" id="ss-save">💾 Uložit</button><span class="ss-msg" id="ss-save-msg"></span></div>'
       + '</div>'
 
+      + '<div class="ss-card">'
+      + '  <h4>📧 E-mail k variantě schůzka</h4>'
+      + '  <div class="ss-hint">Když je lead obchodníka s variantou schůzka a má e-mail, pošle se mu <b>spolu s SMS</b> i tento e-mail (stejná pravidla: zdroj, jen nové, black list). Zapiš <code>{link}</code> pro odkaz, <code>{name}</code> pro jméno leada.</div>'
+      + '  <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="ss-em-on"> Automaticky poslat i e-mail (má-li lead e-mail)</label>'
+      + '  <div class="ss-grid2">'
+      + '    <div><div style="font-size:12px;color:var(--text2);margin:0 0 4px;">Předmět:</div><input type="text" id="ss-em-subject"></div>'
+      + '    <div><div style="font-size:12px;color:var(--text2);margin:0 0 4px;">Text tlačítka:</div><input type="text" id="ss-em-label"></div>'
+      + '  </div>'
+      + '  <div style="font-size:12px;color:var(--text2);margin:10px 0 4px;">Text e-mailu:</div>'
+      + '  <textarea id="ss-em-body" rows="7"></textarea>'
+      + '  <div style="margin-top:10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><button class="ss-btn" id="ss-em-save">💾 Uložit e-mail</button><button class="ss-btn ghost" id="ss-em-preview">👁 Náhled</button><span class="ss-msg" id="ss-em-msg"></span></div>'
+      + '  <div class="ss-prev" id="ss-em-prev"><iframe id="ss-em-frame" title="Náhled e-mailu"></iframe></div>'
+      + '</div>'
+
       + '<div class="ss-card hl">'
       + '  <h4>🧪 Testovací odeslání na konkrétní lead</h4>'
       + '  <div class="ss-hint">Vyber lead (klidně svůj testovací kontakt 🧪), pošli mu SMS a projdi si celou cestu z telefonu. Odešle se skutečná SMS přes nastavenou bránu a zapíše se leadovi stejně jako u automatu.</div>'
@@ -111,6 +129,8 @@
     };
 
     document.getElementById('ss-save').onclick = save;
+    document.getElementById('ss-em-save').onclick = saveEmail;
+    document.getElementById('ss-em-preview').onclick = function () { previewEmail(state.lead ? state.lead.id : 0); };
     document.getElementById('ss-reload').onclick = loadStats;
     var t = null;
     document.getElementById('ss-search').addEventListener('input', function (e) {
@@ -132,6 +152,10 @@
     } catch (e) { state.cfg = {}; }
     renderOwners();
     document.getElementById('ss-text').value = state.cfg.schuzkaText || 'PRADLOMATY: vyberte si termin schuzky {link}';
+    document.getElementById('ss-em-on').checked = !!state.cfg.schuzkaEmailEnabled;
+    document.getElementById('ss-em-subject').value = state.cfg.schuzkaEmailSubject || '';
+    document.getElementById('ss-em-label').value = state.cfg.schuzkaEmailLinkLabel || '';
+    document.getElementById('ss-em-body').value = state.cfg.schuzkaEmailBody || '';
     loadStats();
   }
   function renderOwners() {
@@ -159,6 +183,23 @@
     } catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
   }
 
+  function emailFields() {
+    return { schuzkaEmailEnabled: document.getElementById('ss-em-on').checked, schuzkaEmailSubject: document.getElementById('ss-em-subject').value,
+      schuzkaEmailBody: document.getElementById('ss-em-body').value, schuzkaEmailLinkLabel: document.getElementById('ss-em-label').value };
+  }
+  async function saveEmail() {
+    var msg = document.getElementById('ss-em-msg'); msg.className = 'ss-msg'; msg.textContent = 'Ukládám…';
+    try { var j = await api('/ai-specialist-autosend', { method: 'PUT', body: emailFields() }); state.cfg = (j && j.config) || state.cfg; msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ Uloženo'; }
+    catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
+  }
+  function previewEmail(leadId) {
+    var f = emailFields();
+    var q = '/api/compounder/schuzka-email-preview?lead_id=' + (leadId || 0) + '&subject=' + encodeURIComponent(f.schuzkaEmailSubject) + '&body=' + encodeURIComponent(f.schuzkaEmailBody) + '&linkLabel=' + encodeURIComponent(f.schuzkaEmailLinkLabel);
+    var box = document.getElementById('ss-em-prev'); box.style.display = '';
+    document.getElementById('ss-em-frame').src = q;
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
   // ── Testovací odeslání ───────────────────────────────────────────────────
   async function searchLeads(q) {
     var box = document.getElementById('ss-results');
@@ -180,6 +221,8 @@
     var tpl = document.getElementById('ss-text').value || 'PRADLOMATY: vyberte si termin schuzky {link}';
     var warn = [];
     if (!l.phone) warn.push('Lead nemá telefon — SMS nelze odeslat.');
+    if (!l.email) warn.push('Lead nemá e-mail — e-mail nelze odeslat.');
+    if (l.schuzka_email_sent_at) warn.push('E-mail se schůzkou už byl odeslán ' + fmtDt(l.schuzka_email_sent_at) + ' — pro opakování zaškrtni „Ignorovat pojistku".');
     if (l.outreach_variant === 'specialist') warn.push('Leadovi už byl odeslán <b>specialista</b> — pojistka odeslání zablokuje (pro test zaškrtni „Ignorovat pojistku").');
     if (l.schuzka_sms_sent_at) warn.push('SMS se schůzkou už byla odeslána ' + fmtDt(l.schuzka_sms_sent_at) + ' — pro opakování zaškrtni „Ignorovat pojistku".');
     box.innerHTML = '<div class="ss-lead">'
@@ -195,6 +238,8 @@
       + '<div class="ss-preview">' + esc(tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', 'https://pradlomaty.info/c/…') : tpl + ' https://pradlomaty.info/c/…') + '</div>'
       + '<div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">'
       + '  <button class="ss-btn green" id="ss-send"' + (l.phone ? '' : ' disabled') + '>📨 Odeslat testovací SMS</button>'
+      + '  <button class="ss-btn" id="ss-send-em"' + (l.email ? '' : ' disabled') + '>📧 Odeslat testovací e-mail</button>'
+      + '  <button class="ss-btn ghost" id="ss-prev-em">👁 Náhled e-mailu pro tento lead</button>'
       + '  <label style="font-size:12.5px;color:var(--text2);display:inline-flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="ss-force"> Ignorovat pojistku (opakované / po specialistovi)</label>'
       + '  <span class="ss-msg" id="ss-send-msg"></span>'
       + '</div>'
@@ -202,6 +247,8 @@
       + '</div>';
     document.getElementById('ss-unpick').onclick = function () { state.lead = null; box.innerHTML = ''; document.getElementById('ss-search').value = ''; };
     document.getElementById('ss-send').onclick = sendTest;
+    document.getElementById('ss-send-em').onclick = sendTestEmail;
+    document.getElementById('ss-prev-em').onclick = function () { previewEmail(l.id); };
   }
   async function sendTest() {
     var l = state.lead; if (!l) return;
@@ -221,17 +268,38 @@
     btn.disabled = false;
   }
 
+  async function sendTestEmail() {
+    var l = state.lead; if (!l) return;
+    var msg = document.getElementById('ss-send-msg'), out = document.getElementById('ss-send-result'), btn = document.getElementById('ss-send-em');
+    if (!confirm('Opravdu odeslat e-mail na ' + (l.email || '?') + ' (' + (l.name || '') + ')?')) return;
+    btn.disabled = true; msg.className = 'ss-msg'; msg.textContent = 'Odesílám e-mail…'; out.innerHTML = '';
+    var f = emailFields();
+    try {
+      var j = await api('/leads/' + l.id + '/send-schuzka-email', { method: 'POST', body: { subject: f.schuzkaEmailSubject, body: f.schuzkaEmailBody, linkLabel: f.schuzkaEmailLinkLabel, force: !!document.getElementById('ss-force').checked } });
+      msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ E-mail odeslán';
+      out.innerHTML = '<div style="margin-top:10px;font-size:12.5px;">'
+        + '<div>Předmět: <b>' + esc(j.subject) + '</b> · odesílatel ' + esc(j.from || '') + (j.via ? ' (' + esc(j.via) + ')' : '') + '</div>'
+        + '<div>Odkaz v e-mailu: <a href="' + esc(j.link) + '" target="_blank" style="color:#4aa3ea;">' + esc(j.link) + '</a></div>'
+        + '<div style="color:var(--text2);margin-top:4px;">' + fmtDt(j.sentAt) + ' · stav leada přepnut na <b>odeslana_schuzka</b>.</div>'
+        + '</div>';
+      state.lead.schuzka_email_sent_at = j.sentAt; state.lead.outreach_variant = 'schuzka';
+      loadStats();
+    } catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
+    btn.disabled = false;
+  }
+
   // ── Statistika ───────────────────────────────────────────────────────────
   async function loadStats() {
     var box = document.getElementById('ss-stats'), k = document.getElementById('ss-kpis'); if (!box) return;
     box.textContent = 'Načítám…';
     try {
       var j = await api('/schuzka-sms-stats');
-      k.innerHTML = '<span class="ss-kpi">odesláno <b>' + j.total + '</b></span><span class="ss-kpi">otevřelo <b>' + j.opened + '</b></span><span class="ss-kpi">rezervovalo <b>' + j.booked + '</b></span><span class="ss-kpi" style="font-size:11px;">(bez 🧪 testovacích)</span>';
+      k.innerHTML = '<span class="ss-kpi">SMS <b>' + j.total + '</b></span><span class="ss-kpi">e-mail <b>' + (j.emailed || 0) + '</b></span><span class="ss-kpi">otevřelo <b>' + j.opened + '</b></span><span class="ss-kpi">rezervovalo <b>' + j.booked + '</b></span><span class="ss-kpi" style="font-size:11px;">(bez 🧪 testovacích)</span>';
       if (!j.list.length) { box.innerHTML = 'Zatím žádná odeslaná SMS se schůzkou.'; return; }
-      box.innerHTML = '<table><thead><tr><th>Odesláno</th><th>Lead</th><th>Telefon</th><th>SMS</th><th>Otevřel</th><th>Rezervace</th><th>Forma / cesta</th></tr></thead><tbody>'
+      box.innerHTML = '<table><thead><tr><th>Odesláno</th><th>Lead</th><th>Telefon</th><th>SMS</th><th>E-mail</th><th>Otevřel</th><th>Rezervace</th><th>Forma / cesta</th></tr></thead><tbody>'
         + j.list.map(function (r) {
-          return '<tr><td>' + fmtDt(r.sentAt) + '</td><td>' + (r.is_test ? '🧪 ' : '') + esc(r.name || '—') + '</td><td>' + esc(r.phone || '') + '</td><td>' + esc(r.smsStatus) + '</td>'
+          return '<tr><td>' + fmtDt(r.sentAt) + '</td><td>' + (r.is_test ? '🧪 ' : '') + esc(r.name || '—') + '</td><td>' + esc(r.phone || '') + '</td><td>' + (r.smsStatus ? esc(r.smsStatus) : '<span style="color:var(--text2)">—</span>') + '</td>'
+            + '<td title="' + esc(r.email || '') + '">' + (r.emailSentAt ? '<span class="' + (String(r.emailStatus || '').indexOf('neodesl') === 0 ? 'ss-err' : 'ss-ok') + '">' + esc(r.emailStatus || 'odesláno') + '</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td>' + (r.opened ? '<span class="ss-ok">✓</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td>' + (r.bookedAt ? '<span class="ss-ok">🤝 ' + fmtDt(r.bookedAt) + '</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td>' + (r.mode ? (r.mode === 'online' ? '💻 online' : '👤 osobně') : '') + (r.financing_path ? ' · ' + (r.financing_path === 'vlastni' ? '💰 vlastní' : '🏦 financování') : '') + '</td></tr>';

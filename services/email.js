@@ -315,4 +315,4 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   }
 }
 
-module.exports = { sendMail };
+module.exports = { sendMail, renderEmailHtml };

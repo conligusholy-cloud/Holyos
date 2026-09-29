@@ -5932,6 +5932,8 @@ model CompounderLead {
   schuzka_sms_status      String?
   schuzka_sms_channel     String?
   schuzka_opened_at       DateTime?
+  schuzka_email_sent_at   DateTime?
+  schuzka_email_status    String?   @db.VarChar(40)
   schuzka_mode            String?   @db.VarChar(20) // online | osobne — forma domluvené schůzky
   financing_path          String?   @db.VarChar(20) // vlastni | financovani — zvolená cesta pořízení
 
