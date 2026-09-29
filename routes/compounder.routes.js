@@ -1006,7 +1006,7 @@ const SCHUZKA_EMAIL_KEYS = ['schuzkaEmailEnabled', 'schuzkaEmailSubject', 'schuz
 // Sestaví e-mail „schůzka" pro leada z konfigurace (subject/body s {link}, {name}).
 function buildSchuzkaEmail(lead, cfg, overrides) {
   const c = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}, overrides || {});
-  const link = schuzkaShortLink(lead.id);
+  const link = schuzkaShortLink(lead.id, 'email');
   const name = (lead.name || '').trim();
   const fill = (s) => String(s || '').replace(/\{link\}/g, link).replace(/\{name\}/g, name);
   const subject = fill(c.schuzkaEmailSubject || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailSubject);
@@ -1071,9 +1071,26 @@ router.get('/schuzka-sms-stats', requireAuth, async (req, res, next) => {
       select: { compounder_lead_id: true, slot: { select: { starts_at: true } } },
     }).catch(() => []) : [];
     const resvBy = {}; resv.forEach((r) => { resvBy[r.compounder_lead_id] = r.slot.starts_at; });
+    // Odkud lead přišel (sms / email) — z eventů schuzka_open; starší otevření bez kanálu = „?".
+    const openVia = {};
+    try {
+      const evs = await prisma.compounderEvent.findMany({ where: { event: 'schuzka_open' }, select: { props: true }, orderBy: { created_at: 'asc' }, take: 20000 });
+      evs.forEach((e) => { const lid = e.props && Number(e.props.lead_id); if (!lid) return; const ch = (e.props && e.props.ch) || '?'; (openVia[lid] = openVia[lid] || new Set()).add(ch); });
+    } catch (e) { /* bez eventů */ }
     const real = rows.filter((r) => !r.is_test);
+    // Neodeslané / přeskočené (posledních 14 dní) — aby bylo vidět, PROČ někomu SMS/e-mail nešel.
+    let skipped = [];
+    try {
+      const since = new Date(Date.now() - 14 * 86400000);
+      const evs = await prisma.compounderEvent.findMany({ where: { event: { in: ['outreach_skip', 'outreach_error'] }, created_at: { gte: since } }, orderBy: { created_at: 'desc' }, take: 300 });
+      const ids = Array.from(new Set(evs.map((e) => Number(e.props && e.props.lead_id)).filter(Boolean)));
+      const leads = ids.length ? await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, phone: true, email: true, is_test: true, owner_person_id: true, schuzka_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_sms_sent_at: true } }) : [];
+      const byId = {}; leads.forEach((l) => { byId[l.id] = l; });
+      skipped = evs.map((e) => { const p = e.props || {}; const l = byId[Number(p.lead_id)] || {}; return { at: e.created_at, kind: e.event === 'outreach_error' ? 'chyba' : 'přeskočeno', variant: p.variant, reason: p.reason, lead_id: Number(p.lead_id), name: l.name, phone: l.phone, email: l.email, is_test: l.is_test, sentLater: !!(l.schuzka_sms_sent_at || l.schuzka_email_sent_at || l.ai_specialist_sms_sent_at) }; });
+    } catch (e) { skipped = []; }
     res.json({
       ok: true,
+      skipped,
       total: real.length,
       opened: real.filter((r) => r.schuzka_opened_at).length,
       booked: real.filter((r) => resvBy[r.id]).length,
@@ -1081,6 +1098,7 @@ router.get('/schuzka-sms-stats', requireAuth, async (req, res, next) => {
       list: rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, email: r.email, source: r.source, is_test: r.is_test, status: r.status,
         sentAt: r.schuzka_sms_sent_at || r.schuzka_email_sent_at, smsStatus: r.schuzka_sms_sent_at ? (r.schuzka_sms_status || 'odesláno') : null,
         emailSentAt: r.schuzka_email_sent_at, emailStatus: r.schuzka_email_status, opened: !!r.schuzka_opened_at,
+        openedVia: openVia[r.id] ? Array.from(openVia[r.id]) : [],
         bookedAt: resvBy[r.id] || null, mode: r.schuzka_mode, financing_path: r.financing_path })),
     });
   } catch (err) { next(err); }
@@ -1292,13 +1310,21 @@ router.get('/ai-specialist-sms-stats', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Evidence NEodeslání (přeskočeno pravidly / chyba brány) — event u leada, aby to bylo vidět v HolyOS.
+function logOutreach(leadId, variant, kind, reason) {
+  try {
+    console.log('[' + variant + '-autosend] lead', leadId, '—', kind + ':', reason);
+    prisma.compounderEvent.create({ data: { sid: 'server', event: 'outreach_' + kind, path: '/autosend', props: { lead_id: leadId, variant, reason: String(reason || '').slice(0, 300) } } }).catch(() => {});
+  } catch (e) { /* best-effort */ }
+}
+
 // Automatické odeslání SMS specialisty na nový lead dle pravidel (volá se po vzniku leada z reklamy).
 async function autosendAiSpecialistSms(lead) {
   try {
     if (!lead || !lead.id) return;
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
-    if (!cfg || !cfg.enabled) return;
-    const skip = (why) => { console.log('[aispec-autosend] lead', lead.id, '— přeskočeno:', why); };
+    if (!cfg || !cfg.enabled) return logOutreach(lead.id, 'specialist', 'skip', 'automat je vypnutý');
+    const skip = (why) => logOutreach(lead.id, 'specialist', 'skip', why);
     // Pojistka: jednomu leadovi se pošle jen JEDNA varianta (specialista NEBO schůzka).
     if (lead.outreach_variant || lead.schuzka_sms_sent_at || lead.schuzka_email_sent_at) return skip('už osloveno variantou „' + (lead.outreach_variant || 'schuzka') + '"');
     if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
@@ -1332,16 +1358,17 @@ async function autosendAiSpecialistSms(lead) {
       },
     }).catch(() => {});
     console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
-  } catch (e) { console.warn('[aispec-autosend] selhalo:', e.message); }
+  } catch (e) { logOutreach(lead && lead.id, 'specialist', 'error', 'SMS brána: ' + e.message); }
 }
 
 // Automatické odeslání SMS s odkazem na „cestu k rozhodnutí" (rezervace termínu) —
 // varianta pro obchodníky v cfg.schuzkaOwnerPersonIds. Pojistka + black list stejně jako specialista.
 async function sendSchuzkaSmsAuto(lead, cfg) {
   try {
-    if (!lead || !lead.id || !lead.phone) return;
-    if (lead.outreach_variant || lead.schuzka_sms_sent_at) return;
-    if (cfg && cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) { console.log('[schuzka-autosend] lead', lead.id, '— black list'); return; } }
+    if (!lead || !lead.id) return;
+    if (!lead.phone) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí telefon (SMS)');
+    if (lead.outreach_variant || lead.schuzka_sms_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'už osloveno (' + (lead.outreach_variant || 'schuzka') + ')');
+    if (cfg && cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list'); }
     const link = schuzkaShortLink(lead.id);
     const tpl = String((cfg && cfg.schuzkaText) || 'PRADLOMATY: vyberte si termin schuzky {link}');
     const text = tpl.indexOf('{link}') !== -1 ? tpl.replace('{link}', link) : (tpl + ' ' + link);
@@ -1359,26 +1386,28 @@ async function sendSchuzkaSmsAuto(lead, cfg) {
       },
     }).catch(() => {});
     console.log('[schuzka-autosend] SMS „cesta k rozhodnutí" odeslána na lead', lead.id);
-  } catch (e) { console.warn('[schuzka-autosend] selhalo:', e.message); }
+  } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'SMS brána: ' + e.message); }
 }
 
 // Automatický E-MAIL k variantě „schůzka" (spolu s SMS; má-li lead e-mail a je-li zapnuto).
 async function sendSchuzkaEmailAuto(lead, cfg) {
   try {
-    if (!lead || !lead.id || !lead.email) return;
+    if (!lead || !lead.id) return;
     if (!cfg || !cfg.schuzkaEmailEnabled) return;
-    if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return;
-    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) { console.log('[schuzka-autosend-email] lead', lead.id, '— black list'); return; } }
+    if (!lead.email) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí e-mail (e-mail)');
+    if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'e-mail už odeslán / osloven specialistou');
+    if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
     const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
-    if (!from) { console.log('[schuzka-autosend-email] lead', lead.id, '— není nastavený odesílatel'); return; }
+    if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
     const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, preheader: m.preheader, brand: 'pradlomaty' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
     }).catch(() => {});
-    console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id);
-  } catch (e) { console.warn('[schuzka-autosend-email] selhalo:', e.message); }
+    if (!r || !r.sent) logOutreach(lead.id, 'schuzka', 'error', 'e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
+    else console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id);
+  } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'e-mail: ' + e.message); }
 }
 
 // Automatické odeslání E-MAILU se specialistou novému reklamnímu leadovi
@@ -7190,15 +7219,17 @@ function schuzkaBase() {
   return (b && String(b).trim()) ? String(b).trim().replace(/\/+$/, '') : specialistBase();
 }
 // Krátký odkaz /c/<kód> → stránka /home?t=<token> (kalendář rezervace, spáruje leada).
-function schuzkaShortLink(id) {
-  return schuzkaBase() + '/c/' + makeShortCode(id);
+// channel: 'sms' (default, bez parametru) | 'email' (?c=email) — ať jde poznat, odkud lead přišel.
+function schuzkaShortLink(id, channel) {
+  return schuzkaBase() + '/c/' + makeShortCode(id) + (channel === 'email' ? '?c=email' : '');
 }
-function shortCodeToCestaUrl(code) {
+function shortCodeToCestaUrl(code, channel) {
   const id = verifyShortCode(code);
   if (!id) return null;
-  // Klik na odkaz z SMS = „otevřel odkaz" (jen první otevření; rezervace ho už nepřepisuje).
+  const ch = channel === 'email' ? 'email' : 'sms';
+  // Klik na odkaz = „otevřel odkaz" (jen první otevření; rezervace ho už nepřepisuje) + kanál do eventů.
   prisma.compounderLead.updateMany({ where: { id, schuzka_opened_at: null }, data: { schuzka_opened_at: new Date() } }).catch(() => {});
-  prisma.compounderEvent.create({ data: { sid: 'server', event: 'schuzka_open', path: '/c', props: { lead_id: id } } }).catch(() => {});
+  prisma.compounderEvent.create({ data: { sid: 'server', event: 'schuzka_open', path: '/c', props: { lead_id: id, ch } } }).catch(() => {});
   return schuzkaBase() + '/home?t=' + makePortalToken(id);
 }
 function portalBase() {

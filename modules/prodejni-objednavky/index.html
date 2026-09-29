@@ -4295,6 +4295,9 @@
     function cmpFmtDur(ms){ ms=Number(ms)||0; var s=Math.round(ms/1000); if(s<60) return s+' s'; var m=Math.floor(s/60); var r=s%60; return m+' min'+(r?(' '+r+' s'):''); }
     function cmpEvtLabel(e){
       var p = e.props||{}; var ev = e.event;
+      if (ev==='outreach_skip') return '⏭️ Automat přeskočil ('+cmpEsc(p.variant==='schuzka'?'schůzka':'specialista')+'): '+cmpEsc(p.reason||'');
+      if (ev==='outreach_error') return '❌ Automat selhal ('+cmpEsc(p.variant==='schuzka'?'schůzka':'specialista')+'): '+cmpEsc(p.reason||'');
+      if (ev==='schuzka_open') return '🔗 Otevřel odkaz na cestu k rozhodnutí'+(p.ch?(' (z '+(p.ch==='email'?'e-mailu':'SMS')+')'):'');
       if (ev==='meeting_booked') return '🤝 Rezervoval schůzku: '+(p.starts_at?new Date(p.starts_at).toLocaleString('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}):'')+(p.mode?(' · '+(p.mode==='online'?'online':'osobně')):'')+(p.financing_path?(' · '+(p.financing_path==='vlastni'?'vlastní kapitál':'financování')):'');
       if (ev==='page_view') return '👁️ Otevřel web';
       if (ev==='section_view') return '📄 Sekce: '+cmpEsc(cmpPageName(p.section));

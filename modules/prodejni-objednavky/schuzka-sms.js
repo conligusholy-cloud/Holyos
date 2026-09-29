@@ -115,6 +115,12 @@
       + '<div class="ss-card">'
       + '  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><h4 style="margin:0">📊 Odeslané SMS schůzky</h4><button class="ss-btn ghost" id="ss-reload">↻ Načíst</button><span id="ss-kpis"></span></div>'
       + '  <div id="ss-stats" style="margin-top:10px;font-size:12px;color:var(--text2);"></div>'
+      + '</div>'
+
+      + '<div class="ss-card" style="border-color:rgba(245,158,11,.45);">'
+      + '  <h4>⚠️ Neodesláno / přeskočeno automatem (14 dní)</h4>'
+      + '  <div class="ss-hint">Leady, kterým automat SMS nebo e-mail <b>neposlal</b>, a proč. Chyby brány se zde ukáží také. „Později odesláno“ = nakonec se mu něco poslalo (ručně nebo jinou variantou).</div>'
+      + '  <div id="ss-skipped" style="font-size:12px;color:var(--text2);"></div>'
       + '</div>';
     parent.appendChild(div);
 
@@ -316,6 +322,18 @@
     btn.disabled = false;
   }
 
+  function renderSkipped(list) {
+    var box = document.getElementById('ss-skipped'); if (!box) return;
+    if (!list.length) { box.innerHTML = 'Za posledních 14 dní automat nic nepřeskočil. 👍'; return; }
+    box.innerHTML = '<table><thead><tr><th>Kdy</th><th>Lead</th><th>Kontakt</th><th>Varianta</th><th>Co</th><th>Důvod</th><th></th></tr></thead><tbody>'
+      + list.map(function (r) {
+        return '<tr><td>' + fmtDt(r.at) + '</td><td>' + (r.is_test ? '🧪 ' : '') + esc(r.name || ('#' + r.lead_id)) + '</td><td>' + esc(r.phone || r.email || '—') + '</td>'
+          + '<td>' + (r.variant === 'schuzka' ? '📅 schůzka' : '💬 specialista') + '</td>'
+          + '<td class="' + (r.kind === 'chyba' ? 'ss-err' : '') + '">' + esc(r.kind) + '</td><td>' + esc(r.reason || '') + '</td>'
+          + '<td>' + (r.sentLater ? '<span class="ss-ok" title="Nakonec odesláno">✓ později odesláno</span>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
   // ── Statistika ───────────────────────────────────────────────────────────
   async function loadStats() {
     var box = document.getElementById('ss-stats'), k = document.getElementById('ss-kpis'); if (!box) return;
@@ -323,12 +341,14 @@
     try {
       var j = await api('/schuzka-sms-stats');
       k.innerHTML = '<span class="ss-kpi">SMS <b>' + j.total + '</b></span><span class="ss-kpi">e-mail <b>' + (j.emailed || 0) + '</b></span><span class="ss-kpi">otevřelo <b>' + j.opened + '</b></span><span class="ss-kpi">rezervovalo <b>' + j.booked + '</b></span><span class="ss-kpi" style="font-size:11px;">(bez 🧪 testovacích)</span>';
+      renderSkipped(j.skipped || []);
       if (!j.list.length) { box.innerHTML = 'Zatím žádná odeslaná SMS se schůzkou.'; return; }
       box.innerHTML = '<table><thead><tr><th>Odesláno</th><th>Lead</th><th>Telefon</th><th>SMS</th><th>E-mail</th><th>Otevřel</th><th>Rezervace</th><th>Forma / cesta</th></tr></thead><tbody>'
         + j.list.map(function (r) {
           return '<tr><td>' + fmtDt(r.sentAt) + '</td><td>' + (r.is_test ? '🧪 ' : '') + esc(r.name || '—') + '</td><td>' + esc(r.phone || '') + '</td><td>' + (r.smsStatus ? esc(r.smsStatus) : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td title="' + esc(r.email || '') + '">' + (r.emailSentAt ? '<span class="' + (String(r.emailStatus || '').indexOf('neodesl') === 0 ? 'ss-err' : 'ss-ok') + '">' + esc(r.emailStatus || 'odesláno') + '</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
-            + '<td>' + (r.opened ? '<span class="ss-ok">✓</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
+            + '<td title="' + (r.opened ? ('otevřel z: ' + ((r.openedVia || []).map(function (c) { return c === 'sms' ? 'SMS' : c === 'email' ? 'e-mailu' : 'neznámo (před sledováním kanálu)'; }).join(', ') || 'neznámo')) : 'neotevřel') + '">'
+              + (r.opened ? ('<span class="ss-ok">✓</span> ' + (r.openedVia || []).map(function (c) { return c === 'sms' ? '📱' : c === 'email' ? '📧' : '<span style=\"color:var(--text2)\">?</span>'; }).join('')) : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td>' + (r.bookedAt ? '<span class="ss-ok">🤝 ' + fmtDt(r.bookedAt) + '</span>' : '<span style="color:var(--text2)">—</span>') + '</td>'
             + '<td>' + (r.mode ? (r.mode === 'online' ? '💻 online' : '👤 osobně') : '') + (r.financing_path ? ' · ' + (r.financing_path === 'vlastni' ? '💰 vlastní' : '🏦 financování') : '') + '</td></tr>';
         }).join('') + '</tbody></table>';

@@ -914,7 +914,7 @@ app.use((req, res, next) => {
   }
   // Zkrácený odkaz na „cestu k rozhodnutí" (rezervace termínu): /c/<kód> → /home?t=<token>.
   if (req.path.startsWith('/c/')) {
-    const url = compounderRoutes.shortCodeToCestaUrl(decodeURIComponent(req.path.slice(3)));
+    const url = compounderRoutes.shortCodeToCestaUrl(decodeURIComponent(req.path.slice(3)), req.query && req.query.c);
     if (url) return res.redirect(302, url);
     return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
   }
@@ -928,7 +928,7 @@ app.get('/s/:code', (req, res) => {
   return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
 });
 app.get('/c/:code', (req, res) => {
-  const url = compounderRoutes.shortCodeToCestaUrl(String(req.params.code || ''));
+  const url = compounderRoutes.shortCodeToCestaUrl(String(req.params.code || ''), req.query && req.query.c);
   if (url) return res.redirect(302, url);
   return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
 });
