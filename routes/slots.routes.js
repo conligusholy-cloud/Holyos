@@ -73,7 +73,9 @@ router.get('/calendar', async (req, res, next) => {
       const occupancyPct = capacityTotal > 0 ? Math.min(100, Math.round((usedHours / capacityTotal) * 100)) : 0;
       let derivedStatus = 'free'; let label = 'Volno';
       const isBlocked = s.status === 'blocked' || (s.blocks && s.blocks.length > 0);
+      const isReserve = s.status === 'reserve';
       if (isBlocked) { derivedStatus = 'blocked'; label = 'Blokováno'; }
+      else if (isReserve) { derivedStatus = 'reserve'; label = 'Rezerva'; }
       else if (end < now) { derivedStatus = 'expired'; label = 'Prošlé'; }
       else if (occupancyPct >= 100) { derivedStatus = 'full'; label = 'Plno'; }
       else if (s.assignments.length > 0) { derivedStatus = 'occupied'; label = `Obsazeno ${occupancyPct} %`; }
@@ -126,7 +128,7 @@ router.get('/calendar/next-free', async (req, res, next) => {
     const neededHours = parseFloat(req.query.hours) || 0;
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const slots = await prisma.productionSlot.findMany({
-      where: { end_date: { gte: now }, status: { notIn: ['blocked', 'closed'] } },
+      where: { end_date: { gte: now }, status: { notIn: ['blocked', 'reserve', 'closed'] } },
       include: { assignments: { select: { estimated_hours: true } }, blocks: { select: { id: true } } },
       orderBy: { start_date: 'asc' },
     });

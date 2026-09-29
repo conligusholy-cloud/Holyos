@@ -180,6 +180,14 @@
     }
     .tl-slot-inner.occupied.manual:hover { background: linear-gradient(135deg, rgba(236,72,153,0.26), rgba(168,85,247,0.3)); }
     .tl-slot-inner.occupied.manual .slot-title { color: #f472b6; }
+    /* Rezerva — záložní kapacita držená volná */
+    .tl-slot-inner.reserve {
+      background: linear-gradient(135deg, rgba(234,179,8,0.14), rgba(202,138,4,0.18));
+      border: 1px dashed rgba(234,179,8,0.75);
+    }
+    .tl-slot-inner.reserve:hover { background: linear-gradient(135deg, rgba(234,179,8,0.24), rgba(202,138,4,0.28)); }
+    .tl-slot-inner.reserve .slot-title { color: #facc15; font-size: 12px; font-weight: 700; }
+    .tl-slot-inner.reserve .slot-sub { color: rgba(250,204,21,0.7); font-size: 10px; }
     /* Blikající upozornění: rezervace bez přiřazené objednávky */
     @keyframes slotNoOrderBlink { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.25; transform: scale(0.85); } }
     .slot-noorder {
@@ -536,7 +544,7 @@
         total++;
         var matched = findSlotForWindow(win);
         if (!matched) { free++; return; }
-        if (matched.status === 'blocked') { blocked++; return; }
+        if (matched.status === 'blocked' || matched.status === 'reserve') { blocked++; return; }
         var hasAsgn = matched.assignments && matched.assignments.length > 0;
         if (hasAsgn) {
           occupied++;
@@ -640,8 +648,15 @@
           if (matched) {
             var hasAsgn = matched.assignments && matched.assignments.length > 0;
             var isBlocked = matched.status === 'blocked';
+            var isReserve = matched.status === 'reserve';
 
-            if (isBlocked) {
+            if (isReserve) {
+              html += '<div class="tl-slot-inner reserve">';
+              html += '<div class="slot-title">&#129001; Rezerva</div>';
+              html += '<div class="slot-sub">' + esc(matched.name || 'Záložní kapacita') + '</div>';
+              html += '<div class="slot-sub">' + formatDS(win.start) + ' – ' + formatDS(win.end) + '</div>';
+              html += '</div>';
+            } else if (isBlocked) {
               html += '<div class="tl-slot-inner blocked">';
               html += '<div class="slot-title">&#128683; Blokováno</div>';
               html += '<div class="slot-sub">' + esc(matched.name || 'Blokace') + '</div>';
@@ -754,7 +769,7 @@
       // 2. kolo: sloty bez přesného okna → okno s největším překryvem (jen pokud něco nesou)
       slots.forEach(function(slot) {
         if (placed[slot.id]) return;
-        var meaningful = (slot.assignments && slot.assignments.length > 0) || slot.status === 'blocked';
+        var meaningful = (slot.assignments && slot.assignments.length > 0) || slot.status === 'blocked' || slot.status === 'reserve';
         if (!meaningful) return;
         var sS = _d0(slot.start_date), sE = _d0(slot.end_date);
         var best = null, bestDays = 0;
@@ -977,6 +992,7 @@
           '<div class="form-group"><label>Typ obsazení</label>' +
           '<select id="block-type" name="block_type" onchange="toggleBlockFields(this.value)">' +
             '<option value="block">&#128683; Blokace (dovolená, údržba, skluz)</option>' +
+            '<option value="reserve">&#129001; Rezerva (záložní kapacita — drží se volná)</option>' +
             '<option value="order">&#128230; Rezervovat slot pro stroj / zakázku</option>' +
           '</select></div>' +
 
@@ -1001,7 +1017,7 @@
     }
 
     function toggleBlockFields(val) {
-      document.getElementById('block-fields').style.display = val === 'block' ? '' : 'none';
+      document.getElementById('block-fields').style.display = (val === 'block' || val === 'reserve') ? '' : 'none';
       document.getElementById('order-fields').style.display = val === 'order' ? '' : 'none';
     }
 
@@ -1011,15 +1027,16 @@
       var data = Object.fromEntries(fd.entries());
 
       var isBlock = data.block_type === 'block';
+      var isReserve = data.block_type === 'reserve';
       var slotData = {
-        name: isBlock ? (data.reason || 'Blokace') : (data.product_name + ' — ' + (data.customer_name || '')),
+        name: isBlock ? (data.reason || 'Blokace') : (isReserve ? (data.reason || 'Rezerva') : (data.product_name + ' — ' + (data.customer_name || ''))),
         workstation_id: wsId,
         start_date: startStr,
         end_date: endStr,
         capacity_hours: 8,
-        status: isBlock ? 'blocked' : 'full',
+        status: isBlock ? 'blocked' : (isReserve ? 'reserve' : 'full'),
         note: data.note || '',
-        color: isBlock ? '#ef4444' : '#f97316'
+        color: isBlock ? '#ef4444' : (isReserve ? '#eab308' : '#f97316')
       };
 
       try {
@@ -1027,7 +1044,7 @@
         var newSlot = await res.json();
 
         // Pokud je zakázka, přidej assignment
-        if (!isBlock && data.product_name) {
+        if (!isBlock && !isReserve && data.product_name) {
           await fetch('/api/slots/' + newSlot.id + '/assignments', {
             method: 'POST', headers: headers, credentials: 'include',
             body: JSON.stringify({
@@ -1417,7 +1434,7 @@
     function toISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
     function statusLabel(s) {
-      var labels = { open: 'Otevřený', full: 'Obsazený', blocked: 'Blokovaný', closed: 'Uzavřený' };
+      var labels = { open: 'Otevřený', full: 'Obsazený', blocked: 'Blokovaný', reserve: 'Rezerva', closed: 'Uzavřený' };
       return labels[s] || s;
     }
 
