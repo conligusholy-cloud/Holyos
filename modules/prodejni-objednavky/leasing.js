@@ -438,7 +438,8 @@
             + '<td class="n" style="color:' + (r.overpay < 15 ? '#86efac' : r.overpay < 30 ? '#fde68a' : '#fca5a5') + '">' + r.overpay.toFixed(1) + ' %</td>'
             + '<td class="src">' + r.n + ' nabíd' + (r.n === 1 ? 'ka' : r.n < 5 ? 'ky' : 'ek') + ' (' + r.refMonths + ' měs.' + (r.rate != null ? ', ~' + (r.rate * 12 * 100).toFixed(1) + ' % p.a.' : '') + ')<br>' + r.src.slice(0, 3).map(function (o) { return esc((o.client || o.title || '').slice(0, 30)); }).join(', ') + '</td></tr>';
         }).join('') + '</tbody></table>'
-        : '<div class="lc-empty">Zatím žádné vytěžené nabídky' + (calcState.companyId ? ' u této společnosti' : '') + '. V záložce Nabídky klikni na „🤖 Vytěžit AI".</div>')
+        : '<div class="lc-empty" style="text-align:center;padding:18px 0">Zatím žádné vytěžené nabídky' + (calcState.companyId ? ' u této společnosti' : '') + '.<br><span style="font-size:12px">Nahrané PDF nabídky musí nejdřív přečíst AI (cena, splátka, doba…) — trvá to pár sekund na nabídku.</span><br>'
+          + '<button class="lc-btn primary" style="margin-top:12px" onclick="__lcCalcExtract(this)">🤖 Přečíst nabídky AI a spočítat</button></div>')
       + '<div class="lc-empty" style="margin-top:12px;font-size:11.5px">Orientační odhad: splátka se odvozuje z poměru splátka/financovaná částka v nabídkách nejbližších zadané době (±6 měsíců), jiná doba se přepočítává anuitně při stejném implicitním úroku. Zůstatek jako průměrné % z ceny. Skutečnou nabídku vždy potvrď u leasingovky.</div>'
       + '<div class="lc-foot" style="margin-top:12px"><button class="lc-btn" onclick="__lcClose()">Zavřít</button>' + (calcState.companyId && rows.length ? '<button class="lc-btn primary" onclick="__lcOpenTab(' + calcState.companyId + ',\'offers\')">💼 Otevřít nabídky</button>' : '') + '</div>';
     ['lcc-price', 'lcc-ak', 'lcc-months', 'lcc-vat'].forEach(function (id) {
@@ -446,6 +447,16 @@
       el.addEventListener('change', function () { calcState.price = Number(String(document.getElementById('lcc-price').value).replace(/[^0-9]/g, '')) || 0; calcState.ak = document.getElementById('lcc-ak').value; calcState.months = Number(document.getElementById('lcc-months').value); calcState.vat = document.getElementById('lcc-vat').value === '1'; renderCalc(); });
     });
   }
+  window.__lcCalcExtract = function (btn) {
+    btn.disabled = true; btn.textContent = '⏳ AI čte nabídky… (pár sekund na každou)';
+    var p = calcState.companyId ? api('/' + calcState.companyId + '/documents/extract-all', { method: 'POST', body: {} }) : api('/extract-all', { method: 'POST', body: {} });
+    p.then(function (r) {
+      var errs = (r.results || []).filter(function (x) { return x.error; });
+      if (errs.length) alert('Některé nabídky se nepodařilo přečíst:\n' + errs.map(function (x) { return '#' + x.id + ': ' + x.error; }).join('\n'));
+      return api('/calc-data');
+    }).then(function (d) { calcState.data = d; renderCalc(); })
+      .catch(function (e) { alert('Vytěžení selhalo: ' + e.message); btn.disabled = false; btn.textContent = '🤖 Přečíst nabídky AI a spočítat'; });
+  };
   function annuityFactor(r, n) { return r === 0 ? 1 / n : r / (1 - Math.pow(1 + r, -n)); }
   function solveRate(mf, n) { // najdi měsíční úrok r, aby annuityFactor(r,n) == mf (bisekce)
     if (!mf || !n || mf <= 1 / n) return 0;

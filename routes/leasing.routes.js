@@ -311,6 +311,21 @@ router.post('/:id(\\d+)/documents/extract-all', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/leasing/extract-all — vytěžit nabídky napříč všemi společnostmi (bez params; ?force=1 vše)
+router.post('/extract-all', async (req, res, next) => {
+  try {
+    const where = { category: 'nabidka', file_path: { not: null } };
+    if (!req.query.force) where.params = { equals: null };
+    const docs = await prisma.leasingDocument.findMany({ where, take: 50 });
+    const out = [];
+    for (const d of docs) {
+      try { const params = await extractOfferParams(d); await prisma.leasingDocument.update({ where: { id: d.id }, data: { params } }); out.push({ id: d.id, ok: true }); }
+      catch (e) { out.push({ id: d.id, error: e.message }); }
+    }
+    res.json({ ok: true, processed: out.length, results: out });
+  } catch (err) { next(err); }
+});
+
 // GET /api/leasing/calc-data — všechny vytěžené nabídky (pro kalkulačku), seskupené po společnostech
 router.get('/calc-data', async (req, res, next) => {
   try {
