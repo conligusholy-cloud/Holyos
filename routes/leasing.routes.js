@@ -317,7 +317,9 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
     const phoneDigits = String(c.phone || '').replace(/[^0-9+]/g, '');
     if (phoneDigits.replace(/\D/g, '').length >= 9) {
       try {
-        const text = 'Best Series: poptavka financovani pro klienta ' + client + ' (' + d.subject + ', ' + Math.round(d.price).toLocaleString('cs-CZ') + ' Kc bez DPH). Detail + potvrzeni stavu: ' + url;
+        // SMS bez odkazu: jen klient, kontakt a co se financuje (detail + potvrzeni stavu jde e-mailem).
+        const noDia = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const text = noDia('Best Series - poptavka financovani: ' + client + (d.client_company ? ' (' + d.client_company + ')' : '') + ', tel. ' + (d.client_phone || '-') + (d.client_email ? ', ' + d.client_email : '') + '. Predmet: ' + d.subject + ', ' + Math.round(d.price).toLocaleString('cs-CZ') + ' Kc bez DPH. Detail v e-mailu.').slice(0, 320);
         sms_id = await sms.sendSms(phoneDigits, text, { context: 'leasing_inquiry', inquiryId: inq.id });
         sms_sent = true;
       } catch (e) { errs.push('SMS: ' + e.message); }
@@ -420,7 +422,7 @@ router.post('/inquiries/:id(\\d+)/resend', async (req, res, next) => {
     const { sendMail } = require('../services/email'); const sms = require('../services/voice/sms');
     const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
     if (inq.company.email && from) { try { await sendMail({ to: inq.company.email, subject: 'Připomínka: poptávka financování – ' + client, body: 'Dobrý den,\n\ndovolujeme si připomenout poptávku financování pro klienta ' + client + ' (' + inq.subject + ', ' + fmtKcSrv(inq.price) + ' bez DPH). Prosíme o označení stavu přes odkaz níže.\n\nDěkujeme, Best Series – Prádlomaty', from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku', brand: 'pradlomaty' }); } catch (e) { errs.push('e-mail: ' + e.message); } }
-    if (inq.company.phone) { try { await sms.sendSms(inq.company.phone, 'Best Series: pripominka poptavky financovani pro ' + client + '. Stav prosim oznacte zde: ' + url, { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
+    if (inq.company.phone) { try { await sms.sendSms(inq.company.phone, 'Best Series - pripominka poptavky financovani pro klienta ' + String(client).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + ' (' + String(inq.subject).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + '). Prosime o oznaceni stavu v e-mailu.', { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
     res.json({ ok: true, errors: errs });
   } catch (err) { next(err); }
 });
