@@ -282,8 +282,8 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
   // Odesílatel: schránka Prádlomaty (stejná jako e-mail AI specialisty), až pak Compounder.
   const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
   // Podpis: celé jméno obchodníka z Person (ne login), fallback obecný.
-  let signer = 'Obchodní tým';
-  if (personId) { try { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true, phone: true, email: true } }); if (pp) { signer = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || signer; signer += (pp.phone ? '\n' + pp.phone : '') + (pp.email ? '\n' + pp.email : ''); } } catch (e) { /* */ } }
+  let signer = 'Obchodní tým', salesEmail = null, salesName = null;
+  if (personId) { try { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true, phone: true, email: true } }); if (pp) { salesName = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || null; salesEmail = pp.email || null; signer = salesName || signer; signer += (pp.phone ? '\n' + pp.phone : '') + (pp.email ? '\n' + pp.email : ''); } } catch (e) { /* */ } }
   else if (senderName && senderName.indexOf('.') === -1 && senderName.indexOf('@') === -1) signer = senderName;
   const out = [];
   for (const c of companies) {
@@ -325,6 +325,17 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
       } catch (e) { errs.push('SMS: ' + e.message); }
     } else errs.push(c.phone ? 'telefon leasingovky je neúplný (' + c.phone + ')' : 'leasingovka nemá telefon');
     inq = await prisma.leasingInquiry.update({ where: { id: inq.id }, data: { email_sent, sms_sent, sms_id: sms_id ? String(sms_id) : null } });
+    // Kopie OBCHODNÍKOVI: shrnutí poptávky + kontakt na člověka z leasingovky, aby se s ním mohl spojit.
+    if (salesEmail && from) {
+      const salesBody = 'Dobrý den' + (salesName ? ', ' + salesName.split(' ')[0] : '') + ',\n\n'
+        + 'poptávka financování byla odeslána leasingové společnosti ' + c.name + (email_sent ? ' (e-mail ✓' + (sms_sent ? ', SMS ✓' : '') + ')' : (sms_sent ? ' (SMS ✓)' : ' (⚠️ nic neodešlo: ' + errs.join('; ') + ')')) + '.\n\n'
+        + 'KONTAKT NA LEASINGOVKU\n' + (c.contact_name ? c.contact_name + '\n' : '') + (c.phone ? 'Tel.: ' + c.phone + '\n' : '') + (c.email ? 'E-mail: ' + c.email + '\n' : '') + (c.note ? 'Pozn.: ' + c.note + '\n' : '')
+        + '\nKLIENT\n' + client + (d.client_company ? ' (' + d.client_company + (d.client_ico ? ', IČO ' + d.client_ico : '') + ')' : '') + '\n' + [d.client_phone, d.client_email].filter(Boolean).join(', ') + '\n'
+        + '\nPŘEDMĚT\n' + d.subject + ' · ' + fmtKcSrv(d.price) + ' bez DPH' + (d.akontace_pct != null ? ' · akontace ' + d.akontace_pct + ' %' : '') + (d.months ? ' · ' + d.months + ' měsíců' : '') + (d.note ? '\nPoznámka: ' + d.note : '') + '\n'
+        + '\nVýsledek očekáváme do ' + deadline.toLocaleDateString('cs-CZ') + '. Jakmile leasingovka označí stav přes svůj odkaz, dostanete notifikaci do Velína. Stav poptávky vidíte i u leada na obrazovce obchodníka.';
+      sendMail({ to: salesEmail, subject: 'Odesláno: poptávka financování – ' + client + ' → ' + c.name, body: salesBody, from, fromName: 'HolyOS – Prádlomaty', link: url, linkLabel: 'Zobrazit poptávku (odkaz leasingovky)', brand: 'pradlomaty' })
+        .catch((e) => console.warn('[leasing] kopie obchodníkovi selhala:', e.message));
+    } else if (!salesEmail) console.log('[leasing] obchodník bez e-mailu v Osobách — kopie neodeslána (person', personId, ')');
     if (d.lead_id) {
       prisma.compounderEvent.create({ data: { sid: 'server', event: 'leasing_inquiry_sent', path: '/leasing', props: { lead_id: d.lead_id, inquiry_id: inq.id, company: c.name, price: d.price, subject: d.subject, email_sent, sms_sent } } }).catch(() => {});
     }
