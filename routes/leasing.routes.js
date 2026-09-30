@@ -279,7 +279,12 @@ function inquiryPublicUrl(token) {
 async function createAndSendInquiries(companies, d, personId, senderName) {
   const { sendMail } = require('../services/email');
   const sms = require('../services/voice/sms');
-  const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+  // Odesílatel: schránka Prádlomaty (stejná jako e-mail AI specialisty), až pak Compounder.
+  const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+  // Podpis: celé jméno obchodníka z Person (ne login), fallback obecný.
+  let signer = 'Obchodní tým';
+  if (personId) { try { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true, phone: true, email: true } }); if (pp) { signer = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || signer; signer += (pp.phone ? '\n' + pp.phone : '') + (pp.email ? '\n' + pp.email : ''); } } catch (e) { /* */ } }
+  else if (senderName && senderName.indexOf('.') === -1 && senderName.indexOf('@') === -1) signer = senderName;
   const out = [];
   for (const c of companies) {
     const token = crypto.randomBytes(24).toString('base64url').slice(0, 40);
@@ -295,26 +300,28 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
     const errs = [];
     let email_sent = false;
     if (c.email && from) {
-      const body = 'Dobrý den' + (c.contact_name ? ', ' + c.contact_name : '') + ',\n\nposíláme Vám poptávku financování pro našeho klienta:\n\n'
+      const greetName = (c.contact_name && c.contact_name.indexOf('.') === -1 && c.contact_name.indexOf('@') === -1) ? c.contact_name : '';
+      const body = 'Dobrý den' + (greetName ? ', ' + greetName : '') + ',\n\nposíláme Vám poptávku financování pro našeho klienta:\n\n'
         + 'Klient: ' + client + (d.client_company ? ' (' + d.client_company + (d.client_ico ? ', IČO ' + d.client_ico : '') + ')' : '') + '\n'
         + 'Kontakt: ' + [d.client_phone, d.client_email].filter(Boolean).join(', ') + '\n'
         + 'Předmět financování: ' + d.subject + '\n'
         + 'Cena bez DPH: ' + fmtKcSrv(d.price) + (d.akontace_pct != null ? ', akontace ' + d.akontace_pct + ' %' : '') + (d.months ? ', ' + d.months + ' měsíců' : '') + '\n'
         + (d.note ? 'Poznámka: ' + d.note + '\n' : '')
-        + '\nProsíme o označení stavu (zpracováváme / schváleno / zamítnuto) a podmínek přes tlačítko níže — výsledek očekáváme do 3 pracovních dnů.\n\nDěkujeme,\n' + senderName + '\nBest Series s.r.o. – Prádlomaty';
+        + '\nProsíme o označení stavu (zpracováváme / schváleno / zamítnuto) a podmínek přes tlačítko níže — výsledek očekáváme do 3 pracovních dnů.\n\nDěkujeme,\n' + signer + '\nBest Series s.r.o. – Prádlomaty';
       try {
         const r = await sendMail({ to: c.email, subject: 'Poptávka financování – ' + client + ' – ' + d.subject, body, from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku a označit stav', brand: 'pradlomaty' });
         email_sent = !!(r && r.sent); if (!email_sent) errs.push('e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
       } catch (e) { errs.push('e-mail: ' + e.message); }
     } else errs.push(!c.email ? 'leasingovka nemá e-mail' : 'není nastavený odesílatel (LEASING_MAIL_FROM / COMPOUNDER_MAIL_FROM)');
     let sms_sent = false, sms_id = null;
-    if (c.phone) {
+    const phoneDigits = String(c.phone || '').replace(/[^0-9+]/g, '');
+    if (phoneDigits.replace(/\D/g, '').length >= 9) {
       try {
         const text = 'Best Series: poptavka financovani pro klienta ' + client + ' (' + d.subject + ', ' + Math.round(d.price).toLocaleString('cs-CZ') + ' Kc bez DPH). Detail + potvrzeni stavu: ' + url;
-        sms_id = await sms.sendSms(c.phone, text, { context: 'leasing_inquiry', inquiryId: inq.id });
+        sms_id = await sms.sendSms(phoneDigits, text, { context: 'leasing_inquiry', inquiryId: inq.id });
         sms_sent = true;
       } catch (e) { errs.push('SMS: ' + e.message); }
-    } else errs.push('leasingovka nemá telefon');
+    } else errs.push(c.phone ? 'telefon leasingovky je neúplný (' + c.phone + ')' : 'leasingovka nemá telefon');
     inq = await prisma.leasingInquiry.update({ where: { id: inq.id }, data: { email_sent, sms_sent, sms_id: sms_id ? String(sms_id) : null } });
     if (d.lead_id) {
       prisma.compounderEvent.create({ data: { sid: 'server', event: 'leasing_inquiry_sent', path: '/leasing', props: { lead_id: d.lead_id, inquiry_id: inq.id, company: c.name, price: d.price, subject: d.subject, email_sent, sms_sent } } }).catch(() => {});
@@ -331,8 +338,10 @@ router.post('/inquiries/test', async (req, res, next) => {
     const email = String((req.body && req.body.email) || '').trim() || null;
     const phone = String((req.body && req.body.phone) || '').trim() || null;
     if (!email && !phone) return res.status(400).json({ error: 'Zadej e-mail nebo telefon' });
-    const who = (req.user && (req.user.display_name || req.user.username)) || 'já';
     const personId = (req.user && req.user.person_id) || (req.user && req.user.person && req.user.person.id) || null;
+    let who = (req.user && req.user.display_name) || null;
+    if (personId) { try { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }); if (pp) who = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || who; } catch (e) { /* */ } }
+    who = who || (req.user && req.user.username) || 'já';
     const name = '🧪 Test – ' + who;
     let c = await prisma.leasingCompany.findFirst({ where: { name } });
     c = c ? await prisma.leasingCompany.update({ where: { id: c.id }, data: { email, phone, contact_name: who, active: false } })
@@ -409,7 +418,7 @@ router.post('/inquiries/:id(\\d+)/resend', async (req, res, next) => {
     if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
     const url = inquiryPublicUrl(inq.token); const client = inq.client_first_name + ' ' + inq.client_last_name; const errs = [];
     const { sendMail } = require('../services/email'); const sms = require('../services/voice/sms');
-    const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+    const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
     if (inq.company.email && from) { try { await sendMail({ to: inq.company.email, subject: 'Připomínka: poptávka financování – ' + client, body: 'Dobrý den,\n\ndovolujeme si připomenout poptávku financování pro klienta ' + client + ' (' + inq.subject + ', ' + fmtKcSrv(inq.price) + ' bez DPH). Prosíme o označení stavu přes odkaz níže.\n\nDěkujeme, Best Series – Prádlomaty', from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku', brand: 'pradlomaty' }); } catch (e) { errs.push('e-mail: ' + e.message); } }
     if (inq.company.phone) { try { await sms.sendSms(inq.company.phone, 'Best Series: pripominka poptavky financovani pro ' + client + '. Stav prosim oznacte zde: ' + url, { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
     res.json({ ok: true, errors: errs });
