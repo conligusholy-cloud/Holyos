@@ -73,7 +73,7 @@ router.post('/snapshot-bom', async (req, res, next) => {
     } else {
       // 'computed' / 'manual' — fallback na ProductOperation × OperationMaterial (původní logika)
       const operations = await prisma.productOperation.findMany({
-        where: { product_id: productId },
+        where: { product_id: productId, is_staging: false }, // staging z FY importu do BOM snapshotu nepatří
         include: { materials: true },
         orderBy: { step_number: 'asc' },
       });

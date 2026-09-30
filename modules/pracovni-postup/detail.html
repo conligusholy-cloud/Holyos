@@ -1654,8 +1654,13 @@
                (m.code || '').toLowerCase().includes(q);
       }).slice(0, 50); // max 50 výsledků
 
+      // Nabídka založit nový materiál přímo odsud (nativní HolyOS linie) — vždy jako poslední položka.
+      const createItem = q.length >= 2
+        ? '<div class="ss-item" data-create="' + attr(input.value.trim()) + '" onmousedown="createMaterialFromSearch(this)" style="border-top:1px dashed var(--border);color:#7cc4f8;">'
+          + '<span class="ss-name">＋ Založit nový materiál „' + esc(input.value.trim()) + '"</span><span class="ss-code">HO-M-xxxx</span><span class="ss-type t-material">nový</span></div>'
+        : '';
       if (filtered.length === 0) {
-        dd.innerHTML = '<div class="ss-empty">Nic nenalezeno</div>';
+        dd.innerHTML = '<div class="ss-empty">Nic nenalezeno</div>' + createItem;
         return;
       }
 
@@ -1675,7 +1680,18 @@
           '<span class="ss-type ' + typeCls + '">' + typeLabel + '</span>' +
           (lpId ? '<span style="font-size:9px;color:#22c55e;margin-left:2px;">&#10003;</span>' : '') +
         '</div>';
-      }).join('');
+      }).join('') + createItem;
+    }
+
+    // Založí materiál (skladovou kartu) rovnou z vyhledávání v operaci a vybere ho.
+    async function createMaterialFromSearch(el) {
+      const name = el.dataset.create || '';
+      const unit = (prompt('Jednotka pro „' + name + '":', 'ks') || 'ks').trim() || 'ks';
+      try {
+        const m = await api('/api/production/materials', { method: 'POST', body: JSON.stringify({ name, unit }) });
+        allMaterials.push(m);
+        selectSearchItem(el, m.id, m.name, m.code, m.unit || unit, '');
+      } catch (e) { alert('Materiál se nepodařilo založit: ' + (e.message || e)); }
     }
 
     // Přečte data z položky nabídky (data-* atributy) a vybere materiál.

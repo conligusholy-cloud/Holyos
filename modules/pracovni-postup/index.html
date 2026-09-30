@@ -82,6 +82,7 @@
         <input type="checkbox" id="only-offered" onchange="renderProducts()" style="accent-color:#eab308;width:15px;height:15px;cursor:pointer;"> <span>Jen nabízené</span> <span class="tab-count" id="count-offered" style="background:rgba(234,179,8,0.18);color:#eab308;">&mdash;</span>
       </label>
       <span class="count-badge" id="count-badge">&mdash;</span>
+      <button class="btn" onclick="openNewProduct()" style="background:linear-gradient(135deg,#1e86e0,#3aa0f0);color:#fff;border:none;font-weight:700;">＋ Nový výrobek</button>
       <button class="btn" onclick="loadProducts()">&#8635; Obnovit</button>
     </div>
 
@@ -205,6 +206,56 @@
       return r.json();
     }
 
+    // === Nový výrobek / polotovar (nativní HolyOS) ===
+    let npType = 'product';
+    function npSetType(t) {
+      npType = t;
+      document.getElementById('np-t-product').classList.toggle('on', t === 'product');
+      document.getElementById('np-t-semi').classList.toggle('on', t === 'semi-product');
+      const m = document.getElementById('np-material'); m.checked = (t === 'semi-product'); m.disabled = (t === 'semi-product');
+      document.getElementById('np-material-hint').textContent = t === 'semi-product' ? 'U polotovaru je to nutné — jinak ho nejde vložit do kusovníku nadřazeného výrobku.' : 'Volitelné — hodí se, když hotový výrobek skladuješ jako položku.';
+      document.getElementById('np-cfg-row').style.display = t === 'product' ? '' : 'none';
+      document.getElementById('np-title').textContent = t === 'product' ? '＋ Nový výrobek' : '＋ Nový polotovar';
+    }
+    function openNewProduct() {
+      ['np-name', 'np-code', 'np-takt'].forEach(id => { document.getElementById(id).value = ''; });
+      document.getElementById('np-cfg').checked = false; document.getElementById('np-msg').textContent = '';
+      npSetType(currentType === 'semi-product' ? 'semi-product' : 'product');
+      document.getElementById('np-ov').classList.add('open'); document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('np-name').focus(), 50);
+    }
+    function closeNewProduct() { document.getElementById('np-ov').classList.remove('open'); document.body.style.overflow = ''; }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeNewProduct(); });
+    async function saveNewProduct() {
+      const msg = document.getElementById('np-msg'), btn = document.getElementById('np-save');
+      const name = document.getElementById('np-name').value.trim();
+      if (!name) { msg.style.color = '#ef4444'; msg.textContent = 'Zadej název.'; return; }
+      const takt = parseFloat(document.getElementById('np-takt').value);
+      const body = { name, code: document.getElementById('np-code').value.trim() || null, type: npType,
+        takt_time: isNaN(takt) ? null : takt, create_material: document.getElementById('np-material').checked,
+        show_in_configurator: npType === 'product' && document.getElementById('np-cfg').checked };
+      btn.disabled = true; msg.style.color = 'var(--text2)'; msg.textContent = 'Vytvářím…';
+      try {
+        const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const r = await fetch('/api/production/products', { method: 'POST', headers, body: JSON.stringify(body) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
+        window.location.href = 'detail.html?id=' + j.id;
+      } catch (e) { msg.style.color = '#ef4444'; msg.textContent = e.message; btn.disabled = false; }
+    }
+    async function duplicateProduct(id, name) {
+      const newName = prompt('Název kopie:', name + ' (kopie)'); if (newName === null) return;
+      try {
+        const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const r = await fetch('/api/production/products/' + id + '/duplicate', { method: 'POST', headers, body: JSON.stringify({ name: newName.trim() || undefined }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
+        window.location.href = 'detail.html?id=' + j.id;
+      } catch (e) { alert('Kopii se nepodařilo vytvořit: ' + e.message); }
+    }
+
     // === Načíst výrobky z HolyOS API ===
     async function loadProducts() {
       const list = document.getElementById('product-list');
@@ -281,10 +332,11 @@
           .replace(/[\s-]+3V[A-Z0-9_]{2,}\s*$/, '')
           .replace(/[\s-]+[A-Z][A-Z0-9]*_[A-Z0-9_]+\s*$/, '')
           .trim();
+        const srcBadge = p.factorify_id ? '<span class="src-badge fy" title="Importováno z Factorify">FY</span>' : '<span class="src-badge ho" title="Založeno v HolyOS (nezávisle na Factorify)">HolyOS</span>';
         html += '<div class="product-card">' +
           '<div class="product-card-icon" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">' + (currentType === 'product' ? '&#128295;' : '&#9881;') + '</div>' +
           '<div class="product-card-info" onclick="openProduct(' + p.id + ')" style="cursor:pointer;flex:1;">' +
-            '<div class="product-card-name">' + esc(cleanName) + badge + '</div>' +
+            '<div class="product-card-name">' + esc(cleanName) + badge + srcBadge + '</div>' +
             '<div class="product-card-meta"><span>' + esc(p.code) + '</span></div>' +
           '</div>' +
           (currentType === 'product' ? '<div class="cfg-toggle" title="Zobrazit v konfigurátoru / prodejních objednávkách" onclick="event.stopPropagation();toggleConfigurator(' + p.id + ',this)" style="display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;border-radius:8px;transition:background 0.15s;margin-right:4px;" onmouseover="this.style.background=\'rgba(234,179,8,0.08)\'" onmouseout="this.style.background=\'transparent\'">' +
@@ -295,6 +347,7 @@
               '<span style="position:absolute;content:\'\';height:16px;width:16px;left:' + (p.show_in_configurator ? '18px' : '2px') + ';top:2px;background:white;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>' +
             '</label>' +
           '</div>' : '') +
+          '<button class="copy-btn" title="Vytvořit kopii včetně postupu" onclick="event.stopPropagation();duplicateProduct(' + p.id + ',' + JSON.stringify(cleanName).replace(/"/g, '&quot;') + ')">⧉</button>' +
           '<div class="product-card-arrow" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">&rarr;</div>' +
         '</div>';
       });
@@ -619,5 +672,57 @@
     // === Init ===
     document.addEventListener('DOMContentLoaded', loadProducts);
   </script>
+
+  <!-- Nový výrobek / polotovar (nativní HolyOS linie, nezávisle na Factorify) -->
+  <style>
+    .np-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-start;justify-content:center;z-index:9999;overflow-y:auto;padding:60px 16px}
+    .np-ov.open{display:flex}
+    .np-modal{width:100%;max-width:560px;background:var(--surface,#171a21);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+    .np-head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border)}
+    .np-head h2{margin:0;font-size:16px}
+    .np-x{background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1}
+    .np-body{padding:18px 20px}
+    .np-f{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+    .np-f label{font-size:12px;color:var(--text2);font-weight:600}
+    .np-f input,.np-f select{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:14px;font-family:inherit}
+    .np-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .np-seg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px}
+    .np-seg button{border:none;border-radius:7px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;color:var(--text2);background:transparent;cursor:pointer}
+    .np-seg button.on{background:rgba(30,134,224,.25);color:#7cc4f8}
+    .np-hint{font-size:12px;color:var(--text2);line-height:1.5}
+    .np-chk{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:6px 0}
+    .np-chk input{width:auto;accent-color:#eab308}
+    .np-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--border);align-items:center}
+    .np-msg{margin-right:auto;font-size:12.5px;color:var(--text2)}
+    .np-btn{border:1px solid var(--border);background:var(--surface,#171a21);color:var(--text);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+    .np-btn.primary{background:#1e86e0;border-color:#1e86e0;color:#fff}
+    .np-btn:disabled{opacity:.6;cursor:default}
+    .src-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;margin-left:8px;vertical-align:middle}
+    .src-badge.ho{background:rgba(30,134,224,.18);color:#7cc4f8}
+    .src-badge.fy{background:rgba(255,255,255,.06);color:var(--text2)}
+    .copy-btn{background:none;border:1px solid var(--border);color:var(--text2);border-radius:8px;padding:5px 9px;font-size:13px;cursor:pointer;margin-right:6px}
+    .copy-btn:hover{color:var(--text);border-color:var(--text2)}
+  </style>
+  <div class="np-ov" id="np-ov" onclick="if(event.target===this)closeNewProduct()">
+    <div class="np-modal">
+      <div class="np-head"><h2 id="np-title">＋ Nový výrobek</h2><button class="np-x" onclick="closeNewProduct()">×</button></div>
+      <div class="np-body">
+        <div class="np-f"><label>Typ</label>
+          <div class="np-seg"><button type="button" id="np-t-product" class="on" onclick="npSetType('product')">🔧 Výrobek</button><button type="button" id="np-t-semi" onclick="npSetType('semi-product')">⚙️ Polotovar</button></div>
+        </div>
+        <div class="np-f"><label>Název *</label><input id="np-name" placeholder="např. Prádlomat MINI SK – verze 2"></div>
+        <div class="np-row">
+          <div class="np-f"><label>Kód (prázdné = automaticky HO-V-xxxx / HO-P-xxxx)</label><input id="np-code" placeholder="automaticky"></div>
+          <div class="np-f"><label>Takt (min / ks, volitelné)</label><input id="np-takt" type="number" min="0" step="1" placeholder="—"></div>
+        </div>
+        <label class="np-chk"><input type="checkbox" id="np-material"> Založit i skladovou kartu (Material) se stejným kódem</label>
+        <div class="np-hint" id="np-material-hint">U polotovaru je to nutné — jinak ho nejde vložit do kusovníku nadřazeného výrobku.</div>
+        <label class="np-chk" id="np-cfg-row"><input type="checkbox" id="np-cfg"> 🛒 Rovnou nabízet (konfigurátor / prodejní objednávky)</label>
+        <div class="np-hint" style="margin-top:8px">Výrobek vznikne čistě v HolyOS (bez vazby na Factorify). Po vytvoření se otevře detail, kde přidáš operace, pracoviště a kusovník.</div>
+      </div>
+      <div class="np-foot"><span class="np-msg" id="np-msg"></span><button class="np-btn" onclick="closeNewProduct()">Zrušit</button><button class="np-btn primary" id="np-save" onclick="saveNewProduct()">Vytvořit a otevřít</button></div>
+    </div>
+  </div>
+
 </body>
 </html>

@@ -55,7 +55,7 @@ async function generateBatchOperationsForBatch(batchId, opts = {}) {
   }
 
   const productOps = await tx.productOperation.findMany({
-    where: { product_id: batch.product_id },
+    where: { product_id: batch.product_id, is_staging: false }, // staging z FY importu se neplánuje
     orderBy: { step_number: 'asc' },
     select: { id: true, step_number: true, workstation_id: true, name: true },
   });

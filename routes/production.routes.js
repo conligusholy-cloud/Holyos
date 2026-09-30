@@ -206,29 +206,128 @@ router.patch('/products/:id/configurator', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Nativní HolyOS linie: výrobek / polotovar založený přímo v HolyOS (bez Factorify) ───
+// Kódy: HO-V-0001 (výrobek), HO-P-0001 (polotovar), HO-M-0001 (materiál založený z postupu).
+async function nextHolyosCode(prefix, model) {
+  const rows = await prisma[model].findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+  let max = 0;
+  rows.forEach((r) => { const m = /(\d+)$/.exec(r.code); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+  return prefix + String(max + 1).padStart(4, '0');
+}
+async function codeTaken(code) {
+  const [p, m] = await Promise.all([
+    prisma.product.findFirst({ where: { code: { equals: code, mode: 'insensitive' } }, select: { id: true, name: true } }),
+    prisma.material.findFirst({ where: { code: { equals: code, mode: 'insensitive' } }, select: { id: true, name: true } }),
+  ]);
+  if (p) return 'Výrobek/polotovar s kódem „' + code + '" už existuje (ID ' + p.id + ', ' + p.name + ')';
+  if (m) return 'Materiál (skladová karta) s kódem „' + code + '" už existuje (ID ' + m.id + ', ' + m.name + ')';
+  return null;
+}
+
 // POST /api/production/products
-// Kontrola duplicit podle kódu — kód musí být unikátní
+// { code?, name, type: product|semi-product, takt_time?, show_in_configurator?, create_material? }
+// Prázdný kód → vygeneruje se HO-V-xxxx / HO-P-xxxx. create_material (výchozí u polotovaru) založí
+// skladovou kartu Material se stejným kódem a propojí ji (material_id) — polotovar pak jde vložit
+// do kusovníku nadřazeného výrobku.
 router.post('/products', async (req, res, next) => {
   try {
-    const { code, name, type, material_id, takt_time } = req.body;
+    const { z } = require('zod');
+    const s = z.object({
+      code: z.string().trim().max(50).optional().nullable(),
+      name: z.string().trim().min(1, 'Zadej název').max(255),
+      type: z.enum(['product', 'semi-product']).default('product'),
+      material_id: z.number().int().optional().nullable(),
+      takt_time: z.number().optional().nullable(),
+      show_in_configurator: z.boolean().optional(),
+      create_material: z.boolean().optional(),
+      unit: z.string().trim().max(20).optional(),
+    });
+    const parsed = s.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', message: parsed.error.issues.map((i) => i.message).join(', ') });
+    const d = parsed.data;
+    const type = d.type || 'product';
+    let code = (d.code || '').trim();
+    if (!code) code = await nextHolyosCode(type === 'semi-product' ? 'HO-P-' : 'HO-V-', 'product');
+    const dup = await codeTaken(code);
+    if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
 
-    // Kontrola duplicity kódu
-    if (code) {
-      const existing = await prisma.product.findFirst({
-        where: { code: { equals: code, mode: 'insensitive' } },
-      });
-      if (existing) {
-        return res.status(400).json({
-          error: 'Duplicitní kód',
-          message: 'Výrobek/polotovar s kódem "' + code + '" již existuje (ID: ' + existing.id + ', název: ' + existing.name + ')',
-        });
+    const createMaterial = d.create_material != null ? d.create_material : (type === 'semi-product');
+    const product = await prisma.$transaction(async (tx) => {
+      let material_id = d.material_id || null;
+      if (createMaterial && !material_id) {
+        const mat = await tx.material.create({ data: { code, name: d.name, type: type === 'semi-product' ? 'semi-product' : 'product', unit: d.unit || 'ks', sector: 'vyroba', status: 'active' } });
+        material_id = mat.id;
       }
-    }
-
-    const product = await prisma.product.create({
-      data: { code, name, type: type || 'product', material_id, takt_time: takt_time || null },
+      return tx.product.create({
+        data: { code, name: d.name, type, material_id, takt_time: d.takt_time || null, show_in_configurator: !!d.show_in_configurator },
+      });
     });
     res.status(201).json(product);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/products/:id/duplicate — kopie výrobku včetně postupu (operace + materiály + kompetence)
+// { code?, name?, create_material? }
+router.post('/products/:id/duplicate', async (req, res, next) => {
+  try {
+    const srcId = parseInt(req.params.id, 10);
+    const src = await prisma.product.findUnique({
+      where: { id: srcId },
+      include: { operations: { include: { materials: true, required_competencies: true }, orderBy: { step_number: 'asc' } } },
+    });
+    if (!src) return res.status(404).json({ error: 'Výrobek nenalezen' });
+    const b = req.body || {};
+    let code = String(b.code || '').trim();
+    if (!code) code = await nextHolyosCode(src.type === 'semi-product' ? 'HO-P-' : 'HO-V-', 'product');
+    const dup = await codeTaken(code);
+    if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
+    const name = String(b.name || (src.name + ' (kopie)')).trim().slice(0, 255);
+    const createMaterial = b.create_material != null ? !!b.create_material : (src.type === 'semi-product');
+
+    const created = await prisma.$transaction(async (tx) => {
+      let material_id = null;
+      if (createMaterial) {
+        const mat = await tx.material.create({ data: { code, name, type: src.type === 'semi-product' ? 'semi-product' : 'product', unit: 'ks', sector: 'vyroba', status: 'active' } });
+        material_id = mat.id;
+      }
+      const p = await tx.product.create({
+        data: { code, name, type: src.type, material_id, takt_time: src.takt_time, show_in_configurator: false,
+          min_batch_size: src.min_batch_size, economic_batch_size: src.economic_batch_size, batch_size_step: src.batch_size_step },
+      });
+      for (const op of src.operations) {
+        if (op.is_staging) continue; // staging z FY importu nekopírovat
+        const nop = await tx.productOperation.create({
+          data: { product_id: p.id, workstation_id: op.workstation_id, step_number: op.step_number, name: op.name, phase: op.phase,
+            duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count,
+            description: op.description, bom_count: op.bom_count, from_factorify: false },
+        });
+        for (const m of op.materials) {
+          await tx.operationMaterial.create({ data: { operation_id: nop.id, material_id: m.material_id, product_id: m.product_id, quantity: m.quantity, unit: m.unit } });
+        }
+        for (const c of op.required_competencies || []) {
+          await tx.operationRequiredCompetency.create({ data: { operation_id: nop.id, competency_id: c.competency_id, min_level: c.min_level } });
+        }
+      }
+      return p;
+    });
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/materials — rychlé založení materiálu přímo z editoru operace
+// { code?, name, unit?, type? } → prázdný kód = HO-M-xxxx
+router.post('/materials', async (req, res, next) => {
+  try {
+    const name = String((req.body && req.body.name) || '').trim();
+    if (!name) return res.status(400).json({ error: 'Zadej název materiálu' });
+    let code = String((req.body && req.body.code) || '').trim();
+    if (!code) code = await nextHolyosCode('HO-M-', 'material');
+    const dup = await codeTaken(code);
+    if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
+    const unit = String((req.body && req.body.unit) || 'ks').trim().slice(0, 20) || 'ks';
+    const type = ['material', 'semi-product', 'product'].indexOf(req.body && req.body.type) !== -1 ? req.body.type : 'material';
+    const mat = await prisma.material.create({ data: { code, name, unit, type, sector: 'vyroba', status: 'active' } });
+    res.status(201).json({ id: mat.id, code: mat.code, name: mat.name, type: mat.type, unit: mat.unit, current_stock: 0, linked_product_id: null });
   } catch (err) { next(err); }
 });
 

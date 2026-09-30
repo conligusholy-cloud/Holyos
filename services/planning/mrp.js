@@ -64,7 +64,7 @@ async function computeMrpForBatch(batchId, opts = {}) {
   } else {
     // Fallback: agreguj OperationMaterial přes ProductOperation produktu.
     const ops = await tx.productOperation.findMany({
-      where: { product_id: batch.product_id },
+      where: { product_id: batch.product_id, is_staging: false }, // staging z FY importu nemá jít do MRP
       include: { materials: true },
     });
     const acc = new Map(); // material_id → { qty_per_ks, unit }
