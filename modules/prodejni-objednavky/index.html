@@ -4295,6 +4295,7 @@
     function cmpFmtDur(ms){ ms=Number(ms)||0; var s=Math.round(ms/1000); if(s<60) return s+' s'; var m=Math.floor(s/60); var r=s%60; return m+' min'+(r?(' '+r+' s'):''); }
     function cmpEvtLabel(e){
       var p = e.props||{}; var ev = e.event;
+      if (ev==='leasing_inquiry_sent') return '🏦 Poptávka financování → '+cmpEsc(p.company||'')+': '+cmpEsc(p.subject||'')+' · '+(Number(p.price)||0).toLocaleString('cs-CZ')+' Kč'+(p.email_sent?' 📧':'')+(p.sms_sent?' 📱':'');
       if (ev==='outreach_skip') return '⏭️ Automat přeskočil ('+cmpEsc(p.variant==='schuzka'?'schůzka':'specialista')+'): '+cmpEsc(p.reason||'');
       if (ev==='outreach_error') return '❌ Automat selhal ('+cmpEsc(p.variant==='schuzka'?'schůzka':'specialista')+'): '+cmpEsc(p.reason||'');
       if (ev==='schuzka_open') return '🔗 Otevřel odkaz na cestu k rozhodnutí'+(p.ch?(' (z '+(p.ch==='email'?'e-mailu':'SMS')+')'):'');

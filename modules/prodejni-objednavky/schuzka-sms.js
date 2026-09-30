@@ -93,7 +93,8 @@
       + '<div class="ss-card">'
       + '  <h4>📧 E-mail k variantě schůzka</h4>'
       + '  <div class="ss-hint">Když je lead obchodníka s variantou schůzka a má e-mail, pošle se mu <b>spolu s SMS</b> i tento e-mail (stejná pravidla: zdroj, jen nové, black list). Zapiš <code>{link}</code> pro odkaz, <code>{name}</code> pro jméno leada.</div>'
-      + '  <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin-bottom:10px;"><input type="checkbox" id="ss-em-on"> Automaticky poslat i e-mail (má-li lead e-mail)</label>'
+      + '  <label style="font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="ss-em-on"> Automaticky poslat i e-mail (má-li lead e-mail)</label>'
+      + '  <div id="ss-em-state" style="font-size:12px;color:var(--text2);margin:0 0 10px;"></div>'
       + '  <div class="ss-grid2">'
       + '    <div><div style="font-size:12px;color:var(--text2);margin:0 0 4px;">Předmět:</div><input type="text" id="ss-em-subject"></div>'
       + '    <div><div style="font-size:12px;color:var(--text2);margin:0 0 4px;">Text tlačítka:</div><input type="text" id="ss-em-label"></div>'
@@ -115,6 +116,12 @@
       + '<div class="ss-card">'
       + '  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><h4 style="margin:0">📊 Odeslané SMS schůzky</h4><button class="ss-btn ghost" id="ss-reload">↻ Načíst</button><span id="ss-kpis"></span></div>'
       + '  <div id="ss-stats" style="margin-top:10px;font-size:12px;color:var(--text2);"></div>'
+      + '</div>'
+
+      + '<div class="ss-card">'
+      + '  <h4>🕒 Historie změn nastavení</h4>'
+      + '  <div class="ss-hint">Kdo a kdy co přepnul (automaty, obchodníci, texty) — u obou variant. Podle toho poznáš, jestli byl automat v daný okamžik zapnutý.</div>'
+      + '  <div id="ss-log" style="font-size:12px;color:var(--text2);"></div>'
       + '</div>'
 
       + '<div class="ss-card" style="border-color:rgba(245,158,11,.45);">'
@@ -188,6 +195,7 @@
       var j = await api('/ai-specialist-autosend', { method: 'PUT', body: { schuzkaOwnerPersonIds: ids, schuzkaText: document.getElementById('ss-text').value } });
       state.cfg = (j && j.config) || state.cfg;
       msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ Uloženo';
+      try { var g = await api('/ai-specialist-autosend'); state.log = (g && g.log) || []; renderLog(); } catch (e2) {}
     } catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
   }
 
@@ -201,13 +209,33 @@
     document.getElementById('ss-em-label').value = d.schuzkaEmailLinkLabel || '';
     var msg = document.getElementById('ss-em-msg'); msg.className = 'ss-msg'; msg.textContent = 'Výchozí text načten — nezapomeň Uložit e-mail.';
   }
+  function fmtDtFull(s) { try { return new Date(s).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return s || ''; } }
+  function fmtVal(v) { if (v === true) return 'ZAPNUTO'; if (v === false) return 'vypnuto'; if (Array.isArray(v)) return v.length ? v.map(function (id) { var s = state.sellers.filter(function (x) { return Number(x.id) === Number(id); })[0]; return s ? sellerName(s) : ('#' + id); }).join(', ') : '(nikdo)'; if (v == null) return '—'; return '„' + String(v) + (String(v).length >= 60 ? '…' : '') + '"'; }
+  function renderLog() {
+    var log = state.log || [];
+    // Stav e-mail automatu: poslední změna klíče schuzkaEmailEnabled
+    var st = document.getElementById('ss-em-state');
+    if (st) {
+      var last = null;
+      for (var i = 0; i < log.length && !last; i++) { var c = (log[i].changes || []).filter(function (x) { return x.key === 'schuzkaEmailEnabled'; })[0]; if (c) last = { at: log[i].at, who: log[i].who, to: c.to }; }
+      st.innerHTML = last
+        ? (last.to ? '🟢 <b style="color:#10b981">Zapnuto</b> od ' : '⚪ <b>Vypnuto</b> od ') + fmtDtFull(last.at) + ' (' + esc(last.who) + ')'
+        : (state.cfg.schuzkaEmailEnabled ? '🟢 Zapnuto (čas zapnutí není zaznamenán — před zavedením historie)' : '⚪ Vypnuto — zatím nikdy nezapnuto');
+    }
+    var box = document.getElementById('ss-log'); if (!box) return;
+    if (!log.length) { box.textContent = 'Zatím žádné zaznamenané změny (historie se ukládá od nasazení této verze).'; return; }
+    box.innerHTML = log.slice(0, 40).map(function (e) {
+      return '<div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span style="color:var(--text);font-weight:600;">' + fmtDtFull(e.at) + '</span> · ' + esc(e.who) + '<div style="margin-top:2px;">'
+        + (e.changes || []).map(function (c) { return '• ' + esc(c.label) + ': ' + esc(fmtVal(c.from)) + ' → <b style="color:var(--text);">' + esc(fmtVal(c.to)) + '</b>'; }).join('<br>') + '</div></div>';
+    }).join('');
+  }
   function emailFields() {
     return { schuzkaEmailEnabled: document.getElementById('ss-em-on').checked, schuzkaEmailSubject: document.getElementById('ss-em-subject').value,
       schuzkaEmailBody: document.getElementById('ss-em-body').value, schuzkaEmailLinkLabel: document.getElementById('ss-em-label').value };
   }
   async function saveEmail() {
     var msg = document.getElementById('ss-em-msg'); msg.className = 'ss-msg'; msg.textContent = 'Ukládám…';
-    try { var j = await api('/ai-specialist-autosend', { method: 'PUT', body: emailFields() }); state.cfg = (j && j.config) || state.cfg; msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ Uloženo'; }
+    try { var j = await api('/ai-specialist-autosend', { method: 'PUT', body: emailFields() }); state.cfg = (j && j.config) || state.cfg; msg.className = 'ss-msg ss-ok'; msg.textContent = '✅ Uloženo'; try { var g = await api('/ai-specialist-autosend'); state.log = (g && g.log) || []; renderLog(); } catch (e2) {} }
     catch (e) { msg.className = 'ss-msg ss-err'; msg.textContent = e.message; }
   }
   function previewEmail(leadId) {

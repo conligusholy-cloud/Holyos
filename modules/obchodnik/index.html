@@ -785,6 +785,94 @@
     };
   }
   window.obSendDocs=obSendDocs;
+
+  // ── Poptávka financování: formulář → výběr leasingovky → e-mail + SMS s odkazem pro odpověď ──
+  var _leasCos = null;
+  async function obLeasingCompanies(){ if (_leasCos) return _leasCos; try{ var r=await fetch('/api/leasing?active=1',{credentials:'include'}); _leasCos = r.ok ? await r.json() : []; }catch(e){ _leasCos=[]; } return _leasCos; }
+  function obSplitName(n){ n=(n||'').trim(); if(!n) return ['','']; var p=n.split(/\s+/); if(p.length===1) return [p[0],'']; return [p.slice(0,-1).join(' '), p[p.length-1]]; }
+  function obLeasingPrompt(id){
+    var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
+    var ex=document.getElementById('ob-leasing'); if(ex) ex.remove();
+    var nm=obSplitName(l.name), looksNick = !nm[1] || /\d|@|_/.test(l.name||'');
+    var ov=document.createElement('div'); ov.id='ob-leasing';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:130;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+    var inp='width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--text);font-size:15px;font-family:inherit';
+    var lab='display:block;font-size:12px;color:var(--muted2);margin:10px 0 4px';
+    ov.innerHTML='<div style="background:var(--surface);width:100%;max-width:520px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      +'<div style="font-size:17px;font-weight:700;margin-bottom:2px">🏦 Poptávka financování — '+esc(l.name||l.email||'kontakt')+'</div>'
+      +'<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">Vyplň údaje klienta a co se financuje. Pak vybereš leasingovku — dostane e-mail i SMS s odkazem, kde označí stav. Výsledek čekáme do 3 dnů.</div>'
+      +(looksNick?'<div style="font-size:12px;color:#fbbf24;margin-bottom:4px">⚠️ Jméno z reklamy vypadá jako přezdívka — doplň prosím skutečné jméno a příjmení.</div>':'')
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      +'<div><label style="'+lab+'">Jméno *</label><input id="ol-fn" value="'+esc(nm[0])+'" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">Příjmení *</label><input id="ol-ln" value="'+esc(nm[1])+'" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">Telefon</label><input id="ol-ph" value="'+esc(l.phone||'')+'" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">E-mail</label><input id="ol-em" value="'+esc(l.email||'')+'" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">Firma (volitelné)</label><input id="ol-co" placeholder="název s.r.o." style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">IČO (volitelné)</label><input id="ol-ico" inputmode="numeric" style="'+inp+'"></div>'
+      +'</div>'
+      +'<label style="'+lab+'">Co se bude financovat *</label><input id="ol-subj" placeholder="např. Prádlomat MINI SK, 1 ks" style="'+inp+'">'
+      +'<div style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px">'
+      +'<div><label style="'+lab+'">Cena bez DPH (Kč) *</label><input id="ol-price" inputmode="numeric" placeholder="1 500 000" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">Akontace %</label><input id="ol-ak" inputmode="numeric" placeholder="10" style="'+inp+'"></div>'
+      +'<div><label style="'+lab+'">Měsíců</label><input id="ol-m" inputmode="numeric" placeholder="60" style="'+inp+'"></div>'
+      +'</div>'
+      +'<label style="'+lab+'">Poznámka pro leasingovku</label><textarea id="ol-note" rows="2" placeholder="např. klient má vlastní provozovnu, preferuje 60 měsíců…" style="'+inp+'"></textarea>'
+      +'<div id="ol-cos" style="display:none;margin-top:12px;padding:12px;border:1px solid rgba(20,184,166,.5);border-radius:12px;background:rgba(20,184,166,.06)"><div style="font-weight:700;margin-bottom:6px">Komu poslat? (lze více)</div><div id="ol-cos-list" style="display:flex;flex-direction:column;gap:6px"></div></div>'
+      +'<div id="ol-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px;min-height:16px"></div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px">'
+      +'<button id="ol-cancel" style="flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Zrušit</button>'
+      +'<button id="ol-go" style="flex:2;background:linear-gradient(135deg,#0f766e,#14b8a6);border:none;color:#fff;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">Odeslat kontakt →</button>'
+      +'</div></div>';
+    document.body.appendChild(ov);
+    document.getElementById('ol-cancel').onclick=function(){ ov.remove(); };
+    document.getElementById('ol-price').addEventListener('blur', function(){ var v=Number(String(this.value).replace(/[^0-9]/g,'')); if(v) this.value=v.toLocaleString('cs-CZ'); });
+    var step=1;
+    document.getElementById('ol-go').onclick=async function(){
+      var msg=document.getElementById('ol-msg'), btn=this;
+      var g=function(i){ return (document.getElementById(i).value||'').trim(); };
+      var body={ lead_id:id, client_first_name:g('ol-fn'), client_last_name:g('ol-ln'), client_phone:g('ol-ph')||null, client_email:g('ol-em')||null, client_company:g('ol-co')||null, client_ico:g('ol-ico')||null,
+        subject:g('ol-subj'), price:Number(g('ol-price').replace(/[^0-9.,]/g,'').replace(',','.'))||0, akontace_pct:g('ol-ak')?Number(g('ol-ak')):null, months:g('ol-m')?parseInt(g('ol-m'),10):null, note:g('ol-note')||null };
+      if(!body.client_first_name||!body.client_last_name){ msg.style.color='#ef4444'; msg.textContent='Doplň jméno a příjmení klienta.'; return; }
+      if(!body.subject){ msg.style.color='#ef4444'; msg.textContent='Napiš, co se bude financovat.'; return; }
+      if(!body.price){ msg.style.color='#ef4444'; msg.textContent='Zadej cenu bez DPH.'; return; }
+      if(step===1){
+        var cos=await obLeasingCompanies();
+        var box=document.getElementById('ol-cos'), list=document.getElementById('ol-cos-list');
+        if(!cos.length){ msg.style.color='#ef4444'; msg.textContent='V HolyOS není žádná aktivní leasingová společnost (Prodejní objednávky → Leasing).'; return; }
+        list.innerHTML=cos.map(function(c){ var ok=!!(c.email||c.phone); return '<label style="display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface2);cursor:pointer'+(ok?'':';opacity:.5')+'"><input type="checkbox" class="ol-co-chk" value="'+c.id+'"'+(ok?'':' disabled')+' style="width:18px;height:18px;accent-color:#14b8a6"><div style="flex:1"><div style="font-weight:700">'+esc(c.name)+'</div><div style="font-size:12px;color:var(--muted)">'+esc(c.contact_name||'—')+' · '+(c.email?'📧 ':'')+(c.phone?'📱 ':'')+(ok?'':'chybí kontakt')+'</div></div></label>'; }).join('');
+        box.style.display=''; step=2; btn.textContent='📨 Odeslat poptávku'; msg.style.color='var(--muted)'; msg.textContent='Vyber leasingovku (nebo víc) a odešli.'; box.scrollIntoView({block:'nearest',behavior:'smooth'}); return;
+      }
+      body.company_ids=Array.prototype.slice.call(document.querySelectorAll('.ol-co-chk:checked')).map(function(c){return parseInt(c.value,10);});
+      if(!body.company_ids.length){ msg.style.color='#ef4444'; msg.textContent='Vyber alespoň jednu leasingovou společnost.'; return; }
+      btn.disabled=true; msg.style.color='var(--muted)'; msg.textContent='Odesílám e-mail + SMS…';
+      try{
+        var r=await fetch('/api/leasing/inquiries',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        var j=await r.json().catch(function(){return{};});
+        if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+        var lines=(j.sent||[]).map(function(s){ return (s.email_sent||s.sms_sent?'✅ ':'⚠️ ')+s.company+': '+(s.email_sent?'e-mail ✓ ':'')+(s.sms_sent?'SMS ✓ ':'')+(s.errors&&s.errors.length?('('+s.errors.join('; ')+')'):''); });
+        alert('Poptávka odeslána.\n\n'+lines.join('\n')+'\n\nVýsledek očekáváme do 3 dnů — o každé reakci leasingovky dostaneš notifikaci.');
+        ov.remove(); obLoadLeasing(id);
+      }catch(e){ msg.style.color='#ef4444'; msg.textContent=e.message; btn.disabled=false; }
+    };
+  }
+  var LEAS_ST={ sent:['📤 Odesláno','#94a3b8'], opened:['👀 Otevřeno','#60a5fa'], in_progress:['⏳ Zpracovává se','#f59e0b'], approved:['✅ Schváleno','#22c55e'], rejected:['❌ Zamítnuto','#ef4444'], canceled:['Zrušeno','#6b7280'] };
+  async function obLoadLeasing(id){
+    var box=document.getElementById('ob-leas-'+id); if(!box) return;
+    try{
+      var r=await fetch('/api/leasing/inquiries?lead_id='+id,{credentials:'include'}); var list=r.ok?await r.json():[];
+      if(!list.length){ box.innerHTML=''; return; }
+      box.innerHTML=list.map(function(q){ var st=LEAS_ST[q.status]||[q.status,'#94a3b8']; var dl=q.deadline_at?new Date(q.deadline_at):null;
+        return '<div style="border:1px solid '+st[1]+'55;border-left:3px solid '+st[1]+';border-radius:10px;padding:8px 10px;margin-top:6px;font-size:12.5px;background:rgba(255,255,255,.02)">'
+          +'<div style="display:flex;justify-content:space-between;gap:8px"><b>🏦 '+esc(q.company.name)+'</b><span style="color:'+st[1]+';font-weight:700">'+st[0]+'</span></div>'
+          +'<div style="color:var(--muted)">'+esc(q.subject)+' · '+Math.round(Number(q.price)).toLocaleString('cs-CZ')+' Kč · odesláno '+fmtD(q.sent_at)+(q.email_sent?' 📧':'')+(q.sms_sent?' 📱':'')+'</div>'
+          +(['sent','opened','in_progress'].indexOf(q.status)!==-1&&dl?'<div style="color:'+(q.overdue?'#ef4444':'var(--muted)')+'">'+(q.overdue?'⚠️ Po termínu — výsledek měl být do ':'Výsledek do ')+fmtD(dl)+'</div>':'')
+          +(q.result_note?'<div style="margin-top:4px;color:var(--text);white-space:pre-wrap">'+esc(q.result_note)+(q.result_monthly?' · splátka '+Math.round(Number(q.result_monthly)).toLocaleString('cs-CZ')+' Kč/měs':'')+'</div>':'')
+          +'</div>'; }).join('');
+    }catch(e){}
+  }
+  window.obLeasingPrompt=obLeasingPrompt; window.obLoadLeasing=obLoadLeasing;
+
   // Slíbený krok — přímý dotaz „co jsi slíbil + na kdy" → uloží do kalendáře (SalesEvent task) i do plánu (úkol).
   function obPromisePrompt(id){
     var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
@@ -1356,6 +1444,7 @@
         '<div class="field" style="margin-top:6px"><button class="btn btn-g" style="width:100%" onclick="callFromLead('+l.id+')">📞 Naplánovat hovor</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;font-weight:700" onclick="OrderWizard.open('+l.id+')">🧾 Nová objednávka (průvodce)</button></div>' +
+        '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-weight:700" onclick="obLeasingPrompt('+l.id+')">🏦 Poslat kontakt leasingové společnosti</button><div id="ob-leas-'+l.id+'" style="margin-top:6px"></div></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><a class="btn btn-g" style="width:100%;display:block;text-align:center;text-decoration:none'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" href="'+API+'/leads/'+l.id+'/vcard" onclick="obMarkSaved('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</a></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
@@ -1392,7 +1481,7 @@
     '</div>';
   }
 
-  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); }
+  function toggle(id){ state.openId = (state.openId===id)?null:id; render(); if (state.openId===id) setTimeout(function(){ try{ obLoadLeasing(id); }catch(e){} }, 0); }
 
   // ── Sleva na leadovi: stav + tlačítka (+7 dní / Trvale / Auto / Vypnout) ──
   function obDiscHtml(l){

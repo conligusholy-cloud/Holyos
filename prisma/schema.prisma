@@ -6734,10 +6734,52 @@ model LeasingCompany {
   updated_at    DateTime @updatedAt
 
   documents     LeasingDocument[]
+  inquiries     LeasingInquiry[]
 
   @@index([active])
   @@index([name])
   @@map("leasing_companies")
+}
+
+// Poptávka financování odeslaná leasingové společnosti za klienta (z obrazovky obchodníka).
+// Leasingovka dostane e-mail + SMS s odkazem, kde označí stav (zpracovává se / schváleno / zamítnuto + podmínky).
+model LeasingInquiry {
+  id                 Int      @id @default(autoincrement())
+  leasing_company_id Int
+  company            LeasingCompany @relation(fields: [leasing_company_id], references: [id], onDelete: Cascade)
+  compounder_lead_id Int?
+  sent_by_person_id  Int?
+  token              String   @unique @db.VarChar(64) // veřejný odkaz pro odpověď leasingovky
+
+  client_first_name  String   @db.VarChar(120)
+  client_last_name   String   @db.VarChar(120)
+  client_company     String?  @db.VarChar(255)
+  client_ico         String?  @db.VarChar(20)
+  client_email       String?  @db.VarChar(255)
+  client_phone       String?  @db.VarChar(60)
+  subject            String   @db.VarChar(300) // co se financuje
+  price              Decimal  @db.Decimal(12, 2) // cena bez DPH
+  akontace_pct       Decimal? @db.Decimal(5, 2)
+  months             Int?
+  note               String?  @db.Text
+
+  status             String   @default("sent") @db.VarChar(20) // sent | opened | in_progress | approved | rejected | canceled
+  sent_at            DateTime @default(now())
+  deadline_at        DateTime? // sent_at + 3 dny — očekávaný výsledek
+  email_sent         Boolean  @default(false)
+  sms_sent           Boolean  @default(false)
+  sms_id             String?  @db.VarChar(80)
+  opened_at          DateTime?
+  responded_at       DateTime?
+  result_note        String?  @db.Text // podmínky / důvod zamítnutí
+  result_monthly     Decimal? @db.Decimal(12, 2)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@index([leasing_company_id])
+  @@index([compounder_lead_id])
+  @@index([status])
+  @@map("leasing_inquiries")
 }
 
 // Dokumenty, které leasingová společnost vyžaduje k žádosti o financování,

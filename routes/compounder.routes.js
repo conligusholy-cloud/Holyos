@@ -1017,7 +1017,8 @@ function buildSchuzkaEmail(lead, cfg, overrides) {
 router.get('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
   try {
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: AISPEC_AUTOSEND_DEFAULT });
-    res.json({ ok: true, config: Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}), default: AISPEC_AUTOSEND_DEFAULT });
+    const log = await getSetting('compounder.aispec_autosend_log', { type: 'json', defaultValue: [] }).catch(() => []);
+    res.json({ ok: true, config: Object.assign({}, AISPEC_AUTOSEND_DEFAULT, cfg || {}), default: AISPEC_AUTOSEND_DEFAULT, log: Array.isArray(log) ? log : [] });
   } catch (err) { next(err); }
 });
 // PUT — částečná aktualizace: pošli jen klíče, které měníš (specialista a schůzka se
@@ -1050,6 +1051,24 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
       return res.status(400).json({ ok: false, error: 'Obchodník nemůže být zároveň u specialisty i u schůzky: ' + names.join(', ') + '. Odškrtni ho v jedné z variant.', overlap });
     }
     await setSetting('compounder.aispec_autosend', cfg, { type: 'json', userId: req.user && req.user.id });
+    // Historie změn: kdo, kdy, co přepnul (aby šlo dohledat, jestli byl automat v danou chvíli zapnutý).
+    try {
+      const LABEL = { enabled: 'SMS specialista automat', emailEnabled: 'E-mail specialista automat', schuzkaEmailEnabled: 'E-mail schůzka automat',
+        ownerPersonIds: 'Obchodníci specialista', schuzkaOwnerPersonIds: 'Obchodníci schůzka', text: 'Text SMS specialista', schuzkaText: 'Text SMS schůzka',
+        schuzkaEmailSubject: 'Předmět e-mailu schůzka', schuzkaEmailBody: 'Text e-mailu schůzka', schuzkaEmailLinkLabel: 'Tlačítko e-mailu schůzka',
+        sources: 'Zdroje', onlyNew: 'Jen nové', skipBlacklist: 'Přeskočit black list' };
+      const changes = [];
+      Object.keys(LABEL).forEach((k) => {
+        const a = JSON.stringify(prev[k] === undefined ? null : prev[k]), b = JSON.stringify(cfg[k] === undefined ? null : cfg[k]);
+        if (a !== b) changes.push({ key: k, label: LABEL[k], from: typeof prev[k] === 'boolean' ? prev[k] : (Array.isArray(prev[k]) ? prev[k] : (prev[k] == null ? null : String(prev[k]).slice(0, 60))), to: typeof cfg[k] === 'boolean' ? cfg[k] : (Array.isArray(cfg[k]) ? cfg[k] : String(cfg[k]).slice(0, 60)) });
+      });
+      if (changes.length) {
+        const who = (req.user && (req.user.display_name || req.user.username)) || 'neznámý';
+        const log = (await getSetting('compounder.aispec_autosend_log', { type: 'json', defaultValue: [] }).catch(() => [])) || [];
+        log.unshift({ at: new Date().toISOString(), who, changes });
+        await setSetting('compounder.aispec_autosend_log', log.slice(0, 200), { type: 'json', userId: req.user && req.user.id });
+      }
+    } catch (e) { console.warn('[autosend-log]', e.message); }
     res.json({ ok: true, config: cfg });
   } catch (err) { next(err); }
 });

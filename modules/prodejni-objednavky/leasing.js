@@ -125,10 +125,12 @@
     div.innerHTML = ''
       + '<div class="lc-toolbar">'
       + '  <input id="lc-search" placeholder="Hledat firmu / IČO / město / kontakt…">'
+      + '  <button class="lc-btn" id="lc-view-inq" onclick="__lcInq()" title="Poptávky financování odeslané leasingovkám">📨 Poptávky <span class="lc-cnt" id="lc-inq-cnt" style="margin-left:4px">…</span></button>'
       + '  <button class="lc-btn" onclick="__lcCalc(0)" title="Porovnat všechny leasingovky">🧮 Kalkulačka</button>'
       + '  <button class="lc-btn primary" id="lc-new">+ Nová společnost</button>'
       + '</div>'
-      + '<div id="lc-list"><div style="color:var(--text2)">Načítám…</div></div>';
+      + '<div id="lc-list"><div style="color:var(--text2)">Načítám…</div></div>'
+      + '<div id="lc-inq" style="display:none"></div>';
     parent.appendChild(div);
 
     var orig = window.switchTab;
@@ -146,6 +148,7 @@
   }
 
   function load() {
+    api('/inquiries').then(function (rows) { var open = rows.filter(function (r) { return ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1; }).length; var c = document.getElementById('lc-inq-cnt'); if (c) c.textContent = open; state.inqs = rows; if (state.inqView) renderInq(); }).catch(function () {});
     api('').then(function (rows) { state.rows = Array.isArray(rows) ? rows : []; render(); })
       .catch(function (e) { document.getElementById('lc-list').innerHTML = '<div style="color:#ef4444">Chyba: ' + esc(e.message) + '</div>'; });
   }
@@ -577,6 +580,39 @@
     var p = state.editing ? api('/' + state.editing, { method: 'PUT', body: body }) : api('', { method: 'POST', body: body });
     p.then(function () { close(); load(); }).catch(function (e) { msg.style.color = '#ef4444'; msg.textContent = e.message; btn.disabled = false; });
   }
+
+  // ── Poptávky financování (odeslané z obrazovky obchodníka) ──
+  var INQ_ST = { sent: ['📤 Odesláno', '#94a3b8'], opened: ['👀 Otevřeno', '#60a5fa'], in_progress: ['⏳ Zpracovává se', '#f59e0b'], approved: ['✅ Schváleno', '#22c55e'], rejected: ['❌ Zamítnuto', '#ef4444'], canceled: ['Zrušeno', '#6b7280'] };
+  window.__lcInq = function () {
+    state.inqView = !state.inqView;
+    document.getElementById('lc-list').style.display = state.inqView ? 'none' : '';
+    document.getElementById('lc-inq').style.display = state.inqView ? '' : 'none';
+    var b = document.getElementById('lc-view-inq'); if (b) b.classList.toggle('primary', state.inqView);
+    if (state.inqView) { if (state.inqs) renderInq(); else api('/inquiries').then(function (r) { state.inqs = r; renderInq(); }); }
+  };
+  function renderInq() {
+    var box = document.getElementById('lc-inq'); if (!box) return;
+    var rows = state.inqs || [];
+    var f = state.inqFilter || 'open';
+    var vis = rows.filter(function (r) { return f === 'all' ? true : f === 'open' ? ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1 : r.status === f; });
+    var tab = function (k, l) { return '<button class="lc-btn' + (f === k ? ' primary' : '') + '" onclick="__lcInqFilter(\'' + k + '\')" style="padding:6px 12px;font-size:12px">' + l + '</button>'; };
+    box.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><b style="margin-right:6px">📨 Poptávky financování</b>' + tab('open', 'Otevřené') + tab('approved', 'Schválené') + tab('rejected', 'Zamítnuté') + tab('all', 'Vše') + '<span style="margin-left:auto;font-size:12px;color:var(--text2)">Výsledek očekáváme do 3 dnů od odeslání · leasingovka mění stav přes odkaz z e-mailu/SMS</span></div>'
+      + (vis.length ? '<table><thead><tr><th>Odesláno</th><th>Klient</th><th>Předmět · cena</th><th>Leasingovka</th><th>Kanály</th><th>Stav</th><th>Výsledek</th><th></th></tr></thead><tbody>'
+        + vis.map(function (r) { var st = INQ_ST[r.status] || [r.status, '#94a3b8']; var open = ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1;
+          return '<tr><td style="white-space:nowrap">' + new Date(r.sent_at).toLocaleDateString('cs-CZ') + '<div style="font-size:11px;color:var(--text2)">' + esc(r.sent_by_name || '') + '</div></td>'
+            + '<td><b>' + esc(r.client_first_name + ' ' + r.client_last_name) + '</b>' + (r.client_company ? '<div style="font-size:11px;color:var(--text2)">' + esc(r.client_company) + '</div>' : '') + '<div style="font-size:11px;color:var(--text2)">' + esc(r.client_phone || '') + (r.client_email ? ' · ' + esc(r.client_email) : '') + '</div></td>'
+            + '<td>' + esc(r.subject) + '<div style="font-size:11px;color:var(--text2)">' + fmtKc(r.price) + (r.akontace_pct != null ? ' · ak. ' + Number(r.akontace_pct) + ' %' : '') + (r.months ? ' · ' + r.months + ' měs.' : '') + '</div></td>'
+            + '<td>' + esc(r.company.name) + '<div style="font-size:11px;color:var(--text2)">' + esc(r.company.contact_name || '') + '</div></td>'
+            + '<td style="white-space:nowrap">' + (r.email_sent ? '📧 ' : '<span style="opacity:.3">📧</span> ') + (r.sms_sent ? '📱' : '<span style="opacity:.3">📱</span>') + (r.opened_at ? '<div style="font-size:11px;color:#60a5fa">otevřeno ' + new Date(r.opened_at).toLocaleDateString('cs-CZ') + '</div>' : '') + '</td>'
+            + '<td><span style="color:' + st[1] + ';font-weight:700;white-space:nowrap">' + st[0] + '</span>' + (open && r.deadline_at ? '<div style="font-size:11px;color:' + (r.overdue ? '#ef4444' : 'var(--text2)') + '">' + (r.overdue ? '⚠️ po termínu ' : 'do ') + new Date(r.deadline_at).toLocaleDateString('cs-CZ') + '</div>' : '') + '</td>'
+            + '<td style="max-width:260px;font-size:12px">' + (r.result_note ? esc(r.result_note) : '<span style="color:var(--text2)">—</span>') + (r.result_monthly ? '<div><b>' + fmtKc(r.result_monthly) + '/měs</b></div>' : '') + '</td>'
+            + '<td style="white-space:nowrap"><select onchange="__lcInqStatus(' + r.id + ',this.value)" style="background:var(--surface2,#232630);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11.5px">' + Object.keys(INQ_ST).map(function (k) { return '<option value="' + k + '"' + (k === r.status ? ' selected' : '') + '>' + INQ_ST[k][0] + '</option>'; }).join('') + '</select>'
+            + (open ? '<button class="lc-act" title="Připomenout (e-mail + SMS)" onclick="__lcInqResend(' + r.id + ',this)">🔔</button>' : '') + '<a class="lc-act" title="Otevřít odkaz pro leasingovku" href="' + attr(r.public_url) + '" target="_blank">🔗</a></td></tr>'; }).join('') + '</tbody></table>'
+        : '<div style="color:var(--text2);padding:20px 0">Žádné poptávky v tomto filtru.</div>');
+  }
+  window.__lcInqFilter = function (k) { state.inqFilter = k; renderInq(); };
+  window.__lcInqStatus = function (id, status) { api('/inquiries/' + id, { method: 'PATCH', body: { status: status } }).then(function () { return api('/inquiries'); }).then(function (r) { state.inqs = r; renderInq(); }).catch(function (e) { alert('Nepodařilo se změnit stav: ' + e.message); }); };
+  window.__lcInqResend = function (id, btn) { btn.disabled = true; api('/inquiries/' + id + '/resend', { method: 'POST', body: {} }).then(function (r) { alert((r.errors && r.errors.length) ? 'Připomínka odeslána s výhradami: ' + r.errors.join('; ') : 'Připomínka odeslána (e-mail + SMS).'); }).catch(function (e) { alert('Připomínku se nepodařilo poslat: ' + e.message); }).then(function () { btn.disabled = false; }); };
 
   window.__lcEdit = function (id) { openEditor(id); };
   window.__lcOpenTab = function (id, tab) { openEditor(id); switchEditorTab(tab); };

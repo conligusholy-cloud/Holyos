@@ -14,6 +14,76 @@ const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 
+// ═══════════════════════════════════════════════════════════════
+// VEŘEJNÉ (bez auth): odpověď leasingové společnosti na poptávku přes odkaz s tokenem
+// ═══════════════════════════════════════════════════════════════
+const INQ_STATUS_LABEL = { sent: 'Odesláno', opened: 'Otevřeno', in_progress: 'Zpracovává se', approved: 'Schváleno', rejected: 'Zamítnuto', canceled: 'Zrušeno' };
+function fmtKcSrv(n) { return Math.round(Number(n) || 0).toLocaleString('cs-CZ') + ' Kč'; }
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function inquiryReplyHtml(inq, company, msg) {
+  const client = ((inq.client_first_name || '') + ' ' + (inq.client_last_name || '')).trim();
+  const st = inq.status;
+  const done = st === 'approved' || st === 'rejected';
+  const btn = (val, label, color) => `<button type="submit" name="status" value="${val}" style="flex:1;min-width:140px;border:none;border-radius:12px;padding:16px 14px;font-size:16px;font-weight:700;color:#fff;background:${color};cursor:pointer;font-family:inherit;${st === val ? 'outline:3px solid #fff;' : ''}">${label}</button>`;
+  return `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Poptávka financování – ${escH(client)}</title>
+<style>body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#eaf2ff;color:#0f2444}.wrap{max-width:640px;margin:0 auto;padding:28px 18px 60px}.card{background:#fff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden;margin-bottom:16px}.head{padding:22px 26px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff}.head .b{font-size:20px;font-weight:800;letter-spacing:.04em}.head small{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#dbe8ff;margin-top:4px}.body{padding:22px 26px}h1{font-size:20px;margin:0 0 6px}.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}.kv div{background:#f3f7ff;border:1px solid #dbe8ff;border-radius:10px;padding:10px 12px}.kv small{display:block;font-size:10.5px;color:#6b7d99;text-transform:uppercase;letter-spacing:.05em}.kv b{font-size:15px}.muted{color:#6b7d99;font-size:13px}.btns{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0}label{display:block;font-size:12.5px;color:#425774;font-weight:600;margin:12px 0 5px}textarea,input{width:100%;box-sizing:border-box;border:1px solid #cfe0fb;border-radius:10px;padding:11px 12px;font-size:15px;font-family:inherit}.ok{background:#e8f8ef;border:1px solid #9fe0b8;color:#0f6b3a;border-radius:10px;padding:12px 14px;font-weight:600;margin-bottom:12px}.pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12.5px;font-weight:700;background:#dbe8ff;color:#1d4ed8}.foot{font-size:11.5px;color:#6b7d99;text-align:center;margin-top:16px;line-height:1.6}</style></head>
+<body><div class="wrap">
+<div class="card"><div class="head"><div class="b">💧 PRÁDLOMATY</div><small>Best Series s.r.o. · poptávka financování</small></div>
+<div class="body">
+${msg ? `<div class="ok">${escH(msg)}</div>` : ''}
+<h1>Poptávka financování pro klienta ${escH(client)}</h1>
+<div class="muted">Pro ${escH(company.name)}${company.contact_name ? ' · k rukám ' + escH(company.contact_name) : ''} · odesláno ${new Date(inq.sent_at).toLocaleDateString('cs-CZ')} · aktuální stav: <span class="pill">${escH(INQ_STATUS_LABEL[st] || st)}</span></div>
+<div class="kv">
+<div><small>Klient</small><b>${escH(client)}</b>${inq.client_company ? '<div class="muted">' + escH(inq.client_company) + (inq.client_ico ? ' · IČO ' + escH(inq.client_ico) : '') + '</div>' : ''}</div>
+<div><small>Kontakt</small><b>${escH(inq.client_phone || '—')}</b><div class="muted">${escH(inq.client_email || '')}</div></div>
+<div><small>Předmět financování</small><b>${escH(inq.subject)}</b></div>
+<div><small>Cena bez DPH</small><b>${fmtKcSrv(inq.price)}</b>${inq.akontace_pct != null ? '<div class="muted">akontace ' + Number(inq.akontace_pct) + ' %' + (inq.months ? ' · ' + inq.months + ' měs.' : '') + '</div>' : (inq.months ? '<div class="muted">' + inq.months + ' měs.</div>' : '')}</div>
+</div>
+${inq.note ? '<div class="muted" style="margin-bottom:8px"><b>Poznámka obchodníka:</b> ' + escH(inq.note) + '</div>' : ''}
+<form method="POST" action="/api/leasing/inquiry/${escH(inq.token)}/respond">
+<label>Označte prosím stav poptávky (stačí jedno kliknutí):</label>
+<div class="btns">${btn('in_progress', '⏳ Zpracováváme', '#f59e0b')}${btn('approved', '✅ Schváleno', '#16a34a')}${btn('rejected', '❌ Zamítnuto', '#dc2626')}</div>
+<label>Podmínky / měsíční splátka / důvod (volitelné)</label>
+<textarea name="result_note" rows="4" placeholder="např. schváleno na 60 měsíců, akontace 10 %, splátka 24 500 Kč bez DPH, platnost do 15. 10.">${escH(inq.result_note || '')}</textarea>
+<label>Měsíční splátka bez DPH (Kč, volitelné)</label>
+<input name="result_monthly" inputmode="numeric" value="${inq.result_monthly != null ? Math.round(Number(inq.result_monthly)) : ''}" placeholder="např. 24500">
+<div class="muted" style="margin-top:10px">Odpověď se okamžitě zobrazí obchodníkovi Best Series. Očekáváme výsledek do 3 pracovních dnů — děkujeme.</div>
+</form>
+</div></div>
+<div class="foot">Best Series s.r.o. · IČO 05643724 · Česká republika · tento odkaz je určen pouze pro ${escH(company.name)}</div>
+</div></body></html>`;
+}
+
+// GET /api/leasing/inquiry/:token — stránka pro leasingovku (první otevření = stav „opened")
+router.get('/inquiry/:token', async (req, res) => {
+  try {
+    const inq = await prisma.leasingInquiry.findUnique({ where: { token: String(req.params.token) }, include: { company: true } });
+    if (!inq) return res.status(404).send('Odkaz je neplatný.');
+    if (!inq.opened_at) {
+      const upd = await prisma.leasingInquiry.update({ where: { id: inq.id }, data: { opened_at: new Date(), status: inq.status === 'sent' ? 'opened' : inq.status } });
+      try { require('../services/leasing/notify').notifyLeasingInquiry(prisma, upd, 'opened'); } catch (e) { /* */ }
+      inq.status = upd.status;
+    }
+    res.set('Content-Type', 'text/html; charset=utf-8').send(inquiryReplyHtml(inq, inq.company, null));
+  } catch (err) { res.status(500).send('Chyba: ' + err.message); }
+});
+
+// POST /api/leasing/inquiry/:token/respond — leasingovka označí stav + podmínky
+router.post('/inquiry/:token/respond', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const inq = await prisma.leasingInquiry.findUnique({ where: { token: String(req.params.token) }, include: { company: true } });
+    if (!inq) return res.status(404).send('Odkaz je neplatný.');
+    const status = ['in_progress', 'approved', 'rejected'].indexOf(req.body.status) !== -1 ? req.body.status : null;
+    if (!status) return res.status(400).send('Neplatný stav.');
+    const monthlyRaw = String(req.body.result_monthly || '').replace(/[^0-9.,]/g, '').replace(',', '.');
+    const data = { status, responded_at: new Date(), result_note: String(req.body.result_note || '').trim().slice(0, 4000) || null, result_monthly: monthlyRaw ? Number(monthlyRaw) : null };
+    const upd = await prisma.leasingInquiry.update({ where: { id: inq.id }, data });
+    try { require('../services/leasing/notify').notifyLeasingInquiry(prisma, upd, status); } catch (e) { /* */ }
+    res.set('Content-Type', 'text/html; charset=utf-8').send(inquiryReplyHtml(Object.assign({}, inq, upd), inq.company, 'Děkujeme, stav „' + INQ_STATUS_LABEL[status] + '" byl předán obchodníkovi Best Series.'));
+  } catch (err) { res.status(500).send('Chyba: ' + err.message); }
+});
+
 router.use(requireAuth);
 
 // Úložiště dokumentů (Railway persistent volume přes DATA_DIR).
@@ -192,6 +262,133 @@ router.delete('/documents/:did(\\d+)', async (req, res, next) => {
     if (doc.file_path) { try { const p = path.join(DATA_ROOT, doc.file_path); if (fs.existsSync(p)) fs.unlinkSync(p); } catch (e) { /* ignore */ } }
     await prisma.leasingDocument.delete({ where: { id } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// POPTÁVKY FINANCOVÁNÍ (chráněné) — odeslání za klienta, přehled, změna stavu
+// ═══════════════════════════════════════════════════════════════
+const crypto = require('crypto');
+function inquiryPublicUrl(token) {
+  const { getShareBaseUrl } = require('../services/share-url');
+  return (getShareBaseUrl() || (process.env.APP_URL || '')).replace(/\/$/, '') + '/api/leasing/inquiry/' + token;
+}
+
+// GET /api/leasing/inquiries?lead_id=&company_id=&status=
+router.get('/inquiries', async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.lead_id) where.compounder_lead_id = Number(req.query.lead_id);
+    if (req.query.company_id) where.leasing_company_id = Number(req.query.company_id);
+    if (req.query.status) where.status = String(req.query.status);
+    const rows = await prisma.leasingInquiry.findMany({ where, orderBy: { sent_at: 'desc' }, take: 500, include: { company: { select: { id: true, name: true, contact_name: true, phone: true, email: true } } } });
+    const pids = Array.from(new Set(rows.map((r) => r.sent_by_person_id).filter(Boolean)));
+    const people = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }) : [];
+    const pname = {}; people.forEach((p) => { pname[p.id] = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); });
+    res.json(rows.map((r) => Object.assign({}, r, { sent_by_name: pname[r.sent_by_person_id] || null, public_url: inquiryPublicUrl(r.token), overdue: !!(r.deadline_at && new Date(r.deadline_at) < new Date() && ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1) })));
+  } catch (err) { next(err); }
+});
+
+// POST /api/leasing/inquiries — odeslat poptávku leasingovce (e-mail + SMS s odkazem pro odpověď)
+// { company_ids: [..], lead_id?, client_first_name, client_last_name, client_company?, client_ico?, client_email?, client_phone?, subject, price, akontace_pct?, months?, note? }
+router.post('/inquiries', async (req, res, next) => {
+  try {
+    const s = z.object({
+      company_ids: z.array(z.number().int()).min(1, 'Vyber alespoň jednu leasingovou společnost'),
+      lead_id: z.number().int().optional().nullable(),
+      client_first_name: z.string().trim().min(1, 'Zadej jméno').max(120),
+      client_last_name: z.string().trim().min(1, 'Zadej příjmení').max(120),
+      client_company: z.string().trim().max(255).optional().nullable(),
+      client_ico: z.string().trim().max(20).optional().nullable(),
+      client_email: z.string().trim().max(255).optional().nullable(),
+      client_phone: z.string().trim().max(60).optional().nullable(),
+      subject: z.string().trim().min(1, 'Napiš, co se bude financovat').max(300),
+      price: z.number().positive('Zadej cenu'),
+      akontace_pct: z.number().min(0).max(100).optional().nullable(),
+      months: z.number().int().min(1).max(120).optional().nullable(),
+      note: z.string().trim().max(4000).optional().nullable(),
+    });
+    const parsed = s.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map((i) => i.message).join(', ') });
+    const d = parsed.data;
+    const personId = (req.user && req.user.person_id) || (req.user && req.user.person && req.user.person.id) || null;
+    const senderName = (req.user && (req.user.display_name || req.user.username)) || 'obchodník Best Series';
+    const companies = await prisma.leasingCompany.findMany({ where: { id: { in: d.company_ids } } });
+    if (!companies.length) return res.status(404).json({ error: 'Leasingová společnost nenalezena' });
+    const { sendMail } = require('../services/email');
+    const sms = require('../services/voice/sms');
+    const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+    const out = [];
+    for (const c of companies) {
+      const token = crypto.randomBytes(24).toString('base64url').slice(0, 40);
+      const deadline = new Date(Date.now() + 3 * 86400000);
+      let inq = await prisma.leasingInquiry.create({ data: {
+        leasing_company_id: c.id, compounder_lead_id: d.lead_id || null, sent_by_person_id: personId, token,
+        client_first_name: d.client_first_name, client_last_name: d.client_last_name, client_company: d.client_company || null, client_ico: d.client_ico || null,
+        client_email: d.client_email || null, client_phone: d.client_phone || null, subject: d.subject, price: d.price,
+        akontace_pct: d.akontace_pct == null ? null : d.akontace_pct, months: d.months || null, note: d.note || null, deadline_at: deadline,
+      } });
+      const url = inquiryPublicUrl(token);
+      const client = d.client_first_name + ' ' + d.client_last_name;
+      const errs = [];
+      // E-MAIL kontaktní osobě leasingovky
+      let email_sent = false;
+      if (c.email && from) {
+        const body = 'Dobrý den' + (c.contact_name ? ', ' + c.contact_name : '') + ',\n\nposíláme Vám poptávku financování pro našeho klienta:\n\n'
+          + 'Klient: ' + client + (d.client_company ? ' (' + d.client_company + (d.client_ico ? ', IČO ' + d.client_ico : '') + ')' : '') + '\n'
+          + 'Kontakt: ' + [d.client_phone, d.client_email].filter(Boolean).join(', ') + '\n'
+          + 'Předmět financování: ' + d.subject + '\n'
+          + 'Cena bez DPH: ' + fmtKcSrv(d.price) + (d.akontace_pct != null ? ', akontace ' + d.akontace_pct + ' %' : '') + (d.months ? ', ' + d.months + ' měsíců' : '') + '\n'
+          + (d.note ? 'Poznámka: ' + d.note + '\n' : '')
+          + '\nProsíme o označení stavu (zpracováváme / schváleno / zamítnuto) a podmínek přes tlačítko níže — výsledek očekáváme do 3 pracovních dnů.\n\nDěkujeme,\n' + senderName + '\nBest Series s.r.o. – Prádlomaty';
+        try {
+          const r = await sendMail({ to: c.email, subject: 'Poptávka financování – ' + client + ' – ' + d.subject, body, from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku a označit stav', brand: 'pradlomaty' });
+          email_sent = !!(r && r.sent); if (!email_sent) errs.push('e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
+        } catch (e) { errs.push('e-mail: ' + e.message); }
+      } else errs.push(!c.email ? 'leasingovka nemá e-mail' : 'není nastavený odesílatel (LEASING_MAIL_FROM / COMPOUNDER_MAIL_FROM)');
+      // SMS kontaktní osobě leasingovky (GoSMS)
+      let sms_sent = false, sms_id = null;
+      if (c.phone) {
+        try {
+          const text = 'Best Series: poptavka financovani pro klienta ' + client + ' (' + d.subject + ', ' + Math.round(d.price).toLocaleString('cs-CZ') + ' Kc bez DPH). Detail + potvrzeni stavu: ' + url;
+          sms_id = await sms.sendSms(c.phone, text, { context: 'leasing_inquiry', inquiryId: inq.id });
+          sms_sent = true;
+        } catch (e) { errs.push('SMS: ' + e.message); }
+      } else errs.push('leasingovka nemá telefon');
+      inq = await prisma.leasingInquiry.update({ where: { id: inq.id }, data: { email_sent, sms_sent, sms_id: sms_id ? String(sms_id) : null } });
+      // Do cesty zákazníka (timeline u leada)
+      if (d.lead_id) {
+        prisma.compounderEvent.create({ data: { sid: 'server', event: 'leasing_inquiry_sent', path: '/leasing', props: { lead_id: d.lead_id, inquiry_id: inq.id, company: c.name, price: d.price, subject: d.subject, email_sent, sms_sent } } }).catch(() => {});
+      }
+      out.push({ id: inq.id, company: c.name, email_sent, sms_sent, public_url: url, deadline_at: deadline, errors: errs });
+    }
+    res.status(201).json({ ok: true, sent: out });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/leasing/inquiries/:id — ruční změna stavu / poznámky (např. po telefonátu)
+router.patch('/inquiries/:id(\\d+)', async (req, res, next) => {
+  try {
+    const b = req.body || {}; const data = {};
+    if (b.status && Object.keys(INQ_STATUS_LABEL).indexOf(b.status) !== -1) { data.status = b.status; if (['approved', 'rejected', 'in_progress'].indexOf(b.status) !== -1) data.responded_at = new Date(); }
+    if (b.result_note !== undefined) data.result_note = String(b.result_note || '').slice(0, 4000) || null;
+    if (b.result_monthly !== undefined) data.result_monthly = b.result_monthly == null || b.result_monthly === '' ? null : Number(b.result_monthly);
+    const upd = await prisma.leasingInquiry.update({ where: { id: Number(req.params.id) }, data });
+    res.json(upd);
+  } catch (err) { next(err); }
+});
+
+// POST /api/leasing/inquiries/:id/resend — znovu poslat e-mail + SMS (připomínka)
+router.post('/inquiries/:id(\\d+)/resend', async (req, res, next) => {
+  try {
+    const inq = await prisma.leasingInquiry.findUnique({ where: { id: Number(req.params.id) }, include: { company: true } });
+    if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
+    const url = inquiryPublicUrl(inq.token); const client = inq.client_first_name + ' ' + inq.client_last_name; const errs = [];
+    const { sendMail } = require('../services/email'); const sms = require('../services/voice/sms');
+    const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
+    if (inq.company.email && from) { try { await sendMail({ to: inq.company.email, subject: 'Připomínka: poptávka financování – ' + client, body: 'Dobrý den,\n\ndovolujeme si připomenout poptávku financování pro klienta ' + client + ' (' + inq.subject + ', ' + fmtKcSrv(inq.price) + ' bez DPH). Prosíme o označení stavu přes odkaz níže.\n\nDěkujeme, Best Series – Prádlomaty', from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku', brand: 'pradlomaty' }); } catch (e) { errs.push('e-mail: ' + e.message); } }
+    if (inq.company.phone) { try { await sms.sendSms(inq.company.phone, 'Best Series: pripominka poptavky financovani pro ' + client + '. Stav prosim oznacte zde: ' + url, { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
+    res.json({ ok: true, errors: errs });
   } catch (err) { next(err); }
 });
 
