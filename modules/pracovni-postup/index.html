@@ -78,6 +78,9 @@
         <span class="search-icon">&#128270;</span>
         <input type="text" id="search-input" placeholder="Hledat (název, kód)..." oninput="filterProducts(this.value)">
       </div>
+      <label id="offered-filter" title="Zobrazit jen výrobky zapnuté pro konfigurátor / prodejní objednávky" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);user-select:none;">
+        <input type="checkbox" id="only-offered" onchange="renderProducts()" style="accent-color:#eab308;width:15px;height:15px;cursor:pointer;"> <span>Jen nabízené</span> <span class="tab-count" id="count-offered" style="background:rgba(234,179,8,0.18);color:#eab308;">&mdash;</span>
+      </label>
       <span class="count-badge" id="count-badge">&mdash;</span>
       <button class="btn" onclick="loadProducts()">&#8635; Obnovit</button>
     </div>
@@ -248,14 +251,19 @@
       const list = document.getElementById('product-list');
       const filtered = allProducts.filter(p => p.type === currentType);
       const q = (document.getElementById('search-input').value || '').toLowerCase().trim();
+      const onlyOffered = !!(document.getElementById('only-offered') || {}).checked;
+      // Přepínač „Jen nabízené" dává smysl jen u výrobků (polotovary se nenabízejí).
+      const offEl = document.getElementById('offered-filter'); if (offEl) offEl.style.display = currentType === 'product' ? '' : 'none';
+      const offCnt = document.getElementById('count-offered'); if (offCnt) offCnt.textContent = allProducts.filter(p => p.type === 'product' && p.show_in_configurator).length;
 
       const visible = filtered.filter(p => {
+        if (onlyOffered && currentType === 'product' && !p.show_in_configurator) return false;
         if (!q) return true;
         return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
       });
 
       if (visible.length === 0) {
-        list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (currentType === 'product' ? 'výrobky' : 'polotovary') + '</p></div>';
+        list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (onlyOffered && currentType === 'product' ? 'nabízené výrobky (zapni je přepínačem u výrobku)' : (currentType === 'product' ? 'výrobky' : 'polotovary')) + '</p></div>';
         return;
       }
 
@@ -309,6 +317,9 @@
         // Aktualizuj lokální stav
         const product = allProducts.find(p => p.id === productId);
         if (product) product.show_in_configurator = isOn;
+        // Počítadlo nabízených + při zapnutém filtru „Jen nabízené" vypnutý výrobek zmizí ze seznamu.
+        const offCnt = document.getElementById('count-offered'); if (offCnt) offCnt.textContent = allProducts.filter(p => p.type === 'product' && p.show_in_configurator).length;
+        if (!isOn && (document.getElementById('only-offered') || {}).checked) { renderProducts(); return; }
 
         // Aktualizuj UI bez plného přerenderování
         const icon = el.querySelector('span');
