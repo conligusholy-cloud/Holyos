@@ -190,6 +190,13 @@
     .op-actions button:hover { background:var(--accent); color:#fff; }
     .op-actions button.btn-del:hover { background:#ef4444; }
 
+    /* === Paralelní (plovoucí) operace === */
+    .lane-par .op-card { border-color:rgba(168,85,247,0.55); background:rgba(168,85,247,0.06); margin-bottom:0; }
+    .lane-par .op-card .op-step { background:rgba(168,85,247,0.25); color:#c084fc; }
+    .par-bracket { position:absolute; left:-9px; top:0; bottom:0; width:6px; border:2px solid rgba(168,85,247,0.6); border-right:0; border-radius:6px 0 0 6px; }
+    .par-wrap .op-badge-par { font-size:10px; color:#c084fc; }
+    .op-card.is-par-main-hl { box-shadow:0 0 0 2px rgba(168,85,247,0.35); }
+
     /* === Arrow between ops === */
     .op-arrow {
       display:flex; justify-content:center; padding:2px 0;
@@ -759,6 +766,21 @@
         </div>
       </div>
 
+      <div class="form-row" style="background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:10px 12px;align-items:flex-end;">
+        <div class="form-group" style="flex:0 0 auto;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
+            <input type="checkbox" id="op-parallel" onchange="handleParallelChange()" style="width:auto;accent-color:#a855f7;"> ⫽ Paralelní (plovoucí) operace
+          </label>
+          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Neleží na hlavní linii — může běžet souběžně s hlavními operacemi v zadaném okně.</div>
+        </div>
+        <div class="form-group" id="op-parallel-win" style="display:none;flex:1;gap:8px;">
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;"><label>Může začít od operace</label><select id="op-parallel-from"><option value="">— od začátku —</option></select></div>
+            <div style="flex:1;"><label>Musí skončit do operace</label><select id="op-parallel-to"><option value="">— do konce —</option></select></div>
+          </div>
+        </div>
+      </div>
+
       <div class="form-row">
         <div class="form-group">
           <label>Doba trvání (norma pro 1 osobu)</label>
@@ -1044,10 +1066,21 @@
         if (regularOps.length === 0) {
           html += '<div class="empty-ops" style="padding:30px;"><p style="font-size:13px;color:var(--text2);">Žádné regulární operace. Vytvoř operace pomocí "+ Nová operace" a přesuň materiály ze žlutého panelu vpravo.</p></div>';
         } else {
-          regularOps.forEach((op, i) => {
-            if (i > 0) html += '<div class="op-arrow">&#9660;</div>';
-            html += renderOpCard(op, i);
-          });
+          const mainOps = regularOps.filter(op => !op.is_parallel);
+          const parOps = regularOps.filter(op => op.is_parallel);
+          if (parOps.length) {
+            // Dvě dráhy: hlavní linie vlevo, paralelní (plovoucí) operace vpravo přes okno hlavních operací
+            html += '<div class="lanes" style="display:flex;gap:14px;align-items:flex-start;">';
+            html += '<div class="lane-main" id="lane-main" style="flex:1;min-width:0;">';
+            mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
+            html += '</div>';
+            html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
+            html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
+            parOps.forEach((op, i) => { html += '<div class="par-wrap" data-par-id="' + op.id + '" data-from="' + (op.parallel_from || '') + '" data-to="' + (op.parallel_to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>' + renderOpCard(op, i) + '</div>'; });
+            html += '</div></div>';
+          } else {
+            mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
+          }
         }
         html += '</div>';
 
@@ -1107,7 +1140,46 @@
       initDragDrop();
       // Obnov rozbalené sekce (mat-*, sub-wf-*) po re-renderu — kvůli drag&drop draftu
       if (typeof restoreExpandedSections === 'function') restoreExpandedSections();
+      layoutParallelLane();
     }
+
+    // Umístí paralelní operace vpravo tak, aby se svisle kryly s oknem hlavních operací (od → do).
+    // Když se okna překrývají, karty se posouvají pod sebe. Přepočet i po rozbalení materiálů / změně velikosti.
+    function layoutParallelLane() {
+      const lane = document.getElementById('lane-par'); const main = document.getElementById('lane-main');
+      if (!lane || !main) return;
+      const mainCards = Array.from(main.querySelectorAll(':scope > .op-card'));
+      const byStep = new Map();
+      mainCards.forEach(c => { const id = parseInt(c.getAttribute('data-op-id')); const op = (product.operations || []).find(o => o.id === id); if (op) byStep.set(op.step_number, c); });
+      const steps = Array.from(byStep.keys()).sort((a, b) => a - b);
+      const laneTop = lane.getBoundingClientRect().top;
+      const wraps = Array.from(lane.querySelectorAll('.par-wrap'));
+      const placed = []; // {top,bottom}
+      wraps.sort((a, b) => (parseInt(a.getAttribute('data-from')) || 0) - (parseInt(b.getAttribute('data-from')) || 0));
+      let maxBottom = 0;
+      mainCards.forEach(c => c.classList.remove('is-par-main-hl'));
+      wraps.forEach(w => {
+        const from = parseInt(w.getAttribute('data-from')) || steps[0];
+        const to = parseInt(w.getAttribute('data-to')) || steps[steps.length - 1];
+        const fromCard = byStep.get(steps.find(s => s >= from)) || mainCards[0];
+        const toCard = byStep.get([...steps].reverse().find(s => s <= to)) || mainCards[mainCards.length - 1];
+        if (!fromCard || !toCard) return;
+        let top = fromCard.getBoundingClientRect().top - laneTop;
+        const bottom = toCard.getBoundingClientRect().bottom - laneTop;
+        w.style.position = 'absolute'; w.style.top = '0px';
+        const h = w.offsetHeight;
+        // kolize s už umístěnými kartami → posuň pod ně
+        placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 8; });
+        w.style.top = top + 'px';
+        const bracket = w.querySelector('.par-bracket'); if (bracket) { bracket.style.top = '0'; bracket.style.height = Math.max(h, bottom - top) + 'px'; }
+        w.title = 'Okno: od operace ' + from + ' do operace ' + to;
+        placed.push({ top, bottom: top + h });
+        maxBottom = Math.max(maxBottom, top + h, bottom);
+      });
+      lane.style.minHeight = maxBottom + 'px';
+    }
+    window.addEventListener('resize', () => { try { layoutParallelLane(); } catch (e) {} });
+    document.addEventListener('click', () => { setTimeout(() => { try { layoutParallelLane(); } catch (e) {} }, 50); });
 
     function summaryCard(label, value, unit) {
       return '<div class="wf-summary-card"><div class="label">' + label + '</div>' +
@@ -1132,6 +1204,7 @@
         '<div class="op-body">' +
           '<div class="op-row">' +
             '<span class="op-name">' + esc(op.name) + '</span>' +
+            (op.is_parallel ? '<span class="op-badge-par" title="Paralelní (plovoucí) operace — může běžet souběžně s hlavní linií' + (op.parallel_from || op.parallel_to ? ' v okně ' + (op.parallel_from || 'začátek') + ' → ' + (op.parallel_to || 'konec') : '') + '" style="font-size:10px;color:#c084fc;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);padding:1px 6px;border-radius:3px;margin-left:6px;">⫽ paralelní ' + (op.parallel_from || op.parallel_to ? (op.parallel_from || '…') + '→' + (op.parallel_to || '…') : '') + '</span>' : '') +
             '<span class="op-id-badge" title="ID pracovní operace (ProductOperation.id)" style="font-family:monospace;font-size:10px;color:var(--text2);background:var(--surface2);padding:1px 6px;border-radius:3px;border:1px solid var(--border);margin-left:6px;">#' + op.id + '</span>' +
             (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : (op.workstation_group ? '<span class="op-ws" title="Skupina pracovišť — plánovač vybere volné">' + esc(wsName) + '</span>' : '')) +
           '</div>' +
@@ -1464,6 +1537,7 @@
       document.getElementById('op-name').value = '';
       const nextStep = (product.operations || []).length + 1;
       document.getElementById('op-step').value = nextStep;
+      populateParallel(false, null, null);
       document.getElementById('op-phase').value = '';
       document.getElementById('op-duration').value = '';
       document.getElementById('op-duration-unit').value = 'MINUTE';
@@ -1485,6 +1559,7 @@
       document.getElementById('op-id').value = op.id;
       document.getElementById('op-name').value = op.name;
       document.getElementById('op-step').value = op.step_number;
+      populateParallel(!!op.is_parallel, op.parallel_from, op.parallel_to, op.id);
       document.getElementById('op-phase').value = op.phase || '';
       document.getElementById('op-duration').value = op.duration || '';
       document.getElementById('op-duration-unit').value = op.duration_unit || 'MINUTE';
@@ -1510,6 +1585,20 @@
 
     function closeModal() {
       document.getElementById('op-modal').style.display = 'none';
+    }
+
+    // Paralelní operace — okno (od/do hlavní operace)
+    function populateParallel(isParallel, from, to, selfId) {
+      const cb = document.getElementById('op-parallel'); cb.checked = !!isParallel;
+      const mains = (product.operations || []).filter(o => !o.is_parallel && o.id !== selfId && !/^FY import/i.test(o.name || '')).sort((a, b) => a.step_number - b.step_number);
+      const opts = (sel, val, emptyLabel) => { sel.innerHTML = '<option value="">' + emptyLabel + '</option>' + mains.map(o => '<option value="' + o.step_number + '"' + (val === o.step_number ? ' selected' : '') + '>' + o.step_number + ' · ' + esc(o.name) + '</option>').join(''); };
+      opts(document.getElementById('op-parallel-from'), from, '— od začátku —');
+      opts(document.getElementById('op-parallel-to'), to, '— do konce —');
+      handleParallelChange();
+    }
+    function handleParallelChange() {
+      const on = document.getElementById('op-parallel').checked;
+      document.getElementById('op-parallel-win').style.display = on ? '' : 'none';
     }
 
     function populateWsGroupSelect(selectedId) {
@@ -1835,6 +1924,9 @@
         product_id: product.id,
         name,
         step_number: parseInt(document.getElementById('op-step').value) || 1,
+        is_parallel: !!document.getElementById('op-parallel').checked,
+        parallel_from: parseInt(document.getElementById('op-parallel-from').value) || null,
+        parallel_to: parseInt(document.getElementById('op-parallel-to').value) || null,
         workstation_id: parseInt(document.getElementById('op-ws').value) || null,
         workstation_group_id: parseInt(document.getElementById('op-wsgroup').value) || null,
         phase: document.getElementById('op-phase').value || null,

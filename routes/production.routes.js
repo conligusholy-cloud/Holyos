@@ -311,7 +311,7 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
       for (const op of src.operations) {
         if (op.is_staging) continue; // staging z FY importu nekopírovat
         const nop = await tx.productOperation.create({
-          data: { product_id: p.id, workstation_id: op.workstation_id, workstation_group_id: op.workstation_group_id, step_number: op.step_number, name: op.name, phase: op.phase,
+          data: { product_id: p.id, workstation_id: op.workstation_id, workstation_group_id: op.workstation_group_id, is_parallel: op.is_parallel, parallel_from: op.parallel_from, parallel_to: op.parallel_to, step_number: op.step_number, name: op.name, phase: op.phase,
             duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count,
             description: op.description, bom_count: op.bom_count, from_factorify: false },
         });
@@ -1207,12 +1207,15 @@ router.get('/operations', async (req, res, next) => {
 // POST /api/production/operations
 router.post('/operations', async (req, res, next) => {
   try {
-    const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
+    const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to } = req.body;
     const op = await prisma.$transaction(async (tx) => {
       const created = await tx.productOperation.create({
         data: {
           product_id, workstation_id, step_number,
           workstation_group_id: workstation_group_id || null,
+          is_parallel: !!is_parallel,
+          parallel_from: is_parallel && parallel_from ? parseInt(parallel_from, 10) : null,
+          parallel_to: is_parallel && parallel_to ? parseInt(parallel_to, 10) : null,
           name, phase, duration,
           duration_unit: duration_unit || 'MINUTE',
           preparation_time: preparation_time || 0,
@@ -1252,13 +1255,14 @@ router.post('/operations', async (req, res, next) => {
 // PUT /api/production/operations/:id
 router.put('/operations/:id', async (req, res, next) => {
   try {
-    const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
+    const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to } = req.body;
     const opId = parseInt(req.params.id);
     const op = await prisma.$transaction(async (tx) => {
       await tx.productOperation.update({
         where: { id: opId },
         data: { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count,
-          ...(workstation_group_id !== undefined ? { workstation_group_id: workstation_group_id || null } : {}) },
+          ...(workstation_group_id !== undefined ? { workstation_group_id: workstation_group_id || null } : {}),
+          ...(is_parallel !== undefined ? { is_parallel: !!is_parallel, parallel_from: is_parallel && parallel_from ? parseInt(parallel_from, 10) : null, parallel_to: is_parallel && parallel_to ? parseInt(parallel_to, 10) : null } : {}) },
       });
       // Nahraď materiály — smaž staré + vlož nové v jedné transakci
       if (Array.isArray(materials)) {

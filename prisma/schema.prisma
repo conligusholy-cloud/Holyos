@@ -1528,6 +1528,11 @@ model ProductOperation {
   workstation_id   Int?
   workstation_group_id Int? // skupina pracovišť — konkrétní pracoviště vybere plánovač
   step_number      Int // pořadí operace
+  // Paralelní (plovoucí) operace: neleží na hlavní linii, může běžet souběžně s hlavními operacemi
+  // v okně od parallel_from do parallel_to (step_number hlavních operací; null = bez omezení).
+  is_parallel      Boolean @default(false)
+  parallel_from    Int?
+  parallel_to      Int?
   name             String  @db.VarChar(255)
   phase            String? @db.VarChar(255)
   duration         Int? // trvání v minutách

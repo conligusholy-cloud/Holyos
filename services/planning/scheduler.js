@@ -246,7 +246,7 @@ async function scheduleBatch(batchId, opts = {}) {
           workstation_group_id: true,
           operation_id: true,
           assigned_person_id: true,
-          operation: { select: { duration: true, duration_unit: true, preparation_time: true } },
+          operation: { select: { duration: true, duration_unit: true, preparation_time: true, is_parallel: true, parallel_from: true, parallel_to: true, step_number: true } },
         },
         orderBy: { sequence: 'asc' },
       },
@@ -306,11 +306,29 @@ async function scheduleBatch(batchId, opts = {}) {
   let totalWork = 0;
   let totalWait = 0;
 
-  for (const op of batch.batch_operations) {
+  // Hlavní linie se plánuje za sebou; paralelní (plovoucí) operace až potom — do okna
+  // mezi koncem hlavní operace před parallel_from a startem hlavní operace za parallel_to.
+  const mainOps = batch.batch_operations.filter(o => !(o.operation && o.operation.is_parallel));
+  const parallelOps = batch.batch_operations.filter(o => o.operation && o.operation.is_parallel);
+  const mainByStep = new Map(); // step_number → { start, end }
+  const orderedOps = mainOps.concat(parallelOps);
+
+  for (const op of orderedOps) {
     if (op.status === 'done' || op.status === 'cancelled') continue;
+    const isParallel = !!(op.operation && op.operation.is_parallel);
 
     const warnings = [];
-    let candidateStart = new Date(Math.max(prevEnd.getTime(), anchor.getTime()));
+    let candidateStart;
+    if (isParallel) {
+      // okno: od konce hlavní operace s krokem (parallel_from − 1), jinak od začátku dávky
+      const from = op.operation.parallel_from;
+      let winStart = anchor.getTime();
+      if (from != null) { const prevMain = [...mainByStep.entries()].filter(([st]) => st < from).sort((a, b) => b[0] - a[0])[0]; if (prevMain) winStart = prevMain[1].end.getTime(); }
+      candidateStart = new Date(Math.max(winStart, anchor.getTime()));
+      warnings.push('parallel');
+    } else {
+      candidateStart = new Date(Math.max(prevEnd.getTime(), anchor.getTime()));
+    }
 
     const blockCheck = pushPastSlotBlock(candidateStart, slotBlocks);
     if (blockCheck.blocked) {
@@ -387,8 +405,15 @@ async function scheduleBatch(batchId, opts = {}) {
       });
     }
 
+    if (isParallel) {
+      // Přesah za okno (start hlavní operace za parallel_to) → jen varování, hlavní linii to neposouvá
+      const to = op.operation.parallel_to;
+      if (to != null) { const nextMain = [...mainByStep.entries()].filter(([st]) => st > to).sort((a, b) => a[0] - b[0])[0]; if (nextMain && end.getTime() > nextMain[1].start.getTime()) warnings.push('parallel_overflow:' + Math.round((end.getTime() - nextMain[1].start.getTime()) / 60000) + 'min'); }
+    } else {
+      mainByStep.set(op.operation && op.operation.step_number != null ? op.operation.step_number : op.sequence, { start, end });
+      prevEnd = end;
+    }
     if (warnings.length > 0) opWarnings.push({ op_id: op.id, sequence: op.sequence, warnings });
-    prevEnd = end;
   }
 
   if (updates.length === 0) {
@@ -406,8 +431,9 @@ async function scheduleBatch(batchId, opts = {}) {
       if (u.workstation_id !== undefined) data.workstation_id = u.workstation_id; // vybráno ze skupiny
       await txx.batchOperation.update({ where: { id: u.id }, data });
     }
-    const firstStart = updates[0].planned_start;
-    const lastEnd = updates[updates.length - 1].planned_end;
+    // Paralelní operace jsou na konci pole → začátek/konec dávky počítej z min/max
+    const firstStart = new Date(Math.min(...updates.map(u => u.planned_start.getTime())));
+    const lastEnd = new Date(Math.max(...updates.map(u => u.planned_end.getTime())));
     await txx.productionBatch.update({
       where: { id },
       data: { planned_start: firstStart, planned_end: lastEnd },
@@ -420,9 +446,9 @@ async function scheduleBatch(batchId, opts = {}) {
   return {
     batch_number: batch.batch_number,
     operations_scheduled: updates.length,
-    plan_start: updates[0].planned_start.toISOString(),
+    plan_start: new Date(Math.min(...updates.map(u => u.planned_start.getTime()))).toISOString(),
     anchor: anchor.toISOString(),
-    plan_end: updates[updates.length - 1].planned_end.toISOString(),
+    plan_end: new Date(Math.max(...updates.map(u => u.planned_end.getTime()))).toISOString(),
     work_minutes: work,
     wait_minutes: wait,
     idle_pct: total > 0 ? +((wait / total) * 100).toFixed(1) : 0,
