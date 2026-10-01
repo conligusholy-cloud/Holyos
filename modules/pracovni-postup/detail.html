@@ -1068,19 +1068,25 @@
         } else {
           const mainOps = regularOps.filter(op => !op.is_parallel);
           const parOps = regularOps.filter(op => op.is_parallel);
+          // Vždy dvě dráhy: hlavní linie vlevo (zúžená), vpravo pruh pro paralelní (plovoucí) operace.
+          // Pruh je vidět i prázdný, aby bylo jasné, kam paralelní operace patří, a šly rovnou přidat.
+          html += '<div class="lanes" style="display:flex;gap:14px;align-items:flex-start;">';
+          html += '<div class="lane-main" id="lane-main" style="flex:1;min-width:0;max-width:680px;">';
+          mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
+          html += '</div>';
+          html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
+          html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
           if (parOps.length) {
-            // Dvě dráhy: hlavní linie vlevo, paralelní (plovoucí) operace vpravo přes okno hlavních operací
-            html += '<div class="lanes" style="display:flex;gap:14px;align-items:flex-start;">';
-            html += '<div class="lane-main" id="lane-main" style="flex:1;min-width:0;">';
-            mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
-            html += '</div>';
-            html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
-            html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
             parOps.forEach((op, i) => { html += '<div class="par-wrap" data-par-id="' + op.id + '" data-from="' + (op.parallel_from || '') + '" data-to="' + (op.parallel_to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>' + renderOpCard(op, i) + '</div>'; });
-            html += '</div></div>';
           } else {
-            mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
+            html += '<div class="lane-par-empty" onclick="openAddParallelOp()" style="border:1px dashed rgba(168,85,247,0.55);border-radius:10px;padding:18px 14px;text-align:center;color:#c084fc;font-size:12.5px;cursor:pointer;background:rgba(168,85,247,0.05);">'
+              + '<div style="font-size:20px;margin-bottom:6px;">⫽</div>'
+              + '<div style="font-weight:700;margin-bottom:4px;">Místo pro paralelní operace</div>'
+              + '<div style="color:var(--text2);line-height:1.45;">Operace, které běží souběžně s hlavní linií (např. příprava dílů, lakování). Klikni a přidej první.</div>'
+              + '<div style="margin-top:10px;display:inline-block;padding:6px 12px;border-radius:8px;background:rgba(168,85,247,0.2);font-weight:700;">+ Paralelní operace</div>'
+              + '</div>';
           }
+          html += '</div></div>';
         }
         html += '</div>';
 
@@ -1531,6 +1537,15 @@
     }
 
     // === Modal: Add / Edit operation ===
+    // Nová operace rovnou jako paralelní (zaškrtne ⫽ a zobrazí okno od/do).
+    function openAddParallelOp() {
+      openAddOp();
+      try {
+        var cb = document.getElementById('op-parallel');
+        if (cb && !cb.checked) { cb.checked = true; if (typeof handleParallelChange === 'function') handleParallelChange(); }
+      } catch(e){}
+    }
+
     function openAddOp() {
       document.getElementById('modal-title').textContent = 'Nová operace';
       document.getElementById('op-id').value = '';
