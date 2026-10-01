@@ -1193,7 +1193,7 @@
       const selPerson = id ? (o.sales_person_id || null) : mePersonId;
       const salesPersonOpts = '<option value="">— bez obchodníka —</option>' + salesPeople
         .sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'))
-        .map(p => '<option value="' + p.id + '"' + (p.id === selPerson ? ' selected' : '') + '>' + (p.first_name || '') + ' ' + (p.last_name || '') + (p.role ? ' · ' + p.role : '') + '</option>').join('');
+        .map(p => '<option value="' + p.id + '"' + (p.id === selPerson ? ' selected' : '') + '>' + (p.first_name || '') + ' ' + (p.last_name || '') + (typeof p.role === 'string' && p.role ? ' · ' + p.role : '') + '</option>').join('');
       const compOpts = compList.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type && c.type !== 'customer' ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
 
       // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
@@ -2281,6 +2281,8 @@
       _activePickItemId = null;
     }
 
+    // Sekce „Výrobní sloty — termín dodání" v detailu objednávky je zatím skrytá (termíny se řeší v modulu Výrobní sloty)
+    window.ORDER_DETAIL_SHOW_SLOTS = false;
     async function openOrderDetail(id) {
       try {
         const res = await fetch('/api/wh/orders/' + id);
@@ -2524,7 +2526,7 @@
                 '</div>' +
               '</div>' +
               '<div class="form-group"><label style="font-size:11px;color:var(--text2);">👤 Odpovědný obchodník <span style="font-weight:400;">(zobrazí se na výrobním slotu)</span></label><select id="detail-sales-person" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'sales_person_id\',this.value)">' +
-                '<option value="">— bez obchodníka —</option>' + (window._odPeople || []).map(p => '<option value="' + p.id + '"' + (order.sales_person_id === p.id ? ' selected' : '') + '>' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (p.role ? ' · ' + esc(p.role) : '') + '</option>').join('') +
+                '<option value="">— bez obchodníka —</option>' + (window._odPeople || []).map(p => '<option value="' + p.id + '"' + (order.sales_person_id === p.id ? ' selected' : '') + '>' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' · ' + esc(p.role) : '') + '</option>').join('') +
               '</select></div>' +
               '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Vytvořil</label><div style="padding:6px 10px;font-size:13px;color:var(--text2);">' + (order.creator ? esc((order.creator.first_name || '') + ' ' + (order.creator.last_name || '')) : '—') + ' · ' + (order.created_at ? new Date(order.created_at).toLocaleString('cs-CZ') : '') + '</div></div>' +
               '<div class="form-group" style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
@@ -2535,7 +2537,7 @@
           (isLocked ? '<div style="font-size:11px;color:var(--text2);background:var(--bg);border-radius:8px;padding:8px 12px;margin-bottom:12px;">🔒 Objednávka je zamčená — pro editaci změňte stav zpět na Nový.</div>' : '') +
           '<div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:12px;"><h3 style="font-size:14px;margin-bottom:8px;">📦 Položky</h3>' + itemsHtml + '</div>' +
           addItemSection +
-          (isEditable ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:4px;">📅 Výrobní sloty — termín dodání</h3><div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Klikněte na &quot;Vybrat termín&quot; u položky, pak klikněte na volný slot v časové ose.</div>' + buildOrderSlotTimeline(id, order.items || [], order) + '</div>' : '') +
+          ((isEditable && window.ORDER_DETAIL_SHOW_SLOTS) ? '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;"><h3 style="font-size:14px;margin-bottom:4px;">📅 Výrobní sloty — termín dodání</h3><div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Klikněte na &quot;Vybrat termín&quot; u položky, pak klikněte na volný slot v časové ose.</div>' + buildOrderSlotTimeline(id, order.items || [], order) + '</div>' : '') +
 
           // ─── Panel Platba (viditelný od stavu 'ordered' dál) ───
           (['ordered','confirmed','delivered'].includes(order.status) ? renderPaymentPanel(order) : '') +
