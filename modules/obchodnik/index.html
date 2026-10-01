@@ -1202,6 +1202,34 @@
     render();
   }
   window.markCalled = markCalled;
+  // Po uložení kontaktu (iOS odskočí do Safari) → po návratu do appky nabídnout pokračování
+  // (zavolat / poslat SMS), aby se nemuselo znovu hledat kontakt a klikat.
+  var _obAfterSave = null;
+  function obSetAfterSave(kind, name, proceed){ _obAfterSave = { kind: kind, name: name || '', proceed: proceed, at: Date.now() }; }
+  function obShowAfterSave(){
+    var a = _obAfterSave; if (!a) return;
+    if (Date.now() - a.at < 1500) return; // ještě jsme nikam neodešli
+    _obAfterSave = null;
+    var ex = document.getElementById('ob-aftersave'); if (ex) ex.remove();
+    var label = a.kind === 'call' ? '📞 Volat teď' : (a.kind === 'sms' ? '📩 Odeslat SMS' : '➡️ Pokračovat');
+    var ov = document.createElement('div'); ov.id = 'ob-aftersave';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:125;display:flex;align-items:flex-end;justify-content:center';
+    ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+    ov.innerHTML = '<div style="background:var(--surface);width:100%;max-width:520px;border-radius:18px 18px 0 0;border-top:1px solid var(--line);padding:20px 16px calc(20px + env(safe-area-inset-bottom,0))">'
+      + '<div style="font-size:17px;font-weight:700;margin-bottom:6px">✅ Kontakt uložen — ' + esc(a.name) + '</div>'
+      + '<div style="font-size:13.5px;color:var(--muted);line-height:1.5;margin-bottom:16px">Jsi zpátky u kontaktu. Chceš rovnou pokračovat?</div>'
+      + '<button id="ob-as-go" style="width:100%;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:10px">' + label + '</button>'
+      + '<button id="ob-as-close" style="width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:12px;font-size:14px;cursor:pointer;font-family:inherit">Zavřít</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('ob-as-go').onclick = function(){ ov.remove(); try { if (a.proceed) a.proceed(); } catch(e){} };
+    document.getElementById('ob-as-close').onclick = function(){ ov.remove(); };
+    try { if (typeof render === 'function') render(); } catch(e){}
+  }
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') setTimeout(obShowAfterSave, 150); });
+  window.addEventListener('pageshow', function(){ setTimeout(obShowAfterSave, 150); });
+  window.addEventListener('focus', function(){ setTimeout(obShowAfterSave, 150); });
+
   // Vlastní dialog místo confirm(): dvě barevně odlišená tlačítka (Uložit kontakt / Volat teď).
   function obAskCall(name, onCall, onSave){
     var ex = document.getElementById('ob-callask'); if (ex) ex.remove();
@@ -1217,7 +1245,7 @@
       + '<button id="ob-ca-call" style="flex:1;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📞 Volat teď</button>'
       + '</div></div>';
     document.body.appendChild(ov);
-    document.getElementById('ob-ca-save').onclick = function(){ ov.remove(); if (onSave) onSave(); };
+    document.getElementById('ob-ca-save').onclick = function(){ ov.remove(); obSetAfterSave('call', name, onCall); if (onSave) onSave(); };
     document.getElementById('ob-ca-call').onclick = function(){ ov.remove(); if (onCall) onCall(); };
   }
   window.obAskCall = obAskCall;
@@ -1236,7 +1264,7 @@
       + '<button id="ob-sa-send" style="flex:1;background:#8b5cf6;border:none;color:#fff;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📩 Odeslat SMS</button>'
       + '</div></div>';
     document.body.appendChild(ov);
-    document.getElementById('ob-sa-save').onclick = function(){ ov.remove(); if (onSave) onSave(); };
+    document.getElementById('ob-sa-save').onclick = function(){ ov.remove(); obSetAfterSave('sms', name, onSend); if (onSave) onSave(); };
     document.getElementById('ob-sa-send').onclick = function(){ ov.remove(); if (onSend) onSend(); };
   }
   window.obAskSms = obAskSms;
@@ -1255,7 +1283,7 @@
       + '<button id="ob-sf-skip" style="width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:12px;font-size:14px;cursor:pointer;font-family:inherit">Teď ne, pokračovat bez uložení</button>'
       + '</div>';
     document.body.appendChild(ov);
-    document.getElementById('ob-sf-save').onclick = function(){ ov.remove(); try{ saveContact(id); }catch(e){} };
+    document.getElementById('ob-sf-save').onclick = function(){ ov.remove(); obSetAfterSave('proceed', name, onProceed); try{ saveContact(id); }catch(e){} };
     document.getElementById('ob-sf-skip').onclick = function(){ ov.remove(); if (onProceed) onProceed(); };
   }
   window.obAskSaveFirst = obAskSaveFirst;
