@@ -711,7 +711,7 @@
                 html += '<div class="slot-health-pct" style="position:absolute; top:4px; right:6px; font-size:10px; font-weight:700; color:' + hc.color + ';">' + hc.label + '</div>';
               }
               html += '<div class="slot-customer">' + esc(a.customer_name || '—') + '</div>';
-              html += '<div class="slot-title">' + esc(a.product_name) + '</div>';
+              html += '<div class="slot-title" title="' + esc(a.product_name) + '">' + esc(czName(a.product_name)) + '</div>';
               if (serial) {
                 html += '<div class="slot-sub" style="font-family:monospace;color:#fbbf24;font-weight:700;">🔢 ' + esc(serial) + '</div>';
               }
@@ -929,7 +929,7 @@
         slot.assignments.forEach(function(a) {
           var serial = a.order_item && a.order_item.serial_number ? a.order_item.serial_number : '';
           html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;">';
-          html += '<div style="font-weight:700;font-size:13px;color:#fb923c;">' + esc(a.product_name) + '</div>';
+          html += '<div style="font-weight:700;font-size:13px;color:#fb923c;" title="' + esc(a.product_name) + '">' + esc(czName(a.product_name)) + '</div>';
           if (a.customer_name) html += '<div style="font-size:12px;color:var(--text);">' + esc(a.customer_name) + '</div>';
           if (a.sales_person_name) html += '<div style="font-size:12px;color:#c4b5fd;">👤 Obchodník: ' + esc(a.sales_person_name) + '</div>';
           if (serial) {
@@ -1496,6 +1496,12 @@
     // ─── Helpers ──────────────────────────────────────────────────────────────
     function closeModal() { document.getElementById('modal-root').innerHTML = ''; }
     function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    // Dvojjazyčný název výrobku („Laundromat FLEX CZ Prádlomat FLEX CZ") → jen česká část
+    function czName(name) {
+      var n = String(name || '');
+      var m = n.match(/^Laundromat\s+.+?\s+(Prádlomat\s+.+)$/i);
+      return m ? m[1] : n;
+    }
     function formatDS(d) { return d.getDate() + '.' + (d.getMonth()+1) + '.'; }
     function toISO(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
 
