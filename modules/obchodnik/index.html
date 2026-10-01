@@ -332,12 +332,13 @@
       renderChips();
       buildLangOptions();
       await load();
-      // Deep link ?lead=ID (návrat z vizitky / notifikace) → otevři kontakt
-      try { var _ql = new URLSearchParams(location.search).get('lead'); if (_ql && typeof openLeadFromTask === 'function') { openLeadFromTask(parseInt(_ql, 10)); history.replaceState(null, '', location.pathname); } } catch(e){}
       loadMyPlan();
       loadLokalitySec();
       loadUpcomingMeetings();
-      showScreen('today');
+      // Deep link ?lead=ID (návrat z vizitky / notifikace) → rovnou záložka Kontakty s otevřeným kontaktem (ne „Dnes")
+      var _ql = null; try { _ql = new URLSearchParams(location.search).get('lead'); } catch(e){}
+      if (_ql && typeof openLeadFromTask === 'function') { try { history.replaceState(null, '', location.pathname); } catch(e){} openLeadFromTask(parseInt(_ql, 10)); setTimeout(function(){ openLeadFromTask(parseInt(_ql, 10)); }, 600); }
+      else showScreen('today');
     } catch(e){ /* redirect handled */ }
   }
 
