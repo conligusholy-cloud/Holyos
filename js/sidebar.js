@@ -31,7 +31,7 @@ function renderSidebar(activeModule) {
     { id: 'nastaveni-vyroby',    name: 'Nastavení výroby',    icon: '&#128736;', color: '#14b8a6', active: true },
     { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
-    { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
+    { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true, hidden: true }, // v menu jen přes Nastavení výroby
     { id: 'nakup-sklad',          name: 'Nákup a sklad',       icon: '&#128230;', color: '#10b981', active: true },
     { id: 'prodejni-objednavky',  name: 'Prodejní objednávky', icon: '&#128176;', color: '#eab308', active: true },
     { id: 'vyrobni-sloty',        name: 'Výrobní sloty',       icon: '&#128197;', color: '#f97316', active: true },
@@ -44,7 +44,7 @@ function renderSidebar(activeModule) {
     { id: 'pokladna',             name: 'Pokladna',            icon: '&#128181;', color: '#10b981', active: true },
     { id: 'naklady',              name: 'Náklady',             icon: '&#128202;', color: '#ef4444', active: true },
     { id: 'davky',                 name: 'Pickovací dávky',     icon: '&#128230;', color: '#f59e0b', active: true },
-    { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true },
+    { id: 'pracoviste',           name: 'Pracoviště',          icon: '&#127981;', color: '#14b8a6', active: true, hidden: true }, // v menu jen přes Nastavení výroby
     { id: 'normovani-fy',         name: 'Normování',           icon: '&#9201;',   color: '#6366f1', active: true },
     { id: 'normovani-prehled',    name: 'Normy',               icon: '&#128202;', color: '#8b5cf6', active: true },
     { id: 'vozovy-park',          name: 'Vozový park',         icon: '&#128663;', color: '#0ea5e9', active: true },
@@ -134,9 +134,13 @@ function renderSidebar(activeModule) {
     var navEl = document.getElementById('sidebar-nav-modules');
     if (navEl) {
       var navHtml = '';
+      // Moduly schované pod Nastavení výroby: v menu se neukazují, aktivní je rodič
+      var PARENT = { 'pracoviste': 'nastaveni-vyroby', 'pracovni-postup': 'nastaveni-vyroby' };
+      var activeId = PARENT[activeModule] || activeModule;
       modules.forEach(function(m) {
+        if (m.hidden) return;
         if (!seesAll && !(allowedModules && allowedModules[m.id])) return; // nevidí
-        var isActive = m.id === activeModule;
+        var isActive = m.id === activeId;
         var cls = 'sidebar-item' + (isActive ? ' active' : '') + (!m.active ? ' disabled' : '');
         var entryPage = (m.id === 'vytvoreni-arealu' || m.id === 'programovani-vyroby') ? 'simulace.html' : 'index.html';
         var href = m.active ? (basePath + 'modules/' + m.id + '/' + entryPage) : '#';
