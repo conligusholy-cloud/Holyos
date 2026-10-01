@@ -125,12 +125,12 @@
     div.innerHTML = ''
       + '<div class="lc-toolbar">'
       + '  <input id="lc-search" placeholder="Hledat firmu / IČO / město / kontakt…">'
-      + '  <button class="lc-btn" id="lc-view-inq" onclick="__lcInq()" title="Poptávky financování odeslané leasingovkám">📨 Poptávky <span class="lc-cnt" id="lc-inq-cnt" style="margin-left:4px">…</span></button>'
+      + '  <button class="lc-btn" id="lc-view-inq" onclick="__lcInq()" title="Přepnout mezi poptávkami a seznamem leasingových společností">🏦 Leasingové společnosti</button>'
       + '  <button class="lc-btn" onclick="__lcCalc(0)" title="Porovnat všechny leasingovky">🧮 Kalkulačka</button>'
       + '  <button class="lc-btn primary" id="lc-new">+ Nová společnost</button>'
       + '</div>'
-      + '<div id="lc-list"><div style="color:var(--text2)">Načítám…</div></div>'
-      + '<div id="lc-inq" style="display:none"></div>';
+      + '<div id="lc-list" style="display:none"><div style="color:var(--text2)">Načítám…</div></div>'
+      + '<div id="lc-inq"><div style="color:var(--text2)">Načítám poptávky…</div></div>';
     parent.appendChild(div);
 
     var orig = window.switchTab;
@@ -147,6 +147,7 @@
     document.getElementById('lc-search').addEventListener('input', function (e) { state.search = e.target.value.toLowerCase(); render(); });
   }
 
+  state.inqView = true; // výchozí obrazovka Leasingu = poptávky financování
   function load() {
     api('/inquiries').then(function (rows) { var open = rows.filter(function (r) { return ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1; }).length; var c = document.getElementById('lc-inq-cnt'); if (c) c.textContent = open; state.inqs = rows; if (state.inqView) renderInq(); }).catch(function () {});
     api('').then(function (rows) { state.rows = Array.isArray(rows) ? rows : []; render(); })
@@ -617,7 +618,7 @@
     state.inqView = !state.inqView;
     document.getElementById('lc-list').style.display = state.inqView ? 'none' : '';
     document.getElementById('lc-inq').style.display = state.inqView ? '' : 'none';
-    var b = document.getElementById('lc-view-inq'); if (b) b.classList.toggle('primary', state.inqView);
+    var b = document.getElementById('lc-view-inq'); if (b) { b.classList.toggle('primary', !state.inqView); b.innerHTML = !state.inqView ? '📨 Poptávky <span class="lc-cnt" id="lc-inq-cnt" style="margin-left:4px">' + (state.inqs ? state.inqs.filter(function (r) { return ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1; }).length : '…') + '</span>' : '🏦 Leasingové společnosti'; }
     if (state.inqView) { if (state.inqs) renderInq(); else api('/inquiries').then(function (r) { state.inqs = r; renderInq(); }); }
     else { state.inqCompany = null; api('').then(function (rows) { state.rows = Array.isArray(rows) ? rows : []; render(); }).catch(function () {}); } // obnov počty poptávek u společností
   };
