@@ -746,7 +746,11 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label>Pracoviště</label>
+          <label>Skupina pracovišť <span style="font-weight:400;color:var(--text2);">(kterékoli volné)</span></label>
+          <select id="op-wsgroup" onchange="handleWsGroupChange()"><option value="">— bez skupiny —</option></select>
+        </div>
+        <div class="form-group">
+          <label>Konkrétní pracoviště</label>
           <select id="op-ws" onchange="handleWsExternalChange()"><option value="">— bez pracoviště —</option></select>
         </div>
         <div class="form-group">
@@ -824,6 +828,7 @@
     const token = sessionStorage.getItem('token');
     let product = null;
     let workstations = [];
+    let workstationGroups = [];
     let allMaterials = [];
     let allProductsList = []; // pro mapování material → product
     let currentTab = 'postup';
@@ -862,14 +867,16 @@
 
       try {
         // Načti paralelně produkt, pracoviště a materiály
-        const [prod, ws, mats, prods] = await Promise.all([
+        const [prod, ws, mats, prods, wsGroups] = await Promise.all([
           api('/api/production/products/' + id),
           api('/api/production/workstations'),
           api('/api/production/materials'),
           api('/api/production/products'),
+          api('/api/production/workstation-groups').catch(() => []),
         ]);
         product = prod;
         workstations = ws;
+        workstationGroups = wsGroups || [];
         allMaterials = mats;
         allProductsList = prods;
 
@@ -1108,7 +1115,7 @@
     }
 
     function renderOpCard(op, idx) {
-      const wsName = op.workstation ? op.workstation.name : '—';
+      const wsName = op.workstation ? op.workstation.name : (op.workstation_group ? '\u{1F4E6} ' + op.workstation_group.name : '—');
       const norm = op.duration ? op.duration + ' ' + unitLabel(op.duration_unit) : '—';
       const workers = op.workers_count || 1;
       const realMin = realMinutes(op);
@@ -1126,7 +1133,7 @@
           '<div class="op-row">' +
             '<span class="op-name">' + esc(op.name) + '</span>' +
             '<span class="op-id-badge" title="ID pracovní operace (ProductOperation.id)" style="font-family:monospace;font-size:10px;color:var(--text2);background:var(--surface2);padding:1px 6px;border-radius:3px;border:1px solid var(--border);margin-left:6px;">#' + op.id + '</span>' +
-            (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : '') +
+            (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : (op.workstation_group ? '<span class="op-ws" title="Skupina pracovišť — plánovač vybere volné">' + esc(wsName) + '</span>' : '')) +
           '</div>' +
           '<div class="op-meta">' +
             '<span>&#9202; Norma: ' + norm + '</span>' +
@@ -1464,6 +1471,7 @@
       document.getElementById('op-workers').value = '1';
       document.getElementById('op-desc').value = '';
 
+      populateWsGroupSelect('');
       populateWsSelect('');
       document.getElementById('mat-rows').innerHTML = '';
       document.getElementById('op-modal').style.display = 'flex';
@@ -1484,6 +1492,7 @@
       document.getElementById('op-workers').value = op.workers_count || 1;
       document.getElementById('op-desc').value = op.description || '';
 
+      populateWsGroupSelect(op.workstation_group_id || '');
       populateWsSelect(op.workstation_id || '');
 
       // Materiály
@@ -1503,6 +1512,23 @@
       document.getElementById('op-modal').style.display = 'none';
     }
 
+    function populateWsGroupSelect(selectedId) {
+      const sel = document.getElementById('op-wsgroup');
+      sel.innerHTML = '<option value="">— bez skupiny —</option>';
+      workstationGroups.forEach(g => {
+        const label = esc(g.name) + (g.code ? ' (' + esc(g.code) + ')' : '') + (g.hall ? ' · ' + esc(g.hall.name) : '') + ' [' + (g._count ? g._count.workstations : 0) + ' prac.]';
+        sel.innerHTML += '<option value="' + g.id + '"' + (g.id == selectedId ? ' selected' : '') + '>' + label + '</option>';
+      });
+    }
+
+    // Skupina a konkrétní pracoviště se vylučují: skupina = plánovač vybere volné pracoviště
+    function handleWsGroupChange() {
+      const gid = document.getElementById('op-wsgroup').value;
+      const wsSel = document.getElementById('op-ws');
+      if (gid) { wsSel.value = ''; wsSel.disabled = true; wsSel.style.opacity = '0.5'; handleWsExternalChange(); }
+      else { wsSel.disabled = false; wsSel.style.opacity = ''; }
+    }
+
     function populateWsSelect(selectedId) {
       const sel = document.getElementById('op-ws');
       sel.innerHTML = '<option value="">— bez pracoviště —</option>';
@@ -1512,6 +1538,7 @@
       });
       // Nastav stav polí podle vybraného pracoviště
       handleWsExternalChange();
+      handleWsGroupChange();
     }
 
     // Při změně pracoviště — kooperace = čas 0, nelze měnit
@@ -1809,6 +1836,7 @@
         name,
         step_number: parseInt(document.getElementById('op-step').value) || 1,
         workstation_id: parseInt(document.getElementById('op-ws').value) || null,
+        workstation_group_id: parseInt(document.getElementById('op-wsgroup').value) || null,
         phase: document.getElementById('op-phase').value || null,
         duration: parseInt(document.getElementById('op-duration').value) || 0,
         duration_unit: document.getElementById('op-duration-unit').value,
@@ -1826,7 +1854,7 @@
           if (prevOp) {
             prevOpData = {
               name: prevOp.name, step_number: prevOp.step_number,
-              workstation_id: prevOp.workstation_id, phase: prevOp.phase,
+              workstation_id: prevOp.workstation_id, workstation_group_id: prevOp.workstation_group_id || null, phase: prevOp.phase,
               duration: prevOp.duration, duration_unit: prevOp.duration_unit,
               preparation_time: prevOp.preparation_time, workers_count: prevOp.workers_count,
               description: prevOp.description,
@@ -1870,7 +1898,7 @@
       // Snapshot pro undo
       const undoOpData = op ? {
         product_id: product.id, name: op.name, step_number: op.step_number,
-        workstation_id: op.workstation_id, phase: op.phase,
+        workstation_id: op.workstation_id, workstation_group_id: op.workstation_group_id || null, phase: op.phase,
         duration: op.duration, duration_unit: op.duration_unit,
         preparation_time: op.preparation_time, workers_count: op.workers_count,
         description: op.description,

@@ -243,6 +243,7 @@ async function scheduleBatch(batchId, opts = {}) {
           sequence: true,
           status: true,
           workstation_id: true,
+          workstation_group_id: true,
           operation_id: true,
           assigned_person_id: true,
           operation: { select: { duration: true, duration_unit: true, preparation_time: true } },
@@ -273,9 +274,27 @@ async function scheduleBatch(batchId, opts = {}) {
     }
   }
 
-  const wsIds = [...new Set(
-    batch.batch_operations.map(o => o.workstation_id).filter(wsid => wsid != null)
+  // Skupiny pracovišť — operace se skupinou bez konkrétního pracoviště: plánovač vybere kterékoli volné ve skupině
+  const groupIds = [...new Set(
+    batch.batch_operations.map(o => o.workstation_group_id).filter(g => g != null)
   )];
+  const membersByGroup = new Map();
+  if (groupIds.length > 0) {
+    const members = await tx.workstation.findMany({
+      where: { group_id: { in: groupIds } },
+      select: { id: true, group_id: true },
+      orderBy: { id: 'asc' },
+    });
+    for (const m of members) {
+      if (!membersByGroup.has(m.group_id)) membersByGroup.set(m.group_id, []);
+      membersByGroup.get(m.group_id).push(m.id);
+    }
+  }
+
+  const wsIds = [...new Set([
+    ...batch.batch_operations.map(o => o.workstation_id).filter(wsid => wsid != null),
+    ...[...membersByGroup.values()].flat(),
+  ])];
   const opIds = [...new Set(batch.batch_operations.map(o => o.operation_id).filter(Boolean))];
   const queueByWs = await loadQueueByWorkstation(tx, id, wsIds, exclusive);
   const assignCtx = await loadAssignmentContext(tx, opIds, wsIds);
@@ -305,13 +324,32 @@ async function scheduleBatch(batchId, opts = {}) {
     const runMin = operationMinutes(op.operation || {}, batch.quantity);
     const totalMin = prepMin + runMin;
 
-    if (!op.workstation_id) warnings.push('no_workstation_assigned');
+    // Výběr pracoviště ze skupiny: to, které je v kandidátním čase volné (nebo se uvolní nejdřív)
+    let pickedWsId = null;
+    if (!op.workstation_id && op.workstation_group_id) {
+      const members = membersByGroup.get(op.workstation_group_id) || [];
+      if (members.length === 0) {
+        warnings.push('group_has_no_workstations');
+      } else {
+        const probe = consumeShift(candidateStart, totalMin, cfg);
+        let best = null;
+        for (const wsid of members) {
+          const ce = findQueueConflictEnd(queueByWs, wsid, candidateStart, probe.end);
+          if (!ce) { best = { wsid, free: candidateStart.getTime() }; break; }
+          if (!best || ce.getTime() < best.free) best = { wsid, free: ce.getTime() };
+        }
+        pickedWsId = best.wsid;
+        warnings.push(`picked_from_group:ws${pickedWsId}`);
+      }
+    }
+    const wsId = op.workstation_id || pickedWsId;
+    if (!wsId) warnings.push('no_workstation_assigned');
 
     let consumed;
     for (let i = 0; i < 50; i++) {
       consumed = consumeShift(candidateStart, totalMin, cfg);
       const conflictEnd = findQueueConflictEnd(
-        queueByWs, op.workstation_id, candidateStart, consumed.end
+        queueByWs, wsId, candidateStart, consumed.end
       );
       if (!conflictEnd) break;
       const conflictedBy = Math.round((conflictEnd.getTime() - candidateStart.getTime()) / 60000);
@@ -327,7 +365,7 @@ async function scheduleBatch(batchId, opts = {}) {
     // Resource assignment — jen pokud operace zatím nemá assigned (nepřepíšeme manuální volbu)
     let assignedPerson = null;
     if (!op.assigned_person_id) {
-      assignedPerson = pickAssignee(op, assignCtx);
+      assignedPerson = pickAssignee({ ...op, workstation_id: wsId }, assignCtx);
       if (!assignedPerson) warnings.push('no_assignee_found');
     }
 
@@ -337,13 +375,14 @@ async function scheduleBatch(batchId, opts = {}) {
       planned_end: end,
       minutes: +totalMin.toFixed(1),
       warnings,
+      workstation_id: pickedWsId || undefined,
       assigned_person_id: assignedPerson ? assignedPerson.id : undefined,
       assigned_person_name: assignedPerson ? `${assignedPerson.first_name} ${assignedPerson.last_name}` : null,
     });
 
-    if (op.workstation_id) {
-      if (!queueByWs.has(op.workstation_id)) queueByWs.set(op.workstation_id, []);
-      queueByWs.get(op.workstation_id).push({
+    if (wsId) {
+      if (!queueByWs.has(wsId)) queueByWs.set(wsId, []);
+      queueByWs.get(wsId).push({
         start, end, batch_id: id, op_id: op.id,
       });
     }
@@ -364,6 +403,7 @@ async function scheduleBatch(batchId, opts = {}) {
     for (const u of updates) {
       const data = { planned_start: u.planned_start, planned_end: u.planned_end };
       if (u.assigned_person_id !== undefined) data.assigned_person_id = u.assigned_person_id;
+      if (u.workstation_id !== undefined) data.workstation_id = u.workstation_id; // vybráno ze skupiny
       await txx.batchOperation.update({ where: { id: u.id }, data });
     }
     const firstStart = updates[0].planned_start;
@@ -419,6 +459,16 @@ async function scheduleAllActive(opts = {}) {
       status: { notIn: ['in_progress', 'done', 'cancelled'] },
     },
     data: { planned_start: null, planned_end: null },
+  });
+
+  // Operace ze skupiny pracovišť: uvolni dříve vybrané pracoviště, ať se při přeplánování vybere znovu
+  await tx.batchOperation.updateMany({
+    where: {
+      batch: { status: { in: ['planned', 'released', 'paused'] } },
+      status: { notIn: ['in_progress', 'done', 'cancelled'] },
+      workstation_group_id: { not: null },
+    },
+    data: { workstation_id: null },
   });
 
   const results = [];

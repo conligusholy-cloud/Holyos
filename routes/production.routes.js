@@ -18,6 +18,7 @@ const PRODUCT_DEEP_INCLUDE = {
   operations: {
     include: {
       workstation: true,
+      workstation_group: { select: { id: true, name: true, color: true } },
       materials: {
         include: {
           material: true,
@@ -298,7 +299,7 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
       for (const op of src.operations) {
         if (op.is_staging) continue; // staging z FY importu nekopírovat
         const nop = await tx.productOperation.create({
-          data: { product_id: p.id, workstation_id: op.workstation_id, step_number: op.step_number, name: op.name, phase: op.phase,
+          data: { product_id: p.id, workstation_id: op.workstation_id, workstation_group_id: op.workstation_group_id, step_number: op.step_number, name: op.name, phase: op.phase,
             duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count,
             description: op.description, bom_count: op.bom_count, from_factorify: false },
         });
@@ -759,6 +760,81 @@ router.post('/products/:id/fy-bom/sync-qty', async (req, res, next) => {
 // HALY (halls) — seskupení pracovišť
 // =============================================================================
 
+// =============================================================================
+// SKUPINY PRACOVIŠŤ (Hala → Skupina → Pracoviště)
+// =============================================================================
+
+// GET /api/production/workstation-groups — seznam skupin (vč. počtu pracovišť a operací)
+router.get('/workstation-groups', async (req, res, next) => {
+  try {
+    const groups = await prisma.workstationGroup.findMany({
+      orderBy: [{ hall: { sort_order: 'asc' } }, { sort_order: 'asc' }, { name: 'asc' }],
+      include: {
+        hall: { select: { id: true, name: true, color: true } },
+        _count: { select: { workstations: true, operations: true } },
+      },
+    });
+    res.json(groups);
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/workstation-groups — vytvořit skupinu
+router.post('/workstation-groups', async (req, res, next) => {
+  try {
+    const { name, code, hall_id, color, sort_order, note, workstation_ids } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'Název skupiny je povinný' });
+    const g = await prisma.$transaction(async (tx) => {
+      const created = await tx.workstationGroup.create({
+        data: {
+          name: name.trim(), code: code ? String(code).trim() : null,
+          hall_id: hall_id ? parseInt(hall_id) : null,
+          color: color || null, sort_order: sort_order || 0, note: note || null,
+        },
+      });
+      if (Array.isArray(workstation_ids) && workstation_ids.length) {
+        await tx.workstation.updateMany({
+          where: { id: { in: workstation_ids.map(Number) } },
+          data: { group_id: created.id, ...(created.hall_id ? { hall_id: created.hall_id } : {}) },
+        });
+      }
+      return created;
+    });
+    res.status(201).json(g);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/production/workstation-groups/:id — upravit skupinu
+router.put('/workstation-groups/:id', async (req, res, next) => {
+  try {
+    const { name, code, hall_id, color, sort_order, note } = req.body;
+    const id = parseInt(req.params.id);
+    const data = {};
+    if (name !== undefined) data.name = String(name).trim();
+    if (code !== undefined) data.code = code ? String(code).trim() : null;
+    if (hall_id !== undefined) data.hall_id = hall_id ? parseInt(hall_id) : null;
+    if (color !== undefined) data.color = color || null;
+    if (sort_order !== undefined) data.sort_order = parseInt(sort_order) || 0;
+    if (note !== undefined) data.note = note || null;
+    const g = await prisma.$transaction(async (tx) => {
+      const updated = await tx.workstationGroup.update({ where: { id }, data });
+      // Přesun skupiny do jiné haly → přesunou se i její pracoviště
+      if (hall_id !== undefined) {
+        await tx.workstation.updateMany({ where: { group_id: id }, data: { hall_id: updated.hall_id } });
+      }
+      return updated;
+    });
+    res.json(g);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/production/workstation-groups/:id — smazat skupinu (pracoviště i operace zůstanou, odpojí se)
+router.delete('/workstation-groups/:id', async (req, res, next) => {
+  try {
+    await prisma.workstationGroup.delete({ where: { id: parseInt(req.params.id) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/production/halls — seznam hal
 router.get('/halls', async (req, res, next) => {
   try {
@@ -835,6 +911,7 @@ router.get('/workstations', async (req, res, next) => {
           orderBy: [{ is_primary: 'desc' }, { created_at: 'asc' }],
         },
         hall: { select: { id: true, name: true, color: true } },
+        group: { select: { id: true, name: true, color: true, hall_id: true } },
         input_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
         input_location: { select: { id: true, label: true, section: true, rack: true, position: true } },
         output_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
@@ -965,11 +1042,12 @@ router.get('/workstations/:id', async (req, res, next) => {
 // POST /api/production/workstations
 router.post('/workstations', async (req, res, next) => {
   try {
-    const { name, code, hall_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
+    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
     const ws = await prisma.workstation.create({
       data: {
         name, code,
         hall_id: hall_id ? parseInt(hall_id) : null,
+        group_id: group_id ? parseInt(group_id) : null,
         is_external: is_external === true,
         width_m: width_m ? parseFloat(width_m) : null,
         length_m: length_m ? parseFloat(length_m) : null,
@@ -986,9 +1064,17 @@ router.post('/workstations', async (req, res, next) => {
 // PUT /api/production/workstations/:id
 router.put('/workstations/:id', async (req, res, next) => {
   try {
-    const { name, code, hall_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
-    const data = { name, code };
+    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
+    const data = {};
+    if (name !== undefined) data.name = name;
+    if (code !== undefined) data.code = code;
     if (hall_id !== undefined) data.hall_id = hall_id ? parseInt(hall_id) : null;
+    if (group_id !== undefined) data.group_id = group_id ? parseInt(group_id) : null;
+    // Změna haly bez explicitní skupiny → skupina z jiné haly se odpojí
+    if (hall_id !== undefined && group_id === undefined) {
+      const cur = await prisma.workstation.findUnique({ where: { id: parseInt(req.params.id) }, select: { group: { select: { hall_id: true } } } });
+      if (cur?.group && cur.group.hall_id !== data.hall_id) data.group_id = null;
+    }
     if (is_external !== undefined) data.is_external = is_external === true;
     if (width_m !== undefined) data.width_m = width_m ? parseFloat(width_m) : null;
     if (length_m !== undefined) data.length_m = length_m ? parseFloat(length_m) : null;
@@ -1099,7 +1185,7 @@ router.get('/operations', async (req, res, next) => {
     if (product_id) where.product_id = parseInt(product_id);
     const ops = await prisma.productOperation.findMany({
       where,
-      include: { product: true, workstation: true, materials: { include: { material: true } } },
+      include: { product: true, workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
       orderBy: [{ product_id: 'asc' }, { step_number: 'asc' }],
     });
     res.json(ops);
@@ -1109,11 +1195,12 @@ router.get('/operations', async (req, res, next) => {
 // POST /api/production/operations
 router.post('/operations', async (req, res, next) => {
   try {
-    const { product_id, workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
+    const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
     const op = await prisma.$transaction(async (tx) => {
       const created = await tx.productOperation.create({
         data: {
           product_id, workstation_id, step_number,
+          workstation_group_id: workstation_group_id || null,
           name, phase, duration,
           duration_unit: duration_unit || 'MINUTE',
           preparation_time: preparation_time || 0,
@@ -1143,7 +1230,7 @@ router.post('/operations', async (req, res, next) => {
       }
       return tx.productOperation.findUnique({
         where: { id: created.id },
-        include: { workstation: true, materials: { include: { material: true } } },
+        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
       });
     });
     res.status(201).json(op);
@@ -1153,12 +1240,13 @@ router.post('/operations', async (req, res, next) => {
 // PUT /api/production/operations/:id
 router.put('/operations/:id', async (req, res, next) => {
   try {
-    const { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
+    const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials } = req.body;
     const opId = parseInt(req.params.id);
     const op = await prisma.$transaction(async (tx) => {
       await tx.productOperation.update({
         where: { id: opId },
-        data: { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count },
+        data: { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count,
+          ...(workstation_group_id !== undefined ? { workstation_group_id: workstation_group_id || null } : {}) },
       });
       // Nahraď materiály — smaž staré + vlož nové v jedné transakci
       if (Array.isArray(materials)) {
@@ -1184,7 +1272,7 @@ router.put('/operations/:id', async (req, res, next) => {
       }
       return tx.productOperation.findUnique({
         where: { id: opId },
-        include: { workstation: true, materials: { include: { material: true } } },
+        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
       });
     });
     res.json(op);
@@ -1516,7 +1604,7 @@ router.put('/products/:id/reorder-operations', async (req, res, next) => {
       where: { id: parseInt(req.params.id) },
       include: {
         operations: {
-          include: { workstation: true, materials: { include: { material: true } } },
+          include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
           orderBy: { step_number: 'asc' },
         },
       },

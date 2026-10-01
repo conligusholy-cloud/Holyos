@@ -1379,8 +1379,31 @@ model Hall {
   created_at DateTime @default(now())
 
   workstations Workstation[]
+  groups       WorkstationGroup[]
 
   @@map("halls")
+}
+
+// Skupina zaměnitelných pracovišť (Hala → Skupina → Pracoviště).
+// Operace v postupu ukazuje na skupinu; konkrétní pracoviště vybere plánovač (kterékoli volné).
+model WorkstationGroup {
+  id         Int     @id @default(autoincrement())
+  name       String  @db.VarChar(255)
+  code       String? @db.VarChar(50)
+  hall_id    Int?
+  color      String? @db.VarChar(20)
+  sort_order Int     @default(0)
+  note       String? @db.Text
+
+  created_at DateTime @default(now())
+
+  hall             Hall?              @relation(fields: [hall_id], references: [id], onDelete: SetNull)
+  workstations     Workstation[]
+  operations       ProductOperation[]
+  batch_operations BatchOperation[]
+
+  @@index([hall_id])
+  @@map("workstation_groups")
 }
 
 model Workstation {
@@ -1391,6 +1414,9 @@ model Workstation {
 
   // Zařazení do haly
   hall_id Int?
+
+  // Skupina pracovišť (Hala → Skupina → Pracoviště) — zaměnitelná pracoviště se stejnými operacemi
+  group_id Int?
 
   // Externí pracoviště (kooperace)
   is_external Boolean @default(false)
@@ -1412,6 +1438,7 @@ model Workstation {
   created_at DateTime @default(now())
 
   hall             Hall?               @relation(fields: [hall_id], references: [id], onDelete: SetNull)
+  group            WorkstationGroup?   @relation(fields: [group_id], references: [id], onDelete: SetNull)
   input_warehouse  Warehouse?          @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
   input_location   WarehouseLocation?  @relation("WorkstationInputLocation", fields: [input_location_id], references: [id])
   output_warehouse Warehouse?          @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
@@ -1422,6 +1449,7 @@ model Workstation {
   batch_operations BatchOperation[] // Plánovač — instance operací běžících na pracovišti
 
   @@index([hall_id])
+  @@index([group_id])
   @@index([factorify_id])
   @@index([input_warehouse_id])
   @@index([input_location_id])
@@ -1452,6 +1480,7 @@ model ProductOperation {
   id               Int     @id @default(autoincrement())
   product_id       Int
   workstation_id   Int?
+  workstation_group_id Int? // skupina pracovišť — konkrétní pracoviště vybere plánovač
   step_number      Int // pořadí operace
   name             String  @db.VarChar(255)
   phase            String? @db.VarChar(255)
@@ -1474,6 +1503,7 @@ model ProductOperation {
 
   product            Product                 @relation(fields: [product_id], references: [id], onDelete: Cascade)
   workstation        Workstation?            @relation(fields: [workstation_id], references: [id])
+  workstation_group  WorkstationGroup?       @relation(fields: [workstation_group_id], references: [id], onDelete: SetNull)
   materials          OperationMaterial[]
   config_option_ops  ConfigOptionOperation[] // volby, které ovlivňují tuto operaci
   last_calibrated_by Person?                 @relation("ProductOperationCalibrator", fields: [last_calibrated_by_id], references: [id])
@@ -1486,6 +1516,7 @@ model ProductOperation {
   batch_operations      BatchOperation[]
 
   @@index([product_id])
+  @@index([workstation_group_id])
   @@map("product_operations")
 }
 
@@ -3870,6 +3901,7 @@ model BatchOperation {
   batch_id       Int
   operation_id   Int
   workstation_id Int?
+  workstation_group_id Int? // skupina — konkrétní workstation_id doplní plánovač
   sequence       Int
 
   status String @default("pending") @db.VarChar(20)
@@ -3890,6 +3922,7 @@ model BatchOperation {
   batch           ProductionBatch  @relation(fields: [batch_id], references: [id], onDelete: Cascade)
   operation       ProductOperation @relation(fields: [operation_id], references: [id])
   workstation     Workstation?     @relation(fields: [workstation_id], references: [id])
+  workstation_group WorkstationGroup? @relation(fields: [workstation_group_id], references: [id], onDelete: SetNull)
   assigned_person Person?          @relation("BatchOperationAssignee", fields: [assigned_person_id], references: [id])
 
   logs BatchOperationLog[]
@@ -3897,6 +3930,7 @@ model BatchOperation {
   @@index([batch_id])
   @@index([operation_id])
   @@index([workstation_id])
+  @@index([workstation_group_id])
   @@index([status])
   @@index([assigned_person_id])
   @@map("batch_operations")
@@ -6769,7 +6803,11 @@ model LeasingInquiry {
   email_sent         Boolean  @default(false)
   sms_sent           Boolean  @default(false)
   sms_id             String?  @db.VarChar(80)
-  opened_at          DateTime?
+  opened_at          DateTime? // leasingovka otevřela odkaz (stránku poptávky)
+  email_opened_at    DateTime? // e-mail zobrazen (sledovací pixel)
+  email_delivery     String?  @db.VarChar(20) // accepted (přijato Exchange) | delivered (DSN/Relayed) | bounced (NDR)
+  email_delivery_at  DateTime?
+  email_delivery_note String? @db.VarChar(500) // důvod z NDR
   responded_at       DateTime?
   result_note        String?  @db.Text // podmínky / důvod zamítnutí
   result_monthly     Decimal? @db.Decimal(12, 2)

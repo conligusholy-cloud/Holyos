@@ -130,7 +130,7 @@ async function sendReply(userPrincipalName, { to, subject, body }) {
  * @param {boolean} [args.saveToSentItems=true]
  * @returns {Promise<{ ok: true }>}
  */
-async function sendMailAs(fromUpn, { to, cc, subject, textBody, htmlBody, attachments, saveToSentItems = true, fromName, replyTo }) {
+async function sendMailAs(fromUpn, { to, cc, subject, textBody, htmlBody, attachments, saveToSentItems = true, fromName, replyTo, deliveryReceipt = false }) {
   if (!fromUpn) throw new Error('sendMailAs: chybí fromUpn');
   if (!to) throw new Error('sendMailAs: chybí to');
 
@@ -149,6 +149,8 @@ async function sendMailAs(fromUpn, { to, cc, subject, textBody, htmlBody, attach
     toRecipients: recipients,
   };
   if (ccList.length) message.ccRecipients = ccList;
+  // Doručenka (DSN): Exchange pošle do schránky odesílatele report „Delivered/Relayed" nebo NDR „Undeliverable".
+  if (deliveryReceipt) message.isDeliveryReceiptRequested = true;
 
   // Vlastní zobrazované jméno odesílatele (adresa zůstává fromUpn — povolená schránka).
   if (fromName) message.from = { emailAddress: { name: fromName, address: fromUpn } };

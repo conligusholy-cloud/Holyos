@@ -57,7 +57,7 @@ async function generateBatchOperationsForBatch(batchId, opts = {}) {
   const productOps = await tx.productOperation.findMany({
     where: { product_id: batch.product_id, is_staging: false }, // staging z FY importu se neplánuje
     orderBy: { step_number: 'asc' },
-    select: { id: true, step_number: true, workstation_id: true, name: true },
+    select: { id: true, step_number: true, workstation_id: true, workstation_group_id: true, name: true },
   });
 
   if (productOps.length === 0) {
@@ -76,6 +76,7 @@ async function generateBatchOperationsForBatch(batchId, opts = {}) {
       batch_id: id,
       operation_id: op.id,
       workstation_id: op.workstation_id,
+      workstation_group_id: op.workstation_group_id || null, // plánovač vybere konkrétní pracoviště ze skupiny
       sequence: op.step_number,
       status: initialStatus,
     })),

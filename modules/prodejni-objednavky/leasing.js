@@ -158,7 +158,7 @@
     var rows = state.rows.filter(function (r) { return !q || ((r.name || '') + ' ' + (r.ico || '') + ' ' + (r.city || '') + ' ' + (r.contact_name || '')).toLowerCase().indexOf(q) !== -1; });
     var box = document.getElementById('lc-list'); if (!box) return;
     if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:20px 0">Zatím žádné leasingové společnosti. Přidej první přes „+ Nová společnost".</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>🧮 Kalkulačka</th><th>Stav</th><th></th></tr></thead><tbody>'
+    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>🧮 Kalkulačka</th><th>📨 Poptávky · výsledek</th><th>Stav</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         return '<tr onclick="__lcEdit(' + r.id + ')" style="cursor:pointer">'
           + '<td><b>' + esc(r.name) + '</b>' + (r.note ? '<div style="font-size:11px;color:var(--text2);max-width:260px">' + esc(String(r.note).slice(0, 80)) + '</div>' : '') + '</td>'
@@ -170,6 +170,7 @@
           + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.docs_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'docs\');return false" title="Otevřít potřebné dokumenty">📄 ' + (r.docs_count || 0) + '</a></td>'
           + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.offers_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'offers\');return false" title="Otevřít nabídky">💼 ' + (r.offers_count || 0) + '</a></td>'
           + '<td onclick="event.stopPropagation()"><button class="lc-calcbtn" onclick="__lcCalc(' + r.id + ')" title="Rychlá kalkulačka z nabídek této společnosti"' + (r.offers_count ? '' : ' disabled style="opacity:.4"') + '>🧮 Spočítat</button></td>'
+          + '<td onclick="event.stopPropagation()">' + inqCell(r) + '</td>'
           + '<td><span class="lc-badge ' + (r.active ? 'lc-on' : 'lc-off') + '">' + (r.active ? 'Aktivní' : 'Neaktivní') + '</span></td>'
           + '<td class="lc-actions" onclick="event.stopPropagation()"><button class="lc-act" title="Upravit" onclick="__lcEdit(' + r.id + ')">✏️</button>'
           + '<button class="lc-act" title="Smazat" onclick="__lcDelete(' + r.id + ",'" + attr(r.name) + "')\">🗑️</button></td>"
@@ -582,6 +583,35 @@
   }
 
   // ── Poptávky financování (odeslané z obrazovky obchodníka) ──
+  // Buňka „Poptávky · výsledek" v seznamu společností: celkem odesláno + rozpad podle stavu
+  function inqCell(r) {
+    var q = r.inquiries || { total: 0 };
+    if (!q.total) return '<span class="lc-cnt zero">📨 0</span>';
+    var open = (q.sent || 0) + (q.opened || 0) + (q.in_progress || 0);
+    var pill = function (n, label, color, title) { return n ? '<span title="' + attr(title) + '" style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:600;color:' + color + ';background:' + color + '22;border:1px solid ' + color + '55;margin-left:4px">' + label + ' ' + n + '</span>' : ''; };
+    return '<a href="#" class="lc-cnt" onclick="__lcInqCompany(' + r.id + ');return false" title="Zobrazit poptávky této společnosti">📨 ' + q.total + '</a>'
+      + pill(q.approved, '✅', '#22c55e', 'Schváleno') + pill(q.rejected, '❌', '#ef4444', 'Zamítnuto') + pill(open, '⏳', '#f59e0b', 'Čeká na výsledek (odesláno / otevřeno / zpracovává se)') + pill(q.canceled, '–', '#6b7280', 'Zrušeno');
+  }
+  window.__lcInqCompany = function (cid) {
+    state.inqCompany = cid; state.inqFilter = 'all';
+    if (!state.inqView) window.__lcInq(); else renderInq();
+  };
+
+  // Sloupec Kanály: e-mail (odesláno → doručeno → zobrazen) + SMS + otevření odkazu
+  function inqChannels(r) {
+    var d = function (x) { return new Date(x).toLocaleDateString('cs-CZ'); };
+    var line = function (icon, text, color, title) { return '<div style="font-size:11px;color:' + color + ';white-space:nowrap" title="' + attr(title || '') + '">' + icon + ' ' + text + '</div>'; };
+    var h = '';
+    if (!r.email_sent) h += line('📧', 'e-mail neodeslán', '#ef4444', 'E-mail se nepodařilo odeslat (leasingovka bez e-mailu nebo chyba odesílatele)');
+    else if (r.email_delivery === 'bounced') h += line('📧❌', 'NEDORUČEN', '#ef4444', r.email_delivery_note || 'Server příjemce e-mail odmítl (NDR)');
+    else if (r.email_opened_at) h += line('📧✅', 'doručen · zobrazen ' + d(r.email_opened_at), '#22c55e', 'Leasingovka e-mail zobrazila (sledovací pixel) ' + new Date(r.email_opened_at).toLocaleString('cs-CZ'));
+    else if (r.email_delivery === 'delivered') h += line('📧✅', 'doručen ' + (r.email_delivery_at ? d(r.email_delivery_at) : ''), '#22c55e', 'Doručenka serveru příjemce (' + (r.email_delivery_note || 'DSN') + '); zatím nezobrazen');
+    else h += line('📧', 'odeslán, čeká na doručenku', '#94a3b8', 'E-mail přijal náš server (Exchange). Doručenka od serveru příjemce zatím nedorazila — ne každý server ji posílá; otevření e-mailu nebo odkazu doručení potvrdí.');
+    h += line(r.sms_sent ? '📱' : '<span style="opacity:.3">📱</span>', r.sms_sent ? 'SMS odeslána' : 'SMS ne', r.sms_sent ? 'var(--text2)' : '#94a3b8', r.sms_sent ? 'SMS kontaktní osobě přes GoSMS' : 'SMS neodeslána (bez čísla / vypnuto)');
+    if (r.opened_at) h += line('🔗', 'odkaz otevřen ' + d(r.opened_at), '#60a5fa', 'Leasingovka otevřela stránku poptávky ' + new Date(r.opened_at).toLocaleString('cs-CZ'));
+    return h;
+  }
+
   var INQ_ST = { sent: ['📤 Odesláno', '#94a3b8'], opened: ['👀 Otevřeno', '#60a5fa'], in_progress: ['⏳ Zpracovává se', '#f59e0b'], approved: ['✅ Schváleno', '#22c55e'], rejected: ['❌ Zamítnuto', '#ef4444'], canceled: ['Zrušeno', '#6b7280'] };
   window.__lcInq = function () {
     state.inqView = !state.inqView;
@@ -589,28 +619,32 @@
     document.getElementById('lc-inq').style.display = state.inqView ? '' : 'none';
     var b = document.getElementById('lc-view-inq'); if (b) b.classList.toggle('primary', state.inqView);
     if (state.inqView) { if (state.inqs) renderInq(); else api('/inquiries').then(function (r) { state.inqs = r; renderInq(); }); }
+    else { state.inqCompany = null; api('').then(function (rows) { state.rows = Array.isArray(rows) ? rows : []; render(); }).catch(function () {}); } // obnov počty poptávek u společností
   };
   function renderInq() {
     var box = document.getElementById('lc-inq'); if (!box) return;
     var rows = state.inqs || [];
     var f = state.inqFilter || 'open';
+    if (state.inqCompany) rows = rows.filter(function (r) { return r.leasing_company_id === state.inqCompany; });
     var vis = rows.filter(function (r) { return f === 'all' ? true : f === 'open' ? ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1 : r.status === f; });
+    var compName = state.inqCompany ? ((state.rows || []).filter(function (c) { return c.id === state.inqCompany; })[0] || {}).name || ('#' + state.inqCompany) : null;
     var tab = function (k, l) { return '<button class="lc-btn' + (f === k ? ' primary' : '') + '" onclick="__lcInqFilter(\'' + k + '\')" style="padding:6px 12px;font-size:12px">' + l + '</button>'; };
-    box.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><b style="margin-right:6px">📨 Poptávky financování</b>' + tab('open', 'Otevřené') + tab('approved', 'Schválené') + tab('rejected', 'Zamítnuté') + tab('all', 'Vše') + '<button class="lc-btn" onclick="__lcInqTest()" title="Pošle ukázkovou poptávku na tvůj e-mail a telefon — uvidíš, co dostane leasingovka" style="margin-left:auto;padding:6px 12px;font-size:12px">🧪 Testovací poptávka na mě</button><span style="font-size:12px;color:var(--text2)">Výsledek do 3 dnů · leasingovka mění stav přes odkaz z e-mailu/SMS</span></div>'
+    box.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><b style="margin-right:6px">📨 Poptávky financování</b>' + tab('open', 'Otevřené') + tab('approved', 'Schválené') + tab('rejected', 'Zamítnuté') + tab('all', 'Vše') + (compName ? '<span style="margin-left:8px;padding:5px 10px;border-radius:10px;background:var(--surface2,#232630);border:1px solid var(--border);font-size:12px">🏦 ' + esc(compName) + ' <a href="#" onclick="__lcInqCompanyClear();return false" title="Zrušit filtr společnosti" style="margin-left:4px;color:var(--text2);text-decoration:none">✕</a></span>' : '') + '<button class="lc-btn" onclick="__lcInqTest()" title="Pošle ukázkovou poptávku na tvůj e-mail a telefon — uvidíš, co dostane leasingovka" style="margin-left:auto;padding:6px 12px;font-size:12px">🧪 Testovací poptávka na mě</button><span style="font-size:12px;color:var(--text2)">Výsledek do 3 dnů · leasingovka mění stav přes odkaz z e-mailu/SMS</span></div>'
       + (vis.length ? '<table><thead><tr><th>Odesláno</th><th>Klient</th><th>Předmět · cena</th><th>Leasingovka</th><th>Kanály</th><th>Stav</th><th>Výsledek</th><th></th></tr></thead><tbody>'
         + vis.map(function (r) { var st = INQ_ST[r.status] || [r.status, '#94a3b8']; var open = ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1;
           return '<tr><td style="white-space:nowrap">' + new Date(r.sent_at).toLocaleDateString('cs-CZ') + '<div style="font-size:11px;color:var(--text2)">' + esc(r.sent_by_name || '') + '</div></td>'
             + '<td><b>' + esc(r.client_first_name + ' ' + r.client_last_name) + '</b>' + (r.client_company ? '<div style="font-size:11px;color:var(--text2)">' + esc(r.client_company) + '</div>' : '') + '<div style="font-size:11px;color:var(--text2)">' + esc(r.client_phone || '') + (r.client_email ? ' · ' + esc(r.client_email) : '') + '</div></td>'
             + '<td>' + esc(r.subject) + '<div style="font-size:11px;color:var(--text2)">' + fmtKc(r.price) + (r.akontace_pct != null ? ' · ak. ' + Number(r.akontace_pct) + ' %' : '') + (r.months ? ' · ' + r.months + ' měs.' : '') + '</div></td>'
             + '<td>' + esc(r.company.name) + '<div style="font-size:11px;color:var(--text2)">' + esc(r.company.contact_name || '') + '</div></td>'
-            + '<td style="white-space:nowrap">' + (r.email_sent ? '📧 ' : '<span style="opacity:.3">📧</span> ') + (r.sms_sent ? '📱' : '<span style="opacity:.3">📱</span>') + (r.opened_at ? '<div style="font-size:11px;color:#60a5fa">otevřeno ' + new Date(r.opened_at).toLocaleDateString('cs-CZ') + '</div>' : '') + '</td>'
+            + '<td style="white-space:nowrap">' + inqChannels(r) + '</td>'
             + '<td><span style="color:' + st[1] + ';font-weight:700;white-space:nowrap">' + st[0] + '</span>' + (open && r.deadline_at ? '<div style="font-size:11px;color:' + (r.overdue ? '#ef4444' : 'var(--text2)') + '">' + (r.overdue ? '⚠️ po termínu ' : 'do ') + new Date(r.deadline_at).toLocaleDateString('cs-CZ') + '</div>' : '') + '</td>'
             + '<td style="max-width:260px;font-size:12px">' + (r.result_note ? esc(r.result_note) : '<span style="color:var(--text2)">—</span>') + (r.result_monthly ? '<div><b>' + fmtKc(r.result_monthly) + '/měs</b></div>' : '') + '</td>'
             + '<td style="white-space:nowrap"><select onchange="__lcInqStatus(' + r.id + ',this.value)" style="background:var(--surface2,#232630);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:11.5px">' + Object.keys(INQ_ST).map(function (k) { return '<option value="' + k + '"' + (k === r.status ? ' selected' : '') + '>' + INQ_ST[k][0] + '</option>'; }).join('') + '</select>'
-            + (open ? '<button class="lc-act" title="Připomenout (e-mail + SMS)" onclick="__lcInqResend(' + r.id + ',this)">🔔</button>' : '') + '<a class="lc-act" title="Otevřít odkaz pro leasingovku" href="' + attr(r.public_url) + '" target="_blank">🔗</a></td></tr>'; }).join('') + '</tbody></table>'
+            + (open ? '<button class="lc-act" title="Připomenout (e-mail + SMS)" onclick="__lcInqResend(' + r.id + ',this)">🔔</button>' : '') + '<a class="lc-act" title="Otevřít odkaz pro leasingovku" href="' + attr(r.public_url) + '" target="_blank">🔗</a>' + '<button class="lc-act" title="Smazat neaktuální poptávku (Jan + Tomáš dostanou notifikaci do Velína)" onclick="__lcInqDelete(' + r.id + ',this)">🗑️</button></td></tr>'; }).join('') + '</tbody></table>'
         : '<div style="color:var(--text2);padding:20px 0">Žádné poptávky v tomto filtru.</div>');
   }
   window.__lcInqFilter = function (k) { state.inqFilter = k; renderInq(); };
+  window.__lcInqCompanyClear = function () { state.inqCompany = null; renderInq(); };
   window.__lcInqTest = function () {
     var email = prompt('Na jaký e-mail poslat testovací poptávku?', (state.me && state.me.email) || 'tomas.holy@bestseries.cz'); if (email === null) return;
     var phone = prompt('Na jaký telefon poslat testovací SMS (GoSMS)?', '+420'); if (phone === null) return;
@@ -621,6 +655,13 @@
     }).then(function (r) { state.inqs = r; state.inqFilter = 'all'; renderInq(); }).catch(function (e) { alert('Test selhal: ' + e.message); });
   };
   window.__lcInqStatus = function (id, status) { api('/inquiries/' + id, { method: 'PATCH', body: { status: status } }).then(function () { return api('/inquiries'); }).then(function (r) { state.inqs = r; renderInq(); }).catch(function (e) { alert('Nepodařilo se změnit stav: ' + e.message); }); };
+  window.__lcInqDelete = function (id, btn) {
+    var r = (state.inqs || []).find(function (x) { return x.id === id; });
+    var who = r ? ((r.client_first_name || '') + ' ' + (r.client_last_name || '')).trim() + ' → ' + (r.company ? r.company.name : '') : '#' + id;
+    if (!confirm('Smazat poptávku ' + who + '?\n\nOdkaz pro leasingovku přestane fungovat. Jan a Tomáš Holý dostanou notifikaci do Velína.')) return;
+    btn.disabled = true;
+    api('/inquiries/' + id, { method: 'DELETE' }).then(function () { return api('/inquiries'); }).then(function (rows) { state.inqs = rows; var c = document.getElementById('lc-inq-cnt'); if (c) c.textContent = rows.filter(function (x) { return ['sent', 'opened', 'in_progress'].indexOf(x.status) !== -1; }).length; renderInq(); }).catch(function (e) { alert('Smazání selhalo: ' + e.message); btn.disabled = false; });
+  };
   window.__lcInqResend = function (id, btn) { btn.disabled = true; api('/inquiries/' + id + '/resend', { method: 'POST', body: {} }).then(function (r) { alert((r.errors && r.errors.length) ? 'Připomínka odeslána s výhradami: ' + r.errors.join('; ') : 'Připomínka odeslána (e-mail + SMS).'); }).catch(function (e) { alert('Připomínku se nepodařilo poslat: ' + e.message); }).then(function () { btn.disabled = false; }); };
 
   window.__lcEdit = function (id) { openEditor(id); };

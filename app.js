@@ -1261,6 +1261,11 @@ server.listen(PORT, async () => {
     console.error('[app] compounder-reply-ingest-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/leasing/delivery-worker').start(); // doručenky/NDR e-mailů s poptávkou leasingovkám
+  } catch (err) {
+    console.error('[app] leasing-delivery-worker nelze spustit:', err.message);
+  }
+  try {
     const voiceOutboundWorker = require('./services/voice/outbound-worker');
     voiceOutboundWorker.start();
   } catch (err) {
