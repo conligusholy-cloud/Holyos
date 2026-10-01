@@ -881,11 +881,17 @@ async function buildPersonDayStats(p, dateStr) {
       const closed = ['nezajem', 'nelze_pouzit', 'rejected', 'prodano', 'converted'];
       uncalled = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed } } });
       uncalledNew = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed }, created_at: { gte: new Date(Date.now() - 2 * 86400000) } } });
+      // Nejstarší nevolaný kontakt — jak dlouho se k nim obchodník nedostal.
+      const oldest = await prisma.compounderLead.findFirst({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed } }, orderBy: { created_at: 'asc' }, select: { created_at: true, name: true } });
+      var uncalledOldestAt = oldest ? oldest.created_at : null;
+      var uncalledOldestName = oldest ? oldest.name : null;
     } catch (e) { uncalled = 0; uncalledNew = 0; }
     return {
       person_id: p.id, name: p.name,
       uncalled_contacts: uncalled,          // kolika kontaktům obchodník ještě nikdy nevolal
       uncalled_new_contacts: uncalledNew,   // z toho nových (0–2 dny) — ty nesmí vychladnout
+      uncalled_oldest_at: (typeof uncalledOldestAt !== 'undefined') ? uncalledOldestAt : null, // nejstarší nevolaný kontakt (datum vytvoření)
+      uncalled_oldest_name: (typeof uncalledOldestName !== 'undefined') ? uncalledOldestName : null,
       focus: plan ? plan.focus : null,
       tasks_assigned: dr ? dr.tasks_total : tasks.length,
       tasks_done: dr ? dr.tasks_done : tasks.filter((t) => t.status === 'done').length,
