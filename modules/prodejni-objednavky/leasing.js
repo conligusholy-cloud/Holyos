@@ -622,6 +622,46 @@
     if (state.inqView) { if (state.inqs) renderInq(); else api('/inquiries').then(function (r) { state.inqs = r; renderInq(); }); }
     else { state.inqCompany = null; api('').then(function (rows) { state.rows = Array.isArray(rows) ? rows : []; render(); }).catch(function () {}); } // obnov počty poptávek u společností
   };
+  // Statistika objemu financování BEZ duplicit: jedna poptávka (klient + předmět + cena) poslaná
+  // více leasingovkám = jeden „případ" s jedním objemem. Stav případu: schváleno (aspoň jedna schválila)
+  // > zamítnuto (všechny zamítly/zrušeny) > otevřeno.
+  function inqCases(rows) {
+    var map = {};
+    rows.forEach(function (r) {
+      if (r.company && /^Test\s/i.test(r.company.name || '')) return; // testovací záznamy mimo statistiku
+      var who = r.compounder_lead_id ? 'L' + r.compounder_lead_id : (String(r.client_phone || '').replace(/\D/g, '').slice(-9) || String(r.client_email || '').toLowerCase() || ((r.client_first_name || '') + ' ' + (r.client_last_name || '')).toLowerCase());
+      var key = who + '|' + String(r.subject || '').trim().toLowerCase() + '|' + Math.round(Number(r.price) || 0);
+      var c = map[key] || (map[key] = { key: key, price: Number(r.price) || 0, client: ((r.client_first_name || '') + ' ' + (r.client_last_name || '')).trim(), subject: r.subject, sent_at: r.sent_at, by: r.sent_by_name || '—', companies: [], statuses: [] });
+      if (c.companies.indexOf(r.company ? r.company.name : '') === -1) c.companies.push(r.company ? r.company.name : '');
+      c.statuses.push(r.status);
+      if (new Date(r.sent_at) < new Date(c.sent_at)) c.sent_at = r.sent_at;
+    });
+    return Object.keys(map).map(function (k) {
+      var c = map[k];
+      c.status = c.statuses.indexOf('approved') !== -1 ? 'approved' : (c.statuses.every(function (s) { return s === 'rejected' || s === 'canceled'; }) ? 'rejected' : 'open');
+      return c;
+    });
+  }
+  function inqStatsHtml(rows) {
+    var cases = inqCases(rows);
+    var sum = function (list) { return list.reduce(function (s, c) { return s + c.price; }, 0); };
+    var fm = function (n) { return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; };
+    var open = cases.filter(function (c) { return c.status === 'open'; }), appr = cases.filter(function (c) { return c.status === 'approved'; }), rej = cases.filter(function (c) { return c.status === 'rejected'; });
+    var month = cases.filter(function (c) { var d = new Date(c.sent_at), n = new Date(); return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear(); });
+    var byPerson = {};
+    cases.forEach(function (c) { var b = byPerson[c.by] || (byPerson[c.by] = { n: 0, sum: 0, appr: 0 }); b.n++; b.sum += c.price; if (c.status === 'approved') b.appr += c.price; });
+    var card = function (label, value, sub, color) { return '<div style="flex:1;min-width:170px;background:var(--surface2,#232630);border:1px solid var(--border);border-radius:10px;padding:10px 14px"><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.3px">' + label + '</div><div style="font-size:18px;font-weight:800;color:' + (color || 'var(--text)') + '">' + value + '</div>' + (sub ? '<div style="font-size:11px;color:var(--text2)">' + sub + '</div>' : '') + '</div>'; };
+    var people = Object.keys(byPerson).sort(function (a, b) { return byPerson[b].sum - byPerson[a].sum; }).map(function (k) { return '<span style="white-space:nowrap"><b>' + esc(k) + '</b> ' + byPerson[k].n + '× · ' + fm(byPerson[k].sum) + (byPerson[k].appr ? ' <span style="color:#22c55e">(✅ ' + fm(byPerson[k].appr) + ')</span>' : '') + '</span>'; }).join('<span style="color:var(--border);margin:0 8px">|</span>');
+    return '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
+      + card('Poptávaný objem celkem', fm(sum(cases)), cases.length + ' poptávek (bez duplicit) · ' + rows.length + ' odeslání leasingovkám', '#eab308')
+      + card('Čeká na výsledek', fm(sum(open)), open.length + ' poptávek', '#f59e0b')
+      + card('Schváleno', fm(sum(appr)), appr.length + ' poptávek' + (cases.length ? ' · ' + Math.round(appr.length / cases.length * 100) + ' % úspěšnost' : ''), '#22c55e')
+      + card('Zamítnuto', fm(sum(rej)), rej.length + ' poptávek', '#ef4444')
+      + card('Tento měsíc', fm(sum(month)), month.length + ' poptávek', 'var(--text)')
+      + '</div>'
+      + (people ? '<div style="font-size:12px;color:var(--text2);margin:-2px 0 12px;display:flex;flex-wrap:wrap;align-items:center;gap:4px"><span style="margin-right:6px">👤 Podle obchodníka:</span>' + people + '</div>' : '');
+  }
+
   function renderInq() {
     var box = document.getElementById('lc-inq'); if (!box) return;
     var rows = state.inqs || [];
@@ -631,6 +671,7 @@
     var compName = state.inqCompany ? ((state.rows || []).filter(function (c) { return c.id === state.inqCompany; })[0] || {}).name || ('#' + state.inqCompany) : null;
     var tab = function (k, l) { return '<button class="lc-btn' + (f === k ? ' primary' : '') + '" onclick="__lcInqFilter(\'' + k + '\')" style="padding:6px 12px;font-size:12px">' + l + '</button>'; };
     box.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center"><b style="margin-right:6px">📨 Poptávky financování</b>' + tab('open', 'Otevřené') + tab('approved', 'Schválené') + tab('rejected', 'Zamítnuté') + tab('all', 'Vše') + (compName ? '<span style="margin-left:8px;padding:5px 10px;border-radius:10px;background:var(--surface2,#232630);border:1px solid var(--border);font-size:12px">🏦 ' + esc(compName) + ' <a href="#" onclick="__lcInqCompanyClear();return false" title="Zrušit filtr společnosti" style="margin-left:4px;color:var(--text2);text-decoration:none">✕</a></span>' : '') + '<button class="lc-btn" onclick="__lcInqTest()" title="Pošle ukázkovou poptávku na tvůj e-mail a telefon — uvidíš, co dostane leasingovka" style="margin-left:auto;padding:6px 12px;font-size:12px">🧪 Testovací poptávka na mě</button><span style="font-size:12px;color:var(--text2)">Výsledek do 3 dnů · leasingovka mění stav přes odkaz z e-mailu/SMS</span></div>'
+      + inqStatsHtml(rows)
       + (vis.length ? '<table><thead><tr><th>Odesláno</th><th>👤 Obchodník</th><th>Klient</th><th>Předmět · cena</th><th>Leasingovka</th><th>Kanály</th><th>Stav</th><th>Výsledek</th><th></th></tr></thead><tbody>'
         + vis.map(function (r) { var st = INQ_ST[r.status] || [r.status, '#94a3b8']; var open = ['sent', 'opened', 'in_progress'].indexOf(r.status) !== -1;
           return '<tr><td style="white-space:nowrap">' + new Date(r.sent_at).toLocaleDateString('cs-CZ') + '<div style="font-size:11px;color:var(--text2)">' + new Date(r.sent_at).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) + '</div></td>'
