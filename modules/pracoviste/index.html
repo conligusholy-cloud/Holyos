@@ -169,6 +169,7 @@
       <button class="btn" onclick="openHallModal()">+ Nová hala</button>
       <button class="btn btn-primary" onclick="openAddModal()">+ Nové pracoviště</button>
       <input type="text" class="search-box" id="search" placeholder="Hledat pracoviště..." oninput="renderList()">
+      <button class="btn" id="btn-reset-all" style="display:none;margin-left:auto;background:#ef4444;color:#fff;border-color:#ef4444;" onclick="resetAllWorkstations()" title="Jen admin — smaže všechna pracoviště (se zálohou)">🗑️ Smazat všechna pracoviště</button>
     </div>
 
     <div style="flex:1;overflow-y:auto;">
@@ -338,8 +339,41 @@
       return r.json();
     }
 
+    // === Admin: smazat všechna pracoviště ===
+    async function initAdminButton() {
+      try {
+        const me = await api('/api/auth/me');
+        const u = me.user || me;
+        if (u && (u.role === 'admin' || u.isSuperAdmin || u.is_super_admin)) {
+          document.getElementById('btn-reset-all').style.display = '';
+        }
+      } catch (_) { /* není admin / nepřihlášen */ }
+    }
+
+    async function resetAllWorkstations() {
+      const count = allWorkstations.length;
+      const typed = prompt(
+        'POZOR: smažeš VŠECHNA pracoviště (' + count + ').\n\n' +
+        'Výrobky, pracovní postupy, sloty a dávky zůstanou, jen přijdou o přiřazené pracoviště.\n' +
+        'Přiřazení pracovníků k pracovištím se smaže. Před smazáním se uloží záloha (data/backups).\n\n' +
+        'Pro potvrzení napiš SMAZAT:'
+      );
+      if (typed === null) return;
+      if (typed.trim() !== 'SMAZAT') { showToast('Nepotvrzeno — nic nesmazáno', true); return; }
+      const halls = confirm('Smazat i HALY?\n\nOK = ano, smazat i haly\nZrušit = haly nechat');
+      try {
+        const r = await api('/api/production/workstations/reset-all', {
+          method: 'POST', body: JSON.stringify({ confirm: 'SMAZAT', halls }),
+        });
+        showToast('Smazáno ' + r.workstations_deleted + ' pracovišť' + (r.halls_deleted ? ', ' + r.halls_deleted + ' hal' : '') +
+          ', odpojeno ' + r.operations_unlinked + ' operací. Záloha: ' + r.backup);
+        await reloadData();
+      } catch (e) { showToast('Chyba: ' + e.message, true); }
+    }
+
     // === Inicializace ===
     document.addEventListener('DOMContentLoaded', async () => {
+      initAdminButton();
       try {
         const [wsList, halls, people, warehouses] = await Promise.all([
           api('/api/production/workstations'),

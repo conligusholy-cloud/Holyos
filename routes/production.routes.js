@@ -7,6 +7,7 @@ const { z } = require('zod');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { scheduleBatch } = require('../services/planning/scheduler');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 // =============================================================================
 // HELPER: Rekurzivní načítání sub-produktů (polotovar → polotovar → ... do hloubky)
@@ -1044,6 +1045,37 @@ router.delete('/workstations/:id/workers/:workerId', async (req, res, next) => {
   try {
     await prisma.workstationWorker.delete({ where: { id: parseInt(req.params.workerId) } });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/production/workstations/reset-all — ADMIN: smaž všechna pracoviště (se zálohou)
+// Body: { confirm: 'SMAZAT', halls?: boolean }
+// Výrobky, postupy, sloty i dávky zůstávají — jen přijdou o workstation_id (FK ON DELETE SET NULL).
+router.post('/workstations/reset-all', requireAuth, requireAdmin, async (req, res, next) => {
+  try {
+    if (req.body?.confirm !== 'SMAZAT') return res.status(400).json({ error: 'Chybí potvrzení "SMAZAT"' });
+    const withHalls = !!req.body?.halls;
+
+    const ws = await prisma.workstation.findMany({ include: { workers: true, hall: true }, orderBy: { id: 'asc' } });
+    const halls = await prisma.hall.findMany({ orderBy: { id: 'asc' } });
+    const opsLinked = await prisma.productOperation.count({ where: { workstation_id: { not: null } } });
+
+    // Záloha do data/backups (DATA_DIR na Railway volume)
+    const fs = require('fs');
+    const path = require('path');
+    const dir = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'backups');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'workstations-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json');
+    fs.writeFileSync(file, JSON.stringify({
+      exported_at: new Date().toISOString(), by: req.user?.username || req.user?.id, workstations: ws, halls,
+    }, null, 2));
+
+    const r = await prisma.workstation.deleteMany({});
+    let hallsDeleted = 0;
+    if (withHalls) hallsDeleted = (await prisma.hall.deleteMany({})).count;
+
+    console.log(`[production] ADMIN reset pracovišť: ${r.count} pracovišť, ${hallsDeleted} hal, ${opsLinked} operací odpojeno (user ${req.user?.id}), záloha ${file}`);
+    res.json({ ok: true, workstations_deleted: r.count, halls_deleted: hallsDeleted, operations_unlinked: opsLinked, backup: path.basename(file) });
   } catch (err) { next(err); }
 });
 
