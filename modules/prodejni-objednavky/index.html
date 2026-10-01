@@ -1192,9 +1192,10 @@
       if (!id) {
         _pendingItems = [];
         document.getElementById('modal-root').innerHTML =
-          '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
+          '<div class="modal-overlay" id="new-order-overlay" onclick="if(event.target===this)closeOrderModalGuarded()">' +
             '<div class="modal" style="width:640px;max-width:95vw;">' +
-              '<h2>Nová prodejní objednávka</h2>' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;"><h2 style="margin:0;">Nová prodejní objednávka</h2>' +
+                '<button type="button" onclick="closeOrderModalGuarded()" title="Zavřít (Esc)" style="background:none;border:none;color:var(--text2);font-size:24px;line-height:1;cursor:pointer;padding:0 4px;">×</button></div>' +
               '<p style="font-size:12px;color:var(--text2);margin-bottom:16px;">Stačí vybrat odběratele a měnu. Položky, termíny dodání a odkaz pro zákazníka nastavíte v dalším kroku.</p>' +
               '<form onsubmit="saveOrder(event, null)">' +
                 '<input type="hidden" name="type" value="sales">' +
@@ -1235,7 +1236,7 @@
                   '<div class="form-group"><label>Poznámka</label><input type="text" name="note" placeholder="Nepovinné..."></div>' +
                 '</div>' +
                 '<div class="modal-actions">' +
-                  '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
+                  '<button type="button" class="btn btn-secondary" onclick="closeOrderModalGuarded()">Zrušit</button>' +
                   '<button type="submit" class="btn btn-primary">Vytvořit a pokračovat</button>' +
                 '</div>' +
               '</form>' +
@@ -1366,6 +1367,28 @@
     }
 
     const COMPANY_LABELS = { own: 'Moje firma', supplier: 'Dodavatel', customer: 'Odběratel', cooperation: 'Kooperace', both: 'Dodavatel/Odběratel' };
+
+    // Hlídání neuložených změn v okně Nová objednávka — zavření klikem mimo, Esc i Zrušit se ptá.
+    function newOrderModalDirty() {
+      var ov = document.getElementById('new-order-overlay'); if (!ov) return false;
+      var sel = ov.querySelector('#order-company-select'); if (sel && sel.value) return true;
+      var note = ov.querySelector('input[name="note"]'); if (note && note.value.trim()) return true;
+      var cur = ov.querySelector('select[name="currency"]'); if (cur && cur.value !== 'CZK') return true;
+      var dirty = false;
+      ov.querySelectorAll('#new-company-form input, #new-company-form select').forEach(function(el) {
+        if (el.id === 'new-comp-type' || el.id === 'new-comp-country') return;
+        if (el.id === 'new-comp-payment') { if (String(el.value) !== '14') dirty = true; return; }
+        if ((el.value || '').trim()) dirty = true;
+      });
+      return dirty;
+    }
+    function closeOrderModalGuarded() {
+      if (newOrderModalDirty() && !confirm('Máš rozepsané údaje, které nejsou uložené.\n\nOpravdu zavřít a změny zahodit?')) return;
+      closeModal();
+    }
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.getElementById('new-order-overlay')) { e.preventDefault(); closeOrderModalGuarded(); }
+    });
 
     function toggleNewCompanyForm() {
       const form = document.getElementById('new-company-form');
