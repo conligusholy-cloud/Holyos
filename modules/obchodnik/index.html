@@ -1737,6 +1737,30 @@
   function obPrefetchVcard(){ obLoadVcardToken(false); }
   window.obPrefetchVcard = obPrefetchVcard;
 
+  // Záložní panel, když se Safari neotevře: sdílení vizitky (nový dotyk = povolené gesto) + odkaz.
+  function obShowVcardFallback(vcard, fname, name, url){
+    var ex = document.getElementById('ob-vcf-fb'); if (ex) ex.remove();
+    var ov = document.createElement('div'); ov.id = 'ob-vcf-fb';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:130;display:flex;align-items:flex-end;justify-content:center';
+    ov.innerHTML = '<div style="width:100%;max-width:560px;background:var(--surface);border-radius:18px 18px 0 0;padding:18px 16px 26px;box-shadow:0 -8px 30px rgba(0,0,0,.4)">'
+      + '<div style="font-weight:800;font-size:16px;margin-bottom:6px">📇 Uložit kontakt do telefonu</div>'
+      + '<div style="font-size:13px;color:var(--muted);margin-bottom:12px">Safari se neotevřelo. Použij sdílení vizitky — v panelu klepni na náhled vizitky nahoře, nebo ji ulož do Souborů a tam otevři.</div>'
+      + '<button id="ob-vcf-share" style="width:100%;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px">📤 Sdílet vizitku</button>'
+      + '<a href="' + url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="display:block;text-align:center;width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:14px;font-size:15px;font-weight:700;text-decoration:none;margin-bottom:8px">🌐 Otevřít vizitku v prohlížeči</a>'
+      + '<button id="ob-vcf-close" style="width:100%;background:transparent;border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:12px;font-size:14px;cursor:pointer;font-family:inherit">Zavřít</button>'
+      + '</div>';
+    document.body.appendChild(ov);
+    ov.onclick = function(e){ if (e.target === ov) ov.remove(); };
+    document.getElementById('ob-vcf-close').onclick = function(){ ov.remove(); };
+    document.getElementById('ob-vcf-share').onclick = function(){
+      try {
+        var file = new File([vcard], fname, { type: 'text/vcard' });
+        if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) { navigator.share({ files: [file], title: name }).catch(function(){}); ov.remove(); return; }
+      } catch(e){}
+      alert('Sdílení není na tomto zařízení dostupné — použij „Otevřít vizitku v prohlížeči".');
+    };
+  }
+
   // Uloží kontakt do telefonu přes vizitku (.vcf) — po ťuknutí telefon nabídne „Přidat do kontaktů".
   function saveContact(id){
     var l = state.leads.find(function(x){ return x.id===id; }); if (!l || !l.phone) return;
@@ -1768,28 +1792,17 @@
         // Okno otevíráme hned (ještě v rámci kliknutí), aby ho iOS neblokoval; adresu doplníme po získání tokenu.
         var abs = function(u){ try { return new URL(u, window.location.origin).href; } catch(e){ return u; } };
         var fname = (String(name).replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'kontakt') + '.vcf';
-        // 1) iOS appka na ploše: vestavěný prohlížeč vizitku NEzobrazí (bílá stránka).
-        //    Nejspolehlivější je nativní sdílení souboru → iOS nabídne „Přidat do kontaktů".
-        var shared = false;
-        try {
-          if (navigator.share && typeof File === 'function') {
-            var file = new File([vcard], fname, { type: 'text/vcard' });
-            if (!navigator.canShare || navigator.canShare({ files: [file] })) {
-              shared = true;
-              navigator.share({ files: [file], title: name }).catch(function(){});
-            }
-          }
-        } catch(e){ shared = false; }
-        if (!shared) {
-          // 2) Záloha: otevřít vizitku v OPRAVDOVÉM Safari (x-safari-https://), to kartu kontaktu umí.
-          var tok = obVcardToken();
-          var url = tok ? abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(tok)) : abs(API + '/leads/' + id + '/vcard');
-          var safariUrl = url.replace(/^https:\/\//, 'x-safari-https://');
-          var t0 = Date.now();
-          window.location.href = safariUrl;
-          // 3) Když x-safari schéma nezabere (starší iOS), zkus běžný odkaz.
-          setTimeout(function(){ if (Date.now() - t0 < 1500 && !document.hidden) { window.open(url, '_blank'); } }, 700);
-        }
+        // iOS appka na ploše: vestavěný prohlížeč vizitku nezobrazí a panel sdílení nenabízí
+        // „Přidat do kontaktů". OPRAVDOVÉ Safari ale kartu kontaktu umí → otevřeme vizitku
+        // přes x-safari-https:// (iOS 17+). Když se Safari neotevře, nabídneme sdílení souboru.
+        var tok = obVcardToken();
+        var url = tok ? abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(tok)) : abs(API + '/leads/' + id + '/vcard');
+        var safariUrl = url.replace(/^https:\/\//, 'x-safari-https://');
+        window.location.href = safariUrl;
+        setTimeout(function(){
+          if (document.hidden) return; // Safari se otevřelo
+          obShowVcardFallback(vcard, fname, name, url);
+        }, 900);
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
         var url = URL.createObjectURL(blob);
