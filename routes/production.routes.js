@@ -221,11 +221,22 @@ router.patch('/products/:id/configurator', async (req, res, next) => {
 });
 
 // ─── Nativní HolyOS linie: výrobek / polotovar založený přímo v HolyOS (bez Factorify) ───
-// Kódy: HO-V-0001 (výrobek), HO-P-0001 (polotovar), HO-M-0001 (materiál založený z postupu).
-async function nextHolyosCode(prefix, model) {
-  const rows = await prisma[model].findMany({ where: { code: { startsWith: prefix } }, select: { code: true } });
+// Kódy Best Series: BS-M-0001 (vrcholová sestava = výrobek), BS-S-0001 (sestava = polotovar),
+// BS-D-0001 (díl vyráběný, založený z postupu). Nakupované díly mají NA0000 (z Factorify / nákupu) — negenerují se.
+// Číslo = první volné v dané řadě, ověřené proti výrobkům I zboží (skladovým kartám).
+const BS_PREFIX = { product: 'BS-M-', 'semi-product': 'BS-S-', part: 'BS-D-' };
+async function nextHolyosCode(prefix /*, model (ignorováno — kontrolujeme obě tabulky) */) {
+  const [prods, mats] = await Promise.all([
+    prisma.product.findMany({ where: { code: { startsWith: prefix, mode: 'insensitive' } }, select: { code: true } }),
+    prisma.material.findMany({ where: { code: { startsWith: prefix, mode: 'insensitive' } }, select: { code: true } }),
+  ]);
   let max = 0;
-  rows.forEach((r) => { const m = /(\d+)$/.exec(r.code); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+  prods.concat(mats).forEach((r) => { const m = /(\d+)$/.exec(r.code || ''); if (m) max = Math.max(max, parseInt(m[1], 10)); });
+  // Pojistka: kdyby číslo přesto kolidovalo (např. jiný formát), posuň se na další volné.
+  for (let n = max + 1; n < max + 1000; n++) {
+    const code = prefix + String(n).padStart(4, '0');
+    if (!(await codeTaken(code))) return code;
+  }
   return prefix + String(max + 1).padStart(4, '0');
 }
 async function codeTaken(code) {
@@ -240,7 +251,7 @@ async function codeTaken(code) {
 
 // POST /api/production/products
 // { code?, name, type: product|semi-product, takt_time?, show_in_configurator?, create_material? }
-// Prázdný kód → vygeneruje se HO-V-xxxx / HO-P-xxxx. create_material (výchozí u polotovaru) založí
+// Prázdný kód → vygeneruje se BS-M-xxxx (výrobek) / BS-S-xxxx (polotovar). create_material (výchozí u polotovaru) založí
 // skladovou kartu Material se stejným kódem a propojí ji (material_id) — polotovar pak jde vložit
 // do kusovníku nadřazeného výrobku.
 router.post('/products', async (req, res, next) => {
@@ -261,7 +272,7 @@ router.post('/products', async (req, res, next) => {
     const d = parsed.data;
     const type = d.type || 'product';
     let code = (d.code || '').trim();
-    if (!code) code = await nextHolyosCode(type === 'semi-product' ? 'HO-P-' : 'HO-V-', 'product');
+    if (!code) code = await nextHolyosCode(type === 'semi-product' ? BS_PREFIX['semi-product'] : BS_PREFIX.product, 'product');
     const dup = await codeTaken(code);
     if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
 
@@ -292,7 +303,7 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
     if (!src) return res.status(404).json({ error: 'Výrobek nenalezen' });
     const b = req.body || {};
     let code = String(b.code || '').trim();
-    if (!code) code = await nextHolyosCode(src.type === 'semi-product' ? 'HO-P-' : 'HO-V-', 'product');
+    if (!code) code = await nextHolyosCode(src.type === 'semi-product' ? BS_PREFIX['semi-product'] : BS_PREFIX.product, 'product');
     const dup = await codeTaken(code);
     if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
     const name = String(b.name || (src.name + ' (kopie)')).trim().slice(0, 255);
@@ -329,13 +340,13 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
 });
 
 // POST /api/production/materials — rychlé založení materiálu přímo z editoru operace
-// { code?, name, unit?, type? } → prázdný kód = HO-M-xxxx
+// { code?, name, unit?, type? } → prázdný kód = BS-D-xxxx (vyráběný díl)
 router.post('/materials', async (req, res, next) => {
   try {
     const name = String((req.body && req.body.name) || '').trim();
     if (!name) return res.status(400).json({ error: 'Zadej název materiálu' });
     let code = String((req.body && req.body.code) || '').trim();
-    if (!code) code = await nextHolyosCode('HO-M-', 'material');
+    if (!code) code = await nextHolyosCode(BS_PREFIX.part, 'material');
     const dup = await codeTaken(code);
     if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
     const unit = String((req.body && req.body.unit) || 'ks').trim().slice(0, 20) || 'ks';

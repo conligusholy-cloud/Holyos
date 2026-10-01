@@ -246,7 +246,7 @@
         const r = await fetch('/api/production/products', { method: 'POST', headers, body: JSON.stringify(body) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
-        window.location.href = 'detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
+        window.location.href = 'modules/pracovni-postup/detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
       } catch (e) { msg.style.color = '#ef4444'; msg.textContent = e.message; btn.disabled = false; }
     }
     async function duplicateProduct(id, name) {
@@ -257,7 +257,7 @@
         const r = await fetch('/api/production/products/' + id + '/duplicate', { method: 'POST', headers, body: JSON.stringify({ name: newName.trim() || undefined }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
-        window.location.href = 'detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
+        window.location.href = 'modules/pracovni-postup/detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
       } catch (e) { alert('Kopii se nepodařilo vytvořit: ' + e.message); }
     }
 
@@ -741,7 +741,7 @@
         </div>
         <div class="np-f"><label>Název *</label><input id="np-name" placeholder="např. Prádlomat MINI SK – verze 2"></div>
         <div class="np-row">
-          <div class="np-f"><label>Kód (prázdné = automaticky HO-V-xxxx / HO-P-xxxx)</label><input id="np-code" placeholder="automaticky"></div>
+          <div class="np-f"><label>Kód (prázdné = automaticky BS-M-xxxx výrobek / BS-S-xxxx polotovar)</label><input id="np-code" placeholder="automaticky"></div>
           <div class="np-f"><label>Takt (min / ks, volitelné)</label><input id="np-takt" type="number" min="0" step="1" placeholder="—"></div>
         </div>
         <label class="np-chk"><input type="checkbox" id="np-material"> Založit i skladovou kartu (Material) se stejným kódem</label>

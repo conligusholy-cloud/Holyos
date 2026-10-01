@@ -1773,7 +1773,7 @@
       // Nabídka založit nový materiál přímo odsud (nativní HolyOS linie) — vždy jako poslední položka.
       const createItem = q.length >= 2
         ? '<div class="ss-item" data-create="' + attr(input.value.trim()) + '" onmousedown="createMaterialFromSearch(this)" style="border-top:1px dashed var(--border);color:#7cc4f8;">'
-          + '<span class="ss-name">＋ Založit nový materiál „' + esc(input.value.trim()) + '"</span><span class="ss-code">HO-M-xxxx</span><span class="ss-type t-material">nový</span></div>'
+          + '<span class="ss-name">＋ Založit nový materiál „' + esc(input.value.trim()) + '"</span><span class="ss-code">BS-D-xxxx</span><span class="ss-type t-material">nový</span></div>'
         : '';
       if (filtered.length === 0) {
         dd.innerHTML = '<div class="ss-empty">Nic nenalezeno</div>' + createItem;
