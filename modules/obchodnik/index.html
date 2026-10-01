@@ -288,7 +288,7 @@
   var CONTRACT_TYPES = [['rezervacni','Rezervační'],['kupni','Kupní'],['servisni','Servisní']];
   var CONTRACT_STATUS = { koncept:'Koncept', odeslano:'Odesláno', vyplneno:'Vyplněno', k_podpisu:'Čeká na náš podpis', podepsano:'Podepsáno' };
   var SPEECH_OK = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false, chatEverOnly:false };
+  var state = { leads:[], filter:'', search:'', openId:null, typeFilter:'all', leadStatusFilter:'', calledTodayOnly:false, hotOnly:false, chatEverOnly:false, uncalledOnly:false };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
   function langCode(l){ return (l||'').toLowerCase().split(/[-_]/)[0]; }
@@ -1080,6 +1080,9 @@
   function setLeadStatus(val){ state.leadStatusFilter = val; render(); }
   window.setLeadStatus = setLeadStatus;
   function setCalledTodayOnly(v){ state.calledTodayOnly = !!v; render(); }
+  function isUncalled(l){ return !l.last_called_at && !l.blacklisted && ['nezajem','nelze_pouzit','rejected','prodano','converted'].indexOf(l.status||'new')===-1; }
+  function setUncalledOnly(v){ state.uncalledOnly = !!v; render(); }
+  window.setUncalledOnly = setUncalledOnly;
   window.setCalledTodayOnly = setCalledTodayOnly;
   function setHotOnly(v){ state.hotOnly = !!v; render(); }
   window.setHotOnly = setHotOnly;
@@ -1295,10 +1298,12 @@
       var f = state.leadStatusFilter || '';
       filtered = f ? leads.filter(function(l){ return (l.status||'new') === f; }) : leads;
       if (state.calledTodayOnly) filtered = filtered.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); });
+      if (state.uncalledOnly) filtered = filtered.filter(isUncalled);
       if (state.hotOnly) filtered = filtered.filter(function(l){ return !!l.is_hot; });
       if (state.chatTodayOnly) filtered = filtered.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); });
       if (state.chatEverOnly) filtered = filtered.filter(hasChatted);
       var calledTodayCount = leads.filter(function(l){ return l.last_called_at && isTodayD(new Date(l.last_called_at)); }).length;
+      var uncalledCount = leads.filter(isUncalled).length;
       var hotCount = leads.filter(function(l){ return !!l.is_hot; }).length;
       var chatTodayCount = leads.filter(function(l){ return l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at)); }).length;
       var chatEverCount = leads.filter(hasChatted).length;
@@ -1311,6 +1316,7 @@
         '<span style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌐 Compounder kontakty</span>' +
         '<span style="background:var(--primary);color:#04121e;border-radius:10px;padding:1px 8px;font-size:12px">'+leads.length+'</span>' +
         '<button onclick="setHotOnly('+(!state.hotOnly)+')" title="Zobrazit jen zajímavé kontakty" style="margin-left:auto;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.hotOnly?'#eab308':'var(--line)')+';background:'+(state.hotOnly?'rgba(234,179,8,0.18)':'transparent')+';color:'+(state.hotOnly?'#eab308':'var(--muted)')+'">⭐ Zajímavé'+(hotCount?' ('+hotCount+')':'')+'</button>' +
+        '<button onclick="setUncalledOnly('+(!state.uncalledOnly)+')" title="Kontakty, kterým jsi ještě nevolal (bez ohledu na stav od automatu)" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.uncalledOnly?'#ef4444':(uncalledCount?'rgba(239,68,68,0.6)':'var(--line)'))+';background:'+(state.uncalledOnly?'rgba(239,68,68,0.2)':'transparent')+';color:'+(state.uncalledOnly||uncalledCount?'#fca5a5':'var(--muted)')+';font-weight:'+(uncalledCount?'700':'400')+'">📵 Nevolané'+(uncalledCount?' ('+uncalledCount+')':'')+'</button>' +
         '<button onclick="setCalledTodayOnly('+(!state.calledTodayOnly)+')" title="Zobrazit jen dnes volané" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.calledTodayOnly?'#a78bfa':'var(--line)')+';background:'+(state.calledTodayOnly?'rgba(167,139,250,0.18)':'transparent')+';color:'+(state.calledTodayOnly?'#a78bfa':'var(--muted)')+'">📞 Dnes volané'+(calledTodayCount?' ('+calledTodayCount+')':'')+'</button>' +
         '<button onclick="setChatTodayOnly('+(!state.chatTodayOnly)+')" title="Zobrazit jen ty, co dnes chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatTodayOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatTodayOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatTodayOnly?'#c4b5fd':'var(--muted)')+'">💬 Dnes chatoval'+(chatTodayCount?' ('+chatTodayCount+')':'')+'</button>' +
         '<button onclick="setChatEverOnly('+(!state.chatEverOnly)+')" title="Zobrazit všechny, kdo někdy chatovali se specialistou" style="font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;border:1px solid '+(state.chatEverOnly?'#8b5cf6':'var(--line)')+';background:'+(state.chatEverOnly?'rgba(139,92,246,0.22)':'transparent')+';color:'+(state.chatEverOnly?'#c4b5fd':'var(--muted)')+'">💬 Chatovali'+(chatEverCount?' ('+chatEverCount+')':'')+'</button>' +
@@ -1383,7 +1389,8 @@
     var blBadge = l.blacklisted ? '<span class="ob-bl" title="POZOR: kontakt je na black listu — neoslovovat!" onclick="event.stopPropagation();alert(\'⚠ POZOR: tento kontakt je na BLACK LISTU — neoslovovat!\')">❗</span>' : '';
     var calledDate = l.last_called_at ? new Date(l.last_called_at) : null;
     var calledToday = isTodayD(calledDate);
-    var calledBadge = calledToday ? '<div style="font-size:11px;color:#a78bfa;font-weight:700;margin-top:2px">📞 Dnes voláno '+('0'+calledDate.getHours()).slice(-2)+':'+('0'+calledDate.getMinutes()).slice(-2)+'</div>' : '';
+    var calledBadge = calledToday ? '<div style="font-size:11px;color:#a78bfa;font-weight:700;margin-top:2px">📞 Dnes voláno '+('0'+calledDate.getHours()).slice(-2)+':'+('0'+calledDate.getMinutes()).slice(-2)+'</div>'
+      : (!calledDate && !l.blacklisted && ['nezajem','nelze_pouzit','rejected','prodano','converted'].indexOf(l.status||'new')===-1 ? '<div style="display:inline-block;font-size:11px;color:#fca5a5;background:rgba(239,68,68,0.16);border:1px solid rgba(239,68,68,0.6);border-radius:999px;padding:1px 8px;font-weight:700;margin-top:2px" title="Obchodník ještě nevolal — stav mění jen automat">📵 Nevoláno</div>' : '');
     var chatToday = l.ai_last_chat_at && isTodayD(new Date(l.ai_last_chat_at));
     var chatBadge = chatToday ? '<div style="display:inline-block;font-size:11px;color:#c4b5fd;background:rgba(139,92,246,0.20);border:1px solid rgba(139,92,246,0.6);border-radius:999px;padding:1px 8px;font-weight:700;margin-top:3px">💬 Dnes chatoval se specialistou</div>' : '';
     // Kdokoli někdy chatoval → odznak s počtem zpráv + výtah „co chce" (automaticky, když je uložený).
@@ -1447,6 +1454,10 @@
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-weight:700" onclick="obLeasingPrompt('+l.id+')">🏦 Poslat kontakt leasingové společnosti</button><div id="ob-leas-'+l.id+'" style="margin-top:6px"></div></div>' +
         (l.phone ? '<div class="field" style="margin-top:6px"><a class="btn btn-g" style="width:100%;display:block;text-align:center;text-decoration:none'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" href="'+API+'/leads/'+l.id+'/vcard" onclick="obMarkSaved('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</a></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
+        (calledDate
+          ? '<div class="field" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.45);border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:10px"><span style="font-size:20px">📞</span><div><div style="font-weight:700;color:#86efac">Mluvil jsi s ním</div><div style="font-size:12px;color:var(--muted)">Naposledy voláno '+fmtD(calledDate)+' · stav níže mění i automat (AI specialista, schůzka)</div></div></div>'
+          : '<div class="field" style="background:rgba(239,68,68,0.10);border:2px solid rgba(239,68,68,0.7);border-radius:12px;padding:12px;margin-top:8px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">📵</span><div style="flex:1"><div style="font-weight:800;color:#fca5a5;font-size:15px">JEŠTĚ JSI NEVOLAL</div><div style="font-size:12px;color:var(--muted)">Stav níže nastavil automat — kontakt pořád čeká na tvůj hovor.</div></div></div>'
+            +'<div style="display:flex;gap:8px;margin-top:10px">'+(l.phone?'<a class="btn" href="tel:'+esc(telClean)+'" onclick="return obCallClick(event,'+l.id+')" style="flex:2;background:#22c55e;color:#052e13;font-weight:800;text-align:center;text-decoration:none">📞 Zavolat teď</a>':'')+'<button class="btn btn-g" style="flex:1;font-size:12.5px" onclick="markCalled('+l.id+')" title="Když jsi s ním mluvil jinak (osobně, WhatsApp hovor…)">✔ Už jsem mluvil</button></div></div>') +
         '<div class="field" style="background:rgba(234,179,8,0.10);border:1px solid rgba(234,179,8,0.55);border-radius:12px;padding:12px;margin-top:8px"><label style="color:#eab308;font-weight:700">🏷️ Stav</label>'+statusSel+'</div>' +
         obDiscHtml(l) +
         '<div class="field"><label>Portál</label>' +
