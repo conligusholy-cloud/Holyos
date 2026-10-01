@@ -194,6 +194,12 @@
     .lane-par .op-card { border-color:rgba(168,85,247,0.55); background:rgba(168,85,247,0.06); margin-bottom:0; }
     .lane-par .op-card .op-step { background:rgba(168,85,247,0.25); color:#c084fc; }
     .par-bracket { position:absolute; left:-9px; top:0; bottom:0; width:6px; border:2px solid rgba(168,85,247,0.6); border-right:0; border-radius:6px 0 0 6px; }
+    .par-chain { text-align:center; color:#c084fc; font-size:14px; line-height:18px; opacity:.8; }
+    .par-foot { display:flex; flex-direction:column; align-items:center; gap:2px; padding-top:6px; }
+    .par-time { font-size:11px; color:#86efac; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.35); border-radius:10px; padding:2px 8px; }
+    .par-time.over { color:#fca5a5; background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.45); font-weight:700; }
+    .par-add { height:30px; margin:0; }
+    .par-add .op-node-dot { background:var(--surface); }
     .par-wrap .op-badge-par { font-size:10px; color:#c084fc; }
     .op-card.is-par-main-hl { box-shadow:0 0 0 2px rgba(168,85,247,0.35); }
 
@@ -1094,9 +1100,22 @@
           html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec výroby — sem se vrací paralelní operace. Kliknutím přidáš další operaci hlavní linie." onclick="openAddOp()"><div class="op-node-line"></div><div class="op-node-dot op-node-plus">+</div><div class="op-node-label">konec výroby · přidat operaci</div></div>';
           html += '</div>';
           html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
-          if (parOps.length) html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
+          if (parOps.length) html += '<div style="position:absolute;top:12px;left:0;right:0;text-align:center;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;pointer-events:none;">⫽ PARALELNÍ OPERACE</div>';
           if (parOps.length) {
-            parOps.forEach((op, i) => { html += '<div class="par-wrap" data-par-id="' + op.id + '" data-from="' + (op.parallel_from || '') + '" data-to="' + (op.parallel_to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>' + renderOpCard(op, i) + '</div>'; });
+            // Větve: paralelní operace se stejným oknem (od→do) tvoří řetěz pod sebou
+            const branches = new Map();
+            parOps.slice().sort((a, b) => a.step_number - b.step_number).forEach(op => { const k = (op.parallel_from || '') + '|' + (op.parallel_to || ''); if (!branches.has(k)) branches.set(k, []); branches.get(k).push(op); });
+            branches.forEach((list, k) => {
+              const from = list[0].parallel_from || null, to = list[0].parallel_to || null;
+              const chk = parallelBranchCheck(from, to, null);
+              const over = chk.window > 0 && chk.branch > chk.window;
+              html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>';
+              list.forEach((op, i) => { if (i > 0) html += '<div class="par-chain">&#9660;</div>'; html += renderOpCard(op, i); });
+              html += '<div class="par-foot">' +
+                '<span class="par-time' + (over ? ' over' : '') + '" title="Součet reálných časů paralelních operací ve větvi / součet hlavních operací v okně ' + chk.label + '">⏱ ' + formatDuration(chk.branch) + ' / ' + formatDuration(chk.window) + (over ? ' ⚠️ překročeno' : '') + '</span>' +
+                '<div class="op-node par-add" title="Přidat další paralelní operaci do této větve (okno ' + chk.label + ')" onclick="openAddParallelInBranch(' + (from || 'null') + ',' + (to || 'null') + ')"><div class="op-node-dot op-node-plus">+</div></div>' +
+                '</div></div>';
+            });
           }
           html += '</div></div>';
         }
@@ -1163,6 +1182,24 @@
 
     // Umístí paralelní operace vpravo tak, aby se svisle kryly s oknem hlavních operací (od → do).
     // Když se okna překrývají, karty se posouvají pod sebe. Přepočet i po rozbalení materiálů / změně velikosti.
+    // Součty časů pro paralelní větev (okno od→do): hlavní operace v okně vs. paralelní operace ve větvi.
+    // extra = operace právě ukládaná (nahradí stejnou id) — pro validaci před uložením.
+    function parallelBranchCheck(from, to, extra) {
+      const ops = (product.operations || []).filter(o => !/^FY import/i.test(o.name || ''));
+      const mains = ops.filter(o => !o.is_parallel).sort((a, b) => a.step_number - b.step_number);
+      const lo = from || (mains[0] ? mains[0].step_number : 0), hi = to || (mains.length ? mains[mains.length - 1].step_number : 0);
+      const win = mains.filter(o => o.step_number >= lo && o.step_number <= hi).reduce((s, o) => s + realMinutes(o), 0);
+      let branchOps = ops.filter(o => o.is_parallel && (o.parallel_from || null) === (from || null) && (o.parallel_to || null) === (to || null));
+      if (extra) { branchOps = branchOps.filter(o => o.id !== extra.id); branchOps.push(extra); }
+      const branch = branchOps.reduce((s, o) => s + realMinutes(o), 0);
+      return { window: win, branch, label: (from || 'začátek') + ' → ' + (to || 'konec'), count: branchOps.length };
+    }
+    // Přidat další paralelní operaci do stejné větve (stejné okno)
+    function openAddParallelInBranch(from, to) {
+      openAddParallelOp();
+      try { document.getElementById('op-parallel-from').value = from ? String(from) : ''; document.getElementById('op-parallel-to').value = to ? String(to) : ''; } catch (e) {}
+    }
+
     function layoutParallelLane() {
       const lane = document.getElementById('lane-par'); const main = document.getElementById('lane-main');
       if (!lane || !main) return;
@@ -2006,6 +2043,16 @@
         description: document.getElementById('op-desc').value || null,
         materials,
       };
+
+      // Pravidlo paralelní větve: součet reálných časů paralelních operací ve větvi (stejné okno od→do)
+      // musí být menší než součet reálných časů hlavních operací v tom okně.
+      if (data.is_parallel) {
+        const chk = parallelBranchCheck(data.parallel_from, data.parallel_to, { id: opId ? parseInt(opId) : null, duration: data.duration, duration_unit: data.duration_unit, workers_count: data.workers_count });
+        if (chk.branch > chk.window && chk.window > 0) {
+          alert('Paralelní operace se do okna nevejde.\n\nSoučet paralelních operací ve větvi: ' + formatDuration(chk.branch) + '\nSoučet hlavních operací v okně (' + chk.label + '): ' + formatDuration(chk.window) + '\n\nZkrať operaci, rozšiř okno (od/do), nebo rozděl větev.');
+          return;
+        }
+      }
 
       try {
         let prevOpData = null;
