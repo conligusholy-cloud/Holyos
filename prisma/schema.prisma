@@ -651,6 +651,9 @@ model Order {
   // released_at: kdy se Order rozpadla do výroby (idempotence — druhé volání
   //   release už nedělá nic). Pokud non-split, "deposit_paid" se neuvažuje a
   //   trigger je výhradně final_paid.
+  // Rozložení plateb (splátkový kalendář) — OrderPayment. payment_scope: 'order' = splátky nad celou
+  // objednávkou, 'items' = každá položka má vlastní splátky (různé termíny dodání strojů).
+  payment_scope      String    @default("order") @db.VarChar(10)
   payment_split      Boolean   @default(false)
   deposit_amount     Decimal?  @db.Decimal(12, 2)
   deposit_percent    Int?
@@ -704,6 +707,7 @@ model Order {
   project       Project?    @relation("OrderProject", fields: [project_id], references: [id])
   items         OrderItem[]
   invoices      Invoice[]   @relation("InvoiceOrder")
+  payments      OrderPayment[]
   final_invoice Invoice?    @relation("OrderFinalInvoice", fields: [final_invoice_id], references: [id])
   events        OrderEvent[]
 
@@ -766,12 +770,46 @@ model OrderItem {
   configs          OrderItemConfig[] // vybraná konfigurace pro tento výrobek
   slot_assignments SlotAssignment[] // přiřazení do výrobních slotů (pro zobrazení výrobního čísla v náhledu)
   invoice_items    InvoiceItem[]     @relation("InvoiceItemOrderItem")
+  payments         OrderPayment[] // splátky vázané na tuto položku (payment_scope='items')
 
   @@index([order_id])
   @@index([product_id])
   @@index([serial_number])
   @@index([factorify_id])
   @@map("order_items")
+}
+
+// Splátka v rozložení plateb objednávky.
+// milestone: at_order (při objednání) | before_production (před výrobou) | after_delivery (po dodání)
+// kind: deposit (zálohová faktura) | final (finální faktura — vyúčtování, odečte zálohy)
+// Výše: percent (ze základu = objednávka nebo položka) NEBO amount (pevná částka bez DPH).
+model OrderPayment {
+  id            Int      @id @default(autoincrement())
+  order_id      Int
+  order_item_id Int? // null = splátka nad celou objednávkou
+  seq           Int      @default(0)
+  milestone     String   @db.VarChar(20)
+  kind          String   @default("deposit") @db.VarChar(10)
+  percent       Decimal? @db.Decimal(6, 2)
+  amount        Decimal? @db.Decimal(12, 2)
+  label         String?  @db.VarChar(120)
+  due_days      Int      @default(7) // splatnost faktury ode dne vystavení
+  invoice_id    Int? // vystavená faktura k této splátce
+  paid          Boolean  @default(false)
+  paid_at       DateTime?
+  milestone_at  DateTime? // kdy milník nastal (notifikace odeslána)
+  note          String?  @db.Text
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  order      Order      @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  order_item OrderItem? @relation(fields: [order_item_id], references: [id], onDelete: Cascade)
+  invoice    Invoice?   @relation("OrderPaymentInvoice", fields: [invoice_id], references: [id], onDelete: SetNull)
+
+  @@index([order_id])
+  @@index([order_item_id])
+  @@index([invoice_id])
+  @@map("order_payments")
 }
 
 // =============================================================================
@@ -2940,6 +2978,7 @@ model Invoice {
   // Vazba na objednávku (pro 3-way match)
   order_id Int?
   order    Order? @relation("InvoiceOrder", fields: [order_id], references: [id])
+  order_payments OrderPayment[] @relation("OrderPaymentInvoice")
 
   // Vazba na skladový doklad (příjemka pro AP / dodací list pro AR)
   warehouse_document_id Int?

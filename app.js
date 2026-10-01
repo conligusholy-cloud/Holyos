@@ -1266,6 +1266,11 @@ server.listen(PORT, async () => {
     console.error('[app] leasing-delivery-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/orders/payment-milestone-worker').start(); // milníky splátek → Velín notifikace
+  } catch (err) {
+    console.error('[app] payment-milestone-worker nelze spustit:', err.message);
+  }
+  try {
     const voiceOutboundWorker = require('./services/voice/outbound-worker');
     voiceOutboundWorker.start();
   } catch (err) {

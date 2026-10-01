@@ -825,6 +825,41 @@ router.put('/orders/:id/payment-config', async (req, res, next) => {
 //
 //   TODO (Účetní iniciativa): místo manuálního označení tu bude trigger
 //   z BankTransaction → Invoice → Order auto-párovače.
+// ─── Rozložení plateb (splátkový kalendář) ───────────────────────────────────
+// GET  /api/wh/orders/:id/payments           → plán + šablony
+// PUT  /api/wh/orders/:id/payments           → uložit plán { scope, payments[] }
+// POST /api/wh/orders/:id/payments/:pid/invoice → vystavit fakturu ke splátce (ručně)
+// POST /api/wh/orders/:id/payments/:pid/paid    → { paid: boolean }
+router.get('/orders/:id/payments', async (req, res, next) => {
+  try {
+    const pp = require('../services/orders/payment-plan');
+    const plan = await pp.getPlan(parseInt(req.params.id, 10));
+    if (!plan) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    res.json({ ...plan, templates: pp.TEMPLATES, milestones: pp.MILESTONE_LABEL });
+  } catch (err) { next(err); }
+});
+router.put('/orders/:id/payments', async (req, res, next) => {
+  try {
+    const pp = require('../services/orders/payment-plan');
+    const plan = await pp.savePlan(parseInt(req.params.id, 10), req.body || {});
+    res.json(plan);
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+router.post('/orders/:id/payments/:pid/invoice', async (req, res, next) => {
+  try {
+    const pp = require('../services/orders/payment-plan');
+    const r = await pp.issueInvoiceForPayment(parseInt(req.params.pid, 10), { createdByUserId: (req.user && req.user.id) || null, actor: (req.user && (req.user.username || req.user.email)) || 'uživatel' });
+    res.json(r);
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+router.post('/orders/:id/payments/:pid/paid', async (req, res, next) => {
+  try {
+    const pp = require('../services/orders/payment-plan');
+    const r = await pp.setPaid(parseInt(req.params.pid, 10), !!(req.body && req.body.paid), { createdById: (req.user && req.user.person && req.user.person.id) || null, actor: (req.user && (req.user.username || req.user.email)) || 'uživatel' });
+    res.json(r);
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+
 router.post('/orders/:id/payment', async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id, 10);
