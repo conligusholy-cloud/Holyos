@@ -245,8 +245,19 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
  * @param {Array}  [args.attachments]   Pole attachments [{ filename, content, contentType }]
  *                                      Použito mj. pro PDF fakturu (Fáze 6).
  */
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt }) {
+// Pojistka: AppSetting customer_emails_paused = 'true' → e-maily zákazníkům (objednávky, doklady,
+// faktury, upomínky) se NEODEŠLOU. Volající musí předat audience: 'customer'. Interní/Compounder e-maily nejsou dotčeny.
+const CUSTOMER_MAIL_PAUSE_KEY = 'customer_emails_paused';
+async function isCustomerMailPaused() {
+  try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
+}
+
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
+  if (audience === 'customer' && await isCustomerMailPaused()) {
+    console.warn(`[Email] POZASTAVENO (customer_emails_paused) — neodesláno → ${to}: ${subject}`);
+    return { sent: false, skipped: 'customer-emails-paused', error: 'E-maily zákazníkům jsou pozastaveny (přepínač v Prodejních objednávkách)' };
+  }
 
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
   //    je nakonfigurovaný — tedy Azure App z Fáze 3 s Mail.Send permission)
@@ -316,4 +327,4 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   }
 }
 
-module.exports = { sendMail, renderEmailHtml };
+module.exports = { sendMail, renderEmailHtml, isCustomerMailPaused, CUSTOMER_MAIL_PAUSE_KEY };

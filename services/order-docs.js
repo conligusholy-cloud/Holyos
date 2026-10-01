@@ -164,7 +164,7 @@ async function sendOrderConfirmationDocs(orderId) {
     + invoiceNote + 'S pozdravem\n' + ourName;
 
   try {
-    const res = await sendMail({ from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
+    const res = await sendMail({ audience: 'customer', from: fromEmail, to, subject: 'Potvrzení objednávky ' + order.order_number, body, fromName: ourName, attachments: attachments.length ? attachments : undefined, brand: 'compounder' });
     const evt = require('./order-events');
     if (res && res.sent) {
       await prisma.order.update({ where: { id: order.id }, data: { customer_docs_sent_at: new Date() } }).catch(() => {});

@@ -621,6 +621,29 @@ async function enrichOrdersWithProductionDates(orders) {
 }
 
 // POST /api/wh/orders
+// Pojistka: globální pozastavení e-mailů zákazníkům (potvrzení objednávky, doklady, faktury, upomínky)
+// GET /api/wh/customer-mail-pause → { paused, changed_at, changed_by }
+router.get('/customer-mail-pause', async (req, res, next) => {
+  try {
+    const { getSetting } = require('../services/settings');
+    const paused = (await getSetting('customer_emails_paused', { type: 'boolean', defaultValue: false })) === true;
+    const meta = await getSetting('customer_emails_paused.meta', { type: 'json', defaultValue: null });
+    res.json({ paused, changed_at: meta && meta.at, changed_by: meta && meta.by });
+  } catch (err) { next(err); }
+});
+// PUT /api/wh/customer-mail-pause { paused: boolean }
+router.put('/customer-mail-pause', async (req, res, next) => {
+  try {
+    const { setSetting } = require('../services/settings');
+    const paused = !!(req.body && req.body.paused);
+    const by = req.user ? (req.user.username || req.user.email || String(req.user.id)) : null;
+    await setSetting('customer_emails_paused', paused, { type: 'boolean' });
+    await setSetting('customer_emails_paused.meta', { at: new Date().toISOString(), by }, { type: 'json' });
+    console.log(`[orders] e-maily zákazníkům ${paused ? 'POZASTAVENY' : 'obnoveny'} (${by})`);
+    res.json({ paused, changed_at: new Date().toISOString(), changed_by: by });
+  } catch (err) { next(err); }
+});
+
 router.post('/orders', async (req, res, next) => {
   try {
     const { items, items_count, total_amount, ...rest } = req.body;

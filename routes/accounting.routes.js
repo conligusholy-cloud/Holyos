@@ -1918,7 +1918,7 @@ router.post('/reminders/send/:invoiceId/:level', async (req, res, next) => {
     });
 
     const fromUpn = process.env.INVOICE_IMAP_USER || 'faktury@bestseries.cz';
-    const result = await sendMail({ to: toEmail, subject: built.subject, body: built.body, from: fromUpn });
+    const result = await sendMail({ audience: 'customer', to: toEmail, subject: built.subject, body: built.body, from: fromUpn });
     if (!result?.sent) {
       await prisma.reminder.update({ where: { id: reminder.id }, data: { status: 'bounced' } });
       return res.status(502).json({ error: result?.skipped || 'Odeslání selhalo' });
@@ -2177,6 +2177,7 @@ router.post('/invoices/:id/send', async (req, res, next) => {
     const senderEmail = req.user?.person?.email || ourCompany.email || null;
 
     const result = await sendMail({
+      audience: 'customer',
       from: senderEmail,
       to: recipient,
       subject,

@@ -171,7 +171,7 @@ async function sendDepositTaxDoc(invoiceId, opts = {}) {
       (inv.parent_invoice_id ? '' : '') + '.\n\nS pozdravem\n' + ((our && our.name) || 'Best Series s.r.o.');
     const from = (our && our.email) || null;
     const result = await sendMail({
-      from, to, subject, body,
+      audience: 'customer', from, to, subject, body,
       attachments: [{ filename: inv.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }],
     });
     if (!result || !result.sent) {

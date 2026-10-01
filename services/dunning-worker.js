@@ -159,6 +159,7 @@ async function processReminders() {
     const fromUpn = process.env.INVOICE_IMAP_USER || 'faktury@bestseries.cz';
     try {
       const result = await sendMail({
+        audience: 'customer',
         to: toEmail,
         subject: built.subject,
         body: built.body,

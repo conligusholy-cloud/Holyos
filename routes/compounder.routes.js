@@ -4059,6 +4059,7 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
           + 'Prosíme o kontrolu údajů a potvrzení objednávky kliknutím na tlačítko níže. '
           + 'Po potvrzení Vám obratem zašleme potvrzení objednávky a zálohovou fakturu.';
         const mr = await sendMail({
+          audience: 'customer',
           to: email, subject: 'Objednávka ' + orderNumber + ' k potvrzení',
           body, from: compounderMailFrom(), fromName: compounderMailFromName(),
           link: approvalUrl, linkLabel: 'Zobrazit a potvrdit objednávku', brand: 'compounder',

@@ -736,6 +736,10 @@
             <option value="cancelled">Zrušeno</option>
           </select>
           <div style="flex:1"></div>
+          <label id="cmp-mailpause" title="Když je zapnuto, HolyOS neodešle zákazníkům ŽÁDNÝ e-mail: potvrzení objednávky, odkaz k potvrzení, zálohové/finální faktury, daňové doklady ani upomínky. Interní notifikace běží dál." style="display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface2,#232630);white-space:nowrap">
+            <input type="checkbox" id="cmp-mailpause-cb" onchange="toggleCustomerMailPause(this.checked)" style="width:auto;accent-color:#ef4444;cursor:pointer">
+            <span id="cmp-mailpause-txt">⛔ Neposílat e-maily zákazníkům</span>
+          </label>
           <button class="btn btn-primary" onclick="openOrderModal()">+ Nová prodejní objednávka</button>
         </div>
         <div id="orders-table"></div>
@@ -1754,6 +1758,32 @@
       html += '</tbody></table>';
       el.innerHTML = html;
     }
+
+    // === Pojistka: pozastavení e-mailů zákazníkům ===
+    async function loadCustomerMailPause() {
+      try {
+        const r = await fetch('/api/wh/customer-mail-pause').then(x => x.json());
+        renderCustomerMailPause(r);
+      } catch (e) { /* tichý */ }
+    }
+    function renderCustomerMailPause(r) {
+      const cb = document.getElementById('cmp-mailpause-cb'); const lab = document.getElementById('cmp-mailpause'); const txt = document.getElementById('cmp-mailpause-txt');
+      if (!cb) return;
+      cb.checked = !!r.paused;
+      lab.style.borderColor = r.paused ? '#ef4444' : 'var(--border)';
+      lab.style.background = r.paused ? 'rgba(239,68,68,.12)' : 'var(--surface2,#232630)';
+      txt.innerHTML = r.paused
+        ? '<b style="color:#ef4444">⛔ E-maily zákazníkům POZASTAVENY</b>' + (r.changed_at ? ' <span style="color:var(--text2)">od ' + new Date(r.changed_at).toLocaleString('cs-CZ') + (r.changed_by ? ' · ' + r.changed_by : '') + '</span>' : '')
+        : '⛔ Neposílat e-maily zákazníkům';
+    }
+    async function toggleCustomerMailPause(paused) {
+      if (!paused && !confirm('Obnovit odesílání e-mailů zákazníkům? Od teď se zase budou posílat potvrzení, doklady, faktury i upomínky.')) { document.getElementById('cmp-mailpause-cb').checked = true; return; }
+      try {
+        const r = await fetch('/api/wh/customer-mail-pause', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused }) }).then(x => x.json());
+        renderCustomerMailPause(r);
+      } catch (e) { alert('Nepodařilo se změnit nastavení: ' + e.message); loadCustomerMailPause(); }
+    }
+    document.addEventListener('DOMContentLoaded', loadCustomerMailPause);
 
     async function saveOrder(e, id) {
       e.preventDefault();
