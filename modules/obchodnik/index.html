@@ -2640,8 +2640,26 @@
   window.callLeadFromTask=callLeadFromTask;
   function openLeadFromTask(id){
     showScreen('contacts');
-    try { state.typeFilter='all'; state.leadStatusFilter=''; state.openId=id; renderChips(); render(); } catch(e){}
-    setTimeout(function(){ var el=document.getElementById('card-'+id); if(el) el.scrollIntoView({behavior:'smooth',block:'center'}); }, 120);
+    // Zruš všechny filtry, které by mohly konkrétní kontakt schovat (hledání, nevolané, zajímavé, dnes volané…)
+    try {
+      state.typeFilter='all'; state.leadStatusFilter=''; state.filter=''; state.search=''; state.calledTodayOnly=false; state.hotOnly=false; state.chatEverOnly=false; state.uncalledOnly=false;
+      var si=document.getElementById('search'); if (si) si.value='';
+      state.openId=id; renderChips(); render();
+    } catch(e){}
+    // Kartu posuň úplně nahoru pod lištu s hledáním — jméno nahoře, akční tlačítka hned po ruce.
+    // Opakuje se víckrát, protože se karta po načtení aktivity/leasingu ještě natahuje a posouvá.
+    var scrollTo=function(smooth){
+      var el=document.getElementById('card-'+id); if(!el) return false;
+      var top=document.querySelector('.top'); var off=(top?top.getBoundingClientRect().height:0)+6;
+      var y=el.getBoundingClientRect().top+window.pageYOffset-off;
+      window.scrollTo({ top: Math.max(0,y), behavior: smooth?'smooth':'auto' });
+      return true;
+    };
+    setTimeout(function(){
+      if (scrollTo(true)) { [500,1100,2000].forEach(function(t){ setTimeout(function(){ scrollTo(false); }, t); }); return; }
+      // Kontakt není v načteném seznamu (jiný obchodník / nový) → znovu načti a zkus znovu
+      Promise.resolve(typeof load==='function' ? load() : null).then(function(){ state.openId=id; render(); [150,700,1500].forEach(function(t){ setTimeout(function(){ scrollTo(false); }, t); }); });
+    }, 150);
   }
   function renderReview(rv){
     var box = document.getElementById('today-review'); if(!box) return;
