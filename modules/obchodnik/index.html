@@ -1241,6 +1241,7 @@
   window.obAskSms = obAskSms;
   // Vynucení „nejdřív ulož kontakt": když není uložený, nabídne uložení jako první krok.
   function obAskSaveFirst(name, onProceed, id){
+    if (id) { try { obPrefetchVcard(id); } catch(e){} }
     var ex = document.getElementById('ob-saveask'); if (ex) ex.remove();
     var ov = document.createElement('div'); ov.id = 'ob-saveask';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:120;display:flex;align-items:flex-end;justify-content:center';
@@ -1486,7 +1487,7 @@
         '<div class="field" style="margin-top:6px"><button class="btn btn-p" style="width:100%" onclick="obPromisePrompt('+l.id+')">✅ Slíbený krok (co jsi slíbil + termín)</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#6C5CE7,#0984E3);color:#fff;font-weight:700" onclick="OrderWizard.open('+l.id+')">🧾 Nová objednávka (průvodce)</button></div>' +
         '<div class="field" style="margin-top:6px"><button class="btn" style="width:100%;background:linear-gradient(135deg,#0f766e,#14b8a6);color:#fff;font-weight:700" onclick="obLeasingPrompt('+l.id+')">🏦 Poslat kontakt leasingové společnosti</button><div id="ob-leas-'+l.id+'" style="margin-top:6px"></div></div>' +
-        (l.phone ? '<div class="field" style="margin-top:6px"><button type="button" class="btn btn-g" style="width:100%;display:block;text-align:center'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" onclick="saveContact('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</button></div>' : '') +
+        (l.phone ? (obPrefetchVcard(l.id), '') + '<div class="field" style="margin-top:6px"><button type="button" class="btn btn-g" style="width:100%;display:block;text-align:center'+(obContactSaved(l.id)?';border-color:#22c55e;color:#22c55e':'')+'" onclick="saveContact('+l.id+')">'+(obContactSaved(l.id)?'✓ Uloženo v telefonu (uložit znovu)':'💾 Uložit kontakt do telefonu')+'</button></div>' : '') +
         '<div style="font-size:12px;margin-top:8px;color:'+(laToday?'#22c55e':'var(--muted)')+'">Poslední aktivita: '+(laDate?fmtD(laDate):'—')+'</div>' +
         (calledDate
           ? '<div class="field" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.45);border-radius:12px;padding:10px 12px;margin-top:8px;display:flex;align-items:center;gap:10px"><span style="font-size:20px">📞</span><div><div style="font-weight:700;color:#86efac">Mluvil jsi s ním</div><div style="font-size:12px;color:var(--muted)">Naposledy voláno '+fmtD(calledDate)+' · stav níže mění i automat (AI specialista, schůzka)</div></div></div>'
@@ -1719,6 +1720,17 @@
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit odkaz.</span>'; }
   }
 
+  // Předem připravený podepsaný odkaz na vizitku (platí 15 min) → klepnutí ho otevře přímo.
+  var _vcardLinks = {};
+  function obPrefetchVcard(id, force){
+    if (!force && _vcardLinks[id] && _vcardLinks[id].exp > Date.now()) return;
+    fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(j){ if (j && j.url) _vcardLinks[id] = { url: j.url, exp: Date.now() + 12*60*1000 }; })
+      .catch(function(){});
+  }
+  window.obPrefetchVcard = obPrefetchVcard;
+
   // Uloží kontakt do telefonu přes vizitku (.vcf) — po ťuknutí telefon nabídne „Přidat do kontaktů".
   function saveContact(id){
     var l = state.leads.find(function(x){ return x.id===id; }); if (!l || !l.phone) return;
@@ -1748,19 +1760,26 @@
         // Nové okno z appky na ploše NEMÁ přihlašovací cookie → vizitku otevíráme přes
         // krátkodobý podepsaný odkaz (/vcard/:id?t=…), který přihlášení nepotřebuje.
         // Okno otevíráme hned (ještě v rámci kliknutí), aby ho iOS neblokoval; adresu doplníme po získání tokenu.
-        var w = null;
-        try { w = window.open('about:blank', '_blank'); } catch(e){ w = null; }
-        fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
-          .then(function(r){ return r.json(); })
-          .then(function(j){
-            var url = (j && j.url) ? j.url : (API + '/leads/' + id + '/vcard');
-            if (w && !w.closed) { w.location.href = url; }
-            else { window.location.href = url; }
-          })
-          .catch(function(){
-            var url = API + '/leads/' + id + '/vcard';
-            if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
-          });
+        var abs = function(u){ try { return new URL(u, window.location.origin).href; } catch(e){ return u; } };
+        var pre = _vcardLinks[id];
+        if (pre && pre.exp > Date.now()) {
+          // Odkaz už připravený → otevřít přímo v rámci klepnutí (nejspolehlivější na iOS).
+          window.open(abs(pre.url), '_blank');
+          obPrefetchVcard(id, true);
+        } else {
+          var w = null;
+          try { w = window.open('about:blank', '_blank'); } catch(e){ w = null; }
+          fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
+            .then(function(r){ return r.json(); })
+            .then(function(j){
+              var url = abs((j && j.url) ? j.url : (API + '/leads/' + id + '/vcard'));
+              if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
+            })
+            .catch(function(){
+              var url = abs(API + '/leads/' + id + '/vcard');
+              if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
+            });
+        }
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
         var url = URL.createObjectURL(blob);
