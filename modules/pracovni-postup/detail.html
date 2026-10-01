@@ -1190,31 +1190,42 @@
         const nStart = nodeBefore(steps.find(s => s >= from) || steps[0]);
         const nEnd = nodeAfter([...steps].reverse().find(s => s <= to) || steps[steps.length - 1]);
         if (!nStart || !nEnd) return;
-        let top = nStart.getBoundingClientRect().top - laneTop + 6;
+        const a = dotCenter(nStart), b = dotCenter(nEnd);
+        const laneOff = lane.getBoundingClientRect().top - lanesRect.top; // posun pruhu vůči .lanes
         w.style.position = 'absolute'; w.style.top = '0px';
         const h = w.offsetHeight;
-        // kolize s už umístěnými kartami → posuň pod ně
-        placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 10; });
+        // Karta uprostřed okna (mezi uzlem start a uzlem konec); při kolizi s jinou kartou posuň níž
+        let top = (a.y + b.y) / 2 - h / 2 - laneOff;
+        top = Math.max(top, a.y - laneOff + 14);
+        placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 12; });
         w.style.top = top + 'px';
         const bracket = w.querySelector('.par-bracket'); if (bracket) bracket.style.display = 'none';
         w.title = 'Vychází z uzlu před operací ' + from + ', vrací se do uzlu za operací ' + to;
         placed.push({ top, bottom: top + h });
-        const endY = nEnd.getBoundingClientRect().bottom - laneTop;
-        maxBottom = Math.max(maxBottom, top + h, endY);
-        // SVG spojnice: uzel start → karta (vstup), karta (výstup) → uzel konec
+        maxBottom = Math.max(maxBottom, top + h, b.y - laneOff + 10);
+        // Spojnice v pravých úhlech: uzel → doprava → svisle dolů → do horní hrany karty; z dolní hrany → svisle → doleva → uzel
         if (svg) {
-          const a = dotCenter(nStart), b = dotCenter(nEnd);
           const wr = w.getBoundingClientRect();
-          const cx = wr.left - lanesRect.left, cyIn = wr.top - lanesRect.top + 22, cyOut = wr.bottom - lanesRect.top - 22;
-          const stroke = 'rgba(192,132,252,0.85)';
-          const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' C' + (a.x + 60) + ',' + a.y + ' ' + (cx - 60) + ',' + cyIn + ' ' + cx + ',' + cyIn;
-          const p2 = 'M' + cx + ',' + cyOut + ' C' + (cx - 60) + ',' + cyOut + ' ' + (b.x + 60) + ',' + b.y + ' ' + (b.x + b.r) + ',' + b.y;
-          svg.insertAdjacentHTML('beforeend', '<path d="' + p1 + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#par-arrow)"/>' +
-            '<path d="' + p2 + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#par-arrow)"/>');
+          const cx = wr.left + wr.width / 2 - lanesRect.left; // svislá osa větve = střed karty
+          const cTop = wr.top - lanesRect.top, cBot = wr.bottom - lanesRect.top;
+          const stroke = 'rgba(192,132,252,0.9)';
+          const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' H' + cx + ' V' + (cTop - 2);
+          const p2 = 'M' + cx + ',' + (cBot + 2) + ' V' + b.y + ' H' + (b.x + b.r + 2);
+          const flow = (x, y, dir) => '<path d="M' + (x - 4) + ',' + (y - (dir === 'down' ? 4 : 0)) + ' ' + (dir === 'down' ? 'l4,6 l4,-6' : (dir === 'right' ? 'l6,4 l-6,4' : 'l-6,4 l6,4')) + '" fill="none" stroke="' + stroke + '" stroke-width="2"/>';
+          svg.insertAdjacentHTML('beforeend',
+            '<path d="' + p1 + '" fill="none" stroke="' + stroke + '" stroke-width="2" marker-end="url(#par-arrow)"/>' +
+            '<path d="' + p2 + '" fill="none" stroke="' + stroke + '" stroke-width="2" marker-end="url(#par-arrow)"/>' +
+            // šipky toku uprostřed vodorovných a svislých úseků
+            flow((a.x + a.r + cx) / 2, a.y, 'right') +
+            (cTop - a.y > 40 ? flow(cx + 4, (a.y + cTop) / 2, 'down') : '') +
+            (b.y - cBot > 40 ? flow(cx + 4, (cBot + b.y) / 2, 'down') : '') +
+            flow((b.x + b.r + cx) / 2 + 4, b.y, 'left'));
           nStart.classList.add('op-node-active'); nEnd.classList.add('op-node-active');
         }
       });
-      if (svg && wraps.length) svg.insertAdjacentHTML('afterbegin', '<defs><marker id="par-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(192,132,252,0.95)"/></marker></defs>');
+      if (svg && wraps.length) svg.insertAdjacentHTML('afterbegin', '<defs>' +
+        '<marker id="par-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(192,132,252,0.95)"/></marker>' +
+        '</defs>');
       lane.style.minHeight = maxBottom + 'px';
     }
     // Paralelní operace z uzlu: předvyplní „od operace" = operace za uzlem
