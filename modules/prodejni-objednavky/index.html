@@ -2495,7 +2495,6 @@
             '<div style="display:flex;gap:8px;align-items:center;">' +
               (order.status === 'prodano' ? '<button class="btn" style="background:#06b6d4;color:#04121c;font-weight:700;" onclick="generateOrderFromSold(' + id + ')" title="Podrobnosti níže jsou vyplněné — vygenerovat objednávku a posunout na Objednáno">📝 Vygenerovat objednávku →</button>' : '') +
               '<button class="btn" id="order-history-btn" onclick="toggleOrderHistory()" title="Zobrazit / skrýt historii objednávky (události procesu)">🕓 Historie</button>' +
-              '<button class="btn" onclick="makeDeliveryNote(' + id + ')" title="Vytvořit a otevřít dodací list (PDF)">📦 Dodací list</button>' +
               '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
               renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
             '</div>' +
@@ -2626,6 +2625,7 @@
             ((order.items && order.items.length > 0 && order.status !== 'cancelled')
               ? '<button class="btn btn-secondary" onclick="createInvoiceFromOrder(' + id + ')" title="Vystaví fakturu (AR) z této objednávky">💼 Vystavit fakturu</button>'
               : '') +
+            '<button class="btn btn-secondary" onclick="makeDeliveryNote(' + id + ')" title="Vytvořit a otevřít dodací list (PDF)">📦 Dodací list</button>' +
             '<button class="btn btn-primary" onclick="saveAndCloseDetail(' + id + ')">✅ Uložit</button>' +
             '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
           '</div>' +
