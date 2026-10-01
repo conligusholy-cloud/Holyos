@@ -508,6 +508,7 @@ router.get('/orders', async (req, res, next) => {
       where,
       include: {
         company: { select: { id: true, name: true } },
+        sales_person: { select: { id: true, first_name: true, last_name: true } },
         items: { include: { product: { select: { id: true, code: true, name: true } } } },
         final_invoice: {
           select: {
@@ -656,6 +657,8 @@ router.post('/orders', async (req, res, next) => {
       status: rest.status || 'new',
       currency: rest.currency || 'CZK',
       note: rest.note || null,
+      // Odpovědný obchodník: z formuláře, jinak přihlášený uživatel (jeho Person)
+      sales_person_id: rest.sales_person_id ? parseInt(rest.sales_person_id) : ((req.user && req.user.person && req.user.person.id) || null),
       // Prisma DateTime vyžaduje Date objekt, ne string
       expected_delivery: parseDate(rest.expected_delivery),
       items_count: parseInt(items_count) || 0,
@@ -979,11 +982,12 @@ router.put('/orders/:id', async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);
     const allowed = {};
-    const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id'];
+    const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id', 'sales_person_id'];
     for (const f of fields) {
       if (req.body[f] !== undefined) allowed[f] = req.body[f];
     }
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
+    if (allowed.sales_person_id !== undefined) allowed.sales_person_id = allowed.sales_person_id ? parseInt(allowed.sales_person_id) : null;
     if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
     if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
     if (allowed.expected_delivery !== undefined) {
@@ -1388,7 +1392,7 @@ router.get('/orders/:id/history', async (req, res, next) => {
 router.get('/orders/:id/confirmation-pdf', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    const order = await prisma.order.findUnique({ where: { id }, include: { company: true, items: true } });
+    const order = await prisma.order.findUnique({ where: { id }, include: { company: true, items: true, sales_person: { select: { id: true, first_name: true, last_name: true } } } });
     if (!order) return res.status(404).json({ error: 'Objednávka nenalezena' });
 
     const fs = require('fs');
@@ -2345,6 +2349,25 @@ router.post('/pricelist', async (req, res, next) => {
       include: {
         product: { select: { id: true, code: true, name: true, type: true } },
       },
+    });
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/pricelist/:id/duplicate — rychlá kopie položky (vše stejné, jiný název)
+// Body: { name_cs, name_en? } — když chybí, použije se „<původní> (kopie)".
+router.post('/pricelist/:id/duplicate', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const src = await prisma.salesPricelistItem.findUnique({ where: { id } });
+    if (!src) return res.status(404).json({ error: 'Polozka ceniku nenalezena' });
+    const b = req.body || {};
+    const name_cs = (b.name_cs && String(b.name_cs).trim()) || (src.name_cs + ' (kopie)');
+    const name_en = b.name_en !== undefined ? (b.name_en ? String(b.name_en).trim() : null) : src.name_en;
+    const { id: _id, created_at, updated_at, ...rest } = src;
+    const created = await prisma.salesPricelistItem.create({
+      data: { ...rest, name_cs, name_en, config_options: rest.config_options === null ? undefined : rest.config_options },
+      include: { product: { select: { id: true, code: true, name: true, type: true } } },
     });
     res.status(201).json(created);
   } catch (err) { next(err); }

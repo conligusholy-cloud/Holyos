@@ -1137,12 +1137,13 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th title="Odpovědný obchodník">👤 Obchodník</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (o.company?.name || o.company_name || '—') + '</td>';
+        html += '<td style="white-space:nowrap;font-size:12px;">' + (o.sales_person ? ((o.sales_person.first_name || '') + ' ' + (o.sales_person.last_name || '')).trim() : '<span style="color:var(--text2)">—</span>') + '</td>';
         html += '<td>' + renderStatusBadges({ ...o, type: 'sales' }) + '</td>';
         // Interni warning: pokud alespon 1 polozka nema napojeny Product, zakaznik
         // ji neodesle do vyroby (nema co vyrobit). Red ⚠ badge vedle poctu polozek.
@@ -1184,6 +1185,15 @@
       const compList = companies
         .filter(c => CUSTOMER_TYPES.includes(c.type) || (o.company_id && o.company_id === c.id))
         .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'cs'));
+      // Obchodníci pro výběr odpovědného (všichni aktivní lidé; předvybraný = u editace uložený, u nové = přihlášený)
+      let salesPeople = [];
+      try { const pr = await fetch('/api/hr/people?active=true').then(r => r.json()); salesPeople = (Array.isArray(pr) ? pr : pr.data || []); } catch (e) {}
+      let mePersonId = null;
+      try { const me = await fetch('/api/auth/me').then(r => r.json()); mePersonId = me && me.user && me.user.person ? me.user.person.id : null; } catch (e) {}
+      const selPerson = id ? (o.sales_person_id || null) : mePersonId;
+      const salesPersonOpts = '<option value="">— bez obchodníka —</option>' + salesPeople
+        .sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'))
+        .map(p => '<option value="' + p.id + '"' + (p.id === selPerson ? ' selected' : '') + '>' + (p.first_name || '') + ' ' + (p.last_name || '') + (p.role ? ' · ' + p.role : '') + '</option>').join('');
       const compOpts = compList.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type && c.type !== 'customer' ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
 
       // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
@@ -1284,6 +1294,7 @@
               '</div>' +
             '</div>' +
             '<div class="form-group"><label>Stav</label><select name="status">' + statusOpts + '</select></div>' +
+            '<div class="form-group"><label>👤 Odpovědný obchodník</label><select name="sales_person_id">' + salesPersonOpts + '</select></div>' +
           '</div>' +
           '<div id="new-company-form" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0 12px;">' +
             '<div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#eab308;">🏢 Nový odběratel</div>' +
@@ -1828,6 +1839,7 @@
         status: raw.status || 'new',
         currency: raw.currency || 'CZK',
         note: raw.note || '',
+        sales_person_id: raw.sales_person_id ? parseInt(raw.sales_person_id) : null,
         expected_delivery: raw.expected_delivery || null,
         items_count: _pendingItems.length,
         total_amount: _pendingItems.reduce((sum, it) => sum + (it.quantity * it.unit_price), 0),
@@ -10605,7 +10617,8 @@
           ? '<span style="color:#8b5cf6;font-weight:600">' + esc(it.product.code) + '</span> — ' + esc(it.product.name)
           : '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠ Nenapojeno</span>') + '</td>';
         h += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
-        h += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
+        h += '<td style="white-space:nowrap;"><button class="btn btn-sm" title="Duplikovat položku (vše stejné, jen jiný název)" onclick="event.stopPropagation();duplicatePricelistItem(' + it.id + ', ' + JSON.stringify(it.name_cs || '').replace(/"/g, '&quot;') + ', ' + JSON.stringify(it.name_en || '').replace(/"/g, '&quot;') + ')" style="margin-right:6px;">⧉</button>'
+          + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
         h += '</tr>';
         return h;
       }
@@ -10744,6 +10757,22 @@
         closeModal();
         loadPricelist();
       } catch(e) { alert('Chyba: ' + e.message); }
+    }
+
+    // Rychlá kopie položky ceníku: zeptá se na nový název, zkopíruje vše ostatní a otevře kopii k úpravě
+    async function duplicatePricelistItem(id, nameCs, nameEn) {
+      var newCs = prompt('Nový český název kopie:', (nameCs || '') + ' (kopie)');
+      if (newCs === null) return;
+      newCs = newCs.trim(); if (!newCs) { alert('Název je povinný.'); return; }
+      var newEn = nameEn ? prompt('Nový anglický název (volitelné):', nameEn) : null;
+      if (newEn === null && nameEn) return;
+      try {
+        var res = await fetch('/api/wh/pricelist/' + id + '/duplicate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name_cs: newCs, name_en: newEn }) });
+        var d = await res.json();
+        if (!res.ok) { alert('Chyba: ' + (d.error || res.status)); return; }
+        await loadPricelist();
+        openPricelistModal(d.id); // rovnou k doladění (kód stroje, cena, výrobek…)
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     async function deletePricelistItem(id) {
