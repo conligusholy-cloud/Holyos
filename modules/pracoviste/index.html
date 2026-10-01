@@ -409,7 +409,8 @@
 
       document.getElementById('ws-count').textContent = '(' + filtered.length + ')';
 
-      if (filtered.length === 0) {
+      // Prázdný stav jen když nejsou ani haly (haly se zobrazují i prázdné)
+      if (filtered.length === 0 && (q || allHalls.length === 0)) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' +
           '<div class="icon">&#127981;</div>' +
           '<p>' + (q ? 'Žádné pracoviště nenalezeno' : 'Zatím žádná pracoviště') + '</p>' +
