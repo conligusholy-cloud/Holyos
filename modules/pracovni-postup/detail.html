@@ -197,6 +197,16 @@
     .par-wrap .op-badge-par { font-size:10px; color:#c084fc; }
     .op-card.is-par-main-hl { box-shadow:0 0 0 2px rgba(168,85,247,0.35); }
 
+    /* === Uzly hlavní linie (body pro napojení paralelních operací) === */
+    .op-node { position:relative; display:flex; flex-direction:column; align-items:center; height:46px; justify-content:center; cursor:pointer; margin:2px 0; }
+    .op-node-line { position:absolute; left:50%; top:0; bottom:0; width:2px; background:rgba(255,255,255,0.18); transform:translateX(-50%); }
+    .op-node-dot { position:relative; z-index:1; width:22px; height:22px; border-radius:50%; background:var(--surface); border:2px solid rgba(255,255,255,0.35); color:var(--text2); font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+    .op-node:hover .op-node-dot { border-color:#c084fc; color:#c084fc; box-shadow:0 0 0 4px rgba(168,85,247,0.2); transform:scale(1.15); }
+    .op-node-active .op-node-dot { border-color:#c084fc; background:rgba(168,85,247,0.25); color:#e9d5ff; }
+    .op-node-arrow { position:absolute; bottom:-6px; left:50%; transform:translateX(-50%); color:var(--text2); font-size:12px; opacity:.5; }
+    .op-node-end { height:34px; cursor:default; }
+    .op-node-end .op-node-line { bottom:50%; }
+
     /* === Arrow between ops === */
     .op-arrow {
       display:flex; justify-content:center; padding:2px 0;
@@ -1070,9 +1080,17 @@
           const parOps = regularOps.filter(op => op.is_parallel);
           // Vždy dvě dráhy: hlavní linie vlevo (zúžená), vpravo pruh pro paralelní (plovoucí) operace.
           // Pruh je vidět i prázdný, aby bylo jasné, kam paralelní operace patří, a šly rovnou přidat.
-          html += '<div class="lanes" style="display:flex;gap:14px;align-items:flex-start;">';
+          html += '<div class="lanes" id="lanes" style="display:flex;gap:28px;align-items:flex-start;position:relative;">';
+          html += '<svg id="par-links" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1;"></svg>';
           html += '<div class="lane-main" id="lane-main" style="flex:1;min-width:0;max-width:680px;">';
-          mainOps.forEach((op, i) => { if (i > 0) html += '<div class="op-arrow">&#9660;</div>'; html += renderOpCard(op, i); });
+          // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
+          const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
+            + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
+          mainOps.forEach((op, i) => {
+            html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
+            html += renderOpCard(op, i);
+          });
+          html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec hlavní linie"><div class="op-node-line"></div><div class="op-node-dot">' + mainOps.length + '</div></div>';
           html += '</div>';
           html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
           html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
@@ -1164,25 +1182,51 @@
       wraps.sort((a, b) => (parseInt(a.getAttribute('data-from')) || 0) - (parseInt(b.getAttribute('data-from')) || 0));
       let maxBottom = 0;
       mainCards.forEach(c => c.classList.remove('is-par-main-hl'));
+      // Uzly: paralelní operace „od operace X" vychází z uzlu PŘED X; „do operace Y" se vrací do uzlu ZA Y.
+      const nodes = Array.from(main.querySelectorAll('.op-node'));
+      const nodeBefore = (step) => nodes.find(n => parseInt(n.getAttribute('data-before')) === step) || nodes[0];
+      const nodeAfter = (step) => nodes.find(n => parseInt(n.getAttribute('data-after')) === step) || nodes[nodes.length - 1];
+      const lanes = document.getElementById('lanes'); const svg = document.getElementById('par-links');
+      const lanesRect = lanes ? lanes.getBoundingClientRect() : { left: 0, top: 0 };
+      if (svg) svg.innerHTML = '';
+      const dotCenter = (n) => { const d = n.querySelector('.op-node-dot').getBoundingClientRect(); return { x: d.left + d.width / 2 - lanesRect.left, y: d.top + d.height / 2 - lanesRect.top, r: d.width / 2 }; };
       wraps.forEach(w => {
         const from = parseInt(w.getAttribute('data-from')) || steps[0];
         const to = parseInt(w.getAttribute('data-to')) || steps[steps.length - 1];
-        const fromCard = byStep.get(steps.find(s => s >= from)) || mainCards[0];
-        const toCard = byStep.get([...steps].reverse().find(s => s <= to)) || mainCards[mainCards.length - 1];
-        if (!fromCard || !toCard) return;
-        let top = fromCard.getBoundingClientRect().top - laneTop;
-        const bottom = toCard.getBoundingClientRect().bottom - laneTop;
+        const nStart = nodeBefore(steps.find(s => s >= from) || steps[0]);
+        const nEnd = nodeAfter([...steps].reverse().find(s => s <= to) || steps[steps.length - 1]);
+        if (!nStart || !nEnd) return;
+        let top = nStart.getBoundingClientRect().top - laneTop + 6;
         w.style.position = 'absolute'; w.style.top = '0px';
         const h = w.offsetHeight;
         // kolize s už umístěnými kartami → posuň pod ně
-        placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 8; });
+        placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 10; });
         w.style.top = top + 'px';
-        const bracket = w.querySelector('.par-bracket'); if (bracket) { bracket.style.top = '0'; bracket.style.height = Math.max(h, bottom - top) + 'px'; }
-        w.title = 'Okno: od operace ' + from + ' do operace ' + to;
+        const bracket = w.querySelector('.par-bracket'); if (bracket) bracket.style.display = 'none';
+        w.title = 'Vychází z uzlu před operací ' + from + ', vrací se do uzlu za operací ' + to;
         placed.push({ top, bottom: top + h });
-        maxBottom = Math.max(maxBottom, top + h, bottom);
+        const endY = nEnd.getBoundingClientRect().bottom - laneTop;
+        maxBottom = Math.max(maxBottom, top + h, endY);
+        // SVG spojnice: uzel start → karta (vstup), karta (výstup) → uzel konec
+        if (svg) {
+          const a = dotCenter(nStart), b = dotCenter(nEnd);
+          const wr = w.getBoundingClientRect();
+          const cx = wr.left - lanesRect.left, cyIn = wr.top - lanesRect.top + 22, cyOut = wr.bottom - lanesRect.top - 22;
+          const stroke = 'rgba(192,132,252,0.85)';
+          const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' C' + (a.x + 60) + ',' + a.y + ' ' + (cx - 60) + ',' + cyIn + ' ' + cx + ',' + cyIn;
+          const p2 = 'M' + cx + ',' + cyOut + ' C' + (cx - 60) + ',' + cyOut + ' ' + (b.x + 60) + ',' + b.y + ' ' + (b.x + b.r) + ',' + b.y;
+          svg.insertAdjacentHTML('beforeend', '<path d="' + p1 + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#par-arrow)"/>' +
+            '<path d="' + p2 + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#par-arrow)"/>');
+          nStart.classList.add('op-node-active'); nEnd.classList.add('op-node-active');
+        }
       });
+      if (svg && wraps.length) svg.insertAdjacentHTML('afterbegin', '<defs><marker id="par-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(192,132,252,0.95)"/></marker></defs>');
       lane.style.minHeight = maxBottom + 'px';
+    }
+    // Paralelní operace z uzlu: předvyplní „od operace" = operace za uzlem
+    function openAddParallelFromNode(beforeStep) {
+      openAddParallelOp();
+      try { const sel = document.getElementById('op-parallel-from'); if (sel && beforeStep) sel.value = String(beforeStep); } catch (e) {}
     }
     window.addEventListener('resize', () => { try { layoutParallelLane(); } catch (e) {} });
     document.addEventListener('click', () => { setTimeout(() => { try { layoutParallelLane(); } catch (e) {} }, 50); });
