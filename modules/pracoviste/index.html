@@ -453,10 +453,12 @@
       const tbody = document.getElementById('ws-tbody');
       const q = (document.getElementById('search').value || '').toLowerCase().trim();
 
+      // Přirozené řazení (č.1, č.2 … č.10, č.12 — ne 1, 10, 11, 2)
+      const natCmp = new Intl.Collator('cs', { numeric: true, sensitivity: 'base' }).compare;
       const filtered = allWorkstations.filter(ws => {
         if (!q) return true;
         return (ws.name || '').toLowerCase().includes(q) || (ws.code || '').toLowerCase().includes(q);
-      });
+      }).sort((a, b) => natCmp(a.name || '', b.name || '') || natCmp(a.code || '', b.code || ''));
 
       document.getElementById('ws-count').textContent = '(' + filtered.length + ')';
 
