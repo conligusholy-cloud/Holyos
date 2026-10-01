@@ -634,6 +634,7 @@
         '<td>' + outWhHtml + '</td>' +
         '<td style="text-align:center;">' + opsCount + '</td>' +
         '<td>' +
+          '<button class="btn btn-sm" onclick="event.stopPropagation();duplicateWs(' + ws.id + ')" title="Duplikovat pracoviště (vše stejné, nový název; sklady V/E se vytvoří pro nový název)">⧉</button> ' +
           '<button class="btn btn-sm" onclick="event.stopPropagation();openEditModal(' + ws.id + ')">&#9998;</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteWs(' + ws.id + ')">&#128465;</button>' +
         '</td>' +
@@ -1180,6 +1181,46 @@
       try {
         await api('/api/production/workstations/' + id, { method: 'DELETE' });
         showToast('Pracoviště smazáno');
+        await reloadData();
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
+    // Rychlá kopie pracoviště: zeptá se na název, zkopíruje halu/skupinu/rozměry/kooperaci.
+    // Pokud mělo sklady „V <název>" / „E <název>", vytvoří stejné pro nový název; jinak převezme sklady beze změny.
+    async function duplicateWs(id) {
+      const src = allWorkstations.find(w => w.id === id); if (!src) return;
+      const m = String(src.name).match(/^(.*?)(\d+)$/);
+      const defName = m ? m[1] + (parseInt(m[2], 10) + 1) : src.name + ' 2';
+      const name = prompt('Název nového pracoviště:', defName);
+      if (name === null) return;
+      const nm = name.trim(); if (!nm) return showToast('Název je povinný', true);
+      let code = src.code || null;
+      if (code) { const cm = code.match(/^(.*?)(\d+)$/); code = cm ? cm[1] + String(parseInt(cm[2], 10) + 1).padStart(cm[2].length, '0') : code + '-2'; code = prompt('Kód nového pracoviště:', code); if (code === null) return; code = code.trim() || null; }
+      try {
+        let input_warehouse_id = src.input_warehouse ? src.input_warehouse.id : (src.input_warehouse_id || null);
+        let output_warehouse_id = src.output_warehouse ? src.output_warehouse.id : (src.output_warehouse_id || null);
+        const hadVE = (src.input_warehouse && /^V\s/.test(src.input_warehouse.name)) || (src.output_warehouse && /^E\s/.test(src.output_warehouse.name));
+        if (hadVE) {
+          const hallName = src.hall ? src.hall.name : null;
+          for (const sp of [{ k: 'in', name: 'V ' + nm, code: code ? 'V-' + code : null }, { k: 'out', name: 'E ' + nm, code: code ? 'E-' + code : null }]) {
+            let wh = allWarehouses.find(w => (w.name || '').toLowerCase() === sp.name.toLowerCase());
+            if (!wh) { const data = { name: sp.name, code: sp.code, type: 'production', active: true }; if (hallName) data.address = hallName; wh = await api('/api/wh/warehouses', { method: 'POST', body: JSON.stringify(data) }); allWarehouses.push(wh); }
+            if (sp.k === 'in') input_warehouse_id = wh.id; else output_warehouse_id = wh.id;
+          }
+        }
+        const body = {
+          name: nm, code,
+          hall_id: src.hall ? src.hall.id : (src.hall_id || null),
+          group_id: src.group ? src.group.id : (src.group_id || null),
+          is_external: !!src.is_external,
+          width_m: src.width_m != null ? parseFloat(src.width_m) : null,
+          length_m: src.length_m != null ? parseFloat(src.length_m) : null,
+          input_warehouse_id, output_warehouse_id,
+          input_location_id: hadVE ? null : (src.input_location ? src.input_location.id : null),
+          output_location_id: hadVE ? null : (src.output_location ? src.output_location.id : null),
+        };
+        await api('/api/production/workstations', { method: 'POST', body: JSON.stringify(body) });
+        showToast('Pracoviště „' + nm + '" vytvořeno' + (hadVE ? ' včetně skladů V/E' : ''));
         await reloadData();
       } catch (err) { showToast('Chyba: ' + err.message, true); }
     }
