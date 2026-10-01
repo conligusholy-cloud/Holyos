@@ -55,7 +55,7 @@ function renderSidebar(activeModule) {
     { id: 'site-development',     name: 'Site Development',    icon: '&#128506;', color: '#14b8a6', active: true },
     { id: 'chat',                 name: 'Zprávy',              icon: '&#128172;', color: '#a78bfa', active: true },
     { id: 'kiosky',               name: 'Kiosky',              icon: '&#128433;', color: '#06b6d4', active: true },
-    { id: 'planovani-vyroby',   name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: true },
+    { id: 'planovani-vyroby',   name: 'Plánování výroby',    icon: '&#128197;', color: '#3b82f6', active: true, hidden: true }, // v menu jen přes Nastavení výroby
     { id: 'material',            name: 'Materiálový tok',     icon: '&#128666;', color: '#10b981', active: false },
     { id: 'reporty',             name: 'Reporty a analýzy',   icon: '&#128202;', color: '#ef4444', active: false },
     { id: 'nastaveni',           name: 'Nastavení',           icon: '&#9881;', color: '#6c8cff', active: false },
@@ -135,7 +135,7 @@ function renderSidebar(activeModule) {
     if (navEl) {
       var navHtml = '';
       // Moduly schované pod Nastavení výroby: v menu se neukazují, aktivní je rodič
-      var PARENT = { 'pracoviste': 'nastaveni-vyroby', 'pracovni-postup': 'nastaveni-vyroby' };
+      var PARENT = { 'pracoviste': 'nastaveni-vyroby', 'pracovni-postup': 'nastaveni-vyroby', 'planovani-vyroby': 'nastaveni-vyroby' };
       var activeId = PARENT[activeModule] || activeModule;
       modules.forEach(function(m) {
         if (m.hidden) return;
@@ -519,7 +519,7 @@ var HOLYOS_AI_MODULES = {
   'simulace-vyroby': { name: 'Simulace výroby', parts: ['běh simulace', 'výsledky simulace'] },
   'vytvoreni-arealu': { name: 'Vytvoření areálu', parts: ['editor půdorysu', 'kreslení hal a cest'] },
   'pracoviste': { name: 'Pracoviště', parts: ['seznam pracovišť', 'parametry a kapacity'] },
-  'nastaveni-vyroby': { name: 'Nastavení výroby', parts: ['pracoviště', 'pracovní postupy'] },
+  'nastaveni-vyroby': { name: 'Nastavení výroby', parts: ['pracoviště', 'pracovní postupy', 'plánování výroby'] },
   'normovani-fy': { name: 'Normování', parts: ['normy operací', 'výpočty časů'] },
   'normovani-prehled': { name: 'Normy', parts: ['přehled norem'] },
   'sklady': { name: 'Sklady', parts: ['seznam skladů', 'skladové lokace'] },

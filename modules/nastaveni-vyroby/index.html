@@ -42,6 +42,7 @@
     <div class="tabs" id="tabs">
       <button class="tab-btn" data-tab="pracoviste" onclick="switchTab('pracoviste')">&#127981; Pracoviště</button>
       <button class="tab-btn" data-tab="pracovni-postup" onclick="switchTab('pracovni-postup')">&#128295; Pracovní postup</button>
+      <button class="tab-btn" data-tab="planovani-vyroby" onclick="switchTab('planovani-vyroby')">&#128197; Plánování výroby</button>
       <div class="tab-actions"><a id="open-full" href="#" target="_blank" title="Otevřít aktuální záložku jako samostatnou stránku">&#8599; Otevřít samostatně</a></div>
     </div>
 
@@ -63,6 +64,7 @@
     var TABS = {
       'pracoviste':      { page: 'modules/pracoviste/index.html' },
       'pracovni-postup': { page: 'modules/pracovni-postup/index.html' },
+      'planovani-vyroby': { page: 'modules/planovani-vyroby/index.html' },
     };
     var current = null;
     function switchTab(name, opts) {
