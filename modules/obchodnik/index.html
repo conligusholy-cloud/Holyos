@@ -1745,13 +1745,22 @@
         // na stažení/náhled padá na „Scene was invalidated". Řešení = otevřít
         // serverovou vizitku jako skutečný odkaz do NOVÉHO panelu (target=_blank),
         // čímž iOS vyskočí do Safari, které kartu „Přidat do kontaktů" zobrazí.
-        var va = document.createElement('a');
-        va.href = API + '/leads/' + id + '/vcard';
-        va.target = '_blank';
-        va.rel = 'noopener';
-        document.body.appendChild(va);
-        va.click();
-        setTimeout(function(){ try{ document.body.removeChild(va); }catch(e){} }, 800);
+        // Nové okno z appky na ploše NEMÁ přihlašovací cookie → vizitku otevíráme přes
+        // krátkodobý podepsaný odkaz (/vcard/:id?t=…), který přihlášení nepotřebuje.
+        // Okno otevíráme hned (ještě v rámci kliknutí), aby ho iOS neblokoval; adresu doplníme po získání tokenu.
+        var w = null;
+        try { w = window.open('about:blank', '_blank'); } catch(e){ w = null; }
+        fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
+          .then(function(r){ return r.json(); })
+          .then(function(j){
+            var url = (j && j.url) ? j.url : (API + '/leads/' + id + '/vcard');
+            if (w && !w.closed) { w.location.href = url; }
+            else { window.location.href = url; }
+          })
+          .catch(function(){
+            var url = API + '/leads/' + id + '/vcard';
+            if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
+          });
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
         var url = URL.createObjectURL(blob);

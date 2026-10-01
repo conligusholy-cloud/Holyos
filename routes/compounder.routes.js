@@ -3840,37 +3840,67 @@ router.get('/leads/:id(\\d+)', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /leads/:id/vcard — vizitka (.vcf) pro uložení kontaktu do telefonu.
+// ─── Vizitka (.vcf) pro uložení kontaktu do telefonu ────────────────────────
 // Servírováno ze serveru (skutečná URL), protože iOS Safari neumí spolehlivě
-// otevřít blob:/data: vizitku (padá na „Scene was invalidated"). Reálná URL
-// s Content-Type text/vcard iOS zobrazí jako nativní kartu „Přidat do kontaktů".
+// otevřít blob:/data: vizitku. Reálná URL s Content-Type text/vcard iOS zobrazí
+// jako nativní kartu „Přidat do kontaktů".
+// Z appky na ploše (standalone PWA) se odkaz otevírá v novém okně BEZ cookies →
+// proto existuje i veřejná varianta /vcard/:id?t=<krátkodobý podepsaný token>.
+const VCARD_SECRET = process.env.JWT_SECRET || process.env.SECRET || 'holyos-dev-secret-change-me';
+function buildLeadVcard(lead) {
+  const vesc = (s) => String(s == null ? '' : s).replace(/([,;\\])/g, '\\$1').replace(/\r?\n/g, '\\n');
+  const name = lead.name || lead.email || 'Compounder lead';
+  let first = lead.first_name || '', last = lead.last_name || '';
+  if (!first && !last) { const p = String(name).trim().split(/\s+/); first = p[0] || ''; last = p.slice(1).join(' '); }
+  const noteParts = ['Compounder lead'];
+  if (lead.company) noteParts.push(lead.company);
+  if (lead.email) noteParts.push(lead.email);
+  const vcard = 'BEGIN:VCARD\r\nVERSION:3.0\r\n'
+    + 'N:' + vesc(last) + ';' + vesc(first) + ';;;\r\n'
+    + 'FN:' + vesc(name) + '\r\n'
+    + 'ORG:Compounder\r\n'
+    + (lead.phone ? 'TEL;TYPE=CELL:' + vesc(lead.phone) + '\r\n' : '')
+    + (lead.email ? 'EMAIL;TYPE=INTERNET:' + vesc(lead.email) + '\r\n' : '')
+    + 'NOTE:' + vesc(noteParts.join(' · ')) + '\r\n'
+    + 'END:VCARD\r\n';
+  const fname = (String(name).replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'kontakt') + '.vcf';
+  return { vcard, fname };
+}
+async function sendLeadVcard(res, id) {
+  const lead = await prisma.compounderLead.findUnique({
+    where: { id },
+    select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, company: true },
+  });
+  if (!lead) return res.status(404).send('Lead nenalezen');
+  const { vcard, fname } = buildLeadVcard(lead);
+  res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
+  res.setHeader('Content-Disposition', 'inline; filename="' + fname + '"');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(vcard);
+}
+
+// GET /leads/:id/vcard — přihlášený uživatel (stejné okno s cookie).
 router.get('/leads/:id(\\d+)/vcard', requireAuth, async (req, res, next) => {
+  try { await sendLeadVcard(res, Number(req.params.id)); } catch (err) { next(err); }
+});
+
+// GET /leads/:id/vcard-link — vrátí krátkodobý podepsaný odkaz (15 min) na veřejnou vizitku.
+router.get('/leads/:id(\\d+)/vcard-link', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const jwt = require('jsonwebtoken');
+  const t = jwt.sign({ vc: id }, VCARD_SECRET, { expiresIn: '15m' });
+  res.json({ ok: true, url: '/api/compounder/vcard/' + id + '?t=' + encodeURIComponent(t) });
+});
+
+// GET /vcard/:id?t=… — veřejná vizitka ověřená tokenem (bez cookies; pro nové okno z PWA).
+router.get('/vcard/:id(\\d+)', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const lead = await prisma.compounderLead.findUnique({
-      where: { id },
-      select: { id: true, name: true, first_name: true, last_name: true, email: true, phone: true, company: true },
-    });
-    if (!lead) return res.status(404).send('Lead nenalezen');
-    const vesc = (s) => String(s == null ? '' : s).replace(/([,;\\])/g, '\\$1').replace(/\r?\n/g, '\\n');
-    const name = lead.name || lead.email || 'Compounder lead';
-    let first = lead.first_name || '', last = lead.last_name || '';
-    if (!first && !last) { const p = String(name).trim().split(/\s+/); first = p[0] || ''; last = p.slice(1).join(' '); }
-    const noteParts = ['Compounder lead'];
-    if (lead.company) noteParts.push(lead.company);
-    if (lead.email) noteParts.push(lead.email);
-    const vcard = 'BEGIN:VCARD\r\nVERSION:3.0\r\n'
-      + 'N:' + vesc(last) + ';' + vesc(first) + ';;;\r\n'
-      + 'FN:' + vesc(name) + '\r\n'
-      + 'ORG:Compounder\r\n'
-      + (lead.phone ? 'TEL;TYPE=CELL:' + vesc(lead.phone) + '\r\n' : '')
-      + (lead.email ? 'EMAIL;TYPE=INTERNET:' + vesc(lead.email) + '\r\n' : '')
-      + 'NOTE:' + vesc(noteParts.join(' · ')) + '\r\n'
-      + 'END:VCARD\r\n';
-    const fname = (String(name).replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'kontakt') + '.vcf';
-    res.setHeader('Content-Type', 'text/vcard; charset=utf-8');
-    res.setHeader('Content-Disposition', 'inline; filename="' + fname + '"');
-    res.send(vcard);
+    const jwt = require('jsonwebtoken');
+    let payload;
+    try { payload = jwt.verify(String(req.query.t || ''), VCARD_SECRET); } catch (e) { return res.status(401).send('Odkaz na vizitku vypršel. Otevři kontakt v HolyOS znovu.'); }
+    if (!payload || Number(payload.vc) !== id) return res.status(401).send('Neplatný odkaz na vizitku.');
+    await sendLeadVcard(res, id);
   } catch (err) { next(err); }
 });
 
