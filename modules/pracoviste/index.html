@@ -190,12 +190,11 @@
               <th>Vstupní sklad</th>
               <th>Výstupní sklad</th>
               <th>Operací</th>
-              <th>Pracovníci</th>
               <th style="width:100px;"></th>
             </tr>
           </thead>
           <tbody id="ws-tbody">
-            <tr><td colspan="8" class="empty-state">&#9203; Načítám...</td></tr>
+            <tr><td colspan="7" class="empty-state">&#9203; Načítám...</td></tr>
           </tbody>
         </table>
       </div>
@@ -250,7 +249,9 @@
       </div>
 
       <!-- Sklady -->
-      <div class="section-title">&#128230; Sklady</div>
+      <div class="section-title" style="display:flex;align-items:center;gap:10px;">&#128230; Sklady
+        <button type="button" class="btn btn-sm" onclick="generateWsWarehouses()" title="Vytvoří vstupní sklad „V <název>" a výstupní sklad „E <název>" a rovnou je přiřadí" style="margin-left:auto;">⚡ Vygenerovat sklady V / E</button>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>Vstupní sklad</label>
@@ -272,14 +273,14 @@
         </div>
       </div>
 
-      <!-- Pracovníci -->
-      <div class="section-title">&#128101; Pracovníci</div>
-      <div class="worker-add-row">
+      <!-- Pracovníci — pracovníci se k pracovišti nepřiřazují (sekce skrytá, data model zachován) -->
+      <div class="section-title" style="display:none;">&#128101; Pracovníci</div>
+      <div class="worker-add-row" style="display:none;">
         <select id="worker-select"><option value="">— vyberte pracovníka —</option></select>
         <input type="text" id="worker-role" placeholder="Role (volitelné)">
         <button class="btn btn-sm" onclick="addWorkerToModal()">+ Přidat</button>
       </div>
-      <div class="modal-worker-list" id="modal-worker-list"></div>
+      <div class="modal-worker-list" id="modal-worker-list" style="display:none;"></div>
 
       <div class="modal-actions">
         <button class="btn" onclick="closeModal()">Zrušit</button>
@@ -443,7 +444,7 @@
         renderList();
       } catch (err) {
         document.getElementById('ws-tbody').innerHTML =
-          '<tr><td colspan="8" style="color:#ef4444;text-align:center;padding:40px;">' + esc(err.message) + '</td></tr>';
+          '<tr><td colspan="7" style="color:#ef4444;text-align:center;padding:40px;">' + esc(err.message) + '</td></tr>';
       }
     });
 
@@ -461,7 +462,7 @@
 
       // Prázdný stav jen když nejsou ani haly (haly se zobrazují i prázdné)
       if (filtered.length === 0 && (q || (allHalls.length === 0 && allGroups.length === 0))) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">' +
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">' +
           '<div class="icon">&#127981;</div>' +
           '<p>' + (q ? 'Žádné pracoviště nenalezeno' : 'Zatím žádná pracoviště') + '</p>' +
           (!q ? '<p style="font-size:12px;">Klikněte na "+ Nové pracoviště"</p>' : '') +
@@ -524,7 +525,7 @@
       if (noHall.length > 0 || (groupsNoHall.length > 0 && !q)) {
         const isCollapsed = collapsedHalls.has(0);
         html += '<tr class="hall-row" data-hall-id="0" onclick="toggleHall(0)">' +
-          '<td colspan="8">' +
+          '<td colspan="7">' +
             '<div class="hall-header">' +
               '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
               '<span class="hall-color-dot" style="background:#64748b;"></span>' +
@@ -543,7 +544,7 @@
       const isCollapsed = collapsedGroups.has(g.id);
       const opsCount = g._count ? g._count.operations : 0;
       return '<tr class="group-row" data-group-id="' + g.id + '" onclick="toggleGroup(' + g.id + ')">' +
-        '<td colspan="8" style="border-left:3px solid ' + esc(color || 'transparent') + ';">' +
+        '<td colspan="7" style="border-left:3px solid ' + esc(color || 'transparent') + ';">' +
           '<div class="hall-header">' +
             '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
             '<span>&#128230; ' + esc(g.name) + '</span>' +
@@ -566,7 +567,7 @@
     function renderHallRow(hall, count) {
       const isCollapsed = collapsedHalls.has(hall.id);
       return '<tr class="hall-row" data-hall-id="' + hall.id + '" onclick="toggleHall(' + hall.id + ')">' +
-        '<td colspan="8">' +
+        '<td colspan="7">' +
           '<div class="hall-header">' +
             '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
             '<span class="hall-color-dot" style="background:' + esc(hall.color) + ';"></span>' +
@@ -632,7 +633,6 @@
         '<td>' + inWhHtml + '</td>' +
         '<td>' + outWhHtml + '</td>' +
         '<td style="text-align:center;">' + opsCount + '</td>' +
-        '<td>' + workersHtml + '</td>' +
         '<td>' +
           '<button class="btn btn-sm" onclick="event.stopPropagation();openEditModal(' + ws.id + ')">&#9998;</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteWs(' + ws.id + ')">&#128465;</button>' +
@@ -911,6 +911,36 @@
     }
 
     // === Warehouse selects ===
+    // Vygeneruje sklady podle názvu pracoviště: „V <název>" (vstup) + „E <název>" (end/výstup),
+    // kódy V-<kód> / E-<kód>. Existující sklad stejného názvu se znovu nevytváří, jen přiřadí.
+    async function generateWsWarehouses() {
+      const name = document.getElementById('ws-name').value.trim();
+      if (!name) return showToast('Nejdřív vyplň název pracoviště', true);
+      const code = document.getElementById('ws-code').value.trim();
+      const hallSel = document.getElementById('ws-hall');
+      const hallName = hallSel && hallSel.value ? (allHalls.find(h => String(h.id) === hallSel.value) || {}).name : null;
+      const specs = [
+        { type: 'input',  name: 'V ' + name, code: code ? 'V-' + code : null },
+        { type: 'output', name: 'E ' + name, code: code ? 'E-' + code : null },
+      ];
+      try {
+        const ids = {};
+        for (const sp of specs) {
+          let wh = allWarehouses.find(w => (w.name || '').toLowerCase() === sp.name.toLowerCase());
+          if (!wh) {
+            const data = { name: sp.name, code: sp.code, type: 'production', active: true };
+            if (hallName) data.address = hallName;
+            wh = await api('/api/wh/warehouses', { method: 'POST', body: JSON.stringify(data) });
+            allWarehouses.push(wh);
+          }
+          ids[sp.type] = wh.id;
+        }
+        allWarehouses.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'));
+        populateWarehouseSelects(ids.input, ids.output, null, null);
+        showToast('Sklady „V ' + name + '" a „E ' + name + '" jsou připravené a přiřazené');
+      } catch (err) { showToast('Chyba: ' + err.message, true); }
+    }
+
     function populateWarehouseSelects(inputWhId, outputWhId, inputLocId, outputLocId) {
       ['ws-input-wh', 'ws-output-wh'].forEach(selId => {
         const sel = document.getElementById(selId);
