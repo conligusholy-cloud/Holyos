@@ -360,6 +360,15 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
     if (d.lead_id) {
       prisma.compounderEvent.create({ data: { sid: 'server', event: 'leasing_inquiry_sent', path: '/leasing', props: { lead_id: d.lead_id, inquiry_id: inq.id, company: c.name, price: d.price, subject: d.subject, email_sent, sms_sent } } }).catch(() => {});
     }
+    // Kontakt → stav „Poptávka financování" (neshazuj prodané/převedené/ztracené)
+    if (d.lead_id) {
+      prisma.compounderLead.findUnique({ where: { id: Number(d.lead_id) }, select: { status: true } }).then((l) => {
+        if (!l) return;
+        const KEEP = ['prodano', 'converted', 'nezajem', 'nelze_pouzit', 'rejected', 'poptavka_financovani'];
+        if (KEEP.includes(l.status || '')) return;
+        return prisma.compounderLead.update({ where: { id: Number(d.lead_id) }, data: { status: 'poptavka_financovani' } });
+      }).catch((e) => console.warn('[leasing] stav leada:', e.message));
+    }
     // Velín: Jan + Tomáš Holý (+ odesílatel) vědí, že poptávka odešla
     try { require('../services/leasing/notify').notifyLeasingInquiry(prisma, inq, 'sent', { by: salesName }); } catch (e) { /* */ }
     out.push({ id: inq.id, company: c.name, email_sent, sms_sent, public_url: url, deadline_at: deadline, errors: errs });
