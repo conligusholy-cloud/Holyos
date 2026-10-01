@@ -3892,14 +3892,27 @@ router.get('/leads/:id(\\d+)/vcard-link', requireAuth, (req, res) => {
   res.json({ ok: true, url: '/api/compounder/vcard/' + id + '?t=' + encodeURIComponent(t) });
 });
 
+// GET /vcard-token — podpisový token pro vizitky platný 12 h (appka ho má připravený
+// a odkaz na vizitku pak skládá synchronně přímo při klepnutí — iOS PWA neumí
+// do nově otevřeného okna poslat adresu dodatečně).
+router.get('/vcard-token', requireAuth, (req, res) => {
+  const jwt = require('jsonwebtoken');
+  const uid = (req.user && (req.user.id || req.user.user_id)) || null;
+  const t = jwt.sign({ vca: 1, uid }, VCARD_SECRET, { expiresIn: '12h' });
+  res.json({ ok: true, token: t, base: '/api/compounder/vcard/' });
+});
+
 // GET /vcard/:id?t=… — veřejná vizitka ověřená tokenem (bez cookies; pro nové okno z PWA).
+// Token: buď na konkrétní lead ({vc:id}), nebo obecný 12h token ({vca:1}).
 router.get('/vcard/:id(\\d+)', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const jwt = require('jsonwebtoken');
     let payload;
     try { payload = jwt.verify(String(req.query.t || ''), VCARD_SECRET); } catch (e) { return res.status(401).send('Odkaz na vizitku vypršel. Otevři kontakt v HolyOS znovu.'); }
-    if (!payload || Number(payload.vc) !== id) return res.status(401).send('Neplatný odkaz na vizitku.');
+    const okLead = payload && Number(payload.vc) === id;
+    const okAll = payload && payload.vca === 1;
+    if (!okLead && !okAll) return res.status(401).send('Neplatný odkaz na vizitku.');
     await sendLeadVcard(res, id);
   } catch (err) { next(err); }
 });

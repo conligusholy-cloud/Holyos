@@ -317,6 +317,7 @@
   }
 
   async function init(){
+    try { obLoadVcardToken(false); } catch(e){}
     try {
       var me = await (await fetch('/api/auth/me', { credentials:'include' })).json().catch(function(){return null;});
       if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
@@ -1720,15 +1721,20 @@
     } catch(e){ if(msg) msg.innerHTML = '<span style="color:#fca5a5">Nepodařilo se připravit odkaz.</span>'; }
   }
 
-  // Předem připravený podepsaný odkaz na vizitku (platí 15 min) → klepnutí ho otevře přímo.
-  var _vcardLinks = {};
-  function obPrefetchVcard(id, force){
-    if (!force && _vcardLinks[id] && _vcardLinks[id].exp > Date.now()) return;
-    fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
+  // Podpisový token pro vizitky (12 h) — stáhne se při startu a drží v localStorage,
+  // aby šel odkaz na vizitku složit synchronně přímo při klepnutí.
+  function obVcardToken(){
+    try { var o = JSON.parse(localStorage.getItem('ob.vcardToken') || 'null'); if (o && o.t && o.exp > Date.now()) return o.t; } catch(e){}
+    return null;
+  }
+  function obLoadVcardToken(force){
+    if (!force && obVcardToken()) return;
+    fetch(API + '/vcard-token', { credentials: 'include' })
       .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){ if (j && j.url) _vcardLinks[id] = { url: j.url, exp: Date.now() + 12*60*1000 }; })
+      .then(function(j){ if (j && j.token) { try { localStorage.setItem('ob.vcardToken', JSON.stringify({ t: j.token, exp: Date.now() + 11*3600*1000 })); } catch(e){} } })
       .catch(function(){});
   }
+  function obPrefetchVcard(){ obLoadVcardToken(false); }
   window.obPrefetchVcard = obPrefetchVcard;
 
   // Uloží kontakt do telefonu přes vizitku (.vcf) — po ťuknutí telefon nabídne „Přidat do kontaktů".
@@ -1761,24 +1767,20 @@
         // krátkodobý podepsaný odkaz (/vcard/:id?t=…), který přihlášení nepotřebuje.
         // Okno otevíráme hned (ještě v rámci kliknutí), aby ho iOS neblokoval; adresu doplníme po získání tokenu.
         var abs = function(u){ try { return new URL(u, window.location.origin).href; } catch(e){ return u; } };
-        var pre = _vcardLinks[id];
-        if (pre && pre.exp > Date.now()) {
-          // Odkaz už připravený → otevřít přímo v rámci klepnutí (nejspolehlivější na iOS).
-          window.open(abs(pre.url), '_blank');
-          obPrefetchVcard(id, true);
+        // iOS PWA: do nově otevřeného okna NEJDE poslat adresu dodatečně → odkaz musí být
+        // hotový už při klepnutí. Používáme 12h podpisový token stažený při startu appky.
+        var tok = obVcardToken();
+        if (tok) {
+          window.open(abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(tok)), '_blank');
         } else {
-          var w = null;
-          try { w = window.open('about:blank', '_blank'); } catch(e){ w = null; }
-          fetch(API + '/leads/' + id + '/vcard-link', { credentials: 'include' })
+          // Token ještě není → stáhnout a otevřít v TOMTO okně (nové okno by zůstalo prázdné).
+          fetch(API + '/vcard-token', { credentials: 'include' })
             .then(function(r){ return r.json(); })
             .then(function(j){
-              var url = abs((j && j.url) ? j.url : (API + '/leads/' + id + '/vcard'));
-              if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
+              if (j && j.token) { try { localStorage.setItem('ob.vcardToken', JSON.stringify({ t: j.token, exp: Date.now() + 11*3600*1000 })); } catch(e){} window.location.href = abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(j.token)); }
+              else { window.location.href = abs(API + '/leads/' + id + '/vcard'); }
             })
-            .catch(function(){
-              var url = abs(API + '/leads/' + id + '/vcard');
-              if (w && !w.closed) { w.location.href = url; } else { window.location.href = url; }
-            });
+            .catch(function(){ window.location.href = abs(API + '/leads/' + id + '/vcard'); });
         }
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
