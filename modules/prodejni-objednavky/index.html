@@ -1179,7 +1179,12 @@
 
       let o = {};
       if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }
-      const compOpts = companies.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
+      // V seznamu jen odběratelé (customer / both); u editace navíc vždy ta aktuálně přiřazená firma.
+      const CUSTOMER_TYPES = ['customer', 'both'];
+      const compList = companies
+        .filter(c => CUSTOMER_TYPES.includes(c.type) || (o.company_id && o.company_id === c.id))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'cs'));
+      const compOpts = compList.map(c => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + c.name + (c.type && c.type !== 'customer' ? ' (' + COMPANY_LABELS[c.type] + ')' : '') + '</option>').join('');
 
       // ─── NOVÁ OBJEDNÁVKA — minimalistický krok ───
       // Položky, výrobní sloty, termíny dodání a odkaz pro zákazníka se řeší
@@ -1416,7 +1421,7 @@
         const sel = document.getElementById('order-company-select');
         const opt = document.createElement('option');
         opt.value = newComp.id;
-        opt.textContent = newComp.name + ' (Odběratel)';
+        opt.textContent = newComp.name + (newComp.type && newComp.type !== 'customer' ? ' (' + (COMPANY_LABELS[newComp.type] || newComp.type) + ')' : '');
         opt.selected = true;
         sel.appendChild(opt);
 
