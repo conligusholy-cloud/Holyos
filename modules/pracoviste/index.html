@@ -250,7 +250,7 @@
 
       <!-- Sklady -->
       <div class="section-title" style="display:flex;align-items:center;gap:10px;">&#128230; Sklady
-        <button type="button" class="btn btn-sm" onclick="generateWsWarehouses()" title="Vytvoří vstupní sklad „V <název>" a výstupní sklad „E <název>" a rovnou je přiřadí" style="margin-left:auto;">⚡ Vygenerovat sklady V / E</button>
+        <button type="button" class="btn btn-sm" onclick="generateWsWarehouses()" title="Vytvoří vstupní sklad V + název a výstupní sklad E + název a rovnou je přiřadí" style="margin-left:auto;">⚡ Vygenerovat sklady V / E</button>
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -1100,6 +1100,11 @@
     }
 
     function closeModal() { document.getElementById('ws-modal').style.display = 'none'; }
+    // Esc zavře jakýkoli otevřený dialog (pracoviště / hala / skupina)
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      ['ws-modal', 'hall-modal', 'group-modal'].forEach(function (id) { var m = document.getElementById(id); if (m && m.style.display !== 'none') m.style.display = 'none'; });
+    });
 
     // === Save pracoviště ===
     async function saveWs() {
