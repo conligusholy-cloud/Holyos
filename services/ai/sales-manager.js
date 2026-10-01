@@ -877,8 +877,17 @@ async function buildOwnerReport(dateStr) {
       const grp = await prisma.compounderLead.groupBy({ by: ['status'], where: { owner_person_id: p.id, is_test: false }, _count: { _all: true } });
       grp.forEach((g) => { statusCounts[g.status || 'new'] = g._count._all; });
     } catch (e) { statusCounts = {}; }
+    // Nevolané: obchodník nikdy nestiskl Volat / nezaznamenal hovor (last_called_at null); bez black listu a uzavřených stavů.
+    let uncalled = 0, uncalledNew = 0;
+    try {
+      const closed = ['nezajem', 'nelze_pouzit', 'rejected', 'prodano', 'converted'];
+      uncalled = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed } } });
+      uncalledNew = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed }, created_at: { gte: new Date(Date.now() - 2 * 86400000) } } });
+    } catch (e) { uncalled = 0; uncalledNew = 0; }
     per.push({
       person_id: p.id, name: p.name,
+      uncalled_contacts: uncalled,          // kolika kontaktům obchodník ještě nikdy nevolal
+      uncalled_new_contacts: uncalledNew,   // z toho nových (0–2 dny) — ty nesmí vychladnout
       focus: plan ? plan.focus : null,
       tasks_assigned: dr ? dr.tasks_total : tasks.length,
       tasks_done: dr ? dr.tasks_done : tasks.filter((t) => t.status === 'done').length,
