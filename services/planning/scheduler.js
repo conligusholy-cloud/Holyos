@@ -352,7 +352,15 @@ async function scheduleBatch(batchId, opts = {}) {
 
     // Výběr pracoviště ze skupiny: to, které je v kandidátním čase volné (nebo se uvolní nejdřív)
     let pickedWsId = null;
-    if (!op.workstation_id && op.workstation_group_id) {
+    if (isParallel) {
+      // Plovoucí pracoviště: paralelní operace se dělá tam, kde je výrobek — převezme pracoviště
+      // hlavní operace, u které okno začíná (resp. nejbližší hlavní operace v okně).
+      const from = op.operation.parallel_from;
+      const cands = [...mainByStep.entries()].filter(([st]) => from == null || st >= from).sort((a, b) => a[0] - b[0]);
+      const host = cands[0] || [...mainByStep.entries()].sort((a, b) => b[0] - a[0])[0];
+      if (host && host[1].wsId) { pickedWsId = host[1].wsId; warnings.push('floating_ws:ws' + pickedWsId + '@step' + host[0]); }
+      else warnings.push('floating_ws_unknown');
+    } else if (!op.workstation_id && op.workstation_group_id) {
       const members = membersByGroup.get(op.workstation_group_id) || [];
       if (members.length === 0) {
         warnings.push('group_has_no_workstations');
@@ -378,6 +386,7 @@ async function scheduleBatch(batchId, opts = {}) {
     let consumed;
     for (let i = 0; i < 50; i++) {
       consumed = consumeShift(candidateStart, totalMin, cfg);
+      if (isParallel) break; // plovoucí: pracoviště drží hlavní operace, paralelní ho neblokuje ani nečeká
       const conflictEnd = findQueueConflictEnd(
         queueByWs, wsId, candidateStart, consumed.end
       );
@@ -410,7 +419,7 @@ async function scheduleBatch(batchId, opts = {}) {
       assigned_person_name: assignedPerson ? `${assignedPerson.first_name} ${assignedPerson.last_name}` : null,
     });
 
-    if (wsId) {
+    if (wsId && !isParallel) {
       batchWsUsed.add(wsId);
       if (!queueByWs.has(wsId)) queueByWs.set(wsId, []);
       queueByWs.get(wsId).push({
@@ -423,7 +432,7 @@ async function scheduleBatch(batchId, opts = {}) {
       const to = op.operation.parallel_to;
       if (to != null) { const nextMain = [...mainByStep.entries()].filter(([st]) => st > to).sort((a, b) => a[0] - b[0])[0]; if (nextMain && end.getTime() > nextMain[1].start.getTime()) warnings.push('parallel_overflow:' + Math.round((end.getTime() - nextMain[1].start.getTime()) / 60000) + 'min'); }
     } else {
-      mainByStep.set(op.operation && op.operation.step_number != null ? op.operation.step_number : op.sequence, { start, end });
+      mainByStep.set(op.operation && op.operation.step_number != null ? op.operation.step_number : op.sequence, { start, end, wsId });
       prevEnd = end;
     }
     if (warnings.length > 0) opWarnings.push({ op_id: op.id, sequence: op.sequence, warnings });

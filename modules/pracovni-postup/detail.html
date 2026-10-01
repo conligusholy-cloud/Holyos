@@ -779,17 +779,15 @@
         </div>
       </div>
 
-      <div class="form-row" style="background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:10px 12px;align-items:flex-end;">
-        <div class="form-group" style="flex:0 0 auto;">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;">
-            <input type="checkbox" id="op-parallel" onchange="handleParallelChange()" style="width:auto;accent-color:#a855f7;"> ⫽ Paralelní (plovoucí) operace
-          </label>
-          <div style="font-size:11px;color:var(--text2);margin-top:4px;">Neleží na hlavní linii — může běžet souběžně s hlavními operacemi v zadaném okně.</div>
-        </div>
-        <div class="form-group" id="op-parallel-win" style="display:none;flex:1;gap:8px;">
-          <div style="display:flex;gap:8px;">
-            <div style="flex:1;"><label>Může začít od operace</label><select id="op-parallel-from"><option value="">— od začátku —</option></select></div>
-            <div style="flex:1;"><label>Musí skončit do operace</label><select id="op-parallel-to"><option value="">— do konce —</option></select></div>
+      <div style="background:rgba(168,85,247,0.07);border:1px solid rgba(168,85,247,0.3);border-radius:8px;padding:10px 12px;margin-bottom:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0;font-weight:600;">
+          <input type="checkbox" id="op-parallel" onchange="handleParallelChange()" style="width:auto;accent-color:#a855f7;"> ⫽ Paralelní (plovoucí) operace
+        </label>
+        <div style="font-size:11px;color:var(--text2);margin-top:4px;">Neleží na hlavní linii — běží souběžně s hlavními operacemi v zadaném okně. <b>Pracoviště je plovoucí:</b> přebírá pracoviště hlavní operace, u které se výrobek právě nachází.</div>
+        <div id="op-parallel-win" style="display:none;margin-top:10px;">
+          <div class="form-row" style="margin:0;">
+            <div class="form-group" style="flex:1;"><label>Může začít od operace</label><select id="op-parallel-from"><option value="">— od začátku —</option></select></div>
+            <div class="form-group" style="flex:1;"><label>Musí skončit do operace</label><select id="op-parallel-to"><option value="">— do konce —</option></select></div>
           </div>
         </div>
       </div>
@@ -1233,7 +1231,7 @@
     }
 
     function renderOpCard(op, idx) {
-      const wsName = op.workstation ? op.workstation.name : (op.workstation_group ? '\u{1F4E6} ' + op.workstation_group.name : '—');
+      const wsName = op.is_parallel ? '🧭 plovoucí pracoviště (dle hlavní linie)' : (op.workstation ? op.workstation.name : (op.workstation_group ? '\u{1F4E6} ' + op.workstation_group.name : '—'));
       const norm = op.duration ? op.duration + ' ' + unitLabel(op.duration_unit) : '—';
       const workers = op.workers_count || 1;
       const realMin = realMinutes(op);
@@ -1252,7 +1250,7 @@
             '<span class="op-name">' + esc(op.name) + '</span>' +
             (op.is_parallel ? '<span class="op-badge-par" title="Paralelní (plovoucí) operace — může běžet souběžně s hlavní linií' + (op.parallel_from || op.parallel_to ? ' v okně ' + (op.parallel_from || 'začátek') + ' → ' + (op.parallel_to || 'konec') : '') + '" style="font-size:10px;color:#c084fc;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.4);padding:1px 6px;border-radius:3px;margin-left:6px;">⫽ paralelní ' + (op.parallel_from || op.parallel_to ? (op.parallel_from || '…') + '→' + (op.parallel_to || '…') : '') + '</span>' : '') +
             '<span class="op-id-badge" title="ID pracovní operace (ProductOperation.id)" style="font-family:monospace;font-size:10px;color:var(--text2);background:var(--surface2);padding:1px 6px;border-radius:3px;border:1px solid var(--border);margin-left:6px;">#' + op.id + '</span>' +
-            (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : (op.workstation_group ? '<span class="op-ws" title="Skupina pracovišť — plánovač vybere volné">' + esc(wsName) + '</span>' : '')) +
+            (op.is_parallel ? '<span class="op-ws" title="Paralelní operace nemá vlastní pracoviště — dělá se tam, kde je zrovna výrobek na hlavní linii" style="border-color:rgba(168,85,247,0.5);color:#c084fc;">' + esc(wsName) + '</span>' : (op.workstation ? '<span class="op-ws">' + esc(wsName) + '</span>' : (op.workstation_group ? '<span class="op-ws" title="Skupina pracovišť — plánovač vybere volné">' + esc(wsName) + '</span>' : ''))) +
           '</div>' +
           '<div class="op-meta">' +
             '<span>&#9202; Norma: ' + norm + '</span>' +
@@ -1654,6 +1652,10 @@
     function handleParallelChange() {
       const on = document.getElementById('op-parallel').checked;
       document.getElementById('op-parallel-win').style.display = on ? '' : 'none';
+      // Plovoucí pracoviště: u paralelní operace se pracoviště ani skupina nevybírá (přebírá z hlavní linie)
+      const gsel = document.getElementById('op-wsgroup'), wsel = document.getElementById('op-ws');
+      if (on) { gsel.value = ''; wsel.value = ''; gsel.disabled = true; wsel.disabled = true; gsel.style.opacity = '0.45'; wsel.style.opacity = '0.45'; gsel.title = wsel.title = 'Paralelní operace má plovoucí pracoviště — přebírá ho z hlavní linie'; }
+      else { gsel.disabled = false; gsel.style.opacity = ''; gsel.title = ''; wsel.title = ''; if (typeof handleWsGroupChange === 'function') handleWsGroupChange(); }
     }
 
     function populateWsGroupSelect(selectedId) {
@@ -1980,6 +1982,7 @@
         name,
         step_number: parseInt(document.getElementById('op-step').value) || 1,
         is_parallel: !!document.getElementById('op-parallel').checked,
+        ...(document.getElementById('op-parallel').checked ? { workstation_id: null, workstation_group_id: null } : {}),
         parallel_from: parseInt(document.getElementById('op-parallel-from').value) || null,
         parallel_to: parseInt(document.getElementById('op-parallel-to').value) || null,
         workstation_id: parseInt(document.getElementById('op-ws').value) || null,
