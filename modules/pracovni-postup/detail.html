@@ -204,8 +204,11 @@
     .op-node:hover .op-node-dot { border-color:#c084fc; color:#c084fc; box-shadow:0 0 0 4px rgba(168,85,247,0.2); transform:scale(1.15); }
     .op-node-active .op-node-dot { border-color:#c084fc; background:rgba(168,85,247,0.25); color:#e9d5ff; }
     .op-node-arrow { position:absolute; bottom:-6px; left:50%; transform:translateX(-50%); color:var(--text2); font-size:12px; opacity:.5; }
-    .op-node-end { height:34px; cursor:default; }
-    .op-node-end .op-node-line { bottom:50%; }
+    .op-node-end { height:52px; cursor:pointer; justify-content:flex-start; padding-top:4px; }
+    .op-node-end .op-node-line { bottom:auto; height:14px; }
+    .op-node-plus { font-size:15px; color:#22c55e; border-color:rgba(34,197,94,0.6); }
+    .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
+    .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
 
     /* === Arrow between ops === */
     .op-arrow {
@@ -1090,14 +1093,12 @@
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             html += renderOpCard(op, i);
           });
-          html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec hlavní linie"><div class="op-node-line"></div><div class="op-node-dot">' + mainOps.length + '</div></div>';
+          html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec výroby — sem se vrací paralelní operace. Kliknutím přidáš další operaci hlavní linie." onclick="openAddOp()"><div class="op-node-line"></div><div class="op-node-dot op-node-plus">+</div><div class="op-node-label">konec výroby · přidat operaci</div></div>';
           html += '</div>';
           html += '<div class="lane-par" id="lane-par" style="position:relative;width:340px;flex-shrink:0;min-height:40px;">';
-          html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
+          if (parOps.length) html += '<div style="position:absolute;top:-22px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;">⫽ PARALELNÍ OPERACE</div>';
           if (parOps.length) {
             parOps.forEach((op, i) => { html += '<div class="par-wrap" data-par-id="' + op.id + '" data-from="' + (op.parallel_from || '') + '" data-to="' + (op.parallel_to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>' + renderOpCard(op, i) + '</div>'; });
-          } else {
-            html += '<div style="font-size:11.5px;color:var(--text2);padding:10px 4px;line-height:1.5;">Paralelní operaci přidáš kliknutím na uzel (kroužek) v hlavní linii — nebo přes „+ Nová operace" se zaškrtnutím „⫽ Paralelní".</div>';
           }
           html += '</div></div>';
         }
