@@ -1347,6 +1347,7 @@ model Product {
   name                 String  @db.VarChar(255)
   type                 String  @default("product") @db.VarChar(50) // product, semi-product
   show_in_configurator Boolean @default(false) // zobrazit v konfigurátoru pro zákazníka a v prodejních objednávkách
+  active               Boolean @default(true) // aktivní výrobek (v Pracovním postupu se primárně zobrazují jen aktivní)
   takt_time            Int? // linkový takt v minutách (max čas na operaci)
   factorify_id         Int? // původní ID z Factorify
   material_id          Int? // vazba na Material pokud existuje

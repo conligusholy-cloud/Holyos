@@ -78,6 +78,11 @@
         <span class="search-icon">&#128270;</span>
         <input type="text" id="search-input" placeholder="Hledat (název, kód)..." oninput="filterProducts(this.value)">
       </div>
+      <div id="active-filter" title="Aktivní výrobky = ty, které se dnes vyrábí / nastavují. Neaktivní zůstávají v evidenci." style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12.5px;">
+        <button type="button" class="af-btn on" data-af="active" onclick="setActiveFilter('active')" style="padding:7px 12px;border:0;cursor:pointer;background:transparent;color:var(--text2);font-weight:600;">✅ Aktivní <span class="tab-count" id="count-active" style="background:rgba(34,197,94,0.18);color:#22c55e;">&mdash;</span></button>
+        <button type="button" class="af-btn" data-af="inactive" onclick="setActiveFilter('inactive')" style="padding:7px 12px;border:0;border-left:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text2);font-weight:600;">⛔ Neaktivní <span class="tab-count" id="count-inactive">&mdash;</span></button>
+        <button type="button" class="af-btn" data-af="all" onclick="setActiveFilter('all')" style="padding:7px 12px;border:0;border-left:1px solid var(--border);cursor:pointer;background:transparent;color:var(--text2);font-weight:600;">Vše</button>
+      </div>
       <label id="offered-filter" title="Zobrazit jen výrobky zapnuté pro konfigurátor / prodejní objednávky" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);user-select:none;">
         <input type="checkbox" id="only-offered" onchange="renderProducts()" style="accent-color:#eab308;width:15px;height:15px;cursor:pointer;"> <span>Jen nabízené</span> <span class="tab-count" id="count-offered" style="background:rgba(234,179,8,0.18);color:#eab308;">&mdash;</span>
       </label>
@@ -298,9 +303,32 @@
       }
     }
 
+    // Filtr aktivní / neaktivní / vše — výchozí „aktivní" (pamatuje se v localStorage)
+    var activeFilter = (function(){ try { return localStorage.getItem('pp.activeFilter') || 'active'; } catch(e){ return 'active'; } })();
+    function setActiveFilter(v) {
+      activeFilter = v; try { localStorage.setItem('pp.activeFilter', v); } catch(e){}
+      document.querySelectorAll('.af-btn').forEach(b => { const on = b.getAttribute('data-af') === v; b.classList.toggle('on', on); b.style.background = on ? '#22c55e' : 'transparent'; b.style.color = on ? '#052e13' : 'var(--text2)'; });
+      renderProducts();
+    }
+    async function toggleActive(productId, el) {
+      try {
+        const headers = { 'Accept': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const res = await fetch('/api/production/products/' + productId + '/active', { method: 'PATCH', headers });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.status);
+        const product = allProducts.find(p => p.id === productId);
+        if (product) product.active = data.active;
+        renderProducts();
+      } catch (e) { alert('Nepodařilo se změnit aktivitu výrobku: ' + e.message); }
+    }
+
     function renderProducts() {
       const list = document.getElementById('product-list');
-      const filtered = allProducts.filter(p => p.type === currentType);
+      setTimeout(function(){ document.querySelectorAll('.af-btn').forEach(b => { const on = b.getAttribute('data-af') === activeFilter; b.style.background = on ? '#22c55e' : 'transparent'; b.style.color = on ? '#052e13' : 'var(--text2)'; }); }, 0);
+      const ca = document.getElementById('count-active'); if (ca) ca.textContent = allProducts.filter(p => p.type === currentType && p.active !== false).length;
+      const ci = document.getElementById('count-inactive'); if (ci) ci.textContent = allProducts.filter(p => p.type === currentType && p.active === false).length;
+      const filtered = allProducts.filter(p => p.type === currentType && (activeFilter === 'all' || (activeFilter === 'active' ? p.active !== false : p.active === false)));
       const q = (document.getElementById('search-input').value || '').toLowerCase().trim();
       const onlyOffered = !!(document.getElementById('only-offered') || {}).checked;
       // Přepínač „Jen nabízené" dává smysl jen u výrobků (polotovary se nenabízejí).
@@ -314,7 +342,7 @@
       });
 
       if (visible.length === 0) {
-        list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (onlyOffered && currentType === 'product' ? 'nabízené výrobky (zapni je přepínačem u výrobku)' : (currentType === 'product' ? 'výrobky' : 'polotovary')) + '</p></div>';
+        list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (onlyOffered && currentType === 'product' ? 'nabízené výrobky (zapni je přepínačem u výrobku)' : ((activeFilter === 'active' ? 'aktivní ' : activeFilter === 'inactive' ? 'neaktivní ' : '') + (currentType === 'product' ? 'výrobky' : 'polotovary'))) + (activeFilter !== 'all' ? ' — <a href="#" onclick="setActiveFilter(\'all\');return false;" style="color:#eab308;">zobrazit vše</a>' : '') + '</p></div>';
         return;
       }
 
@@ -347,6 +375,7 @@
               '<span style="position:absolute;content:\'\';height:16px;width:16px;left:' + (p.show_in_configurator ? '18px' : '2px') + ';top:2px;background:white;border-radius:50%;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>' +
             '</label>' +
           '</div>' : '') +
+          '<button class="copy-btn" title="' + (p.active !== false ? 'Aktivní výrobek — kliknutím deaktivuješ (zůstane v evidenci, schová se z výchozího seznamu)' : 'Neaktivní výrobek — kliknutím aktivuješ') + '" onclick="event.stopPropagation();toggleActive(' + p.id + ',this)" style="' + (p.active !== false ? 'color:#22c55e;border-color:rgba(34,197,94,0.5);background:rgba(34,197,94,0.1);' : 'color:var(--text2);opacity:.7;') + '">' + (p.active !== false ? '✅ Aktivní' : '⛔ Neaktivní') + '</button>' +
           '<button class="copy-btn" title="Vytvořit kopii včetně postupu" onclick="event.stopPropagation();duplicateProduct(' + p.id + ',' + JSON.stringify(cleanName).replace(/"/g, '&quot;') + ')">⧉</button>' +
           '<div class="product-card-arrow" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">&rarr;</div>' +
         '</div>';

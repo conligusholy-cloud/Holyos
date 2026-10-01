@@ -194,6 +194,18 @@ router.get('/products/:id', async (req, res, next) => {
 });
 
 // PATCH /api/production/products/:id/configurator — přepni viditelnost v konfigurátoru
+// PATCH /api/production/products/:id/active — přepne aktivní/neaktivní výrobek (body { active } nebo toggle)
+router.patch('/products/:id/active', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id);
+    const product = await prisma.product.findUnique({ where: { id }, select: { id: true, active: true } });
+    if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
+    const next_ = (req.body && typeof req.body.active === 'boolean') ? req.body.active : !product.active;
+    const updated = await prisma.product.update({ where: { id }, data: { active: next_ } });
+    res.json({ id: updated.id, active: updated.active });
+  } catch (err) { next(err); }
+});
+
 router.patch('/products/:id/configurator', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
