@@ -280,7 +280,9 @@ function initVersionWatcher() {
       .catch(function() { return null; });
   }
   function showBanner(nv) {
-    if (shown) return; shown = true;
+    if (shown) return;
+    if (window.self !== window.top || /[?&]embed=1(&|$)/.test(window.location.search)) return; // vložený rámec — banner ukazuje jen vnější stránka
+    shown = true;
     var bar = document.createElement('div');
     bar.id = 'holyos-version-bar';
     bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:linear-gradient(135deg,#6c5ce7,#0984e3);color:#fff;font-size:13px;padding:8px 14px;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;box-shadow:0 2px 10px rgba(0,0,0,0.3);font-family:inherit;';

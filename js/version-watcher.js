@@ -14,6 +14,7 @@
         .catch(function () { return null; });
     }
     function showBanner(nv) {
+      if (window.self !== window.top || /[?&]embed=1(&|$)/.test(window.location.search)) return; // vložený rámec — banner ukazuje jen vnější stránka
       if (shown) return; shown = true;
       var bar = document.createElement('div');
       bar.id = 'holyos-version-bar';
