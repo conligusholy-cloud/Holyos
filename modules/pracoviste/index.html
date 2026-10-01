@@ -190,7 +190,7 @@
               <th>Vstupní sklad</th>
               <th>Výstupní sklad</th>
               <th>Operací</th>
-              <th style="width:100px;"></th>
+              <th style="width:130px;"></th>
             </tr>
           </thead>
           <tbody id="ws-tbody">
@@ -633,7 +633,7 @@
         '<td>' + inWhHtml + '</td>' +
         '<td>' + outWhHtml + '</td>' +
         '<td style="text-align:center;">' + opsCount + '</td>' +
-        '<td>' +
+        '<td style="white-space:nowrap;">' +
           '<button class="btn btn-sm" onclick="event.stopPropagation();duplicateWs(' + ws.id + ')" title="Duplikovat pracoviště (vše stejné, nový název; sklady V/E se vytvoří pro nový název)">⧉</button> ' +
           '<button class="btn btn-sm" onclick="event.stopPropagation();openEditModal(' + ws.id + ')">&#9998;</button> ' +
           '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteWs(' + ws.id + ')">&#128465;</button>' +
