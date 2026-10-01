@@ -183,6 +183,7 @@ model Person {
   documents                   Document[]
   doc_notifications           DocumentNotification[]
   orders_created              Order[]                @relation("OrderCreatedBy")
+  sales_orders_owned Order[] @relation("OrderSalesPerson")
   orders_approved             Order[]                @relation("OrderApprovedBy")
   inventory_movements         InventoryMovement[]    @relation("MovementCreatedBy")
   shipping_requests           ShippingRequest[]      @relation("ShippingRequestAssignee")
@@ -609,6 +610,7 @@ model Order {
   currency          String    @default("CZK") @db.VarChar(3)
   note              String?   @db.Text
   created_by        Int?
+  sales_person_id   Int? // odpovědný obchodník (kdo obchod zrealizoval) — z leadu / přihlášeného uživatele / ručně
   approved_by       Int? // legacy Person FK — zachováno; nově preferujeme approved_by_user_id
   expected_delivery DateTime? @db.Date
   // true = datum zadal ručně obchodník (neautomatizovat); false = dopočítá se z posledního výrobního slotu + 10 dní
@@ -692,6 +694,7 @@ model Order {
 
   company       Company     @relation(fields: [company_id], references: [id])
   creator       Person?     @relation("OrderCreatedBy", fields: [created_by], references: [id])
+  sales_person  Person?     @relation("OrderSalesPerson", fields: [sales_person_id], references: [id], onDelete: SetNull)
   approver      Person?     @relation("OrderApprovedBy", fields: [approved_by], references: [id])
   approver_user User?       @relation("OrderApproverUser", fields: [approved_by_user_id], references: [id])
   cost_center   CostCenter? @relation("OrderCostCenter", fields: [cost_center_id], references: [id])
@@ -704,6 +707,7 @@ model Order {
   @@index([type])
   @@index([status])
   @@index([company_id])
+  @@index([sales_person_id])
   @@index([approval_status])
   @@index([factorify_id])
   @@index([cost_center_id])

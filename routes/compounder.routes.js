@@ -3877,7 +3877,7 @@ router.get('/leads/:id(\\d+)/vcard', requireAuth, async (req, res, next) => {
 router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, phone: true, company: true, activity_log: true } });
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, email: true, phone: true, company: true, activity_log: true, owner_person_id: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     const b = req.body || {};
     const buyerType = (b.buyer_type === 'osoba') ? 'osoba' : 'firma';
@@ -3962,6 +3962,8 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
       note: noteFull.slice(0, 4000),
       expected_delivery: b.expected_delivery ? new Date(String(b.expected_delivery)) : null,
       created_by: (req.user && req.user.id) || null,
+      // Odpovědný obchodník: přihlášený obchodník (kdo objednávku vytvořil), jinak vlastník leadu
+      sales_person_id: (req.user && req.user.person && req.user.person.id) || lead.owner_person_id || null,
       payment_split: paymentSplit,
       deposit_percent: depositPercent,
       deposit_amount: depositAmount,

@@ -38,6 +38,17 @@ router.get('/', async (req, res, next) => {
       },
       orderBy: { start_date: 'asc' },
     });
+    // Odpovědný obchodník z objednávky (SlotAssignment.order_id nemá Prisma relaci → dohledáme hromadně)
+    const orderIds = [...new Set(slots.flatMap(sl => sl.assignments.map(a => a.order_id)).filter(Boolean))];
+    if (orderIds.length) {
+      const orders = await prisma.order.findMany({ where: { id: { in: orderIds } }, select: { id: true, order_number: true, sales_person: { select: { id: true, first_name: true, last_name: true } } } });
+      const byId = new Map(orders.map(o => [o.id, o]));
+      for (const sl of slots) for (const a of sl.assignments) {
+        const o = a.order_id ? byId.get(a.order_id) : null;
+        a.order_number = o ? o.order_number : null;
+        a.sales_person_name = o && o.sales_person ? ((o.sales_person.first_name || '') + ' ' + (o.sales_person.last_name || '')).trim() : null;
+      }
+    }
     res.json(slots);
   } catch (err) { next(err); }
 });
