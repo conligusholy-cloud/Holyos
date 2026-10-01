@@ -261,6 +261,16 @@
         window.location.href = 'modules/pracovni-postup/detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
       } catch (e) { msg.style.color = '#ef4444'; msg.textContent = e.message; btn.disabled = false; }
     }
+    async function deleteProduct(id, name) {
+      if (!confirm('Smazat výrobek „' + name + '" včetně jeho pracovního postupu?\n\nTato akce je nevratná.')) return;
+      try {
+        const r = await fetch('/api/production/products/' + id, { method: 'DELETE', credentials: 'include' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(j.error || ('Smazání selhalo (' + r.status + ')')); return; }
+        loadProducts();
+      } catch (e) { alert('Smazání selhalo: ' + e.message); }
+    }
+
     async function duplicateProduct(id, name) {
       const newName = prompt('Název kopie:', name + ' (kopie)'); if (newName === null) return;
       try {
@@ -391,6 +401,7 @@
           '</div>' : '') +
           '<button class="copy-btn" title="' + (p.active !== false ? 'Aktivní výrobek — kliknutím deaktivuješ (zůstane v evidenci, schová se z výchozího seznamu)' : 'Neaktivní výrobek — kliknutím aktivuješ') + '" onclick="event.stopPropagation();toggleActive(' + p.id + ',this)" style="' + (p.active !== false ? 'color:#22c55e;border-color:rgba(34,197,94,0.5);background:rgba(34,197,94,0.1);' : 'color:var(--text2);opacity:.7;') + '">' + (p.active !== false ? '✅ Aktivní' : '⛔ Neaktivní') + '</button>' +
           '<button class="copy-btn" title="Vytvořit kopii včetně postupu" onclick="event.stopPropagation();duplicateProduct(' + p.id + ',' + JSON.stringify(cleanName).replace(/"/g, '&quot;') + ')">⧉</button>' +
+          '<button class="copy-btn" title="Smazat výrobek (včetně postupu)" onclick="event.stopPropagation();deleteProduct(' + p.id + ',' + JSON.stringify(cleanName).replace(/"/g, '&quot;') + ')" style="color:#ef4444;border-color:rgba(239,68,68,0.45);">🗑</button>' +
           '<div class="product-card-arrow" onclick="openProduct(' + p.id + ')" style="cursor:pointer;">&rarr;</div>' +
         '</div>';
       });

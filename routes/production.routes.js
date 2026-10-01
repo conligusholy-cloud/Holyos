@@ -410,7 +410,29 @@ router.put('/products/:id', async (req, res, next) => {
 // DELETE /api/production/products/:id
 router.delete('/products/:id', async (req, res, next) => {
   try {
-    await prisma.product.delete({ where: { id: parseInt(req.params.id) } });
+    const id = parseInt(req.params.id);
+    const p = await prisma.product.findUnique({ where: { id }, select: { id: true, code: true, name: true, material_id: true } });
+    if (!p) return res.status(404).json({ error: 'Výrobek nenalezen' });
+    // Pojistka: výrobek použitý v objednávkách nebo výrobních dávkách nemazat (raději deaktivovat).
+    const [orderItems, batches] = await Promise.all([
+      prisma.orderItem.count({ where: { product_id: id } }).catch(() => 0),
+      prisma.productionBatch.count({ where: { product_id: id } }).catch(() => 0),
+    ]);
+    if (orderItems > 0 || batches > 0) {
+      return res.status(409).json({ error: 'Výrobek „' + p.code + '" je použitý (' + orderItems + ' položek objednávek, ' + batches + ' výrobních dávek). Místo smazání ho deaktivuj.' });
+    }
+    await prisma.product.delete({ where: { id } });
+    // Skladová karta založená spolu s polotovarem (stejný kód) → smazat jen pokud není nikde použitá.
+    if (p.material_id) {
+      try {
+        const m = await prisma.material.findUnique({ where: { id: p.material_id }, select: { id: true, code: true } });
+        if (m && m.code && m.code.toUpperCase() === String(p.code).toUpperCase()) {
+          const used = await prisma.operationMaterial.count({ where: { material_id: m.id } }).catch(() => 1);
+          const stock = await prisma.stock.count({ where: { material_id: m.id } }).catch(() => 1);
+          if (!used && !stock) await prisma.material.delete({ where: { id: m.id } });
+        }
+      } catch (e) { /* karta zůstane */ }
+    }
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
