@@ -67,6 +67,7 @@ async function getPlan(orderId, db = defaultPrisma) {
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
+      company: { select: { id: true, name: true, email: true } },
       items: { select: { id: true, name: true, quantity: true, unit_price: true, total_price: true, serial_number: true, status: true, delivered_quantity: true,
         slot_assignments: { select: { slot: { select: { start_date: true, end_date: true } } } } } },
       payments: { orderBy: [{ order_item_id: 'asc' }, { seq: 'asc' }], include: { invoice: { select: { id: true, invoice_number: true, total: true, status: true, date_due: true, delivery_status: true } } } },
@@ -96,15 +97,23 @@ async function getPlan(orderId, db = defaultPrisma) {
     return false;
   }
 
+  // Stav splátky: waiting (čeká na milník) → due (milník nastal) → invoiced (faktura vytvořena) → sent (odeslána, čeká na platbu) → paid
+  function stateOf(p, reached) {
+    if (p.paid) return 'paid';
+    if (p.invoice) return (p.invoice.status === 'sent' || p.invoice.delivery_status === 'sent' || p.invoice.status === 'paid') ? 'sent' : 'invoiced';
+    return reached ? 'due' : 'waiting';
+  }
   const payments = order.payments.map((p) => {
     const item = p.order_item_id ? itemById.get(p.order_item_id) : null;
     const base = baseOf(order, item);
+    const reached = milestoneReached(p, item);
     return {
+      state: stateOf(p, reached),
       id: p.id, order_item_id: p.order_item_id, seq: p.seq, milestone: p.milestone, milestone_label: MILESTONE_LABEL[p.milestone] || p.milestone,
       kind: p.kind, percent: p.percent == null ? null : Number(p.percent), amount_fixed: p.amount == null ? null : Number(p.amount),
       base, amount: amountOf(p, base), label: p.label, due_days: p.due_days, note: p.note,
       invoice: p.invoice, paid: p.paid, paid_at: p.paid_at, milestone_at: p.milestone_at,
-      milestone_reached: milestoneReached(p, item),
+      milestone_reached: reached,
       item: item ? { id: item.id, name: item.name, serial_number: item.serial_number } : null,
     };
   });
@@ -113,6 +122,7 @@ async function getPlan(orderId, db = defaultPrisma) {
   const paidSum = r2(payments.filter((p) => p.paid).reduce((s, p) => s + p.amount, 0));
   return {
     order_id: order.id, scope: order.payment_scope || 'order', currency: order.currency || 'CZK', total,
+    customer_email: order.customer_email || (order.company && order.company.email) || null,
     items: order.items.map((i) => ({ id: i.id, name: i.name, serial_number: i.serial_number, base: baseOf(order, i), production_start: itemStart(i) })),
     payments, paid_sum: paidSum, remaining: r2(total - paidSum),
   };
@@ -245,6 +255,18 @@ async function issueInvoiceForPayment(paymentId, opts = {}) {
   return { created: true, invoice };
 }
 
+/** Ručně označí fakturu splátky jako odeslanou (čeká na platbu) / vrátí na vystavenou. */
+async function setSent(paymentId, sent, opts = {}) {
+  const db = opts.prisma || defaultPrisma;
+  const p = await db.orderPayment.findUnique({ where: { id: paymentId }, include: { invoice: true } });
+  if (!p) throw Object.assign(new Error('Splátka nenalezena'), { status: 404 });
+  if (!p.invoice) throw Object.assign(new Error('Splátka nemá vystavenou fakturu'), { status: 400 });
+  if (p.paid) throw Object.assign(new Error('Splátka je už zaplacená'), { status: 400 });
+  await db.invoice.update({ where: { id: p.invoice.id }, data: { status: sent ? 'sent' : 'issued' } });
+  try { require('../order-events').logOrderEvent(p.order_id, { type: sent ? 'invoice_marked_sent' : 'invoice_unsent', label: (sent ? 'Faktura označena jako odeslaná' : 'Faktura vrácena na vystavenou') + ' — ' + p.invoice.invoice_number, actor: opts.actor || 'uživatel' }); } catch (e) { /* */ }
+  return { ok: true };
+}
+
 /** Označí splátku zaplacenou / nezaplacenou; po zaplacení „release" splátky uvolní výrobu. */
 async function setPaid(paymentId, paid, opts = {}) {
   const db = opts.prisma || defaultPrisma;
@@ -284,4 +306,4 @@ const TEMPLATES = [
   { key: '100_after', label: '100 % po dodání', rows: [{ milestone: 'after_delivery', kind: 'final', percent: 100 }] },
 ];
 
-module.exports = { MILESTONES, MILESTONE_LABEL, TEMPLATES, getPlan, savePlan, issueInvoiceForPayment, setPaid, amountOf, baseOf };
+module.exports = { MILESTONES, MILESTONE_LABEL, TEMPLATES, getPlan, savePlan, issueInvoiceForPayment, setPaid, setSent, amountOf, baseOf };

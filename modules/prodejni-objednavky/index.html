@@ -2710,12 +2710,16 @@
           var amt = ppAmount(r);
           var di = 'style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;color:var(--text);font-size:12px;"';
           var ri = d.payments.indexOf(r);
+          var PP_ST = { waiting: ['⏳ Čeká na milník', 'var(--text2)'], due: ['⏰ Milník nastal', '#f59e0b'], invoiced: ['🧾 Faktura vytvořena', '#3b82f6'], sent: ['📤 Odesláno, čeká na platbu', '#8b5cf6'], paid: ['✅ Zaplaceno', '#22c55e'] };
           var st = '';
           if (saved) {
-            if (saved.paid) st = '<span style="color:#22c55e;font-weight:700;">✅ Zaplaceno</span><div style="font-size:11px;color:var(--text2);">' + (saved.paid_at ? new Date(saved.paid_at).toLocaleDateString('cs-CZ') : '') + '</div>';
-            else if (saved.invoice) st = '<span style="color:#3b82f6;font-weight:600;">🧾 ' + esc(saved.invoice.invoice_number) + '</span><div style="font-size:11px;color:var(--text2);">' + fm(saved.invoice.total) + ' s DPH · ' + esc(saved.invoice.status) + (saved.invoice.date_due ? ' · do ' + new Date(saved.invoice.date_due).toLocaleDateString('cs-CZ') : '') + '</div>';
-            else if (saved.milestone_reached) st = '<span style="color:#f59e0b;font-weight:700;">⏰ Milník nastal</span><div style="font-size:11px;color:var(--text2);">vystav fakturu</div>';
-            else st = '<span style="color:var(--text2);">čeká na milník</span>';
+            var cs = PP_ST[saved.state] || PP_ST.waiting;
+            var sub = '';
+            if (saved.invoice) sub = esc(saved.invoice.invoice_number) + ' · ' + fm(saved.invoice.total) + ' s DPH' + (saved.invoice.date_due ? ' · splatnost ' + new Date(saved.invoice.date_due).toLocaleDateString('cs-CZ') : '');
+            if (saved.paid && saved.paid_at) sub += (sub ? ' · ' : '') + 'zaplaceno ' + new Date(saved.paid_at).toLocaleDateString('cs-CZ');
+            st = '<select onchange="ppState(' + saved.id + ', this.value, \'' + saved.state + '\')" ' + (PP.dirty ? 'disabled title="Nejdřív ulož rozložení plateb"' : '') + ' style="width:100%;background:var(--surface);border:1px solid ' + cs[1] + ';border-radius:6px;padding:4px 6px;color:' + cs[1] + ';font-size:12px;font-weight:700;">' +
+              Object.keys(PP_ST).map(function (k) { return '<option value="' + k + '"' + (k === saved.state ? ' selected' : '') + '>' + PP_ST[k][0] + '</option>'; }).join('') + '</select>' +
+              (sub ? '<div style="font-size:11px;color:var(--text2);margin-top:2px;">' + sub + '</div>' : '');
           } else st = '<span style="color:var(--text2);font-style:italic;">neuloženo</span>';
           h += '<tr>' +
             '<td style="color:var(--text2);">' + (idx + 1) + '</td>' +
@@ -2724,10 +2728,9 @@
             '<td><input type="number" min="0" step="1" ' + di + ' value="' + (r.amount != null ? r.amount : '') + '" placeholder="' + fm(amt).replace(' ' + cur, '') + '" ' + (locked ? 'disabled' : '') + ' onchange="ppSet(' + ri + ',\'amount\',this.value)" title="Pevná částka (má přednost před %)"><div style="font-size:11px;color:#eab308;font-weight:600;">= ' + fm(amt) + '</div></td>' +
             '<td><select ' + di + ' ' + (locked ? 'disabled' : '') + ' onchange="ppSet(' + ri + ',\'kind\',this.value)"><option value="deposit"' + (r.kind === 'deposit' ? ' selected' : '') + '>Zálohová faktura</option><option value="final"' + (r.kind === 'final' ? ' selected' : '') + '>Finální faktura</option></select></td>' +
             '<td><input type="number" min="0" ' + di + ' value="' + (r.due_days != null ? r.due_days : 7) + '" onchange="ppSet(' + ri + ',\'due_days\',this.value)" title="Dní splatnosti od vystavení"></td>' +
-            '<td>' + st + '</td>' +
+            '<td style="min-width:210px;">' + st + '</td>' +
             '<td style="white-space:nowrap;text-align:right;">' +
-              (saved && !saved.invoice && !PP.dirty ? '<button type="button" class="btn btn-sm" onclick="ppInvoice(' + saved.id + ')" title="Vystavit ' + (r.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu (koncept v Účetních dokladech)">🧾 Vystavit</button> ' : '') +
-              (saved && !PP.dirty ? (saved.paid ? '<button type="button" class="btn btn-sm" onclick="ppPaid(' + saved.id + ',false)" title="Zrušit označení zaplaceno">↩</button> ' : '<button type="button" class="btn btn-sm" style="background:rgba(34,197,94,0.15);color:#22c55e;border-color:rgba(34,197,94,0.4);" onclick="ppPaid(' + saved.id + ',true)" title="Označit splátku jako zaplacenou">✓ Zaplaceno</button> ') : '') +
+              (saved && saved.invoice ? '<a class="btn btn-sm" href="/api/accounting/invoices/' + saved.invoice.id + '/pdf" target="_blank" rel="noopener" title="Otevřít PDF faktury">📄</a> ' : '') +
               (!locked ? '<button type="button" class="btn btn-sm btn-danger" onclick="ppRemove(' + ri + ')" title="Odebrat splátku">🗑️</button>' : '<span title="Splátka má fakturu nebo je zaplacená — nelze měnit výši ani smazat" style="color:var(--text2);">🔒</span>') +
             '</td></tr>';
         });
@@ -2804,6 +2807,47 @@
         if (!res.ok) { alert('Nelze uložit: ' + (d.error || res.status)); return; }
         await loadPayPlan(PP.orderId);
       } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    // Změna stavu splátky ze selectu: waiting/due → invoiced (vytvoří fakturu) → sent (odešle e-mailem nebo jen označí) → paid
+    var PP_ORDER = ['waiting', 'due', 'invoiced', 'sent', 'paid'];
+    async function ppState(pid, to, from) {
+      var saved = PP.plan.payments.find(function (p) { return p.id === pid; }); if (!saved) return;
+      var fi = PP_ORDER.indexOf(from), ti = PP_ORDER.indexOf(to);
+      var post = function (path, body) { return fetch('/api/wh/orders/' + PP.orderId + '/payments/' + pid + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) }).then(async function (r) { var d = await r.json().catch(function () { return {}; }); if (!r.ok) throw new Error(d.error || r.status); return d; }); };
+      try {
+        if (ti === fi) return;
+        if (ti > fi) {
+          // dopředu: postupně projdi kroky
+          if (ti >= 2 && !saved.invoice) {
+            if (!confirm('Vytvořit ' + (saved.kind === 'final' ? 'finální' : 'zálohovou') + ' fakturu na ' + Number(saved.amount).toLocaleString('cs-CZ') + ' ' + PP.plan.currency + ' bez DPH?')) { renderPayPlan(); return; }
+            var ci = await post('/invoice'); saved.invoice = ci.invoice;
+          }
+          if (ti >= 3 && (saved.state === 'invoiced' || !saved.paid)) {
+            var email = PP.plan.customer_email || '';
+            var choice = confirm('Odeslat fakturu ' + (saved.invoice ? saved.invoice.invoice_number : '') + ' zákazníkovi e-mailem teď?\n\nOK = odeslat' + (email ? ' na ' + email : '') + '\nZrušit = neposílat, jen označit jako odeslanou (poslal jsi ji jinak)');
+            if (choice) {
+              var to = prompt('E-mail příjemce:', email); if (to === null) { renderPayPlan(); return; }
+              var sr = await fetch('/api/accounting/invoices/' + saved.invoice.id + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.trim() }) });
+              var sd = await sr.json().catch(function () { return {}; });
+              if (!sr.ok) { alert('Faktura vytvořena, ale e-mail neodešel: ' + (sd.error || sr.status) + (sd.reason === 'customer-emails-paused' ? '\n\nE-maily zákazníkům jsou pozastaveny (přepínač nahoře). Můžeš ji označit jako odeslanou ručně.' : '')); await loadPayPlan(PP.orderId); return; }
+            } else {
+              await post('/sent', { sent: true });
+            }
+          }
+          if (ti >= 4) {
+            if (!confirm('Označit splátku jako zaplacenou?')) { await loadPayPlan(PP.orderId); return; }
+            var pr = await post('/paid', { paid: true });
+            if (pr.release && pr.release.released) alert('Splátka zaplacena — objednávka byla uvolněna do výroby.');
+          }
+        } else {
+          // zpět
+          if (fi === 4) { if (!confirm('Zrušit označení zaplaceno?')) { renderPayPlan(); return; } await post('/paid', { paid: false }); }
+          if (ti <= 2 && saved.invoice && (fi >= 3)) { await post('/sent', { sent: false }); }
+          if (ti <= 1 && saved.invoice) alert('Faktura ' + saved.invoice.invoice_number + ' už existuje — stav se vrátí jen na „Faktura vytvořena". Fakturu případně storno v Účetních dokladech.');
+        }
+      } catch (e) { alert('Chyba: ' + e.message); }
+      loadOrders(); loadStats();
+      openOrderDetail(PP.orderId); // obnoví rozložení plateb, účetní doklady i historii
     }
     async function ppInvoice(pid) {
       if (!confirm('Vystavit fakturu k této splátce? Vznikne koncept v Účetních dokladech (nic se neposílá).')) return;

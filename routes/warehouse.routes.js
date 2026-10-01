@@ -852,6 +852,13 @@ router.post('/orders/:id/payments/:pid/invoice', async (req, res, next) => {
     res.json(r);
   } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
 });
+router.post('/orders/:id/payments/:pid/sent', async (req, res, next) => {
+  try {
+    const pp = require('../services/orders/payment-plan');
+    const r = await pp.setSent(parseInt(req.params.pid, 10), !!(req.body && req.body.sent), { actor: (req.user && (req.user.username || req.user.email)) || 'uživatel' });
+    res.json(r);
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
 router.post('/orders/:id/payments/:pid/paid', async (req, res, next) => {
   try {
     const pp = require('../services/orders/payment-plan');
