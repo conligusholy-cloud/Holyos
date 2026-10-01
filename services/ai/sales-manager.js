@@ -858,11 +858,9 @@ async function reviewPeriod(personId, kind, refStr) {
 // ─── Denní report majitelům (Jan + Tomáš) ─────────────────────────────────────
 // Souhrn za celý tým: jaké úkoly/cíle agent zadal, co se splnilo, hodnocení
 // spolupráce obchodníků. Posílá push + zvonek a vytvoří čitelnou položku ve Velíně.
-async function buildOwnerReport(dateStr) {
-  const people = await getActiveSalespeople();
+// Statistiky jednoho obchodníka pro daný den (stejná data pro vedoucího i pro samotného obchodníka).
+async function buildPersonDayStats(p, dateStr) {
   const date = dayDate(dateStr);
-  const per = [];
-  for (const p of people) {
     const plan = await prisma.salesDayPlan.findUnique({ where: { person_id_date: { person_id: p.id, date } }, include: { tasks: true } }).catch(() => null);
     const review = await prisma.salesReview.findUnique({ where: { person_id_kind_period_start: { person_id: p.id, kind: 'day', period_start: date } } }).catch(() => null);
     const tasks = plan ? plan.tasks : [];
@@ -884,7 +882,7 @@ async function buildOwnerReport(dateStr) {
       uncalled = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed } } });
       uncalledNew = await prisma.compounderLead.count({ where: { owner_person_id: p.id, is_test: false, last_called_at: null, status: { notIn: closed }, created_at: { gte: new Date(Date.now() - 2 * 86400000) } } });
     } catch (e) { uncalled = 0; uncalledNew = 0; }
-    per.push({
+    return {
       person_id: p.id, name: p.name,
       uncalled_contacts: uncalled,          // kolika kontaktům obchodník ještě nikdy nevolal
       uncalled_new_contacts: uncalledNew,   // z toho nových (0–2 dny) — ty nesmí vychladnout
@@ -908,8 +906,14 @@ async function buildOwnerReport(dateStr) {
       month_actual_new_contacts: (actuals.new_contacts && actuals.new_contacts.month) || 0,
       month_target_conversions: (targets.conversions && targets.conversions.month) || 0,
       month_actual_conversions: (actuals.conversions && actuals.conversions.month) || 0,
-    });
+    };
   }
+
+async function buildOwnerReport(dateStr) {
+  const people = await getActiveSalespeople();
+  const date = dayDate(dateStr);
+  const per = [];
+  for (const p of people) per.push(await buildPersonDayStats(p, dateStr));
   // Týmový průměr délky hovoru (vážený počtem hovorů).
   let _tSec = 0; let _tN = 0;
   per.forEach((p) => { if (p.avg_call_sec && p.avg_call_sample) { _tSec += p.avg_call_sec * p.avg_call_sample; _tN += p.avg_call_sample; } });
@@ -1054,7 +1058,7 @@ module.exports = {
   tzTodayStr, periodBounds, getActiveSalespeople,
   coachReply,
   planDay, reviewDay, reviewPeriod, reportToOwners,
-  buildOwnerReport, computeActuals, getTargets, ensureTargets,
+  buildOwnerReport, buildPersonDayStats, computeActuals, getTargets, ensureTargets,
   replaceSkippedTask,
   AI_PLAN_INSTRUCTIONS_KEY, AI_PLAN_INSTRUCTIONS_DEFAULT,
   callClaudeJSON, callClaudeText,

@@ -3120,6 +3120,19 @@ router.get('/sales/team-day', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/sales/my-stats?date= — statistiky přihlášeného obchodníka (stejný blok jako vidí vedoucí).
+router.get('/sales/my-stats', requireAuth, async (req, res, next) => {
+  try {
+    const pid = (req.user && req.user.person_id) || (req.user && req.user.person && req.user.person.id) || null;
+    if (!pid) return res.status(400).json({ error: 'Uživatel nemá přiřazenou osobu' });
+    const person = await prisma.person.findUnique({ where: { id: pid }, select: { id: true, first_name: true, last_name: true } });
+    if (!person) return res.status(404).json({ error: 'Osoba nenalezena' });
+    const dateStr = String(req.query.date || todayStr()).slice(0, 10);
+    const stats = await salesMgr.buildPersonDayStats({ id: person.id, name: ((person.first_name || '') + ' ' + (person.last_name || '')).trim() }, dateStr);
+    res.json({ ok: true, date: dateStr, person: stats });
+  } catch (err) { next(err); }
+});
+
 // GET /api/compounder/sales/reviews?kind=month&period_start= — hodnocení celého týmu (vedoucí/admin).
 router.get('/sales/reviews', requireAuth, async (req, res, next) => {
   try {

@@ -243,6 +243,11 @@
   </div>
   <button class="fab" id="fab-calendar" onclick="openMeeting({})" style="display:none">+ Schůzka</button>
 
+  <div id="screen-stats" style="display:none;padding:4px 6px 90px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0 8px"><h1 style="margin:0;font-size:20px">📊 Moje statistiky</h1><button class="btn btn-g" style="padding:6px 12px;font-size:12.5px" onclick="loadMyStats(true)">🔄 Obnovit</button></div>
+    <div id="stats-body" style="color:var(--muted);font-size:13px">Načítám…</div>
+  </div>
+
   <div id="screen-coach">
     <div style="display:flex;align-items:center;gap:8px;padding:4px 6px 8px">
       <h1 style="margin:0;font-size:20px">👔 Vedoucí</h1>
@@ -260,9 +265,11 @@
     <button class="tab active" id="tab-today" onclick="showScreen('today')"><span class="ic">🧭</span>Dnes</button>
     <button class="tab" id="tab-contacts" onclick="showScreen('contacts')"><span class="ic">👥</span>Kontakty</button>
     <button class="tab" id="tab-calendar" onclick="showScreen('calendar')"><span class="ic">📅</span>Kalendář</button>
+    <button class="tab" id="tab-stats" onclick="showScreen('stats')"><span class="ic">📊</span>Statistiky</button>
     <button class="tab" id="tab-coach" onclick="showScreen('coach')"><span class="ic">👔</span>Vedoucí</button>
   </nav>
 
+  <script src="/js/sales-stats.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/locales-all.global.min.js"></script>
 <script>
@@ -873,6 +880,33 @@
   }
   window.obLeasingPrompt=obLeasingPrompt; window.obLoadLeasing=obLoadLeasing;
 
+  // ── Moje statistiky (stejné bloky jako vidí vedoucí v Přehledu obchodu) ──
+  var _statsLoadedAt = 0;
+  async function loadMyStats(force){
+    var box=document.getElementById('stats-body'); if(!box) return;
+    if(!force && Date.now()-_statsLoadedAt < 60000 && box.dataset.ok==='1') return;
+    box.innerHTML='<div style="color:var(--muted)">Načítám statistiky…</div>';
+    try{
+      var r=await fetch('/api/compounder/sales/my-stats',{credentials:'include'});
+      var j=await r.json().catch(function(){return{};});
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+      var p=j.person||{};
+      var d=new Date(j.date); var dateLbl=d.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'long'});
+      var html='<div style="font-size:12.5px;color:var(--muted);margin-bottom:6px">'+esc(p.name||'')+' · '+esc(dateLbl)+'</div>'
+        + (p.focus?'<div style="font-size:13px;color:var(--text);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px">🎯 '+esc(p.focus)+'</div>':'')
+        + '<div style="font-size:13px;margin:4px 0 2px">Úkoly: <b>'+(p.tasks_done||0)+'/'+(p.tasks_assigned||0)+'</b> splněno · '+(p.tasks_open||0)+' otevřeno</div>'
+        + (window.SalesStats ? SalesStats.person(p) : '<div style="color:#ef4444">Chybí js/sales-stats.js</div>')
+        + '<div style="margin-top:14px;font-size:11px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em">Měsíc — plán vs. skutečnost</div>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">'
+        + [['Nové kontakty',p.month_actual_new_contacts,p.month_target_new_contacts],['Rezervace',p.month_actual_reservations,p.month_target_reservations],['Konverze',p.month_actual_conversions,p.month_target_conversions],['Tržby (Kč)',p.month_actual_revenue,p.month_target_revenue]].map(function(x){ var a=Number(x[1])||0,t=Number(x[2])||0,pc=t?Math.min(100,Math.round(a/t*100)):0; return '<div style="background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><div style="font-size:11px;color:var(--muted2)">'+x[0]+'</div><div style="font-size:18px;font-weight:800;color:'+(t&&a>=t?'#22c55e':'var(--text)')+'">'+a.toLocaleString('cs-CZ')+'<span style="font-size:12px;color:var(--muted);font-weight:400"> / '+t.toLocaleString('cs-CZ')+'</span></div><div style="height:5px;border-radius:3px;background:rgba(255,255,255,.08);margin-top:6px;overflow:hidden"><div style="height:100%;width:'+pc+'%;background:'+(pc>=100?'#22c55e':pc>=50?'#eab308':'#ef4444')+'"></div></div></div>'; }).join('')
+        + '</div>'
+        + (p.avg_call_min?'<div style="font-size:12.5px;color:var(--muted);margin-top:10px">⌀ délka hovoru: <b style="color:var(--text)">'+String(p.avg_call_min).replace('.',',')+' min</b> (z '+(p.avg_call_sample||0)+' hovorů za 30 dní)</div>':'')
+        + (p.day_summary?'<div style="font-size:13px;color:var(--text);background:rgba(139,92,246,.10);border:1px solid rgba(139,92,246,.4);border-radius:10px;padding:10px 12px;margin-top:10px;white-space:pre-wrap">🧠 '+esc(p.day_summary)+'</div>':'');
+      box.innerHTML=html; box.dataset.ok='1'; _statsLoadedAt=Date.now();
+    }catch(e){ box.innerHTML='<div style="color:#ef4444">Statistiky se nepodařilo načíst: '+esc(e.message)+'</div>'; box.dataset.ok=''; }
+  }
+  window.loadMyStats=loadMyStats;
+
   // Slíbený krok — přímý dotaz „co jsi slíbil + na kdy" → uloží do kalendáře (SalesEvent task) i do plánu (úkol).
   function obPromisePrompt(id){
     var l=(state.leads||[]).filter(function(x){return x.id===id;})[0]||{};
@@ -973,7 +1007,10 @@
     var cal = name==='calendar';
     var tod = name==='today';
     var coach = name==='coach';
-    var contacts = !cal && !tod && !coach;
+    var stats = name==='stats';
+    var contacts = !cal && !tod && !coach && !stats;
+    var ss=document.getElementById('screen-stats'); if(ss) ss.style.display = stats?'block':'none';
+    if (stats) loadMyStats(false);
     var sc=document.getElementById('screen-calendar'); if(sc) sc.style.display = cal?'block':'none';
     var st=document.getElementById('screen-today'); if(st) st.style.display = tod?'block':'none';
     var sco=document.getElementById('screen-coach'); if(sco) sco.style.display = coach?'flex':'none';
@@ -986,6 +1023,7 @@
     var tc=document.getElementById('tab-contacts'); if(tc) tc.classList.toggle('active',contacts);
     var tk=document.getElementById('tab-calendar'); if(tk) tk.classList.toggle('active',cal);
     var tco=document.getElementById('tab-coach'); if(tco) tco.classList.toggle('active',coach);
+    var tst=document.getElementById('tab-stats'); if(tst) tst.classList.toggle('active',stats);
     if(cal){ initCalendarView(); setTimeout(function(){ if(window._fcInst){ try{ window._fcInst.updateSize(); }catch(e){} } },60); }
     if(tod && !window._todayLoaded){ loadToday(); }
     if(coach){ coachRestore(); }
