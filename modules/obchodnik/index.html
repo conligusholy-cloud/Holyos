@@ -1767,20 +1767,28 @@
         // krátkodobý podepsaný odkaz (/vcard/:id?t=…), který přihlášení nepotřebuje.
         // Okno otevíráme hned (ještě v rámci kliknutí), aby ho iOS neblokoval; adresu doplníme po získání tokenu.
         var abs = function(u){ try { return new URL(u, window.location.origin).href; } catch(e){ return u; } };
-        // iOS PWA: do nově otevřeného okna NEJDE poslat adresu dodatečně → odkaz musí být
-        // hotový už při klepnutí. Používáme 12h podpisový token stažený při startu appky.
-        var tok = obVcardToken();
-        if (tok) {
-          window.open(abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(tok)), '_blank');
-        } else {
-          // Token ještě není → stáhnout a otevřít v TOMTO okně (nové okno by zůstalo prázdné).
-          fetch(API + '/vcard-token', { credentials: 'include' })
-            .then(function(r){ return r.json(); })
-            .then(function(j){
-              if (j && j.token) { try { localStorage.setItem('ob.vcardToken', JSON.stringify({ t: j.token, exp: Date.now() + 11*3600*1000 })); } catch(e){} window.location.href = abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(j.token)); }
-              else { window.location.href = abs(API + '/leads/' + id + '/vcard'); }
-            })
-            .catch(function(){ window.location.href = abs(API + '/leads/' + id + '/vcard'); });
+        var fname = (String(name).replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,40) || 'kontakt') + '.vcf';
+        // 1) iOS appka na ploše: vestavěný prohlížeč vizitku NEzobrazí (bílá stránka).
+        //    Nejspolehlivější je nativní sdílení souboru → iOS nabídne „Přidat do kontaktů".
+        var shared = false;
+        try {
+          if (navigator.share && typeof File === 'function') {
+            var file = new File([vcard], fname, { type: 'text/vcard' });
+            if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+              shared = true;
+              navigator.share({ files: [file], title: name }).catch(function(){});
+            }
+          }
+        } catch(e){ shared = false; }
+        if (!shared) {
+          // 2) Záloha: otevřít vizitku v OPRAVDOVÉM Safari (x-safari-https://), to kartu kontaktu umí.
+          var tok = obVcardToken();
+          var url = tok ? abs(API + '/vcard/' + id + '?t=' + encodeURIComponent(tok)) : abs(API + '/leads/' + id + '/vcard');
+          var safariUrl = url.replace(/^https:\/\//, 'x-safari-https://');
+          var t0 = Date.now();
+          window.location.href = safariUrl;
+          // 3) Když x-safari schéma nezabere (starší iOS), zkus běžný odkaz.
+          setTimeout(function(){ if (Date.now() - t0 < 1500 && !document.hidden) { window.open(url, '_blank'); } }, 700);
         }
       } else {
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
