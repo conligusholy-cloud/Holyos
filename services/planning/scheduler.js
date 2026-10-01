@@ -73,15 +73,22 @@ async function loadQueueByWorkstation(tx, batchId, workstationIds, exclusive) {
       planned_end: true,
     },
   });
-  const map = new Map();
+  // PRAVIDLO: na pracovišti se vyrábí v jednu chvíli jen JEDEN výrobek (dávka). Výrobek pracoviště
+  // drží po celou dobu, co na něm je — od začátku své první operace do konce poslední — včetně
+  // mezer mezi operacemi. Proto se operace jiných dávek slučují per (pracoviště, dávka) do jednoho
+  // obsazeného úseku; jiná dávka se do mezery nevejde.
+  const spans = new Map(); // key ws|batch → { start, end, batch_id, op_id }
   for (const o of others) {
-    if (!map.has(o.workstation_id)) map.set(o.workstation_id, []);
-    map.get(o.workstation_id).push({
-      start: new Date(o.planned_start),
-      end: new Date(o.planned_end),
-      batch_id: o.batch_id,
-      op_id: o.id,
-    });
+    const key = o.workstation_id + '|' + o.batch_id;
+    const st = new Date(o.planned_start), en = new Date(o.planned_end);
+    const cur = spans.get(key);
+    if (!cur) spans.set(key, { ws: o.workstation_id, start: st, end: en, batch_id: o.batch_id, op_id: o.id, ops: 1 });
+    else { if (st < cur.start) cur.start = st; if (en > cur.end) cur.end = en; cur.ops++; }
+  }
+  const map = new Map();
+  for (const sp of spans.values()) {
+    if (!map.has(sp.ws)) map.set(sp.ws, []);
+    map.get(sp.ws).push({ start: sp.start, end: sp.end, batch_id: sp.batch_id, op_id: sp.op_id, whole_batch: true, ops: sp.ops });
   }
   for (const arr of map.values()) {
     arr.sort((a, b) => a.start - b.start);
@@ -312,6 +319,7 @@ async function scheduleBatch(batchId, opts = {}) {
   const parallelOps = batch.batch_operations.filter(o => o.operation && o.operation.is_parallel);
   const mainByStep = new Map(); // step_number → { start, end }
   const orderedOps = mainOps.concat(parallelOps);
+  const batchWsUsed = new Set(); // pracoviště, kde už tato dávka má operaci (výrobek na něm zůstává)
 
   for (const op of orderedOps) {
     if (op.status === 'done' || op.status === 'cancelled') continue;
@@ -350,14 +358,18 @@ async function scheduleBatch(batchId, opts = {}) {
         warnings.push('group_has_no_workstations');
       } else {
         const probe = consumeShift(candidateStart, totalMin, cfg);
+        // Přednost má pracoviště, kde už tato dávka je (výrobek se nestěhuje); jinak první volné,
+        // jinak to, které se uvolní nejdřív. Volné = žádný JINÝ výrobek ho v okně nedrží.
+        const ordered = members.slice().sort((x, y) => (batchWsUsed.has(y) ? 1 : 0) - (batchWsUsed.has(x) ? 1 : 0));
         let best = null;
-        for (const wsid of members) {
+        for (const wsid of ordered) {
           const ce = findQueueConflictEnd(queueByWs, wsid, candidateStart, probe.end);
           if (!ce) { best = { wsid, free: candidateStart.getTime() }; break; }
           if (!best || ce.getTime() < best.free) best = { wsid, free: ce.getTime() };
         }
         pickedWsId = best.wsid;
         warnings.push(`picked_from_group:ws${pickedWsId}`);
+        if (best.free > candidateStart.getTime()) warnings.push('group_all_busy_waiting');
       }
     }
     const wsId = op.workstation_id || pickedWsId;
@@ -399,6 +411,7 @@ async function scheduleBatch(batchId, opts = {}) {
     });
 
     if (wsId) {
+      batchWsUsed.add(wsId);
       if (!queueByWs.has(wsId)) queueByWs.set(wsId, []);
       queueByWs.get(wsId).push({
         start, end, batch_id: id, op_id: op.id,
