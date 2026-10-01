@@ -2493,6 +2493,7 @@
             '<h2 style="margin:0;">' + order.order_number + '</h2>' +
             '<div style="display:flex;gap:8px;align-items:center;">' +
               (order.status === 'prodano' ? '<button class="btn" style="background:#06b6d4;color:#04121c;font-weight:700;" onclick="generateOrderFromSold(' + id + ')" title="Podrobnosti níže jsou vyplněné — vygenerovat objednávku a posunout na Objednáno">📝 Vygenerovat objednávku →</button>' : '') +
+              '<button class="btn" id="order-history-btn" onclick="toggleOrderHistory()" title="Zobrazit / skrýt historii objednávky (události procesu)">🕓 Historie</button>' +
               '<button class="btn" onclick="makeDeliveryNote(' + id + ')" title="Vytvořit a otevřít dodací list (PDF)">📦 Dodací list</button>' +
               '<select onchange="updateOrderStatus(' + id + ',this.value)" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:12px;">' + statusOpts + '</select>' +
               renderStatusBadges({ ...order, type: 'sales' }, { size: 'lg' }) +
@@ -2992,9 +2993,17 @@
     // Časová osa — placeholder; naplní se z /api/wh/orders/:id/history (plné události procesu).
     function renderOrderTimeline(order) {
       if (!order) return '';
-      return '<div style="border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
-        '<h3 style="font-size:14px;margin-bottom:8px;">🕓 Historie objednávky</h3>' +
+      // Sbaleno — rozbalí se tlačítkem „🕓 Historie" v hlavičce detailu (obsah se načte i tak, ať je připravený)
+      return '<div id="order-history-wrap" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:12px;">' +
+        '<h3 style="font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">🕓 Historie objednávky <button class="btn btn-sm" onclick="toggleOrderHistory()" style="margin-left:auto;">Skrýt</button></h3>' +
         '<div id="order-history-panel"><div style="color:var(--text2);font-size:12px;">Načítám historii…</div></div></div>';
+    }
+    function toggleOrderHistory() {
+      var w = document.getElementById('order-history-wrap'); if (!w) return;
+      var open = w.style.display === 'none';
+      w.style.display = open ? '' : 'none';
+      var b = document.getElementById('order-history-btn'); if (b) b.classList.toggle('btn-primary', open);
+      if (open) w.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     // Načte celou historii procesu (události vč. doručení dokladů zákazníkovi) a vykreslí osu.
