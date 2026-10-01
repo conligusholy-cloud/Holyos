@@ -332,6 +332,8 @@
       renderChips();
       buildLangOptions();
       await load();
+      // Deep link ?lead=ID (návrat z vizitky / notifikace) → otevři kontakt
+      try { var _ql = new URLSearchParams(location.search).get('lead'); if (_ql && typeof openLeadFromTask === 'function') { openLeadFromTask(parseInt(_ql, 10)); history.replaceState(null, '', location.pathname); } } catch(e){}
       loadMyPlan();
       loadLokalitySec();
       loadUpcomingMeetings();

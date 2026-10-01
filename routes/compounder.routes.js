@@ -3913,7 +3913,22 @@ router.get('/vcard/:id(\\d+)', async (req, res, next) => {
     const okLead = payload && Number(payload.vc) === id;
     const okAll = payload && payload.vca === 1;
     if (!okLead && !okAll) return res.status(401).send('Neplatný odkaz na vizitku.');
-    await sendLeadVcard(res, id);
+    // ?dl=1 → samotná vizitka (text/vcard). Bez dl → HTML „zastávka": otevře kartu kontaktu
+    // a po uložení zůstane viditelné tlačítko „Zpět na kontakt v HolyOS" (jinak Safari zůstalo
+    // na libovolné předchozí stránce, např. Překladači).
+    if (String(req.query.dl || '') === '1') return sendLeadVcard(res, id);
+    const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, name: true, phone: true } });
+    if (!lead) return res.status(404).send('Lead nenalezen');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const vcfUrl = '/api/compounder/vcard/' + id + '?t=' + encodeURIComponent(String(req.query.t || '')) + '&dl=1';
+    const backUrl = '/modules/obchodnik/index.html?lead=' + id;
+    res.set('Content-Type', 'text/html; charset=utf-8').set('Cache-Control', 'no-store').send('<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Uložit kontakt — ' + esc(lead.name) + '</title>'
+      + '<style>body{margin:0;font-family:-apple-system,Inter,system-ui,sans-serif;background:#0f1320;color:#e6e9f2;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}.c{max-width:420px;width:100%;text-align:center}.n{font-size:22px;font-weight:800;margin:6px 0 2px}.p{color:#9aa3b8;font-size:14px;margin-bottom:22px}a.b{display:block;border-radius:14px;padding:16px;font-size:16px;font-weight:700;text-decoration:none;margin-bottom:12px}.g{background:#22c55e;color:#052e13}.y{background:#eab308;color:#1a1400}.h{color:#9aa3b8;font-size:12.5px;line-height:1.5}</style></head><body><div class="c">'
+      + '<div style="font-size:44px">📇</div><div class="n">' + esc(lead.name) + '</div><div class="p">' + esc(lead.phone || '') + '</div>'
+      + '<a class="b g" href="' + vcfUrl + '">📥 Uložit kontakt do telefonu</a>'
+      + '<a class="b y" href="' + backUrl + '">← Zpět na kontakt v HolyOS</a>'
+      + '<div class="h">Karta kontaktu se otevře sama. Po uložení klepni na „Zpět na kontakt" — nebo vlevo nahoře na ◀ zpět do aplikace.</div>'
+      + '</div><script>setTimeout(function(){ location.href = ' + JSON.stringify(vcfUrl) + '; }, 250);</script></body></html>');
   } catch (err) { next(err); }
 });
 
