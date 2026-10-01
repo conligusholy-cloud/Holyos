@@ -611,6 +611,9 @@ model Order {
   note              String?   @db.Text
   created_by        Int?
   sales_person_id   Int? // odpovědný obchodník (kdo obchod zrealizoval) — z leadu / přihlášeného uživatele / ručně
+  // Financování prodejní objednávky: own = vlastní zdroje, leasing = leasing/úvěr (volitelně která společnost).
+  financing_type     String? @db.VarChar(20)
+  leasing_company_id Int?
   approved_by       Int? // legacy Person FK — zachováno; nově preferujeme approved_by_user_id
   expected_delivery DateTime? @db.Date
   // true = datum zadal ručně obchodník (neautomatizovat); false = dopočítá se z posledního výrobního slotu + 10 dní

@@ -2299,6 +2299,7 @@
         if (_availableSlots.length === 0) await loadAvailableSlots();
         // Lidé pro výběr odpovědného obchodníka
         if (!window._odPeople) { try { const pr = await fetch('/api/hr/people?active=true').then(r => r.json()); window._odPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs')); } catch (e) { window._odPeople = []; } }
+        if (!window._odLeasing) { try { const lr = await fetch('/api/leasing?active=1', { credentials: 'include' }).then(r => r.json()); const arr = Array.isArray(lr) ? lr : (lr.items || lr.data || []); window._odLeasing = arr.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'cs')); } catch (e) { window._odLeasing = []; } }
         const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
         const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
 
@@ -2531,6 +2532,14 @@
                 '<option value="">— bez obchodníka —</option>' + (window._odPeople || []).map(p => '<option value="' + p.id + '"' + (order.sales_person_id === p.id ? ' selected' : '') + '>' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' · ' + esc(p.role) : '') + '</option>').join('') +
               '</select></div>' +
               '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Vytvořil</label><div style="padding:6px 10px;font-size:13px;color:var(--text2);">' + (order.creator ? esc((order.creator.first_name || '') + ' ' + (order.creator.last_name || '')) : '—') + ' · ' + (order.created_at ? new Date(order.created_at).toLocaleString('cs-CZ') : '') + '</div></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">💰 Financování</label><select id="detail-financing" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="onFinancingChange(' + id + ', this.value)">' +
+                '<option value=""' + (!order.financing_type ? ' selected' : '') + '>— neuvedeno —</option>' +
+                '<option value="own"' + (order.financing_type === 'own' ? ' selected' : '') + '>🏦 Vlastní zdroje</option>' +
+                '<option value="leasing"' + (order.financing_type === 'leasing' ? ' selected' : '') + '>📄 Leasing / úvěr</option>' +
+              '</select></div>' +
+              '<div class="form-group" id="detail-leasing-wrap" style="' + (order.financing_type === 'leasing' ? '' : 'display:none;') + '"><label style="font-size:11px;color:var(--text2);">Leasingová společnost</label><select id="detail-leasing-company" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'leasing_company_id\',this.value)">' +
+                '<option value="">— vyber —</option>' + (window._odLeasing || []).map(l => '<option value="' + l.id + '"' + (order.leasing_company_id === l.id ? ' selected' : '') + '>' + esc(l.name) + '</option>').join('') +
+              '</select></div>' +
               '<div class="form-group" style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
             '</div>';
           })() :
@@ -3330,9 +3339,22 @@
         body[field] = value;
         if (field === 'company_id') body[field] = parseInt(value);
         if (field === 'sales_person_id') body[field] = value ? parseInt(value) : null;
+        if (field === 'leasing_company_id') body[field] = value ? parseInt(value) : null;
         await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         loadOrders();
         loadStats();
+      } catch(e) { console.error(e); }
+    }
+
+    // Financování: při změně na leasing zobraz výběr společnosti; při jiné volbě společnost odpoj.
+    async function onFinancingChange(id, value) {
+      var wrap = document.getElementById('detail-leasing-wrap');
+      if (wrap) wrap.style.display = value === 'leasing' ? '' : 'none';
+      var body = { financing_type: value || null };
+      if (value !== 'leasing') body.leasing_company_id = null;
+      try {
+        await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        loadOrders();
       } catch(e) { console.error(e); }
     }
 

@@ -984,12 +984,14 @@ router.put('/orders/:id', async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);
     const allowed = {};
-    const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id', 'sales_person_id'];
+    const fields = ['status', 'currency', 'note', 'expected_delivery', 'items_count', 'total_amount', 'company_id', 'sales_person_id', 'financing_type', 'leasing_company_id'];
     for (const f of fields) {
       if (req.body[f] !== undefined) allowed[f] = req.body[f];
     }
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.sales_person_id !== undefined) allowed.sales_person_id = allowed.sales_person_id ? parseInt(allowed.sales_person_id) : null;
+    if (allowed.financing_type !== undefined) allowed.financing_type = ['own', 'leasing'].includes(allowed.financing_type) ? allowed.financing_type : null;
+    if (allowed.leasing_company_id !== undefined) allowed.leasing_company_id = allowed.leasing_company_id ? parseInt(allowed.leasing_company_id) : null;
     if (allowed.items_count !== undefined) allowed.items_count = parseInt(allowed.items_count) || 0;
     if (allowed.total_amount !== undefined) allowed.total_amount = parseFloat(allowed.total_amount) || 0;
     if (allowed.expected_delivery !== undefined) {
