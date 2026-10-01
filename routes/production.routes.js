@@ -249,6 +249,39 @@ async function codeTaken(code) {
   return null;
 }
 
+// POST /api/production/recode-holyos-codes — jednorázový přepis starých kódů HO-* na BS-*.
+// HO-V → BS-M (výrobek), HO-P → BS-S (polotovar), HO-M → BS-D (díl). Navázaná skladová karta
+// (Product.material_id se stejným kódem) dostane stejný nový kód. Idempotentní: bez HO-* nic nedělá.
+router.post('/recode-holyos-codes', async (req, res, next) => {
+  try {
+    const changes = [];
+    const prods = await prisma.product.findMany({
+      where: { OR: [{ code: { startsWith: 'HO-V-' } }, { code: { startsWith: 'HO-P-' } }] },
+      select: { id: true, code: true, type: true, material_id: true },
+      orderBy: { id: 'asc' },
+    });
+    for (const p of prods) {
+      const prefix = p.code.startsWith('HO-P-') || p.type === 'semi-product' ? BS_PREFIX['semi-product'] : BS_PREFIX.product;
+      const newCode = await nextHolyosCode(prefix, 'product');
+      await prisma.product.update({ where: { id: p.id }, data: { code: newCode } });
+      if (p.material_id) {
+        const m = await prisma.material.findUnique({ where: { id: p.material_id }, select: { id: true, code: true } });
+        if (m && m.code && m.code.toUpperCase() === p.code.toUpperCase()) {
+          await prisma.material.update({ where: { id: m.id }, data: { code: newCode } });
+        }
+      }
+      changes.push({ kind: 'product', id: p.id, from: p.code, to: newCode });
+    }
+    const mats = await prisma.material.findMany({ where: { code: { startsWith: 'HO-M-' } }, select: { id: true, code: true }, orderBy: { id: 'asc' } });
+    for (const m of mats) {
+      const newCode = await nextHolyosCode(BS_PREFIX.part, 'material');
+      await prisma.material.update({ where: { id: m.id }, data: { code: newCode } });
+      changes.push({ kind: 'material', id: m.id, from: m.code, to: newCode });
+    }
+    res.json({ ok: true, changed: changes.length, changes });
+  } catch (err) { next(err); }
+});
+
 // POST /api/production/products
 // { code?, name, type: product|semi-product, takt_time?, show_in_configurator?, create_material? }
 // Prázdný kód → vygeneruje se BS-M-xxxx (výrobek) / BS-S-xxxx (polotovar). create_material (výchozí u polotovaru) založí

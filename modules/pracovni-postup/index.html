@@ -87,6 +87,7 @@
         <input type="checkbox" id="only-offered" onchange="renderProducts()" style="accent-color:#eab308;width:15px;height:15px;cursor:pointer;"> <span>Jen nabízené</span> <span class="tab-count" id="count-offered" style="background:rgba(234,179,8,0.18);color:#eab308;">&mdash;</span>
       </label>
       <span class="count-badge" id="count-badge">&mdash;</span>
+      <button class="btn" id="btn-recode-ho" onclick="recodeHolyosCodes()" title="Jednorázově přepíše staré kódy HO-V/HO-P/HO-M na BS-M/BS-S/BS-D" style="display:none;background:rgba(234,179,8,0.15);border-color:rgba(234,179,8,0.5);color:#eab308;font-weight:700;">🔁 Přečíslovat HO → BS</button>
       <button class="btn" onclick="openNewProduct()" style="background:linear-gradient(135deg,#1e86e0,#3aa0f0);color:#fff;border:none;font-weight:700;">＋ Nový výrobek</button>
       <button class="btn" onclick="loadProducts()">&#8635; Obnovit</button>
     </div>
@@ -222,6 +223,17 @@
       document.getElementById('np-cfg-row').style.display = t === 'product' ? '' : 'none';
       document.getElementById('np-title').textContent = t === 'product' ? '＋ Nový výrobek' : '＋ Nový polotovar';
     }
+    async function recodeHolyosCodes() {
+      if (!confirm('Přepsat všechny staré kódy HO-V / HO-P / HO-M na BS-M / BS-S / BS-D?\n\nKódy dostanou první volná čísla v nových řadách. Navázané skladové karty se přejmenují také.')) return;
+      try {
+        const r = await fetch('/api/production/recode-holyos-codes', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert('Přečíslování selhalo: ' + (j.error || r.status)); return; }
+        alert('Přečíslováno položek: ' + j.changed + (j.changes && j.changes.length ? '\n\n' + j.changes.map(c => c.from + ' → ' + c.to).join('\n') : ''));
+        loadProducts();
+      } catch (e) { alert('Přečíslování selhalo: ' + e.message); }
+    }
+
     function openNewProduct() {
       ['np-name', 'np-code', 'np-takt'].forEach(id => { document.getElementById(id).value = ''; });
       document.getElementById('np-cfg').checked = false; document.getElementById('np-msg').textContent = '';
@@ -270,6 +282,8 @@
       try {
         allProducts = await api('/api/production/products');
         updateStatus('connected', 'Připojeno — ' + allProducts.length + ' výrobků');
+        // Tlačítko přečíslování se ukáže jen dokud existuje nějaký starý kód HO-*.
+        try { var rb = document.getElementById('btn-recode-ho'); if (rb) rb.style.display = allProducts.some(function(p){ return /^HO-[VPM]-/i.test(p.code || ''); }) ? '' : 'none'; } catch(e){}
         updateCounts();
         renderProducts();
       } catch (err) {
