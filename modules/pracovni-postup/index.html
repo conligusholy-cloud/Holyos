@@ -241,7 +241,7 @@
         const r = await fetch('/api/production/products', { method: 'POST', headers, body: JSON.stringify(body) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
-        window.location.href = 'detail.html?id=' + j.id;
+        window.location.href = 'detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
       } catch (e) { msg.style.color = '#ef4444'; msg.textContent = e.message; btn.disabled = false; }
     }
     async function duplicateProduct(id, name) {
@@ -252,7 +252,7 @@
         const r = await fetch('/api/production/products/' + id + '/duplicate', { method: 'POST', headers, body: JSON.stringify({ name: newName.trim() || undefined }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
-        window.location.href = 'detail.html?id=' + j.id;
+        window.location.href = 'detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
       } catch (e) { alert('Kopii se nepodařilo vytvořit: ' + e.message); }
     }
 
@@ -397,7 +397,7 @@
     }
 
     function openProduct(id) {
-      window.location.href = 'modules/pracovni-postup/detail.html?id=' + id;
+      window.location.href = 'modules/pracovni-postup/detail.html?id=' + id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
     }
 
     function updateStatus(state, text) {

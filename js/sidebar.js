@@ -3,12 +3,32 @@
    ============================================ */
 
 function renderSidebar(activeModule) {
+  // Vložený režim (?embed=1): stránka běží uvnitř záložky jiného modulu (např. Nastavení výroby)
+  // → bez sidebaru, bez horní lišty, obsah na celou šířku.
+  if (/[?&]embed=1(&|$)/.test(window.location.search)) {
+    var aside = document.getElementById('sidebar'); if (aside) aside.style.display = 'none';
+    var st = document.createElement('style');
+    st.textContent = 'body.holyos-embed .main-wrapper{margin-left:0 !important;padding-top:0 !important;} body.holyos-embed #holyos-topbar,body.holyos-embed .holyos-topbar{display:none !important;}';
+    document.head.appendChild(st);
+    document.body.classList.add('holyos-embed');
+    // Odkazy uvnitř modulu drží embed=1 (navigace mezi stránkami modulu zůstane bez sidebaru)
+    document.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a[href]') : null; if (!a) return;
+      var href = a.getAttribute('href') || '';
+      if (/^(https?:|mailto:|tel:|#|javascript:)/i.test(href) || a.target === '_blank') return;
+      if (href.indexOf('/modules/') === -1 && href.indexOf('.html') === -1) return;
+      if (/[?&]embed=1/.test(href)) return;
+      a.setAttribute('href', href + (href.indexOf('?') === -1 ? '?' : '&') + 'embed=1');
+    }, true);
+    return;
+  }
   var modules = [
     { id: 'obchod',              name: 'Obchod',              icon: '&#128188;', color: '#ec4899', active: true },
     { id: 'lide-hr',             name: 'Lidé a HR',           icon: '&#128101;', color: '#6c5ce7', active: true },
     { id: 'velin',                name: 'Velín (mobil)',       icon: '&#128752;', color: '#6366f1', active: true },
     { id: 'metodicke-pokyny',    name: 'Metodické pokyny a směrnice', icon: '&#128218;', color: '#a78bfa', active: true },
     { id: 'vytvoreni-arealu',    name: 'Vytvoření areálu',    icon: '&#9998;', color: '#8b5cf6', active: true },
+    { id: 'nastaveni-vyroby',    name: 'Nastavení výroby',    icon: '&#128736;', color: '#14b8a6', active: true },
     { id: 'programovani-vyroby', name: 'Programování výroby', icon: '&#9881;', color: '#f59e0b', active: true },
     { id: 'simulace-vyroby',    name: 'Simulace výroby',     icon: '&#9654;', color: '#22c55e', active: true },
     { id: 'pracovni-postup',    name: 'Pracovní postup',     icon: '&#128295;', color: '#06b6d4', active: true },
@@ -495,6 +515,7 @@ var HOLYOS_AI_MODULES = {
   'simulace-vyroby': { name: 'Simulace výroby', parts: ['běh simulace', 'výsledky simulace'] },
   'vytvoreni-arealu': { name: 'Vytvoření areálu', parts: ['editor půdorysu', 'kreslení hal a cest'] },
   'pracoviste': { name: 'Pracoviště', parts: ['seznam pracovišť', 'parametry a kapacity'] },
+  'nastaveni-vyroby': { name: 'Nastavení výroby', parts: ['pracoviště', 'pracovní postupy'] },
   'normovani-fy': { name: 'Normování', parts: ['normy operací', 'výpočty časů'] },
   'normovani-prehled': { name: 'Normy', parts: ['přehled norem'] },
   'sklady': { name: 'Sklady', parts: ['seznam skladů', 'skladové lokace'] },

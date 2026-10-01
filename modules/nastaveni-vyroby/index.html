@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Nastavení výroby | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    /* HolyOS — Nastavení výroby: záložky nad existujícími moduly (vložené přes iframe s ?embed=1) */
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .module-header { background: linear-gradient(135deg, #14b8a6 0%, #0f766e 100%); padding: 22px 32px 16px; display: flex; align-items: center; gap: 16px; }
+    .module-header-icon { font-size: 34px; }
+    .module-header h1 { font-size: 22px; font-weight: 700; color: #fff; }
+    .module-header p { font-size: 13px; color: rgba(255,255,255,0.75); margin-top: 2px; }
+    .tabs { display: flex; gap: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; overflow-x: auto; }
+    .tab-btn { background: transparent; border: none; color: var(--text2); padding: 14px 22px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s; letter-spacing: 0.3px; white-space: nowrap; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #14b8a6; border-bottom-color: #14b8a6; }
+    .tab-btn .soon { font-size: 10px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 1px 6px; margin-left: 6px; font-weight: 500; }
+    .frame-wrap { flex: 1; min-height: 0; display: flex; }
+    .frame-wrap iframe { flex: 1; width: 100%; border: 0; background: var(--bg); min-height: calc(100vh - 160px); }
+    .tab-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; padding-right: 4px; }
+    .tab-actions a { font-size: 12px; color: var(--text2); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+    .tab-actions a:hover { color: var(--text); }
+    @media (max-width: 768px) { .main-wrapper { margin-left: 0; } }
+  </style>
+</head>
+<body>
+  <aside id="sidebar" class="sidebar"></aside>
+
+  <div class="main-wrapper">
+    <div class="module-header">
+      <div class="module-header-icon">&#128736;</div>
+      <div>
+        <h1>Nastavení výroby</h1>
+        <p>Pracoviště, pracovní postupy a další parametry výroby na jednom místě</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button class="tab-btn" data-tab="pracoviste" onclick="switchTab('pracoviste')">&#127981; Pracoviště</button>
+      <button class="tab-btn" data-tab="pracovni-postup" onclick="switchTab('pracovni-postup')">&#128295; Pracovní postup</button>
+      <div class="tab-actions"><a id="open-full" href="#" target="_blank" title="Otevřít aktuální záložku jako samostatnou stránku">&#8599; Otevřít samostatně</a></div>
+    </div>
+
+    <div class="frame-wrap">
+      <iframe id="tab-frame" title="Obsah záložky" src="about:blank"></iframe>
+    </div>
+  </div>
+
+  <script>
+    var s = document.createElement('script');
+    s.src = 'js/sidebar.js?v=' + Date.now();
+    s.onload = function() { renderSidebar('nastaveni-vyroby'); if (typeof initDate === 'function') initDate(); };
+    document.head.appendChild(s);
+  </script>
+
+  <script>
+    // Záložky = existující moduly vložené v iframe s ?embed=1 (bez sidebaru a horní lišty).
+    // Nové sekce stačí přidat do TABS (id → stránka).
+    var TABS = {
+      'pracoviste':      { page: 'modules/pracoviste/index.html' },
+      'pracovni-postup': { page: 'modules/pracovni-postup/index.html' },
+    };
+    var current = null;
+    function switchTab(name, opts) {
+      if (!TABS[name]) name = 'pracoviste';
+      current = name;
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+      var src = TABS[name].page + '?embed=1';
+      var fr = document.getElementById('tab-frame');
+      if (fr.getAttribute('data-tab') !== name) { fr.setAttribute('data-tab', name); fr.src = src; }
+      document.getElementById('open-full').href = TABS[name].page;
+      try { localStorage.setItem('nastaveni-vyroby.tab', name); } catch (e) {}
+      if (!(opts && opts.silent)) { try { history.replaceState(null, '', location.pathname + '?tab=' + name); } catch (e) {} }
+    }
+    (function () {
+      var q = new URLSearchParams(location.search).get('tab');
+      var last = null; try { last = localStorage.getItem('nastaveni-vyroby.tab'); } catch (e) {}
+      switchTab(q || last || 'pracoviste', { silent: !q });
+    })();
+  </script>
+</body>
+</html>
