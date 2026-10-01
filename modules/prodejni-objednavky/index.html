@@ -2294,6 +2294,8 @@
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();
         if (_availableSlots.length === 0) await loadAvailableSlots();
+        // Lidé pro výběr odpovědného obchodníka
+        if (!window._odPeople) { try { const pr = await fetch('/api/hr/people?active=true').then(r => r.json()); window._odPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs')); } catch (e) { window._odPeople = []; } }
         const st = ORDER_STATUSES[order.status] || { label: order.status, color: '#9ca3af' };
         const statusOpts = Object.entries(ORDER_STATUSES).map(([k,v]) => '<option value="' + k + '"' + (order.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
 
@@ -2521,6 +2523,10 @@
                   '<span title="Konec posledního slotu">■ ' + prodFinish + '</span>' +
                 '</div>' +
               '</div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">👤 Odpovědný obchodník <span style="font-weight:400;">(zobrazí se na výrobním slotu)</span></label><select id="detail-sales-person" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'sales_person_id\',this.value)">' +
+                '<option value="">— bez obchodníka —</option>' + (window._odPeople || []).map(p => '<option value="' + p.id + '"' + (order.sales_person_id === p.id ? ' selected' : '') + '>' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (p.role ? ' · ' + esc(p.role) : '') + '</option>').join('') +
+              '</select></div>' +
+              '<div class="form-group"><label style="font-size:11px;color:var(--text2);">Vytvořil</label><div style="padding:6px 10px;font-size:13px;color:var(--text2);">' + (order.creator ? esc((order.creator.first_name || '') + ' ' + (order.creator.last_name || '')) : '—') + ' · ' + (order.created_at ? new Date(order.created_at).toLocaleString('cs-CZ') : '') + '</div></div>' +
               '<div class="form-group" style="grid-column:1 / -1;"><label style="font-size:11px;color:var(--text2);">Poznámka</label><input type="text" id="detail-note" value="' + (order.note || '').replace(/"/g, '&quot;') + '" placeholder="Poznámka..." style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;" onchange="updateOrderField(' + id + ',\'note\',this.value)"></div>' +
             '</div>';
           })() :
@@ -3311,6 +3317,7 @@
         var body = {};
         body[field] = value;
         if (field === 'company_id') body[field] = parseInt(value);
+        if (field === 'sales_person_id') body[field] = value ? parseInt(value) : null;
         await fetch('/api/wh/orders/' + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         loadOrders();
         loadStats();

@@ -687,6 +687,8 @@ router.get('/orders/:id', async (req, res, next) => {
       where: { id: parseInt(req.params.id) },
       include: {
         company: true,
+        sales_person: { select: { id: true, first_name: true, last_name: true } },
+        creator: { select: { id: true, first_name: true, last_name: true } },
         items: {
           include: {
             product: { select: { id: true, code: true, name: true } },
