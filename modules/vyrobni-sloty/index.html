@@ -716,6 +716,11 @@
                 html += '<div class="slot-sub" style="font-family:monospace;color:#fbbf24;font-weight:700;">🔢 ' + esc(serial) + '</div>';
               }
               html += '<div class="slot-sub">Dodání: ' + deliveryDate + '</div>';
+              if (a.note) {
+                var noteShort = String(a.note).replace(/\s+/g, ' ').trim();
+                if (noteShort.length > 70) noteShort = noteShort.slice(0, 70) + '…';
+                html += '<div class="slot-sub" title="' + esc(a.note) + '" style="color:#fbbf24;font-style:italic;">📝 ' + esc(noteShort) + '</div>';
+              }
               if (isManualA) {
                 html += '<div class="slot-noorder" title="Není přiřazena prodejní objednávka — otevři slot a klikni „Napojit na objednávku"">⚠️</div>';
                 html += '<div class="slot-pay" style="color:#f472b6;">✍️ Rezervováno ručně — <b>bez objednávky</b></div>';
@@ -943,6 +948,7 @@
           html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">';
           if (!a.batch_id) {
             if (isManual) html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="editAssignment(' + a.id + ',' + slot.id + ')">✏️ Upravit</button>';
+            else html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="editAssignmentNote(' + a.id + ',' + slot.id + ')">📝 Poznámka</button>';
             if (!a.order_item_id) html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="openLinkOrder(' + a.id + ',' + slot.id + ')">🔗 Napojit na objednávku</button>';
             else html += '<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="unlinkAssignment(' + a.id + ',' + slot.id + ')">🔓 Odpojit objednávku</button>';
             html += '<button class="btn btn-danger" style="padding:4px 10px;font-size:12px;" onclick="deleteAssignment(' + a.id + ',' + slot.id + ')">🗑️ Zrušit blokaci</button>';
@@ -1171,6 +1177,26 @@
         + '</div>';
       document.getElementById('ea-title-' + aid).focus();
     }
+    // Libovolná poznámka k zakázce ve slotu (i když je napojená objednávka).
+    function editAssignmentNote(aid, slotId) {
+      var slot = slots.find(function(s) { return s.id === slotId; });
+      var a = slot && slot.assignments ? slot.assignments.find(function(x) { return x.id === aid; }) : null;
+      var box = document.getElementById('link-box-' + aid); if (!box || !a) return;
+      var inp = 'width:100%;padding:8px 10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:13px;';
+      box.innerHTML = '<div style="margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px;background:var(--surface2);">'
+        + '<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;">📝 Poznámka k zakázce</div>'
+        + '<textarea id="ea-note-' + aid + '" placeholder="např. zákazník chce dodat až po 15., speciální barva, čeká se na doplatek…" style="' + inp + 'min-height:64px;font-family:inherit;">' + esc(a.note || '') + '</textarea>'
+        + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;"><button class="btn btn-secondary" style="padding:4px 10px;font-size:12px;" onclick="document.getElementById(\'link-box-' + aid + '\').innerHTML=\'\'">Zrušit</button><button class="btn btn-primary" style="padding:4px 10px;font-size:12px;" onclick="saveAssignmentNote(' + aid + ',' + slotId + ')">Uložit poznámku</button></div>'
+        + '</div>';
+      document.getElementById('ea-note-' + aid).focus();
+    }
+    async function saveAssignmentNote(aid, slotId) {
+      var note = (document.getElementById('ea-note-' + aid).value || '').trim() || null;
+      var r = await fetch('/api/slots/assignments/' + aid, { method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note: note }) });
+      if (!r.ok) { alert('Poznámku se nepodařilo uložit.'); return; }
+      refreshSlotDetail(slotId);
+    }
+
     async function saveEditAssignment(aid, slotId) {
       var title = (document.getElementById('ea-title-' + aid).value || '').trim();
       if (!title) { alert('Napiš, co se ve slotu vyrobí.'); return; }
