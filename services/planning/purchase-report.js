@@ -31,7 +31,7 @@ async function computePurchaseReport(opts = {}) {
   const statuses = opts.statuses && opts.statuses.length > 0 ? opts.statuses : ACTIVE_STATUSES;
 
   const batches = await tx.productionBatch.findMany({
-    where: { status: { in: statuses } },
+    where: { status: { in: statuses }, ignore_stock: false }, // dávky „ignorovat sklad" se do nákupu nepočítají
     select: { id: true, batch_number: true, status: true, quantity: true, planned_start: true,
       product: { select: { code: true, name: true } } },
     orderBy: [{ priority: 'asc' }, { planned_start: 'asc' }],

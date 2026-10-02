@@ -3960,10 +3960,16 @@ model ProductionBatch {
   planned_end   DateTime?
   actual_start  DateTime?
   actual_end    DateTime?
+  due_date      DateTime? // kdy to chce mít vyrobené (požadovaný termín)
 
   parent_batch_id Int?
   bom_snapshot_id Int?
   created_by_id   Int?
+
+  // Testování plánování: is_test = testovací dávka (doklady/pohyby označené, smazání uklidí vše navázané),
+  // ignore_stock = plánovat bez ohledu na dostupnost materiálu (MRP/nákup se přeskočí)
+  is_test      Boolean @default(false)
+  ignore_stock Boolean @default(false)
 
   note String? @db.Text
 

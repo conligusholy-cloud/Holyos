@@ -466,7 +466,9 @@ async function scheduleBatch(batchId, opts = {}) {
     };
   }
 
-  await tx.$transaction(async (txx) => {
+  // Když už běžíme uvnitř interaktivní transakce (simulace), $transaction není k dispozici → zapisuj přímo přes tx
+  const runTx = typeof tx.$transaction === 'function' ? (fn) => tx.$transaction(fn) : (fn) => fn(tx);
+  await runTx(async (txx) => {
     for (const u of updates) {
       const data = { planned_start: u.planned_start, planned_end: u.planned_end };
       if (u.assigned_person_id !== undefined) data.assigned_person_id = u.assigned_person_id;

@@ -2537,7 +2537,7 @@ router.post('/batches', async (req, res, next) => {
     const {
       product_id, quantity, variant_key, batch_type, priority,
       planned_start, planned_end, parent_batch_id, bom_snapshot_id,
-      created_by_id, note, auto_generate_operations,
+      created_by_id, note, auto_generate_operations, due_date, is_test, ignore_stock,
     } = req.body || {};
 
     const productId = parseInt(product_id, 10);
@@ -2546,7 +2546,8 @@ router.post('/batches', async (req, res, next) => {
       return res.status(400).json({ error: 'product_id a quantity (>0) jsou povinné' });
     }
 
-    const batch_number = await generateBatchNumber(planned_start);
+    let batch_number = await generateBatchNumber(planned_start);
+    if (is_test) batch_number = 'TEST-' + batch_number;
 
     const batch = await prisma.productionBatch.create({
       data: {
@@ -2562,6 +2563,9 @@ router.post('/batches', async (req, res, next) => {
         bom_snapshot_id: bom_snapshot_id ? parseInt(bom_snapshot_id, 10) : null,
         created_by_id: created_by_id ? parseInt(created_by_id, 10) : null,
         note: note || null,
+        due_date: due_date ? new Date(due_date) : null,
+        is_test: !!is_test,
+        ignore_stock: !!ignore_stock,
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
@@ -2658,9 +2662,22 @@ router.delete('/batches/:id', async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
 
-    const b = await prisma.productionBatch.findUnique({ where: { id }, select: { id: true, batch_number: true, status: true } });
+    const b = await prisma.productionBatch.findUnique({ where: { id }, select: { id: true, batch_number: true, status: true, is_test: true } });
     if (!b) return res.status(404).json({ error: 'Dávka nenalezena' });
     await prisma.$transaction(async (tx) => {
+      // Testovací dávka: uklidit VŠE navázané (skladové pohyby/doklady s referencí na dávku, feeder dávky)
+      if (b.is_test) {
+        const mv = await tx.inventoryMovement.findMany({ where: { reference_type: 'batch', reference_id: id }, select: { id: true, material_id: true, type: true, quantity: true, document_id: true } });
+        for (const m of mv) {
+          // vrátit stav skladu, který pohyb změnil
+          const delta = Number(m.quantity) * (m.type === 'receipt' ? -1 : (m.type === 'issue' ? 1 : 0));
+          if (delta) await tx.material.update({ where: { id: m.material_id }, data: { current_stock: { increment: delta } } }).catch(() => {});
+        }
+        if (mv.length) await tx.inventoryMovement.deleteMany({ where: { id: { in: mv.map(m => m.id) } } });
+        const docIds = [...new Set(mv.map(m => m.document_id).filter(Boolean))];
+        if (docIds.length) await tx.warehouseDocument.deleteMany({ where: { id: { in: docIds }, movements: { none: {} } } }).catch(() => {});
+        await tx.productionBatch.deleteMany({ where: { parent_batch_id: id, is_test: true } });
+      }
       // Feeder dávky odpoj (ne smazat), sloty uvolni, pak dávku (operace + logy jdou cascade)
       await tx.productionBatch.updateMany({ where: { parent_batch_id: id }, data: { parent_batch_id: null } });
       await tx.slotAssignment.updateMany({ where: { batch_id: id }, data: { batch_id: null } }).catch(() => {});

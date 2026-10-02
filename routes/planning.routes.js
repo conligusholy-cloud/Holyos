@@ -572,6 +572,15 @@ router.post('/batch-operations/:id/unblock', async (req, res, next) => {
 //   ?person_id=N&batch_id=N&action=start|pause|resume|done|problem|comment
 //   ?limit=200 (default 200, max 1000)
 //   Vrátí seznam akcí v kioscích — pro mzdy / audit / debug.
+// POST /api/planning/simulate — dry-run: kdy nejdřív bude výrobek hotový (nic se neukládá)
+router.post('/simulate', async (req, res, next) => {
+  try {
+    const { simulateProduction } = require('../services/planning/simulate');
+    const r = await simulateProduction(req.body || {});
+    res.json(r);
+  } catch (err) { if (/nenalezen|nemá pracovní postup/.test(err.message)) return res.status(400).json({ error: err.message }); next(err); }
+});
+
 // GET /api/planning/work-plan?from=&to= — Plán práce: naplánované operace (BatchOperation) v období
 // s člověkem, pracovištěm, dávkou a výrobkem. Frontend seskupí podle lidí (časový harmonogram).
 router.get('/work-plan', async (req, res, next) => {
@@ -601,7 +610,7 @@ router.get('/batches-plan', async (req, res, next) => {
     const batches = await prisma.productionBatch.findMany({
       where: { status: { in: status } },
       select: {
-        id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, actual_start: true, actual_end: true, note: true, created_at: true,
+        id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, actual_start: true, actual_end: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
         product: { select: { id: true, code: true, name: true } },
         batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
       },
@@ -624,7 +633,7 @@ router.get('/batches-plan', async (req, res, next) => {
 router.get('/material-moves', async (req, res, next) => {
   try {
     const batches = await prisma.productionBatch.findMany({
-      where: { status: { in: ['planned', 'released', 'in_progress', 'paused'] } },
+      where: { status: { in: ['planned', 'released', 'in_progress', 'paused'] }, ignore_stock: false },
       select: { id: true, batch_number: true, planned_start: true, status: true, product: { select: { code: true, name: true } } },
       orderBy: [{ planned_start: 'asc' }, { id: 'asc' }], take: 200,
     });
