@@ -1051,8 +1051,15 @@
       const ops = applyPendingMoves(product.operations || []);
 
       // Toolbar — Nová operace + případné "Uložit / Zahodit" pokud jsou pending změny
-      let html = '<div class="wf-toolbar">' +
-        '<button class="btn btn-primary" onclick="openAddOp()">+ Nová operace</button>';
+      // Operace se přidávají klikem na uzly v hlavní linii; vpravo lupa (zoom plátna)
+      let html = '<div class="wf-toolbar" style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:12px;color:var(--text2);">Operaci přidáš kliknutím na uzel ● v hlavní linii (nebo na + u paralelní větve).</span>' +
+        '<span style="flex:1"></span>' +
+        '<div class="wf-zoom" title="Zvětšit / zmenšit plátno pracovního postupu">' +
+          '<button class="btn" onclick="wfZoom(-0.1)" title="Zmenšit">🔍−</button>' +
+          '<button class="btn" onclick="wfZoom(0)" id="wf-zoom-val" title="Vrátit na 100 %" style="min-width:58px;">' + Math.round(wfZoomLevel * 100) + ' %</button>' +
+          '<button class="btn" onclick="wfZoom(0.1)" title="Zvětšit">🔍+</button>' +
+        '</div>';
       if (_pendingMoves.size > 0) {
         html += '<button class="btn" style="background:#10b981;color:#fff;border-color:#10b981;font-weight:700;" onclick="commitPendingMoves()" title="Uložit všechny neuložené přesuny materiálů do databáze">💾 Uložit pracovní postup (' + _pendingMoves.size + ' změn' + (_pendingMoves.size === 1 ? 'a' : (_pendingMoves.size < 5 ? 'y' : '')) + ')</button>';
         html += '<button class="btn" style="background:rgba(239,68,68,0.1);color:#ef4444;border-color:rgba(239,68,68,0.4);" onclick="discardPendingMoves()" title="Vrátí všechny neuložené přesuny">↺ Zahodit změny</button>';
@@ -1113,13 +1120,13 @@
       if (regularOps.length === 0 && stagingOps.length === 0) {
         html += '<div class="empty-ops"><div class="icon">&#128736;</div>' +
           '<p>Žádné operace v pracovním postupu</p>' +
-          '<p style="font-size:12px;">Klikněte na "+ Nová operace" pro přidání prvního kroku</p></div>';
+          '<p style="font-size:12px;"><button class="btn btn-primary" onclick="openAddOp()">+ První operace</button></p></div>';
       } else {
-        // Wrapper pro op-list s místem pro sticky panel vpravo
-        html += '<div style="display:flex;gap:16px;align-items:flex-start;">';
+        // Wrapper pro op-list s místem pro sticky panel vpravo (plátno jde zvětšit/zmenšit lupou)
+        html += '<div id="wf-canvas" style="display:flex;gap:16px;align-items:flex-start;transform-origin:0 0;transform:scale(' + wfZoomLevel + ');width:' + (100 / wfZoomLevel) + '%;">';
         html += '<div class="op-list" id="op-list" style="flex:1;min-width:0;">';
         if (regularOps.length === 0) {
-          html += '<div class="empty-ops" style="padding:30px;"><p style="font-size:13px;color:var(--text2);">Žádné regulární operace. Vytvoř operace pomocí "+ Nová operace" a přesuň materiály ze žlutého panelu vpravo.</p></div>';
+          html += '<div class="empty-ops" style="padding:30px;"><p style="font-size:13px;color:var(--text2);">Žádné regulární operace. <button class="btn btn-primary" onclick="openAddOp()">+ První operace</button> a přesuň materiály ze žlutého panelu vpravo.</p></div>';
         } else {
           const mainOps = regularOps.filter(op => !op.is_parallel);
           const parOps = regularOps.filter(op => op.is_parallel);
@@ -1262,7 +1269,8 @@
       const lanes = document.getElementById('lanes'); const svg = document.getElementById('par-links');
       const lanesRect = lanes ? lanes.getBoundingClientRect() : { left: 0, top: 0 };
       if (svg) svg.innerHTML = '';
-      const dotCenter = (n) => { const d = n.querySelector('.op-node-dot').getBoundingClientRect(); return { x: d.left + d.width / 2 - lanesRect.left, y: d.top + d.height / 2 - lanesRect.top, r: d.width / 2 }; };
+      const z = (typeof wfZoomLevel === 'number' && wfZoomLevel > 0) ? wfZoomLevel : 1; // plátno je škálované → souřadnice přepočítat na layout px
+      const dotCenter = (n) => { const d = n.querySelector('.op-node-dot').getBoundingClientRect(); return { x: (d.left + d.width / 2 - lanesRect.left) / z, y: (d.top + d.height / 2 - lanesRect.top) / z, r: d.width / 2 / z }; };
       wraps.forEach(w => {
         const from = parseInt(w.getAttribute('data-from')) || steps[0];
         const to = parseInt(w.getAttribute('data-to')) || steps[steps.length - 1];
@@ -1270,7 +1278,7 @@
         const nEnd = nodeAfter([...steps].reverse().find(s => s <= to) || steps[steps.length - 1]);
         if (!nStart || !nEnd) return;
         const a = dotCenter(nStart), b = dotCenter(nEnd);
-        const laneOff = lane.getBoundingClientRect().top - lanesRect.top; // posun pruhu vůči .lanes
+        const laneOff = (lane.getBoundingClientRect().top - lanesRect.top) / z; // posun pruhu vůči .lanes
         w.style.position = 'absolute'; w.style.top = '0px';
         const h = w.offsetHeight;
         // Karta uprostřed okna (mezi uzlem start a uzlem konec); při kolizi s jinou kartou posuň níž
@@ -1285,8 +1293,8 @@
         // Spojnice v pravých úhlech: uzel → doprava → svisle dolů → do horní hrany karty; z dolní hrany → svisle → doleva → uzel
         if (svg) {
           const wr = w.getBoundingClientRect();
-          const cx = wr.left + wr.width / 2 - lanesRect.left; // svislá osa větve = střed karty
-          const cTop = wr.top - lanesRect.top, cBot = wr.bottom - lanesRect.top;
+          const cx = (wr.left + wr.width / 2 - lanesRect.left) / z; // svislá osa větve = střed karty
+          const cTop = (wr.top - lanesRect.top) / z, cBot = (wr.bottom - lanesRect.top) / z;
           const stroke = 'rgba(192,132,252,0.9)';
           const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' H' + cx + ' V' + (cTop - 2);
           const p2 = 'M' + cx + ',' + (cBot + 2) + ' V' + b.y + ' H' + (b.x + b.r + 2);
@@ -1361,6 +1369,17 @@
         } catch (err) { toast('Přepojení selhalo: ' + err.message, true); }
       });
     })();
+
+    // ── Lupa plátna ──────────────────────────────────────────────────────────
+    var wfZoomLevel = (function () { try { return Math.min(1.6, Math.max(0.5, parseFloat(localStorage.getItem('pp.zoom')) || 1)); } catch (e) { return 1; } })();
+    function wfZoom(delta) {
+      wfZoomLevel = delta === 0 ? 1 : Math.min(1.6, Math.max(0.5, Math.round((wfZoomLevel + delta) * 10) / 10));
+      try { localStorage.setItem('pp.zoom', String(wfZoomLevel)); } catch (e) {}
+      const c = document.getElementById('wf-canvas');
+      if (c) { c.style.transform = 'scale(' + wfZoomLevel + ')'; c.style.width = (100 / wfZoomLevel) + '%'; }
+      const v = document.getElementById('wf-zoom-val'); if (v) v.textContent = Math.round(wfZoomLevel * 100) + ' %';
+      setTimeout(() => { try { layoutParallelLane(); } catch (e) {} }, 30);
+    }
 
     // ── Hotové výrobky (výstupy postupu) ─────────────────────────────────────
     function outputLabel(o) {
