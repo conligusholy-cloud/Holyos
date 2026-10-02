@@ -6887,6 +6887,7 @@ model LeasingCompany {
   email         String?  @db.VarChar(255)
   note          String?  @db.Text
   active        Boolean  @default(true)
+  send_sms      Boolean  @default(true) // poptávky zasílat i SMS (e-mail jde vždy)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

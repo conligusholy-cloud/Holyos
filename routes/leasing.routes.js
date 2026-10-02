@@ -126,6 +126,7 @@ const schema = z.object({
   email: z.string().trim().max(255).optional(),
   note: z.string().trim().max(6000).optional(),
   active: z.boolean().optional(),
+  send_sms: z.boolean().optional(),
 });
 
 // GET /api/leasing — seznam (volitelně ?q= a ?active=1)
@@ -162,6 +163,7 @@ function dataFrom(d) {
     contact_name: emptyToNull(d.contact_name), phone: emptyToNull(d.phone), email: emptyToNull(d.email),
     note: emptyToNull(d.note),
     active: d.active === undefined ? true : !!d.active,
+    send_sms: d.send_sms === undefined ? true : !!d.send_sms,
   };
 }
 
@@ -186,6 +188,7 @@ router.put('/:id(\\d+)', async (req, res, next) => {
     ['ico', 'dic', 'address', 'city', 'zip', 'contact_name', 'phone', 'email', 'note'].forEach((k) => { if (d[k] !== undefined) data[k] = emptyToNull(d[k]); });
     if (d.country !== undefined) data.country = emptyToNull(d.country) || 'CZ';
     if (d.active !== undefined) data.active = !!d.active;
+    if (d.send_sms !== undefined) data.send_sms = !!d.send_sms;
     const updated = await prisma.leasingCompany.update({ where: { id: Number(req.params.id) }, data });
     res.json(updated);
   } catch (err) { next(err); }
@@ -336,7 +339,8 @@ async function createAndSendInquiries(companies, d, personId, senderName) {
     } else errs.push(!c.email ? 'leasingovka nemá e-mail' : 'není nastavený odesílatel (LEASING_MAIL_FROM / COMPOUNDER_MAIL_FROM)');
     let sms_sent = false, sms_id = null;
     const phoneDigits = String(c.phone || '').replace(/[^0-9+]/g, '');
-    if (phoneDigits.replace(/\D/g, '').length >= 9) {
+    if (c.send_sms === false) { /* u této leasingovky je SMS vypnutá — jen e-mail */ }
+    else if (phoneDigits.replace(/\D/g, '').length >= 9) {
       try {
         // SMS bez odkazu: jen klient, kontakt a co se financuje (detail + potvrzeni stavu jde e-mailem).
         const noDia = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -483,7 +487,7 @@ router.post('/inquiries/:id(\\d+)/resend', async (req, res, next) => {
     const { sendMail } = require('../services/email'); const sms = require('../services/voice/sms');
     const from = process.env.LEASING_MAIL_FROM || process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || null;
     if (inq.company.email && from) { try { await sendMail({ to: inq.company.email, subject: 'Připomínka: poptávka financování – ' + client, body: 'Dobrý den,\n\ndovolujeme si připomenout poptávku financování pro klienta ' + client + ' (' + inq.subject + ', ' + fmtKcSrv(inq.price) + ' bez DPH). Prosíme o označení stavu přes odkaz níže.\n\nDěkujeme, Best Series – Prádlomaty', from, fromName: 'Best Series – Prádlomaty', link: url, linkLabel: 'Otevřít poptávku', brand: 'pradlomaty', trackingPixel: url + '/px', deliveryReceipt: true }); } catch (e) { errs.push('e-mail: ' + e.message); } }
-    if (inq.company.phone) { try { await sms.sendSms(inq.company.phone, 'Best Series - pripominka poptavky financovani pro klienta ' + String(client).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + ' (' + String(inq.subject).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + '). Prosime o oznaceni stavu v e-mailu.', { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
+    if (inq.company.phone && inq.company.send_sms !== false) { try { await sms.sendSms(inq.company.phone, 'Best Series - pripominka poptavky financovani pro klienta ' + String(client).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + ' (' + String(inq.subject).normalize('NFD').replace(/[\u0300-\u036f]/g, '') + '). Prosime o oznaceni stavu v e-mailu.', { context: 'leasing_inquiry', inquiryId: inq.id }); } catch (e) { errs.push('SMS: ' + e.message); } }
     res.json({ ok: true, errors: errs });
   } catch (err) { next(err); }
 });

@@ -159,7 +159,7 @@
     var rows = state.rows.filter(function (r) { return !q || ((r.name || '') + ' ' + (r.ico || '') + ' ' + (r.city || '') + ' ' + (r.contact_name || '')).toLowerCase().indexOf(q) !== -1; });
     var box = document.getElementById('lc-list'); if (!box) return;
     if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:20px 0">Zatím žádné leasingové společnosti. Přidej první přes „+ Nová společnost".</div>'; return; }
-    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>🧮 Kalkulačka</th><th>📨 Poptávky · výsledek</th><th>Stav</th><th></th></tr></thead><tbody>'
+    box.innerHTML = '<table><thead><tr><th>Společnost</th><th>IČO</th><th>Kontakt</th><th>Telefon</th><th>E-mail</th><th>Město</th><th>📄 Dokumenty</th><th>💼 Nabídky</th><th>🧮 Kalkulačka</th><th>📨 Poptávky · výsledek</th><th>Poptávky zasílat</th><th>Stav</th><th></th></tr></thead><tbody>'
       + rows.map(function (r) {
         return '<tr onclick="__lcEdit(' + r.id + ')" style="cursor:pointer">'
           + '<td><b>' + esc(r.name) + '</b>' + (r.note ? '<div style="font-size:11px;color:var(--text2);max-width:260px">' + esc(String(r.note).slice(0, 80)) + '</div>' : '') + '</td>'
@@ -172,6 +172,8 @@
           + '<td onclick="event.stopPropagation()"><a href="#" class="lc-cnt' + (r.offers_count ? '' : ' zero') + '" onclick="__lcOpenTab(' + r.id + ',\'offers\');return false" title="Otevřít nabídky">💼 ' + (r.offers_count || 0) + '</a></td>'
           + '<td onclick="event.stopPropagation()"><button class="lc-calcbtn" onclick="__lcCalc(' + r.id + ')" title="Rychlá kalkulačka z nabídek této společnosti"' + (r.offers_count ? '' : ' disabled style="opacity:.4"') + '>🧮 Spočítat</button></td>'
           + '<td onclick="event.stopPropagation()">' + inqCell(r) + '</td>'
+          + '<td onclick="event.stopPropagation()" style="white-space:nowrap"><label title="E-mail se posílá vždy" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);margin-right:10px;cursor:default"><input type="checkbox" checked disabled style="width:auto;accent-color:#22c55e"> 📧 e-mail</label>'
+          + '<label title="Poslat poptávku i SMS kontaktní osobě" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;cursor:pointer;color:' + (r.send_sms !== false ? 'var(--text)' : 'var(--text2)') + '"><input type="checkbox" ' + (r.send_sms !== false ? 'checked' : '') + ' onchange="__lcToggleSms(' + r.id + ', this.checked)" style="width:auto;accent-color:#22c55e"> 📱 SMS</label></td>'
           + '<td><span class="lc-badge ' + (r.active ? 'lc-on' : 'lc-off') + '">' + (r.active ? 'Aktivní' : 'Neaktivní') + '</span></td>'
           + '<td class="lc-actions" onclick="event.stopPropagation()"><button class="lc-act" title="Upravit" onclick="__lcEdit(' + r.id + ')">✏️</button>'
           + '<button class="lc-act" title="Smazat" onclick="__lcDelete(' + r.id + ",'" + attr(r.name) + "')\">🗑️</button></td>"
@@ -593,6 +595,12 @@
     return '<a href="#" class="lc-cnt" onclick="__lcInqCompany(' + r.id + ');return false" title="Zobrazit poptávky této společnosti">📨 ' + q.total + '</a>'
       + pill(q.approved, '✅', '#22c55e', 'Schváleno') + pill(q.rejected, '❌', '#ef4444', 'Zamítnuto') + pill(open, '⏳', '#f59e0b', 'Čeká na výsledek (odesláno / otevřeno / zpracovává se)') + pill(q.canceled, '–', '#6b7280', 'Zrušeno');
   }
+  window.__lcToggleSms = function (id, on) {
+    var row = (state.rows || []).find(function (r) { return r.id === id; }); if (!row) return;
+    var body = {}; Object.keys(row).forEach(function (k) { if (['id', 'docs_count', 'offers_count', 'inquiries', 'created_at', 'updated_at'].indexOf(k) === -1) body[k] = row[k]; });
+    body.send_sms = !!on;
+    api('/' + id, { method: 'PUT', body: body }).then(function () { row.send_sms = !!on; render(); }).catch(function (e) { alert('Nepodařilo se uložit: ' + e.message); render(); });
+  };
   window.__lcInqCompany = function (cid) {
     state.inqCompany = cid; state.inqFilter = 'all';
     if (!state.inqView) window.__lcInq(); else renderInq();
