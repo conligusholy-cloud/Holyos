@@ -3898,7 +3898,7 @@ router.get('/leads/:id(\\d+)/vcard-link', requireAuth, (req, res) => {
 router.get('/vcard-token', requireAuth, (req, res) => {
   const jwt = require('jsonwebtoken');
   const uid = (req.user && (req.user.id || req.user.user_id)) || null;
-  const t = jwt.sign({ vca: 1, uid }, VCARD_SECRET, { expiresIn: '12h' });
+  const t = jwt.sign({ vca: 1, uid }, VCARD_SECRET, { expiresIn: '30d' });
   res.json({ ok: true, token: t, base: '/api/compounder/vcard/' });
 });
 
@@ -3908,11 +3908,30 @@ router.get('/vcard/:id(\\d+)', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const jwt = require('jsonwebtoken');
-    let payload;
-    try { payload = jwt.verify(String(req.query.t || ''), VCARD_SECRET); } catch (e) { return res.status(401).send('Odkaz na vizitku vypršel. Otevři kontakt v HolyOS znovu.'); }
-    const okLead = payload && Number(payload.vc) === id;
-    const okAll = payload && payload.vca === 1;
-    if (!okLead && !okAll) return res.status(401).send('Neplatný odkaz na vizitku.');
+    // Ověření: 1) podepsaný token v odkazu, 2) záloha = přihlášený prohlížeč (cookie).
+    // Důvod odmítnutí logujeme, ať jde na dálku poznat, proč to na konkrétním telefonu nešlo.
+    let ok = false, reason = '';
+    const t = String(req.query.t || '');
+    if (t) {
+      try {
+        const payload = jwt.verify(t, VCARD_SECRET);
+        ok = !!(payload && (Number(payload.vc) === id || payload.vca === 1));
+        if (!ok) reason = 'token pro jiný kontakt';
+      } catch (e) { reason = 'token: ' + (e && e.message); }
+    } else reason = 'bez tokenu';
+    if (!ok) {
+      try { const { peekToken } = require('../middleware/auth'); if (peekToken(req)) { ok = true; reason = ''; } } catch (e) { /* bez cookie */ }
+    }
+    if (!ok) {
+      console.warn('[vcard] odmítnuto lead', id, '—', reason, '| UA:', String(req.headers['user-agent'] || '').slice(0, 90));
+      return res.status(401).set('Content-Type', 'text/html; charset=utf-8').send(
+        '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        + '<body style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;padding:28px 20px;text-align:center;color:#111">'
+        + '<div style="font-size:40px">📇</div><h2 style="margin:10px 0 6px">Vizitku se nepodařilo ověřit</h2>'
+        + '<p style="color:#555;line-height:1.5">Odkaz je neplatný nebo vypršel. Vrať se do HolyOS, obnov appku, kontakt otevři znovu a klepni na <b>Uložit kontakt</b>.</p>'
+        + '<p style="color:#999;font-size:12px">(' + String(reason).replace(/</g, '&lt;') + ')</p></body>'
+      );
+    }
     // ?dl=1 → samotná vizitka (text/vcard). Bez dl → HTML „zastávka": otevře kartu kontaktu
     // a po uložení zůstane viditelné tlačítko „Zpět na kontakt v HolyOS" (jinak Safari zůstalo
     // na libovolné předchozí stránce, např. Překladači).

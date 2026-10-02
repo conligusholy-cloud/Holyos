@@ -317,7 +317,7 @@
   }
 
   async function init(){
-    try { obLoadVcardToken(false); } catch(e){}
+    try { obLoadVcardToken(true); } catch(e){} // vždy čerstvý token (platí 30 dní)
     try {
       var me = await (await fetch('/api/auth/me', { credentials:'include' })).json().catch(function(){return null;});
       if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
@@ -1765,7 +1765,7 @@
     if (!force && obVcardToken()) return;
     fetch(API + '/vcard-token', { credentials: 'include' })
       .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(j){ if (j && j.token) { try { localStorage.setItem('ob.vcardToken', JSON.stringify({ t: j.token, exp: Date.now() + 11*3600*1000 })); } catch(e){} } })
+      .then(function(j){ if (j && j.token) { try { localStorage.setItem('ob.vcardToken', JSON.stringify({ t: j.token, exp: Date.now() + 29*24*3600*1000 })); } catch(e){} } })
       .catch(function(){});
   }
   function obPrefetchVcard(){ obLoadVcardToken(false); }
@@ -1838,6 +1838,13 @@
           obShowVcardFallback(vcard, fname, name, url);
         }, 900);
       } else {
+        // Android / desktop: stažení vizitky → telefon nabídne otevřít v Kontaktech.
+        var aTest = document.createElement('a');
+        if (!('download' in aTest)) {
+          // Prohlížeč neumí stažení z appky → vizitka ze serveru (stejné okno, s přihlášením).
+          window.location.href = API + '/leads/' + id + '/vcard';
+          return;
+        }
         var blob = new Blob([vcard], { type: 'text/vcard;charset=utf-8' });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
