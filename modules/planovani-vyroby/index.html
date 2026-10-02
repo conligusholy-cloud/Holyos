@@ -195,8 +195,8 @@
           <input id="pf-start" type="hidden">
           <div class="pf-row">
             <div class="pf-field" style="flex:1;"><label>Poznámka</label><input id="pf-note" placeholder="Volitelné (zákazník, objednávka, důvod…)"></div>
-            <div class="pf-field" style="flex:0 0 auto;align-self:flex-end;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="pf-assign" checked style="accent-color:#14b8a6;"> přiřadit lidi</label>
+            <div class="pf-field" style="flex:0 0 auto;align-self:flex-end;display:flex;gap:14px;align-items:center;flex-wrap:nowrap;white-space:nowrap;">
+              <input type="checkbox" id="pf-assign" checked style="display:none;">
               <label title="Testovací dávka: číslo TEST-…, všechny navázané doklady a skladové pohyby se označí; smazáním dávky se smaže vše navázané" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#c084fc;cursor:pointer;"><input type="checkbox" id="pf-test" style="accent-color:#a855f7;"> 🧪 testovací výrobek</label>
               <label title="Plánovat bez ohledu na sklad: nehlídá dostupnost materiálu ani dodací lhůty (netestuje se nákup a naskladnění/vyskladnění)" style="display:flex;align-items:center;gap:6px;font-size:12px;color:#f59e0b;cursor:pointer;"><input type="checkbox" id="pf-ignore-stock" onchange="pfSimulate()" style="accent-color:#f59e0b;"> ⏩ ignorovat sklad</label>
               <button class="btn btn-primary" id="pf-go" onclick="pfPlan()" style="background:#14b8a6;border-color:#14b8a6;color:#042f2e;font-weight:800;">▶ Naplánovat do výroby</button>
