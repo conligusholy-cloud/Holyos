@@ -41,7 +41,10 @@ async function computeMaterialTasks(opts = {}) {
   for (const s of stock) { if (!stockByMat.has(s.material_id)) stockByMat.set(s.material_id, []); stockByMat.get(s.material_id).push(s); }
 
   const tasks = [];
-  const dueOf = (d) => new Date(new Date(d).getTime() - leadMin * 60000);
+  // Termín přípravy = začátek operace minus rezerva v PRACOVNÍM čase (operace v 5:30 → připravit předchozí pracovní den do 13:00)
+  const { loadShiftConfig, subtractShift } = require('./shift-calendar');
+  const cfg = await loadShiftConfig();
+  const dueOf = (d) => subtractShift(new Date(d), leadMin, cfg);
 
   // 1) materiál na pracoviště
   for (const o of ops) {

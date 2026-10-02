@@ -217,8 +217,58 @@ function consumeShift(start, minutes, cfg) {
   };
 }
 
+/** Nejbližší konec pracovního času ≤ `from` (pro počítání zpět): konec směny / konec přestávky / předchozí den. */
+function prevShiftEnd(from, cfg) {
+  if (!cfg.enabled) return new Date(from);
+  if (isInShift(from, cfg)) return new Date(from);
+  const s = parseTime(cfg.start), e = parseTime(cfg.end);
+  let cursor = new Date(from);
+  for (let i = 0; i < 14; i++) {
+    if (cfg.workDays.includes(isoDow(cursor))) {
+      const shiftStart = withTimeOfDay(cursor, s.h, s.m), shiftEnd = withTimeOfDay(cursor, e.h, e.m);
+      if (cursor > shiftEnd) return shiftEnd;
+      if (cursor >= shiftStart && cursor <= shiftEnd) {
+        // v přestávce → začátek přestávky
+        for (const br of cfg.breaks || []) { const bs = withTimeOfDay(cursor, br.start.h, br.start.m), be = withTimeOfDay(cursor, br.end.h, br.end.m); if (cursor >= bs && cursor < be) return bs; }
+        return cursor;
+      }
+      // před začátkem směny → předchozí pracovní den (konec směny)
+    }
+    cursor = addDays(cursor, -1);
+    cursor.setHours(23, 59, 59, 0);
+  }
+  return new Date(from);
+}
+/** Začátek aktuálního pracovního úseku ≤ date (začátek směny nebo konec předchozí přestávky). */
+function currentSegmentStart(date, cfg) {
+  const s = parseTime(cfg.start);
+  let segStart = withTimeOfDay(date, s.h, s.m);
+  for (const br of cfg.breaks || []) { const be = withTimeOfDay(date, br.end.h, br.end.m); if (be <= date && be > segStart) segStart = be; }
+  return segStart;
+}
+/**
+ * Odečte `minutes` pracovních minut od `end` směrem ZPĚT (přes přestávky, večery, víkendy).
+ * Použití: do kdy musí být materiál připravený, aby operace mohla začít v `end`.
+ */
+function subtractShift(end, minutes, cfg) {
+  if (minutes <= 0) return new Date(end);
+  if (!cfg.enabled) return new Date(end.getTime() - minutes * 60_000);
+  let cursor = prevShiftEnd(end, cfg);
+  let remaining = minutes;
+  for (let i = 0; i < 2000; i++) {
+    const segStart = currentSegmentStart(cursor, cfg);
+    const availableMin = (cursor.getTime() - segStart.getTime()) / 60_000;
+    if (remaining <= availableMin) return new Date(cursor.getTime() - remaining * 60_000);
+    remaining -= availableMin;
+    cursor = prevShiftEnd(new Date(segStart.getTime() - 1), cfg);
+  }
+  return new Date(cursor.getTime() - remaining * 60_000);
+}
+
 module.exports = {
   getShiftConfig,
+  subtractShift,
+  prevShiftEnd,
   loadShiftConfig,
   normalizeConfig,
   DEFAULT_SHIFT,

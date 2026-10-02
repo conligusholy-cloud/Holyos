@@ -356,6 +356,11 @@ async function scheduleBatch(batchId, opts = {}) {
   }
 
   const anchor = batch.planned_start ? new Date(batch.planned_start) : new Date();
+  // Příprava materiálu: od TEĎ musí skladník stihnout rezervu (pracovních minut) → dřív nemůže žádná operace začít.
+  // (Když je dávka naplánovaná do budoucna, nic to neposune.)
+  let materialLeadMin = 60;
+  try { const { getSetting } = require('../settings'); const v = await getSetting('production.material_lead_min', { type: 'number', defaultValue: 60 }); if (Number.isFinite(Number(v))) materialLeadMin = Number(v); } catch (e) { /* default */ }
+  const prepReadyAt = consumeShift(new Date(), materialLeadMin, cfg).end;
   let prevEnd = new Date(anchor);
   const updates = [];
   const opWarnings = [];
@@ -386,6 +391,8 @@ async function scheduleBatch(batchId, opts = {}) {
     } else {
       candidateStart = new Date(Math.max(prevEnd.getTime(), anchor.getTime()));
     }
+
+    if (candidateStart < prepReadyAt) { warnings.push('material_prep_lead'); candidateStart = new Date(prepReadyAt); }
 
     const blockCheck = pushPastSlotBlock(candidateStart, slotBlocks);
     if (blockCheck.blocked) {
