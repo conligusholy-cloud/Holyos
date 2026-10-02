@@ -826,6 +826,16 @@
         </div>
       </div>
 
+      <div class="form-group" style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 12px;">
+        <label style="margin:0 0 6px;">👥 Kdo smí operaci dělat <span style="font-weight:400;color:var(--text2);">(plánovač vybírá z těchto lidí — pořadí = priorita)</span></label>
+        <div id="op-people-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+        <div style="display:flex;gap:8px;">
+          <select id="op-people-select" style="flex:1;"><option value="">— vybrat člověka —</option></select>
+          <button type="button" class="btn" onclick="addAllowedPerson()">+ Přidat</button>
+        </div>
+        <div id="op-people-warn" style="display:none;font-size:11px;color:#ef4444;margin-top:6px;">⚠️ Bez lidí nejde operaci naplánovat — vyber alespoň jednoho.</div>
+      </div>
+
       <div class="form-group">
         <label>Popis</label>
         <textarea id="op-desc" placeholder="Volitelný popis operace..."></textarea>
@@ -870,6 +880,8 @@
     let product = null;
     let workstations = [];
     let workstationGroups = [];
+    let allPeople = []; // lidé pro „kdo smí operaci dělat"
+    let modalAllowed = []; // vybraní lidé v otevřeném dialogu operace (ids)
     let allMaterials = [];
     let allProductsList = []; // pro mapování material → product
     let currentTab = 'postup';
@@ -918,6 +930,7 @@
         product = prod;
         workstations = ws;
         workstationGroups = wsGroups || [];
+        try { const pr = await api('/api/hr/people?active=true'); allPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs')); } catch (e) { allPeople = []; }
         allMaterials = mats;
         allProductsList = prods;
 
@@ -1046,6 +1059,7 @@
         summaryCard('Příprava', totalPrep, 'min') +
         summaryCard('Max pracovníků', maxWorkers, '') +
         summaryCard('Materiálů', totalMats, '') +
+        (function () { const miss = realOps.filter(o => !(o.allowed_people || []).length).length; return '<div class="wf-summary-card" style="' + (miss ? 'border-color:rgba(239,68,68,0.6);' : 'border-color:rgba(34,197,94,0.5);') + '" title="Operace bez definovaných lidí (kdo je smí dělat)"><div class="label">👥 Lidé u operací</div><div class="value" style="color:' + (miss ? '#ef4444' : '#22c55e') + ';">' + (miss ? miss + '<span class="unit">bez lidí ⚠️</span>' : '✓<span class="unit">všechny</span>') + '</div></div>'; })() +
         '<div class="wf-summary-card takt-card">' +
           '<div class="label">Linkový takt</div>' +
           '<div class="value"><input type="number" id="takt-input" min="1" value="' + taktVal + '" placeholder="—" onchange="saveTakt(this.value)" title="Maximální čas na operaci v minutách"><span class="unit">min</span></div>' +
@@ -1364,6 +1378,9 @@
             (op.preparation_time ? '<span>&#128260; Příprava: ' + op.preparation_time + ' min</span>' : '') +
             '<span>&#128101; ' + workers + (workers > 1 ? ' prac.' : ' os.') + '</span>' +
             (takt ? taktBadge(realMin, takt) : '') +
+            ((op.allowed_people || []).length
+              ? '<span title="Kdo smí operaci dělat (pořadí = priorita)" style="display:inline-flex;gap:4px;flex-wrap:wrap;align-items:center;">👤 ' + op.allowed_people.slice().sort((a, b) => a.priority - b.priority).map(a => '<span style="background:rgba(34,197,94,0.14);border:1px solid rgba(34,197,94,0.35);border-radius:10px;padding:0 7px;font-size:11px;">' + esc(((a.person || {}).first_name || '') + ' ' + ((a.person || {}).last_name || '')) + '</span>').join('') + '</span>'
+              : (isFyImport ? '' : '<span onclick="event.stopPropagation();openEditOp(' + op.id + ')" title="Operace nemá definované lidi — plánovač ji neumí přiřadit. Klikni a doplň." style="cursor:pointer;color:#fca5a5;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.45);border-radius:10px;padding:0 8px;font-size:11px;font-weight:700;">⚠️ chybí lidé</span>')) +
           '</div>';
 
       if (op.description) {
@@ -1697,6 +1714,7 @@
       const nextStep = (product.operations || []).length + 1;
       document.getElementById('op-step').value = nextStep;
       populateParallel(false, null, null);
+      modalAllowed = []; renderAllowedChips();
       document.getElementById('op-phase').value = '';
       document.getElementById('op-duration').value = '';
       document.getElementById('op-duration-unit').value = 'MINUTE';
@@ -1719,6 +1737,7 @@
       document.getElementById('op-name').value = op.name;
       document.getElementById('op-step').value = op.step_number;
       populateParallel(!!op.is_parallel, op.parallel_from, op.parallel_to, op.id);
+      modalAllowed = (op.allowed_people || []).slice().sort((a, b) => a.priority - b.priority).map(a => a.person_id); renderAllowedChips();
       document.getElementById('op-phase').value = op.phase || '';
       document.getElementById('op-duration').value = op.duration || '';
       document.getElementById('op-duration-unit').value = op.duration_unit || 'MINUTE';
@@ -1763,6 +1782,23 @@
       if (on) { gsel.value = ''; wsel.value = ''; gsel.disabled = true; wsel.disabled = true; gsel.style.opacity = '0.45'; wsel.style.opacity = '0.45'; gsel.title = wsel.title = 'Paralelní operace má plovoucí pracoviště — přebírá ho z hlavní linie'; }
       else { gsel.disabled = false; gsel.style.opacity = ''; gsel.title = ''; wsel.title = ''; if (typeof handleWsGroupChange === 'function') handleWsGroupChange(); }
     }
+
+    // Kdo smí operaci dělat — chipy v dialogu
+    function renderAllowedChips() {
+      const box = document.getElementById('op-people-chips'); const sel = document.getElementById('op-people-select');
+      if (!box || !sel) return;
+      const byId = new Map(allPeople.map(p => [p.id, p]));
+      box.innerHTML = modalAllowed.map((id, i) => { const p = byId.get(id); const nm = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id);
+        return '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:14px;padding:3px 8px 3px 10px;font-size:12px;">' + (i + 1) + '. ' + esc(nm) +
+          (i > 0 ? '<button type="button" onclick="moveAllowedPerson(' + id + ',-1)" title="Vyšší priorita" style="background:none;border:0;color:var(--text2);cursor:pointer;padding:0;">▲</button>' : '') +
+          '<button type="button" onclick="removeAllowedPerson(' + id + ')" title="Odebrat" style="background:none;border:0;color:#ef4444;cursor:pointer;padding:0;font-weight:700;">×</button></span>'; }).join('')
+        || '<span style="font-size:12px;color:var(--text2);">Zatím nikdo.</span>';
+      sel.innerHTML = '<option value="">— vybrat člověka —</option>' + allPeople.filter(p => !modalAllowed.includes(p.id)).map(p => '<option value="' + p.id + '">' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' · ' + esc(p.role) : '') + '</option>').join('');
+      const w = document.getElementById('op-people-warn'); if (w && modalAllowed.length) w.style.display = 'none';
+    }
+    function addAllowedPerson() { const sel = document.getElementById('op-people-select'); const id = parseInt(sel.value); if (!id) return; if (!modalAllowed.includes(id)) modalAllowed.push(id); renderAllowedChips(); }
+    function removeAllowedPerson(id) { modalAllowed = modalAllowed.filter(x => x !== id); renderAllowedChips(); }
+    function moveAllowedPerson(id, dir) { const i = modalAllowed.indexOf(id); const j = i + dir; if (i < 0 || j < 0 || j >= modalAllowed.length) return; [modalAllowed[i], modalAllowed[j]] = [modalAllowed[j], modalAllowed[i]]; renderAllowedChips(); }
 
     function populateWsGroupSelect(selectedId) {
       const sel = document.getElementById('op-wsgroup');
@@ -1997,6 +2033,7 @@
       const opId = document.getElementById('op-id').value;
       const name = document.getElementById('op-name').value.trim();
       if (!name) return toast('Vyplňte název operace', true);
+      if (!modalAllowed.length) { document.getElementById('op-people-warn').style.display = ''; return toast('Vyber, kdo smí operaci dělat (alespoň jednoho člověka)', true); }
 
       // Sesbírej materiály z modálu — s product_id pokud existuje.
       //
@@ -2087,6 +2124,7 @@
         product_id: product.id,
         name,
         step_number: parseInt(document.getElementById('op-step').value) || 1,
+        allowed_person_ids: modalAllowed.slice(),
         is_parallel: !!document.getElementById('op-parallel').checked,
         ...(document.getElementById('op-parallel').checked ? { workstation_id: null, workstation_group_id: null } : {}),
         parallel_from: parseInt(document.getElementById('op-parallel-from').value) || null,

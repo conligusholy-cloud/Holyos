@@ -184,6 +184,7 @@ model Person {
   doc_notifications           DocumentNotification[]
   orders_created              Order[]                @relation("OrderCreatedBy")
   sales_orders_owned Order[] @relation("OrderSalesPerson")
+  allowed_operations OperationAllowedPerson[] @relation("OperationAllowedPerson")
   orders_approved             Order[]                @relation("OrderApprovedBy")
   inventory_movements         InventoryMovement[]    @relation("MovementCreatedBy")
   shipping_requests           ShippingRequest[]      @relation("ShippingRequestAssignee")
@@ -1561,6 +1562,8 @@ model ProductOperation {
 
   // Plánovač — požadované kompetence
   required_competencies OperationRequiredCompetency[]
+  // Plánovač — kdo smí operaci dělat (explicitní seznam lidí = varianty pro plánování)
+  allowed_people        OperationAllowedPerson[]
   // Plánovač — BOM snapshot itemy, kde je tato operace zdrojem spotřeby materiálu
   bom_snapshot_items    BomSnapshotItem[]             @relation("BomSnapshotItemOperation")
   // Plánovač — instance operace pro výrobní dávky
@@ -3829,6 +3832,23 @@ model WorkerCompetency {
 // UNIQUE(operation, competency) — operace má každou kompetenci max. jednou.
 // Plánovač používá tuto tabulku pro filtrování úkolů v kiosku — pracovník vidí
 // operaci jen pokud má všechny required_competencies na úrovni >= min_level.
+// Kdo smí operaci dělat — explicitní seznam lidí (plánovač vybírá z těchto variant; priority = pořadí preference)
+model OperationAllowedPerson {
+  id           Int @id @default(autoincrement())
+  operation_id Int
+  person_id    Int
+  priority     Int @default(0)
+
+  created_at DateTime @default(now())
+
+  operation ProductOperation @relation(fields: [operation_id], references: [id], onDelete: Cascade)
+  person    Person           @relation("OperationAllowedPerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([operation_id, person_id])
+  @@index([person_id])
+  @@map("operation_allowed_people")
+}
+
 model OperationRequiredCompetency {
   id            Int @id @default(autoincrement())
   operation_id  Int

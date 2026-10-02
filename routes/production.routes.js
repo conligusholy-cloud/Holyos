@@ -19,6 +19,7 @@ const PRODUCT_DEEP_INCLUDE = {
     include: {
       workstation: true,
       workstation_group: { select: { id: true, name: true, color: true } },
+      allowed_people: { select: { id: true, person_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true, photo_url: true } } }, orderBy: { priority: 'asc' } },
       materials: {
         include: {
           material: true,
@@ -331,7 +332,7 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
     const srcId = parseInt(req.params.id, 10);
     const src = await prisma.product.findUnique({
       where: { id: srcId },
-      include: { operations: { include: { materials: true, required_competencies: true }, orderBy: { step_number: 'asc' } } },
+      include: { operations: { include: { materials: true, required_competencies: true, allowed_people: true }, orderBy: { step_number: 'asc' } } },
     });
     if (!src) return res.status(404).json({ error: 'Výrobek nenalezen' });
     const b = req.body || {};
@@ -364,6 +365,9 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
         }
         for (const c of op.required_competencies || []) {
           await tx.operationRequiredCompetency.create({ data: { operation_id: nop.id, competency_id: c.competency_id, min_level: c.min_level } });
+        }
+        for (const ap of op.allowed_people || []) {
+          await tx.operationAllowedPerson.create({ data: { operation_id: nop.id, person_id: ap.person_id, priority: ap.priority } });
         }
       }
       return p;
@@ -1273,7 +1277,7 @@ router.get('/operations', async (req, res, next) => {
 // POST /api/production/operations
 router.post('/operations', async (req, res, next) => {
   try {
-    const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to } = req.body;
+    const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to, allowed_person_ids } = req.body;
     const op = await prisma.$transaction(async (tx) => {
       const created = await tx.productOperation.create({
         data: {
@@ -1290,6 +1294,10 @@ router.post('/operations', async (req, res, next) => {
           bom_count,
         },
       });
+      // Kdo smí operaci dělat
+      if (Array.isArray(allowed_person_ids)) {
+        await tx.operationAllowedPerson.createMany({ data: allowed_person_ids.map((pid, i) => ({ operation_id: created.id, person_id: parseInt(pid, 10), priority: i })).filter(x => Number.isFinite(x.person_id)), skipDuplicates: true });
+      }
       // Hromadně vlož materiály (pokud přišly) — s automatickým napojením na Product
       if (Array.isArray(materials) && materials.length > 0) {
         const matIds = materials.map(m => m.material_id).filter(Boolean);
@@ -1311,7 +1319,7 @@ router.post('/operations', async (req, res, next) => {
       }
       return tx.productOperation.findUnique({
         where: { id: created.id },
-        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
+        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, allowed_people: { select: { id: true, person_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true, photo_url: true } } }, orderBy: { priority: 'asc' } }, materials: { include: { material: true } } },
       });
     });
     res.status(201).json(op);
@@ -1321,7 +1329,7 @@ router.post('/operations', async (req, res, next) => {
 // PUT /api/production/operations/:id
 router.put('/operations/:id', async (req, res, next) => {
   try {
-    const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to } = req.body;
+    const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to, allowed_person_ids } = req.body;
     const opId = parseInt(req.params.id);
     const op = await prisma.$transaction(async (tx) => {
       await tx.productOperation.update({
@@ -1330,6 +1338,11 @@ router.put('/operations/:id', async (req, res, next) => {
           ...(workstation_group_id !== undefined ? { workstation_group_id: workstation_group_id || null } : {}),
           ...(is_parallel !== undefined ? { is_parallel: !!is_parallel, parallel_from: is_parallel && parallel_from ? parseInt(parallel_from, 10) : null, parallel_to: is_parallel && parallel_to ? parseInt(parallel_to, 10) : null } : {}) },
       });
+      // Kdo smí operaci dělat — nahraď seznam (pokud přišel)
+      if (Array.isArray(allowed_person_ids)) {
+        await tx.operationAllowedPerson.deleteMany({ where: { operation_id: opId } });
+        await tx.operationAllowedPerson.createMany({ data: allowed_person_ids.map((pid, i) => ({ operation_id: opId, person_id: parseInt(pid, 10), priority: i })).filter(x => Number.isFinite(x.person_id)), skipDuplicates: true });
+      }
       // Nahraď materiály — smaž staré + vlož nové v jedné transakci
       if (Array.isArray(materials)) {
         await tx.operationMaterial.deleteMany({ where: { operation_id: opId } });
@@ -1354,7 +1367,7 @@ router.put('/operations/:id', async (req, res, next) => {
       }
       return tx.productOperation.findUnique({
         where: { id: opId },
-        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
+        include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, allowed_people: { select: { id: true, person_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true, photo_url: true } } }, orderBy: { priority: 'asc' } }, materials: { include: { material: true } } },
       });
     });
     res.json(op);
@@ -1686,7 +1699,7 @@ router.put('/products/:id/reorder-operations', async (req, res, next) => {
       where: { id: parseInt(req.params.id) },
       include: {
         operations: {
-          include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, materials: { include: { material: true } } },
+          include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, allowed_people: { select: { id: true, person_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true, photo_url: true } } }, orderBy: { priority: 'asc' } }, materials: { include: { material: true } } },
           orderBy: { step_number: 'asc' },
         },
       },

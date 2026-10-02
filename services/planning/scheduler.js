@@ -111,6 +111,16 @@ async function loadQueueByWorkstation(tx, batchId, workstationIds, exclusive) {
 function pickAssignee(op, ctx) {
   const required = ctx.requiredByOp.get(op.operation_id) || [];
   let candidates = null;
+  // 0. Explicitní seznam „kdo smí operaci dělat" má přednost — vybírá se z těchto variant (podle priority,
+  //    přednost má ten, kdo je kmenový na daném pracovišti).
+  const allowed = ctx.allowedByOp.get(op.operation_id) || [];
+  if (allowed.length > 0) {
+    const wsW = op.workstation_id ? (ctx.workersByWs.get(op.workstation_id) || []) : [];
+    const prim = new Set(wsW.filter(w => w.is_primary).map(w => w.person_id));
+    const onWs = new Set(wsW.map(w => w.person_id));
+    const sorted = allowed.slice().sort((a, b) => (prim.has(b.person.id) - prim.has(a.person.id)) || (onWs.has(b.person.id) - onWs.has(a.person.id)) || (a.priority - b.priority));
+    return sorted[0].person;
+  }
   if (required.length > 0) {
     // Najdi pracovníky, kteří mají VŠECHNY required kompetence s min_level
     const setsPerComp = required.map(r => {
@@ -158,6 +168,16 @@ async function loadAssignmentContext(tx, operationIds, workstationIds) {
   const requiredByOp = new Map();
   const personsByComp = new Map();
   const workersByWs = new Map();
+  const allowedByOp = new Map();
+
+  if (operationIds.length > 0) {
+    const allowed = await tx.operationAllowedPerson.findMany({
+      where: { operation_id: { in: operationIds }, person: { active: true } },
+      select: { operation_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true } } },
+      orderBy: { priority: 'asc' },
+    });
+    for (const a of allowed) { if (!allowedByOp.has(a.operation_id)) allowedByOp.set(a.operation_id, []); allowedByOp.get(a.operation_id).push(a); }
+  }
 
   if (operationIds.length > 0) {
     const reqs = await tx.operationRequiredCompetency.findMany({
@@ -209,7 +229,7 @@ async function loadAssignmentContext(tx, operationIds, workstationIds) {
     }
   }
 
-  return { requiredByOp, personsByComp, workersByWs };
+  return { requiredByOp, personsByComp, workersByWs, allowedByOp };
 }
 
 function pushPastSlotBlock(date, blocks) {
