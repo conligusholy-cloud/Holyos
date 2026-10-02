@@ -174,9 +174,16 @@
         <div class="pv2-hint">Zadej výrobek do výroby: vybereš výrobek, počet kusů a kdy začít. HolyOS vytvoří výrobní dávku, operace podle pracovního postupu a rozplánuje je v čase na lidi a pracoviště.</div>
         <div class="pv2-planform">
           <div class="pf-row">
+            <div class="pf-field" style="flex:0 0 auto;">
+              <label>Co vyrábět</label>
+              <div style="display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                <button type="button" class="pf-type on" data-t="product" onclick="pfType('product')">🔧 Výrobky</button>
+                <button type="button" class="pf-type" data-t="semi-product" onclick="pfType('semi-product')">⚙️ Polotovary</button>
+              </div>
+            </div>
             <div class="pf-field" style="flex:2;position:relative;">
-              <label>Výrobek *</label>
-              <input id="pf-product" placeholder="Hledat aktivní výrobek (název / kód)…" autocomplete="off" oninput="pfSearch(this.value)" onfocus="pfSearch(this.value)">
+              <label>Výrobek / polotovar * <span style="text-transform:none;letter-spacing:0;">(jen aktivní, s pracovním postupem)</span></label>
+              <input id="pf-product" placeholder="Hledat podle názvu / kódu… (klikni pro seznam)" autocomplete="off" oninput="pfSearch(this.value)" onfocus="pfSearch(this.value)">
               <div id="pf-sug" class="pf-sug" style="display:none;"></div>
               <div id="pf-product-info" class="pf-info"></div>
             </div>
@@ -230,6 +237,9 @@
       .pf-sug div { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--border); }
       .pf-sug div:hover { background:var(--surface2); }
       .pf-info { font-size:12px; color:var(--text2); min-height:16px; }
+      .pf-type { background:transparent; border:0; color:var(--text2); padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+      .pf-type + .pf-type { border-left:1px solid var(--border); }
+      .pf-type.on { background:#14b8a6; color:#042f2e; }
       .pf-result { margin-top:4px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.6; }
       .pf-result.ok { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.45); }
       .pf-result.err { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.45); }
@@ -1622,7 +1632,8 @@
   async function pv2Fetch(url) { var r = await fetch(url, { credentials: 'include' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
 
   // 0) Naplánovat práci — výrobek do výroby
-  var pfProducts = null, pfSelected = null;
+  var pfProducts = null, pfSelected = null, pfTypeSel = 'product';
+  window.pfType = function (t) { pfTypeSel = t; document.querySelectorAll('.pf-type').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-t') === t); }); pfSelected = null; document.getElementById('pf-product').value = ''; document.getElementById('pf-product-info').innerHTML = ''; pfSearch(''); document.getElementById('pf-product').focus(); };
   async function pfEnsureProducts() {
     if (pfProducts) return pfProducts;
     var all = await pv2Fetch('/api/production/products');
@@ -1632,8 +1643,12 @@
   window.pfSearch = async function (q) {
     var box = document.getElementById('pf-sug'); q = (q || '').toLowerCase().trim();
     var list = await pfEnsureProducts();
-    var hits = list.filter(function (p) { return !q || ((p.name || '') + ' ' + (p.code || '')).toLowerCase().indexOf(q) !== -1; }).slice(0, 12);
-    box.innerHTML = hits.length ? hits.map(function (p) { var ops = (p.operations || []).length; return '<div onclick="pfPick(' + p.id + ')"><b>' + pv2Esc(p.code) + '</b> · ' + pv2Esc(p.name) + ' <span style="color:' + (ops ? 'var(--text2)' : '#ef4444') + ';font-size:11px;">· ' + (ops ? ops + ' operací' : 'bez postupu!') + (p.type === 'semi-product' ? ' · polotovar' : '') + '</span></div>'; }).join('') : '<div style="color:var(--text2);">Nic nenalezeno (hledají se jen aktivní výrobky)</div>';
+    var typed = list.filter(function (p) { return (p.type || 'product') === pfTypeSel; });
+    var hits = typed.filter(function (p) { return !q || ((p.name || '') + ' ' + (p.code || '')).toLowerCase().indexOf(q) !== -1; })
+      .sort(function (a, b) { return ((b.operations || []).length ? 1 : 0) - ((a.operations || []).length ? 1 : 0) || (a.name || '').localeCompare(b.name || '', 'cs'); }).slice(0, 20);
+    var label = pfTypeSel === 'semi-product' ? 'polotovar' : 'výrobek';
+    box.innerHTML = (hits.length ? hits.map(function (p) { var ops = (p.operations || []).length; return '<div onclick="pfPick(' + p.id + ')"' + (ops ? '' : ' style="opacity:.55"') + '><b>' + pv2Esc(p.code) + '</b> · ' + pv2Esc(p.name) + ' <span style="color:' + (ops ? '#22c55e' : '#ef4444') + ';font-size:11px;">· ' + (ops ? ops + ' operací' : 'bez postupu') + '</span></div>'; }).join('') : '<div style="color:var(--text2);">Žádný aktivní ' + label + ' neodpovídá.</div>')
+      + '<div style="padding:6px 12px;font-size:11px;color:var(--text2);border-top:1px solid var(--border);">' + typed.length + ' aktivních ' + (pfTypeSel === 'semi-product' ? 'polotovarů' : 'výrobků') + ' · zobrazeno ' + hits.length + '</div>';
     box.style.display = '';
   };
   window.pfPick = function (id) {
