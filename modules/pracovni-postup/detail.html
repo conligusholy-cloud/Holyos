@@ -829,10 +829,12 @@
       <div class="form-group" style="background:rgba(34,197,94,0.06);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 12px;">
         <label style="margin:0 0 6px;">👥 Kdo smí operaci dělat <span style="font-weight:400;color:var(--text2);">(plánovač vybírá z těchto lidí — pořadí = priorita)</span></label>
         <div id="op-people-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-        <div style="display:flex;gap:8px;">
-          <select id="op-people-select" style="flex:1;"><option value="">— vybrat člověka —</option></select>
-          <button type="button" class="btn" onclick="addAllowedPerson()">+ Přidat</button>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
+          <input id="op-people-search" placeholder="Hledat člověka…" oninput="renderAllowedChips()" style="flex:1;">
+          <button type="button" class="btn" onclick="addAllowedPeople('checked')">+ Přidat vybrané</button>
+          <button type="button" class="btn" onclick="addAllowedPeople('all')" title="Přidá všechny zobrazené (dle hledání a nastavení výrobních pracovníků)">+ Přidat všechny</button>
         </div>
+        <div id="op-people-list" style="display:grid;grid-template-columns:1fr 1fr;gap:2px 12px;max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg);"></div>
         <div id="op-people-warn" style="display:none;font-size:11px;color:#ef4444;margin-top:6px;">⚠️ Bez lidí nejde operaci naplánovat — vyber alespoň jednoho.</div>
       </div>
 
@@ -1792,7 +1794,7 @@
 
     // Kdo smí operaci dělat — chipy v dialogu
     function renderAllowedChips() {
-      const box = document.getElementById('op-people-chips'); const sel = document.getElementById('op-people-select');
+      const box = document.getElementById('op-people-chips'); const sel = document.getElementById('op-people-list');
       if (!box || !sel) return;
       const byId = new Map((allPeopleAll.length ? allPeopleAll : allPeople).map(p => [p.id, p]));
       box.innerHTML = modalAllowed.map((id, i) => { const p = byId.get(id); const nm = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id);
@@ -1800,10 +1802,21 @@
           (i > 0 ? '<button type="button" onclick="moveAllowedPerson(' + id + ',-1)" title="Vyšší priorita" style="background:none;border:0;color:var(--text2);cursor:pointer;padding:0;">▲</button>' : '') +
           '<button type="button" onclick="removeAllowedPerson(' + id + ')" title="Odebrat" style="background:none;border:0;color:#ef4444;cursor:pointer;padding:0;font-weight:700;">×</button></span>'; }).join('')
         || '<span style="font-size:12px;color:var(--text2);">Zatím nikdo.</span>';
-      sel.innerHTML = '<option value="">— vybrat člověka —</option>' + allPeople.filter(p => !modalAllowed.includes(p.id)).map(p => '<option value="' + p.id + '">' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' · ' + esc(p.role) : '') + '</option>').join('');
+      // Seznam se zaškrtávátky (hromadný výběr) — jen lidé, kteří ještě nejsou přidaní
+      const q = ((document.getElementById('op-people-search') || {}).value || '').toLowerCase();
+      const avail = allPeople.filter(p => !modalAllowed.includes(p.id) && (!q || (((p.first_name || '') + ' ' + (p.last_name || '') + ' ' + (typeof p.role === 'string' ? p.role : '')).toLowerCase().includes(q))));
+      sel.innerHTML = avail.length ? avail.map(p => '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="op-people-cb" value="' + p.id + '" style="width:auto;accent-color:#22c55e;"> ' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' <span style="color:var(--text2);font-size:11px;">· ' + esc(p.role) + '</span>' : '') + '</label>').join('')
+        : '<span style="font-size:12px;color:var(--text2);grid-column:1 / -1;">' + (allPeople.length ? 'Všichni dostupní už jsou přidaní.' : 'Žádní výrobní pracovníci — nastav je v ⚙️ Nastavení výroby.') + '</span>';
       const w = document.getElementById('op-people-warn'); if (w && modalAllowed.length) w.style.display = 'none';
     }
-    function addAllowedPerson() { const sel = document.getElementById('op-people-select'); const id = parseInt(sel.value); if (!id) return; if (!modalAllowed.includes(id)) modalAllowed.push(id); renderAllowedChips(); }
+    // Hromadné přidání: 'checked' = zaškrtnutí, 'all' = všichni právě zobrazení
+    function addAllowedPeople(mode) {
+      const cbs = Array.from(document.querySelectorAll('#op-people-list .op-people-cb'));
+      const ids = cbs.filter(cb => mode === 'all' || cb.checked).map(cb => parseInt(cb.value)).filter(Boolean);
+      if (!ids.length) { toast(mode === 'all' ? 'Není koho přidat' : 'Nejdřív zaškrtni lidi v seznamu', true); return; }
+      ids.forEach(id => { if (!modalAllowed.includes(id)) modalAllowed.push(id); });
+      renderAllowedChips();
+    }
     function removeAllowedPerson(id) { modalAllowed = modalAllowed.filter(x => x !== id); renderAllowedChips(); }
     function moveAllowedPerson(id, dir) { const i = modalAllowed.indexOf(id); const j = i + dir; if (i < 0 || j < 0 || j >= modalAllowed.length) return; [modalAllowed[i], modalAllowed[j]] = [modalAllowed[j], modalAllowed[i]]; renderAllowedChips(); }
 
