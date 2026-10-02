@@ -215,6 +215,7 @@
     .op-node-plus { font-size:15px; color:#22c55e; border-color:rgba(34,197,94,0.6); }
     .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
     .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
+    @keyframes opPulse { 0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0.45); } }
     .start-box { margin:0 auto 2px; width:max-content; display:flex; align-items:center; gap:10px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.55); color:#86efac; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:800; letter-spacing:.4px; }
     .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
@@ -841,7 +842,7 @@
         <div id="op-people-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
           <input id="op-people-search" placeholder="Hledat člověka…" oninput="renderAllowedChips()" style="flex:1;">
-          <button type="button" class="btn" onclick="addAllowedPeople('checked')">+ Přidat vybrané</button>
+          <button type="button" class="btn" id="op-people-add" onclick="addAllowedPeople('checked')" style="background:#22c55e;color:#052e13;border-color:#22c55e;font-weight:800;box-shadow:0 0 0 3px rgba(34,197,94,0.25);">✔ Přidat vybrané <span id="op-people-add-n" style="background:rgba(0,0,0,0.2);border-radius:10px;padding:0 7px;margin-left:4px;display:none;">0</span></button>
           <button type="button" class="btn" onclick="addAllowedPeople('all')" title="Přidá všechny zobrazené (dle hledání a nastavení výrobních pracovníků)">+ Přidat všechny</button>
         </div>
         <div id="op-people-list" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:2px 12px;max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg);"></div>
@@ -1902,9 +1903,16 @@
       // Seznam se zaškrtávátky (hromadný výběr) — jen lidé, kteří ještě nejsou přidaní
       const q = ((document.getElementById('op-people-search') || {}).value || '').toLowerCase();
       const avail = allPeople.filter(p => !modalAllowed.includes(p.id) && (!q || (((p.first_name || '') + ' ' + (p.last_name || '') + ' ' + (typeof p.role === 'string' ? p.role : '')).toLowerCase().includes(q))));
-      sel.innerHTML = avail.length ? avail.map(p => '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="op-people-cb" value="' + p.id + '" style="width:auto;accent-color:#22c55e;"> ' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' <span style="color:var(--text2);font-size:11px;">· ' + esc(p.role) + '</span>' : '') + '</label>').join('')
+      sel.innerHTML = avail.length ? avail.map(p => '<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="op-people-cb" value="' + p.id + '" onchange="updateAddPeopleBadge()" style="width:auto;accent-color:#22c55e;"> ' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' <span style="color:var(--text2);font-size:11px;">· ' + esc(p.role) + '</span>' : '') + '</label>').join('')
         : '<span style="font-size:12px;color:var(--text2);grid-column:1 / -1;">' + (allPeople.length ? 'Všichni dostupní už jsou přidaní.' : 'Žádní výrobní pracovníci — nastav je v ⚙️ Nastavení výroby.') + '</span>';
       const w = document.getElementById('op-people-warn'); if (w && modalAllowed.length) w.style.display = 'none';
+    }
+    // Počítadlo zaškrtnutých na zeleném tlačítku + pulz, ať je jasné, že je třeba kliknout „Přidat"
+    function updateAddPeopleBadge() {
+      const n = document.querySelectorAll('#op-people-list .op-people-cb:checked').length;
+      const b = document.getElementById('op-people-add-n'); const btn = document.getElementById('op-people-add');
+      if (b) { b.textContent = n; b.style.display = n ? '' : 'none'; }
+      if (btn) btn.style.animation = n ? 'opPulse 1s ease-in-out infinite' : '';
     }
     // Hromadné přidání: 'checked' = zaškrtnutí, 'all' = všichni právě zobrazení
     function addAllowedPeople(mode) {
