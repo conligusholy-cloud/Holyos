@@ -215,6 +215,8 @@
     .op-node-plus { font-size:15px; color:#22c55e; border-color:rgba(34,197,94,0.6); }
     .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
     .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
+    .start-box { margin:0 auto 2px; width:max-content; display:flex; align-items:center; gap:10px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.55); color:#86efac; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:800; letter-spacing:.4px; }
+    .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
     .outputs-head { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#86efac; margin-bottom:6px; }
@@ -1128,6 +1130,8 @@
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
+          // Start výroby — vizuální začátek hlavní linie (protějšek koncového uzlu „konec výroby")
+          html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span></div>';
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             html += renderOpCard(op, i);
