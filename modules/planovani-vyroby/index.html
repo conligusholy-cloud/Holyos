@@ -158,6 +158,7 @@
          (PV_LEGACY = true je zase ukáže), kód zůstává. Sem přijde nový návrh plánování. -->
     <div id="pv-new">
       <div class="pv2-tabs">
+        <button class="pv2-tab" data-sec="plan" onclick="pv2Show('plan')" style="border-color:rgba(20,184,166,0.5);">➕ Naplánovat práci</button>
         <button class="pv2-tab active" data-sec="work" onclick="pv2Show('work')">👤 Plán práce</button>
         <button class="pv2-tab" data-sec="batches" onclick="pv2Show('batches')">🗂️ Výrobní dávky</button>
         <button class="pv2-tab" data-sec="moves" onclick="pv2Show('moves')">📦 Příprava materiálu</button>
@@ -167,6 +168,33 @@
         <label class="pv2-range">Do <input type="date" id="pv2-to" onchange="pv2LoadWork()"></label>
         <button class="btn btn-secondary" onclick="pv2Reload()">🔄 Obnovit</button>
       </div>
+
+      <!-- 0) Naplánovat práci — zadání výrobku do výroby (vznikne dávka, operace z postupu, časový plán) -->
+      <section id="pv2-plan" class="pv2-sec" style="display:none;">
+        <div class="pv2-hint">Zadej výrobek do výroby: vybereš výrobek, počet kusů a kdy začít. HolyOS vytvoří výrobní dávku, operace podle pracovního postupu a rozplánuje je v čase na lidi a pracoviště.</div>
+        <div class="pv2-planform">
+          <div class="pf-row">
+            <div class="pf-field" style="flex:2;position:relative;">
+              <label>Výrobek *</label>
+              <input id="pf-product" placeholder="Hledat aktivní výrobek (název / kód)…" autocomplete="off" oninput="pfSearch(this.value)" onfocus="pfSearch(this.value)">
+              <div id="pf-sug" class="pf-sug" style="display:none;"></div>
+              <div id="pf-product-info" class="pf-info"></div>
+            </div>
+            <div class="pf-field" style="flex:0 0 120px;"><label>Počet kusů *</label><input id="pf-qty" type="number" min="1" value="1"></div>
+            <div class="pf-field" style="flex:0 0 220px;"><label>Začátek výroby *</label><input id="pf-start" type="datetime-local"></div>
+            <div class="pf-field" style="flex:0 0 130px;"><label>Priorita</label><select id="pf-priority"><option value="100">Normální</option><option value="50">Vysoká</option><option value="10">Urgentní</option><option value="200">Nízká</option></select></div>
+          </div>
+          <div class="pf-row">
+            <div class="pf-field" style="flex:1;"><label>Poznámka</label><input id="pf-note" placeholder="Volitelné (zákazník, objednávka, důvod…)"></div>
+            <div class="pf-field" style="flex:0 0 auto;align-self:flex-end;display:flex;gap:8px;">
+              <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer;"><input type="checkbox" id="pf-assign" checked style="accent-color:#14b8a6;"> přiřadit lidi</label>
+              <button class="btn btn-primary" id="pf-go" onclick="pfPlan()" style="background:#14b8a6;border-color:#14b8a6;color:#042f2e;font-weight:800;">▶ Naplánovat do výroby</button>
+            </div>
+          </div>
+          <div id="pf-result" class="pf-result" style="display:none;"></div>
+        </div>
+        <div id="pv2-recent" style="margin-top:18px;"></div>
+      </section>
 
       <!-- 1) Plán práce: člověk → časový harmonogram operací (datum/čas začátku a konce, navazuje dle postupu) -->
       <section id="pv2-work" class="pv2-sec">
@@ -193,6 +221,18 @@
       </section>
     </div>
     <style>
+      .pv2-planform { background:var(--surface); border:1px solid rgba(20,184,166,0.4); border-radius:12px; padding:16px 18px; }
+      .pf-row { display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+      .pf-field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+      .pf-field label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:.3px; }
+      .pf-field input, .pf-field select { background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text); padding:9px 11px; font-size:14px; }
+      .pf-sug { position:absolute; left:0; right:0; top:100%; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:8px; max-height:260px; overflow:auto; box-shadow:0 10px 30px rgba(0,0,0,.4); }
+      .pf-sug div { padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--border); }
+      .pf-sug div:hover { background:var(--surface2); }
+      .pf-info { font-size:12px; color:var(--text2); min-height:16px; }
+      .pf-result { margin-top:4px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.6; }
+      .pf-result.ok { background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.45); }
+      .pf-result.err { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.45); }
       .pv2-tabs { display:flex; align-items:center; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; flex-wrap:wrap; }
       .pv2-tab { background:none; border:1px solid transparent; border-radius:8px; color:var(--text2); font-weight:600; font-size:13px; padding:8px 14px; cursor:pointer; }
       .pv2-tab:hover { color:var(--text); background:var(--surface2); }
@@ -1576,9 +1616,75 @@
   };
   window.pv2Reload = function () { pv2Loaded = {}; var sec = document.querySelector('.pv2-tab.active').getAttribute('data-sec'); pv2Load(sec); };
   function pv2Load(sec) {
-    if (sec === 'work') pv2LoadWork(); else if (sec === 'batches') pv2LoadBatches(); else if (sec === 'moves') pv2LoadMoves(); else if (sec === 'purchase') pv2LoadPurchase();
+    if (sec === 'plan') { pv2Loaded.plan = true; var st = document.getElementById('pf-start'); if (st && !st.value) { var d = new Date(Date.now() + 3600000); d.setMinutes(0, 0, 0); st.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); } pv2LoadRecent(); }
+    else if (sec === 'work') pv2LoadWork(); else if (sec === 'batches') pv2LoadBatches(); else if (sec === 'moves') pv2LoadMoves(); else if (sec === 'purchase') pv2LoadPurchase();
   }
   async function pv2Fetch(url) { var r = await fetch(url, { credentials: 'include' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+
+  // 0) Naplánovat práci — výrobek do výroby
+  var pfProducts = null, pfSelected = null;
+  async function pfEnsureProducts() {
+    if (pfProducts) return pfProducts;
+    var all = await pv2Fetch('/api/production/products');
+    pfProducts = (Array.isArray(all) ? all : []).filter(function (p) { return p.active !== false; });
+    return pfProducts;
+  }
+  window.pfSearch = async function (q) {
+    var box = document.getElementById('pf-sug'); q = (q || '').toLowerCase().trim();
+    var list = await pfEnsureProducts();
+    var hits = list.filter(function (p) { return !q || ((p.name || '') + ' ' + (p.code || '')).toLowerCase().indexOf(q) !== -1; }).slice(0, 12);
+    box.innerHTML = hits.length ? hits.map(function (p) { var ops = (p.operations || []).length; return '<div onclick="pfPick(' + p.id + ')"><b>' + pv2Esc(p.code) + '</b> · ' + pv2Esc(p.name) + ' <span style="color:' + (ops ? 'var(--text2)' : '#ef4444') + ';font-size:11px;">· ' + (ops ? ops + ' operací' : 'bez postupu!') + (p.type === 'semi-product' ? ' · polotovar' : '') + '</span></div>'; }).join('') : '<div style="color:var(--text2);">Nic nenalezeno (hledají se jen aktivní výrobky)</div>';
+    box.style.display = '';
+  };
+  window.pfPick = function (id) {
+    pfSelected = (pfProducts || []).find(function (p) { return p.id === id; }) || null;
+    document.getElementById('pf-sug').style.display = 'none';
+    if (!pfSelected) return;
+    document.getElementById('pf-product').value = pfSelected.code + ' · ' + pfSelected.name;
+    var ops = (pfSelected.operations || []).length;
+    document.getElementById('pf-product-info').innerHTML = ops ? '✓ pracovní postup: ' + ops + ' operací' : '<span style="color:#ef4444;">⚠️ Výrobek nemá pracovní postup — nejdřív ho vytvoř v záložce Pracovní postup.</span>';
+  };
+  document.addEventListener('click', function (e) { if (!e.target.closest || !e.target.closest('#pf-product, #pf-sug')) { var b = document.getElementById('pf-sug'); if (b) b.style.display = 'none'; } });
+  window.pfPlan = async function () {
+    var res = document.getElementById('pf-result'); var btn = document.getElementById('pf-go');
+    var qty = parseInt(document.getElementById('pf-qty').value) || 0; var start = document.getElementById('pf-start').value;
+    if (!pfSelected) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Vyber výrobek ze seznamu.'; return; }
+    if (!(pfSelected.operations || []).length) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Výrobek nemá pracovní postup — bez operací nelze plánovat.'; return; }
+    if (qty < 1) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Zadej počet kusů.'; return; }
+    if (!start) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Zadej začátek výroby.'; return; }
+    btn.disabled = true; btn.textContent = 'Plánuji…'; res.style.display = ''; res.className = 'pf-result'; res.textContent = 'Vytvářím dávku…';
+    try {
+      var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, quantity: qty, planned_start: new Date(start).toISOString(), priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
+      var b = await r.json(); if (!r.ok) throw new Error(b.error || 'HTTP ' + r.status);
+      res.textContent = 'Dávka ' + b.batch_number + ' vytvořena, plánuji operace…';
+      var sr = await fetch('/api/planning/batches/' + b.id + '/schedule', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ syncVelin: false }) });
+      var sch = await sr.json(); if (!sr.ok) throw new Error(sch.error || 'Plánování selhalo');
+      var assignTxt = '';
+      if (document.getElementById('pf-assign').checked) {
+        try { var ar = await fetch('/api/planning/batches/' + b.id + '/auto-assign', { method: 'POST', headers: authHeaders(), credentials: 'include', body: '{}' }); var aj = await ar.json(); if (ar.ok) assignTxt = ' · lidé přiřazeni' + (aj.assigned != null ? ' (' + aj.assigned + ')' : ''); } catch (e) {}
+      }
+      var warn = (sch.op_warnings || []).flatMap(function (w) { return w.warnings || []; });
+      var noPeople = warn.filter(function (w) { return w === 'no_assignee_found'; }).length;
+      var noWs = warn.filter(function (w) { return w === 'no_workstation_assigned'; }).length;
+      res.className = 'pf-result ok';
+      res.innerHTML = '<b>✅ Naplánováno:</b> dávka <b>' + pv2Esc(b.batch_number) + '</b> · ' + pv2Esc(pfSelected.code) + ' ' + pv2Esc(pfSelected.name) + ' × ' + qty + ' ks<br>' +
+        '⏱ ' + pv2DT(sch.plan_start) + ' → ' + pv2DT(sch.plan_end) + ' · ' + sch.operations_scheduled + ' operací · práce ' + Math.round((sch.work_minutes || 0) / 60 * 10) / 10 + ' h' + (sch.wait_minutes ? ' · čekání ' + Math.round(sch.wait_minutes / 60 * 10) / 10 + ' h' : '') + assignTxt +
+        (noPeople ? '<br><span style="color:#f59e0b;">⚠️ ' + noPeople + ' operací bez člověka — doplň „kdo smí operaci dělat" v postupu nebo přiřaď ručně.</span>' : '') +
+        (noWs ? '<br><span style="color:#f59e0b;">⚠️ ' + noWs + ' operací bez pracoviště.</span>' : '') +
+        '<br><a href="#" onclick="pv2Loaded={};pv2Show(\'work\');return false;" style="color:#14b8a6;">→ Otevřít Plán práce</a> · <a href="#" onclick="pv2Loaded={};pv2Show(\'batches\');return false;" style="color:#14b8a6;">→ Výrobní dávky</a>';
+      pv2Loaded = {}; pv2LoadRecent();
+    } catch (e) { res.className = 'pf-result err'; res.textContent = 'Chyba: ' + e.message; }
+    finally { btn.disabled = false; btn.textContent = '▶ Naplánovat do výroby'; }
+  };
+  async function pv2LoadRecent() {
+    var box = document.getElementById('pv2-recent'); if (!box) return;
+    try {
+      var rows = await pv2Fetch('/api/planning/batches-plan');
+      rows = rows.slice().sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 8);
+      box.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Naposledy zadáno do výroby</div>' + (rows.length ? '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Stav</th></tr></thead><tbody>' +
+        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td><td>' + pv2DT(b.planned_start) + '</td><td>' + pv2DT(b.planned_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
+    } catch (e) { box.innerHTML = ''; }
+  }
 
   // 1) Plán práce — člověk → den → operace (start–konec)
   window.pv2LoadWork = async function () {
@@ -1675,7 +1781,7 @@
     var iso = function (d) { return d.toISOString().slice(0, 10); };
     var fi = document.getElementById('pv2-from'), ti = document.getElementById('pv2-to');
     if (fi && !fi.value) fi.value = iso(f); if (ti && !ti.value) ti.value = iso(t);
-    var sec = 'work'; try { sec = localStorage.getItem('pv2.sec') || 'work'; } catch (e) {}
+    var sec = 'plan'; try { sec = localStorage.getItem('pv2.sec') || 'plan'; } catch (e) {}
     if (!/[?&]legacy=1/.test(location.search)) pv2Show(sec);
   })();
 
