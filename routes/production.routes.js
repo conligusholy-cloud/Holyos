@@ -843,6 +843,30 @@ router.post('/products/:id/fy-bom/sync-qty', async (req, res, next) => {
 // =============================================================================
 
 // =============================================================================
+// OBECNÉ NASTAVENÍ VÝROBY (AppSetting production.*)
+// =============================================================================
+// GET /api/production/settings → { workers_person_ids: [] }
+router.get('/settings', requireAuth, async (req, res, next) => {
+  try {
+    const { getSetting } = require('../services/settings');
+    const ids = await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] });
+    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [] });
+  } catch (err) { next(err); }
+});
+// PUT /api/production/settings { workers_person_ids: [..] }
+router.put('/settings', requireAuth, async (req, res, next) => {
+  try {
+    const { setSetting } = require('../services/settings');
+    const b = req.body || {};
+    if (Array.isArray(b.workers_person_ids)) {
+      await setSetting('production.workers_person_ids', b.workers_person_ids.map(Number).filter(Number.isFinite), { type: 'json', description: 'Výrobní pracovníci — výchozí seznam lidí nabízený u operací' });
+    }
+    const { getSetting } = require('../services/settings');
+    res.json({ workers_person_ids: await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] }) });
+  } catch (err) { next(err); }
+});
+
+// =============================================================================
 // SKUPINY PRACOVIŠŤ (Hala → Skupina → Pracoviště)
 // =============================================================================
 

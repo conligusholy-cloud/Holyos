@@ -880,7 +880,8 @@
     let product = null;
     let workstations = [];
     let workstationGroups = [];
-    let allPeople = []; // lidé pro „kdo smí operaci dělat"
+    let allPeople = []; // lidé pro „kdo smí operaci dělat" (zúžení dle ⚙️ Nastavení výroby)
+    let allPeopleAll = []; // všichni aktivní (pro zobrazení jmen už přiřazených)
     let modalAllowed = []; // vybraní lidé v otevřeném dialogu operace (ids)
     let allMaterials = [];
     let allProductsList = []; // pro mapování material → product
@@ -930,7 +931,13 @@
         product = prod;
         workstations = ws;
         workstationGroups = wsGroups || [];
-        try { const pr = await api('/api/hr/people?active=true'); allPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs')); } catch (e) { allPeople = []; }
+        try {
+          const pr = await api('/api/hr/people?active=true');
+          allPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'));
+          allPeopleAll = allPeople.slice();
+          // Obecné nastavení výroby: výchozí seznam výrobních pracovníků (⚙️ v Nastavení výroby). Prázdné = všichni aktivní.
+          try { const st = await api('/api/production/settings'); const ids = new Set((st.workers_person_ids || []).map(Number)); if (ids.size) allPeople = allPeople.filter(p => ids.has(p.id)); } catch (e) {}
+        } catch (e) { allPeople = []; }
         allMaterials = mats;
         allProductsList = prods;
 
@@ -1787,7 +1794,7 @@
     function renderAllowedChips() {
       const box = document.getElementById('op-people-chips'); const sel = document.getElementById('op-people-select');
       if (!box || !sel) return;
-      const byId = new Map(allPeople.map(p => [p.id, p]));
+      const byId = new Map((allPeopleAll.length ? allPeopleAll : allPeople).map(p => [p.id, p]));
       box.innerHTML = modalAllowed.map((id, i) => { const p = byId.get(id); const nm = p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : ('#' + id);
         return '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);border-radius:14px;padding:3px 8px 3px 10px;font-size:12px;">' + (i + 1) + '. ' + esc(nm) +
           (i > 0 ? '<button type="button" onclick="moveAllowedPerson(' + id + ',-1)" title="Vyšší priorita" style="background:none;border:0;color:var(--text2);cursor:pointer;padding:0;">▲</button>' : '') +
