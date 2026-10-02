@@ -629,8 +629,15 @@ router.get('/batches-plan', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /api/planning/material-moves — Naplánované skladové pohyby: příprava materiálu na pracoviště
-// (pre-pick přes všechny aktivní dávky s termínem; termín = plánovaný start dávky)
+// GET /api/planning/material-tasks?from=&to= — pokyny pro skladníka/čtečku: materiál na pracoviště + přesuny WIP
+router.get('/material-tasks', async (req, res, next) => {
+  try {
+    const { computeMaterialTasks } = require('../services/planning/material-tasks');
+    res.json(await computeMaterialTasks({ from: req.query.from, to: req.query.to }));
+  } catch (err) { next(err); }
+});
+
+// GET /api/planning/material-moves — (starší) pre-pick přes aktivní dávky
 router.get('/material-moves', async (req, res, next) => {
   try {
     const batches = await prisma.productionBatch.findMany({

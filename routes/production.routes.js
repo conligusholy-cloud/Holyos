@@ -889,7 +889,8 @@ router.get('/settings', requireAuth, async (req, res, next) => {
     const ids = await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] });
     const { DEFAULT_SHIFT } = require('../services/planning/shift-calendar');
     const shift = await getSetting('production.shift', { type: 'json', defaultValue: null });
-    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [], shift: shift || Object.assign({ source: 'default' }, DEFAULT_SHIFT) });
+    const leadMin = await getSetting('production.material_lead_min', { type: 'number', defaultValue: 60 });
+    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [], shift: shift || Object.assign({ source: 'default' }, DEFAULT_SHIFT), material_lead_min: Number(leadMin) || 60 });
   } catch (err) { next(err); }
 });
 // PUT /api/production/settings { workers_person_ids: [..] }
@@ -899,6 +900,9 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     const b = req.body || {};
     if (Array.isArray(b.workers_person_ids)) {
       await setSetting('production.workers_person_ids', b.workers_person_ids.map(Number).filter(Number.isFinite), { type: 'json', description: 'Výrobní pracovníci — výchozí seznam lidí nabízený u operací' });
+    }
+    if (b.material_lead_min !== undefined && Number.isFinite(Number(b.material_lead_min))) {
+      await setSetting('production.material_lead_min', Math.max(0, Math.round(Number(b.material_lead_min))), { type: 'number', description: 'Rezerva pro přípravu materiálu na pracoviště (minuty před začátkem operace)' });
     }
     if (b.shift && typeof b.shift === 'object') {
       const sh = b.shift;
