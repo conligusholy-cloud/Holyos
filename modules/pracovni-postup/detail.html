@@ -215,6 +215,8 @@
     .op-node-plus { font-size:15px; color:#22c55e; border-color:rgba(34,197,94,0.6); }
     .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
     .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
+    .op-node-target .op-node-dot { border-color:#c084fc; box-shadow:0 0 0 3px rgba(168,85,247,0.25); }
+    .op-node-hover .op-node-dot { background:#a855f7; color:#fff; transform:scale(1.3); box-shadow:0 0 0 6px rgba(168,85,247,0.35); }
 
     /* === Arrow between ops === */
     .op-arrow {
@@ -1110,7 +1112,7 @@
               const from = list[0].parallel_from || null, to = list[0].parallel_to || null;
               const chk = parallelBranchCheck(from, to, null);
               const over = chk.window > 0 && chk.branch > chk.window;
-              html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>';
+              html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" data-ops="' + list.map(o => o.id).join(',') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>';
               list.forEach((op, i) => { if (i > 0) html += '<div class="par-chain">&#9660;</div>'; html += renderOpCard(op, i); });
               html += '<div class="par-foot">' +
                 '<span class="par-time' + (over ? ' over' : '') + '" title="Součet reálných časů paralelních operací ve větvi / součet hlavních operací v okně ' + chk.label + '">⏱ ' + formatDuration(chk.branch) + ' / ' + formatDuration(chk.window) + (over ? ' ⚠️ překročeno' : '') + '</span>' +
@@ -1251,9 +1253,13 @@
           const p2 = 'M' + cx + ',' + (cBot + 2) + ' V' + b.y + ' H' + (b.x + b.r + 2);
           // Šipka toku = šipka (chevron) sedící přesně na čáře, hrot v bodě (x,y)
           const flow = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5) : (dir === 'right' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x - 5) + ',' + (y + 5) : 'M' + (x + 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y + 5))) + '" fill="none" stroke="' + stroke + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+          const ops = w.getAttribute('data-ops') || '';
           svg.insertAdjacentHTML('beforeend',
             '<path d="' + p1 + '" fill="none" stroke="' + stroke + '" stroke-width="2" marker-end="url(#par-arrow)"/>' +
             '<path d="' + p2 + '" fill="none" stroke="' + stroke + '" stroke-width="2" marker-end="url(#par-arrow)"/>' +
+            // Neviditelné široké „úchopy": vodorovné úseky jdou chytit myší a přetáhnout na jiný uzel
+            '<path class="par-grab" data-end="start" data-ops="' + ops + '" d="M' + (a.x + a.r) + ',' + a.y + ' H' + cx + '" fill="none" stroke="rgba(192,132,252,0.001)" stroke-width="16" style="pointer-events:stroke;cursor:grab;"><title>Začátek větve — chyť a přetáhni na jiný uzel</title></path>' +
+            '<path class="par-grab" data-end="end" data-ops="' + ops + '" d="M' + cx + ',' + b.y + ' H' + (b.x + b.r) + '" fill="none" stroke="rgba(192,132,252,0.001)" stroke-width="16" style="pointer-events:stroke;cursor:grab;"><title>Konec větve — chyť a přetáhni na jiný uzel</title></path>' +
             // šipky toku uprostřed vodorovných a svislých úseků
             flow((a.x + a.r + cx) / 2, a.y, 'right') +
             (cTop - a.y > 40 ? flow(cx, (a.y + cTop) / 2, 'down') : '') +
@@ -1267,6 +1273,56 @@
         '</defs>');
       lane.style.minHeight = maxBottom + 'px';
     }
+    // Přetažení začátku/konce paralelní větve na jiný uzel (levým tlačítkem chytit vodorovnou čáru)
+    (function () {
+      let drag = null; // { end:'start'|'end', ops:[ids], ghost }
+      document.addEventListener('mousedown', (e) => {
+        const p = e.target && e.target.closest ? e.target.closest('.par-grab') : null;
+        if (!p || e.button !== 0) return;
+        e.preventDefault();
+        drag = { end: p.getAttribute('data-end'), ops: (p.getAttribute('data-ops') || '').split(',').map(Number).filter(Boolean) };
+        document.body.style.cursor = 'grabbing';
+        document.querySelectorAll('.op-node').forEach(n => n.classList.add('op-node-target'));
+        const g = document.createElement('div'); g.id = 'par-drag-ghost';
+        g.textContent = drag.end === 'start' ? '⫽ začátek větve → pusť na uzel' : '⫽ konec větve → pusť na uzel';
+        g.style.cssText = 'position:fixed;z-index:9999;pointer-events:none;background:#2e1065;color:#e9d5ff;border:1px solid #a855f7;border-radius:8px;padding:4px 10px;font-size:12px;';
+        document.body.appendChild(g); drag.ghost = g; moveGhost(e);
+      });
+      function moveGhost(e) { if (drag && drag.ghost) { drag.ghost.style.left = (e.clientX + 14) + 'px'; drag.ghost.style.top = (e.clientY + 14) + 'px'; } }
+      document.addEventListener('mousemove', (e) => {
+        if (!drag) return; moveGhost(e);
+        document.querySelectorAll('.op-node-hover').forEach(n => n.classList.remove('op-node-hover'));
+        const n = nodeAt(e.clientX, e.clientY); if (n) n.classList.add('op-node-hover');
+      });
+      function nodeAt(x, y) { const el = document.elementFromPoint(x, y); return el && el.closest ? el.closest('.op-node') : null; }
+      document.addEventListener('mouseup', async (e) => {
+        if (!drag) return;
+        const d = drag; drag = null;
+        document.body.style.cursor = '';
+        if (d.ghost) d.ghost.remove();
+        document.querySelectorAll('.op-node-target,.op-node-hover').forEach(n => { n.classList.remove('op-node-target'); n.classList.remove('op-node-hover'); });
+        const n = nodeAt(e.clientX, e.clientY); if (!n) return;
+        const before = parseInt(n.getAttribute('data-before')) || null; // uzel před operací X
+        const after = parseInt(n.getAttribute('data-after')) || null;  // uzel za operací Y
+        const mains = (product.operations || []).filter(o => !o.is_parallel && !/^FY import/i.test(o.name || '')).map(o => o.step_number).sort((a, b) => a - b);
+        const sample = (product.operations || []).find(o => o.id === d.ops[0]); if (!sample) return;
+        let from = sample.parallel_from || null, to = sample.parallel_to || null;
+        if (d.end === 'start') { if (!before) { if (n.classList.contains('op-node-end')) return toast('Větev nemůže začínat na konci výroby', true); from = null; } else from = before; }
+        else { if (!after) return toast('Větev se nemůže vracet před první operaci', true); to = (after === mains[mains.length - 1]) ? null : after; }
+        const lo = from || mains[0], hi = to || mains[mains.length - 1];
+        if (lo > hi) return toast('Začátek větve musí být před jejím koncem', true);
+        try {
+          for (const id of d.ops) {
+            const op = (product.operations || []).find(o => o.id === id); if (!op) continue;
+            await api('/api/production/operations/' + id, { method: 'PUT', body: JSON.stringify({ step_number: op.step_number, name: op.name, phase: op.phase, duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count, description: op.description, bom_count: op.bom_count, workstation_id: null, workstation_group_id: null, is_parallel: true, parallel_from: from, parallel_to: to }) });
+          }
+          product = await api('/api/production/products/' + product.id);
+          renderTab();
+          toast('Větev přepojena: ' + (from || 'začátek') + ' → ' + (to || 'konec'));
+        } catch (err) { toast('Přepojení selhalo: ' + err.message, true); }
+      });
+    })();
+
     // Paralelní operace z uzlu: předvyplní „od operace" = operace za uzlem
     function openAddParallelFromNode(beforeStep) {
       openAddParallelOp();
