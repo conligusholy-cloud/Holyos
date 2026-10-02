@@ -143,7 +143,7 @@
   <div class="page-header">
     <span style="font-size:22px;">🗂️</span>
     <h1>Plánování výroby <span class="count" id="batchCount"></span></h1>
-    <div style="margin-left:auto; display:flex; gap:8px;">
+    <div id="pv-legacy-actions" style="margin-left:auto; display:none; gap:8px;">
       <button class="btn btn-secondary" onclick="openWorkstationQueue()" title="Vytížení pracovišť — kolik práce čeká">🏭 Vytížení</button>
       <button class="btn btn-secondary" onclick="openAuditLog()" title="Audit log akcí v kioscích za dnešek">📜 Audit</button>
       <button class="btn btn-secondary" onclick="openPurchaseReport()" title="Konsolidovaný nákupní report přes všechny aktivní dávky">📋 Nákupní report</button>
@@ -154,6 +154,16 @@
   </div>
 
   <div class="content">
+    <!-- NOVÉ PLÁNOVÁNÍ — začínáme znovu. Staré podsekce (Objednávky do výroby / Výrobní dávky) jsou schované
+         (PV_LEGACY = true je zase ukáže), kód zůstává. Sem přijde nový návrh plánování. -->
+    <div id="pv-new" style="min-height:60vh;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text2);">
+      <div>
+        <div style="font-size:42px;margin-bottom:10px;">📅</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Plánování výroby — nový návrh</div>
+        <div style="font-size:13px;max-width:520px;line-height:1.5;">Prázdné plátno. Staré podsekce jsou vypnuté; tady vznikne nové plánování nad pracovišti, lidmi a postupy.</div>
+      </div>
+    </div>
+    <div id="pv-legacy" style="display:none;">
     <!-- Záložky modulu -->
     <div class="pv-tabs" style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border);">
       <button id="pvtab-orders" onclick="switchPvTab('orders')" style="background:none; border:none; border-bottom:2px solid var(--primary); color:var(--text); font-weight:700; font-size:13px; padding:8px 12px; cursor:pointer;">🧾 Objednávky do výroby</button>
@@ -205,6 +215,7 @@
       </div>
       <div class="table-wrap" id="ordersWrap"></div>
     </div>
+    </div><!-- /pv-legacy -->
   </div>
 </div>
 
@@ -1489,9 +1500,8 @@
   };
 
   // ─── Init ─────────────────────────────────────────────────────────────────
-  loadAll();
-  // Výchozí záložka: Objednávky do výroby (na prvním místě).
-  switchPvTab('orders');
+  var PV_LEGACY = /[?&]legacy=1/.test(location.search);
+  if (PV_LEGACY) { document.getElementById('pv-legacy').style.display = ''; document.getElementById('pv-legacy-actions').style.display = 'flex'; document.getElementById('pv-new').style.display = 'none'; loadAll(); switchPvTab('orders'); }
 })();
 </script>
 
