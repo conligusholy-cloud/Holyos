@@ -2658,10 +2658,19 @@ router.delete('/batches/:id', async (req, res, next) => {
     const id = parseInt(req.params.id, 10);
     if (isNaN(id)) return res.status(400).json({ error: 'Neplatné ID' });
 
-    await prisma.productionBatch.delete({ where: { id } });
+    const b = await prisma.productionBatch.findUnique({ where: { id }, select: { id: true, batch_number: true, status: true } });
+    if (!b) return res.status(404).json({ error: 'Dávka nenalezena' });
+    await prisma.$transaction(async (tx) => {
+      // Feeder dávky odpoj (ne smazat), sloty uvolni, pak dávku (operace + logy jdou cascade)
+      await tx.productionBatch.updateMany({ where: { parent_batch_id: id }, data: { parent_batch_id: null } });
+      await tx.slotAssignment.updateMany({ where: { batch_id: id }, data: { batch_id: null } }).catch(() => {});
+      await tx.productionBatch.delete({ where: { id } });
+    });
+    console.log(`[batches] smazána dávka ${b.batch_number} (${b.status}) uživatelem ${req.user ? (req.user.username || req.user.id) : '?'}`);
     res.status(204).end();
   } catch (err) {
     if (err.code === 'P2025') return res.status(404).json({ error: 'Dávka nenalezena' });
+    if (err.code === 'P2003') return res.status(409).json({ error: 'Dávku nelze smazat — mají na ni vazbu další záznamy (Velín úkoly, pickování…). Zruš ji místo toho.' });
     next(err);
   }
 });
