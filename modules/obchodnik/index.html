@@ -318,6 +318,8 @@
 
   async function init(){
     try { obLoadVcardToken(true); } catch(e){} // vždy čerstvý token (platí 30 dní)
+    // Po znovunačtení stránky (návrat z hovoru / z uložení kontaktu) dokonči rozdělaný tok.
+    setTimeout(function(){ try { obShowAfterSave(); } catch(e){} try { obCheckPendingCall(); } catch(e){} }, 1200);
     try {
       var me = await (await fetch('/api/auth/me', { credentials:'include' })).json().catch(function(){return null;});
       if (!me || !me.user){ window.location.href = '/login.html?redirect=' + encodeURIComponent(location.pathname); return; }
@@ -1211,11 +1213,33 @@
   // Po uložení kontaktu (iOS odskočí do Safari) → po návratu do appky nabídnout pokračování
   // (zavolat / poslat SMS), aby se nemuselo znovu hledat kontakt a klikat.
   var _obAfterSave = null;
-  function obSetAfterSave(kind, name, proceed){ _obAfterSave = { kind: kind, name: name || '', proceed: proceed, at: Date.now() }; }
+  function obSetAfterSave(kind, name, proceed, id, href){
+    _obAfterSave = { kind: kind, name: name || '', proceed: proceed, at: Date.now(), id: id || null, href: href || null };
+    // Přežije i znovunačtení stránky (u hovoru umíme akci sestavit znovu z id + tel odkazu).
+    try { sessionStorage.setItem('ob.afterSave', JSON.stringify({ kind: kind, name: name || '', at: Date.now(), id: id || null, href: href || null })); } catch(e){}
+  }
+  // Po návratu z HOVORU: nabídnout další krok / změnu stavu (spouští se až když je appka zase vidět).
+  function obArmNextStep(id){ try { sessionStorage.setItem('ob.pendingCall', JSON.stringify({ id: id, at: Date.now() })); } catch(e){} }
+  function obCheckPendingCall(){
+    var raw = null; try { raw = sessionStorage.getItem('ob.pendingCall'); } catch(e){}
+    if (!raw) return;
+    var pc = null; try { pc = JSON.parse(raw); } catch(e){}
+    if (!pc || !pc.id) { try { sessionStorage.removeItem('ob.pendingCall'); } catch(e){} return; }
+    if (Date.now() - pc.at < 3000) return; // hovor se teprve vytáčí
+    try { sessionStorage.removeItem('ob.pendingCall'); } catch(e){}
+    try { if (typeof obNextStep === 'function') obNextStep(pc.id); } catch(e){}
+  }
   function obShowAfterSave(){
-    var a = _obAfterSave; if (!a) return;
+    var a = _obAfterSave;
+    if (!a) { try { var raw = sessionStorage.getItem('ob.afterSave'); if (raw) a = JSON.parse(raw); } catch(e){} }
+    if (!a) return;
     if (Date.now() - a.at < 1500) return; // ještě jsme nikam neodešli
-    _obAfterSave = null;
+    _obAfterSave = null; try { sessionStorage.removeItem('ob.afterSave'); } catch(e){}
+    if (!a.proceed && a.kind === 'call' && a.id && a.href) {
+      var cid = a.id, chref = a.href;
+      a.proceed = function(){ _obActiveTaskId = null; try { markCalled(cid); } catch(e){} obArmNextStep(cid); window.location.href = chref; };
+    }
+    if (!a.proceed) return; // SMS/jiné bez akce po reloadu — nic nenabízíme
     var ex = document.getElementById('ob-aftersave'); if (ex) ex.remove();
     var label = a.kind === 'call' ? '📞 Volat teď' : (a.kind === 'sms' ? '📩 Odeslat SMS' : '➡️ Pokračovat');
     var ov = document.createElement('div'); ov.id = 'ob-aftersave';
@@ -1232,9 +1256,9 @@
     document.getElementById('ob-as-close').onclick = function(){ ov.remove(); };
     try { if (typeof render === 'function') render(); } catch(e){}
   }
-  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') setTimeout(obShowAfterSave, 150); });
-  window.addEventListener('pageshow', function(){ setTimeout(obShowAfterSave, 150); });
-  window.addEventListener('focus', function(){ setTimeout(obShowAfterSave, 150); });
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') { setTimeout(obShowAfterSave, 150); setTimeout(obCheckPendingCall, 400); } });
+  window.addEventListener('pageshow', function(){ setTimeout(obShowAfterSave, 150); setTimeout(obCheckPendingCall, 400); });
+  window.addEventListener('focus', function(){ setTimeout(obShowAfterSave, 150); setTimeout(obCheckPendingCall, 400); });
 
   // Vlastní dialog místo confirm(): dvě barevně odlišená tlačítka (Uložit kontakt / Volat teď).
   function obAskCall(name, onCall, onSave){
@@ -1251,7 +1275,7 @@
       + '<button id="ob-ca-call" style="flex:1;background:#22c55e;border:none;color:#052e13;border-radius:12px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit">📞 Volat teď</button>'
       + '</div></div>';
     document.body.appendChild(ov);
-    document.getElementById('ob-ca-save').onclick = function(){ ov.remove(); obSetAfterSave('call', name, onCall); if (onSave) onSave(); };
+    document.getElementById('ob-ca-save').onclick = function(){ ov.remove(); obSetAfterSave('call', name, onCall, (window._obAskCallCtx||{}).id, (window._obAskCallCtx||{}).href); if (onSave) onSave(); };
     document.getElementById('ob-ca-call').onclick = function(){ ov.remove(); if (onCall) onCall(); };
   }
   window.obAskCall = obAskCall;
@@ -1309,10 +1333,12 @@
     if (!obContactSaved(id)){
       if (ev && ev.preventDefault) ev.preventDefault();
       var href = (ev && ev.currentTarget && ev.currentTarget.getAttribute('href')) || ('tel:'+String(l.phone||'').replace(/[^\d+]/g,''));
-      obAskCall(l.name, function(){ _obActiveTaskId=null; markCalled(id); window.location.href = href; setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); }, function(){ saveContact(id); });
+      window._obAskCallCtx = { id: id, href: href };
+      obAskCall(l.name, function(){ _obActiveTaskId=null; markCalled(id); obArmNextStep(id); window.location.href = href; }, function(){ saveContact(id); });
       return false;
     }
     markCalled(id);
+    obArmNextStep(id); // po návratu z hovoru nabídnout další krok / změnu stavu
     return true; // ostatní stavy: tel: odkaz proběhne normálně
   }
   window.obCallClick = obCallClick;
@@ -2635,10 +2661,11 @@
     var doCall=function(){
       if(typeof markCalled==='function') markCalled(id);
       if(typeof openLeadFromTask==='function') openLeadFromTask(id); // přepni na kontakt a otevři ho (pro doplnění po hovoru)
+      obArmNextStep(id); // po návratu z hovoru: nabídni další krok s termínem
       window.location.href=tel; // spusť hovor
-      setTimeout(function(){ if(typeof obNextStep==='function') obNextStep(id); }, 400); // po návratu z hovoru: nabídni další krok s termínem
     };
     if(l.status==='new'){
+      window._obAskCallCtx = { id: id, href: tel };
       obAskCall(l.name, doCall, function(){ saveContact(id); });
       return;
     }
