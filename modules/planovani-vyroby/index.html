@@ -213,11 +213,11 @@
         <div class="pv2-filter">
           <input id="wp-search" placeholder="🔍 Hledat člověka / operaci / výrobek / dávku / pracoviště…" oninput="pv2RenderWork()">
           <select id="wp-sort" onchange="pv2RenderWork()" title="Řazení lidí">
+            <option value="first_asc" selected>Začátek: nejdřív</option>
             <option value="hours_desc">Vytížení: od největšího</option>
             <option value="hours_asc">Vytížení: od nejmenšího</option>
             <option value="name_asc">Jméno: A → Z</option>
             <option value="name_desc">Jméno: Z → A</option>
-            <option value="first_asc">Začátek: nejdřív</option>
             <option value="ops_desc">Počet operací</option>
           </select>
           <select id="wp-person" onchange="pv2RenderWork()" title="Jen jeden člověk"><option value="">Všichni lidé</option></select>
