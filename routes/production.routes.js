@@ -370,6 +370,9 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
           await tx.operationAllowedPerson.create({ data: { operation_id: nop.id, person_id: ap.person_id, priority: ap.priority } });
         }
       }
+      // Hotové výrobky (výstupy postupu)
+      const outs = await tx.productOutput.findMany({ where: { product_id: src.id } });
+      if (outs.length) await tx.productOutput.createMany({ data: outs.map(o => ({ product_id: p.id, out_product_id: o.out_product_id, out_material_id: o.out_material_id, quantity: o.quantity, unit: o.unit, note: o.note })) });
       return p;
     });
     res.status(201).json(created);
@@ -841,6 +844,40 @@ router.post('/products/:id/fy-bom/sync-qty', async (req, res, next) => {
 // =============================================================================
 // HALY (halls) — seskupení pracovišť
 // =============================================================================
+
+// =============================================================================
+// HOTOVÉ VÝROBKY (výstupy postupu) — co se naskladní po dokončení
+// =============================================================================
+const OUTPUT_INCLUDE = { out_product: { select: { id: true, code: true, name: true, type: true } }, out_material: { select: { id: true, code: true, name: true, unit: true } } };
+// GET /api/production/products/:id/outputs
+router.get('/products/:id/outputs', async (req, res, next) => {
+  try {
+    const rows = await prisma.productOutput.findMany({ where: { product_id: parseInt(req.params.id) }, include: OUTPUT_INCLUDE, orderBy: { id: 'asc' } });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+// PUT /api/production/products/:id/outputs — nahradí seznam { outputs: [{ out_product_id? | out_material_id?, quantity, unit, note }] }
+// Prázdný seznam = výchozí chování (výrobek sám ×1).
+router.put('/products/:id/outputs', async (req, res, next) => {
+  try {
+    const pid = parseInt(req.params.id);
+    const list = Array.isArray(req.body && req.body.outputs) ? req.body.outputs : [];
+    const data = list.map((o) => ({
+      product_id: pid,
+      out_product_id: o.out_product_id ? parseInt(o.out_product_id) : null,
+      out_material_id: o.out_material_id ? parseInt(o.out_material_id) : null,
+      quantity: Number(o.quantity) > 0 ? Number(o.quantity) : 1,
+      unit: (o.unit || 'ks').slice(0, 20),
+      note: o.note ? String(o.note).slice(0, 255) : null,
+    })).filter((o) => o.out_product_id || o.out_material_id);
+    await prisma.$transaction(async (tx) => {
+      await tx.productOutput.deleteMany({ where: { product_id: pid } });
+      if (data.length) await tx.productOutput.createMany({ data });
+    });
+    const rows = await prisma.productOutput.findMany({ where: { product_id: pid }, include: OUTPUT_INCLUDE, orderBy: { id: 'asc' } });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
 
 // =============================================================================
 // OBECNÉ NASTAVENÍ VÝROBY (AppSetting production.*)

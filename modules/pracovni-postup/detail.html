@@ -215,6 +215,13 @@
     .op-node-plus { font-size:15px; color:#22c55e; border-color:rgba(34,197,94,0.6); }
     .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
     .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
+    .outputs-box { margin:10px auto 0; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
+    .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
+    .outputs-head { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#86efac; margin-bottom:6px; }
+    .outputs-def { font-size:10px; font-weight:500; color:var(--text2); border:1px solid var(--border); border-radius:10px; padding:1px 6px; }
+    .outputs-edit { font-size:11px; font-weight:500; color:var(--text2); }
+    .outputs-row { display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:3px 0; border-top:1px dashed rgba(255,255,255,0.08); }
+    .outputs-foot { font-size:10.5px; color:var(--text2); margin-top:6px; }
     .op-node-target .op-node-dot { border-color:#c084fc; box-shadow:0 0 0 3px rgba(168,85,247,0.25); }
     .op-node-hover .op-node-dot { background:#a855f7; color:#fff; transform:scale(1.3); box-shadow:0 0 0 6px rgba(168,85,247,0.35); }
 
@@ -885,6 +892,7 @@
     let workstationGroups = [];
     let allPeople = []; // lidé pro „kdo smí operaci dělat" (zúžení dle ⚙️ Nastavení výroby)
     let allPeopleAll = []; // všichni aktivní (pro zobrazení jmen už přiřazených)
+    let productOutputs = []; // hotové výrobky (výstupy postupu); prázdné = výrobek sám ×1
     let modalAllowed = []; // vybraní lidé v otevřeném dialogu operace (ids)
     let allMaterials = [];
     let allProductsList = []; // pro mapování material → product
@@ -934,6 +942,7 @@
         product = prod;
         workstations = ws;
         workstationGroups = wsGroups || [];
+        try { productOutputs = await api('/api/production/products/' + id + '/outputs'); } catch (e) { productOutputs = []; }
         try {
           const pr = await api('/api/hr/people?active=true');
           allPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'));
@@ -1124,6 +1133,7 @@
             html += renderOpCard(op, i);
           });
           html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec výroby — sem se vrací paralelní operace. Kliknutím přidáš další operaci hlavní linie." onclick="openAddOp()"><div class="op-node-line"></div><div class="op-node-dot op-node-plus">+</div><div class="op-node-label">konec výroby · přidat operaci</div></div>';
+          html += renderOutputsBox();
           html += '</div>';
           // Pravý pruh má stejnou šířku jako hlavní linie → karty paralelních operací mají stejné rozměry
           html += '<div class="lane-par" id="lane-par" style="position:relative;flex:1 1 0;min-width:0;max-width:680px;min-height:40px;">';
@@ -1346,6 +1356,72 @@
         } catch (err) { toast('Přepojení selhalo: ' + err.message, true); }
       });
     })();
+
+    // ── Hotové výrobky (výstupy postupu) ─────────────────────────────────────
+    function outputLabel(o) {
+      if (o.out_product) return (o.out_product.code ? o.out_product.code + ' · ' : '') + o.out_product.name;
+      if (o.out_material) return (o.out_material.code ? o.out_material.code + ' · ' : '') + o.out_material.name;
+      return '?';
+    }
+    function renderOutputsBox() {
+      const isDefault = !productOutputs.length;
+      const rows = isDefault
+        ? [{ label: (product.code ? product.code + ' · ' : '') + product.name, qty: 1, unit: 'ks' }]
+        : productOutputs.map(o => ({ label: outputLabel(o), qty: Number(o.quantity), unit: o.unit }));
+      return '<div class="outputs-box" onclick="openOutputsEditor()" title="Co se naskladní po dokončení postupu — klikni pro úpravu">' +
+        '<div class="outputs-head">📦 ' + (rows.length > 1 ? 'Hotové výrobky' : 'Hotový výrobek') + (isDefault ? ' <span class="outputs-def">výchozí</span>' : '') + '<span style="flex:1"></span><span class="outputs-edit">✎ upravit</span></div>' +
+        rows.map(r => '<div class="outputs-row"><span>' + esc(r.label) + '</span><b>' + r.qty + ' ' + esc(r.unit) + '</b></div>').join('') +
+        (rows.length > 1 ? '<div class="outputs-foot">Např. nářezový plán: 1 deska → více dílů; po dokončení se naskladní všechny položky.</div>' : '') +
+        '</div>';
+    }
+    let outDraft = [];
+    function openOutputsEditor() {
+      outDraft = productOutputs.length ? productOutputs.map(o => ({ out_product_id: o.out_product_id, out_material_id: o.out_material_id, label: outputLabel(o), quantity: Number(o.quantity), unit: o.unit }))
+        : [{ out_product_id: product.id, out_material_id: null, label: (product.code ? product.code + ' · ' : '') + product.name, quantity: 1, unit: 'ks' }];
+      let m = document.getElementById('outputs-modal');
+      if (!m) { m = document.createElement('div'); m.id = 'outputs-modal'; m.className = 'modal-overlay'; m.onclick = (e) => { if (e.target === m) closeOutputsEditor(); }; document.body.appendChild(m); }
+      renderOutputsEditor(); m.style.display = 'flex';
+    }
+    function closeOutputsEditor() { const m = document.getElementById('outputs-modal'); if (m) m.style.display = 'none'; }
+    function renderOutputsEditor() {
+      const m = document.getElementById('outputs-modal'); if (!m) return;
+      const inp = 'style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;"';
+      m.innerHTML = '<div class="modal-box" style="width:min(820px,94vw);max-width:820px;">' +
+        '<h3>📦 Hotové výrobky — co se naskladní po dokončení postupu</h3>' +
+        '<div style="font-size:12px;color:var(--text2);margin:-8px 0 12px;">Výchozí je samotný výrobek ×1. U nářezového plánu zadej jednotlivé díly a jejich počty (1 deska → 10 dílů). Položky se po odvedení výroby naskladní na výstupní sklad poslední operace.</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--text2);font-size:11px;text-transform:uppercase;"><th style="text-align:left;padding:4px;">Položka (výrobek / polotovar / díl / materiál)</th><th style="width:110px;padding:4px;">Množství</th><th style="width:80px;padding:4px;">Jedn.</th><th style="width:40px;"></th></tr></thead><tbody>' +
+        outDraft.map((r, i) => '<tr><td style="padding:4px;position:relative;"><input ' + inp + ' value="' + esc(r.label) + '" placeholder="Hledat podle názvu / kódu…" oninput="outSearch(' + i + ', this)" onfocus="outSearch(' + i + ', this)"><div id="out-sug-' + i + '" style="position:absolute;left:4px;right:4px;top:100%;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow:auto;display:none;"></div></td>' +
+          '<td style="padding:4px;"><input type="number" min="0.001" step="any" ' + inp + ' value="' + r.quantity + '" onchange="outDraft[' + i + '].quantity = Number(this.value) || 1"></td>' +
+          '<td style="padding:4px;"><input ' + inp + ' value="' + esc(r.unit) + '" onchange="outDraft[' + i + '].unit = this.value || \'ks\'"></td>' +
+          '<td style="padding:4px;text-align:center;"><button class="btn" onclick="outDraft.splice(' + i + ',1);renderOutputsEditor()" style="padding:4px 8px;color:#ef4444;">×</button></td></tr>').join('') +
+        '</tbody></table>' +
+        '<div style="display:flex;gap:8px;margin-top:10px;"><button class="btn" onclick="outDraft.push({out_product_id:null,out_material_id:null,label:\'\',quantity:1,unit:\'ks\'});renderOutputsEditor()">+ Přidat položku</button>' +
+        '<button class="btn" onclick="outDraft=[];renderOutputsEditor()" title="Vrátit na výchozí: výrobek sám ×1">↺ Výchozí (výrobek ×1)</button></div>' +
+        '<div class="modal-actions" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;"><button class="btn" onclick="closeOutputsEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveOutputs()">Uložit</button></div></div>';
+    }
+    function outSearch(i, el) {
+      const q = (el.value || '').toLowerCase().trim(); const box = document.getElementById('out-sug-' + i); if (!box) return;
+      if (q.length < 2) { box.style.display = 'none'; return; }
+      const prods = (allProductsList || []).filter(p => ((p.name || '') + ' ' + (p.code || '')).toLowerCase().includes(q)).slice(0, 8);
+      const mats = (allMaterials || []).filter(mm => ((mm.name || '') + ' ' + (mm.code || '')).toLowerCase().includes(q)).slice(0, 8);
+      const row = (kind, id, label, sub) => '<div onclick="outPick(' + i + ',\'' + kind + '\',' + id + ',' + JSON.stringify(label).replace(/"/g, '&quot;') + ')" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="font-size:10px;color:var(--text2);margin-right:6px;">' + sub + '</span>' + esc(label) + '</div>';
+      box.innerHTML = prods.map(p => row('product', p.id, (p.code ? p.code + ' · ' : '') + p.name, p.type === 'semi-product' ? 'POLOTOVAR' : 'VÝROBEK')).join('') + mats.map(mm => row('material', mm.id, (mm.code ? mm.code + ' · ' : '') + mm.name, 'MATERIÁL')).join('') || '<div style="padding:6px 10px;color:var(--text2);font-size:12px;">Nic nenalezeno</div>';
+      box.style.display = '';
+    }
+    function outPick(i, kind, id, label) {
+      outDraft[i].out_product_id = kind === 'product' ? id : null; outDraft[i].out_material_id = kind === 'material' ? id : null; outDraft[i].label = label;
+      renderOutputsEditor();
+    }
+    async function saveOutputs() {
+      const rows = outDraft.filter(r => r.out_product_id || r.out_material_id);
+      if (outDraft.some(r => !r.out_product_id && !r.out_material_id)) return toast('Každá položka musí být vybraná ze seznamu (výrobek nebo materiál)', true);
+      // Výchozí stav (jen výrobek sám ×1) ukládáme jako prázdný seznam
+      const isDefault = rows.length === 1 && rows[0].out_product_id === product.id && Number(rows[0].quantity) === 1;
+      try {
+        productOutputs = await api('/api/production/products/' + product.id + '/outputs', { method: 'PUT', body: JSON.stringify({ outputs: isDefault ? [] : rows }) });
+        closeOutputsEditor(); renderTab(); toast('Hotové výrobky uloženy');
+      } catch (e) { toast('Uložení selhalo: ' + e.message, true); }
+    }
 
     // Paralelní operace z uzlu: předvyplní „od operace" = operace za uzlem
     function openAddParallelFromNode(beforeStep) {
