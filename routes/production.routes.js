@@ -887,7 +887,9 @@ router.get('/settings', requireAuth, async (req, res, next) => {
   try {
     const { getSetting } = require('../services/settings');
     const ids = await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] });
-    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [] });
+    const { DEFAULT_SHIFT } = require('../services/planning/shift-calendar');
+    const shift = await getSetting('production.shift', { type: 'json', defaultValue: null });
+    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [], shift: shift || Object.assign({ source: 'default' }, DEFAULT_SHIFT) });
   } catch (err) { next(err); }
 });
 // PUT /api/production/settings { workers_person_ids: [..] }
@@ -898,8 +900,18 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     if (Array.isArray(b.workers_person_ids)) {
       await setSetting('production.workers_person_ids', b.workers_person_ids.map(Number).filter(Number.isFinite), { type: 'json', description: 'Výrobní pracovníci — výchozí seznam lidí nabízený u operací' });
     }
+    if (b.shift && typeof b.shift === 'object') {
+      const sh = b.shift;
+      const hhmm = (v) => (typeof v === 'string' && /^\d{1,2}:\d{2}$/.test(v)) ? v : null;
+      const clean = sh.mode === '24_7' ? { mode: '24_7' } : {
+        start: hhmm(sh.start) || '05:30', end: hhmm(sh.end) || '14:00',
+        work_days: (Array.isArray(sh.work_days) ? sh.work_days.map(Number).filter(n => n >= 1 && n <= 7) : [1, 2, 3, 4, 5]),
+        breaks: (Array.isArray(sh.breaks) ? sh.breaks : []).map(x => ({ start: hhmm(x.start), end: hhmm(x.end) })).filter(x => x.start && x.end),
+      };
+      await setSetting('production.shift', clean, { type: 'json', description: 'Směna výroby: začátek/konec, pracovní dny, přestávky (plánovač)' });
+    }
     const { getSetting } = require('../services/settings');
-    res.json({ workers_person_ids: await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] }) });
+    res.json({ workers_person_ids: await getSetting('production.workers_person_ids', { type: 'json', defaultValue: [] }), shift: await getSetting('production.shift', { type: 'json', defaultValue: null }) });
   } catch (err) { next(err); }
 });
 

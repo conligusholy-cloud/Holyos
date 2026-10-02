@@ -28,7 +28,7 @@
 // =============================================================================
 
 const { prisma: defaultPrisma } = require('../../config/database');
-const { getShiftConfig, consumeShift, nextShiftStart } = require('./shift-calendar');
+const { getShiftConfig, loadShiftConfig, consumeShift, nextShiftStart } = require('./shift-calendar');
 
 const ACTIVE_BATCH_STATUSES = ['planned', 'released', 'in_progress', 'paused'];
 
@@ -273,7 +273,7 @@ async function scheduleBatch(batchId, opts = {}) {
   const id = parseInt(batchId, 10);
   if (isNaN(id)) throw new Error('Neplatné batchId');
 
-  const cfg = getShiftConfig();
+  const cfg = await loadShiftConfig(); // směna + přestávky z ⚙️ Nastavení výroby (fallback env / 5:30–14:00)
 
   const batch = await tx.productionBatch.findUnique({
     where: { id },
@@ -551,7 +551,7 @@ async function scheduleBatch(batchId, opts = {}) {
     wait_minutes: wait,
     idle_pct: total > 0 ? +((wait / total) * 100).toFixed(1) : 0,
     shift_config: cfg.enabled
-      ? { enabled: true, start: cfg.start, end: cfg.end, work_days: cfg.workDays }
+      ? { enabled: true, start: cfg.start, end: cfg.end, work_days: cfg.workDays, breaks: (cfg.breaks || []).map(b => b.s + '–' + b.e) }
       : { enabled: false, mode: '24/7' },
     exclusive_mode: exclusive,
     operations: updates.map(u => ({

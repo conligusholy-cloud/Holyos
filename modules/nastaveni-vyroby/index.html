@@ -63,6 +63,19 @@
         <button class="btn" onclick="closeProdSettings()" style="padding:4px 10px;">✕</button>
       </div>
       <div style="padding:16px 20px;overflow:auto;">
+        <div style="font-weight:700;margin-bottom:4px;">🕒 Pracovní doba výroby</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Plánovač plánuje práci jen do této doby, přeskakuje přestávky i nepracovní dny. Výchozí: 5:30–14:00, Po–Pá, přestávky 8:30–8:45 a 11:00–11:15 (zákonných 30 min).</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:8px;">
+          <label style="font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px;">Začátek směny<input id="sh-start" type="time" value="05:30" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;"></label>
+          <label style="font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px;">Konec směny<input id="sh-end" type="time" value="14:00" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:6px 8px;"></label>
+          <div style="font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px;">Pracovní dny<div id="sh-days" style="display:flex;gap:4px;"></div></div>
+          <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;margin-left:auto;"><input type="checkbox" id="sh-247" style="accent-color:#f59e0b;"> nepřetržitě 24/7 (bez směny)</label>
+        </div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:4px;">Přestávky (nepočítají se do práce)</div>
+        <div id="sh-breaks" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px;"></div>
+        <button class="btn" onclick="shAddBreak()" style="font-size:12px;">+ Přidat přestávku</button>
+        <div id="sh-sum" style="font-size:12px;color:#14b8a6;margin-top:6px;"></div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:16px 0;">
         <div style="font-weight:700;margin-bottom:4px;">👥 Výrobní pracovníci</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Lidé, kteří se nabízejí u operací v Pracovním postupu („Kdo smí operaci dělat"). Zaškrtni jen ty, kdo ve výrobě opravdu pracují. Když nikoho nezaškrtneš, nabízejí se všichni aktivní.</div>
         <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
@@ -87,6 +100,7 @@
       try {
         var r = await fetch('/api/production/settings'); var st = await r.json();
         PS.selected = new Set((st.workers_person_ids || []).map(Number));
+        shRender(st.shift || {});
         if (!PS.people.length) { var pr = await fetch('/api/hr/people?active=true').then(function (x) { return x.json(); }); PS.people = (Array.isArray(pr) ? pr : pr.data || []).sort(function (a, b) { return ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'); }); }
         renderPsPeople();
         document.getElementById('ps-modal').style.display = 'flex';
@@ -101,11 +115,41 @@
         .map(function (p) { return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0;cursor:pointer;"><input type="checkbox" ' + (PS.selected.has(p.id) ? 'checked' : '') + ' onchange="psToggle(' + p.id + ',this.checked)" style="accent-color:#14b8a6;"> ' + esc((p.first_name || '') + ' ' + (p.last_name || '')) + (typeof p.role === 'string' && p.role ? ' <span style="color:var(--text2);font-size:11px;">· ' + esc(p.role) + '</span>' : '') + '</label>'; }).join('');
       document.getElementById('ps-count').textContent = 'vybráno ' + PS.selected.size + ' / ' + PS.people.length;
     }
+    // ── Pracovní doba ──
+    var SH_DAYS = ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'];
+    function shRender(sh) {
+      var is247 = sh.mode === '24_7';
+      document.getElementById('sh-247').checked = is247;
+      document.getElementById('sh-start').value = sh.start || '05:30';
+      document.getElementById('sh-end').value = sh.end || '14:00';
+      var days = Array.isArray(sh.work_days) && sh.work_days.length ? sh.work_days.map(Number) : [1, 2, 3, 4, 5];
+      document.getElementById('sh-days').innerHTML = SH_DAYS.map(function (d, i) { var n = i + 1; return '<label style="display:flex;align-items:center;gap:3px;border:1px solid var(--border);border-radius:6px;padding:4px 7px;cursor:pointer;color:var(--text);"><input type="checkbox" class="sh-day" value="' + n + '" ' + (days.indexOf(n) !== -1 ? 'checked' : '') + ' style="accent-color:#14b8a6;">' + d + '</label>'; }).join('');
+      var breaks = Array.isArray(sh.breaks) ? sh.breaks : [{ start: '08:30', end: '08:45' }, { start: '11:00', end: '11:15' }];
+      document.getElementById('sh-breaks').innerHTML = breaks.map(function (b) { return shBreakRow(b.start, b.end); }).join('');
+      shSum();
+      document.querySelectorAll('#sh-start,#sh-end,#sh-247,.sh-day').forEach(function (el) { el.onchange = shSum; });
+    }
+    function shBreakRow(a, b) { return '<div class="sh-br" style="display:flex;gap:8px;align-items:center;"><input type="time" class="sh-bs" value="' + esc(a || '') + '" onchange="shSum()" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;"> – <input type="time" class="sh-be" value="' + esc(b || '') + '" onchange="shSum()" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 8px;"><button class="btn" onclick="this.parentNode.remove();shSum()" style="padding:3px 8px;color:#ef4444;">×</button></div>'; }
+    function shAddBreak() { document.getElementById('sh-breaks').insertAdjacentHTML('beforeend', shBreakRow('', '')); }
+    function shCollect() {
+      if (document.getElementById('sh-247').checked) return { mode: '24_7' };
+      return { start: document.getElementById('sh-start').value, end: document.getElementById('sh-end').value,
+        work_days: Array.from(document.querySelectorAll('.sh-day:checked')).map(function (c) { return parseInt(c.value); }),
+        breaks: Array.from(document.querySelectorAll('#sh-breaks .sh-br')).map(function (r) { return { start: r.querySelector('.sh-bs').value, end: r.querySelector('.sh-be').value }; }).filter(function (b) { return b.start && b.end; }) };
+    }
+    function shSum() {
+      var c = shCollect(); var el = document.getElementById('sh-sum');
+      if (c.mode === '24_7') { el.textContent = 'Plánuje se nepřetržitě, bez přestávek.'; return; }
+      var m = function (t) { var p = t.split(':'); return parseInt(p[0]) * 60 + parseInt(p[1]); };
+      var total = m(c.end) - m(c.start); var br = c.breaks.reduce(function (s, b) { return s + Math.max(0, m(b.end) - m(b.start)); }, 0);
+      var work = total - br;
+      el.innerHTML = 'Směna ' + c.start + '–' + c.end + ' = ' + (total / 60).toFixed(2).replace('.', ',') + ' h, přestávky ' + br + ' min → <b>čistá práce ' + (work / 60).toFixed(2).replace('.', ',') + ' h/den</b> · ' + c.work_days.length + ' dní v týdnu' + (work > 360 && br < 30 ? ' <span style="color:#ef4444;">⚠️ Při práci nad 6 h musí být přestávka alespoň 30 min (ZP §88).</span>' : '');
+    }
     function psToggle(id, on) { if (on) PS.selected.add(id); else PS.selected.delete(id); document.getElementById('ps-count').textContent = 'vybráno ' + PS.selected.size + ' / ' + PS.people.length; }
     function psSelectAll(on) { PS.selected = on ? new Set(PS.people.map(function (p) { return p.id; })) : new Set(); renderPsPeople(); }
     async function saveProdSettings() {
       try {
-        var r = await fetch('/api/production/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workers_person_ids: Array.from(PS.selected) }) });
+        var r = await fetch('/api/production/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ workers_person_ids: Array.from(PS.selected), shift: shCollect() }) });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         closeProdSettings();
         var fr = document.getElementById('tab-frame'); if (fr && fr.contentWindow) { try { fr.contentWindow.location.reload(); } catch (e) {} }

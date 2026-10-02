@@ -19,26 +19,43 @@
 /**
  * Načti konfiguraci ze env. Pokud start nebo end chybí, modul je vypnut.
  */
+// Výchozí směna (když není nic nastaveno): 5:30–14:00, Po–Pá, zákonné přestávky 30 min
+// (ZP §88: nejdéle po 6 h práce; tady 2× 15 min — svačina 8:30 a oběd 11:00).
+const DEFAULT_SHIFT = { start: '05:30', end: '14:00', work_days: [1, 2, 3, 4, 5], breaks: [{ start: '08:30', end: '08:45' }, { start: '11:00', end: '11:15' }] };
+
+function normalizeConfig(raw) {
+  const start = raw && raw.start ? String(raw.start) : null;
+  const end = raw && raw.end ? String(raw.end) : null;
+  let workDays = Array.isArray(raw && raw.work_days) ? raw.work_days.map(n => parseInt(n, 10)).filter(n => n >= 1 && n <= 7) : null;
+  if (workDays && !workDays.length) workDays = [1, 2, 3, 4, 5];
+  const breaks = (Array.isArray(raw && raw.breaks) ? raw.breaks : [])
+    .map(b => ({ start: parseTime(b.start), end: parseTime(b.end), s: b.start, e: b.end }))
+    .filter(b => b.start && b.end && (b.end.h * 60 + b.end.m) > (b.start.h * 60 + b.start.m))
+    .sort((a, b) => (a.start.h * 60 + a.start.m) - (b.start.h * 60 + b.start.m));
+  return { start, end, workDays, breaks, enabled: !!(start && end && workDays && workDays.length > 0) };
+}
+
+/**
+ * Konfigurace směny ze env (synchronně). Když env není, použije se DEFAULT_SHIFT.
+ * Preferovaná cesta je loadShiftConfig() — čte AppSetting production.shift (⚙️ Nastavení výroby).
+ */
 function getShiftConfig(env = process.env) {
-  const start = env.SCHEDULER_SHIFT_START || null;
-  const end = env.SCHEDULER_SHIFT_END || null;
-  const workDaysRaw = env.SCHEDULER_WORK_DAYS || '1,2,3,4,5';
-
-  let workDays = null;
-  if (start && end) {
-    workDays = workDaysRaw
-      .split(',')
-      .map(s => parseInt(s.trim(), 10))
-      .filter(n => Number.isFinite(n) && n >= 1 && n <= 7);
-    if (workDays.length === 0) workDays = [1, 2, 3, 4, 5];
+  if (env.SCHEDULER_SHIFT_START && env.SCHEDULER_SHIFT_END) {
+    return normalizeConfig({ start: env.SCHEDULER_SHIFT_START, end: env.SCHEDULER_SHIFT_END, work_days: (env.SCHEDULER_WORK_DAYS || '1,2,3,4,5').split(','), breaks: DEFAULT_SHIFT.breaks });
   }
+  if (String(env.SCHEDULER_SHIFT_24_7 || '') === '1') return { start: null, end: null, workDays: null, breaks: [], enabled: false };
+  return normalizeConfig(DEFAULT_SHIFT);
+}
 
-  return {
-    start,             // 'HH:MM' nebo null
-    end,               // 'HH:MM' nebo null
-    workDays,          // [1..7] (ISO) nebo null
-    enabled: !!(start && end && workDays && workDays.length > 0),
-  };
+/** Asynchronně: AppSetting production.shift → env → výchozí. */
+async function loadShiftConfig() {
+  try {
+    const { getSetting } = require('../settings');
+    const raw = await getSetting('production.shift', { type: 'json', defaultValue: null });
+    if (raw && raw.start && raw.end) return normalizeConfig(raw);
+    if (raw && raw.mode === '24_7') return { start: null, end: null, workDays: null, breaks: [], enabled: false };
+  } catch (e) { /* bez DB → env/default */ }
+  return getShiftConfig();
 }
 
 /** Parse 'HH:MM' -> { h, m }, vrátí null při chybě. */
@@ -83,7 +100,24 @@ function isInShift(date, cfg) {
   if (!s || !e) return true;
   const shiftStart = withTimeOfDay(date, s.h, s.m);
   const shiftEnd = withTimeOfDay(date, e.h, e.m);
-  return date >= shiftStart && date < shiftEnd;
+  if (!(date >= shiftStart && date < shiftEnd)) return false;
+  // Přestávky = mimo pracovní čas
+  for (const br of cfg.breaks || []) {
+    const bs = withTimeOfDay(date, br.start.h, br.start.m), be = withTimeOfDay(date, br.end.h, br.end.m);
+    if (date >= bs && date < be) return false;
+  }
+  return true;
+}
+
+/** Nejbližší konec pracovního úseku po `date` (konec směny nebo začátek přestávky). */
+function currentSegmentEnd(date, cfg) {
+  const e = parseTime(cfg.end);
+  let segEnd = withTimeOfDay(date, e.h, e.m);
+  for (const br of cfg.breaks || []) {
+    const bs = withTimeOfDay(date, br.start.h, br.start.m);
+    if (bs > date && bs < segEnd) segEnd = bs;
+  }
+  return segEnd;
 }
 
 /**
@@ -99,6 +133,7 @@ function nextShiftStart(from, cfg) {
   if (isInShift(from, cfg)) return new Date(from);
 
   const s = parseTime(cfg.start);
+  const e = parseTime(cfg.end);
   if (!s) return new Date(from);
 
   let cursor = new Date(from);
@@ -106,6 +141,14 @@ function nextShiftStart(from, cfg) {
     if (cfg.workDays.includes(isoDow(cursor))) {
       const shiftStart = withTimeOfDay(cursor, s.h, s.m);
       if (cursor < shiftStart) return shiftStart;
+      // Uvnitř směny v přestávce → konec přestávky
+      const shiftEnd = e ? withTimeOfDay(cursor, e.h, e.m) : null;
+      if (shiftEnd && cursor < shiftEnd) {
+        for (const br of cfg.breaks || []) {
+          const bs = withTimeOfDay(cursor, br.start.h, br.start.m), be = withTimeOfDay(cursor, br.end.h, br.end.m);
+          if (cursor >= bs && cursor < be) return be;
+        }
+      }
       // Jsme v pracovní den po konci shiftu -> zkus zítra
     }
     cursor = addDays(cursor, 1);
@@ -148,9 +191,10 @@ function consumeShift(start, minutes, cfg) {
   let remaining = minutes;
 
   // Bezpečnostní limit — neměl by se nikdy spustit (ale defensive).
-  for (let i = 0; i < 500; i++) {
-    const todayShiftEnd = withTimeOfDay(cursor, e.h, e.m);
-    const availableMin = (todayShiftEnd.getTime() - cursor.getTime()) / 60_000;
+  for (let i = 0; i < 2000; i++) {
+    // Pracovní úsek = do konce směny nebo do začátku nejbližší přestávky
+    const segEnd = currentSegmentEnd(cursor, cfg);
+    const availableMin = (segEnd.getTime() - cursor.getTime()) / 60_000;
 
     if (remaining <= availableMin) {
       const end = new Date(cursor.getTime() + remaining * 60_000);
@@ -158,10 +202,10 @@ function consumeShift(start, minutes, cfg) {
     }
 
     remaining -= availableMin;
-    // Skok na začátek dalšího shiftu (přes večer / víkend)
-    const beyondShift = new Date(todayShiftEnd.getTime() + 1);
-    const nextStart = nextShiftStart(beyondShift, cfg);
-    wait += (nextStart.getTime() - todayShiftEnd.getTime()) / 60_000;
+    // Skok přes přestávku / večer / víkend na další pracovní čas
+    const beyond = new Date(segEnd.getTime() + 1);
+    const nextStart = nextShiftStart(beyond, cfg);
+    wait += (nextStart.getTime() - segEnd.getTime()) / 60_000;
     cursor = nextStart;
   }
 
@@ -175,6 +219,9 @@ function consumeShift(start, minutes, cfg) {
 
 module.exports = {
   getShiftConfig,
+  loadShiftConfig,
+  normalizeConfig,
+  DEFAULT_SHIFT,
   parseTime,
   isoDow,
   isInShift,
