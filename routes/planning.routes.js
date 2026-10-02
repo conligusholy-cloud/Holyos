@@ -572,6 +572,86 @@ router.post('/batch-operations/:id/unblock', async (req, res, next) => {
 //   ?person_id=N&batch_id=N&action=start|pause|resume|done|problem|comment
 //   ?limit=200 (default 200, max 1000)
 //   Vrátí seznam akcí v kioscích — pro mzdy / audit / debug.
+// GET /api/planning/work-plan?from=&to= — Plán práce: naplánované operace (BatchOperation) v období
+// s člověkem, pracovištěm, dávkou a výrobkem. Frontend seskupí podle lidí (časový harmonogram).
+router.get('/work-plan', async (req, res, next) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 86400000);
+    const to = req.query.to ? new Date(req.query.to) : new Date(Date.now() + 14 * 86400000);
+    const ops = await prisma.batchOperation.findMany({
+      where: { planned_start: { not: null }, planned_end: { gte: from }, planned_start: { lte: to }, status: { notIn: ['cancelled'] }, batch: { status: { notIn: ['cancelled'] } } },
+      select: {
+        id: true, sequence: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true,
+        assigned_person: { select: { id: true, first_name: true, last_name: true } },
+        workstation: { select: { id: true, name: true, code: true } },
+        operation: { select: { id: true, name: true, step_number: true, is_parallel: true, duration: true, duration_unit: true, workers_count: true } },
+        batch: { select: { id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, product: { select: { id: true, code: true, name: true } } } },
+      },
+      orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
+      take: 2000,
+    });
+    res.json({ from, to, operations: ops });
+  } catch (err) { next(err); }
+});
+
+// GET /api/planning/batches-plan — Naplánované výrobní dávky (s časem) + počet operací a lidí
+router.get('/batches-plan', async (req, res, next) => {
+  try {
+    const status = req.query.status ? String(req.query.status).split(',') : ['planned', 'released', 'in_progress', 'paused'];
+    const batches = await prisma.productionBatch.findMany({
+      where: { status: { in: status } },
+      select: {
+        id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, actual_start: true, actual_end: true, note: true, created_at: true,
+        product: { select: { id: true, code: true, name: true } },
+        batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
+      },
+      orderBy: [{ planned_start: 'asc' }, { priority: 'desc' }, { id: 'desc' }],
+      take: 500,
+    });
+    res.json(batches.map(b => ({
+      ...b,
+      ops_total: b.batch_operations.length,
+      ops_done: b.batch_operations.filter(o => o.status === 'done').length,
+      ops_planned: b.batch_operations.filter(o => o.planned_start).length,
+      people: [...new Map(b.batch_operations.filter(o => o.assigned_person).map(o => [o.assigned_person.id, o.assigned_person])).values()],
+      workstations: [...new Map(b.batch_operations.filter(o => o.workstation).map(o => [o.workstation.id, o.workstation])).values()],
+    })));
+  } catch (err) { next(err); }
+});
+
+// GET /api/planning/material-moves — Naplánované skladové pohyby: příprava materiálu na pracoviště
+// (pre-pick přes všechny aktivní dávky s termínem; termín = plánovaný start dávky)
+router.get('/material-moves', async (req, res, next) => {
+  try {
+    const batches = await prisma.productionBatch.findMany({
+      where: { status: { in: ['planned', 'released', 'in_progress', 'paused'] } },
+      select: { id: true, batch_number: true, planned_start: true, status: true, product: { select: { code: true, name: true } } },
+      orderBy: [{ planned_start: 'asc' }, { id: 'asc' }], take: 200,
+    });
+    const moves = [];
+    for (const b of batches) {
+      let pp; try { pp = await computePrePickForBatch(b.id); } catch (e) { continue; }
+      for (const g of pp.by_workstation || []) {
+        for (const t of g.transfers || []) {
+          if (t.no_transfer_needed) continue;
+          moves.push({
+            batch: { id: b.id, batch_number: b.batch_number, status: b.status, product: b.product },
+            due: b.planned_start,
+            workstation: g.workstation ? { id: g.workstation.id, name: g.workstation.name } : null,
+            material: t.material, needed: t.needed, unit: t.unit,
+            source_warehouse: t.source_warehouse ? { id: t.source_warehouse.id, name: t.source_warehouse.name } : null,
+            source_location: t.source_location ? { id: t.source_location.id, label: t.source_location.label } : null,
+            target_location: t.target_location ? { id: t.target_location.id, label: t.target_location.label } : null,
+            available_at_source: t.available_at_source, action: t.action,
+          });
+        }
+      }
+    }
+    moves.sort((x, y) => (new Date(x.due || 8640000000000000) - new Date(y.due || 8640000000000000)) || ((x.workstation?.name || '').localeCompare(y.workstation?.name || '')));
+    res.json({ batches_processed: batches.length, moves });
+  } catch (err) { next(err); }
+});
+
 router.get('/audit-log', async (req, res, next) => {
   try {
     const { from, to, person_id, batch_id, action } = req.query;

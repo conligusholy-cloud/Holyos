@@ -156,13 +156,75 @@
   <div class="content">
     <!-- NOVÉ PLÁNOVÁNÍ — začínáme znovu. Staré podsekce (Objednávky do výroby / Výrobní dávky) jsou schované
          (PV_LEGACY = true je zase ukáže), kód zůstává. Sem přijde nový návrh plánování. -->
-    <div id="pv-new" style="min-height:60vh;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--text2);">
-      <div>
-        <div style="font-size:42px;margin-bottom:10px;">📅</div>
-        <div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;">Plánování výroby — nový návrh</div>
-        <div style="font-size:13px;max-width:520px;line-height:1.5;">Prázdné plátno. Staré podsekce jsou vypnuté; tady vznikne nové plánování nad pracovišti, lidmi a postupy.</div>
+    <div id="pv-new">
+      <div class="pv2-tabs">
+        <button class="pv2-tab active" data-sec="work" onclick="pv2Show('work')">👤 Plán práce</button>
+        <button class="pv2-tab" data-sec="batches" onclick="pv2Show('batches')">🗂️ Výrobní dávky</button>
+        <button class="pv2-tab" data-sec="moves" onclick="pv2Show('moves')">📦 Příprava materiálu</button>
+        <button class="pv2-tab" data-sec="purchase" onclick="pv2Show('purchase')">🛒 Nákup dílů</button>
+        <span style="flex:1"></span>
+        <label class="pv2-range">Od <input type="date" id="pv2-from" onchange="pv2LoadWork()"></label>
+        <label class="pv2-range">Do <input type="date" id="pv2-to" onchange="pv2LoadWork()"></label>
+        <button class="btn btn-secondary" onclick="pv2Reload()">🔄 Obnovit</button>
       </div>
+
+      <!-- 1) Plán práce: člověk → časový harmonogram operací (datum/čas začátku a konce, navazuje dle postupu) -->
+      <section id="pv2-work" class="pv2-sec">
+        <div class="pv2-hint">Kdo, kdy a co dělá. Řádek = člověk, uvnitř operace v pořadí podle pracovního postupu (začátek → konec). Bez přiřazeného člověka = „Nepřiřazeno".</div>
+        <div id="pv2-work-body" class="pv2-body">Načítám…</div>
+      </section>
+
+      <!-- 2) Naplánované výrobní dávky -->
+      <section id="pv2-batches" class="pv2-sec" style="display:none;">
+        <div class="pv2-hint">Dávky s plánovaným začátkem a koncem, průběh operací, lidé a pracoviště.</div>
+        <div id="pv2-batches-body" class="pv2-body">Načítám…</div>
+      </section>
+
+      <!-- 3) Naplánované skladové pohyby — příprava materiálu na pracoviště -->
+      <section id="pv2-moves" class="pv2-sec" style="display:none;">
+        <div class="pv2-hint">Co, odkud, kam a do kdy je třeba připravit na pracoviště (podle operací dávek a vstupního skladu pracoviště).</div>
+        <div id="pv2-moves-body" class="pv2-body">Načítám…</div>
+      </section>
+
+      <!-- 4) Plán nákupu dílů -->
+      <section id="pv2-purchase" class="pv2-sec" style="display:none;">
+        <div class="pv2-hint">Co chybí na skladě pro naplánované dávky — sumováno podle dodavatele, s termínem potřeby.</div>
+        <div id="pv2-purchase-body" class="pv2-body">Načítám…</div>
+      </section>
     </div>
+    <style>
+      .pv2-tabs { display:flex; align-items:center; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; flex-wrap:wrap; }
+      .pv2-tab { background:none; border:1px solid transparent; border-radius:8px; color:var(--text2); font-weight:600; font-size:13px; padding:8px 14px; cursor:pointer; }
+      .pv2-tab:hover { color:var(--text); background:var(--surface2); }
+      .pv2-tab.active { color:#14b8a6; background:rgba(20,184,166,0.12); border-color:rgba(20,184,166,0.4); }
+      .pv2-range { font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px; }
+      .pv2-range input { background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 8px; font-size:12px; }
+      .pv2-hint { font-size:12px; color:var(--text2); margin-bottom:10px; }
+      .pv2-body { font-size:13px; }
+      .pv2-empty { padding:40px; text-align:center; color:var(--text2); border:1px dashed var(--border); border-radius:10px; }
+      .pv2-table { width:100%; border-collapse:collapse; }
+      .pv2-table th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--text2); padding:8px 10px; border-bottom:1px solid var(--border); }
+      .pv2-table td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+      .pv2-person { background:var(--surface); border:1px solid var(--border); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+      .pv2-person-head { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface2); font-weight:700; }
+      .pv2-person-head .cnt { font-size:11px; color:var(--text2); font-weight:500; }
+      .pv2-day { padding:6px 14px 2px; font-size:11px; color:#14b8a6; font-weight:700; text-transform:uppercase; }
+      .pv2-op { display:grid; grid-template-columns:120px 1fr auto; gap:10px; padding:6px 14px; border-top:1px solid var(--border); align-items:center; }
+      .pv2-op .t { font-family:monospace; font-size:12px; color:var(--text); }
+      .pv2-op .n { font-size:13px; }
+      .pv2-op .n small { color:var(--text2); }
+      .pv2-op .s { font-size:11px; padding:2px 8px; border-radius:10px; border:1px solid var(--border); color:var(--text2); white-space:nowrap; }
+      .pv2-op .s.in_progress { color:#f59e0b; border-color:rgba(245,158,11,.5); }
+      .pv2-op .s.done { color:#22c55e; border-color:rgba(34,197,94,.5); }
+      .pv2-op .s.blocked { color:#ef4444; border-color:rgba(239,68,68,.5); }
+      .pv2-badge { display:inline-block; font-size:11px; padding:1px 7px; border-radius:10px; border:1px solid var(--border); color:var(--text2); margin-right:4px; }
+      .pv2-bar { height:6px; background:var(--surface2); border-radius:4px; overflow:hidden; min-width:90px; }
+      .pv2-bar > div { height:100%; background:#22c55e; }
+      .pv2-act { font-size:11px; padding:2px 8px; border-radius:10px; }
+      .pv2-act.transfer_ok { color:#22c55e; background:rgba(34,197,94,.12); }
+      .pv2-act.shortage { color:#ef4444; background:rgba(239,68,68,.12); }
+      .pv2-act.no_source, .pv2-act.no_target { color:#f59e0b; background:rgba(245,158,11,.12); }
+    </style>
     <div id="pv-legacy" style="display:none;">
     <!-- Záložky modulu -->
     <div class="pv-tabs" style="display:flex; gap:6px; margin-bottom:12px; border-bottom:1px solid var(--border);">
@@ -1500,6 +1562,123 @@
   };
 
   // ─── Init ─────────────────────────────────────────────────────────────────
+  // ─── NOVÉ PLÁNOVÁNÍ (4 sekce) ───────────────────────────────────────────
+  function pv2Esc(x) { return String(x == null ? '' : x).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function pv2Date(d) { return d ? new Date(d).toLocaleDateString('cs-CZ') : '—'; }
+  function pv2Time(d) { return d ? new Date(d).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '—'; }
+  function pv2DT(d) { return d ? pv2Date(d) + ' ' + pv2Time(d) : '—'; }
+  var pv2Loaded = {};
+  window.pv2Show = function (sec) {
+    document.querySelectorAll('.pv2-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sec') === sec); });
+    document.querySelectorAll('.pv2-sec').forEach(function (el) { el.style.display = el.id === 'pv2-' + sec ? '' : 'none'; });
+    try { localStorage.setItem('pv2.sec', sec); } catch (e) {}
+    if (!pv2Loaded[sec]) pv2Load(sec);
+  };
+  window.pv2Reload = function () { pv2Loaded = {}; var sec = document.querySelector('.pv2-tab.active').getAttribute('data-sec'); pv2Load(sec); };
+  function pv2Load(sec) {
+    if (sec === 'work') pv2LoadWork(); else if (sec === 'batches') pv2LoadBatches(); else if (sec === 'moves') pv2LoadMoves(); else if (sec === 'purchase') pv2LoadPurchase();
+  }
+  async function pv2Fetch(url) { var r = await fetch(url, { credentials: 'include' }); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+
+  // 1) Plán práce — člověk → den → operace (start–konec)
+  window.pv2LoadWork = async function () {
+    var box = document.getElementById('pv2-work-body'); box.textContent = 'Načítám…';
+    var from = document.getElementById('pv2-from').value, to = document.getElementById('pv2-to').value;
+    try {
+      var d = await pv2Fetch('/api/planning/work-plan?from=' + encodeURIComponent(from) + 'T00:00:00&to=' + encodeURIComponent(to) + 'T23:59:59');
+      pv2Loaded.work = true;
+      var ops = d.operations || [];
+      if (!ops.length) { box.innerHTML = '<div class="pv2-empty">V tomto období nejsou naplánované žádné operace.<br><small>Operace vznikají z dávek (sekce Výrobní dávky) po naplánování.</small></div>'; return; }
+      var byPerson = new Map();
+      ops.forEach(function (o) { var key = o.assigned_person ? o.assigned_person.id : 0; if (!byPerson.has(key)) byPerson.set(key, { person: o.assigned_person, ops: [] }); byPerson.get(key).ops.push(o); });
+      var groups = Array.from(byPerson.values()).sort(function (a, b) { if (!a.person) return 1; if (!b.person) return -1; return (a.person.last_name || '').localeCompare(b.person.last_name || '', 'cs'); });
+      box.innerHTML = groups.map(function (g) {
+        var name = g.person ? (g.person.first_name + ' ' + g.person.last_name) : '⚠️ Nepřiřazeno';
+        var minutes = g.ops.reduce(function (s, o) { return s + (o.planned_end && o.planned_start ? (new Date(o.planned_end) - new Date(o.planned_start)) / 60000 : 0); }, 0);
+        var html = '<div class="pv2-person"><div class="pv2-person-head">👤 ' + pv2Esc(name) + '<span class="cnt">' + g.ops.length + ' operací · ' + Math.round(minutes / 60 * 10) / 10 + ' h</span></div>';
+        var lastDay = '';
+        g.ops.forEach(function (o) {
+          var day = pv2Date(o.planned_start);
+          if (day !== lastDay) { html += '<div class="pv2-day">' + day + '</div>'; lastDay = day; }
+          html += '<div class="pv2-op"><div class="t">' + pv2Time(o.planned_start) + ' – ' + pv2Time(o.planned_end) + '</div>' +
+            '<div class="n"><b>' + (o.operation ? o.operation.step_number + '. ' + pv2Esc(o.operation.name) : '?') + '</b>' + (o.operation && o.operation.is_parallel ? ' <span class="pv2-badge" style="color:#c084fc;">⫽ paralelní</span>' : '') +
+            ' <small>· ' + pv2Esc(o.batch.product.code) + ' ' + pv2Esc(o.batch.product.name) + ' · dávka ' + pv2Esc(o.batch.batch_number) + ' (' + o.batch.quantity + ' ks)' + (o.workstation ? ' · 🏭 ' + pv2Esc(o.workstation.name) : '') + '</small></div>' +
+            '<span class="s ' + pv2Esc(o.status) + '">' + pv2Esc(o.status) + '</span></div>';
+        });
+        return html + '</div>';
+      }).join('');
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+
+  // 2) Výrobní dávky
+  window.pv2LoadBatches = async function () {
+    var box = document.getElementById('pv2-batches-body'); box.textContent = 'Načítám…';
+    try {
+      var rows = await pv2Fetch('/api/planning/batches-plan'); pv2Loaded.batches = true;
+      if (!rows.length) { box.innerHTML = '<div class="pv2-empty">Žádné naplánované dávky.</div>'; return; }
+      box.innerHTML = '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Lidé</th><th>Pracoviště</th><th>Stav</th></tr></thead><tbody>' +
+        rows.map(function (b) {
+          var pct = b.ops_total ? Math.round(b.ops_done / b.ops_total * 100) : 0;
+          return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td>' +
+            '<td>' + pv2DT(b.planned_start) + '</td><td>' + pv2DT(b.planned_end) + '</td>' +
+            '<td><div class="pv2-bar" title="' + b.ops_done + ' / ' + b.ops_total + ' hotovo"><div style="width:' + pct + '%"></div></div><small style="color:var(--text2)">' + b.ops_done + '/' + b.ops_total + (b.ops_planned < b.ops_total ? ' · ' + (b.ops_total - b.ops_planned) + ' nenaplánováno' : '') + '</small></td>' +
+            '<td>' + (b.people.length ? b.people.map(function (p) { return '<span class="pv2-badge">' + pv2Esc(p.first_name + ' ' + p.last_name) + '</span>'; }).join('') : '<span style="color:#ef4444;font-size:11px;">bez lidí</span>') + '</td>' +
+            '<td>' + b.workstations.map(function (w) { return '<span class="pv2-badge">' + pv2Esc(w.name) + '</span>'; }).join('') + '</td>' +
+            '<td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td></tr>';
+        }).join('') + '</tbody></table>';
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+
+  // 3) Příprava materiálu na pracoviště
+  window.pv2LoadMoves = async function () {
+    var box = document.getElementById('pv2-moves-body'); box.textContent = 'Načítám…';
+    try {
+      var d = await pv2Fetch('/api/planning/material-moves'); pv2Loaded.moves = true;
+      var ACT = { transfer_ok: 'připravit (skladem)', shortage: 'nedostatek', no_source: 'není na skladě', no_target: 'pracoviště bez vstupního skladu' };
+      if (!d.moves.length) { box.innerHTML = '<div class="pv2-empty">Žádné naplánované přesuny materiálu (' + d.batches_processed + ' dávek zkontrolováno).</div>'; return; }
+      box.innerHTML = '<table class="pv2-table"><thead><tr><th>Do kdy</th><th>Pracoviště</th><th>Materiál</th><th>Množství</th><th>Odkud</th><th>Kam</th><th>K dispozici</th><th>Stav</th><th>Dávka</th></tr></thead><tbody>' +
+        d.moves.map(function (m) {
+          return '<tr><td>' + pv2DT(m.due) + '</td><td>' + (m.workstation ? pv2Esc(m.workstation.name) : '—') + '</td><td><b>' + (m.material ? pv2Esc(m.material.code) : '?') + '</b> <small style="color:var(--text2)">' + (m.material ? pv2Esc(m.material.name) : '') + '</small></td>' +
+            '<td>' + m.needed + ' ' + pv2Esc(m.unit) + '</td><td>' + (m.source_warehouse ? pv2Esc(m.source_warehouse.name) + (m.source_location ? ' / ' + pv2Esc(m.source_location.label) : '') : '—') + '</td><td>' + (m.target_location ? pv2Esc(m.target_location.label) : '—') + '</td>' +
+            '<td>' + m.available_at_source + '</td><td><span class="pv2-act ' + pv2Esc(m.action) + '">' + (ACT[m.action] || m.action) + '</span></td><td><small>' + pv2Esc(m.batch.batch_number) + ' · ' + pv2Esc(m.batch.product.code) + '</small></td></tr>';
+        }).join('') + '</tbody></table>';
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+
+  // 4) Nákup dílů
+  window.pv2LoadPurchase = async function () {
+    var box = document.getElementById('pv2-purchase-body'); box.textContent = 'Načítám…';
+    try {
+      var d = await pv2Fetch('/api/planning/purchase-report'); pv2Loaded.purchase = true;
+      if (!d.items || !d.items.length) { box.innerHTML = '<div class="pv2-empty">Nic k objednání — naplánované dávky jsou materiálově pokryté (' + (d.batches_processed || 0) + ' dávek).</div>'; return; }
+      var bySup = {};
+      d.items.forEach(function (it) { var k = it.supplier ? it.supplier.name : '— bez dodavatele —'; (bySup[k] = bySup[k] || []).push(it); });
+      box.innerHTML = Object.keys(bySup).sort().map(function (sup) {
+        var items = bySup[sup];
+        return '<div class="pv2-person"><div class="pv2-person-head">🏢 ' + pv2Esc(sup) + '<span class="cnt">' + items.length + ' položek</span></div>' +
+          '<table class="pv2-table"><thead><tr><th>Materiál</th><th>Chybí</th><th>Potřeba do</th><th>Dodací lhůta</th><th>Objednat do</th><th>Pro dávky</th></tr></thead><tbody>' +
+          items.map(function (it) {
+            var need = it.needed_by || null;
+            var lead = it.lead_time_days != null ? it.lead_time_days : null;
+            var orderBy = need && lead != null ? new Date(new Date(need).getTime() - lead * 86400000) : null;
+            return '<tr><td><b>' + pv2Esc(it.material ? it.material.code : '?') + '</b> <small style="color:var(--text2)">' + pv2Esc(it.material ? it.material.name : '') + '</small></td>' +
+              '<td style="color:#ef4444;font-weight:700;">' + it.total_shortage + ' ' + pv2Esc(it.material && it.material.unit || '') + '</td><td>' + pv2Date(need) + '</td><td>' + (lead != null ? lead + ' dní' : '—') + '</td>' +
+              '<td>' + (orderBy ? '<b' + (orderBy < new Date() ? ' style="color:#ef4444"' : '') + '>' + pv2Date(orderBy) + '</b>' : '—') + '</td>' +
+              '<td><small>' + (it.contributors || []).map(function (b) { return pv2Esc(b.batch_number) + ' (' + b.shortage + ')'; }).join(', ') + '</small></td></tr>';
+          }).join('') + '</tbody></table></div>';
+      }).join('');
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+
+  (function pv2Init() {
+    var f = new Date(), t = new Date(Date.now() + 14 * 86400000);
+    var iso = function (d) { return d.toISOString().slice(0, 10); };
+    var fi = document.getElementById('pv2-from'), ti = document.getElementById('pv2-to');
+    if (fi && !fi.value) fi.value = iso(f); if (ti && !ti.value) ti.value = iso(t);
+    var sec = 'work'; try { sec = localStorage.getItem('pv2.sec') || 'work'; } catch (e) {}
+    if (!/[?&]legacy=1/.test(location.search)) pv2Show(sec);
+  })();
+
   var PV_LEGACY = /[?&]legacy=1/.test(location.search);
   if (PV_LEGACY) { document.getElementById('pv-legacy').style.display = ''; document.getElementById('pv-legacy-actions').style.display = 'flex'; document.getElementById('pv-new').style.display = 'none'; loadAll(); switchPvTab('orders'); }
 })();

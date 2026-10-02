@@ -32,7 +32,7 @@ async function computePurchaseReport(opts = {}) {
 
   const batches = await tx.productionBatch.findMany({
     where: { status: { in: statuses } },
-    select: { id: true, batch_number: true, status: true, quantity: true,
+    select: { id: true, batch_number: true, status: true, quantity: true, planned_start: true,
       product: { select: { code: true, name: true } } },
     orderBy: [{ priority: 'asc' }, { planned_start: 'asc' }],
   });
@@ -66,7 +66,10 @@ async function computePurchaseReport(opts = {}) {
         product: b.product ? `${b.product.code} ${b.product.name}` : null,
         quantity: b.quantity,
         shortage: it.shortage,
+        planned_start: b.planned_start,
       });
+      // Nejbližší termín potřeby (start dávky)
+      if (b.planned_start && (!cur.needed_by || new Date(b.planned_start) < new Date(cur.needed_by))) cur.needed_by = b.planned_start;
       acc.set(it.material_id, cur);
     }
   }
