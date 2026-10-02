@@ -210,6 +210,21 @@
       <!-- 1) Plán práce: člověk → časový harmonogram operací (datum/čas začátku a konce, navazuje dle postupu) -->
       <section id="pv2-work" class="pv2-sec">
         <div class="pv2-hint">Kdo, kdy a co dělá. Řádek = člověk, uvnitř operace v pořadí podle pracovního postupu (začátek → konec). Bez přiřazeného člověka = „Nepřiřazeno".</div>
+        <div class="pv2-filter">
+          <input id="wp-search" placeholder="🔍 Hledat člověka / operaci / výrobek / dávku / pracoviště…" oninput="pv2RenderWork()">
+          <select id="wp-sort" onchange="pv2RenderWork()" title="Řazení lidí">
+            <option value="hours_desc">Vytížení: od největšího</option>
+            <option value="hours_asc">Vytížení: od nejmenšího</option>
+            <option value="name_asc">Jméno: A → Z</option>
+            <option value="name_desc">Jméno: Z → A</option>
+            <option value="first_asc">Začátek: nejdřív</option>
+            <option value="ops_desc">Počet operací</option>
+          </select>
+          <select id="wp-person" onchange="pv2RenderWork()" title="Jen jeden člověk"><option value="">Všichni lidé</option></select>
+          <select id="wp-batch" onchange="pv2RenderWork()" title="Jen jedna dávka"><option value="">Všechny dávky</option></select>
+          <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
+          <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
+        </div>
         <div id="pv2-work-body" class="pv2-body">Načítám…</div>
       </section>
 
@@ -259,6 +274,10 @@
       .pv2-range { font-size:12px; color:var(--text2); display:flex; align-items:center; gap:6px; }
       .pv2-range input { background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:5px 8px; font-size:12px; }
       .pv2-hint { font-size:12px; color:var(--text2); margin-bottom:10px; }
+      .pv2-filter { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:10px; font-size:12px; }
+      .pv2-filter input[type=text], .pv2-filter input:not([type]), .pv2-filter select { background:var(--bg); border:1px solid var(--border); border-radius:6px; color:var(--text); padding:6px 9px; font-size:12px; }
+      .pv2-filter input:not([type]) { flex:1; min-width:220px; }
+      .pv2-filter label { color:var(--text2); display:flex; align-items:center; gap:5px; }
       .pv2-body { font-size:13px; }
       .pv2-empty { padding:40px; text-align:center; color:var(--text2); border:1px dashed var(--border); border-radius:10px; }
       .pv2-table { width:100%; border-collapse:collapse; }
@@ -1741,15 +1760,54 @@
     try {
       var d = await pv2Fetch('/api/planning/work-plan?from=' + encodeURIComponent(from) + 'T00:00:00&to=' + encodeURIComponent(to) + 'T23:59:59');
       pv2Loaded.work = true;
-      var ops = d.operations || [];
-      if (!ops.length) { box.innerHTML = '<div class="pv2-empty">V tomto období nejsou naplánované žádné operace.<br><small>Operace vznikají z dávek (sekce Výrobní dávky) po naplánování.</small></div>'; return; }
+      pv2WorkOps = d.operations || [];
+      // naplň filtry lidí a dávek
+      var pSel = document.getElementById('wp-person'), bSel = document.getElementById('wp-batch');
+      var pKeep = pSel.value, bKeep = bSel.value;
+      var people = {}, batches = {};
+      pv2WorkOps.forEach(function (o) { ((o.workers && o.workers.length) ? o.workers.map(function (w) { return w.person; }) : (o.assigned_person ? [o.assigned_person] : [])).forEach(function (p) { people[p.id] = p.first_name + ' ' + p.last_name; }); batches[o.batch.id] = o.batch.batch_number + ' · ' + o.batch.product.code; });
+      pSel.innerHTML = '<option value="">Všichni lidé</option>' + Object.keys(people).sort(function (a, b) { return people[a].localeCompare(people[b], 'cs'); }).map(function (id) { return '<option value="' + id + '">' + pv2Esc(people[id]) + '</option>'; }).join('');
+      bSel.innerHTML = '<option value="">Všechny dávky</option>' + Object.keys(batches).map(function (id) { return '<option value="' + id + '">' + pv2Esc(batches[id]) + '</option>'; }).join('');
+      pSel.value = pKeep; bSel.value = bKeep;
+      pv2RenderWork();
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+  var pv2WorkOps = [];
+  window.pv2RenderWork = function () {
+    var box = document.getElementById('pv2-work-body');
+    try {
+      var q = (document.getElementById('wp-search').value || '').toLowerCase().trim();
+      var sort = document.getElementById('wp-sort').value; var onlyPerson = parseInt(document.getElementById('wp-person').value) || 0; var onlyBatch = parseInt(document.getElementById('wp-batch').value) || 0; var onlyUn = document.getElementById('wp-unassigned').checked;
+      var ops = pv2WorkOps.filter(function (o) {
+        if (onlyBatch && o.batch.id !== onlyBatch) return false;
+        if (!q) return true;
+        var txt = [(o.operation && o.operation.name) || '', o.batch.batch_number, o.batch.product.code, o.batch.product.name, o.workstation ? o.workstation.name : '', o.status].concat(((o.workers || []).map(function (w) { return w.person.first_name + ' ' + w.person.last_name; }))).join(' ').toLowerCase();
+        return txt.indexOf(q) !== -1;
+      });
+      if (!pv2WorkOps.length) { box.innerHTML = '<div class="pv2-empty">V tomto období nejsou naplánované žádné operace.<br><small>Operace vznikají z dávek (sekce Výrobní dávky) po naplánování.</small></div>'; document.getElementById('wp-count').textContent = ''; return; }
       var byPerson = new Map();
       // Operace s více lidmi (workers_count 2+) se ukáže u KAŽDÉHO přiřazeného člověka
       ops.forEach(function (o) {
         var people = (o.workers && o.workers.length) ? o.workers.map(function (w) { return w.person; }) : (o.assigned_person ? [o.assigned_person] : [null]);
         people.forEach(function (p) { var key = p ? p.id : 0; if (!byPerson.has(key)) byPerson.set(key, { person: p, ops: [] }); byPerson.get(key).ops.push(o); });
       });
-      var groups = Array.from(byPerson.values()).sort(function (a, b) { if (!a.person) return 1; if (!b.person) return -1; return (a.person.last_name || '').localeCompare(b.person.last_name || '', 'cs'); });
+      var groups = Array.from(byPerson.values());
+      if (onlyPerson) groups = groups.filter(function (g) { return g.person && g.person.id === onlyPerson; });
+      if (onlyUn) groups = groups.filter(function (g) { return !g.person; });
+      var hoursOf = function (g) { return g.ops.reduce(function (s, o) { return s + (o.planned_end && o.planned_start ? (new Date(o.planned_end) - new Date(o.planned_start)) / 3600000 : 0); }, 0); };
+      var nameOf = function (g) { return g.person ? ((g.person.last_name || '') + ' ' + (g.person.first_name || '')) : '~'; };
+      var firstOf = function (g) { return Math.min.apply(null, g.ops.map(function (o) { return new Date(o.planned_start).getTime(); })); };
+      groups.sort(function (a, b) {
+        if (!a.person !== !b.person) return !a.person ? 1 : -1; // Nepřiřazeno vždy dole
+        if (sort === 'hours_desc') return hoursOf(b) - hoursOf(a) || nameOf(a).localeCompare(nameOf(b), 'cs');
+        if (sort === 'hours_asc') return hoursOf(a) - hoursOf(b) || nameOf(a).localeCompare(nameOf(b), 'cs');
+        if (sort === 'name_desc') return nameOf(b).localeCompare(nameOf(a), 'cs');
+        if (sort === 'first_asc') return firstOf(a) - firstOf(b);
+        if (sort === 'ops_desc') return b.ops.length - a.ops.length || nameOf(a).localeCompare(nameOf(b), 'cs');
+        return nameOf(a).localeCompare(nameOf(b), 'cs');
+      });
+      document.getElementById('wp-count').textContent = groups.length + ' lidí · ' + ops.length + ' operací · ' + (Math.round(groups.reduce(function (s, g) { return s + hoursOf(g); }, 0) * 10) / 10) + ' h';
+      if (!groups.length) { box.innerHTML = '<div class="pv2-empty">Filtru nic neodpovídá.</div>'; return; }
       box.innerHTML = groups.map(function (g) {
         var name = g.person ? (g.person.first_name + ' ' + g.person.last_name) : '⚠️ Nepřiřazeno';
         var minutes = g.ops.reduce(function (s, o) { return s + (o.planned_end && o.planned_start ? (new Date(o.planned_end) - new Date(o.planned_start)) / 60000 : 0); }, 0);
