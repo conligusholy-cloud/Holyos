@@ -597,9 +597,8 @@
   }
   window.__lcToggleSms = function (id, on) {
     var row = (state.rows || []).find(function (r) { return r.id === id; }); if (!row) return;
-    var body = {}; Object.keys(row).forEach(function (k) { if (['id', 'docs_count', 'offers_count', 'inquiries', 'created_at', 'updated_at'].indexOf(k) === -1) body[k] = row[k]; });
-    body.send_sms = !!on;
-    api('/' + id, { method: 'PUT', body: body }).then(function () { row.send_sms = !!on; render(); }).catch(function (e) { alert('Nepodařilo se uložit: ' + e.message); render(); });
+    // PUT je částečný — posíláme jen přepínač (celý řádek obsahuje null hodnoty, které validace odmítá)
+    api('/' + id, { method: 'PUT', body: { send_sms: !!on } }).then(function () { row.send_sms = !!on; render(); }).catch(function (e) { alert('Nepodařilo se uložit: ' + e.message); render(); });
   };
   window.__lcInqCompany = function (cid) {
     state.inqCompany = cid; state.inqFilter = 'all';
