@@ -1744,7 +1744,11 @@
       var ops = d.operations || [];
       if (!ops.length) { box.innerHTML = '<div class="pv2-empty">V tomto období nejsou naplánované žádné operace.<br><small>Operace vznikají z dávek (sekce Výrobní dávky) po naplánování.</small></div>'; return; }
       var byPerson = new Map();
-      ops.forEach(function (o) { var key = o.assigned_person ? o.assigned_person.id : 0; if (!byPerson.has(key)) byPerson.set(key, { person: o.assigned_person, ops: [] }); byPerson.get(key).ops.push(o); });
+      // Operace s více lidmi (workers_count 2+) se ukáže u KAŽDÉHO přiřazeného člověka
+      ops.forEach(function (o) {
+        var people = (o.workers && o.workers.length) ? o.workers.map(function (w) { return w.person; }) : (o.assigned_person ? [o.assigned_person] : [null]);
+        people.forEach(function (p) { var key = p ? p.id : 0; if (!byPerson.has(key)) byPerson.set(key, { person: p, ops: [] }); byPerson.get(key).ops.push(o); });
+      });
       var groups = Array.from(byPerson.values()).sort(function (a, b) { if (!a.person) return 1; if (!b.person) return -1; return (a.person.last_name || '').localeCompare(b.person.last_name || '', 'cs'); });
       box.innerHTML = groups.map(function (g) {
         var name = g.person ? (g.person.first_name + ' ' + g.person.last_name) : '⚠️ Nepřiřazeno';
@@ -1756,6 +1760,7 @@
           if (day !== lastDay) { html += '<div class="pv2-day">' + day + '</div>'; lastDay = day; }
           html += '<div class="pv2-op"><div class="t">' + pv2Time(o.planned_start) + ' – ' + pv2Time(o.planned_end) + '</div>' +
             '<div class="n"><b>' + (o.operation ? o.operation.step_number + '. ' + pv2Esc(o.operation.name) : '?') + '</b>' + (o.operation && o.operation.is_parallel ? ' <span class="pv2-badge" style="color:#c084fc;">⫽ paralelní</span>' : '') +
+            (function () { var n = (o.operation && o.operation.workers_count) || 1; var w = (o.workers || []).map(function (x) { return x.person; }); if (n > 1 || w.length > 1) { var others = w.filter(function (p) { return !g.person || p.id !== g.person.id; }); return ' <span class="pv2-badge" title="Operace vyžaduje ' + n + ' lidi najednou" style="color:' + (w.length < n ? '#ef4444' : '#22c55e') + ';">👥 ' + w.length + '/' + n + (others.length ? ' · s ' + pv2Esc(others.map(function (p) { return p.first_name + ' ' + p.last_name; }).join(', ')) : '') + '</span>'; } return ''; })() +
             ' <small>· ' + pv2Esc(o.batch.product.code) + ' ' + pv2Esc(o.batch.product.name) + ' · dávka ' + pv2Esc(o.batch.batch_number) + ' (' + o.batch.quantity + ' ks)' + (o.workstation ? ' · 🏭 ' + pv2Esc(o.workstation.name) : '') + '</small></div>' +
             '<span class="s ' + pv2Esc(o.status) + '">' + pv2Esc(o.status) + '</span></div>';
         });

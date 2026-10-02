@@ -220,6 +220,7 @@ model Person {
   batches_created               ProductionBatch[]   @relation("BatchCreatedBy")
   // Plánovač — přiřazené operace v kiosku
   batch_operations_assigned     BatchOperation[]    @relation("BatchOperationAssignee")
+  batch_operation_work          BatchOperationWorker[] @relation("BatchOperationWorkerPerson")
   // Plánovač — log akcí v kiosku
   batch_operation_logs          BatchOperationLog[] @relation("BatchOperationLogPerson")
   // Plánovač — kalibrace časů ProductOperation
@@ -3859,6 +3860,22 @@ model ProductOutput {
   @@map("product_outputs")
 }
 
+// Lidé přiřazení k operaci dávky (operace s workers_count = N dostane N lidí; všichni pracují souběžně)
+model BatchOperationWorker {
+  id                 Int @id @default(autoincrement())
+  batch_operation_id Int
+  person_id          Int
+  slot               Int @default(1) // pořadí (1 = hlavní = assigned_person)
+  created_at DateTime @default(now())
+
+  batch_operation BatchOperation @relation(fields: [batch_operation_id], references: [id], onDelete: Cascade)
+  person          Person         @relation("BatchOperationWorkerPerson", fields: [person_id], references: [id], onDelete: Cascade)
+
+  @@unique([batch_operation_id, person_id])
+  @@index([person_id])
+  @@map("batch_operation_workers")
+}
+
 // Kdo smí operaci dělat — explicitní seznam lidí (plánovač vybírá z těchto variant; priority = pořadí preference)
 model OperationAllowedPerson {
   id           Int @id @default(autoincrement())
@@ -4031,6 +4048,7 @@ model BatchOperation {
   assigned_person Person?          @relation("BatchOperationAssignee", fields: [assigned_person_id], references: [id])
 
   logs BatchOperationLog[]
+  workers BatchOperationWorker[] // všichni přiřazení lidé (workers_count > 1); assigned_person = první z nich
 
   @@index([batch_id])
   @@index([operation_id])

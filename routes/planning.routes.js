@@ -592,6 +592,7 @@ router.get('/work-plan', async (req, res, next) => {
       select: {
         id: true, sequence: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true,
         assigned_person: { select: { id: true, first_name: true, last_name: true } },
+        workers: { select: { slot: true, person: { select: { id: true, first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
         workstation: { select: { id: true, name: true, code: true } },
         operation: { select: { id: true, name: true, step_number: true, is_parallel: true, duration: true, duration_unit: true, workers_count: true } },
         batch: { select: { id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, product: { select: { id: true, code: true, name: true } } } },
@@ -612,7 +613,7 @@ router.get('/batches-plan', async (req, res, next) => {
       select: {
         id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, actual_start: true, actual_end: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
         product: { select: { id: true, code: true, name: true } },
-        batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
+        batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workers: { select: { person: { select: { id: true, first_name: true, last_name: true } } } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
       },
       orderBy: [{ planned_start: 'asc' }, { priority: 'desc' }, { id: 'desc' }],
       take: 500,
@@ -622,7 +623,7 @@ router.get('/batches-plan', async (req, res, next) => {
       ops_total: b.batch_operations.length,
       ops_done: b.batch_operations.filter(o => o.status === 'done').length,
       ops_planned: b.batch_operations.filter(o => o.planned_start).length,
-      people: [...new Map(b.batch_operations.filter(o => o.assigned_person).map(o => [o.assigned_person.id, o.assigned_person])).values()],
+      people: [...new Map(b.batch_operations.flatMap(o => (o.workers && o.workers.length ? o.workers.map(w => w.person) : (o.assigned_person ? [o.assigned_person] : []))).map(p => [p.id, p])).values()],
       workstations: [...new Map(b.batch_operations.filter(o => o.workstation).map(o => [o.workstation.id, o.workstation])).values()],
     })));
   } catch (err) { next(err); }

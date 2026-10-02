@@ -67,6 +67,8 @@ async function simulateProduction(p) {
       const bottlenecks = [];
       const noPeopleOps = product.operations.filter(o => !(o.allowed_people || []).length).length;
       if (count('no_assignee_found')) bottlenecks.push({ type: 'people', severity: 'warn', text: count('no_assignee_found') + ' operací bez dostupného člověka' + (noPeopleOps ? ' (' + noPeopleOps + ' operací nemá definováno, kdo je smí dělat)' : '') });
+      if (count('people_short')) bottlenecks.push({ type: 'people', severity: 'warn', text: count('people_short') + ' operací nemá dost lidí najednou (chybí druhý/třetí pracovník)' });
+      if (count('person_busy')) bottlenecks.push({ type: 'people', severity: 'info', text: count('person_busy') + '× přiřazen člověk, který má v tu dobu jinou práci' });
       if (count('no_workstation_assigned')) bottlenecks.push({ type: 'workstation', severity: 'warn', text: count('no_workstation_assigned') + ' operací bez pracoviště' });
       if (count('group_all_busy_waiting') || count('pushed_by_queue')) bottlenecks.push({ type: 'queue', severity: 'info', text: 'Čekání na obsazená pracoviště: ' + (count('pushed_by_queue') + count('group_all_busy_waiting')) + '× (fronta jiných dávek)' });
       if (count('parallel_overflow')) bottlenecks.push({ type: 'parallel', severity: 'warn', text: count('parallel_overflow') + ' paralelních operací přesahuje své okno' });
