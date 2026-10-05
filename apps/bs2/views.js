@@ -70,14 +70,14 @@ function loginPage({ error = '', info = '', login = '' } = {}) {
     <p class="muted small" style="margin:14px 0 0;text-align:center">Jsi tu poprvé? <a href="/activate">Aktivovat účet e-mailem</a></p>
   </div></div>` });
 }
-function activatePage({ step = 'email', email = '', error = '', name = '' } = {}) {
+function activatePage({ step = 'email', email = '', error = '', name = '', nick = '' } = {}) {
   const inner = step === 'email' ? `
     <p class="muted small">Zadej e-mail, na který jsi u nás veden. Pokud ho v seznamu máme, vytvoříš si nick a heslo.</p>
     <form method="post" action="/activate"><label>E-mail</label><input name="email" type="email" value="${esc(email)}" autocomplete="email" inputmode="email" autocapitalize="none" required>
     <div style="height:14px"></div><button class="btn full" type="submit">Pokračovat</button></form>` : `
     <p class="muted small">Ahoj${name ? ' ' + esc(name) : ''}, e-mail <b>${esc(email)}</b> známe. Zvol si nick a heslo pro přihlašování.</p>
     <form method="post" action="/activate/finish"><input type="hidden" name="email" value="${esc(email)}">
-      <label>Nick (3–30 znaků, písmena/čísla/._-)</label><input name="nick" autocomplete="username" autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required>
+      <label>Nick (3–30 znaků, písmena/čísla/._-)</label><input name="nick" value="${esc(nick)}" autocomplete="username" autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required>
       <label>Heslo (min. 8 znaků)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
       <label>Heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
       <div style="height:14px"></div><button class="btn full" type="submit">Vytvořit účet a přihlásit</button></form>`;
@@ -155,7 +155,10 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Jméno</th><th>E-mail</th><th>Nick</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${rowsHtml || '<tr><td colspan="6" class="muted">Nic nenalezeno.</td></tr>'}</tbody></table></div>`, holyosUrl);
 }
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false }) {
-  const extra = s && s.extra && Object.keys(s.extra).length ? Object.entries(s.extra).map(([k, v]) => `<div class="list-item"><span class="muted">${esc(k)}</span><span>${esc(v)}</span></div>`).join('') : '<p class="muted small">Žádné další údaje.</p>';
+  const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
+  const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
+  const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
+  const extra = keys.length ? keys.map(k => `<div class="list-item"><span class="muted">${esc(k)}</span><span style="text-align:right;word-break:break-all">${esc(s.extra[k])}</span></div>`).join('') : '<p class="muted small">Žádné další údaje.</p>';
   return adminLayout(isNew ? 'Nový podporovatel' : 'Detail', 'sup', admin, `
   <p><a href="/admin/supporters">← seznam</a></p>
   <h1>${isNew ? 'Nový podporovatel' : esc([s.last_name, s.first_name].filter(Boolean).join(' ') || s.email)}</h1>
@@ -181,21 +184,21 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat podporovatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
       </div>
     </div>
-    <div class="card"><h2 style="margin-top:0">Další údaje z importu</h2>${extra}</div>`}
+    <div class="card"><h2 style="margin-top:0">Další údaje z importu <span class="muted small">(${keys.length})</span></h2>${extra}</div>`}
   </div>`, holyosUrl);
 }
 function adminImport({ admin, result = null, error = '', holyosUrl }) {
   let res = '';
   if (result) {
     res = `<div class="card"><h2 style="margin-top:0">Výsledek importu „${esc(result.file)}"</h2>
-      <div class="grid"><div class="stat"><div class="v">${result.rows}</div><div class="l">Řádků</div></div><div class="stat"><div class="v" style="color:var(--ok)">${result.created}</div><div class="l">Nových</div></div><div class="stat"><div class="v" style="color:var(--blue)">${result.updated}</div><div class="l">Aktualizováno</div></div><div class="stat"><div class="v" style="color:var(--err)">${result.skipped}</div><div class="l">Přeskočeno (bez e-mailu)</div></div></div>
-      <p class="muted small">Rozpoznané sloupce: e-mail = <code>${esc(result.map.email || '?')}</code>, jméno = <code>${esc(result.map.first_name || '—')}</code>, příjmení = <code>${esc(result.map.last_name || '—')}</code>${result.map.full_name ? `, celé jméno = <code>${esc(result.map.full_name)}</code>` : ''}. Ostatní sloupce (${result.extraCols.length}) uloženy jako další údaje.</p>
+      <div class="grid"><div class="stat"><div class="v">${result.rows}</div><div class="l">Řádků</div></div><div class="stat"><div class="v" style="color:var(--ok)">${result.created}</div><div class="l">Nových</div></div><div class="stat"><div class="v" style="color:var(--blue)">${result.updated}</div><div class="l">Aktualizováno</div></div><div class="stat"><div class="v" style="color:var(--err)">${result.skipped}</div><div class="l">Přeskočeno (neplatný / duplicitní e-mail)</div></div>${result.with_password != null ? `<div class="stat"><div class="v" style="color:var(--ok)">${result.with_password}</div><div class="l">S přeneseným heslem (přihlásí se hned)</div></div>` : ''}${result.nick_conflicts ? `<div class="stat"><div class="v" style="color:var(--accent2)">${result.nick_conflicts}</div><div class="l">Kolize nicku (zvolí si nový)</div></div>` : ''}</div>
+      <p class="muted small">Rozpoznané sloupce: e-mail = <code>${esc(result.map.email || '?')}</code>, jméno = <code>${esc(result.map.first_name || '—')}</code>, příjmení = <code>${esc(result.map.last_name || '—')}</code>${result.map.full_name ? `, celé jméno = <code>${esc(result.map.full_name)}</code>` : ''}. ${result.map.nick ? `, nick = <code>${esc(result.map.nick)}</code>` : ''}${result.map.password ? `, heslo = <code>${esc(result.map.password)}</code>` : ''}. Všechny ostatní sloupce (${result.extraCols.length}) uloženy 1:1 jako další údaje.</p>
       ${result.errors.length ? `<div class="msg err"><b>Problémy (${result.errors.length}):</b><br>${result.errors.slice(0, 20).map(esc).join('<br>')}${result.errors.length > 20 ? '<br>…' : ''}</div>` : ''}
       <a class="btn sec" href="/admin/supporters">Zobrazit podporovatele</a></div>`;
   }
   return adminLayout('Import', 'imp', admin, `
   <h1>Import podporovatelů</h1>
-  <p class="muted">Nahraj CSV nebo Excel (.xlsx/.xls) ze staré databáze. Klíčem je <b>e-mail</b> — existující záznam se aktualizuje (nick a heslo zůstanou), nový se založí jako „čeká na aktivaci". Sloupce se poznají podle hlavičky (E-mail / Email, Jméno, Příjmení, případně „Jméno a příjmení"); všechny ostatní sloupce se uloží k podporovateli jako další údaje.</p>
+  <p class="muted">Nahraj CSV nebo Excel (.xlsx/.xls) ze staré databáze — importuje se <b>1:1, všechny sloupce</b>. Klíčem je <b>e-mail</b>. Sloupce <code>memb/nick</code> a <code>password</code> (bcrypt) se přenesou jako nick a heslo, takže se podporovatelé <b>přihlásí rovnou starými údaji</b>; ostatní sloupce se uloží jako další údaje. Existující záznam se jen doplní (nick ani heslo nastavené v BS2 se nepřepíší).</p>
   ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   <div class="card"><form method="post" action="/admin/import" enctype="multipart/form-data">
     <label>Soubor (CSV, XLSX, XLS — max 20 MB)</label><input type="file" name="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>

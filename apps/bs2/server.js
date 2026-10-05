@@ -113,7 +113,7 @@ app.post('/activate', wrap(async (req, res) => {
   if (!u) { noteFail(ip); return res.status(404).send(V.activatePage({ step: 'email', email, error: 'Tento e-mail v seznamu podporovatelů nemáme. Zkontroluj překlep, nebo nám napiš.' })); }
   if (u.status === 'blocked') return res.status(403).send(V.activatePage({ step: 'email', email, error: 'Tento účet je zablokovaný.' }));
   if (u.password_hash) return res.send(V.loginPage({ login: email, info: 'Tenhle účet už je aktivovaný — přihlas se heslem.' }));
-  res.send(V.activatePage({ step: 'credentials', email, name: u.first_name }));
+  res.send(V.activatePage({ step: 'credentials', email, name: u.first_name, nick: (u.extra && u.extra.puvodni_nick) || '' }));
 }));
 app.post('/activate/finish', wrap(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -122,7 +122,7 @@ app.post('/activate/finish', wrap(async (req, res) => {
   const u = r.rows[0];
   if (!u || u.status === 'blocked') return res.status(404).send(V.activatePage({ step: 'email', email, error: 'E-mail nenalezen.' }));
   if (u.password_hash) return res.send(V.loginPage({ login: email, info: 'Účet už je aktivovaný — přihlas se heslem.' }));
-  const back = (error) => res.status(400).send(V.activatePage({ step: 'credentials', email, name: u.first_name, error }));
+  const back = (error) => res.status(400).send(V.activatePage({ step: 'credentials', email, name: u.first_name, nick, error }));
   if (!/^[A-Za-z0-9._-]{3,30}$/.test(nick)) return back('Nick: 3–30 znaků, jen písmena, čísla, tečka, podtržítko, pomlčka.');
   if (nick.includes('@')) return back('Nick nesmí být e-mail.');
   if (password.length < 8) return back('Heslo musí mít aspoň 8 znaků.');
