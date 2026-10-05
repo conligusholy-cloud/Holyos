@@ -221,7 +221,7 @@ function adminFirstLine({ admin, nick = '', rows = [], msg = '', holyosUrl }) {
   ${form}
   ${nick ? `<div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${5 + xcols.length}" class="muted">Nikdo s tab3 = „${esc(nick)}" nenalezen.</td></tr>`}</tbody></table></div>` : '<p class="muted">Zadej svůj nick, ať vím, koho vypsat.</p>'}`, holyosUrl);
 }
-function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false }) {
+function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
@@ -259,6 +259,17 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
     </div></details>
     <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
   </div>
+  ${isNew ? '' : `<details class="card sec" data-sec="linie" open style="margin-top:12px"><summary><span>První linie <span class="muted small">(${firstLine.length}) — kdo má v poli tab3 nick „${esc(s.nick || '—')}"</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    ${!s.nick ? '<p class="muted small">Podporovatel nemá nick, první linii nelze určit.</p>' : firstLine.length ? `<div class="tbl-wrap"><table class="cards"><thead><tr><th>Jméno</th><th>Nick</th><th>E-mail</th><th>Stav</th><th>Registrace</th><th>Level</th><th>Obrat</th><th></th></tr></thead><tbody>${firstLine.map(r => `<tr>
+      <td data-l="Jméno"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
+      <td data-l="Nick">${r.nick ? esc(r.nick) : '<span class="muted">—</span>'}</td>
+      <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
+      <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span></td>
+      <td data-l="Registrace" class="small">${esc((r.extra && r.extra.date) || '—')}</td>
+      <td data-l="Level" class="small">${esc((r.extra && r.extra.level) || '—')}</td>
+      <td data-l="Obrat" class="small">${esc((r.extra && r.extra.obrat) || '—')}</td>
+      <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nikoho nepřivedl.</p>'}
+  </div></details>`}
   <script>
   // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny podporovatele
   (function(){var KEY='bs2.detail.sections';var st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}

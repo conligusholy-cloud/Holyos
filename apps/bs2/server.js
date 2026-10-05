@@ -217,7 +217,8 @@ app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {
 async function loadSupporter(id) { const r = await q('SELECT * FROM supporters WHERE id=$1', [parseInt(id, 10) || 0]); return r.rows[0] || null; }
 app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Podporovatel neexistuje.', '/admin/supporters'));
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+  const firstLine = s.nick ? (await q("SELECT id,email,first_name,last_name,nick,status,extra FROM supporters WHERE id<>$1 AND lower(trim(extra->>'tab3')) = lower($2) ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 2000", [s.id, s.nick])).rows : [];
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine }));
 }));
 app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Podporovatel neexistuje.', '/admin/supporters'));
