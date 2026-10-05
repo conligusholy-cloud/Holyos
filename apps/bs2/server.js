@@ -214,11 +214,14 @@ app.post('/join/:code', wrap(async (req, res) => {
 app.get('/', (req, res, next) => {
   if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
   return requireUser(req, res, async () => {
-    let offers = [];
-    try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
-    res.send(V.supporterHome(req.user, offers));
+    res.send(V.supporterHome(req.user));
   });
 });
+app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
+  let offers = [];
+  try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
+  res.send(V.supporterProducts(req.user, offers));
+}));
 app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
   const code = await ensureRefCode(req.user);

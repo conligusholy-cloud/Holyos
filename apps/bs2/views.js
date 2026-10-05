@@ -151,16 +151,14 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
-const userNav = (s) => (s && s.user_type === 'seller' ? [USER_NAV[0], { id: 'team', href: '/team', label: 'Můj tým', icon: 'users' }, USER_NAV[1]] : USER_NAV);
+const userNav = (s) => {
+  const nav = [USER_NAV[0]];
+  if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Můj tým', icon: 'users' });
+  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, USER_NAV[1]);
+  return nav;
+};
 function supporterHome(s, offers = [], extra = {}) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
-  const offerCards = offers.length ? `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
-  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
-    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
-      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
-      <div class="small muted">cena s DPH 21 %</div>
-    </div>`; }).join('')}</div>` : '';
   return layout({ title: 'Domů', user: s.nick, nav: userNav(s), active: 'home', fx: true, body: `
   <div class="hero">
     <div class="eyebrow"><i></i>Účet · aktivní</div>
@@ -169,7 +167,17 @@ function supporterHome(s, offers = [], extra = {}) {
   </div>
   <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
     <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
-  ${offerCards}` });
+  ` });
+}
+function supporterProducts(s, offers = []) {
+  return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
+  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
+    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
+      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
+      <div class="small muted">cena s DPH 21 %</div>
+    </div>`; }).join('')}</div>
+  ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
 }
 function supporterTeam(s, { team = [], refUrl = '' } = {}) {
   return layout({ title: 'Můj tým', user: s.nick, nav: userNav(s), active: 'team', fx: true, body: `
@@ -427,4 +435,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
