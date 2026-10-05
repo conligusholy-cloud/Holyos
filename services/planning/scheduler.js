@@ -347,13 +347,30 @@ async function scheduleBatch(batchId, opts = {}) {
   const assignCtx = await loadAssignmentContext(tx, opIds, wsIds);
 
   // Obsazenost lidí: už naplánované operace JINÝCH aktivních dávek (každý člověk dělá v jednu chvíli jen jednu věc)
+  // Pravidlo: člověk nedělá na dvou dávkách najednou. Jeho obsazenost jinou dávkou platí za CELOU
+  // dávku — od jeho první do poslední operace na ní (včetně hotových), ne jen za jednotlivé operace.
+  // Mezery mezi jeho operacemi na rozdělané dávce se tedy nevyplňují jinou dávkou.
   const personBusy = new Map();
   if (!exclusive) {
     const others = await tx.batchOperationWorker.findMany({
-      where: { batch_operation: { batch_id: { not: id }, planned_start: { not: null }, status: { notIn: ['done', 'cancelled'] }, batch: { status: { in: ['planned', 'released', 'in_progress', 'paused'] } } } },
-      select: { person_id: true, batch_operation: { select: { planned_start: true, planned_end: true } } },
+      where: { batch_operation: { batch_id: { not: id }, planned_start: { not: null }, status: { notIn: ['cancelled'] }, batch: { status: { in: ['planned', 'released', 'in_progress', 'paused'] } } } },
+      select: { person_id: true, batch_operation: { select: { batch_id: true, planned_start: true, planned_end: true, status: true } } },
     });
-    for (const w of others) { if (!personBusy.has(w.person_id)) personBusy.set(w.person_id, []); personBusy.get(w.person_id).push({ start: new Date(w.batch_operation.planned_start), end: new Date(w.batch_operation.planned_end) }); }
+    const spans = new Map(); // person|batch → { start, end }
+    for (const w of others) {
+      const bo = w.batch_operation;
+      const st = new Date(bo.planned_start), en = new Date(bo.planned_end || bo.planned_start);
+      const k = w.person_id + '|' + bo.batch_id;
+      const cur = spans.get(k);
+      if (!cur) spans.set(k, { person_id: w.person_id, start: st, end: en });
+      else { if (st < cur.start) cur.start = st; if (en > cur.end) cur.end = en; }
+    }
+    const nowTs = Date.now();
+    for (const s of spans.values()) {
+      if (s.end.getTime() < nowTs) continue; // dávka, kterou má člověk celou za sebou, už neblokuje
+      if (!personBusy.has(s.person_id)) personBusy.set(s.person_id, []);
+      personBusy.get(s.person_id).push({ start: s.start, end: s.end });
+    }
   }
 
   const anchor = batch.planned_start ? new Date(batch.planned_start) : new Date();
