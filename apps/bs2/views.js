@@ -57,34 +57,47 @@ ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).ma
 }
 
 // ── Veřejné / podporovatel ──────────────────────────────────────────────────
-function loginPage({ error = '', info = '', login = '' } = {}) {
-  return layout({ title: 'Přihlášení', body: `
-  <div class="auth"><div class="logo">BS2</div><div class="sub">Soukromá sekce Best Series pro podporovatele</div>
-  <div class="card">
+// Přihlášení a aktivace mají vlastní prémiový vizuál (auth-shell.js) — bez hlavičky aplikace.
+const { authShell, ICON } = require('./auth-shell');
+function field({ name, type = 'text', value = '', icon, placeholder = '', auto = '', extra = '', eye = false }) {
+  return `<div class="f">${ICON[icon] || ''}<input name="${name}" type="${type}" value="${esc(value)}" placeholder="${esc(placeholder)}" ${auto ? `autocomplete="${auto}"` : ''} ${extra}>${eye ? `<button type="button" data-eye aria-label="Zobrazit heslo">${ICON.eye}</button>` : ''}</div>`;
+}
+function loginPage({ error = '', info = '', login = '', members = null } = {}) {
+  return authShell({ title: 'Přihlášení', members, esc, card: `
+    <h2>Přihlášení</h2><p class="sub">Pokračuj do svého účtu</p>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${info ? `<div class="msg ok">${esc(info)}</div>` : ''}
-    <form method="post" action="/login">
-      <label>Nick nebo e-mail</label><input name="login" value="${esc(login)}" autocomplete="username" autocapitalize="none" autocorrect="off" required>
-      <label>Heslo</label><input name="password" type="password" autocomplete="current-password" required>
-      <div style="height:14px"></div><button class="btn full" type="submit">Přihlásit</button>
+    <form method="post" action="/login" novalidate>
+      <label>Nick nebo e-mail</label>${field({ name: 'login', value: login, icon: 'user', placeholder: 'tvůj nick', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" spellcheck="false" required autofocus' })}
+      <label>Heslo <a href="/forgot">Zapomenuté heslo</a></label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: '••••••••', auto: 'current-password', extra: 'required', eye: true })}
+      <button class="btn" type="submit">Přihlásit se ${ICON.arrow}</button>
     </form>
-    <p class="muted small" style="margin:14px 0 0;text-align:center">Jsi tu poprvé? <a href="/activate">Aktivovat účet e-mailem</a></p>
-  </div></div>` });
+    <div class="sec">${ICON.shield} Zabezpečené přihlášení</div>
+    <p class="foot">Přihlášením souhlasíš s podmínkami členství</p>` });
 }
 function activatePage({ step = 'email', email = '', error = '', name = '', nick = '' } = {}) {
   const inner = step === 'email' ? `
-    <p class="muted small">Zadej e-mail, na který jsi u nás veden. Pokud ho v seznamu máme, vytvoříš si nick a heslo.</p>
-    <form method="post" action="/activate"><label>E-mail</label><input name="email" type="email" value="${esc(email)}" autocomplete="email" inputmode="email" autocapitalize="none" required>
-    <div style="height:14px"></div><button class="btn full" type="submit">Pokračovat</button></form>` : `
-    <p class="muted small">Ahoj${name ? ' ' + esc(name) : ''}, e-mail <b>${esc(email)}</b> známe. Zvol si nick a heslo pro přihlašování.</p>
+    <h2>Aktivace účtu</h2><p class="sub">Zadej e-mail, na který jsi u nás veden. Pokud ho známe, vytvoříš si nick a heslo.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/activate" novalidate><label>E-mail</label>${field({ name: 'email', type: 'email', value: email, icon: 'mail', placeholder: 'jmeno@email.cz', auto: 'email', extra: 'inputmode="email" autocapitalize="none" required autofocus' })}
+    <button class="btn" type="submit">Pokračovat ${ICON.arrow}</button></form>` : `
+    <h2>Ahoj${name ? ' ' + esc(name) : ''}</h2><p class="sub">E-mail <b>${esc(email)}</b> známe. Zvol si nick a heslo pro přihlašování.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
     <form method="post" action="/activate/finish"><input type="hidden" name="email" value="${esc(email)}">
-      <label>Nick (3–30 znaků, písmena/čísla/._-)</label><input name="nick" value="${esc(nick)}" autocomplete="username" autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required>
-      <label>Heslo (min. 8 znaků)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
-      <label>Heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
-      <div style="height:14px"></div><button class="btn full" type="submit">Vytvořit účet a přihlásit</button></form>`;
-  return layout({ title: 'Aktivace účtu', body: `
-  <div class="auth"><div class="logo">BS2</div><div class="sub">První přihlášení podporovatele</div>
-  <div class="card">${error ? `<div class="msg err">${esc(error)}</div>` : ''}${inner}
-  <p class="muted small" style="margin:14px 0 0;text-align:center"><a href="/login">← zpět na přihlášení</a></p></div></div>` });
+      <label>Nick</label>${field({ name: 'nick', value: nick, icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required' })}
+      <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      <button class="btn" type="submit">Vytvořit účet a přihlásit ${ICON.arrow}</button></form>`;
+  return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">← zpět na přihlášení</a></p>` });
+}
+function forgotPage({ email = '', error = '', done = false } = {}) {
+  return authShell({ title: 'Zapomenuté heslo', esc, card: done ? `
+    <h2>Zpráva přijata</h2><p class="sub">Pokud e-mail <b>${esc(email)}</b> známe, ozveme se ti s dalším postupem. Obvykle do jednoho pracovního dne.</p>
+    <p class="foot"><a href="/login">← zpět na přihlášení</a></p>` : `
+    <h2>Zapomenuté heslo</h2><p class="sub">Zadej e-mail, pod kterým jsi u nás veden. Postaráme se o obnovu přístupu.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/forgot" novalidate><label>E-mail</label>${field({ name: 'email', type: 'email', value: email, icon: 'mail', placeholder: 'jmeno@email.cz', auto: 'email', extra: 'inputmode="email" autocapitalize="none" required autofocus' })}
+    <button class="btn" type="submit">Požádat o obnovu ${ICON.arrow}</button></form>
+    <p class="foot"><a href="/login">← zpět na přihlášení</a></p>` });
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: '🏠' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: '👤', right: true }];
 function supporterHome(s) {
@@ -319,4 +332,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, supporterHome, passwordPage, adminDash, adminSupporters, adminFirstLine, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, supporterHome, passwordPage, adminDash, adminSupporters, adminFirstLine, adminSupporterDetail, adminImport, errorPage };

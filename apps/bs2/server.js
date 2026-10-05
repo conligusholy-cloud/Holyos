@@ -83,10 +83,26 @@ app.get('/sso', (req, res) => {
 });
 
 // ── Podporovatel: přihlášení / aktivace ─────────────────────────────────────
-app.get('/login', (req, res) => {
+// Počet aktivních členů na přihlašovací stránce (cache 10 min, při chybě DB se číslo nezobrazí)
+let _members = { n: null, at: 0 };
+async function memberCount() {
+  if (Date.now() - _members.at < 600000) return _members.n;
+  try { const r = await q("SELECT count(*)::int AS n FROM supporters WHERE status='active'"); _members = { n: r.rows[0].n, at: Date.now() }; } catch (e) { _members = { n: null, at: Date.now() }; }
+  return _members.n;
+}
+app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
-  res.send(V.loginPage({ info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
-});
+  res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
+}));
+// Zapomenuté heslo — zatím bez automatického e-mailu: žádost se zapíše do admin_log, Tomáš/Jan ji vyřídí ručně (reset v adminu)
+app.get('/forgot', (req, res) => res.send(V.forgotPage()));
+app.post('/forgot', wrap(async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).send(V.forgotPage({ email, error: 'Zadej platný e-mail.' }));
+  const r = await q('SELECT id, nick FROM supporters WHERE lower(email)=$1 LIMIT 1', [email]);
+  await log({ name: 'web' }, 'forgot_password', { email, known: !!r.rows[0], supporter_id: r.rows[0] ? r.rows[0].id : null, ip: req.ip });
+  res.send(V.forgotPage({ email, done: true }));
+}));
 app.post('/login', wrap(async (req, res) => {
   const ip = req.ip;
   if (tooMany(ip)) return res.status(429).send(V.loginPage({ error: 'Příliš mnoho pokusů. Zkus to za 15 minut.' }));
@@ -95,8 +111,8 @@ app.post('/login', wrap(async (req, res) => {
   const u = r.rows[0];
   if (!u || !u.password_hash || !(await bcrypt.compare(password, u.password_hash))) {
     noteFail(ip);
-    const hint = u && !u.password_hash ? 'Účet ještě není aktivovaný — použij „Aktivovat účet e-mailem".' : 'Nesprávný nick/e-mail nebo heslo.';
-    return res.status(401).send(V.loginPage({ error: hint, login }));
+    const hint = u && !u.password_hash ? 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.' : 'Nesprávný nick/e-mail nebo heslo.';
+    return res.status(401).send(V.loginPage({ error: hint, login, members: await memberCount() }));
   }
   if (u.status === 'blocked') return res.status(403).send(V.loginPage({ error: 'Účet je zablokovaný. Ozvi se nám.', login }));
   await q('UPDATE supporters SET last_login_at=now() WHERE id=$1', [u.id]);
