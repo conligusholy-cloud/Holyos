@@ -42,8 +42,14 @@ function parseBuffer(buf, filename) {
   const isCsv = /\.csv$/i.test(filename || '');
   let wb;
   if (isCsv) {
+    // Kódování: UTF-8, pokud dává smysl (české znaky bez mojibake). Na windows-1250 přepneme jen tehdy,
+    // když je UTF-8 dekódování prokazatelně horší — pár vadných bajtů v souboru nestačí.
     let text = buf.toString('utf8');
-    if (text.includes('�')) { try { text = new TextDecoder('windows-1250').decode(buf); } catch (e) { /* utf8 */ } }
+    const bad = (text.match(/�/g) || []).length;
+    if (bad > 0) {
+      const score = (t) => (t.match(/[ěščřžýáíéúůťďňĚŠČŘŽÝÁÍÉÚŮŤĎŇ]/g) || []).length - 5 * (t.match(/[ÃÅĂ]/g) || []).length - 3 * (t.match(/�/g) || []).length;
+      try { const cp = new TextDecoder('windows-1250').decode(buf); if (score(cp) > score(text)) text = cp; } catch (e) { /* utf8 */ }
+    }
     text = text.replace(/^﻿/, '');
     const first = text.split('\n')[0];
     const delim = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
