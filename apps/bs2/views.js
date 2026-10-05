@@ -131,7 +131,7 @@ function adminDash({ admin, stats, recent, holyosUrl }) {
     <div class="stat"><div class="v" style="color:var(--blue)">${stats.invited}</div><div class="l">Čeká na první přihlášení</div></div>
     <div class="stat"><div class="v" style="color:var(--err)">${stats.blocked}</div><div class="l">Blokovaní</div></div>
   </div>
-  <div class="row" style="margin:14px 0"><a class="btn" href="/admin/import">⬆ Import CSV / Excel</a><a class="btn sec" href="/admin/supporters">Seznam podporovatelů</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a></div>
+
   <div class="card"><h2 style="margin-top:0">Poslední přihlášení</h2>
   ${recent.length ? recent.map(r => `<div class="list-item"><span><b>${esc(r.nick || '—')}</b> <span class="muted">${esc(r.email)}</span></span><span class="muted small">${fmtDT(r.last_login_at)}</span></div>`).join('') : '<p class="muted">Zatím se nikdo nepřihlásil.</p>'}</div>
   <p class="muted small">Přihlašovací stránka pro podporovatele: <code>${esc(process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz')}/login</code> — první přihlášení přes <code>/activate</code> (e-mail musí být v seznamu).</p>`, holyosUrl);
@@ -183,14 +183,16 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
     .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;padding:5px 0;color:var(--text);cursor:pointer} .colpick-i input{width:auto;margin:0}
     .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
   </style>
-  <h1>Podporovatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h1 style="margin:0">Podporovatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+    <div class="row"><a class="btn" href="/admin/import">⬆ Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
+  </div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form method="get" class="row" style="margin:10px 0 14px">
     <input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1;min-width:200px">
     <select name="status" style="width:auto"><option value="">Všechny stavy</option><option value="invited"${status === 'invited' ? ' selected' : ''}>Čeká na aktivaci</option><option value="active"${status === 'active' ? ' selected' : ''}>Aktivní</option><option value="blocked"${status === 'blocked' ? ' selected' : ''}>Blokovaní</option></select>
-    <button class="btn sec" type="submit">Filtrovat</button><a class="btn" href="/admin/supporters/new">+ Přidat</a>
+    <button class="btn sec" type="submit">Filtrovat</button>
   </form>
-  <div class="row" style="justify-content:flex-end;margin:-6px 0 8px">${picker}</div>
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
   <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
