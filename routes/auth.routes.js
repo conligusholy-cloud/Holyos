@@ -213,7 +213,13 @@ async function externalSectionsFor(user) {
   return out;
 }
 // GET /api/auth/sso/bs2 — přesměruje do BS2 s jednorázovým tokenem (platnost 2 min)
-router.get('/sso/bs2', requireAuth, async (req, res, next) => {
+// Bez přihlášení (přímý odkaz z iPadu/mobilu, vypršelá cookie) → na přihlašovací stránku a po přihlášení zpět sem.
+function loginRedirectIfAnonymous(req, res, next) {
+  const hasToken = (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) || (req.cookies && req.cookies.token);
+  if (!hasToken) return res.redirect('/public/login.html?redirect=' + encodeURIComponent(req.originalUrl));
+  next();
+}
+router.get('/sso/bs2', loginRedirectIfAnonymous, requireAuth, async (req, res, next) => {
   try {
     if (!(await bs2Allowed(req.user))) return res.status(403).send('Do této sekce nemáš přístup.');
     const secret = process.env.BS2_SSO_SECRET;
