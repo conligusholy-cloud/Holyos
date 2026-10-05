@@ -222,9 +222,11 @@
           </select>
           <select id="wp-person" onchange="pv2RenderWork()" title="Jen jeden člověk"><option value="">Všichni lidé</option></select>
           <select id="wp-batch" onchange="pv2RenderWork()" title="Jen jedna dávka"><option value="">Všechny dávky</option></select>
+          <select id="wp-material" onchange="pv2RenderWork()" title="Stav materiálu pro operaci"><option value="">Materiál: vše</option><option value="on_site">🟢 na pracovišti</option><option value="in_stock">🔵 skladem ve firmě</option><option value="ordered">🟠 objednáno, čeká se</option><option value="missing">🔴 chybí — není objednáno</option><option value="problem">🟠+🔴 vyžaduje nákup</option></select>
           <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
           <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
         </div>
+        <div style="font-size:11px;color:var(--text2);margin:-4px 0 8px;">Materiál: <span style="color:#22c55e;">🟢 na pracovišti</span> · <span style="color:#60a5fa;">🔵 skladem (jen přesun)</span> · <span style="color:#f59e0b;">🟠 objednáno</span> · <span style="color:#ef4444;">🔴 chybí, není objednáno</span> · ⚪ bez materiálu — najetím myší detail položek.</div>
         <div id="pv2-work-body" class="pv2-body">Načítám…</div>
       </section>
 
@@ -1779,13 +1781,27 @@
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
   var pv2WorkOps = [];
+  // Semafor materiálu u operace + tooltip s položkami (co, kolik, kde, objednávka/ETA)
+  var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
+  var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ' };
+  window.pv2MatBadge = function (m) {
+    var lvl = (m && m.level) || 'none'; var d = PV2_MAT[lvl] || PV2_MAT.none;
+    var tip = (m && m.materials && m.materials.length) ? m.materials.map(function (x) {
+      return (PV2_MAT_ITEM[x.level] || x.level) + ' ' + (x.code || '') + ' ' + (x.name || '') + ' — potřeba ' + x.needed + ' ' + x.unit + ', na pracovišti ' + x.on_site + ', skladem ' + x.available + (x.on_order ? ', objednáno ' + x.on_order + (x.eta ? ' (ETA ' + pv2Date(x.eta) + ')' : '') + (x.orders && x.orders.length ? ' ' + x.orders.join(', ') : '') : '');
+    }).join('\n') : 'Operace nemá v postupu žádný materiál.';
+    return ' <span class="pv2-badge" title="' + pv2Esc(tip) + '" style="color:' + d[1] + ';cursor:help;">' + d[0] + (m && m.materials && m.materials.length ? ' (' + m.materials.length + ')' : '') + '</span>';
+  };
   window.pv2RenderWork = function () {
     var box = document.getElementById('pv2-work-body');
     try {
       var q = (document.getElementById('wp-search').value || '').toLowerCase().trim();
       var sort = document.getElementById('wp-sort').value; var onlyPerson = parseInt(document.getElementById('wp-person').value) || 0; var onlyBatch = parseInt(document.getElementById('wp-batch').value) || 0; var onlyUn = document.getElementById('wp-unassigned').checked;
+      var onlyMat = document.getElementById('wp-material').value;
       var ops = pv2WorkOps.filter(function (o) {
         if (onlyBatch && o.batch.id !== onlyBatch) return false;
+        var lvl = (o.material && o.material.level) || 'none';
+        if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing') return false; }
+        else if (onlyMat && lvl !== onlyMat) return false;
         if (!q) return true;
         var txt = [(o.operation && o.operation.name) || '', o.batch.batch_number, o.batch.product.code, o.batch.product.name, o.workstation ? o.workstation.name : '', o.status].concat(((o.workers || []).map(function (w) { return w.person.first_name + ' ' + w.person.last_name; }))).join(' ').toLowerCase();
         return txt.indexOf(q) !== -1;
@@ -1825,6 +1841,7 @@
           html += '<div class="pv2-op"><div class="t">' + pv2Time(o.planned_start) + ' – ' + pv2Time(o.planned_end) + '</div>' +
             '<div class="n"><b>' + (o.operation ? o.operation.step_number + '. ' + pv2Esc(o.operation.name) : '?') + '</b>' + (o.operation && o.operation.is_parallel ? ' <span class="pv2-badge" style="color:#c084fc;">⫽ paralelní</span>' : '') +
             (function () { var n = (o.operation && o.operation.workers_count) || 1; var w = (o.workers || []).map(function (x) { return x.person; }); if (n > 1 || w.length > 1) { var others = w.filter(function (p) { return !g.person || p.id !== g.person.id; }); return ' <span class="pv2-badge" title="Operace vyžaduje ' + n + ' lidi najednou" style="color:' + (w.length < n ? '#ef4444' : '#22c55e') + ';">👥 ' + w.length + '/' + n + (others.length ? ' · s ' + pv2Esc(others.map(function (p) { return p.first_name + ' ' + p.last_name; }).join(', ')) : '') + '</span>'; } return ''; })() +
+            pv2MatBadge(o.material) +
             ' <small>· ' + pv2Esc(o.batch.product.code) + ' ' + pv2Esc(o.batch.product.name) + ' · dávka ' + pv2Esc(o.batch.batch_number) + ' (' + o.batch.quantity + ' ks)' + (o.workstation ? ' · 🏭 ' + pv2Esc(o.workstation.name) : '') + '</small></div>' +
             '<span class="s ' + pv2Esc(o.status) + '">' + pv2Esc(o.status) + '</span></div>';
         });

@@ -598,6 +598,9 @@
       : 'bez času';
     const where = t.workstation ? `🏭 ${escapeHtml(t.workstation.name)}` : '🏭 pracoviště nepřiřazeno';
     const mates = (t.mates && t.mates.length) ? `<span>👥 s ${escapeHtml(t.mates.join(', '))}</span>` : '';
+    const MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 materiál skladem — čeká na přesun', '#60a5fa'], ordered: ['🟠 materiál objednán, čeká se', '#f59e0b'], missing: ['🔴 materiál chybí — není objednán', '#ef4444'] };
+    const ml = t.material && MAT[t.material.level];
+    const matBadge = ml ? `<span style="color:${ml[1]};font-weight:600" title="${escapeHtml((t.material.materials || []).map(x => `${x.code || ''} ${x.name || ''}: potřeba ${x.needed} ${x.unit}, na pracovišti ${x.on_site}, skladem ${x.available}${x.on_order ? ', objednáno ' + x.on_order : ''}`).join('\n'))}">${ml[0]}</span>` : '';
     const action = t.here
       ? `<button class="ws-btn ws-btn-start" data-action="start" data-id="${t.id}">▶ Začít</button>`
       : (t.workstation
@@ -614,6 +617,7 @@
             ${op?.duration ? `<span>⏱ ${op.duration} min/ks</span>` : ''}
             ${op?.is_parallel ? '<span>⫽ paralelní</span>' : ''}
             ${mates}
+            ${matBadge}
           </div>
         </div>
         <div class="ws-task-actions">${action}</div>

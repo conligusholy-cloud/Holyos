@@ -7,6 +7,7 @@ const { z } = require('zod');
 const router = express.Router();
 const { prisma } = require('../config/database');
 const { scheduleBatch } = require('../services/planning/scheduler');
+const { computeOpMaterialStatus } = require('../services/planning/op-material-status');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 // =============================================================================
@@ -2887,17 +2888,20 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
         batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
           product: { select: { id: true, code: true, name: true } } } },
         operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, is_parallel: true, workers_count: true } },
-        workstation: { select: { id: true, name: true } },
+        workstation: { select: { id: true, name: true, input_warehouse_id: true } },
         workers: { select: { person_id: true, slot: true, person: { select: { first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
       },
       orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
       take: 50,
     });
+    // Semafor materiálu (na pracovišti / skladem / objednáno / chybí)
+    let matStatus = new Map();
+    try { matStatus = await computeOpMaterialStatus(myPlannedRaw); } catch (e) { /* bez semaforu */ }
     const my_planned = myPlannedRaw.map(o => {
       const mates = (o.workers || []).filter(w => w.person_id !== personId && w.person)
         .map(w => ((w.person.first_name || '') + ' ' + (w.person.last_name || '')).trim()).filter(Boolean);
       const { workers, ...rest } = o;
-      return { ...rest, here: o.workstation_id === wsId, mates };
+      return { ...rest, here: o.workstation_id === wsId, mates, material: matStatus.get(o.id) || { level: 'none', materials: [] } };
     });
 
     res.json({

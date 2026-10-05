@@ -14,6 +14,7 @@ const { generateBatchOperationsForBatch } = require('../services/planning/batch-
 const { computeMrpForBatch } = require('../services/planning/mrp');
 const { computePrePickForBatch } = require('../services/planning/pre-pick');
 const { computePurchaseReport } = require('../services/planning/purchase-report');
+const { computeOpMaterialStatus } = require('../services/planning/op-material-status');
 const { checkAndCloseBatch } = require('../services/planning/batch-state');
 const { scheduleBatch, scheduleAllActive } = require('../services/planning/scheduler');
 const { syncBatchToVelin } = require('../services/planning/velin-bridge');
@@ -593,14 +594,17 @@ router.get('/work-plan', async (req, res, next) => {
         id: true, sequence: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true,
         assigned_person: { select: { id: true, first_name: true, last_name: true } },
         workers: { select: { slot: true, person: { select: { id: true, first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
-        workstation: { select: { id: true, name: true, code: true } },
+        workstation: { select: { id: true, name: true, code: true, input_warehouse_id: true } },
         operation: { select: { id: true, name: true, step_number: true, is_parallel: true, duration: true, duration_unit: true, workers_count: true } },
         batch: { select: { id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, product: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
       take: 2000,
     });
-    res.json({ from, to, operations: ops });
+    // Semafor materiálu per operace (na pracovišti / skladem / objednáno / chybí)
+    let matStatus = new Map();
+    try { matStatus = await computeOpMaterialStatus(ops); } catch (e) { console.warn('[work-plan] material status:', e.message); }
+    res.json({ from, to, operations: ops.map(o => ({ ...o, material: matStatus.get(o.id) || { level: 'none', materials: [] } })) });
   } catch (err) { next(err); }
 });
 
