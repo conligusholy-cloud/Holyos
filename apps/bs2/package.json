@@ -1,7 +1,7 @@
 {
   "name": "bs2",
-  "version": "0.1.0",
-  "description": "BS2 — soukromá sekce Best Series (samostatná aplikace, oddělená od HolyOS; přihlášení přes SSO z HolyOS)",
+  "version": "0.2.0",
+  "description": "BS2 — soukromá sekce Best Series: podporovatelé (import CSV/XLSX, první přihlášení e-mailem, nick + heslo), správa přes SSO z HolyOS",
   "private": true,
   "main": "server.js",
   "scripts": {
@@ -10,8 +10,12 @@
   },
   "engines": { "node": ">=18" },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "express": "^4.19.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.12.0",
+    "xlsx": "^0.18.5"
   }
 }

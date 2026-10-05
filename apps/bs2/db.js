@@ -1,0 +1,50 @@
+// BS2 — vlastní databáze (Postgres v projektu BS2, DATABASE_URL). Nezávislá na HolyOS.
+// Schéma se zakládá/doplňuje při startu (idempotentní SQL) — malá app, bez ORM.
+
+const { Pool } = require('pg');
+
+const url = process.env.DATABASE_URL;
+if (!url) console.warn('[bs2] POZOR: DATABASE_URL není nastaven — přidej Postgres službu do projektu BS2.');
+
+const pool = new Pool({
+  connectionString: url,
+  ssl: url && /railway|proxy\.rlwy\.net|sslmode=require/.test(url) && !/localhost|127\.0\.0\.1/.test(url) ? { rejectUnauthorized: false } : undefined,
+  max: 5,
+});
+
+async function q(text, params) { return pool.query(text, params); }
+
+async function migrate() {
+  await q(`
+    CREATE TABLE IF NOT EXISTS supporters (
+      id            SERIAL PRIMARY KEY,
+      email         TEXT NOT NULL UNIQUE,                 -- vždy lowercase, klíč pro první přihlášení
+      first_name    TEXT,
+      last_name     TEXT,
+      nick          TEXT UNIQUE,                         -- zvolí si při aktivaci (case-insensitive unikát přes index níž)
+      password_hash TEXT,                                -- NULL = účet ještě neaktivován
+      status        TEXT NOT NULL DEFAULT 'invited',     -- invited | active | blocked
+      extra         JSONB NOT NULL DEFAULT '{}'::jsonb,  -- libovolné další sloupce z importu
+      source        TEXT,                                -- název souboru importu
+      imported_at   TIMESTAMPTZ,
+      activated_at  TIMESTAMPTZ,
+      last_login_at TIMESTAMPTZ,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS supporters_nick_lower_idx ON supporters (lower(nick)) WHERE nick IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS supporters_status_idx ON supporters (status);
+    CREATE INDEX IF NOT EXISTS supporters_last_name_idx ON supporters (lower(last_name));
+
+    CREATE TABLE IF NOT EXISTS admin_log (
+      id         SERIAL PRIMARY KEY,
+      admin_pid  INTEGER,
+      admin_name TEXT,
+      action     TEXT NOT NULL,
+      detail     JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+}
+
+module.exports = { pool, q, migrate };
