@@ -348,8 +348,8 @@ function passwordPage({ s, nick, error = '', ok = '' }) {
 const ADMIN_NAV = [
   { id: 'dash', href: '/admin', label: 'Přehled', icon: 'chart' },
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
-  { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
+  { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -453,13 +453,14 @@ const leftOver = (p, cur, sym) => {
 const maxDisc = (price, min, sym) => { if (price == null || min == null || !Number(price)) return ''; const diff = Number(price) - Number(min); const pct = Math.round(diff / Number(price) * 1000) / 10; return `<div style="${diff < 0 ? 'color:var(--err)' : ''}"><b>${esc(String(pct).replace('.', ','))} %</b> <span class="small muted">(${money(diff, sym)})</span></div>`; };
 // Kolik DC lze využít: % z ceny bez DPH, nejvýš však po minimální cenu
 const dcUse = (p) => { if (p.dc_use_pct == null) return '<div class="small muted" style="margin-top:4px">bez omezení (jen min. cena)</div>'; const pct = Number(p.dc_use_pct); const f = (price, min, sym) => { if (price == null) return ''; let dc = Number(price) * pct / 100; if (min != null) dc = Math.min(dc, Math.max(0, Number(price) - Number(min))); return `<div class="small muted">= ${money(Math.round(dc), 'DC')} <span style="opacity:.7">(${sym})</span></div>`; }; return '<div style="margin-top:4px">' + f(p.price_czk, p.min_price_czk, 'Kč') + f(p.price_eur, p.min_price_eur, '€') + '</div>'; };
-function adminOrders({ admin, rows = [], msg = '', holyosUrl }) {
+function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {} }) {
   const sy = (o) => (o.currency === 'EUR' ? '€' : 'Kč');
   const st = (o) => `<span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span>`;
   return adminLayout('Objednávky', 'ord', admin, `
   <h1 style="margin:0 0 6px">Objednávky <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
   <p class="muted" style="margin-top:0">Objednávky odeslané uživateli tlačítkem <b>Koupit</b>. Potvrzením vznikne nákup a prodejci se připíše provize v DC. Zrušením se uživateli vrátí uplatněné DC.</p>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <div class="row" style="gap:8px;margin:10px 0 12px">${[['', 'Všechny', (counts.new || 0) + (counts.confirmed || 0) + (counts.cancelled || 0)], ['new', 'Čekají na potvrzení', counts.new || 0], ['confirmed', 'Potvrzené', counts.confirmed || 0], ['cancelled', 'Zrušené', counts.cancelled || 0]].map(([k, l, n]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/orders${k ? '?status=' + k : ''}">${l} <span style="opacity:.7">${n}</span></a>`).join('')}</div>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Prádlomat</th><th>Cena bez DPH</th><th>Uplatněno DC</th><th>Stav</th><th></th></tr></thead><tbody>
     ${rows.map(o => `<tr><td data-l="Datum" class="small muted">${fmtDT(o.created_at)}</td>
       <td data-l="Uživatel"><a href="/admin/supporters/${o.supporter_id}"><b>${esc([o.last_name, o.first_name].filter(Boolean).join(' ') || o.email)}</b></a><div class="small muted">${esc(o.nick || '')}</div></td>

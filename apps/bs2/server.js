@@ -413,8 +413,10 @@ app.post('/admin/products/:id(\\d+)/offer', requireAdmin, wrap(async (req, res) 
   res.redirect('/admin/products');
 }));
 app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {
-  const rows = (await q("SELECT o.*, s.first_name, s.last_name, s.email, s.nick FROM orders o JOIN supporters s ON s.id=o.supporter_id ORDER BY (o.status='new') DESC, o.created_at DESC LIMIT 500")).rows;
-  res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+  const status = ['new', 'confirmed', 'cancelled'].includes(req.query.status) ? req.query.status : '';
+  const rows = (await q("SELECT o.*, s.first_name, s.last_name, s.email, s.nick FROM orders o JOIN supporters s ON s.id=o.supporter_id " + (status ? 'WHERE o.status=$1 ' : '') + "ORDER BY (o.status='new') DESC, o.created_at DESC LIMIT 500", status ? [status] : [])).rows;
+  const counts = {}; (await q('SELECT status, count(*)::int AS c FROM orders GROUP BY status')).rows.forEach(r => { counts[r.status] = r.c; });
+  res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, status, counts }));
 }));
 app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) => {
   const o = (await q("UPDATE orders SET status='confirmed', decided_at=now() WHERE id=$1 AND status='new' RETURNING *", [parseInt(req.params.id, 10)])).rows[0];
