@@ -150,10 +150,29 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
     <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
+// Prodejci (user_type = seller) mají navíc záložku Můj tým
+const userNav = (s) => (s && s.user_type === 'seller' ? [USER_NAV[0], { id: 'team', href: '/team', label: 'Můj tým', icon: 'users' }, USER_NAV[1]] : USER_NAV);
 function supporterHome(s, offers = [], extra = {}) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
-  const { team, refUrl } = extra;
-  const sellerBlock = s.user_type === 'seller' ? `
+  const offerCards = offers.length ? `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
+  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
+    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
+      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
+      <div class="small muted">cena s DPH 21 %</div>
+    </div>`; }).join('')}</div>` : '';
+  return layout({ title: 'Domů', user: s.nick, nav: userNav(s), active: 'home', fx: true, body: `
+  <div class="hero">
+    <div class="eyebrow"><i></i>Účet · aktivní</div>
+    <h1><span class="g">Vítej, ${esc(require('./vocative').vocativeName(s.first_name, s.last_name) || s.nick)}</span></h1>
+    <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
+  </div>
+  <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
+    <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
+  ${offerCards}` });
+}
+function supporterTeam(s, { team = [], refUrl = '' } = {}) {
+  return layout({ title: 'Můj tým', user: s.nick, nav: userNav(s), active: 'team', fx: true, body: `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('users', 18)} Můj tým — lidé, které jsem přivedl</h2>
   <div class="card" style="margin-bottom:12px">
     <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
@@ -172,29 +191,12 @@ function supporterHome(s, offers = [], extra = {}) {
       <td data-l="Registrace" class="small muted">${fmtDT(r.activated_at || r.created_at)}</td>
       <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>${r.user_type === 'owner' ? ' <span class="badge type-owner">koupil prádlomat</span>' : ''}</td>
       <td data-l="Objednávky" class="small muted">${r.user_type === 'owner' ? 'prádlomat pořízen' : 'zatím bez objednávky'}</td></tr>`).join('')}</tbody></table>`
-    : '<p class="muted" style="margin:0">Zatím nikdo. Pošli svůj odkaz — první registrace se tu objeví hned.</p>'}</div>` : '';
-  const offerCards = offers.length ? `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
-  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
-    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
-      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
-      <div class="small muted">cena s DPH 21 %</div>
-    </div>`; }).join('')}</div>` : '';
-  return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
-  <div class="hero">
-    <div class="eyebrow"><i></i>Účet · aktivní</div>
-    <h1><span class="g">Vítej, ${esc(require('./vocative').vocativeName(s.first_name, s.last_name) || s.nick)}</span></h1>
-    <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
-  </div>
-  <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
-    <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
-  ${sellerBlock}
-  ${offerCards}` });
+    : '<p class="muted" style="margin:0">Zatím nikdo. Pošli svůj odkaz — první registrace se tu objeví hned.</p>'}</div>` });
 }
 function passwordPage({ s, nick, error = '', ok = '' }) {
   const u = s || { nick };
   const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
-  return layout({ title: 'Můj účet', user: u.nick, nav: USER_NAV, active: 'acc', fx: true, body: `
+  return layout({ title: 'Můj účet', user: u.nick, nav: userNav(u), active: 'acc', fx: true, body: `
   <h1 style="margin-bottom:14px">Můj účet</h1>
   <div class="grid">
     <div class="card"><h2 style="margin-top:0">Údaje</h2>
@@ -425,4 +427,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };

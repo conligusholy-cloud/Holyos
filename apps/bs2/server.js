@@ -216,15 +216,14 @@ app.get('/', (req, res, next) => {
   return requireUser(req, res, async () => {
     let offers = [];
     try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
-    let team = null, refUrl = null;
-    if (req.user.user_type === 'seller') {
-      const code = await ensureRefCode(req.user);
-      refUrl = PUBLIC_URL + '/join/' + code;
-      team = await loadFirstLine(req.user);
-    }
-    res.send(V.supporterHome(req.user, offers, { team, refUrl }));
+    res.send(V.supporterHome(req.user, offers));
   });
 });
+app.get('/team', wrap(requireUser), wrap(async (req, res) => {
+  if (req.user.user_type !== 'seller') return res.redirect('/');
+  const code = await ensureRefCode(req.user);
+  res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
+}));
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   const { old = '', password = '', password2 = '' } = req.body;
