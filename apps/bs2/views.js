@@ -180,19 +180,29 @@ function supporterProducts(s, offers = []) {
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
 }
+const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', delivered: 'Dodáno', running: 'V provozu' };
+const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
 function supporterMine(s, { rows = [] } = {}) {
-  const sum = rows.reduce((a, r) => a + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
+  const sum = rows.reduce((acc, r) => acc + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
+  const dt = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ') : '—');
+  const info = (l, val) => (val ? `<div class="list-item"><span class="muted">${l}</span><span style="text-align:right">${val}</span></div>` : '');
+  const cards = rows.map(r => { const m = r.machine || {}; return `
+    <div class="card" style="margin:0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><b style="font-size:17px">${esc(r.product_name)}</b><span class="badge ${r.status === 'running' ? 'active' : 'invited'}">${esc(PURCHASE_STATUS[r.status] || r.status)}</span></div>
+      <div style="font-size:22px;font-weight:800;margin:10px 0 6px">${money(r.price_czk, 'Kč')} <span class="small muted" style="font-weight:500">bez DPH</span></div>
+      ${info('Datum nákupu', esc(dt(r.purchased_at)))}
+      ${info('Typ stroje', esc(m.machine_code || ''))}
+      ${info('Model', esc([m.model_version && (MODEL_L[m.model_version] || m.model_version), m.model_variant === 'H1' ? 'nižší (H1)' : m.model_variant === 'H2' ? 'standard (H2)' : m.model_variant].filter(Boolean).join(' · ')))}
+      ${info('Sériové číslo', esc(r.serial_no || ''))}
+      ${info('Umístění', esc(r.location || ''))}
+      ${info('Poznámka', esc(r.note || ''))}
+    </div>`; }).join('');
   return layout({ title: 'Moje síť prádlomatů', user: s.nick, nav: userNav(s), active: 'mine', fx: true, body: `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Moje síť prádlomatů — prádlomaty, které jsem si koupil</h2>
   <div class="grid" style="margin-bottom:12px">
     <div class="card" style="margin:0"><div class="small muted">Počet prádlomatů</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
-    <div class="card" style="margin:0"><div class="small muted">Investováno celkem</div><div style="font-size:26px;font-weight:800">${money(sum, 'Kč')}</div></div>
+    <div class="card" style="margin:0"><div class="small muted">Investováno celkem (bez DPH)</div><div style="font-size:26px;font-weight:800">${money(sum, 'Kč')}</div></div>
   </div>
-  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena</th><th>Datum nákupu</th><th>Poznámka</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td data-l="Prádlomat"><b>${esc(r.product_name)}</b></td><td data-l="Cena">${money(r.price_czk, 'Kč')}</td>
-      <td data-l="Datum nákupu" class="small muted">${r.purchased_at ? new Date(r.purchased_at).toLocaleDateString('cs-CZ') : '—'}</td>
-      <td data-l="Poznámka" class="small muted">${esc(r.note || '')}</td></tr>`).join('')}</tbody></table>`
-    : '<p class="muted" style="margin:0">Zatím tu nemáš žádný prádlomat. Jakmile si nějaký pořídíš, objeví se tady.</p>'}</div>` });
+  ${rows.length ? `<div class="grid">${cards}</div>` : '<div class="card"><p class="muted" style="margin:0">Zatím tu nemáš žádný prádlomat. Jakmile si nějaký pořídíš, objeví se tady.</p></div>'}` });
 }
 function supporterNetwork(s, { rows = [], lineCount = 0 } = {}) {
   const buyers = new Set(rows.map(r => r.id)).size;
@@ -420,7 +430,16 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nikoho nepřivedl.</p>'}
   </div></details>`}
   ${isNew ? '' : `<details class="card sec" data-sec="nakupy" open style="margin-top:12px"><summary><span>Prádlomaty (nákupy) <span class="muted small">(${purchases.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">
-    ${purchases.length ? purchases.map(p => `<div class="list-item"><span><b>${esc(p.product_name)}</b> <span class="muted small">${p.purchased_at ? new Date(p.purchased_at).toLocaleDateString('cs-CZ') : ''}${p.note ? ' · ' + esc(p.note) : ''}</span></span><span style="display:flex;gap:10px;align-items:center">${p.price_czk != null ? money(p.price_czk, 'Kč') : ''}<form method="post" action="/admin/purchases/${p.id}/delete" onsubmit="return confirm('Smazat nákup?')" style="margin:0"><button class="btn danger sm" type="submit">${ico('trash', 14)}</button></form></span></div>`).join('') : '<p class="muted small">Zatím žádný nákup.</p>'}
+    ${purchases.length ? purchases.map(p => `<form method="post" action="/admin/purchases/${p.id}" class="card" style="margin:0 0 10px;padding:12px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px"><span><b>${esc(p.product_name)}</b> <span class="muted small">${p.purchased_at ? new Date(p.purchased_at).toLocaleDateString('cs-CZ') : ''}</span></span><span>${p.price_czk != null ? money(p.price_czk, 'Kč') : ''}</span></div>
+      <div class="row" style="gap:10px;align-items:flex-end">
+        <div style="width:150px"><label>Stav</label><select name="status">${Object.keys(PURCHASE_STATUS).map(k => `<option value="${k}"${p.status === k ? ' selected' : ''}>${PURCHASE_STATUS[k]}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:140px"><label>Sériové číslo</label><input name="serial_no" value="${esc(p.serial_no || '')}"></div>
+        <div style="flex:1;min-width:160px"><label>Umístění</label><input name="location" value="${esc(p.location || '')}" placeholder="adresa / lokalita"></div>
+        <div style="flex:1;min-width:160px"><label>Poznámka</label><input name="note" value="${esc(p.note || '')}"></div>
+        <button class="btn sm" type="submit">Uložit</button>
+        <button class="btn danger sm" type="submit" formaction="/admin/purchases/${p.id}/delete" formnovalidate onclick="return confirm('Smazat nákup?')">${ico('trash', 14)}</button>
+      </div></form>`).join('') : '<p class="muted small">Zatím žádný nákup.</p>'}
     <form method="post" action="/admin/supporters/${s.id}/purchases" style="margin-top:12px">
       <div class="row" style="align-items:flex-end;gap:10px">
         <div style="flex:2;min-width:200px"><label>Prádlomat z ceníku</label><select name="item"><option value="">— vybrat —</option>${machines.map(m => `<option value="${m.id}">${esc(m.name_cs)}${m.price_czk != null ? ' — ' + Number(m.price_czk).toLocaleString('cs-CZ') + ' Kč' : ''}</option>`).join('')}</select></div>

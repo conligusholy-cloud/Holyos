@@ -87,6 +87,9 @@ async function migrate() {
       created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS purchases_supporter_idx ON purchases (supporter_id);
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'ordered';
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS location TEXT;
+    ALTER TABLE purchases ADD COLUMN IF NOT EXISTS serial_no TEXT;
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,

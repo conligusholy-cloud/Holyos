@@ -231,7 +231,9 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   res.send(V.supporterProducts(req.user, offers));
 }));
 app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
-  const rows = (await q('SELECT product_name, price_czk, purchased_at, note FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [req.user.id])).rows;
+  const rows = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [req.user.id])).rows;
+  let byId = new Map(); try { byId = new Map(((await loadProducts()).items || []).map(p => [p.id, p])); } catch (e) { /* bez parametrů stroje */ }
+  rows.forEach(r => { r.machine = byId.get(r.holyos_item_id) || null; });
   res.send(V.supporterMine(req.user, { rows }));
 }));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
@@ -354,6 +356,13 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
   if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'purchase_add', { id: s.id, product: name });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.'));
+}));
+app.post('/admin/purchases/:pid(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const b = req.body, st = ['ordered', 'production', 'delivered', 'running'].includes(b.status) ? b.status : 'ordered';
+  const t = (x, n) => String(x || '').trim().slice(0, n) || null;
+  const r = await q('UPDATE purchases SET status=$1, serial_no=$2, location=$3, note=$4 WHERE id=$5 RETURNING supporter_id', [st, t(b.serial_no, 100), t(b.location, 300), t(b.note, 500), parseInt(req.params.pid, 10)]);
+  await log(req.admin, 'purchase_update', { id: req.params.pid, status: st });
+  res.redirect(r.rows[0] ? '/admin/supporters/' + r.rows[0].supporter_id + '?msg=' + encodeURIComponent('Nákup uložen.') : '/admin/supporters');
 }));
 app.post('/admin/purchases/:pid(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
   const r = await q('DELETE FROM purchases WHERE id=$1 RETURNING supporter_id', [parseInt(req.params.pid, 10)]);
