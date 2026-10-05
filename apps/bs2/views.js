@@ -155,7 +155,7 @@ const userNav = (s) => {
   const nav = [USER_NAV[0]];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje síť prádlomatů', icon: 'box' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, USER_NAV[1]);
+  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'box' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, USER_NAV[1]);
   return nav;
 };
 function supporterHome(s, offers = [], extra = {}) {
@@ -211,8 +211,8 @@ function supporterMine(s, { rows = [] } = {}) {
       ${info('Umístění', esc(r.location || ''))}
       ${info('Poznámka', esc(r.note || ''))}
     </div>`; }).join('');
-  return layout({ title: 'Moje síť prádlomatů', user: s.nick, nav: userNav(s), active: 'mine', fx: true, body: `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Moje síť prádlomatů — prádlomaty, které jsem si koupil</h2>
+  return layout({ title: 'Moje svoboda', user: s.nick, nav: userNav(s), active: 'mine', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Moje svoboda — prádlomaty, které jsem si koupil</h2>
   <div class="grid" style="margin-bottom:12px">
     <div class="card" style="margin:0"><div class="small muted">Počet prádlomatů</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
     <div class="card" style="margin:0"><div class="small muted">Investováno celkem (bez DPH)</div><div style="font-size:26px;font-weight:800">${money(sum, 'Kč')}</div></div>
