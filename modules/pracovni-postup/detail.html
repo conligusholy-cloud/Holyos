@@ -520,6 +520,10 @@
       cursor: default;
     }
     .gantt-bar.over-takt { outline: 2px solid #ef4444; outline-offset: -2px; }
+    /* Paralelní operace: šrafovaný bar + světlé okno, ve kterém smí běžet */
+    .gantt-bar.par { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.22) 0 6px, transparent 6px 12px); border: 1px dashed rgba(255,255,255,.55); }
+    .gantt-par-window { position: absolute; top: 2px; bottom: 2px; border-radius: 6px; background: rgba(192,132,252,.10); border: 1px dashed rgba(192,132,252,.45); pointer-events: none; }
+    .gantt-row.par-row .gantt-track { background: transparent; }
     .gantt-c0 { background: #0891b2; }
     .gantt-c1 { background: #8b5cf6; }
     .gantt-c2 { background: #10b981; }
@@ -2758,12 +2762,18 @@
       const mainColorOf = (idx) => 'gantt-c' + (idx % 8);
       const subColorOf = (mainIdx, subIdx) => 'gantt-c' + ((mainIdx * 3 + subIdx + 5) % 8);
 
-      const groups = [];  // [{ main: {op, idx, start, end}, subs: [{subProduct, op, start, end, mainIdx, subIdx}] }]
+      const groups = [];  // [{ main: {op, idx, start, end, parallel}, subs: [{subProduct, op, start, end, mainIdx, subIdx}] }]
+      // Paralelní operace neposouvají hlavní linii — běží souběžně v okně mezi hlavními kroky
+      // (parallel_from .. parallel_to); nejdřív se rozvrhne hlavní linie, pak se paralelní zasadí do okna.
+      const mainOnly = ops.filter(o => !o.is_parallel);
+      const mainStepTimes = new Map(); // step_number → { start, end }
       let mainCum = 0;
       ops.forEach((op, mainIdx) => {
         const dur = realMinutes(op);
+        if (op.is_parallel) { groups.push({ main: { op, idx: mainIdx, start: 0, end: dur, parallel: true }, subs: [] }); return; }
         const mainStart = mainCum;
         const mainEnd = mainCum + dur;
+        mainStepTimes.set(op.step_number, { start: mainStart, end: mainEnd });
         const subs = [];
         if (_ganttShowSubs) {
           const subProds = collectSubProducts(op);
@@ -2788,6 +2798,19 @@
         groups.push({ main: { op, idx: mainIdx, start: mainStart, end: mainEnd }, subs });
         mainCum = mainEnd;
       });
+      // Paralelní operace: okno od konce hlavní operace před parallel_from do začátku hlavní operace za parallel_to
+      groups.filter(g => g.main.parallel).forEach(g => {
+        const op = g.main.op; const dur = g.main.end - g.main.start;
+        const from = op.parallel_from, to = op.parallel_to;
+        const steps = [...mainStepTimes.keys()].sort((a, b) => a - b);
+        const prevStep = from != null ? steps.filter(s => s < from).pop() : undefined;
+        const nextStep = to != null ? steps.find(s => s > to) : undefined;
+        const winStart = prevStep != null ? mainStepTimes.get(prevStep).end : 0;
+        const winEnd = nextStep != null ? mainStepTimes.get(nextStep).start : mainCum;
+        g.main.start = winStart; g.main.end = winStart + dur;
+        g.main.winStart = winStart; g.main.winEnd = winEnd;
+        g.main.overflow = g.main.end > winEnd; // paralelní práce se do okna nevejde → zdrží hlavní linii
+      });
 
       // Posun timeline tak, aby všechny starts >= 0
       const allStarts = groups.flatMap(g => [g.main.start, ...g.subs.map(s => s.start)]);
@@ -2801,8 +2824,9 @@
       }
       const totalEnd = Math.max(...groups.map(g => g.main.end), 0);
 
-      // ── 2) Souhrnný panel ──
-      const totalReal = ops.reduce((s, o) => s + realMinutes(o), 0);
+      // ── 2) Souhrnný panel ── (paralelní operace se do průběžného času nepočítají)
+      const totalReal = mainOnly.reduce((s, o) => s + realMinutes(o), 0);
+      const totalParallel = ops.filter(o => o.is_parallel).reduce((s, o) => s + realMinutes(o), 0);
       const totalNorm = ops.reduce((s, o) => s + normMinutes(o), 0);
       const totalPrep = ops.reduce((s, o) => s + (o.preparation_time || 0), 0);
       const takt = product.takt_time;
@@ -2820,6 +2844,7 @@
         '<div class="gantt-summary-item"><div class="label">Operací</div><div class="value">' + ops.length + (subOpCount ? ' + ' + subOpCount + ' sub' : '') + '</div></div>' +
         '<div class="gantt-summary-item"><div class="label">Celkem (s polotovary)</div><div class="value">' + formatDuration(totalEnd) + '</div></div>' +
         '<div class="gantt-summary-item"><div class="label">Hl. operace (reálně)</div><div class="value">' + formatDuration(totalReal) + '</div></div>' +
+        (totalParallel > 0 ? '<div class="gantt-summary-item"><div class="label">⫽ Paralelně (souběžně)</div><div class="value">' + formatDuration(totalParallel) + '</div></div>' : '') +
         '<div class="gantt-summary-item"><div class="label">Norma (1 os.)</div><div class="value">' + formatDuration(totalNorm) + '</div></div>' +
         (totalPrep > 0 ? '<div class="gantt-summary-item"><div class="label">Příprava</div><div class="value">' + totalPrep + ' min</div></div>' : '') +
         (subProdCount > 0 ? '<div class="gantt-summary-item"><div class="label">Polotovarů</div><div class="value">' + subProdCount + '</div></div>' : '') +
@@ -2882,18 +2907,26 @@
         const widthPct = (dur / safeTotal) * 100;
         const wsName = m.op.workstation ? m.op.workstation.name : '';
         const overTakt = takt && dur > takt;
-        const tooltip = m.op.name + ' — ' + formatDuration(dur) +
+        let tooltip = m.op.name + ' — ' + formatDuration(dur) +
           (wsName ? ' • ' + wsName : '') +
           ' • ' + formatDuration(m.start) + ' → ' + formatDuration(m.end);
+        let windowHtml = '';
+        if (m.parallel) {
+          tooltip += ' • ⫽ paralelní — běží souběžně s hlavní linií, okno ' + formatDuration(m.winStart) + ' → ' + formatDuration(m.winEnd) +
+            (m.overflow ? ' • ⚠ nevejde se do okna, zdrží další operaci' : '');
+          const wl = (m.winStart / safeTotal) * 100, ww = ((m.winEnd - m.winStart) / safeTotal) * 100;
+          windowHtml = '<div class="gantt-par-window" style="left:' + wl + '%;width:' + ww + '%;" title="Okno pro paralelní práci"></div>';
+        }
 
-        html += '<div class="gantt-row">' +
+        html += '<div class="gantt-row' + (m.parallel ? ' par-row' : '') + '">' +
           '<div class="gantt-label">' +
             '<span class="step">' + (m.op.step_number || (m.idx + 1)) + '</span>' +
             esc(m.op.name) +
+            (m.parallel ? ' <span class="ws" style="color:#c084fc;">⫽ paralelní</span>' : '') +
             (wsName ? ' <span class="ws">(' + esc(wsName) + ')</span>' : '') +
           '</div>' +
-          '<div class="gantt-track">' +
-            '<div class="gantt-bar ' + mainColorOf(m.idx) + (overTakt ? ' over-takt' : '') + '" ' +
+          '<div class="gantt-track">' + windowHtml +
+            '<div class="gantt-bar ' + mainColorOf(m.idx) + (overTakt ? ' over-takt' : '') + (m.parallel ? ' par' : '') + (m.overflow ? ' over-takt' : '') + '" ' +
                  'style="left:' + startPct + '%;width:' + widthPct + '%;" ' +
                  'title="' + esc(tooltip) + '">' +
               (widthPct > 4 ? formatDuration(dur) : '') +
