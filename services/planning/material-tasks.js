@@ -40,6 +40,12 @@ async function computeMaterialTasks(opts = {}) {
   const stockByMat = new Map();
   for (const s of stock) { if (!stockByMat.has(s.material_id)) stockByMat.set(s.material_id, []); stockByMat.get(s.material_id).push(s); }
 
+  // Stav „připraveno" (čtečka skladníka) — klíč kind|batch_operation_id|material_id (wip → 0)
+  const opIds = ops.map(o => o.id);
+  const doneRows = opIds.length ? await tx.materialPrepDone.findMany({ where: { batch_operation_id: { in: opIds } } }).catch(() => []) : [];
+  const doneMap = new Map(doneRows.map(d => [d.kind + '|' + d.batch_operation_id + '|' + (d.material_id || 0), d]));
+  const keyOf = (kind, opId, matId) => kind + '|' + opId + '|' + (matId || 0);
+
   const tasks = [];
   // Termín přípravy = začátek operace minus rezerva v PRACOVNÍM čase (operace v 5:30 → připravit předchozí pracovní den do 13:00)
   const { loadShiftConfig, subtractShift } = require('./shift-calendar');
@@ -63,8 +69,11 @@ async function computeMaterialTasks(opts = {}) {
       else if (!targetWhId) status = 'no_target';
       else if (!src) status = 'no_stock';
       else if (avail < needed) status = 'partial';
+      const mk = keyOf('material', o.id, m.material.id);
+      const mdone = doneMap.get(mk) || null;
       tasks.push({
-        kind: 'material', due: dueOf(o.planned_start), start_at: o.planned_start, status,
+        key: mk, prepared: !!mdone, prepared_at: mdone ? mdone.done_at : null, prepared_by: mdone ? mdone.done_by_person_id : null,
+        kind: 'material', due: dueOf(o.planned_start), start_at: o.planned_start, status: mdone ? 'prepared' : status,
         batch: { id: o.batch.id, batch_number: o.batch.batch_number, is_test: o.batch.is_test, product: o.batch.product },
         operation: { id: o.operation.id, step: o.operation.step_number, name: o.operation.name, batch_operation_id: o.id },
         item: { type: 'material', id: m.material.id, code: m.material.code, name: m.material.name }, qty: needed, unit: m.unit || m.material.unit || 'ks',
@@ -83,9 +92,12 @@ async function computeMaterialTasks(opts = {}) {
     for (let i = 1; i < list.length; i++) {
       const prev = list[i - 1], next = list[i];
       if (!prev.workstation || !next.workstation || prev.workstation.id === next.workstation.id) continue;
+      const wk = keyOf('wip', next.id, 0);
+      const wdone = doneMap.get(wk) || null;
       tasks.push({
+        key: wk, prepared: !!wdone, prepared_at: wdone ? wdone.done_at : null, prepared_by: wdone ? wdone.done_by_person_id : null,
         kind: 'wip', due: dueOf(next.planned_start), start_at: next.planned_start, after: prev.planned_end,
-        status: (prev.workstation.output_warehouse_id && next.workstation.input_warehouse_id) ? 'ok' : 'no_target',
+        status: wdone ? 'prepared' : ((prev.workstation.output_warehouse_id && next.workstation.input_warehouse_id) ? 'ok' : 'no_target'),
         batch: { id: next.batch.id, batch_number: next.batch.batch_number, is_test: next.batch.is_test, product: next.batch.product },
         operation: { id: next.operation.id, step: next.operation.step_number, name: next.operation.name, batch_operation_id: next.id, prev_step: prev.operation.step_number, prev_name: prev.operation.name },
         item: { type: 'wip', id: next.batch.product.id, code: next.batch.product.code, name: next.batch.product.name + ' (rozpracováno po op. ' + prev.operation.step_number + ')' }, qty: Number(next.batch.quantity), unit: 'ks',

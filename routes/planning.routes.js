@@ -637,6 +637,48 @@ router.get('/material-tasks', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/planning/material-tasks/done — skladník označil úkol přípravy jako „připraveno".
+// Body: { key } nebo { kind, batch_operation_id, material_id?, qty?, note? }. key = kind|opId|matId.
+router.post('/material-tasks/done', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    let kind = b.kind, opId = b.batch_operation_id, matId = b.material_id;
+    if (b.key && typeof b.key === 'string') { const p = b.key.split('|'); kind = p[0]; opId = parseInt(p[1], 10); matId = parseInt(p[2], 10) || 0; }
+    opId = parseInt(opId, 10); matId = parseInt(matId, 10) || 0;
+    if (!['material', 'wip'].includes(kind) || !opId) return res.status(400).json({ error: 'Chybí kind / batch_operation_id' });
+    const personId = (req.user && req.user.person && req.user.person.id) || null;
+    const row = await prisma.materialPrepDone.upsert({
+      where: { kind_batch_operation_id_material_id: { kind, batch_operation_id: opId, material_id: matId } },
+      update: { done_at: new Date(), done_by_person_id: personId, qty: b.qty != null ? Number(b.qty) : undefined, note: b.note || undefined },
+      create: { kind, batch_operation_id: opId, material_id: matId, done_by_person_id: personId, qty: b.qty != null ? Number(b.qty) : null, note: b.note || null },
+    });
+    res.status(201).json({ ok: true, done: row });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/planning/material-tasks/done — vrátit „připraveno" zpět. Body stejné jako POST.
+router.delete('/material-tasks/done', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    let kind = b.kind, opId = b.batch_operation_id, matId = b.material_id;
+    if (b.key && typeof b.key === 'string') { const p = b.key.split('|'); kind = p[0]; opId = parseInt(p[1], 10); matId = parseInt(p[2], 10) || 0; }
+    opId = parseInt(opId, 10); matId = parseInt(matId, 10) || 0;
+    if (!kind || !opId) return res.status(400).json({ error: 'Chybí kind / batch_operation_id' });
+    await prisma.materialPrepDone.deleteMany({ where: { kind, batch_operation_id: opId, material_id: matId } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/planning/batch-operations/:id/pull-earlier — posunout operaci na dřívější termín
+// (jen když je vše připraveno a pracoviště i přiřazení lidé mají volno). Vrací { moved, reason, to_start, to_end }.
+router.post('/batch-operations/:id(\\d+)/pull-earlier', async (req, res, next) => {
+  try {
+    const { pullOperationEarlier } = require('../services/planning/pull-earlier');
+    const r = await pullOperationEarlier(parseInt(req.params.id, 10));
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (err) { next(err); }
+});
+
 // GET /api/planning/material-moves — (starší) pre-pick přes aktivní dávky
 router.get('/material-moves', async (req, res, next) => {
   try {

@@ -18,6 +18,7 @@ import PickingSplitPage from './pages/PickingSplitPage';
 import StockCheckPage from './pages/StockCheckPage';
 import ItemInfoPage from './pages/ItemInfoPage';
 import AwaitingReceiptPage from './pages/AwaitingReceiptPage';
+import MaterialPrepPage from './pages/MaterialPrepPage';
 
 export default function App() {
   return (
@@ -133,6 +134,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AwaitingReceiptPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/material-prep"
+        element={
+          <ProtectedRoute>
+            <MaterialPrepPage />
           </ProtectedRoute>
         }
       />

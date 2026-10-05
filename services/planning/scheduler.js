@@ -623,4 +623,4 @@ async function scheduleAllActive(opts = {}) {
   };
 }
 
-module.exports = { scheduleBatch, scheduleAllActive };
+module.exports = { scheduleBatch, scheduleAllActive, operationMinutes, findQueueConflictEnd, loadQueueByWorkstation, ACTIVE_BATCH_STATUSES };

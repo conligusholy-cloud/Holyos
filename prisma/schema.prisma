@@ -1972,6 +1972,24 @@ model SlotAssignment {
   @@map("slot_assignments")
 }
 
+// Příprava materiálu / přesun WIP pro pracoviště — záznam „připraveno" (čtečka skladníka).
+// Úkoly samotné se počítají z plánu (services/planning/material-tasks.js); tady je jen stav splnění.
+// kind: material (materiál na vstupní sklad pracoviště) | wip (rozpracovaný výrobek na další pracoviště)
+model MaterialPrepDone {
+  id                 Int      @id @default(autoincrement())
+  kind               String   @db.VarChar(20)
+  batch_operation_id Int
+  material_id        Int?     // u kind=material; u wip null
+  qty                Decimal? @db.Decimal(12, 3)
+  note               String?  @db.VarChar(500)
+  done_by_person_id  Int?
+  done_at            DateTime @default(now())
+
+  @@unique([kind, batch_operation_id, material_id])
+  @@index([batch_operation_id])
+  @@map("material_prep_done")
+}
+
 // Blokace slotu — dovolená, údržba, nepracovní dny apod.
 model SlotBlock {
   id         Int      @id @default(autoincrement())

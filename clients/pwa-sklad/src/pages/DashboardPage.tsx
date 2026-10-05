@@ -21,6 +21,7 @@ const ACTIONS: Action[] = [
   { key: 'stock-check', label: 'Kontrola stavu', hint: 'Sken → stav po lokacích', to: '/stock-check', accent: 'stock-check', icon: '⚗' },
   { key: 'info', label: 'Info o zboží', hint: 'Sken → plný detail', to: '/info', accent: 'info', icon: '👁' },
   { key: 'awaiting', label: 'Čekání na příjem', hint: 'Faktury bez příjemky', to: '/awaiting-receipt', accent: 'awaiting', icon: '📋' },
+  { key: 'material-prep', label: 'Příprava výroby', hint: 'Co, kam a na kdy připravit', to: '/material-prep', accent: 'picking', icon: '🏭' },
 ];
 
 export default function DashboardPage() {
