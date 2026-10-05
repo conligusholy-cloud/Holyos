@@ -167,6 +167,7 @@
         <label class="pv2-range">Od <input type="date" id="pv2-from" onchange="pv2LoadWork()"></label>
         <label class="pv2-range">Do <input type="date" id="pv2-to" onchange="pv2LoadWork()"></label>
         <button class="btn btn-secondary" onclick="pv2Reload()">🔄 Obnovit</button>
+        <button class="btn" id="pv2-replan-all" onclick="pv2ReplanAll()" title="Přeplánovat všechny aktivní dávky podle aktuálního nastavení (pracovní doba, obsazenost lidí a pracovišť, bez prodlev)" style="background:#f59e0b;color:#1a1a1a;font-weight:700;border-color:#f59e0b;">📅 Přeplánovat vše</button>
       </div>
 
       <!-- 0) Naplánovat práci — zadání výrobku do výroby (vznikne dávka, operace z postupu, časový plán) -->
@@ -1806,6 +1807,20 @@
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
   var pv2WorkOps = [];
+  // Přeplánovat všechny aktivní dávky (planned/released/paused) — nedokončené operace dostanou nový čas
+  window.pv2ReplanAll = async function () {
+    if (!confirm('Přeplánovat všechny aktivní dávky?\n\nNedokončené operace dostanou nový plán podle aktuální pracovní doby, obsazenosti lidí a pracovišť (práce lidí navazuje bez prodlev). Hotové a rozpracované operace se nemění.')) return;
+    var btn = document.getElementById('pv2-replan-all'); var old = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Plánuji…';
+    try {
+      var r = await fetch('/api/planning/schedule-all', { method: 'POST', headers: authHeaders(), credentials: 'include' });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      var failed = (j.results || []).filter(function (x) { return !x.ok; }).map(function (x) { return x.batch_number + ': ' + x.error; });
+      alert('📅 Přeplánováno: ' + j.ok + '/' + j.total + ' dávek' + (failed.length ? '\n\nChyby:\n' + failed.join('\n') : ''));
+      pv2Loaded = {}; pv2Reload();
+    } catch (e) { alert('Přeplánování selhalo: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = old; }
+  };
   // Semafor materiálu u operace + tooltip s položkami (co, kolik, kde, objednávka/ETA)
   var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
   var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ' };

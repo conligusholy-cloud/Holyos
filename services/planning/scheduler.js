@@ -291,6 +291,7 @@ async function scheduleBatch(batchId, opts = {}) {
           workstation_group_id: true,
           operation_id: true,
           assigned_person_id: true,
+          planned_start: true, planned_end: true, finished_at: true,
           operation: { select: { duration: true, duration_unit: true, preparation_time: true, is_parallel: true, parallel_from: true, parallel_to: true, step_number: true, workers_count: true } },
           workers: { select: { person_id: true, slot: true } },
         },
@@ -382,9 +383,18 @@ async function scheduleBatch(batchId, opts = {}) {
   const orderedOps = mainOps.concat(parallelOps);
   const batchWsUsed = new Set(); // pracoviště, kde už tato dávka má operaci (výrobek na něm zůstává)
 
+  const now = new Date();
   for (const op of orderedOps) {
-    if (op.status === 'done' || op.status === 'cancelled') continue;
     const isParallel = !!(op.operation && op.operation.is_parallel);
+    if (op.status === 'cancelled') continue;
+    if (op.status === 'done' || op.status === 'in_progress') {
+      // Hotová / rozpracovaná operace se nepřeplánovává, ale další linie na ni navazuje
+      const en = op.finished_at || op.planned_end;
+      if (!isParallel && en && new Date(en) > prevEnd) prevEnd = new Date(en);
+      if (!isParallel && op.operation && op.planned_start) mainByStep.set(op.operation.step_number, { start: new Date(op.planned_start), end: new Date(en || op.planned_end), wsId: op.workstation_id });
+      if (op.workstation_id) batchWsUsed.add(op.workstation_id);
+      continue;
+    }
 
     const warnings = [];
     let candidateStart;
@@ -398,6 +408,8 @@ async function scheduleBatch(batchId, opts = {}) {
     } else {
       candidateStart = new Date(Math.max(prevEnd.getTime(), anchor.getTime()));
     }
+    // Nezačatá operace se nedá naplánovat do minulosti (např. při přeplánování staré dávky)
+    if (candidateStart < now) candidateStart = new Date(now);
 
     if (candidateStart < prepReadyAt) {
       if (leadBlocksStart) { warnings.push('material_prep_lead'); candidateStart = new Date(prepReadyAt); }
@@ -449,17 +461,45 @@ async function scheduleBatch(batchId, opts = {}) {
     const wsId = op.workstation_id || pickedWsId;
     if (!wsId) warnings.push('no_workstation_assigned');
 
+    // Lidé: člověk dělá v jednu chvíli jen jednu věc. Když v kandidátním čase není dost volných
+    // kandidátů, operace se posune na okamžik, kdy se někdo uvolní (místo dvojího obsazení).
+    const needPeople = Math.max(1, parseInt(op.operation && op.operation.workers_count, 10) || 1);
+    const fixedPeople = op.assigned_person_id ? (op.workers && op.workers.length ? op.workers.map(w => w.person_id) : [op.assigned_person_id]) : [];
+    const peopleConflictEnd = (st, en) => {
+      // vrátí nejbližší konec obsazení, po kterém může být dost lidí volných; null = už teď je dost volných
+      const busyOf = (pid) => (personBusy.get(pid) || []).filter(iv => iv.start < en && iv.end > st);
+      let pool;
+      if (fixedPeople.length) pool = fixedPeople; // ručně přiřazení musí být volní všichni
+      else {
+        const ranked = rankCandidates({ ...op, workstation_id: wsId }, assignCtx);
+        if (!ranked || ranked.length < needPeople) return null; // kandidátů není dost ani teoreticky → řeší se warningem níž
+        pool = ranked.map(p => p.id);
+      }
+      const free = pool.filter(pid => busyOf(pid).length === 0);
+      if (free.length >= (fixedPeople.length ? pool.length : needPeople)) return null;
+      const ends = pool.flatMap(pid => busyOf(pid).map(iv => iv.end.getTime()));
+      return ends.length ? new Date(Math.min(...ends)) : null;
+    };
+
     let consumed;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 80; i++) {
       consumed = consumeShift(candidateStart, totalMin, cfg);
-      if (isParallel) break; // plovoucí: pracoviště drží hlavní operace, paralelní ho neblokuje ani nečeká
-      const conflictEnd = findQueueConflictEnd(
-        queueByWs, wsId, candidateStart, consumed.end
-      );
-      if (!conflictEnd) break;
-      const conflictedBy = Math.round((conflictEnd.getTime() - candidateStart.getTime()) / 60000);
-      warnings.push(`pushed_by_queue:+${conflictedBy}min`);
-      candidateStart = nextShiftStart(conflictEnd, cfg);
+      if (!isParallel) { // plovoucí: pracoviště drží hlavní operace, paralelní ho neblokuje ani nečeká
+        const conflictEnd = findQueueConflictEnd(queueByWs, wsId, candidateStart, consumed.end);
+        if (conflictEnd) {
+          const conflictedBy = Math.round((conflictEnd.getTime() - candidateStart.getTime()) / 60000);
+          warnings.push(`pushed_by_queue:+${conflictedBy}min`);
+          candidateStart = nextShiftStart(conflictEnd, cfg);
+          continue;
+        }
+      }
+      const pEnd = peopleConflictEnd(candidateStart, consumed.end);
+      if (pEnd && pEnd > candidateStart) {
+        warnings.push(`pushed_by_people:+${Math.round((pEnd.getTime() - candidateStart.getTime()) / 60000)}min`);
+        candidateStart = nextShiftStart(pEnd, cfg);
+        continue;
+      }
+      break;
     }
 
     const start = candidateStart;
@@ -471,7 +511,6 @@ async function scheduleBatch(batchId, opts = {}) {
     // Lidé: operace potřebuje workers_count lidí NAJEDNOU → přiřadíme N (volných v tom čase)
     let assignedPerson = null;
     let workerIds;
-    const needPeople = Math.max(1, parseInt(op.operation && op.operation.workers_count, 10) || 1);
     if (!op.assigned_person_id) {
       const pick = pickAssignees({ ...op, workstation_id: wsId }, assignCtx, needPeople, start, end, personBusy);
       if (!pick.people.length) warnings.push('no_assignee_found');
