@@ -120,7 +120,7 @@ const ADMIN_NAV = [
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
   return layout({ title, active, nav: ADMIN_NAV, user: admin.name || admin.username, holyosUrl, body,
-    banner: { icon: '🔒', title: 'Soukromá sekce', subtitle: 'Správa podporovatelů, přístupů a dalších agend Best Series na jednom místě' } });
+    banner: { icon: '👥', title: 'Podporovatelé', subtitle: 'Správa podporovatelů Best Series, jejich přístupů a dalších agend na jednom místě' } });
 }
 function adminDash({ admin, stats, recent, holyosUrl }) {
   return adminLayout('Přehled', 'dash', admin, `
