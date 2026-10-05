@@ -104,6 +104,9 @@ async function migrate() {
     -- Discount Credit v %: kolik % z ceny s DPH získá prodejce, když prodá tento typ stroje
     ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS credit_pct NUMERIC(5,2) NOT NULL DEFAULT 0;
 
+    -- Zobrazovací měna uživatele (CZK / EUR) na stránkách Prádlomaty a Discount Credit
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

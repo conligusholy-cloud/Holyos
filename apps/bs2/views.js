@@ -170,31 +170,40 @@ function supporterHome(s, offers = [], extra = {}) {
     <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
   ` });
 }
+// Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
+const curOf = (s) => (s && s.currency === 'EUR' ? 'EUR' : 'CZK');
+const curSw = (s, back) => `<form method="post" action="/currency" style="margin:0;display:inline-flex;gap:0;border:1px solid var(--border2);border-radius:999px;overflow:hidden"><input type="hidden" name="back" value="${esc(back)}">
+  ${['CZK', 'EUR'].map(c => `<button type="submit" name="cur" value="${c}" class="btn sm ${curOf(s) === c ? '' : 'sec'}" style="border-radius:0;border:0;min-width:64px">${c === 'CZK' ? 'Kč' : '€'}</button>`).join('')}</form>`;
+// cena s DPH 21 % v měně uživatele (EUR bere cenu EUR z ceníku)
+const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_czk; return b == null ? null : Math.round(Number(b) * 1.21); };
 function supporterProducts(s, offers = []) {
+  const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
   return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
-  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
+  <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
+  <div class="grid">${offers.map(p => `
     <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
-      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
+      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vatPrice(p, cur), sym)}</div>
       <div class="small muted">cena s DPH 21 %</div>
-    </div>`; }).join('')}</div>
+    </div>`).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
 }
 const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', delivered: 'Dodáno', running: 'V provozu' };
 const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
-function supporterCredit(s, { rows = [], sellable = [] } = {}) {
-  const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0);
+function supporterCredit(s, { rows = [], sellable = [], rate = 25 } = {}) {
+  const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč', k = cur === 'EUR' ? 1 / (Number(rate) || 25) : 1;
+  const conv = (x) => Math.round(Number(x) * k * 100) / 100;
+  const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0) * k;
   return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, body: `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>
+  <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>${curSw(s, '/discount-credit')}</div>
   <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'DC')}</div></div>
   <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
   <div class="card tbl-wrap">${sellable.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena s DPH</th><th>Discount Credit</th></tr></thead><tbody>
-    ${sellable.map(p => { const vat = p.price_czk == null ? null : Math.round(Number(p.price_czk) * 1.21); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, 'Kč')}</td><td data-l="Discount Credit">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
+    ${sellable.map(p => { const vat = vatPrice(p, cur); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, sym)}</td><td data-l="Discount Credit">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
     <p class="small muted" style="margin:10px 0 0">Credit se připíše, když člověk z tvého doporučení zakoupí prádlomat.</p>`
     : '<p class="muted" style="margin:0">Momentálně není nastavena žádná nabídka.</p>'}</div>
   <h3 style="margin:20px 0 8px">Historie</h3>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(r.amount_czk, 'DC')}</b></td></tr>`).join('')}</tbody></table>`
+    ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(conv(r.amount_czk), 'DC')}</b></td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné pohyby na kreditním účtu.</p>'}</div>` });
 }
 function supporterMine(s, { rows = [] } = {}) {
@@ -224,7 +233,7 @@ function supporterNetwork(s, { rows = [], lineCount = 0 } = {}) {
   return layout({ title: 'Partnerská síť', user: s.nick, nav: userNav(s), active: 'net', fx: true, body: `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('network', 18)} Partnerská síť — kdo z mé první linie si koupil prádlomat</h2>
   <div class="grid" style="margin-bottom:12px">
-    <div class="card" style="margin:0"><div class="small muted">Moje první linie</div><div style="font-size:26px;font-weight:800">${lineCount}</div></div>
+    <div class="card" style="margin:0"><div class="small muted">Moje doporučení</div><div style="font-size:26px;font-weight:800">${lineCount}</div></div>
     <div class="card" style="margin:0"><div class="small muted">Kupující</div><div style="font-size:26px;font-weight:800">${buyers}</div></div>
     <div class="card" style="margin:0"><div class="small muted">Prádlomatů celkem</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
   </div>
@@ -374,7 +383,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
 }
 // Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
 const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
-function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl }) {
+function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate = 25 }) {
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
   const body = Object.keys(groups).map(k => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2>
@@ -392,6 +401,7 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl }) {
   </div>
   <p class="muted" style="margin-top:0">Typy prádlomatů a jejich ceny bez DPH — aktivní položky z prodejního ceníku HolyOS (úpravy se dělají tam). <b>Discount Credit</b> = kolik % z ceny s DPH (21 %) získá prodejce, když jeho doporučený zákazník koupí tento typ. Přepínačem <b>Nabízet uživatelům</b> určíš, které stroje uvidí uživatelé BS2 na své domovské stránce.</p>
   <style>.sw{display:inline-flex;align-items:center;gap:8px;background:transparent;border:0;cursor:pointer;color:var(--text2);font:inherit;font-size:12.5px;font-weight:600;padding:4px 0}.sw i{width:38px;height:22px;border-radius:999px;background:rgba(120,160,255,.14);border:1px solid var(--border2);position:relative;transition:background .2s}.sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--text2);transition:left .2s,background .2s}.sw.on{color:var(--ok)}.sw.on i{background:linear-gradient(90deg,var(--accent),var(--vio));border-color:transparent;box-shadow:0 0 14px rgba(58,108,245,.5)}.sw.on i::after{left:18px;background:#fff}</style>
+  <form method="post" action="/admin/settings/eur-rate" class="row" style="margin:6px 0 12px;gap:8px;align-items:center"><span class="muted">Kurz pro zobrazení v eurech: 1 € =</span><input name="rate" inputmode="decimal" value="${esc(String(rate).replace('.', ','))}" style="width:90px;padding:7px 8px;text-align:right"><span class="muted">Kč</span><button class="btn sec sm" type="submit">Uložit</button><span class="small muted">(přepočítává se jím kredit z Kč do €; ceny prádlomatů se berou z EUR ceníku)</span></form>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   ${body || (error ? '' : '<p class="muted">V ceníku nejsou žádné aktivní stroje.</p>')}`, holyosUrl);
 }

@@ -225,6 +225,18 @@ app.get('/', (req, res, next) => {
     res.send(V.supporterHome(req.user));
   });
 });
+async function eurRate() { const r = await q("SELECT value FROM app_settings WHERE key='eur_czk_rate'"); const n = Number(r.rows[0] && r.rows[0].value); return n > 0 ? n : 25; }
+app.post('/currency', wrap(requireUser), wrap(async (req, res) => {
+  const cur = req.body.cur === 'EUR' ? 'EUR' : 'CZK';
+  await q('UPDATE supporters SET currency=$1, updated_at=now() WHERE id=$2', [cur, req.user.id]);
+  const back = ['/pradlomaty', '/discount-credit'].includes(req.body.back) ? req.body.back : '/pradlomaty';
+  res.redirect(back);
+}));
+app.post('/admin/settings/eur-rate', requireAdmin, wrap(async (req, res) => {
+  const n = Number(String(req.body.rate || '').replace(/\s/g, '').replace(',', '.'));
+  if (n > 0 && n < 1000) await q("INSERT INTO app_settings (key,value) VALUES ('eur_czk_rate',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [String(n)]);
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Kurz uložen.'));
+}));
 app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let offers = [];
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
@@ -244,7 +256,7 @@ app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
     const off = new Map((await q('SELECT holyos_item_id, offered, credit_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, r]));
     sellable = items.filter(p => off.get(p.id) && off.get(p.id).offered).map(p => ({ ...p, credit_pct: Number(off.get(p.id).credit_pct) }));
   } catch (e) { /* bez tabulky */ }
-  res.send(V.supporterCredit(req.user, { rows, sellable }));
+  res.send(V.supporterCredit(req.user, { rows, sellable, rate: await eurRate() }));
 }));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
@@ -325,7 +337,7 @@ app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
   const offered = await offeredSet();
   const pcts = new Map((await q('SELECT holyos_item_id, credit_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, Number(r.credit_pct)]));
   const rows = (out.items || []).map(p => ({ ...p, offered: offered.has(p.id), credit_pct: pcts.get(p.id) || 0 }));
-  res.send(V.adminProducts({ admin: req.admin, rows, error: out.error || '', msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+  res.send(V.adminProducts({ admin: req.admin, rows, error: out.error || '', msg: req.query.msg || '', holyosUrl: HOLYOS_URL, rate: await eurRate() }));
 }));
 app.post('/admin/products/:id(\\d+)/credit', requireAdmin, wrap(async (req, res) => {
   let pct = Number(String(req.body.pct || '0').replace(/\s/g, '').replace(',', '.'));
