@@ -155,7 +155,7 @@ const userNav = (s) => {
   const nav = [USER_NAV[0]];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, USER_NAV[1]);
+  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje síť prádlomatů', icon: 'box' }, USER_NAV[1]);
   return nav;
 };
 function supporterHome(s, offers = [], extra = {}) {
@@ -179,6 +179,20 @@ function supporterProducts(s, offers = []) {
       <div class="small muted">cena s DPH 21 %</div>
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
+}
+function supporterMine(s, { rows = [] } = {}) {
+  const sum = rows.reduce((a, r) => a + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
+  return layout({ title: 'Moje síť prádlomatů', user: s.nick, nav: userNav(s), active: 'mine', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Moje síť prádlomatů — prádlomaty, které jsem si koupil</h2>
+  <div class="grid" style="margin-bottom:12px">
+    <div class="card" style="margin:0"><div class="small muted">Počet prádlomatů</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
+    <div class="card" style="margin:0"><div class="small muted">Investováno celkem</div><div style="font-size:26px;font-weight:800">${money(sum, 'Kč')}</div></div>
+  </div>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena</th><th>Datum nákupu</th><th>Poznámka</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td data-l="Prádlomat"><b>${esc(r.product_name)}</b></td><td data-l="Cena">${money(r.price_czk, 'Kč')}</td>
+      <td data-l="Datum nákupu" class="small muted">${r.purchased_at ? new Date(r.purchased_at).toLocaleDateString('cs-CZ') : '—'}</td>
+      <td data-l="Poznámka" class="small muted">${esc(r.note || '')}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted" style="margin:0">Zatím tu nemáš žádný prádlomat. Jakmile si nějaký pořídíš, objeví se tady.</p>'}</div>` });
 }
 function supporterNetwork(s, { rows = [], lineCount = 0 } = {}) {
   const buyers = new Set(rows.map(r => r.id)).size;
@@ -466,4 +480,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };

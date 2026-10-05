@@ -230,6 +230,10 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
   res.send(V.supporterProducts(req.user, offers));
 }));
+app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
+  const rows = (await q('SELECT product_name, price_czk, purchased_at, note FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [req.user.id])).rows;
+  res.send(V.supporterMine(req.user, { rows }));
+}));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
   const [rows, line] = await Promise.all([loadNetwork(req.user), loadFirstLine(req.user)]);
