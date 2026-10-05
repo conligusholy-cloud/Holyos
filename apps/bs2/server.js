@@ -44,7 +44,8 @@ function setCookie(req, res, name, payload, maxAgeSec) {
 function readCookie(req, name) { const t = req.cookies && req.cookies[name]; if (!t || !SESSION_SECRET) return null; try { return jwt.verify(t, SESSION_SECRET); } catch (e) { return null; } }
 function requireAdmin(req, res, next) {
   const s = readCookie(req, ADMIN_COOKIE);
-  if (!s || s.kind !== 'admin') return res.redirect(HOLYOS_URL + '/api/auth/sso/bs2');
+  // Nepřihlášený nikdy nesmí být poslán do HolyOS — admin se dostane jen z menu HolyOS; návštěvník uvidí jen BS2 login
+  if (!s || s.kind !== 'admin') return res.redirect('/login');
   req.admin = s; next();
 }
 async function requireUser(req, res, next) {
@@ -71,14 +72,14 @@ app.get('/api/health', wrap(async (req, res) => {
 
 // ── SSO správce (z HolyOS) ─────────────────────────────────────────────────
 app.get('/sso', (req, res) => {
-  if (!SSO_SECRET) return res.status(500).send(V.errorPage('SSO není nakonfigurováno', 'Chybí BS2_SSO_SECRET.', HOLYOS_URL));
+  if (!SSO_SECRET) return res.status(500).send(V.errorPage('Služba není nakonfigurována', 'Zkus to prosím později.', '/login'));
   try {
     const p = jwt.verify(String(req.query.t || ''), SSO_SECRET, { audience: 'bs2', issuer: 'holyos' });
-    if (ALLOWED_PIDS.length && !ALLOWED_PIDS.includes(Number(p.pid))) return res.status(403).send(V.errorPage('Přístup odepřen', 'Do správy této sekce nemáš přístup.', HOLYOS_URL));
+    if (ALLOWED_PIDS.length && !ALLOWED_PIDS.includes(Number(p.pid))) return res.status(403).send(V.errorPage('Přístup odepřen', 'Do této sekce nemáš přístup.', '/login'));
     setCookie(req, res, ADMIN_COOKIE, { kind: 'admin', uid: p.uid, pid: p.pid, name: p.name, username: p.username }, 12 * 3600);
     res.redirect('/admin');
   } catch (e) {
-    res.status(401).send(V.errorPage('Přihlášení vypršelo', 'Odkaz z HolyOS je neplatný nebo vypršel (platí 2 minuty). Zkus to z HolyOS znovu.', HOLYOS_URL + '/api/auth/sso/bs2'));
+    res.status(401).send(V.errorPage('Odkaz vypršel', 'Přihlašovací odkaz je neplatný nebo vypršel. Otevři sekci znovu z místa, odkud jsi přišel.', '/login'));
   }
 });
 

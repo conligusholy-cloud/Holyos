@@ -213,10 +213,11 @@ async function externalSectionsFor(user) {
   return out;
 }
 // GET /api/auth/sso/bs2 — přesměruje do BS2 s jednorázovým tokenem (platnost 2 min)
-// Bez přihlášení (přímý odkaz z iPadu/mobilu, vypršelá cookie) → na přihlašovací stránku a po přihlášení zpět sem.
+// Bez přihlášení do HolyOS (přímý odkaz, vypršelá cookie) → rovnou na přihlášení BS2.
+// Záměr: nikdo, kdo míří do BS2, nesmí skončit na přihlašovací stránce HolyOS. Admin se do BS2 dostane z menu HolyOS.
 function loginRedirectIfAnonymous(req, res, next) {
   const hasToken = (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) || (req.cookies && req.cookies.token);
-  if (!hasToken) return res.redirect('/public/login.html?redirect=' + encodeURIComponent(req.originalUrl));
+  if (!hasToken) return res.redirect(String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '') + '/login');
   next();
 }
 router.get('/sso/bs2', loginRedirectIfAnonymous, requireAuth, async (req, res, next) => {
