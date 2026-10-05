@@ -422,10 +422,10 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
   const body = Object.keys(groups).map(k => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2>
-    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Typ stroje</th><th>Cena CZK</th><th>Cena EUR</th><th>Kamion CZK</th><th>Kamion EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
+    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Typ stroje</th><th>Cena CZK</th><th>Cena EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
     ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td><td data-l="Typ stroje" class="small">${esc(p.machine_code || '—')}</td>
       <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
-      <td data-l="Kamion CZK">${money(p.truck_price_czk, 'Kč')}</td><td data-l="Kamion EUR">${money(p.truck_price_eur, '€')}</td>
+      
       <td data-l="Discount Credit"><form method="post" action="/admin/products/${p.id}/credit" style="display:flex;align-items:center;gap:6px;margin:0"><input name="pct" inputmode="decimal" value="${Number(p.credit_pct || 0)}" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span><button class="btn sec sm" type="submit">Uložit</button></form>${p.price_czk != null && Number(p.credit_pct) > 0 ? `<div class="small muted" style="margin-top:4px">= ${money(Math.round(Number(p.price_czk) * 1.21 * Number(p.credit_pct)) / 100, 'DC')} za prodej</div>` : ''}</td>
       <td data-l="Minimální cena"><form method="post" action="/admin/products/${p.id}/min" style="display:flex;flex-direction:column;gap:6px;margin:0">
         <div style="display:flex;align-items:center;gap:6px"><input name="min_czk" inputmode="decimal" value="${p.min_price_czk != null ? Number(p.min_price_czk) : ''}" placeholder="—" style="width:110px;padding:7px 8px;text-align:right"><span class="muted">Kč</span></div>
