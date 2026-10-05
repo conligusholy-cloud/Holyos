@@ -186,14 +186,14 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
     <div><div class="small muted">Dostupné Discount Credit</div><div style="font-size:28px;font-weight:800;letter-spacing:-.02em"><span id="dc-left">${fmt(bal)}</span> <span style="font-size:18px">DC</span></div></div>
     <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Zadej u vybraného prádlomatu, kolik DC chceš uplatnit — cena se hned přepočítá. Kalkulace je orientační, slevu potvrdíme při objednávce.</div>
   </div>
-  <div class="grid" id="dc-grid">${offers.map(p => { const price = vatPrice(p, cur); const minB = cur === 'EUR' ? p.min_price_eur : p.min_price_czk; const minV = minB == null ? 0 : Math.round(Number(minB) * 1.21); let room = price == null ? 0 : Math.max(0, price - minV); const netP = cur === 'EUR' ? p.price_eur : p.price_czk; if (p.dc_use_pct != null && netP != null) room = Math.min(room, Math.floor(Number(netP) * Number(p.dc_use_pct) / 100)); return `
-    <div class="card dc-card" style="margin:0" data-price="${price == null ? '' : price}" data-room="${room}"><b style="font-size:16px">${esc(p.name_cs)}</b>
-      <div class="dc-price" style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(price, sym)}</div>
-      <div class="small muted">cena s DPH 21 %</div>
-      <div class="small muted" style="opacity:.8">${money(cur === 'EUR' ? p.price_eur : p.price_czk, sym)} bez DPH</div>
-      ${price != null && bal > 0 && room > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
-      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> <span class="muted">(ušetříš <span class="dc-saved"></span>)</span></div>
-      ${minV > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minV, sym)} s DPH</div>` : ''}` : ''}
+  <div class="grid" id="dc-grid">${offers.map(p => { const net = cur === 'EUR' ? p.price_eur : p.price_czk; const minB = cur === 'EUR' ? p.min_price_eur : p.min_price_czk; const minN = minB == null ? 0 : Number(minB); let room = net == null ? 0 : Math.max(0, Math.round(Number(net) - minN)); if (p.dc_use_pct != null && net != null) room = Math.min(room, Math.floor(Number(net) * Number(p.dc_use_pct) / 100)); return `
+    <div class="card dc-card" style="margin:0" data-price="${net == null ? '' : Number(net)}" data-room="${room}"><b style="font-size:16px">${esc(p.name_cs)}</b>
+      <div class="dc-price" style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(net, sym)}</div>
+      <div class="small muted">cena bez DPH</div>
+      <div class="small muted" style="opacity:.8">${money(vatPrice(p, cur), sym)} s DPH 21 %</div>
+      ${net != null && bal > 0 && room > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
+      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div>
+      ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
   <script>
@@ -211,7 +211,7 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
         var val=Math.max(0,parseInt(i.value,10)||0); if(val>cap){val=cap;i.value=cap;}
         i.max=cap; u+=val;
         var box=c.querySelector('.dc-after');
-        if(val>0){box.style.display='block';c.querySelector('.dc-new').textContent=fmt(price-val)+' '+sym;c.querySelector('.dc-saved').textContent=fmt(val)+' '+sym;}else box.style.display='none';
+        if(val>0){box.style.display='block';c.querySelector('.dc-new').textContent=fmt(price-val)+' '+sym;c.querySelector('.dc-gross').textContent=fmt((price-val)*1.21)+' '+sym;c.querySelector('.dc-saved').textContent=fmt(val)+' '+sym;}else box.style.display='none';
       });
       document.getElementById('dc-left').textContent=fmt(total-u);
     }
