@@ -36,6 +36,7 @@ function placeLabel(p: PrepTask['from'] | PrepTask['to']): string {
 }
 function statusBadge(t: PrepTask): { text: string; color: string } {
   if (t.prepared) return { text: '✓ připraveno', color: '#22c55e' };
+  if (t.urgent) return { text: '⚡ připravit IHNED', color: '#ef4444' };
   const overdue = new Date(t.due).getTime() < Date.now();
   if (t.status === 'no_stock') return { text: 'není skladem', color: '#ef4444' };
   if (t.status === 'partial') return { text: 'částečně skladem', color: '#f59e0b' };

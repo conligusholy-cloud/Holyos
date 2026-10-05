@@ -358,8 +358,15 @@ async function scheduleBatch(batchId, opts = {}) {
   const anchor = batch.planned_start ? new Date(batch.planned_start) : new Date();
   // Příprava materiálu: od TEĎ musí skladník stihnout rezervu (pracovních minut) → dřív nemůže žádná operace začít.
   // (Když je dávka naplánovaná do budoucna, nic to neposune.)
-  let materialLeadMin = 60;
-  try { const { getSetting } = require('../settings'); const v = await getSetting('production.material_lead_min', { type: 'number', defaultValue: 60 }); if (Number.isFinite(Number(v))) materialLeadMin = Number(v); } catch (e) { /* default */ }
+  // Výchozí režim „lidé bez prodlev": rezerva začátek NEodsouvá — práce navazuje hned a plán přípravy
+  // materiálu se přizpůsobí (úkol dostane termín v minulosti → skladník vidí „⚡ připravit ihned").
+  // Jen když je zapnuto production.material_lead_blocks_start, čeká se na rezervu jako dřív.
+  let materialLeadMin = 60, leadBlocksStart = false;
+  try {
+    const { getSetting } = require('../settings');
+    const v = await getSetting('production.material_lead_min', { type: 'number', defaultValue: 60 }); if (Number.isFinite(Number(v))) materialLeadMin = Number(v);
+    leadBlocksStart = !!(await getSetting('production.material_lead_blocks_start', { type: 'boolean', defaultValue: false }));
+  } catch (e) { /* default */ }
   const prepReadyAt = consumeShift(new Date(), materialLeadMin, cfg).end;
   let prevEnd = new Date(anchor);
   const updates = [];
@@ -392,7 +399,10 @@ async function scheduleBatch(batchId, opts = {}) {
       candidateStart = new Date(Math.max(prevEnd.getTime(), anchor.getTime()));
     }
 
-    if (candidateStart < prepReadyAt) { warnings.push('material_prep_lead'); candidateStart = new Date(prepReadyAt); }
+    if (candidateStart < prepReadyAt) {
+      if (leadBlocksStart) { warnings.push('material_prep_lead'); candidateStart = new Date(prepReadyAt); }
+      else warnings.push('material_prep_urgent'); // materiál se musí připravit hned, výroba na něj nečeká
+    }
 
     const blockCheck = pushPastSlotBlock(candidateStart, slotBlocks);
     if (blockCheck.blocked) {

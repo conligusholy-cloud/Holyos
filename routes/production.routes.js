@@ -891,7 +891,8 @@ router.get('/settings', requireAuth, async (req, res, next) => {
     const { DEFAULT_SHIFT } = require('../services/planning/shift-calendar');
     const shift = await getSetting('production.shift', { type: 'json', defaultValue: null });
     const leadMin = await getSetting('production.material_lead_min', { type: 'number', defaultValue: 60 });
-    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [], shift: shift || Object.assign({ source: 'default' }, DEFAULT_SHIFT), material_lead_min: Number(leadMin) || 60 });
+    const leadBlocks = await getSetting('production.material_lead_blocks_start', { type: 'boolean', defaultValue: false });
+    res.json({ workers_person_ids: Array.isArray(ids) ? ids : [], shift: shift || Object.assign({ source: 'default' }, DEFAULT_SHIFT), material_lead_min: Number(leadMin) || 60, material_lead_blocks_start: !!leadBlocks });
   } catch (err) { next(err); }
 });
 // PUT /api/production/settings { workers_person_ids: [..] }
@@ -904,6 +905,9 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     }
     if (b.material_lead_min !== undefined && Number.isFinite(Number(b.material_lead_min))) {
       await setSetting('production.material_lead_min', Math.max(0, Math.round(Number(b.material_lead_min))), { type: 'number', description: 'Rezerva pro přípravu materiálu na pracoviště (minuty před začátkem operace)' });
+    }
+    if (typeof b.material_lead_blocks_start === 'boolean') {
+      await setSetting('production.material_lead_blocks_start', b.material_lead_blocks_start, { type: 'boolean', description: 'Rezerva přípravy materiálu smí odsunout začátek výroby (false = lidé bez prodlev, příprava se přizpůsobí)' });
     }
     if (b.shift && typeof b.shift === 'object') {
       const sh = b.shift;

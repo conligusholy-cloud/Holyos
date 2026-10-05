@@ -21,6 +21,7 @@ export interface PrepTask {
   key: string;
   prepared: boolean;
   prepared_at: string | null;
+  urgent?: boolean; // termín uplynul, operace ještě nezačala → připravit ihned
   kind: PrepKind;
   due: string;
   start_at: string;

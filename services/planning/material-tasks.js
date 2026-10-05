@@ -107,6 +107,10 @@ async function computeMaterialTasks(opts = {}) {
     }
   }
 
+  // urgent = termín přípravy už uplynul, ale operace ještě nezačala → „⚡ připravit ihned"
+  // (plánovač nenechává lidi čekat na rezervu, příprava se přizpůsobuje výrobě)
+  const nowTs = Date.now();
+  for (const t of tasks) t.urgent = !t.prepared && t.status !== 'on_site' && new Date(t.due).getTime() < nowTs && new Date(t.start_at).getTime() > nowTs;
   tasks.sort((a, b) => new Date(a.due) - new Date(b.due) || (a.kind === 'wip' ? 1 : -1));
   return { from, to, lead_minutes: leadMin, operations_checked: ops.length, tasks };
 }
