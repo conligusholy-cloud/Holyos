@@ -75,6 +75,19 @@ async function migrate() {
       updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Nákupy prádlomatů uživatelů (zadává admin v detailu uživatele); základ záložky Partnerská síť
+    CREATE TABLE IF NOT EXISTS purchases (
+      id             SERIAL PRIMARY KEY,
+      supporter_id   INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      holyos_item_id INTEGER,
+      product_name   TEXT NOT NULL,
+      price_czk      NUMERIC(14,2),
+      purchased_at   DATE NOT NULL DEFAULT CURRENT_DATE,
+      note           TEXT,
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS purchases_supporter_idx ON purchases (supporter_id);
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

@@ -174,6 +174,14 @@ async function loadFirstLine(u) {
     ORDER BY created_at DESC LIMIT 500`, u.nick ? [u.id, u.nick] : [u.id]);
   return r.rows;
 }
+// Partnerská síť: nákupy prádlomatů lidí z první linie prodejce
+async function loadNetwork(u) {
+  const r = await q(`SELECT p.id AS purchase_id, p.product_name, p.price_czk, p.purchased_at, s.id, s.email, s.first_name, s.last_name, s.nick, s.phone
+    FROM purchases p JOIN supporters s ON s.id=p.supporter_id
+    WHERE s.id<>$1 AND (s.referred_by=$1 ${u.nick ? "OR lower(trim(s.extra->>'tab3')) = lower($2)" : ''})
+    ORDER BY p.purchased_at DESC, p.id DESC LIMIT 1000`, u.nick ? [u.id, u.nick] : [u.id]);
+  return r.rows;
+}
 async function loadSeller(code) {
   if (!/^[a-z0-9]{6,20}$/.test(String(code || ''))) return null;
   const r = await q("SELECT id, nick, first_name, last_name, status, user_type FROM supporters WHERE ref_code=$1", [code]);
@@ -221,6 +229,11 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let offers = [];
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
   res.send(V.supporterProducts(req.user, offers));
+}));
+app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
+  if (req.user.user_type !== 'seller') return res.redirect('/');
+  const [rows, line] = await Promise.all([loadNetwork(req.user), loadFirstLine(req.user)]);
+  res.send(V.supporterNetwork(req.user, { rows, lineCount: line.length }));
 }));
 app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
@@ -321,7 +334,27 @@ async function loadSupporter(id) { const r = await q('SELECT * FROM supporters W
 app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Uživatel neexistuje.', '/admin/supporters'));
   const firstLine = s.nick ? (await q("SELECT id,email,first_name,last_name,nick,status,extra FROM supporters WHERE id<>$1 AND lower(trim(extra->>'tab3')) = lower($2) ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 2000", [s.id, s.nick])).rows : [];
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine }));
+  const purchases = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [s.id])).rows;
+  let machines = []; try { machines = (await loadProducts()).items || []; } catch (e) { /* bez výběru */ }
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines }));
+}));
+app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  let m = null; try { m = ((await loadProducts()).items || []).find(p => String(p.id) === String(req.body.item)); } catch (e) { /* ruční název */ }
+  const name = m ? m.name_cs : String(req.body.custom || '').trim().slice(0, 200);
+  if (!name) return res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Vyber prádlomat nebo zadej název.'));
+  const pr = String(req.body.price || '').replace(/\s/g, '').replace(',', '.');
+  const price = pr !== '' && !isNaN(Number(pr)) ? Number(pr) : (m && m.price_czk != null ? m.price_czk : null);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
+  await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, purchased_at, note) VALUES ($1,$2,$3,$4,$5,$6)', [s.id, m ? m.id : null, name, price, date, String(req.body.note || '').trim().slice(0, 500) || null]);
+  if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
+  await log(req.admin, 'purchase_add', { id: s.id, product: name });
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.'));
+}));
+app.post('/admin/purchases/:pid(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+  const r = await q('DELETE FROM purchases WHERE id=$1 RETURNING supporter_id', [parseInt(req.params.pid, 10)]);
+  await log(req.admin, 'purchase_delete', { id: req.params.pid });
+  res.redirect(r.rows[0] ? '/admin/supporters/' + r.rows[0].supporter_id + '?msg=' + encodeURIComponent('Nákup smazán.') : '/admin/supporters');
 }));
 app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Uživatel neexistuje.', '/admin/supporters'));

@@ -15,6 +15,7 @@ const P = {
   logout: '<path d="M10 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H10"/><path d="M15 8l4 4-4 4"/><path d="M19 12H9"/>',
   back: '<path d="M19 12H5"/><path d="m11 6-6 6 6 6"/>',
   box: '<path d="m12 3 8.5 4.5v9L12 21l-8.5-4.5v-9z"/><path d="M3.5 7.5 12 12l8.5-4.5"/><path d="M12 12v9"/>',
+  network: '<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M12 7.5v4M12 11.5 6.2 16M12 11.5l5.8 4.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   sprout: '<path d="M12 21v-8"/><path d="M12 13c0-4 3-6.5 7-6.5 0 4-3 6.5-7 6.5z"/><path d="M12 13c0-3-2.3-5-5.5-5 0 3 2.3 5 5.5 5z"/>',
 };

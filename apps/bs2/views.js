@@ -154,6 +154,7 @@ const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id:
 const userNav = (s) => {
   const nav = [USER_NAV[0]];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
+  if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
   nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, USER_NAV[1]);
   return nav;
 };
@@ -178,6 +179,24 @@ function supporterProducts(s, offers = []) {
       <div class="small muted">cena s DPH 21 %</div>
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
+}
+function supporterNetwork(s, { rows = [], lineCount = 0 } = {}) {
+  const buyers = new Set(rows.map(r => r.id)).size;
+  return layout({ title: 'Partnerská síť', user: s.nick, nav: userNav(s), active: 'net', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('network', 18)} Partnerská síť — kdo z mé první linie si koupil prádlomat</h2>
+  <div class="grid" style="margin-bottom:12px">
+    <div class="card" style="margin:0"><div class="small muted">Moje první linie</div><div style="font-size:26px;font-weight:800">${lineCount}</div></div>
+    <div class="card" style="margin:0"><div class="small muted">Kupující</div><div style="font-size:26px;font-weight:800">${buyers}</div></div>
+    <div class="card" style="margin:0"><div class="small muted">Prádlomatů celkem</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
+  </div>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Prádlomat</th><th>Cena</th><th>Datum nákupu</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.first_name, r.last_name].filter(Boolean).join(' ') || r.nick || '—')}</b>${r.nick ? `<div class="small muted">${esc(r.nick)}</div>` : ''}</td>
+      <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
+      <td data-l="Telefon">${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="muted">—</span>'}</td>
+      <td data-l="Prádlomat"><b>${esc(r.product_name)}</b></td>
+      <td data-l="Cena">${money(r.price_czk, 'Kč')}</td>
+      <td data-l="Datum nákupu" class="small muted">${r.purchased_at ? new Date(r.purchased_at).toLocaleDateString('cs-CZ') : '—'}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted" style="margin:0">Zatím nikdo z tvé první linie prádlomat nekoupil. Jakmile se to stane, objeví se tady včetně typu stroje.</p>'}</div>` });
 }
 function supporterTeam(s, { team = [], refUrl = '' } = {}) {
   return layout({ title: 'Moje doporučení', user: s.nick, nav: userNav(s), active: 'team', fx: true, body: `
@@ -336,7 +355,7 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl }) {
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   ${body || (error ? '' : '<p class="muted">V ceníku nejsou žádné aktivní stroje.</p>')}`, holyosUrl);
 }
-function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [] }) {
+function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
@@ -385,6 +404,18 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <td data-l="Level" class="small">${esc((r.extra && r.extra.level) || '—')}</td>
       <td data-l="Obrat" class="small">${esc((r.extra && r.extra.obrat) || '—')}</td>
       <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nikoho nepřivedl.</p>'}
+  </div></details>`}
+  ${isNew ? '' : `<details class="card sec" data-sec="nakupy" open style="margin-top:12px"><summary><span>Prádlomaty (nákupy) <span class="muted small">(${purchases.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    ${purchases.length ? purchases.map(p => `<div class="list-item"><span><b>${esc(p.product_name)}</b> <span class="muted small">${p.purchased_at ? new Date(p.purchased_at).toLocaleDateString('cs-CZ') : ''}${p.note ? ' · ' + esc(p.note) : ''}</span></span><span style="display:flex;gap:10px;align-items:center">${p.price_czk != null ? money(p.price_czk, 'Kč') : ''}<form method="post" action="/admin/purchases/${p.id}/delete" onsubmit="return confirm('Smazat nákup?')" style="margin:0"><button class="btn danger sm" type="submit">${ico('trash', 14)}</button></form></span></div>`).join('') : '<p class="muted small">Zatím žádný nákup.</p>'}
+    <form method="post" action="/admin/supporters/${s.id}/purchases" style="margin-top:12px">
+      <div class="row" style="align-items:flex-end;gap:10px">
+        <div style="flex:2;min-width:200px"><label>Prádlomat z ceníku</label><select name="item"><option value="">— vybrat —</option>${machines.map(m => `<option value="${m.id}">${esc(m.name_cs)}${m.price_czk != null ? ' — ' + Number(m.price_czk).toLocaleString('cs-CZ') + ' Kč' : ''}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:140px"><label>nebo vlastní název</label><input name="custom" placeholder="jiný typ"></div>
+        <div style="width:150px"><label>Cena Kč (prázdné = z ceníku)</label><input name="price" inputmode="decimal"></div>
+        <div style="width:150px"><label>Datum</label><input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}"></div>
+      </div>
+      <div style="height:10px"></div><button class="btn sm" type="submit">+ Přidat nákup</button>
+    </form>
   </div></details>`}
   <script>
   // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny uživatele
@@ -435,4 +466,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
