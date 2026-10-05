@@ -539,9 +539,13 @@ async function scheduleBatch(batchId, opts = {}) {
     // Paralelní operace jsou na konci pole → začátek/konec dávky počítej z min/max
     const firstStart = new Date(Math.min(...updates.map(u => u.planned_start.getTime())));
     const lastEnd = new Date(Math.max(...updates.map(u => u.planned_end.getTime())));
+    // První naplánování si zapamatujeme jako „původní termín" — další přeplánování se s ním porovnává
+    const cur = await txx.productionBatch.findUnique({ where: { id }, select: { original_planned_start: true, original_planned_end: true } });
     await txx.productionBatch.update({
       where: { id },
-      data: { planned_start: firstStart, planned_end: lastEnd },
+      data: { planned_start: firstStart, planned_end: lastEnd,
+        ...(cur && !cur.original_planned_start ? { original_planned_start: firstStart } : {}),
+        ...(cur && !cur.original_planned_end ? { original_planned_end: lastEnd } : {}) },
     });
   });
 

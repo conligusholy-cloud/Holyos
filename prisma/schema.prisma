@@ -3996,6 +3996,8 @@ model ProductionBatch {
   actual_start  DateTime?
   actual_end    DateTime?
   due_date      DateTime? // kdy to chce mít vyrobené (požadovaný termín)
+  original_planned_start DateTime? // první naplánovaný termín (pro porovnání s aktuálním přeplánováním)
+  original_planned_end   DateTime?
 
   parent_batch_id Int?
   bom_snapshot_id Int?
