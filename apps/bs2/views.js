@@ -418,6 +418,17 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
 }
 // Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
 const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
+// Kolik firmě zbyde: prodejní cena (bez DPH) − sleva (využití DC, % z ceny) − provize (Discount Credit, % z ceny s DPH po slevě) − minimální cena (= výrobní náklad)
+const leftOver = (p, cur, sym) => {
+  const price = cur === 'czk' ? p.price_czk : p.price_eur, cost = cur === 'czk' ? p.min_price_czk : p.min_price_eur;
+  if (price == null) return '';
+  if (cost == null) return `<div class="small muted">zadej min. cenu (${sym})</div>`;
+  const P = Number(price), disc = P * Number(p.dc_use_pct || 0) / 100, paid = P - disc;
+  const comm = paid * 1.21 * Number(p.credit_pct || 0) / 100, net = paid - comm, left = net - Number(cost);
+  const pct = paid ? Math.round(left / paid * 1000) / 10 : 0;
+  const tip = `Cena ${Math.round(P).toLocaleString('cs-CZ')} − sleva ${Math.round(disc).toLocaleString('cs-CZ')} − provize ${Math.round(comm).toLocaleString('cs-CZ')} − náklad ${Math.round(Number(cost)).toLocaleString('cs-CZ')} ${sym}`;
+  return `<div title="${esc(tip)}" style="${left < 0 ? 'color:var(--err)' : ''}"><b>${money(Math.round(left), sym)}</b> <span class="small muted">(${esc(String(pct).replace('.', ','))} %)</span></div>`;
+};
 // Max. sleva = o kolik % lze cenu snížit až na minimální cenu (obě bez DPH)
 const maxDisc = (price, min, sym) => { if (price == null || min == null || !Number(price)) return ''; const diff = Number(price) - Number(min); const pct = Math.round(diff / Number(price) * 1000) / 10; return `<div style="${diff < 0 ? 'color:var(--err)' : ''}"><b>${esc(String(pct).replace('.', ','))} %</b> <span class="small muted">(${money(diff, sym)})</span></div>`; };
 // Kolik DC lze využít: % z ceny s DPH (21 %), nejvýš však po minimální cenu
@@ -426,14 +437,14 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
   const body = Object.keys(groups).map((k, gi) => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2><form id="gf${gi}" method="post" action="/admin/products/save-group" style="display:none"></form>
-    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Cena CZK</th><th>Cena EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th>Max. sleva</th><th>Může být využito DC</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
+    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Cena CZK</th><th>Cena EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th title="Prodejní cena − sleva (využití DC) − provize (Discount Credit) − minimální cena (bráno jako výrobní náklad)">Zbývá mi</th><th>Může být využito DC</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
     ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td>
       <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
       <td data-l="Discount Credit"><div style="display:flex;align-items:center;gap:6px"><input form="gf${gi}" name="credit_pct_${p.id}" inputmode="decimal" value="${Number(p.credit_pct || 0)}" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span></div>${p.price_czk != null && Number(p.credit_pct) > 0 ? `<div class="small muted" style="margin-top:4px">= ${money(Math.round(Number(p.price_czk) * 1.21 * Number(p.credit_pct)) / 100, 'DC')} za prodej</div>` : ''}</td>
       <td data-l="Minimální cena"><div style="display:flex;flex-direction:column;gap:6px">
         <div style="display:flex;align-items:center;gap:6px"><input form="gf${gi}" name="min_czk_${p.id}" inputmode="decimal" value="${p.min_price_czk != null ? Number(p.min_price_czk) : ''}" placeholder="—" style="width:110px;padding:7px 8px;text-align:right"><span class="muted">Kč</span></div>
         <div style="display:flex;align-items:center;gap:6px"><input form="gf${gi}" name="min_eur_${p.id}" inputmode="decimal" value="${p.min_price_eur != null ? Number(p.min_price_eur) : ''}" placeholder="—" style="width:110px;padding:7px 8px;text-align:right"><span class="muted">€</span></div></div></td>
-      <td data-l="Max. sleva">${maxDisc(p.price_czk, p.min_price_czk, 'Kč')}${maxDisc(p.price_eur, p.min_price_eur, '€')}</td>
+      <td data-l="Zbývá mi">${leftOver(p, 'czk', 'Kč')}${leftOver(p, 'eur', '€')}</td>
       <td data-l="Může být využito DC"><div style="display:flex;align-items:center;gap:6px"><input form="gf${gi}" name="dc_use_pct_${p.id}" inputmode="decimal" value="${p.dc_use_pct != null ? Number(p.dc_use_pct) : ''}" placeholder="—" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span></div>
         ${dcUse(p)}</td>
       <td data-l="Nabízet" class="actions" style="text-align:right"><form method="post" action="/admin/products/${p.id}/offer" style="display:inline"><input type="hidden" name="on" value="${p.offered ? '0' : '1'}"><button type="submit" class="sw ${p.offered ? 'on' : ''}" title="${p.offered ? 'Uživatelé tento stroj vidí — kliknutím skryješ' : 'Skryto — kliknutím zobrazíš uživatelům'}"><i></i><span>${p.offered ? 'Aktivní' : 'Skryto'}</span></button></form></td></tr>`).join('')}
