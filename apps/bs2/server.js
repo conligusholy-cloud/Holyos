@@ -159,7 +159,11 @@ app.get('/logout', (req, res) => { res.clearCookie(USER_COOKIE); res.clearCookie
 // ── Uživatel: domů + heslo ──────────────────────────────────────────────
 app.get('/', (req, res, next) => {
   if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
-  return requireUser(req, res, () => res.send(V.supporterHome(req.user)));
+  return requireUser(req, res, async () => {
+    let offers = [];
+    try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
+    res.send(V.supporterHome(req.user, offers));
+  });
 });
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
@@ -221,10 +225,20 @@ async function loadProducts() {
   productsCache = { at: Date.now(), items: await r.json() };
   return { items: productsCache.items };
 }
+async function offeredSet() { const r = await q('SELECT holyos_item_id FROM product_offers WHERE offered'); return new Set(r.rows.map(x => x.holyos_item_id)); }
 app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
   if (req.query.refresh) productsCache = { at: 0, items: null };
   let out; try { out = await loadProducts(); } catch (e) { out = { error: 'Nepodařilo se načíst ceník z HolyOS: ' + e.message }; }
-  res.send(V.adminProducts({ admin: req.admin, rows: out.items || [], error: out.error || '', holyosUrl: HOLYOS_URL }));
+  const offered = await offeredSet();
+  const rows = (out.items || []).map(p => ({ ...p, offered: offered.has(p.id) }));
+  res.send(V.adminProducts({ admin: req.admin, rows, error: out.error || '', msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+}));
+// Přepínač „Nabízet uživatelům" u stroje (id = položka ceníku HolyOS)
+app.post('/admin/products/:id(\\d+)/offer', requireAdmin, wrap(async (req, res) => {
+  const on = req.body.on === '1';
+  await q('INSERT INTO product_offers (holyos_item_id, offered, updated_at) VALUES ($1,$2,now()) ON CONFLICT (holyos_item_id) DO UPDATE SET offered=EXCLUDED.offered, updated_at=now()', [req.params.id, on]);
+  await log(req.admin, on ? 'product_offer_on' : 'product_offer_off', { holyos_item_id: Number(req.params.id) });
+  res.redirect('/admin/products');
 }));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));
 app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {

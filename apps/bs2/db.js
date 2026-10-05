@@ -58,6 +58,13 @@ async function migrate() {
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Které stroje z ceníku HolyOS nabízíme uživatelům BS2 (přepínač v adminu → záložka Produkty)
+    CREATE TABLE IF NOT EXISTS product_offers (
+      holyos_item_id INTEGER PRIMARY KEY,
+      offered        BOOLEAN NOT NULL DEFAULT false,
+      updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT
