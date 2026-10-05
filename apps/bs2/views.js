@@ -4,21 +4,30 @@ function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ 
 function fmtDT(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } }
 
 const CSS = `
-:root{--bg:#0f1220;--card:#181c2e;--card2:#1f2438;--border:#2a2f45;--text:#e8eaf2;--text2:#9aa0b4;--accent:#f59e0b;--ok:#22c55e;--err:#ef4444;--blue:#4aa3ea}
+:root{--bg:#0c1826;--card:#13233a;--card2:#0e1e33;--border:#1f3453;--text:#e9f0f7;--text2:#9db6cd;--accent:#1e86e0;--accent2:#4aa3ea;--ok:#22c55e;--err:#ef4444;--blue:#4aa3ea}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent} html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;min-height:100vh;min-height:100dvh}
 a{color:var(--blue)} .muted{color:var(--text2)} .small{font-size:12px}
 header{position:sticky;top:0;z-index:5;background:rgba(15,18,32,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-header .brand{font-weight:800;font-size:17px;letter-spacing:.02em;text-decoration:none;color:var(--text)} header .tag{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:1px 8px}
+header .brand{font-weight:800;font-size:17px;letter-spacing:.02em;text-decoration:none;color:var(--text)} header .tag{font-size:11px;color:var(--accent2);border:1px solid var(--accent2);border-radius:999px;padding:1px 8px}
 header nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap} header nav a{color:var(--text2);text-decoration:none;padding:6px 10px;border-radius:8px;font-size:14px} header nav a.active,header nav a:hover{background:var(--card2);color:var(--text)}
 main{padding:18px 16px calc(24px + env(safe-area-inset-bottom));max-width:1100px;margin:0 auto}
+.banner{background:linear-gradient(135deg,#1e86e0 0%,#1565b8 100%);color:#fff;padding:18px 16px}
+.banner .in{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:14px}
+.banner .ico{width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none}
+.banner h1{margin:0;font-size:20px;color:#fff} .banner p{margin:2px 0 0;font-size:13px;color:rgba(255,255,255,.85)}
+.tabs{background:var(--card2);border-bottom:1px solid var(--border);overflow:auto;-webkit-overflow-scrolling:touch}
+.tabs .in{max-width:1100px;margin:0 auto;display:flex;gap:2px;padding:0 8px;white-space:nowrap}
+.tabs a{display:inline-flex;align-items:center;gap:6px;padding:12px 14px;color:var(--text2);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
+.tabs a.active{color:var(--accent2);border-bottom-color:var(--accent2)} .tabs a:hover{color:var(--text)}
+.tabs .right{margin-left:auto;display:inline-flex;gap:2px}
 h1{font-size:22px;margin:0 0 6px} h2{font-size:17px;margin:18px 0 8px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:14px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
 .stat{background:var(--card2);border-radius:12px;padding:12px 14px} .stat .v{font-size:24px;font-weight:800} .stat .l{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em}
 label{display:block;font-size:13px;color:var(--text2);margin:10px 0 4px}
 input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 12px;outline:none} input:focus,select:focus{border-color:var(--accent)}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:15px;font-weight:700;background:var(--accent);color:#1a1a1a;border:0;border-radius:12px;padding:12px 16px;cursor:pointer;text-decoration:none;min-height:44px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:15px;font-weight:700;background:var(--accent);color:#fff;border:0;border-radius:12px;padding:12px 16px;cursor:pointer;text-decoration:none;min-height:44px}
 .btn.full{width:100%} .btn.sec{background:var(--card2);color:var(--text);border:1px solid var(--border)} .btn.danger{background:transparent;color:var(--err);border:1px solid rgba(239,68,68,.5)} .btn.sm{padding:7px 10px;font-size:13px;min-height:34px;border-radius:9px} .btn:disabled{opacity:.5;cursor:default}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .msg{padding:10px 12px;border-radius:10px;margin:10px 0;font-size:14px} .msg.err{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4)} .msg.ok{background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4)}
@@ -36,12 +45,14 @@ table{width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;
 code{background:var(--card2);padding:1px 6px;border-radius:6px;font-size:13px}
 `;
 
-function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '' }) {
+function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '', banner = null }) {
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0f1220">
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)} · BS2</title><style>${CSS}</style></head>
 <body><header><a class="brand" href="/">BS2</a><span class="tag">soukromé</span>
-<nav>${nav.map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.label}</a>`).join('')}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ⎋</a>` : ''}</nav></header>
+<nav>${holyosUrl ? `<a href="${holyosUrl}">← HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ⎋</a>` : ''}</nav></header>
+${banner ? `<div class="banner"><div class="in"><div class="ico">${banner.icon || '🔒'}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
+${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main></body></html>`;
 }
 
@@ -75,8 +86,9 @@ function activatePage({ step = 'email', email = '', error = '', name = '' } = {}
   <div class="card">${error ? `<div class="msg err">${esc(error)}</div>` : ''}${inner}
   <p class="muted small" style="margin:14px 0 0;text-align:center"><a href="/login">← zpět na přihlášení</a></p></div></div>` });
 }
+const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: '🏠' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: '👤', right: true }];
 function supporterHome(s) {
-  return layout({ title: 'Domů', user: s.nick, body: `
+  return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', banner: { icon: '🔒', title: 'Soukromá sekce Best Series', subtitle: 'Prostor pro naše podporovatele' }, body: `
   <h1>Vítej, ${esc(s.nick)} 👋</h1>
   <p class="muted">${esc([s.first_name, s.last_name].filter(Boolean).join(' '))} · ${esc(s.email)}</p>
   <div class="grid">
@@ -90,7 +102,7 @@ function supporterHome(s) {
   </div>` });
 }
 function passwordPage({ nick, error = '', ok = '' }) {
-  return layout({ title: 'Změna hesla', user: nick, body: `
+  return layout({ title: 'Změna hesla', user: nick, nav: USER_NAV, active: 'acc', banner: { icon: '🔒', title: 'Soukromá sekce Best Series', subtitle: 'Prostor pro naše podporovatele' }, body: `
   <div class="auth" style="margin-top:10px"><div class="card"><h2 style="margin-top:0">Změna hesla</h2>
   ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${ok ? `<div class="msg ok">${esc(ok)}</div>` : ''}
   <form method="post" action="/password"><label>Současné heslo</label><input name="old" type="password" autocomplete="current-password" required>
@@ -101,13 +113,18 @@ function passwordPage({ nick, error = '', ok = '' }) {
 }
 
 // ── Admin (Tomáš, Jan přes SSO) ─────────────────────────────────────────────
-const ADMIN_NAV = [{ id: 'dash', href: '/admin', label: 'Přehled' }, { id: 'sup', href: '/admin/supporters', label: 'Podporovatelé' }, { id: 'imp', href: '/admin/import', label: 'Import' }];
+const ADMIN_NAV = [
+  { id: 'dash', href: '/admin', label: 'Přehled', icon: '📊' },
+  { id: 'sup', href: '/admin/supporters', label: 'Podporovatelé', icon: '👥' },
+  { id: 'imp', href: '/admin/import', label: 'Import', icon: '⬆️', right: true },
+];
 function adminLayout(title, active, admin, body, holyosUrl) {
-  return layout({ title, active, nav: ADMIN_NAV.concat([{ id: 'holyos', href: holyosUrl, label: '← HolyOS' }]), user: admin.name || admin.username, body });
+  return layout({ title, active, nav: ADMIN_NAV, user: admin.name || admin.username, holyosUrl, body,
+    banner: { icon: '🔒', title: 'Soukromá sekce', subtitle: 'Správa podporovatelů, přístupů a dalších agend Best Series na jednom místě' } });
 }
 function adminDash({ admin, stats, recent, holyosUrl }) {
   return adminLayout('Přehled', 'dash', admin, `
-  <h1>Správa podporovatelů</h1><p class="muted">Přihlášen přes HolyOS jako <b>${esc(admin.name)}</b>.</p>
+  <p class="muted" style="margin-top:0">Přihlášen přes HolyOS jako <b>${esc(admin.name)}</b>.</p>
   <div class="grid">
     <div class="stat"><div class="v">${stats.total}</div><div class="l">Celkem</div></div>
     <div class="stat"><div class="v" style="color:var(--ok)">${stats.active}</div><div class="l">Aktivní (mají nick + heslo)</div></div>
