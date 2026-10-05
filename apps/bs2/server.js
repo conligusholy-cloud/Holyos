@@ -209,33 +209,22 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
-// Produkty (typy prádlomatů + cena)
-function readProduct(b) {
-  const price = String(b.price || '').replace(/\s/g, '').replace(',', '.');
-  return [String(b.name || '').trim().slice(0, 200), String(b.description || '').trim().slice(0, 2000) || null,
-    price === '' || isNaN(Number(price)) ? null : Number(price), ['CZK', 'EUR', 'USD'].includes(b.currency) ? b.currency : 'CZK',
-    parseInt(b.sort, 10) || 0, b.active === '1'];
+// Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
+let productsCache = { at: 0, items: null };
+async function loadProducts() {
+  if (productsCache.items && Date.now() - productsCache.at < 5 * 60e3) return { items: productsCache.items };
+  const secret = process.env.BS2_SSO_SECRET;
+  if (!secret) return { error: 'Chybí BS2_SSO_SECRET.' };
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + '/api/auth/bs2/products', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return { error: 'HolyOS vrátil chybu ' + r.status + '.' };
+  productsCache = { at: Date.now(), items: await r.json() };
+  return { items: productsCache.items };
 }
 app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
-  const rows = (await q('SELECT * FROM products ORDER BY sort, id')).rows;
-  res.send(V.adminProducts({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
-}));
-app.post('/admin/products', requireAdmin, wrap(async (req, res) => {
-  const v = readProduct(req.body); if (!v[0]) return res.redirect('/admin/products');
-  await q('INSERT INTO products (name,description,price,currency,sort,active) VALUES ($1,$2,$3,$4,$5,$6)', v);
-  await log(req.admin, 'product_create', { name: v[0] });
-  res.redirect('/admin/products?msg=' + encodeURIComponent('Produkt přidán.'));
-}));
-app.post('/admin/products/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
-  const v = readProduct(req.body); if (!v[0]) return res.redirect('/admin/products');
-  await q('UPDATE products SET name=$1,description=$2,price=$3,currency=$4,sort=$5,active=$6,updated_at=now() WHERE id=$7', v.concat([parseInt(req.params.id, 10)]));
-  await log(req.admin, 'product_update', { id: req.params.id, name: v[0] });
-  res.redirect('/admin/products?msg=' + encodeURIComponent('Uloženo.'));
-}));
-app.post('/admin/products/:id(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
-  await q('DELETE FROM products WHERE id=$1', [parseInt(req.params.id, 10)]);
-  await log(req.admin, 'product_delete', { id: req.params.id });
-  res.redirect('/admin/products?msg=' + encodeURIComponent('Produkt smazán.'));
+  if (req.query.refresh) productsCache = { at: 0, items: null };
+  let out; try { out = await loadProducts(); } catch (e) { out = { error: 'Nepodařilo se načíst ceník z HolyOS: ' + e.message }; }
+  res.send(V.adminProducts({ admin: req.admin, rows: out.items || [], error: out.error || '', holyosUrl: HOLYOS_URL }));
 }));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));
 app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {

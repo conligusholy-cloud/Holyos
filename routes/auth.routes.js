@@ -231,6 +231,23 @@ router.get('/sso/bs2', loginRedirectIfAnonymous, requireAuth, async (req, res, n
   } catch (err) { next(err); }
 });
 
+// GET /api/auth/bs2/products — aktivní stroje z prodejního ceníku pro záložku Produkty v BS2.
+// Volá server BS2 (ne prohlížeč); ověřuje se krátkým JWT podepsaným sdíleným BS2_SSO_SECRET (aud 'holyos-api').
+router.get('/bs2/products', async (req, res, next) => {
+  try {
+    const secret = process.env.BS2_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'bs2' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const items = await prisma.salesPricelistItem.findMany({
+      where: { active: true, kind: 'machine' },
+      orderBy: [{ model_version: 'asc' }, { model_variant: 'asc' }, { name_cs: 'asc' }],
+      select: { id: true, name_cs: true, name_en: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true, truck_capacity: true, model_version: true, model_variant: true, machine_code: true },
+    });
+    res.json(items.map(i => ({ ...i, price_czk: i.price_czk == null ? null : Number(i.price_czk), price_eur: i.price_eur == null ? null : Number(i.price_eur), truck_price_czk: i.truck_price_czk == null ? null : Number(i.truck_price_czk), truck_price_eur: i.truck_price_eur == null ? null : Number(i.truck_price_eur) })));
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/users — seznam uživatelů (admin)
 router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
   try {

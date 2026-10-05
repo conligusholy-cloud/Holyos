@@ -1,6 +1,7 @@
 // BS2 — HTML šablony (server-side, bez frameworku). Mobile-first, funguje na iPhone/Android/Windows/Mac.
 
 const { logoSvg } = require('./logo');
+const { ico } = require('./icons');
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmtDT(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } }
 
@@ -21,16 +22,16 @@ header .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:no
 header .brand .mark{display:inline-flex;filter:drop-shadow(0 6px 16px rgba(30,134,224,.45))}
 header .brand span.v{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
 header .tag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02)}
-header nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap} header nav a{color:var(--text2);text-decoration:none;padding:6px 10px;border-radius:9px;font-size:13.5px;border:1px solid transparent} header nav a.active,header nav a:hover{background:rgba(120,160,255,.08);border-color:var(--border);color:var(--text)}
+header nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap} header nav a{display:inline-flex;align-items:center;gap:6px;color:var(--text2);text-decoration:none;padding:6px 10px;border-radius:9px;font-size:13.5px;border:1px solid transparent} header nav a.active,header nav a:hover{background:rgba(120,160,255,.08);border-color:var(--border);color:var(--text)}
 main{padding:22px 18px calc(28px + env(safe-area-inset-bottom));max-width:1100px;margin:0 auto}
 .banner{padding:34px 18px 26px}
 .banner .in{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:16px}
-.banner .ico{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none;box-shadow:0 10px 30px rgba(30,134,224,.25)}
+.banner .ico{color:var(--accent2);width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none;box-shadow:0 10px 30px rgba(30,134,224,.25)}
 .banner h1{margin:0;font-size:clamp(22px,3vw,30px);letter-spacing:-.02em;font-weight:800;background:linear-gradient(90deg,#fff 0%,var(--accent2) 60%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent} .banner p{margin:3px 0 0;font-size:13.5px;color:var(--text2)}
 .tabs{border-bottom:1px solid var(--border);overflow:auto;-webkit-overflow-scrolling:touch;background:rgba(4,6,12,.35);backdrop-filter:blur(8px)}
 .tabs .in{max-width:1100px;margin:0 auto;display:flex;gap:2px;padding:0 10px;white-space:nowrap}
-.tabs a{display:inline-flex;align-items:center;gap:6px;padding:12px 14px;color:var(--text2);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
-.tabs a.active{color:var(--accent2);border-bottom-color:var(--accent2);text-shadow:0 0 18px rgba(79,209,255,.5)} .tabs a:hover{color:var(--text)}
+.tabs a{display:inline-flex;align-items:center;gap:7px;padding:12px 14px;color:var(--text2);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
+.tabs a .ico{opacity:.8}.tabs a.active .ico{opacity:1;filter:drop-shadow(0 0 6px rgba(79,209,255,.6))}.tabs a.active{color:var(--accent2);border-bottom-color:var(--accent2);text-shadow:0 0 18px rgba(79,209,255,.5)} .tabs a:hover{color:var(--text)}
 .tabs .right{margin-left:auto;display:inline-flex;gap:2px}
 h1{font-size:24px;margin:0 0 6px;letter-spacing:-.02em} h2{font-size:17px;margin:18px 0 8px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
@@ -79,9 +80,9 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
-<nav>${holyosUrl ? `<a href="${holyosUrl}">← HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ⎋</a>` : ''}</nav></header>
-${banner ? `<div class="banner"><div class="in"><div class="ico">${banner.icon || '🔒'}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
-${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
+<nav>${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
+${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main>${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
@@ -116,19 +117,19 @@ function activatePage({ step = 'email', email = '', error = '', name = '', nick 
       <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <button class="btn" type="submit">Vytvořit účet a přihlásit ${ICON.arrow}</button></form>`;
-  return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">← zpět na přihlášení</a></p>` });
+  return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
 function forgotPage({ email = '', error = '', done = false } = {}) {
   return authShell({ title: 'Zapomenuté heslo', esc, card: done ? `
     <h2>Zpráva přijata</h2><p class="sub">Pokud e-mail <b>${esc(email)}</b> známe, ozveme se ti s dalším postupem. Obvykle do jednoho pracovního dne.</p>
-    <p class="foot"><a href="/login">← zpět na přihlášení</a></p>` : `
+    <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` : `
     <h2>Zapomenuté heslo</h2><p class="sub">Zadej e-mail, pod kterým jsi u nás veden. Postaráme se o obnovu přístupu.</p>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
     <form method="post" action="/forgot" novalidate><label>E-mail</label>${field({ name: 'email', type: 'email', value: email, icon: 'mail', placeholder: 'jmeno@email.cz', auto: 'email', extra: 'inputmode="email" autocapitalize="none" required autofocus' })}
     <button class="btn" type="submit">Požádat o obnovu ${ICON.arrow}</button></form>
-    <p class="foot"><a href="/login">← zpět na přihlášení</a></p>` });
+    <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
-const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: '🏠' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: '👤', right: true }];
+const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 function supporterHome(s) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
   return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
@@ -138,7 +139,7 @@ function supporterHome(s) {
     <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
   </div>
   <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
-    <div class="soon"><span>⚡</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>` });
+    <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>` });
 }
 function passwordPage({ s, nick, error = '', ok = '' }) {
   const u = s || { nick };
@@ -164,14 +165,14 @@ function passwordPage({ s, nick, error = '', ok = '' }) {
 
 // ── Admin (Tomáš, Jan přes SSO) ─────────────────────────────────────────────
 const ADMIN_NAV = [
-  { id: 'dash', href: '/admin', label: 'Přehled', icon: '📊' },
-  { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: '👥' },
-  { id: 'prod', href: '/admin/products', label: 'Produkty', icon: '🧺' },
-  { id: 'imp', href: '/admin/import', label: 'Import', icon: '⬆️', right: true },
+  { id: 'dash', href: '/admin', label: 'Přehled', icon: 'chart' },
+  { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
+  { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
+  { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
   return layout({ title, active, nav: ADMIN_NAV, user: admin.name || admin.username, holyosUrl, body,
-    banner: { icon: '👥', title: 'Uživatelé', subtitle: 'Správa uživatelů Best Series 2.0, jejich přístupů a dalších agend na jednom místě' } });
+    banner: { icon: 'users', title: 'Uživatelé', subtitle: 'Správa uživatelů Best Series 2.0, jejich přístupů a dalších agend na jednom místě' } });
 }
 function adminDash({ admin, stats, recent, holyosUrl }) {
   return adminLayout('Přehled', 'dash', admin, `
@@ -211,7 +212,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
     <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
-  <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">⚙️</summary>
+  <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
     <form method="post" action="/admin/supporters/columns" class="colpick-pop">
       <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
       <div class="colpick-grid">
@@ -236,7 +237,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   </style>
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
     <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-    <div class="row"><a class="btn" href="/admin/import">⬆ Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
+    <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
   </div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form method="get" class="row" style="margin:10px 0 14px">
@@ -247,37 +248,25 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
   <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
-// Produkty: typy prádlomatů a jejich cena
-const fmtPrice = (p, c) => (p == null ? '—' : Number(p).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c || 'CZK'));
-function productForm(p, action, btn) {
-  const cur = (p && p.currency) || 'CZK';
-  return `<form method="post" action="${action}">
-    <label>Typ prádlomatu</label><input name="name" value="${esc(p ? p.name : '')}" placeholder="např. Prádlomat 750" required>
-    <label>Popis</label><textarea name="description" rows="2" placeholder="Stručný popis, kapacita, výbava…" style="width:100%">${esc(p ? p.description || '' : '')}</textarea>
-    <div class="row" style="align-items:flex-end;gap:10px">
-      <div style="flex:1;min-width:140px"><label>Cena</label><input name="price" inputmode="decimal" value="${p && p.price != null ? esc(String(Number(p.price))) : ''}" placeholder="0"></div>
-      <div style="width:110px"><label>Měna</label><select name="currency">${['CZK', 'EUR', 'USD'].map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
-      <div style="width:90px"><label>Pořadí</label><input name="sort" inputmode="numeric" value="${p ? p.sort : 0}"></div>
-    </div>
-    <label class="colpick-i" style="margin-top:8px"><input type="checkbox" name="active" value="1"${!p || p.active ? ' checked' : ''} style="width:auto;margin:0"> Aktivní (nabízí se)</label>
-    <div style="height:10px"></div><button class="btn sm" type="submit">${btn}</button>
-  </form>`;
-}
-function adminProducts({ admin, rows = [], msg = '', error = '', holyosUrl }) {
-  const list = rows.map(p => `<details class="card sec" data-sec="p${p.id}" style="margin-bottom:10px"><summary><span>${esc(p.name)} <span class="muted small">${p.active ? '' : '(neaktivní)'}</span></span><span style="display:flex;gap:10px;align-items:center"><b>${esc(fmtPrice(p.price, p.currency))}</b><span class="chev">▶</span></span></summary><div class="sec-body">
-    ${p.description ? `<p class="muted small" style="margin-top:0;white-space:pre-line">${esc(p.description)}</p>` : ''}
-    ${productForm(p, '/admin/products/' + p.id, 'Uložit')}
-    <form method="post" action="/admin/products/${p.id}/delete" onsubmit="return confirm('Smazat produkt ' + ${esc(JSON.stringify(p.name))} + '?')" style="margin-top:8px"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
-  </div></details>`).join('');
+// Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
+const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
+function adminProducts({ admin, rows = [], error = '', holyosUrl }) {
+  const groups = {};
+  for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
+  const body = Object.keys(groups).map(k => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2>
+    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Typ stroje</th><th>Cena CZK</th><th>Cena EUR</th><th>Kamion CZK</th><th>Kamion EUR</th></tr></thead><tbody>
+    ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td><td data-l="Typ stroje" class="small">${esc(p.machine_code || '—')}</td>
+      <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
+      <td data-l="Kamion CZK">${money(p.truck_price_czk, 'Kč')}</td><td data-l="Kamion EUR">${money(p.truck_price_eur, '€')}</td></tr>`).join('')}
+    </tbody></table></div>`).join('');
   return adminLayout('Produkty', 'prod', admin, `
-  <style>.sec{padding:0} .sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;font-size:17px;font-weight:700;user-select:none}
-    .sec>summary::-webkit-details-marker{display:none} .sec>summary .chev{transition:transform .2s;color:var(--text2);font-size:13px} .sec[open]>summary .chev{transform:rotate(90deg)} .sec>.sec-body{padding:0 16px 16px}
-    .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;cursor:pointer}</style>
-  <h1 style="margin:0 0 6px">Produkty <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
-  <p class="muted" style="margin-top:0">Typy prádlomatů a jejich cena.</p>
-  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
-  ${list || '<p class="muted">Zatím žádný produkt — přidej první níže.</p>'}
-  <details class="card sec" data-sec="pnew" ${rows.length ? '' : 'open'} style="margin-top:14px"><summary>+ Přidat produkt <span class="chev">▶</span></summary><div class="sec-body">${productForm(null, '/admin/products', 'Přidat')}</div></details>`, holyosUrl);
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h1 style="margin:0">Produkty <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+    <a class="btn sec sm" href="/admin/products?refresh=1">↻ Načíst znovu</a>
+  </div>
+  <p class="muted" style="margin-top:0">Typy prádlomatů a jejich ceny bez DPH — aktivní položky z prodejního ceníku HolyOS (úpravy se dělají tam).</p>
+  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+  ${body || (error ? '' : '<p class="muted">V ceníku nejsou žádné aktivní stroje.</p>')}`, holyosUrl);
 }
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
@@ -285,7 +274,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
   const extra = keys.length ? keys.map(k => `<div class="list-item"><span class="muted">${esc(k)}</span><span style="text-align:right;word-break:break-all">${esc(s.extra[k])}</span></div>`).join('') : '<p class="muted small">Žádné další údaje.</p>';
   return adminLayout(isNew ? 'Nový uživatel' : 'Detail', 'sup', admin, `
-  <p><a href="/admin/supporters">← seznam</a></p>
+  <p><a href="/admin/supporters">${ico('back', 15)} seznam</a></p>
   <h1>${isNew ? 'Nový uživatel' : esc([s.last_name, s.first_name].filter(Boolean).join(' ') || s.email)}</h1>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   <style>
@@ -310,9 +299,9 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div class="list-item"><span class="muted">Poslední přihlášení</span><span>${fmtDT(s.last_login_at)}</span></div>
       <div class="list-item"><span class="muted">Import</span><span class="small">${esc(s.source || '—')} ${s.imported_at ? '· ' + fmtDT(s.imported_at) : ''}</span></div>
       <div class="row" style="margin-top:12px">
-        <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">🔑 Nové heslo</button></form>
-        <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? '✓ Odblokovat' : '⛔ Blokovat'}</button></form>
-        <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">${ico('key', 16)} Nové heslo</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? ico('check', 16) + ' Odblokovat' : ico('block', 16) + ' Blokovat'}</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">${ico('trash', 16)} Smazat</button></form>
       </div>
     </div></details>
     <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
