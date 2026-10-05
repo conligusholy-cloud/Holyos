@@ -116,6 +116,7 @@ function passwordPage({ nick, error = '', ok = '' }) {
 const ADMIN_NAV = [
   { id: 'dash', href: '/admin', label: 'Přehled', icon: '📊' },
   { id: 'sup', href: '/admin/supporters', label: 'Podporovatelé', icon: '👥' },
+  { id: 'fl', href: '/admin/first-line', label: 'Moje první linie', icon: '🌱' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: '⬆️', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -195,6 +196,30 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   </form>
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
   <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
+}
+// Moje první linie: podporovatelé, kterým je v poli tab3 (extra) nick přihlášeného správce
+function adminFirstLine({ admin, nick = '', rows = [], msg = '', holyosUrl }) {
+  const has = (k) => rows.some(r => r.extra && r.extra[k] != null && r.extra[k] !== '');
+  const xcols = ['date', 'level', 'obrat', 'profit'].filter(has);
+  const head = '<th>Jméno</th><th>Nick</th><th>E-mail</th><th>Stav</th>' + xcols.map(k => `<th>${esc(k)}</th>`).join('') + '<th></th>';
+  const body = rows.map(r => `<tr>
+    <td data-l="Jméno"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
+    <td data-l="Nick">${r.nick ? esc(r.nick) : '<span class="muted">—</span>'}</td>
+    <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
+    <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span></td>
+    ${xcols.map(k => `<td data-l="${esc(k)}" class="small">${r.extra && r.extra[k] ? esc(r.extra[k]) : '<span class="muted">—</span>'}</td>`).join('')}
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('');
+  const form = `<form method="post" action="/admin/first-line/nick" class="row" style="margin:10px 0 14px">
+    <input name="nick" value="${esc(nick)}" placeholder="Tvůj nick (hodnota v poli tab3)" style="flex:1;min-width:200px" required>
+    <button class="btn sec" type="submit">${nick ? 'Změnit nick' : 'Uložit nick'}</button></form>`;
+  return adminLayout('Moje první linie', 'fl', admin, `
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+    <h1 style="margin:0">Moje první linie ${nick ? `<span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span>` : ''}</h1>
+  </div>
+  <p class="muted" style="margin-top:0">Podporovatelé, které jsi přivedl ty — v poli <code>tab3</code> mají tvůj nick.</p>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  ${form}
+  ${nick ? `<div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${5 + xcols.length}" class="muted">Nikdo s tab3 = „${esc(nick)}" nenalezen.</td></tr>`}</tbody></table></div>` : '<p class="muted">Zadej svůj nick, ať vím, koho vypsat.</p>'}`, holyosUrl);
 }
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
@@ -283,4 +308,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, supporterHome, passwordPage, adminDash, adminSupporters, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, supporterHome, passwordPage, adminDash, adminSupporters, adminFirstLine, adminSupporterDetail, adminImport, errorPage };
