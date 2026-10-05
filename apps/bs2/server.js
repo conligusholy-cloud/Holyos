@@ -243,13 +243,36 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   try { const mins = new Map((await q('SELECT holyos_item_id, min_price_czk, min_price_eur, dc_use_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, r])); offers = offers.map(p => { const m = mins.get(p.id) || {}; return { ...p, min_price_czk: m.min_price_czk, min_price_eur: m.min_price_eur, dc_use_pct: m.dc_use_pct }; }); } catch (e) { /* bez minima */ }
   const sum = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0);
   const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
-  res.send(V.supporterProducts(req.user, offers, { balance }));
+  res.send(V.supporterProducts(req.user, offers, { balance, msg: req.query.msg || '' }));
+}));
+// Koupit (+ případně uplatnit DC): vše se přepočítá na serveru, DC se hned odečtou, objednávku potvrdí admin
+app.post('/order', wrap(requireUser), wrap(async (req, res) => {
+  const back = (m) => res.redirect('/pradlomaty?msg=' + encodeURIComponent(m));
+  const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
+  const items = (await loadProducts()).items || [];
+  const set = await offeredSet();
+  const p = items.find(x => String(x.id) === String(req.body.item) && set.has(x.id));
+  if (!p) return back('Tento prádlomat teď nelze objednat.');
+  const net = Number(cur === 'EUR' ? p.price_eur : p.price_czk);
+  if (!isFinite(net) || net <= 0) return back('Prádlomat nemá cenu v zvolené měně.');
+  const o = (await q('SELECT credit_pct, min_price_czk, min_price_eur, dc_use_pct FROM product_offers WHERE holyos_item_id=$1', [p.id])).rows[0] || {};
+  const min = Number(cur === 'EUR' ? o.min_price_eur : o.min_price_czk) || 0;
+  let room = Math.max(0, Math.round(net - min)); if (o.dc_use_pct != null) room = Math.min(room, Math.floor(net * Number(o.dc_use_pct) / 100));
+  const rate = cur === 'EUR' ? await eurRate() : 1;
+  const bal = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0) / rate;
+  let dc = Math.max(0, parseInt(req.body.dc, 10) || 0);
+  dc = Math.min(dc, room, Math.floor(bal));
+  const ins = await q('INSERT INTO orders (supporter_id, holyos_item_id, product_name, currency, price_net, dc_used, final_net) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, p.id, p.name_cs, cur, net, dc, net - dc]);
+  if (dc > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [req.user.id, -Math.round(dc * rate * 100) / 100, 'Uplatnění DC: ' + p.name_cs + ' (objednávka #' + ins.rows[0].id + ')', ins.rows[0].id]);
+  await log({ name: req.user.nick }, 'order_new', { id: ins.rows[0].id, product: p.name_cs, dc });
+  res.redirect('/moje-pradlomaty?ordered=1');
 }));
 app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [req.user.id])).rows;
   let byId = new Map(); try { byId = new Map(((await loadProducts()).items || []).map(p => [p.id, p])); } catch (e) { /* bez parametrů stroje */ }
   rows.forEach(r => { r.machine = byId.get(r.holyos_item_id) || null; });
-  res.send(V.supporterMine(req.user, { rows }));
+  const orders = (await q('SELECT * FROM orders WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100', [req.user.id])).rows;
+  res.send(V.supporterMine(req.user, { rows, orders, msg: req.query.ordered ? 'Objednávka odeslána. Ozveme se s potvrzením.' : '' }));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
@@ -389,6 +412,28 @@ app.post('/admin/products/:id(\\d+)/offer', requireAdmin, wrap(async (req, res) 
   await log(req.admin, on ? 'product_offer_on' : 'product_offer_off', { holyos_item_id: Number(req.params.id) });
   res.redirect('/admin/products');
 }));
+app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {
+  const rows = (await q("SELECT o.*, s.first_name, s.last_name, s.email, s.nick FROM orders o JOIN supporters s ON s.id=o.supporter_id ORDER BY (o.status='new') DESC, o.created_at DESC LIMIT 500")).rows;
+  res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+}));
+app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) => {
+  const o = (await q("UPDATE orders SET status='confirmed', decided_at=now() WHERE id=$1 AND status='new' RETURNING *", [parseInt(req.params.id, 10)])).rows[0];
+  if (!o) return res.redirect('/admin/orders');
+  const s = await loadSupporter(o.supporter_id);
+  const rate = o.currency === 'EUR' ? await eurRate() : 1;
+  const priceCzk = Math.round(Number(o.final_net) * rate * 100) / 100;
+  let m = null; try { m = ((await loadProducts()).items || []).find(p => p.id === o.holyos_item_id) || null; } catch (e) { /* bez parametrů */ }
+  const ins = await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, note) VALUES ($1,$2,$3,$4,$5) RETURNING id', [s.id, o.holyos_item_id, o.product_name, priceCzk, 'Objednávka #' + o.id + (Number(o.dc_used) > 0 ? ' · uplatněno ' + Number(o.dc_used).toLocaleString('cs-CZ') + ' DC' : '')]);
+  const creditMsg = await grantSellerCredit(s, m ? { id: m.id } : (o.holyos_item_id ? { id: o.holyos_item_id } : null), priceCzk, o.product_name, ins.rows[0].id);
+  if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
+  await log(req.admin, 'order_confirm', { id: o.id });
+  res.redirect('/admin/orders?msg=' + encodeURIComponent('Objednávka #' + o.id + ' potvrzena, nákup zapsán.' + creditMsg));
+}));
+app.post('/admin/orders/:id(\\d+)/cancel', requireAdmin, wrap(async (req, res) => {
+  const o = (await q("UPDATE orders SET status='cancelled', decided_at=now() WHERE id=$1 AND status='new' RETURNING id", [parseInt(req.params.id, 10)])).rows[0];
+  if (o) { await q('DELETE FROM credits WHERE order_id=$1', [o.id]); await log(req.admin, 'order_cancel', { id: o.id }); }
+  res.redirect('/admin/orders?msg=' + encodeURIComponent(o ? 'Objednávka zrušena, DC vráceny.' : 'Objednávku nelze zrušit.'));
+}));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));
 app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
@@ -411,6 +456,22 @@ app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const credits = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC', [s.id])).rows;
   res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits }));
 }));
+// Discount Credit prodejci: % z ceny bez DPH podle nastavení typu stroje; prodejce = kdo zákazníka přivedl (referred_by) nebo nick v tab3
+async function grantSellerCredit(s, m, price, name, purchaseId) {
+  let creditMsg = '';
+  try {
+    if (m && price != null) {
+      const pct = Number(((await q('SELECT credit_pct FROM product_offers WHERE holyos_item_id=$1', [m.id])).rows[0] || {}).credit_pct || 0);
+      const seller = (await q("SELECT id, nick FROM supporters WHERE id<>$1 AND (id=$2 OR ($3::text IS NOT NULL AND lower(nick)=lower($3))) ORDER BY (id=$2) DESC NULLS LAST LIMIT 1", [s.id, s.referred_by || 0, (s.extra && s.extra.tab3 && String(s.extra.tab3).trim()) || null])).rows[0];
+      if (pct > 0 && seller) {
+        const amount = Math.round(Number(price) * pct) / 100;
+        await q('INSERT INTO credits (supporter_id, amount_czk, note, purchase_id) VALUES ($1,$2,$3,$4)', [seller.id, amount, 'Prodej: ' + name + ' (' + ([s.first_name, s.last_name].filter(Boolean).join(' ') || s.email) + '), ' + pct + ' % z ceny bez DPH', purchaseId]);
+        creditMsg = ' Prodejci ' + (seller.nick || '') + ' připsáno ' + amount.toLocaleString('cs-CZ') + ' DC.';
+      }
+    }
+  } catch (e) { console.error('credit auto', e.message); }
+  return creditMsg;
+}
 app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
   let m = null; try { m = ((await loadProducts()).items || []).find(p => String(p.id) === String(req.body.item)); } catch (e) { /* ruční název */ }
@@ -420,19 +481,7 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
   const price = pr !== '' && !isNaN(Number(pr)) ? Number(pr) : (m && m.price_czk != null ? m.price_czk : null);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
   const ins = await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, purchased_at, note) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [s.id, m ? m.id : null, name, price, date, String(req.body.note || '').trim().slice(0, 500) || null]);
-  // Discount Credit prodejci: % z ceny bez DPH podle nastavení typu stroje; prodejce = kdo zákazníka přivedl (referred_by) nebo nick v tab3
-  let creditMsg = '';
-  try {
-    if (m && price != null) {
-      const pct = Number(((await q('SELECT credit_pct FROM product_offers WHERE holyos_item_id=$1', [m.id])).rows[0] || {}).credit_pct || 0);
-      const seller = (await q("SELECT id, nick FROM supporters WHERE id<>$1 AND (id=$2 OR ($3::text IS NOT NULL AND lower(nick)=lower($3))) ORDER BY (id=$2) DESC NULLS LAST LIMIT 1", [s.id, s.referred_by || 0, (s.extra && s.extra.tab3 && String(s.extra.tab3).trim()) || null])).rows[0];
-      if (pct > 0 && seller) {
-        const amount = Math.round(Number(price) * pct) / 100;
-        await q('INSERT INTO credits (supporter_id, amount_czk, note, purchase_id) VALUES ($1,$2,$3,$4)', [seller.id, amount, 'Prodej: ' + name + ' (' + ([s.first_name, s.last_name].filter(Boolean).join(' ') || s.email) + '), ' + pct + ' % z ceny s DPH', ins.rows[0].id]);
-        creditMsg = ' Prodejci ' + (seller.nick || '') + ' připsáno ' + amount.toLocaleString('cs-CZ') + ' DC.';
-      }
-    }
-  } catch (e) { console.error('credit auto', e.message); }
+  const creditMsg = await grantSellerCredit(s, m, price, name, ins.rows[0].id);
   if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'purchase_add', { id: s.id, product: name });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.' + creditMsg));

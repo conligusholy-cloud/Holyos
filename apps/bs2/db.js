@@ -112,6 +112,23 @@ async function migrate() {
     -- Zobrazovací měna uživatele (CZK / EUR) na stránkách Prádlomaty a Discount Credit
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'CZK';
 
+    -- Objednávky z Prádlomatů (Koupit): admin potvrdí → vznikne nákup + provize; zrušením se vrátí uplatněné DC
+    CREATE TABLE IF NOT EXISTS orders (
+      id             SERIAL PRIMARY KEY,
+      supporter_id   INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      holyos_item_id INTEGER,
+      product_name   TEXT NOT NULL,
+      currency       TEXT NOT NULL DEFAULT 'CZK',
+      price_net      NUMERIC(14,2) NOT NULL,
+      dc_used        NUMERIC(14,2) NOT NULL DEFAULT 0,
+      final_net      NUMERIC(14,2) NOT NULL,
+      status         TEXT NOT NULL DEFAULT 'new',
+      created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+      decided_at     TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS orders_supporter_idx ON orders (supporter_id);
+    ALTER TABLE credits ADD COLUMN IF NOT EXISTS order_id INTEGER;
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

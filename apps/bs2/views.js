@@ -176,15 +176,17 @@ const curSw = (s, back) => `<form method="post" action="/currency" style="margin
   ${['CZK', 'EUR'].map(c => `<button type="submit" name="cur" value="${c}" class="btn sm ${curOf(s) === c ? '' : 'sec'}" style="border-radius:0;border:0;min-width:64px">${c === 'CZK' ? 'Kč' : '€'}</button>`).join('')}</form>`;
 // cena s DPH 21 % v měně uživatele (EUR bere cenu EUR z ceníku)
 const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_czk; return b == null ? null : Math.round(Number(b) * 1.21); };
-function supporterProducts(s, offers = [], { balance = 0 } = {}) {
+function supporterProducts(s, offers = [], { balance = 0, msg = '' } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
   const bal = Math.max(0, Math.floor(Number(balance) || 0));
   const fmt = (n) => Math.round(n).toLocaleString('cs-CZ');
   return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"></form>
   <div class="card" style="margin:0 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">
     <div><div class="small muted">Dostupné Discount Credit</div><div style="font-size:28px;font-weight:800;letter-spacing:-.02em"><span id="dc-left">${fmt(bal)}</span> <span style="font-size:18px">DC</span></div></div>
-    <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Zadej u vybraného prádlomatu, kolik DC chceš uplatnit — cena se hned přepočítá. Kalkulace je orientační, slevu potvrdíme při objednávce.</div>
+    <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Klikni na <b>Uplatnit DC</b>, zadej kolik chceš uplatnit — cena se hned přepočítá. Tlačítkem <b>Koupit</b> odešleš objednávku, kterou potvrdíme.</div>
   </div>
   <div class="grid" id="dc-grid">${offers.map(p => { const net = cur === 'EUR' ? p.price_eur : p.price_czk; const minB = cur === 'EUR' ? p.min_price_eur : p.min_price_czk; const minN = minB == null ? 0 : Number(minB); let room = net == null ? 0 : Math.max(0, Math.round(Number(net) - minN)); if (p.dc_use_pct != null && net != null) room = Math.min(room, Math.floor(Number(net) * Number(p.dc_use_pct) / 100)); return `
     <div class="card dc-card" style="margin:0" data-price="${net == null ? '' : Number(net)}" data-room="${room}"><b style="font-size:16px">${esc(p.name_cs)}</b>
@@ -193,9 +195,10 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
       <div class="small muted" style="opacity:.8">${money(vatPrice(p, cur), sym)} s DPH 21 %</div>
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximální sleva z DC:</span> ${p.dc_use_pct == null && minB == null ? '<span class="muted">zatím nenastaveno</span>' : room > 0 ? `<b style="color:var(--ok)">${esc(Math.round(room).toLocaleString('cs-CZ'))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
       ${room > 0 && net != null ? `<div class="small" style="margin-top:4px"><span class="muted">Cena po odečtení slevy:</span> <b>${money(Math.round(Number(net) - room), sym)}</b> <span class="muted">bez DPH · ${money(Math.round((Number(net) - room) * 1.21), sym)} s DPH</span></div>` : ''}
-      ${net != null && bal > 0 && room > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
+      ${net != null ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn sec dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tento prádlomat nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn dc-buy" data-item="${p.id}" data-name="${esc(p.name_cs)}">Koupit</button></div>` : ''}
+      ${net != null && bal > 0 && room > 0 ? `<div class="dc-panel" style="display:none;margin-top:12px"><div style="display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div>
-      ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}` : ''}
+      ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}</div>` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
   <script>
@@ -217,6 +220,18 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
       });
       document.getElementById('dc-left').textContent=fmt(total-u);
     }
+    cards.forEach(function(c){
+      var tg=c.querySelector('.dc-toggle'), pn=c.querySelector('.dc-panel');
+      if(tg&&pn&&!tg.disabled)tg.addEventListener('click',function(){var open=pn.style.display==='none';pn.style.display=open?'block':'none';tg.textContent=open?'Skrýt DC':'Uplatnit DC';if(!open){var inp=pn.querySelector('.dc-in');inp.value=0;recalc();}});
+      var buy=c.querySelector('.dc-buy');
+      if(buy)buy.addEventListener('click',function(){
+        var inp=c.querySelector('.dc-in'), val=(inp&&c.querySelector('.dc-panel').style.display!=='none')?Math.max(0,parseInt(inp.value,10)||0):0;
+        var price=parseFloat(c.getAttribute('data-price'))||0;
+        var txt='Objednat '+buy.getAttribute('data-name')+'?\n\nCena bez DPH: '+fmt(price-val)+' '+sym+(val>0?'\nUplatněno DC: '+fmt(val):'')+'\n\nObjednávku potvrdíme.';
+        if(!confirm(txt))return;
+        var f=document.getElementById('orderf');f.item.value=buy.getAttribute('data-item');f.dc.value=val;f.submit();
+      });
+    });
     cards.forEach(function(c){var i=c.querySelector('.dc-in'); if(!i)return;
       i.addEventListener('input',recalc);
       c.querySelector('.dc-max').addEventListener('click',function(){var room=parseFloat(c.getAttribute('data-room'));if(isNaN(room))room=parseFloat(c.getAttribute('data-price'))||0;i.value=Math.max(0,Math.min(room,total-used(c)));recalc();});
@@ -243,7 +258,7 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25 } = {}) {
     ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(conv(r.amount_czk), 'DC')}</b></td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné pohyby na kreditním účtu.</p>'}</div>` });
 }
-function supporterMine(s, { rows = [] } = {}) {
+function supporterMine(s, { rows = [], orders = [], msg = '' } = {}) {
   const sum = rows.reduce((acc, r) => acc + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
   const dt = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ') : '—');
   const info = (l, val) => (val ? `<div class="list-item"><span class="muted">${l}</span><span style="text-align:right">${val}</span></div>` : '');
@@ -263,6 +278,8 @@ function supporterMine(s, { rows = [] } = {}) {
     <div class="card" style="margin:0"><div class="small muted">Počet prádlomatů</div><div style="font-size:26px;font-weight:800">${rows.length}</div></div>
     <div class="card" style="margin:0"><div class="small muted">Investováno celkem (bez DPH)</div><div style="font-size:26px;font-weight:800">${money(sum, 'Kč')}</div></div>
   </div>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  ${orders.length ? `<h3 style="margin:0 0 8px">Moje objednávky</h3><div class="card tbl-wrap" style="margin-bottom:14px"><table class="cards"><thead><tr><th>Datum</th><th>Prádlomat</th><th>Cena bez DPH</th><th>Uplatněno DC</th><th>Stav</th></tr></thead><tbody>${orders.map(o => `<tr><td data-l="Datum" class="small muted">${fmtDT(o.created_at)}</td><td data-l="Prádlomat"><b>${esc(o.product_name)}</b></td><td data-l="Cena bez DPH">${money(o.final_net, o.currency === 'EUR' ? '€' : 'Kč')}</td><td data-l="Uplatněno DC">${Number(o.dc_used) > 0 ? esc(Number(o.dc_used).toLocaleString('cs-CZ')) + ' DC' : '<span class="muted">—</span>'}</td><td data-l="Stav"><span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span></td></tr>`).join('')}</tbody></table></div>` : ''}
   ${rows.length ? `<div class="grid">${cards}</div>` : '<div class="card"><p class="muted" style="margin:0">Zatím tu nemáš žádný prádlomat. Jakmile si nějaký pořídíš, objeví se tady.</p></div>'}` });
 }
 function supporterNetwork(s, { rows = [], lineCount = 0 } = {}) {
@@ -331,6 +348,7 @@ function passwordPage({ s, nick, error = '', ok = '' }) {
 const ADMIN_NAV = [
   { id: 'dash', href: '/admin', label: 'Přehled', icon: 'chart' },
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
+  { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
@@ -435,6 +453,22 @@ const leftOver = (p, cur, sym) => {
 const maxDisc = (price, min, sym) => { if (price == null || min == null || !Number(price)) return ''; const diff = Number(price) - Number(min); const pct = Math.round(diff / Number(price) * 1000) / 10; return `<div style="${diff < 0 ? 'color:var(--err)' : ''}"><b>${esc(String(pct).replace('.', ','))} %</b> <span class="small muted">(${money(diff, sym)})</span></div>`; };
 // Kolik DC lze využít: % z ceny bez DPH, nejvýš však po minimální cenu
 const dcUse = (p) => { if (p.dc_use_pct == null) return '<div class="small muted" style="margin-top:4px">bez omezení (jen min. cena)</div>'; const pct = Number(p.dc_use_pct); const f = (price, min, sym) => { if (price == null) return ''; let dc = Number(price) * pct / 100; if (min != null) dc = Math.min(dc, Math.max(0, Number(price) - Number(min))); return `<div class="small muted">= ${money(Math.round(dc), 'DC')} <span style="opacity:.7">(${sym})</span></div>`; }; return '<div style="margin-top:4px">' + f(p.price_czk, p.min_price_czk, 'Kč') + f(p.price_eur, p.min_price_eur, '€') + '</div>'; };
+function adminOrders({ admin, rows = [], msg = '', holyosUrl }) {
+  const sy = (o) => (o.currency === 'EUR' ? '€' : 'Kč');
+  const st = (o) => `<span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span>`;
+  return adminLayout('Objednávky', 'ord', admin, `
+  <h1 style="margin:0 0 6px">Objednávky <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+  <p class="muted" style="margin-top:0">Objednávky odeslané uživateli tlačítkem <b>Koupit</b>. Potvrzením vznikne nákup a prodejci se připíše provize v DC. Zrušením se uživateli vrátí uplatněné DC.</p>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Prádlomat</th><th>Cena bez DPH</th><th>Uplatněno DC</th><th>Stav</th><th></th></tr></thead><tbody>
+    ${rows.map(o => `<tr><td data-l="Datum" class="small muted">${fmtDT(o.created_at)}</td>
+      <td data-l="Uživatel"><a href="/admin/supporters/${o.supporter_id}"><b>${esc([o.last_name, o.first_name].filter(Boolean).join(' ') || o.email)}</b></a><div class="small muted">${esc(o.nick || '')}</div></td>
+      <td data-l="Prádlomat"><b>${esc(o.product_name)}</b></td>
+      <td data-l="Cena bez DPH">${money(o.final_net, sy(o))} <span class="small muted">(ceník ${money(o.price_net, sy(o))})</span></td>
+      <td data-l="Uplatněno DC">${Number(o.dc_used) > 0 ? esc(Number(o.dc_used).toLocaleString('cs-CZ')) + ' DC' : '<span class="muted">—</span>'}</td>
+      <td data-l="Stav">${st(o)}</td>
+      <td class="actions">${o.status === 'new' ? `<div class="row"><form method="post" action="/admin/orders/${o.id}/confirm" style="margin:0"><button class="btn sm" type="submit">Potvrdit</button></form><form method="post" action="/admin/orders/${o.id}/cancel" onsubmit="return confirm('Zrušit objednávku a vrátit DC?')" style="margin:0"><button class="btn danger sm" type="submit">Zrušit</button></form></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
+}
 function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate = 25 }) {
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
@@ -591,4 +625,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminSupporterDetail, adminImport, errorPage };
