@@ -153,7 +153,7 @@ const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id:
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
 const userNav = (s) => {
   const nav = [USER_NAV[0]];
-  if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Můj tým', icon: 'users' });
+  if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, USER_NAV[1]);
   return nav;
 };
@@ -180,13 +180,13 @@ function supporterProducts(s, offers = []) {
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
 }
 function supporterTeam(s, { team = [], refUrl = '' } = {}) {
-  return layout({ title: 'Můj tým', user: s.nick, nav: userNav(s), active: 'team', fx: true, body: `
-  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('users', 18)} Můj tým — lidé, které jsem přivedl</h2>
+  return layout({ title: 'Moje doporučení', user: s.nick, nav: userNav(s), active: 'team', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('users', 18)} Moje doporučení — lidé, které jsem přivedl</h2>
   <div class="card" style="margin-bottom:12px">
     <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
       <div style="min-width:0;flex:1"><div class="small muted" style="letter-spacing:.08em;text-transform:uppercase">Můj registrační odkaz</div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="refurl" readonly value="${esc(refUrl || '')}" onclick="this.select()" style="font-size:14px;padding:10px 12px"><button class="btn sm" type="button" onclick="navigator.clipboard.writeText(document.getElementById('refurl').value).then(()=>{this.textContent='Zkopírováno';setTimeout(()=>this.textContent='Kopírovat',1500)})">Kopírovat</button></div>
-        <div class="small muted" style="margin-top:6px">Pošli ho komukoli — kdo se přes něj zaregistruje, objeví se tady v tvém týmu.</div></div>
+        <div class="small muted" style="margin-top:6px">Pošli ho komukoli — kdo se přes něj zaregistruje, objeví se tady mezi tvými doporučeními.</div></div>
       <div class="row">
         <a class="btn sec sm" href="https://wa.me/?text=${encodeURIComponent('Přidej se ke mně v Best Series 2.0 a pořiď si prádlomat: ' + (refUrl || ''))}" target="_blank" rel="noopener">WhatsApp</a>
         <a class="btn sec sm" href="mailto:?subject=${encodeURIComponent('Pozvánka do Best Series 2.0')}&body=${encodeURIComponent('Ahoj, přidej se ke mně v Best Series 2.0 a pořiď si prádlomat. Registrace tady: ' + (refUrl || ''))}">E-mail</a>
