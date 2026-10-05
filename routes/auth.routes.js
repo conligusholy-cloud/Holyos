@@ -183,10 +183,45 @@ router.get('/me', requireAuth, async (req, res, next) => {
       }
     }
 
-    res.json({ user: req.user, allowed_modules });
+    res.json({ user: req.user, allowed_modules, external_sections: await externalSectionsFor(req.user) });
   } catch (err) {
     next(err);
   }
+});
+
+// =============================================================================
+// Soukromá sekce „BS2" — samostatná aplikace (vlastní Railway služba + doména, např. bestseries2.cz),
+// mechanicky oddělená od HolyOS. HolyOS jen: (1) ukáže odkaz v sidebaru vybraným lidem,
+// (2) předá přihlášení krátkým podepsaným SSO tokenem (sdílený BS2_SSO_SECRET).
+// Kdo ji vidí: BS2_ALLOWED_PERSON_IDS (čárkami), jinak výchozí Tomáš Holý + Jan Holý podle jména.
+// =============================================================================
+const jwt = require('jsonwebtoken');
+async function bs2Allowed(user) {
+  if (!process.env.BS2_URL) return false;
+  const person = user && user.person;
+  if (!person) return false;
+  const ids = String(process.env.BS2_ALLOWED_PERSON_IDS || '').split(',').map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+  if (ids.length) return ids.includes(person.id);
+  const fn = String(person.first_name || '').trim().toLowerCase(), ln = String(person.last_name || '').trim().toLowerCase();
+  return ln === 'holý' && (fn === 'tomáš' || fn === 'jan');
+}
+async function externalSectionsFor(user) {
+  const out = [];
+  try {
+    if (await bs2Allowed(user)) out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Soukromá sekce', icon: '&#128274;', color: '#f59e0b', href: '/api/auth/sso/bs2' });
+  } catch (e) { /* bez sekce */ }
+  return out;
+}
+// GET /api/auth/sso/bs2 — přesměruje do BS2 s jednorázovým tokenem (platnost 2 min)
+router.get('/sso/bs2', requireAuth, async (req, res, next) => {
+  try {
+    if (!(await bs2Allowed(req.user))) return res.status(403).send('Do této sekce nemáš přístup.');
+    const secret = process.env.BS2_SSO_SECRET;
+    if (!secret) return res.status(500).send('BS2_SSO_SECRET není nastaven.');
+    const p = req.user.person;
+    const token = jwt.sign({ uid: req.user.id, pid: p.id, name: ((p.first_name || '') + ' ' + (p.last_name || '')).trim(), username: req.user.username, aud: 'bs2', iss: 'holyos' }, secret, { expiresIn: '2m' });
+    res.redirect(String(process.env.BS2_URL).replace(/\/$/, '') + '/sso?t=' + encodeURIComponent(token));
+  } catch (err) { next(err); }
 });
 
 // GET /api/auth/users — seznam uživatelů (admin)

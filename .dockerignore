@@ -29,3 +29,6 @@ docs
 .github
 src
 tsconfig.json
+
+# Samostatné aplikace (vlastní Railway služba, Root Directory apps/<x>)
+apps
