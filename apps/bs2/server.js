@@ -158,15 +158,36 @@ app.get('/admin', requireAdmin, wrap(async (req, res) => {
   const recent = (await q('SELECT nick, email, last_login_at FROM supporters WHERE last_login_at IS NOT NULL ORDER BY last_login_at DESC LIMIT 8')).rows;
   res.send(V.adminDash({ admin: req.admin, stats: st, recent, holyosUrl: HOLYOS_URL }));
 }));
+// Volba sloupců seznamu (cookie, 1 rok). Klíče údajů z importu se načítají z DB (cache 5 min).
+const COLS_COOKIE = 'bs2_cols';
+function readCols(req) { try { const a = JSON.parse(req.cookies[COLS_COOKIE] || 'null'); return Array.isArray(a) && a.length ? a.filter(x => typeof x === 'string').slice(0, 60) : V.DEFAULT_COLS; } catch (e) { return V.DEFAULT_COLS; } }
+let extraKeysCache = { at: 0, keys: [] };
+async function extraKeys() {
+  if (Date.now() - extraKeysCache.at < 5 * 60e3) return extraKeysCache.keys;
+  const r = await q('SELECT DISTINCT k FROM supporters, LATERAL jsonb_object_keys(extra) AS k ORDER BY k');
+  extraKeysCache = { at: Date.now(), keys: r.rows.map(x => x.k) };
+  return extraKeysCache.keys;
+}
+app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
+  const back = String(req.body.back || '/admin/supporters').startsWith('/admin/supporters') ? String(req.body.back) : '/admin/supporters';
+  if (req.body.reset) { res.clearCookie(COLS_COOKIE); return res.redirect(back); }
+  let cols = req.body.cols || []; if (!Array.isArray(cols)) cols = [cols];
+  cols = cols.map(String).filter(c => /^(x:.{1,80}|[a-z_]{1,40})$/.test(c)).slice(0, 60);
+  res.cookie(COLS_COOKIE, JSON.stringify(cols), { httpOnly: true, secure: isHttps(req), sameSite: 'lax', maxAge: 365 * 24 * 3600 * 1000 });
+  res.redirect(back);
+});
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(), status = String(req.query.status || '');
   const where = [], params = [];
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $${params.length} OR lower(coalesce(first_name,'')) LIKE $${params.length} OR lower(coalesce(last_name,'')) LIKE $${params.length} OR lower(coalesce(nick,'')) LIKE $${params.length})`); }
   if (['invited', 'active', 'blocked'].includes(status)) { params.push(status); where.push(`status=$${params.length}`); }
   const sql = `FROM supporters ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
+  const cols = readCols(req);
+  const keys = await extraKeys();
+  const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q('SELECT id,email,first_name,last_name,nick,status,last_login_at ' + sql + ' ORDER BY lower(coalesce(last_name,\'\')), lower(coalesce(first_name,\'\')), email LIMIT 500', params)).rows;
-  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));
 app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {

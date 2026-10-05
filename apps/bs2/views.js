@@ -136,15 +136,53 @@ function adminDash({ admin, stats, recent, holyosUrl }) {
   ${recent.length ? recent.map(r => `<div class="list-item"><span><b>${esc(r.nick || '—')}</b> <span class="muted">${esc(r.email)}</span></span><span class="muted small">${fmtDT(r.last_login_at)}</span></div>`).join('') : '<p class="muted">Zatím se nikdo nepřihlásil.</p>'}</div>
   <p class="muted small">Přihlašovací stránka pro podporovatele: <code>${esc(process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz')}/login</code> — první přihlášení přes <code>/activate</code> (e-mail musí být v seznamu).</p>`, holyosUrl);
 }
-function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '', holyosUrl }) {
+// Sloupce seznamu: základní (pevně Jméno) + volitelné základní + libovolné údaje z importu. Výběr je v cookie bs2_cols.
+const BASE_COLS = [
+  { key: 'email', label: 'E-mail', render: (r) => `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` },
+  { key: 'nick', label: 'Nick', render: (r) => r.nick ? esc(r.nick) : '<span class="muted">—</span>' },
+  { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
+  { key: 'last_login_at', label: 'Poslední přihlášení', render: (r) => `<span class="muted small">${fmtDT(r.last_login_at)}</span>` },
+  { key: 'activated_at', label: 'Aktivován', render: (r) => `<span class="muted small">${fmtDT(r.activated_at)}</span>` },
+  { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
+  { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
+];
+const DEFAULT_COLS = ['email', 'nick', 'status', 'last_login_at'];
+const EXTRA_PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
+function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [] }) {
+  const baseSel = BASE_COLS.filter(c => cols.includes(c.key));
+  const extraSel = cols.filter(k => k.startsWith('x:')).map(k => k.slice(2)).filter(k => extraKeys.includes(k));
+  const sortedExtra = extraKeys.slice().sort((a, b) => { const ia = EXTRA_PRIO.indexOf(a), ib = EXTRA_PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); });
+  const head = '<th>Jméno</th>' + baseSel.map(c => `<th>${esc(c.label)}</th>`).join('') + extraSel.map(k => `<th title="údaj z importu">${esc(k)}</th>`).join('') + '<th></th>';
   const rowsHtml = rows.map(r => `<tr>
     <td data-l="Jméno"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
-    <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
-    <td data-l="Nick">${r.nick ? esc(r.nick) : '<span class="muted">—</span>'}</td>
-    <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span></td>
-    <td data-l="Poslední přihlášení" class="muted small">${fmtDT(r.last_login_at)}</td>
+    ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
+    ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
     <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('');
+  const colCount = 2 + baseSel.length + extraSel.length;
+  const picker = `
+  <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">⚙️</summary>
+    <form method="post" action="/admin/supporters/columns" class="colpick-pop">
+      <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
+      <div class="colpick-grid">
+        <div><div class="colpick-h">Základní</div>
+          <label class="colpick-i"><input type="checkbox" checked disabled> Jméno</label>
+          ${BASE_COLS.map(c => `<label class="colpick-i"><input type="checkbox" name="cols" value="${c.key}"${cols.includes(c.key) ? ' checked' : ''}> ${esc(c.label)}</label>`).join('')}
+        </div>
+        <div><div class="colpick-h">Údaje z importu <span class="muted">(${sortedExtra.length})</span></div>
+          <div class="colpick-scroll">${sortedExtra.map(k => `<label class="colpick-i"><input type="checkbox" name="cols" value="x:${esc(k)}"${cols.includes('x:' + k) ? ' checked' : ''}> ${esc(k)}</label>`).join('') || '<span class="muted small">Zatím žádné (naimportuj data).</span>'}</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn sec sm" type="submit" name="reset" value="1">Výchozí</button><button class="btn sm" type="submit">Uložit sloupce</button></div>
+    </form></details>`;
   return adminLayout('Podporovatelé', 'sup', admin, `
+  <style>
+    .colpick{position:relative} .colpick summary{list-style:none;cursor:pointer;display:inline-flex} .colpick summary::-webkit-details-marker{display:none}
+    .colpick-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;width:min(560px,calc(100vw - 32px));box-shadow:0 12px 40px rgba(0,0,0,.5)}
+    .colpick-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:600px){.colpick-grid{grid-template-columns:1fr}}
+    .colpick-h{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:6px}
+    .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;padding:5px 0;color:var(--text);cursor:pointer} .colpick-i input{width:auto;margin:0}
+    .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
+  </style>
   <h1>Podporovatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form method="get" class="row" style="margin:10px 0 14px">
@@ -152,7 +190,9 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
     <select name="status" style="width:auto"><option value="">Všechny stavy</option><option value="invited"${status === 'invited' ? ' selected' : ''}>Čeká na aktivaci</option><option value="active"${status === 'active' ? ' selected' : ''}>Aktivní</option><option value="blocked"${status === 'blocked' ? ' selected' : ''}>Blokovaní</option></select>
     <button class="btn sec" type="submit">Filtrovat</button><a class="btn" href="/admin/supporters/new">+ Přidat</a>
   </form>
-  <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Jméno</th><th>E-mail</th><th>Nick</th><th>Stav</th><th>Poslední přihlášení</th><th></th></tr></thead><tbody>${rowsHtml || '<tr><td colspan="6" class="muted">Nic nenalezeno.</td></tr>'}</tbody></table></div>`, holyosUrl);
+  <div class="row" style="justify-content:flex-end;margin:-6px 0 8px">${picker}</div>
+  <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
+  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
@@ -229,4 +269,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { esc, layout, loginPage, activatePage, supporterHome, passwordPage, adminDash, adminSupporters, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, supporterHome, passwordPage, adminDash, adminSupporters, adminSupporterDetail, adminImport, errorPage };
