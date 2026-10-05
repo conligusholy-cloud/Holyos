@@ -617,19 +617,38 @@ router.get('/batches-plan', async (req, res, next) => {
       select: {
         id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, original_planned_start: true, original_planned_end: true, actual_start: true, actual_end: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
         product: { select: { id: true, code: true, name: true } },
-        batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workers: { select: { person: { select: { id: true, first_name: true, last_name: true } } } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
+        batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workers: { select: { person: { select: { id: true, first_name: true, last_name: true } } } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
       },
       orderBy: [{ planned_start: 'asc' }, { priority: 'desc' }, { id: 'desc' }],
       take: 500,
     });
-    res.json(batches.map(b => ({
+    const now = Date.now();
+    res.json(batches.map(b => {
+      // Skutečnost: start = první zahájená operace; konec = když jsou všechny hotové. Předpoklad konce = plán + zpoždění
+      // z dosud odvedených / rozpracovaných operací (dokončeno později než plán → posun).
+      const ops = b.batch_operations;
+      const started = ops.filter(o => o.started_at).map(o => new Date(o.started_at).getTime());
+      const actual_start = b.actual_start || (started.length ? new Date(Math.min(...started)) : null);
+      const allDone = ops.length && ops.every(o => o.status === 'done' || o.status === 'cancelled');
+      const finished = ops.filter(o => o.finished_at).map(o => new Date(o.finished_at).getTime());
+      const actual_end = b.actual_end || (allDone && finished.length ? new Date(Math.max(...finished)) : null);
+      let delayMs = 0;
+      for (const o of ops) {
+        if (!o.planned_end) continue;
+        if (o.status === 'done' && o.finished_at) delayMs = Math.max(delayMs, new Date(o.finished_at) - new Date(o.planned_end));
+        else if (o.status === 'in_progress') delayMs = Math.max(delayMs, now - new Date(o.planned_end));
+        else if (o.planned_start && new Date(o.planned_start).getTime() < now && !o.started_at && b.status !== 'planned') delayMs = Math.max(delayMs, now - new Date(o.planned_start));
+      }
+      const forecast_end = actual_end ? null : (b.planned_end ? new Date(new Date(b.planned_end).getTime() + Math.max(0, delayMs)) : null);
+      return {
       ...b,
+      actual_start, actual_end, forecast_end, delay_minutes: Math.round(Math.max(0, delayMs) / 60000),
       ops_total: b.batch_operations.length,
       ops_done: b.batch_operations.filter(o => o.status === 'done').length,
       ops_planned: b.batch_operations.filter(o => o.planned_start).length,
       people: [...new Map(b.batch_operations.flatMap(o => (o.workers && o.workers.length ? o.workers.map(w => w.person) : (o.assigned_person ? [o.assigned_person] : []))).map(p => [p.id, p])).values()],
       workstations: [...new Map(b.batch_operations.filter(o => o.workstation).map(o => [o.workstation.id, o.workstation])).values()],
-    })));
+    }; }));
   } catch (err) { next(err); }
 });
 
