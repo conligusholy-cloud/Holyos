@@ -203,16 +203,22 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
   <p><a href="/admin/supporters">← seznam</a></p>
   <h1>${isNew ? 'Nový podporovatel' : esc([s.last_name, s.first_name].filter(Boolean).join(' ') || s.email)}</h1>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
-  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
-    <div class="card"><h2 style="margin-top:0">Údaje</h2>
+  <style>
+    .sec{padding:0} .sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;font-size:17px;font-weight:700;user-select:none}
+    .sec>summary::-webkit-details-marker{display:none} .sec>summary .chev{transition:transform .2s;color:var(--text2);font-size:13px} .sec[open]>summary .chev{transform:rotate(90deg)}
+    .sec>.sec-body{padding:0 16px 16px} .sec:not([open])>summary{padding-bottom:14px}
+    .grid-sec{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;align-items:start}
+  </style>
+  <div class="grid-sec">
+    <details class="card sec" data-sec="udaje" open><summary>Údaje <span class="chev">▶</span></summary><div class="sec-body">
       <form method="post" action="${isNew ? '/admin/supporters/new' : '/admin/supporters/' + s.id}">
         <label>E-mail (klíč pro první přihlášení)</label><input name="email" type="email" value="${esc(s ? s.email : '')}" required>
         <label>Jméno</label><input name="first_name" value="${esc(s ? s.first_name : '')}">
         <label>Příjmení</label><input name="last_name" value="${esc(s ? s.last_name : '')}">
         <div style="height:12px"></div><button class="btn" type="submit">${isNew ? 'Vytvořit' : 'Uložit'}</button>
       </form>
-    </div>
-    ${isNew ? '' : `<div class="card"><h2 style="margin-top:0">Účet</h2>
+    </div></details>
+    ${isNew ? '' : `<details class="card sec" data-sec="ucet" open><summary>Účet <span class="chev">▶</span></summary><div class="sec-body">
       <div class="list-item"><span class="muted">Stav</span><span class="badge ${esc(s.status)}">${s.status}</span></div>
       <div class="list-item"><span class="muted">Nick</span><b>${esc(s.nick || '—')}</b></div>
       <div class="list-item"><span class="muted">Aktivován</span><span>${fmtDT(s.activated_at)}</span></div>
@@ -223,9 +229,15 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? '✓ Odblokovat' : '⛔ Blokovat'}</button></form>
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat podporovatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
       </div>
-    </div>
-    <div class="card"><h2 style="margin-top:0">Další údaje z importu <span class="muted small">(${keys.length})</span></h2>${extra}</div>`}
-  </div>`, holyosUrl);
+    </div></details>
+    <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
+  </div>
+  <script>
+  // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny podporovatele
+  (function(){var KEY='bs2.detail.sections';var st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+    document.querySelectorAll('details.sec').forEach(function(d){var k=d.getAttribute('data-sec');if(st[k]===false)d.removeAttribute('open');
+      d.addEventListener('toggle',function(){st[k]=d.open;try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}});});})();
+  </script>`, holyosUrl);
 }
 function adminImport({ admin, result = null, error = '', holyosUrl, job = null }) {
   let res = '';
