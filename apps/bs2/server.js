@@ -249,6 +249,17 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
     res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.'));
   } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný podporovatel.' : e.message, holyosUrl: HOLYOS_URL })); }
 }));
+// Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá podporovateli), ten si ho pak změní v Můj účet
+app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = require('crypto').randomBytes(10);
+  const pwd = Array.from(bytes, b => alphabet[b % alphabet.length]).join('');
+  const hash = await bcrypt.hash(pwd, 10);
+  const r = await q("UPDATE supporters SET password_hash=$2, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'active' END, activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE id=$1 RETURNING nick, email", [req.params.id, hash]);
+  await log(req.admin, 'new_password', { id: Number(req.params.id) });
+  const u = r.rows[0] || {};
+  res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Nové dočasné heslo pro ' + (u.nick || u.email) + ': ' + pwd + ' — pošli ho podporovateli, ať si ho po přihlášení změní.'));
+}));
 app.post('/admin/supporters/:id(\\d+)/reset', requireAdmin, wrap(async (req, res) => {
   await q("UPDATE supporters SET nick=NULL, password_hash=NULL, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'invited' END, activated_at=NULL, updated_at=now() WHERE id=$1", [req.params.id]);
   await log(req.admin, 'reset', { id: Number(req.params.id) });

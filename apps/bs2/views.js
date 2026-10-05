@@ -299,7 +299,8 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div class="list-item"><span class="muted">Poslední přihlášení</span><span>${fmtDT(s.last_login_at)}</span></div>
       <div class="list-item"><span class="muted">Import</span><span class="small">${esc(s.source || '—')} ${s.imported_at ? '· ' + fmtDT(s.imported_at) : ''}</span></div>
       <div class="row" style="margin-top:12px">
-        <form method="post" action="/admin/supporters/${s.id}/reset" onsubmit="return confirm('Smazat nick i heslo? Podporovatel si účet znovu aktivuje e-mailem.')"><button class="btn sec sm" type="submit">↺ Reset přihlášení</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">🔑 Nové heslo</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/reset" onsubmit="return confirm('Smazat nick i heslo? Podporovatel si účet znovu aktivuje e-mailem na /activate.')"><button class="btn sec sm" type="submit">↺ Reset přihlášení</button></form>
         <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? '✓ Odblokovat' : '⛔ Blokovat'}</button></form>
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat podporovatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
       </div>
