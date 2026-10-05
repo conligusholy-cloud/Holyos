@@ -656,7 +656,14 @@ router.post('/material-tasks/done', async (req, res, next) => {
       update: { done_at: new Date(), done_by_person_id: personId, qty: b.qty != null ? Number(b.qty) : undefined, note: b.note || undefined },
       create: { kind, batch_operation_id: opId, material_id: matId, done_by_person_id: personId, qty: b.qty != null ? Number(b.qty) : null, note: b.note || null },
     });
-    res.status(201).json({ ok: true, done: row });
+    // Automaticky: jakmile je pro operaci připraveno vše, zkus ji posunout na dřívější termín
+    // (jen když má pracoviště i přiřazení lidé volno — jinak zůstane, kde je).
+    let pulled = null;
+    try {
+      const { pullOperationEarlier } = require('../services/planning/pull-earlier');
+      pulled = await pullOperationEarlier(opId);
+    } catch (e) { pulled = { ok: false, moved: false, reason: e.message }; }
+    res.status(201).json({ ok: true, done: row, pulled });
   } catch (err) { next(err); }
 });
 

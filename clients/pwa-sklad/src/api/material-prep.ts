@@ -63,8 +63,13 @@ export async function listPrepTasks(days = 7): Promise<PrepResponse> {
   return apiFetch<PrepResponse>(`/api/planning/material-tasks?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 }
 
-export async function markPrepared(key: string, qty?: number): Promise<void> {
-  await apiFetch('/api/planning/material-tasks/done', { method: 'POST', body: { key, qty } });
+export interface MarkPreparedResult {
+  ok: boolean;
+  pulled?: PullEarlierResult | null; // server po označení automaticky zkusí posunout výrobu dřív
+}
+
+export async function markPrepared(key: string, qty?: number): Promise<MarkPreparedResult> {
+  return apiFetch<MarkPreparedResult>('/api/planning/material-tasks/done', { method: 'POST', body: { key, qty } });
 }
 
 export async function unmarkPrepared(key: string): Promise<void> {

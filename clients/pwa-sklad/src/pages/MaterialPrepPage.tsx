@@ -1,12 +1,12 @@
 // HolyOS PWA — Příprava materiálu pro výrobu
 // Skladník vidí z plánu výroby, CO má KAM a NA KDY připravit (materiál na vstupní sklad
 // pracoviště + přesun rozpracovaného výrobku na další pracoviště). Úkol odškrtne jako
-// „Připraveno". Když je připraveno dřív, může zkusit „Posunout výrobu dřív" — server
-// posune operaci, jen pokud má pracoviště i montér (přiřazení lidé) volno.
+// „Připraveno". Server pak AUTOMATICKY zkusí posunout výrobu dřív — operace se posune,
+// jen pokud má pracoviště i montér (přiřazení lidé) volno; výsledek se ukáže v hlášce.
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listPrepTasks, markPrepared, unmarkPrepared, pullEarlier, type PrepTask } from '../api/material-prep';
+import { listPrepTasks, markPrepared, unmarkPrepared, type PrepTask } from '../api/material-prep';
 import { ApiError } from '../api/client';
 
 function fmtTime(iso: string | null | undefined): string {
@@ -65,24 +65,21 @@ export default function MaterialPrepPage() {
   async function onToggle(t: PrepTask) {
     setBusyKey(t.key);
     try {
-      if (t.prepared) await unmarkPrepared(t.key); else await markPrepared(t.key, t.qty);
-      setTasks(prev => prev.map(x => x.key === t.key ? { ...x, prepared: !t.prepared, status: !t.prepared ? 'prepared' : 'ok' } : x));
-    } catch (e) { showToast(e instanceof ApiError ? e.message : 'Uložení selhalo'); }
-    finally { setBusyKey(null); }
-  }
-
-  async function onPullEarlier(t: PrepTask) {
-    if (!confirm(`Posunout výrobu dřív?\n\n${t.operation.step}. ${t.operation.name} · ${t.batch.product.code} (dávka ${t.batch.batch_number})\n\nPosune se jen, když má pracoviště i montér volno.`)) return;
-    setBusyKey(t.key + ':pull');
-    try {
-      const r = await pullEarlier(t.operation.batch_operation_id);
-      if (r.moved && r.to_start) {
-        showToast(`✅ Výroba posunuta: ${new Date(r.to_start).toLocaleString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
-        await reload();
+      if (t.prepared) {
+        await unmarkPrepared(t.key);
+        setTasks(prev => prev.map(x => x.key === t.key ? { ...x, prepared: false, status: 'ok' } : x));
       } else {
-        showToast('⏸ ' + (r.reason || 'Dřívější termín není k dispozici.'));
+        // Server po označení sám zkusí posunout výrobu dřív (když má pracoviště i montér volno)
+        const r = await markPrepared(t.key, t.qty);
+        setTasks(prev => prev.map(x => x.key === t.key ? { ...x, prepared: true, status: 'prepared' } : x));
+        if (r.pulled && r.pulled.moved && r.pulled.to_start) {
+          showToast(`✅ Připraveno · výroba posunuta na ${new Date(r.pulled.to_start).toLocaleString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
+          await reload();
+        } else {
+          showToast('✅ Připraveno' + (r.pulled && r.pulled.reason ? ` · výroba zůstává (${r.pulled.reason})` : ''));
+        }
       }
-    } catch (e) { showToast(e instanceof ApiError ? e.message : 'Posun selhal'); }
+    } catch (e) { showToast(e instanceof ApiError ? e.message : 'Uložení selhalo'); }
     finally { setBusyKey(null); }
   }
 
@@ -121,7 +118,7 @@ export default function MaterialPrepPage() {
             <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '.04em', color: '#9aa0ad', margin: '8px 0 8px' }}>{dayLabel(list[0].due)}</h3>
             {list.map(t => {
               const b = statusBadge(t);
-              const isBusy = busyKey === t.key || busyKey === t.key + ':pull';
+              const isBusy = busyKey === t.key;
               return (
                 <div key={t.key} style={{
                   background: t.prepared ? 'rgba(34,197,94,0.07)' : 'var(--card2, #1b1f2a)',
@@ -148,12 +145,6 @@ export default function MaterialPrepPage() {
                       style={{ flex: 1, background: t.prepared ? 'transparent' : '#22c55e', color: t.prepared ? '#9aa0ad' : '#052e13', border: t.prepared ? '1px solid rgba(255,255,255,0.15)' : 'none', fontWeight: 700, padding: '12px 10px', borderRadius: 12 }}>
                       {t.prepared ? '↩ Vrátit' : '✓ Připraveno'}
                     </button>
-                    {t.prepared && (
-                      <button type="button" disabled={isBusy} onClick={() => onPullEarlier(t)} className="btn"
-                        style={{ flex: 1, background: '#3b82f6', color: '#fff', border: 'none', fontWeight: 700, padding: '12px 10px', borderRadius: 12 }}>
-                        ⏩ Posunout výrobu dřív
-                      </button>
-                    )}
                   </div>
                 </div>
               );
