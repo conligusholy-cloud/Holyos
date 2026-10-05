@@ -101,4 +101,4 @@ function authShell({ title, card, members = null, esc }) {
 <script>${AUTH_JS}</script></body></html>`;
 }
 
-module.exports = { authShell, ICON };
+module.exports = { authShell, ICON, AUTH_JS };
