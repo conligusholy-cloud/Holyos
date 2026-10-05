@@ -134,7 +134,7 @@ function supporterHome(s) {
   return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
   <div class="hero">
     <div class="eyebrow"><i></i>Účet · aktivní</div>
-    <h1><span class="g">Vítej, ${esc(s.nick)}</span></h1>
+    <h1><span class="g">Vítej, ${esc(require('./vocative').vocativeName(s.first_name, s.last_name) || s.nick)}</span></h1>
     <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
   </div>
   <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
