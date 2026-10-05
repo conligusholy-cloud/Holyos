@@ -15,7 +15,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { q, migrate } = require('./db');
 const V = require('./views');
-const { importSupporters } = require('./import');
+const { importSupporters, prepareImport, writeImport } = require('./import');
 
 const PORT = process.env.PORT || 3100;
 const SSO_SECRET = process.env.BS2_SSO_SECRET;
@@ -213,15 +213,44 @@ app.post('/admin/supporters/:id(\\d+)/delete', requireAdmin, wrap(async (req, re
   await q('DELETE FROM supporters WHERE id=$1', [req.params.id]); await log(req.admin, 'delete', { id: Number(req.params.id), email: s && s.email });
   res.redirect('/admin/supporters?msg=' + encodeURIComponent('Podporovatel smazán.'));
 }));
-app.get('/admin/import', requireAdmin, (req, res) => res.send(V.adminImport({ admin: req.admin, holyosUrl: HOLYOS_URL })));
+// Import běží na pozadí (28k řádků by přes proxy vypršelo) — úloha v paměti + průběh přes /admin/import/status/:id
+const importJobs = new Map();
+app.get('/admin/import', requireAdmin, (req, res) => {
+  const job = req.query.job ? importJobs.get(String(req.query.job)) : null;
+  if (job && job.done) return res.send(V.adminImport({ admin: req.admin, result: job.result, holyosUrl: HOLYOS_URL }));
+  res.send(V.adminImport({ admin: req.admin, job, holyosUrl: HOLYOS_URL }));
+});
+app.get('/admin/import/status/:id', requireAdmin, (req, res) => {
+  const j = importJobs.get(req.params.id);
+  if (!j) return res.status(404).json({ error: 'Úloha nenalezena (server se mezitím restartoval?)' });
+  res.json({ id: j.id, total: j.total, processed: j.processed, done: j.done, error: j.error || null, started_at: j.started_at, finished_at: j.finished_at || null,
+    created: j.result.created, updated: j.result.updated, skipped: j.result.skipped, errors: j.result.errors.length });
+});
 app.post('/admin/import', requireAdmin, upload.single('file'), wrap(async (req, res) => {
   if (!req.file) return res.status(400).send(V.adminImport({ admin: req.admin, error: 'Vyber soubor.', holyosUrl: HOLYOS_URL }));
-  try {
-    const result = await importSupporters(req.file.buffer, req.file.originalname, { dry: req.body.dry === '1' });
-    if (req.body.dry === '1') result.file += ' (jen zkouška, nic neuloženo)';
-    else await log(req.admin, 'import', { file: req.file.originalname, rows: result.rows, created: result.created, updated: result.updated });
-    res.send(V.adminImport({ admin: req.admin, result, holyosUrl: HOLYOS_URL }));
-  } catch (e) { res.status(400).send(V.adminImport({ admin: req.admin, error: 'Soubor se nepodařilo zpracovat: ' + e.message, holyosUrl: HOLYOS_URL })); }
+  let prep;
+  try { prep = prepareImport(req.file.buffer, req.file.originalname); }
+  catch (e) { return res.status(400).send(V.adminImport({ admin: req.admin, error: 'Soubor se nepodařilo zpracovat: ' + e.message, holyosUrl: HOLYOS_URL })); }
+  const { result, prepared } = prep;
+  if (req.body.dry === '1' || !prepared.length) {
+    result.created = prepared.length; result.file += req.body.dry === '1' ? ' (jen zkouška, nic neuloženo)' : '';
+    return res.send(V.adminImport({ admin: req.admin, result, holyosUrl: HOLYOS_URL }));
+  }
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const job = { id, total: prepared.length, processed: 0, done: false, started_at: new Date().toISOString(), result };
+  importJobs.set(id, job);
+  // po hodině uklidit
+  setTimeout(() => importJobs.delete(id), 3600e3).unref();
+  const admin = req.admin;
+  setImmediate(async () => {
+    try { await writeImport(prepared, result, { onProgress: (n) => { job.processed = n; } }); }
+    catch (e) { job.error = e.message; result.errors.unshift('Import přerušen: ' + e.message); }
+    finally {
+      job.done = true; job.finished_at = new Date().toISOString();
+      await log(admin, 'import', { file: req.file.originalname, rows: result.rows, created: result.created, updated: result.updated, skipped: result.skipped, nick_conflicts: result.nick_conflicts, error: job.error || null });
+    }
+  });
+  res.redirect('/admin/import?job=' + id);
 }));
 
 // ── Chyby ──────────────────────────────────────────────────────────────────

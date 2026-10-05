@@ -59,89 +59,107 @@ function parseBuffer(buf, filename) {
 
 const clean = (v) => { if (v == null) return null; if (v instanceof Date) return v.toISOString().slice(0, 19).replace('T', ' '); const s = String(v).trim(); return s === '' || s === 'NULL' ? null : s; };
 
+const UPSERT_TAIL = `
+  ON CONFLICT (email) DO UPDATE SET
+    first_name    = COALESCE(EXCLUDED.first_name, supporters.first_name),
+    last_name     = COALESCE(EXCLUDED.last_name,  supporters.last_name),
+    extra         = supporters.extra || EXCLUDED.extra,
+    nick          = COALESCE(supporters.nick, EXCLUDED.nick),
+    password_hash = COALESCE(supporters.password_hash, EXCLUDED.password_hash),
+    status        = CASE WHEN supporters.status = 'blocked' THEN 'blocked'
+                         WHEN COALESCE(supporters.password_hash, EXCLUDED.password_hash) IS NOT NULL AND COALESCE(supporters.nick, EXCLUDED.nick) IS NOT NULL THEN 'active'
+                         ELSE supporters.status END,
+    activated_at  = COALESCE(supporters.activated_at, EXCLUDED.activated_at),
+    source = EXCLUDED.source, imported_at = now(), updated_at = now()
+  RETURNING (xmax = 0) AS inserted`;
+// Dávkový upsert přes unnest (jeden dotaz na stovky řádků)
+const SQL_BATCH = `INSERT INTO supporters (email, first_name, last_name, extra, source, imported_at, nick, password_hash, status, activated_at)
+  SELECT t.email, t.first_name, t.last_name, t.extra::jsonb, t.source, now(), t.nick, t.password_hash, t.status, CASE WHEN t.status = 'active' THEN now() ELSE NULL END
+  FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[]) AS t(email, first_name, last_name, extra, source, nick, password_hash, status)` + UPSERT_TAIL;
+const SQL_ONE = `INSERT INTO supporters (email, first_name, last_name, extra, source, imported_at, nick, password_hash, status, activated_at)
+  VALUES ($1, $2, $3, $4::jsonb, $5, now(), $6, $7, $8, CASE WHEN $8 = 'active' THEN now() ELSE NULL END)` + UPSERT_TAIL;
+const SQL_ONE_NONICK = `INSERT INTO supporters (email, first_name, last_name, extra, source, imported_at, nick, password_hash, status, activated_at)
+  VALUES ($1, $2, $3, $4::jsonb, $5, now(), NULL, $6, 'invited', NULL)` + UPSERT_TAIL;
+
 /**
- * @returns {Promise<{file, rows, created, updated, skipped, with_password, nick_conflicts, errors[], map, extraCols[]}>}
+ * Připraví řádky (validace, mapování) — rychlé, synchronní. Vrací { result, prepared }.
  */
-async function importSupporters(buf, filename, { dry = false } = {}) {
+function prepareImport(buf, filename) {
   const { rows, headers } = parseBuffer(buf, filename);
   const map = detectColumns(headers);
   const result = { file: filename, rows: rows.length, created: 0, updated: 0, skipped: 0, with_password: 0, nick_conflicts: 0, errors: [], map, extraCols: [] };
-  if (!rows.length) { result.errors.push('Soubor neobsahuje žádné řádky.'); return result; }
+  if (!rows.length) { result.errors.push('Soubor neobsahuje žádné řádky.'); return { result, prepared: [] }; }
   if (!map.email) {
     for (const h of headers) { const hits = rows.slice(0, 50).filter(r => EMAIL_RE.test(String(r[h] || '').trim())).length; if (hits >= Math.min(rows.length, 50) * 0.5) { map.email = h; break; } }
   }
-  if (!map.email) { result.errors.push('Nenašel jsem sloupec s e-mailem.'); return result; }
+  if (!map.email) { result.errors.push('Nenašel jsem sloupec s e-mailem.'); return { result, prepared: [] }; }
   const used = new Set([map.email, map.first_name, map.last_name, map.full_name, map.nick, map.password].filter(Boolean));
   result.extraCols = headers.filter(h => !used.has(h) && String(h).trim() && !/^__EMPTY/.test(h));
 
-  const client = dry ? null : await pool.connect();
-  const seen = new Set();
-  try {
-    if (client) await client.query('BEGIN');
-    for (let i = 0; i < rows.length; i++) {
-      const r = rows[i];
-      const email = String(r[map.email] || '').trim().toLowerCase();
-      if (!email) { result.skipped++; result.errors.push(`Řádek ${i + 2}: prázdný e-mail (přeskočeno)`); continue; }
-      if (!EMAIL_RE.test(email)) { result.skipped++; result.errors.push(`Řádek ${i + 2}: neplatný e-mail „${email}" (přeskočeno)`); continue; }
-      if (seen.has(email)) { result.skipped++; result.errors.push(`Řádek ${i + 2}: duplicitní e-mail ${email} (použit první výskyt)`); continue; }
-      seen.add(email);
-      let first_name = map.first_name ? clean(r[map.first_name]) : null;
-      let last_name = map.last_name ? clean(r[map.last_name]) : null;
-      if (map.full_name && (!first_name || !last_name)) { const sp = splitFullName(r[map.full_name]); first_name = first_name || sp.first_name; last_name = last_name || sp.last_name; }
-      const nick = map.nick ? clean(r[map.nick]) : null;
-      const pw = map.password ? clean(r[map.password]) : null;
-      const hash = pw && BCRYPT_RE.test(pw) ? pw : null;
-      if (hash) result.with_password++;
-      const extra = {};
-      for (const h of result.extraCols) { const v = clean(r[h]); if (v !== null) extra[String(h).trim()] = v; }
-      if (pw && !hash) extra[map.password] = pw; // nebcryptové heslo nelze použít k přihlášení — uložíme jen jako údaj
-      const status = (hash && nick) ? 'active' : 'invited';
+  const seen = new Set(); const prepared = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const email = String(r[map.email] || '').trim().toLowerCase();
+    if (!email) { result.skipped++; result.errors.push(`Řádek ${i + 2}: prázdný e-mail (přeskočeno)`); continue; }
+    if (!EMAIL_RE.test(email)) { result.skipped++; result.errors.push(`Řádek ${i + 2}: neplatný e-mail „${email}" (přeskočeno)`); continue; }
+    if (seen.has(email)) { result.skipped++; result.errors.push(`Řádek ${i + 2}: duplicitní e-mail ${email} (použit první výskyt)`); continue; }
+    seen.add(email);
+    let first_name = map.first_name ? clean(r[map.first_name]) : null;
+    let last_name = map.last_name ? clean(r[map.last_name]) : null;
+    if (map.full_name && (!first_name || !last_name)) { const sp = splitFullName(r[map.full_name]); first_name = first_name || sp.first_name; last_name = last_name || sp.last_name; }
+    const nick = map.nick ? clean(r[map.nick]) : null;
+    const pw = map.password ? clean(r[map.password]) : null;
+    const hash = pw && BCRYPT_RE.test(pw) ? pw : null;
+    if (hash) result.with_password++;
+    const extra = {};
+    for (const h of result.extraCols) { const v = clean(r[h]); if (v !== null) extra[String(h).trim()] = v; }
+    if (pw && !hash) extra[map.password] = pw;
+    prepared.push({ line: i + 2, email, first_name, last_name, extra: JSON.stringify(extra), nick, hash, status: (hash && nick) ? 'active' : 'invited' });
+  }
+  return { result, prepared };
+}
 
-      if (dry) { result.created++; continue; }
-      const UPSERT_TAIL = `
-        ON CONFLICT (email) DO UPDATE SET
-          first_name    = COALESCE(EXCLUDED.first_name, supporters.first_name),
-          last_name     = COALESCE(EXCLUDED.last_name,  supporters.last_name),
-          extra         = supporters.extra || EXCLUDED.extra,
-          nick          = COALESCE(supporters.nick, EXCLUDED.nick),
-          password_hash = COALESCE(supporters.password_hash, EXCLUDED.password_hash),
-          status        = CASE WHEN supporters.status = 'blocked' THEN 'blocked'
-                               WHEN COALESCE(supporters.password_hash, EXCLUDED.password_hash) IS NOT NULL AND COALESCE(supporters.nick, EXCLUDED.nick) IS NOT NULL THEN 'active'
-                               ELSE supporters.status END,
-          activated_at  = COALESCE(supporters.activated_at, EXCLUDED.activated_at),
-          source = EXCLUDED.source, imported_at = now(), updated_at = now()
-        RETURNING (xmax = 0) AS inserted`;
-      // s nickem (plná varianta) / bez nicku (když nick koliduje)
-      const sqlFull = `INSERT INTO supporters (email, first_name, last_name, extra, source, imported_at, nick, password_hash, status, activated_at)
-        VALUES ($1, $2, $3, $4::jsonb, $5, now(), $6, $7, $8, CASE WHEN $8 = 'active' THEN now() ELSE NULL END)` + UPSERT_TAIL;
-      const sqlNoNick = `INSERT INTO supporters (email, first_name, last_name, extra, source, imported_at, nick, password_hash, status, activated_at)
-        VALUES ($1, $2, $3, $4::jsonb, $5, now(), NULL, $6, 'invited', NULL)` + UPSERT_TAIL;
-      const base = [email, first_name, last_name, JSON.stringify(extra), filename];
+/**
+ * Zapíše připravené řádky do DB po dávkách. onProgress(processed) se volá po každé dávce.
+ */
+async function writeImport(prepared, result, { onProgress, batchSize = 300 } = {}) {
+  const client = await pool.connect();
+  let processed = 0;
+  try {
+    for (let off = 0; off < prepared.length; off += batchSize) {
+      const chunk = prepared.slice(off, off + batchSize);
       try {
-        await client.query('SAVEPOINT row_sp');
-        let up;
-        try { up = await client.query(sqlFull, base.concat([nick, hash, status])); }
-        catch (e) {
-          if (e.code === '23505' && /nick/.test(e.constraint || e.detail || '')) {
-            // nick už má někdo jiný → uložíme bez nicku (uživatel si ho zvolí při aktivaci)
-            await client.query('ROLLBACK TO SAVEPOINT row_sp');
-            result.nick_conflicts++; result.errors.push(`Řádek ${i + 2}: nick „${nick}" už existuje — ${email} uložen bez nicku`);
-            up = await client.query(sqlNoNick, base.concat([hash]));
-          } else throw e;
-        }
-        await client.query('RELEASE SAVEPOINT row_sp');
-        if (up.rows[0].inserted) result.created++; else result.updated++;
+        const up = await client.query(SQL_BATCH, [chunk.map(x => x.email), chunk.map(x => x.first_name), chunk.map(x => x.last_name), chunk.map(x => x.extra), chunk.map(() => result.file), chunk.map(x => x.nick), chunk.map(x => x.hash), chunk.map(x => x.status)]);
+        for (const row of up.rows) { if (row.inserted) result.created++; else result.updated++; }
       } catch (e) {
-        try { await client.query('ROLLBACK TO SAVEPOINT row_sp'); } catch (e2) { /* */ }
-        result.skipped++; result.errors.push(`Řádek ${i + 2} (${email}): ${e.message}`);
+        // dávka spadla (typicky kolize nicku) → zpracuj po řádcích
+        for (const x of chunk) {
+          const base = [x.email, x.first_name, x.last_name, x.extra, result.file];
+          try {
+            let up;
+            try { up = await client.query(SQL_ONE, base.concat([x.nick, x.hash, x.status])); }
+            catch (e1) {
+              if (e1.code === '23505' && /nick/.test((e1.constraint || '') + (e1.detail || ''))) {
+                result.nick_conflicts++; result.errors.push(`Řádek ${x.line}: nick „${x.nick}" už existuje — ${x.email} uložen bez nicku`);
+                up = await client.query(SQL_ONE_NONICK, base.concat([x.hash]));
+              } else throw e1;
+            }
+            if (up.rows[0].inserted) result.created++; else result.updated++;
+          } catch (e2) { result.skipped++; result.errors.push(`Řádek ${x.line} (${x.email}): ${e2.message}`); }
+        }
       }
+      processed += chunk.length;
+      if (onProgress) onProgress(processed);
     }
-    if (client) await client.query('COMMIT');
-  } catch (e) {
-    if (client) { try { await client.query('ROLLBACK'); } catch (e2) { /* */ } }
-    throw e;
-  } finally { if (client) client.release(); }
+  } finally { client.release(); }
   return result;
 }
 
-module.exports = { importSupporters, detectColumns, parseBuffer };
+/** Jednorázový import (zkouška nebo malé soubory). */
+async function importSupporters(buf, filename, { dry = false, onProgress } = {}) {
+  const { result, prepared } = prepareImport(buf, filename);
+  if (dry || !prepared.length) { result.created = prepared.length; return result; }
+  return writeImport(prepared, result, { onProgress });
+}
+
+module.exports = { importSupporters, prepareImport, writeImport, detectColumns, parseBuffer };
