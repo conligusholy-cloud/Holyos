@@ -92,10 +92,10 @@ function authShell({ title, card, members = null, esc }) {
   <section class="hero">
     <div class="brand"><div class="mark">${logoSvg(44, 'a')}</div><b>Best Series <span>2.0</span></b></div>
     <div class="eyebrow"><i></i>Platforma nové generace · online</div>
-    <h1><span class="g">Vítej zpět</span><br>v komunitě podporovatelů</h1>
+    <h1><span class="g">Vítej zpět</span><br>v Best Series 2.0</h1>
     <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem jako dřív — zbytek je nový.</p>
     <div class="chips"><span>Šifrované připojení</span><span>Přístup z mobilu i počítače</span><span>Výhody pro členy</span></div>
-    ${members != null ? `<div class="stats"><div><b>${fmtN(members)}</b><small>aktivních členů</small></div><div><b>od 2014</b><small>s vámi</small></div></div>` : ''}
+    ${members != null ? `<div class="stats"><div><b>${fmtN(members)}</b><small>aktivních uživatelů</small></div><div><b>od 2014</b><small>s vámi</small></div></div>` : ''}
   </section>
   <section class="side"><div class="card"><div class="in">${card}</div></div></section>
 </div>

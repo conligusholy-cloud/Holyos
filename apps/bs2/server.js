@@ -3,7 +3,7 @@
 //
 // Dva druhy přihlášení:
 //   • SPRÁVCE — z HolyOS: GET /api/auth/sso/bs2 → /sso?t=<JWT, BS2_SSO_SECRET, 2 min> → cookie bs2_admin (12 h)
-//   • PODPOROVATEL — e-mail musí být v tabulce supporters (import CSV/XLSX). První přihlášení přes
+//   • UŽIVATEL — e-mail musí být v tabulce supporters (import CSV/XLSX). První přihlášení přes
 //     /activate (e-mail → nick + heslo), pak /login nickem nebo e-mailem. Cookie bs2_user (30 dní).
 // Env: PORT, DATABASE_URL, BS2_SSO_SECRET, BS2_SESSION_SECRET, HOLYOS_URL, BS2_PUBLIC_URL,
 //      BS2_ALLOWED_PIDS (volitelně — čárkami person id správců z HolyOS)
@@ -83,7 +83,7 @@ app.get('/sso', (req, res) => {
   }
 });
 
-// ── Podporovatel: přihlášení / aktivace ─────────────────────────────────────
+// ── Uživatel: přihlášení / aktivace ─────────────────────────────────────
 // Počet aktivních členů na přihlašovací stránce (cache 10 min, při chybě DB se číslo nezobrazí)
 let _members = { n: null, at: 0 };
 async function memberCount() {
@@ -130,7 +130,7 @@ app.post('/activate', wrap(async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   const r = await q('SELECT * FROM supporters WHERE email=$1', [email]);
   const u = r.rows[0];
-  if (!u) { noteFail(ip); return res.status(404).send(V.activatePage({ step: 'email', email, error: 'Tento e-mail v seznamu podporovatelů nemáme. Zkontroluj překlep, nebo nám napiš.' })); }
+  if (!u) { noteFail(ip); return res.status(404).send(V.activatePage({ step: 'email', email, error: 'Tento e-mail v seznamu uživatelů nemáme. Zkontroluj překlep, nebo nám napiš.' })); }
   if (u.status === 'blocked') return res.status(403).send(V.activatePage({ step: 'email', email, error: 'Tento účet je zablokovaný.' }));
   if (u.password_hash) return res.send(V.loginPage({ login: email, info: 'Tenhle účet už je aktivovaný — přihlas se heslem.' }));
   res.send(V.activatePage({ step: 'credentials', email, name: u.first_name, nick: (u.extra && u.extra.puvodni_nick) || '' }));
@@ -156,7 +156,7 @@ app.post('/activate/finish', wrap(async (req, res) => {
 }));
 app.get('/logout', (req, res) => { res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
 
-// ── Podporovatel: domů + heslo ──────────────────────────────────────────────
+// ── Uživatel: domů + heslo ──────────────────────────────────────────────
 app.get('/', (req, res, next) => {
   if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
   return requireUser(req, res, () => res.send(V.supporterHome(req.user)));
@@ -228,28 +228,28 @@ app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {
   try {
     const r = await q('INSERT INTO supporters (email, first_name, last_name, source) VALUES ($1,$2,$3,$4) RETURNING id', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, 'ručně']);
     await log(req.admin, 'create', { id: r.rows[0].id, email });
-    res.redirect('/admin/supporters/' + r.rows[0].id + '?msg=' + encodeURIComponent('Podporovatel založen.'));
+    res.redirect('/admin/supporters/' + r.rows[0].id + '?msg=' + encodeURIComponent('Uživatel založen.'));
   } catch (e) {
-    const error = e.code === '23505' ? 'Podporovatel s tímto e-mailem už existuje.' : e.message;
+    const error = e.code === '23505' ? 'Uživatel s tímto e-mailem už existuje.' : e.message;
     res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s: { email, first_name: req.body.first_name, last_name: req.body.last_name }, isNew: true, error, holyosUrl: HOLYOS_URL }));
   }
 }));
 async function loadSupporter(id) { const r = await q('SELECT * FROM supporters WHERE id=$1', [parseInt(id, 10) || 0]); return r.rows[0] || null; }
 app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
-  const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Podporovatel neexistuje.', '/admin/supporters'));
+  const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Uživatel neexistuje.', '/admin/supporters'));
   const firstLine = s.nick ? (await q("SELECT id,email,first_name,last_name,nick,status,extra FROM supporters WHERE id<>$1 AND lower(trim(extra->>'tab3')) = lower($2) ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 2000", [s.id, s.nick])).rows : [];
   res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine }));
 }));
 app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
-  const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Podporovatel neexistuje.', '/admin/supporters'));
+  const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Uživatel neexistuje.', '/admin/supporters'));
   const email = String(req.body.email || '').trim().toLowerCase();
   try {
     await q('UPDATE supporters SET email=$1, first_name=$2, last_name=$3, updated_at=now() WHERE id=$4', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, s.id]);
     await log(req.admin, 'update', { id: s.id, email });
     res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.'));
-  } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný podporovatel.' : e.message, holyosUrl: HOLYOS_URL })); }
+  } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný uživatel.' : e.message, holyosUrl: HOLYOS_URL })); }
 }));
-// Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá podporovateli), ten si ho pak změní v Můj účet
+// Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
   const bytes = require('crypto').randomBytes(10);
@@ -258,13 +258,9 @@ app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, 
   const r = await q("UPDATE supporters SET password_hash=$2, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'active' END, activated_at=COALESCE(activated_at, now()), updated_at=now() WHERE id=$1 RETURNING nick, email", [req.params.id, hash]);
   await log(req.admin, 'new_password', { id: Number(req.params.id) });
   const u = r.rows[0] || {};
-  res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Nové dočasné heslo pro ' + (u.nick || u.email) + ': ' + pwd + ' — pošli ho podporovateli, ať si ho po přihlášení změní.'));
+  res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Nové dočasné heslo pro ' + (u.nick || u.email) + ': ' + pwd + ' — pošli ho uživateli, ať si ho po přihlášení změní.'));
 }));
-app.post('/admin/supporters/:id(\\d+)/reset', requireAdmin, wrap(async (req, res) => {
-  await q("UPDATE supporters SET nick=NULL, password_hash=NULL, status=CASE WHEN status='blocked' THEN 'blocked' ELSE 'invited' END, activated_at=NULL, updated_at=now() WHERE id=$1", [req.params.id]);
-  await log(req.admin, 'reset', { id: Number(req.params.id) });
-  res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Přihlášení resetováno — podporovatel si účet znovu aktivuje e-mailem.'));
-}));
+// „Reset přihlášení" (smazání nicku + hesla) odstraněn 2026-10-05 na přání Tomáše — nahrazen akcí Nové heslo. Endpoint záměrně neexistuje.
 app.post('/admin/supporters/:id(\\d+)/block', requireAdmin, wrap(async (req, res) => {
   await q("UPDATE supporters SET status='blocked', updated_at=now() WHERE id=$1", [req.params.id]); await log(req.admin, 'block', { id: Number(req.params.id) });
   res.redirect('/admin/supporters/' + req.params.id + '?msg=' + encodeURIComponent('Účet zablokován.'));
@@ -276,7 +272,7 @@ app.post('/admin/supporters/:id(\\d+)/unblock', requireAdmin, wrap(async (req, r
 app.post('/admin/supporters/:id(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id);
   await q('DELETE FROM supporters WHERE id=$1', [req.params.id]); await log(req.admin, 'delete', { id: Number(req.params.id), email: s && s.email });
-  res.redirect('/admin/supporters?msg=' + encodeURIComponent('Podporovatel smazán.'));
+  res.redirect('/admin/supporters?msg=' + encodeURIComponent('Uživatel smazán.'));
 }));
 // Import běží na pozadí (28k řádků by přes proxy vypršelo) — úloha v paměti + průběh přes /admin/import/status/:id
 const importJobs = new Map();

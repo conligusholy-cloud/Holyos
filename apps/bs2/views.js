@@ -67,8 +67,8 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 @media (prefers-reduced-motion:reduce){.glow,.hero .eyebrow i{animation:none}}
 `;
 
-// Hlavní layout aplikace (podporovatel i admin) ve stejném vizuálu jako přihlášení.
-// fx:true přidá animovanou síť uzlů (podporovatelské stránky); záře + grid jsou vždy.
+// Hlavní layout aplikace (uživatel i admin) ve stejném vizuálu jako přihlášení.
+// fx:true přidá animovanou síť uzlů (uživatelské stránky); záře + grid jsou vždy.
 function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '', banner = null, fx = false }) {
   const { AUTH_JS } = require('./auth-shell');
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
@@ -85,7 +85,7 @@ ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).ma
 <main>${body}</main>${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
-// ── Veřejné / podporovatel ──────────────────────────────────────────────────
+// ── Veřejné / uživatel ──────────────────────────────────────────────────
 // Přihlášení a aktivace mají vlastní prémiový vizuál (auth-shell.js) — bez hlavičky aplikace.
 const { authShell, ICON } = require('./auth-shell');
 function field({ name, type = 'text', value = '', icon, placeholder = '', auto = '', extra = '', eye = false }) {
@@ -133,12 +133,12 @@ function supporterHome(s) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
   return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
   <div class="hero">
-    <div class="eyebrow"><i></i>Účet podporovatele · aktivní</div>
+    <div class="eyebrow"><i></i>Účet · aktivní</div>
     <h1><span class="g">Vítej, ${esc(s.nick)}</span></h1>
     <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
   </div>
   <div class="grid">
-    <div class="card"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Prostor pro podporovatele Best Series. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
+    <div class="card"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
       <div class="soon"><span>⚡</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
     <div class="card"><h2 style="margin-top:0">Můj účet</h2>
       <div class="list-item"><span class="muted">Nick</span><b>${esc(s.nick)}</b></div>
@@ -162,13 +162,13 @@ function passwordPage({ nick, error = '', ok = '' }) {
 // ── Admin (Tomáš, Jan přes SSO) ─────────────────────────────────────────────
 const ADMIN_NAV = [
   { id: 'dash', href: '/admin', label: 'Přehled', icon: '📊' },
-  { id: 'sup', href: '/admin/supporters', label: 'Podporovatelé', icon: '👥' },
+  { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: '👥' },
   { id: 'fl', href: '/admin/first-line', label: 'Moje první linie', icon: '🌱' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: '⬆️', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
   return layout({ title, active, nav: ADMIN_NAV, user: admin.name || admin.username, holyosUrl, body,
-    banner: { icon: '👥', title: 'Podporovatelé', subtitle: 'Správa podporovatelů Best Series, jejich přístupů a dalších agend na jednom místě' } });
+    banner: { icon: '👥', title: 'Uživatelé', subtitle: 'Správa uživatelů Best Series 2.0, jejich přístupů a dalších agend na jednom místě' } });
 }
 function adminDash({ admin, stats, recent, holyosUrl }) {
   return adminLayout('Přehled', 'dash', admin, `
@@ -182,7 +182,7 @@ function adminDash({ admin, stats, recent, holyosUrl }) {
 
   <div class="card"><h2 style="margin-top:0">Poslední přihlášení</h2>
   ${recent.length ? recent.map(r => `<div class="list-item"><span><b>${esc(r.nick || '—')}</b> <span class="muted">${esc(r.email)}</span></span><span class="muted small">${fmtDT(r.last_login_at)}</span></div>`).join('') : '<p class="muted">Zatím se nikdo nepřihlásil.</p>'}</div>
-  <p class="muted small">Přihlašovací stránka pro podporovatele: <code>${esc(process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz')}/login</code> — první přihlášení přes <code>/activate</code> (e-mail musí být v seznamu).</p>`, holyosUrl);
+  <p class="muted small">Přihlašovací stránka pro uživatele: <code>${esc(process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz')}/login</code> — první přihlášení přes <code>/activate</code> (e-mail musí být v seznamu).</p>`, holyosUrl);
 }
 // Sloupce seznamu: základní (pevně Jméno) + volitelné základní + libovolné údaje z importu. Výběr je v cookie bs2_cols.
 const BASE_COLS = [
@@ -222,7 +222,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
       </div>
       <div class="row" style="margin-top:10px;justify-content:flex-end"><button class="btn sec sm" type="submit" name="reset" value="1">Výchozí</button><button class="btn sm" type="submit">Uložit sloupce</button></div>
     </form></details>`;
-  return adminLayout('Podporovatelé', 'sup', admin, `
+  return adminLayout('Uživatelé', 'sup', admin, `
   <style>
     .colpick{position:relative} .colpick summary{list-style:none;cursor:pointer;display:inline-flex} .colpick summary::-webkit-details-marker{display:none}
     .colpick-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;width:min(560px,calc(100vw - 32px));box-shadow:0 12px 40px rgba(0,0,0,.5)}
@@ -232,7 +232,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
     .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
   </style>
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h1 style="margin:0">Podporovatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+    <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
     <div class="row"><a class="btn" href="/admin/import">⬆ Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
   </div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
@@ -244,7 +244,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
   <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
-// Moje první linie: podporovatelé, kterým je v poli tab3 (extra) nick přihlášeného správce
+// Moje první linie: uživatelé, kterým je v poli tab3 (extra) nick přihlášeného správce
 function adminFirstLine({ admin, nick = '', rows = [], msg = '', holyosUrl }) {
   const has = (k) => rows.some(r => r.extra && r.extra[k] != null && r.extra[k] !== '');
   const xcols = ['date', 'level', 'obrat', 'profit'].filter(has);
@@ -263,7 +263,7 @@ function adminFirstLine({ admin, nick = '', rows = [], msg = '', holyosUrl }) {
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
     <h1 style="margin:0">Moje první linie ${nick ? `<span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span>` : ''}</h1>
   </div>
-  <p class="muted" style="margin-top:0">Podporovatelé, které jsi přivedl ty — v poli <code>tab3</code> mají tvůj nick.</p>
+  <p class="muted" style="margin-top:0">Uživatelé, které jsi přivedl ty — v poli <code>tab3</code> mají tvůj nick.</p>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   ${form}
   ${nick ? `<div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${5 + xcols.length}" class="muted">Nikdo s tab3 = „${esc(nick)}" nenalezen.</td></tr>`}</tbody></table></div>` : '<p class="muted">Zadej svůj nick, ať vím, koho vypsat.</p>'}`, holyosUrl);
@@ -273,9 +273,9 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
   const extra = keys.length ? keys.map(k => `<div class="list-item"><span class="muted">${esc(k)}</span><span style="text-align:right;word-break:break-all">${esc(s.extra[k])}</span></div>`).join('') : '<p class="muted small">Žádné další údaje.</p>';
-  return adminLayout(isNew ? 'Nový podporovatel' : 'Detail', 'sup', admin, `
+  return adminLayout(isNew ? 'Nový uživatel' : 'Detail', 'sup', admin, `
   <p><a href="/admin/supporters">← seznam</a></p>
-  <h1>${isNew ? 'Nový podporovatel' : esc([s.last_name, s.first_name].filter(Boolean).join(' ') || s.email)}</h1>
+  <h1>${isNew ? 'Nový uživatel' : esc([s.last_name, s.first_name].filter(Boolean).join(' ') || s.email)}</h1>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   <style>
     .sec{padding:0} .sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;font-size:17px;font-weight:700;user-select:none}
@@ -300,15 +300,14 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div class="list-item"><span class="muted">Import</span><span class="small">${esc(s.source || '—')} ${s.imported_at ? '· ' + fmtDT(s.imported_at) : ''}</span></div>
       <div class="row" style="margin-top:12px">
         <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">🔑 Nové heslo</button></form>
-        <form method="post" action="/admin/supporters/${s.id}/reset" onsubmit="return confirm('Smazat nick i heslo? Podporovatel si účet znovu aktivuje e-mailem na /activate.')"><button class="btn sec sm" type="submit">↺ Reset přihlášení</button></form>
         <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? '✓ Odblokovat' : '⛔ Blokovat'}</button></form>
-        <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat podporovatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
+        <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
       </div>
     </div></details>
     <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
   </div>
   ${isNew ? '' : `<details class="card sec" data-sec="linie" open style="margin-top:12px"><summary><span>První linie <span class="muted small">(${firstLine.length}) — kdo má v poli tab3 nick „${esc(s.nick || '—')}"</span></span><span class="chev">▶</span></summary><div class="sec-body">
-    ${!s.nick ? '<p class="muted small">Podporovatel nemá nick, první linii nelze určit.</p>' : firstLine.length ? `<div class="tbl-wrap"><table class="cards"><thead><tr><th>Jméno</th><th>Nick</th><th>E-mail</th><th>Stav</th><th>Registrace</th><th>Level</th><th>Obrat</th><th></th></tr></thead><tbody>${firstLine.map(r => `<tr>
+    ${!s.nick ? '<p class="muted small">Uživatel nemá nick, první linii nelze určit.</p>' : firstLine.length ? `<div class="tbl-wrap"><table class="cards"><thead><tr><th>Jméno</th><th>Nick</th><th>E-mail</th><th>Stav</th><th>Registrace</th><th>Level</th><th>Obrat</th><th></th></tr></thead><tbody>${firstLine.map(r => `<tr>
       <td data-l="Jméno"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
       <td data-l="Nick">${r.nick ? esc(r.nick) : '<span class="muted">—</span>'}</td>
       <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
@@ -319,7 +318,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="muted small">Nikoho nepřivedl.</p>'}
   </div></details>`}
   <script>
-  // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny podporovatele
+  // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny uživatele
   (function(){var KEY='bs2.detail.sections';var st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
     document.querySelectorAll('details.sec').forEach(function(d){var k=d.getAttribute('data-sec');if(st[k]===false)d.removeAttribute('open');
       d.addEventListener('toggle',function(){st[k]=d.open;try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}});});})();
@@ -351,11 +350,11 @@ function adminImport({ admin, result = null, error = '', holyosUrl, job = null }
       <div class="grid"><div class="stat"><div class="v">${result.rows}</div><div class="l">Řádků</div></div><div class="stat"><div class="v" style="color:var(--ok)">${result.created}</div><div class="l">Nových</div></div><div class="stat"><div class="v" style="color:var(--blue)">${result.updated}</div><div class="l">Aktualizováno</div></div><div class="stat"><div class="v" style="color:var(--err)">${result.skipped}</div><div class="l">Přeskočeno (neplatný / duplicitní e-mail)</div></div>${result.with_password != null ? `<div class="stat"><div class="v" style="color:var(--ok)">${result.with_password}</div><div class="l">S přeneseným heslem (přihlásí se hned)</div></div>` : ''}${result.nick_conflicts ? `<div class="stat"><div class="v" style="color:var(--accent2)">${result.nick_conflicts}</div><div class="l">Kolize nicku (zvolí si nový)</div></div>` : ''}</div>
       <p class="muted small">Rozpoznané sloupce: e-mail = <code>${esc(result.map.email || '?')}</code>, jméno = <code>${esc(result.map.first_name || '—')}</code>, příjmení = <code>${esc(result.map.last_name || '—')}</code>${result.map.full_name ? `, celé jméno = <code>${esc(result.map.full_name)}</code>` : ''}. ${result.map.nick ? `, nick = <code>${esc(result.map.nick)}</code>` : ''}${result.map.password ? `, heslo = <code>${esc(result.map.password)}</code>` : ''}. Všechny ostatní sloupce (${result.extraCols.length}) uloženy 1:1 jako další údaje.</p>
       ${result.errors.length ? `<div class="msg err"><b>Problémy (${result.errors.length}):</b><br>${result.errors.slice(0, 20).map(esc).join('<br>')}${result.errors.length > 20 ? '<br>…' : ''}</div>` : ''}
-      <a class="btn sec" href="/admin/supporters">Zobrazit podporovatele</a></div>`;
+      <a class="btn sec" href="/admin/supporters">Zobrazit uživatele</a></div>`;
   }
   return adminLayout('Import', 'imp', admin, `
-  <h1>Import podporovatelů</h1>
-  <p class="muted">Nahraj CSV nebo Excel (.xlsx/.xls) ze staré databáze — importuje se <b>1:1, všechny sloupce</b>. Klíčem je <b>e-mail</b>. Sloupce <code>memb/nick</code> a <code>password</code> (bcrypt) se přenesou jako nick a heslo, takže se podporovatelé <b>přihlásí rovnou starými údaji</b>; ostatní sloupce se uloží jako další údaje. Existující záznam se jen doplní (nick ani heslo nastavené v BS2 se nepřepíší).</p>
+  <h1>Import uživatelů</h1>
+  <p class="muted">Nahraj CSV nebo Excel (.xlsx/.xls) ze staré databáze — importuje se <b>1:1, všechny sloupce</b>. Klíčem je <b>e-mail</b>. Sloupce <code>memb/nick</code> a <code>password</code> (bcrypt) se přenesou jako nick a heslo, takže se uživatelé <b>přihlásí rovnou starými údaji</b>; ostatní sloupce se uloží jako další údaje. Existující záznam se jen doplní (nick ani heslo nastavené v BS2 se nepřepíší).</p>
   ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   <div class="card"><form method="post" action="/admin/import" enctype="multipart/form-data">
     <label>Soubor (CSV, XLSX, XLS — max 20 MB)</label><input type="file" name="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
