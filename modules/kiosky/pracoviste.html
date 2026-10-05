@@ -391,6 +391,8 @@
         wsCode.textContent = ws.code ? `kód ${ws.code}` : '';
       } else {
         wsName.firstChild.textContent = `Pracoviště #${wsId}`;
+        wsCode.textContent = '⚠️ toto pracoviště neexistuje — otevři kiosk z Nastavení výroby → Pracoviště';
+        wsCode.style.color = '#f59e0b';
       }
     } catch (e) {
       wsName.firstChild.textContent = `Pracoviště #${wsId}`;
@@ -598,7 +600,9 @@
     const mates = (t.mates && t.mates.length) ? `<span>👥 s ${escapeHtml(t.mates.join(', '))}</span>` : '';
     const action = t.here
       ? `<button class="ws-btn ws-btn-start" data-action="start" data-id="${t.id}">▶ Začít</button>`
-      : `<span style="font-size:12px;color:var(--text2);text-align:right;line-height:1.3">jinde —<br>${escapeHtml(t.workstation ? t.workstation.name : '')}</span>`;
+      : (t.workstation
+          ? `<button class="ws-btn" data-action="goto-ws" data-ws="${t.workstation.id}" style="white-space:normal;line-height:1.25">➜ Přejít na<br><b>${escapeHtml(t.workstation.name)}</b></button>`
+          : `<span style="font-size:12px;color:var(--text2);text-align:right;line-height:1.3">pracoviště nepřiřazeno</span>`);
     return `
       <div class="ws-task-card" style="${t.here ? '' : 'opacity:.85;'}">
         <div class="ws-task-info">
@@ -690,6 +694,14 @@
   async function handleTaskAction(e) {
     const btn = e.currentTarget;
     const action = btn.dataset.action;
+    // Přechod na kiosk pracoviště, kde je práce naplánovaná — přihlášení se přenese (krátkodobě přes sessionStorage).
+    if (action === 'goto-ws') {
+      const target = parseInt(btn.dataset.ws, 10);
+      if (!target) return;
+      try { sessionStorage.setItem('kiosk.handoff', JSON.stringify({ person: currentPerson, at: Date.now() })); } catch (e) {}
+      window.location.href = 'pracoviste.html?ws=' + target;
+      return;
+    }
     const id = parseInt(btn.dataset.id, 10);
     if (!id || isProcessing) return;
 
@@ -761,6 +773,17 @@
   // ----- Init -----
   loadWorkstation();
   chipInput.focus();
+  // Přenesené přihlášení z jiného kiosku (tlačítko „Přejít na pracoviště") — platí 2 minuty
+  try {
+    const h = JSON.parse(sessionStorage.getItem('kiosk.handoff') || 'null');
+    sessionStorage.removeItem('kiosk.handoff');
+    if (h && h.person && h.person.id && Date.now() - (h.at || 0) < 120000) {
+      currentPerson = h.person;
+      showWorkerScreen();
+      refreshTasks();
+      startPolling();
+    }
+  } catch (e) {}
 })();
 </script>
 
