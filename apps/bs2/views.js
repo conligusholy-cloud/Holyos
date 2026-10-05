@@ -166,7 +166,7 @@ function passwordPage({ s, nick, error = '', ok = '' }) {
 const ADMIN_NAV = [
   { id: 'dash', href: '/admin', label: 'Přehled', icon: '📊' },
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: '👥' },
-  { id: 'fl', href: '/admin/first-line', label: 'Moje první linie', icon: '🌱' },
+  { id: 'prod', href: '/admin/products', label: 'Produkty', icon: '🧺' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: '⬆️', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -247,29 +247,37 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
   <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
-// Moje první linie: uživatelé, kterým je v poli tab3 (extra) nick přihlášeného správce
-function adminFirstLine({ admin, nick = '', rows = [], msg = '', holyosUrl }) {
-  const has = (k) => rows.some(r => r.extra && r.extra[k] != null && r.extra[k] !== '');
-  const xcols = ['date', 'level', 'obrat', 'profit'].filter(has);
-  const head = '<th>Jméno</th><th>Nick</th><th>E-mail</th><th>Stav</th>' + xcols.map(k => `<th>${esc(k)}</th>`).join('') + '<th></th>';
-  const body = rows.map(r => `<tr>
-    <td data-l="Jméno"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
-    <td data-l="Nick">${r.nick ? esc(r.nick) : '<span class="muted">—</span>'}</td>
-    <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
-    <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span></td>
-    ${xcols.map(k => `<td data-l="${esc(k)}" class="small">${r.extra && r.extra[k] ? esc(r.extra[k]) : '<span class="muted">—</span>'}</td>`).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('');
-  const form = `<form method="post" action="/admin/first-line/nick" class="row" style="margin:10px 0 14px">
-    <input name="nick" value="${esc(nick)}" placeholder="Tvůj nick (hodnota v poli tab3)" style="flex:1;min-width:200px" required>
-    <button class="btn sec" type="submit">${nick ? 'Změnit nick' : 'Uložit nick'}</button></form>`;
-  return adminLayout('Moje první linie', 'fl', admin, `
-  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h1 style="margin:0">Moje první linie ${nick ? `<span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span>` : ''}</h1>
-  </div>
-  <p class="muted" style="margin-top:0">Uživatelé, které jsi přivedl ty — v poli <code>tab3</code> mají tvůj nick.</p>
-  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
-  ${form}
-  ${nick ? `<div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${5 + xcols.length}" class="muted">Nikdo s tab3 = „${esc(nick)}" nenalezen.</td></tr>`}</tbody></table></div>` : '<p class="muted">Zadej svůj nick, ať vím, koho vypsat.</p>'}`, holyosUrl);
+// Produkty: typy prádlomatů a jejich cena
+const fmtPrice = (p, c) => (p == null ? '—' : Number(p).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + (c || 'CZK'));
+function productForm(p, action, btn) {
+  const cur = (p && p.currency) || 'CZK';
+  return `<form method="post" action="${action}">
+    <label>Typ prádlomatu</label><input name="name" value="${esc(p ? p.name : '')}" placeholder="např. Prádlomat 750" required>
+    <label>Popis</label><textarea name="description" rows="2" placeholder="Stručný popis, kapacita, výbava…" style="width:100%">${esc(p ? p.description || '' : '')}</textarea>
+    <div class="row" style="align-items:flex-end;gap:10px">
+      <div style="flex:1;min-width:140px"><label>Cena</label><input name="price" inputmode="decimal" value="${p && p.price != null ? esc(String(Number(p.price))) : ''}" placeholder="0"></div>
+      <div style="width:110px"><label>Měna</label><select name="currency">${['CZK', 'EUR', 'USD'].map(c => `<option${c === cur ? ' selected' : ''}>${c}</option>`).join('')}</select></div>
+      <div style="width:90px"><label>Pořadí</label><input name="sort" inputmode="numeric" value="${p ? p.sort : 0}"></div>
+    </div>
+    <label class="colpick-i" style="margin-top:8px"><input type="checkbox" name="active" value="1"${!p || p.active ? ' checked' : ''} style="width:auto;margin:0"> Aktivní (nabízí se)</label>
+    <div style="height:10px"></div><button class="btn sm" type="submit">${btn}</button>
+  </form>`;
+}
+function adminProducts({ admin, rows = [], msg = '', error = '', holyosUrl }) {
+  const list = rows.map(p => `<details class="card sec" data-sec="p${p.id}" style="margin-bottom:10px"><summary><span>${esc(p.name)} <span class="muted small">${p.active ? '' : '(neaktivní)'}</span></span><span style="display:flex;gap:10px;align-items:center"><b>${esc(fmtPrice(p.price, p.currency))}</b><span class="chev">▶</span></span></summary><div class="sec-body">
+    ${p.description ? `<p class="muted small" style="margin-top:0;white-space:pre-line">${esc(p.description)}</p>` : ''}
+    ${productForm(p, '/admin/products/' + p.id, 'Uložit')}
+    <form method="post" action="/admin/products/${p.id}/delete" onsubmit="return confirm('Smazat produkt ' + ${esc(JSON.stringify(p.name))} + '?')" style="margin-top:8px"><button class="btn danger sm" type="submit">🗑 Smazat</button></form>
+  </div></details>`).join('');
+  return adminLayout('Produkty', 'prod', admin, `
+  <style>.sec{padding:0} .sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;font-size:17px;font-weight:700;user-select:none}
+    .sec>summary::-webkit-details-marker{display:none} .sec>summary .chev{transition:transform .2s;color:var(--text2);font-size:13px} .sec[open]>summary .chev{transform:rotate(90deg)} .sec>.sec-body{padding:0 16px 16px}
+    .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;cursor:pointer}</style>
+  <h1 style="margin:0 0 6px">Produkty <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+  <p class="muted" style="margin-top:0">Typy prádlomatů a jejich cena.</p>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+  ${list || '<p class="muted">Zatím žádný produkt — přidej první níže.</p>'}
+  <details class="card sec" data-sec="pnew" ${rows.length ? '' : 'open'} style="margin-top:14px"><summary>+ Přidat produkt <span class="chev">▶</span></summary><div class="sec-body">${productForm(null, '/admin/products', 'Přidat')}</div></details>`, holyosUrl);
 }
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
@@ -369,4 +377,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, supporterHome, passwordPage, adminDash, adminSupporters, adminFirstLine, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, supporterHome, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };

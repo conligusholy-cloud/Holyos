@@ -209,17 +209,33 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
-// Moje první linie — nick správce se pamatuje v app_settings (per admin pid)
-const flKey = (admin) => 'first_line_nick:' + (admin.pid || admin.uid || admin.username || 'x');
-app.get('/admin/first-line', requireAdmin, wrap(async (req, res) => {
-  const nick = ((await q('SELECT value FROM app_settings WHERE key=$1', [flKey(req.admin)])).rows[0] || {}).value || '';
-  const rows = nick ? (await q("SELECT id,email,first_name,last_name,nick,status,extra FROM supporters WHERE lower(trim(extra->>'tab3')) = lower($1) ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 2000", [nick])).rows : [];
-  res.send(V.adminFirstLine({ admin: req.admin, nick, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+// Produkty (typy prádlomatů + cena)
+function readProduct(b) {
+  const price = String(b.price || '').replace(/\s/g, '').replace(',', '.');
+  return [String(b.name || '').trim().slice(0, 200), String(b.description || '').trim().slice(0, 2000) || null,
+    price === '' || isNaN(Number(price)) ? null : Number(price), ['CZK', 'EUR', 'USD'].includes(b.currency) ? b.currency : 'CZK',
+    parseInt(b.sort, 10) || 0, b.active === '1'];
+}
+app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
+  const rows = (await q('SELECT * FROM products ORDER BY sort, id')).rows;
+  res.send(V.adminProducts({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
 }));
-app.post('/admin/first-line/nick', requireAdmin, wrap(async (req, res) => {
-  const nick = String(req.body.nick || '').trim().slice(0, 100);
-  if (nick) await q('INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [flKey(req.admin), nick]);
-  res.redirect('/admin/first-line');
+app.post('/admin/products', requireAdmin, wrap(async (req, res) => {
+  const v = readProduct(req.body); if (!v[0]) return res.redirect('/admin/products');
+  await q('INSERT INTO products (name,description,price,currency,sort,active) VALUES ($1,$2,$3,$4,$5,$6)', v);
+  await log(req.admin, 'product_create', { name: v[0] });
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Produkt přidán.'));
+}));
+app.post('/admin/products/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const v = readProduct(req.body); if (!v[0]) return res.redirect('/admin/products');
+  await q('UPDATE products SET name=$1,description=$2,price=$3,currency=$4,sort=$5,active=$6,updated_at=now() WHERE id=$7', v.concat([parseInt(req.params.id, 10)]));
+  await log(req.admin, 'product_update', { id: req.params.id, name: v[0] });
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Uloženo.'));
+}));
+app.post('/admin/products/:id(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+  await q('DELETE FROM products WHERE id=$1', [parseInt(req.params.id, 10)]);
+  await log(req.admin, 'product_delete', { id: req.params.id });
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Produkt smazán.'));
 }));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));
 app.post('/admin/supporters/new', requireAdmin, wrap(async (req, res) => {
