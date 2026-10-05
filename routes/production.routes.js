@@ -1360,6 +1360,7 @@ router.get('/operations', async (req, res, next) => {
 router.post('/operations', async (req, res, next) => {
   try {
     const { product_id, workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to, allowed_person_ids } = req.body;
+    if (!is_parallel && !workstation_id && !workstation_group_id) return res.status(400).json({ error: 'Operace musí mít skupinu pracovišť nebo konkrétní pracoviště (paralelní operace je plovoucí a pracoviště nepotřebuje).' });
     const op = await prisma.$transaction(async (tx) => {
       const created = await tx.productOperation.create({
         data: {
@@ -1413,6 +1414,15 @@ router.put('/operations/:id', async (req, res, next) => {
   try {
     const { workstation_id, workstation_group_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count, materials, is_parallel, parallel_from, parallel_to, allowed_person_ids } = req.body;
     const opId = parseInt(req.params.id);
+    // Kontrola: hlavní (neparalelní) operace musí mít pracoviště nebo skupinu — sloučíme s aktuálním stavem (PUT může být částečný)
+    if (workstation_id !== undefined || workstation_group_id !== undefined || is_parallel !== undefined) {
+      const cur = await prisma.productOperation.findUnique({ where: { id: opId }, select: { workstation_id: true, workstation_group_id: true, is_parallel: true } });
+      if (!cur) return res.status(404).json({ error: 'Operace nenalezena' });
+      const par = is_parallel !== undefined ? !!is_parallel : cur.is_parallel;
+      const ws = workstation_id !== undefined ? workstation_id : cur.workstation_id;
+      const grp = workstation_group_id !== undefined ? workstation_group_id : cur.workstation_group_id;
+      if (!par && !ws && !grp) return res.status(400).json({ error: 'Operace musí mít skupinu pracovišť nebo konkrétní pracoviště (paralelní operace je plovoucí a pracoviště nepotřebuje).' });
+    }
     const op = await prisma.$transaction(async (tx) => {
       await tx.productOperation.update({
         where: { id: opId },

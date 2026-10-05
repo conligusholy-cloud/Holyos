@@ -1093,6 +1093,7 @@
         summaryCard('Max pracovníků', maxWorkers, '') +
         summaryCard('Materiálů', totalMats, '') +
         (function () { const miss = realOps.filter(o => !(o.allowed_people || []).length).length; return '<div class="wf-summary-card" style="' + (miss ? 'border-color:rgba(239,68,68,0.6);' : 'border-color:rgba(34,197,94,0.5);') + '" title="Operace bez definovaných lidí (kdo je smí dělat)"><div class="label">👥 Lidé u operací</div><div class="value" style="color:' + (miss ? '#ef4444' : '#22c55e') + ';">' + (miss ? miss + '<span class="unit">bez lidí ⚠️</span>' : '✓<span class="unit">všechny</span>') + '</div></div>'; })() +
+        (function () { const miss = realOps.filter(o => !o.is_parallel && !o.workstation_id && !o.workstation_group_id).length; return '<div class="wf-summary-card" style="' + (miss ? 'border-color:rgba(239,68,68,0.6);' : 'border-color:rgba(34,197,94,0.5);') + '" title="Hlavní operace bez pracoviště ani skupiny pracovišť (paralelní jsou plovoucí)"><div class="label">🏭 Pracoviště u operací</div><div class="value" style="color:' + (miss ? '#ef4444' : '#22c55e') + ';">' + (miss ? miss + '<span class="unit">bez pracoviště ⚠️</span>' : '✓<span class="unit">všechny</span>') + '</div></div>'; })() +
         '<div class="wf-summary-card takt-card">' +
           '<div class="label">Linkový takt</div>' +
           '<div class="value"><input type="number" id="takt-input" min="1" value="' + taktVal + '" placeholder="—" onchange="saveTakt(this.value)" title="Maximální čas na operaci v minutách"><span class="unit">min</span></div>' +
@@ -2287,6 +2288,13 @@
         description: document.getElementById('op-desc').value || null,
         materials,
       };
+
+      // Hlavní operace musí mít buď skupinu pracovišť, nebo konkrétní pracoviště (paralelní je plovoucí → nemusí)
+      if (!data.is_parallel && !data.workstation_id && !data.workstation_group_id) {
+        ['op-ws', 'op-wsgroup'].forEach(id => { const el = document.getElementById(id); if (el) { el.style.outline = '2px solid #ef4444'; el.onchange = () => ['op-ws', 'op-wsgroup'].forEach(x => { document.getElementById(x).style.outline = ''; }); } });
+        alert('Operace se NEULOŽÍ — vyber skupinu pracovišť nebo konkrétní pracoviště.\n\nBez pracoviště ji plánovač nemá kam zařadit a skladník neví, kam připravit materiál.');
+        return;
+      }
 
       // Pravidlo paralelní větve: součet reálných časů paralelních operací ve větvi (stejné okno od→do)
       // musí být menší než součet reálných časů hlavních operací v tom okně.
