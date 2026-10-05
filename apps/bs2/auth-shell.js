@@ -1,6 +1,8 @@
 // BS2 — prémiová přihlašovací obrazovka (Best Series 2.0): samostatná šablona bez hlavičky aplikace.
 // Vizuál: tmavé pozadí, animovaná síť uzlů (canvas), jemný perspektivní grid, skleněná karta se svítícím okrajem.
 
+const { logoSvg } = require('./logo');
+
 const AUTH_CSS = `
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html{-webkit-text-size-adjust:100%}
 :root{--bg:#04060c;--ink:#eaf2ff;--ink2:#8ea2c2;--ink3:#58698a;--line:rgba(120,160,255,.14);--acc:#1e86e0;--acc2:#4fd1ff;--vio:#7c5cff;--err:#ff5d6c;--ok:#2fe3a0}
@@ -15,7 +17,7 @@ body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);color:var(
 .wrap{position:relative;z-index:1;min-height:100vh;min-height:100dvh;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);max-width:1180px;margin:0 auto;padding:0 28px}
 .hero{display:flex;flex-direction:column;justify-content:center;padding:60px 36px 60px 0}
 .brand{display:flex;align-items:center;gap:12px;margin-bottom:46px}
-.mark{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--acc),var(--vio));display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.12) inset,0 10px 30px rgba(30,134,224,.45)}
+.mark{display:inline-flex;filter:drop-shadow(0 10px 28px rgba(30,134,224,.5))}
 .brand b{font-size:16px;letter-spacing:.02em}.brand b span{background:linear-gradient(90deg,var(--acc2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
 .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;width:max-content;background:rgba(255,255,255,.02)}
 .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.7);animation:pulse 2s infinite}
@@ -81,14 +83,14 @@ function fmtN(n) { return Number(n || 0).toLocaleString('cs-CZ'); }
 function authShell({ title, card, members = null, esc }) {
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
-<meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title>
+<meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>${AUTH_CSS}</style></head><body>
 <canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="glow c"></div><div class="grid" aria-hidden="true"></div>
 <div class="wrap">
   <section class="hero">
-    <div class="brand"><div class="mark">BS</div><b>Best Series <span>2.0</span></b></div>
+    <div class="brand"><div class="mark">${logoSvg(44, 'a')}</div><b>Best Series <span>2.0</span></b></div>
     <div class="eyebrow"><i></i>Platforma nové generace · online</div>
     <h1><span class="g">Vítej zpět</span><br>v komunitě podporovatelů</h1>
     <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem jako dřív — zbytek je nový.</p>

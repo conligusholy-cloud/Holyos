@@ -90,6 +90,9 @@ async function memberCount() {
   try { const r = await q("SELECT count(*)::int AS n FROM supporters WHERE status='active'"); _members = { n: r.rows[0].n, at: Date.now() }; } catch (e) { _members = { n: null, at: Date.now() }; }
   return _members.n;
 }
+// Favicon / logo (SVG, cache 1 den)
+app.get('/favicon.svg', (req, res) => { res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(require('./logo').logoSvg(64, 'f')); });
+app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
   res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));

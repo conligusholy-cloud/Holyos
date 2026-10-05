@@ -1,5 +1,6 @@
 // BS2 — HTML šablony (server-side, bez frameworku). Mobile-first, funguje na iPhone/Android/Windows/Mac.
 
+const { logoSvg } = require('./logo');
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function fmtDT(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } }
 
@@ -17,7 +18,7 @@ a{color:var(--blue)} .muted{color:var(--text2)} .small{font-size:12px}
 header,.banner,.tabs,main{position:relative;z-index:1}
 header{position:sticky;top:0;z-index:5;background:rgba(4,6,12,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:10px 18px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:700;font-size:15px;letter-spacing:.02em}
-header .brand .mark{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--vio));display:grid;place-items:center;font-weight:800;font-size:12px;color:#fff;box-shadow:0 0 0 1px rgba(255,255,255,.12) inset,0 6px 18px rgba(30,134,224,.4)}
+header .brand .mark{display:inline-flex;filter:drop-shadow(0 6px 16px rgba(30,134,224,.45))}
 header .brand span.v{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
 header .tag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02)}
 header nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap} header nav a{color:var(--text2);text-decoration:none;padding:6px 10px;border-radius:9px;font-size:13.5px;border:1px solid transparent} header nav a.active,header nav a:hover{background:rgba(120,160,255,.08);border-color:var(--border);color:var(--text)}
@@ -72,12 +73,12 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
   const { AUTH_JS } = require('./auth-shell');
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
-<meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title>
+<meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
-<header><a class="brand" href="/"><span class="mark">BS</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
+<header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
 <nav>${holyosUrl ? `<a href="${holyosUrl}">← HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ⎋</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${banner.icon || '🔒'}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? n.icon + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
