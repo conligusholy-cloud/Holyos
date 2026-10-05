@@ -703,7 +703,8 @@
       const target = parseInt(btn.dataset.ws, 10);
       if (!target) return;
       try { sessionStorage.setItem('kiosk.handoff', JSON.stringify({ person: currentPerson, at: Date.now() })); } catch (e) {}
-      window.location.href = 'pracoviste.html?ws=' + target;
+      // Pozor na <base href="../../"> — použít plnou cestu modulu
+      window.location.href = window.location.pathname + '?ws=' + target;
       return;
     }
     const id = parseInt(btn.dataset.id, 10);
