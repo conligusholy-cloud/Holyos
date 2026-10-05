@@ -2873,11 +2873,39 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
       // Else: úkol pro tohoto pracovníka skrytý (tvrdá kompetenční politika).
     }
 
+    // 4. Moje NAPLÁNOVANÁ práce — operace, kde jsem hlavní (assigned_person) nebo další pracovník
+    //    (workers), na kterémkoli pracovišti, které ještě nezačaly: co, kdy a kde mě čeká.
+    const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+    const myPlannedRaw = await prisma.batchOperation.findMany({
+      where: {
+        OR: [{ assigned_person_id: personId }, { workers: { some: { person_id: personId } } }],
+        status: { in: ['pending', 'ready'] },
+        AND: [{ OR: [{ planned_end: { gte: dayStart } }, { planned_start: null }] }],
+        batch: { status: { notIn: ['cancelled', 'done', 'completed'] } },
+      },
+      include: {
+        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
+          product: { select: { id: true, code: true, name: true } } } },
+        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, is_parallel: true, workers_count: true } },
+        workstation: { select: { id: true, name: true } },
+        workers: { select: { person_id: true, slot: true, person: { select: { first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
+      },
+      orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
+      take: 50,
+    });
+    const my_planned = myPlannedRaw.map(o => {
+      const mates = (o.workers || []).filter(w => w.person_id !== personId && w.person)
+        .map(w => ((w.person.first_name || '') + ' ' + (w.person.last_name || '')).trim()).filter(Boolean);
+      const { workers, ...rest } = o;
+      return { ...rest, here: o.workstation_id === wsId, mates };
+    });
+
     res.json({
       workstation_id: wsId,
       person_id: personId,
       my_in_progress: myInProgress,
       available,
+      my_planned,
     });
   } catch (err) { next(err); }
 });
