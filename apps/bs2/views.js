@@ -425,7 +425,7 @@ const dcUse = (p) => { if (p.dc_use_pct == null) return '<div class="small muted
 function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate = 25 }) {
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
-  const body = Object.keys(groups).map((k, gi) => `<div class="row" style="justify-content:space-between;align-items:center;margin:18px 0 8px"><h2 style="margin:0;font-size:15px;color:var(--text2)">${esc(k)}</h2><button class="btn sm" type="submit" form="gf${gi}">Uložit</button></div><form id="gf${gi}" method="post" action="/admin/products/save-group" style="display:none"></form>
+  const body = Object.keys(groups).map((k, gi) => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2><form id="gf${gi}" method="post" action="/admin/products/save-group" style="display:none"></form>
     <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Cena CZK</th><th>Cena EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th>Max. sleva</th><th>Může být využito DC</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
     ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td>
       <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
@@ -437,7 +437,8 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
       <td data-l="Může být využito DC"><div style="display:flex;align-items:center;gap:6px"><input form="gf${gi}" name="dc_use_pct_${p.id}" inputmode="decimal" value="${p.dc_use_pct != null ? Number(p.dc_use_pct) : ''}" placeholder="—" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span></div>
         ${dcUse(p)}</td>
       <td data-l="Nabízet" class="actions" style="text-align:right"><form method="post" action="/admin/products/${p.id}/offer" style="display:inline"><input type="hidden" name="on" value="${p.offered ? '0' : '1'}"><button type="submit" class="sw ${p.offered ? 'on' : ''}" title="${p.offered ? 'Uživatelé tento stroj vidí — kliknutím skryješ' : 'Skryto — kliknutím zobrazíš uživatelům'}"><i></i><span>${p.offered ? 'Aktivní' : 'Skryto'}</span></button></form></td></tr>`).join('')}
-    </tbody></table></div>`).join('');
+    </tbody></table>
+    <div style="display:flex;justify-content:flex-end;padding:12px 4px 4px"><button class="btn sm" type="submit" form="gf${gi}">Uložit</button></div></div>`).join('');
   return adminLayout('Produkty', 'prod', admin, `
   <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
     <h1 style="margin:0">Produkty <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
