@@ -228,7 +228,7 @@
           <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
           <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
         </div>
-        <div style="font-size:11px;color:var(--text2);margin:-4px 0 8px;">Materiál: <span style="color:#22c55e;">🟢 na pracovišti</span> · <span style="color:#60a5fa;">🔵 skladem (jen přesun)</span> · <span style="color:#f59e0b;">🟠 objednáno</span> · <span style="color:#ef4444;">🔴 chybí, není objednáno</span> · ⚪ bez materiálu — najetím myší detail položek.</div>
+        <div style="font-size:11px;color:var(--text2);margin:-4px 0 8px;">Materiál: <span style="color:#22c55e;">🟢 na pracovišti</span> · <span style="color:#60a5fa;">🔵 skladem (jen přesun)</span> · <span style="color:#f59e0b;">🟠 objednáno</span> · <span style="color:#ef4444;">🔴 chybí, není objednáno</span> · ⚪ bez materiálu — najetím myší detail položek. &nbsp;Čas: <span style="color:#22c55e;">zelený = hotovo</span> · <span style="color:#f59e0b;">oranžový ⚠ = čas uplynul, nehotovo</span> · <span style="color:#14b8a6;">tyrkysový = právě probíhá</span> · <s style="color:var(--text2);">přeškrtnutý</s> = minulost.</div>
         <div id="pv2-work-body" class="pv2-body">Načítám…</div>
       </section>
 
@@ -299,6 +299,14 @@
       .pv2-day { padding:6px 14px 2px; font-size:11px; color:#14b8a6; font-weight:700; text-transform:uppercase; }
       .pv2-op { display:grid; grid-template-columns:120px 1fr auto; gap:10px; padding:6px 14px; border-top:1px solid var(--border); align-items:center; }
       .pv2-op .t { font-family:monospace; font-size:12px; color:var(--text); }
+      /* Operace v minulosti (konec < teď): ztlumeně; hotová zeleně, nehotová (zmeškaná) oranžově */
+      .pv2-op.past { background:rgba(255,255,255,0.025); opacity:.6; }
+      .pv2-op.past .t { color:var(--text2); text-decoration:line-through; }
+      .pv2-op.past.ok .t { color:#22c55e; text-decoration:none; }
+      .pv2-op.past.missed { opacity:.85; background:rgba(245,158,11,0.08); }
+      .pv2-op.past.missed .t { color:#f59e0b; text-decoration:none; }
+      .pv2-op.running { background:rgba(20,184,166,0.10); }
+      .pv2-op.running .t { color:#14b8a6; font-weight:700; }
       .pv2-op .n { font-size:13px; }
       .pv2-op .n small { color:var(--text2); }
       .pv2-op .s { font-size:11px; padding:2px 8px; border-radius:10px; border:1px solid var(--border); color:var(--text2); white-space:nowrap; }
@@ -1879,7 +1887,11 @@
         g.ops.forEach(function (o) {
           var day = pv2Date(o.planned_start);
           if (day !== lastDay) { html += '<div class="pv2-day">' + day + '</div>'; lastDay = day; }
-          html += '<div class="pv2-op"><div class="t">' + pv2Time(o.planned_start) + ' – ' + pv2Time(o.planned_end) + '</div>' +
+          var nowT = Date.now(), stT = new Date(o.planned_start).getTime(), enT = new Date(o.planned_end).getTime();
+          var isDone = o.status === 'done' || o.status === 'completed';
+          var cls = enT < nowT ? ('past ' + (isDone ? 'ok' : 'missed')) : (stT <= nowT && o.status !== 'done' ? 'running' : '');
+          var tTitle = cls.indexOf('missed') !== -1 ? 'Plánovaný čas už uplynul, operace není hotová' : cls.indexOf('ok') !== -1 ? 'Hotovo' : cls === 'running' ? 'Právě probíhá podle plánu' : '';
+          html += '<div class="pv2-op ' + cls + '" title="' + tTitle + '"><div class="t">' + pv2Time(o.planned_start) + ' – ' + pv2Time(o.planned_end) + (cls.indexOf('missed') !== -1 ? ' ⚠' : '') + '</div>' +
             '<div class="n"><b>' + (o.operation ? o.operation.step_number + '. ' + pv2Esc(o.operation.name) : '?') + '</b>' + (o.operation && o.operation.is_parallel ? ' <span class="pv2-badge" style="color:#c084fc;">⫽ paralelní</span>' : '') +
             (function () { var n = (o.operation && o.operation.workers_count) || 1; var w = (o.workers || []).map(function (x) { return x.person; }); if (n > 1 || w.length > 1) { var others = w.filter(function (p) { return !g.person || p.id !== g.person.id; }); return ' <span class="pv2-badge" title="Operace vyžaduje ' + n + ' lidi najednou" style="color:' + (w.length < n ? '#ef4444' : '#22c55e') + ';">👥 ' + w.length + '/' + n + (others.length ? ' · s ' + pv2Esc(others.map(function (p) { return p.first_name + ' ' + p.last_name; }).join(', ')) : '') + '</span>'; } return ''; })() +
             pv2MatBadge(o.material) +
