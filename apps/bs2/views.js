@@ -186,15 +186,15 @@ function supporterCredit(s, { rows = [], sellable = [] } = {}) {
   const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0);
   return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, body: `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>
-  <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'Kč')}</div><div class="small muted">Slouží jako sleva při pořízení prádlomatu.</div></div>
+  <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'DC')}</div><div class="small muted">1 DC = 1 Kč slevy při pořízení prádlomatu.</div></div>
   <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
   <div class="card tbl-wrap">${sellable.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena s DPH</th><th>Discount Credit</th><th>Získám za prodej</th></tr></thead><tbody>
-    ${sellable.map(p => { const vat = p.price_czk == null ? null : Math.round(Number(p.price_czk) * 1.21); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, 'Kč')}</td><td data-l="Discount Credit">${pct > 0 ? esc(String(pct).replace('.', ',')) + ' %' : '<span class="muted">—</span>'}</td><td data-l="Získám za prodej">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'Kč')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
+    ${sellable.map(p => { const vat = p.price_czk == null ? null : Math.round(Number(p.price_czk) * 1.21); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, 'Kč')}</td><td data-l="Discount Credit">${pct > 0 ? esc(String(pct).replace('.', ',')) + ' %' : '<span class="muted">—</span>'}</td><td data-l="Získám za prodej">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
     <p class="small muted" style="margin:10px 0 0">Kredit se připíše, když zákazník z tvé první linie koupí daný typ prádlomatu.</p>`
     : '<p class="muted" style="margin:0">Momentálně není nastavena žádná nabídka.</p>'}</div>
   <h3 style="margin:20px 0 8px">Historie</h3>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(r.amount_czk, 'Kč')}</b></td></tr>`).join('')}</tbody></table>`
+    ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(r.amount_czk, 'DC')}</b></td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné pohyby na kreditním účtu.</p>'}</div>` });
 }
 function supporterMine(s, { rows = [] } = {}) {
@@ -382,7 +382,7 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl }) {
     ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td><td data-l="Typ stroje" class="small">${esc(p.machine_code || '—')}</td>
       <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
       <td data-l="Kamion CZK">${money(p.truck_price_czk, 'Kč')}</td><td data-l="Kamion EUR">${money(p.truck_price_eur, '€')}</td>
-      <td data-l="Discount Credit"><form method="post" action="/admin/products/${p.id}/credit" style="display:flex;align-items:center;gap:6px;margin:0"><input name="pct" inputmode="decimal" value="${Number(p.credit_pct || 0)}" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span><button class="btn sec sm" type="submit">Uložit</button></form>${p.price_czk != null && Number(p.credit_pct) > 0 ? `<div class="small muted" style="margin-top:4px">= ${money(Math.round(Number(p.price_czk) * 1.21 * Number(p.credit_pct)) / 100, 'Kč')} s DPH</div>` : ''}</td>
+      <td data-l="Discount Credit"><form method="post" action="/admin/products/${p.id}/credit" style="display:flex;align-items:center;gap:6px;margin:0"><input name="pct" inputmode="decimal" value="${Number(p.credit_pct || 0)}" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span><button class="btn sec sm" type="submit">Uložit</button></form>${p.price_czk != null && Number(p.credit_pct) > 0 ? `<div class="small muted" style="margin-top:4px">= ${money(Math.round(Number(p.price_czk) * 1.21 * Number(p.credit_pct)) / 100, 'DC')} za prodej</div>` : ''}</td>
       <td data-l="Nabízet" class="actions" style="text-align:right"><form method="post" action="/admin/products/${p.id}/offer" style="display:inline"><input type="hidden" name="on" value="${p.offered ? '0' : '1'}"><button type="submit" class="sw ${p.offered ? 'on' : ''}" title="${p.offered ? 'Uživatelé tento stroj vidí — kliknutím skryješ' : 'Skryto — kliknutím zobrazíš uživatelům'}"><i></i><span>${p.offered ? 'Aktivní' : 'Skryto'}</span></button></form></td></tr>`).join('')}
     </tbody></table></div>`).join('');
   return adminLayout('Produkty', 'prod', admin, `
@@ -466,10 +466,10 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div style="height:10px"></div><button class="btn sm" type="submit">+ Přidat nákup</button>
     </form>
   </div></details>`}
-  ${isNew ? '' : `<details class="card sec" data-sec="credit" open style="margin-top:12px"><summary><span>Discount Credit <span class="muted small">(zůstatek ${money(credits.reduce((a, c) => a + Number(c.amount_czk), 0), 'Kč')})</span></span><span class="chev">▶</span></summary><div class="sec-body">
-    ${credits.length ? credits.map(c => `<div class="list-item"><span>${esc(c.note || '—')} <span class="muted small">${fmtDT(c.created_at)}</span></span><span style="display:flex;gap:10px;align-items:center"><b>${Number(c.amount_czk) > 0 ? '+' : ''}${money(c.amount_czk, 'Kč')}</b><form method="post" action="/admin/credits/${c.id}/delete" onsubmit="return confirm('Smazat pohyb?')" style="margin:0"><button class="btn danger sm" type="submit">${ico('trash', 14)}</button></form></span></div>`).join('') : '<p class="muted small">Žádné pohyby.</p>'}
+  ${isNew ? '' : `<details class="card sec" data-sec="credit" open style="margin-top:12px"><summary><span>Discount Credit <span class="muted small">(zůstatek ${money(credits.reduce((a, c) => a + Number(c.amount_czk), 0), 'DC')})</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    ${credits.length ? credits.map(c => `<div class="list-item"><span>${esc(c.note || '—')} <span class="muted small">${fmtDT(c.created_at)}</span></span><span style="display:flex;gap:10px;align-items:center"><b>${Number(c.amount_czk) > 0 ? '+' : ''}${money(c.amount_czk, 'DC')}</b><form method="post" action="/admin/credits/${c.id}/delete" onsubmit="return confirm('Smazat pohyb?')" style="margin:0"><button class="btn danger sm" type="submit">${ico('trash', 14)}</button></form></span></div>`).join('') : '<p class="muted small">Žádné pohyby.</p>'}
     <form method="post" action="/admin/supporters/${s.id}/credits" class="row" style="margin-top:12px;align-items:flex-end;gap:10px">
-      <div style="width:170px"><label>Částka Kč (− = čerpání)</label><input name="amount" inputmode="decimal" required></div>
+      <div style="width:170px"><label>Částka DC (− = čerpání)</label><input name="amount" inputmode="decimal" required></div>
       <div style="flex:1;min-width:200px"><label>Popis</label><input name="note" placeholder="např. bonus za doporučení"></div>
       <button class="btn sm" type="submit">+ Zapsat</button>
     </form>

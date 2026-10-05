@@ -381,7 +381,7 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
       if (pct > 0 && seller) {
         const amount = Math.round(Number(price) * 1.21 * pct) / 100;
         await q('INSERT INTO credits (supporter_id, amount_czk, note, purchase_id) VALUES ($1,$2,$3,$4)', [seller.id, amount, 'Prodej: ' + name + ' (' + ([s.first_name, s.last_name].filter(Boolean).join(' ') || s.email) + '), ' + pct + ' % z ceny s DPH', ins.rows[0].id]);
-        creditMsg = ' Prodejci ' + (seller.nick || '') + ' připsáno ' + amount.toLocaleString('cs-CZ') + ' Kč kreditu.';
+        creditMsg = ' Prodejci ' + (seller.nick || '') + ' připsáno ' + amount.toLocaleString('cs-CZ') + ' DC.';
       }
     }
   } catch (e) { console.error('credit auto', e.message); }
