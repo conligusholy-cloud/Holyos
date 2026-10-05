@@ -63,7 +63,11 @@ const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).cat
 async function log(admin, action, detail) { try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [admin.pid || null, admin.name || null, action, detail ? JSON.stringify(detail) : null]); } catch (e) { /* log není kritický */ } }
 
 // ── Health ─────────────────────────────────────────────────────────────────
-app.get('/api/health', wrap(async (req, res) => { let db = false; try { await q('SELECT 1'); db = true; } catch (e) { /* */ } res.json({ ok: true, app: 'bs2', db, time: new Date().toISOString() }); }));
+app.get('/api/health', wrap(async (req, res) => {
+  let db = false, db_error;
+  try { await q('SELECT 1'); db = true; } catch (e) { db_error = e.message; }
+  res.json({ ok: true, app: 'bs2', db, db_error, db_configured: !!process.env.DATABASE_URL, time: new Date().toISOString() });
+}));
 
 // ── SSO správce (z HolyOS) ─────────────────────────────────────────────────
 app.get('/sso', (req, res) => {

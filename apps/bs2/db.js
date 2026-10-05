@@ -8,7 +8,8 @@ if (!url) console.warn('[bs2] POZOR: DATABASE_URL není nastaven — přidej Pos
 
 const pool = new Pool({
   connectionString: url,
-  ssl: url && /railway|proxy\.rlwy\.net|sslmode=require/.test(url) && !/localhost|127\.0\.0\.1/.test(url) ? { rejectUnauthorized: false } : undefined,
+  // SSL jen pro veřejný proxy / explicitní sslmode; interní síť Railway (*.railway.internal) SSL nepodporuje
+  ssl: url && /proxy\.rlwy\.net|sslmode=require/.test(url) && !/\.railway\.internal|localhost|127\.0\.0\.1/.test(url) ? { rejectUnauthorized: false } : undefined,
   max: 5,
 });
 
