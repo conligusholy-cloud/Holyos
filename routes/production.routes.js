@@ -2523,21 +2523,22 @@ router.get('/batches/:id', async (req, res, next) => {
 
 // Generátor batch_number: {rok}-{seq3}, např. "2026-001", "2026-042".
 // Sekvence běží od 1 v rámci kalendářního roku planned_start (nebo dnes).
-async function generateBatchNumber(plannedStart) {
+// Testovací dávky mají vlastní řadu "TEST-{rok}-{seq3}" (dřív se hledalo jen "{rok}-", takže
+// druhá testovací dávka dostala znovu -001 → P2002 konflikt).
+async function generateBatchNumber(plannedStart, isTest) {
   const ref = plannedStart ? new Date(plannedStart) : new Date();
   const year = ref.getFullYear();
-  const prefix = `${year}-`;
-  const last = await prisma.productionBatch.findFirst({
+  const prefix = (isTest ? 'TEST-' : '') + `${year}-`;
+  const rows = await prisma.productionBatch.findMany({
     where: { batch_number: { startsWith: prefix } },
-    orderBy: { batch_number: 'desc' },
     select: { batch_number: true },
   });
-  let seq = 1;
-  if (last) {
-    const m = last.batch_number.match(/-(\d+)$/);
-    if (m) seq = parseInt(m[1], 10) + 1;
+  let seq = 0;
+  for (const r of rows) {
+    const m = r.batch_number.slice(prefix.length).match(/^(\d+)$/);
+    if (m) seq = Math.max(seq, parseInt(m[1], 10));
   }
-  return prefix + String(seq).padStart(3, '0');
+  return prefix + String(seq + 1).padStart(3, '0');
 }
 
 // POST /api/production/batches — vytvoření dávky
@@ -2563,12 +2564,11 @@ router.post('/batches', async (req, res, next) => {
       return res.status(400).json({ error: 'product_id a quantity (>0) jsou povinné' });
     }
 
-    let batch_number = await generateBatchNumber(planned_start);
-    if (is_test) batch_number = 'TEST-' + batch_number;
-
-    const batch = await prisma.productionBatch.create({
+    let batch_number = await generateBatchNumber(planned_start, !!is_test);
+    // Pojistka proti souběhu: když číslo mezitím někdo obsadil, vygeneruj další a zkus znovu.
+    const createBatch = async (bn) => prisma.productionBatch.create({
       data: {
-        batch_number,
+        batch_number: bn,
         product_id: productId,
         quantity: qty,
         variant_key: variant_key || null,
@@ -2586,6 +2586,14 @@ router.post('/batches', async (req, res, next) => {
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
+    let batch;
+    for (let attempt = 0; ; attempt++) {
+      try { batch = await createBatch(batch_number); break; }
+      catch (e) {
+        if (e.code === 'P2002' && attempt < 3) { batch_number = await generateBatchNumber(planned_start, !!is_test); continue; }
+        throw e;
+      }
+    }
 
     // Plánovač F3.1 — automaticky vygeneruj BatchOperation
     let opsResult = null;
