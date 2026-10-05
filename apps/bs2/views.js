@@ -155,7 +155,7 @@ const userNav = (s) => {
   const nav = [USER_NAV[0]];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje síť prádlomatů', icon: 'box' }, USER_NAV[1]);
+  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje síť prádlomatů', icon: 'box' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, USER_NAV[1]);
   return nav;
 };
 function supporterHome(s, offers = [], extra = {}) {
@@ -182,6 +182,16 @@ function supporterProducts(s, offers = []) {
 }
 const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', delivered: 'Dodáno', running: 'V provozu' };
 const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
+function supporterCredit(s, { rows = [] } = {}) {
+  const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0);
+  return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, body: `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>
+  <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'Kč')}</div><div class="small muted">Slouží jako sleva při pořízení prádlomatu.</div></div>
+  <h3 style="margin:20px 0 8px">Historie</h3>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(r.amount_czk, 'Kč')}</b></td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted" style="margin:0">Zatím žádné pohyby na kreditním účtu.</p>'}</div>` });
+}
 function supporterMine(s, { rows = [] } = {}) {
   const sum = rows.reduce((acc, r) => acc + (r.price_czk == null ? 0 : Number(r.price_czk)), 0);
   const dt = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ') : '—');
@@ -379,7 +389,7 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl }) {
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}${error ? `<div class="msg err">${esc(error)}</div>` : ''}
   ${body || (error ? '' : '<p class="muted">V ceníku nejsou žádné aktivní stroje.</p>')}`, holyosUrl);
 }
-function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [] }) {
+function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
@@ -450,6 +460,14 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div style="height:10px"></div><button class="btn sm" type="submit">+ Přidat nákup</button>
     </form>
   </div></details>`}
+  ${isNew ? '' : `<details class="card sec" data-sec="credit" open style="margin-top:12px"><summary><span>Discount Credit <span class="muted small">(zůstatek ${money(credits.reduce((a, c) => a + Number(c.amount_czk), 0), 'Kč')})</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    ${credits.length ? credits.map(c => `<div class="list-item"><span>${esc(c.note || '—')} <span class="muted small">${fmtDT(c.created_at)}</span></span><span style="display:flex;gap:10px;align-items:center"><b>${Number(c.amount_czk) > 0 ? '+' : ''}${money(c.amount_czk, 'Kč')}</b><form method="post" action="/admin/credits/${c.id}/delete" onsubmit="return confirm('Smazat pohyb?')" style="margin:0"><button class="btn danger sm" type="submit">${ico('trash', 14)}</button></form></span></div>`).join('') : '<p class="muted small">Žádné pohyby.</p>'}
+    <form method="post" action="/admin/supporters/${s.id}/credits" class="row" style="margin-top:12px;align-items:flex-end;gap:10px">
+      <div style="width:170px"><label>Částka Kč (− = čerpání)</label><input name="amount" inputmode="decimal" required></div>
+      <div style="flex:1;min-width:200px"><label>Popis</label><input name="note" placeholder="např. bonus za doporučení"></div>
+      <button class="btn sm" type="submit">+ Zapsat</button>
+    </form>
+  </div></details>`}
   <script>
   // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny uživatele
   (function(){var KEY='bs2.detail.sections';var st={};try{st=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
@@ -499,4 +517,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };

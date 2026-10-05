@@ -91,6 +91,16 @@ async function migrate() {
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS location TEXT;
     ALTER TABLE purchases ADD COLUMN IF NOT EXISTS serial_no TEXT;
 
+    -- Discount Credit: kreditní účet uživatele (kladné = připsáno, záporné = čerpáno); zadává admin
+    CREATE TABLE IF NOT EXISTS credits (
+      id           SERIAL PRIMARY KEY,
+      supporter_id INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      amount_czk   NUMERIC(14,2) NOT NULL,
+      note         TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS credits_supporter_idx ON credits (supporter_id);
+
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

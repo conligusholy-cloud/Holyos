@@ -236,6 +236,10 @@ app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   rows.forEach(r => { r.machine = byId.get(r.holyos_item_id) || null; });
   res.send(V.supporterMine(req.user, { rows }));
 }));
+app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
+  const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
+  res.send(V.supporterCredit(req.user, { rows }));
+}));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
   const [rows, line] = await Promise.all([loadNetwork(req.user), loadFirstLine(req.user)]);
@@ -342,7 +346,8 @@ app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const firstLine = s.nick ? (await q("SELECT id,email,first_name,last_name,nick,status,extra FROM supporters WHERE id<>$1 AND lower(trim(extra->>'tab3')) = lower($2) ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 2000", [s.id, s.nick])).rows : [];
   const purchases = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [s.id])).rows;
   let machines = []; try { machines = (await loadProducts()).items || []; } catch (e) { /* bez výběru */ }
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines }));
+  const credits = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC', [s.id])).rows;
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits }));
 }));
 app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
@@ -356,6 +361,19 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
   if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'purchase_add', { id: s.id, product: name });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.'));
+}));
+app.post('/admin/supporters/:id(\\d+)/credits', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const amt = Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.'));
+  if (!isFinite(amt) || amt === 0) return res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Zadej nenulovou částku.'));
+  await q('INSERT INTO credits (supporter_id, amount_czk, note) VALUES ($1,$2,$3)', [s.id, amt, String(req.body.note || '').trim().slice(0, 300) || null]);
+  await log(req.admin, 'credit_add', { id: s.id, amount: amt });
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Kredit zapsán.'));
+}));
+app.post('/admin/credits/:cid(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+  const r = await q('DELETE FROM credits WHERE id=$1 RETURNING supporter_id', [parseInt(req.params.cid, 10)]);
+  await log(req.admin, 'credit_delete', { id: req.params.cid });
+  res.redirect(r.rows[0] ? '/admin/supporters/' + r.rows[0].supporter_id + '?msg=' + encodeURIComponent('Pohyb smazán.') : '/admin/supporters');
 }));
 app.post('/admin/purchases/:pid(\\d+)', requireAdmin, wrap(async (req, res) => {
   const b = req.body, st = ['ordered', 'production', 'delivered', 'running'].includes(b.status) ? b.status : 'ordered';
