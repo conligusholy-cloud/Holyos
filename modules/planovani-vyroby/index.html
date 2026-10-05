@@ -240,7 +240,7 @@
         <div class="pv2-filter">
           <input id="mt-search" placeholder="🔍 Hledat materiál / pracoviště / dávku…" oninput="pv2RenderMoves()">
           <select id="mt-kind" onchange="pv2RenderMoves()"><option value="">Materiál i přesuny</option><option value="material">Jen materiál ze skladu</option><option value="wip">Jen přesuny mezi pracovišti</option></select>
-          <select id="mt-status" onchange="pv2RenderMoves()"><option value="">Všechny stavy</option><option value="todo">K přípravě</option><option value="problem">Problém (chybí / bez skladu)</option><option value="on_site">Už na místě</option></select>
+          <select id="mt-status" onchange="pv2RenderMoves()"><option value="">Všechny stavy</option><option value="todo">K přípravě</option><option value="problem">Problém (chybí / bez skladu)</option><option value="on_site">Už na místě</option><option value="prepared">✓ Připraveno</option></select>
           <span id="mt-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
         </div>
         <div id="pv2-moves-body" class="pv2-body">Načítám…</div>
@@ -1877,10 +1877,11 @@
   window.pv2RenderMoves = function (checked) {
     var box = document.getElementById('pv2-moves-body');
     var q = (document.getElementById('mt-search').value || '').toLowerCase().trim(); var kind = document.getElementById('mt-kind').value; var st = document.getElementById('mt-status').value;
-    var ST = { ok: ['📦 připravit', '#22c55e'], on_site: ['✓ už na místě', 'var(--text2)'], partial: ['⚠️ jen část skladem', '#f59e0b'], no_stock: ['⛔ není skladem', '#ef4444'], no_target: ['⚠️ pracoviště bez skladu', '#f59e0b'], no_workstation: ['⚠️ bez pracoviště', '#f59e0b'] };
+    var ST = { ok: ['📦 připravit', '#22c55e'], on_site: ['✓ už na místě', 'var(--text2)'], partial: ['⚠️ jen část skladem', '#f59e0b'], no_stock: ['⛔ není skladem', '#ef4444'], no_target: ['⚠️ pracoviště bez skladu', '#f59e0b'], no_workstation: ['⚠️ bez pracoviště', '#f59e0b'], prepared: ['✓ připraveno', '#22c55e'] };
     var rows = pv2Tasks.filter(function (t) {
       if (kind && t.kind !== kind) return false;
       if (st === 'todo' && t.status !== 'ok' && t.status !== 'partial') return false;
+      if (st === 'prepared' && !t.prepared) return false;
       if (st === 'problem' && ['no_stock', 'no_target', 'no_workstation', 'partial'].indexOf(t.status) === -1) return false;
       if (st === 'on_site' && t.status !== 'on_site') return false;
       if (!q) return true;
@@ -1895,16 +1896,29 @@
     rows.forEach(function (t) {
       var day = pv2Date(t.due);
       if (day !== lastDay) { html += '<tr><td colspan="8" style="background:var(--surface2);color:#14b8a6;font-weight:700;font-size:11px;text-transform:uppercase;padding:6px 10px;">' + day + '</td></tr>'; lastDay = day; }
-      var s = ST[t.status] || [t.status, 'var(--text2)']; var late = new Date(t.due).getTime() < now && t.status !== 'on_site';
+      var s = ST[t.status] || [t.status, 'var(--text2)']; var late = new Date(t.due).getTime() < now && t.status !== 'on_site' && !t.prepared;
       var place = function (p, isFrom) { if (!p) return '<span style="color:#ef4444;">—</span>'; return (p.workstation ? '🏭 ' + pv2Esc(p.workstation.name) + '<br>' : '') + '<small style="color:var(--text2);">' + (p.warehouse ? pv2Esc(p.warehouse.name) : '—') + (p.location ? ' / ' + pv2Esc(p.location.label) : '') + (isFrom && p.available != null ? ' · skladem ' + p.available : '') + '</small>'; };
       html += '<tr' + (t.status === 'on_site' ? ' style="opacity:.55"' : '') + '><td style="white-space:nowrap;"><b' + (late ? ' style="color:#ef4444"' : '') + '>' + pv2Time(t.due) + '</b><br><small style="color:var(--text2);">op. v ' + pv2Time(t.start_at) + '</small></td>' +
         '<td>' + (t.kind === 'wip' ? '<span class="pv2-badge" style="color:#c084fc;">🔁 přesun WIP</span>' : '<span class="pv2-badge" style="color:#22c55e;">📦 materiál</span>') + '</td>' +
         '<td><b>' + pv2Esc(t.item.code || '') + '</b> <small style="color:var(--text2);">' + pv2Esc(t.item.name) + '</small></td><td style="white-space:nowrap;"><b>' + t.qty + '</b> ' + pv2Esc(t.unit) + (t.on_site ? '<br><small style="color:var(--text2);">na místě ' + t.on_site + '</small>' : '') + '</td>' +
         '<td>' + place(t.from, true) + '</td><td>' + place(t.to) + '</td>' +
         '<td><small>' + pv2Esc(t.batch.batch_number) + (t.batch.is_test ? ' 🧪' : '') + ' · ' + t.operation.step + '. ' + pv2Esc(t.operation.name) + (t.operation.prev_step ? '<br>po ' + t.operation.prev_step + '. ' + pv2Esc(t.operation.prev_name) + (t.after ? ' (hotovo ' + pv2Time(t.after) + ')' : '') : '') + '</small></td>' +
-        '<td><span style="color:' + s[1] + ';font-weight:600;white-space:nowrap;">' + s[0] + '</span>' + (late ? '<br><small style="color:#ef4444;">po termínu</small>' : '') + '</td></tr>';
+        '<td><span style="color:' + s[1] + ';font-weight:600;white-space:nowrap;">' + s[0] + '</span>' + (late ? '<br><small style="color:#ef4444;">po termínu</small>' : '') +
+        (t.prepared ? '<br><small style="color:var(--text2);">' + (t.prepared_at ? pv2Date(t.prepared_at) + ' ' + pv2Time(t.prepared_at) : '') + ' · <a href="#" onclick="pv2TogglePrepared(event, this)" data-key="' + pv2Esc(t.key) + '" data-on="1" style="color:#4aa3ea;">vrátit</a></small>' :
+          (t.status !== 'on_site' && t.key ? '<br><small><a href="#" onclick="pv2TogglePrepared(event, this)" data-key="' + pv2Esc(t.key) + '" data-qty="' + t.qty + '" style="color:#4aa3ea;">označit připraveno</a></small>' : '')) + '</td></tr>';
     });
     box.innerHTML = html + '</tbody></table>';
+  };
+  // Přepnout stav „připraveno" i z webu (stejný endpoint jako čtečka)
+  window.pv2TogglePrepared = async function (ev, a) {
+    ev.preventDefault();
+    var key = a.getAttribute('data-key'), on = a.getAttribute('data-on') === '1';
+    a.textContent = '…';
+    try {
+      var r = await fetch('/api/planning/material-tasks/done', { method: on ? 'DELETE' : 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()), credentials: 'include', body: JSON.stringify(on ? { key: key } : { key: key, qty: Number(a.getAttribute('data-qty')) || undefined }) });
+      if (!r.ok) { var j = await r.json().catch(function () { return {}; }); throw new Error(j.error || 'HTTP ' + r.status); }
+      pv2LoadMoves();
+    } catch (e) { alert('Uložení selhalo: ' + e.message); pv2RenderMoves(); }
   };
   window.pv2LoadMovesLegacy = async function () {
     var box = document.getElementById('pv2-moves-body'); box.textContent = 'Načítám…';
