@@ -1778,7 +1778,7 @@
       var rows = await pv2Fetch('/api/planning/batches-plan');
       rows = rows.slice().sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 8);
       box.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Naposledy zadáno do výroby</div>' + (rows.length ? '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Stav</th><th></th></tr></thead><tbody>' +
-        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;"><button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
+        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;white-space:nowrap;">' + pv2ReplanBtn(b) + '<button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
     } catch (e) { box.innerHTML = ''; }
   }
 
@@ -1892,9 +1892,22 @@
             '<td>' + (b.people.length ? b.people.map(function (p) { return '<span class="pv2-badge">' + pv2Esc(p.first_name + ' ' + p.last_name) + '</span>'; }).join('') : '<span style="color:#ef4444;font-size:11px;">bez lidí</span>') + '</td>' +
             '<td>' + b.workstations.map(function (w) { return '<span class="pv2-badge">' + pv2Esc(w.name) + '</span>'; }).join('') + '</td>' +
             '<td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td>' +
-            '<td style="white-space:nowrap;text-align:right;"><button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku (operace a plán se smažou, sloty uvolní)" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>';
+            '<td style="white-space:nowrap;text-align:right;">' + pv2ReplanBtn(b) + '<button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku (operace a plán se smažou, sloty uvolní)" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>';
         }).join('') + '</tbody></table>';
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+  function pv2ReplanBtn(b) {
+    if (b.actual_end || b.status === 'done' || b.status === 'cancelled') return '';
+    return '<button class="btn btn-secondary" onclick="pv2Replan(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ')" title="Přeplánovat podle aktuální pracovní doby, přestávek, obsazenosti lidí a pracovišť" style="padding:4px 9px;margin-right:4px;">🔄</button>';
+  }
+  window.pv2Replan = async function (id, number) {
+    if (!confirm('Přeplánovat dávku ' + number + '?\n\nNedokončené operace dostanou nový plán podle aktuální pracovní doby (⚙️ Nastavení výroby), přestávek a obsazenosti. Hotové operace se nemění.')) return;
+    try {
+      var r = await fetch('/api/planning/batches/' + id + '/schedule', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()), credentials: 'include', body: JSON.stringify({}) });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      pv2Loaded = {}; pv2LoadBatches(); pv2LoadRecent(); if (typeof pv2LoadWork === 'function') pv2LoadWork(); if (typeof pv2LoadMoves === 'function') pv2LoadMoves();
+    } catch (e) { alert('Přeplánování selhalo: ' + e.message); }
   };
   window.pv2DeleteBatch = async function (id, number, status) {
     var warn = status === 'in_progress' ? '\n\n⚠️ Dávka je ROZPRACOVANÁ — smazáním přijdeš o odvedenou práci na operacích.' : '';
