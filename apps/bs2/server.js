@@ -240,7 +240,9 @@ app.post('/admin/settings/eur-rate', requireAdmin, wrap(async (req, res) => {
 app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let offers = [];
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
-  res.send(V.supporterProducts(req.user, offers));
+  const sum = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0);
+  const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
+  res.send(V.supporterProducts(req.user, offers, { balance }));
 }));
 app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [req.user.id])).rows;

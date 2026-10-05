@@ -176,16 +176,49 @@ const curSw = (s, back) => `<form method="post" action="/currency" style="margin
   ${['CZK', 'EUR'].map(c => `<button type="submit" name="cur" value="${c}" class="btn sm ${curOf(s) === c ? '' : 'sec'}" style="border-radius:0;border:0;min-width:64px">${c === 'CZK' ? 'Kč' : '€'}</button>`).join('')}</form>`;
 // cena s DPH 21 % v měně uživatele (EUR bere cenu EUR z ceníku)
 const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_czk; return b == null ? null : Math.round(Number(b) * 1.21); };
-function supporterProducts(s, offers = []) {
+function supporterProducts(s, offers = [], { balance = 0 } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
+  const bal = Math.max(0, Math.floor(Number(balance) || 0));
+  const fmt = (n) => Math.round(n).toLocaleString('cs-CZ');
   return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
-  <div class="grid">${offers.map(p => `
-    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
-      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vatPrice(p, cur), sym)}</div>
+  <div class="card" style="margin:0 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">
+    <div><div class="small muted">Dostupné Discount Credit</div><div style="font-size:28px;font-weight:800;letter-spacing:-.02em"><span id="dc-left">${fmt(bal)}</span> <span style="font-size:18px">DC</span></div></div>
+    <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Zadej u vybraného prádlomatu, kolik DC chceš uplatnit — cena se hned přepočítá. Kalkulace je orientační, slevu potvrdíme při objednávce.</div>
+  </div>
+  <div class="grid" id="dc-grid">${offers.map(p => { const price = vatPrice(p, cur); return `
+    <div class="card dc-card" style="margin:0" data-price="${price == null ? '' : price}"><b style="font-size:16px">${esc(p.name_cs)}</b>
+      <div class="dc-price" style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(price, sym)}</div>
       <div class="small muted">cena s DPH 21 %</div>
-    </div>`).join('')}</div>
-  ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}` });
+      ${price != null && bal > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, price)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
+      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> <span class="muted">(ušetříš <span class="dc-saved"></span>)</span></div>` : ''}
+    </div>`; }).join('')}</div>
+  ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
+  <script>
+  (function(){
+    var total=${bal}, sym=${JSON.stringify(sym)};
+    var cards=[].slice.call(document.querySelectorAll('.dc-card'));
+    function fmt(n){return Math.round(n).toLocaleString('cs-CZ');}
+    function used(except){var u=0;cards.forEach(function(c){if(c===except)return;var i=c.querySelector('.dc-in');if(i)u+=Math.max(0,parseInt(i.value,10)||0);});return u;}
+    function recalc(){
+      var u=0;
+      cards.forEach(function(c){
+        var i=c.querySelector('.dc-in'); if(!i)return;
+        var price=parseFloat(c.getAttribute('data-price'))||0;
+        var other=used(c), cap=Math.max(0,Math.min(price,total-other));
+        var val=Math.max(0,parseInt(i.value,10)||0); if(val>cap){val=cap;i.value=cap;}
+        i.max=cap; u+=val;
+        var box=c.querySelector('.dc-after');
+        if(val>0){box.style.display='block';c.querySelector('.dc-new').textContent=fmt(price-val)+' '+sym;c.querySelector('.dc-saved').textContent=fmt(val)+' '+sym;}else box.style.display='none';
+      });
+      document.getElementById('dc-left').textContent=fmt(total-u);
+    }
+    cards.forEach(function(c){var i=c.querySelector('.dc-in'); if(!i)return;
+      i.addEventListener('input',recalc);
+      c.querySelector('.dc-max').addEventListener('click',function(){var price=parseFloat(c.getAttribute('data-price'))||0;i.value=Math.max(0,Math.min(price,total-used(c)));recalc();});
+    });
+  })();
+  </script>` });
 }
 const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', delivered: 'Dodáno', running: 'V provozu' };
 const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
