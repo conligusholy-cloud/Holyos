@@ -58,6 +58,12 @@ async function migrate() {
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Referenční program: prodejce (user_type=seller) má unikátní ref_code, nově registrovaní přes /join/<code> mají referred_by
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS ref_code TEXT UNIQUE;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS referred_by INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS phone TEXT;
+    CREATE INDEX IF NOT EXISTS supporters_referred_by_idx ON supporters (referred_by);
+
     -- Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS user_type TEXT NOT NULL DEFAULT 'standard';
     CREATE INDEX IF NOT EXISTS supporters_user_type_idx ON supporters (user_type);

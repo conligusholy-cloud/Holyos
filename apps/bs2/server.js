@@ -156,13 +156,73 @@ app.post('/activate/finish', wrap(async (req, res) => {
 }));
 app.get('/logout', (req, res) => { res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
 
+// ── Referenční program (prodejci) ───────────────────────────────────────
+const PUBLIC_URL = (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+function makeRefCode() { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; const b = require('crypto').randomBytes(8); return Array.from(b, x => a[x % a.length]).join(''); }
+async function ensureRefCode(u) {
+  if (u.ref_code) return u.ref_code;
+  for (let i = 0; i < 5; i++) {
+    const code = makeRefCode();
+    try { await q('UPDATE supporters SET ref_code=$1, updated_at=now() WHERE id=$2 AND ref_code IS NULL', [code, u.id]); const r = await q('SELECT ref_code FROM supporters WHERE id=$1', [u.id]); if (r.rows[0] && r.rows[0].ref_code) return r.rows[0].ref_code; } catch (e) { if (e.code !== '23505') throw e; }
+  }
+  throw new Error('Nepodařilo se vytvořit referenční kód.');
+}
+// První linie prodejce = lidé registrovaní přes jeho odkaz (referred_by) + historická vazba ze starého systému (extra.tab3 = nick)
+async function loadFirstLine(u) {
+  const r = await q(`SELECT id,email,first_name,last_name,nick,phone,status,user_type,created_at,activated_at,last_login_at,referred_by
+    FROM supporters WHERE id<>$1 AND (referred_by=$1 ${u.nick ? "OR lower(trim(extra->>'tab3')) = lower($2)" : ''})
+    ORDER BY created_at DESC LIMIT 500`, u.nick ? [u.id, u.nick] : [u.id]);
+  return r.rows;
+}
+async function loadSeller(code) {
+  if (!/^[a-z0-9]{6,20}$/.test(String(code || ''))) return null;
+  const r = await q("SELECT id, nick, first_name, last_name, status, user_type FROM supporters WHERE ref_code=$1", [code]);
+  const s = r.rows[0];
+  return s && s.status !== 'blocked' && s.user_type === 'seller' ? s : null;
+}
+app.get('/join/:code', wrap(async (req, res) => {
+  const seller = await loadSeller(req.params.code);
+  if (!seller) return res.status(404).send(V.errorPage('Odkaz neplatí', 'Tenhle registrační odkaz není platný. Požádej toho, kdo ti ho poslal, o nový.', '/login'));
+  if (readCookie(req, USER_COOKIE)) return res.redirect('/');
+  res.send(V.joinPage({ code: req.params.code, seller }));
+}));
+app.post('/join/:code', wrap(async (req, res) => {
+  const seller = await loadSeller(req.params.code);
+  if (!seller) return res.status(404).send(V.errorPage('Odkaz neplatí', 'Tenhle registrační odkaz není platný.', '/login'));
+  const ip = req.ip;
+  if (tooMany(ip)) return res.status(429).send(V.joinPage({ code: req.params.code, seller, error: 'Příliš mnoho pokusů. Zkus to za 15 minut.' }));
+  const f = { first_name: String(req.body.first_name || '').trim(), last_name: String(req.body.last_name || '').trim(), email: String(req.body.email || '').trim().toLowerCase(), phone: String(req.body.phone || '').trim(), nick: String(req.body.nick || '').trim() };
+  const password = String(req.body.password || ''), password2 = String(req.body.password2 || '');
+  const back = (error) => res.status(400).send(V.joinPage({ code: req.params.code, seller, f, error }));
+  if (!f.first_name || !f.last_name) return back('Vyplň jméno a příjmení.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return back('Zadej platný e-mail.');
+  if (f.phone && !/^[+0-9 ()./-]{6,25}$/.test(f.phone)) return back('Telefon má neplatný formát.');
+  if (!/^[A-Za-z0-9._-]{3,30}$/.test(f.nick)) return back('Nick: 3–30 znaků, jen písmena, čísla, tečka, podtržítko, pomlčka.');
+  if (password.length < 8) return back('Heslo musí mít aspoň 8 znaků.');
+  if (password !== password2) return back('Hesla se neshodují.');
+  if ((await q('SELECT 1 FROM supporters WHERE email=$1', [f.email])).rows.length) return back('Tento e-mail už u nás účet má — přihlas se, nebo použij Zapomenuté heslo.');
+  if ((await q('SELECT 1 FROM supporters WHERE lower(nick)=lower($1)', [f.nick])).rows.length) return back('Tenhle nick už někdo má, zvol jiný.');
+  const hash = await bcrypt.hash(password, 11);
+  const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at)
+    VALUES ($1,$2,$3,$4,$5,$6,'active','standard',$7,'referral',now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
+  await log({ name: 'web' }, 'join_via_referral', { id: r.rows[0].id, email: f.email, seller_id: seller.id, seller_nick: seller.nick, ip });
+  setCookie(req, res, USER_COOKIE, { kind: 'user', sid: r.rows[0].id, nick: f.nick }, 30 * 24 * 3600);
+  res.redirect('/?welcome=1');
+}));
+
 // ── Uživatel: domů + heslo ──────────────────────────────────────────────
 app.get('/', (req, res, next) => {
   if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
   return requireUser(req, res, async () => {
     let offers = [];
     try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
-    res.send(V.supporterHome(req.user, offers));
+    let team = null, refUrl = null;
+    if (req.user.user_type === 'seller') {
+      const code = await ensureRefCode(req.user);
+      refUrl = PUBLIC_URL + '/join/' + code;
+      team = await loadFirstLine(req.user);
+    }
+    res.send(V.supporterHome(req.user, offers, { team, refUrl }));
   });
 });
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));

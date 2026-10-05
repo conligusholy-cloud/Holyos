@@ -119,6 +119,26 @@ function activatePage({ step = 'email', email = '', error = '', name = '', nick 
       <button class="btn" type="submit">Vytvořit účet a přihlásit ${ICON.arrow}</button></form>`;
   return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
+// Registrace přes referenční odkaz prodejce (/join/<code>)
+function joinPage({ code, seller, f = {}, error = '' }) {
+  const who = [seller.first_name, seller.last_name].filter(Boolean).join(' ') || seller.nick;
+  return authShell({ title: 'Registrace', esc, card: `
+    <h2>Vytvoř si účet</h2><p class="sub">Pozvánka od <b>${esc(who)}</b>. Po registraci uvidíš nabídku prádlomatů a svůj účet.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/join/${esc(code)}" novalidate>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div><label>Jméno</label>${field({ name: 'first_name', value: f.first_name || '', icon: 'user', placeholder: 'Jan', auto: 'given-name', extra: 'required autofocus' })}</div>
+        <div><label>Příjmení</label>${field({ name: 'last_name', value: f.last_name || '', icon: 'user', placeholder: 'Novák', auto: 'family-name', extra: 'required' })}</div>
+      </div>
+      <label>E-mail</label>${field({ name: 'email', type: 'email', value: f.email || '', icon: 'mail', placeholder: 'jmeno@email.cz', auto: 'email', extra: 'inputmode="email" autocapitalize="none" required' })}
+      <label>Telefon <span style="color:var(--ink3)">(nepovinné)</span></label>${field({ name: 'phone', type: 'tel', value: f.phone || '', icon: 'phone', placeholder: '+420 …', auto: 'tel', extra: 'inputmode="tel"' })}
+      <label>Nick</label>${field({ name: 'nick', value: f.nick || '', icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" required' })}
+      <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      <button class="btn" type="submit">Vytvořit účet ${ICON.arrow}</button>
+    </form>
+    <p class="foot">Už účet máš? <a href="/login">Přihlas se</a></p>` });
+}
 function forgotPage({ email = '', error = '', done = false } = {}) {
   return authShell({ title: 'Zapomenuté heslo', esc, card: done ? `
     <h2>Zpráva přijata</h2><p class="sub">Pokud e-mail <b>${esc(email)}</b> známe, ozveme se ti s dalším postupem. Obvykle do jednoho pracovního dne.</p>
@@ -130,8 +150,29 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
     <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
-function supporterHome(s, offers = []) {
+function supporterHome(s, offers = [], extra = {}) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
+  const { team, refUrl } = extra;
+  const sellerBlock = s.user_type === 'seller' ? `
+  <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('users', 18)} Můj tým — lidé, které jsem přivedl</h2>
+  <div class="card" style="margin-bottom:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+      <div style="min-width:0;flex:1"><div class="small muted" style="letter-spacing:.08em;text-transform:uppercase">Můj registrační odkaz</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input id="refurl" readonly value="${esc(refUrl || '')}" onclick="this.select()" style="font-size:14px;padding:10px 12px"><button class="btn sm" type="button" onclick="navigator.clipboard.writeText(document.getElementById('refurl').value).then(()=>{this.textContent='Zkopírováno';setTimeout(()=>this.textContent='Kopírovat',1500)})">Kopírovat</button></div>
+        <div class="small muted" style="margin-top:6px">Pošli ho komukoli — kdo se přes něj zaregistruje, objeví se tady v tvém týmu.</div></div>
+      <div class="row">
+        <a class="btn sec sm" href="https://wa.me/?text=${encodeURIComponent('Přidej se ke mně v Best Series 2.0 a pořiď si prádlomat: ' + (refUrl || ''))}" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="btn sec sm" href="mailto:?subject=${encodeURIComponent('Pozvánka do Best Series 2.0')}&body=${encodeURIComponent('Ahoj, přidej se ke mně v Best Series 2.0 a pořiď si prádlomat. Registrace tady: ' + (refUrl || ''))}">E-mail</a>
+      </div>
+    </div>
+  </div>
+  <div class="card tbl-wrap">${(team || []).length ? `<table class="cards"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Registrace</th><th>Stav účtu</th><th>Objednávky</th></tr></thead><tbody>
+    ${team.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.first_name, r.last_name].filter(Boolean).join(' ') || r.nick || '—')}</b>${r.nick ? `<div class="small muted">${esc(r.nick)}</div>` : ''}</td>
+      <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td><td data-l="Telefon">${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="muted">—</span>'}</td>
+      <td data-l="Registrace" class="small muted">${fmtDT(r.activated_at || r.created_at)}</td>
+      <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>${r.user_type === 'owner' ? ' <span class="badge type-owner">koupil prádlomat</span>' : ''}</td>
+      <td data-l="Objednávky" class="small muted">${r.user_type === 'owner' ? 'prádlomat pořízen' : 'zatím bez objednávky'}</td></tr>`).join('')}</tbody></table>`
+    : '<p class="muted" style="margin:0">Zatím nikdo. Pošli svůj odkaz — první registrace se tu objeví hned.</p>'}</div>` : '';
   const offerCards = offers.length ? `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
   <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
@@ -147,6 +188,7 @@ function supporterHome(s, offers = []) {
   </div>
   <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
     <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
+  ${sellerBlock}
   ${offerCards}` });
 }
 function passwordPage({ s, nick, error = '', ok = '' }) {
@@ -383,4 +425,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, supporterHome, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, passwordPage, adminDash, adminSupporters, adminProducts, adminSupporterDetail, adminImport, errorPage };
