@@ -190,7 +190,7 @@ function supporterCredit(s, { rows = [], sellable = [] } = {}) {
   <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
   <div class="card tbl-wrap">${sellable.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena s DPH</th><th>Discount Credit</th></tr></thead><tbody>
     ${sellable.map(p => { const vat = p.price_czk == null ? null : Math.round(Number(p.price_czk) * 1.21); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, 'Kč')}</td><td data-l="Discount Credit">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
-    <p class="small muted" style="margin:10px 0 0">Kredit se připíše, když zákazník z tvé první linie koupí daný typ prádlomatu.</p>`
+    <p class="small muted" style="margin:10px 0 0">Credit se připíše, když člověk z tvého doporučení zakoupí prádlomat.</p>`
     : '<p class="muted" style="margin:0">Momentálně není nastavena žádná nabídka.</p>'}</div>
   <h3 style="margin:20px 0 8px">Historie</h3>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
