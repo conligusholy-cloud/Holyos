@@ -186,7 +186,7 @@ function supporterCredit(s, { rows = [], sellable = [] } = {}) {
   const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0);
   return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, body: `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>
-  <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'DC')}</div><div class="small muted">1 DC = 1 Kč slevy při pořízení prádlomatu.</div></div>
+  <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'DC')}</div></div>
   <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
   <div class="card tbl-wrap">${sellable.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena s DPH</th><th>Discount Credit</th><th>Získám za prodej</th></tr></thead><tbody>
     ${sellable.map(p => { const vat = p.price_czk == null ? null : Math.round(Number(p.price_czk) * 1.21); const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena s DPH">${money(vat, 'Kč')}</td><td data-l="Discount Credit">${pct > 0 ? esc(String(pct).replace('.', ',')) + ' %' : '<span class="muted">—</span>'}</td><td data-l="Získám za prodej">${pct > 0 && vat != null ? `<b style="color:var(--ok)">+${money(Math.round(vat * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
