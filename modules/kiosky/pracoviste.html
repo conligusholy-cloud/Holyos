@@ -601,13 +601,16 @@
     const MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 materiál skladem — čeká na přesun', '#60a5fa'], ordered: ['🟠 materiál objednán, čeká se', '#f59e0b'], missing: ['🔴 materiál chybí — není objednán', '#ef4444'] };
     const ml = t.material && MAT[t.material.level];
     const matBadge = ml ? `<span style="color:${ml[1]};font-weight:600" title="${escapeHtml((t.material.materials || []).map(x => `${x.code || ''} ${x.name || ''}: potřeba ${x.needed} ${x.unit}, na pracovišti ${x.on_site}, skladem ${x.available}${x.on_order ? ', objednáno ' + x.on_order : ''}`).join('\n'))}">${ml[0]}</span>` : '';
-    const action = t.here
+    const blockedBox = `<div style="font-size:12px;color:#ef4444;text-align:right;line-height:1.3;max-width:260px"><b>⛔ Nelze začít</b><br>${escapeHtml(t.blocked_reason || 'materiál není připraven na pracovišti')}</div>`;
+    const action = t.can_start === false
+      ? blockedBox
+      : t.here
       ? `<button class="ws-btn ws-btn-start" data-action="start" data-id="${t.id}">▶ Začít</button>`
       : (t.workstation
           ? `<button class="ws-btn" data-action="goto-ws" data-ws="${t.workstation.id}" style="white-space:normal;line-height:1.25">➜ Přejít na<br><b>${escapeHtml(t.workstation.name)}</b></button>`
           : `<span style="font-size:12px;color:var(--text2);text-align:right;line-height:1.3">pracoviště nepřiřazeno</span>`);
     return `
-      <div class="ws-task-card" style="${t.here ? '' : 'opacity:.85;'}">
+      <div class="ws-task-card" style="${t.here ? '' : 'opacity:.85;'}${t.can_start === false ? 'border-color:rgba(239,68,68,.5);' : ''}">
         <div class="ws-task-info">
           <div class="ws-task-batch">${when} · ${where}</div>
           <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}</div>
@@ -690,7 +693,9 @@
         </div>
         <div class="ws-task-actions">
           ${problemBtn}
-          <button class="ws-btn ${btnClass}" data-action="${action}" data-id="${t.id}">${btnLabel}</button>
+          ${(!isInProgress && t.can_start === false)
+            ? `<div style="font-size:12px;color:#ef4444;text-align:right;line-height:1.3;max-width:260px"><b>⛔ Nelze začít</b><br>${escapeHtml(t.blocked_reason || 'materiál není připraven na pracovišti')}</div>`
+            : `<button class="ws-btn ${btnClass}" data-action="${action}" data-id="${t.id}">${btnLabel}</button>`}
         </div>
       </div>`;
   }

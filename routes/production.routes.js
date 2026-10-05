@@ -2792,6 +2792,19 @@ router.get('/workstations/:id/buffer', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Materiál blokuje start operace, pokud není na pracovišti (on_site) — ledaže dávka ignoruje sklad (testy).
+function isMaterialBlocked(material, batch) {
+  if (!material || !material.materials || !material.materials.length) return false;
+  if (batch && batch.ignore_stock) return false;
+  return material.level !== 'on_site' && material.level !== 'none';
+}
+function materialBlockReason(material) {
+  const bad = (material.materials || []).filter(m => m.level !== 'on_site');
+  const list = bad.slice(0, 4).map(m => (m.code ? m.code + ' ' : '') + (m.name || '') + ' (' + m.needed + ' ' + m.unit + ', na pracovišti ' + m.on_site + ')').join(', ');
+  const head = material.level === 'missing' ? 'Materiál chybí a není objednán' : material.level === 'ordered' ? 'Materiál je objednán, ale ještě nedorazil' : 'Materiál není připraven na pracovišti — skladník ho musí nejdřív přivézt';
+  return head + (list ? ': ' + list : '') + (bad.length > 4 ? ' …' : '');
+}
+
 // GET /api/production/workstations/:id/available-work?person_id=N
 //   Klíčový endpoint kiosku. Vrátí dvě skupiny úkolů pro daného pracovníka:
 //     - my_in_progress: rozpracované úkoly, které pracovník už začal (status='in_progress')
@@ -2841,8 +2854,9 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
         status: { in: ['pending', 'ready'] },
       },
       include: {
-        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
+        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true, ignore_stock: true,
           product: { select: { id: true, code: true, name: true } } } },
+        workstation: { select: { id: true, name: true, input_warehouse_id: true } },
         operation: {
           select: {
             id: true, name: true, step_number: true, duration: true, description: true,
@@ -2902,21 +2916,28 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
       orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
       take: 50,
     });
-    // Semafor materiálu (na pracovišti / skladem / objednáno / chybí)
+    // Semafor materiálu (na pracovišti / skladem / objednáno / chybí) — pro naplánované i volné úkoly.
+    // Bez materiálu na pracovišti (a bez „ignorovat sklad" u dávky) se operace NESMÍ začít → can_start=false.
     let matStatus = new Map();
-    try { matStatus = await computeOpMaterialStatus(myPlannedRaw); } catch (e) { /* bez semaforu */ }
+    try { matStatus = await computeOpMaterialStatus(myPlannedRaw.concat(available)); } catch (e) { /* bez semaforu */ }
+    const withMaterial = (o) => {
+      const material = matStatus.get(o.id) || { level: 'none', materials: [] };
+      const blocked = isMaterialBlocked(material, o.batch);
+      return { material, can_start: !blocked, blocked_reason: blocked ? materialBlockReason(material) : null };
+    };
     const my_planned = myPlannedRaw.map(o => {
       const mates = (o.workers || []).filter(w => w.person_id !== personId && w.person)
         .map(w => ((w.person.first_name || '') + ' ' + (w.person.last_name || '')).trim()).filter(Boolean);
       const { workers, ...rest } = o;
-      return { ...rest, here: o.workstation_id === wsId, mates, material: matStatus.get(o.id) || { level: 'none', materials: [] } };
+      return { ...rest, here: o.workstation_id === wsId, mates, ...withMaterial(o) };
     });
+    const availableOut = available.map(o => ({ ...o, ...withMaterial(o) }));
 
     res.json({
       workstation_id: wsId,
       person_id: personId,
       my_in_progress: myInProgress,
-      available,
+      available: availableOut,
       my_planned,
     });
   } catch (err) { next(err); }
@@ -2977,11 +2998,19 @@ router.post('/batch-operations/:id/start', async (req, res, next) => {
     const personId = parseInt(req.body?.person_id, 10);
     if (isNaN(personId)) return res.status(400).json({ error: 'person_id je povinné' });
 
-    const existing = await prisma.batchOperation.findUnique({ where: { id }, select: { status: true } });
+    const existing = await prisma.batchOperation.findUnique({ where: { id }, select: { id: true, status: true, operation: { select: { id: true } }, batch: { select: { quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
     if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
     if (existing.status !== 'ready' && existing.status !== 'pending') {
       return res.status(409).json({ error: `Nelze startovat ze stavu '${existing.status}'` });
     }
+    // Bez připraveného materiálu na pracovišti se operace nesmí zahájit (výjimka: dávka s „ignorovat sklad")
+    try {
+      const ms = await computeOpMaterialStatus([existing]);
+      const material = ms.get(id) || { level: 'none', materials: [] };
+      if (isMaterialBlocked(material, existing.batch)) {
+        return res.status(409).json({ error: materialBlockReason(material), code: 'material_not_ready', material });
+      }
+    } catch (e) { console.warn('[batch-operations/start] kontrola materiálu:', e.message); }
 
     const result = await prisma.$transaction(async (tx) => {
       const op = await tx.batchOperation.update({

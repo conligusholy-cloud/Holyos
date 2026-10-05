@@ -1215,6 +1215,20 @@ async function transitionTask(req, res, next, opts) {
     if (task.person_id !== req.velin.person.id) {
       return res.status(403).json({ error: 'Tento úkol není přidělen tobě' });
     }
+    // Start výrobní operace bez připraveného materiálu na pracovišti není povolen (stejné pravidlo jako kiosk)
+    if (opts.bridgeAction === 'start' && task.source_ref_type === 'BatchOperation' && task.source_ref_id) {
+      try {
+        const { computeOpMaterialStatus } = require('../services/planning/op-material-status');
+        const bo = await prisma.batchOperation.findUnique({ where: { id: task.source_ref_id }, select: { id: true, operation: { select: { id: true } }, batch: { select: { quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
+        if (bo) {
+          const material = (await computeOpMaterialStatus([bo])).get(bo.id);
+          if (material && material.materials.length && !(bo.batch && bo.batch.ignore_stock) && material.level !== 'on_site' && material.level !== 'none') {
+            const bad = material.materials.filter(m => m.level !== 'on_site').slice(0, 4).map(m => (m.code ? m.code + ' ' : '') + (m.name || '')).join(', ');
+            return res.status(409).json({ error: 'Nelze začít — materiál není připraven na pracovišti' + (bad ? ': ' + bad : ''), code: 'material_not_ready', material });
+          }
+        }
+      } catch (e) { console.warn('[velin/transitionTask] kontrola materiálu:', e.message); }
+    }
     const data = opts.data(task, req);
     const updated = await prisma.taskAssignment.update({ where: { id }, data });
 
