@@ -161,10 +161,10 @@ app.get('/', (req, res, next) => {
   if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
   return requireUser(req, res, () => res.send(V.supporterHome(req.user)));
 });
-app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ nick: req.user.nick })));
+app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   const { old = '', password = '', password2 = '' } = req.body;
-  const back = (error, ok) => res.send(V.passwordPage({ nick: req.user.nick, error, ok }));
+  const back = (error, ok) => res.send(V.passwordPage({ s: req.user, error, ok }));
   if (!(await bcrypt.compare(String(old), req.user.password_hash))) return back('Současné heslo nesouhlasí.');
   if (String(password).length < 8) return back('Nové heslo musí mít aspoň 8 znaků.');
   if (password !== password2) return back('Nová hesla se neshodují.');

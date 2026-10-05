@@ -137,26 +137,29 @@ function supporterHome(s) {
     <h1><span class="g">Vítej, ${esc(s.nick)}</span></h1>
     <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
   </div>
-  <div class="grid">
-    <div class="card"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
-      <div class="soon"><span>⚡</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
-    <div class="card"><h2 style="margin-top:0">Můj účet</h2>
-      <div class="list-item"><span class="muted">Nick</span><b>${esc(s.nick)}</b></div>
-      <div class="list-item"><span class="muted">E-mail</span><span>${esc(s.email)}</span></div>
-      <div class="list-item"><span class="muted">Účet aktivní od</span><span>${fmtDT(s.activated_at)}</span></div>
-      <div style="margin-top:12px"><a class="btn sec sm" href="/password">Změnit heslo</a></div>
-    </div>
-  </div>` });
+  <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
+    <div class="soon"><span>⚡</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>` });
 }
-function passwordPage({ nick, error = '', ok = '' }) {
-  return layout({ title: 'Změna hesla', user: nick, nav: USER_NAV, active: 'acc', fx: true, body: `
-  <div class="auth" style="margin-top:10px"><div class="card"><h2 style="margin-top:0">Změna hesla</h2>
-  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${ok ? `<div class="msg ok">${esc(ok)}</div>` : ''}
-  <form method="post" action="/password"><label>Současné heslo</label><input name="old" type="password" autocomplete="current-password" required>
-  <label>Nové heslo (min. 8)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
-  <label>Nové heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
-  <div style="height:14px"></div><button class="btn full" type="submit">Uložit</button></form>
-  <p class="small" style="margin:14px 0 0;text-align:center"><a href="/">← domů</a></p></div></div>` });
+function passwordPage({ s, nick, error = '', ok = '' }) {
+  const u = s || { nick };
+  const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+  return layout({ title: 'Můj účet', user: u.nick, nav: USER_NAV, active: 'acc', fx: true, body: `
+  <h1 style="margin-bottom:14px">Můj účet</h1>
+  <div class="grid">
+    <div class="card"><h2 style="margin-top:0">Údaje</h2>
+      <div class="list-item"><span class="muted">Nick</span><b>${esc(u.nick)}</b></div>
+      ${fullName ? `<div class="list-item"><span class="muted">Jméno</span><span>${esc(fullName)}</span></div>` : ''}
+      <div class="list-item"><span class="muted">E-mail</span><span>${esc(u.email || '')}</span></div>
+      <div class="list-item"><span class="muted">Účet aktivní od</span><span>${fmtDT(u.activated_at)}</span></div>
+      <div class="list-item"><span class="muted">Poslední přihlášení</span><span>${fmtDT(u.last_login_at)}</span></div>
+    </div>
+    <div class="card"><h2 style="margin-top:0">Změna hesla</h2>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${ok ? `<div class="msg ok">${esc(ok)}</div>` : ''}
+    <form method="post" action="/password"><label>Současné heslo</label><input name="old" type="password" autocomplete="current-password" required>
+    <label>Nové heslo (min. 8)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
+    <label>Nové heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
+    <div style="height:14px"></div><button class="btn full" type="submit">Uložit nové heslo</button></form></div>
+  </div>` });
 }
 
 // ── Admin (Tomáš, Jan přes SSO) ─────────────────────────────────────────────
