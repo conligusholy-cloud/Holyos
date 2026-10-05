@@ -240,6 +240,7 @@ app.post('/admin/settings/eur-rate', requireAdmin, wrap(async (req, res) => {
 app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let offers = [];
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }
+  try { const mins = new Map((await q('SELECT holyos_item_id, min_price_czk, min_price_eur FROM product_offers')).rows.map(r => [r.holyos_item_id, r])); offers = offers.map(p => { const m = mins.get(p.id) || {}; return { ...p, min_price_czk: m.min_price_czk, min_price_eur: m.min_price_eur }; }); } catch (e) { /* bez minima */ }
   const sum = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0);
   const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
   res.send(V.supporterProducts(req.user, offers, { balance }));
@@ -337,9 +338,16 @@ app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
   if (req.query.refresh) productsCache = { at: 0, items: null };
   let out; try { out = await loadProducts(); } catch (e) { out = { error: 'Nepodařilo se načíst ceník z HolyOS: ' + e.message }; }
   const offered = await offeredSet();
-  const pcts = new Map((await q('SELECT holyos_item_id, credit_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, Number(r.credit_pct)]));
-  const rows = (out.items || []).map(p => ({ ...p, offered: offered.has(p.id), credit_pct: pcts.get(p.id) || 0 }));
+  const po = new Map((await q('SELECT holyos_item_id, credit_pct, min_price_czk, min_price_eur FROM product_offers')).rows.map(r => [r.holyos_item_id, r]));
+  const rows = (out.items || []).map(p => { const o = po.get(p.id) || {}; return { ...p, offered: offered.has(p.id), credit_pct: Number(o.credit_pct || 0), min_price_czk: o.min_price_czk, min_price_eur: o.min_price_eur }; });
   res.send(V.adminProducts({ admin: req.admin, rows, error: out.error || '', msg: req.query.msg || '', holyosUrl: HOLYOS_URL, rate: await eurRate() }));
+}));
+app.post('/admin/products/:id(\\d+)/min', requireAdmin, wrap(async (req, res) => {
+  const num = (x) => { const t = String(x || '').replace(/\s/g, '').replace(',', '.'); if (t === '') return null; const n = Number(t); return isFinite(n) && n >= 0 ? n : null; };
+  const mc = num(req.body.min_czk), me = num(req.body.min_eur);
+  await q('INSERT INTO product_offers (holyos_item_id, offered, min_price_czk, min_price_eur, updated_at) VALUES ($1,false,$2,$3,now()) ON CONFLICT (holyos_item_id) DO UPDATE SET min_price_czk=EXCLUDED.min_price_czk, min_price_eur=EXCLUDED.min_price_eur, updated_at=now()', [req.params.id, mc, me]);
+  await log(req.admin, 'product_min_price', { holyos_item_id: Number(req.params.id), min_czk: mc, min_eur: me });
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Minimální cena uložena.'));
 }));
 app.post('/admin/products/:id(\\d+)/credit', requireAdmin, wrap(async (req, res) => {
   let pct = Number(String(req.body.pct || '0').replace(/\s/g, '').replace(',', '.'));

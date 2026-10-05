@@ -102,6 +102,9 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS credits_supporter_idx ON credits (supporter_id);
     ALTER TABLE credits ADD COLUMN IF NOT EXISTS purchase_id INTEGER REFERENCES purchases(id) ON DELETE CASCADE;
     -- Discount Credit v %: kolik % z ceny s DPH získá prodejce, když prodá tento typ stroje
+    -- Minimální prodejní cena bez DPH (nejnižší, za kterou lze stroj prodat); DC sleva pod ni nejde
+    ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS min_price_czk NUMERIC(14,2);
+    ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS min_price_eur NUMERIC(14,2);
     ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS credit_pct NUMERIC(5,2) NOT NULL DEFAULT 0;
 
     -- Zobrazovací měna uživatele (CZK / EUR) na stránkách Prádlomaty a Discount Credit

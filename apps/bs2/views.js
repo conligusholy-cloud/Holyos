@@ -186,13 +186,14 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
     <div><div class="small muted">Dostupné Discount Credit</div><div style="font-size:28px;font-weight:800;letter-spacing:-.02em"><span id="dc-left">${fmt(bal)}</span> <span style="font-size:18px">DC</span></div></div>
     <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Zadej u vybraného prádlomatu, kolik DC chceš uplatnit — cena se hned přepočítá. Kalkulace je orientační, slevu potvrdíme při objednávce.</div>
   </div>
-  <div class="grid" id="dc-grid">${offers.map(p => { const price = vatPrice(p, cur); return `
-    <div class="card dc-card" style="margin:0" data-price="${price == null ? '' : price}"><b style="font-size:16px">${esc(p.name_cs)}</b>
+  <div class="grid" id="dc-grid">${offers.map(p => { const price = vatPrice(p, cur); const minB = cur === 'EUR' ? p.min_price_eur : p.min_price_czk; const minV = minB == null ? 0 : Math.round(Number(minB) * 1.21); const room = price == null ? 0 : Math.max(0, price - minV); return `
+    <div class="card dc-card" style="margin:0" data-price="${price == null ? '' : price}" data-room="${room}"><b style="font-size:16px">${esc(p.name_cs)}</b>
       <div class="dc-price" style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(price, sym)}</div>
       <div class="small muted">cena s DPH 21 %</div>
       <div class="small muted" style="opacity:.8">${money(cur === 'EUR' ? p.price_eur : p.price_czk, sym)} bez DPH</div>
-      ${price != null && bal > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, price)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
-      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> <span class="muted">(ušetříš <span class="dc-saved"></span>)</span></div>` : ''}
+      ${price != null && bal > 0 && room > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
+      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> <span class="muted">(ušetříš <span class="dc-saved"></span>)</span></div>
+      ${minV > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minV, sym)} s DPH</div>` : ''}` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
   <script>
@@ -205,8 +206,8 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
       var u=0;
       cards.forEach(function(c){
         var i=c.querySelector('.dc-in'); if(!i)return;
-        var price=parseFloat(c.getAttribute('data-price'))||0;
-        var other=used(c), cap=Math.max(0,Math.min(price,total-other));
+        var price=parseFloat(c.getAttribute('data-price'))||0, room=parseFloat(c.getAttribute('data-room'));if(isNaN(room))room=price;
+        var other=used(c), cap=Math.max(0,Math.min(room,total-other));
         var val=Math.max(0,parseInt(i.value,10)||0); if(val>cap){val=cap;i.value=cap;}
         i.max=cap; u+=val;
         var box=c.querySelector('.dc-after');
@@ -216,7 +217,7 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
     }
     cards.forEach(function(c){var i=c.querySelector('.dc-in'); if(!i)return;
       i.addEventListener('input',recalc);
-      c.querySelector('.dc-max').addEventListener('click',function(){var price=parseFloat(c.getAttribute('data-price'))||0;i.value=Math.max(0,Math.min(price,total-used(c)));recalc();});
+      c.querySelector('.dc-max').addEventListener('click',function(){var room=parseFloat(c.getAttribute('data-room'));if(isNaN(room))room=parseFloat(c.getAttribute('data-price'))||0;i.value=Math.max(0,Math.min(room,total-used(c)));recalc();});
     });
   })();
   </script>` });
@@ -421,11 +422,14 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
   const groups = {};
   for (const p of rows) { const k = [p.model_version, p.model_variant].filter(Boolean).join(' · ') || 'Ostatní'; (groups[k] = groups[k] || []).push(p); }
   const body = Object.keys(groups).map(k => `<h2 style="margin:18px 0 8px;font-size:15px;color:var(--text2)">${esc(k)}</h2>
-    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Typ stroje</th><th>Cena CZK</th><th>Cena EUR</th><th>Kamion CZK</th><th>Kamion EUR</th><th>Discount Credit</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
+    <div class="card tbl-wrap"><table class="cards"><thead><tr><th>Název</th><th>Typ stroje</th><th>Cena CZK</th><th>Cena EUR</th><th>Kamion CZK</th><th>Kamion EUR</th><th>Discount Credit</th><th>Minimální cena bez DPH</th><th style="text-align:right">Nabízet uživatelům</th></tr></thead><tbody>
     ${groups[k].map(p => `<tr><td data-l="Název"><b>${esc(p.name_cs)}</b></td><td data-l="Typ stroje" class="small">${esc(p.machine_code || '—')}</td>
       <td data-l="Cena CZK">${money(p.price_czk, 'Kč')}</td><td data-l="Cena EUR">${money(p.price_eur, '€')}</td>
       <td data-l="Kamion CZK">${money(p.truck_price_czk, 'Kč')}</td><td data-l="Kamion EUR">${money(p.truck_price_eur, '€')}</td>
       <td data-l="Discount Credit"><form method="post" action="/admin/products/${p.id}/credit" style="display:flex;align-items:center;gap:6px;margin:0"><input name="pct" inputmode="decimal" value="${Number(p.credit_pct || 0)}" style="width:70px;padding:7px 8px;text-align:right"><span class="muted">%</span><button class="btn sec sm" type="submit">Uložit</button></form>${p.price_czk != null && Number(p.credit_pct) > 0 ? `<div class="small muted" style="margin-top:4px">= ${money(Math.round(Number(p.price_czk) * 1.21 * Number(p.credit_pct)) / 100, 'DC')} za prodej</div>` : ''}</td>
+      <td data-l="Minimální cena"><form method="post" action="/admin/products/${p.id}/min" style="display:flex;flex-direction:column;gap:6px;margin:0">
+        <div style="display:flex;align-items:center;gap:6px"><input name="min_czk" inputmode="decimal" value="${p.min_price_czk != null ? Number(p.min_price_czk) : ''}" placeholder="—" style="width:110px;padding:7px 8px;text-align:right"><span class="muted">Kč</span></div>
+        <div style="display:flex;align-items:center;gap:6px"><input name="min_eur" inputmode="decimal" value="${p.min_price_eur != null ? Number(p.min_price_eur) : ''}" placeholder="—" style="width:110px;padding:7px 8px;text-align:right"><span class="muted">€</span><button class="btn sec sm" type="submit">Uložit</button></div></form></td>
       <td data-l="Nabízet" class="actions" style="text-align:right"><form method="post" action="/admin/products/${p.id}/offer" style="display:inline"><input type="hidden" name="on" value="${p.offered ? '0' : '1'}"><button type="submit" class="sw ${p.offered ? 'on' : ''}" title="${p.offered ? 'Uživatelé tento stroj vidí — kliknutím skryješ' : 'Skryto — kliknutím zobrazíš uživatelům'}"><i></i><span>${p.offered ? 'Aktivní' : 'Skryto'}</span></button></form></td></tr>`).join('')}
     </tbody></table></div>`).join('');
   return adminLayout('Produkty', 'prod', admin, `
