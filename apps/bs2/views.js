@@ -134,12 +134,12 @@ function supporterHome(s, offers = []) {
   const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ');
   const offerCards = offers.length ? `
   <h2 style="margin:22px 0 10px;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>
-  <div class="grid">${offers.map(p => `
-    <div class="card" style="margin:0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><b style="font-size:16px">${esc(p.name_cs)}</b>${p.machine_code ? `<span class="small muted">${esc(p.machine_code)}</span>` : ''}</div>
-      ${[p.model_version, p.model_variant].filter(Boolean).length ? `<div class="small muted" style="margin-top:2px">${esc([p.model_version, p.model_variant].filter(Boolean).join(' · '))}</div>` : ''}
-      <div style="margin-top:12px;font-size:22px;font-weight:800;letter-spacing:-.02em">${money(p.price_czk, 'Kč')}</div>
-      <div class="small muted">${money(p.price_eur, '€')} · ceny bez DPH${p.truck_price_czk ? ` · s dopravou kamionem ${money(p.truck_price_czk, 'Kč')}` : ''}</div>
-    </div>`).join('')}</div>` : '';
+  <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
+    <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
+      <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
+      <div class="small muted">cena s DPH 21 %${p.price_eur != null ? ` · ${money(p.price_eur, '€')} bez DPH` : ''}</div>
+      ${p.truck_price_czk ? `<div class="small muted" style="margin-top:6px">S dopravou kamionem ${money(vat(p.truck_price_czk), 'Kč')} s DPH</div>` : ''}
+    </div>`; }).join('')}</div>` : '';
   return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
   <div class="hero">
     <div class="eyebrow"><i></i>Účet · aktivní</div>
