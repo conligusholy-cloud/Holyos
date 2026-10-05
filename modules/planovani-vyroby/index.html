@@ -222,6 +222,7 @@
           </select>
           <select id="wp-person" onchange="pv2RenderWork()" title="Jen jeden člověk"><option value="">Všichni lidé</option></select>
           <select id="wp-batch" onchange="pv2RenderWork()" title="Jen jedna dávka"><option value="">Všechny dávky</option></select>
+          <select id="wp-ws" onchange="pv2RenderWork()" title="Jen jedno pracoviště"><option value="">Všechna pracoviště</option></select>
           <select id="wp-material" onchange="pv2RenderWork()" title="Stav materiálu pro operaci"><option value="">Materiál: vše</option><option value="on_site">🟢 na pracovišti</option><option value="in_stock">🔵 skladem ve firmě</option><option value="ordered">🟠 objednáno, čeká se</option><option value="missing">🔴 chybí — není objednáno</option><option value="problem">🟠+🔴 vyžaduje nákup</option></select>
           <label><input type="checkbox" id="wp-unassigned" onchange="pv2RenderWork()"> jen nepřiřazené</label>
           <span id="wp-count" style="margin-left:auto;font-size:12px;color:var(--text2);"></span>
@@ -1655,13 +1656,24 @@
   function pv2DT(d) { return d ? pv2Date(d) + ' ' + pv2Time(d) : '—'; }
   var pv2Loaded = {};
   // Termín: původní (první plán) + pod ním aktuální, zeleně když dřív, červeně když později
-  function pv2PlanCell(orig, cur) {
-    if (!orig && !cur) return '—';
-    if (!orig || !cur || Math.abs(new Date(orig) - new Date(cur)) < 60000) return pv2DT(cur || orig);
-    var later = new Date(cur) > new Date(orig);
-    var diffH = Math.round(Math.abs(new Date(cur) - new Date(orig)) / 3600000 * 10) / 10;
-    return '<div style="color:var(--text2);text-decoration:line-through;font-size:12px;" title="Původní termín">' + pv2DT(orig) + '</div>' +
-      '<div style="color:' + (later ? '#ef4444' : '#22c55e') + ';font-weight:700;" title="Aktuální termín po přeplánování (' + (later ? '+' : '−') + diffH + ' h)">' + pv2DT(cur) + ' <small>' + (later ? '▲ +' : '▼ −') + diffH + ' h</small></div>';
+  // Buňka termínu: plán (původní, příp. přeplánovaný) + REÁLNĚ: skutečný začátek / skutečný konec nebo předpoklad konce.
+  // Reálný čas zeleně, když je dřív než plán, červeně, když později.
+  function pv2PlanCell(orig, cur, real, realLabel, isForecast) {
+    var plan = cur || orig;
+    var html = '';
+    if (orig && cur && Math.abs(new Date(orig) - new Date(cur)) >= 60000) {
+      html += '<div style="color:var(--text2);text-decoration:line-through;font-size:11px;" title="Původní plán">' + pv2DT(orig) + '</div>';
+    }
+    html += '<div style="font-size:12px;color:var(--text2);" title="Plán">plán ' + (plan ? pv2DT(plan) : '—') + '</div>';
+    if (real) {
+      var later = plan ? new Date(real) > new Date(plan) : false;
+      var diffH = plan ? Math.round(Math.abs(new Date(real) - new Date(plan)) / 3600000 * 10) / 10 : 0;
+      html += '<div style="color:' + (later ? '#ef4444' : '#22c55e') + ';font-weight:700;" title="' + realLabel + '">' + (isForecast ? '≈ ' : '') + pv2DT(real) + (plan && diffH ? ' <small>' + (later ? '▲ +' : '▼ −') + diffH + ' h</small>' : '') + '</div>';
+      html += '<div style="font-size:10.5px;color:var(--text2);">' + realLabel + '</div>';
+    } else {
+      html += '<div style="font-size:11px;color:var(--text2);">' + (isForecast ? 'předpoklad = plán' : 'zatím nezačato') + '</div>';
+    }
+    return html;
   }
   window.pv2Show = function (sec) {
     document.querySelectorAll('.pv2-tab').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-sec') === sec); });
@@ -1766,7 +1778,7 @@
       var rows = await pv2Fetch('/api/planning/batches-plan');
       rows = rows.slice().sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 8);
       box.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Naposledy zadáno do výroby</div>' + (rows.length ? '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Stav</th><th></th></tr></thead><tbody>' +
-        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;"><button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
+        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;"><button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
     } catch (e) { box.innerHTML = ''; }
   }
 
@@ -1786,6 +1798,10 @@
       pSel.innerHTML = '<option value="">Všichni lidé</option>' + Object.keys(people).sort(function (a, b) { return people[a].localeCompare(people[b], 'cs'); }).map(function (id) { return '<option value="' + id + '">' + pv2Esc(people[id]) + '</option>'; }).join('');
       bSel.innerHTML = '<option value="">Všechny dávky</option>' + Object.keys(batches).map(function (id) { return '<option value="' + id + '">' + pv2Esc(batches[id]) + '</option>'; }).join('');
       pSel.value = pKeep; bSel.value = bKeep;
+      var wSel = document.getElementById('wp-ws'), wKeep = wSel.value, wss = {};
+      pv2WorkOps.forEach(function (o) { if (o.workstation) wss[o.workstation.id] = o.workstation.name; });
+      wSel.innerHTML = '<option value="">Všechna pracoviště</option>' + Object.keys(wss).sort(function (a, b) { return wss[a].localeCompare(wss[b], 'cs'); }).map(function (id) { return '<option value="' + id + '">' + pv2Esc(wss[id]) + '</option>'; }).join('');
+      wSel.value = wKeep;
       pv2RenderWork();
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
@@ -1805,9 +1821,10 @@
     try {
       var q = (document.getElementById('wp-search').value || '').toLowerCase().trim();
       var sort = document.getElementById('wp-sort').value; var onlyPerson = parseInt(document.getElementById('wp-person').value) || 0; var onlyBatch = parseInt(document.getElementById('wp-batch').value) || 0; var onlyUn = document.getElementById('wp-unassigned').checked;
-      var onlyMat = document.getElementById('wp-material').value;
+      var onlyMat = document.getElementById('wp-material').value; var onlyWs = parseInt(document.getElementById('wp-ws').value) || 0;
       var ops = pv2WorkOps.filter(function (o) {
         if (onlyBatch && o.batch.id !== onlyBatch) return false;
+        if (onlyWs && !(o.workstation && o.workstation.id === onlyWs)) return false;
         var lvl = (o.material && o.material.level) || 'none';
         if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing') return false; }
         else if (onlyMat && lvl !== onlyMat) return false;
@@ -1870,7 +1887,7 @@
           var pct = b.ops_total ? Math.round(b.ops_done / b.ops_total * 100) : 0;
           var late = b.due_date && b.planned_end && new Date(b.planned_end) > new Date(b.due_date);
           return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b>' + (b.is_test ? ' <span class="pv2-badge" style="color:#c084fc;">🧪</span>' : '') + (b.ignore_stock ? ' <span class="pv2-badge" style="color:#f59e0b;" title="Plánováno bez ohledu na sklad">⏩</span>' : '') + '</td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small></td><td>' + b.quantity + '</td>' +
-            '<td>' + pv2PlanCell(b.original_planned_start, b.planned_start) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end) + (b.due_date ? '<div style="font-size:11px;color:' + (late ? '#ef4444' : '#22c55e') + ';">' + (late ? '❌ po termínu ' : '✓ termín ') + pv2DT(b.due_date) + '</div>' : '') + '</td>' +
+            '<td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + (b.due_date ? '<div style="font-size:11px;color:' + (late ? '#ef4444' : '#22c55e') + ';">' + (late ? '❌ po termínu ' : '✓ termín ') + pv2DT(b.due_date) + '</div>' : '') + '</td>' +
             '<td><div class="pv2-bar" title="' + b.ops_done + ' / ' + b.ops_total + ' hotovo"><div style="width:' + pct + '%"></div></div><small style="color:var(--text2)">' + b.ops_done + '/' + b.ops_total + (b.ops_planned < b.ops_total ? ' · ' + (b.ops_total - b.ops_planned) + ' nenaplánováno' : '') + '</small></td>' +
             '<td>' + (b.people.length ? b.people.map(function (p) { return '<span class="pv2-badge">' + pv2Esc(p.first_name + ' ' + p.last_name) + '</span>'; }).join('') : '<span style="color:#ef4444;font-size:11px;">bez lidí</span>') + '</td>' +
             '<td>' + b.workstations.map(function (w) { return '<span class="pv2-badge">' + pv2Esc(w.name) + '</span>'; }).join('') + '</td>' +
