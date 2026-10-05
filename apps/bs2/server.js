@@ -238,7 +238,13 @@ app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
-  res.send(V.supporterCredit(req.user, { rows }));
+  let sellable = [];
+  try {
+    const items = (await loadProducts()).items || [];
+    const off = new Map((await q('SELECT holyos_item_id, offered, credit_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, r]));
+    sellable = items.filter(p => off.get(p.id) && off.get(p.id).offered).map(p => ({ ...p, credit_pct: Number(off.get(p.id).credit_pct) }));
+  } catch (e) { /* bez tabulky */ }
+  res.send(V.supporterCredit(req.user, { rows, sellable }));
 }));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
