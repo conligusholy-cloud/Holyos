@@ -317,8 +317,16 @@ app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
   if (req.query.refresh) productsCache = { at: 0, items: null };
   let out; try { out = await loadProducts(); } catch (e) { out = { error: 'Nepodařilo se načíst ceník z HolyOS: ' + e.message }; }
   const offered = await offeredSet();
-  const rows = (out.items || []).map(p => ({ ...p, offered: offered.has(p.id) }));
+  const pcts = new Map((await q('SELECT holyos_item_id, credit_pct FROM product_offers')).rows.map(r => [r.holyos_item_id, Number(r.credit_pct)]));
+  const rows = (out.items || []).map(p => ({ ...p, offered: offered.has(p.id), credit_pct: pcts.get(p.id) || 0 }));
   res.send(V.adminProducts({ admin: req.admin, rows, error: out.error || '', msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+}));
+app.post('/admin/products/:id(\\d+)/credit', requireAdmin, wrap(async (req, res) => {
+  let pct = Number(String(req.body.pct || '0').replace(/\s/g, '').replace(',', '.'));
+  if (!isFinite(pct) || pct < 0) pct = 0; if (pct > 100) pct = 100;
+  await q('INSERT INTO product_offers (holyos_item_id, offered, credit_pct, updated_at) VALUES ($1,false,$2,now()) ON CONFLICT (holyos_item_id) DO UPDATE SET credit_pct=EXCLUDED.credit_pct, updated_at=now()', [req.params.id, pct]);
+  await log(req.admin, 'product_credit_pct', { holyos_item_id: Number(req.params.id), pct });
+  res.redirect('/admin/products?msg=' + encodeURIComponent('Discount Credit uložen.'));
 }));
 // Přepínač „Nabízet uživatelům" u stroje (id = položka ceníku HolyOS)
 app.post('/admin/products/:id(\\d+)/offer', requireAdmin, wrap(async (req, res) => {
@@ -357,10 +365,23 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
   const pr = String(req.body.price || '').replace(/\s/g, '').replace(',', '.');
   const price = pr !== '' && !isNaN(Number(pr)) ? Number(pr) : (m && m.price_czk != null ? m.price_czk : null);
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
-  await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, purchased_at, note) VALUES ($1,$2,$3,$4,$5,$6)', [s.id, m ? m.id : null, name, price, date, String(req.body.note || '').trim().slice(0, 500) || null]);
+  const ins = await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, purchased_at, note) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [s.id, m ? m.id : null, name, price, date, String(req.body.note || '').trim().slice(0, 500) || null]);
+  // Discount Credit prodejci: % z ceny s DPH (21 %) podle nastavení typu stroje; prodejce = kdo zákazníka přivedl (referred_by) nebo nick v tab3
+  let creditMsg = '';
+  try {
+    if (m && price != null) {
+      const pct = Number(((await q('SELECT credit_pct FROM product_offers WHERE holyos_item_id=$1', [m.id])).rows[0] || {}).credit_pct || 0);
+      const seller = (await q("SELECT id, nick FROM supporters WHERE id<>$1 AND (id=$2 OR ($3::text IS NOT NULL AND lower(nick)=lower($3))) ORDER BY (id=$2) DESC NULLS LAST LIMIT 1", [s.id, s.referred_by || 0, (s.extra && s.extra.tab3 && String(s.extra.tab3).trim()) || null])).rows[0];
+      if (pct > 0 && seller) {
+        const amount = Math.round(Number(price) * 1.21 * pct) / 100;
+        await q('INSERT INTO credits (supporter_id, amount_czk, note, purchase_id) VALUES ($1,$2,$3,$4)', [seller.id, amount, 'Prodej: ' + name + ' (' + ([s.first_name, s.last_name].filter(Boolean).join(' ') || s.email) + '), ' + pct + ' % z ceny s DPH', ins.rows[0].id]);
+        creditMsg = ' Prodejci ' + (seller.nick || '') + ' připsáno ' + amount.toLocaleString('cs-CZ') + ' Kč kreditu.';
+      }
+    }
+  } catch (e) { console.error('credit auto', e.message); }
   if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'purchase_add', { id: s.id, product: name });
-  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.'));
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.' + creditMsg));
 }));
 app.post('/admin/supporters/:id(\\d+)/credits', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');

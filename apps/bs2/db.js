@@ -100,6 +100,9 @@ async function migrate() {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS credits_supporter_idx ON credits (supporter_id);
+    ALTER TABLE credits ADD COLUMN IF NOT EXISTS purchase_id INTEGER REFERENCES purchases(id) ON DELETE CASCADE;
+    -- Discount Credit v %: kolik % z ceny s DPH získá prodejce, když prodá tento typ stroje
+    ALTER TABLE product_offers ADD COLUMN IF NOT EXISTS credit_pct NUMERIC(5,2) NOT NULL DEFAULT 0;
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
