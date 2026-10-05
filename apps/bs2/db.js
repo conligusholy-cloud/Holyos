@@ -58,6 +58,10 @@ async function migrate() {
       updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
+    -- Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS user_type TEXT NOT NULL DEFAULT 'standard';
+    CREATE INDEX IF NOT EXISTS supporters_user_type_idx ON supporters (user_type);
+
     -- Které stroje z ceníku HolyOS nabízíme uživatelům BS2 (přepínač v adminu → záložka Produkty)
     CREATE TABLE IF NOT EXISTS product_offers (
       holyos_item_id INTEGER PRIMARY KEY,

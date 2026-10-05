@@ -200,18 +200,20 @@ app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
   res.cookie(COLS_COOKIE, JSON.stringify(cols), { httpOnly: true, secure: isHttps(req), sameSite: 'lax', maxAge: 365 * 24 * 3600 * 1000 });
   res.redirect(back);
 });
+const USER_TYPES = ['standard', 'owner', 'seller'];
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
-  const qs = String(req.query.q || '').trim(), status = String(req.query.status || '');
+  const qs = String(req.query.q || '').trim(), status = String(req.query.status || ''), utype = String(req.query.type || '');
   const where = [], params = [];
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where.push(`(lower(email) LIKE $${params.length} OR lower(coalesce(first_name,'')) LIKE $${params.length} OR lower(coalesce(last_name,'')) LIKE $${params.length} OR lower(coalesce(nick,'')) LIKE $${params.length})`); }
   if (['invited', 'active', 'blocked'].includes(status)) { params.push(status); where.push(`status=$${params.length}`); }
+  if (USER_TYPES.includes(utype)) { params.push(utype); where.push(`user_type=$${params.length}`); }
   const sql = `FROM supporters ${where.length ? 'WHERE ' + where.join(' AND ') : ''}`;
   const cols = readCols(req);
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
-  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
 let productsCache = { at: 0, items: null };
@@ -263,8 +265,9 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const s = await loadSupporter(req.params.id); if (!s) return res.status(404).send(V.errorPage('Nenalezeno', 'Uživatel neexistuje.', '/admin/supporters'));
   const email = String(req.body.email || '').trim().toLowerCase();
   try {
-    await q('UPDATE supporters SET email=$1, first_name=$2, last_name=$3, updated_at=now() WHERE id=$4', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, s.id]);
-    await log(req.admin, 'update', { id: s.id, email });
+    const utype = USER_TYPES.includes(String(req.body.user_type)) ? String(req.body.user_type) : (s.user_type || 'standard');
+    await q('UPDATE supporters SET email=$1, first_name=$2, last_name=$3, user_type=$5, updated_at=now() WHERE id=$4', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, s.id, utype]);
+    await log(req.admin, 'update', { id: s.id, email, user_type: utype });
     res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.'));
   } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný uživatel.' : e.message, holyosUrl: HOLYOS_URL })); }
 }));

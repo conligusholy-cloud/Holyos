@@ -44,7 +44,7 @@ input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--text);b
 .btn.full{width:100%} .btn.sec{background:rgba(120,160,255,.08);color:var(--text);border:1px solid var(--border2);box-shadow:none} .btn.danger{background:transparent;color:var(--err);border:1px solid rgba(255,93,108,.5);box-shadow:none} .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px} .btn:disabled{opacity:.5;cursor:default;transform:none}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .msg{padding:10px 12px;border-radius:10px;margin:10px 0;font-size:14px} .msg.err{background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.4);color:#ffb3bb} .msg.ok{background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.4);color:#a9f5d9}
-.badge{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;border:1px solid} .badge.invited{color:var(--blue);border-color:rgba(79,209,255,.5)} .badge.active{color:var(--ok);border-color:rgba(47,227,160,.5)} .badge.blocked{color:var(--err);border-color:rgba(255,93,108,.5)}
+.badge{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px;border:1px solid} .badge.invited{color:var(--blue);border-color:rgba(79,209,255,.5)} .badge.active{color:var(--ok);border-color:rgba(47,227,160,.5)} .badge.blocked{color:var(--err);border-color:rgba(255,93,108,.5)} .badge.type-standard{color:var(--text2);border-color:var(--border2)} .badge.type-owner{color:var(--accent2);border-color:rgba(79,209,255,.5)} .badge.type-seller{color:#c4b5ff;border-color:rgba(124,92,255,.6);background:rgba(124,92,255,.1)}
 .auth{max-width:440px;margin:6vh auto 0} .auth .logo{font-size:28px;font-weight:900;text-align:center;margin-bottom:4px} .auth .sub{text-align:center;color:var(--text2);margin-bottom:18px}
 table{width:100%;border-collapse:collapse;font-size:14px} th,td{text-align:left;padding:9px 8px;border-top:1px solid var(--border);vertical-align:top} th{color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-top:0}
 .tbl-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
@@ -137,8 +137,7 @@ function supporterHome(s, offers = []) {
   <div class="grid">${offers.map(p => { const vat = (v) => (v == null ? null : Math.round(Number(v) * 1.21)); return `
     <div class="card" style="margin:0"><b style="font-size:16px">${esc(p.name_cs)}</b>
       <div style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(vat(p.price_czk), 'Kč')}</div>
-      <div class="small muted">cena s DPH 21 %${p.price_eur != null ? ` · ${money(p.price_eur, '€')} bez DPH` : ''}</div>
-      ${p.truck_price_czk ? `<div class="small muted" style="margin-top:6px">S dopravou kamionem ${money(vat(p.truck_price_czk), 'Kč')} s DPH</div>` : ''}
+      <div class="small muted">cena s DPH 21 %</div>
     </div>`; }).join('')}</div>` : '';
   return layout({ title: 'Domů', user: s.nick, nav: USER_NAV, active: 'home', fx: true, body: `
   <div class="hero">
@@ -202,14 +201,19 @@ const BASE_COLS = [
   { key: 'email', label: 'E-mail', render: (r) => `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` },
   { key: 'nick', label: 'Nick', render: (r) => r.nick ? esc(r.nick) : '<span class="muted">—</span>' },
   { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
+  { key: 'user_type', label: 'Typ uživatele', render: (r) => typeBadge(r.user_type) },
   { key: 'last_login_at', label: 'Poslední přihlášení', render: (r) => `<span class="muted small">${fmtDT(r.last_login_at)}</span>` },
   { key: 'activated_at', label: 'Aktivován', render: (r) => `<span class="muted small">${fmtDT(r.activated_at)}</span>` },
   { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'status', 'last_login_at'];
+const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at'];
+// Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
+const USER_TYPE_LABEL = { standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat' };
+const typeBadge = (t) => { const k = USER_TYPE_LABEL[t] ? t : 'standard'; return `<span class="badge type-${k}">${USER_TYPE_LABEL[k]}</span>`; };
+const typeSelect = (cur, name = 'user_type') => `<select name="${name}" style="width:auto">${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${(cur || 'standard') === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>`;
 const EXTRA_PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
-function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [] }) {
+function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [] }) {
   const baseSel = BASE_COLS.filter(c => cols.includes(c.key));
   const extraSel = cols.filter(k => k.startsWith('x:')).map(k => k.slice(2)).filter(k => extraKeys.includes(k));
   const sortedExtra = extraKeys.slice().sort((a, b) => { const ia = EXTRA_PRIO.indexOf(a), ib = EXTRA_PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); });
@@ -252,6 +256,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', total, msg = '',
   <form method="get" class="row" style="margin:10px 0 14px">
     <input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1;min-width:200px">
     <select name="status" style="width:auto"><option value="">Všechny stavy</option><option value="invited"${status === 'invited' ? ' selected' : ''}>Čeká na aktivaci</option><option value="active"${status === 'active' ? ' selected' : ''}>Aktivní</option><option value="blocked"${status === 'blocked' ? ' selected' : ''}>Blokovaní</option></select>
+    <select name="type" style="width:auto"><option value="">Všechny typy</option>${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${utype === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>
     <button class="btn sec" type="submit">Filtrovat</button>
   </form>
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
@@ -300,6 +305,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <label>E-mail (klíč pro první přihlášení)</label><input name="email" type="email" value="${esc(s ? s.email : '')}" required>
         <label>Jméno</label><input name="first_name" value="${esc(s ? s.first_name : '')}">
         <label>Příjmení</label><input name="last_name" value="${esc(s ? s.last_name : '')}">
+        ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Stávající · Koupil prádlomat · Může prodávat</div>`}
         <div style="height:12px"></div><button class="btn" type="submit">${isNew ? 'Vytvořit' : 'Uložit'}</button>
       </form>
     </div></details>
