@@ -190,6 +190,7 @@ function supporterProducts(s, offers = [], { balance = 0 } = {}) {
     <div class="card dc-card" style="margin:0" data-price="${price == null ? '' : price}"><b style="font-size:16px">${esc(p.name_cs)}</b>
       <div class="dc-price" style="margin-top:12px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(price, sym)}</div>
       <div class="small muted">cena s DPH 21 %</div>
+      <div class="small muted" style="opacity:.8">${money(cur === 'EUR' ? p.price_eur : p.price_czk, sym)} bez DPH</div>
       ${price != null && bal > 0 ? `<div style="margin-top:12px;display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, price)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> <span class="muted">(ušetříš <span class="dc-saved"></span>)</span></div>` : ''}
     </div>`; }).join('')}</div>
