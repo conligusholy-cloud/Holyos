@@ -297,15 +297,15 @@
       .pv2-person-head { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface2); font-weight:700; }
       .pv2-person-head .cnt { font-size:11px; color:var(--text2); font-weight:500; }
       .pv2-day { padding:6px 14px 2px; font-size:11px; color:#14b8a6; font-weight:700; text-transform:uppercase; }
-      /* Sloupce zarovnané doleva: čas | operace | lidé | materiál | výrobek · dávka | pracoviště | stav */
-      .pv2-op { display:grid; grid-template-columns:118px minmax(150px,200px) minmax(170px,230px) minmax(170px,220px) minmax(220px,1fr) minmax(150px,220px) auto; gap:10px; padding:6px 14px; border-top:1px solid var(--border); align-items:center; }
+      /* Sloupce zarovnané doleva: čas | operace | lidé | materiál | výrobek | dávka | pracoviště | stav */
+      .pv2-op { display:grid; grid-template-columns:118px minmax(150px,200px) minmax(170px,230px) minmax(170px,220px) minmax(200px,1fr) minmax(150px,190px) minmax(150px,220px) auto; gap:10px; padding:6px 14px; border-top:1px solid var(--border); align-items:center; }
       .pv2-op > div { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .pv2-op .c-op { font-size:13px; font-weight:700; }
       .pv2-op .c-op .pv2-badge { font-weight:600; }
       .pv2-op .c-sub { font-size:12px; color:var(--text2); }
       .pv2-op .c-sub b { color:var(--text); font-weight:600; }
       .pv2-op .pv2-badge { margin:0; }
-      .pv2-op-head { display:grid; grid-template-columns:118px minmax(150px,200px) minmax(170px,230px) minmax(170px,220px) minmax(220px,1fr) minmax(150px,220px) auto; gap:10px; padding:4px 14px 2px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text2); }
+      .pv2-op-head { display:grid; grid-template-columns:118px minmax(150px,200px) minmax(170px,230px) minmax(170px,220px) minmax(200px,1fr) minmax(150px,190px) minmax(150px,220px) auto; gap:10px; padding:4px 14px 2px; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--text2); }
       .pv2-op .t { font-family:monospace; font-size:12px; color:var(--text); }
       /* Operace v minulosti (konec < teď): ztlumeně; hotová zeleně, nehotová (zmeškaná) oranžově */
       .pv2-op.past { background:rgba(255,255,255,0.025); opacity:.6; }
@@ -1887,7 +1887,7 @@
       });
       document.getElementById('wp-count').textContent = groups.length + ' lidí · ' + ops.length + ' operací · ' + (Math.round(groups.reduce(function (s, g) { return s + hoursOf(g); }, 0) * 10) / 10) + ' h';
       if (!groups.length) { box.innerHTML = '<div class="pv2-empty">Filtru nic neodpovídá.</div>'; return; }
-      box.innerHTML = '<div class="pv2-op-head"><div>Čas</div><div>Operace</div><div>Lidé</div><div>Materiál</div><div>Výrobek · dávka</div><div>Pracoviště</div><div>Stav</div></div>' + groups.map(function (g) {
+      box.innerHTML = '<div class="pv2-op-head"><div>Čas</div><div>Operace</div><div>Lidé</div><div>Materiál</div><div>Výrobek</div><div>Dávka</div><div>Pracoviště</div><div>Stav</div></div>' + groups.map(function (g) {
         var name = g.person ? (g.person.first_name + ' ' + g.person.last_name) : '⚠️ Nepřiřazeno';
         var minutes = g.ops.reduce(function (s, o) { return s + (o.planned_end && o.planned_start ? (new Date(o.planned_end) - new Date(o.planned_start)) / 60000 : 0); }, 0);
         var html = '<div class="pv2-person"><div class="pv2-person-head">👤 ' + pv2Esc(name) + '<span class="cnt">' + g.ops.length + ' operací · ' + Math.round(minutes / 60 * 10) / 10 + ' h</span></div>';
@@ -1906,7 +1906,8 @@
             '<div class="c-op" title="' + pv2Esc(o.operation ? o.operation.name : '') + '">' + (o.operation ? o.operation.step_number + '. ' + pv2Esc(o.operation.name) : '?') + (o.operation && o.operation.is_parallel ? ' <span class="pv2-badge" style="color:#c084fc;">⫽</span>' : '') + '</div>' +
             '<div>' + peopleCell + '</div>' +
             '<div>' + pv2MatBadge(o.material) + '</div>' +
-            '<div class="c-sub" title="' + pv2Esc(prodTxt) + '"><b>' + pv2Esc(o.batch.product.code) + '</b> ' + pv2Esc(o.batch.product.name) + ' · <b>' + pv2Esc(o.batch.batch_number) + '</b> (' + o.batch.quantity + ' ks)</div>' +
+            '<div class="c-sub" title="' + pv2Esc(prodTxt) + '"><b>' + pv2Esc(o.batch.product.code) + '</b> ' + pv2Esc(o.batch.product.name) + '</div>' +
+            '<div class="c-sub" title="Dávka ' + pv2Esc(o.batch.batch_number) + '"><b>' + pv2Esc(o.batch.batch_number) + '</b> (' + o.batch.quantity + ' ks)</div>' +
             '<div class="c-sub" title="' + pv2Esc(o.workstation ? o.workstation.name : '') + '">' + (o.workstation ? '🏭 ' + pv2Esc(o.workstation.name) : '—') + '</div>' +
             '<span class="s ' + pv2Esc(o.status) + '">' + pv2Esc(o.status) + '</span></div>';
         });
