@@ -616,7 +616,7 @@
           <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}${op?.variant_name ? ` <span style="font-size:12px;color:#fb923c;border:1px solid rgba(251,146,60,.5);border-radius:6px;padding:1px 6px;">varianta: ${escapeHtml(op.variant_name)}</span>` : ''}</div>
           <div class="ws-task-meta">
             <span>${escapeHtml(product?.code || '')} ${escapeHtml(product?.name || '')}</span>
-            <span>· dávka ${escapeHtml(t.batch?.batch_number || '')} (${t.batch?.quantity || '?'} ks)</span>
+            <span>· dávka ${escapeHtml(t.batch?.batch_number || '')} (${t.batch?.quantity || '?'} ks)</span>${t.batch?.config_code ? `<span style="font-family:ui-monospace,Consolas,monospace;font-weight:700;color:#22c55e;" title="Výrobní kód — co přesně se vyrábí">${escapeHtml(t.batch.config_code)}</span>` : ''}
             ${op?.duration ? `<span>⏱ ${op.duration} min/ks</span>` : ''}
             ${op?.is_parallel ? '<span>⫽ paralelní</span>' : ''}
             ${mates}

@@ -9,3 +9,4 @@ CREATE INDEX IF NOT EXISTS "product_operations_variant_of_id_idx" ON "product_op
 ALTER TABLE "production_batches" ADD COLUMN IF NOT EXISTS "variant_choices" JSONB;
 ALTER TABLE "production_batches" ADD COLUMN IF NOT EXISTS "variant_label" VARCHAR(255);
 CREATE UNIQUE INDEX IF NOT EXISTS "product_operations_variant_code_key" ON "product_operations"(upper("variant_code")) WHERE "variant_code" IS NOT NULL;
+ALTER TABLE "production_batches" ADD COLUMN IF NOT EXISTS "config_code" VARCHAR(160);

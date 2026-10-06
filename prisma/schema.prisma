@@ -4044,6 +4044,8 @@ model ProductionBatch {
   // Zvolené varianty operací při zadání do výroby: { "<id základní operace>": <id varianty> }; variant_label = čitelný souhrn („Opláštění: Hliník")
   variant_choices Json?
   variant_label   String? @db.VarChar(255)
+  // Výrobní kód = kód výrobku + kódy zvolených provedení po operacích (BS-M-5021-V04-V03-V07) — jednoznačně říká, co se vyrábí
+  config_code     String? @db.VarChar(160)
 
   note String? @db.Text
 

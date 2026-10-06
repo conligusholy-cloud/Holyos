@@ -218,6 +218,7 @@
     @keyframes opPulse { 0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0.45); } }
     .start-box { margin:28px auto 26px; width:max-content; display:flex; align-items:center; gap:12px; background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.65); color:#86efac; border-radius:26px; padding:12px 26px; font-size:16px; font-weight:800; letter-spacing:.6px; box-shadow:0 0 0 6px rgba(34,197,94,0.07), 0 6px 20px rgba(34,197,94,0.18); }
     .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
+    .start-box .start-cfg { font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; color:#0b1a12; background:#22c55e; border-radius:999px; padding:3px 10px; letter-spacing:.3px; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
     .outputs-head { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#86efac; margin-bottom:6px; }
@@ -1208,7 +1209,8 @@
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
           // Start výroby — vizuální začátek hlavní linie (protějšek koncového uzlu „konec výroby")
-          html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span></div>';
+          const cfgCode = (maxVariants && Object.keys(eqSelected).length) ? eqConfigCode() : null;
+          html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span>' + (cfgCode ? '<span class="start-cfg" title="Výrobní kód = kód výrobku + kódy zvolených provedení. Jednoznačně říká, co se vyrábí; dostane ho každá dávka.">' + esc(cfgCode) + '</span>' : '') + '</div>';
           if (maxVariants) html += renderEquipmentBox();
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
@@ -1632,6 +1634,13 @@
       renderTab();
     }
     function eqClear() { eqSelected = {}; renderTab(); }
+    // Výrobní kód pro vyklikanou výbavu: kód výrobku + kódy zvolených provedení (v pořadí operací)
+    function eqConfigCode() {
+      const choice = eqRouteChoices();
+      const codes = (product.operations || []).filter(o => variantsOf(o.id).length).sort((a, b) => a.step_number - b.step_number)
+        .map(o => { const pv = provisionById(choice[o.id] || o.id); return pv && pv.variant_code ? pv.variant_code : null; }).filter(Boolean);
+      return (product.code || '') + (codes.length ? '-' + codes.join('-') : '');
+    }
     // Zvolené provedení pro každou základní operaci: { base_id: id karty (základ nebo varianta) }
     function eqRouteChoices() {
       const out = {}; const bases = (product.operations || []);

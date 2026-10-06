@@ -2757,7 +2757,7 @@ router.post('/batches', async (req, res, next) => {
     }
 
     // Varianty operací: { základ_id: varianta_id } — ověř, že varianty patří k výrobku a k uvedenému základu; sestav štítek
-    let choices = null, variantLabel = null;
+    let choices = null, variantLabel = null, configCode = null;
     if (variant_choices && typeof variant_choices === 'object' && Object.keys(variant_choices).length) {
       const ids = Object.values(variant_choices).map(Number).filter(Number.isFinite);
       const vars = ids.length ? await prisma.productOperation.findMany({ where: { id: { in: ids }, product_id: productId, variant_of_id: { not: null } }, select: { id: true, name: true, variant_of_id: true, variant_name: true, variant_code: true, step_number: true } }) : [];
@@ -2772,6 +2772,10 @@ router.post('/batches', async (req, res, next) => {
       const bases = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: null, is_staging: false, variants: { some: {} } }, select: { id: true, name: true, step_number: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true } } }, orderBy: { step_number: 'asc' } });
       const parts = bases.map(b => { const vid = choices ? choices[b.id] : null; const v = vid ? b.variants.find(x => x.id === vid) : null; const pick = v || b; return b.step_number + '. ' + b.name + ': ' + (pick.variant_code ? pick.variant_code + ' ' : '') + (pick.variant_name || (v ? 'varianta' : 'základ')); });
       variantLabel = ((equipmentLabels.length ? 'Výbava: ' + equipmentLabels.join(', ') + (parts.length ? ' · ' : '') : '') + parts.join(' · ')).slice(0, 255) || null;
+      // Výrobní kód: kód výrobku + kódy zvolených provedení v pořadí operací (základ i varianta mají svůj kód)
+      const prodRow = await prisma.product.findUnique({ where: { id: productId }, select: { code: true } });
+      const codes = bases.map(b => { const vid = choices ? choices[b.id] : null; const v = vid ? b.variants.find(x => x.id === vid) : null; return (v || b).variant_code || null; }).filter(Boolean);
+      configCode = ((prodRow && prodRow.code) || ('P' + productId)) + (codes.length ? '-' + codes.join('-') : '');
     }
 
     let batch_number = await generateBatchNumber(planned_start, !!is_test);
@@ -2795,6 +2799,7 @@ router.post('/batches', async (req, res, next) => {
         ignore_stock: !!ignore_stock,
         variant_choices: choices || undefined,
         variant_label: variantLabel,
+        config_code: configCode ? configCode.slice(0, 160) : null,
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
@@ -3051,7 +3056,7 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
         status: 'in_progress',
       },
       include: {
-        batch: { select: { id: true, batch_number: true, quantity: true, priority: true,
+        batch: { select: { id: true, batch_number: true, quantity: true, config_code: true, priority: true,
           product: { select: { id: true, code: true, name: true } } } },
         operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, variant_name: true, variant_code: true } },
       },
@@ -3066,7 +3071,7 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
         status: { in: ['pending', 'ready'] },
       },
       include: {
-        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true, ignore_stock: true,
+        batch: { select: { id: true, batch_number: true, quantity: true, config_code: true, priority: true, status: true, ignore_stock: true,
           product: { select: { id: true, code: true, name: true } } } },
         workstation: { select: { id: true, name: true, input_warehouse_id: true } },
         operation: {
@@ -3119,7 +3124,7 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
         batch: { status: { notIn: ['cancelled', 'done', 'completed'] } },
       },
       include: {
-        batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
+        batch: { select: { id: true, batch_number: true, quantity: true, config_code: true, priority: true, status: true,
           product: { select: { id: true, code: true, name: true } } } },
         operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, is_parallel: true, workers_count: true, variant_name: true, variant_code: true } },
         workstation: { select: { id: true, name: true, input_warehouse_id: true } },
