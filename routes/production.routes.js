@@ -387,7 +387,7 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
       }
       // Hotové výrobky (výstupy postupu)
       const outs = await tx.productOutput.findMany({ where: { product_id: src.id } });
-      if (outs.length) await tx.productOutput.createMany({ data: outs.map(o => ({ product_id: p.id, out_product_id: o.out_product_id, out_material_id: o.out_material_id, quantity: o.quantity, unit: o.unit, note: o.note })) });
+      if (outs.length) await tx.productOutput.createMany({ data: outs.map(o => ({ product_id: p.id, out_product_id: o.out_product_id, out_material_id: o.out_material_id, quantity: o.quantity, unit: o.unit, note: o.note, variant_id: o.variant_id ? (opIdMap.get(o.variant_id) || null) : null })) });
       return p;
     });
     res.status(201).json(created);
@@ -932,8 +932,11 @@ router.put('/products/:id/outputs', async (req, res, next) => {
   try {
     const pid = parseInt(req.params.id);
     const list = Array.isArray(req.body && req.body.outputs) ? req.body.outputs : [];
+    // variant_id: výstupy pro konkrétní provedení (varianta operace); bez něj = výchozí výstupy
+    const variantId = req.body && req.body.variant_id ? parseInt(req.body.variant_id) : null;
     const data = list.map((o) => ({
       product_id: pid,
+      variant_id: variantId,
       out_product_id: o.out_product_id ? parseInt(o.out_product_id) : null,
       out_material_id: o.out_material_id ? parseInt(o.out_material_id) : null,
       quantity: Number(o.quantity) > 0 ? Number(o.quantity) : 1,
@@ -941,7 +944,7 @@ router.put('/products/:id/outputs', async (req, res, next) => {
       note: o.note ? String(o.note).slice(0, 255) : null,
     })).filter((o) => o.out_product_id || o.out_material_id);
     await prisma.$transaction(async (tx) => {
-      await tx.productOutput.deleteMany({ where: { product_id: pid } });
+      await tx.productOutput.deleteMany({ where: { product_id: pid, variant_id: variantId } });
       if (data.length) await tx.productOutput.createMany({ data });
     });
     const rows = await prisma.productOutput.findMany({ where: { product_id: pid }, include: OUTPUT_INCLUDE, orderBy: { id: 'asc' } });

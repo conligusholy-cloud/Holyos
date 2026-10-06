@@ -1586,6 +1586,7 @@ model ProductOperation {
   allowed_people        OperationAllowedPerson[]
   variant_of            ProductOperation?       @relation("OperationVariants", fields: [variant_of_id], references: [id], onDelete: Cascade)
   variants              ProductOperation[]      @relation("OperationVariants")
+  variant_outputs       ProductOutput[]         @relation("OutputVariant")
   // Plánovač — BOM snapshot itemy, kde je tato operace zdrojem spotřeby materiálu
   bom_snapshot_items    BomSnapshotItem[]             @relation("BomSnapshotItemOperation")
   // Plánovač — instance operace pro výrobní dávky
@@ -3900,15 +3901,19 @@ model ProductOutput {
   quantity    Decimal  @default(1) @db.Decimal(12, 3)
   unit        String   @default("ks") @db.VarChar(20)
   note        String?  @db.VarChar(255)
+  // Výstup pro konkrétní provedení (varianta / základ operace): null = výchozí výstupy. Např. nářezový plán: jiná barva → jiné kódy dílů.
+  variant_id  Int?
   created_at  DateTime @default(now())
 
   product      Product   @relation("ProductOutputParent", fields: [product_id], references: [id], onDelete: Cascade)
+  variant      ProductOperation? @relation("OutputVariant", fields: [variant_id], references: [id], onDelete: Cascade)
   out_product  Product?  @relation("ProductOutputProduct", fields: [out_product_id], references: [id], onDelete: Cascade)
   out_material Material? @relation("ProductOutputMaterial", fields: [out_material_id], references: [id], onDelete: Cascade)
 
   @@index([product_id])
   @@index([out_product_id])
   @@index([out_material_id])
+  @@index([variant_id])
   @@map("product_outputs")
 }
 
