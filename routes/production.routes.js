@@ -916,7 +916,7 @@ async function resolveEquipment(productId, equipmentIds, baseChoices) {
       picked[b] = vid; owner[b] = e.group_name + ' – ' + e.name;
     }
   }
-  for (const b of Object.keys(picked)) { if (picked[b] === Number(b)) delete choices[b]; else choices[b] = picked[b]; }
+  for (const b of Object.keys(picked)) choices[b] = picked[b]; // základ = id základu (výslovná volba), jinak id varianty
   return { choices, labels: eq.map(e => e.group_name + ' – ' + e.name) };
 }
 
@@ -2756,15 +2756,22 @@ router.post('/batches', async (req, res, next) => {
       catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); throw e; }
     }
 
-    // Varianty operací: { základ_id: varianta_id } — ověř, že varianty patří k výrobku a k uvedenému základu; sestav štítek
+    // Varianty operací: { základ_id: varianta_id | základ_id } — hodnota = zvolená varianta, nebo id základu (= výslovně základ).
+    // U výrobku s variantami MUSÍ být provedení zvoleno u KAŽDÉ operace s variantami, aby byl postup jednoznačný.
     let choices = null, variantLabel = null, configCode = null;
-    if (variant_choices && typeof variant_choices === 'object' && Object.keys(variant_choices).length) {
-      const ids = Object.values(variant_choices).map(Number).filter(Number.isFinite);
-      const vars = ids.length ? await prisma.productOperation.findMany({ where: { id: { in: ids }, product_id: productId, variant_of_id: { not: null } }, select: { id: true, name: true, variant_of_id: true, variant_name: true, variant_code: true, step_number: true } }) : [];
+    const basesWithVariants = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: null, is_staging: false, variants: { some: {} } }, select: { id: true, name: true, step_number: true, variants: { select: { id: true } } }, orderBy: { step_number: 'asc' } });
+    if (basesWithVariants.length) {
+      const vc = (variant_choices && typeof variant_choices === 'object') ? variant_choices : {};
+      const missing = [], bad = [];
       choices = {};
-      for (const v of vars) if (Number(variant_choices[v.variant_of_id]) === v.id) choices[v.variant_of_id] = v.id;
-      const bad = ids.filter(i => !vars.some(v => v.id === i));
-      if (bad.length) return res.status(400).json({ error: 'Neplatná varianta operace: ' + bad.join(', ') });
+      for (const b of basesWithVariants) {
+        const val = vc[b.id] != null ? Number(vc[b.id]) : null;
+        if (val == null || !Number.isFinite(val)) { missing.push(b.step_number + '. ' + b.name); continue; }
+        if (val === b.id) continue; // výslovně základ
+        if (b.variants.some(v => v.id === val)) choices[b.id] = val; else bad.push(b.step_number + '. ' + b.name);
+      }
+      if (missing.length) return res.status(400).json({ error: 'Není zvoleno provedení u operací: ' + missing.join(', ') + '. Vyber výbavu nebo provedení u každé operace s variantami — jinak není jasné, co se má vyrábět.', missing });
+      if (bad.length) return res.status(400).json({ error: 'Neplatná varianta u operací: ' + bad.join(', ') });
       if (!Object.keys(choices).length) choices = null;
     }
     // Štítek dávky: u každé operace s variantami zvolené provedení (varianta nebo pojmenovaný základ)
