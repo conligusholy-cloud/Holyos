@@ -196,7 +196,7 @@
               </div>
             </div>
             <div class="pf-field" style="flex:0 0 120px;"><label>Počet kusů *</label><input id="pf-qty" type="number" min="1" value="1" onchange="pfSimulate()"></div>
-            <div class="pf-field" style="flex:0 0 200px;"><label>Chci mít vyrobeno do</label><input id="pf-due" type="datetime-local" onchange="pfSimulate()"></div>
+            <div class="pf-field" style="flex:0 0 200px;"><label title="S termínem se plánuje ZPĚTNĚ: najde se nejpozdější start, aby bylo hotovo v termínu. Bez termínu se plánuje dopředu od teď.">Chci mít vyrobeno do</label><input id="pf-due" type="datetime-local" onchange="pfSimulate()"></div>
             <div class="pf-field" style="flex:0 0 130px;"><label>Priorita</label><select id="pf-priority" onchange="pfSimulate()"><option value="100">Normální</option><option value="50">Vysoká</option><option value="10">Urgentní</option><option value="200">Nízká</option></select></div>
           </div>
           <div id="pf-sim" class="pf-sim" style="display:none;"></div>
@@ -1815,9 +1815,17 @@
       var cls = d.meets_due === false ? 'late' : (d.feasible ? 'ok' : 'err');
       box.className = 'pf-sim ' + cls;
       var hours = Math.round((d.work_minutes || 0) / 60 * 10) / 10, wait = Math.round((d.wait_minutes || 0) / 60 * 10) / 10;
-      box.innerHTML = '<div><span style="color:var(--text2);">Když to teď dáš do výroby, bude hotovo nejdřív</span> <span class="big">' + (d.earliest_finish ? pv2DT(d.earliest_finish) : '—') + '</span>' +
-        (d.earliest_start && new Date(d.earliest_start) - new Date(d.requested_start) > 3600000 ? ' <span style="color:#f59e0b;">(start až ' + pv2DT(d.earliest_start) + (d.material && d.material.material_ready_at ? ' — čeká se na materiál' : '') + ')</span>' : '') +
-        (d.due_date ? ' · požadováno do <b>' + pv2DT(d.due_date) + '</b>: ' + (d.meets_due ? '<b style="color:#22c55e;">✅ stíhá</b> (rezerva ' + d.slack_hours + ' h)' : '<b style="color:#ef4444;">❌ nestíhá</b> (chybí ' + Math.abs(d.slack_hours) + ' h)') : '') + '</div>' +
+      var head;
+      if (d.mode === 'backward' && d.due_date) {
+        // Plánováno ZPĚTNĚ od termínu: nejpozdější start, při kterém je hotovo v termínu
+        head = d.meets_due
+          ? '<div><span style="color:var(--text2);">Termín <b>' + pv2DT(d.due_date) + '</b> stíháme — stačí začít nejpozději</span> <span class="big">' + pv2DT(d.earliest_start) + '</span> <span style="color:var(--text2);">a hotovo bude</span> <b style="color:#22c55e;">' + pv2DT(d.earliest_finish) + '</b> (rezerva ' + d.slack_hours + ' h)' + (d.material && d.material.material_ready_at ? ' <span style="color:#f59e0b;">· materiál k dispozici ' + pv2DT(d.material.material_ready_at) + '</span>' : '') + '</div>'
+          : '<div><b style="color:#ef4444;">❌ Termín ' + pv2DT(d.due_date) + ' nejde stihnout</b> <span style="color:var(--text2);">— i při okamžitém startu bude hotovo nejdřív</span> <span class="big">' + pv2DT(d.earliest_finish) + '</span> <span style="color:#ef4444;">(o ' + Math.abs(d.slack_hours) + ' h později)</span>' + (d.material && d.material.material_ready_at ? ' <span style="color:#f59e0b;">· čeká se na materiál do ' + pv2DT(d.material.material_ready_at) + '</span>' : '') + '</div>';
+      } else {
+        head = '<div><span style="color:var(--text2);">Když to teď dáš do výroby, bude hotovo nejdřív</span> <span class="big">' + (d.earliest_finish ? pv2DT(d.earliest_finish) : '—') + '</span>' +
+          (d.earliest_start && new Date(d.earliest_start) - new Date(d.requested_start) > 3600000 ? ' <span style="color:#f59e0b;">(start až ' + pv2DT(d.earliest_start) + (d.material && d.material.material_ready_at ? ' — čeká se na materiál' : '') + ')</span>' : '') + '</div>';
+      }
+      box.innerHTML = head +
         '<div style="font-size:12px;color:var(--text2);">' + d.operations_scheduled + ' operací · práce ' + hours + ' h · čekání ' + wait + ' h' + (d.shift && d.shift.enabled ? ' · směna ' + d.shift.start + '–' + d.shift.end : ' · 24/7') + '</div>' +
         ((d.bottlenecks || []).length ? '<div style="margin-top:4px;">' + d.bottlenecks.map(function (b) { return '<span class="bn ' + b.severity + '">' + (b.severity === 'error' ? '⛔' : b.severity === 'warn' ? '⚠️' : 'ℹ️') + ' ' + pv2Esc(b.text) + '</span>'; }).join('') + '</div>' : '') +
         (d.material && d.material.shortages && d.material.shortages.length ? '<details style="margin-top:4px;font-size:12px;"><summary style="cursor:pointer;color:var(--text2);">Chybějící materiál (' + d.material.shortages.length + ')</summary>' + d.material.shortages.map(function (m) { return '<div>• ' + (m.material ? pv2Esc(m.material.code) + ' ' + pv2Esc(m.material.name) : '?') + ': chybí ' + m.shortage + ' ' + pv2Esc(m.unit || '') + (m.lead_time_days != null ? ' · dodání ' + m.lead_time_days + ' dní' : ' · bez dodací lhůty') + (m.supplier ? ' · ' + pv2Esc(m.supplier) : '') + '</div>'; }).join('') + '</details>' : '');

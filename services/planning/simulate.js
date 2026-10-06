@@ -12,7 +12,7 @@
 
 const { prisma } = require('../../config/database');
 const { generateBatchOperationsForBatch } = require('./batch-operations');
-const { scheduleBatch } = require('./scheduler');
+const { scheduleBatchSmart } = require('./scheduler');
 const { computeMrpForBatch } = require('./mrp');
 
 const ROLLBACK = Symbol('simulate-rollback');
@@ -60,9 +60,10 @@ async function simulateProduction(p) {
         } catch (e) { material.error = e.message; }
       }
       if (materialStart.getTime() !== start.getTime()) await tx.productionBatch.update({ where: { id: batch.id }, data: { planned_start: materialStart } });
+      if (due) await tx.productionBatch.update({ where: { id: batch.id }, data: { due_date: due } });
 
       // 2) Plán
-      const sch = await scheduleBatch(batch.id, { tx });
+      const sch = await scheduleBatchSmart(batch.id, { tx }); // s termínem zpětně (nejpozdější start), jinak dopředu
 
       const warnings = (sch.op_warnings || []).flatMap(w => w.warnings || []);
       const count = (pref) => warnings.filter(w => String(w).startsWith(pref)).length;
@@ -86,6 +87,7 @@ async function simulateProduction(p) {
         due_date: due, meets_due: meets, slack_hours: due && finish ? Math.round((due - finish) / 3600000 * 10) / 10 : null,
         operations_scheduled: sch.operations_scheduled, work_minutes: sch.work_minutes, wait_minutes: sch.wait_minutes, idle_pct: sch.idle_pct,
         shift: sch.shift_config, bottlenecks, material, feasible: !!finish && !bottlenecks.some(b => b.severity === 'error'),
+        mode: sch.mode || 'forward', latest_start: sch.latest_start || null, late_minutes: sch.late_minutes || 0,
         operations: (sch.operations || []).map(o => ({ planned_start: o.planned_start, planned_end: o.planned_end, minutes: o.minutes, assignee: o.assigned_person_name, warnings: o.warnings })),
       };
       throw ROLLBACK; // nic neukládat

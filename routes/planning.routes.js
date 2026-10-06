@@ -16,7 +16,7 @@ const { computePrePickForBatch } = require('../services/planning/pre-pick');
 const { computePurchaseReport } = require('../services/planning/purchase-report');
 const { computeOpMaterialStatus } = require('../services/planning/op-material-status');
 const { checkAndCloseBatch } = require('../services/planning/batch-state');
-const { scheduleBatch, scheduleAllActive } = require('../services/planning/scheduler');
+const { scheduleBatch, scheduleBatchSmart, scheduleAllActive } = require('../services/planning/scheduler');
 const { syncBatchToVelin } = require('../services/planning/velin-bridge');
 const { autoAssignBatch } = require('../services/planning/mistr-dispatcher');
 
@@ -310,7 +310,8 @@ router.post('/batches/:id/schedule', async (req, res, next) => {
     // Defaultně po každém schedule pošli operace do Velína. Lze vypnout
     // přes body.syncVelin = false (např. při testech / dry-run).
     const syncVelin = body.syncVelin !== false;
-    const result = await scheduleBatch(id, { exclusive });
+    // S termínem (due_date) plánuje zpětně od termínu (nejpozdější start), bez termínu dopředu od teď
+    const result = await scheduleBatchSmart(id, { exclusive, forward: body.forward === true });
 
     if (syncVelin) {
       try {

@@ -374,7 +374,7 @@ async function scheduleBatch(batchId, opts = {}) {
     }
   }
 
-  const anchor = batch.planned_start ? new Date(batch.planned_start) : new Date();
+  const anchor = opts.anchor ? new Date(opts.anchor) : (batch.planned_start ? new Date(batch.planned_start) : new Date());
   // Příprava materiálu: od TEĎ musí skladník stihnout rezervu (pracovních minut) → dřív nemůže žádná operace začít.
   // (Když je dávka naplánovaná do budoucna, nic to neposune.)
   // Výchozí režim „lidé bez prodlev": rezerva začátek NEodsouvá — práce navazuje hned a plán přípravy
@@ -627,8 +627,8 @@ async function scheduleBatch(batchId, opts = {}) {
     await txx.productionBatch.update({
       where: { id },
       data: { planned_start: firstStart, planned_end: lastEnd,
-        ...(cur && !cur.original_planned_start ? { original_planned_start: firstStart } : {}),
-        ...(cur && !cur.original_planned_end ? { original_planned_end: lastEnd } : {}) },
+        ...(cur && !cur.original_planned_start && !opts.probe ? { original_planned_start: firstStart } : {}),
+        ...(cur && !cur.original_planned_end && !opts.probe ? { original_planned_end: lastEnd } : {}) },
     });
   });
 
@@ -710,4 +710,40 @@ async function scheduleAllActive(opts = {}) {
   };
 }
 
-module.exports = { scheduleBatch, scheduleAllActive, operationMinutes, findQueueConflictEnd, loadQueueByWorkstation, ACTIVE_BATCH_STATUSES };
+/**
+ * Plánování podle termínu (zpětně, „just-in-time"):
+ *   - dávka BEZ termínu (due_date) → dopředu od teď (resp. od planned_start) = nejdřívější možný průběh
+ *   - dávka S termínem → najde NEJPOZDĚJŠÍ start, při kterém je hotovo nejpozději v termínu
+ *     (dopředný plánovač je deterministický a konec roste se startem → binární hledání startu mezi teď a termínem).
+ *     Když termín nestihne ani start „hned", naplánuje se od teď a vrátí feasible:false + late_minutes.
+ * Vrací výsledek scheduleBatch + { mode: 'forward'|'backward', feasible, due_date, latest_start, slack_minutes, late_minutes }.
+ */
+async function scheduleBatchSmart(batchId, opts = {}) {
+  const tx = opts.tx || defaultPrisma;
+  const id = parseInt(batchId, 10);
+  const batch = await tx.productionBatch.findUnique({ where: { id }, select: { due_date: true, planned_start: true, status: true } });
+  if (!batch) throw new Error(`Dávka id=${id} nenalezena`);
+  const due = batch.due_date ? new Date(batch.due_date) : null;
+  if (!due || opts.forward) {
+    const r = await scheduleBatch(id, opts);
+    return Object.assign(r, { mode: 'forward', feasible: due && r.plan_end ? new Date(r.plan_end) <= due : null, due_date: due });
+  }
+  const now = new Date();
+  const earliest = await scheduleBatch(id, { ...opts, anchor: now, probe: true });
+  if (!earliest.plan_end) return Object.assign(earliest, { mode: 'backward', feasible: false, due_date: due });
+  if (new Date(earliest.plan_end) > due) {
+    // Nestíhá ani při okamžitém startu → zůstane nejdřívější plán, ať je vidět, o kolik to ujede
+    const r = await scheduleBatch(id, { ...opts, anchor: now });
+    return Object.assign(r, { mode: 'backward', feasible: false, due_date: due, latest_start: now, late_minutes: Math.round((new Date(r.plan_end) - due) / 60000) });
+  }
+  let lo = now.getTime(), hi = due.getTime();
+  for (let i = 0; i < 16 && hi - lo > 15 * 60000; i++) {
+    const mid = Math.round((lo + hi) / 2);
+    const r = await scheduleBatch(id, { ...opts, anchor: new Date(mid), probe: true });
+    if (r.plan_end && new Date(r.plan_end) <= due) lo = mid; else hi = mid;
+  }
+  const final = await scheduleBatch(id, { ...opts, anchor: new Date(lo) });
+  return Object.assign(final, { mode: 'backward', feasible: true, due_date: due, latest_start: new Date(lo), slack_minutes: Math.round((due - new Date(final.plan_end)) / 60000) });
+}
+
+module.exports = { scheduleBatch, scheduleBatchSmart, scheduleAllActive, operationMinutes, findQueueConflictEnd, loadQueueByWorkstation, ACTIVE_BATCH_STATUSES };
