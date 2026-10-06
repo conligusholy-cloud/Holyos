@@ -218,7 +218,8 @@
     @keyframes opPulse { 0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0.45); } }
     .start-box { margin:28px auto 26px; width:max-content; display:flex; align-items:center; gap:12px; background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.65); color:#86efac; border-radius:26px; padding:12px 26px; font-size:16px; font-weight:800; letter-spacing:.6px; box-shadow:0 0 0 6px rgba(34,197,94,0.07), 0 6px 20px rgba(34,197,94,0.18); }
     .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
-    .start-box .start-cfg { font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; color:#0b1a12; background:#22c55e; border-radius:999px; padding:3px 10px; letter-spacing:.3px; }
+    .start-box { flex-wrap:wrap; justify-content:center; }
+    .start-box .start-cfg { flex-basis:100%; text-align:center; margin-top:6px; font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; color:#0b1a12; background:#22c55e; border-radius:999px; padding:3px 12px; letter-spacing:.3px; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
     .outputs-head { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#86efac; margin-bottom:6px; }
@@ -741,7 +742,7 @@
     .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
     .eq-var.used{text-decoration:line-through;opacity:.45;cursor:not-allowed;border-style:dotted}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
-    .par-row{padding-top:22px;margin-bottom:0}
+    .par-row{padding-top:48px;margin-bottom:0}
     .lane-par .par-wrap{width:max-content !important}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
@@ -1460,7 +1461,7 @@
         const baseCard = row.querySelector('.op-card:not(.is-variant)'); const vCards = Array.from(row.querySelectorAll('.op-card.is-variant'));
         if (!baseCard || !vCards.length) return;
         const br = baseCard.getBoundingClientRect(); const col = 'rgba(251,146,60,0.95)';
-        const y = (br.top - lanesRect.top) / z - 10; const x0 = (br.left + br.width / 2 - lanesRect.left) / z;
+        const y = (br.top - lanesRect.top) / z - 36; const x0 = (br.left + br.width / 2 - lanesRect.left) / z; // nad popisky „Základ / Varianta
         const far = Math.max(...vCards.map(vc => (vc.getBoundingClientRect().left + vc.getBoundingClientRect().width / 2 - lanesRect.left) / z));
         variantSvg += '<path d="M' + x0 + ',' + ((br.top - lanesRect.top) / z) + ' V' + y + ' H' + far + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5"/>';
         vCards.forEach(vc => { const vr = vc.getBoundingClientRect(); const vx = (vr.left + vr.width / 2 - lanesRect.left) / z; variantSvg += '<path d="M' + vx + ',' + y + ' V' + ((vr.top - lanesRect.top) / z - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#var-arrow)"/>'; });
