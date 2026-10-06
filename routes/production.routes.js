@@ -1458,7 +1458,11 @@ router.post('/operations/:id/variant', async (req, res, next) => {
     const baseId = src.variant_of_id || src.id; // varianta z varianty → pořád patří k základu
     const variant_name = String(req.body?.variant_name || '').trim();
     if (!variant_name) return res.status(400).json({ error: 'Zadej název varianty (např. Hliník, Nerez, SK verze).' });
-    const variant_code = String(req.body?.variant_code || '').trim().slice(0, 20) || null;
+    // Kód varianty: písmeno + číslo (V1, V2, …), UNIKÁTNÍ v rámci celého výrobku (napříč všemi operacemi) — nikdy se neopakuje
+    const used = new Set((await prisma.productOperation.findMany({ where: { product_id: src.product_id, variant_of_id: { not: null } }, select: { variant_code: true } })).map(v => (v.variant_code || '').toUpperCase()).filter(Boolean));
+    let variant_code = String(req.body?.variant_code || '').trim().slice(0, 20).toUpperCase() || null;
+    if (variant_code && used.has(variant_code)) return res.status(400).json({ error: 'Kód varianty ' + variant_code + ' už je u tohoto výrobku použitý — kódy se nesmí opakovat.' });
+    if (!variant_code) { let n = 1; while (used.has('V' + n)) n++; variant_code = 'V' + n; }
     const op = await prisma.$transaction(async (tx) => {
       const created = await tx.productOperation.create({
         data: { product_id: src.product_id, workstation_id: src.workstation_id, workstation_group_id: src.workstation_group_id, is_parallel: src.is_parallel, parallel_from: src.parallel_from, parallel_to: src.parallel_to,
@@ -1489,7 +1493,14 @@ router.put('/operations/:id', async (req, res, next) => {
       if (!par && !ws && !grp) return res.status(400).json({ error: 'Operace musí mít skupinu pracovišť nebo konkrétní pracoviště (paralelní operace je plovoucí a pracoviště nepotřebuje).' });
     }
     const op = await prisma.$transaction(async (tx) => {
-      const { variant_name, variant_code } = req.body;
+      const { variant_name } = req.body;
+      let variant_code = req.body.variant_code;
+      if (variant_code !== undefined && variant_code) {
+        variant_code = String(variant_code).trim().slice(0, 20).toUpperCase();
+        const me = await tx.productOperation.findUnique({ where: { id: opId }, select: { product_id: true } });
+        const dup = await tx.productOperation.findFirst({ where: { product_id: me.product_id, variant_of_id: { not: null }, id: { not: opId }, variant_code: { equals: variant_code, mode: 'insensitive' } }, select: { id: true, name: true } });
+        if (dup) throw Object.assign(new Error('Kód varianty ' + variant_code + ' už používá operace „' + dup.name + '" — kódy se nesmí opakovat.'), { status: 400 });
+      }
       await tx.productOperation.update({
         where: { id: opId },
         data: { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count,

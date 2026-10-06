@@ -1901,11 +1901,11 @@
       const op = findAnyOp(opId); if (!op) return;
       const name = prompt('Název varianty operace „' + op.name + '" (např. Hliník, Nerez, SK verze):', '');
       if (!name || !name.trim()) return;
-      const code = prompt('Krátké označení varianty (např. AL, NR) — ukáže se u dávky:', name.trim().slice(0, 3).toUpperCase());
       try {
-        const v = await api('/api/production/operations/' + opId + '/variant', { method: 'POST', body: JSON.stringify({ variant_name: name.trim(), variant_code: (code || '').trim() }) });
+        // kód (V1, V2, …) přidělí server automaticky; dá se změnit v dialogu varianty
+        const v = await api('/api/production/operations/' + opId + '/variant', { method: 'POST', body: JSON.stringify({ variant_name: name.trim() }) });
         product = splitVariants(await api('/api/production/products/' + product.id));
-        renderTab(); toast('Varianta „' + name.trim() + '" vytvořena — uprav v ní díly');
+        renderTab(); toast('Varianta ' + (v.variant_code || '') + ' „' + name.trim() + '" vytvořena — uprav v ní díly');
         openEditOp(v.id);
       } catch (e) { toast('Variantu se nepodařilo vytvořit: ' + e.message, true); }
     }
