@@ -237,6 +237,7 @@ app.post('/admin/settings/eur-rate', requireAdmin, wrap(async (req, res) => {
   if (n > 0 && n < 1000) await q("INSERT INTO app_settings (key,value) VALUES ('eur_czk_rate',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [String(n)]);
   res.redirect('/admin/products?msg=' + encodeURIComponent('Kurz uložen.'));
 }));
+app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterCompounder(req.user)));
 app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let offers = [];
   try { const out = await loadProducts(); const set = await offeredSet(); offers = (out.items || []).filter(p => set.has(p.id)); } catch (e) { /* bez nabídky */ }

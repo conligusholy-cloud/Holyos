@@ -94,9 +94,67 @@ const HELP = {
     <p>Z každého takového nákupu Vám vzniká Discount Credit. Čísla nahoře: kolik lidí jste doporučili, kolik z nich nakoupilo a kolik prádlomatů celkem.</p>` },
   team: { title: 'Moje doporučení', html: `<p>Váš <b>registrační odkaz</b> je jedinečný. Pošlete ho komukoli (WhatsApp, e-mail, zkopírovat) — kdo se přes něj zaregistruje, objeví se v tabulce níže jako Vaše doporučení.</p>
     <p>U každého vidíte stav účtu (čeká na aktivaci / aktivní) a zda už si pořídil prádlomat. Jakmile nakoupí, připíše se Vám Discount Credit a člověk se zobrazí i v <b>Partnerské síti</b>.</p>` },
+  cmp: { title: 'Compounder', html: `<p>Tahle sekce popisuje, <b>jak přemýšlí správný Compounder</b> — člověk, kterému se jeho vlastní prádlomaty násobí.</p>
+    <p>Nejsou to pravidla, která Vám někdo nařizuje. Je to způsob uvažování, který odděluje majitele jednoho stroje od majitele sítě. Projděte si zásady, vyzkoušejte si, co se stane s jedním prádlomatem v čase, a pak se rozhodněte, kolik jich chcete.</p>`},
   acc: { title: 'Můj účet', html: `<p>Vaše údaje (nick, jméno, e-mail) a změna hesla. Nick nebo e-mail používáte k přihlášení.</p>
     <p>Pokud heslo zapomenete, použijte na přihlašovací stránce odkaz <b>Zapomenuté heslo</b> — ozveme se Vám s obnovou přístupu.</p>` },
 };
+// Ikona prádlomatu — jednoduchý izometrický „3D" model (samoobslužná prací stanice s bubnem a panelem)
+function pradlomatSvg(size = 300) {
+  const h = Math.round(size * 0.7);
+  return `<svg class="pm3d" width="${size}" height="${h}" viewBox="0 0 320 224" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <defs>
+    <linearGradient id="pmBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9dde3"/><stop offset="1" stop-color="#b9bfc8"/></linearGradient>
+    <linearGradient id="pmSide" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b6470"/><stop offset="1" stop-color="#2f353e"/></linearGradient>
+    <linearGradient id="pmTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#eef1f4"/><stop offset="1" stop-color="#c9ced6"/></linearGradient>
+    <linearGradient id="pmCy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fd0f2"/><stop offset="1" stop-color="#2aa8d8"/></linearGradient>
+    <radialGradient id="pmDrum" cx=".4" cy=".35" r=".75"><stop offset="0" stop-color="#4a5666"/><stop offset=".55" stop-color="#1b2129"/><stop offset="1" stop-color="#0a0d12"/></radialGradient>
+    <linearGradient id="pmRing" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#9aa3ad"/><stop offset="1" stop-color="#e6e9ed"/></linearGradient>
+    <linearGradient id="pmGlass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".18"/><stop offset="1" stop-color="#4fd1ff" stop-opacity=".06"/></linearGradient>
+    <filter id="pmGlow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <ellipse cx="160" cy="206" rx="140" ry="12" fill="#4fd1ff" opacity=".14"/>
+  <!-- tmavý bok s 18 KG -->
+  <path d="M236 44 L292 62 L292 186 L236 200 Z" fill="url(#pmSide)" stroke="#232931" stroke-width="1.2"/>
+  <text x="264" y="118" fill="#e9edf1" font-family="Inter,Arial,sans-serif" font-weight="900" font-size="26" text-anchor="middle" transform="skewY(14) translate(0 -62)">18</text>
+  <text x="264" y="148" fill="#e9edf1" font-family="Inter,Arial,sans-serif" font-weight="900" font-size="26" text-anchor="middle" transform="skewY(14) translate(0 -62)">KG</text>
+  <!-- střecha -->
+  <path d="M30 40 L236 44 L292 62 L84 58 Z" fill="url(#pmTop)" stroke="#9aa3ad" stroke-width="1"/>
+  <!-- čelo -->
+  <rect x="30" y="40" width="206" height="160" fill="url(#pmBody)" stroke="#8d96a1" stroke-width="1.2"/>
+  <!-- horní pruh PRÁDLOMAT 24/7 -->
+  <rect x="30" y="40" width="206" height="22" fill="#c4cad2"/>
+  <rect x="30" y="40" width="96" height="22" fill="url(#pmCy)"/>
+  <path d="M126 40 L140 51 L126 62 Z" fill="url(#pmCy)"/>
+  <circle cx="44" cy="51" r="6" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M41 53 q3 -6 6 0" stroke="#fff" stroke-width="1.5" fill="none"/>
+  <text x="56" y="56" fill="#fff" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="12">PRÁDLOMAT</text>
+  <text x="186" y="56" fill="#fff" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="12" text-anchor="middle" opacity=".95">24/7</text>
+  <!-- popisky nad bubny -->
+  <text x="98" y="84" fill="#6c7682" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="9" text-anchor="middle">PRAČKA</text>
+  <text x="155" y="84" fill="#6c7682" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="9" text-anchor="middle">PRAČKA</text>
+  <text x="212" y="84" fill="#6c7682" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="9" text-anchor="middle">SUŠIČKA</text>
+  <!-- modré šipky -->
+  <path d="M92 90 h12 v14 l-6 6 l-6 -6 Z" fill="url(#pmCy)" opacity=".9"/><path d="M149 90 h12 v18 l-6 6 l-6 -6 Z" fill="url(#pmCy)" opacity=".9"/><path d="M206 90 h12 v10 l-6 6 l-6 -6 Z" fill="url(#pmCy)" opacity=".9"/>
+  <!-- terminál -->
+  <rect x="42" y="78" width="22" height="34" rx="2" fill="#f4f6f8" stroke="#aab2bb"/><rect x="46" y="82" width="14" height="18" rx="1.5" fill="#1b2129"/><rect x="48" y="84" width="10" height="4" fill="#4fd1ff" opacity=".9"/>
+  <rect x="46" y="104" width="14" height="4" rx="1" fill="#2f353e"/>
+  <path d="M42 150 l11 -8 l11 8 M42 162 l11 -8 l11 8" stroke="url(#pmCy)" stroke-width="3" fill="none" opacity=".8"/>
+  <!-- bubny: 8 kg, 18 kg, 18 kg -->
+  <g><circle cx="98" cy="138" r="21" fill="url(#pmRing)"/><circle cx="98" cy="138" r="17" fill="#2f353e"/><circle cx="98" cy="138" r="14" fill="url(#pmDrum)"/><circle cx="92" cy="131" r="4" fill="#fff" opacity=".22"/><text x="98" y="141" fill="#fff" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="7" text-anchor="middle">8 kg</text></g>
+  <g><circle cx="155" cy="134" r="28" fill="url(#pmRing)"/><circle cx="155" cy="134" r="23" fill="#2f353e"/><circle cx="155" cy="134" r="19" fill="url(#pmDrum)"/><circle cx="147" cy="125" r="5" fill="#fff" opacity=".22"/><text x="155" y="137" fill="#fff" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="8" text-anchor="middle">18 kg</text></g>
+  <g><circle cx="212" cy="128" r="28" fill="url(#pmRing)"/><circle cx="212" cy="128" r="23" fill="#2f353e"/><circle cx="212" cy="128" r="19" fill="url(#pmDrum)"/><circle cx="204" cy="119" r="5" fill="#fff" opacity=".22"/><text x="212" y="131" fill="#fff" font-family="Inter,Arial,sans-serif" font-weight="800" font-size="8" text-anchor="middle">18 kg</text></g>
+  <!-- bublinky -->
+  <g stroke="#5fd0f2" stroke-width="1.6" fill="none" opacity=".85"><circle cx="110" cy="178" r="6"/><circle cx="128" cy="186" r="4"/><circle cx="146" cy="176" r="8"/><circle cx="166" cy="188" r="5"/><circle cx="184" cy="178" r="7"/><circle cx="204" cy="188" r="4"/><circle cx="222" cy="176" r="6"/></g>
+  <g stroke="#ffffff" stroke-width="1.4" fill="none" opacity=".8"><circle cx="120" cy="170" r="3"/><circle cx="158" cy="166" r="4"/><circle cx="196" cy="168" r="3"/><circle cx="214" cy="190" r="3"/></g>
+  <!-- skleněné bočnice (přístřešek) -->
+  <path d="M8 46 L30 40 L30 200 L8 206 Z" fill="url(#pmGlass)" stroke="#9fb6c8" stroke-width="1"/>
+  <path d="M236 44 L250 60 L250 196 L236 200 Z" fill="url(#pmGlass)" stroke="#9fb6c8" stroke-width="1" opacity=".9"/>
+  <circle cx="19" cy="118" r="9" fill="none" stroke="url(#pmCy)" stroke-width="2" filter="url(#pmGlow)"/><path d="M14 121 q5 -9 10 0" stroke="url(#pmCy)" stroke-width="2" fill="none"/>
+  <!-- rám + sokl -->
+  <path d="M8 46 L30 40 M8 206 L30 200" stroke="#6c7682" stroke-width="1.5"/>
+  <rect x="26" y="200" width="214" height="8" fill="#1b2129"/><path d="M240 200 L292 186 L292 194 L240 208 Z" fill="#0f1317"/>
+</svg>`;
+}
 function helpWidget(h) {
   if (!h) return '';
   return `<button type="button" class="helpbtn" onclick="document.getElementById('helpdlg').showModal()" aria-label="Nápověda k sekci ${esc(h.title)}" title="Jak tato sekce funguje?">?</button>
@@ -185,7 +243,7 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
 const userNav = (s) => {
-  const nav = [USER_NAV[0]];
+  const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
   nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, USER_NAV[1]);
@@ -208,7 +266,10 @@ function homeStory(s) {
   return `
   <style>
   .st{max-width:1040px}
-  .st .first{margin:6px 0 22px}
+  .st .first{margin:6px 0 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .st .first .pm3d{flex:none;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 20px 40px rgba(30,134,224,.35))}
+  @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
+  @media(max-width:760px){.st .first .pm3d{width:100%;height:auto;max-width:320px}}
   .st .first .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent2);font-weight:700}
   .st .first h2{margin:4px 0 0;font-size:clamp(34px,6vw,72px);line-height:1;letter-spacing:-.03em;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(79,209,255,.25)}
   .st .first h2 .cp{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(124,92,255,.45))}
@@ -249,7 +310,7 @@ function homeStory(s) {
   @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
   </style>
   <div class="st">
-    <div class="first"><span class="k">Best Series 2.0</span><h2>První <span class="cp">Compounder</span> v&nbsp;Čechách</h2></div>
+    <div class="first"><div><span class="k">Best Series 2.0</span><h2>První <span class="cp">Compounder</span> v&nbsp;Čechách</h2></div>${pradlomatSvg(320)}</div>
     <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>24. 9. 2026</b> tvoří <b>Best Series 2.0</b> z lidí <b class="cp">Compoundery</b>.</p>
 
     <div class="tl">
@@ -282,6 +343,74 @@ function homeStory(s) {
       <a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a>
     </div>
   </div>`;
+}
+// Compounder — jak přemýšlí správný Compounder (statická stránka, texty doplňujeme)
+function supporterCompounder(s) {
+  const P = [
+    ['01', 'Nekupuje stroj. Kupuje čas.', 'Prádlomat nepotřebuje obsluhu, pracuje 24/7 a vydělává, i když spíte. Compounder počítá, kolik hodin svého života si každým strojem koupí zpátky — ne jen kolik korun.'],
+    ['02', 'První stroj neslouží k utrácení. Slouží k pořízení druhého.', 'Výnos z prvního prádlomatu jde na splátku a zálohu dalšího. Spotřeba přijde až ve chvíli, kdy síť vydělává víc, než stačíte utratit. To je rozdíl mezi majitelem a Compounderem.'],
+    ['03', 'Používá páku, ne úspory.', 'Bankovní domy berou prádlomat jako zástavu. Compounder nečeká, až našetří — nechá stroj, ať si na sebe vydělá sám, a své peníze používá jen tam, kde banka nemůže.'],
+    ['04', 'Nemyslí na jeden stroj. Myslí na linku.', 'Jeden prádlomat je experiment. Pět prádlomatů je příjem. Dvacet je svoboda. Compounder se od začátku rozhoduje tak, aby šlo každé další místo zopakovat stejně — stejná smlouva, stejný servis, stejný proces.'],
+    ['05', 'Místo je důležitější než stroj.', 'Stroj je vždycky stejný. Rozdíl dělá místo: lidé, průchod, parkování, konkurence. Compounder tráví čas hledáním dobrých míst, protože ví, že stroj dodáme my a místo si musí najít sám.'],
+    ['06', 'Hraje na čas, ne na dokonalost.', 'Pravidla se změnila 24. 9. 2026 — dnes je to podpultová informace. Compounder ví, že okno nebude otevřené věčně, a radši má tři stroje teď než pět „až to bude ideální".'],
+    ['07', 'Nedrží informaci pro sebe.', 'Lidé, které přivede, kupují vedle něj — ne proti němu. Každý další Compounder v okolí zvedá povědomí o prádlomatech, a tím i obrat všech. Proto má svůj doporučovací odkaz a Discount Credit.'],
+    ['08', 'Měří, co se násobí.', 'Počet strojů. Měsíční obrat na stroj. Kolik strojů si síť sama zaplatí ročně. Compounder zná svoje tři čísla zpaměti a každé rozhodnutí poměřuje tím, jestli je zvedne.'],
+  ];
+  const steps = [['Rok 1', 1, 'první stroj si splácí sám'], ['Rok 2', 2, 'výnos z prvního = záloha na druhý'], ['Rok 3', 4, 'dva stroje platí dva další'], ['Rok 4', 8, 'síť roste rychleji než Vaše výdaje'], ['Rok 5', 16, 'linka — svoboda']];
+  return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
+  <style>
+  .cp .hero2{margin:22px 0 26px;max-width:860px}
+  .cp .hero2 .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent2);font-weight:700}
+  .cp .hero2 h1{margin:4px 0 10px;font-size:clamp(30px,5vw,56px);line-height:1.02;letter-spacing:-.03em;font-weight:900}
+  .cp .hero2 h1 .g{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .hero2 p{margin:0;font-size:clamp(16px,1.8vw,19px);line-height:1.55;color:var(--text)}
+  .cp .def{display:flex;gap:16px;align-items:flex-start;padding:18px 20px;border-radius:18px;border:1px solid rgba(79,209,255,.4);background:linear-gradient(135deg,rgba(30,134,224,.16),rgba(124,92,255,.14));margin:0 0 26px;max-width:860px}
+  .cp .def .q{flex:none;width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:rgba(4,8,16,.5);border:1px solid var(--border2)}
+  .cp .def b{display:block;font-size:17px;margin-bottom:4px}
+  .cp .def p{margin:0;color:var(--text);line-height:1.5}
+  .cp .ladder{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:0 0 10px}
+  .cp .ladder .r{padding:16px 12px;border-radius:16px;border:1px solid var(--border);background:var(--card);text-align:center;position:relative}
+  .cp .ladder .r .y{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .cp .ladder .r .n{font-size:clamp(28px,4vw,44px);font-weight:900;letter-spacing:-.03em;line-height:1.1;margin:4px 0;background:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .ladder .r .t{font-size:12px;color:var(--text2);line-height:1.35}
+  .cp .ladder .r:last-child{border-color:rgba(47,227,160,.55);box-shadow:0 0 30px rgba(47,227,160,.18)} .cp .ladder .r:last-child .n{background:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .note{font-size:12.5px;color:var(--text3);margin:0 0 28px;max-width:860px}
+  .cp h2.sec{font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;margin:0 0 14px}
+  .cp .pr{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 28px}
+  .cp .pr .c{padding:20px;border-radius:16px;border:1px solid var(--border);background:var(--card);display:flex;gap:16px;transition:border-color .2s,transform .2s}
+  .cp .pr .c:hover{border-color:rgba(79,209,255,.5);transform:translateY(-2px)}
+  .cp .pr .c .no{flex:none;font-size:30px;font-weight:900;letter-spacing:-.04em;line-height:1;background:linear-gradient(180deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;min-width:46px}
+  .cp .pr .c b{display:block;font-size:16.5px;margin:2px 0 6px;letter-spacing:-.01em}
+  .cp .pr .c p{margin:0;color:var(--text2);font-size:14px;line-height:1.5}
+  .cp .vs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0 0 28px}
+  .cp .vs .c{padding:18px 20px;border-radius:16px;border:1px solid var(--border);background:var(--card)}
+  .cp .vs .c.b{border-color:rgba(47,227,160,.5)} .cp .vs .c .h{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:10px} .cp .vs .c.a .h{color:var(--text3)} .cp .vs .c.b .h{color:var(--ok)}
+  .cp .vs ul{margin:0;padding:0;list-style:none} .cp .vs li{padding:7px 0;border-top:1px solid var(--border);font-size:14px;line-height:1.4} .cp .vs li:first-child{border-top:0} .cp .vs .c.a li{color:var(--text2)}
+  .cp .cta{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:22px 24px;border-radius:18px;border:1px solid var(--border2);background:var(--card2)}
+  .cp .cta .q{font-size:clamp(18px,2.2vw,24px);font-weight:800;letter-spacing:-.02em} .cp .cta .q small{display:block;font-size:14px;font-weight:500;color:var(--text2);margin-top:4px}
+  @media(max-width:760px){.cp .ladder{grid-template-columns:repeat(2,1fr)} .cp .pr,.cp .vs{grid-template-columns:1fr}}
+  </style>
+  <div class="cp">
+    <div class="hero2"><div class="k">Best Series 2.0</div><h1>Jak přemýšlí <span class="g">správný Compounder</span></h1>
+      <p>Compounder není titul. Je to způsob uvažování. Stejný stroj, stejná cena, stejná smlouva — a přesto jeden člověk skončí s jedním prádlomatem a druhý se sítí. Rozdíl je jen v hlavě.</p></div>
+
+    <div class="def"><div class="q">${ico('sprout', 24)}</div><div><b>Compounder = ten, komu se jeho vlastní prádlomaty násobí.</b><p>Slovo pochází z „compounding" — složené úročení. Výnos se nespotřebuje, ale znovu zapojí do hry, takže každé další kolo začíná z vyšší základny. Compounder to dělá s prádlomaty.</p></div></div>
+
+    <h2 class="sec">Co se stane s jedním prádlomatem, když ho necháte násobit</h2>
+    <div class="ladder">${steps.map(([y, n, t]) => `<div class="r"><div class="y">${y}</div><div class="n">${n}</div><div class="t">${t}</div></div>`).join('')}</div>
+    <p class="note">Ilustrace principu, ne příslib výnosu. Skutečné tempo závisí na místě, obratu a podmínkách financování — ale směr je vždy stejný: stroje platí stroje.</p>
+
+    <h2 class="sec">Osm zásad Compoundera</h2>
+    <div class="pr">${P.map(([n, t, d]) => `<div class="c"><div class="no">${n}</div><div><b>${esc(t)}</b><p>${esc(d)}</p></div></div>`).join('')}</div>
+
+    <h2 class="sec">Majitel vs. Compounder</h2>
+    <div class="vs">
+      <div class="c a"><div class="h">Majitel jednoho stroje</div><ul><li>„Až našetřím, koupím další."</li><li>Výnos utratí.</li><li>Čeká na ideální chvíli.</li><li>Informaci si nechává pro sebe.</li><li>Zná cenu stroje.</li></ul></div>
+      <div class="c b"><div class="h">Compounder</div><ul><li>„Stroj si na další stroj vydělá sám."</li><li>Výnos znovu zapojí.</li><li>Ví, že okno je otevřené teď.</li><li>Přivádí další — roste celá síť.</li><li>Zná svoje tři čísla.</li></ul></div>
+    </div>
+
+    <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
+  </div>` });
 }
 // Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
 const curOf = (s) => (s && s.currency === 'EUR' ? 'EUR' : 'CZK');
@@ -739,4 +868,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminSupporterDetail, adminImport, errorPage };
