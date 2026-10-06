@@ -402,15 +402,6 @@ function supporterCompounder(s) {
     <div class="ladder">${steps.map(([y, n, t]) => `<div class="r"><div class="y">${y}</div><div class="n">${n}</div><div class="t">${t}</div></div>`).join('')}</div>
     <p class="note">Ilustrace principu, ne příslib výnosu. Skutečné tempo závisí na místě, obratu a podmínkách financování — ale směr je vždy stejný: stroje platí stroje.</p>
 
-    <h2 class="sec">Osm zásad Compoundera</h2>
-    <div class="pr">${P.map(([n, t, d]) => `<div class="c"><div class="no">${n}</div><div><b>${esc(t)}</b><p>${esc(d)}</p></div></div>`).join('')}</div>
-
-    <h2 class="sec">Majitel vs. Compounder</h2>
-    <div class="vs">
-      <div class="c a"><div class="h">Majitel jednoho stroje</div><ul><li>„Až našetřím, koupím další."</li><li>Výnos utratí.</li><li>Čeká na ideální chvíli.</li><li>Informaci si nechává pro sebe.</li><li>Zná cenu stroje.</li></ul></div>
-      <div class="c b"><div class="h">Compounder</div><ul><li>„Stroj si na další stroj vydělá sám."</li><li>Výnos znovu zapojí.</li><li>Ví, že okno je otevřené teď.</li><li>Přivádí další — roste celá síť.</li><li>Zná svoje tři čísla.</li></ul></div>
-    </div>
-
     <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
   </div>` });
 }
