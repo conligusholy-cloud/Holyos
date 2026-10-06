@@ -173,7 +173,7 @@ router.get('/products', async (req, res, next) => {
     // operations = hlavní linie (bez variant); u každé operace seznam variant k výběru při zadání do výroby
     const products = await prisma.product.findMany({
       where,
-      include: { operations: { where: { variant_of_id: null }, orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true, variants: { select: { id: true, variant_name: true, variant_code: true }, orderBy: { id: 'asc' } } } } },
+      include: { operations: { where: { variant_of_id: null }, orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true }, orderBy: { id: 'asc' } } } } },
       orderBy: { name: 'asc' },
     });
     res.json(products);
@@ -1432,7 +1432,7 @@ router.post('/operations', async (req, res, next) => {
 // Kódy variant: formát písmeno + 2 číslice, unikátní napříč celým systémem
 const VARIANT_LETTERS = 'VWXYZABCDEFGHJKLMNPQRSTU'; // začíná se u V (varianta), I a O vynechány kvůli záměně s 1/0
 async function usedVariantCodes() {
-  const rows = await prisma.productOperation.findMany({ where: { variant_of_id: { not: null }, variant_code: { not: null } }, select: { variant_code: true } });
+  const rows = await prisma.productOperation.findMany({ where: { variant_code: { not: null } }, select: { variant_code: true } });
   return new Set(rows.map(r => String(r.variant_code).toUpperCase()));
 }
 function nextVariantCode(used) {
@@ -1516,10 +1516,15 @@ router.put('/operations/:id', async (req, res, next) => {
     const op = await prisma.$transaction(async (tx) => {
       const { variant_name } = req.body;
       let variant_code = req.body.variant_code;
+      // Základní provedení s pojmenováním (má varianty) dostane unikátní kód automaticky, když žádný nemá
+      if (variant_name && !variant_code) {
+        const cur = await tx.productOperation.findUnique({ where: { id: opId }, select: { variant_code: true } });
+        if (!cur.variant_code) { const used = new Set((await tx.productOperation.findMany({ where: { variant_code: { not: null } }, select: { variant_code: true } })).map(r => String(r.variant_code).toUpperCase())); variant_code = nextVariantCode(used); }
+      }
       if (variant_code !== undefined && variant_code) {
         variant_code = String(variant_code).trim().toUpperCase();
         if (!/^[A-Z][0-9]{2}$/.test(variant_code)) throw Object.assign(new Error('Kód varianty musí být písmeno a dvě číslice (např. V01).'), { status: 400 });
-        const dup = await tx.productOperation.findFirst({ where: { variant_of_id: { not: null }, id: { not: opId }, variant_code: { equals: variant_code, mode: 'insensitive' } }, select: { id: true, name: true, product: { select: { code: true } } } });
+        const dup = await tx.productOperation.findFirst({ where: { id: { not: opId }, variant_code: { equals: variant_code, mode: 'insensitive' } }, select: { id: true, name: true, product: { select: { code: true } } } });
         if (dup) throw Object.assign(new Error('Kód varianty ' + variant_code + ' už používá operace „' + dup.name + '" (' + (dup.product ? dup.product.code : '') + ') — kódy se nesmí opakovat.'), { status: 400 });
       }
       await tx.productOperation.update({
@@ -2697,8 +2702,13 @@ router.post('/batches', async (req, res, next) => {
       for (const v of vars) if (Number(variant_choices[v.variant_of_id]) === v.id) choices[v.variant_of_id] = v.id;
       const bad = ids.filter(i => !vars.some(v => v.id === i));
       if (bad.length) return res.status(400).json({ error: 'Neplatná varianta operace: ' + bad.join(', ') });
-      variantLabel = vars.sort((x, y) => x.step_number - y.step_number).map(v => v.step_number + '. ' + v.name + ': ' + (v.variant_name || v.variant_code || 'varianta')).join(' · ').slice(0, 255) || null;
       if (!Object.keys(choices).length) choices = null;
+    }
+    // Štítek dávky: u každé operace s variantami zvolené provedení (varianta nebo pojmenovaný základ)
+    {
+      const bases = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: null, is_staging: false, variants: { some: {} } }, select: { id: true, name: true, step_number: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true } } }, orderBy: { step_number: 'asc' } });
+      const parts = bases.map(b => { const vid = choices ? choices[b.id] : null; const v = vid ? b.variants.find(x => x.id === vid) : null; const pick = v || b; return b.step_number + '. ' + b.name + ': ' + (pick.variant_code ? pick.variant_code + ' ' : '') + (pick.variant_name || (v ? 'varianta' : 'základ')); });
+      variantLabel = parts.join(' · ').slice(0, 255) || null;
     }
 
     let batch_number = await generateBatchNumber(planned_start, !!is_test);

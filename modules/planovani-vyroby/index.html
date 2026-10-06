@@ -1747,7 +1747,7 @@
     box.style.display = '';
     rows.innerHTML = withVar.map(function (o) {
       return '<label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text2);"><span><b style="color:var(--text);">' + o.step_number + '. ' + pv2Esc(o.name) + '</b></span>' +
-        '<select class="pf-var" data-base="' + o.id + '" onchange="pfSimulate()" style="font-size:13px;"><option value="">Základ (hlavní linie)</option>' +
+        '<select class="pf-var" data-base="' + o.id + '" onchange="pfSimulate()" style="font-size:13px;"><option value="">' + pv2Esc((o.variant_code ? o.variant_code + ' · ' : '') + (o.variant_name || 'Základ (hlavní linie)')) + '</option>' +
         o.variants.map(function (v) { return '<option value="' + v.id + '">' + pv2Esc((v.variant_code ? v.variant_code + ' · ' : '') + (v.variant_name || 'varianta')) + '</option>'; }).join('') + '</select></label>';
     }).join('');
   }

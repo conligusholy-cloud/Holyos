@@ -728,6 +728,7 @@
     .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px}
     .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
     .variant-link span{display:inline-block;width:14px;border-top:2px dashed rgba(192,132,252,.7)}
+    .variant-link.base{color:#14b8a6} .variant-link.base span{border-top-color:rgba(20,184,166,.7)}
     .variant-wrap .op-card{margin-bottom:0}
     .lane-main.has-variants .op-row{padding-top:18px}
     /* Osa hlavní linie (uzly, start, hotový výrobek) zůstává nad sloupcem základu, i když vedle jsou varianty */
@@ -1189,7 +1190,7 @@
             // Varianty operace — plnohodnotné karty VEDLE základu v jednom řádku (náhrada základní větve; vybírá se při zadání do výroby)
             const vs = variantsOf(op.id);
             {
-              html += '<div class="op-row">' + renderOpCard(op, i);
+              html += '<div class="op-row">' + (vs.length ? '<div class="variant-wrap base-wrap"><div class="variant-link base" title="Základní provedení (hlavní větev)"><span></span>⎘ Základ <b>' + esc(op.variant_code || '—') + '</b> · ' + esc(op.variant_name || 'bez názvu') + '</div>' + renderOpCard(op, i) + '</div>' : renderOpCard(op, i));
               vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ Varianta <b>' + esc(v.variant_code || '—') + '</b> · ' + esc(v.variant_name || 'bez názvu') + '</div>' + renderOpCard(v, i) + '</div>'; });
               html += '</div>';
             }
@@ -1927,7 +1928,14 @@
       const name = prompt('Název varianty operace „' + op.name + '" (např. Hliník, Nerez, SK verze):', '');
       if (!name || !name.trim()) return;
       try {
-        // kód (V1, V2, …) přidělí server automaticky; dá se změnit v dialogu varianty
+        // Základ musí mít taky jméno provedení (např. Modrá), aby bylo při zadání do výroby jasné, co je co
+        const baseOp = op.variant_of_id ? findAnyOp(op.variant_of_id) : op;
+        if (baseOp && !baseOp.variant_name) {
+          const bname = prompt('Jak se jmenuje ZÁKLADNÍ provedení operace „' + baseOp.name + '" (hlavní větev)? Např. Modrá, Standard:', 'Standard');
+          if (!bname || !bname.trim()) return;
+          await api('/api/production/operations/' + baseOp.id, { method: 'PUT', body: JSON.stringify({ variant_name: bname.trim() }) });
+        }
+        // kód (V01, V02, …) přidělí server automaticky; dá se změnit v dialogu varianty
         const v = await api('/api/production/operations/' + opId + '/variant', { method: 'POST', body: JSON.stringify({ variant_name: name.trim() }) });
         product = splitVariants(await api('/api/production/products/' + product.id));
         renderTab(); toast('Varianta ' + (v.variant_code || '') + ' „' + name.trim() + '" vytvořena — uprav v ní díly');
@@ -1960,7 +1968,7 @@
       const baseOp = op.variant_of_id ? findAnyOp(op.variant_of_id) : null;
       modalBaseMats = baseOp ? new Map((baseOp.materials || []).map(m => [String(m.material_id), { quantity: m.quantity, unit: m.unit, label: m.material ? matLabel(m.material) : ('#' + m.material_id) }])) : null;
       const vbox = document.getElementById('op-variant-box');
-      vbox.style.display = op.variant_of_id ? '' : 'none';
+      vbox.style.display = (op.variant_of_id || variantsOf(op.id).length) ? '' : 'none';
       document.getElementById('op-variant-name').value = op.variant_name || '';
       document.getElementById('op-variant-code').value = op.variant_code || '';
       const vinfo = document.getElementById('op-variant-info');
