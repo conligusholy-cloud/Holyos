@@ -359,6 +359,18 @@ function supporterCompounder(s) {
     ['08', 'Měří, co se násobí.', 'Počet strojů. Měsíční obrat na stroj. Kolik strojů si síť sama zaplatí ročně. Compounder zná svoje tři čísla zpaměti a každé rozhodnutí poměřuje tím, jestli je zvedne.'],
   ];
   const steps = [['Rok 1', 1, 'první stroj si splácí sám'], ['Rok 2', 2, 'výnos z prvního = záloha na druhý'], ['Rok 3', 4, 'dva stroje platí dva další'], ['Rok 4', 8, 'síť roste rychleji než Vaše výdaje'], ['Rok 5', 16, 'linka — svoboda']];
+  // Fáze Compoundera — doplňujeme postupně
+  const PHASES = [
+    { no: '1', k: 'Vztah s bankovním domem', title: 'Sblížení', visual: 'pilots', lead: 'Stejně jako mezi lidmi je i mezi Vámi a bankovním domem potřeba vybudovat vztah. Teď jste pro něj <b>nový partner</b> — a potřebuje Vás trochu poznat. Nejde o to, kolik máte, ale jak se chováte.',
+      points: [
+        ['box', '1–3 prádlomaty na financování', 'Ideální start: pořídit s financováním <b>jeden až tři prádlomaty</b>. Dost na to, aby banka viděla, že splácíte a stroje vydělávají — a málo na to, abyste se zbytečně napínal.'],
+        ['bolt', 'Verze MINI', 'Pro první stroje doporučujeme <b>verzi MINI</b>. Nižší pořizovací cena, rychlejší rozjezd, stejná data o místě.'],
+        ['check', 'Největší možná akontace', 'Čím vyšší akontaci dáte, tím lépe Vás banka čte: nižší riziko, lepší podmínky pro další kola. Tady se buduje důvěra, ze které budete čerpat celé roky.'],
+        ['sun', 'Těmto strojům říkáme Piloti', 'Piloti slouží především k jednomu: <b>ověřit správné místo</b>. Stroj je vždycky stejný — rozdíl dělá lokalita. Pilot ji otestuje naostro.'],
+      ],
+      timeline: [['Den 0', 'Piloti v provozu'], ['1–6 měsíců', 'sběr dat o místě: obrat, vytížení, opakovaní zákazníci'], ['~6 měsíců', 'místo se verifikuje — nebo Pilota přemístíme jinam']],
+      note: 'Dle statistik víme zhruba <b>po 6 měsících</b>, jestli se místo verifikuje, nebo je potřeba stroj přemístit na jiné místo. Díky tomu nikdy nerozšiřujete síť na místě, které nefunguje — a banka vidí, že rozhodujete podle čísel.' },
+  ];
   return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
   <style>
   .cp .hero2{margin:22px 0 26px;max-width:860px}
@@ -388,6 +400,38 @@ function supporterCompounder(s) {
   .cp .vs .c{padding:18px 20px;border-radius:16px;border:1px solid var(--border);background:var(--card)}
   .cp .vs .c.b{border-color:rgba(47,227,160,.5)} .cp .vs .c .h{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;margin-bottom:10px} .cp .vs .c.a .h{color:var(--text3)} .cp .vs .c.b .h{color:var(--ok)}
   .cp .vs ul{margin:0;padding:0;list-style:none} .cp .vs li{padding:7px 0;border-top:1px solid var(--border);font-size:14px;line-height:1.4} .cp .vs li:first-child{border-top:0} .cp .vs .c.a li{color:var(--text2)}
+  .cp .ph{margin:0 0 28px;padding:26px 28px;border-radius:22px;border:1px solid rgba(79,209,255,.3);background:linear-gradient(135deg,rgba(30,134,224,.12),rgba(124,92,255,.1));position:relative;overflow:hidden}
+  .cp .ph:before{content:'';position:absolute;inset:-40%;background:radial-gradient(circle at 15% 15%,rgba(79,209,255,.16),transparent 45%);pointer-events:none}
+  .cp .ph>*{position:relative}
+  .cp .ph-head{display:flex;gap:20px;align-items:flex-start;margin-bottom:20px}
+  .cp .ph-no{flex:none;width:76px;height:76px;border-radius:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(30,134,224,.5),rgba(124,92,255,.5));border:1px solid rgba(79,209,255,.5);box-shadow:0 14px 40px rgba(30,134,224,.35)}
+  .cp .ph-no span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#dff3ff;font-weight:700} .cp .ph-no b{font-size:34px;line-height:1;letter-spacing:-.03em;color:#fff}
+  .cp .ph-k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);font-weight:700}
+  .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
+  .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
+  .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
+  .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
+  .cp .pl{position:relative;text-align:center;animation:pmfloat 5s ease-in-out infinite}
+  .cp .pl img{width:100%;height:auto;filter:drop-shadow(0 22px 36px rgba(0,0,0,.65)) drop-shadow(0 0 26px rgba(79,209,255,.25))}
+  .cp .pl .pl-tag{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);padding:5px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 8px 24px rgba(30,134,224,.45);white-space:nowrap}
+  .cp .pl .pl-mini{position:absolute;top:6px;right:6px;padding:3px 8px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.1em;color:var(--accent2);border:1px solid rgba(79,209,255,.5);background:rgba(4,8,16,.75)}
+  .cp .pl-cap{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:center;margin-top:22px;font-size:13.5px;color:var(--text)}
+  .cp .pl-cap span{display:inline-flex;align-items:center;gap:8px} .cp .pl-cap i{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 10px var(--accent2)}
+  .cp .pl-cap .pl-arrow{color:var(--text3);font-size:18px} .cp .pl-cap .pl-goal{color:var(--ok);font-weight:700}
+  @keyframes pmfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  @media(max-width:760px){.cp .pl-row{grid-template-columns:1fr;gap:26px} .cp .pl img{max-width:300px}}
+  .cp .ph-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px}
+  .cp .ph-grid .c{padding:16px 18px;border-radius:16px;border:1px solid var(--border);background:rgba(4,8,16,.55)}
+  .cp .ph-grid .i{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);margin-bottom:10px}
+  .cp .ph-grid b{display:block;font-size:15.5px;margin-bottom:4px} .cp .ph-grid p{margin:0;color:var(--text2);font-size:13.5px;line-height:1.5} .cp .ph-grid p b{display:inline;color:var(--accent2);font-size:inherit}
+  .cp .ph-tl{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .cp .ph-tl .s{position:relative;padding:14px 14px 14px 52px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
+  .cp .ph-tl .s i{position:absolute;left:14px;top:14px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-style:normal;font-weight:800;font-size:12px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio))}
+  .cp .ph-tl .s b{display:block;font-size:14px} .cp .ph-tl .s span{font-size:12.5px;color:var(--text2);line-height:1.4}
+  .cp .ph-tl .s:last-child{border-color:rgba(47,227,160,.5)} .cp .ph-tl .s:last-child i{background:linear-gradient(135deg,#1ea97c,var(--ok))}
+  .cp .ph-note{margin:0;padding:12px 16px;border-radius:12px;background:rgba(47,227,160,.07);border:1px solid rgba(47,227,160,.3);color:var(--text);font-size:14px;line-height:1.5} .cp .ph-note b{color:var(--ok)}
+  .cp .ph-head p b{color:var(--accent2)}
+  @media(max-width:760px){.cp .ph{padding:20px 18px} .cp .ph-grid,.cp .ph-tl{grid-template-columns:1fr} .cp .ph-head{flex-direction:column;gap:12px}}
   .cp .cta{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:22px 24px;border-radius:18px;border:1px solid var(--border2);background:var(--card2)}
   .cp .cta .q{font-size:clamp(18px,2.2vw,24px);font-weight:800;letter-spacing:-.02em} .cp .cta .q small{display:block;font-size:14px;font-weight:500;color:var(--text2);margin-top:4px}
   @media(max-width:760px){.cp .ladder{grid-template-columns:repeat(2,1fr)} .cp .pr,.cp .vs{grid-template-columns:1fr}}
@@ -395,6 +439,14 @@ function supporterCompounder(s) {
   <div class="cp">
     <div class="hero2"><div class="k">Best Series 2.0</div><h1>Jak přemýšlí <span class="g">správný Compounder</span></h1>
       <p>Compounder není titul. Je to způsob uvažování. Stejný stroj, stejná cena, stejná smlouva — a přesto jeden člověk skončí s jedním prádlomatem a druhý se sítí. Rozdíl je jen v hlavě.</p></div>
+
+    ${PHASES.map(ph => `<section class="ph">
+      <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
+      ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row">${[1, 2, 3].map(i => `<div class="pl" style="animation-delay:${(i - 1) * -1.7}s"><img src="/img/pradlomat.webp" alt="Pilot ${i}" loading="lazy" decoding="async"><span class="pl-tag">Pilot ${i}</span><span class="pl-mini">MINI</span></div>`).join('')}</div><div class="pl-cap"><span><i></i>1–3 Piloti · verze MINI · maximální akontace</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
+      <div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>
+      ${ph.timeline ? `<div class="ph-tl">${ph.timeline.map((t, i) => `<div class="s"><i>${i + 1}</i><b>${esc(t[0])}</b><span>${esc(t[1])}</span></div>`).join('')}</div>` : ''}
+      ${ph.note ? `<p class="ph-note">${ph.note}</p>` : ''}
+    </section>`).join('')}
 
     <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
   </div>` });
