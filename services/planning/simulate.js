@@ -31,7 +31,7 @@ async function simulateProduction(p) {
 
   try {
     await prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, code: true, name: true, operations: { where: { is_staging: false }, select: { id: true, is_parallel: true, allowed_people: { select: { person_id: true } }, workstation_id: true, workstation_group_id: true, name: true, step_number: true } } } });
+      const product = await tx.product.findUnique({ where: { id: productId }, select: { id: true, code: true, name: true, operations: { where: { is_staging: false, variant_of_id: null }, select: { id: true, is_parallel: true, allowed_people: { select: { person_id: true } }, workstation_id: true, workstation_group_id: true, name: true, step_number: true } } } });
       if (!product) throw new Error('Výrobek nenalezen');
       if (!product.operations.length) throw new Error('Výrobek nemá pracovní postup');
 
@@ -39,8 +39,11 @@ async function simulateProduction(p) {
       let material = { checked: !ignoreStock, shortages: [], material_ready_at: null };
       let materialStart = start;
 
-      const batch = await tx.productionBatch.create({ data: { batch_number: 'SIM-' + Date.now(), product_id: productId, quantity: qty, status: 'planned', priority: p.priority != null ? parseInt(p.priority, 10) : 100, planned_start: start, note: 'simulace', is_test: true, ignore_stock: ignoreStock } });
+      const variantChoices = p.variant_choices && typeof p.variant_choices === 'object' ? p.variant_choices : null;
+      const batch = await tx.productionBatch.create({ data: { batch_number: 'SIM-' + Date.now(), product_id: productId, quantity: qty, status: 'planned', priority: p.priority != null ? parseInt(p.priority, 10) : 100, planned_start: start, note: 'simulace', is_test: true, ignore_stock: ignoreStock, variant_choices: variantChoices || undefined } });
 
+      // Operace dávky dřív než MRP, aby MRP počítalo díly podle zvolených variant
+      await generateBatchOperationsForBatch(batch.id, { tx });
       if (!ignoreStock) {
         try {
           const mrp = await computeMrpForBatch(batch.id, { tx });
@@ -58,8 +61,7 @@ async function simulateProduction(p) {
       }
       if (materialStart.getTime() !== start.getTime()) await tx.productionBatch.update({ where: { id: batch.id }, data: { planned_start: materialStart } });
 
-      // 2) Operace + plán
-      await generateBatchOperationsForBatch(batch.id, { tx });
+      // 2) Plán
       const sch = await scheduleBatch(batch.id, { tx });
 
       const warnings = (sch.op_warnings || []).flatMap(w => w.warnings || []);

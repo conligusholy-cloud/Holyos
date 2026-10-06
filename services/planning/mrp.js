@@ -62,9 +62,12 @@ async function computeMrpForBatch(batchId, opts = {}) {
     }));
     bomSource = 'bom_snapshot';
   } else {
-    // Fallback: agreguj OperationMaterial přes ProductOperation produktu.
+    // Fallback: agreguj OperationMaterial přes operace DÁVKY (BatchOperation → zvolené varianty),
+    // když ještě operace nejsou, přes hlavní linii postupu (bez variant).
+    const bops = await tx.batchOperation.findMany({ where: { batch_id: id, status: { not: 'cancelled' } }, select: { operation_id: true } });
+    const opIds = bops.map(b => b.operation_id).filter(Boolean);
     const ops = await tx.productOperation.findMany({
-      where: { product_id: batch.product_id, is_staging: false }, // staging z FY importu nemá jít do MRP
+      where: opIds.length ? { id: { in: opIds } } : { product_id: batch.product_id, is_staging: false, variant_of_id: null }, // staging z FY importu nemá jít do MRP
       include: { materials: true },
     });
     const acc = new Map(); // material_id → { qty_per_ks, unit }

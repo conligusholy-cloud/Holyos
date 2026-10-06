@@ -720,7 +720,15 @@
     }
     .fy-tree-header > span:nth-child(6) { text-align: right; }
     .fy-tree-header > span:nth-child(8) { text-align: center; }
-  </style>
+      .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+    .vchip{font-size:11px;border:1px solid rgba(192,132,252,.5);color:#c084fc;background:rgba(192,132,252,.08);border-radius:999px;padding:2px 9px;cursor:pointer}
+    .vchip small{color:var(--text2)} .vchip:hover{background:rgba(192,132,252,.18)}
+    .vchip.base{border-color:var(--border);color:var(--text2);background:transparent;cursor:default}
+    .vchip.add{border-style:dashed;color:#14b8a6;border-color:rgba(20,184,166,.5);background:transparent}
+    .mdiff{font-size:10px;font-weight:700;border-radius:4px;padding:1px 6px;white-space:nowrap}
+    .mdiff.same{color:#22c55e;background:rgba(34,197,94,.12)} .mdiff.changed{color:#f59e0b;background:rgba(245,158,11,.12)} .mdiff.only{color:#60a5fa;background:rgba(96,165,250,.12)} .mdiff.missing{color:#ef4444;background:rgba(239,68,68,.12)}
+    .mdiff-slot{flex:0 0 auto;min-width:70px;text-align:center}
+</style>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
@@ -775,6 +783,15 @@
     <div class="modal-box" style="width:min(1080px, 94vw);max-width:1080px;max-height:90vh;">
       <h3 id="modal-title">Nová operace</h3>
       <input type="hidden" id="op-id">
+      <div id="op-variant-info" style="display:none;font-size:12px;color:#f59e0b;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:8px 10px;margin-bottom:10px;"></div>
+      <div id="op-variant-box" style="display:none;border:1px solid rgba(192,132,252,.45);background:rgba(192,132,252,.07);border-radius:10px;padding:10px 12px;margin-bottom:10px;">
+        <div class="form-row">
+          <div class="form-group" style="flex:2;"><label>Název varianty</label><input type="text" id="op-variant-name" placeholder="Hliník / Nerez / SK verze"></div>
+          <div class="form-group" style="flex:1;"><label>Označení (do dávky)</label><input type="text" id="op-variant-code" placeholder="AL" maxlength="20"></div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text2);">Díly: <span class="mdiff same">společný</span> stejný jako v základu (změny ze základu se sem propisují) · <span class="mdiff changed">upraveno</span> jiné množství než základ · <span class="mdiff only">jen varianta</span> díl navíc · <span class="mdiff missing">vynecháno</span> díl základu, který varianta nemá</div>
+        <div id="op-variant-missing" style="display:none;font-size:12px;margin-top:6px;"></div>
+      </div>
 
       <div class="form-row">
         <div class="form-group" style="flex:2;">
@@ -947,7 +964,7 @@
           api('/api/production/products'),
           api('/api/production/workstation-groups').catch(() => []),
         ]);
-        product = prod;
+        product = splitVariants(prod);
         workstations = ws;
         workstationGroups = wsGroups || [];
         try { productOutputs = await api('/api/production/products/' + id + '/outputs'); } catch (e) { productOutputs = []; }
@@ -1369,7 +1386,7 @@
             const op = (product.operations || []).find(o => o.id === id); if (!op) continue;
             await api('/api/production/operations/' + id, { method: 'PUT', body: JSON.stringify({ step_number: op.step_number, name: op.name, phase: op.phase, duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count, description: op.description, bom_count: op.bom_count, workstation_id: null, workstation_group_id: null, is_parallel: true, parallel_from: from, parallel_to: to }) });
           }
-          product = await api('/api/production/products/' + product.id);
+          product = splitVariants(await api('/api/production/products/' + product.id));
           renderTab();
           toast('Větev přepojena: ' + (from || 'začátek') + ' → ' + (to || 'konec'));
         } catch (err) { toast('Přepojení selhalo: ' + err.message, true); }
@@ -1605,9 +1622,11 @@
         html += '</tbody></table></div></div>';
       }
 
+      if (!isFyImport && !op.is_parallel) html += variantChipsHtml(op);
       html += '</div>' +
         '<div class="op-actions">' +
           '<button onclick="openEditOp(' + op.id + ')" title="Upravit">&#9998;</button>' +
+          (!isFyImport && !op.is_parallel ? '<button onclick="createVariant(' + op.id + ')" title="Vytvořit variantu (kopie operace k úpravě dílů)" style="color:#c084fc;">&#10697;</button>' : '') +
           '<button class="btn-del" onclick="deleteOp(' + op.id + ')" title="Smazat">&#128465;</button>' +
         '</div>' +
         '</div>';
@@ -1819,7 +1838,7 @@
           method: 'PUT',
           body: JSON.stringify({ order }),
         });
-        product = updated;
+        product = splitVariants(updated);
         updateMeta();
         renderTab();
         addHistory('reorder', 'Přeřazení: ' + movedName, 'Krok ' + (srcIdx+1) + ' → ' + (tgtIdx+1), { type: 'reorder', prevOrder });
@@ -1840,7 +1859,7 @@
     }
 
     function openAddOp() {
-      document.getElementById('modal-title').textContent = 'Nová operace';
+      document.getElementById('modal-title').textContent = 'Nová operace'; modalBaseMats = null; document.getElementById('op-variant-box').style.display = 'none'; document.getElementById('op-variant-info').style.display = 'none';
       document.getElementById('op-id').value = '';
       document.getElementById('op-name').value = '';
       const nextStep = (product.operations || []).length + 1;
@@ -1860,11 +1879,71 @@
       document.getElementById('op-modal').style.display = 'flex';
     }
 
+    // Varianty operací: API vrací všechny operace; varianty (variant_of_id) jdou mimo hlavní linii do product.variants
+    function splitVariants(p) {
+      if (!p || !Array.isArray(p.operations)) return p;
+      p.variants = p.operations.filter(o => o.variant_of_id);
+      p.operations = p.operations.filter(o => !o.variant_of_id);
+      return p;
+    }
+    function variantsOf(opId) { return (product.variants || []).filter(v => v.variant_of_id === opId); }
+    function findAnyOp(opId) { return product.operations.find(o => o.id === opId) || (product.variants || []).find(o => o.id === opId) || null; }
+    // Chipy variant pod operací: [Základ] [AL Hliník] … [+ varianta]
+    function variantChipsHtml(op) {
+      const vs = variantsOf(op.id);
+      return '<div class="op-variants">' +
+        '<span class="vchip base" title="Základní provedení (hlavní linie)">Základ</span>' +
+        vs.map(v => '<span class="vchip" onclick="event.stopPropagation();openEditOp(' + v.id + ')" title="Upravit variantu">' + (v.variant_code ? '<b>' + esc(v.variant_code) + '</b> ' : '') + esc(v.variant_name || 'varianta') + ' <small>' + (v.materials || []).length + ' dílů</small></span>').join('') +
+        '<span class="vchip add" onclick="event.stopPropagation();createVariant(' + op.id + ')" title="Vytvořit variantu — kopie operace, kterou upravíš (zaměníš / doplníš díly)">+ varianta</span>' +
+        '</div>';
+    }
+    async function createVariant(opId) {
+      const op = findAnyOp(opId); if (!op) return;
+      const name = prompt('Název varianty operace „' + op.name + '" (např. Hliník, Nerez, SK verze):', '');
+      if (!name || !name.trim()) return;
+      const code = prompt('Krátké označení varianty (např. AL, NR) — ukáže se u dávky:', name.trim().slice(0, 3).toUpperCase());
+      try {
+        const v = await api('/api/production/operations/' + opId + '/variant', { method: 'POST', body: JSON.stringify({ variant_name: name.trim(), variant_code: (code || '').trim() }) });
+        product = splitVariants(await api('/api/production/products/' + product.id));
+        renderTab(); toast('Varianta „' + name.trim() + '" vytvořena — uprav v ní díly');
+        openEditOp(v.id);
+      } catch (e) { toast('Variantu se nepodařilo vytvořit: ' + e.message, true); }
+    }
+    // Barevné porovnání dílů varianty se základem
+    let modalBaseMats = null; // Map material_id → {quantity, unit} základu (jen při editaci varianty)
+    function matDiffBadge(materialId, qty) {
+      if (!modalBaseMats) return '';
+      const b = modalBaseMats.get(String(materialId));
+      if (!b) return '<span class="mdiff only" title="Tento díl je jen v této variantě">jen varianta</span>';
+      if (Number(b.quantity) === Number(qty)) return '<span class="mdiff same" title="Společný díl se základem — změna v základu se sem propíše">společný</span>';
+      return '<span class="mdiff changed" title="Díl je v základu s jiným množstvím (' + b.quantity + ' ' + (b.unit || 'ks') + ')">upraveno</span>';
+    }
+    function refreshMatDiff() {
+      const box = document.getElementById('op-variant-missing'); if (!box) return;
+      document.querySelectorAll('#mat-rows .mat-row').forEach(r => { const badge = r.querySelector('.mdiff-slot'); if (badge) badge.innerHTML = matDiffBadge(r.querySelector('.mat-select').value, r.querySelector('.mat-qty').value); });
+      if (!modalBaseMats) { box.style.display = 'none'; return; }
+      const present = new Set([...document.querySelectorAll('#mat-rows .mat-select')].map(i => String(i.value)));
+      const missing = [...modalBaseMats.entries()].filter(([id]) => !present.has(id));
+      box.style.display = missing.length ? '' : 'none';
+      box.innerHTML = missing.length ? 'Oproti základu vynecháno: ' + missing.map(([id, m]) => '<span class="mdiff missing">' + esc(m.label) + ' (' + m.quantity + ' ' + (m.unit || 'ks') + ')</span>').join(' ') : '';
+    }
+
     function openEditOp(opId) {
-      const op = product.operations.find(o => o.id === opId);
+      const op = findAnyOp(opId);
       if (!op) return;
 
-      document.getElementById('modal-title').textContent = 'Upravit operaci';
+      const baseOp = op.variant_of_id ? findAnyOp(op.variant_of_id) : null;
+      modalBaseMats = baseOp ? new Map((baseOp.materials || []).map(m => [String(m.material_id), { quantity: m.quantity, unit: m.unit, label: m.material ? matLabel(m.material) : ('#' + m.material_id) }])) : null;
+      const vbox = document.getElementById('op-variant-box');
+      vbox.style.display = op.variant_of_id ? '' : 'none';
+      document.getElementById('op-variant-name').value = op.variant_name || '';
+      document.getElementById('op-variant-code').value = op.variant_code || '';
+      const vinfo = document.getElementById('op-variant-info');
+      const nVar = variantsOf(op.id).length;
+      vinfo.style.display = (!op.variant_of_id && nVar) ? '' : 'none';
+      vinfo.textContent = nVar ? 'Tahle operace má ' + nVar + ' variant(y). Změny společných dílů (přidání, množství, odebrání) se propíší do všech variant.' : '';
+
+      document.getElementById('modal-title').textContent = op.variant_of_id ? 'Upravit variantu: ' + (op.variant_name || '') + ' (základ: ' + op.name + ')' : 'Upravit operaci';
       document.getElementById('op-id').value = op.id;
       document.getElementById('op-name').value = op.name;
       document.getElementById('op-step').value = op.step_number;
@@ -1889,6 +1968,7 @@
         const lpId = m.linked_product ? m.linked_product.id : (m.product_id || null);
         addMatRow(m.material_id, m.quantity, m.unit, m.id, lpId);
       });
+      refreshMatDiff();
 
       document.getElementById('op-modal').style.display = 'flex';
     }
@@ -2038,9 +2118,10 @@
           '<input type="hidden" class="mat-select" value="' + (materialId || '') + '">' +
           '<div class="ss-dropdown"></div>' +
         '</div>' +
-        '<input type="number" class="mat-qty" min="0.001" step="0.001" value="' + (quantity || 1) + '" placeholder="Množství">' +
+        '<input type="number" class="mat-qty" min="0.001" step="0.001" value="' + (quantity || 1) + '" placeholder="Množství" oninput="refreshMatDiff()">' +
         '<input type="text" class="mat-unit" value="' + esc(unit || 'ks') + '" placeholder="jed." style="flex:0.5;">' +
-        '<button class="btn" onclick="this.parentElement.remove()" style="padding:4px 8px;font-size:11px;">&times;</button>';
+        '<span class="mdiff-slot">' + matDiffBadge(materialId, quantity || 1) + '</span>' +
+        '<button class="btn" onclick="this.parentElement.remove();refreshMatDiff()" style="padding:4px 8px;font-size:11px;">&times;</button>';
 
       container.appendChild(row);
     }
@@ -2173,6 +2254,7 @@
       row.dataset.materialId = id;
       // Ulož linked_product_id přímo z API dat (spolehlivější než hledání)
       row.dataset.productId = linkedProductId || '';
+      refreshMatDiff();
       // Nastav výchozí jednotku ze zboží
       const unitInput = row.querySelector('.mat-unit');
       if (unitInput && (!unitInput.value || unitInput.value === 'ks')) unitInput.value = unit;
@@ -2277,6 +2359,7 @@
         name,
         step_number: parseInt(document.getElementById('op-step').value) || 1,
         allowed_person_ids: modalAllowed.slice(),
+        ...(document.getElementById('op-variant-box').style.display !== 'none' ? { variant_name: document.getElementById('op-variant-name').value.trim() || null, variant_code: document.getElementById('op-variant-code').value.trim() || null } : {}),
         is_parallel: !!document.getElementById('op-parallel').checked,
         ...(document.getElementById('op-parallel').checked ? { workstation_id: null, workstation_group_id: null } : {}),
         parallel_from: parseInt(document.getElementById('op-parallel-from').value) || null,
@@ -2313,7 +2396,7 @@
         let prevOpData = null;
         if (opId) {
           // Snapshot pro undo edit
-          const prevOp = product.operations.find(o => o.id == opId);
+          const prevOp = findAnyOp(parseInt(opId));
           if (prevOp) {
             prevOpData = {
               name: prevOp.name, step_number: prevOp.step_number,
@@ -2335,7 +2418,7 @@
         }
 
         // Reload product
-        product = await api('/api/production/products/' + product.id);
+        product = splitVariants(await api('/api/production/products/' + product.id));
         closeModal();
         updateMeta();
         renderTab();
@@ -2376,7 +2459,7 @@
 
       try {
         await api('/api/production/operations/' + opId, { method: 'DELETE' });
-        product = await api('/api/production/products/' + product.id);
+        product = splitVariants(await api('/api/production/products/' + product.id));
         updateMeta();
         renderTab();
         addHistory('delete', 'Smazána: ' + opName, '', undoOpData ? { type: 'delete-op', opData: undoOpData } : null);
@@ -2595,7 +2678,7 @@
         if (idx >= 0) history.splice(idx, 1);
 
         // Reload
-        product = await api('/api/production/products/' + product.id);
+        product = splitVariants(await api('/api/production/products/' + product.id));
         updateMeta();
         renderTab();
         renderHistory();

@@ -613,7 +613,7 @@
       <div class="ws-task-card" style="${t.here ? '' : 'opacity:.85;'}${t.can_start === false ? 'border-color:rgba(239,68,68,.5);' : ''}">
         <div class="ws-task-info">
           <div class="ws-task-batch">${when} · ${where}</div>
-          <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}</div>
+          <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}${op?.variant_name ? ` <span style="font-size:12px;color:#c084fc;border:1px solid rgba(192,132,252,.5);border-radius:6px;padding:1px 6px;">varianta: ${escapeHtml(op.variant_name)}</span>` : ''}</div>
           <div class="ws-task-meta">
             <span>${escapeHtml(product?.code || '')} ${escapeHtml(product?.name || '')}</span>
             <span>· dávka ${escapeHtml(t.batch?.batch_number || '')} (${t.batch?.quantity || '?'} ks)</span>
@@ -684,7 +684,7 @@
       <div class="ws-task-card ${isInProgress ? 'in-progress' : ''}">
         <div class="ws-task-info">
           <div class="ws-task-batch">${escapeHtml(t.batch?.batch_number || '')} · ${escapeHtml(product?.code || '')} ${escapeHtml(product?.name || '')}</div>
-          <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}</div>
+          <div class="ws-task-name">${escapeHtml(op?.step_number || '')}. ${escapeHtml(op?.name || 'Operace')}${op?.variant_name ? ` <span style="font-size:12px;color:#c084fc;border:1px solid rgba(192,132,252,.5);border-radius:6px;padding:1px 6px;">varianta: ${escapeHtml(op.variant_name)}</span>` : ''}</div>
           <div class="ws-task-meta">
             <span>📦 ${t.batch?.quantity || '?'} ks</span>
             ${op?.duration ? `<span>⏱ ${op.duration} min/ks</span>` : ''}

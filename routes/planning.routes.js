@@ -74,7 +74,7 @@ router.post('/snapshot-bom', async (req, res, next) => {
     } else {
       // 'computed' / 'manual' — fallback na ProductOperation × OperationMaterial (původní logika)
       const operations = await prisma.productOperation.findMany({
-        where: { product_id: productId, is_staging: false }, // staging z FY importu do BOM snapshotu nepatří
+        where: { product_id: productId, is_staging: false, variant_of_id: null }, // staging z FY importu ani varianty do BOM snapshotu nepatří
         include: { materials: true },
         orderBy: { step_number: 'asc' },
       });
@@ -595,7 +595,7 @@ router.get('/work-plan', async (req, res, next) => {
         assigned_person: { select: { id: true, first_name: true, last_name: true } },
         workers: { select: { slot: true, person: { select: { id: true, first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
         workstation: { select: { id: true, name: true, code: true, input_warehouse_id: true } },
-        operation: { select: { id: true, name: true, step_number: true, is_parallel: true, duration: true, duration_unit: true, workers_count: true } },
+        operation: { select: { id: true, name: true, step_number: true, is_parallel: true, duration: true, duration_unit: true, workers_count: true, variant_name: true, variant_code: true } },
         batch: { select: { id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, product: { select: { id: true, code: true, name: true } } } },
       },
       orderBy: [{ planned_start: 'asc' }, { sequence: 'asc' }],
@@ -615,7 +615,7 @@ router.get('/batches-plan', async (req, res, next) => {
     const batches = await prisma.productionBatch.findMany({
       where: { status: { in: status } },
       select: {
-        id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, original_planned_start: true, original_planned_end: true, actual_start: true, actual_end: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
+        id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, original_planned_start: true, original_planned_end: true, actual_start: true, actual_end: true, variant_label: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
         product: { select: { id: true, code: true, name: true } },
         batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workers: { select: { person: { select: { id: true, first_name: true, last_name: true } } } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
       },

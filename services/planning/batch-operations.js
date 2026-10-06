@@ -39,7 +39,7 @@ async function generateBatchOperationsForBatch(batchId, opts = {}) {
   const batch = await tx.productionBatch.findUnique({
     where: { id },
     select: {
-      id: true, product_id: true, batch_number: true,
+      id: true, product_id: true, batch_number: true, variant_choices: true,
       _count: { select: { batch_operations: true } },
     },
   });
@@ -54,11 +54,20 @@ async function generateBatchOperationsForBatch(batchId, opts = {}) {
     };
   }
 
-  const productOps = await tx.productOperation.findMany({
-    where: { product_id: batch.product_id, is_staging: false }, // staging z FY importu se neplánuje
+  // Hlavní linie = operace bez variant_of_id. Když dávka má zvolené varianty ({ základ_id: varianta_id }),
+  // nahradí se základní operace zvolenou variantou (jiné díly / lidi / pracoviště podle varianty).
+  const choices = batch.variant_choices && typeof batch.variant_choices === 'object' ? batch.variant_choices : {};
+  let productOps = await tx.productOperation.findMany({
+    where: { product_id: batch.product_id, is_staging: false, variant_of_id: null }, // staging z FY importu se neplánuje; varianty jen přes volbu
     orderBy: { step_number: 'asc' },
     select: { id: true, step_number: true, workstation_id: true, workstation_group_id: true, name: true },
   });
+  const chosenIds = Object.values(choices).map(Number).filter(Number.isFinite);
+  if (chosenIds.length) {
+    const variants = await tx.productOperation.findMany({ where: { id: { in: chosenIds }, product_id: batch.product_id }, select: { id: true, step_number: true, workstation_id: true, workstation_group_id: true, name: true, variant_of_id: true } });
+    const byBase = new Map(variants.map(v => [v.variant_of_id, v]));
+    productOps = productOps.map(op => byBase.get(op.id) || op);
+  }
 
   if (productOps.length === 0) {
     return {

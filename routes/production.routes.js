@@ -170,9 +170,10 @@ router.get('/products', async (req, res, next) => {
       }
     }
 
+    // operations = hlavní linie (bez variant); u každé operace seznam variant k výběru při zadání do výroby
     const products = await prisma.product.findMany({
       where,
-      include: { operations: { orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true } } },
+      include: { operations: { where: { variant_of_id: null }, orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true, variants: { select: { id: true, variant_name: true, variant_code: true }, orderBy: { id: 'asc' } } } } },
       orderBy: { name: 'asc' },
     });
     res.json(products);
@@ -354,13 +355,17 @@ router.post('/products/:id/duplicate', async (req, res, next) => {
         data: { code, name, type: src.type, material_id, takt_time: src.takt_time, show_in_configurator: false,
           min_batch_size: src.min_batch_size, economic_batch_size: src.economic_batch_size, batch_size_step: src.batch_size_step },
       });
-      for (const op of src.operations) {
+      const opIdMap = new Map(); // původní id → nové id (kvůli variantám)
+      const orderedOps = src.operations.slice().sort((a, b) => (a.variant_of_id ? 1 : 0) - (b.variant_of_id ? 1 : 0)); // základy dřív než varianty
+      for (const op of orderedOps) {
         if (op.is_staging) continue; // staging z FY importu nekopírovat
         const nop = await tx.productOperation.create({
           data: { product_id: p.id, workstation_id: op.workstation_id, workstation_group_id: op.workstation_group_id, is_parallel: op.is_parallel, parallel_from: op.parallel_from, parallel_to: op.parallel_to, step_number: op.step_number, name: op.name, phase: op.phase,
             duration: op.duration, duration_unit: op.duration_unit, preparation_time: op.preparation_time, workers_count: op.workers_count,
-            description: op.description, bom_count: op.bom_count, from_factorify: false },
+            description: op.description, bom_count: op.bom_count, from_factorify: false,
+            variant_of_id: op.variant_of_id ? (opIdMap.get(op.variant_of_id) || null) : null, variant_name: op.variant_name, variant_code: op.variant_code },
         });
+        opIdMap.set(op.id, nop.id);
         for (const m of op.materials) {
           await tx.operationMaterial.create({ data: { operation_id: nop.id, material_id: m.material_id, product_id: m.product_id, quantity: m.quantity, unit: m.unit } });
         }
@@ -1416,6 +1421,59 @@ router.post('/operations', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Propagace změn dílů základní operace do jejích variant.
+//   before/after = díly základu před a po uložení. Pro každou variantu:
+//   - díl přidaný do základu → přidá se i do varianty (společný díl)
+//   - díl změněný (množství/jednotka) → ve variantě se přepíše, pokud tam je
+//   - díl odebraný ze základu → z varianty se odebere jen tehdy, když ho varianta měla beze změny (stejné množství)
+async function propagateMaterialsToVariants(tx, opId, before, after) {
+  const variants = await tx.productOperation.findMany({ where: { variant_of_id: opId }, select: { id: true } });
+  if (!variants.length) return;
+  const b = new Map(before.map(m => [m.material_id, m]));
+  const a = new Map(after.filter(m => m.material_id).map(m => [m.material_id, m]));
+  for (const v of variants) {
+    const cur = await tx.operationMaterial.findMany({ where: { operation_id: v.id } });
+    const vm = new Map(cur.map(m => [m.material_id, m]));
+    for (const [mid, m] of a) {
+      const old = b.get(mid);
+      const inV = vm.get(mid);
+      if (!old) { if (!inV) await tx.operationMaterial.create({ data: { operation_id: v.id, material_id: mid, product_id: m.product_id || null, quantity: m.quantity, unit: m.unit || 'ks' } }); }
+      else if (inV && (Number(old.quantity) !== Number(m.quantity) || (old.unit || 'ks') !== (m.unit || 'ks'))) await tx.operationMaterial.update({ where: { id: inV.id }, data: { quantity: m.quantity, unit: m.unit || 'ks' } });
+    }
+    for (const [mid, old] of b) {
+      if (a.has(mid)) continue;
+      const inV = vm.get(mid);
+      if (inV && Number(inV.quantity) === Number(old.quantity)) await tx.operationMaterial.delete({ where: { id: inV.id } });
+    }
+  }
+}
+
+// POST /api/production/operations/:id/variant — vytvoří variantu operace (kopie dílů, lidí, pracoviště…)
+//   body: { variant_name (povinné), variant_code? }
+router.post('/operations/:id/variant', async (req, res, next) => {
+  try {
+    const srcId = parseInt(req.params.id, 10);
+    const src = await prisma.productOperation.findUnique({ where: { id: srcId }, include: { materials: true, allowed_people: true, required_competencies: true } });
+    if (!src) return res.status(404).json({ error: 'Operace nenalezena' });
+    const baseId = src.variant_of_id || src.id; // varianta z varianty → pořád patří k základu
+    const variant_name = String(req.body?.variant_name || '').trim();
+    if (!variant_name) return res.status(400).json({ error: 'Zadej název varianty (např. Hliník, Nerez, SK verze).' });
+    const variant_code = String(req.body?.variant_code || '').trim().slice(0, 20) || null;
+    const op = await prisma.$transaction(async (tx) => {
+      const created = await tx.productOperation.create({
+        data: { product_id: src.product_id, workstation_id: src.workstation_id, workstation_group_id: src.workstation_group_id, is_parallel: src.is_parallel, parallel_from: src.parallel_from, parallel_to: src.parallel_to,
+          step_number: src.step_number, name: src.name, phase: src.phase, duration: src.duration, duration_unit: src.duration_unit, preparation_time: src.preparation_time, workers_count: src.workers_count,
+          description: src.description, bom_count: src.bom_count, from_factorify: false, variant_of_id: baseId, variant_name, variant_code },
+      });
+      if (src.materials.length) await tx.operationMaterial.createMany({ data: src.materials.map(m => ({ operation_id: created.id, material_id: m.material_id, product_id: m.product_id, quantity: m.quantity, unit: m.unit })) });
+      if (src.allowed_people.length) await tx.operationAllowedPerson.createMany({ data: src.allowed_people.map(ap => ({ operation_id: created.id, person_id: ap.person_id, priority: ap.priority })), skipDuplicates: true });
+      if ((src.required_competencies || []).length) await tx.operationRequiredCompetency.createMany({ data: src.required_competencies.map(c => ({ operation_id: created.id, competency_id: c.competency_id, min_level: c.min_level })) });
+      return tx.productOperation.findUnique({ where: { id: created.id }, include: { workstation: true, workstation_group: { select: { id: true, name: true, color: true } }, allowed_people: { select: { id: true, person_id: true, priority: true, person: { select: { id: true, first_name: true, last_name: true, photo_url: true } } }, orderBy: { priority: 'asc' } }, materials: { include: { material: true } } } });
+    });
+    res.status(201).json(op);
+  } catch (err) { next(err); }
+});
+
 // PUT /api/production/operations/:id
 router.put('/operations/:id', async (req, res, next) => {
   try {
@@ -1431,12 +1489,20 @@ router.put('/operations/:id', async (req, res, next) => {
       if (!par && !ws && !grp) return res.status(400).json({ error: 'Operace musí mít skupinu pracovišť nebo konkrétní pracoviště (paralelní operace je plovoucí a pracoviště nepotřebuje).' });
     }
     const op = await prisma.$transaction(async (tx) => {
+      const { variant_name, variant_code } = req.body;
       await tx.productOperation.update({
         where: { id: opId },
         data: { workstation_id, step_number, name, phase, duration, duration_unit, preparation_time, workers_count, description, bom_count,
+          ...(variant_name !== undefined ? { variant_name: variant_name ? String(variant_name).slice(0, 120) : null } : {}),
+          ...(variant_code !== undefined ? { variant_code: variant_code ? String(variant_code).slice(0, 20) : null } : {}),
           ...(workstation_group_id !== undefined ? { workstation_group_id: workstation_group_id || null } : {}),
           ...(is_parallel !== undefined ? { is_parallel: !!is_parallel, parallel_from: is_parallel && parallel_from ? parseInt(parallel_from, 10) : null, parallel_to: is_parallel && parallel_to ? parseInt(parallel_to, 10) : null } : {}) },
       });
+      // Varianty drží pořadí a zařazení (hlavní/paralelní okno) podle základu
+      if (step_number !== undefined || is_parallel !== undefined) {
+        const base = await tx.productOperation.findUnique({ where: { id: opId }, select: { step_number: true, is_parallel: true, parallel_from: true, parallel_to: true } });
+        await tx.productOperation.updateMany({ where: { variant_of_id: opId }, data: { step_number: base.step_number, is_parallel: base.is_parallel, parallel_from: base.parallel_from, parallel_to: base.parallel_to } });
+      }
       // Kdo smí operaci dělat — nahraď seznam (pokud přišel)
       if (Array.isArray(allowed_person_ids)) {
         await tx.operationAllowedPerson.deleteMany({ where: { operation_id: opId } });
@@ -1444,6 +1510,8 @@ router.put('/operations/:id', async (req, res, next) => {
       }
       // Nahraď materiály — smaž staré + vlož nové v jedné transakci
       if (Array.isArray(materials)) {
+        // Propagace do variant: díly společné se základem (stejný materiál) se ve všech variantách srovnají podle základu
+        const before = await tx.operationMaterial.findMany({ where: { operation_id: opId }, select: { material_id: true, quantity: true, unit: true } });
         await tx.operationMaterial.deleteMany({ where: { operation_id: opId } });
         if (materials.length > 0) {
           const matIds = materials.map(m => m.material_id).filter(Boolean);
@@ -1463,6 +1531,7 @@ router.put('/operations/:id', async (req, res, next) => {
             })),
           });
         }
+        await propagateMaterialsToVariants(tx, opId, before, materials);
       }
       return tx.productOperation.findUnique({
         where: { id: opId },
@@ -1785,12 +1854,14 @@ router.put('/products/:id/reorder-operations', async (req, res, next) => {
 
     // Aktualizuj pořadí v transakci
     await prisma.$transaction(
-      order.map(item =>
+      order.flatMap(item => [
         prisma.productOperation.update({
           where: { id: item.id },
           data: { step_number: item.step_number },
-        })
-      )
+        }),
+        // varianty operace drží stejné pořadí jako jejich základ
+        prisma.productOperation.updateMany({ where: { variant_of_id: item.id }, data: { step_number: item.step_number } }),
+      ])
     );
 
     // Vrať aktualizovaný produkt
@@ -2576,13 +2647,26 @@ router.post('/batches', async (req, res, next) => {
     const {
       product_id, quantity, variant_key, batch_type, priority,
       planned_start, planned_end, parent_batch_id, bom_snapshot_id,
-      created_by_id, note, auto_generate_operations, due_date, is_test, ignore_stock,
+      created_by_id, note, auto_generate_operations, due_date, is_test, ignore_stock, variant_choices,
     } = req.body || {};
 
     const productId = parseInt(product_id, 10);
     const qty = parseInt(quantity, 10);
     if (isNaN(productId) || isNaN(qty) || qty <= 0) {
       return res.status(400).json({ error: 'product_id a quantity (>0) jsou povinné' });
+    }
+
+    // Varianty operací: { základ_id: varianta_id } — ověř, že varianty patří k výrobku a k uvedenému základu; sestav štítek
+    let choices = null, variantLabel = null;
+    if (variant_choices && typeof variant_choices === 'object' && Object.keys(variant_choices).length) {
+      const ids = Object.values(variant_choices).map(Number).filter(Number.isFinite);
+      const vars = ids.length ? await prisma.productOperation.findMany({ where: { id: { in: ids }, product_id: productId, variant_of_id: { not: null } }, select: { id: true, name: true, variant_of_id: true, variant_name: true, variant_code: true, step_number: true } }) : [];
+      choices = {};
+      for (const v of vars) if (Number(variant_choices[v.variant_of_id]) === v.id) choices[v.variant_of_id] = v.id;
+      const bad = ids.filter(i => !vars.some(v => v.id === i));
+      if (bad.length) return res.status(400).json({ error: 'Neplatná varianta operace: ' + bad.join(', ') });
+      variantLabel = vars.sort((x, y) => x.step_number - y.step_number).map(v => v.step_number + '. ' + v.name + ': ' + (v.variant_name || v.variant_code || 'varianta')).join(' · ').slice(0, 255) || null;
+      if (!Object.keys(choices).length) choices = null;
     }
 
     let batch_number = await generateBatchNumber(planned_start, !!is_test);
@@ -2604,6 +2688,8 @@ router.post('/batches', async (req, res, next) => {
         due_date: due_date ? new Date(due_date) : null,
         is_test: !!is_test,
         ignore_stock: !!ignore_stock,
+        variant_choices: choices || undefined,
+        variant_label: variantLabel,
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
@@ -2862,7 +2948,7 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
       include: {
         batch: { select: { id: true, batch_number: true, quantity: true, priority: true,
           product: { select: { id: true, code: true, name: true } } } },
-        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true } },
+        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, variant_name: true, variant_code: true } },
       },
       orderBy: [{ started_at: 'asc' }],
     });
@@ -2930,7 +3016,7 @@ router.get('/workstations/:id/available-work', async (req, res, next) => {
       include: {
         batch: { select: { id: true, batch_number: true, quantity: true, priority: true, status: true,
           product: { select: { id: true, code: true, name: true } } } },
-        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, is_parallel: true, workers_count: true } },
+        operation: { select: { id: true, name: true, step_number: true, duration: true, description: true, is_parallel: true, workers_count: true, variant_name: true, variant_code: true } },
         workstation: { select: { id: true, name: true, input_warehouse_id: true } },
         workers: { select: { person_id: true, slot: true, person: { select: { first_name: true, last_name: true } } }, orderBy: { slot: 'asc' } },
       },

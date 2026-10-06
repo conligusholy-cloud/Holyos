@@ -1566,6 +1566,12 @@ model ProductOperation {
   // do správných operací a tuto operaci pak smaže.
   is_staging Boolean @default(false)
 
+  // Varianty operace: kopie operace hlavní linie s jinými/doplněnými díly. variant_of_id = základní operace.
+  // Varianta není součástí hlavní linie — vybírá se při zadání dávky do výroby (ProductionBatch.variant_choices).
+  variant_of_id Int?
+  variant_name  String? @db.VarChar(120) // „Hliník", „Nerez", „SK verze"
+  variant_code  String? @db.VarChar(20) // krátké označení do čísla dávky / štítku: „AL", „NR"
+
   product            Product                 @relation(fields: [product_id], references: [id], onDelete: Cascade)
   workstation        Workstation?            @relation(fields: [workstation_id], references: [id])
   workstation_group  WorkstationGroup?       @relation(fields: [workstation_group_id], references: [id], onDelete: SetNull)
@@ -1577,6 +1583,8 @@ model ProductOperation {
   required_competencies OperationRequiredCompetency[]
   // Plánovač — kdo smí operaci dělat (explicitní seznam lidí = varianty pro plánování)
   allowed_people        OperationAllowedPerson[]
+  variant_of            ProductOperation?       @relation("OperationVariants", fields: [variant_of_id], references: [id], onDelete: Cascade)
+  variants              ProductOperation[]      @relation("OperationVariants")
   // Plánovač — BOM snapshot itemy, kde je tato operace zdrojem spotřeby materiálu
   bom_snapshot_items    BomSnapshotItem[]             @relation("BomSnapshotItemOperation")
   // Plánovač — instance operace pro výrobní dávky
@@ -1584,6 +1592,7 @@ model ProductOperation {
 
   @@index([product_id])
   @@index([workstation_group_id])
+  @@index([variant_of_id])
   @@map("product_operations")
 }
 
@@ -4014,6 +4023,9 @@ model ProductionBatch {
   // ignore_stock = plánovat bez ohledu na dostupnost materiálu (MRP/nákup se přeskočí)
   is_test      Boolean @default(false)
   ignore_stock Boolean @default(false)
+  // Zvolené varianty operací při zadání do výroby: { "<id základní operace>": <id varianty> }; variant_label = čitelný souhrn („Opláštění: Hliník")
+  variant_choices Json?
+  variant_label   String? @db.VarChar(255)
 
   note String? @db.Text
 

@@ -120,7 +120,7 @@ router.get('/', async (req, res, next) => {
       wantsProduction
         ? prisma.productOperation.findMany({
             where: {
-              is_staging: false,
+              is_staging: false, variant_of_id: null,
               OR: [
                 { name: { contains: q, mode: 'insensitive' } },
                 { phase: { contains: q, mode: 'insensitive' } },
