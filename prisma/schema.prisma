@@ -1384,6 +1384,7 @@ model Product {
 
   // Hotové výrobky — co se naskladní po dokončení postupu (prázdné = výrobek sám ×1; nářezový plán = více dílů)
   outputs ProductOutput[] @relation("ProductOutputParent")
+  equipment ProductEquipment[] // Výbava: pojmenované kombinace variant operací (Barva – Červená …)
   used_as_output ProductOutput[] @relation("ProductOutputProduct")
 
   @@index([factorify_id])
@@ -3874,6 +3875,23 @@ model WorkerCompetency {
 // operaci jen pokud má všechny required_competencies na úrovni >= min_level.
 // Hotové výrobky na konci pracovního postupu: co (a kolik) se naskladní po dokončení.
 // Výchozí = samotný výrobek ×1 (bez záznamů). Nářezový plán: 1 deska → N různých dílů.
+// Výbava výrobku: položka „Skupina – Název" (Barva – Červená) = sada variant operací, které se při jejím
+// výběru použijí místo základu. Při zadání do výroby se vybírá výbava, ne varianty po operacích.
+model ProductEquipment {
+  id          Int      @id @default(autoincrement())
+  product_id  Int
+  group_name  String   @db.VarChar(80) // „Barva", „Rám", „Verze"
+  name        String   @db.VarChar(120) // „Červená"
+  variant_ids Int[]    @default([]) // id variant operací (ProductOperation s variant_of_id)
+  sort        Int      @default(0)
+  note        String?  @db.Text
+  created_at  DateTime @default(now())
+  product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+
+  @@index([product_id])
+  @@map("product_equipments")
+}
+
 model ProductOutput {
   id          Int      @id @default(autoincrement())
   product_id  Int // výrobek, jehož postup výstup produkuje

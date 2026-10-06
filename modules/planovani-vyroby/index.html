@@ -188,8 +188,10 @@
               <div id="pf-sug" class="pf-sug" style="display:none;"></div>
               <div id="pf-product-info" class="pf-info"></div>
               <div id="pf-variants" style="display:none;margin-top:8px;border:1px solid rgba(251,146,60,.5);background:rgba(251,146,60,.07);border-radius:10px;padding:10px 12px;">
-                <div style="font-size:12px;color:#fb923c;font-weight:700;margin-bottom:6px;">Varianty operací — vyber provedení pro tuto dávku</div>
-                <div id="pf-variants-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;"></div>
+                <div style="font-size:12px;color:#fb923c;font-weight:700;margin-bottom:6px;">Výbava — vyber provedení pro tuto dávku</div>
+                <div id="pf-equipment-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:6px;"></div>
+                <details id="pf-variants-details"><summary style="cursor:pointer;font-size:11.5px;color:var(--text2);">Podrobně po operacích (ruční volba varianty)</summary>
+                <div id="pf-variants-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:6px;"></div></details>
               </div>
             </div>
             <div class="pf-field" style="flex:0 0 120px;"><label>Počet kusů *</label><input id="pf-qty" type="number" min="1" value="1" onchange="pfSimulate()"></div>
@@ -1741,10 +1743,21 @@
   };
   // Operace s variantami: pro každou výběr Základ / varianta → variant_choices { základ_id: varianta_id }
   function pfRenderVariants() {
-    var box = document.getElementById('pf-variants'), rows = document.getElementById('pf-variants-rows');
+    var box = document.getElementById('pf-variants'), rows = document.getElementById('pf-variants-rows'), eqRows = document.getElementById('pf-equipment-rows');
     var withVar = (pfSelected && pfSelected.operations || []).filter(function (o) { return (o.variants || []).length; });
-    if (!withVar.length) { box.style.display = 'none'; rows.innerHTML = ''; return; }
+    if (!withVar.length) { box.style.display = 'none'; rows.innerHTML = ''; eqRows.innerHTML = ''; return; }
     box.style.display = '';
+    // Výbava po skupinách (Barva: Základ / Červená / Bílá) — výběr nastaví varianty u všech dotčených operací
+    var eq = (pfSelected.equipment || []); var groups = {};
+    eq.forEach(function (e) { (groups[e.group_name] = groups[e.group_name] || []).push(e); });
+    var gkeys = Object.keys(groups);
+    eqRows.innerHTML = gkeys.map(function (g) {
+      return '<label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text2);"><span><b style="color:var(--text);">' + pv2Esc(g) + '</b></span>' +
+        '<select class="pf-eq" data-group="' + pv2Esc(g) + '" onchange="pfApplyEquipment()" style="font-size:13px;"><option value="">Základ</option>' +
+        groups[g].map(function (e) { return '<option value="' + e.id + '">' + pv2Esc(e.name) + '</option>'; }).join('') + '</select></label>';
+    }).join('');
+    document.getElementById('pf-variants-details').open = !gkeys.length;
+    if (!gkeys.length) eqRows.innerHTML = '<div style="font-size:11.5px;color:var(--text2);grid-column:1/-1;">Výrobek nemá definovanou výbavu (⚙ v pracovním postupu) — vyber varianty ručně níže.</div>';
     rows.innerHTML = withVar.map(function (o) {
       return '<label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text2);"><span><b style="color:var(--text);">' + o.step_number + '. ' + pv2Esc(o.name) + '</b></span>' +
         '<select class="pf-var" data-base="' + o.id + '" onchange="pfSimulate()" style="font-size:13px;"><option value="">' + pv2Esc((o.variant_code ? o.variant_code + ' · ' : '') + (o.variant_name || 'Základ (hlavní linie)')) + '</option>' +
@@ -1755,6 +1768,21 @@
     var out = {}; document.querySelectorAll('#pf-variants-rows .pf-var').forEach(function (sel) { if (sel.value) out[sel.getAttribute('data-base')] = parseInt(sel.value); });
     return Object.keys(out).length ? out : null;
   }
+  function pfEquipmentIds() {
+    var ids = []; document.querySelectorAll('#pf-equipment-rows .pf-eq').forEach(function (sel) { if (sel.value) ids.push(parseInt(sel.value)); });
+    return ids.length ? ids : null;
+  }
+  // Výběr výbavy → předvyplní varianty operací (a hlídá kolize mezi výbavami)
+  window.pfApplyEquipment = function () {
+    var eq = (pfSelected && pfSelected.equipment || []); var chosen = pfEquipmentIds() || [];
+    var byVar = {}; (pfSelected.operations || []).forEach(function (o) { (o.variants || []).forEach(function (v) { byVar[v.id] = o.id; }); });
+    var pick = {}, owner = {}, conflict = null;
+    chosen.forEach(function (id) { var e = eq.find(function (x) { return x.id === id; }); if (!e) return; (e.variant_ids || []).forEach(function (vid) { var base = byVar[vid]; if (!base) return; if (pick[base] && pick[base] !== vid) conflict = owner[base] + ' × ' + e.group_name + ' – ' + e.name; pick[base] = vid; owner[base] = e.group_name + ' – ' + e.name; }); });
+    document.querySelectorAll('#pf-variants-rows .pf-var').forEach(function (sel) { var base = parseInt(sel.getAttribute('data-base')); sel.value = pick[base] ? String(pick[base]) : ''; });
+    var info = document.getElementById('pf-product-info');
+    if (conflict) info.innerHTML = '<span style="color:#ef4444;">⚠️ Výbavy se liší u stejné operace: ' + pv2Esc(conflict) + ' — vyber jen jednu.</span>';
+    pfSimulate();
+  };
   // Živý odhad: „když to teď dám do výroby, kdy nejdřív to bude hotové" (dry-run na serveru, nic se neukládá)
   var pfSimSeq = 0, pfLastSim = null;
   window.pfSimulate = async function () {
@@ -1762,7 +1790,7 @@
     var seq = ++pfSimSeq; box.style.display = ''; box.className = 'pf-sim'; box.innerHTML = '⏳ Počítám nejbližší reálný termín (kapacity lidí, pracoviště, materiál)…';
     var due = document.getElementById('pf-due').value;
     try {
-      var r = await fetch('/api/planning/simulate', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), quantity: parseInt(document.getElementById('pf-qty').value) || 1, due_date: due ? new Date(due).toISOString() : null, priority: parseInt(document.getElementById('pf-priority').value) || 100, ignore_stock: document.getElementById('pf-ignore-stock').checked }) });
+      var r = await fetch('/api/planning/simulate', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), quantity: parseInt(document.getElementById('pf-qty').value) || 1, due_date: due ? new Date(due).toISOString() : null, priority: parseInt(document.getElementById('pf-priority').value) || 100, ignore_stock: document.getElementById('pf-ignore-stock').checked }) });
       var d = await r.json(); if (seq !== pfSimSeq) return; if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
       pfLastSim = d;
       var cls = d.meets_due === false ? 'late' : (d.feasible ? 'ok' : 'err');
@@ -1787,7 +1815,7 @@
     if (qty < 1) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Zadej počet kusů.'; return; }
     btn.disabled = true; btn.textContent = 'Plánuji…'; res.style.display = ''; res.className = 'pf-result'; res.textContent = 'Vytvářím dávku…';
     try {
-      var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), quantity: qty, planned_start: new Date(start).toISOString(), due_date: due ? new Date(due).toISOString() : null, is_test: isTest, ignore_stock: ignoreStock, priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
+      var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), quantity: qty, planned_start: new Date(start).toISOString(), due_date: due ? new Date(due).toISOString() : null, is_test: isTest, ignore_stock: ignoreStock, priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
       var b = await r.json(); if (!r.ok) throw new Error(b.error || 'HTTP ' + r.status);
       res.textContent = 'Dávka ' + b.batch_number + ' vytvořena, plánuji operace…';
       var sr = await fetch('/api/planning/batches/' + b.id + '/schedule', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ syncVelin: false }) });

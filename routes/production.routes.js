@@ -173,7 +173,8 @@ router.get('/products', async (req, res, next) => {
     // operations = hlavní linie (bez variant); u každé operace seznam variant k výběru při zadání do výroby
     const products = await prisma.product.findMany({
       where,
-      include: { operations: { where: { variant_of_id: null }, orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true }, orderBy: { id: 'asc' } } } } },
+      include: { operations: { where: { variant_of_id: null }, orderBy: { step_number: 'asc' }, select: { id: true, step_number: true, name: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true }, orderBy: { id: 'asc' } } } },
+        equipment: { select: { id: true, group_name: true, name: true, variant_ids: true }, orderBy: [{ group_name: 'asc' }, { sort: 'asc' }] } },
       orderBy: { name: 'asc' },
     });
     res.json(products);
@@ -864,6 +865,58 @@ router.post('/products/:id/fy-bom/sync-qty', async (req, res, next) => {
 // =============================================================================
 const OUTPUT_INCLUDE = { out_product: { select: { id: true, code: true, name: true, type: true } }, out_material: { select: { id: true, code: true, name: true, unit: true } } };
 // GET /api/production/products/:id/outputs
+// ── Výbava výrobku (Barva – Červená = sada variant operací) ───────────────────
+// GET /api/production/products/:id/equipment
+router.get('/products/:id/equipment', async (req, res, next) => {
+  try {
+    const rows = await prisma.productEquipment.findMany({ where: { product_id: parseInt(req.params.id, 10) }, orderBy: [{ group_name: 'asc' }, { sort: 'asc' }, { name: 'asc' }] });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+// PUT /api/production/products/:id/equipment — nahradí celou výbavu: [{ id?, group_name, name, variant_ids:[], note? }]
+router.put('/products/:id/equipment', async (req, res, next) => {
+  try {
+    const productId = parseInt(req.params.id, 10);
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const variants = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: { not: null } }, select: { id: true, variant_of_id: true } });
+    const validIds = new Set(variants.map(v => v.id));
+    const baseOf = new Map(variants.map(v => [v.id, v.variant_of_id]));
+    const clean = [];
+    for (const [i, it] of items.entries()) {
+      const group_name = String(it.group_name || '').trim().slice(0, 80), name = String(it.name || '').trim().slice(0, 120);
+      if (!group_name || !name) return res.status(400).json({ error: 'Každá položka výbavy musí mít skupinu (např. Barva) a název (např. Červená).' });
+      const ids = [...new Set((it.variant_ids || []).map(Number).filter(n => validIds.has(n)))];
+      // jedna výbava nesmí mít dvě varianty téže operace
+      const bases = ids.map(id => baseOf.get(id)); if (new Set(bases).size !== bases.length) return res.status(400).json({ error: 'Výbava „' + group_name + ' – ' + name + '" má dvě varianty stejné operace.' });
+      clean.push({ product_id: productId, group_name, name, variant_ids: ids, sort: i, note: it.note ? String(it.note).slice(0, 2000) : null });
+    }
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.productEquipment.deleteMany({ where: { product_id: productId } });
+      if (clean.length) await tx.productEquipment.createMany({ data: clean });
+      return tx.productEquipment.findMany({ where: { product_id: productId }, orderBy: [{ group_name: 'asc' }, { sort: 'asc' }] });
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+// Převod zvolené výbavy na volby variant { základ_id: varianta_id }; kolize dvou výbav na téže operaci = chyba
+async function resolveEquipment(productId, equipmentIds, baseChoices) {
+  const choices = Object.assign({}, baseChoices || {});
+  const ids = (equipmentIds || []).map(Number).filter(Number.isFinite);
+  if (!ids.length) return { choices, labels: [] };
+  const eq = await prisma.productEquipment.findMany({ where: { id: { in: ids }, product_id: productId } });
+  const allVar = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: { not: null } }, select: { id: true, variant_of_id: true, name: true } });
+  const baseOf = new Map(allVar.map(v => [v.id, v.variant_of_id]));
+  const owner = {}; // základ → název výbavy, která ho nastavila
+  for (const e of eq) {
+    for (const vid of e.variant_ids) {
+      const b = baseOf.get(vid); if (!b) continue;
+      if (choices[b] && choices[b] !== vid && owner[b]) throw Object.assign(new Error('Výbavy „' + owner[b] + '" a „' + e.group_name + ' – ' + e.name + '" se liší u stejné operace — vyber jen jednu z nich.'), { status: 400 });
+      choices[b] = vid; owner[b] = e.group_name + ' – ' + e.name;
+    }
+  }
+  return { choices, labels: eq.map(e => e.group_name + ' – ' + e.name) };
+}
+
 router.get('/products/:id/outputs', async (req, res, next) => {
   try {
     const rows = await prisma.productOutput.findMany({ where: { product_id: parseInt(req.params.id) }, include: OUTPUT_INCLUDE, orderBy: { id: 'asc' } });
@@ -2684,13 +2737,20 @@ router.post('/batches', async (req, res, next) => {
     const {
       product_id, quantity, variant_key, batch_type, priority,
       planned_start, planned_end, parent_batch_id, bom_snapshot_id,
-      created_by_id, note, auto_generate_operations, due_date, is_test, ignore_stock, variant_choices,
+      created_by_id, note, auto_generate_operations, due_date, is_test, ignore_stock, equipment_ids,
     } = req.body || {};
+    let variant_choices = req.body?.variant_choices;
 
     const productId = parseInt(product_id, 10);
     const qty = parseInt(quantity, 10);
     if (isNaN(productId) || isNaN(qty) || qty <= 0) {
       return res.status(400).json({ error: 'product_id a quantity (>0) jsou povinné' });
+    }
+    // Výbava (Barva – Červená …) → volby variant; ruční volby variant mají přednost
+    let equipmentLabels = [];
+    if (Array.isArray(equipment_ids) && equipment_ids.length) {
+      try { const r = await resolveEquipment(productId, equipment_ids, null); variant_choices = Object.assign({}, r.choices, variant_choices || {}); equipmentLabels = r.labels; }
+      catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); throw e; }
     }
 
     // Varianty operací: { základ_id: varianta_id } — ověř, že varianty patří k výrobku a k uvedenému základu; sestav štítek
@@ -2708,7 +2768,7 @@ router.post('/batches', async (req, res, next) => {
     {
       const bases = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: null, is_staging: false, variants: { some: {} } }, select: { id: true, name: true, step_number: true, variant_name: true, variant_code: true, variants: { select: { id: true, variant_name: true, variant_code: true } } }, orderBy: { step_number: 'asc' } });
       const parts = bases.map(b => { const vid = choices ? choices[b.id] : null; const v = vid ? b.variants.find(x => x.id === vid) : null; const pick = v || b; return b.step_number + '. ' + b.name + ': ' + (pick.variant_code ? pick.variant_code + ' ' : '') + (pick.variant_name || (v ? 'varianta' : 'základ')); });
-      variantLabel = parts.join(' · ').slice(0, 255) || null;
+      variantLabel = ((equipmentLabels.length ? 'Výbava: ' + equipmentLabels.join(', ') + (parts.length ? ' · ' : '') : '') + parts.join(' · ')).slice(0, 255) || null;
     }
 
     let batch_number = await generateBatchNumber(planned_start, !!is_test);
@@ -3231,4 +3291,5 @@ router.post('/batch-operations/:id/done', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.resolveEquipment = resolveEquipment;
 module.exports = router;

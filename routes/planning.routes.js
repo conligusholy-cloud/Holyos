@@ -577,9 +577,16 @@ router.post('/batch-operations/:id/unblock', async (req, res, next) => {
 router.post('/simulate', async (req, res, next) => {
   try {
     const { simulateProduction } = require('../services/planning/simulate');
-    const r = await simulateProduction(req.body || {});
+    const body = Object.assign({}, req.body || {});
+    // Výbava → volby variant (stejně jako při vytvoření dávky)
+    if (Array.isArray(body.equipment_ids) && body.equipment_ids.length) {
+      const { resolveEquipment } = require('./production.routes');
+      const r = await resolveEquipment(parseInt(body.product_id, 10), body.equipment_ids, null);
+      body.variant_choices = Object.assign({}, r.choices, body.variant_choices || {});
+    }
+    const r = await simulateProduction(body);
     res.json(r);
-  } catch (err) { if (/nenalezen|nemá pracovní postup/.test(err.message)) return res.status(400).json({ error: err.message }); next(err); }
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); if (/nenalezen|nemá pracovní postup/.test(err.message)) return res.status(400).json({ error: err.message }); next(err); }
 });
 
 // GET /api/planning/work-plan?from=&to= — Plán práce: naplánované operace (BatchOperation) v období
