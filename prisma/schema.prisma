@@ -3902,6 +3902,7 @@ model ProductOutputVariant {
   product_id Int
   code       String   @db.VarChar(20) // K01, K02 … unikátní v systému
   name       String   @db.VarChar(120)
+  is_base    Boolean  @default(false) // pojmenovaný ZÁKLADNÍ konec (jeho výstupy = výchozí výstupy s output_variant_id null)
   created_at DateTime @default(now())
   product    Product         @relation(fields: [product_id], references: [id], onDelete: Cascade)
   outputs    ProductOutput[]

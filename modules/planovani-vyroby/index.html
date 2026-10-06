@@ -1783,7 +1783,13 @@
   // Operace s variantami, u kterých ještě není zvoleno provedení
   function pfMissingChoices() {
     var choices = pfVariantChoices() || {};
-    return (pfSelected && pfSelected.operations || []).filter(function (o) { return (o.variants || []).length && !choices[o.id]; }).map(function (o) { return o.step_number + '. ' + o.name; });
+    var miss = (pfSelected && pfSelected.operations || []).filter(function (o) { return (o.variants || []).length && !choices[o.id]; }).map(function (o) { return o.step_number + '. ' + o.name; });
+    // konec (hotové výrobky): když výrobek má varianty konce, musí ho výbava určit
+    if (pfSelected && (pfSelected.output_variants || []).length) {
+      var hasOv = (pfEquipmentIds() || []).some(function (id) { var e = (pfSelected.equipment || []).find(function (x) { return x.id === id; }); return e && e.output_variant_id; });
+      if (!hasOv) miss.push('Konec (hotové výrobky)');
+    }
+    return miss;
   }
   function pfEquipmentIds() {
     var ids = []; document.querySelectorAll('#pf-equipment-rows .pf-eq').forEach(function (sel) { if (sel.value) ids.push(parseInt(sel.value)); });
