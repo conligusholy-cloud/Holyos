@@ -1422,8 +1422,15 @@
         if (!lanes) return;
         // Neposouvat, když uživatel klikl na kartu, uzel, tlačítko, pole nebo úchop spoje
         if (e.target.closest('.op-card, .op-node, .par-wrap, button, input, select, textarea, a, .par-grab, .start-box, .outputs-box')) return;
-        const scroller = document.scrollingElement || document.documentElement;
-        pan = { x: e.clientX, y: e.clientY, sl: lanes.scrollLeft, st: scroller.scrollTop, lanes, moved: false };
+        // Svisle roluje nejbližší rolovatelný předek (modul může běžet vnořený v Nastavení výroby), jinak stránka
+        let scroller = lanes.parentElement;
+        while (scroller && scroller !== document.body) {
+          const st = getComputedStyle(scroller);
+          if (/(auto|scroll)/.test(st.overflowY) && scroller.scrollHeight > scroller.clientHeight + 4) break;
+          scroller = scroller.parentElement;
+        }
+        if (!scroller || scroller === document.body) scroller = document.scrollingElement || document.documentElement;
+        pan = { x: e.clientX, y: e.clientY, sl: lanes.scrollLeft, st: scroller.scrollTop, lanes, scroller, moved: false };
         lanes.classList.add('panning');
         e.preventDefault();
       });
@@ -1432,7 +1439,8 @@
         const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
         if (Math.abs(dx) + Math.abs(dy) > 3) pan.moved = true;
         pan.lanes.scrollLeft = pan.sl - dx;
-        (document.scrollingElement || document.documentElement).scrollTop = pan.st - dy;
+        pan.scroller.scrollTop = pan.st - dy;
+        if (pan.scroller !== document.documentElement && pan.scroller !== document.scrollingElement) window.scrollBy(0, 0);
       });
       document.addEventListener('mouseup', () => { if (pan) { pan.lanes.classList.remove('panning'); pan = null; } });
     })();
