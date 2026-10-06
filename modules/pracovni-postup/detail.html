@@ -729,9 +729,10 @@
     .variant-wrap .op-card{margin-bottom:0}
     .lane-main.has-variants .op-row{padding-top:18px}
     .lane-main.has-variants > .op-card{width:440px}
-    .op-card.is-variant{border-color:rgba(192,132,252,.6);background:rgba(192,132,252,.06);margin-bottom:0}
-    .op-card.is-variant .op-handle{visibility:hidden}
-    .op-card.is-variant .op-step{color:#c084fc}
+    /* Karta varianty = stejný formát jako paralelní operace (fialový rámeček, podklad, fialový krok) */
+    .op-card.is-variant{border-color:rgba(168,85,247,0.55);background:rgba(168,85,247,0.06);margin-bottom:0}
+    .op-card.is-variant .op-handle{opacity:.35;cursor:default}
+    .op-card.is-variant .op-step{background:rgba(168,85,247,0.25);color:#c084fc}
     .vchip{font-size:11px;border:1px solid rgba(192,132,252,.5);color:#c084fc;background:rgba(192,132,252,.08);border-radius:999px;padding:2px 9px;cursor:pointer}
     .vchip small{color:var(--text2)} .vchip:hover{background:rgba(192,132,252,.18)}
     .vchip.base{border-color:var(--border);color:var(--text2);background:transparent;cursor:default}
@@ -1171,7 +1172,7 @@
           // Když má některá operace varianty, hlavní linie se rozšíří: základ + varianty vedle sebe v jednom řádku (náhrada základu)
           const maxVariants = mainOps.reduce((m, op) => Math.max(m, variantsOf(op.id).length), 0);
           const laneW = maxVariants ? (440 * (maxVariants + 1) + 16 * maxVariants) : 680;
-          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="flex:1 1 0;min-width:0;max-width:' + laneW + 'px;">';
+          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="' + (maxVariants ? 'flex:0 0 auto;width:' + laneW + 'px;' : 'flex:1 1 0;min-width:0;max-width:680px;') + '">';
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
