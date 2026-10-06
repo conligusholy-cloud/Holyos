@@ -1398,8 +1398,13 @@
         // Spojnice v pravých úhlech: uzel → doprava → svisle dolů → do horní hrany karty; z dolní hrany → svisle → doleva → uzel
         if (svg) {
           const wr = w.getBoundingClientRect();
-          const cx = (wr.left + wr.width / 2 - lanesRect.left) / z; // svislá osa větve = střed karty
-          const cTop = (wr.top - lanesRect.top) / z, cBot = (wr.bottom - lanesRect.top) / z;
+          // Svislá osa větve = střed ZÁKLADNÍ karty (když má paralelní operace varianty, stojí vedle ní)
+          const baseCardEl = w.querySelector('.op-card:not(.is-variant)') || w;
+          const bcr = baseCardEl.getBoundingClientRect();
+          const cx = (bcr.left + bcr.width / 2 - lanesRect.left) / z;
+          const cTop = (bcr.top - lanesRect.top) / z, cBot = (wr.bottom - lanesRect.top) / z;
+          // Varianty paralelní operace: zpět do návratové čáry vede čárkovaná oranžová svislice
+          w.querySelectorAll('.op-card.is-variant').forEach(vc => { const vr = vc.getBoundingClientRect(); const vx = (vr.left + vr.width / 2 - lanesRect.left) / z, vb = (vr.bottom - lanesRect.top) / z; svg.insertAdjacentHTML('beforeend', '<path d="M' + vx + ',' + (vb + 2) + ' V' + b.y + ' H' + (cx + 2) + '" fill="none" stroke="rgba(251,146,60,0.95)" stroke-width="2" stroke-dasharray="7 5"/><circle cx="' + cx + '" cy="' + b.y + '" r="3.5" fill="rgba(251,146,60,0.95)"/>'); });
           const stroke = 'rgba(192,132,252,0.9)';
           const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' H' + cx + ' V' + (cTop - 2);
           const p2 = 'M' + cx + ',' + (cBot + 2) + ' V' + b.y + ' H' + (b.x + b.r + 2);
