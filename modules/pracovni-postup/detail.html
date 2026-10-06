@@ -721,6 +721,12 @@
     .fy-tree-header > span:nth-child(6) { text-align: right; }
     .fy-tree-header > span:nth-child(8) { text-align: center; }
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+    .variant-stack{margin:6px 0 4px 26px;padding-left:14px;border-left:2px dashed rgba(192,132,252,.55);display:flex;flex-direction:column;gap:8px}
+    .variant-head{font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.2px;margin-bottom:3px}
+    .variant-head span{font-weight:500;color:var(--text2)}
+    .op-card.is-variant{border-color:rgba(192,132,252,.6);background:rgba(192,132,252,.06);margin-bottom:0}
+    .op-card.is-variant .op-handle{visibility:hidden}
+    .op-card.is-variant .op-step{color:#c084fc}
     .vchip{font-size:11px;border:1px solid rgba(192,132,252,.5);color:#c084fc;background:rgba(192,132,252,.08);border-radius:999px;padding:2px 9px;cursor:pointer}
     .vchip small{color:var(--text2)} .vchip:hover{background:rgba(192,132,252,.18)}
     .vchip.base{border-color:var(--border);color:var(--text2);background:transparent;cursor:default}
@@ -1166,6 +1172,13 @@
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             html += renderOpCard(op, i);
+            // Varianty operace — plnohodnotné karty pod základem (stejný vzhled jako hlavní linie), fialově označené
+            const vs = variantsOf(op.id);
+            if (vs.length) {
+              html += '<div class="variant-stack">';
+              vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-head">⎘ Varianta <b>' + esc(v.variant_code || '') + '</b> · ' + esc(v.variant_name || '') + ' <span>místo základu „' + esc(op.name) + '" — vybírá se při zadání do výroby</span></div>' + renderOpCard(v, i) + '</div>'; });
+              html += '</div>';
+            }
           });
           html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec výroby — sem se vrací paralelní operace. Kliknutím přidáš další operaci hlavní linie." onclick="openAddOp()"><div class="op-node-line"></div><div class="op-node-dot op-node-plus">+</div><div class="op-node-label">konec výroby · přidat operaci</div></div>';
           html += renderOutputsBox();
@@ -1511,7 +1524,7 @@
       const mats = op.materials || [];
 
       const isFyImport = /^FY import/i.test(op.name || '');
-      let html = '<div class="op-card' + (overTakt ? ' over-takt' : '') + (underTakt ? ' under-takt' : '') + (isFyImport ? ' fy-import' : '') + '" draggable="true" data-op-id="' + op.id + '" ondragover="omDragOver(event,' + op.id + ')" ondragleave="omDragLeave(event,' + op.id + ')" ondrop="omDrop(event,' + op.id + ')">' +
+      let html = '<div class="op-card' + (overTakt ? ' over-takt' : '') + (underTakt ? ' under-takt' : '') + (isFyImport ? ' fy-import' : '') + (op.variant_of_id ? ' is-variant' : '') + '" draggable="' + (op.variant_of_id ? 'false' : 'true') + '" data-op-id="' + op.id + '" ondragover="omDragOver(event,' + op.id + ')" ondragleave="omDragLeave(event,' + op.id + ')" ondrop="omDrop(event,' + op.id + ')">' +
         '<div class="op-handle" title="Přetáhni pro změnu pořadí">&#8942;&#8942;</div>' +
         '<div class="op-step">' + op.step_number + '</div>' +
         '<div class="op-body">' +
@@ -1622,11 +1635,11 @@
         html += '</tbody></table></div></div>';
       }
 
-      if (!isFyImport && !op.is_parallel) html += variantChipsHtml(op);
+      if (!isFyImport && !op.is_parallel && !op.variant_of_id) html += variantChipsHtml(op);
       html += '</div>' +
         '<div class="op-actions">' +
           '<button onclick="openEditOp(' + op.id + ')" title="Upravit">&#9998;</button>' +
-          (!isFyImport && !op.is_parallel ? '<button onclick="createVariant(' + op.id + ')" title="Vytvořit variantu (kopie operace k úpravě dílů)" style="color:#c084fc;">&#10697;</button>' : '') +
+          (!isFyImport && !op.is_parallel && !op.variant_of_id ? '<button onclick="createVariant(' + op.id + ')" title="Vytvořit variantu (kopie operace k úpravě dílů)" style="color:#c084fc;">&#10697;</button>' : '') +
           '<button class="btn-del" onclick="deleteOp(' + op.id + ')" title="Smazat">&#128465;</button>' +
         '</div>' +
         '</div>';
@@ -1789,7 +1802,7 @@
 
     // === Drag & drop pro přeřazení ===
     function initDragDrop() {
-      const cards = document.querySelectorAll('.op-card');
+      const cards = document.querySelectorAll('.op-card:not(.is-variant)');
       cards.forEach(card => {
         card.addEventListener('dragstart', e => {
           dragSrcId = parseInt(card.dataset.opId);
@@ -1892,8 +1905,7 @@
     function variantChipsHtml(op) {
       const vs = variantsOf(op.id);
       return '<div class="op-variants">' +
-        '<span class="vchip base" title="Základní provedení (hlavní linie)">Základ</span>' +
-        vs.map(v => '<span class="vchip" onclick="event.stopPropagation();openEditOp(' + v.id + ')" title="Upravit variantu">' + (v.variant_code ? '<b>' + esc(v.variant_code) + '</b> ' : '') + esc(v.variant_name || 'varianta') + ' <small>' + (v.materials || []).length + ' dílů</small></span>').join('') +
+        '<span class="vchip base" title="Základní provedení (hlavní linie)">Základ' + (vs.length ? ' · ' + vs.length + ' variant' : '') + '</span>' +
         '<span class="vchip add" onclick="event.stopPropagation();createVariant(' + op.id + ')" title="Vytvořit variantu — kopie operace, kterou upravíš (zaměníš / doplníš díly)">+ varianta</span>' +
         '</div>';
     }
