@@ -63,6 +63,16 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .hero h1{margin:14px 0 6px;font-size:clamp(28px,4vw,42px);line-height:1.08;letter-spacing:-.025em;font-weight:800}
 .hero h1 .g{background:linear-gradient(90deg,#fff 0%,var(--accent2) 50%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{margin:0;color:var(--text2)}
+.helpbtn{position:fixed;right:18px;top:118px;z-index:40;width:44px;height:44px;border-radius:50%;border:1px solid rgba(79,209,255,.6);background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.55));color:#fff;font:800 20px/1 Inter,system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 30px rgba(30,134,224,.35),0 0 0 6px rgba(79,209,255,.08);backdrop-filter:blur(10px);animation:helpbob 3.2s ease-in-out infinite;transition:transform .2s,box-shadow .2s}
+.helpbtn:hover{animation-play-state:paused;transform:scale(1.08);box-shadow:0 14px 36px rgba(79,209,255,.45),0 0 0 8px rgba(79,209,255,.12)}
+@keyframes helpbob{0%,100%{translate:0 0}50%{translate:0 -7px}}
+@media(max-width:760px){.helpbtn{top:auto;bottom:18px;right:14px}}
+.helpdlg{border:0;padding:0;background:transparent;max-width:min(92vw,560px);width:100%;color:var(--text)} .helpdlg::backdrop{background:rgba(2,4,10,.7);backdrop-filter:blur(6px)}
+.helpdlg .hd-in{background:var(--card2);border:1px solid var(--border2);border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 40px rgba(30,134,224,.2);overflow:hidden}
+.helpdlg .hd-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border)} .helpdlg .hd-head h2{margin:0;font-size:17px;flex:1;letter-spacing:-.01em}
+.helpdlg .hd-q{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.55));border:1px solid rgba(79,209,255,.5);flex:none}
+.helpdlg .hd-x{background:transparent;border:0;color:var(--text2);font-size:16px;cursor:pointer;padding:6px;border-radius:8px} .helpdlg .hd-x:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.helpdlg .hd-body{padding:16px 18px 18px;font-size:14.5px;line-height:1.55;color:var(--text)} .helpdlg .hd-body p{margin:0 0 10px} .helpdlg .hd-body p:last-child{margin:0} .helpdlg .hd-body b{color:var(--accent2)}
 .soon{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 12px;border-radius:12px;border:1px dashed var(--border2);color:var(--text2);font-size:13px}
 .soon b{color:var(--accent2)}
 @media (prefers-reduced-motion:reduce){.glow,.hero .eyebrow i{animation:none}}
@@ -70,8 +80,31 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 
 // Hlavní layout aplikace (uživatel i admin) ve stejném vizuálu jako přihlášení.
 // fx:true přidá animovanou síť uzlů (uživatelské stránky); záře + grid jsou vždy.
-function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '', banner = null, fx = false }) {
+// Nápověda k sekcím (plovoucí otazník vpravo nahoře) — na Domů se nezobrazuje
+const HELP = {
+  products: { title: 'Prádlomaty', html: `<p>Tady vidíte prádlomaty, které si můžete pořídit, s cenou bez DPH i s DPH 21 %. Měnu (Kč / €) přepnete vpravo nahoře.</p>
+    <p><b>Discount Credit (DC)</b> můžete uplatnit jako slevu: klikněte na <b>Uplatnit DC</b>, zadejte kolik chcete použít (maximum je u každého stroje uvedeno) a cena se hned přepočítá.</p>
+    <p>Tlačítkem <b>Koupit</b> odešlete objednávku. Nic se neplatí hned — objednávku potvrdíme a ozveme se Vám s dalším postupem (smlouva, financování, termín).</p>` },
+  mine: { title: 'Moje svoboda', html: `<p>Přehled prádlomatů, které jste si pořídili, a Vašich objednávek včetně stavu (čeká na potvrzení / potvrzeno / dodáno).</p>
+    <p>U každého stroje najdete typ, cenu bez DPH a uplatněný Discount Credit. Čím víc strojů tady máte, tím víc se Vám prádlomaty násobí — proto „Moje svoboda".</p>` },
+  credit: { title: 'Discount Credit', html: `<p><b>Discount Credit (DC)</b> je Váš interní kredit. 1 DC = 1 Kč slevy na nákup prádlomatu.</p>
+    <p>DC se Vám připíše, když si člověk z Vašeho doporučení (registrovaný přes Váš odkaz) koupí prádlomat — výše se řídí procentem u konkrétního stroje v tabulce níže.</p>
+    <p>Kredit uplatníte v sekci <b>Prádlomaty</b> tlačítkem Uplatnit DC. DC nelze vyplatit v hotovosti, slouží jen jako sleva.</p>` },
+  net: { title: 'Partnerská síť', html: `<p>Seznam lidí z Vaší <b>první linie</b> (registrovali se přes Váš odkaz), kteří si už koupili prádlomat — včetně typu stroje, ceny a data nákupu.</p>
+    <p>Z každého takového nákupu Vám vzniká Discount Credit. Čísla nahoře: kolik lidí jste doporučili, kolik z nich nakoupilo a kolik prádlomatů celkem.</p>` },
+  team: { title: 'Moje doporučení', html: `<p>Váš <b>registrační odkaz</b> je jedinečný. Pošlete ho komukoli (WhatsApp, e-mail, zkopírovat) — kdo se přes něj zaregistruje, objeví se v tabulce níže jako Vaše doporučení.</p>
+    <p>U každého vidíte stav účtu (čeká na aktivaci / aktivní) a zda už si pořídil prádlomat. Jakmile nakoupí, připíše se Vám Discount Credit a člověk se zobrazí i v <b>Partnerské síti</b>.</p>` },
+  acc: { title: 'Můj účet', html: `<p>Vaše údaje (nick, jméno, e-mail) a změna hesla. Nick nebo e-mail používáte k přihlášení.</p>
+    <p>Pokud heslo zapomenete, použijte na přihlašovací stránce odkaz <b>Zapomenuté heslo</b> — ozveme se Vám s obnovou přístupu.</p>` },
+};
+function helpWidget(h) {
+  if (!h) return '';
+  return `<button type="button" class="helpbtn" onclick="document.getElementById('helpdlg').showModal()" aria-label="Nápověda k sekci ${esc(h.title)}" title="Jak tato sekce funguje?">?</button>
+<dialog id="helpdlg" class="helpdlg" onclick="if(event.target===this)this.close()"><div class="hd-in"><div class="hd-head"><span class="hd-q">?</span><h2>${esc(h.title)} — jak to funguje</h2><button type="button" class="hd-x" onclick="document.getElementById('helpdlg').close()" aria-label="Zavřít">✕</button></div><div class="hd-body">${h.html}</div></div></dialog>`;
+}
+function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '', banner = null, fx = false, help }) {
   const { AUTH_JS } = require('./auth-shell');
+  const h = help === null ? null : (help || HELP[active] || null);
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -83,7 +116,7 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <nav>${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
-<main>${body}</main>${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
+<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
 // ── Veřejné / uživatel ──────────────────────────────────────────────────
