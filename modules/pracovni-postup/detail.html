@@ -736,6 +736,8 @@
     .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
     .eq-var.used{text-decoration:line-through;opacity:.45;cursor:not-allowed;border-style:dotted}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
+    .par-row{padding-top:22px;margin-bottom:0}
+    .lane-par .par-wrap{width:max-content !important}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
     .lane-main > .op-card, .lane-par .op-card{width:680px}
@@ -1234,7 +1236,17 @@
               const chk = parallelBranchCheck(from, to, null);
               const over = chk.window > 0 && chk.branch > chk.window;
               html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" data-ops="' + list.map(o => o.id).join(',') + '" style="position:absolute;left:0;width:' + CARD_W + 'px;pointer-events:auto;">' + '<div class="par-bracket"></div>';
-              list.forEach((op, i) => { if (i > 0) html += '<div class="par-chain">&#9660;</div>'; html += renderOpCard(op, i); });
+              list.forEach((op, i) => {
+                if (i > 0) html += '<div class="par-chain">&#9660;</div>';
+                const pvs = variantsOf(op.id);
+                if (!pvs.length) html += renderOpCard(op, i);
+                else {
+                  // Paralelní operace s variantami: základ + varianty vedle sebe (stejně jako v hlavní linii)
+                  html += '<div class="op-row par-row">' + '<div class="variant-wrap base-wrap"><div class="variant-link base" title="Základní provedení"><span></span>⎘ Základ <b>' + esc(op.variant_code || '—') + '</b> · ' + esc(op.variant_name || 'bez názvu') + '</div>' + renderOpCard(op, i) + '</div>';
+                  pvs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ Varianta <b>' + esc(v.variant_code || '—') + '</b> · ' + esc(v.variant_name || 'bez názvu') + '</div>' + renderOpCard(v, i) + '</div>'; });
+                  html += '</div>';
+                }
+              });
               html += '<div class="par-foot">' +
                 '<span class="par-time' + (over ? ' over' : '') + '" title="Součet reálných časů paralelních operací ve větvi / součet hlavních operací v okně ' + chk.label + '">⏱ ' + formatDuration(chk.branch) + ' / ' + formatDuration(chk.window) + (over ? ' ⚠️ překročeno' : '') + '</span>' +
                 '<div class="op-node par-add" title="Přidat další paralelní operaci do této větve (okno ' + chk.label + ')" onclick="openAddParallelInBranch(' + (from || 'null') + ',' + (to || 'null') + ')"><div class="op-node-dot op-node-plus">+</div></div>' +
@@ -1437,8 +1449,19 @@
         // zvýraznit rozbočku na ose základu
         variantSvg += '<circle cx="' + a.x + '" cy="' + yFork + '" r="3.5" fill="' + col + '"/>' + '<circle cx="' + b.x + '" cy="' + yJoin + '" r="3.5" fill="' + col + '"/>';
       });
+      // Varianty paralelních operací: oranžová čárkovaná spojka „NEBO" ze základu do každé varianty (vodorovně vedle sebe)
+      lane.querySelectorAll('.par-row').forEach(row => {
+        const baseCard = row.querySelector('.op-card:not(.is-variant)'); const vCards = Array.from(row.querySelectorAll('.op-card.is-variant'));
+        if (!baseCard || !vCards.length) return;
+        const br = baseCard.getBoundingClientRect(); const col = 'rgba(251,146,60,0.95)';
+        const y = (br.top - lanesRect.top) / z - 10; const x0 = (br.left + br.width / 2 - lanesRect.left) / z;
+        const far = Math.max(...vCards.map(vc => (vc.getBoundingClientRect().left + vc.getBoundingClientRect().width / 2 - lanesRect.left) / z));
+        variantSvg += '<path d="M' + x0 + ',' + ((br.top - lanesRect.top) / z) + ' V' + y + ' H' + far + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5"/>';
+        vCards.forEach(vc => { const vr = vc.getBoundingClientRect(); const vx = (vr.left + vr.width / 2 - lanesRect.left) / z; variantSvg += '<path d="M' + vx + ',' + y + ' V' + ((vr.top - lanesRect.top) / z - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#var-arrow)"/>'; });
+        variantSvg += '<text x="' + ((x0 + far) / 2) + '" y="' + (y - 6) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + col + '" letter-spacing=".08em">NEBO</text>';
+      });
       // Zelená cesta: pro vyklikanou výbavu projde postup START → uzly → zvolené karty (základ / varianta)
-      main.querySelectorAll('.op-card.route-on').forEach(c => c.classList.remove('route-on'));
+      document.querySelectorAll('#lanes .op-card.route-on').forEach(c => c.classList.remove('route-on'));
       if (Object.keys(eqSelected).length && nodes.length) {
         const choice = eqRouteChoices();
         const green = 'rgba(34,197,94,0.95)';
@@ -1459,6 +1482,8 @@
             d += 'M' + a.x + ',' + (a.y + a.r) + ' V' + yFork + ' H' + cx + ' V' + cTop + ' M' + cx + ',' + cBot + ' V' + yJoin + ' H' + b.x + ' V' + (b.y - b.r) + ' ';
           }
         });
+        // paralelní operace: zvýraznit zvolené provedení (základ / varianta)
+        (product.operations || []).filter(o => o.is_parallel).forEach(op => { const cid = choice[op.id] || op.id; const c = lane.querySelector('.op-card[data-op-id="' + cid + '"]'); if (c) c.classList.add('route-on'); });
         if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="' + d + '" fill="none" stroke="' + green + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
       }
@@ -1609,7 +1634,7 @@
     function eqClear() { eqSelected = {}; renderTab(); }
     // Zvolené provedení pro každou základní operaci: { base_id: id karty (základ nebo varianta) }
     function eqRouteChoices() {
-      const out = {}; const bases = (product.operations || []).filter(o => !o.is_parallel);
+      const out = {}; const bases = (product.operations || []);
       bases.forEach(b => { out[b.id] = b.id; });
       Object.values(eqSelected).forEach(id => { const e = productEquipment.find(x => x.id === id); if (!e) return; (e.variant_ids || []).forEach(vid => { const pv = provisionById(vid); if (!pv) return; const base = pv.variant_of_id || pv.id; out[base] = vid; }); });
       return out;
@@ -1892,7 +1917,7 @@
       html += '</div>' +
         '<div class="op-actions">' +
           '<button onclick="openEditOp(' + op.id + ')" title="Upravit">&#9998;</button>' +
-          (!isFyImport && !op.is_parallel && !op.variant_of_id ? '<button onclick="createVariant(' + op.id + ')" title="Vytvořit variantu (kopie operace k úpravě dílů)" style="color:#fb923c;">&#10697;</button>' : '') +
+          (!isFyImport && !op.variant_of_id ? '<button onclick="createVariant(' + op.id + ')" title="Vytvořit variantu (kopie operace k úpravě dílů)" style="color:#fb923c;">&#10697;</button>' : '') +
           '<button class="btn-del" onclick="deleteOp(' + op.id + ')" title="Smazat">&#128465;</button>' +
         '</div>' +
         '</div>';
