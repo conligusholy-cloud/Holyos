@@ -266,41 +266,15 @@ function homeStory(s) {
   return `
   <style>
   .st{max-width:1040px}
-  .hero3{position:relative;display:grid;grid-template-columns:1.05fr 1fr;gap:28px;align-items:center;margin:10px 0 30px;padding:34px 36px;border-radius:28px;border:1px solid rgba(120,160,255,.22);background:linear-gradient(135deg,rgba(14,22,40,.85),rgba(8,13,26,.9));overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06)}
-  .hero3 .h3-bg{position:absolute;inset:0;pointer-events:none}
-  .hero3 .orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:.55}
-  .hero3 .orb.a{width:520px;height:520px;right:-120px;top:-180px;background:radial-gradient(circle,rgba(79,209,255,.55),transparent 65%);animation:orbA 12s ease-in-out infinite}
-  .hero3 .orb.b{width:420px;height:420px;left:-140px;bottom:-200px;background:radial-gradient(circle,rgba(124,92,255,.5),transparent 65%);animation:orbB 14s ease-in-out infinite}
-  @keyframes orbA{0%,100%{transform:translate(0,0)}50%{transform:translate(-40px,30px)}} @keyframes orbB{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,-30px)}}
-  .hero3 .ring{position:absolute;right:6%;top:50%;width:560px;height:560px;margin-top:-280px;border-radius:50%;border:1px solid rgba(79,209,255,.18);box-shadow:0 0 60px rgba(79,209,255,.08) inset;animation:ringspin 40s linear infinite}
-  .hero3 .ring:before{content:'';position:absolute;top:-4px;left:50%;width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 16px var(--accent2)}
-  .hero3 .ring.r2{width:720px;height:720px;margin-top:-360px;right:2%;border-color:rgba(124,92,255,.14);animation-duration:65s;animation-direction:reverse}
-  @keyframes ringspin{to{transform:rotate(360deg)}}
-  .hero3 .beam{position:absolute;left:-20%;top:-50%;width:40%;height:200%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);transform:skewX(-18deg);animation:beam 7s ease-in-out infinite}
-  @keyframes beam{0%{left:-40%}60%,100%{left:120%}}
-  .hero3 .h3-txt{position:relative;z-index:1}
-  .hero3 .k{display:inline-flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent2);font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(79,209,255,.35);background:rgba(79,209,255,.06)}
-  .hero3 .k i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.6s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.7)}}
-  .hero3 h2{margin:14px 0 14px;font-size:clamp(36px,5.2vw,68px);line-height:.98;letter-spacing:-.035em;font-weight:900;color:#fff;text-shadow:0 0 50px rgba(79,209,255,.2)}
-  .hero3 h2 .cp{background:linear-gradient(90deg,#4fd1ff 0%,#7c5cff 50%,#4fd1ff 100%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 5s linear infinite;filter:drop-shadow(0 0 18px rgba(124,92,255,.45))}
-  @keyframes shimmer{to{background-position:200% 0}}
-  .hero3 .lead{margin:0 0 18px;max-width:560px}
-  .hero3 .h3-stats{display:grid;grid-template-columns:repeat(4,auto);gap:10px 22px;margin:0 0 20px;justify-content:start}
-  .hero3 .h3-stats div{display:flex;flex-direction:column;padding-left:12px;border-left:2px solid rgba(79,209,255,.4)}
-  .hero3 .h3-stats b{font-size:22px;letter-spacing:-.02em;line-height:1.1;background:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .hero3 .h3-stats span{font-size:11.5px;color:var(--text2);letter-spacing:.04em;text-transform:uppercase;margin-top:2px}
-  .hero3 .h3-cta{display:flex;gap:10px;flex-wrap:wrap}
-  .hero3 .h3-img{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-height:380px}
-  .hero3 .stage{position:absolute;left:50%;bottom:8%;width:85%;height:60px;margin-left:-42.5%;border-radius:50%;background:radial-gradient(ellipse,rgba(79,209,255,.45),rgba(124,92,255,.15) 55%,transparent 72%);filter:blur(8px);animation:stage 5s ease-in-out infinite}
-  @keyframes stage{0%,100%{transform:scaleX(1);opacity:.9}50%{transform:scaleX(.92);opacity:.6}}
-  .hero3 .pm3d{position:relative;width:100%;max-width:560px;height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 30px 50px rgba(0,0,0,.7)) drop-shadow(0 0 40px rgba(79,209,255,.3))}
-  @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-.6deg)}50%{transform:translateY(-12px) rotate(.6deg)}}
-  .hero3 .tag24,.hero3 .tagbank{position:absolute;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.04em;border:1px solid var(--border2);background:rgba(4,8,16,.75);backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.4);animation:tagfloat 6s ease-in-out infinite}
-  .hero3 .tag24{top:6%;left:4%;color:var(--accent2);border-color:rgba(79,209,255,.5)}
-  .hero3 .tagbank{bottom:12%;right:2%;color:var(--ok);border-color:rgba(47,227,160,.5);animation-delay:-3s}
-  @keyframes tagfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-  @media(max-width:900px){.hero3{grid-template-columns:1fr;padding:24px 20px} .hero3 .h3-img{min-height:0} .hero3 .h3-stats{grid-template-columns:repeat(2,1fr)} .hero3 .ring,.hero3 .ring.r2{display:none}}
+  .st .first{margin:6px 0 14px}
+  .st .intro{display:flex;align-items:center;justify-content:space-between;gap:24px;margin:0 0 26px}
+  .st .intro .intro-txt{flex:1;min-width:0} .st .intro .lead{margin:0}
+  .st .intro .pm3d{flex:none;width:460px;height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
+  @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
+  @media(max-width:900px){.st .intro{flex-direction:column;align-items:flex-start} .st .intro .pm3d{width:min(100%,380px);align-self:center}}
+  .st .first .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent2);font-weight:700}
+  .st .first h2{margin:4px 0 0;font-size:clamp(34px,6vw,72px);line-height:1;letter-spacing:-.03em;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(79,209,255,.25)}
+  .st .first h2 .cp{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(124,92,255,.45))}
   .st .lead{font-size:clamp(17px,2vw,21px);line-height:1.5;color:var(--text);max-width:760px;margin:0 0 26px}
   .st .lead b{color:var(--accent2)}
   .st .lead b.cp{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
@@ -338,17 +312,8 @@ function homeStory(s) {
   @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
   </style>
   <div class="st">
-    <section class="hero3">
-      <div class="h3-bg" aria-hidden="true"><i class="orb a"></i><i class="orb b"></i><i class="ring"></i><i class="ring r2"></i><i class="beam"></i></div>
-      <div class="h3-txt">
-        <div class="k"><i></i>Best Series 2.0 · od 24. 9. 2026</div>
-        <h2>První <span class="cp">Compounder</span><br>v&nbsp;Čechách</h2>
-        <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>24. 9. 2026</b> tvoří <b>Best Series 2.0</b> z lidí <b class="cp">Compoundery</b>.</p>
-        <div class="h3-stats"><div><b>2018</b><span>začátek</span></div><div><b>8 let</b><span>tvrdé práce</span></div><div><b>24/7</b><span>stroj vydělává</span></div><div><b>∞</b><span>financování bank</span></div></div>
-        <div class="h3-cta"><a class="btn" href="/pradlomaty">Chci prádlomat ${ICON.arrow}</a><a class="btn sec" href="/compounder">Jak přemýšlí Compounder</a></div>
-      </div>
-      <div class="h3-img"><i class="stage" aria-hidden="true"></i><img class="pm3d" src="/img/pradlomat.webp" alt="Prádlomat 24/7" width="560" height="426" loading="eager" decoding="async"><span class="tag24">24/7 · bez obsluhy</span><span class="tagbank">zaknihováno u bank</span></div>
-    </section>
+    <div class="first"><span class="k">Best Series 2.0</span><h2>První <span class="cp">Compounder</span> v&nbsp;Čechách</h2></div>
+    <div class="intro"><div class="intro-txt"><p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>24. 9. 2026</b> tvoří <b>Best Series 2.0</b> z lidí <b class="cp">Compoundery</b>.</p><a class="btn" href="/compounder" style="margin-top:16px">Jak přemýšlí Compounder ${ICON.arrow}</a></div><img class="pm3d" src="/img/pradlomat.webp" alt="Prádlomat 24/7" width="460" height="350" loading="eager" decoding="async"></div>
 
     <div class="tl">
       <div class="c"><div class="y">2018 – 2026</div><div class="t">Best Series</div><p>Osm let tvrdé práce: vlastní výroba, servis, síť míst, konzistence. Důvěra, která se nedá koupit — jen odpracovat.</p></div>
