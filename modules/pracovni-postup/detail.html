@@ -723,7 +723,7 @@
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
     .eq-box{position:absolute;right:0;top:0;width:680px;background:var(--surface);border:1px solid rgba(251,146,60,.45);border-radius:10px;padding:8px 12px;z-index:2}
     .lane-main.has-variants{position:relative}
-    .lane-main.has-variants .eq-box{position:static;width:auto;margin:0 0 10px 716px}
+    .lane-main.has-variants .eq-box{position:static;width:auto;margin:-34px 0 14px 716px}
     .eq-head{display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;color:#fb923c;margin-bottom:4px}.eq-head .muted{font-weight:500;font-size:11px}
     .eq-table{border-collapse:collapse;width:100%;font-size:12px}.eq-table td{padding:3px 6px 3px 0;vertical-align:top;border-top:1px solid var(--border)}.eq-table td.eq-g{font-weight:700;color:var(--text2);white-space:nowrap;width:1%;padding-right:12px}
     .eq-item{display:inline-block;border:1px solid rgba(251,146,60,.5);color:#fb923c;border-radius:999px;padding:1px 9px;margin:2px 2px 2px 0}.eq-item small{color:var(--text2);margin-left:3px}
@@ -1432,6 +1432,20 @@
         // zvýraznit rozbočku na ose základu
         variantSvg += '<circle cx="' + a.x + '" cy="' + yFork + '" r="3.5" fill="' + col + '"/>' + '<circle cx="' + b.x + '" cy="' + yJoin + '" r="3.5" fill="' + col + '"/>';
       });
+      // Výbava: osa START → uzel 0 je spojená, box Výbavy se připojuje vodorovnou oranžovou čarou na osu
+      const eqBox = main.querySelector('.eq-box'), startBox = main.querySelector('.start-box');
+      if (eqBox && startBox && nodes[0]) {
+        const sr = startBox.getBoundingClientRect(), er = eqBox.getBoundingClientRect();
+        const n0 = dotCenter(nodes[0]);
+        const sx = (sr.left + sr.width / 2 - lanesRect.left) / z, sBot = (sr.bottom - lanesRect.top) / z;
+        const ex = (er.left - lanesRect.left) / z, ey = (er.top + er.height / 2 - lanesRect.top) / z;
+        const axisX = n0.x;
+        variantSvg += '<path d="M' + sx + ',' + sBot + ' V' + (n0.y - n0.r) + '" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2"/>';
+        variantSvg += '<path d="M' + (ex - 2) + ',' + ey + ' H' + (axisX + 2) + '" fill="none" stroke="rgba(251,146,60,0.95)" stroke-width="2" stroke-dasharray="7 5"/>';
+        variantSvg += '<path d="M' + (axisX + 12) + ',' + (ey - 5) + ' L' + (axisX + 7) + ',' + ey + ' L' + (axisX + 12) + ',' + (ey + 5) + '" fill="none" stroke="rgba(251,146,60,0.95)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+        variantSvg += '<circle cx="' + axisX + '" cy="' + ey + '" r="4.5" fill="rgba(251,146,60,0.95)" stroke="var(--bg)" stroke-width="2"/>';
+        variantSvg += '<text x="' + ((ex + axisX) / 2) + '" y="' + (ey - 7) + '" text-anchor="middle" font-size="10" font-weight="700" fill="rgba(251,146,60,0.95)" letter-spacing=".08em">VÝBAVA URČUJE CESTU</text>';
+      }
       if (svg && variantSvg) svg.insertAdjacentHTML('beforeend', variantSvg);
       if (svg && (wraps.length || variantSvg)) svg.insertAdjacentHTML('afterbegin', '<defs>' +
         '<marker id="par-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(192,132,252,0.95)"/></marker>' +
