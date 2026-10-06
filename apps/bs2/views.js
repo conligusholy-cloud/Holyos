@@ -761,7 +761,8 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <label>E-mail (klíč pro první přihlášení)</label><input name="email" type="email" value="${esc(s ? s.email : '')}" required>
         <label>Jméno</label><input name="first_name" value="${esc(s ? s.first_name : '')}">
         <label>Příjmení</label><input name="last_name" value="${esc(s ? s.last_name : '')}">
-        ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Stávající · Koupil prádlomat · Může prodávat</div>`}
+        ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Stávající · Koupil prádlomat · Může prodávat</div>
+        <label style="margin-top:12px">Discount Credit (zůstatek)</label><div style="display:flex;gap:8px;align-items:center"><input name="dc_balance" inputmode="decimal" value="${credits.reduce((a, c) => a + Number(c.amount_czk), 0).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ')}" style="max-width:180px;text-align:right;font-weight:700"><span class="muted">DC</span></div><div class="small muted" style="margin-top:4px">Přepiš číslo a ulož — rozdíl se zapíše jako pohyb do historie DC níže a hned se promítne do účtu uživatele.</div>`}
         <div style="height:12px"></div><button class="btn" type="submit">${isNew ? 'Vytvořit' : 'Uložit'}</button>
       </form>
     </div></details>

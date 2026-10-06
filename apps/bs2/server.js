@@ -521,7 +521,21 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
     const utype = USER_TYPES.includes(String(req.body.user_type)) ? String(req.body.user_type) : (s.user_type || 'standard');
     await q('UPDATE supporters SET email=$1, first_name=$2, last_name=$3, user_type=$5, updated_at=now() WHERE id=$4', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, s.id, utype]);
     await log(req.admin, 'update', { id: s.id, email, user_type: utype });
-    res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.'));
+    // Ruční nastavení zůstatku DC: rozdíl proti aktuálnímu zůstatku se zapíše jako pohyb v credits (historie zůstává)
+    let dcMsg = '';
+    if (req.body.dc_balance != null && String(req.body.dc_balance).trim() !== '') {
+      const target = Number(String(req.body.dc_balance).replace(/\s/g, '').replace(',', '.'));
+      if (isFinite(target)) {
+        const cur = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [s.id])).rows[0] || {}).b || 0);
+        const diff = Math.round((target - cur) * 100) / 100;
+        if (diff !== 0) {
+          await q('INSERT INTO credits (supporter_id, amount_czk, note) VALUES ($1,$2,$3)', [s.id, diff, 'Ruční úprava zůstatku adminem (' + (req.admin.name || req.admin.username || 'admin') + '): ' + cur.toLocaleString('cs-CZ') + ' → ' + target.toLocaleString('cs-CZ') + ' DC']);
+          await log(req.admin, 'credit_set', { id: s.id, from: cur, to: target });
+          dcMsg = ' DC nastaveno na ' + target.toLocaleString('cs-CZ') + '.';
+        }
+      }
+    }
+    res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.' + dcMsg));
   } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný uživatel.' : e.message, holyosUrl: HOLYOS_URL })); }
 }));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
