@@ -745,6 +745,7 @@
     .par-row{padding-top:48px;margin-bottom:0}
     .lane-par .par-wrap{width:max-content !important}
     .lane-par .par-wrap .par-foot{width:680px}
+    .lane-par .par-wrap .var-foot{width:auto;padding-top:8px}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
     .lane-main > .op-card, .lane-par .op-card{width:680px}
@@ -1251,7 +1252,13 @@
                 else {
                   // Paralelní operace s variantami: základ + varianty vedle sebe (stejně jako v hlavní linii)
                   html += '<div class="op-row par-row">' + '<div class="variant-wrap base-wrap"><div class="variant-link base" title="Základní provedení"><span></span>⎘ Základ <b>' + esc(op.variant_code || '—') + '</b> · ' + esc(op.variant_name || 'bez názvu') + '</div>' + renderOpCard(op, i) + '</div>';
-                  pvs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ Varianta <b>' + esc(v.variant_code || '—') + '</b> · ' + esc(v.variant_name || 'bez názvu') + '</div>' + renderOpCard(v, i) + '</div>'; });
+                  pvs.forEach(v => {
+                    // Čas větve s touto variantou místo základu (varianta může trvat jinak)
+                    const vchk = parallelBranchCheck(from, to, { id: op.id, duration: v.duration, duration_unit: v.duration_unit, workers_count: v.workers_count });
+                    const vover = vchk.window > 0 && vchk.branch > vchk.window;
+                    html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ Varianta <b>' + esc(v.variant_code || '—') + '</b> · ' + esc(v.variant_name || 'bez názvu') + '</div>' + renderOpCard(v, i) +
+                      '<div class="par-foot var-foot"><span class="par-time' + (vover ? ' over' : '') + '" title="Součet reálných časů větve s touto variantou / součet hlavních operací v okně ' + vchk.label + '">⏱ ' + formatDuration(vchk.branch) + ' / ' + formatDuration(vchk.window) + (vover ? ' ⚠️' : '') + '</span></div></div>';
+                  });
                   html += '</div>';
                 }
               });
