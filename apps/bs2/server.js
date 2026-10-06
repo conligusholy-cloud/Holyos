@@ -95,6 +95,7 @@ async function memberCount() {
 app.get('/favicon.svg', (req, res) => { res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(require('./logo').logoSvg(64, 'f')); });
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat.webp')));
+app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat-mini.webp')));
 app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
   res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
