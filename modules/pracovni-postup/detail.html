@@ -1205,7 +1205,8 @@
           html += renderOutputsBox();
           html += '</div>';
           // Pravý pruh má stejnou šířku jako hlavní linie → karty paralelních operací mají stejné rozměry
-          html += '<div class="lane-par" id="lane-par" style="position:relative;flex:0 0 auto;width:' + CARD_W + 'px;min-height:40px;">';
+          // Paralelní pruh leží absolutně vpravo od sloupce základu; karty se přitáhnou k hlavní větvi tam, kde vedle není varianta
+          html += '<div class="lane-par" id="lane-par" style="position:absolute;top:0;left:' + (CARD_W + 36) + 'px;width:' + (laneW - CARD_W + CARD_W + 36) + 'px;min-height:40px;pointer-events:none;">';
           if (parOps.length) html += '<div style="position:absolute;top:12px;left:0;right:0;text-align:center;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;pointer-events:none;">⫽ PARALELNÍ OPERACE</div>';
           if (parOps.length) {
             // Větve: paralelní operace se stejným oknem (od→do) tvoří řetěz pod sebou
@@ -1215,7 +1216,7 @@
               const from = list[0].parallel_from || null, to = list[0].parallel_to || null;
               const chk = parallelBranchCheck(from, to, null);
               const over = chk.window > 0 && chk.branch > chk.window;
-              html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" data-ops="' + list.map(o => o.id).join(',') + '" style="position:absolute;left:0;right:0;">' + '<div class="par-bracket"></div>';
+              html += '<div class="par-wrap" data-from="' + (from || '') + '" data-to="' + (to || '') + '" data-ops="' + list.map(o => o.id).join(',') + '" style="position:absolute;left:0;width:' + CARD_W + 'px;pointer-events:auto;">' + '<div class="par-bracket"></div>';
               list.forEach((op, i) => { if (i > 0) html += '<div class="par-chain">&#9660;</div>'; html += renderOpCard(op, i); });
               html += '<div class="par-foot">' +
                 '<span class="par-time' + (over ? ' over' : '') + '" title="Součet reálných časů paralelních operací ve větvi / součet hlavních operací v okně ' + chk.label + '">⏱ ' + formatDuration(chk.branch) + ' / ' + formatDuration(chk.window) + (over ? ' ⚠️ překročeno' : '') + '</span>' +
@@ -1343,6 +1344,17 @@
         top = Math.max(top, a.y - laneOff + 14);
         placed.forEach(p => { if (top < p.bottom && top + h > p.top) top = p.bottom + 12; });
         w.style.top = top + 'px';
+        // Vodorovně: přitáhnout k hlavní větvi — jen tam, kde ve stejné výšce stojí karta varianty, uhnout za ni
+        {
+          const laneLeft = (lane.getBoundingClientRect().left - lanesRect.left) / z;
+          const wTop = top + laneOff, wBot = top + laneOff + h;
+          let rightEdge = laneLeft; // výchozí = hned za sloupcem základu
+          main.querySelectorAll('.op-card.is-variant').forEach(vc => {
+            const r = vc.getBoundingClientRect(); const vt = (r.top - lanesRect.top) / z, vb = (r.bottom - lanesRect.top) / z, vr = (r.right - lanesRect.left) / z;
+            if (vt < wBot + 24 && vb > wTop - 24) rightEdge = Math.max(rightEdge, vr + 36);
+          });
+          w.style.left = (rightEdge - laneLeft) + 'px';
+        }
         const bracket = w.querySelector('.par-bracket'); if (bracket) bracket.style.display = 'none';
         w.title = 'Vychází z uzlu před operací ' + from + ', vrací se do uzlu za operací ' + to;
         placed.push({ top, bottom: top + h });
@@ -1414,6 +1426,7 @@
         '<marker id="var-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(251,146,60,0.95)"/></marker>' +
         '</defs>');
       lane.style.minHeight = maxBottom + 'px';
+      const lanesEl = document.getElementById('lanes'); if (lanesEl) lanesEl.style.minHeight = (maxBottom + (lane.getBoundingClientRect().top - lanesRect.top) / z + 20) + 'px';
     }
     // Posun plátna myší: chytit prázdné místo plátna a táhnout (vodorovně roluje .lanes, svisle stránku)
     (function () {
