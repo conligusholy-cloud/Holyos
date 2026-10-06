@@ -722,13 +722,17 @@
     .fy-tree-header > span:nth-child(8) { text-align: center; }
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
     .op-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:8px}
-    .op-row > .op-card{flex:0 0 440px;width:440px;margin-bottom:0}
-    .variant-wrap{flex:0 0 440px;width:440px;position:relative}
+    .op-row > .op-card{flex:0 0 520px;width:520px;margin-bottom:0}
+    .variant-wrap{flex:0 0 520px;width:520px;position:relative}
+    .lane-main > .op-card, .lane-par .op-card{width:520px}
+    .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px}
     .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
     .variant-link span{display:inline-block;width:14px;border-top:2px dashed rgba(192,132,252,.7)}
     .variant-wrap .op-card{margin-bottom:0}
     .lane-main.has-variants .op-row{padding-top:18px}
-    .lane-main.has-variants > .op-card{width:440px}
+    /* Osa hlavní linie (uzly, start, hotový výrobek) zůstává nad sloupcem základu, i když vedle jsou varianty */
+    .lane-main.has-variants .op-node, .lane-main.has-variants .start-box, .lane-main.has-variants .outputs-box{width:520px;max-width:520px;margin-left:0;margin-right:0}
+    .lane-main.has-variants .start-box{width:max-content;margin-left:0;transform:translateX(calc(260px - 50%))}
     /* Karta varianty = stejný formát jako paralelní operace (fialový rámeček, podklad, fialový krok) */
     .op-card.is-variant{border-color:rgba(168,85,247,0.55);background:rgba(168,85,247,0.06);margin-bottom:0}
     .op-card.is-variant .op-handle{opacity:.35;cursor:default}
@@ -1170,9 +1174,11 @@
           html += '<div class="lanes" id="lanes" style="display:flex;gap:28px;align-items:flex-start;position:relative;">';
           html += '<svg id="par-links" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1;"></svg>';
           // Když má některá operace varianty, hlavní linie se rozšíří: základ + varianty vedle sebe v jednom řádku (náhrada základu)
+          // Jednotný formát karet: hlavní linie, varianty i paralelní operace mají stejnou šířku (CARD_W)
+          const CARD_W = 520;
           const maxVariants = mainOps.reduce((m, op) => Math.max(m, variantsOf(op.id).length), 0);
-          const laneW = maxVariants ? (440 * (maxVariants + 1) + 16 * maxVariants) : 680;
-          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="' + (maxVariants ? 'flex:0 0 auto;width:' + laneW + 'px;' : 'flex:1 1 0;min-width:0;max-width:680px;') + '">';
+          const laneW = CARD_W * (maxVariants + 1) + 16 * maxVariants;
+          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="flex:0 0 auto;width:' + laneW + 'px;">';
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
@@ -1182,8 +1188,7 @@
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             // Varianty operace — plnohodnotné karty VEDLE základu v jednom řádku (náhrada základní větve; vybírá se při zadání do výroby)
             const vs = variantsOf(op.id);
-            if (!maxVariants) html += renderOpCard(op, i);
-            else {
+            {
               html += '<div class="op-row">' + renderOpCard(op, i);
               vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ <b>' + esc(v.variant_code || '') + '</b> ' + esc(v.variant_name || '') + '</div>' + renderOpCard(v, i) + '</div>'; });
               html += '</div>';
@@ -1193,7 +1198,7 @@
           html += renderOutputsBox();
           html += '</div>';
           // Pravý pruh má stejnou šířku jako hlavní linie → karty paralelních operací mají stejné rozměry
-          html += '<div class="lane-par" id="lane-par" style="position:relative;flex:1 1 0;min-width:0;max-width:680px;min-height:40px;">';
+          html += '<div class="lane-par" id="lane-par" style="position:relative;flex:0 0 auto;width:' + CARD_W + 'px;min-height:40px;">';
           if (parOps.length) html += '<div style="position:absolute;top:12px;left:0;right:0;text-align:center;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.3px;pointer-events:none;">⫽ PARALELNÍ OPERACE</div>';
           if (parOps.length) {
             // Větve: paralelní operace se stejným oknem (od→do) tvoří řetěz pod sebou
