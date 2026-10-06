@@ -361,14 +361,14 @@ function supporterCompounder(s) {
   const steps = [['Rok 1', 1, 'první stroj si splácí sám'], ['Rok 2', 2, 'výnos z prvního = záloha na druhý'], ['Rok 3', 4, 'dva stroje platí dva další'], ['Rok 4', 8, 'síť roste rychleji než Vaše výdaje'], ['Rok 5', 16, 'linka — svoboda']];
   // Fáze Compoundera — doplňujeme postupně
   const PHASES = [
-    { no: '1', k: 'Vztah s bankovním domem', title: 'Sblížení', visual: 'pilots', lead: 'Stejně jako mezi lidmi je i mezi Vámi a bankovním domem potřeba vybudovat vztah. Teď jste pro něj <b>nový partner</b> — a potřebuje Vás trochu poznat. Strategie: <b>první MINI za vlastní</b>, další jeden až dva s financováním a maximální akontací.',
+    { no: '1', k: 'Vztah s bankovním domem', title: 'Sblížení', visual: 'pilots', lead: 'Stejně jako mezi lidmi je i mezi Vámi a bankovním domem potřeba vybudovat vztah. Teď jste pro něj <b>nový partner</b> — a potřebuje Vás trochu poznat. Strategie je jednoduchá: <b>začněte jedním prvním prádlomatem</b> — verze MINI, ideálně bez financování.',
       points: [
-        ['box', 'První MINI ideálně bez financování', 'Ideální start: <b>první prádlomat ve verzi MINI koupit za vlastní</b>, bez úvěru. Máte hned stroj, který vydělává, žádnou splátku — a pro banku první důkaz, že to myslíte vážně.'],
-        ['bolt', 'Druhý a třetí s financováním', 'Další <b>1–2 Piloty</b> už pořiďte s financováním. Dost na to, aby banka viděla, že splácíte a stroje vydělávají — a málo na to, abyste se zbytečně napínal.'],
-        ['check', 'Největší možná akontace', 'U financovaných strojů dejte <b>co nejvyšší akontaci</b>. Čím víc vložíte, tím lépe Vás banka čte: nižší riziko, lepší podmínky pro další kola. Tady se buduje důvěra, ze které budete čerpat celé roky.'],
-        ['sun', 'Těmto strojům říkáme Piloti', 'Piloti slouží především k jednomu: <b>ověřit správné místo</b>. Stroj je vždycky stejný — rozdíl dělá lokalita. Pilot ji otestuje naostro.'],
+        ['box', 'Jeden první prádlomat', 'Začněte <b>jedním strojem</b>. Ne třemi, ne pěti. Jeden stroj na jednom místě dá všechna data, která potřebujete — a nic Vás nenutí dělat další rozhodnutí dřív, než budete vědět.'],
+        ['bolt', 'Verze MINI, ideálně bez financování', 'Pro první stroj doporučujeme <b>verzi MINI</b> a nejlépe ji <b>koupit za vlastní</b>. Žádná splátka, stroj od prvního dne vydělává jen Vám — a pro banku je to první důkaz, že to myslíte vážně.'],
+        ['check', 'Pokud financování, pak s maximální akontací', 'Když první stroj přece jen financujete, dejte <b>co nejvyšší akontaci</b>. Čím víc vložíte, tím lépe Vás banka čte: nižší riziko, lepší podmínky pro další kola.'],
+        ['sun', 'Tomuto stroji říkáme Pilot', 'Pilot slouží především k jednomu: <b>ověřit správné místo</b>. Stroj je vždycky stejný — rozdíl dělá lokalita. Pilot ji otestuje naostro.'],
       ],
-      timeline: [['Den 0', 'Piloti v provozu'], ['1–6 měsíců', 'sběr dat o místě: obrat, vytížení, opakovaní zákazníci'], ['~6 měsíců', 'místo se verifikuje — nebo Pilota přemístíme jinam']],
+      timeline: [['Den 0', 'Pilot v provozu'], ['1–6 měsíců', 'sběr dat o místě: obrat, vytížení, opakovaní zákazníci'], ['~6 měsíců', 'místo se verifikuje — nebo Pilota přemístíme jinam']],
       note: 'Dle statistik víme zhruba <b>po 6 měsících</b>, jestli se místo verifikuje, nebo je potřeba stroj přemístit na jiné místo. Díky tomu nikdy nerozšiřujete síť na místě, které nefunguje — a banka vidí, že rozhodujete podle čísel.' },
     { no: '2', k: 'Po 6 měsících', title: 'Násobení', visual: 'scale', lead: 'Uplynulo 6 měsíců. Už víte, <b>kteří Piloti místo verifikovali</b> a kteří ne. Od této chvíle se mění pravidla: na ověřené místo jde další stroj s <b>0 % akontací</b> — stroj splácí sám sebe a ještě něco zbývá.',
       points: [
@@ -420,6 +420,7 @@ function supporterCompounder(s) {
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
+  .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
   .cp .pl{position:relative;text-align:center;animation:pmfloat 5s ease-in-out infinite}
   .cp .pl img{width:100%;height:auto;filter:drop-shadow(0 22px 36px rgba(0,0,0,.65)) drop-shadow(0 0 26px rgba(79,209,255,.25))}
   .cp .pl .pl-tag{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);padding:5px 12px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 8px 24px rgba(30,134,224,.45);white-space:nowrap}
@@ -476,7 +477,7 @@ function supporterCompounder(s) {
 
     ${PHASES.map(ph => `<section class="ph">
       <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
-      ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row">${[1, 2, 3].map(i => `<div class="pl" style="animation-delay:${(i - 1) * -1.7}s"><img src="/img/pradlomat.webp" alt="Pilot ${i}" loading="lazy" decoding="async"><span class="pl-tag">Pilot ${i}</span><span class="pl-mini">${i === 1 ? 'MINI · bez financování' : 'MINI · financování'}</span></div>`).join('')}</div><div class="pl-cap"><span><i></i>1. Pilot MINI za vlastní · 2.–3. Pilot s financováním a max. akontací</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
+      ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat.webp" alt="Pilot" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
       ${ph.visual === 'scale' ? `<div class="scale"><div class="sc-col ok"><div class="sc-h"><i></i>Místo verifikováno</div><div class="sc-m"><img src="/img/pradlomat.webp" alt="Pilot" loading="lazy" decoding="async"><span class="pl-tag">Pilot</span></div><div class="sc-plus">+</div><div class="sc-m new"><img src="/img/pradlomat.webp" alt="Další stroj" loading="lazy" decoding="async"><span class="pl-tag z">0 % akontace</span></div><div class="sc-t">stroj splácí sám sebe — a ještě něco zbývá</div></div>
         <div class="sc-col wait"><div class="sc-h"><i></i>Místo neverifikováno</div><div class="sc-m dim"><img src="/img/pradlomat.webp" alt="Pilot" loading="lazy" decoding="async"><span class="pl-tag g">Pilot</span></div><div class="sc-arrow">⟶</div><div class="sc-t">počkat · nebo přemístit na nové místo a verifikovat znovu</div></div></div>` : ''}
       <div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>
