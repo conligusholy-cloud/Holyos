@@ -1389,20 +1389,22 @@
         const yFork = a.y + a.r + 18;          // vodorovná „rozbočka" pod horním uzlem
         const yJoin = b.y - b.r - 18;          // vodorovné „sloučení" nad dolním uzlem
         const col = 'rgba(251,146,60,0.95)';
-        const chev = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5) : 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x - 5) + ',' + (y + 5)) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
-        vCards.forEach(vc => {
-          const vr = vc.getBoundingClientRect();
-          const vx = (vr.left + vr.width / 2 - lanesRect.left) / z;
-          const vTop = (vr.top - lanesRect.top) / z, vBot = (vr.bottom - lanesRect.top) / z;
-          // uzel → rozbočka doprava → dolů do horní hrany varianty
-          variantSvg += '<path d="M' + a.x + ',' + yFork + ' H' + vx + ' V' + (vTop - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#var-arrow)"/>';
-          variantSvg += chev((a.x + vx) / 2, yFork, 'right');
-          // dolní hrana varianty → dolů → sloučení doleva → uzel
-          variantSvg += '<path d="M' + vx + ',' + (vBot + 2) + ' V' + yJoin + ' H' + (b.x + b.r + 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#var-arrow)"/>';
-          variantSvg += chev((vx + b.x) / 2, yJoin, 'left');
-          // štítek „NEBO" na rozbočce
-          variantSvg += '<text x="' + ((a.x + vx) / 2) + '" y="' + (yFork - 6) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + col + '" letter-spacing=".08em">NEBO</text>';
-        });
+        const dash = 'stroke-dasharray="7 5"';
+        const chev = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5)
+          : dir === 'right' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x - 5) + ',' + (y + 5)
+          : 'M' + (x + 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y + 5)) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+        const vxs = vCards.map(vc => { const vr = vc.getBoundingClientRect(); return { x: (vr.left + vr.width / 2 - lanesRect.left) / z, top: (vr.top - lanesRect.top) / z, bot: (vr.bottom - lanesRect.top) / z }; });
+        const farX = Math.max(...vxs.map(v => v.x));
+        // Rozbočka: jedna čárkovaná vodorovná čára od uzlu k nejvzdálenější variantě, z ní svislé odbočky dolů do každé varianty
+        variantSvg += '<path d="M' + a.x + ',' + yFork + ' H' + farX + '" fill="none" stroke="' + col + '" stroke-width="2" ' + dash + '/>';
+        variantSvg += chev((a.x + vxs[0].x) / 2, yFork, 'right');
+        variantSvg += '<text x="' + ((a.x + vxs[0].x) / 2) + '" y="' + (yFork - 7) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + col + '" letter-spacing=".08em">NEBO</text>';
+        vxs.forEach(v => { variantSvg += '<path d="M' + v.x + ',' + yFork + ' V' + (v.top - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" ' + dash + ' marker-end="url(#var-arrow)"/>'; });
+        // Sloučení: z dolní hrany každé varianty svisle dolů na společnou čáru, ta vede DOLEVA zpět do uzlu základní větve
+        vxs.forEach(v => { variantSvg += '<path d="M' + v.x + ',' + (v.bot + 2) + ' V' + yJoin + '" fill="none" stroke="' + col + '" stroke-width="2" ' + dash + '/>'; });
+        variantSvg += '<path d="M' + farX + ',' + yJoin + ' H' + (b.x + b.r + 2) + '" fill="none" stroke="' + col + '" stroke-width="2" ' + dash + ' marker-end="url(#var-arrow)"/>';
+        variantSvg += chev((vxs[0].x + b.x) / 2, yJoin, 'left');
+        vxs.forEach(v => { variantSvg += '<circle cx="' + v.x + '" cy="' + yJoin + '" r="3" fill="' + col + '"/>'; });
         // zvýraznit rozbočku na ose základu
         variantSvg += '<circle cx="' + a.x + '" cy="' + yFork + '" r="3.5" fill="' + col + '"/>' + '<circle cx="' + b.x + '" cy="' + yJoin + '" r="3.5" fill="' + col + '"/>';
       });
