@@ -1380,9 +1380,11 @@
       const nodeBefore = (step) => nodes.find(n => parseInt(n.getAttribute('data-before')) === step) || nodes[0];
       const nodeAfter = (step) => nodes.find(n => parseInt(n.getAttribute('data-after')) === step) || nodes[nodes.length - 1];
       const lanes = document.getElementById('lanes'); const svg = document.getElementById('par-links');
-      const lanesRect = lanes ? lanes.getBoundingClientRect() : { left: 0, top: 0 };
       if (svg) svg.innerHTML = '';
       const z = (typeof wfZoomLevel === 'number' && wfZoomLevel > 0) ? wfZoomLevel : 1; // plátno je škálované → souřadnice přepočítat na layout px
+      // Počátek souřadnic = levý horní roh OBSAHU plátna (vč. odrolování) — jinak se po posunu plátna čáry rozjedou
+      const lr = lanes ? lanes.getBoundingClientRect() : { left: 0, top: 0 };
+      const lanesRect = { left: lr.left - (lanes ? lanes.scrollLeft : 0) * z, top: lr.top - (lanes ? lanes.scrollTop : 0) * z };
       const dotCenter = (n) => { const d = n.querySelector('.op-node-dot').getBoundingClientRect(); return { x: (d.left + d.width / 2 - lanesRect.left) / z, y: (d.top + d.height / 2 - lanesRect.top) / z, r: d.width / 2 / z }; };
       wraps.forEach(w => {
         const from = parseInt(w.getAttribute('data-from')) || steps[0];
@@ -1542,7 +1544,15 @@
           const seg = (pk) => { const bR = rect(pk.base), cR = rect(pk.card); if (!pk.isVar) return { inX: bR.x, top: bR.top, bot: bR.bot, outX: bR.x, lead: 'V' + bR.top }; const yN = bR.top - 36; return { inX: bR.x, top: cR.top, bot: cR.bot, outX: cR.x, lead: 'V' + yN + ' H' + cR.x + ' V' + cR.top }; };
           const f = seg(picks[0]), l = seg(picks[picks.length - 1]);
           d += 'M' + (a.x + a.r) + ',' + a.y + ' H' + f.inX + ' ' + f.lead + ' ';
-          for (let k = 1; k < picks.length; k++) { const p0 = seg(picks[k - 1]), p1 = seg(picks[k]); const ym = (p0.bot + p1.top) / 2; d += 'M' + p0.outX + ',' + p0.bot + ' V' + ym + ' H' + p1.inX + ' ' + p1.lead + ' '; }
+          for (let k = 1; k < picks.length; k++) {
+            const p0 = seg(picks[k - 1]), p1 = seg(picks[k]);
+            // Stejná výška spojky jako u oranžového návratu: mezi spodkem celého řádku (vč. patičky) a vrškem dalšího prvku
+            const rowEl = picks[k - 1].base.closest('.par-row') || picks[k - 1].base;
+            const nextEl = picks[k].base.closest('.par-row') || picks[k].base;
+            const rowBot = (rowEl.getBoundingClientRect().bottom - lanesRect.top) / z, nextTop = (nextEl.getBoundingClientRect().top - lanesRect.top) / z;
+            const ym = (rowBot + nextTop) / 2;
+            d += 'M' + p0.outX + ',' + p0.bot + ' V' + ym + ' H' + p1.inX + ' ' + p1.lead + ' ';
+          }
           d += 'M' + l.outX + ',' + l.bot + ' V' + b.y + ' H' + (b.x + b.r) + ' ';
         });
         if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
