@@ -191,7 +191,7 @@
                 <div style="font-size:12px;color:#fb923c;font-weight:700;margin-bottom:6px;">Výbava — vyber provedení pro tuto dávku</div>
                 <div id="pf-equipment-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:6px;"></div>
                 <div id="pf-config-code" style="display:none;margin:4px 0 8px;font-size:12px;color:var(--text2);">Výrobní kód: <span style="font-family:ui-monospace,Consolas,monospace;font-weight:700;color:#0b1a12;background:#22c55e;border-radius:999px;padding:2px 10px;" id="pf-config-code-val"></span></div>
-                <details id="pf-variants-details"><summary style="cursor:pointer;font-size:11.5px;color:var(--text2);">Podrobně po operacích (ruční volba varianty)</summary>
+                <details id="pf-variants-details" style="display:none;"><summary style="cursor:pointer;font-size:11.5px;color:var(--text2);">Podrobně po operacích (ruční volba varianty)</summary>
                 <div id="pf-variants-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-top:6px;"></div></details>
               </div>
             </div>
@@ -1758,7 +1758,8 @@
         groups[g].map(function (e) { return '<option value="' + e.id + '">' + pv2Esc(e.name) + '</option>'; }).join('') + '</select></label>';
     }).join('');
     document.getElementById('pf-variants-details').open = !gkeys.length;
-    if (!gkeys.length) eqRows.innerHTML = '<div style="font-size:11.5px;color:var(--text2);grid-column:1/-1;">Výrobek nemá definovanou výbavu (⚙ v pracovním postupu) — vyber varianty ručně níže.</div>';
+    document.getElementById('pf-variants-details').style.display = gkeys.length ? 'none' : '';
+    if (!gkeys.length) eqRows.innerHTML = '<div style="font-size:11.5px;color:var(--text2);grid-column:1/-1;">Výrobek nemá definovanou výbavu (⚙ v pracovním postupu) — vyber provedení u operací níže.</div>';
     setTimeout(pfUpdateConfigCode, 0);
     rows.innerHTML = withVar.map(function (o) {
       return '<label style="display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text2);"><span><b style="color:var(--text);">' + o.step_number + '. ' + pv2Esc(o.name) + '</b></span>' +
@@ -1795,7 +1796,6 @@
     chosen.forEach(function (id) { var e = eq.find(function (x) { return x.id === id; }); if (!e) return; (e.variant_ids || []).forEach(function (vid) { var base = byVar[vid]; if (!base) return; if (pick[base] && pick[base] !== vid) conflict = owner[base] + ' × ' + e.group_name + ' – ' + e.name; pick[base] = vid; owner[base] = e.group_name + ' – ' + e.name; }); });
     var uncovered = [];
     document.querySelectorAll('#pf-variants-rows .pf-var').forEach(function (sel) { var base = parseInt(sel.getAttribute('data-base')); if (pick[base]) sel.value = String(pick[base]); else if (!sel.value) uncovered.push(sel); });
-    if (uncovered.length) document.getElementById('pf-variants-details').open = true;
     pfUpdateConfigCode();
     var info = document.getElementById('pf-product-info');
     if (conflict) info.innerHTML = '<span style="color:#ef4444;">⚠️ Výbavy se liší u stejné operace: ' + pv2Esc(conflict) + ' — vyber jen jednu.</span>';
@@ -1805,7 +1805,7 @@
   var pfSimSeq = 0, pfLastSim = null;
   window.pfSimulate = async function () {
     var box = document.getElementById('pf-sim'); if (!pfSelected || !(pfSelected.operations || []).length) { box.style.display = 'none'; pfLastSim = null; return; }
-    var miss = pfMissingChoices(); if (miss.length) { box.style.display = ''; box.className = 'pf-sim'; box.innerHTML = '🧩 Nejdřív vyber provedení (výbavu) — chybí u: <b>' + pv2Esc(miss.join(', ')) + '</b>. Pak spočítám termín.'; pfLastSim = null; return; }
+    var miss = pfMissingChoices(); if (miss.length) { box.style.display = ''; box.className = 'pf-sim'; box.innerHTML = '🧩 Nejdřív vyber výbavu — provedení zatím chybí u: <b>' + pv2Esc(miss.join(', ')) + '</b>. Pak spočítám termín.'; pfLastSim = null; return; }
     var seq = ++pfSimSeq; box.style.display = ''; box.className = 'pf-sim'; box.innerHTML = '⏳ Počítám nejbližší reálný termín (kapacity lidí, pracoviště, materiál)…';
     var due = document.getElementById('pf-due').value;
     try {
@@ -1833,7 +1833,7 @@
     if (!(pfSelected.operations || []).length) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Výrobek nemá pracovní postup — bez operací nelze plánovat.'; return; }
     if (qty < 1) { res.className = 'pf-result err'; res.style.display = ''; res.textContent = 'Zadej počet kusů.'; return; }
     var missingOps = pfMissingChoices();
-    if (missingOps.length) { res.className = 'pf-result err'; res.style.display = ''; res.innerHTML = '⚠️ Není zvoleno provedení u operací: <b>' + pv2Esc(missingOps.join(', ')) + '</b>. Vyber výbavu (nebo provedení v „Podrobně po operacích"), aby byl pracovní postup jednoznačný.'; document.getElementById('pf-variants-details').open = true; return; }
+    if (missingOps.length) { res.className = 'pf-result err'; res.style.display = ''; res.innerHTML = '⚠️ Výbava neurčuje provedení u operací: <b>' + pv2Esc(missingOps.join(', ')) + '</b>. Vyber všechny skupiny výbavy; pokud výbava tyto operace nepokrývá, doplň položky výbavy v pracovním postupu (⚙ Výbava).'; return; }
     btn.disabled = true; btn.textContent = 'Plánuji…'; res.style.display = ''; res.className = 'pf-result'; res.textContent = 'Vytvářím dávku…';
     try {
       var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), quantity: qty, planned_start: new Date(start).toISOString(), due_date: due ? new Date(due).toISOString() : null, is_test: isTest, ignore_stock: ignoreStock, priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
