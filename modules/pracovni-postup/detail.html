@@ -721,9 +721,14 @@
     .fy-tree-header > span:nth-child(6) { text-align: right; }
     .fy-tree-header > span:nth-child(8) { text-align: center; }
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
-    .variant-stack{margin:6px 0 4px 26px;padding-left:14px;border-left:2px dashed rgba(192,132,252,.55);display:flex;flex-direction:column;gap:8px}
-    .variant-head{font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.2px;margin-bottom:3px}
-    .variant-head span{font-weight:500;color:var(--text2)}
+    .op-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:8px}
+    .op-row > .op-card{flex:0 0 440px;width:440px;margin-bottom:0}
+    .variant-wrap{flex:0 0 440px;width:440px;position:relative}
+    .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#c084fc;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+    .variant-link span{display:inline-block;width:14px;border-top:2px dashed rgba(192,132,252,.7)}
+    .variant-wrap .op-card{margin-bottom:0}
+    .lane-main.has-variants .op-row{padding-top:18px}
+    .lane-main.has-variants > .op-card{width:440px}
     .op-card.is-variant{border-color:rgba(192,132,252,.6);background:rgba(192,132,252,.06);margin-bottom:0}
     .op-card.is-variant .op-handle{visibility:hidden}
     .op-card.is-variant .op-step{color:#c084fc}
@@ -1163,7 +1168,10 @@
           // Pruh je vidět i prázdný, aby bylo jasné, kam paralelní operace patří, a šly rovnou přidat.
           html += '<div class="lanes" id="lanes" style="display:flex;gap:28px;align-items:flex-start;position:relative;">';
           html += '<svg id="par-links" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:1;"></svg>';
-          html += '<div class="lane-main" id="lane-main" style="flex:1 1 0;min-width:0;max-width:680px;">';
+          // Když má některá operace varianty, hlavní linie se rozšíří: základ + varianty vedle sebe v jednom řádku (náhrada základu)
+          const maxVariants = mainOps.reduce((m, op) => Math.max(m, variantsOf(op.id).length), 0);
+          const laneW = maxVariants ? (440 * (maxVariants + 1) + 16 * maxVariants) : 680;
+          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="flex:1 1 0;min-width:0;max-width:' + laneW + 'px;">';
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
@@ -1171,12 +1179,12 @@
           html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span></div>';
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
-            html += renderOpCard(op, i);
-            // Varianty operace — plnohodnotné karty pod základem (stejný vzhled jako hlavní linie), fialově označené
+            // Varianty operace — plnohodnotné karty VEDLE základu v jednom řádku (náhrada základní větve; vybírá se při zadání do výroby)
             const vs = variantsOf(op.id);
-            if (vs.length) {
-              html += '<div class="variant-stack">';
-              vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-head">⎘ Varianta <b>' + esc(v.variant_code || '') + '</b> · ' + esc(v.variant_name || '') + ' <span>místo základu „' + esc(op.name) + '" — vybírá se při zadání do výroby</span></div>' + renderOpCard(v, i) + '</div>'; });
+            if (!maxVariants) html += renderOpCard(op, i);
+            else {
+              html += '<div class="op-row">' + renderOpCard(op, i);
+              vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ <b>' + esc(v.variant_code || '') + '</b> ' + esc(v.variant_name || '') + '</div>' + renderOpCard(v, i) + '</div>'; });
               html += '</div>';
             }
           });
@@ -1288,7 +1296,7 @@
     function layoutParallelLane() {
       const lane = document.getElementById('lane-par'); const main = document.getElementById('lane-main');
       if (!lane || !main) return;
-      const mainCards = Array.from(main.querySelectorAll(':scope > .op-card'));
+      const mainCards = Array.from(main.querySelectorAll(':scope > .op-card, :scope > .op-row > .op-card:not(.is-variant)'));
       const byStep = new Map();
       mainCards.forEach(c => { const id = parseInt(c.getAttribute('data-op-id')); const op = (product.operations || []).find(o => o.id === id); if (op) byStep.set(op.step_number, c); });
       const steps = Array.from(byStep.keys()).sort((a, b) => a - b);
