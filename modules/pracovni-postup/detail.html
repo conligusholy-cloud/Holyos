@@ -1322,7 +1322,7 @@
     function layoutParallelLane() {
       const lane = document.getElementById('lane-par'); const main = document.getElementById('lane-main');
       if (!lane || !main) return;
-      const mainCards = Array.from(main.querySelectorAll(':scope > .op-card, :scope > .op-row > .op-card:not(.is-variant)'));
+      const mainCards = Array.from(main.querySelectorAll(':scope > .op-card, :scope > .op-row .op-card:not(.is-variant)'));
       const byStep = new Map();
       mainCards.forEach(c => { const id = parseInt(c.getAttribute('data-op-id')); const op = (product.operations || []).find(o => o.id === id); if (op) byStep.set(op.step_number, c); });
       const steps = Array.from(byStep.keys()).sort((a, b) => a - b);
