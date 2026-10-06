@@ -727,7 +727,7 @@
     .lane-main > .op-card, .lane-par .op-card{width:680px}
     .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px}
     .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#fb923c;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
-    .variant-link span{display:inline-block;width:14px;border-top:2px dashed rgba(251,146,60,.7)}
+    .variant-link span{display:none}
     .variant-link.base{color:#14b8a6} .variant-link.base span{border-top-color:rgba(20,184,166,.7)}
     .variant-wrap .op-card{margin-bottom:0}
     .lane-main.has-variants .op-row{padding-top:18px}
@@ -1368,8 +1368,44 @@
           nStart.classList.add('op-node-active'); nEnd.classList.add('op-node-active');
         }
       });
-      if (svg && wraps.length) svg.insertAdjacentHTML('afterbegin', '<defs>' +
+      // Varianty: rozvětvení cesty — z uzlu nad operací jde tok buď do základu, nebo do varianty (oranžově),
+      // a z každé varianty se vrací do uzlu pod operací. Jasně ukazuje, že postup se může vydat různou cestou.
+      let variantSvg = '';
+      main.querySelectorAll(':scope > .op-row').forEach(row => {
+        const baseCard = row.querySelector('.op-card:not(.is-variant)');
+        const vCards = Array.from(row.querySelectorAll('.op-card.is-variant'));
+        if (!baseCard || !vCards.length) return;
+        const baseId = parseInt(baseCard.getAttribute('data-op-id'));
+        const baseOp = (product.operations || []).find(o => o.id === baseId); if (!baseOp) return;
+        const nTop = nodeBefore(baseOp.step_number), nBot = nodeAfter(baseOp.step_number);
+        if (!nTop || !nBot) return;
+        const a = dotCenter(nTop), b = dotCenter(nBot);
+        const br = baseCard.getBoundingClientRect();
+        const bTop = (br.top - lanesRect.top) / z, bBot = (br.bottom - lanesRect.top) / z;
+        const yFork = a.y + a.r + 10;          // vodorovná „rozbočka" těsně pod horním uzlem
+        const yJoin = b.y - b.r - 10;          // vodorovné „sloučení" těsně nad dolním uzlem
+        const col = 'rgba(251,146,60,0.95)';
+        const chev = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5) : 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x - 5) + ',' + (y + 5)) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+        vCards.forEach(vc => {
+          const vr = vc.getBoundingClientRect();
+          const vx = (vr.left + vr.width / 2 - lanesRect.left) / z;
+          const vTop = (vr.top - lanesRect.top) / z, vBot = (vr.bottom - lanesRect.top) / z;
+          // uzel → rozbočka doprava → dolů do horní hrany varianty
+          variantSvg += '<path d="M' + a.x + ',' + yFork + ' H' + vx + ' V' + (vTop - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#var-arrow)"/>';
+          variantSvg += chev((a.x + vx) / 2, yFork, 'right');
+          // dolní hrana varianty → dolů → sloučení doleva → uzel
+          variantSvg += '<path d="M' + vx + ',' + (vBot + 2) + ' V' + yJoin + ' H' + (b.x + b.r + 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#var-arrow)"/>';
+          variantSvg += chev((vx + b.x) / 2, yJoin, 'left');
+          // štítek „NEBO" na rozbočce
+          variantSvg += '<text x="' + ((a.x + vx) / 2) + '" y="' + (yFork - 6) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + col + '" letter-spacing=".08em">NEBO</text>';
+        });
+        // zvýraznit rozbočku na ose základu
+        variantSvg += '<circle cx="' + a.x + '" cy="' + yFork + '" r="3.5" fill="' + col + '"/>' + '<circle cx="' + b.x + '" cy="' + yJoin + '" r="3.5" fill="' + col + '"/>';
+      });
+      if (svg && variantSvg) svg.insertAdjacentHTML('beforeend', variantSvg);
+      if (svg && (wraps.length || variantSvg)) svg.insertAdjacentHTML('afterbegin', '<defs>' +
         '<marker id="par-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(192,132,252,0.95)"/></marker>' +
+        '<marker id="var-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="rgba(251,146,60,0.95)"/></marker>' +
         '</defs>');
       lane.style.minHeight = maxBottom + 'px';
     }
