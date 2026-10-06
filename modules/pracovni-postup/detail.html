@@ -727,7 +727,9 @@
     .eq-table{width:auto}.eq-table td{white-space:nowrap}
     .eq-head{display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;color:#fb923c;margin-bottom:4px}.eq-head .muted{font-weight:500;font-size:11px}
     .eq-table{border-collapse:collapse;font-size:12px}.eq-table td{padding:3px 6px 3px 0;vertical-align:top;border-top:1px solid var(--border)}.eq-table td.eq-g{font-weight:700;color:var(--text2);white-space:nowrap;width:1%;padding-right:12px}
-    .eq-item{display:inline-block;border:1px solid rgba(251,146,60,.5);color:#fb923c;border-radius:999px;padding:1px 9px;margin:2px 2px 2px 0}.eq-item small{color:var(--text2);margin-left:3px}
+    .eq-item{display:inline-block;border:1px solid rgba(251,146,60,.5);color:#fb923c;border-radius:999px;padding:1px 9px;margin:2px 2px 2px 0;cursor:pointer;user-select:none}.eq-item small{color:var(--text2);margin-left:3px}
+    .eq-item:hover{background:rgba(251,146,60,.12)}.eq-item.on{background:rgba(34,197,94,.18);border-color:#22c55e;color:#86efac;font-weight:700}
+    .op-card.route-on{border-color:#22c55e !important;box-shadow:0 0 0 3px rgba(34,197,94,.25), 0 0 18px rgba(34,197,94,.35) !important}
     .eq-row{border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px}.eq-fields{display:flex;gap:8px;align-items:center}
     .eq-vars{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.eq-var{font-size:12px;border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}.eq-var.on{border-color:rgba(251,146,60,.7);background:rgba(251,146,60,.1);color:#fb923c}
     .eq-legend{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
@@ -1435,6 +1437,31 @@
         // zvýraznit rozbočku na ose základu
         variantSvg += '<circle cx="' + a.x + '" cy="' + yFork + '" r="3.5" fill="' + col + '"/>' + '<circle cx="' + b.x + '" cy="' + yJoin + '" r="3.5" fill="' + col + '"/>';
       });
+      // Zelená cesta: pro vyklikanou výbavu projde postup START → uzly → zvolené karty (základ / varianta)
+      main.querySelectorAll('.op-card.route-on').forEach(c => c.classList.remove('route-on'));
+      if (Object.keys(eqSelected).length && nodes.length) {
+        const choice = eqRouteChoices();
+        const green = 'rgba(34,197,94,0.95)';
+        let d = '';
+        const mainList = (product.operations || []).filter(o => !o.is_parallel && !/^FY import/i.test(o.name || '')).sort((a, b) => a.step_number - b.step_number);
+        mainList.forEach((op, idx) => {
+          const nTop = nodeBefore(op.step_number), nBot = nodeAfter(op.step_number); if (!nTop || !nBot) return;
+          const a = dotCenter(nTop), b = dotCenter(nBot);
+          const chosenId = choice[op.id] || op.id;
+          const card = main.querySelector('.op-card[data-op-id="' + chosenId + '"]'); if (!card) return;
+          card.classList.add('route-on');
+          const r = card.getBoundingClientRect();
+          const cx = (r.left + r.width / 2 - lanesRect.left) / z, cTop = (r.top - lanesRect.top) / z, cBot = (r.bottom - lanesRect.top) / z;
+          if (chosenId === op.id) {
+            d += 'M' + a.x + ',' + (a.y + a.r) + ' V' + cTop + ' M' + a.x + ',' + cBot + ' V' + (b.y - b.r) + ' ';
+          } else {
+            const yFork = a.y + a.r + 18, yJoin = b.y - b.r - 18;
+            d += 'M' + a.x + ',' + (a.y + a.r) + ' V' + yFork + ' H' + cx + ' V' + cTop + ' M' + cx + ',' + cBot + ' V' + yJoin + ' H' + b.x + ' V' + (b.y - b.r) + ' ';
+          }
+        });
+        if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '<path d="' + d + '" fill="none" stroke="' + green + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
+      }
       // Výbava: osa START → uzel 0 je spojená, box Výbavy se připojuje vodorovnou oranžovou čarou na osu
       const eqBox = main.querySelector('.eq-box'), startBox = main.querySelector('.start-box');
       if (eqBox && startBox && nodes[0]) {
@@ -1572,6 +1599,21 @@
     // ── Výbava výrobku: „Barva – Červená" = sada variant operací; vybírá se při zadání do výroby ──
     let productEquipment = [];
     let eqDraft = [];
+    // Vyklikaná výbava na plátně (skupina → id položky) → zelená cesta postupu
+    let eqSelected = {};
+    function eqPick(id) {
+      const e = productEquipment.find(x => x.id === id); if (!e) return;
+      if (eqSelected[e.group_name] === id) delete eqSelected[e.group_name]; else eqSelected[e.group_name] = id;
+      renderTab();
+    }
+    function eqClear() { eqSelected = {}; renderTab(); }
+    // Zvolené provedení pro každou základní operaci: { base_id: id karty (základ nebo varianta) }
+    function eqRouteChoices() {
+      const out = {}; const bases = (product.operations || []).filter(o => !o.is_parallel);
+      bases.forEach(b => { out[b.id] = b.id; });
+      Object.values(eqSelected).forEach(id => { const e = productEquipment.find(x => x.id === id); if (!e) return; (e.variant_ids || []).forEach(vid => { const pv = provisionById(vid); if (!pv) return; const base = pv.variant_of_id || pv.id; out[base] = vid; }); });
+      return out;
+    }
     // Seznam provedení do výbavy: základ (pokud má varianty) + jeho varianty, seřazené po operacích
     function allVariantsList() {
       const out = [];
@@ -1591,11 +1633,12 @@
       groups.forEach((list, g) => {
         rows += '<tr><td class="eq-g">' + esc(g) + '</td><td>' + list.map(e => {
           const vs = (e.variant_ids || []).map(id => provisionById(id)).filter(Boolean);
-          return '<span class="eq-item" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + '">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).join(' ') + '</small></span>';
+          const on = eqSelected[e.group_name] === e.id;
+          return '<span class="eq-item' + (on ? ' on' : '') + '" onclick="eqPick(' + e.id + ')" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + '\n\nKliknutím vybereš — zeleně se vyznačí cesta postupu">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).join(' ') + '</small></span>';
         }).join(' ') + '</td></tr>';
       });
       return '<div class="eq-box">' +
-        '<div class="eq-head"><span>⚙ Výbava</span><span class="muted">co si lze vybrat při zadání do výroby</span><button class="btn" onclick="openEquipmentEditor()" title="Nastavit výbavu: skupina (Barva) → položky (Červená, Bílá) → dotčené varianty operací" style="margin-left:auto;padding:3px 8px;">⚙</button></div>' +
+        '<div class="eq-head"><span>⚙ Výbava</span><span class="muted">' + (Object.keys(eqSelected).length ? '<b style="color:#22c55e;">zelená = cesta postupu pro zvolenou výbavu</b> · <a href="#" onclick="eqClear();return false;" style="color:var(--text2);">zrušit výběr</a>' : 'klikni na položky — zeleně se ukáže cesta postupu') + '</span><button class="btn" onclick="openEquipmentEditor()" title="Nastavit výbavu: skupina (Barva) → položky (Červená, Bílá) → dotčené varianty operací" style="margin-left:auto;padding:3px 8px;">⚙</button></div>' +
         (rows ? '<table class="eq-table">' + rows + '</table>' : '<div class="muted" style="font-size:12px;padding:4px 0 2px;">Zatím žádná výbava — klikni na ⚙ a vytvoř např. <b>Barva – Červená</b> a přiřaď k ní varianty operací.</div>') +
         '</div>';
     }
