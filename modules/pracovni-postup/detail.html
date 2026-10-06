@@ -721,18 +721,20 @@
     .fy-tree-header > span:nth-child(6) { text-align: right; }
     .fy-tree-header > span:nth-child(8) { text-align: center; }
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
-    .op-row{display:flex;gap:16px;align-items:flex-start;margin-bottom:8px}
+    .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
     .lane-main > .op-card, .lane-par .op-card{width:680px}
     .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px;cursor:grab;user-select:none}
     .lanes.panning{cursor:grabbing}
     .lanes .op-card, .lanes .op-node, .lanes .par-wrap, .lanes button, .lanes input{cursor:auto}
-    .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#fb923c;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
+    .variant-link{position:absolute;top:-20px;left:0;font-size:11px;color:#fb923c;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
     .variant-link span{display:none}
     .variant-link.base{color:#14b8a6} .variant-link.base span{border-top-color:rgba(20,184,166,.7)}
     .variant-wrap .op-card{margin-bottom:0}
-    .lane-main.has-variants .op-row{padding-top:18px}
+    .lane-main.has-variants .op-row{padding-top:26px;margin-bottom:14px}
+    .lane-main.has-variants .op-node{height:92px}
+    .lane-main.has-variants .op-row > .op-card, .lane-main.has-variants .variant-wrap .op-card{margin-bottom:0}
     /* Osa hlavní linie (uzly, start, hotový výrobek) zůstává nad sloupcem základu, i když vedle jsou varianty */
     .lane-main.has-variants .op-node, .lane-main.has-variants .start-box, .lane-main.has-variants .outputs-box{width:680px;max-width:680px;margin-left:0;margin-right:0}
     .lane-main.has-variants .start-box{width:max-content;margin-left:0;transform:translateX(calc(340px - 50%))}
@@ -1182,7 +1184,7 @@
           // Jednotný formát karet: hlavní linie, varianty i paralelní operace mají stejnou šířku (CARD_W)
           const CARD_W = 680; // = původní šířka paralelní operace; základ i varianty se jí přizpůsobují
           const maxVariants = mainOps.reduce((m, op) => Math.max(m, variantsOf(op.id).length), 0);
-          const laneW = CARD_W * (maxVariants + 1) + 16 * maxVariants;
+          const laneW = CARD_W * (maxVariants + 1) + 36 * maxVariants;
           html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="flex:0 0 auto;width:' + laneW + 'px;">';
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
@@ -1384,8 +1386,8 @@
         const a = dotCenter(nTop), b = dotCenter(nBot);
         const br = baseCard.getBoundingClientRect();
         const bTop = (br.top - lanesRect.top) / z, bBot = (br.bottom - lanesRect.top) / z;
-        const yFork = a.y + a.r + 10;          // vodorovná „rozbočka" těsně pod horním uzlem
-        const yJoin = b.y - b.r - 10;          // vodorovné „sloučení" těsně nad dolním uzlem
+        const yFork = a.y + a.r + 18;          // vodorovná „rozbočka" pod horním uzlem
+        const yJoin = b.y - b.r - 18;          // vodorovné „sloučení" nad dolním uzlem
         const col = 'rgba(251,146,60,0.95)';
         const chev = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5) : 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x - 5) + ',' + (y + 5)) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
         vCards.forEach(vc => {
