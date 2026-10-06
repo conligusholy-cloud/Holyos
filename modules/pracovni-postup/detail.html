@@ -216,7 +216,7 @@
     .op-node-end:hover .op-node-dot { border-color:#22c55e; color:#22c55e; box-shadow:0 0 0 4px rgba(34,197,94,0.2); transform:scale(1.15); }
     .op-node-label { font-size:10.5px; color:var(--text2); margin-top:3px; }
     @keyframes opPulse { 0%,100% { box-shadow:0 0 0 3px rgba(34,197,94,0.25); } 50% { box-shadow:0 0 0 8px rgba(34,197,94,0.45); } }
-    .start-box { margin:0 auto 2px; width:max-content; display:flex; align-items:center; gap:10px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.55); color:#86efac; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:800; letter-spacing:.4px; }
+    .start-box { margin:28px auto 10px; width:max-content; display:flex; align-items:center; gap:12px; background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.65); color:#86efac; border-radius:26px; padding:12px 26px; font-size:16px; font-weight:800; letter-spacing:.6px; box-shadow:0 0 0 6px rgba(34,197,94,0.07), 0 6px 20px rgba(34,197,94,0.18); }
     .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
@@ -723,7 +723,7 @@
       .op-variants{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
     .eq-box{position:absolute;right:0;top:0;width:680px;background:var(--surface);border:1px solid rgba(251,146,60,.45);border-radius:10px;padding:8px 12px;z-index:2}
     .lane-main.has-variants{position:relative}
-    .lane-main.has-variants .eq-box{position:static;width:auto;margin:-34px 0 14px 716px}
+    .lane-main.has-variants .eq-box{position:static;width:auto;margin:-52px 0 16px 716px}
     .eq-head{display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;color:#fb923c;margin-bottom:4px}.eq-head .muted{font-weight:500;font-size:11px}
     .eq-table{border-collapse:collapse;width:100%;font-size:12px}.eq-table td{padding:3px 6px 3px 0;vertical-align:top;border-top:1px solid var(--border)}.eq-table td.eq-g{font-weight:700;color:var(--text2);white-space:nowrap;width:1%;padding-right:12px}
     .eq-item{display:inline-block;border:1px solid rgba(251,146,60,.5);color:#fb923c;border-radius:999px;padding:1px 9px;margin:2px 2px 2px 0}.eq-item small{color:var(--text2);margin-left:3px}
@@ -731,6 +731,7 @@
     .eq-vars{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.eq-var{font-size:12px;border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}.eq-var.on{border-color:rgba(251,146,60,.7);background:rgba(251,146,60,.1);color:#fb923c}
     .eq-legend{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
     .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
+    .eq-var.used{text-decoration:line-through;opacity:.45;cursor:not-allowed;border-style:dotted}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
@@ -748,6 +749,7 @@
     /* Osa hlavní linie (uzly, start, hotový výrobek) zůstává nad sloupcem základu, i když vedle jsou varianty */
     .lane-main.has-variants .op-node, .lane-main.has-variants .start-box, .lane-main.has-variants .outputs-box{width:680px;max-width:680px;margin-left:0;margin-right:0}
     .lane-main.has-variants .start-box{width:max-content;margin-left:0;transform:translateX(calc(340px - 50%))}
+    .lane-main.has-variants .start-box{margin-top:28px}
     /* Karta varianty = stejný formát jako paralelní operace (fialový rámeček, podklad, fialový krok) */
     /* Varianty = oranžová (paralelní operace zůstávají fialové) */
     .op-card.is-variant{border-color:rgba(249,115,22,0.6);background:rgba(249,115,22,0.06);margin-bottom:0}
@@ -1607,6 +1609,7 @@
     function eqAdd() { const last = eqDraft[eqDraft.length - 1]; eqDraft.push({ group_name: last ? last.group_name : '', name: '', variant_ids: [], note: '' }); renderEquipmentEditor(); }
     function eqDel(i) { eqDraft.splice(i, 1); renderEquipmentEditor(); }
     function eqSet(i, k, v) { eqDraft[i][k] = v; }
+    function eqSetGroup(i, v) { eqDraft[i].group_name = v; clearTimeout(eqSetGroup._t); eqSetGroup._t = setTimeout(() => { const el = document.activeElement; const pos = el && el.selectionStart; renderEquipmentEditor(); const again = document.querySelector('#equipment-modal .eq-row:nth-child(' + (i + 3) + ') input'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} } }, 400); }
     function eqToggle(i, vid, on) {
       const v = provisionById(vid); if (!v) return;
       const baseKey = v.variant_of_id || v.id;
@@ -1619,11 +1622,13 @@
       const m = document.getElementById('equipment-modal'); if (!m) return;
       const inp = 'style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;"';
       const vars = allVariantsList();
+      // Provedení už použité jinou položkou TÉŽE skupiny je v ostatních položkách škrtnuté a nejde zvolit (jedna barva = jedno provedení)
+      const usedBy = (i, vid) => { const g = (eqDraft[i].group_name || '').trim().toLowerCase(); for (let j = 0; j < eqDraft.length; j++) { if (j === i) continue; if ((eqDraft[j].group_name || '').trim().toLowerCase() !== g) continue; if (eqDraft[j].variant_ids.includes(vid)) return eqDraft[j]; } return null; };
       const rows = eqDraft.map((e, i) => '<div class="eq-row">' +
-        '<div class="eq-fields"><input placeholder="Skupina (Barva, Rám…)" value="' + esc(e.group_name) + '" oninput="eqSet(' + i + ',\'group_name\',this.value)" ' + inp + '>' +
+        '<div class="eq-fields"><input placeholder="Skupina (Barva, Rám…)" value="' + esc(e.group_name) + '" oninput="eqSetGroup(' + i + ',this.value)" ' + inp + '>' +
         '<input placeholder="Název (Červená…)" value="' + esc(e.name) + '" oninput="eqSet(' + i + ',\'name\',this.value)" ' + inp + '>' +
         '<button class="btn" onclick="eqDel(' + i + ')" title="Odebrat" style="color:#ef4444;">&#128465;</button></div>' +
-        '<div class="eq-vars">' + (vars.length ? vars.map(v => '<label class="eq-var' + (e.variant_ids.includes(v.id) ? ' on' : '') + (v._isBase ? ' base' : '') + '"><input type="checkbox" ' + (e.variant_ids.includes(v.id) ? 'checked' : '') + ' onchange="eqToggle(' + i + ',' + v.id + ',this.checked)"> ' + esc(variantLabelOf(v)) + '</label>').join('') : '<span class="muted" style="font-size:12px;">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</span>') + '</div>' +
+        '<div class="eq-vars">' + (vars.length ? vars.map(v => { const u = usedBy(i, v.id); return '<label class="eq-var' + (e.variant_ids.includes(v.id) ? ' on' : '') + (v._isBase ? ' base' : '') + (u ? ' used' : '') + '"' + (u ? ' title="Už použito u položky ' + esc(u.group_name + ' – ' + u.name) + ' — ve skupině ' + esc(e.group_name) + ' může být každé provedení jen jednou"' : '') + '><input type="checkbox" ' + (e.variant_ids.includes(v.id) ? 'checked' : '') + (u ? ' disabled' : '') + ' onchange="eqToggle(' + i + ',' + v.id + ',this.checked)"> ' + esc(variantLabelOf(v)) + '</label>'; }).join('') : '<span class="muted" style="font-size:12px;">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</span>') + '</div>' +
         '</div>').join('');
       m.innerHTML = '<div class="modal-box" style="width:min(900px,94vw);max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
