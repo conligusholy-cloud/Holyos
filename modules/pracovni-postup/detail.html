@@ -737,8 +737,8 @@
     .eq-legend{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
     .eqg{border:1px solid rgba(251,146,60,.4);border-radius:12px;padding:10px 12px;margin-top:10px;background:rgba(251,146,60,.03)}
     .eqg-head{display:flex;gap:10px;align-items:center;margin-bottom:8px}.eqg-name{font-weight:700;min-width:220px}
-    .eqg-table{border-collapse:collapse;width:100%;font-size:12.5px}.eqg-table th{text-align:left;font-size:11px;color:var(--text2);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}.eqg-table td{padding:5px 6px;vertical-align:middle}
-    .eqg-sel{width:100%;min-width:150px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text2);font-size:12.5px}.eqg-sel.var{border-color:rgba(251,146,60,.7);color:#fb923c;font-weight:600}.eqg-sel.base{border-color:rgba(20,184,166,.8);color:#14b8a6;font-weight:600}
+    .eqg{overflow-x:auto}.eqg-table{border-collapse:collapse;width:100%;font-size:12.5px}.eqg-table th{text-align:left;font-size:11px;color:var(--text2);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}.eqg-table td{padding:5px 6px;vertical-align:middle}
+    .eqg-sel{width:100%;min-width:130px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text2);font-size:12.5px}.eqg-sel.var{border-color:rgba(251,146,60,.7);color:#fb923c;font-weight:600}.eqg-sel.base{border-color:rgba(20,184,166,.8);color:#14b8a6;font-weight:600}
     .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
     .eq-var.used{text-decoration:line-through;opacity:.45;cursor:not-allowed;border-style:dotted}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
@@ -1748,7 +1748,7 @@
             '<td><button class="btn" onclick="eqDel(' + i + ')" title="Odebrat položku" style="color:#ef4444;padding:4px 8px;">&#128465;</button></td></tr>'; }).join('') +
           '</tbody></table></div>';
       });
-      m.innerHTML = '<div class="modal-box" style="width:min(1100px,96vw);max-height:90vh;overflow:auto;">' +
+      m.innerHTML = '<div class="modal-box" style="width:min(1500px,96vw);max-width:none;max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
         '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Řádek = položka výbavy (např. <b>Barva – Červená</b>), sloupce = operace, které mají varianty. V buňce vyber, jaké provedení operace položka znamená; „— netýká se" nech tam, kde položka operaci neovlivňuje. V jedné skupině může být každé provedení jen u jedné položky.</p>' +
         (cols.length ? body : '<p class="muted">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</p>') +
