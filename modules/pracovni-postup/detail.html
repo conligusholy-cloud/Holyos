@@ -725,7 +725,9 @@
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
     .lane-main > .op-card, .lane-par .op-card{width:680px}
-    .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px}
+    .lanes{overflow-x:auto;overflow-y:visible;padding-bottom:6px;cursor:grab;user-select:none}
+    .lanes.panning{cursor:grabbing}
+    .lanes .op-card, .lanes .op-node, .lanes .par-wrap, .lanes button, .lanes input{cursor:auto}
     .variant-link{position:absolute;top:-18px;left:0;font-size:11px;color:#fb923c;font-weight:700;letter-spacing:.2px;white-space:nowrap;display:flex;align-items:center;gap:6px}
     .variant-link span{display:none}
     .variant-link.base{color:#14b8a6} .variant-link.base span{border-top-color:rgba(20,184,166,.7)}
@@ -1409,6 +1411,30 @@
         '</defs>');
       lane.style.minHeight = maxBottom + 'px';
     }
+    // Posun plátna myší: chytit prázdné místo plátna a táhnout (vodorovně roluje .lanes, svisle stránku)
+    (function () {
+      let pan = null;
+      document.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        const lanes = e.target && e.target.closest ? e.target.closest('#lanes') : null;
+        if (!lanes) return;
+        // Neposouvat, když uživatel klikl na kartu, uzel, tlačítko, pole nebo úchop spoje
+        if (e.target.closest('.op-card, .op-node, .par-wrap, button, input, select, textarea, a, .par-grab, .start-box, .outputs-box')) return;
+        const scroller = document.scrollingElement || document.documentElement;
+        pan = { x: e.clientX, y: e.clientY, sl: lanes.scrollLeft, st: scroller.scrollTop, lanes, moved: false };
+        lanes.classList.add('panning');
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!pan) return;
+        const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+        if (Math.abs(dx) + Math.abs(dy) > 3) pan.moved = true;
+        pan.lanes.scrollLeft = pan.sl - dx;
+        (document.scrollingElement || document.documentElement).scrollTop = pan.st - dy;
+      });
+      document.addEventListener('mouseup', () => { if (pan) { pan.lanes.classList.remove('panning'); pan = null; } });
+    })();
+
     // Přetažení začátku/konce paralelní větve na jiný uzel (levým tlačítkem chytit vodorovnou čáru)
     (function () {
       let drag = null; // { end:'start'|'end', ops:[ids], ghost }
