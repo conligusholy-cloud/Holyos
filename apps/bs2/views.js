@@ -370,6 +370,15 @@ function supporterCompounder(s) {
       ],
       timeline: [['Den 0', 'Piloti v provozu'], ['1–6 měsíců', 'sběr dat o místě: obrat, vytížení, opakovaní zákazníci'], ['~6 měsíců', 'místo se verifikuje — nebo Pilota přemístíme jinam']],
       note: 'Dle statistik víme zhruba <b>po 6 měsících</b>, jestli se místo verifikuje, nebo je potřeba stroj přemístit na jiné místo. Díky tomu nikdy nerozšiřujete síť na místě, které nefunguje — a banka vidí, že rozhodujete podle čísel.' },
+    { no: '2', k: 'Po 6 měsících', title: 'Násobení', visual: 'scale', lead: 'Uplynulo 6 měsíců. Už víte, <b>kteří Piloti místo verifikovali</b> a kteří ne. Od této chvíle se mění pravidla: na ověřené místo jde další stroj s <b>0 % akontací</b> — stroj splácí sám sebe a ještě něco zbývá.',
+      points: [
+        ['check', 'Verifikované místo = stroj s 0 % akontací', 'Na místo, které prokázalo čísla, dodáme <b>další prádlomat bez akontace</b>. Nic nevkládáte — stroj si na sebe vydělá a splátku pokryje z vlastního obratu.'],
+        ['network', 'Neverifikované místo = počkat, nebo přemístit', 'Pilot, který místo neověřil, buď ještě chvíli počká, nebo ho <b>přesuneme na nové místo</b>. Nic se neztrácí — stroj jede dál, jen jinde.'],
+        ['box', 'Přistavujete další a další', 'Každé ověřené místo unese víc strojů a každý nový Pilot otevírá další místo. Síť roste z vlastních výnosů, ne z Vašich úspor.'],
+        ['sun', 'Po pěti letech zůstane všechno Vám', 'Máte dobré místo, víte, kolik tam vyděláte, a víte, že se prádlomat sám zaplatí. Po splacení <b>je stroj i jeho výnos Váš</b> — každý měsíc, napořád.'],
+      ],
+      decision: true,
+      note: 'Tady je potřeba udělat důležité rozhodnutí: <b>Kolik prádlomatů vlastně chci?</b> 3, 5, 10 nebo 100? Otázka nezní, kolik si můžete dovolit — ale <b>kolik peněz chcete mít pravidelně měsíčně za 5 let</b>.' },
   ];
   return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
   <style>
@@ -420,6 +429,31 @@ function supporterCompounder(s) {
   .cp .pl-cap .pl-arrow{color:var(--text3);font-size:18px} .cp .pl-cap .pl-goal{color:var(--ok);font-weight:700}
   @keyframes pmfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
   @media(max-width:760px){.cp .pl-row{grid-template-columns:1fr;gap:26px} .cp .pl img{max-width:300px}}
+  .cp .scale{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin:4px 0 22px}
+  .cp .sc-col{padding:16px;border-radius:18px;border:1px solid var(--border);background:rgba(4,8,16,.45);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;position:relative}
+  .cp .sc-col.ok{border-color:rgba(47,227,160,.45);background:radial-gradient(ellipse at 50% 100%,rgba(47,227,160,.12),transparent 60%),rgba(4,8,16,.45)}
+  .cp .sc-col.wait{border-color:rgba(245,158,11,.4)}
+  .cp .sc-h{width:100%;display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:700} .cp .sc-h i{width:8px;height:8px;border-radius:50%}
+  .cp .sc-col.ok .sc-h{color:var(--ok)} .cp .sc-col.ok .sc-h i{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+  .cp .sc-col.wait .sc-h{color:#f59e0b} .cp .sc-col.wait .sc-h i{background:#f59e0b;box-shadow:0 0 10px #f59e0b}
+  .cp .sc-m{position:relative;width:38%;min-width:150px;text-align:center;animation:pmfloat 5s ease-in-out infinite} .cp .sc-m.new{animation-delay:-2s} .cp .sc-col.wait .sc-m{width:52%}
+  .cp .sc-m img{width:100%;height:auto;filter:drop-shadow(0 18px 30px rgba(0,0,0,.65)) drop-shadow(0 0 22px rgba(79,209,255,.22))}
+  .cp .sc-m.dim img{filter:grayscale(.7) brightness(.7) drop-shadow(0 18px 30px rgba(0,0,0,.65))}
+  .cp .sc-m .pl-tag{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);padding:5px 12px;border-radius:999px;font-size:11.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));white-space:nowrap;box-shadow:0 8px 24px rgba(30,134,224,.45)}
+  .cp .sc-m .pl-tag.z{background:linear-gradient(135deg,#1ea97c,var(--ok));box-shadow:0 8px 24px rgba(47,227,160,.4)} .cp .sc-m .pl-tag.g{background:#3a4454;box-shadow:none}
+  .cp .sc-plus{font-size:34px;font-weight:900;color:var(--ok);text-shadow:0 0 18px rgba(47,227,160,.6)} .cp .sc-arrow{font-size:28px;color:#f59e0b}
+  .cp .sc-t{width:100%;text-align:center;font-size:13px;color:var(--text2);margin-top:10px}
+  .cp .dec{margin-top:14px;padding:20px 22px;border-radius:18px;border:1px solid rgba(124,92,255,.45);background:linear-gradient(135deg,rgba(124,92,255,.14),rgba(30,134,224,.1))}
+  .cp .dec-q{font-size:clamp(20px,2.6vw,28px);font-weight:900;letter-spacing:-.02em;margin-bottom:12px}
+  .cp .dec-opts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .cp .dec-o{font:inherit;font-weight:800;font-size:20px;min-width:72px;padding:12px 18px;border-radius:14px;border:1px solid var(--border2);background:rgba(4,8,16,.6);color:var(--text2);cursor:pointer;transition:all .2s}
+  .cp .dec-o:hover{color:var(--text);border-color:rgba(79,209,255,.5)} .cp .dec-o.on{color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));border-color:transparent;box-shadow:0 10px 30px rgba(30,134,224,.4);transform:translateY(-2px)}
+  .cp .dec-out{display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:14px;background:rgba(4,8,16,.5);border:1px solid var(--border);margin-bottom:12px}
+  .cp .dec-k{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .cp .dec-out b{display:block;font-size:clamp(22px,3vw,32px);letter-spacing:-.02em;line-height:1.1;background:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .dec-s{display:block;font-size:13px;color:var(--text2);margin-top:2px}
+  .cp .dec-ask{font-size:15px;line-height:1.5;color:var(--text)} .cp .dec-ask b{color:var(--accent2)}
+  @media(max-width:760px){.cp .scale{grid-template-columns:1fr}}
   .cp .ph-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px}
   .cp .ph-grid .c{padding:16px 18px;border-radius:16px;border:1px solid var(--border);background:rgba(4,8,16,.55)}
   .cp .ph-grid .i{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);margin-bottom:10px}
@@ -443,9 +477,14 @@ function supporterCompounder(s) {
     ${PHASES.map(ph => `<section class="ph">
       <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row">${[1, 2, 3].map(i => `<div class="pl" style="animation-delay:${(i - 1) * -1.7}s"><img src="/img/pradlomat.webp" alt="Pilot ${i}" loading="lazy" decoding="async"><span class="pl-tag">Pilot ${i}</span><span class="pl-mini">MINI</span></div>`).join('')}</div><div class="pl-cap"><span><i></i>1–3 Piloti · verze MINI · maximální akontace</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
+      ${ph.visual === 'scale' ? `<div class="scale"><div class="sc-col ok"><div class="sc-h"><i></i>Místo verifikováno</div><div class="sc-m"><img src="/img/pradlomat.webp" alt="Pilot" loading="lazy" decoding="async"><span class="pl-tag">Pilot</span></div><div class="sc-plus">+</div><div class="sc-m new"><img src="/img/pradlomat.webp" alt="Další stroj" loading="lazy" decoding="async"><span class="pl-tag z">0 % akontace</span></div><div class="sc-t">stroj splácí sám sebe — a ještě něco zbývá</div></div>
+        <div class="sc-col wait"><div class="sc-h"><i></i>Místo neverifikováno</div><div class="sc-m dim"><img src="/img/pradlomat.webp" alt="Pilot" loading="lazy" decoding="async"><span class="pl-tag g">Pilot</span></div><div class="sc-arrow">⟶</div><div class="sc-t">počkat · nebo přemístit na nové místo a verifikovat znovu</div></div></div>` : ''}
       <div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>
       ${ph.timeline ? `<div class="ph-tl">${ph.timeline.map((t, i) => `<div class="s"><i>${i + 1}</i><b>${esc(t[0])}</b><span>${esc(t[1])}</span></div>`).join('')}</div>` : ''}
       ${ph.note ? `<p class="ph-note">${ph.note}</p>` : ''}
+      ${ph.decision ? `<div class="dec"><div class="dec-q">Kolik prádlomatů vlastně chci?</div><div class="dec-opts">${[3, 5, 10, 100].map((n, i) => `<button type="button" class="dec-o${i === 1 ? ' on' : ''}" data-n="${n}" onclick="for(const b of this.parentNode.children)b.classList.remove('on');this.classList.add('on');document.getElementById('dec-n').textContent=this.dataset.n">${n}</button>`).join('')}</div>
+        <div class="dec-out"><div><span class="dec-k">za 5 let</span><b><span id="dec-n">5</span> prádlomatů</b><span class="dec-s">splacených · Vašich · každý měsíc vydělávají jen Vám</span></div></div>
+        <div class="dec-ask">Otázka tedy nezní „kolik strojů", ale: <b>Kolik peněz chcete mít pravidelně měsíčně za 5 let?</b></div></div>` : ''}
     </section>`).join('')}
 
     <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
