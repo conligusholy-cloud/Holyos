@@ -1746,7 +1746,7 @@
   function pfRenderVariants() {
     var box = document.getElementById('pf-variants'), rows = document.getElementById('pf-variants-rows'), eqRows = document.getElementById('pf-equipment-rows');
     var withVar = (pfSelected && pfSelected.operations || []).filter(function (o) { return (o.variants || []).length; });
-    if (!withVar.length) { box.style.display = 'none'; rows.innerHTML = ''; eqRows.innerHTML = ''; return; }
+    if (!withVar.length && !(pfSelected && (pfSelected.output_variants || []).length)) { box.style.display = 'none'; rows.innerHTML = ''; eqRows.innerHTML = ''; return; }
     box.style.display = '';
     // Výbava po skupinách (Barva: Základ / Červená / Bílá) — výběr nastaví varianty u všech dotčených operací
     var eq = (pfSelected.equipment || []); var groups = {};
@@ -1777,7 +1777,8 @@
     var choices = pfVariantChoices() || {};
     var codes = (pfSelected.operations || []).filter(function (o) { return (o.variants || []).length; }).map(function (o) { var vid = choices[o.id]; if (!vid) return '?'; var v = (o.variants || []).find(function (x) { return x.id === vid; }); return (v || o).variant_code || '?'; });
     var withVar = (pfSelected.operations || []).some(function (o) { return (o.variants || []).length; });
-    box.style.display = withVar ? '' : 'none'; val.textContent = pfSelected.code + (codes.length ? '-' + codes.join('-') : '');
+    var ovCode = ''; (pfEquipmentIds() || []).forEach(function (id) { var e = (pfSelected.equipment || []).find(function (x) { return x.id === id; }); if (e && e.output_variant_id) { var ov = (pfSelected.output_variants || []).find(function (x) { return x.id === e.output_variant_id; }); if (ov) ovCode = '-' + ov.code; } });
+    box.style.display = (withVar || (pfSelected.output_variants || []).length) ? '' : 'none'; val.textContent = pfSelected.code + (codes.length ? '-' + codes.join('-') : '') + ovCode;
   }
   // Operace s variantami, u kterých ještě není zvoleno provedení
   function pfMissingChoices() {

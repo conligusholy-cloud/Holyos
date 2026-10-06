@@ -1385,6 +1385,7 @@ model Product {
   // Hotové výrobky — co se naskladní po dokončení postupu (prázdné = výrobek sám ×1; nářezový plán = více dílů)
   outputs ProductOutput[] @relation("ProductOutputParent")
   equipment ProductEquipment[] // Výbava: pojmenované kombinace variant operací (Barva – Červená …)
+  output_variants ProductOutputVariant[]
   used_as_output ProductOutput[] @relation("ProductOutputProduct")
 
   @@index([factorify_id])
@@ -1586,7 +1587,6 @@ model ProductOperation {
   allowed_people        OperationAllowedPerson[]
   variant_of            ProductOperation?       @relation("OperationVariants", fields: [variant_of_id], references: [id], onDelete: Cascade)
   variants              ProductOperation[]      @relation("OperationVariants")
-  variant_outputs       ProductOutput[]         @relation("OutputVariant")
   // Plánovač — BOM snapshot itemy, kde je tato operace zdrojem spotřeby materiálu
   bom_snapshot_items    BomSnapshotItem[]             @relation("BomSnapshotItemOperation")
   // Plánovač — instance operace pro výrobní dávky
@@ -3884,13 +3884,33 @@ model ProductEquipment {
   group_name  String   @db.VarChar(80) // „Barva", „Rám", „Verze"
   name        String   @db.VarChar(120) // „Červená"
   variant_ids Int[]    @default([]) // id variant operací (ProductOperation s variant_of_id)
+  output_variant_id Int? // varianta konce (jiné hotové výrobky/díly) pro tuto položku výbavy
   sort        Int      @default(0)
   note        String?  @db.Text
   created_at  DateTime @default(now())
   product     Product  @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  output_variant ProductOutputVariant? @relation(fields: [output_variant_id], references: [id], onDelete: SetNull)
 
   @@index([product_id])
+  @@index([output_variant_id])
   @@map("product_equipments")
+}
+
+// Varianta KONCE postupu („Červený", kód K01): vlastní sada hotových výrobků/dílů k naskladnění. Vybírá se přes výbavu.
+model ProductOutputVariant {
+  id         Int      @id @default(autoincrement())
+  product_id Int
+  code       String   @db.VarChar(20) // K01, K02 … unikátní v systému
+  name       String   @db.VarChar(120)
+  created_at DateTime @default(now())
+  product    Product         @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  outputs    ProductOutput[]
+  equipment  ProductEquipment[]
+  batches    ProductionBatch[]
+
+  @@unique([code])
+  @@index([product_id])
+  @@map("product_output_variants")
 }
 
 model ProductOutput {
@@ -3901,19 +3921,19 @@ model ProductOutput {
   quantity    Decimal  @default(1) @db.Decimal(12, 3)
   unit        String   @default("ks") @db.VarChar(20)
   note        String?  @db.VarChar(255)
-  // Výstup pro konkrétní provedení (varianta / základ operace): null = výchozí výstupy. Např. nářezový plán: jiná barva → jiné kódy dílů.
-  variant_id  Int?
+  // Varianta konce (ProductOutputVariant): null = výchozí výstupy. Např. nářezový plán: jiná barva → jiné kódy dílů.
+  output_variant_id Int?
   created_at  DateTime @default(now())
 
-  product      Product   @relation("ProductOutputParent", fields: [product_id], references: [id], onDelete: Cascade)
-  variant      ProductOperation? @relation("OutputVariant", fields: [variant_id], references: [id], onDelete: Cascade)
+  product        Product               @relation("ProductOutputParent", fields: [product_id], references: [id], onDelete: Cascade)
+  output_variant ProductOutputVariant? @relation(fields: [output_variant_id], references: [id], onDelete: Cascade)
   out_product  Product?  @relation("ProductOutputProduct", fields: [out_product_id], references: [id], onDelete: Cascade)
   out_material Material? @relation("ProductOutputMaterial", fields: [out_material_id], references: [id], onDelete: Cascade)
 
   @@index([product_id])
   @@index([out_product_id])
   @@index([out_material_id])
-  @@index([variant_id])
+  @@index([output_variant_id])
   @@map("product_outputs")
 }
 
@@ -4051,12 +4071,14 @@ model ProductionBatch {
   variant_label   String? @db.VarChar(255)
   // Výrobní kód = kód výrobku + kódy zvolených provedení po operacích (BS-M-5021-V04-V03-V07) — jednoznačně říká, co se vyrábí
   config_code     String? @db.VarChar(160)
+  output_variant_id Int? // zvolená varianta konce (co se naskladní)
 
   note String? @db.Text
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
+  output_variant ProductOutputVariant? @relation(fields: [output_variant_id], references: [id], onDelete: SetNull)
   product        Product           @relation("BatchProduct", fields: [product_id], references: [id])
   parent_batch   ProductionBatch?  @relation("BatchFeederHierarchy", fields: [parent_batch_id], references: [id])
   feeder_batches ProductionBatch[] @relation("BatchFeederHierarchy")

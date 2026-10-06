@@ -1020,6 +1020,7 @@
         workstationGroups = wsGroups || [];
         try { productOutputs = await api('/api/production/products/' + id + '/outputs'); } catch (e) { productOutputs = []; }
         try { productEquipment = await api('/api/production/products/' + id + '/equipment'); } catch (e) { productEquipment = []; }
+        try { productOutputVariants = await api('/api/production/products/' + id + '/output-variants'); } catch (e) { productOutputVariants = []; }
         try {
           const pr = await api('/api/hr/people?active=true');
           allPeople = (Array.isArray(pr) ? pr : pr.data || []).sort((a, b) => ((a.last_name || '') + a.first_name).localeCompare((b.last_name || '') + b.first_name, 'cs'));
@@ -1213,15 +1214,16 @@
           // Jednotný formát karet: hlavní linie, varianty i paralelní operace mají stejnou šířku (CARD_W)
           const CARD_W = 680; // = původní šířka paralelní operace; základ i varianty se jí přizpůsobují
           const maxVariants = mainOps.reduce((m, op) => Math.max(m, variantsOf(op.id).length), 0);
-          const laneW = CARD_W * (maxVariants + 1) + 36 * maxVariants;
-          html += '<div class="lane-main' + (maxVariants ? ' has-variants' : '') + '" id="lane-main" style="flex:0 0 auto;width:' + laneW + 'px;">';
+          const cols = Math.max(maxVariants, productOutputVariants.length);
+          const laneW = CARD_W * (cols + 1) + 36 * cols;
+          html += '<div class="lane-main' + ((maxVariants || productOutputVariants.length) ? ' has-variants' : '') + '" id="lane-main" style="flex:0 0 auto;width:' + laneW + 'px;">';
           // Uzel (bod) před každou hlavní operací a za poslední: sem se připojují / vrací paralelní operace
           const nodeHtml = (afterStep, beforeStep, i) => '<div class="op-node" data-after="' + (afterStep || '') + '" data-before="' + (beforeStep || '') + '" title="Uzel ' + (i) + ' — klikni pro paralelní operaci z tohoto bodu" onclick="openAddParallelFromNode(' + (beforeStep || 'null') + ')">'
             + '<div class="op-node-line"></div><div class="op-node-dot">' + i + '</div><div class="op-node-arrow">&#9660;</div></div>';
           // Start výroby — vizuální začátek hlavní linie (protějšek koncového uzlu „konec výroby")
-          const cfgCode = (maxVariants && Object.keys(eqSelected).length) ? eqConfigCode() : null;
+          const cfgCode = ((maxVariants || productOutputVariants.length) && Object.keys(eqSelected).length) ? eqConfigCode() : null;
           html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span>' + (cfgCode ? '<span class="start-cfg" title="Výrobní kód = kód výrobku + kódy zvolených provedení. Jednoznačně říká, co se vyrábí; dostane ho každá dávka.">' + esc(cfgCode) + '</span>' : '') + '</div>';
-          if (maxVariants) html += renderEquipmentBox();
+          if (maxVariants || productOutputVariants.length) html += renderEquipmentBox();
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             // Varianty operace — plnohodnotné karty VEDLE základu v jednom řádku (náhrada základní větve; vybírá se při zadání do výroby)
@@ -1235,10 +1237,9 @@
           html += '<div class="op-node op-node-end" data-after="' + (mainOps.length ? mainOps[mainOps.length - 1].step_number : '') + '" data-before="" title="Konec výroby — sem se vrací paralelní operace. Kliknutím přidáš další operaci hlavní linie." onclick="openAddOp()"><div class="op-node-line"></div><div class="op-node-dot op-node-plus">+</div><div class="op-node-label">konec výroby · přidat operaci</div></div>';
           // Výstupy: výchozí box pod základem; když má poslední operace s variantami varianty, každá dostane vlastní box
           // ve svém sloupci (jiné provedení = jiné kódy dílů, např. nářezový plán v jiné barvě)
-          const lastVarOp = mainOps.slice().reverse().find(o => variantsOf(o.id).length);
-          if (lastVarOp) {
+          if (productOutputVariants.length) {
             html += '<div class="op-row outputs-row">' + '<div style="width:680px;flex:0 0 680px;">' + renderOutputsBox(null) + '</div>' +
-              variantsOf(lastVarOp.id).map(v => '<div style="width:680px;flex:0 0 680px;">' + renderOutputsBox(v.id) + '</div>').join('') + '</div>';
+              productOutputVariants.map(ov => '<div style="width:680px;flex:0 0 680px;">' + renderOutputsBox(ov.id) + '</div>').join('') + '</div>';
           } else html += renderOutputsBox(null);
           html += '</div>';
           // Pravý pruh má stejnou šířku jako hlavní linie → karty paralelních operací mají stejné rozměry
@@ -1667,21 +1668,38 @@
       if (o.out_material) return (o.out_material.code ? o.out_material.code + ' · ' : '') + o.out_material.name;
       return '?';
     }
-    // Výstupy: výchozí (variant_id null) + per provedení (variant_id = id varianty). provId null = výchozí box.
-    function outputsFor(provId) { return productOutputs.filter(o => (o.variant_id || null) === (provId || null)); }
-    let outTarget = null; // id provedení, pro které se právě edituje (null = výchozí)
-    function renderOutputsBox(provId) {
-      const own = outputsFor(provId);
-      const inherits = provId && !own.length; // varianta bez vlastních výstupů → platí výchozí
+    // Výstupy: výchozí konec (output_variant_id null) + varianty konce (K01 Červený …) s vlastní sadou dílů
+    let productOutputVariants = [];
+    function outputsFor(ovId) { return productOutputs.filter(o => (o.output_variant_id || null) === (ovId || null)); }
+    let outTarget = null; // id varianty konce, pro kterou se edituje (null = výchozí konec)
+    async function createOutputVariant() {
+      const name = prompt('Název varianty konce (např. Červený, Nerez, SK verze):', '');
+      if (!name || !name.trim()) return;
+      try {
+        const ov = await api('/api/production/products/' + product.id + '/output-variants', { method: 'POST', body: JSON.stringify({ name: name.trim() }) });
+        productOutputVariants = await api('/api/production/products/' + product.id + '/output-variants');
+        renderTab(); toast('Konec ' + ov.code + ' „' + ov.name + '" vytvořen — nastav jeho hotové výrobky'); openOutputsEditor(ov.id);
+      } catch (e) { toast('Nepodařilo se vytvořit: ' + e.message, true); }
+    }
+    async function deleteOutputVariant(id) {
+      const ov = productOutputVariants.find(x => x.id === id); if (!ov) return;
+      if (!confirm('Smazat konec ' + ov.code + ' „' + ov.name + '" i jeho výstupy?')) return;
+      try { await api('/api/production/products/' + product.id + '/output-variants/' + id, { method: 'DELETE' }); productOutputVariants = productOutputVariants.filter(x => x.id !== id); productOutputs = await api('/api/production/products/' + product.id + '/outputs'); productEquipment = await api('/api/production/products/' + product.id + '/equipment'); closeOutputsEditor(); renderTab(); } catch (e) { toast('Smazání selhalo: ' + e.message, true); }
+    }
+    function renderOutputsBox(ovId) {
+      const own = outputsFor(ovId);
+      const ov = ovId ? productOutputVariants.find(x => x.id === ovId) : null;
+      const inherits = ov && !own.length; // varianta konce bez vlastních výstupů → platí výchozí
       const list = own.length ? own : outputsFor(null);
       const isDefault = !list.length;
       const rows = isDefault
         ? [{ label: (product.code ? product.code + ' · ' : '') + product.name, qty: 1, unit: 'ks' }]
         : list.map(o => ({ label: outputLabel(o), qty: Number(o.quantity), unit: o.unit }));
-      const pv = provId ? provisionById(provId) : null;
-      const head = pv ? '<span style="color:#fb923c;">⎘ ' + esc(pv.variant_code || '') + ' · ' + esc(pv.variant_name || '') + '</span> ' : '';
-      return '<div class="outputs-box' + (inherits ? ' inherits' : '') + (pv ? ' for-variant' : '') + '" onclick="openOutputsEditor(' + (provId || 'null') + ')" title="Co se naskladní po dokončení postupu' + (pv ? ' při provedení ' + esc(pv.variant_name || '') : '') + ' — klikni pro úpravu">' +
-        '<div class="outputs-head">📦 ' + head + (isDefault ? 'Hotový výrobek <span class="outputs-def">jeden výrobek</span>' : 'Hotové výrobky <span class="outputs-def">sada dílů</span>') + (inherits ? ' <span class="outputs-def" style="color:var(--text2);">stejné jako základ — klikni a nastav jiné díly</span>' : '') + '<span style="flex:1"></span><span class="outputs-edit">✎ upravit</span></div>' +
+      const head = ov ? '<span style="color:#fb923c;">⎘ ' + esc(ov.code) + ' · ' + esc(ov.name) + '</span> ' : (productOutputVariants.length ? '<span style="color:#14b8a6;">Základ</span> ' : '');
+      const on = eqRouteOutputVariant() === (ovId || null) && Object.keys(eqSelected).length;
+      return '<div class="outputs-box' + (inherits ? ' inherits' : '') + (ov ? ' for-variant' : '') + (on ? ' route-on' : '') + '" onclick="openOutputsEditor(' + (ovId || 'null') + ')" title="Co se naskladní po dokončení postupu' + (ov ? ' u konce ' + esc(ov.name) : '') + ' — klikni pro úpravu">' +
+        '<div class="outputs-head">📦 ' + head + (isDefault ? 'Hotový výrobek <span class="outputs-def">jeden výrobek</span>' : 'Hotové výrobky <span class="outputs-def">sada dílů</span>') + (inherits ? ' <span class="outputs-def" style="color:var(--text2);">stejné jako základ — klikni a nastav jiné díly</span>' : '') +
+        (!ov ? '<button class="btn" onclick="event.stopPropagation();createOutputVariant()" title="Vytvořit variantu konce (jiné hotové výrobky / kódy dílů) — vybírá se ve výbavě" style="margin-left:auto;padding:2px 8px;color:#fb923c;">&#10697;</button>' : '') + '<span style="flex:1"></span><span class="outputs-edit">✎ upravit</span></div>' +
         rows.map(r => '<div class="outputs-row"><span>' + esc(r.label) + '</span><b>' + r.qty + ' ' + esc(r.unit) + '</b></div>').join('') +
         (rows.length > 1 ? '<div class="outputs-foot">Např. nářezový plán: 1 deska → více dílů; po dokončení se naskladní všechny položky.</div>' : '') +
         '</div>';
@@ -1699,12 +1717,15 @@
       renderTab();
     }
     function eqClear() { eqSelected = {}; renderTab(); }
+    // Konec (varianta hotových výrobků) určený vyklikanou výbavou; null = výchozí
+    function eqRouteOutputVariant() { let out = null; Object.values(eqSelected).forEach(id => { const e = productEquipment.find(x => x.id === id); if (e && e.output_variant_id) out = e.output_variant_id; }); return out; }
     // Výrobní kód pro vyklikanou výbavu: kód výrobku + kódy zvolených provedení (v pořadí operací)
     function eqConfigCode() {
       const choice = eqRouteChoices();
       const codes = (product.operations || []).filter(o => variantsOf(o.id).length).sort((a, b) => a.step_number - b.step_number)
         .map(o => { const pv = provisionById(choice[o.id] || o.id); return pv && pv.variant_code ? pv.variant_code : null; }).filter(Boolean);
-      return (product.code || '') + (codes.length ? '-' + codes.join('-') : '');
+      const ovId = eqRouteOutputVariant(); const ov = ovId ? productOutputVariants.find(x => x.id === ovId) : null;
+      return (product.code || '') + (codes.length ? '-' + codes.join('-') : '') + (ov ? '-' + ov.code : '');
     }
     // Zvolené provedení pro každou základní operaci: { base_id: id karty (základ nebo varianta) }
     function eqRouteChoices() {
@@ -1733,7 +1754,8 @@
         rows += '<tr><td class="eq-g">' + esc(g) + '</td><td>' + list.map(e => {
           const vs = (e.variant_ids || []).map(id => provisionById(id)).filter(Boolean);
           const on = eqSelected[e.group_name] === e.id;
-          return '<span class="eq-item' + (on ? ' on' : '') + '" onclick="eqPick(' + e.id + ')" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + '\n\nKliknutím vybereš — zeleně se vyznačí cesta postupu">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).join(' ') + '</small></span>';
+          const ovc = e.output_variant_id && productOutputVariants.find(x => x.id === e.output_variant_id);
+          return '<span class="eq-item' + (on ? ' on' : '') + '" onclick="eqPick(' + e.id + ')" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + (ovc ? '\nKonec: ' + esc(ovc.code + ' ' + ovc.name) : '') + '\n\nKliknutím vybereš — zeleně se vyznačí cesta postupu">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).concat(ovc ? [ovc.code] : []).join(' ') + '</small></span>';
         }).join(' ') + '</td></tr>';
       });
       return '<div class="eq-box">' +
@@ -1742,7 +1764,7 @@
         '</div>';
     }
     function openEquipmentEditor() {
-      eqDraft = productEquipment.map(e => ({ group_name: e.group_name, name: e.name, variant_ids: (e.variant_ids || []).slice(), note: e.note || '' }));
+      eqDraft = productEquipment.map(e => ({ group_name: e.group_name, name: e.name, variant_ids: (e.variant_ids || []).slice(), note: e.note || '', output_variant_id: e.output_variant_id || null }));
       if (!eqDraft.length) eqDraft.push({ group_name: 'Barva', name: '', variant_ids: [], note: '' });
       eqDraft.sort((a, b) => (a.group_name || '').localeCompare(b.group_name || '', 'cs'));
       let m = document.getElementById('equipment-modal');
@@ -1776,19 +1798,20 @@
         const first = eqDraft[idxs[0]];
         body += '<div class="eqg">' +
           '<div class="eqg-head"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Skupina</span><input class="eqg-name" placeholder="Barva / Jazyk / Platební metody…" value="' + esc(first.group_name) + '" oninput="eqRenameGroup(' + idxs[0] + ',this.value)" onchange="renderEquipmentEditor()" ' + inp + '><button class="btn" onclick="eqAddItem(' + idxs[idxs.length - 1] + ')" style="margin-left:auto;">+ položka</button></div>' +
-          '<table class="eqg-table"><thead><tr><th style="min-width:160px;">Položka</th>' + cols.map(o => '<th>' + o.step_number + '. ' + esc(o.name) + (o.is_parallel ? ' <span style="color:#c084fc;">⫽</span>' : '') + '</th>').join('') + '<th></th></tr></thead><tbody>' +
+          '<table class="eqg-table"><thead><tr><th style="min-width:160px;">Položka</th>' + cols.map(o => '<th>' + o.step_number + '. ' + esc(o.name) + (o.is_parallel ? ' <span style="color:#c084fc;">⫽</span>' : '') + '</th>').join('') + (productOutputVariants.length ? '<th>📦 Konec (hotové výrobky)</th>' : '') + '<th></th></tr></thead><tbody>' +
           idxs.map(i => { const e = eqDraft[i]; return '<tr>' +
             '<td><input placeholder="Červená…" value="' + esc(e.name) + '" oninput="eqSet(' + i + ',\'name\',this.value)" ' + inp + ' style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;"></td>' +
             cols.map(o => { const provs = [o].concat(variantsOf(o.id)); const cur = provs.find(pv => e.variant_ids.includes(pv.id));
               return '<td><select onchange="eqCellPick(' + i + ',' + o.id + ',this.value)" class="eqg-sel' + (cur ? (cur.variant_of_id ? ' var' : ' base') : '') + '"><option value="">— netýká se</option>' +
                 provs.map(pv => { const u = usedIn(i, o.id, pv.id); return '<option value="' + pv.id + '"' + (cur && cur.id === pv.id ? ' selected' : '') + (u ? ' disabled' : '') + '>' + esc((pv.variant_code ? pv.variant_code + ' ' : '') + (pv.variant_name || (pv.variant_of_id ? 'varianta' : 'základ')) + (pv.variant_of_id ? '' : ' (základ)') + (u ? ' — už u „' + u.name + '"' : '')) + '</option>'; }).join('') + '</select></td>'; }).join('') +
+            (productOutputVariants.length ? '<td><select onchange="eqSet(' + i + ',\'output_variant_id\',this.value ? parseInt(this.value) : null);renderEquipmentEditor()" class="eqg-sel' + (e.output_variant_id ? ' var' : '') + '"><option value="">— netýká se (výchozí konec)</option>' + productOutputVariants.map(ov => '<option value="' + ov.id + '"' + (e.output_variant_id === ov.id ? ' selected' : '') + '>' + esc(ov.code + ' ' + ov.name) + '</option>').join('') + '</select></td>' : '') +
             '<td><button class="btn" onclick="eqDel(' + i + ')" title="Odebrat položku" style="color:#ef4444;padding:4px 8px;">&#128465;</button></td></tr>'; }).join('') +
           '</tbody></table></div>';
       });
       m.innerHTML = '<div class="modal-box" style="width:min(1500px,96vw);max-width:none;max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
         '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Řádek = položka výbavy (např. <b>Barva – Červená</b>), sloupce = operace, které mají varianty. V buňce vyber, jaké provedení operace položka znamená; „— netýká se" nech tam, kde položka operaci neovlivňuje. V jedné skupině může být každé provedení jen u jedné položky.</p>' +
-        (cols.length ? body : '<p class="muted">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</p>') +
+        ((cols.length || productOutputVariants.length) ? body : '<p class="muted">Výrobek nemá žádné varianty operací ani konce — nejdřív je vytvoř tlačítkem ⎘ u operace nebo u Hotového výrobku.</p>') +
         '<div style="display:flex;gap:8px;margin-top:12px;"><button class="btn" onclick="eqAddGroup()">+ Skupina</button><span style="flex:1"></span><button class="btn" onclick="closeEquipmentEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveEquipment()">Uložit</button></div>' +
         '</div>';
       if (focusLast) { const inputs = m.querySelectorAll('.eqg:last-child input'); const el = inputs[inputs.length - 1] || inputs[0]; if (el) el.focus(); }
@@ -1801,8 +1824,8 @@
       } catch (e) { toast('Uložení výbavy selhalo: ' + e.message, true); }
     }
 
-    function openOutputsEditor(provId) {
-      outTarget = provId || null;
+    function openOutputsEditor(ovId) {
+      outTarget = ovId || null;
       const list = outputsFor(outTarget);
       // varianta bez vlastních výstupů: předvyplní se výchozí, aby šlo jen zaměnit kódy dílů
       const src = list.length ? list : (outTarget ? outputsFor(null) : []);
@@ -1834,8 +1857,8 @@
           '<span style="margin-left:12px;font-size:12px;color:var(--text2);">Celkem ' + outDraft.filter(r => r.out_product_id || r.out_material_id).length + ' dílů · ' + outDraft.reduce((s2, r) => s2 + (Number(r.quantity) || 0), 0) + ' ks</span></div>';
       }
       m.innerHTML = '<div class="modal-box" style="width:min(820px,94vw);max-width:820px;">' +
-        '<h3>📦 Hotové výrobky — co se naskladní po dokončení postupu' + (outTarget && provisionById(outTarget) ? ' <span style="color:#fb923c;font-size:14px;">· provedení ' + esc((provisionById(outTarget).variant_code || '') + ' ' + (provisionById(outTarget).variant_name || '')) + '</span>' : '') + '</h3>' +
-        (outTarget ? '<p class="muted" style="font-size:12px;margin:0 0 10px;">Tyto výstupy platí jen při tomto provedení (např. jiná barva = jiné kódy dílů). Prázdná sada = použijí se výchozí výstupy základu.</p>' : '') +
+        '<h3>📦 Hotové výrobky — co se naskladní po dokončení postupu' + (outTarget && productOutputVariants.find(x => x.id === outTarget) ? ' <span style="color:#fb923c;font-size:14px;">· konec ' + esc(productOutputVariants.find(x => x.id === outTarget).code + ' ' + productOutputVariants.find(x => x.id === outTarget).name) + '</span> <button class="btn" onclick="deleteOutputVariant(' + outTarget + ')" style="color:#ef4444;font-size:12px;padding:2px 8px;margin-left:6px;">&#128465; smazat konec</button>' : '') + '</h3>' +
+        (outTarget ? '<p class="muted" style="font-size:12px;margin:0 0 10px;">Tyto výstupy platí jen pro tento konec (vybírá se ve výbavě; např. jiná barva = jiné kódy dílů). Prázdná sada = použijí se výchozí výstupy.</p>' : '') +
         '<div style="display:flex;gap:10px;">' +
           opt('single', '🔹', 'Jeden výrobek', 'Postup vyrobí tento výrobek — naskladní se ×1.') +
           opt('set', '🧩', 'Sada dílů', 'Z jednoho průchodu vznikne více dílů (nářezový plán) — naskladní se všechny.') +
@@ -1864,7 +1887,7 @@
       }
       // „Jeden výrobek" = prázdný seznam (výchozí chování: výrobek sám ×1)
       try {
-        productOutputs = await api('/api/production/products/' + product.id + '/outputs', { method: 'PUT', body: JSON.stringify({ outputs: rows, variant_id: outTarget }) });
+        productOutputs = await api('/api/production/products/' + product.id + '/outputs', { method: 'PUT', body: JSON.stringify({ outputs: rows, output_variant_id: outTarget }) });
         closeOutputsEditor(); renderTab(); toast('Hotové výrobky uloženy');
       } catch (e) { toast('Uložení selhalo: ' + e.message, true); }
     }
