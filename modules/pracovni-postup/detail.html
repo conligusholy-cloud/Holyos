@@ -222,7 +222,7 @@
     .start-box .start-cfg { flex-basis:100%; text-align:center; margin-top:6px; font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; color:#0b1a12; background:#22c55e; border-radius:999px; padding:3px 12px; letter-spacing:.3px; }
     .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
-    .outputs-row{margin-top:10px;margin-bottom:48px}.outputs-row .outputs-box{margin:0;max-width:none}
+    .outputs-row{margin-top:44px;margin-bottom:48px}.outputs-row .outputs-box{margin:0;max-width:none}
     .outputs-box.for-variant{border-color:rgba(251,146,60,.55);background:rgba(251,146,60,.06)}.outputs-box.inherits{border-style:dashed;opacity:.8}
     .outputs-head { display:flex; align-items:center; gap:8px; font-weight:700; font-size:13px; color:#86efac; margin-bottom:6px; }
     .outputs-def { font-size:10px; font-weight:500; color:var(--text2); border:1px solid var(--border); border-radius:10px; padding:1px 6px; }
@@ -1546,6 +1546,31 @@
         });
         if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="' + d + '" fill="none" stroke="' + green + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
+      }
+      // Konec: z koncového uzlu vede oranžová čárkovaná rozbočka NEBO k variantám konce (boxy hotových výrobků);
+      // zelená cesta pokračuje až do zvoleného výstupu (základ rovně dolů, varianta konce odbočkou).
+      {
+        const endNode = main.querySelector('.op-node-end');
+        const outBoxes = Array.from(main.querySelectorAll('.outputs-row .outputs-box'));
+        if (endNode && outBoxes.length > 1) {
+          const e = dotCenter(endNode); const col = 'rgba(251,146,60,0.95)';
+          const rects = outBoxes.map(bx => { const r = bx.getBoundingClientRect(); return { el: bx, x: (r.left + r.width / 2 - lanesRect.left) / z, top: (r.top - lanesRect.top) / z }; });
+          const yFork = rects[0].top - 22;
+          const far = Math.max(...rects.map(r => r.x));
+          variantSvg += '<path d="M' + e.x + ',' + yFork + ' H' + far + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5"/>';
+          variantSvg += '<text x="' + ((e.x + rects[1].x) / 2) + '" y="' + (yFork - 6) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + col + '" letter-spacing=".08em">NEBO</text>';
+          rects.slice(1).forEach(r => { variantSvg += '<path d="M' + r.x + ',' + yFork + ' V' + (r.top - 2) + '" fill="none" stroke="' + col + '" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#var-arrow)"/>'; });
+          variantSvg += '<path d="M' + e.x + ',' + (e.y + e.r) + ' V' + (rects[0].top - 2) + '" fill="none" stroke="rgba(255,255,255,0.28)" stroke-width="2"/>';
+          const chosen = rects.find(r => r.el.classList.contains('route-on'));
+          if (chosen && Object.keys(eqSelected).length) {
+            const d2 = chosen.x === rects[0].x ? 'M' + e.x + ',' + (e.y + e.r) + ' V' + chosen.top : 'M' + e.x + ',' + (e.y + e.r) + ' V' + yFork + ' H' + chosen.x + ' V' + chosen.top;
+            variantSvg += '<path d="' + d2 + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><path d="' + d2 + '" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
+          }
+        } else if (endNode && outBoxes.length === 1 && Object.keys(eqSelected).length) {
+          const e = dotCenter(endNode); const r = outBoxes[0].getBoundingClientRect(); const top = (r.top - lanesRect.top) / z;
+          const d2 = 'M' + e.x + ',' + (e.y + e.r) + ' V' + top;
+          variantSvg += '<path d="' + d2 + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round"/><path d="' + d2 + '" fill="none" stroke="rgba(34,197,94,0.95)" stroke-width="4" stroke-linecap="round"/>';
+        }
       }
       // Výbava: osa START → uzel 0 je spojená, box Výbavy se připojuje vodorovnou oranžovou čarou na osu
       const eqBox = main.querySelector('.eq-box'), startBox = main.querySelector('.start-box');
