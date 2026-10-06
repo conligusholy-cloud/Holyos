@@ -3108,7 +3108,7 @@ function isMaterialBlocked(material, batch) {
 function materialBlockReason(material) {
   const bad = (material.materials || []).filter(m => m.level !== 'on_site');
   const list = bad.slice(0, 4).map(m => (m.code ? m.code + ' ' : '') + (m.name || '') + ' (' + m.needed + ' ' + m.unit + ', na pracovišti ' + m.on_site + ')').join(', ');
-  const head = material.level === 'missing' ? 'Materiál chybí a není objednán' : material.level === 'ordered' ? 'Materiál je objednán, ale ještě nedorazil' : material.level === 'in_production' ? 'Polotovar se teprve vyrábí v dílčí dávce' + ((bad.find(m => m.in_production) || {}).in_production ? ' ' + bad.find(m => m.in_production).in_production.batches.join(', ') : '') : 'Materiál není připraven na pracovišti — skladník ho musí nejdřív přivézt';
+  const head = material.level === 'missing' ? 'Materiál chybí a není objednán' : material.level === 'not_produced' ? 'Polotovar chybí a není vyroben — nejdřív ho zadej do výroby' : material.level === 'ordered' ? 'Materiál je objednán, ale ještě nedorazil' : material.level === 'in_production' ? 'Polotovar se teprve vyrábí v dílčí dávce' + ((bad.find(m => m.in_production) || {}).in_production ? ' ' + bad.find(m => m.in_production).in_production.batches.join(', ') : '') : 'Materiál není připraven na pracovišti — skladník ho musí nejdřív přivézt';
   return head + (list ? ': ' + list : '') + (bad.length > 4 ? ' …' : '');
 }
 

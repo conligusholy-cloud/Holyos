@@ -5,14 +5,15 @@
 //   in_stock  🔵 materiál je ve firmě skladem (jen přesun na pracoviště)
 //   in_production 🟣 není skladem, ale vyrábí se v dílčí dávce (polotovar s vlastním postupem) — hotovo = planned_end dílčí dávky
 //   ordered   🟠 není skladem, ale chybějící množství pokrývá otevřená nákupní objednávka (ETA)
-//   missing   🔴 chybí a NENÍ objednáno → zamakat na nákupu
+//   missing   🔴 chybí a NENÍ objednáno → zamakat na nákupu (nakupovaný díl)
+//   not_produced 🔴 chybí a NENÍ vyrobeno → díl s vlastním pracovním postupem, bez dílčí dávky (vyráběný díl)
 //   none      ⚪ operace nemá žádný materiál
 // Úroveň operace = nejhorší z jejích materiálů. Pozn.: sklad se nerozpočítává mezi dávky
 // (stejný kus může „pokrývat" víc operací) — je to rychlý semafor, přesné MRP je u dávky.
 
 const { prisma: defaultPrisma } = require('../../config/database');
 
-const LEVEL_RANK = { none: 0, on_site: 1, in_stock: 2, in_production: 3, ordered: 4, missing: 5 };
+const LEVEL_RANK = { none: 0, on_site: 1, in_stock: 2, in_production: 3, ordered: 4, missing: 5, not_produced: 5 };
 
 /**
  * @param {Array} ops  BatchOperation záznamy; potřebují: id, operation.id (ProductOperation),
@@ -89,6 +90,9 @@ async function computeOpMaterialStatus(ops, opts = {}) {
     feederByKey.set(k, cur);
   }
 
+  // Vyráběné díly = materiál navázaný na výrobek s pracovním postupem
+  const producedMat = new Set((materialIds.length ? await tx.product.findMany({ where: { material_id: { in: materialIds }, operations: { some: { is_staging: false } } }, select: { material_id: true } }).catch(() => []) : []).map(p => p.material_id));
+
   // „Připraveno" ze čtečky
   const opIds = ops.map(o => o.id);
   const doneRows = await tx.materialPrepDone.findMany({ where: { batch_operation_id: { in: opIds }, kind: 'material' }, select: { batch_operation_id: true, material_id: true } }).catch(() => []);
@@ -110,7 +114,7 @@ async function computeOpMaterialStatus(ops, opts = {}) {
       else if (available >= needed) level = 'in_stock';
       else if (fd && !fd.done && fd.qty >= needed - available) level = 'in_production';
       else if (po.qty >= needed - available) level = 'ordered';
-      else level = 'missing';
+      else level = producedMat.has(om.material_id) ? 'not_produced' : 'missing';
       if (LEVEL_RANK[level] > LEVEL_RANK[worst]) worst = level;
       return {
         material_id: om.material_id, code: om.material ? om.material.code : null, name: om.material ? om.material.name : null,

@@ -598,7 +598,7 @@
       : 'bez času';
     const where = t.workstation ? `🏭 ${escapeHtml(t.workstation.name)}` : '🏭 pracoviště nepřiřazeno';
     const mates = (t.mates && t.mates.length) ? `<span>👥 s ${escapeHtml(t.mates.join(', '))}</span>` : '';
-    const MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 materiál skladem — čeká na přesun', '#60a5fa'], in_production: ['🟣 polotovar se teprve vyrábí', '#a78bfa'], ordered: ['🟠 materiál objednán, čeká se', '#f59e0b'], missing: ['🔴 materiál chybí — není objednán', '#ef4444'] };
+    const MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 materiál skladem — čeká na přesun', '#60a5fa'], in_production: ['🟣 polotovar se teprve vyrábí', '#a78bfa'], ordered: ['🟠 materiál objednán, čeká se', '#f59e0b'], missing: ['🔴 materiál chybí — není objednán', '#ef4444'], not_produced: ['🔴 polotovar chybí — není vyroben', '#ef4444'] };
     const ml = t.material && MAT[t.material.level];
     const matBadge = ml ? `<span style="color:${ml[1]};font-weight:600" title="${escapeHtml((t.material.materials || []).map(x => `${x.code || ''} ${x.name || ''}: potřeba ${x.needed} ${x.unit}, na pracovišti ${x.on_site}, skladem ${x.available}${x.on_order ? ', objednáno ' + x.on_order : ''}`).join('\n'))}">${ml[0]}</span>` : '';
     const blockedBox = `<div style="font-size:12px;color:#ef4444;text-align:right;line-height:1.3;max-width:260px"><b>⛔ Nelze začít</b><br>${escapeHtml(t.blocked_reason || 'materiál není připraven na pracovišti')}</div>`;

@@ -1924,8 +1924,8 @@
     finally { btn.disabled = false; btn.textContent = old; }
   };
   // Semafor materiálu u operace + tooltip s položkami (co, kolik, kde, objednávka/ETA)
-  var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], in_production: ['🟣 polotovar se vyrábí (dílčí dávka)', '#a78bfa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
-  var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', in_production: '🟣 vyrábí se', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ' };
+  var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], in_production: ['🟣 polotovar se vyrábí (dílčí dávka)', '#a78bfa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], not_produced: ['🔴 chybí — není vyrobeno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
+  var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', in_production: '🟣 vyrábí se', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ', not_produced: '🔴 NENÍ VYROBENO' };
   window.pv2MatBadge = function (m) {
     var lvl = (m && m.level) || 'none'; var d = PV2_MAT[lvl] || PV2_MAT.none;
     var tip = (m && m.materials && m.materials.length) ? m.materials.map(function (x) {
@@ -1943,7 +1943,7 @@
         if (onlyBatch && o.batch.id !== onlyBatch) return false;
         if (onlyWs && !(o.workstation && o.workstation.id === onlyWs)) return false;
         var lvl = (o.material && o.material.level) || 'none';
-        if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing' && lvl !== 'in_production') return false; }
+        if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing' && lvl !== 'not_produced' && lvl !== 'in_production') return false; }
         else if (onlyMat && lvl !== onlyMat) return false;
         if (!q) return true;
         var txt = [(o.operation && o.operation.name) || '', o.batch.batch_number, o.batch.product.code, o.batch.product.name, o.workstation ? o.workstation.name : '', o.status].concat(((o.workers || []).map(function (w) { return w.person.first_name + ' ' + w.person.last_name; }))).join(' ').toLowerCase();
