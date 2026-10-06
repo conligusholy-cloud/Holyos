@@ -379,6 +379,13 @@ function supporterCompounder(s) {
       ],
       decision: true,
       note: 'Tady je potřeba udělat důležité rozhodnutí: <b>Kolik prádlomatů vlastně chci?</b> 3, 5, 10 nebo 100? Otázka nezní, kolik si můžete dovolit — ale <b>kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování</b>.' },
+    { no: '3', k: 'Pořád dokola', title: 'Smyčka', visual: 'loop', lead: 'Fáze 3 je v podstatě <b>opakování fází 1 a 2</b>. Pilotem ověříte místo, na ověřené místo dodáme 100 % zafinancovaný stroj, Pilota přesunete na nové místo a ověřujete znovu. <b>A tak pořád dokola.</b> Jediné, co je na Vás: kolik opakování uděláte.',
+      points: [
+        ['sun', '1 · Pilot ověřuje místo', 'Jeden stroj MINI, ~6 měsíců, čísla rozhodnou.'],
+        ['check', '2 · Místo verifikováno', 'Obrat a vytížení potvrdily, že místo funguje.'],
+        ['box', '3 · Dodáme zafinancovaný stroj', 'Na ověřené místo jde prádlomat 100 % zafinancovaný bankou. Splácí se sám.'],
+        ['network', '4 · Pilot jede dál', 'Pilota přesunete na nové místo — a smyčka začíná znovu. Každé kolo = +1 stroj, který je po splacení Váš.'],
+      ] },
   ];
   return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
   <style>
@@ -444,6 +451,23 @@ function supporterCompounder(s) {
   .cp .sc-m .pl-tag.z{background:linear-gradient(135deg,#1ea97c,var(--ok));box-shadow:0 8px 24px rgba(47,227,160,.4)} .cp .sc-m .pl-tag.g{background:#3a4454;box-shadow:none}
   .cp .sc-plus{font-size:34px;font-weight:900;color:var(--ok);text-shadow:0 0 18px rgba(47,227,160,.6)} .cp .sc-arrow{font-size:28px;color:#f59e0b}
   .cp .sc-t{width:100%;text-align:center;font-size:13px;color:var(--text2);margin-top:10px}
+  .cp .loopwrap{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:center;margin:4px 0 22px}
+  .cp .loop{position:relative;aspect-ratio:1;max-width:460px;margin:0 auto;width:100%}
+  .cp .loop-svg{width:100%;height:100%;display:block}
+  .cp .loop-dash{animation:lpspin 30s linear infinite;transform-origin:210px 210px}
+  @keyframes lpspin{to{transform:rotate(360deg)}}
+  .cp .ln{position:absolute;width:150px;padding:10px 12px;border-radius:14px;border:1px solid var(--border2);background:rgba(4,8,16,.85);backdrop-filter:blur(8px);box-shadow:0 14px 30px rgba(0,0,0,.45);text-align:center}
+  .cp .ln i{position:absolute;top:-12px;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;font-style:normal;font-weight:800;font-size:12px;color:#fff;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 0 14px rgba(79,209,255,.5)}
+  .cp .ln b{display:block;font-size:13px;line-height:1.25;margin-top:4px} .cp .ln span{font-size:11px;color:var(--text2)}
+  .cp .ln.n1{top:2%;left:50%;transform:translateX(-50%)} .cp .ln.n2{top:50%;right:-4%;transform:translateY(-50%)} .cp .ln.n3{bottom:2%;left:50%;transform:translateX(-50%);border-color:rgba(47,227,160,.55)} .cp .ln.n3 i{background:linear-gradient(135deg,#1ea97c,var(--ok))} .cp .ln.n4{top:50%;left:-4%;transform:translateY(-50%)}
+  .cp .rep{padding:20px 22px;border-radius:18px;border:1px solid rgba(79,209,255,.4);background:linear-gradient(135deg,rgba(30,134,224,.14),rgba(124,92,255,.1))}
+  .cp .rep-q{font-size:clamp(20px,2.4vw,26px);font-weight:900;letter-spacing:-.02em} .cp .rep-sub{color:var(--text2);font-size:13.5px;margin:4px 0 14px} .cp .rep-sub b{color:var(--accent2)}
+  .cp .rep input[type=range]{width:100%;accent-color:#4fd1ff;margin:0 0 14px}
+  .cp .rep-out{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:rgba(4,8,16,.5);border:1px solid var(--border)}
+  .cp .rep-out b{display:block;font-size:clamp(22px,3vw,32px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .rep-money{margin-left:auto;text-align:right} .cp .rep-money b{background-image:linear-gradient(180deg,#fff,var(--accent2))}
+  .cp .rep-dots{display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;align-items:center} .cp .rep-dots i{width:14px;height:14px;border-radius:4px;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 0 8px rgba(79,209,255,.4)} .cp .rep-dots i:first-child{background:linear-gradient(135deg,#1ea97c,var(--ok))} .cp .rep-dots em{font-style:normal;font-size:12px;color:var(--text2);margin-left:4px}
+  @media(max-width:900px){.cp .loopwrap{grid-template-columns:1fr} .cp .ln{width:128px} .cp .ln.n2{right:-2%} .cp .ln.n4{left:-2%}}
   .cp .dec{margin-top:14px;padding:20px 22px;border-radius:18px;border:1px solid rgba(124,92,255,.45);background:linear-gradient(135deg,rgba(124,92,255,.14),rgba(30,134,224,.1))}
   .cp .dec-q{font-size:clamp(20px,2.6vw,28px);font-weight:900;letter-spacing:-.02em;margin-bottom:12px}
   .cp .dec-opts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
@@ -480,6 +504,30 @@ function supporterCompounder(s) {
     ${PHASES.map(ph => `<section class="ph">
       <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
+      ${ph.visual === 'loop' ? `<div class="loopwrap"><div class="loop">
+        <svg viewBox="0 0 420 420" class="loop-svg" aria-hidden="true">
+          <defs><linearGradient id="lpG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+          <marker id="lpA" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4fd1ff"/></marker></defs>
+          <circle cx="210" cy="210" r="150" fill="none" stroke="rgba(79,209,255,.12)" stroke-width="26"/>
+          <circle cx="210" cy="210" r="150" fill="none" stroke="url(#lpG)" stroke-width="3" stroke-dasharray="10 12" class="loop-dash"/>
+          <path d="M210 60 A150 150 0 0 1 360 210" fill="none" stroke="url(#lpG)" stroke-width="3" marker-end="url(#lpA)" class="loop-arc"/>
+          <path d="M360 210 A150 150 0 0 1 210 360" fill="none" stroke="url(#lpG)" stroke-width="3" marker-end="url(#lpA)" class="loop-arc"/>
+          <path d="M210 360 A150 150 0 0 1 60 210" fill="none" stroke="url(#lpG)" stroke-width="3" marker-end="url(#lpA)" class="loop-arc"/>
+          <path d="M60 210 A150 150 0 0 1 210 60" fill="none" stroke="url(#lpG)" stroke-width="3" marker-end="url(#lpA)" class="loop-arc"/>
+          <circle cx="210" cy="210" r="4" fill="#4fd1ff"><animateMotion dur="9s" repeatCount="indefinite" path="M0 -150 A150 150 0 1 1 -0.01 -150"/></circle>
+          <text x="210" y="200" text-anchor="middle" fill="#8ea2c2" font-size="12" font-weight="700" letter-spacing="2">SMYČKA</text>
+          <text x="210" y="232" text-anchor="middle" fill="#fff" font-size="26" font-weight="900">∞</text>
+        </svg>
+        <div class="ln n1"><i>1</i><b>Pilot ověřuje místo</b><span>~6 měsíců</span></div>
+        <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
+        <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 % od banky</span></div>
+        <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
+      </div>
+      <div class="rep"><div class="rep-q">Kolik opakování uděláte?</div><div class="rep-sub">Každé kolo smyčky = <b>+1 prádlomat</b>, který je po splacení Váš.</div>
+        <input type="range" id="rep-r" min="1" max="100" value="10" oninput="var n=+this.value;document.getElementById('rep-n').textContent=n;document.getElementById('rep-k').textContent=(n+1);document.getElementById('rep-m').textContent=((n+1)*25000).toLocaleString('cs-CZ');document.getElementById('rep-dots').innerHTML=Array.from({length:Math.min(n+1,60)},function(){return '<i></i>'}).join('')+((n+1)>60?'<em>+'+((n+1)-60)+'</em>':'')">
+        <div class="rep-out"><div><span class="dec-k">opakování</span><b><span id="rep-n">10</span>×</b></div><div><span class="dec-k">prádlomatů celkem</span><b><span id="rep-k">11</span></b><span class="dec-s">Pilot + 1 za každé kolo</span></div><div class="rep-money"><span class="dec-k">měsíčně pro Vás</span><b><span id="rep-m">275 000</span> Kč</b><span class="dec-s">odhad · 25 000 Kč / stroj</span></div></div>
+        <div class="rep-dots" id="rep-dots">${Array.from({ length: 11 }, () => '<i></i>').join('')}</div>
+      </div></div>` : ''}
       ${ph.visual === 'scale' ? `<div class="scale"><div class="sc-col ok"><div class="sc-h"><i></i>Místo verifikováno</div><div class="sc-m"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot</span></div><div class="sc-plus">+</div><div class="sc-m new"><img src="/img/pradlomat.webp?v=2" alt="Další stroj" loading="lazy" decoding="async"><span class="pl-tag z">100 % zafinancovaný</span></div><div class="sc-t">stroj splácí sám sebe — a ještě něco zbývá</div></div>
         <div class="sc-col wait"><div class="sc-h"><i></i>Místo neverifikováno</div><div class="sc-m dim"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag g">Pilot</span></div><div class="sc-arrow">⟶</div><div class="sc-t">počkat · nebo přemístit na nové místo a verifikovat znovu</div></div></div>` : ''}
       <div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>
