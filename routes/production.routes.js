@@ -2897,7 +2897,19 @@ router.post('/batches', async (req, res, next) => {
       }
     }
 
-    res.status(201).json({ ...batch, operations_generated: opsResult });
+    // Vícestupňová výroba: díly s vlastním postupem (polotovary), kterých není dost skladem → dílčí dávky před touto dávkou
+    let feeders = null;
+    if (auto_generate_operations !== false && !(opsResult && opsResult.error)) {
+      try {
+        const { createFeederBatches } = require('../services/planning/feeders');
+        feeders = await createFeederBatches(batch.id);
+      } catch (e) {
+        console.error('[batches/create] feeder batches failed:', e.message);
+        feeders = { error: e.message, created: [], skipped: [] };
+      }
+    }
+
+    res.status(201).json({ ...batch, operations_generated: opsResult, feeders });
   } catch (err) {
     if (err.code === 'P2003') return res.status(400).json({ error: 'Product, parent_batch nebo bom_snapshot neexistuje' });
     if (err.code === 'P2002') return res.status(409).json({ error: 'Konflikt batch_number — zkus znovu' });
@@ -2992,7 +3004,13 @@ router.delete('/batches/:id', async (req, res, next) => {
         if (docIds.length) await tx.warehouseDocument.deleteMany({ where: { id: { in: docIds }, movements: { none: {} } } }).catch(() => {});
         await tx.productionBatch.deleteMany({ where: { parent_batch_id: id, is_test: true } });
       }
-      // Feeder dávky odpoj (ne smazat), sloty uvolni, pak dávku (operace + logy jdou cascade)
+      // Automaticky založené dílčí dávky polotovarů, které ještě nezačaly, smaž s rodičem (rekurzivně); rozpracované jen odpoj
+      const dropFeeders = async (pid) => {
+        const kids = await tx.productionBatch.findMany({ where: { parent_batch_id: pid, batch_type: 'feeder', status: 'planned' }, select: { id: true } });
+        for (const k of kids) { await dropFeeders(k.id); await tx.slotAssignment.updateMany({ where: { batch_id: k.id }, data: { batch_id: null } }).catch(() => {}); await tx.productionBatch.delete({ where: { id: k.id } }); }
+      };
+      await dropFeeders(id);
+      // Ostatní feeder dávky odpoj (ne smazat), sloty uvolni, pak dávku (operace + logy jdou cascade)
       await tx.productionBatch.updateMany({ where: { parent_batch_id: id }, data: { parent_batch_id: null } });
       await tx.slotAssignment.updateMany({ where: { batch_id: id }, data: { batch_id: null } }).catch(() => {});
       await tx.productionBatch.delete({ where: { id } });
@@ -3090,7 +3108,7 @@ function isMaterialBlocked(material, batch) {
 function materialBlockReason(material) {
   const bad = (material.materials || []).filter(m => m.level !== 'on_site');
   const list = bad.slice(0, 4).map(m => (m.code ? m.code + ' ' : '') + (m.name || '') + ' (' + m.needed + ' ' + m.unit + ', na pracovišti ' + m.on_site + ')').join(', ');
-  const head = material.level === 'missing' ? 'Materiál chybí a není objednán' : material.level === 'ordered' ? 'Materiál je objednán, ale ještě nedorazil' : 'Materiál není připraven na pracovišti — skladník ho musí nejdřív přivézt';
+  const head = material.level === 'missing' ? 'Materiál chybí a není objednán' : material.level === 'ordered' ? 'Materiál je objednán, ale ještě nedorazil' : material.level === 'in_production' ? 'Polotovar se teprve vyrábí v dílčí dávce' + ((bad.find(m => m.in_production) || {}).in_production ? ' ' + bad.find(m => m.in_production).in_production.batches.join(', ') : '') : 'Materiál není připraven na pracovišti — skladník ho musí nejdřív přivézt';
   return head + (list ? ': ' + list : '') + (bad.length > 4 ? ' …' : '');
 }
 
@@ -3287,7 +3305,7 @@ router.post('/batch-operations/:id/start', async (req, res, next) => {
     const personId = parseInt(req.body?.person_id, 10);
     if (isNaN(personId)) return res.status(400).json({ error: 'person_id je povinné' });
 
-    const existing = await prisma.batchOperation.findUnique({ where: { id }, select: { id: true, status: true, operation: { select: { id: true } }, batch: { select: { quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
+    const existing = await prisma.batchOperation.findUnique({ where: { id }, select: { id: true, status: true, operation: { select: { id: true } }, batch: { select: { id: true, quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
     if (!existing) return res.status(404).json({ error: 'Operace nenalezena' });
     if (existing.status !== 'ready' && existing.status !== 'pending') {
       return res.status(409).json({ error: `Nelze startovat ze stavu '${existing.status}'` });

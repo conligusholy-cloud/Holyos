@@ -14,6 +14,7 @@ const { prisma } = require('../../config/database');
 const { generateBatchOperationsForBatch } = require('./batch-operations');
 const { scheduleBatchSmart } = require('./scheduler');
 const { computeMrpForBatch } = require('./mrp');
+const { createFeederBatches } = require('./feeders');
 
 const ROLLBACK = Symbol('simulate-rollback');
 
@@ -44,6 +45,9 @@ async function simulateProduction(p) {
 
       // Operace dávky dřív než MRP, aby MRP počítalo díly podle zvolených variant
       await generateBatchOperationsForBatch(batch.id, { tx });
+      // Polotovary s vlastním postupem → dílčí dávky (naplánují se před rodičem uvnitř scheduleBatchSmart)
+      let feeders = { created: [], skipped: [] };
+      try { feeders = await createFeederBatches(batch.id, { tx }); } catch (e) { feeders.error = e.message; }
       if (!ignoreStock) {
         try {
           const mrp = await computeMrpForBatch(batch.id, { tx });
@@ -78,6 +82,9 @@ async function simulateProduction(p) {
       if (count('crossed_slot_block')) bottlenecks.push({ type: 'block', severity: 'info', text: 'Plán překračuje blokaci slotu' });
       if (material.shortages.length) bottlenecks.push({ type: 'material', severity: material.material_ready_at ? 'warn' : 'error', text: material.shortages.length + ' materiálů chybí na skladě' + (material.material_ready_at ? ' — po objednání k dispozici ' + material.material_ready_at.toLocaleDateString('cs-CZ') : ' (bez dodací lhůty — termín nelze spočítat)') });
       if (material.error) bottlenecks.push({ type: 'material', severity: 'info', text: 'MRP: ' + material.error });
+      if (feeders.created.length) bottlenecks.push({ type: 'feeder', severity: 'info', text: 'Nejdřív se vyrobí ' + feeders.created.length + ' polotovar(ů): ' + feeders.created.map(f => f.quantity + '× ' + (f.product.code || f.product.name)).join(', ') });
+      if (feeders.skipped.length) bottlenecks.push({ type: 'feeder', severity: 'warn', text: 'Polotovary s variantami/výbavou je nutné zadat ručně: ' + feeders.skipped.map(f => f.quantity + '× ' + (f.product.code || f.product.name)).join(', ') });
+      if (feeders.error) bottlenecks.push({ type: 'feeder', severity: 'info', text: 'Dílčí dávky: ' + feeders.error });
 
       const finish = sch.plan_end ? new Date(sch.plan_end) : null;
       const meets = due && finish ? finish <= due : null;
@@ -88,6 +95,7 @@ async function simulateProduction(p) {
         operations_scheduled: sch.operations_scheduled, work_minutes: sch.work_minutes, wait_minutes: sch.wait_minutes, idle_pct: sch.idle_pct,
         shift: sch.shift_config, bottlenecks, material, feasible: !!finish && !bottlenecks.some(b => b.severity === 'error'),
         mode: sch.mode || 'forward', latest_start: sch.latest_start || null, late_minutes: sch.late_minutes || 0,
+        feeders: { created: feeders.created.map(f => ({ ...f, plan: (sch.feeders || []).find(x => x.id === f.id) || null })), skipped: feeders.skipped },
         operations: (sch.operations || []).map(o => ({ planned_start: o.planned_start, planned_end: o.planned_end, minutes: o.minutes, assignee: o.assigned_person_name, warnings: o.warnings })),
       };
       throw ROLLBACK; // nic neukládat

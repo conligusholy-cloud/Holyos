@@ -311,10 +311,16 @@ router.post('/batches/:id/schedule', async (req, res, next) => {
     // přes body.syncVelin = false (např. při testech / dry-run).
     const syncVelin = body.syncVelin !== false;
     // S termínem (due_date) plánuje zpětně od termínu (nejpozdější start), bez termínu dopředu od teď
+    // Polotovary s vlastním postupem → dílčí dávky (idempotentní; založí jen chybějící)
+    let feedersCreated = null;
+    try { feedersCreated = await require('../services/planning/feeders').createFeederBatches(id); } catch (e) { console.warn('[planning] createFeederBatches selhal:', e.message); }
     const result = await scheduleBatchSmart(id, { exclusive, forward: body.forward === true });
+    if (feedersCreated) result.feeders_created = feedersCreated;
 
     if (syncVelin) {
       try {
+        const feederIds = (result.feeders || []).map(f => f.id);
+        for (const fid of feederIds) { try { await syncBatchToVelin(fid); } catch (e) { console.warn('[planning] syncBatchToVelin (feeder) selhal:', e.message); } }
         const velinResults = await syncBatchToVelin(id);
         const created = velinResults.filter(r => r.created).length;
         const updated = velinResults.filter(r => r.task && !r.created).length;
@@ -624,6 +630,7 @@ router.get('/batches-plan', async (req, res, next) => {
       where: { status: { in: status } },
       select: {
         id: true, batch_number: true, quantity: true, status: true, priority: true, planned_start: true, planned_end: true, original_planned_start: true, original_planned_end: true, actual_start: true, actual_end: true, variant_label: true, config_code: true, due_date: true, is_test: true, ignore_stock: true, note: true, created_at: true,
+        batch_type: true, parent_batch_id: true, parent_batch: { select: { id: true, batch_number: true } },
         product: { select: { id: true, code: true, name: true } },
         batch_operations: { select: { id: true, status: true, planned_start: true, planned_end: true, started_at: true, finished_at: true, assigned_person: { select: { id: true, first_name: true, last_name: true } }, workers: { select: { person: { select: { id: true, first_name: true, last_name: true } } } }, workstation: { select: { id: true, name: true } } }, orderBy: { sequence: 'asc' } },
       },

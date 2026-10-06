@@ -1869,6 +1869,7 @@
         '⏱ ' + pv2DT(sch.plan_start) + ' → ' + pv2DT(sch.plan_end) + ' · ' + sch.operations_scheduled + ' operací · práce ' + Math.round((sch.work_minutes || 0) / 60 * 10) / 10 + ' h' + (sch.wait_minutes ? ' · čekání ' + Math.round(sch.wait_minutes / 60 * 10) / 10 + ' h' : '') + assignTxt +
         (noPeople ? '<br><span style="color:#f59e0b;">⚠️ ' + noPeople + ' operací bez člověka — doplň „kdo smí operaci dělat" v postupu nebo přiřaď ručně.</span>' : '') +
         (noWs ? '<br><span style="color:#f59e0b;">⚠️ ' + noWs + ' operací bez pracoviště.</span>' : '') +
+        pv2FeedersHtml(sch, b.feeders) +
         '<br><a href="#" onclick="pv2Loaded={};pv2Show(\'work\');return false;" style="color:#14b8a6;">→ Otevřít Plán práce</a> · <a href="#" onclick="pv2Loaded={};pv2Show(\'batches\');return false;" style="color:#14b8a6;">→ Výrobní dávky</a>';
       pv2Loaded = {}; pv2LoadRecent();
     } catch (e) { res.className = 'pf-result err'; res.textContent = 'Chyba: ' + e.message; }
@@ -1880,7 +1881,7 @@
       var rows = await pv2Fetch('/api/planning/batches-plan');
       rows = rows.slice().sort(function (a, b) { return new Date(b.created_at) - new Date(a.created_at); }).slice(0, 8);
       box.innerHTML = '<div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Naposledy zadáno do výroby</div>' + (rows.length ? '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Stav</th><th></th></tr></thead><tbody>' +
-        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b></td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small>' + (b.config_code ? '<div style="font-size:11px;font-family:ui-monospace,Consolas,monospace;color:#22c55e;font-weight:700;">' + pv2Esc(b.config_code) + '</div>' : '') + (b.variant_label ? '<div style="font-size:11px;color:#fb923c;">⎘ ' + pv2Esc(b.variant_label) + '</div>' : '') + '</td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;white-space:nowrap;">' + pv2ReplanBtn(b) + '<button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
+        rows.map(function (b) { return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b>' + pv2FeederTag(b) + '</td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small>' + (b.config_code ? '<div style="font-size:11px;font-family:ui-monospace,Consolas,monospace;color:#22c55e;font-weight:700;">' + pv2Esc(b.config_code) + '</div>' : '') + (b.variant_label ? '<div style="font-size:11px;color:#fb923c;">⎘ ' + pv2Esc(b.variant_label) + '</div>' : '') + '</td><td>' + b.quantity + '</td><td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + '</td><td>' + b.ops_done + '/' + b.ops_total + '</td><td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td><td style="text-align:right;white-space:nowrap;">' + pv2ReplanBtn(b) + '<button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>'; }).join('') + '</tbody></table>' : '<div class="pv2-empty">Zatím nic.</div>');
     } catch (e) { box.innerHTML = ''; }
   }
 
@@ -1923,8 +1924,8 @@
     finally { btn.disabled = false; btn.textContent = old; }
   };
   // Semafor materiálu u operace + tooltip s položkami (co, kolik, kde, objednávka/ETA)
-  var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
-  var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ' };
+  var PV2_MAT = { on_site: ['🟢 materiál na pracovišti', '#22c55e'], in_stock: ['🔵 skladem — jen přesun', '#60a5fa'], in_production: ['🟣 polotovar se vyrábí (dílčí dávka)', '#a78bfa'], ordered: ['🟠 objednáno, čeká se', '#f59e0b'], missing: ['🔴 chybí — není objednáno', '#ef4444'], none: ['⚪ bez materiálu', 'var(--text2)'] };
+  var PV2_MAT_ITEM = { on_site: '🟢 na pracovišti', in_stock: '🔵 skladem', in_production: '🟣 vyrábí se', ordered: '🟠 objednáno', missing: '🔴 CHYBÍ' };
   window.pv2MatBadge = function (m) {
     var lvl = (m && m.level) || 'none'; var d = PV2_MAT[lvl] || PV2_MAT.none;
     var tip = (m && m.materials && m.materials.length) ? m.materials.map(function (x) {
@@ -1942,7 +1943,7 @@
         if (onlyBatch && o.batch.id !== onlyBatch) return false;
         if (onlyWs && !(o.workstation && o.workstation.id === onlyWs)) return false;
         var lvl = (o.material && o.material.level) || 'none';
-        if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing') return false; }
+        if (onlyMat === 'problem') { if (lvl !== 'ordered' && lvl !== 'missing' && lvl !== 'in_production') return false; }
         else if (onlyMat && lvl !== onlyMat) return false;
         if (!q) return true;
         var txt = [(o.operation && o.operation.name) || '', o.batch.batch_number, o.batch.product.code, o.batch.product.name, o.workstation ? o.workstation.name : '', o.status].concat(((o.workers || []).map(function (w) { return w.person.first_name + ' ' + w.person.last_name; }))).join(' ').toLowerCase();
@@ -2011,7 +2012,7 @@
         rows.map(function (b) {
           var pct = b.ops_total ? Math.round(b.ops_done / b.ops_total * 100) : 0;
           var late = b.due_date && b.planned_end && new Date(b.planned_end) > new Date(b.due_date);
-          return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b>' + (b.is_test ? ' <span class="pv2-badge" style="color:#c084fc;">🧪</span>' : '') + (b.ignore_stock ? ' <span class="pv2-badge" style="color:#f59e0b;" title="Plánováno bez ohledu na sklad">⏩</span>' : '') + '</td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small>' + (b.config_code ? '<div style="font-size:11px;font-family:ui-monospace,Consolas,monospace;color:#22c55e;font-weight:700;">' + pv2Esc(b.config_code) + '</div>' : '') + (b.variant_label ? '<div style="font-size:11px;color:#fb923c;">⎘ ' + pv2Esc(b.variant_label) + '</div>' : '') + '</td><td>' + b.quantity + '</td>' +
+          return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b>' + (b.is_test ? ' <span class="pv2-badge" style="color:#c084fc;">🧪</span>' : '') + (b.ignore_stock ? ' <span class="pv2-badge" style="color:#f59e0b;" title="Plánováno bez ohledu na sklad">⏩</span>' : '') + pv2FeederTag(b) + '</td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small>' + (b.config_code ? '<div style="font-size:11px;font-family:ui-monospace,Consolas,monospace;color:#22c55e;font-weight:700;">' + pv2Esc(b.config_code) + '</div>' : '') + (b.variant_label ? '<div style="font-size:11px;color:#fb923c;">⎘ ' + pv2Esc(b.variant_label) + '</div>' : '') + '</td><td>' + b.quantity + '</td>' +
             '<td>' + pv2PlanCell(b.original_planned_start, b.planned_start, b.actual_start, 'skutečně začato', false) + '</td><td>' + pv2PlanCell(b.original_planned_end, b.planned_end, b.actual_end || b.forecast_end, b.actual_end ? 'skutečně hotovo' : 'předpoklad dokončení', !b.actual_end) + (b.due_date ? '<div style="font-size:11px;color:' + (late ? '#ef4444' : '#22c55e') + ';">' + (late ? '❌ po termínu ' : '✓ termín ') + pv2DT(b.due_date) + '</div>' : '') + '</td>' +
             '<td><div class="pv2-bar" title="' + b.ops_done + ' / ' + b.ops_total + ' hotovo"><div style="width:' + pct + '%"></div></div><small style="color:var(--text2)">' + b.ops_done + '/' + b.ops_total + (b.ops_planned < b.ops_total ? ' · ' + (b.ops_total - b.ops_planned) + ' nenaplánováno' : '') + '</small></td>' +
             '<td>' + (b.people.length ? b.people.map(function (p) { return '<span class="pv2-badge">' + pv2Esc(p.first_name + ' ' + p.last_name) + '</span>'; }).join('') : '<span style="color:#ef4444;font-size:11px;">bez lidí</span>') + '</td>' +
@@ -2021,6 +2022,20 @@
         }).join('') + '</tbody></table>';
     } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
   };
+  function pv2FeederTag(b) {
+    return b.parent_batch ? '<div style="font-size:11px;color:#a78bfa;" title="Dílčí dávka polotovaru — vyrábí se před hlavní dávkou">↳ polotovar pro <b>' + pv2Esc(b.parent_batch.batch_number) + '</b></div>' : '';
+  }
+  function pv2FeedersHtml(sch, created) {
+    var cr = (created && created.created) || [], sk = (created && created.skipped) || [];
+    var plans = sch && sch.feeders ? sch.feeders : [];
+    var h = '';
+    if (plans.length || cr.length) {
+      var rows = (plans.length ? plans : cr).map(function (f) { var c = cr.find(function (x) { return x.id === f.id; }) || f; return '<li><b>' + pv2Esc(f.batch_number) + '</b> · ' + pv2Esc((c.product && (c.product.code + ' ' + c.product.name)) || (f.product && (f.product.code + ' ' + f.product.name)) || '') + ' × ' + (f.quantity || c.quantity) + ' ks' + (f.plan_start ? ' · ⏱ ' + pv2DT(f.plan_start) + ' → ' + pv2DT(f.plan_end) : '') + (c.for_material ? ' <small style="color:var(--text2);">(díl ' + pv2Esc((c.for_material.code || '') + ' ' + (c.for_material.name || '')) + ')</small>' : '') + '</li>'; });
+      h += '<div style="margin-top:6px;color:#a78bfa;"><b>🧩 Nejdřív polotovary</b> — vyrobí se v dílčích dávkách před touto dávkou:<ul style="margin:4px 0 0 18px;padding:0;">' + rows.join('') + '</ul></div>';
+    }
+    if (sk.length) h += '<div style="margin-top:6px;color:#f59e0b;">⚠️ Polotovary s variantami/výbavou nelze založit automaticky — zadej je do výroby ručně: ' + sk.map(function (f) { return '<b>' + pv2Esc(f.product.code || f.product.name) + '</b> × ' + f.quantity + ' ks'; }).join(', ') + '</div>';
+    return h;
+  }
   function pv2ReplanBtn(b) {
     if (b.actual_end || b.status === 'done' || b.status === 'cancelled') return '';
     return '<button class="btn btn-secondary" onclick="pv2Replan(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ')" title="Přeplánovat podle aktuální pracovní doby, přestávek, obsazenosti lidí a pracovišť" style="padding:4px 9px;margin-right:4px;">🔄</button>';
@@ -2031,6 +2046,8 @@
       var r = await fetch('/api/planning/batches/' + id + '/schedule', { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()), credentials: 'include', body: JSON.stringify({}) });
       var j = await r.json().catch(function () { return {}; });
       if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+      if (j.feeders_created && (j.feeders_created.created || []).length) alert('Založeny dílčí dávky polotovarů (vyrobí se před ' + number + '):\n' + j.feeders_created.created.map(function (f) { return f.batch_number + ' · ' + (f.product.code || f.product.name) + ' × ' + f.quantity + ' ks'; }).join('\n'));
+      if (j.feeders_created && (j.feeders_created.skipped || []).length) alert('Polotovary s variantami/výbavou je nutné zadat ručně: ' + j.feeders_created.skipped.map(function (f) { return (f.product.code || f.product.name) + ' × ' + f.quantity + ' ks'; }).join(', '));
       pv2Loaded = {}; pv2LoadBatches(); pv2LoadRecent(); if (typeof pv2LoadWork === 'function') pv2LoadWork(); if (typeof pv2LoadMoves === 'function') pv2LoadMoves();
     } catch (e) { alert('Přeplánování selhalo: ' + e.message); }
   };

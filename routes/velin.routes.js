@@ -1219,7 +1219,7 @@ async function transitionTask(req, res, next, opts) {
     if (opts.bridgeAction === 'start' && task.source_ref_type === 'BatchOperation' && task.source_ref_id) {
       try {
         const { computeOpMaterialStatus } = require('../services/planning/op-material-status');
-        const bo = await prisma.batchOperation.findUnique({ where: { id: task.source_ref_id }, select: { id: true, operation: { select: { id: true } }, batch: { select: { quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
+        const bo = await prisma.batchOperation.findUnique({ where: { id: task.source_ref_id }, select: { id: true, operation: { select: { id: true } }, batch: { select: { id: true, quantity: true, ignore_stock: true } }, workstation: { select: { input_warehouse_id: true } } } });
         if (bo) {
           const material = (await computeOpMaterialStatus([bo])).get(bo.id);
           if (material && material.materials.length && !(bo.batch && bo.batch.ignore_stock) && material.level !== 'on_site' && material.level !== 'none') {

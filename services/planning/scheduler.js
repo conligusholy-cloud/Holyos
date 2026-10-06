@@ -292,7 +292,7 @@ async function scheduleBatch(batchId, opts = {}) {
           operation_id: true,
           assigned_person_id: true,
           planned_start: true, planned_end: true, finished_at: true,
-          operation: { select: { duration: true, duration_unit: true, preparation_time: true, is_parallel: true, parallel_from: true, parallel_to: true, step_number: true, workers_count: true } },
+          operation: { select: { duration: true, duration_unit: true, preparation_time: true, is_parallel: true, parallel_from: true, parallel_to: true, step_number: true, workers_count: true, materials: { select: { material_id: true, product_id: true } } } },
           workstation: { select: { id: true, is_external: true, coop_lead_days: true, name: true } },
           workers: { select: { person_id: true, slot: true } },
         },
@@ -387,6 +387,19 @@ async function scheduleBatch(batchId, opts = {}) {
     leadBlocksStart = !!(await getSetting('production.material_lead_blocks_start', { type: 'boolean', defaultValue: false }));
   } catch (e) { /* default */ }
   const prepReadyAt = consumeShift(new Date(), materialLeadMin, cfg).end;
+  // Dílčí dávky (polotovary s vlastním postupem): operace, která díl spotřebovává, začne až po dokončení dílčí dávky
+  const feeders = await tx.productionBatch.findMany({ where: { parent_batch_id: id, status: { notIn: ['cancelled', 'canceled'] } }, select: { id: true, product_id: true, planned_end: true, actual_end: true, status: true, product: { select: { material_id: true } } } });
+  const feederReadyAt = (op) => {
+    let t = null;
+    for (const m of (op.operation && op.operation.materials) || []) {
+      for (const f of feeders) {
+        if (!(f.product_id === m.product_id || (f.product && f.product.material_id && f.product.material_id === m.material_id))) continue;
+        const end = (f.status === 'done' || f.status === 'completed') ? (f.actual_end || f.planned_end) : f.planned_end;
+        if (end && (!t || new Date(end) > t)) t = new Date(end);
+      }
+    }
+    return t;
+  };
   let prevEnd = new Date(anchor);
   const updates = [];
   const opWarnings = [];
@@ -433,6 +446,8 @@ async function scheduleBatch(batchId, opts = {}) {
       if (leadBlocksStart) { warnings.push('material_prep_lead'); candidateStart = new Date(prepReadyAt); }
       else warnings.push('material_prep_urgent'); // materiál se musí připravit hned, výroba na něj nečeká
     }
+    const feederEnd = feederReadyAt(op);
+    if (feederEnd && candidateStart < feederEnd) { warnings.push('waits_for_feeder'); candidateStart = new Date(feederEnd); }
 
     const blockCheck = pushPastSlotBlock(candidateStart, slotBlocks);
     if (blockCheck.blocked) {
@@ -723,18 +738,29 @@ async function scheduleBatchSmart(batchId, opts = {}) {
   const id = parseInt(batchId, 10);
   const batch = await tx.productionBatch.findUnique({ where: { id }, select: { due_date: true, planned_start: true, status: true } });
   if (!batch) throw new Error(`Dávka id=${id} nenalezena`);
+  // Nejdřív dílčí dávky (polotovary s vlastním postupem) — rekurzivně, dopředu od teď; rodič pak na ně navazuje
+  const feederResults = [];
+  {
+    const { listFeeders } = require('./feeders');
+    const kids = await listFeeders(tx, id);
+    for (const k of kids) {
+      const r = await scheduleBatchSmart(k.id, { ...opts, forward: true, anchor: undefined });
+      feederResults.push({ id: k.id, batch_number: k.batch_number, quantity: k.quantity, product: k.product, plan_start: r.plan_start, plan_end: r.plan_end, operations_scheduled: r.operations_scheduled });
+    }
+  }
+  const withFeeders = (r) => Object.assign(r, { feeders: feederResults });
   const due = batch.due_date ? new Date(batch.due_date) : null;
   if (!due || opts.forward) {
     const r = await scheduleBatch(id, opts);
-    return Object.assign(r, { mode: 'forward', feasible: due && r.plan_end ? new Date(r.plan_end) <= due : null, due_date: due });
+    return withFeeders(Object.assign(r, { mode: 'forward', feasible: due && r.plan_end ? new Date(r.plan_end) <= due : null, due_date: due }));
   }
   const now = new Date();
   const earliest = await scheduleBatch(id, { ...opts, anchor: now, probe: true });
-  if (!earliest.plan_end) return Object.assign(earliest, { mode: 'backward', feasible: false, due_date: due });
+  if (!earliest.plan_end) return withFeeders(Object.assign(earliest, { mode: 'backward', feasible: false, due_date: due }));
   if (new Date(earliest.plan_end) > due) {
     // Nestíhá ani při okamžitém startu → zůstane nejdřívější plán, ať je vidět, o kolik to ujede
     const r = await scheduleBatch(id, { ...opts, anchor: now });
-    return Object.assign(r, { mode: 'backward', feasible: false, due_date: due, latest_start: now, late_minutes: Math.round((new Date(r.plan_end) - due) / 60000) });
+    return withFeeders(Object.assign(r, { mode: 'backward', feasible: false, due_date: due, latest_start: now, late_minutes: Math.round((new Date(r.plan_end) - due) / 60000) }));
   }
   let lo = now.getTime(), hi = due.getTime();
   for (let i = 0; i < 16 && hi - lo > 15 * 60000; i++) {
@@ -743,7 +769,7 @@ async function scheduleBatchSmart(batchId, opts = {}) {
     if (r.plan_end && new Date(r.plan_end) <= due) lo = mid; else hi = mid;
   }
   const final = await scheduleBatch(id, { ...opts, anchor: new Date(lo) });
-  return Object.assign(final, { mode: 'backward', feasible: true, due_date: due, latest_start: new Date(lo), slack_minutes: Math.round((due - new Date(final.plan_end)) / 60000) });
+  return withFeeders(Object.assign(final, { mode: 'backward', feasible: true, due_date: due, latest_start: new Date(lo), slack_minutes: Math.round((due - new Date(final.plan_end)) / 60000) }));
 }
 
 module.exports = { scheduleBatch, scheduleBatchSmart, scheduleAllActive, operationMinutes, findQueueConflictEnd, loadQueueByWorkstation, ACTIVE_BATCH_STATUSES };

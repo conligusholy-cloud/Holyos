@@ -3,6 +3,7 @@
 // Pro každou BatchOperation spočítá, jestli na ni máme materiál:
 //   on_site   🟢 materiál už je na vstupním skladu pracoviště (nebo skladník označil „připraveno")
 //   in_stock  🔵 materiál je ve firmě skladem (jen přesun na pracoviště)
+//   in_production 🟣 není skladem, ale vyrábí se v dílčí dávce (polotovar s vlastním postupem) — hotovo = planned_end dílčí dávky
 //   ordered   🟠 není skladem, ale chybějící množství pokrývá otevřená nákupní objednávka (ETA)
 //   missing   🔴 chybí a NENÍ objednáno → zamakat na nákupu
 //   none      ⚪ operace nemá žádný materiál
@@ -11,7 +12,7 @@
 
 const { prisma: defaultPrisma } = require('../../config/database');
 
-const LEVEL_RANK = { none: 0, on_site: 1, in_stock: 2, ordered: 3, missing: 4 };
+const LEVEL_RANK = { none: 0, on_site: 1, in_stock: 2, in_production: 3, ordered: 4, missing: 5 };
 
 /**
  * @param {Array} ops  BatchOperation záznamy; potřebují: id, operation.id (ProductOperation),
@@ -69,6 +70,25 @@ async function computeOpMaterialStatus(ops, opts = {}) {
     onOrder.set(oi.material_id, cur);
   }
 
+  // Dílčí dávky (polotovary ve výrobě) rodičovských dávek těchto operací
+  const batchIds = [...new Set(ops.map(o => o.batch && o.batch.id).filter(Boolean))];
+  const feeders = batchIds.length ? await tx.productionBatch.findMany({
+    where: { parent_batch_id: { in: batchIds }, status: { notIn: ['cancelled', 'canceled'] } },
+    select: { id: true, batch_number: true, parent_batch_id: true, quantity: true, status: true, planned_end: true, product: { select: { material_id: true } } },
+  }).catch(() => []) : [];
+  const feederByKey = new Map(); // parent_batch_id|material_id → { qty, done, eta, batches[] }
+  for (const f of feeders) {
+    if (!f.product || !f.product.material_id) continue;
+    const k = f.parent_batch_id + '|' + f.product.material_id;
+    const cur = feederByKey.get(k) || { qty: 0, done: true, eta: null, batches: [] };
+    cur.qty += Number(f.quantity);
+    const isDone = f.status === 'done' || f.status === 'completed';
+    if (!isDone) cur.done = false;
+    if (!isDone && f.planned_end && (!cur.eta || new Date(f.planned_end) > new Date(cur.eta))) cur.eta = f.planned_end;
+    cur.batches.push(f.batch_number);
+    feederByKey.set(k, cur);
+  }
+
   // „Připraveno" ze čtečky
   const opIds = ops.map(o => o.id);
   const doneRows = await tx.materialPrepDone.findMany({ where: { batch_operation_id: { in: opIds }, kind: 'material' }, select: { batch_operation_id: true, material_id: true } }).catch(() => []);
@@ -84,16 +104,19 @@ async function computeOpMaterialStatus(ops, opts = {}) {
       const onSite = whId ? (stockByWh.get(om.material_id + '|' + whId) || 0) : 0;
       const available = stockTotal.get(om.material_id) || 0;
       const po = onOrder.get(om.material_id) || { qty: 0, eta: null, orders: [] };
+      const fd = (o.batch && feederByKey.get(o.batch.id + '|' + om.material_id)) || null;
       let level;
       if (doneSet.has(o.id + '|' + om.material_id) || onSite >= needed) level = 'on_site';
       else if (available >= needed) level = 'in_stock';
+      else if (fd && !fd.done && fd.qty >= needed - available) level = 'in_production';
       else if (po.qty >= needed - available) level = 'ordered';
       else level = 'missing';
       if (LEVEL_RANK[level] > LEVEL_RANK[worst]) worst = level;
       return {
         material_id: om.material_id, code: om.material ? om.material.code : null, name: om.material ? om.material.name : null,
         unit: om.unit || (om.material && om.material.unit) || '', needed, available: Math.round(available * 1000) / 1000, on_site: Math.round(onSite * 1000) / 1000,
-        on_order: Math.round(po.qty * 1000) / 1000, eta: po.eta, orders: po.orders, level,
+        on_order: Math.round(po.qty * 1000) / 1000, eta: level === 'in_production' && fd ? fd.eta : po.eta, orders: po.orders, level,
+        in_production: fd && !fd.done ? { qty: fd.qty, batches: fd.batches, eta: fd.eta } : null,
       };
     });
     result.set(o.id, { level: worst, materials: details });
