@@ -10878,6 +10878,10 @@
         var cfgBadge = ownN
           ? ' <span style="display:inline-block;background:rgba(139,92,246,0.15);color:#a78bfa;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ ' + ownN + ' skup. (vlastní)</span>'
           : (shN ? ' <span style="display:inline-block;background:rgba(148,163,184,0.15);color:#94a3b8;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;">⚙ společná (' + shN + ')</span>' : '');
+        var imgUrl = it.image_ext ? '/api/wh/pricelist/' + it.id + '/image?v=' + encodeURIComponent(it.image_updated_at || '') : '';
+        h += '<td style="width:64px;padding:4px 6px;" onclick="event.stopPropagation();plPickImage(' + it.id + ')" title="' + (imgUrl ? 'Kliknutím nahradíš obrázek' : 'Kliknutím nahraješ obrázek produktu') + '">'
+          + (imgUrl ? '<img src="' + imgUrl + '" alt="" style="width:56px;height:42px;object-fit:contain;border-radius:6px;background:rgba(255,255,255,0.04);border:1px solid var(--border);cursor:pointer;">'
+                    : '<div style="width:56px;height:42px;border-radius:6px;border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:16px;cursor:pointer;">🖼️</div>') + '</td>';
         h += '<td class="person-name">' + esc(it.name_cs) + cfgBadge + (it.name_en ? '<div style="font-size:11px;color:var(--text2)">' + esc(it.name_en) + '</div>' : '') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_czk, 'Kč') + '</td>';
         h += '<td style="text-align:right;">' + money(it.price_eur, '€') + '</td>';
@@ -10888,13 +10892,15 @@
           : '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.4);padding:3px 10px;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;animation:pulse-warn 1.8s ease-in-out infinite;">⚠ Nenapojeno</span>') + '</td>';
         h += '<td><span class="badge" style="' + statusCss + '">' + statusLbl + '</span></td>';
         h += '<td style="white-space:nowrap;"><button class="btn btn-sm" title="Duplikovat položku (vše stejné, jen jiný název)" onclick="event.stopPropagation();duplicatePricelistItem(' + it.id + ', ' + JSON.stringify(it.name_cs || '').replace(/"/g, '&quot;') + ', ' + JSON.stringify(it.name_en || '').replace(/"/g, '&quot;') + ')" style="margin-right:6px;">⧉</button>'
+          + '<button class="btn btn-sm" title="' + (it.image_ext ? 'Nahradit obrázek produktu' : 'Nahrát obrázek produktu') + '" onclick="event.stopPropagation();plPickImage(' + it.id + ')" style="margin-right:6px;">🖼️</button>'
+          + (it.image_ext ? '<button class="btn btn-sm" title="Odstranit obrázek" onclick="event.stopPropagation();plDeleteImage(' + it.id + ')" style="margin-right:6px;color:#f59e0b;">✕🖼️</button>' : '')
           + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deletePricelistItem(' + it.id + ')">🗑️</button></td>';
         h += '</tr>';
         return h;
       }
       function tableFor(rows) {
         var h = '<div style="overflow-x:auto;margin:0 0 6px 0;"><table class="data-table"><thead><tr>' +
-          '<th>Typ stroje</th><th>Název</th>' +
+          '<th>Typ stroje</th><th title="Obrázek produktu — klikni pro nahrání">Foto</th><th>Název</th>' +
           '<th style="text-align:right" title="Maloobchodní">Cena CZK</th>' +
           '<th style="text-align:right" title="Maloobchodní">Cena EUR</th>' +
           '<th style="text-align:right" title="Kamionová / velkoobchodní">🚛 CZK</th>' +
@@ -11045,6 +11051,30 @@
       } catch (e) { alert('Chyba: ' + e.message); }
     }
 
+    // Obrázek položky ceníku — výběr souboru → upload → překreslení
+    function plPickImage(id) {
+      var inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/png,image/jpeg,image/webp,image/gif';
+      inp.onchange = async function () {
+        var f = inp.files && inp.files[0]; if (!f) return;
+        if (f.size > 10 * 1024 * 1024) { alert('Obrázek je větší než 10 MB.'); return; }
+        var fd = new FormData(); fd.append('image', f);
+        try {
+          var res = await fetch('/api/wh/pricelist/' + id + '/image', { method: 'POST', body: fd });
+          var j = await res.json().catch(function () { return {}; });
+          if (!res.ok) { alert('Nahrání selhalo: ' + (j.error || res.status)); return; }
+          loadPricelist(); if (typeof loadAccessories === 'function') { try { loadAccessories(); } catch (e) {} }
+        } catch (e) { alert('Chyba: ' + e.message); }
+      };
+      inp.click();
+    }
+    async function plDeleteImage(id) {
+      if (!confirm('Odstranit obrázek produktu?')) return;
+      try {
+        var res = await fetch('/api/wh/pricelist/' + id + '/image', { method: 'DELETE' });
+        if (!res.ok) { alert('Odstranění selhalo'); return; }
+        loadPricelist();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
     async function deletePricelistItem(id) {
       if (!confirm('Opravdu smazat tuto položku ceníku?')) return;
       try {

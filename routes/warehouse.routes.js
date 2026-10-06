@@ -2419,6 +2419,57 @@ router.post('/pricelist/:id/duplicate', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ---- Obrázek položky ceníku (persistent volume data/pricelist-images/pl-<id>.<ext>) ----
+const PL_IMAGES_DIR = require('path').join(__dirname, '..', 'data', 'pricelist-images');
+const plImageUpload = require('multer')({ storage: require('multer').memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+const PL_IMAGE_MIME = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+// GET /api/wh/pricelist/:id/image
+router.get('/pricelist/:id/image', async (req, res, next) => {
+  try {
+    const fs = require('fs'), path = require('path');
+    const id = parseInt(req.params.id, 10);
+    const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { image_ext: true } });
+    if (!it || !it.image_ext) return res.status(404).json({ error: 'Položka nemá obrázek' });
+    const file = path.join(PL_IMAGES_DIR, `pl-${id}.${it.image_ext}`);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Soubor obrázku chybí' });
+    const mime = Object.keys(PL_IMAGE_MIME).find(k => PL_IMAGE_MIME[k] === it.image_ext) || 'application/octet-stream';
+    res.set('Content-Type', mime).set('Cache-Control', 'public, max-age=86400');
+    fs.createReadStream(file).pipe(res);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/pricelist/:id/image — multipart pole `image` (png/jpg/webp/gif, max 10 MB)
+router.post('/pricelist/:id/image', plImageUpload.single('image'), async (req, res, next) => {
+  try {
+    const fs = require('fs'), path = require('path');
+    const id = parseInt(req.params.id, 10);
+    if (!req.file) return res.status(400).json({ error: 'Chybí soubor obrázku' });
+    const ext = PL_IMAGE_MIME[req.file.mimetype];
+    if (!ext) return res.status(400).json({ error: 'Nepodporovaný formát — použij PNG, JPG, WebP nebo GIF' });
+    const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { id: true, image_ext: true } });
+    if (!it) return res.status(404).json({ error: 'Položka nenalezena' });
+    fs.mkdirSync(PL_IMAGES_DIR, { recursive: true });
+    if (it.image_ext && it.image_ext !== ext) { try { fs.unlinkSync(path.join(PL_IMAGES_DIR, `pl-${id}.${it.image_ext}`)); } catch (e) {} }
+    fs.writeFileSync(path.join(PL_IMAGES_DIR, `pl-${id}.${ext}`), req.file.buffer);
+    const updated = await prisma.salesPricelistItem.update({ where: { id }, data: { image_ext: ext, image_updated_at: new Date() }, select: { id: true, image_ext: true, image_updated_at: true } });
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/wh/pricelist/:id/image
+router.delete('/pricelist/:id/image', async (req, res, next) => {
+  try {
+    const fs = require('fs'), path = require('path');
+    const id = parseInt(req.params.id, 10);
+    const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { image_ext: true } });
+    if (!it) return res.status(404).json({ error: 'Položka nenalezena' });
+    if (it.image_ext) { try { fs.unlinkSync(path.join(PL_IMAGES_DIR, `pl-${id}.${it.image_ext}`)); } catch (e) {} }
+    await prisma.salesPricelistItem.update({ where: { id }, data: { image_ext: null, image_updated_at: null } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // PUT /api/wh/pricelist/:id
 router.put('/pricelist/:id', async (req, res, next) => {
   try {

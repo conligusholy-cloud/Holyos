@@ -1414,6 +1414,8 @@ model SalesPricelistItem {
   product         Product? @relation(fields: [product_id], references: [id], onDelete: SetNull)
   active          Boolean  @default(true) // aktivní / zrušená položka
   note            String?  @db.Text // interní poznámka
+  image_ext       String?  @db.VarChar(10) // přípona obrázku produktu (soubor data/pricelist-images/pl-<id>.<ext>)
+  image_updated_at DateTime? // kdy byl obrázek naposledy nahrán (cache-bust)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
