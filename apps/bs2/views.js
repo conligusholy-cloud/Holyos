@@ -177,6 +177,7 @@ function homeStory(s) {
   .st{max-width:1040px}
   .st .lead{font-size:clamp(17px,2vw,21px);line-height:1.5;color:var(--text);max-width:760px;margin:0 0 26px}
   .st .lead b{color:var(--accent2)}
+  .st .lead b.cp{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;font-weight:900}
   .st h2{font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;margin:0 0 6px}
   .st .sec{margin:0 0 26px}
   .st .tl{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 26px}
@@ -211,12 +212,12 @@ function homeStory(s) {
   @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
   </style>
   <div class="st">
-    <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo — a od <b>25. 9. 2026</b> je z každého, kdo Best Series podpořil, <b>Best Series 2.0</b>.</p>
+    <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>25. 9. 2026</b> je to <b>Best Series 2.0</b> a z tebe uděláme <b class="cp">Compoundera</b>.</p>
 
     <div class="tl">
       <div class="c"><div class="y">2018 – 2026</div><div class="t">Best Series</div><p>Osm let tvrdé práce: vlastní výroba, servis, síť míst, konzistence. Důvěra, která se nedá koupit — jen odpracovat.</p></div>
       <div class="c"><div class="y">24. 9. 2026</div><div class="t">Zlom</div><p>Bankovní domy si všimly, že český prádlomat je skvělý stroj — a <b>zaknihovaly ho do leasingových produktů</b>.</p></div>
-      <div class="c now"><div class="y">25. 9. 2026 → dnes</div><div class="t">Best Series 2.0</div><p>Každý, kdo Best Series podpořil, je teď součástí 2.0. Pravidla hry se změnila. Ty jsi u toho.</p></div>
+      <div class="c now"><div class="y">25. 9. 2026 → dnes</div><div class="t">Best Series 2.0 → Compounder</div><p>Každý, kdo Best Series podpořil, je teď součástí 2.0. Z podporovatele se stává Compounder — ten, komu se prádlomaty násobí. Ty jsi u toho.</p></div>
     </div>
 
     <div class="big">
