@@ -734,6 +734,10 @@
     .eq-row{border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px}.eq-fields{display:flex;gap:8px;align-items:center}
     .eq-vars{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.eq-var{font-size:12px;border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}.eq-var.on{border-color:rgba(251,146,60,.7);background:rgba(251,146,60,.1);color:#fb923c}
     .eq-legend{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+    .eqg{border:1px solid rgba(251,146,60,.4);border-radius:12px;padding:10px 12px;margin-top:10px;background:rgba(251,146,60,.03)}
+    .eqg-head{display:flex;gap:10px;align-items:center;margin-bottom:8px}.eqg-name{font-weight:700;min-width:220px}
+    .eqg-table{border-collapse:collapse;width:100%;font-size:12.5px}.eqg-table th{text-align:left;font-size:11px;color:var(--text2);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap}.eqg-table td{padding:5px 6px;vertical-align:middle}
+    .eqg-sel{width:100%;min-width:150px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text2);font-size:12.5px}.eqg-sel.var{border-color:rgba(251,146,60,.7);color:#fb923c;font-weight:600}.eqg-sel.base{border-color:rgba(20,184,166,.8);color:#14b8a6;font-weight:600}
     .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
     .eq-var.used{text-decoration:line-through;opacity:.45;cursor:not-allowed;border-style:dotted}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
@@ -1484,8 +1488,23 @@
             d += 'M' + a.x + ',' + (a.y + a.r) + ' V' + yFork + ' H' + cx + ' V' + cTop + ' M' + cx + ',' + cBot + ' V' + yJoin + ' H' + b.x + ' V' + (b.y - b.r) + ' ';
           }
         });
-        // paralelní operace: zvýraznit zvolené provedení (základ / varianta)
-        (product.operations || []).filter(o => o.is_parallel).forEach(op => { const cid = choice[op.id] || op.id; const c = lane.querySelector('.op-card[data-op-id="' + cid + '"]'); if (c) c.classList.add('route-on'); });
+        // paralelní větve: zelená cesta z uzlu start → zvolené provedení každé operace větve → uzel konec
+        wraps.forEach(w => {
+          const from = parseInt(w.getAttribute('data-from')) || steps[0];
+          const to = parseInt(w.getAttribute('data-to')) || steps[steps.length - 1];
+          const nStart = nodeBefore(steps.find(s => s >= from) || steps[0]);
+          const nEnd = nodeAfter([...steps].reverse().find(s => s <= to) || steps[steps.length - 1]);
+          if (!nStart || !nEnd) return;
+          const a = dotCenter(nStart), b = dotCenter(nEnd);
+          const opIds = (w.getAttribute('data-ops') || '').split(',').map(Number).filter(Boolean);
+          const cards = opIds.map(id => { const cid = choice[id] || id; const c = lane.querySelector('.op-card[data-op-id="' + cid + '"]'); if (c) c.classList.add('route-on'); return c; }).filter(Boolean);
+          if (!cards.length) return;
+          const rect = (c) => { const r = c.getBoundingClientRect(); return { x: (r.left + r.width / 2 - lanesRect.left) / z, top: (r.top - lanesRect.top) / z, bot: (r.bottom - lanesRect.top) / z }; };
+          const first = rect(cards[0]), last = rect(cards[cards.length - 1]);
+          d += 'M' + (a.x + a.r) + ',' + a.y + ' H' + first.x + ' V' + first.top + ' ';
+          for (let k = 1; k < cards.length; k++) { const p0 = rect(cards[k - 1]), p1 = rect(cards[k]); const ym = (p0.bot + p1.top) / 2; d += 'M' + p0.x + ',' + p0.bot + ' V' + ym + ' H' + p1.x + ' V' + p1.top + ' '; }
+          d += 'M' + last.x + ',' + last.bot + ' V' + b.y + ' H' + (b.x + b.r) + ' ';
+        });
         if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="' + d + '" fill="none" stroke="' + green + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
       }
@@ -1679,42 +1698,54 @@
     function openEquipmentEditor() {
       eqDraft = productEquipment.map(e => ({ group_name: e.group_name, name: e.name, variant_ids: (e.variant_ids || []).slice(), note: e.note || '' }));
       if (!eqDraft.length) eqDraft.push({ group_name: 'Barva', name: '', variant_ids: [], note: '' });
+      eqDraft.sort((a, b) => (a.group_name || '').localeCompare(b.group_name || '', 'cs'));
       let m = document.getElementById('equipment-modal');
       if (!m) { m = document.createElement('div'); m.id = 'equipment-modal'; m.className = 'modal-overlay'; m.onclick = (e) => { if (e.target === m) closeEquipmentEditor(); }; document.body.appendChild(m); }
       renderEquipmentEditor(); m.style.display = 'flex';
     }
     function closeEquipmentEditor() { const m = document.getElementById('equipment-modal'); if (m) m.style.display = 'none'; }
-    function eqAdd() { const last = eqDraft[eqDraft.length - 1]; eqDraft.push({ group_name: last ? last.group_name : '', name: '', variant_ids: [], note: '' }); renderEquipmentEditor(); }
+    // Editor výbavy = tabulka: skupina (Barva) → řádky položek (Červená, Bílá) × sloupce operací s variantami;
+    // v buňce vybereš provedení (základ / varianta) nebo „—" (položka se té operace netýká).
+    // Psaní do políček nepřekresluje (kurzor zůstává), překresluje se jen po změně výběru / struktury.
+    function eqGroups() { const order = []; const map = new Map(); eqDraft.forEach((e, i) => { const k = (e.group_name || '').trim() || '\u0000' + i; if (!map.has(k)) { map.set(k, []); order.push(k); } map.get(k).push(i); }); return order.map(k => map.get(k)); }
+    function eqAddGroup() { eqDraft.push({ group_name: '', name: '', variant_ids: [], note: '' }); renderEquipmentEditor(true); }
+    function eqAddItem(i) { const e = eqDraft[i]; eqDraft.splice(i + 1, 0, { group_name: e.group_name, name: '', variant_ids: [], note: '' }); renderEquipmentEditor(true); }
     function eqDel(i) { eqDraft.splice(i, 1); renderEquipmentEditor(); }
     function eqSet(i, k, v) { eqDraft[i][k] = v; }
-    function eqSetGroup(i, v) { eqDraft[i].group_name = v; clearTimeout(eqSetGroup._t); eqSetGroup._t = setTimeout(() => { const el = document.activeElement; const pos = el && el.selectionStart; renderEquipmentEditor(); const again = document.querySelector('#equipment-modal .eq-row:nth-child(' + (i + 3) + ') input'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) {} } }, 400); }
-    function eqToggle(i, vid, on) {
-      const v = provisionById(vid); if (!v) return;
-      const baseKey = v.variant_of_id || v.id;
-      // v jedné výbavě max. jedno provedení téže operace (základ nebo jedna z variant)
-      eqDraft[i].variant_ids = eqDraft[i].variant_ids.filter(id => { const o = provisionById(id); return !(o && (o.variant_of_id || o.id) === baseKey); });
-      if (on) eqDraft[i].variant_ids.push(vid);
+    function eqRenameGroup(i, v) { const old = eqDraft[i].group_name; eqDraft.forEach(e => { if (e.group_name === old) e.group_name = v; }); }
+    function eqOpCols() { return (product.operations || []).filter(o => variantsOf(o.id).length).sort((a, b) => a.step_number - b.step_number); }
+    function eqCellPick(i, baseId, vid) {
+      const base = (product.operations || []).find(o => o.id === baseId); const ids = new Set([baseId, ...variantsOf(baseId).map(v => v.id)]);
+      eqDraft[i].variant_ids = eqDraft[i].variant_ids.filter(id => !ids.has(id));
+      if (vid) eqDraft[i].variant_ids.push(parseInt(vid));
       renderEquipmentEditor();
     }
-    function renderEquipmentEditor() {
+    function renderEquipmentEditor(focusLast) {
       const m = document.getElementById('equipment-modal'); if (!m) return;
-      const inp = 'style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:13px;"';
-      const vars = allVariantsList();
-      // Provedení už použité jinou položkou TÉŽE skupiny je v ostatních položkách škrtnuté a nejde zvolit (jedna barva = jedno provedení)
-      const usedBy = (i, vid) => { const g = (eqDraft[i].group_name || '').trim().toLowerCase(); for (let j = 0; j < eqDraft.length; j++) { if (j === i) continue; if ((eqDraft[j].group_name || '').trim().toLowerCase() !== g) continue; if (eqDraft[j].variant_ids.includes(vid)) return eqDraft[j]; } return null; };
-      const rows = eqDraft.map((e, i) => '<div class="eq-row">' +
-        '<div class="eq-fields"><input placeholder="Skupina (Barva, Rám…)" value="' + esc(e.group_name) + '" oninput="eqSetGroup(' + i + ',this.value)" ' + inp + '>' +
-        '<input placeholder="Název (Červená…)" value="' + esc(e.name) + '" oninput="eqSet(' + i + ',\'name\',this.value)" ' + inp + '>' +
-        '<button class="btn" onclick="eqDel(' + i + ')" title="Odebrat" style="color:#ef4444;">&#128465;</button></div>' +
-        '<div class="eq-vars">' + (vars.length ? vars.map(v => { const u = usedBy(i, v.id); return '<label class="eq-var' + (e.variant_ids.includes(v.id) ? ' on' : '') + (v._isBase ? ' base' : '') + (u ? ' used' : '') + '"' + (u ? ' title="Už použito u položky ' + esc(u.group_name + ' – ' + u.name) + ' — ve skupině ' + esc(e.group_name) + ' může být každé provedení jen jednou"' : '') + '><input type="checkbox" ' + (e.variant_ids.includes(v.id) ? 'checked' : '') + (u ? ' disabled' : '') + ' onchange="eqToggle(' + i + ',' + v.id + ',this.checked)"> ' + esc(variantLabelOf(v)) + '</label>'; }).join('') : '<span class="muted" style="font-size:12px;">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</span>') + '</div>' +
-        '</div>').join('');
-      m.innerHTML = '<div class="modal-box" style="width:min(900px,94vw);max-height:90vh;overflow:auto;">' +
+      const inp = 'style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;"';
+      const cols = eqOpCols();
+      const usedIn = (i, baseId, provId) => { const g = (eqDraft[i].group_name || '').trim().toLowerCase(); for (let j = 0; j < eqDraft.length; j++) { if (j === i || (eqDraft[j].group_name || '').trim().toLowerCase() !== g) continue; if (eqDraft[j].variant_ids.includes(provId)) return eqDraft[j]; } return null; };
+      let body = '';
+      eqGroups().forEach(idxs => {
+        const first = eqDraft[idxs[0]];
+        body += '<div class="eqg">' +
+          '<div class="eqg-head"><span class="muted" style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;">Skupina</span><input class="eqg-name" placeholder="Barva / Jazyk / Platební metody…" value="' + esc(first.group_name) + '" oninput="eqRenameGroup(' + idxs[0] + ',this.value)" onchange="renderEquipmentEditor()" ' + inp + '><button class="btn" onclick="eqAddItem(' + idxs[idxs.length - 1] + ')" style="margin-left:auto;">+ položka</button></div>' +
+          '<table class="eqg-table"><thead><tr><th style="min-width:160px;">Položka</th>' + cols.map(o => '<th>' + o.step_number + '. ' + esc(o.name) + (o.is_parallel ? ' <span style="color:#c084fc;">⫽</span>' : '') + '</th>').join('') + '<th></th></tr></thead><tbody>' +
+          idxs.map(i => { const e = eqDraft[i]; return '<tr>' +
+            '<td><input placeholder="Červená…" value="' + esc(e.name) + '" oninput="eqSet(' + i + ',\'name\',this.value)" ' + inp + ' style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 10px;color:var(--text);font-size:13px;"></td>' +
+            cols.map(o => { const provs = [o].concat(variantsOf(o.id)); const cur = provs.find(pv => e.variant_ids.includes(pv.id));
+              return '<td><select onchange="eqCellPick(' + i + ',' + o.id + ',this.value)" class="eqg-sel' + (cur ? (cur.variant_of_id ? ' var' : ' base') : '') + '"><option value="">— netýká se</option>' +
+                provs.map(pv => { const u = usedIn(i, o.id, pv.id); return '<option value="' + pv.id + '"' + (cur && cur.id === pv.id ? ' selected' : '') + (u ? ' disabled' : '') + '>' + esc((pv.variant_code ? pv.variant_code + ' ' : '') + (pv.variant_name || (pv.variant_of_id ? 'varianta' : 'základ')) + (pv.variant_of_id ? '' : ' (základ)') + (u ? ' — už u „' + u.name + '"' : '')) + '</option>'; }).join('') + '</select></td>'; }).join('') +
+            '<td><button class="btn" onclick="eqDel(' + i + ')" title="Odebrat položku" style="color:#ef4444;padding:4px 8px;">&#128465;</button></td></tr>'; }).join('') +
+          '</tbody></table></div>';
+      });
+      m.innerHTML = '<div class="modal-box" style="width:min(1100px,96vw);max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
-        '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Každá položka výbavy (např. <b>Barva – Červená</b>) říká, které <b>varianty operací</b> se použijí místo základu, když ji zákazník zvolí. Jedna barva se může dotýkat více operací — zaškrtni všechny varianty, které k ní patří. Při zadání do výroby pak stačí vybrat výbavu.</p>' +
-        '<div class="eq-legend">Provedení k výběru (tyrkysově = základ, oranžově = varianta):</div>' +
-        rows +
-        '<div style="display:flex;gap:8px;margin-top:10px;"><button class="btn" onclick="eqAdd()">+ Položka výbavy</button><span style="flex:1"></span><button class="btn" onclick="closeEquipmentEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveEquipment()">Uložit</button></div>' +
+        '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Řádek = položka výbavy (např. <b>Barva – Červená</b>), sloupce = operace, které mají varianty. V buňce vyber, jaké provedení operace položka znamená; „— netýká se" nech tam, kde položka operaci neovlivňuje. V jedné skupině může být každé provedení jen u jedné položky.</p>' +
+        (cols.length ? body : '<p class="muted">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</p>') +
+        '<div style="display:flex;gap:8px;margin-top:12px;"><button class="btn" onclick="eqAddGroup()">+ Skupina</button><span style="flex:1"></span><button class="btn" onclick="closeEquipmentEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveEquipment()">Uložit</button></div>' +
         '</div>';
+      if (focusLast) { const inputs = m.querySelectorAll('.eqg:last-child input'); const el = inputs[inputs.length - 1] || inputs[0]; if (el) el.focus(); }
     }
     async function saveEquipment() {
       const items = eqDraft.filter(e => (e.group_name || '').trim() && (e.name || '').trim());
