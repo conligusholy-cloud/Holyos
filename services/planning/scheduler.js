@@ -293,6 +293,7 @@ async function scheduleBatch(batchId, opts = {}) {
           assigned_person_id: true,
           planned_start: true, planned_end: true, finished_at: true,
           operation: { select: { duration: true, duration_unit: true, preparation_time: true, is_parallel: true, parallel_from: true, parallel_to: true, step_number: true, workers_count: true } },
+          workstation: { select: { id: true, is_external: true, coop_lead_days: true, name: true } },
           workers: { select: { person_id: true, slot: true } },
         },
         orderBy: { sequence: 'asc' },
@@ -497,6 +498,22 @@ async function scheduleBatch(batchId, opts = {}) {
       const ends = pool.flatMap(pid => busyOf(pid).map(iv => iv.end.getTime()));
       return ends.length ? new Date(Math.min(...ends)) : null;
     };
+
+    // KOOPERACE (externí pracoviště): operaci dělá dodavatel. Trvá coop_lead_days KALENDÁŘNÍCH dnů
+    // (vč. dopravy tam a zpět), neřeší se směny, fronta pracoviště ani naši lidé. Když průběžná doba
+    // není nastavená, bere se doba operace z postupu přepočtená na dny.
+    const extWs = op.workstation && op.workstation.is_external ? op.workstation : null;
+    if (extWs) {
+      const days = extWs.coop_lead_days != null ? Number(extWs.coop_lead_days) : Math.max(1, Math.ceil(totalMin / 1440));
+      const start = candidateStart;
+      const end = new Date(start.getTime() + days * 86400000);
+      warnings.push('external_cooperation:' + days + 'd');
+      totalWait += days * 1440;
+      updates.push({ id: op.id, planned_start: start, planned_end: end, minutes: +totalMin.toFixed(1), warnings, workstation_id: undefined, assigned_person_id: undefined, assigned_person_name: null, worker_ids: [], workers_needed: 0 });
+      if (!isParallel) { mainByStep.set(op.operation && op.operation.step_number != null ? op.operation.step_number : op.sequence, { start, end, wsId }); prevEnd = end; }
+      if (warnings.length > 0) opWarnings.push({ op_id: op.id, sequence: op.sequence, warnings });
+      continue;
+    }
 
     let consumed;
     for (let i = 0; i < 80; i++) {

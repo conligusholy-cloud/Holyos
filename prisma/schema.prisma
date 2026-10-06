@@ -599,6 +599,7 @@ model Company {
   @@index([factorify_id])
   @@index([eshop_pricelist_id])
   @@map("companies")
+  coop_workstations Workstation[] @relation("WorkstationSupplier") // externí pracoviště (kooperace) u tohoto dodavatele
 }
 
 model Order {
@@ -1471,8 +1472,11 @@ model Workstation {
   // Skupina pracovišť (Hala → Skupina → Pracoviště) — zaměnitelná pracoviště se stejnými operacemi
   group_id Int?
 
-  // Externí pracoviště (kooperace)
-  is_external Boolean @default(false)
+  // Externí pracoviště (kooperace) — operace, které neděláme sami (zinkování, lakování…)
+  is_external         Boolean @default(false)
+  supplier_company_id Int? // dodavatel kooperace (Company)
+  coop_lead_days      Int? // průběžná doba kooperace v kalendářních dnech (vč. dopravy tam a zpět)
+  coop_note           String? @db.Text // poznámka: co se posílá, balení, kontakt
 
   // Rozměry pracoviště v metrech
   width_m  Decimal? @db.Decimal(8, 2) // šířka v m
@@ -1492,6 +1496,7 @@ model Workstation {
 
   hall             Hall?               @relation(fields: [hall_id], references: [id], onDelete: SetNull)
   group            WorkstationGroup?   @relation(fields: [group_id], references: [id], onDelete: SetNull)
+  supplier_company Company?            @relation("WorkstationSupplier", fields: [supplier_company_id], references: [id], onDelete: SetNull)
   input_warehouse  Warehouse?          @relation("WorkstationInputWarehouse", fields: [input_warehouse_id], references: [id])
   input_location   WarehouseLocation?  @relation("WorkstationInputLocation", fields: [input_location_id], references: [id])
   output_warehouse Warehouse?          @relation("WorkstationOutputWarehouse", fields: [output_warehouse_id], references: [id])
@@ -1508,6 +1513,8 @@ model Workstation {
   @@index([input_location_id])
   @@index([output_warehouse_id])
   @@index([output_location_id])
+  @@index([supplier_company_id])
+  @@index([is_external])
   @@map("workstations")
 }
 

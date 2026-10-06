@@ -175,6 +175,7 @@
       <button class="btn" onclick="openHallModal()">+ Nová hala</button>
       <button class="btn" onclick="openGroupModal()">+ Nová skupina</button>
       <button class="btn btn-primary" onclick="openAddModal()">+ Nové pracoviště</button>
+      <button class="btn" onclick="openAddModal(true)" title="Externí pracoviště — operace, kterou dělá dodavatel (zinkování, lakování, obrábění…)" style="border-color:rgba(249,115,22,.5);color:#f97316;">+ Kooperace</button>
       <input type="text" class="search-box" id="search" placeholder="Hledat pracoviště..." oninput="renderList()">
       <button class="btn" id="btn-reset-all" style="display:none;margin-left:auto;background:#ef4444;color:#fff;border-color:#ef4444;" onclick="resetAllWorkstations()" title="Jen admin — smaže všechna pracoviště (se zálohou)">🗑️ Smazat všechna pracoviště</button>
     </div>
@@ -229,10 +230,30 @@
         </div>
         <div class="form-group" style="flex:1;display:flex;align-items:flex-end;padding-bottom:8px;">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text);margin:0;">
-            <input type="checkbox" id="ws-external" style="width:auto;accent-color:var(--accent);cursor:pointer;">
+            <input type="checkbox" id="ws-external" style="width:auto;accent-color:var(--accent);cursor:pointer;" onchange="applyCoopMode()">
             Kooperace (externí)
           </label>
         </div>
+      </div>
+
+      <!-- Kooperace: dodavatel + průběžná doba (jen pro externí pracoviště) -->
+      <div id="coop-box" style="display:none;border:1px solid rgba(249,115,22,.45);background:rgba(249,115,22,.06);border-radius:10px;padding:12px 14px;margin:4px 0 10px;">
+        <div style="font-size:12px;color:#f97316;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;">🤝 Kooperace — operaci dělá dodavatel</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2;">
+            <label>Dodavatel (firma)</label>
+            <select id="ws-supplier"><option value="">— vyber dodavatele —</option></select>
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label>Průběžná doba (kalendářní dny)</label>
+            <input type="number" id="ws-coop-days" min="0" step="1" placeholder="např. 7" title="Od odeslání do návratu vč. dopravy tam i zpět — plánovač s tím počítá v kalendářních dnech, bez směn a našich lidí">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Poznámka (co posíláme, balení, kontakt)</label>
+          <input type="text" id="ws-coop-note" placeholder="např. díly na paletě, zinkovat žárově, volat p. Novák 777 …">
+        </div>
+        <div style="font-size:11.5px;color:var(--text2);">Vstupní sklad = expedice do kooperace, výstupní sklad = příjem zpět. Hala, skupina, rozměry a naši lidé se u kooperace nepoužívají.</div>
       </div>
 
       <!-- Rozměry -->
@@ -472,10 +493,11 @@
         return;
       }
 
-      // Seskupení: haly + nezařazené
+      // Seskupení: kooperace (externí) zvlášť, pak haly + nezařazené
       const byHall = {};
       const noHall = [];
-      filtered.forEach(ws => {
+      const external = filtered.filter(ws => ws.is_external);
+      filtered.filter(ws => !ws.is_external).forEach(ws => {
         const hid = ws.hall_id || (ws.hall ? ws.hall.id : null);
         if (hid) {
           if (!byHall[hid]) byHall[hid] = [];
@@ -538,6 +560,20 @@
         if (!isCollapsed) html += renderHallBody(0, noHall, '#64748b');
       }
 
+      // Kooperace — externí pracoviště (dodavatelé)
+      if (external.length > 0 || !q) {
+        const isCollapsed = collapsedHalls.has(-1);
+        html += '<tr class="hall-row" data-hall-id="-1" onclick="toggleHall(-1)">' +
+          '<td colspan="7"><div class="hall-header">' +
+            '<span class="hall-toggle ' + (isCollapsed ? 'collapsed' : '') + '">&#9660;</span>' +
+            '<span class="hall-color-dot" style="background:#f97316;"></span>' +
+            '<span>🤝 Kooperace (externí pracoviště)</span>' +
+            '<span class="hall-count">(' + external.length + ')</span>' +
+            '<button class="btn btn-sm" onclick="event.stopPropagation();openAddModal(true)" style="margin-left:auto;border-color:rgba(249,115,22,.5);color:#f97316;">+ Kooperace</button>' +
+          '</div></td></tr>';
+        if (!isCollapsed) external.forEach(ws => { html += renderWsRow(ws, '#f97316'); });
+      }
+
       tbody.innerHTML = html;
       initDragAndDrop();
     }
@@ -587,9 +623,13 @@
       const workers = ws.workers || [];
       const opsCount = ws._count ? ws._count.operations : 0;
 
-      // Rozměry
+      // Rozměry (u kooperace místo nich dodavatel + průběžná doba)
       let dimHtml = '<span style="color:var(--text2);">—</span>';
-      if (ws.width_m || ws.length_m) {
+      if (ws.is_external) {
+        dimHtml = '<div style="font-size:12px;">' + (ws.supplier_company ? '🏢 ' + esc(ws.supplier_company.name) : '<span style="color:#ef4444;">bez dodavatele</span>') + '</div>' +
+          '<div style="font-size:11px;color:#f97316;">⏱ ' + (ws.coop_lead_days != null ? ws.coop_lead_days + ' dní' : '<span style="color:#ef4444;">doba nezadána</span>') + '</div>' +
+          (ws.coop_note ? '<div style="font-size:10.5px;color:var(--text2);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + esc(ws.coop_note) + '">' + esc(ws.coop_note) + '</div>' : '');
+      } else if (ws.width_m || ws.length_m) {
         const w = ws.width_m ? parseFloat(ws.width_m) : 0;
         const l = ws.length_m ? parseFloat(ws.length_m) : 0;
         dimHtml = '<span class="dim-badge">' + w + ' × ' + l + ' m</span>';
@@ -1051,14 +1091,18 @@
     function togglePrimary(idx) { modalWorkers[idx].is_primary = !modalWorkers[idx].is_primary; renderModalWorkers(); }
 
     // === Modal open/close ===
-    function openAddModal() {
-      document.getElementById('modal-title').textContent = 'Nové pracoviště';
+    function openAddModal(coop) {
+      document.getElementById('modal-title').textContent = coop ? 'Nová kooperace (externí pracoviště)' : 'Nové pracoviště';
       document.getElementById('ws-id').value = '';
       document.getElementById('ws-name').value = '';
       document.getElementById('ws-code').value = '';
       document.getElementById('ws-width').value = '';
       document.getElementById('ws-length').value = '';
-      document.getElementById('ws-external').checked = false;
+      document.getElementById('ws-external').checked = !!coop;
+      document.getElementById('ws-supplier').value = '';
+      document.getElementById('ws-coop-days').value = '';
+      document.getElementById('ws-coop-note').value = '';
+      populateSupplierSelect(null); applyCoopMode();
       modalWorkers = [];
       populateHallSelect(null);
       populateWarehouseSelects(null, null, null, null);
@@ -1078,6 +1122,9 @@
       document.getElementById('ws-width').value = ws.width_m ? parseFloat(ws.width_m) : '';
       document.getElementById('ws-length').value = ws.length_m ? parseFloat(ws.length_m) : '';
       document.getElementById('ws-external').checked = ws.is_external || false;
+      document.getElementById('ws-coop-days').value = ws.coop_lead_days != null ? ws.coop_lead_days : '';
+      document.getElementById('ws-coop-note').value = ws.coop_note || '';
+      populateSupplierSelect(ws.supplier_company_id || (ws.supplier_company ? ws.supplier_company.id : null)); applyCoopMode();
 
       const hallId = ws.hall ? ws.hall.id : ws.hall_id || null;
       populateHallSelect(hallId, ws.group_id || (ws.group ? ws.group.id : null));
@@ -1103,6 +1150,20 @@
     }
 
     function closeModal() { document.getElementById('ws-modal').style.display = 'none'; }
+    // Kooperace: přepne dialog do externího režimu (skryje halu/skupinu/rozměry, ukáže dodavatele a dobu)
+    function applyCoopMode() {
+      const on = document.getElementById('ws-external').checked;
+      document.getElementById('coop-box').style.display = on ? '' : 'none';
+      ['ws-hall', 'ws-group', 'ws-width', 'ws-length'].forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = on; el.closest('.form-group').style.opacity = on ? .45 : 1; } });
+    }
+    let allCompanies = null;
+    async function populateSupplierSelect(selectedId) {
+      const sel = document.getElementById('ws-supplier');
+      if (!allCompanies) { try { allCompanies = await api('/api/wh/companies'); } catch (e) { allCompanies = []; } }
+      const pref = (c) => (c.type === 'cooperation' ? 0 : c.type === 'supplier' || c.type === 'both' ? 1 : 2);
+      const list = allCompanies.slice().sort((a, b) => pref(a) - pref(b) || (a.name || '').localeCompare(b.name || '', 'cs'));
+      sel.innerHTML = '<option value="">— vyber dodavatele —</option>' + list.map(c => '<option value="' + c.id + '"' + (selectedId == c.id ? ' selected' : '') + '>' + esc(c.name) + (c.city ? ' · ' + esc(c.city) : '') + (c.type === 'cooperation' ? ' (kooperace)' : '') + '</option>').join('');
+    }
     // Esc zavře jakýkoli otevřený dialog (pracoviště / hala / skupina)
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
@@ -1124,10 +1185,14 @@
       const output_warehouse_id = document.getElementById('ws-output-wh').value || null;
       const output_location_id = document.getElementById('ws-output-loc').value || null;
       if (!name) return showToast('Vyplňte název pracoviště', true);
+      if (is_external && !document.getElementById('ws-coop-days').value) return showToast('U kooperace vyplň průběžnou dobu ve dnech — plánovač ji potřebuje', true);
 
       try {
         let wsId;
-        const body = { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id };
+        const body = { name, code, hall_id: is_external ? null : hall_id, group_id: is_external ? null : group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id,
+          supplier_company_id: is_external ? (document.getElementById('ws-supplier').value || null) : null,
+          coop_lead_days: is_external ? (document.getElementById('ws-coop-days').value || null) : null,
+          coop_note: is_external ? (document.getElementById('ws-coop-note').value.trim() || null) : null };
         if (id) {
           await api('/api/production/workstations/' + id, { method: 'PUT', body: JSON.stringify(body) });
           wsId = parseInt(id);
@@ -1215,6 +1280,9 @@
           hall_id: src.hall ? src.hall.id : (src.hall_id || null),
           group_id: src.group ? src.group.id : (src.group_id || null),
           is_external: !!src.is_external,
+          supplier_company_id: src.supplier_company_id || (src.supplier_company ? src.supplier_company.id : null),
+          coop_lead_days: src.coop_lead_days != null ? src.coop_lead_days : null,
+          coop_note: src.coop_note || null,
           width_m: src.width_m != null ? parseFloat(src.width_m) : null,
           length_m: src.length_m != null ? parseFloat(src.length_m) : null,
           input_warehouse_id, output_warehouse_id,

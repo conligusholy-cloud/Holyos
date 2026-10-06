@@ -1076,6 +1076,7 @@ router.get('/workstations', async (req, res, next) => {
         },
         hall: { select: { id: true, name: true, color: true } },
         group: { select: { id: true, name: true, color: true, hall_id: true } },
+        supplier_company: { select: { id: true, name: true, city: true, email: true, phone: true } },
         input_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
         input_location: { select: { id: true, label: true, section: true, rack: true, position: true } },
         output_warehouse: { select: { id: true, name: true, code: true, locations: { select: { id: true, label: true, section: true, rack: true, position: true }, orderBy: [{ section: 'asc' }, { rack: 'asc' }, { position: 'asc' }] } } },
@@ -1206,13 +1207,16 @@ router.get('/workstations/:id', async (req, res, next) => {
 // POST /api/production/workstations
 router.post('/workstations', async (req, res, next) => {
   try {
-    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
+    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id, supplier_company_id, coop_lead_days, coop_note } = req.body;
     const ws = await prisma.workstation.create({
       data: {
         name, code,
         hall_id: hall_id ? parseInt(hall_id) : null,
         group_id: group_id ? parseInt(group_id) : null,
         is_external: is_external === true,
+        supplier_company_id: is_external === true && supplier_company_id ? parseInt(supplier_company_id) : null,
+        coop_lead_days: is_external === true && coop_lead_days != null && coop_lead_days !== '' ? Math.max(0, parseInt(coop_lead_days)) : null,
+        coop_note: is_external === true && coop_note ? String(coop_note) : null,
         width_m: width_m ? parseFloat(width_m) : null,
         length_m: length_m ? parseFloat(length_m) : null,
         input_warehouse_id: input_warehouse_id ? parseInt(input_warehouse_id) : null,
@@ -1228,8 +1232,11 @@ router.post('/workstations', async (req, res, next) => {
 // PUT /api/production/workstations/:id
 router.put('/workstations/:id', async (req, res, next) => {
   try {
-    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id } = req.body;
+    const { name, code, hall_id, group_id, is_external, width_m, length_m, input_warehouse_id, input_location_id, output_warehouse_id, output_location_id, supplier_company_id, coop_lead_days, coop_note } = req.body;
     const data = {};
+    if (supplier_company_id !== undefined) data.supplier_company_id = supplier_company_id ? parseInt(supplier_company_id) : null;
+    if (coop_lead_days !== undefined) data.coop_lead_days = coop_lead_days != null && coop_lead_days !== '' ? Math.max(0, parseInt(coop_lead_days)) : null;
+    if (coop_note !== undefined) data.coop_note = coop_note ? String(coop_note) : null;
     if (name !== undefined) data.name = name;
     if (code !== undefined) data.code = code;
     if (hall_id !== undefined) data.hall_id = hall_id ? parseInt(hall_id) : null;
