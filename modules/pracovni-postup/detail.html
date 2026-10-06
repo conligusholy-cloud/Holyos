@@ -758,6 +758,7 @@
     .variant-wrap .op-card{margin-bottom:0}
     .lane-main.has-variants .op-row{padding-top:26px;margin-bottom:14px}
     .lane-main.has-variants .op-node{height:92px}
+    .lane-main.has-variants .op-node-end{margin-top:34px}
     .lane-main.has-variants .op-row > .op-card, .lane-main.has-variants .variant-wrap .op-card{margin-bottom:0}
     /* Osa hlavní linie (uzly, start, hotový výrobek) zůstává nad sloupcem základu, i když vedle jsou varianty */
     .lane-main.has-variants .op-node, .lane-main.has-variants .start-box, .lane-main.has-variants .outputs-box{width:680px;max-width:680px;margin-left:0;margin-right:0}
@@ -1455,8 +1456,12 @@
         const a = dotCenter(nTop), b = dotCenter(nBot);
         const br = baseCard.getBoundingClientRect();
         const bTop = (br.top - lanesRect.top) / z, bBot = (br.bottom - lanesRect.top) / z;
-        const yFork = a.y + a.r + 18;          // vodorovná „rozbočka" pod horním uzlem
-        const yJoin = b.y - b.r - 18;          // vodorovné „sloučení" nad dolním uzlem
+        const vRects = vCards.map(vc => vc.getBoundingClientRect());
+        const rowTop = Math.min(bTop, ...vRects.map(r => (r.top - lanesRect.top) / z));
+        const rowBot = Math.max(bBot, ...vRects.map(r => (r.bottom - lanesRect.top) / z));
+        // Rozbočka / sloučení: u uzlů, ale vždy s odstupem od karet (ať čára neleží na hraně karty)
+        const yFork = Math.min(a.y + a.r + 18, rowTop - 14);
+        const yJoin = Math.max(b.y - b.r - 18, rowBot + 16);
         const col = 'rgba(251,146,60,0.95)';
         const dash = 'stroke-dasharray="7 5"';
         const chev = (x, y, dir) => '<path d="' + (dir === 'down' ? 'M' + (x - 5) + ',' + (y - 5) + ' L' + x + ',' + y + ' L' + (x + 5) + ',' + (y - 5)
