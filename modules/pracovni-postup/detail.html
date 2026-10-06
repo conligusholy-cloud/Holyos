@@ -1498,13 +1498,16 @@
           if (!nStart || !nEnd) return;
           const a = dotCenter(nStart), b = dotCenter(nEnd);
           const opIds = (w.getAttribute('data-ops') || '').split(',').map(Number).filter(Boolean);
-          const cards = opIds.map(id => { const cid = choice[id] || id; const c = lane.querySelector('.op-card[data-op-id="' + cid + '"]'); if (c) c.classList.add('route-on'); return c; }).filter(Boolean);
-          if (!cards.length) return;
           const rect = (c) => { const r = c.getBoundingClientRect(); return { x: (r.left + r.width / 2 - lanesRect.left) / z, top: (r.top - lanesRect.top) / z, bot: (r.bottom - lanesRect.top) / z }; };
-          const first = rect(cards[0]), last = rect(cards[cards.length - 1]);
-          d += 'M' + (a.x + a.r) + ',' + a.y + ' H' + first.x + ' V' + first.top + ' ';
-          for (let k = 1; k < cards.length; k++) { const p0 = rect(cards[k - 1]), p1 = rect(cards[k]); const ym = (p0.bot + p1.top) / 2; d += 'M' + p0.x + ',' + p0.bot + ' V' + ym + ' H' + p1.x + ' V' + p1.top + ' '; }
-          d += 'M' + last.x + ',' + last.bot + ' V' + b.y + ' H' + (b.x + b.r) + ' ';
+          // Cesta jede po EXISTUJÍCÍCH čarách: fialová z uzlu ke sloupci základu, u varianty po oranžové rozbočce NEBO
+          // (36 px nad kartami) doprava a dolů do varianty; zpět po fialové svislici/vodorovné do uzlu.
+          const picks = opIds.map(id => { const base = lane.querySelector('.op-card[data-op-id="' + id + '"]'); const cid = choice[id] || id; const c = lane.querySelector('.op-card[data-op-id="' + cid + '"]'); if (c) c.classList.add('route-on'); return c && base ? { card: c, base, isVar: cid !== id } : null; }).filter(Boolean);
+          if (!picks.length) return;
+          const seg = (pk) => { const bR = rect(pk.base), cR = rect(pk.card); if (!pk.isVar) return { inX: bR.x, top: bR.top, bot: bR.bot, outX: bR.x, lead: 'V' + bR.top }; const yN = bR.top - 36; return { inX: bR.x, top: cR.top, bot: cR.bot, outX: cR.x, lead: 'V' + yN + ' H' + cR.x + ' V' + cR.top }; };
+          const f = seg(picks[0]), l = seg(picks[picks.length - 1]);
+          d += 'M' + (a.x + a.r) + ',' + a.y + ' H' + f.inX + ' ' + f.lead + ' ';
+          for (let k = 1; k < picks.length; k++) { const p0 = seg(picks[k - 1]), p1 = seg(picks[k]); const ym = (p0.bot + p1.top) / 2; d += 'M' + p0.outX + ',' + p0.bot + ' V' + ym + ' H' + p1.inX + ' ' + p1.lead + ' '; }
+          d += 'M' + l.outX + ',' + l.bot + ' V' + b.y + ' H' + (b.x + b.r) + ' ';
         });
         if (d) variantSvg += '<path d="' + d + '" fill="none" stroke="rgba(34,197,94,0.25)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>' +
           '<path d="' + d + '" fill="none" stroke="' + green + '" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>';
