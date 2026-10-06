@@ -449,7 +449,7 @@ function supporterCompounder(s) {
   .cp .dec-opts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
   .cp .dec-o{font:inherit;font-weight:800;font-size:20px;min-width:72px;padding:12px 18px;border-radius:14px;border:1px solid var(--border2);background:rgba(4,8,16,.6);color:var(--text2);cursor:pointer;transition:all .2s}
   .cp .dec-o:hover{color:var(--text);border-color:rgba(79,209,255,.5)} .cp .dec-o.on{color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));border-color:transparent;box-shadow:0 10px 30px rgba(30,134,224,.4);transform:translateY(-2px)}
-  .cp .dec-money{margin-left:auto;text-align:right} .cp .dec-money b{background:linear-gradient(180deg,#fff,var(--accent2))!important;-webkit-background-clip:text;background-clip:text}
+  .cp .dec-money{margin-left:auto;text-align:right} .cp .dec-money b{background-image:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
   @media(max-width:640px){.cp .dec-out{flex-direction:column;align-items:flex-start} .cp .dec-money{margin-left:0;text-align:left}}
   .cp .dec-out{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border-radius:14px;background:rgba(4,8,16,.5);border:1px solid var(--border);margin-bottom:12px}
   .cp .dec-k{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
@@ -486,7 +486,7 @@ function supporterCompounder(s) {
       ${ph.timeline ? `<div class="ph-tl">${ph.timeline.map((t, i) => `<div class="s"><i>${i + 1}</i><b>${esc(t[0])}</b><span>${esc(t[1])}</span></div>`).join('')}</div>` : ''}
       ${ph.note ? `<p class="ph-note">${ph.note}</p>` : ''}
       ${ph.decision ? `<div class="dec"><div class="dec-q">Kolik prádlomatů vlastně chci?</div><div class="dec-opts">${[3, 5, 10, 100].map((n, i) => `<button type="button" class="dec-o${i === 1 ? ' on' : ''}" data-n="${n}" onclick="for(const b of this.parentNode.children)b.classList.remove('on');this.classList.add('on');document.getElementById('dec-n').textContent=this.dataset.n;document.getElementById('dec-m').textContent=(this.dataset.n*25000).toLocaleString('cs-CZ')">${n}</button>`).join('')}</div>
-        <div class="dec-out"><div><span class="dec-k">za 5 let</span><b><span id="dec-n">5</span> prádlomatů</b><span class="dec-s">splacených · Vašich · každý měsíc vydělávají jen Vám</span></div><div class="dec-money"><span class="dec-k">měsíčně pro Vás</span><b><span id="dec-m">125 000</span> Kč</b><span class="dec-s">při 25 000 Kč čistého na jeden prádlomat</span></div></div>
+        <div class="dec-out"><div><span class="dec-k">za 5 let</span><b><span id="dec-n">5</span> prádlomatů</b><span class="dec-s">splacených · Vašich · každý měsíc vydělávají jen Vám</span></div><div class="dec-money"><span class="dec-k">měsíčně pro Vás</span><b><span id="dec-m">125 000</span> Kč</b><span class="dec-s">odhad při dodržení postupu · 25 000 Kč čistého na jeden prádlomat měsíčně</span></div></div>
         <div class="dec-ask">Otázka tedy nezní „kolik strojů", ale: <b>Kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování?</b></div></div>` : ''}
     </section>`).join('')}
 
