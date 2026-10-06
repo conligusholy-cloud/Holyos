@@ -1412,7 +1412,15 @@
           const cx = (bcr.left + bcr.width / 2 - lanesRect.left) / z;
           const cTop = (bcr.top - lanesRect.top) / z, cBot = (wr.bottom - lanesRect.top) / z;
           // Varianty paralelní operace: zpět do návratové čáry vede čárkovaná oranžová svislice
-          w.querySelectorAll('.op-card.is-variant').forEach(vc => { const vr = vc.getBoundingClientRect(); const vx = (vr.left + vr.width / 2 - lanesRect.left) / z, vb = (vr.bottom - lanesRect.top) / z; svg.insertAdjacentHTML('beforeend', '<path d="M' + vx + ',' + (vb + 2) + ' V' + b.y + ' H' + (cx + 2) + '" fill="none" stroke="rgba(251,146,60,0.95)" stroke-width="2" stroke-dasharray="7 5"/><circle cx="' + cx + '" cy="' + b.y + '" r="3.5" fill="rgba(251,146,60,0.95)"/>'); });
+          // Návrat varianty: když větev pokračuje další operací (řetěz), varianta se vrací do větve MEZI operacemi
+          // (nad další kartu); jinak až do návratové čáry k uzlu.
+          w.querySelectorAll('.par-row').forEach(row => {
+            const rowR = row.getBoundingClientRect();
+            let nextEl = row.nextElementSibling; while (nextEl && !nextEl.classList.contains('op-card') && !nextEl.classList.contains('par-row')) nextEl = nextEl.nextElementSibling;
+            let joinY = b.y;
+            if (nextEl) { const nr = nextEl.getBoundingClientRect(); const rowBot = (rowR.bottom - lanesRect.top) / z; const nextTop = (nr.top - lanesRect.top) / z; joinY = (rowBot + nextTop) / 2; }
+            row.querySelectorAll('.op-card.is-variant').forEach(vc => { const vr = vc.getBoundingClientRect(); const vx = (vr.left + vr.width / 2 - lanesRect.left) / z, vb = (vr.bottom - lanesRect.top) / z; svg.insertAdjacentHTML('beforeend', '<path d="M' + vx + ',' + (vb + 2) + ' V' + joinY + ' H' + (cx + 2) + '" fill="none" stroke="rgba(251,146,60,0.95)" stroke-width="2" stroke-dasharray="7 5"/><circle cx="' + cx + '" cy="' + joinY + '" r="3.5" fill="rgba(251,146,60,0.95)"/>'); });
+          });
           const stroke = 'rgba(192,132,252,0.9)';
           const p1 = 'M' + (a.x + a.r) + ',' + a.y + ' H' + cx + ' V' + (cTop - 2);
           const p2 = 'M' + cx + ',' + (cBot + 2) + ' V' + b.y + ' H' + (b.x + b.r + 2);
