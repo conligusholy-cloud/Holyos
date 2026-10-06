@@ -220,7 +220,8 @@
     .start-box .start-sub { font-weight:500; color:var(--text2); letter-spacing:0; }
     .start-box { flex-wrap:wrap; justify-content:center; }
     .start-box .start-cfg { flex-basis:100%; text-align:center; margin-top:6px; font-family:ui-monospace,Consolas,monospace; font-size:13px; font-weight:700; color:#0b1a12; background:#22c55e; border-radius:999px; padding:3px 12px; letter-spacing:.3px; }
-    .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:10px 14px; cursor:pointer; }
+    .outputs-box { margin:10px auto 48px; max-width:440px; background:rgba(34,197,94,0.07); border:1px solid rgba(34,197,94,0.45); border-radius:10px; padding:0; cursor:pointer; display:flex; align-items:stretch; overflow:hidden; }
+    .outputs-box .outputs-body { flex:1; min-width:0; padding:10px 14px; }
     .outputs-box:hover { border-color:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,0.15); }
     .outputs-row{margin-top:44px;margin-bottom:48px}.outputs-row .outputs-box{margin:0;max-width:none}
     .outputs-box.for-variant{border-color:rgba(251,146,60,.55);background:rgba(251,146,60,.06)}.outputs-box.inherits{border-style:dashed;opacity:.8}
@@ -1732,12 +1733,18 @@
       const routeOv = eqRouteOutputVariant();
       const on = Object.keys(eqSelected).length && (ov ? routeOv === ov.id : (routeOv === null || (bov && routeOv === bov.id)));
       return '<div class="outputs-box' + (inherits ? ' inherits' : '') + (ov ? ' for-variant' : '') + (on ? ' route-on' : '') + '" onclick="openOutputsEditor(' + (ovId || 'null') + ')" title="Co se naskladní po dokončení postupu' + (ov ? ' u konce ' + esc(ov.name) : '') + ' — klikni pro úpravu">' +
+        '<div class="outputs-body">' +
         '<div class="outputs-head">📦 ' + head + (isDefault ? 'Hotový výrobek <span class="outputs-def">jeden výrobek</span>' : 'Hotové výrobky <span class="outputs-def">sada dílů</span>') + (inherits ? ' <span class="outputs-def" style="color:var(--text2);">stejné jako základ — klikni a nastav jiné díly</span>' : '') +
-        (!ov ? '<button class="btn" onclick="event.stopPropagation();createOutputVariant()" title="Vytvořit variantu konce (jiné hotové výrobky / kódy dílů) — vybírá se ve výbavě" style="margin-left:auto;padding:2px 8px;color:#fb923c;">&#10697;</button>'
-             : '<button class="btn" onclick="event.stopPropagation();deleteOutputVariant(' + ov.id + ')" title="Smazat tento konec" style="margin-left:auto;padding:2px 8px;color:#ef4444;">&#128465;</button>') + '<span style="flex:1"></span><span class="outputs-edit">✎ upravit</span></div>' +
+        '</div>' +
         rows.map(r => '<div class="outputs-row"><span>' + esc(r.label) + '</span><b>' + r.qty + ' ' + esc(r.unit) + '</b></div>').join('') +
         (rows.length > 1 ? '<div class="outputs-foot">Např. nářezový plán: 1 deska → více dílů; po dokončení se naskladní všechny položky.</div>' : '') +
-        '</div>';
+        '</div>' +
+        // Stejný sloupec tlačítek jako u operací: upravit, varianta (jen základ), smazat (jen varianta)
+        '<div class="op-actions">' +
+          '<button onclick="event.stopPropagation();openOutputsEditor(' + (ovId || 'null') + ')" title="Upravit">&#9998;</button>' +
+          (!ov ? '<button onclick="event.stopPropagation();createOutputVariant()" title="Vytvořit variantu konce (jiné hotové výrobky / kódy dílů)" style="color:#fb923c;">&#10697;</button>'
+               : '<button class="btn-del" onclick="event.stopPropagation();deleteOutputVariant(' + ov.id + ')" title="Smazat tento konec">&#128465;</button>') +
+        '</div></div>';
     }
     let outDraft = [];
     let outMode = 'single'; // 'single' = jeden výrobek (výrobek sám ×1) | 'set' = sada dílů
