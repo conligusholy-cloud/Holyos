@@ -1190,7 +1190,7 @@
             const vs = variantsOf(op.id);
             {
               html += '<div class="op-row">' + renderOpCard(op, i);
-              vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ <b>' + esc(v.variant_code || '') + '</b> ' + esc(v.variant_name || '') + '</div>' + renderOpCard(v, i) + '</div>'; });
+              vs.forEach(v => { html += '<div class="variant-wrap"><div class="variant-link" title="Varianta nahrazuje základ"><span></span>⎘ Varianta <b>' + esc(v.variant_code || '—') + '</b> · ' + esc(v.variant_name || 'bez názvu') + '</div>' + renderOpCard(v, i) + '</div>'; });
               html += '</div>';
             }
           });

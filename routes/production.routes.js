@@ -184,8 +184,16 @@ router.get('/products', async (req, res, next) => {
 router.get('/products/:id', async (req, res, next) => {
   try {
     // Načti produkt s operacemi a materiály (1 úroveň)
-    const product = await loadProductDeep(parseInt(req.params.id), prisma);
+    let product = await loadProductDeep(parseInt(req.params.id), prisma);
     if (!product) return res.status(404).json({ error: 'Produkt nenalezen' });
+
+    // Varianty bez kódu (vzniklé před zavedením kódů) dostanou unikátní kód V01… automaticky
+    const noCode = (product.operations || []).filter(o => o.variant_of_id && !o.variant_code);
+    if (noCode.length) {
+      const used = await usedVariantCodes();
+      for (const v of noCode) { const c = nextVariantCode(used); used.add(c); await prisma.productOperation.update({ where: { id: v.id }, data: { variant_code: c } }); }
+      product = await loadProductDeep(parseInt(req.params.id), prisma);
+    }
 
     // Rekurzivně enrich materiály s linked_product (do hloubky max 30 úrovní)
     const productCache = await buildProductCache(prisma);
