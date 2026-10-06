@@ -212,12 +212,12 @@ function homeStory(s) {
   @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
   </style>
   <div class="st">
-    <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>25. 9. 2026</b> je to <b>Best Series 2.0</b> a z Vás teď udělá <b class="cp">Compoundera</b>.</p>
+    <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>24. 9. 2026</b> tvoří <b>Best Series 2.0</b> z lidí <b class="cp">Compoundery</b>.</p>
 
     <div class="tl">
       <div class="c"><div class="y">2018 – 2026</div><div class="t">Best Series</div><p>Osm let tvrdé práce: vlastní výroba, servis, síť míst, konzistence. Důvěra, která se nedá koupit — jen odpracovat.</p></div>
       <div class="c"><div class="y">24. 9. 2026</div><div class="t">Zlom</div><p>Bankovní domy si všimly, že český prádlomat je skvělý stroj — a <b>zaknihovaly ho do leasingových produktů</b>.</p></div>
-      <div class="c now"><div class="y">25. 9. 2026 → dnes</div><div class="t">Best Series 2.0 → Compounder</div><p>Každý, kdo Best Series podpořil, je teď součástí 2.0. Z podporovatele se stává Compounder — ten, komu se prádlomaty násobí. Vy jste u toho.</p></div>
+      <div class="c now"><div class="y">25. 9. 2026 → dnes</div><div class="t">Best Series 2.0 → Compounder</div><p>Best Series 2.0 právě teď vrací několikanásobně větší hodnotu než kdy jindy. Vytváří z Vás Compoundery. <b>Kdo je Compounder?</b> Ten, komu se jeho vlastní prádlomaty násobí. <b>Jste to Vy!</b></p></div>
     </div>
 
     <div class="big">
@@ -236,7 +236,7 @@ function homeStory(s) {
     <div class="rule">
       <div class="k">Pravidla hry se změnila</div>
       <h2>Už nejde o peníze. Jde o čas.</h2>
-      <p><span class="old">Kolik prádlomatů si můžete dovolit?</span> → <b>Kolik prádlomatů stihnete mít, než si toho všimnou ostatní?</b> Dnes je to podpultová informace. Dříve nebo později si jí všimne někdo další a přiveze sem konkurenční stroj — zvlášť když jsme banky přesvědčili, že prádlomat je produkt, který stojí za financování. Záleží, kdo u toho bude.</p>
+      <p><span class="old">Kolik prádlomatů si můžete dovolit?</span> → <b>Kolik prádlomatů stihnete mít, než si toho všimnou ostatní?</b> Dnes je to podpultová informace. Dříve nebo později si jí všimne někdo další a přiveze sem konkurenční stroj — zvlášť když jsme bankovní domy přesvědčili, že prádlomat je produkt, který stojí za financování. Záleží, kdo u toho bude.</p>
     </div>
 
     <div class="cta">
