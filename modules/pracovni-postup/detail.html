@@ -730,6 +730,7 @@
     .eq-row{border:1px solid var(--border);border-radius:10px;padding:10px;margin-top:8px}.eq-fields{display:flex;gap:8px;align-items:center}
     .eq-vars{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.eq-var{font-size:12px;border:1px solid var(--border);border-radius:8px;padding:4px 8px;cursor:pointer;display:flex;gap:6px;align-items:center}.eq-var.on{border-color:rgba(251,146,60,.7);background:rgba(251,146,60,.1);color:#fb923c}
     .eq-legend{font-size:11px;color:var(--text2);margin-bottom:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+    .eq-var.base{border-style:dashed}.eq-var.base.on{border-color:rgba(20,184,166,.8);background:rgba(20,184,166,.1);color:#14b8a6}
     .op-row{display:flex;gap:36px;align-items:flex-start;margin-bottom:8px}
     .op-row > .op-card{flex:0 0 680px;width:680px;margin-bottom:0}
     .variant-wrap{flex:0 0 680px;width:680px;position:relative}
@@ -1554,15 +1555,25 @@
     // ── Výbava výrobku: „Barva – Červená" = sada variant operací; vybírá se při zadání do výroby ──
     let productEquipment = [];
     let eqDraft = [];
-    function allVariantsList() { return (product.variants || []).slice().sort((a, b) => a.step_number - b.step_number || a.id - b.id); }
-    function variantLabelOf(v) { const base = findAnyOp(v.variant_of_id); return (base ? base.step_number + '. ' + base.name + ': ' : '') + (v.variant_code ? v.variant_code + ' ' : '') + (v.variant_name || ''); }
+    // Seznam provedení do výbavy: základ (pokud má varianty) + jeho varianty, seřazené po operacích
+    function allVariantsList() {
+      const out = [];
+      (product.operations || []).slice().sort((a, b) => a.step_number - b.step_number).forEach(op => {
+        const vs = variantsOf(op.id); if (!vs.length) return;
+        out.push(Object.assign({ _isBase: true }, op));
+        vs.sort((a, b) => a.id - b.id).forEach(v => out.push(v));
+      });
+      return out;
+    }
+    function variantLabelOf(v) { const base = v.variant_of_id ? findAnyOp(v.variant_of_id) : v; return (base ? base.step_number + '. ' + base.name + ': ' : '') + (v.variant_code ? v.variant_code + ' ' : '') + (v.variant_name || (v.variant_of_id ? '' : 'základ')) + (v.variant_of_id ? '' : ' (základ)'); }
+    function provisionById(id) { return (product.variants || []).find(v => v.id === id) || (product.operations || []).find(o => o.id === id) || null; }
     function renderEquipmentBox() {
       const groups = new Map();
       productEquipment.forEach(e => { if (!groups.has(e.group_name)) groups.set(e.group_name, []); groups.get(e.group_name).push(e); });
       let rows = '';
       groups.forEach((list, g) => {
         rows += '<tr><td class="eq-g">' + esc(g) + '</td><td>' + list.map(e => {
-          const vs = (e.variant_ids || []).map(id => (product.variants || []).find(v => v.id === id)).filter(Boolean);
+          const vs = (e.variant_ids || []).map(id => provisionById(id)).filter(Boolean);
           return '<span class="eq-item" title="' + esc(vs.map(variantLabelOf).join('\n') || 'bez variant') + '">' + esc(e.name) + ' <small>' + vs.map(v => v.variant_code || '').filter(Boolean).join(' ') + '</small></span>';
         }).join(' ') + '</td></tr>';
       });
@@ -1583,9 +1594,10 @@
     function eqDel(i) { eqDraft.splice(i, 1); renderEquipmentEditor(); }
     function eqSet(i, k, v) { eqDraft[i][k] = v; }
     function eqToggle(i, vid, on) {
-      const v = (product.variants || []).find(x => x.id === vid); if (!v) return;
-      // v jedné výbavě max. jedna varianta téže operace
-      eqDraft[i].variant_ids = eqDraft[i].variant_ids.filter(id => { const o = (product.variants || []).find(x => x.id === id); return !(o && o.variant_of_id === v.variant_of_id); });
+      const v = provisionById(vid); if (!v) return;
+      const baseKey = v.variant_of_id || v.id;
+      // v jedné výbavě max. jedno provedení téže operace (základ nebo jedna z variant)
+      eqDraft[i].variant_ids = eqDraft[i].variant_ids.filter(id => { const o = provisionById(id); return !(o && (o.variant_of_id || o.id) === baseKey); });
       if (on) eqDraft[i].variant_ids.push(vid);
       renderEquipmentEditor();
     }
@@ -1597,12 +1609,12 @@
         '<div class="eq-fields"><input placeholder="Skupina (Barva, Rám…)" value="' + esc(e.group_name) + '" oninput="eqSet(' + i + ',\'group_name\',this.value)" ' + inp + '>' +
         '<input placeholder="Název (Červená…)" value="' + esc(e.name) + '" oninput="eqSet(' + i + ',\'name\',this.value)" ' + inp + '>' +
         '<button class="btn" onclick="eqDel(' + i + ')" title="Odebrat" style="color:#ef4444;">&#128465;</button></div>' +
-        '<div class="eq-vars">' + (vars.length ? vars.map(v => '<label class="eq-var' + (e.variant_ids.includes(v.id) ? ' on' : '') + '"><input type="checkbox" ' + (e.variant_ids.includes(v.id) ? 'checked' : '') + ' onchange="eqToggle(' + i + ',' + v.id + ',this.checked)"> ' + esc(variantLabelOf(v)) + '</label>').join('') : '<span class="muted" style="font-size:12px;">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</span>') + '</div>' +
+        '<div class="eq-vars">' + (vars.length ? vars.map(v => '<label class="eq-var' + (e.variant_ids.includes(v.id) ? ' on' : '') + (v._isBase ? ' base' : '') + '"><input type="checkbox" ' + (e.variant_ids.includes(v.id) ? 'checked' : '') + ' onchange="eqToggle(' + i + ',' + v.id + ',this.checked)"> ' + esc(variantLabelOf(v)) + '</label>').join('') : '<span class="muted" style="font-size:12px;">Výrobek nemá žádné varianty operací — nejdřív je vytvoř tlačítkem ⎘ u operace.</span>') + '</div>' +
         '</div>').join('');
       m.innerHTML = '<div class="modal-box" style="width:min(900px,94vw);max-height:90vh;overflow:auto;">' +
         '<h3 style="margin-top:0;">⚙ Výbava výrobku</h3>' +
         '<p class="muted" style="font-size:12.5px;margin:0 0 12px;">Každá položka výbavy (např. <b>Barva – Červená</b>) říká, které <b>varianty operací</b> se použijí místo základu, když ji zákazník zvolí. Jedna barva se může dotýkat více operací — zaškrtni všechny varianty, které k ní patří. Při zadání do výroby pak stačí vybrat výbavu.</p>' +
-        '<div class="eq-legend">Varianty: ' + (vars.length ? vars.map(v => '<span class="vchip">' + esc(variantLabelOf(v)) + '</span>').join(' ') : '—') + '</div>' +
+        '<div class="eq-legend">Provedení k výběru (tyrkysově = základ, oranžově = varianta):</div>' +
         rows +
         '<div style="display:flex;gap:8px;margin-top:10px;"><button class="btn" onclick="eqAdd()">+ Položka výbavy</button><span style="flex:1"></span><button class="btn" onclick="closeEquipmentEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveEquipment()">Uložit</button></div>' +
         '</div>';

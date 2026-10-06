@@ -878,9 +878,10 @@ router.put('/products/:id/equipment', async (req, res, next) => {
   try {
     const productId = parseInt(req.params.id, 10);
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const variants = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: { not: null } }, select: { id: true, variant_of_id: true } });
+    // Do výbavy jde zařadit varianty i ZÁKLADNÍ provedení operace (základ = „u této operace nic neměnit")
+    const variants = await prisma.productOperation.findMany({ where: { product_id: productId, OR: [{ variant_of_id: { not: null } }, { variants: { some: {} } }] }, select: { id: true, variant_of_id: true } });
     const validIds = new Set(variants.map(v => v.id));
-    const baseOf = new Map(variants.map(v => [v.id, v.variant_of_id]));
+    const baseOf = new Map(variants.map(v => [v.id, v.variant_of_id || v.id]));
     const clean = [];
     for (const [i, it] of items.entries()) {
       const group_name = String(it.group_name || '').trim().slice(0, 80), name = String(it.name || '').trim().slice(0, 120);
@@ -904,16 +905,18 @@ async function resolveEquipment(productId, equipmentIds, baseChoices) {
   const ids = (equipmentIds || []).map(Number).filter(Number.isFinite);
   if (!ids.length) return { choices, labels: [] };
   const eq = await prisma.productEquipment.findMany({ where: { id: { in: ids }, product_id: productId } });
-  const allVar = await prisma.productOperation.findMany({ where: { product_id: productId, variant_of_id: { not: null } }, select: { id: true, variant_of_id: true, name: true } });
-  const baseOf = new Map(allVar.map(v => [v.id, v.variant_of_id]));
+  const allVar = await prisma.productOperation.findMany({ where: { product_id: productId, OR: [{ variant_of_id: { not: null } }, { variants: { some: {} } }] }, select: { id: true, variant_of_id: true, name: true } });
+  const baseOf = new Map(allVar.map(v => [v.id, v.variant_of_id || v.id]));
   const owner = {}; // základ → název výbavy, která ho nastavila
+  const picked = {}; // základ → zvolené id (varianta nebo samotný základ)
   for (const e of eq) {
     for (const vid of e.variant_ids) {
       const b = baseOf.get(vid); if (!b) continue;
-      if (choices[b] && choices[b] !== vid && owner[b]) throw Object.assign(new Error('Výbavy „' + owner[b] + '" a „' + e.group_name + ' – ' + e.name + '" se liší u stejné operace — vyber jen jednu z nich.'), { status: 400 });
-      choices[b] = vid; owner[b] = e.group_name + ' – ' + e.name;
+      if (picked[b] && picked[b] !== vid) throw Object.assign(new Error('Výbavy „' + owner[b] + '" a „' + e.group_name + ' – ' + e.name + '" se liší u stejné operace — vyber jen jednu z nich.'), { status: 400 });
+      picked[b] = vid; owner[b] = e.group_name + ' – ' + e.name;
     }
   }
+  for (const b of Object.keys(picked)) { if (picked[b] === Number(b)) delete choices[b]; else choices[b] = picked[b]; }
   return { choices, labels: eq.map(e => e.group_name + ' – ' + e.name) };
 }
 

@@ -1775,10 +1775,10 @@
   // Výběr výbavy → předvyplní varianty operací (a hlídá kolize mezi výbavami)
   window.pfApplyEquipment = function () {
     var eq = (pfSelected && pfSelected.equipment || []); var chosen = pfEquipmentIds() || [];
-    var byVar = {}; (pfSelected.operations || []).forEach(function (o) { (o.variants || []).forEach(function (v) { byVar[v.id] = o.id; }); });
+    var byVar = {}; (pfSelected.operations || []).forEach(function (o) { byVar[o.id] = o.id; (o.variants || []).forEach(function (v) { byVar[v.id] = o.id; }); });
     var pick = {}, owner = {}, conflict = null;
     chosen.forEach(function (id) { var e = eq.find(function (x) { return x.id === id; }); if (!e) return; (e.variant_ids || []).forEach(function (vid) { var base = byVar[vid]; if (!base) return; if (pick[base] && pick[base] !== vid) conflict = owner[base] + ' × ' + e.group_name + ' – ' + e.name; pick[base] = vid; owner[base] = e.group_name + ' – ' + e.name; }); });
-    document.querySelectorAll('#pf-variants-rows .pf-var').forEach(function (sel) { var base = parseInt(sel.getAttribute('data-base')); sel.value = pick[base] ? String(pick[base]) : ''; });
+    document.querySelectorAll('#pf-variants-rows .pf-var').forEach(function (sel) { var base = parseInt(sel.getAttribute('data-base')); sel.value = (pick[base] && pick[base] !== base) ? String(pick[base]) : ''; });
     var info = document.getElementById('pf-product-info');
     if (conflict) info.innerHTML = '<span style="color:#ef4444;">⚠️ Výbavy se liší u stejné operace: ' + pv2Esc(conflict) + ' — vyber jen jednu.</span>';
     pfSimulate();
