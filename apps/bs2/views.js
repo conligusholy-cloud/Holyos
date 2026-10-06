@@ -378,7 +378,7 @@ function supporterCompounder(s) {
         ['sun', 'Po pěti letech zůstane všechno Vám', 'Máte dobré místo, víte, kolik tam vyděláte, a víte, že se prádlomat sám zaplatí. Po splacení <b>je stroj i jeho výnos Váš</b> — každý měsíc, napořád.'],
       ],
       decision: true,
-      note: 'Tady je potřeba udělat důležité rozhodnutí: <b>Kolik prádlomatů vlastně chci?</b> 3, 5, 10 nebo 100? Otázka nezní, kolik si můžete dovolit — ale <b>kolik peněz chcete mít pravidelně měsíčně za 5 let</b>.' },
+      note: 'Tady je potřeba udělat důležité rozhodnutí: <b>Kolik prádlomatů vlastně chci?</b> 3, 5, 10 nebo 100? Otázka nezní, kolik si můžete dovolit — ale <b>kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování</b>.' },
   ];
   return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
   <style>
@@ -485,7 +485,7 @@ function supporterCompounder(s) {
       ${ph.note ? `<p class="ph-note">${ph.note}</p>` : ''}
       ${ph.decision ? `<div class="dec"><div class="dec-q">Kolik prádlomatů vlastně chci?</div><div class="dec-opts">${[3, 5, 10, 100].map((n, i) => `<button type="button" class="dec-o${i === 1 ? ' on' : ''}" data-n="${n}" onclick="for(const b of this.parentNode.children)b.classList.remove('on');this.classList.add('on');document.getElementById('dec-n').textContent=this.dataset.n">${n}</button>`).join('')}</div>
         <div class="dec-out"><div><span class="dec-k">za 5 let</span><b><span id="dec-n">5</span> prádlomatů</b><span class="dec-s">splacených · Vašich · každý měsíc vydělávají jen Vám</span></div></div>
-        <div class="dec-ask">Otázka tedy nezní „kolik strojů", ale: <b>Kolik peněz chcete mít pravidelně měsíčně za 5 let?</b></div></div>` : ''}
+        <div class="dec-ask">Otázka tedy nezní „kolik strojů", ale: <b>Kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování?</b></div></div>` : ''}
     </section>`).join('')}
 
     <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
