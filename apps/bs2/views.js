@@ -267,9 +267,9 @@ function homeStory(s) {
   <style>
   .st{max-width:1040px}
   .st .first{margin:6px 0 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
-  .st .first .pm3d{flex:none;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 20px 40px rgba(30,134,224,.35))}
+  .st .first .pm3d{flex:none;width:420px;height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
   @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
-  @media(max-width:760px){.st .first .pm3d{width:100%;height:auto;max-width:320px}}
+  @media(max-width:1000px){.st .first .pm3d{width:min(100%,360px)}}
   .st .first .k{font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--accent2);font-weight:700}
   .st .first h2{margin:4px 0 0;font-size:clamp(34px,6vw,72px);line-height:1;letter-spacing:-.03em;font-weight:900;color:#fff;text-shadow:0 0 40px rgba(79,209,255,.25)}
   .st .first h2 .cp{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(124,92,255,.45))}
@@ -310,7 +310,7 @@ function homeStory(s) {
   @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
   </style>
   <div class="st">
-    <div class="first"><div><span class="k">Best Series 2.0</span><h2>První <span class="cp">Compounder</span> v&nbsp;Čechách</h2></div>${pradlomatSvg(320)}</div>
+    <div class="first"><div><span class="k">Best Series 2.0</span><h2>První <span class="cp">Compounder</span> v&nbsp;Čechách</h2></div><img class="pm3d" src="/img/pradlomat.webp" alt="Prádlomat 24/7" width="420" height="320" loading="eager" decoding="async"></div>
     <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo. Do teď jsme tvořili Best Series — od <b>24. 9. 2026</b> tvoří <b>Best Series 2.0</b> z lidí <b class="cp">Compoundery</b>.</p>
 
     <div class="tl">
