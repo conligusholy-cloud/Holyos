@@ -396,12 +396,6 @@ function supporterCompounder(s) {
     <div class="hero2"><div class="k">Best Series 2.0</div><h1>Jak přemýšlí <span class="g">správný Compounder</span></h1>
       <p>Compounder není titul. Je to způsob uvažování. Stejný stroj, stejná cena, stejná smlouva — a přesto jeden člověk skončí s jedním prádlomatem a druhý se sítí. Rozdíl je jen v hlavě.</p></div>
 
-    <div class="def"><div class="q">${ico('sprout', 24)}</div><div><b>Compounder = ten, komu se jeho vlastní prádlomaty násobí.</b><p>Slovo pochází z „compounding" — složené úročení. Výnos se nespotřebuje, ale znovu zapojí do hry, takže každé další kolo začíná z vyšší základny. Compounder to dělá s prádlomaty.</p></div></div>
-
-    <h2 class="sec">Co se stane s jedním prádlomatem, když ho necháte násobit</h2>
-    <div class="ladder">${steps.map(([y, n, t]) => `<div class="r"><div class="y">${y}</div><div class="n">${n}</div><div class="t">${t}</div></div>`).join('')}</div>
-    <p class="note">Ilustrace principu, ne příslib výnosu. Skutečné tempo závisí na místě, obratu a podmínkách financování — ale směr je vždy stejný: stroje platí stroje.</p>
-
     <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
   </div>` });
 }
