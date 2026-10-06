@@ -166,9 +166,83 @@ function supporterHome(s, offers = [], extra = {}) {
     <h1><span class="g">Vítej, ${esc(require('./vocative').vocativeName(s.first_name, s.last_name) || s.nick)}</span></h1>
     <p>${esc(fullName)}${fullName ? ' · ' : ''}${esc(s.email)}</p>
   </div>
-  <div class="card" style="max-width:640px"><h2 style="margin-top:0">Soukromá sekce</h2><p class="muted" style="margin:0">Tvůj prostor v Best Series 2.0. Obsah právě připravujeme — jakmile bude co ukázat, uvidíš to tady jako první.</p>
-    <div class="soon"><span style="color:var(--accent2);display:inline-flex">${ico('bolt', 18)}</span><span>Brzy: <b>novinky</b>, <b>výhody pro členy</b> a <b>přehled podpory</b></span></div></div>
+  ${homeStory(s)}
   ` });
+}
+// Domů — příběh příležitosti Best Series 2.0 (zaknihování prádlomatu do leasingu). Texty doplňujeme postupně.
+function homeStory(s) {
+  const ownerHint = s && s.user_type === 'owner' ? 'Už prádlomat máš. Teď jde o to, kolik jich budeš mít.' : 'Dnes už není otázka, jestli si prádlomat můžeš dovolit.';
+  return `
+  <style>
+  .st{max-width:1040px}
+  .st .lead{font-size:clamp(17px,2vw,21px);line-height:1.5;color:var(--text);max-width:760px;margin:0 0 26px}
+  .st .lead b{color:var(--accent2)}
+  .st h2{font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;margin:0 0 6px}
+  .st .sec{margin:0 0 26px}
+  .st .tl{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 26px}
+  .st .tl .c{position:relative;padding:18px;border-radius:16px;border:1px solid var(--border);background:var(--card);backdrop-filter:blur(14px)}
+  .st .tl .c .y{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .st .tl .c .t{font-size:18px;font-weight:800;margin:6px 0 4px}
+  .st .tl .c p{margin:0;color:var(--text2);font-size:13.5px;line-height:1.45}
+  .st .tl .c.now{border-color:rgba(79,209,255,.55);box-shadow:0 0 0 1px rgba(79,209,255,.25),0 20px 60px rgba(30,134,224,.25)}
+  .st .tl .c.now .y{color:var(--accent2)}
+  .st .big{padding:26px;border-radius:20px;border:1px solid var(--border2);background:linear-gradient(135deg,rgba(30,134,224,.18),rgba(124,92,255,.16));position:relative;overflow:hidden;margin:0 0 26px}
+  .st .big:before{content:'';position:absolute;inset:-40%;background:radial-gradient(circle at 20% 20%,rgba(79,209,255,.18),transparent 45%),radial-gradient(circle at 80% 80%,rgba(124,92,255,.2),transparent 45%);pointer-events:none}
+  .st .big *{position:relative}
+  .st .big .k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);font-weight:700}
+  .st .big h2{font-size:clamp(24px,3.4vw,38px);line-height:1.1;margin:8px 0 10px;background:linear-gradient(90deg,#fff,var(--accent2) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .st .big p{margin:0;font-size:16px;line-height:1.55;color:var(--text);max-width:720px}
+  .st .cmp{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .st .cmp span{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;border:1px solid var(--border2);background:rgba(4,8,16,.5);font-size:14px;font-weight:600}
+  .st .cmp span.hi{border-color:rgba(47,227,160,.6);color:var(--ok);box-shadow:0 0 18px rgba(47,227,160,.25)}
+  .st .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:0 0 26px}
+  .st .g3 .c{padding:18px;border-radius:16px;border:1px solid var(--border);background:var(--card)}
+  .st .g3 .c .i{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);margin-bottom:10px}
+  .st .g3 .c b{font-size:16px;display:block;margin-bottom:4px}
+  .st .g3 .c p{margin:0;color:var(--text2);font-size:13.5px;line-height:1.45}
+  .st .rule{padding:22px 24px;border-radius:18px;border:1px solid rgba(255,93,108,.35);background:rgba(255,93,108,.06);margin:0 0 26px}
+  .st .rule .k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--err);font-weight:700}
+  .st .rule h2{margin:6px 0 8px}
+  .st .rule p{margin:0;color:var(--text);line-height:1.55;max-width:760px}
+  .st .rule .old{text-decoration:line-through;color:var(--text3)}
+  .st .cta{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;padding:22px 24px;border-radius:18px;border:1px solid var(--border2);background:var(--card2)}
+  .st .cta .q{font-size:clamp(18px,2.2vw,24px);font-weight:800;letter-spacing:-.02em}
+  .st .cta .q small{display:block;font-size:14px;font-weight:500;color:var(--text2);margin-top:4px}
+  @media(max-width:760px){.st .tl,.st .g3{grid-template-columns:1fr}}
+  </style>
+  <div class="st">
+    <p class="lead">Od roku <b>2018</b> stavěla skupina lidí Best Series. Osm let práce, překážek a budování důvěry. <b>24. 9. 2026</b> se to zlomilo — a od <b>25. 9. 2026</b> je z každého, kdo Best Series podpořil, <b>Best Series 2.0</b>.</p>
+
+    <div class="tl">
+      <div class="c"><div class="y">2018 – 2026</div><div class="t">Best Series</div><p>Osm let tvrdé práce: vlastní výroba, servis, síť míst, konzistence. Důvěra, která se nedá koupit — jen odpracovat.</p></div>
+      <div class="c"><div class="y">24. 9. 2026</div><div class="t">Zlom</div><p>Bankovní domy si všimly, že český prádlomat je skvělý stroj — a <b>zaknihovaly ho do leasingových produktů</b>.</p></div>
+      <div class="c now"><div class="y">25. 9. 2026 → dnes</div><div class="t">Best Series 2.0</div><p>Každý, kdo Best Series podpořil, je teď součástí 2.0. Pravidla hry se změnila. Ty jsi u toho.</p></div>
+    </div>
+
+    <div class="big">
+      <div class="k">Co se stalo převratného</div>
+      <h2>Banky berou prádlomat jako hodnotnou zástavu.</h2>
+      <p>Umí ho zafinancovat jako auto nebo bagr — a v praxi lépe než nemovitost, protože si na sebe vydělává od prvního dne. Na konkrétní produkt tak přestal být strop. ${esc(ownerHint)}</p>
+      <div class="cmp"><span>🚗 auto</span><span>🚜 bagr</span><span>🏠 nemovitost</span><span class="hi">🧺 prádlomat</span></div>
+    </div>
+
+    <div class="g3">
+      <div class="c"><div class="i">${ico('bolt', 20)}</div><b>Páka</b><p>Nemusíš mít celou částku. Stroj je zástava sám o sobě a splácí se z vlastního výdělku.</p></div>
+      <div class="c"><div class="i">${ico('sun', 20)}</div><b>Rychlost</b><p>Odpadá nejdelší fáze — šetření na další stroj. Rozhoduje, jak rychle najdeš další dobré místo.</p></div>
+      <div class="c"><div class="i">${ico('network', 20)}</div><b>Duplikace</b><p>Linková výroba + financování = stejný model se opakuje. Jeden prádlomat je začátek, ne cíl.</p></div>
+    </div>
+
+    <div class="rule">
+      <div class="k">Pravidla hry se změnila</div>
+      <h2>Už nejde o peníze. Jde o čas.</h2>
+      <p><span class="old">Kolik prádlomatů si můžeš dovolit?</span> → <b>Kolik prádlomatů stihneš mít, než si toho všimnou ostatní?</b> Dnes je to podpultová informace. Dříve nebo později si jí všimne někdo další a přiveze sem konkurenční stroj — zvlášť když jsme banky přesvědčili, že prádlomat je produkt, který stojí za financování. Záleží, kdo u toho bude.</p>
+    </div>
+
+    <div class="cta">
+      <div class="q">Kolik prádlomatů chceš?<small>Ukaž, že jsi dobrý partner — a limit přestane být číslo.</small></div>
+      <a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a>
+    </div>
+  </div>`;
 }
 // Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
 const curOf = (s) => (s && s.currency === 'EUR' ? 'EUR' : 'CZK');
