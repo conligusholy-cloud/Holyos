@@ -359,6 +359,20 @@ async function loadProducts() {
   productsCache = { at: Date.now(), items: await r.json() };
   return { items: productsCache.items };
 }
+// Obrázek produktu — proxy z HolyOS (uživatel BS2 nemá do HolyOS přístup), cache v paměti 1 h
+const productImgCache = new Map(); // id → { at, buf, type }
+app.get('/img/product/:id(\\d+)', wrap(async (req, res) => {
+  const id = req.params.id, key = id + '|' + (req.query.v || '');
+  const c = productImgCache.get(key);
+  if (c && Date.now() - c.at < 3600e3) return res.set('Content-Type', c.type).set('Cache-Control', 'public, max-age=86400').send(c.buf);
+  const secret = process.env.BS2_SSO_SECRET; if (!secret) return res.status(404).end();
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + '/api/auth/bs2/products/' + id + '/image', { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) return res.status(404).end();
+  const buf = Buffer.from(await r.arrayBuffer()), type = r.headers.get('content-type') || 'image/png';
+  productImgCache.set(key, { at: Date.now(), buf, type });
+  res.set('Content-Type', type).set('Cache-Control', 'public, max-age=86400').send(buf);
+}));
 async function offeredSet() { const r = await q('SELECT holyos_item_id FROM product_offers WHERE offered'); return new Set(r.rows.map(x => x.holyos_item_id)); }
 app.get('/admin/products', requireAdmin, wrap(async (req, res) => {
   if (req.query.refresh) productsCache = { at: 0, items: null };

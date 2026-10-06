@@ -242,9 +242,28 @@ router.get('/bs2/products', async (req, res, next) => {
     const items = await prisma.salesPricelistItem.findMany({
       where: { active: true, kind: 'machine' },
       orderBy: [{ model_version: 'asc' }, { model_variant: 'asc' }, { name_cs: 'asc' }],
-      select: { id: true, name_cs: true, name_en: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true, truck_capacity: true, model_version: true, model_variant: true, machine_code: true },
+      select: { id: true, name_cs: true, name_en: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true, truck_capacity: true, model_version: true, model_variant: true, machine_code: true, image_ext: true, image_updated_at: true },
     });
     res.json(items.map(i => ({ ...i, price_czk: i.price_czk == null ? null : Number(i.price_czk), price_eur: i.price_eur == null ? null : Number(i.price_eur), truck_price_czk: i.truck_price_czk == null ? null : Number(i.truck_price_czk), truck_price_eur: i.truck_price_eur == null ? null : Number(i.truck_price_eur) })));
+  } catch (err) { next(err); }
+});
+
+// GET /api/auth/bs2/products/:id/image — obrázek položky ceníku pro BS2 (stejná autorizace tokenem)
+router.get('/bs2/products/:id/image', async (req, res, next) => {
+  try {
+    const secret = process.env.BS2_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'bs2' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const fs = require('fs'), path = require('path');
+    const id = parseInt(req.params.id, 10);
+    const it = await prisma.salesPricelistItem.findUnique({ where: { id }, select: { image_ext: true } });
+    if (!it || !it.image_ext) return res.status(404).json({ error: 'Bez obrázku' });
+    const file = path.join(__dirname, '..', 'data', 'pricelist-images', `pl-${id}.${it.image_ext}`);
+    if (!fs.existsSync(file)) return res.status(404).json({ error: 'Soubor chybí' });
+    const mime = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[it.image_ext] || 'application/octet-stream';
+    res.set('Content-Type', mime).set('Cache-Control', 'public, max-age=3600');
+    fs.createReadStream(file).pipe(res);
   } catch (err) { next(err); }
 });
 
