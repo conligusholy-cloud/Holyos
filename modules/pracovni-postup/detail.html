@@ -1900,7 +1900,7 @@
       } else {
         body = '<div style="margin-top:14px;font-size:12px;color:var(--text2);margin-bottom:6px;">Vyber všechny díly, které z jednoho průchodu postupu vzniknou (např. 1 deska → 10 dílů), a jejich počty.</div>' +
           '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="color:var(--text2);font-size:11px;text-transform:uppercase;"><th style="text-align:left;padding:4px;">Díl (výrobek / polotovar / materiál)</th><th style="width:110px;padding:4px;">Množství</th><th style="width:80px;padding:4px;">Jedn.</th><th style="width:40px;"></th></tr></thead><tbody>' +
-          outDraft.map((r, i) => '<tr><td style="padding:4px;position:relative;"><input ' + inp + ' value="' + esc(r.label) + '" placeholder="Hledat podle názvu / kódu…" oninput="outSearch(' + i + ', this)" onfocus="outSearch(' + i + ', this)"><div id="out-sug-' + i + '" style="position:absolute;left:4px;right:4px;top:100%;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow:auto;display:none;"></div></td>' +
+          outDraft.map((r, i) => '<tr><td style="padding:4px;position:relative;"><input ' + inp + ' value="' + esc(r.label) + '" placeholder="Hledat podle názvu / kódu…" oninput="outSearch(' + i + ', this)" onfocus="outSearch(' + i + ', this)"><div id="out-sug-' + i + '" style="position:absolute;left:4px;right:4px;top:100%;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:8px;max-height:200px;overflow:auto;display:none;"></div>' + outColorRow(r, i) + '</td>' +
             '<td style="padding:4px;"><input type="number" min="0.001" step="any" ' + inp + ' value="' + r.quantity + '" onchange="outDraft[' + i + '].quantity = Number(this.value) || 1"></td>' +
             '<td style="padding:4px;"><input ' + inp + ' value="' + esc(r.unit) + '" onchange="outDraft[' + i + '].unit = this.value || \'ks\'"></td>' +
             '<td style="padding:4px;text-align:center;"><button class="btn" onclick="outDraft.splice(' + i + ',1);renderOutputsEditor()" style="padding:4px 8px;color:#ef4444;">×</button></td></tr>').join('') +
@@ -1916,6 +1916,35 @@
           opt('set', '🧩', 'Sada dílů', 'Z jednoho průchodu vznikne více dílů (nářezový plán) — naskladní se všechny.') +
         '</div>' + body +
         '<div class="modal-actions" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;"><button class="btn" onclick="closeOutputsEditor()">Zrušit</button><button class="btn btn-primary" onclick="saveOutputs()">Uložit</button></div></div>';
+    }
+    // Barva u dílu v sadě: základ s variantami → povinný výběr barvy (select) + možnost založit novou barvu rovnou odsud
+    function outColorRow(r, i) {
+      if (!r.out_material_id) return '';
+      const mat = (allMaterials || []).find(mm => mm.id === r.out_material_id); if (!mat) return '';
+      const base = mat.has_color_variants ? mat : (mat.parent_material_id ? (allMaterials || []).find(mm => mm.id === mat.parent_material_id) : null);
+      if (!base) return '';
+      const vars = (allMaterials || []).filter(v => v.parent_material_id === base.id);
+      const cur = mat.parent_material_id ? mat.id : '';
+      return '<div style="display:flex;align-items:center;gap:8px;margin-top:5px;padding:5px 8px;border:1px dashed ' + (cur ? 'rgba(167,139,250,.5)' : '#ef4444') + ';border-radius:8px;font-size:12px;">' +
+        '<span style="color:#a78bfa;font-weight:700;">🎨 Barva' + (cur ? '' : ' <span style="color:#ef4444;">(povinné)</span>') + ':</span>' +
+        '<select onchange="outPickColor(' + i + ', this.value)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:12px;">' +
+          '<option value="">— vyber barvu —</option>' + vars.map(v => '<option value="' + v.id + '"' + (v.id === cur ? ' selected' : '') + '>' + esc(v.color_name || v.name) + ' · ' + esc(v.code) + '</option>').join('') + '</select>' +
+        '<button class="btn" onclick="outNewColor(' + i + ',' + base.id + ')" style="padding:3px 8px;font-size:12px;" title="Založit novou barevnou variantu dílu ' + esc(base.code || '') + '">＋ nová barva</button></div>';
+    }
+    function outPickColor(i, vid) {
+      const r = outDraft[i]; const base = (allMaterials || []).find(mm => mm.id === r.out_material_id); const baseId = base && base.parent_material_id ? base.parent_material_id : (base ? base.id : null);
+      const v = vid ? (allMaterials || []).find(mm => mm.id === parseInt(vid, 10)) : null;
+      if (v) { r.out_material_id = v.id; r.label = (v.code ? v.code + ' · ' : '') + v.name; }
+      else if (baseId) { const b = (allMaterials || []).find(mm => mm.id === baseId); r.out_material_id = baseId; r.label = (b.code ? b.code + ' · ' : '') + b.name; }
+      renderOutputsEditor();
+    }
+    async function outNewColor(i, baseId) {
+      const name = (prompt('Název nové barvy (např. Červená):') || '').trim(); if (!name) return;
+      try {
+        const v = await api('/api/wh/materials/' + baseId + '/color-variants', { method: 'POST', body: JSON.stringify({ color_name: name }) });
+        try { allMaterials = await api('/api/production/materials'); } catch (e) {}
+        outPickColor(i, v.id);
+      } catch (e) { toast('Založení barvy selhalo: ' + (e.message || e), true); }
     }
     function outSearch(i, el) {
       const q = (el.value || '').toLowerCase().trim(); const box = document.getElementById('out-sug-' + i); if (!box) return;
