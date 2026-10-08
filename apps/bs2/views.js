@@ -460,6 +460,10 @@ function supporterCompounder(s) {
   .cp .ln i{position:absolute;top:-12px;left:50%;transform:translateX(-50%);width:24px;height:24px;border-radius:50%;font-style:normal;font-weight:800;font-size:12px;color:#fff;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 0 14px rgba(79,209,255,.5)}
   .cp .ln b{display:block;font-size:13px;line-height:1.25;margin-top:4px} .cp .ln span{font-size:11px;color:var(--text2)}
   .cp .ln.n1{top:2%;left:50%;transform:translateX(-50%)} .cp .ln.n2{top:50%;right:-4%;transform:translateY(-50%)} .cp .ln.n3{bottom:2%;left:50%;transform:translateX(-50%);border-color:rgba(47,227,160,.55)} .cp .ln.n3 i{background:linear-gradient(135deg,#1ea97c,var(--ok))} .cp .ln.n4{top:50%;left:-4%;transform:translateY(-50%)}
+  .cp .lp-img{position:absolute;left:50%;top:14%;width:84px;height:auto;transform:translate(-50%,-50%);opacity:0;pointer-events:none;filter:drop-shadow(0 14px 22px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(79,209,255,.35));z-index:3;will-change:left,top,transform,opacity}
+  .cp #lp-flex{width:110px}
+  .cp .lp-stamp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-14deg);padding:4px 10px;border:3px solid var(--ok);border-radius:8px;color:var(--ok);font-weight:900;font-size:13px;letter-spacing:.14em;background:rgba(4,8,16,.7);opacity:0;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(47,227,160,.6);box-shadow:0 0 18px rgba(47,227,160,.4)}
+  .cp .ln{z-index:2}
   .cp .loop-fleet{margin-top:6px;padding:10px 12px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
   .cp .lf-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700;margin-bottom:6px} .cp .lf-h b{font-size:14px;color:var(--ok);letter-spacing:0}
   .cp .lf-row{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;align-items:flex-end}
@@ -527,9 +531,42 @@ function supporterCompounder(s) {
         <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
         <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 % od banky</span></div>
         <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
+        <img id="lp-mini" class="lp-img" src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI">
+        <img id="lp-flex" class="lp-img" src="/img/pradlomat.webp?v=2" alt="Zafinancovaný stroj">
+        <div id="lp-stamp" class="lp-stamp">VERIFIKOVÁNO</div>
       </div>
       <div class="loop-fleet"><div class="lf-h"><span>Vaše flotila</span><b id="lf-n">0</b></div><div class="lf-row" id="lf-row"></div></div>
-      <script>(function(){var dot=document.getElementById('loop-dot'),row=document.getElementById('lf-row'),n=document.getElementById('lf-n');if(!dot||!row)return;var T=9000,start=performance.now(),last=0,count=0;function tick(now){var t=((now-start)%T)/T;var a=t*Math.PI*2;dot.setAttribute('cx',(210+150*Math.sin(a)).toFixed(1));dot.setAttribute('cy',(210-150*Math.cos(a)).toFixed(1));if(last<0.5&&t>=0.5){count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');}last=t;requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>
+      <script>(function(){
+var loop=document.querySelector('.cp .loop'),dot=document.getElementById('loop-dot'),mini=document.getElementById('lp-mini'),flex=document.getElementById('lp-flex'),stamp=document.getElementById('lp-stamp'),row=document.getElementById('lf-row'),n=document.getElementById('lf-n');
+if(!loop||!dot||!mini||!flex||!row)return;
+var A=4000,B=2600,C=2200,D=2400,T=A+B+C+D,start=performance.now(),count=0,dropped=false;
+function pos(deg){var a=deg*Math.PI/180;return {x:210+150*Math.sin(a),y:210-150*Math.cos(a)};}
+function place(el,p,scale,op,dy){el.style.left=(p.x/420*100)+'%';el.style.top=((p.y+(dy||0))/420*100)+'%';el.style.transform='translate(-50%,-50%) scale('+(scale||1)+')';el.style.opacity=op==null?1:op;}
+function hide(el){el.style.opacity=0;}
+var ease=function(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;};
+function tick(now){
+  var t=(now-start)%T;
+  if(t<A){ // bod 4 → 1 → 2: tečka + MINI jedou spolu
+    var ang=270+180*ease(t/A),p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));place(mini,p,1,1);hide(flex);stamp.style.opacity=0;stamp.style.transform='translate(-50%,-50%) rotate(-14deg) scale(2)';dropped=false;
+  }else if(t<A+B){ // bod 2: MINI vyroste, razítko, výměna za FLEX
+    var q=(t-A)/B,p=pos(90);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
+    var grow=Math.min(1,q/.3),sw=q<.6?0:(q-.6)/.4;
+    place(mini,p,1+.5*grow,1-sw);place(flex,p,1,sw);
+    stamp.style.left=(p.x/420*100)+'%';stamp.style.top=(p.y/420*100)+'%';
+    var st=q<.25?0:Math.min(1,(q-.25)/.15);stamp.style.opacity=q<.85?st:Math.max(0,1-(q-.85)/.15);stamp.style.transform='translate(-50%,-50%) rotate(-14deg) scale('+(2-st)+')';
+  }else if(t<A+B+C){ // bod 2 → 3: tečka + FLEX
+    var q=ease((t-A-B)/C),ang=90+90*q,p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));place(flex,p,1,1);hide(mini);stamp.style.opacity=0;
+  }else{ // bod 3: FLEX propadne do flotily; MINI jede středem do bodu 4; tečka po kružnici 3 → 4
+    var q=(t-A-B-C)/D,ang=180+90*ease(q),p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
+    var p3=pos(180),p4=pos(270);
+    var dq=Math.min(1,q/.6);place(flex,p3,1-.4*dq,1-dq,dq*dq*140);
+    if(!dropped&&q>=.45){dropped=true;count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');}
+    var mq=ease(q);place(mini,{x:p3.x+(p4.x-p3.x)*mq,y:p3.y+(p4.y-p3.y)*mq},1,1);
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+})();</script>
       <div class="rep"><div class="rep-q">Kolik opakování uděláte?</div><div class="rep-sub">Každé kolo smyčky = <b>+1 prádlomat</b>, který je po splacení Váš.</div>
         <input type="range" id="rep-r" min="1" max="100" value="10" oninput="var n=+this.value;document.getElementById('rep-n').textContent=n;document.getElementById('rep-k').textContent=(n+1);document.getElementById('rep-m').textContent=((n+1)*25000).toLocaleString('cs-CZ');document.getElementById('rep-dots').innerHTML=Array.from({length:Math.min(n+1,60)},function(){return '<i></i>'}).join('')+((n+1)>60?'<em>+'+((n+1)-60)+'</em>':'')">
         <div class="rep-out"><div><span class="dec-k">opakování</span><b><span id="rep-n">10</span>×</b></div><div><span class="dec-k">prádlomatů celkem</span><b><span id="rep-k">11</span></b><span class="dec-s">Pilot + 1 za každé kolo</span></div><div class="rep-money"><span class="dec-k">měsíčně pro Vás</span><b><span id="rep-m">275 000</span> Kč</b><span class="dec-s">odhad · 25 000 Kč / stroj</span></div></div>
