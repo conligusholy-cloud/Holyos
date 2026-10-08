@@ -462,6 +462,10 @@ function supporterCompounder(s) {
   .cp .ln.n1{top:2%;left:50%;transform:translateX(-50%)} .cp .ln.n2{top:50%;right:-4%;transform:translateY(-50%)} .cp .ln.n3{bottom:2%;left:50%;transform:translateX(-50%);border-color:rgba(47,227,160,.55)} .cp .ln.n3 i{background:linear-gradient(135deg,#1ea97c,var(--ok))} .cp .ln.n4{top:50%;left:-4%;transform:translateY(-50%)}
   .cp .lp-img{position:absolute;left:50%;top:14%;width:84px;height:auto;transform:translate(-50%,-50%);opacity:0;pointer-events:none;filter:drop-shadow(0 14px 22px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(79,209,255,.35));z-index:3;will-change:left,top,transform,opacity}
   .cp #lp-flex{width:110px}
+  .cp .lp-pilot{display:flex;flex-direction:column;align-items:center;gap:2px;width:92px;filter:none}
+  .cp .lp-pilot img{width:84px;height:auto;filter:drop-shadow(0 14px 22px rgba(0,0,0,.7)) drop-shadow(0 0 14px rgba(79,209,255,.35));position:relative;z-index:1}
+  .cp .lp-pilot .lp-ring{position:absolute;left:50%;top:40%;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:1.5px dashed rgba(79,209,255,.55);animation:lpspin 14s linear infinite;z-index:0}
+  .cp .lp-pilot .lp-tag{white-space:nowrap;font-size:9.5px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:999px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 6px 16px rgba(30,134,224,.45);position:relative;z-index:1}
   .cp .lp-stamp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-14deg);padding:4px 10px;border:3px solid var(--ok);border-radius:8px;color:var(--ok);font-weight:900;font-size:13px;letter-spacing:.14em;background:rgba(4,8,16,.7);opacity:0;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(47,227,160,.6);box-shadow:0 0 18px rgba(47,227,160,.4)}
   .cp .ln{z-index:2}
   .cp .loop-fleet{margin-top:6px;padding:10px 12px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
@@ -531,7 +535,7 @@ function supporterCompounder(s) {
         <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
         <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 % od banky</span></div>
         <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
-        <img id="lp-mini" class="lp-img" src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI">
+        <div id="lp-mini" class="lp-img lp-pilot"><i class="lp-ring"></i><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI"><span class="lp-tag">PILOT · stále ten samý MINI</span></div>
         <img id="lp-flex" class="lp-img" src="/img/pradlomat.webp?v=2" alt="Zafinancovaný stroj">
         <div id="lp-stamp" class="lp-stamp">VERIFIKOVÁNO</div>
       </div>
