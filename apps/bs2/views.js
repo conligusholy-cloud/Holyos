@@ -463,7 +463,7 @@ function supporterCompounder(s) {
   .cp .loop-fleet{margin-top:6px;padding:10px 12px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
   .cp .lf-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700;margin-bottom:6px} .cp .lf-h b{font-size:14px;color:var(--ok);letter-spacing:0}
   .cp .lf-row{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;align-items:flex-end}
-  .cp .lf-row{justify-content:center} .cp .lf-m{width:calc(10% - 6px);min-width:34px;max-width:80px;height:auto;filter:drop-shadow(0 8px 14px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(79,209,255,.3));animation:lfpop .5s cubic-bezier(.2,1.4,.4,1) both}
+  .cp .lf-row{justify-content:center;--lfw:80px} .cp .lf-m{width:var(--lfw);height:auto;transition:width .6s ease;filter:drop-shadow(0 8px 14px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(79,209,255,.3));animation:lfpop .5s cubic-bezier(.2,1.4,.4,1) both}
   @keyframes lfpop{from{transform:translateY(-14px) scale(.4);opacity:0}to{transform:none;opacity:1}}
   .cp .rep{padding:20px 22px;border-radius:18px;border:1px solid rgba(79,209,255,.4);background:linear-gradient(135deg,rgba(30,134,224,.14),rgba(124,92,255,.1))}
   .cp .rep-q{font-size:clamp(20px,2.4vw,26px);font-weight:900;letter-spacing:-.02em} .cp .rep-sub{color:var(--text2);font-size:13.5px;margin:4px 0 14px} .cp .rep-sub b{color:var(--accent2)}
@@ -523,13 +523,13 @@ function supporterCompounder(s) {
           <text x="210" y="200" text-anchor="middle" fill="#8ea2c2" font-size="12" font-weight="700" letter-spacing="2">SMYČKA</text>
           <text x="210" y="232" text-anchor="middle" fill="#fff" font-size="26" font-weight="900">∞</text>
         </svg>
-        <div class="ln n1"><i>1</i><b>Pilot ověřuje místo</b><span>~6 měsíců</span></div>
+        <div class="ln n1"><i>1</i><b>Pilot ověřuje místo</b><span>náběhová křivka</span></div>
         <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
         <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 % od banky</span></div>
         <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
       </div>
       <div class="loop-fleet"><div class="lf-h"><span>Vaše flotila</span><b id="lf-n">0</b></div><div class="lf-row" id="lf-row"></div></div>
-      <script>(function(){var dot=document.getElementById('loop-dot'),row=document.getElementById('lf-row'),n=document.getElementById('lf-n');if(!dot||!row)return;var T=9000,start=performance.now(),last=0,count=0;function tick(now){var t=((now-start)%T)/T;var a=t*Math.PI*2;dot.setAttribute('cx',(210+150*Math.sin(a)).toFixed(1));dot.setAttribute('cy',(210-150*Math.cos(a)).toFixed(1));if(last<0.5&&t>=0.5){if(count>=10){row.innerHTML='';count=0;}count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;}last=t;requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>
+      <script>(function(){var dot=document.getElementById('loop-dot'),row=document.getElementById('lf-row'),n=document.getElementById('lf-n');if(!dot||!row)return;var T=9000,start=performance.now(),last=0,count=0;function tick(now){var t=((now-start)%T)/T;var a=t*Math.PI*2;dot.setAttribute('cx',(210+150*Math.sin(a)).toFixed(1));dot.setAttribute('cy',(210-150*Math.cos(a)).toFixed(1));if(last<0.5&&t>=0.5){count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');}last=t;requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>
       <div class="rep"><div class="rep-q">Kolik opakování uděláte?</div><div class="rep-sub">Každé kolo smyčky = <b>+1 prádlomat</b>, který je po splacení Váš.</div>
         <input type="range" id="rep-r" min="1" max="100" value="10" oninput="var n=+this.value;document.getElementById('rep-n').textContent=n;document.getElementById('rep-k').textContent=(n+1);document.getElementById('rep-m').textContent=((n+1)*25000).toLocaleString('cs-CZ');document.getElementById('rep-dots').innerHTML=Array.from({length:Math.min(n+1,60)},function(){return '<i></i>'}).join('')+((n+1)>60?'<em>+'+((n+1)-60)+'</em>':'')">
         <div class="rep-out"><div><span class="dec-k">opakování</span><b><span id="rep-n">10</span>×</b></div><div><span class="dec-k">prádlomatů celkem</span><b><span id="rep-k">11</span></b><span class="dec-s">Pilot + 1 za každé kolo</span></div><div class="rep-money"><span class="dec-k">měsíčně pro Vás</span><b><span id="rep-m">275 000</span> Kč</b><span class="dec-s">odhad · 25 000 Kč / stroj</span></div></div>
