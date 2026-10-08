@@ -473,7 +473,7 @@ function supporterCompounder(s) {
   .cp .lp-income b{display:block;font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .lp-income .s{display:block;font-size:10.5px;color:var(--text2);margin-top:2px}
   .cp .lp-income.bump{animation:incbump .5s cubic-bezier(.2,1.4,.4,1)} @keyframes incbump{0%{transform:scale(1)}40%{transform:scale(1.08);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 40px rgba(47,227,160,.45)}100%{transform:scale(1)}}
-  @media(max-width:900px){.cp .lp-income{position:static;margin:8px auto 0;width:max-content}}
+  @media(max-width:900px){.cp .loop{margin-bottom:92px} .cp .lp-income{right:auto;left:50%;bottom:-88px;transform:translateX(-50%);text-align:center;min-width:200px}}
   .cp .loop-fleet{margin-top:6px;padding:10px 12px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
   .cp .lf-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700;margin-bottom:6px} .cp .lf-h b{font-size:14px;color:var(--ok);letter-spacing:0}
   .cp .lf-row{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;align-items:flex-end}
