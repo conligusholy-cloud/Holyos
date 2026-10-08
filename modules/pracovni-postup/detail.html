@@ -2683,13 +2683,33 @@
         const lpId = m.linked_product_id || '';
         // Data v data-* atributech (bezpečně escapované) — vyhne se rozbití inline
         // handleru u názvů s uvozovkami/apostrofy (BUG #96).
+        if (m.has_color_variants) {
+          // Základ s barevnými variantami: nelze vybrat přímo — rozbalí seznam barev
+          return '<div class="ss-item" data-base="' + m.id + '" onmousedown="event.preventDefault();showColorVariants(this)" style="border-left:3px solid #a78bfa;">' +
+            '<span class="ss-name">' + esc(m.name) + ' <span style="color:#a78bfa;font-size:11px;font-weight:700;">🎨 vyber barvu ▸</span></span>' +
+            '<span class="ss-code">' + esc(m.code) + '</span><span class="ss-type ' + typeCls + '">' + typeLabel + '</span></div>';
+        }
+        const colorDot = m.parent_material_id ? '<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (m.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);margin-right:6px;vertical-align:middle;"></i>' : '';
         return '<div class="ss-item" data-id="' + m.id + '" data-name="' + attr(m.name) + '" data-code="' + attr(m.code) + '" data-unit="' + attr(m.unit || 'ks') + '" data-lp="' + attr(lpId) + '" onmousedown="selectSearchItemEl(this)">' +
-          '<span class="ss-name">' + esc(m.name) + '</span>' +
+          '<span class="ss-name">' + colorDot + esc(m.name) + '</span>' +
           '<span class="ss-code">' + esc(m.code) + '</span>' +
           '<span class="ss-type ' + typeCls + '">' + typeLabel + '</span>' +
           (lpId ? '<span style="font-size:9px;color:#22c55e;margin-left:2px;">&#10003;</span>' : '') +
         '</div>';
       }).join('') + createItem;
+    }
+
+    // Základ s barevnými variantami → nabídka jen jeho barev (volba barvy je povinná)
+    function showColorVariants(el) {
+      const baseId = parseInt(el.dataset.base, 10);
+      const base = allMaterials.find(m => m.id === baseId);
+      const dd = el.closest('.ss-dropdown');
+      const vars = allMaterials.filter(m => m.parent_material_id === baseId);
+      dd.innerHTML = '<div class="ss-item" style="color:#a78bfa;font-weight:700;cursor:default;">🎨 ' + esc(base ? base.code + ' ' + base.name : '') + ' — zvol barvu:</div>' +
+        (vars.length ? vars.map(m => '<div class="ss-item" data-id="' + m.id + '" data-name="' + attr(m.name) + '" data-code="' + attr(m.code) + '" data-unit="' + attr(m.unit || 'ks') + '" data-lp="' + attr(m.linked_product_id || '') + '" onmousedown="selectSearchItemEl(this)" style="padding-left:22px;">' +
+          '<span class="ss-name"><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + (m.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);margin-right:8px;vertical-align:middle;"></i>' + esc(m.color_name || m.name) + '</span>' +
+          '<span class="ss-code">' + esc(m.code) + '</span></div>').join('')
+        : '<div class="ss-empty">Díl nemá aktivní barevné varianty — založ je v Nákupu a skladu u karty dílu.</div>');
     }
 
     // Založí materiál (skladovou kartu) rovnou z vyhledávání v operaci a vybere ho.
@@ -2767,6 +2787,11 @@
               : 'Materiál není vyplněný.',
             row,
           });
+          return;
+        }
+        const baseMat = allMaterials.find(mm => mm.id === materialId);
+        if (baseMat && baseMat.has_color_variants) {
+          incomplete.push({ idx: idx + 1, reason: 'Díl „' + (baseMat.code || '') + ' ' + (baseMat.name || '') + '" má barevné varianty — vyber konkrétní barvu (řádek ' + (idx + 1) + ').', row });
           return;
         }
         if (Number.isNaN(qty) || qty <= 0) {

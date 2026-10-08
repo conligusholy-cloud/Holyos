@@ -836,7 +836,8 @@
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
-        html += '<td class="person-name">' + m.name + '</td>';
+        const cvN = (m._count && m._count.color_variants) || 0;
+        html += '<td class="person-name">' + m.name + (cvN ? ' <span class="badge" title="Díl má ' + cvN + ' barevné varianty — vždy se volí konkrétní barva" style="background:#8b5cf622;color:#a78bfa">🎨 ' + cvN + '</span>' : '') + (m.parent_material_id ? ' <span class="badge" title="Barevná varianta dílu ' + esc((m.parent_material && m.parent_material.code) || '') + '" style="background:#8b5cf622;color:#a78bfa"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + (m.color || '#64748b') + ';margin-right:4px;vertical-align:middle;"></i>' + esc(m.color_name || 'varianta') + '</span>' : '') + '</td>';
         html += '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + catLabel + '</td>';
         const cadCount = (m._count && m._count.cad_drawings) || 0;
         html += '<td style="text-align:center">' + (cadCount > 0
@@ -937,6 +938,13 @@
             '<div class="form-group"><label>Hmotnost (kg)</label><input type="number" name="weight" value="' + v('weight',0) + '" step="0.001"></div>' +
             '<div class="form-group"><label>Účetní jednotka</label><input type="text" name="accounting_unit" value="' + v('accounting_unit') + '"></div>' +
             '<div class="form-group"><label>Šablona zboží</label><input type="text" name="goods_template" value="' + v('goods_template') + '"></div>' +
+            (id ? '<div class="form-group full" id="cv-box" style="border:1px solid rgba(139,92,246,.45);border-radius:10px;padding:12px 14px;background:rgba(139,92,246,.06);">' +
+              '<label style="color:#a78bfa;">🎨 Barevné varianty' + (m.parent_material_id ? '' : ' <span style="font-weight:400;color:var(--text2);">— každá barva je samostatná skladová karta (kód ' + esc(m.code || '') + '-cervena…). Jakmile díl má varianty, musí se ve výrobě i na skladě vždy zvolit konkrétní barva.</span>') + '</label>' +
+              (m.parent_material_id
+                ? '<div style="font-size:13px;">Tahle karta je barevná varianta <b>' + esc(m.color_name || '') + '</b> základního dílu <a href="#" onclick="openMaterialModal(' + m.parent_material_id + ');return false;" style="color:#a78bfa;">' + esc((m.parent_material && m.parent_material.code) || ('#' + m.parent_material_id)) + '</a>.</div>'
+                : '<div id="cv-list" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>' +
+                  '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="text" id="cv-name" placeholder="Název barvy (Červená)" style="flex:1;min-width:160px;"><input type="color" id="cv-hex" value="#ef4444" title="Odstín (nepovinné)" style="width:44px;height:36px;padding:2px;"><button type="button" class="btn btn-primary" onclick="cvAdd(' + id + ')">＋ Přidat barvu</button></div>') +
+            '</div>' : '') +
             '<div class="form-group full"><label>Fotografie</label>' +
               '<div id="photo-upload-area" style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;position:relative;" onclick="document.getElementById(\'photo-file-input\').click()" ondragover="event.preventDefault();this.style.borderColor=\'#eab308\';this.style.background=\'rgba(234,179,8,0.06)\'" ondragleave="this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\';handlePhotoDrop(event)">' +
                 (v('photo_url') ? '<div id="photo-preview" style="margin-bottom:8px;"><img src="' + v('photo_url') + '" style="max-width:200px;max-height:140px;border-radius:8px;object-fit:cover;"></div>' : '<div id="photo-preview"></div>') +
@@ -1064,6 +1072,7 @@
           '<button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
           '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
         '</div></form></div></div>';
+      if (id && !m.parent_material_id) cvLoad(id);
       // Kód + id pro spárování s CAD výkresem / „kde se používá" (načte se po kliknutí na záložku).
       window.__cadMatCode = (m && m.code) ? String(m.code) : '';
       window.__matId = (m && m.id) ? m.id : (id || null);
@@ -1331,6 +1340,38 @@
 
     function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
+    // ---- Barevné varianty materiálu ----
+    async function cvLoad(id) {
+      const el = document.getElementById('cv-list'); if (!el) return;
+      try {
+        const rows = await fetch('/api/wh/materials/' + id + '/color-variants?_=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
+        if (!Array.isArray(rows) || !rows.length) { el.innerHTML = '<span style="color:var(--text2);font-size:12px;">Zatím žádné barevné varianty.</span>'; return; }
+        el.innerHTML = rows.map(v => '<span style="display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:var(--surface);font-size:12.5px;' + (v.status !== 'active' ? 'opacity:.5;' : '') + '">' +
+          '<i style="width:12px;height:12px;border-radius:50%;background:' + (v.color || '#64748b') + ';border:1px solid rgba(255,255,255,.3);display:inline-block;"></i>' +
+          '<b>' + esc(v.color_name || '') + '</b><span style="font-family:monospace;color:var(--text2);">' + esc(v.code) + '</span><span style="color:var(--text2);">· skladem ' + (Number(v.current_stock) || 0) + ' ' + esc(v.unit || 'ks') + '</span>' +
+          '<a href="#" onclick="openMaterialModal(' + v.id + ');return false;" title="Otevřít kartu varianty" style="color:#a78bfa;">↗</a>' +
+          '<button type="button" onclick="cvDelete(' + id + ',' + v.id + ',\'' + esc(v.color_name || '').replace(/'/g, '') + '\')" title="Odstranit variantu" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px;">×</button></span>').join('');
+      } catch (e) { el.innerHTML = '<span style="color:#ef4444;font-size:12px;">Nepodařilo se načíst varianty.</span>'; }
+    }
+    async function cvAdd(id) {
+      const name = (document.getElementById('cv-name').value || '').trim(); const hex = document.getElementById('cv-hex').value;
+      if (!name) { alert('Zadej název barvy.'); return; }
+      try {
+        const r = await fetch('/api/wh/materials/' + id + '/color-variants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ color_name: name, color: hex }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(j.error || ('HTTP ' + r.status)); return; }
+        document.getElementById('cv-name').value = ''; cvLoad(id); loadMaterials();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
+    async function cvDelete(id, vid, name) {
+      if (!confirm('Odstranit barevnou variantu „' + name + '"?\n(Pokud má zásobu nebo pohyby, jen se archivuje.)')) return;
+      try {
+        const r = await fetch('/api/wh/materials/' + id + '/color-variants/' + vid, { method: 'DELETE' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert(j.error || ('HTTP ' + r.status)); return; }
+        cvLoad(id); loadMaterials();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
     async function saveMaterial(e, id) {
       e.preventDefault();
       const f = new FormData(e.target);

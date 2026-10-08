@@ -948,6 +948,12 @@ model Material {
   dimension       String?  @db.VarChar(255)
   color           String?  @db.VarChar(7)
   secondary_color String?  @db.VarChar(7)
+  // Barevné varianty: varianta je samostatná skladová karta (kód = kód základu + '-' + barva, např. NA0034-cervena),
+  // parent_material_id ukazuje na základní díl; základ s variantami nelze skladovat/zadávat — vždy se musí zvolit barva.
+  parent_material_id Int?
+  color_name         String?  @db.VarChar(60) // název barvy varianty (Červená, Černá…)
+  parent_material    Material?  @relation("MaterialColorVariants", fields: [parent_material_id], references: [id], onDelete: SetNull)
+  color_variants     Material[] @relation("MaterialColorVariants")
 
   // Výroba / design
   material_ref     String? @db.VarChar(100)
@@ -1076,6 +1082,7 @@ model Material {
   @@index([sector])
   @@index([sells_on_eshop])
   @@index([eshop_warehouse_id])
+  @@index([parent_material_id])
   @@map("materials")
 }
 

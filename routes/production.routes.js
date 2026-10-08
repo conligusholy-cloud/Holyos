@@ -270,6 +270,15 @@ async function nextHolyosCode(prefix /*, model (ignorováno — kontrolujeme ob�
   }
   return prefix + String(max + 1).padStart(4, '0');
 }
+// Barevné varianty: základní díl, který má varianty, nesmí být v kusovníku přímo — musí se zvolit konkrétní barva.
+// Vrací text chyby, nebo null.
+async function baseWithVariantsError(materialIds, tx = prisma) {
+  const ids = [...new Set((materialIds || []).map(Number).filter(Boolean))];
+  if (!ids.length) return null;
+  const bases = await tx.material.findMany({ where: { id: { in: ids }, color_variants: { some: {} } }, select: { code: true, name: true, color_variants: { select: { color_name: true }, where: { status: 'active' } } } });
+  if (!bases.length) return null;
+  return 'U dílu ' + bases.map(b => b.code + ' ' + b.name + ' musíš zvolit barvu (' + b.color_variants.map(v => v.color_name).join(', ') + ')').join('; ');
+}
 async function codeTaken(code) {
   const [p, m] = await Promise.all([
     prisma.product.findFirst({ where: { code: { equals: code, mode: 'insensitive' } }, select: { id: true, name: true } }),
@@ -1541,6 +1550,7 @@ router.post('/operations', async (req, res, next) => {
       // Hromadně vlož materiály (pokud přišly) — s automatickým napojením na Product
       if (Array.isArray(materials) && materials.length > 0) {
         const matIds = materials.map(m => m.material_id).filter(Boolean);
+        const bErr = await baseWithVariantsError(matIds, tx); if (bErr) { const e = new Error(bErr); e.status = 400; throw e; }
         const linkedProds = matIds.length > 0
           ? await tx.product.findMany({ where: { material_id: { in: matIds } }, select: { id: true, material_id: true } })
           : [];
@@ -1689,6 +1699,7 @@ router.put('/operations/:id', async (req, res, next) => {
         await tx.operationMaterial.deleteMany({ where: { operation_id: opId } });
         if (materials.length > 0) {
           const matIds = materials.map(m => m.material_id).filter(Boolean);
+          const bErr = await baseWithVariantsError(matIds, tx); if (bErr) { const e = new Error(bErr); e.status = 400; throw e; }
           const linkedProds = matIds.length > 0
             ? await tx.product.findMany({ where: { material_id: { in: matIds } }, select: { id: true, material_id: true } })
             : [];
@@ -1743,6 +1754,7 @@ router.get('/operations/:id/materials', async (req, res, next) => {
 router.post('/operations/:id/materials', async (req, res, next) => {
   try {
     const { material_id, quantity, unit } = req.body;
+    const bErr = await baseWithVariantsError([material_id]); if (bErr) return res.status(400).json({ error: bErr });
     const mat = await prisma.operationMaterial.create({
       data: {
         operation_id: parseInt(req.params.id),
@@ -2088,9 +2100,11 @@ router.get('/materials', async (req, res, next) => {
     }
     const materials = await prisma.material.findMany({
       where,
-      select: { id: true, code: true, name: true, type: true, unit: true, current_stock: true },
+      select: { id: true, code: true, name: true, type: true, unit: true, current_stock: true, parent_material_id: true, color_name: true, color: true, _count: { select: { color_variants: true } } },
       orderBy: { name: 'asc' },
     });
+    // Barevné varianty: základ s variantami nelze vybrat přímo (has_color_variants), varianta nese parent_material_id
+    materials.forEach(m => { m.has_color_variants = m._count.color_variants > 0; delete m._count; });
 
     // Připoj linked_product_id — hledej Product přes material_id, kód, nebo název
     const allProducts = await prisma.product.findMany({

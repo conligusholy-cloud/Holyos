@@ -245,8 +245,9 @@ router.get('/materials', async (req, res, next) => {
       include: {
         supplier: { select: { id: true, name: true } },
         category: { select: { id: true, name: true, parent_id: true } },
-        // Počet napojených CAD výkresů — pro sloupec „Dokumentace" (od konstruktéra).
-        _count: { select: { cad_drawings: true } },
+        parent_material: { select: { id: true, code: true, name: true } },
+        // Počet napojených CAD výkresů — pro sloupec „Dokumentace" (od konstruktéra); barevné varianty
+        _count: { select: { cad_drawings: true, color_variants: true } },
       },
       orderBy: { name: 'asc' },
     });
@@ -262,6 +263,56 @@ router.get('/materials', async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+// ---- Barevné varianty materiálu ----
+// Varianta = samostatná skladová karta (kód NA0034-cervena), parent_material_id → základ. Základ s variantami
+// se nesmí používat přímo (sklad, kusovník) — vždy se musí zvolit konkrétní barva.
+const colorSlug = (name) => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+const MATERIAL_COPY_FIELDS = ['type', 'unit', 'sector', 'unit_price', 'min_stock', 'max_stock', 'min_stock_type', 'max_stock_type', 'supplier_id', 'lead_time_days', 'batch_size_min', 'batch_size_max', 'batch_size_default', 'processed_in_multiples', 'reorder_quantity', 'expedition_reserve_days', 'delivery_tolerance_pct', 'plan_orders', 'classification', 'family', 'material_group', 'norm', 'weight', 'dimension', 'category_id', 'non_stock', 'distinguish_batches'];
+
+// GET /api/wh/materials/:id/color-variants
+router.get('/materials/:id/color-variants', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const rows = await prisma.material.findMany({ where: { parent_material_id: id }, select: { id: true, code: true, name: true, color_name: true, color: true, status: true, current_stock: true, unit: true }, orderBy: { color_name: 'asc' } });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/materials/:id/color-variants { color_name, color? (#hex) }
+router.post('/materials/:id/color-variants', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const colorName = String((req.body || {}).color_name || '').trim();
+    const colorHex = /^#[0-9a-f]{6}$/i.test(String((req.body || {}).color || '')) ? String(req.body.color) : null;
+    if (!colorName) return res.status(400).json({ error: 'Zadej název barvy' });
+    const base = await prisma.material.findUnique({ where: { id } });
+    if (!base) return res.status(404).json({ error: 'Materiál nenalezen' });
+    if (base.parent_material_id) return res.status(400).json({ error: 'Varianta nemůže mít vlastní varianty — zakládej je u základního dílu' });
+    const slug = colorSlug(colorName);
+    if (!slug) return res.status(400).json({ error: 'Název barvy musí obsahovat písmena nebo čísla' });
+    const code = base.code + '-' + slug;
+    const exists = await prisma.material.findFirst({ where: { OR: [{ code: { equals: code, mode: 'insensitive' } }, { parent_material_id: id, color_name: { equals: colorName, mode: 'insensitive' } }] }, select: { id: true, code: true } });
+    if (exists) return res.status(400).json({ error: 'Varianta „' + colorName + '" (' + code + ') už existuje' });
+    const data = { code, name: base.name + ' – ' + colorName, status: 'active', parent_material_id: id, color_name: colorName, color: colorHex };
+    for (const f of MATERIAL_COPY_FIELDS) if (base[f] !== undefined) data[f] = base[f];
+    const v = await prisma.material.create({ data });
+    res.status(201).json(v);
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/wh/materials/:id/color-variants/:vid — smaže variantu bez pohybů/zásoby, jinak archivuje
+router.delete('/materials/:id/color-variants/:vid', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10), vid = parseInt(req.params.vid, 10);
+    const v = await prisma.material.findFirst({ where: { id: vid, parent_material_id: id } });
+    if (!v) return res.status(404).json({ error: 'Varianta nenalezena' });
+    const used = Number(v.current_stock) !== 0 || (await prisma.inventoryMovement.count({ where: { material_id: vid } })) > 0 || (await prisma.operationMaterial.count({ where: { material_id: vid } })) > 0;
+    if (used) { await prisma.material.update({ where: { id: vid }, data: { status: 'archived' } }); return res.json({ ok: true, archived: true }); }
+    await prisma.material.delete({ where: { id: vid } });
+    res.json({ ok: true, deleted: true });
+  } catch (err) { next(err); }
 });
 
 // GET /api/wh/materials/:id/image — vrátí fotografii materiálu z persistent volume.
@@ -302,6 +353,7 @@ router.get('/materials/:id', async (req, res, next) => {
         supplier: true,
         movements: { take: 20, orderBy: { created_at: 'desc' } },
         stock_rules: true,
+        parent_material: { select: { id: true, code: true, name: true } },
       },
     });
 
