@@ -551,17 +551,15 @@ function tick(now){
   }else if(t<A+B){ // bod 2: MINI vyroste, razítko, výměna za FLEX
     var q=(t-A)/B,p=pos(90);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
     var grow=Math.min(1,q/.3),sw=q<.6?0:(q-.6)/.4;
-    place(mini,p,1+.5*grow,1-sw);place(flex,p,1,sw);
+    place(mini,p,1+.5*grow-.5*sw,1);place(flex,p,1,sw);
     stamp.style.left=(p.x/420*100)+'%';stamp.style.top=(p.y/420*100)+'%';
     var st=q<.25?0:Math.min(1,(q-.25)/.15);stamp.style.opacity=q<.85?st:Math.max(0,1-(q-.85)/.15);stamp.style.transform='translate(-50%,-50%) rotate(-14deg) scale('+(2-st)+')';
-  }else if(t<A+B+C){ // bod 2 → 3: tečka + FLEX
-    var q=ease((t-A-B)/C),ang=90+90*q,p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));place(flex,p,1,1);hide(mini);stamp.style.opacity=0;
-  }else{ // bod 3: FLEX propadne do flotily; MINI jede středem do bodu 4; tečka po kružnici 3 → 4
-    var q=(t-A-B-C)/D,ang=180+90*ease(q),p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
-    var p3=pos(180),p4=pos(270);
-    var dq=Math.min(1,q/.6);place(flex,p3,1-.4*dq,1-dq,dq*dq*140);
-    if(!dropped&&q>=.45){dropped=true;count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');}
-    var mq=ease(q);place(mini,{x:p3.x+(p4.x-p3.x)*mq,y:p3.y+(p4.y-p3.y)*mq},1,1);
+  }else{ // bod 2 → 3 → 4: FLEX po kružnici do bodu 3 a propadne do flotily; MINI zároveň jede z bodu 2 středem kruhu do bodu 4 — dorazí ve stejný okamžik jako tečka
+    var u=(t-A-B)/(C+D),p2=pos(90),p4=pos(270),mq=ease(u);place(mini,{x:p2.x+(p4.x-p2.x)*mq,y:p2.y+(p4.y-p2.y)*mq},1,1);stamp.style.opacity=0;
+    if(t<A+B+C){ var q=ease((t-A-B)/C),ang=90+90*q,p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));place(flex,p,1,1); }
+    else{ var q=(t-A-B-C)/D,ang=180+90*ease(q),p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
+      var p3=pos(180),dq=Math.min(1,q/.6);place(flex,p3,1-.4*dq,1-dq,dq*dq*140);
+      if(!dropped&&q>=.45){dropped=true;count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');} }
   }
   requestAnimationFrame(tick);
 }
