@@ -381,10 +381,10 @@ function supporterCompounder(s) {
       note: 'Tady je potřeba udělat důležité rozhodnutí: <b>Kolik prádlomatů vlastně chci?</b> 3, 5, 10 nebo 100? Otázka nezní, kolik si můžete dovolit — ale <b>kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování</b>.' },
     { no: '3', k: 'Pořád dokola', title: 'Smyčka', visual: 'loop', lead: 'Fáze 3 je v podstatě <b>opakování fází 1 a 2</b>. Pilotem ověříte místo, na ověřené místo dodáme 100 % zafinancovaný stroj, Pilota přesunete na nové místo a ověřujete znovu. <b>A tak pořád dokola.</b> Jediné, co je na Vás: kolik opakování uděláte.',
       points: [
-        ['sun', '1 · Pilot ověřuje místo', 'Jeden stroj MINI, ~6 měsíců, čísla rozhodnou.'],
-        ['check', '2 · Místo verifikováno', 'Obrat a vytížení potvrdily, že místo funguje.'],
-        ['box', '3 · Dodáme zafinancovaný stroj', 'Na ověřené místo jde prádlomat 100 % zafinancovaný bankou. Splácí se sám.'],
-        ['network', '4 · Pilot jede dál', 'Pilota přesunete na nové místo — a smyčka začíná znovu. Každé kolo = +1 stroj, který je po splacení Váš.'],
+        ['network', '1 · Pilot na nové místo', 'Pilota (stále ten samý MINI) postavíte na nové místo — začíná kolo.'],
+        ['sun', '2 · Pilot ověřuje místo', 'Jeden stroj MINI, náběhová křivka, čísla rozhodnou.'],
+        ['check', '3 · Místo verifikováno', 'Obrat a vytížení potvrdily, že místo funguje.'],
+        ['box', '4 · Dodáme zafinancovaný stroj', 'Na ověřené místo jde prádlomat 100 % zafinancovaný. Splácí se sám — a Pilot jede na další místo. Každé kolo = +1 stroj, který je po splacení Váš.'],
       ] },
   ];
   return layout({ title: 'Compounder', user: s.nick, nav: userNav(s), active: 'cmp', fx: true, body: `
@@ -537,10 +537,10 @@ function supporterCompounder(s) {
           <text x="210" y="200" text-anchor="middle" fill="#8ea2c2" font-size="12" font-weight="700" letter-spacing="2">SMYČKA</text>
           <text x="210" y="232" text-anchor="middle" fill="#fff" font-size="26" font-weight="900">∞</text>
         </svg>
-        <div class="ln n1"><i>1</i><b>Pilot ověřuje místo</b><span>náběhová křivka</span></div>
-        <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
-        <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 %</span></div>
-        <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
+        <div class="ln n1"><i>2</i><b>Pilot ověřuje místo</b><span>náběhová křivka</span></div>
+        <div class="ln n2"><i>3</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
+        <div class="ln n3"><i>4</i><b>Dodáme zafinancovaný stroj</b><span>100 %</span></div>
+        <div class="ln n4"><i>1</i><b>Pilot na nové místo</b><span>start každého kola</span></div>
         <div id="lp-mini" class="lp-img lp-pilot"><i class="lp-ring"></i><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI"><span class="lp-tag">PILOT · stále ten samý MINI</span></div>
         <img id="lp-flex" class="lp-img" src="/img/pradlomat.webp?v=2" alt="Zafinancovaný stroj">
         <div id="lp-stamp" class="lp-stamp">VERIFIKOVÁNO</div>
