@@ -303,12 +303,13 @@
     }
 
     // Skladové karty (polotovar/výrobek) ze skladu, které ještě nemají pracovní postup — nabídnout založení postupu nad nimi
-    let mwfSeq = 0;
+    let mwfSeq = 0; const mwfRows = {};
     async function appendMaterialsWithoutWorkflow(q, list) {
       const seq = ++mwfSeq;
       try {
         const rows = await api('/api/production/materials-without-workflow?type=' + encodeURIComponent(currentType) + '&search=' + encodeURIComponent(q));
         if (seq !== mwfSeq || !rows.length) return;
+        rows.forEach(m => { mwfRows[m.id] = m; });
         const esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const box = document.createElement('div');
         box.style.cssText = 'margin-top:14px;padding:14px 16px;border:1px dashed rgba(234,179,8,.55);border-radius:12px;background:rgba(234,179,8,.06);';
@@ -323,9 +324,8 @@
     async function createWorkflowForMaterial(materialId, btn) {
       if (btn) { btn.disabled = true; btn.textContent = 'Zakládám…'; }
       try {
-        const rows = await api('/api/production/materials-without-workflow?search=');
-        const m = rows.find(x => x.id === materialId);
-        if (!m) throw new Error('Skladová karta už má postup nebo neexistuje');
+        const m = mwfRows[materialId];
+        if (!m) throw new Error('Skladová karta nenalezena — obnov stránku');
         const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = 'Bearer ' + token;
         const r = await fetch('/api/production/products', { method: 'POST', headers, credentials: 'include', body: JSON.stringify({ name: m.name, code: m.code, type: m.type, material_id: m.id, create_material: false }) });
