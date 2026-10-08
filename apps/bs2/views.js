@@ -533,7 +533,7 @@ function supporterCompounder(s) {
         </svg>
         <div class="ln n1"><i>1</i><b>Pilot ověřuje místo</b><span>náběhová křivka</span></div>
         <div class="ln n2"><i>2</i><b>Místo verifikováno</b><span>čísla sedí</span></div>
-        <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 % od banky</span></div>
+        <div class="ln n3"><i>3</i><b>Dodáme zafinancovaný stroj</b><span>100 %</span></div>
         <div class="ln n4"><i>4</i><b>Pilot na nové místo</b><span>a znovu od 1</span></div>
         <div id="lp-mini" class="lp-img lp-pilot"><i class="lp-ring"></i><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI"><span class="lp-tag">PILOT · stále ten samý MINI</span></div>
         <img id="lp-flex" class="lp-img" src="/img/pradlomat.webp?v=2" alt="Zafinancovaný stroj">
