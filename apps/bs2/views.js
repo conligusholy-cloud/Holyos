@@ -468,6 +468,12 @@ function supporterCompounder(s) {
   .cp .lp-pilot .lp-tag{white-space:nowrap;font-size:9.5px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:999px;color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));box-shadow:0 6px 16px rgba(30,134,224,.45);position:relative;z-index:1}
   .cp .lp-stamp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-14deg);padding:4px 10px;border:3px solid var(--ok);border-radius:8px;color:var(--ok);font-weight:900;font-size:13px;letter-spacing:.14em;background:rgba(4,8,16,.7);opacity:0;pointer-events:none;z-index:4;text-shadow:0 0 10px rgba(47,227,160,.6);box-shadow:0 0 18px rgba(47,227,160,.4)}
   .cp .ln{z-index:2}
+  .cp .lp-income{position:absolute;right:-4%;bottom:4%;z-index:4;padding:10px 14px;border-radius:14px;border:1px solid rgba(47,227,160,.45);background:rgba(4,8,16,.8);backdrop-filter:blur(8px);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;min-width:170px}
+  .cp .lp-income .k{display:block;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .cp .lp-income b{display:block;font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .lp-income .s{display:block;font-size:10.5px;color:var(--text2);margin-top:2px}
+  .cp .lp-income.bump{animation:incbump .5s cubic-bezier(.2,1.4,.4,1)} @keyframes incbump{0%{transform:scale(1)}40%{transform:scale(1.08);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 40px rgba(47,227,160,.45)}100%{transform:scale(1)}}
+  @media(max-width:900px){.cp .lp-income{position:static;margin:8px auto 0;width:max-content}}
   .cp .loop-fleet{margin-top:6px;padding:10px 12px;border-radius:14px;border:1px dashed var(--border2);background:rgba(4,8,16,.4)}
   .cp .lf-h{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700;margin-bottom:6px} .cp .lf-h b{font-size:14px;color:var(--ok);letter-spacing:0}
   .cp .lf-row{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;align-items:flex-end}
@@ -538,12 +544,15 @@ function supporterCompounder(s) {
         <div id="lp-mini" class="lp-img lp-pilot"><i class="lp-ring"></i><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI"><span class="lp-tag">PILOT · stále ten samý MINI</span></div>
         <img id="lp-flex" class="lp-img" src="/img/pradlomat.webp?v=2" alt="Zafinancovaný stroj">
         <div id="lp-stamp" class="lp-stamp">VERIFIKOVÁNO</div>
+        <div class="lp-income"><span class="k">Měsíční příjem</span><b><span id="lp-inc">0</span> Kč</b><span class="s">25 000 Kč × <span id="lp-inc-n">0</span> strojů · odhad</span></div>
       </div>
       <div class="loop-fleet"><div class="lf-h"><span>Vaše flotila</span><b id="lf-n">0</b></div><div class="lf-row" id="lf-row"></div></div>
       <script>(function(){
 var loop=document.querySelector('.cp .loop'),dot=document.getElementById('loop-dot'),mini=document.getElementById('lp-mini'),flex=document.getElementById('lp-flex'),stamp=document.getElementById('lp-stamp'),row=document.getElementById('lf-row'),n=document.getElementById('lf-n');
 if(!loop||!dot||!mini||!flex||!row)return;
 var A=4000,B=2600,C=2200,D=2400,T=A+B+C+D,start=performance.now(),count=0,dropped=false;
+var incEl=document.getElementById('lp-inc'),incN=document.getElementById('lp-inc-n'),incBox=document.querySelector('.lp-income'),incShown=0,incTarget=0;
+function incTick(){if(incShown<incTarget){incShown=Math.min(incTarget,incShown+Math.max(500,(incTarget-incShown)*0.12));incEl.textContent=Math.round(incShown).toLocaleString('cs-CZ');requestAnimationFrame(incTick);}}
 function pos(deg){var a=deg*Math.PI/180;return {x:210+150*Math.sin(a),y:210-150*Math.cos(a)};}
 function place(el,p,scale,op,dy){el.style.left=(p.x/420*100)+'%';el.style.top=((p.y+(dy||0))/420*100)+'%';el.style.transform='translate(-50%,-50%) scale('+(scale||1)+')';el.style.opacity=op==null?1:op;}
 function hide(el){el.style.opacity=0;}
@@ -563,7 +572,7 @@ function tick(now){
     if(t<A+B+C){ var q=ease((t-A-B)/C),ang=90+90*q,p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));place(flex,p,1,1); }
     else{ var q=(t-A-B-C)/D,ang=180+90*ease(q),p=pos(ang);dot.setAttribute('cx',p.x.toFixed(1));dot.setAttribute('cy',p.y.toFixed(1));
       var p3=pos(180),dq=Math.min(1,q/.6);place(flex,p3,1-.4*dq,1-dq,dq*dq*140);
-      if(!dropped&&q>=.45){dropped=true;count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');} }
+      if(!dropped&&q>=.45){dropped=true;count++;var im=document.createElement('img');im.src='/img/pradlomat.webp?v=2';im.alt='';im.className='lf-m';row.appendChild(im);n.textContent=count;var w=count<=10?80:count<=20?56:count<=40?40:count<=80?30:22;row.style.setProperty('--lfw',w+'px');incTarget=count*25000;incN.textContent=count;incBox.classList.remove('bump');void incBox.offsetWidth;incBox.classList.add('bump');incTick();} }
   }
   requestAnimationFrame(tick);
 }
