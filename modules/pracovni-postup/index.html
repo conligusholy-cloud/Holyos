@@ -302,6 +302,39 @@
       }
     }
 
+    // Skladové karty (polotovar/výrobek) ze skladu, které ještě nemají pracovní postup — nabídnout založení postupu nad nimi
+    let mwfSeq = 0;
+    async function appendMaterialsWithoutWorkflow(q, list) {
+      const seq = ++mwfSeq;
+      try {
+        const rows = await api('/api/production/materials-without-workflow?type=' + encodeURIComponent(currentType) + '&search=' + encodeURIComponent(q));
+        if (seq !== mwfSeq || !rows.length) return;
+        const esc = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const box = document.createElement('div');
+        box.style.cssText = 'margin-top:14px;padding:14px 16px;border:1px dashed rgba(234,179,8,.55);border-radius:12px;background:rgba(234,179,8,.06);';
+        box.innerHTML = '<div style="font-weight:700;color:#eab308;margin-bottom:8px;">📦 Skladové karty bez pracovního postupu (' + rows.length + ')</div>' +
+          '<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">Tyto položky existují v Nákupu a skladu jako ' + (currentType === 'product' ? 'výrobek' : 'polotovar') + ', ale nemají pracovní postup. Založ ho jedním klikem — karta zůstane propojená.</div>' +
+          rows.map(m => '<div style="display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--surface,#171a21);">' +
+            '<div style="flex:1;min-width:0;"><b>' + esc(m.name) + '</b> <span style="font-family:ui-monospace,Consolas,monospace;color:var(--text2);font-size:12px;">' + esc(m.code) + '</span>' + (m.current_stock != null ? ' <span style="font-size:11px;color:var(--text2);">· skladem ' + esc(m.current_stock) + ' ' + esc(m.unit || 'ks') + '</span>' : '') + '</div>' +
+            '<button class="btn" onclick="createWorkflowForMaterial(' + m.id + ', this)" style="background:linear-gradient(135deg,#1e86e0,#3aa0f0);color:#fff;border:none;font-weight:700;white-space:nowrap;">＋ Založit postup</button></div>').join('');
+        list.appendChild(box);
+      } catch (e) { /* ticho — jen doplňkový blok */ }
+    }
+    async function createWorkflowForMaterial(materialId, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = 'Zakládám…'; }
+      try {
+        const rows = await api('/api/production/materials-without-workflow?search=');
+        const m = rows.find(x => x.id === materialId);
+        if (!m) throw new Error('Skladová karta už má postup nebo neexistuje');
+        const headers = { 'Accept': 'application/json', 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const r = await fetch('/api/production/products', { method: 'POST', headers, credentials: 'include', body: JSON.stringify({ name: m.name, code: m.code, type: m.type, material_id: m.id, create_material: false }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.message || j.error || ('HTTP ' + r.status));
+        window.location.href = 'modules/pracovni-postup/detail.html?id=' + j.id + (/[?&]embed=1/.test(location.search) ? '&embed=1' : '');
+      } catch (e) { alert('Založení postupu selhalo: ' + e.message); if (btn) { btn.disabled = false; btn.textContent = '＋ Založit postup'; } }
+    }
+
     function updateCounts() {
       const products = allProducts.filter(p => p.type === 'product');
       const semi = allProducts.filter(p => p.type === 'semi-product');
@@ -365,6 +398,7 @@
         return (p.name || '').toLowerCase().includes(q) || (p.code || '').toLowerCase().includes(q);
       });
 
+      if (q) appendMaterialsWithoutWorkflow(q, list); // skladové karty bez postupu (Nákup a sklad) k danému hledání
       if (visible.length === 0) {
         list.innerHTML = '<div class="empty-state"><div class="empty-icon">&#128230;</div><p>Žádné ' + (onlyOffered && currentType === 'product' ? 'nabízené výrobky (zapni je přepínačem u výrobku)' : ((activeFilter === 'active' ? 'aktivní ' : activeFilter === 'inactive' ? 'neaktivní ' : '') + (currentType === 'product' ? 'výrobky' : 'polotovary'))) + (activeFilter !== 'all' ? ' — <a href="#" onclick="setActiveFilter(\'all\');return false;" style="color:#eab308;">zobrazit vše</a>' : '') + '</p></div>';
         return;

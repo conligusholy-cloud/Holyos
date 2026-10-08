@@ -142,6 +142,24 @@ async function enrichOperationsRecursive(operations, prisma, productCache, depth
 // =============================================================================
 
 // GET /api/production/products
+// GET /api/production/materials-without-workflow?search=&type=semi-product|product
+// Skladové karty typu polotovar/výrobek, které ještě nemají pracovní postup (žádný Product na ně nenavázaný ani se stejným kódem).
+// Slouží k založení postupu nad existující kartou z Nákupu a skladu.
+router.get('/materials-without-workflow', async (req, res, next) => {
+  try {
+    const search = String(req.query.search || '').trim();
+    const t = String(req.query.type || '');
+    const types = t === 'product' ? ['product'] : t === 'semi-product' ? ['semi-product', 'semi_product'] : ['product', 'semi-product', 'semi_product'];
+    const where = { type: { in: types }, status: { not: 'archived' } };
+    if (search) where.OR = [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }];
+    const mats = await prisma.material.findMany({ where, select: { id: true, code: true, name: true, type: true, unit: true, current_stock: true }, orderBy: { code: 'asc' }, take: 60 });
+    if (!mats.length) return res.json([]);
+    const linked = await prisma.product.findMany({ where: { OR: [{ material_id: { in: mats.map(m => m.id) } }, { code: { in: mats.map(m => m.code) } }] }, select: { material_id: true, code: true } });
+    const byMat = new Set(linked.map(l => l.material_id).filter(Boolean)), byCode = new Set(linked.map(l => l.code));
+    res.json(mats.filter(m => !byMat.has(m.id) && !byCode.has(m.code)).map(m => ({ ...m, type: m.type === 'product' ? 'product' : 'semi-product' })));
+  } catch (err) { next(err); }
+});
+
 router.get('/products', async (req, res, next) => {
   try {
     const { search, type, configurator } = req.query;
@@ -319,7 +337,15 @@ router.post('/products', async (req, res, next) => {
     const type = d.type || 'product';
     let code = (d.code || '').trim();
     if (!code) code = await nextHolyosCode(type === 'semi-product' ? BS_PREFIX['semi-product'] : BS_PREFIX.product, 'product');
-    const dup = await codeTaken(code);
+    // Při založení postupu nad existující skladovou kartou (material_id) smí mít výrobek stejný kód jako ta karta
+    let dup = await codeTaken(code);
+    if (dup && d.material_id) {
+      const ownMat = await prisma.material.findUnique({ where: { id: d.material_id }, select: { code: true } });
+      if (ownMat && ownMat.code.toLowerCase() === code.toLowerCase()) {
+        const p = await prisma.product.findFirst({ where: { code: { equals: code, mode: 'insensitive' } }, select: { id: true } });
+        dup = p ? dup : null;
+      }
+    }
     if (dup) return res.status(400).json({ error: 'Duplicitní kód', message: dup });
 
     const createMaterial = d.create_material != null ? d.create_material : (type === 'semi-product');
