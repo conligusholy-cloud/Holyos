@@ -538,7 +538,6 @@ function supporterCompounder(s) {
         <div class="dec-ask">Otázka tedy nezní „kolik strojů", ale: <b>Kolik peněz chcete mít pravidelně měsíčně za 5 let, až se doplatí financování?</b></div></div>` : ''}
     </section>`).join('')}
 
-    <div class="cta"><div class="q">Tak kolik jich chcete?<small>Jeden je začátek. Rozhodnutí, jestli budete Compounder, děláte u druhého.</small></div><a class="btn" href="/pradlomaty">Vybrat prádlomat ${ICON.arrow}</a></div>
   </div>` });
 }
 // Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
