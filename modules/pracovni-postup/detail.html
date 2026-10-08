@@ -1921,9 +1921,20 @@
       const q = (el.value || '').toLowerCase().trim(); const box = document.getElementById('out-sug-' + i); if (!box) return;
       if (q.length < 2) { box.style.display = 'none'; return; }
       const prods = (allProductsList || []).filter(p => ((p.name || '') + ' ' + (p.code || '')).toLowerCase().includes(q)).slice(0, 8);
-      const mats = (allMaterials || []).filter(mm => ((mm.name || '') + ' ' + (mm.code || '')).toLowerCase().includes(q)).slice(0, 8);
+      // Barevné varianty: základ se nenabízí k výběru, místo něj rovnou jeho barvy (volba barvy je povinná)
+      const matsRaw = (allMaterials || []).filter(mm => ((mm.name || '') + ' ' + (mm.code || '')).toLowerCase().includes(q));
+      const seen = new Set(); const mats = [];
+      for (const mm of matsRaw) {
+        if (mm.has_color_variants) {
+          mats.push({ ...mm, _baseHdr: true });
+          (allMaterials || []).filter(v => v.parent_material_id === mm.id).forEach(v => { if (!seen.has(v.id)) { seen.add(v.id); mats.push({ ...v, _underBase: true }); } });
+        } else if (!seen.has(mm.id)) { seen.add(mm.id); mats.push(mm); }
+        if (mats.length >= 14) break;
+      }
       const row = (kind, id, label, sub) => '<div onclick="outPick(' + i + ',\'' + kind + '\',' + id + ',' + JSON.stringify(label).replace(/"/g, '&quot;') + ')" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="font-size:10px;color:var(--text2);margin-right:6px;">' + sub + '</span>' + esc(label) + '</div>';
-      box.innerHTML = prods.map(p => row('product', p.id, (p.code ? p.code + ' · ' : '') + p.name, p.type === 'semi-product' ? 'POLOTOVAR' : 'VÝROBEK')).join('') + mats.map(mm => row('material', mm.id, (mm.code ? mm.code + ' · ' : '') + mm.name, 'MATERIÁL')).join('') || '<div style="padding:6px 10px;color:var(--text2);font-size:12px;">Nic nenalezeno</div>';
+      box.innerHTML = prods.map(p => row('product', p.id, (p.code ? p.code + ' · ' : '') + p.name, p.type === 'semi-product' ? 'POLOTOVAR' : 'VÝROBEK')).join('') + mats.map(mm => mm._baseHdr
+          ? '<div style="padding:6px 10px;border-bottom:1px solid var(--border);font-size:12.5px;color:#a78bfa;cursor:default;"><span style="font-size:10px;margin-right:6px;">🎨 VYBER BARVU</span>' + esc((mm.code ? mm.code + ' · ' : '') + mm.name) + '</div>'
+          : row('material', mm.id, (mm.code ? mm.code + ' · ' : '') + mm.name, mm._underBase ? '<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (mm.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);vertical-align:middle;"></i> ' + esc((mm.color_name || '').toUpperCase()) : 'MATERIÁL')).join('') || '<div style="padding:6px 10px;color:var(--text2);font-size:12px;">Nic nenalezeno</div>';
       box.style.display = '';
     }
     function outPick(i, kind, id, label) {
@@ -1934,6 +1945,8 @@
       let rows = [];
       if (outMode === 'set') {
         if (outDraft.some(r => !r.out_product_id && !r.out_material_id)) return toast('Každý díl musí být vybraný ze seznamu (výrobek, polotovar nebo materiál)', true);
+        const baseRow = outDraft.find(r => r.out_material_id && (allMaterials.find(mm => mm.id === r.out_material_id) || {}).has_color_variants);
+        if (baseRow) return toast('Díl „' + baseRow.label + '" má barevné varianty — vyber konkrétní barvu', true);
         rows = outDraft.filter(r => r.out_product_id || r.out_material_id);
         if (!rows.length && !outTarget) return toast('Sada dílů musí mít alespoň jeden díl', true);
       }

@@ -1030,6 +1030,7 @@ router.put('/products/:id/outputs', async (req, res, next) => {
       unit: (o.unit || 'ks').slice(0, 20),
       note: o.note ? String(o.note).slice(0, 255) : null,
     })).filter((o) => o.out_product_id || o.out_material_id);
+    const bErr = await baseWithVariantsError(data.map(o => o.out_material_id)); if (bErr) return res.status(400).json({ error: bErr });
     await prisma.$transaction(async (tx) => {
       await tx.productOutput.deleteMany({ where: { product_id: pid, output_variant_id: variantId } });
       if (data.length) await tx.productOutput.createMany({ data });
