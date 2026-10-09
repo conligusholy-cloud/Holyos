@@ -5251,6 +5251,19 @@ model ServiceMachine {
   @@map("service_machines")
 }
 
+// Šablona kontrolního protokolu údržby (checklist) — body, které má technik při údržbě zkontrolovat.
+model MaintenanceChecklist {
+  id          Int      @id @default(autoincrement())
+  name        String   @db.VarChar(200)
+  description String?  @db.Text
+  items       Json     @default("[]") // pole { text } v pořadí zobrazení
+  active      Boolean  @default(true)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@map("maintenance_checklists")
+}
+
 // Odečet stavů měřidel (voda/elektro) — zadává kolegyně z mobilu, ukládá se do Odečtů.
 model MeterReading {
   id                  Int      @id @default(autoincrement())

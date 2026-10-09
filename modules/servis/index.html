@@ -697,10 +697,13 @@
     <!-- ═══ SEKCE: ÚDRŽBA (obsah doplníme) ═══ -->
     <section class="section-panel" id="section-udrzba">
       <div class="content">
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:40px 20px;text-align:center;color:var(--text2);">
-          <div style="font-size:34px;margin-bottom:8px;">🔩</div>
-          <div style="font-size:16px;font-weight:600;color:var(--text);margin-bottom:4px;">Údržba</div>
-          <div>Záložka je připravená, obsah doplníme.</div>
+        <div class="toolbar">
+          <button class="btn btn-primary" id="ud-new-btn">+ Nová šablona</button>
+          <span style="color:var(--text2);font-size:13px;">Šablony kontrolních protokolů – co má technik při údržbě prádlomatu zkontrolovat.</span>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
+          <table class="data-table"><thead><tr><th>Název šablony</th><th>Popis</th><th>Bodů</th><th>Stav</th><th></th></tr></thead>
+          <tbody id="ud-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
     </section>
@@ -763,7 +766,7 @@
       // v dokumentu), takže při obnově po refreshi ještě nemusí existovat. Proto je
       // voláme s krátkým opakováním, dokud nejsou připravené.
       function ensureFor(sec) {
-        var map = { infolinka: 'infoInit', pozadavky: 'srEnsure', stroje: 'smEnsure', odecty: 'odEnsure', kontrola: 'kmEnsure' };
+        var map = { infolinka: 'infoInit', pozadavky: 'srEnsure', stroje: 'smEnsure', odecty: 'odEnsure', kontrola: 'kmEnsure', udrzba: 'udEnsure' };
         var fn = map[sec]; if (!fn) return;
         var tries = 0;
         (function attempt() {
@@ -2295,6 +2298,86 @@
       function ensure(){ if(loaded) return; loaded=true; load(); }
       window.odEnsure=ensure;
       var tabBtn=document.querySelector('.section-tab[data-section="odecty"]');
+      if(tabBtn) tabBtn.addEventListener('click',ensure);
+    });
+  })();
+  </script>
+
+  <!-- Agenda: Údržba – šablony kontrolních protokolů (checklist) -->
+  <script>
+  (function(){
+    var API='/api/service';
+    function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function fetchJSON(url,opts){ return fetch(url,Object.assign({credentials:'include',headers:{'Content-Type':'application/json'}},opts||{})).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+    var rowsCache=[];
+    function render(rows){
+      rowsCache=rows;
+      var tb=document.getElementById('ud-tbody'); if(!tb) return;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--text2);padding:20px">Zatím žádná šablona.</td></tr>'; return; }
+      tb.innerHTML=rows.map(function(r){
+        var n=Array.isArray(r.items)?r.items.length:0;
+        return '<tr style="cursor:pointer;" data-id="'+r.id+'">'+
+          '<td><b>'+esc(r.name)+'</b></td>'+
+          '<td style="color:var(--text2);">'+esc(r.description||'—')+'</td>'+
+          '<td>'+n+'</td>'+
+          '<td>'+(r.active?'<span style="color:#22c55e;">Aktivní</span>':'<span style="color:var(--text2);">Neaktivní</span>')+'</td>'+
+          '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">✏️ Upravit</button></td></tr>';
+      }).join('');
+      tb.querySelectorAll('tr[data-id]').forEach(function(tr){ tr.addEventListener('click',function(){ var r=rowsCache.filter(function(x){ return String(x.id)===tr.dataset.id; })[0]; if(r) openModal(r); }); });
+    }
+    function load(){ fetchJSON(API+'/maintenance-checklists').then(render).catch(function(){ var tb=document.getElementById('ud-tbody'); if(tb) tb.innerHTML='<tr><td colspan="5" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; }); }
+    function openModal(row){
+      row=row||{}; var isNew=!row.id;
+      var items=(Array.isArray(row.items)?row.items:[]).map(function(i){ return i.text; });
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      ov.innerHTML='<div class="modal" style="width:680px;max-height:90vh;overflow:auto;"><h2>'+(isNew?'Nová šablona':'Šablona kontrolního protokolu')+'</h2>'+
+        '<div class="form-row"><label>Název šablony *</label><input id="ud-name" value="'+esc(row.name||'')+'" placeholder="např. Kontrolní protokol – servis"></div>'+
+        '<div class="form-row"><label>Popis</label><input id="ud-desc" value="'+esc(row.description||'')+'" placeholder="k čemu šablona slouží"></div>'+
+        '<div class="form-row"><label><input type="checkbox" id="ud-active"'+(row.active===false?'':' checked')+'> Aktivní</label></div>'+
+        '<div style="font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.4px;margin:6px 0;">Kontrolní body (technik u každého vybere OK / Závada / N/A + poznámka)</div>'+
+        '<div id="ud-items"></div>'+
+        '<button class="btn btn-sm btn-secondary" id="ud-add" style="margin-top:8px;">+ Přidat bod</button>'+
+        '<div class="modal-actions">'+
+          (isNew?'':'<button class="btn btn-danger" id="ud-del">Smazat</button>')+
+          '<button class="btn btn-secondary" id="ud-cancel">Zrušit</button>'+
+          '<button class="btn btn-primary" id="ud-save">💾 Uložit</button>'+
+        '</div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      var box=ov.querySelector('#ud-items');
+      function sync(){ box.querySelectorAll('input[data-i]').forEach(function(inp){ items[+inp.dataset.i]=inp.value; }); }
+      function drawItems(){
+        box.innerHTML=items.map(function(t,i){
+          return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">'+
+            '<span style="width:24px;text-align:right;color:var(--text2);">'+(i+1)+'.</span>'+
+            '<input data-i="'+i+'" value="'+esc(t)+'" style="flex:1;" placeholder="text kontrolního bodu">'+
+            '<button class="btn btn-sm btn-secondary" data-up="'+i+'" title="Nahoru">▲</button>'+
+            '<button class="btn btn-sm btn-secondary" data-dn="'+i+'" title="Dolů">▼</button>'+
+            '<button class="btn btn-sm btn-secondary" data-rm="'+i+'" title="Odebrat">✕</button></div>';
+        }).join('')||'<div style="color:var(--text2);">Zatím žádné body.</div>';
+        box.querySelectorAll('[data-up]').forEach(function(b){ b.onclick=function(){ sync(); var i=+b.dataset.up; if(i>0){ var t=items[i]; items[i]=items[i-1]; items[i-1]=t; drawItems(); } }; });
+        box.querySelectorAll('[data-dn]').forEach(function(b){ b.onclick=function(){ sync(); var i=+b.dataset.dn; if(i<items.length-1){ var t=items[i]; items[i]=items[i+1]; items[i+1]=t; drawItems(); } }; });
+        box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ sync(); items.splice(+b.dataset.rm,1); drawItems(); }; });
+      }
+      drawItems();
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#ud-cancel').onclick=close;
+      ov.querySelector('#ud-add').onclick=function(){ sync(); items.push(''); drawItems(); var ins=box.querySelectorAll('input[data-i]'); if(ins.length) ins[ins.length-1].focus(); };
+      var del=ov.querySelector('#ud-del'); if(del) del.onclick=function(){ if(!confirm('Smazat šablonu?')) return; fetchJSON(API+'/maintenance-checklists/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); };
+      ov.querySelector('#ud-save').onclick=function(){
+        sync();
+        var body={ name:ov.querySelector('#ud-name').value.trim(), description:ov.querySelector('#ud-desc').value.trim(), active:ov.querySelector('#ud-active').checked, items:items.map(function(t){ return {text:t}; }) };
+        if(!body.name){ alert('Vyplň název šablony.'); return; }
+        var p=isNew?fetchJSON(API+'/maintenance-checklists',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/maintenance-checklists/'+row.id,{method:'PUT',body:JSON.stringify(body)});
+        p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
+      };
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      var nb=document.getElementById('ud-new-btn'); if(nb) nb.addEventListener('click',function(){ openModal(null); });
+      var loaded=false;
+      function ensure(){ if(loaded) return; loaded=true; load(); }
+      window.udEnsure=ensure;
+      var tabBtn=document.querySelector('.section-tab[data-section="udrzba"]');
       if(tabBtn) tabBtn.addEventListener('click',ensure);
     });
   })();

@@ -1601,4 +1601,68 @@ router.delete('/readings/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Údržba: šablony kontrolních protokolů (checklist) ─────────────────────
+const DEFAULT_CHECKLIST_ITEMS = [
+  'Provozovna je čistá a bez překážek', 'Podlaha suchá, bez rizika uklouznutí', 'Osvětlení funguje',
+  'Dveře a zámky kiosku fungují', 'Viditelné známky poškození / vandalismu', 'Pračky – přívody a hadice bez úniku vody',
+  'Pračky – zámky dveří a těsnění v pořádku', 'Sušičky – bez neobvyklého hluku/přehřívání', 'Filtry sušiček čisté',
+  'Odtoky průchodné', 'Dávkovací systém funguje', 'Chemie je dostatečná a nádoby správně označené',
+  'Platební terminál funguje', 'Mincovník funguje', 'Rozvaděč a elektro prvky bez viditelné závady',
+  'Únikové cesty volné', 'Internet / vzdálený monitoring OK', 'Kamera funguje – pokud je instalována',
+  'Telefon / kontakt podpory funguje', 'Nejsou zjevné nové závady vyžadující servis',
+];
+
+const checklistSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().optional().nullable(),
+  active: z.boolean().optional(),
+  items: z.array(z.object({ text: z.string() })).optional(),
+});
+const _cleanItems = (arr) => (arr || []).map((i) => ({ text: String(i.text || '').trim().slice(0, 300) })).filter((i) => i.text);
+
+// GET /api/service/maintenance-checklists — při prvním načtení založí výchozí šablonu podle vzoru.
+router.get('/maintenance-checklists', async (req, res, next) => {
+  try {
+    if ((await prisma.maintenanceChecklist.count()) === 0) {
+      await prisma.maintenanceChecklist.create({
+        data: { name: 'Kontrolní protokol – servis', description: 'Běžná kontrola pobočky (prádlomat)', items: DEFAULT_CHECKLIST_ITEMS.map((text) => ({ text })) },
+      });
+    }
+    res.json(await prisma.maintenanceChecklist.findMany({ orderBy: [{ active: 'desc' }, { name: 'asc' }] }));
+  } catch (err) { next(err); }
+});
+
+router.post('/maintenance-checklists', async (req, res, next) => {
+  try {
+    const parsed = checklistSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const row = await prisma.maintenanceChecklist.create({
+      data: { name: d.name.trim(), description: d.description || null, active: d.active !== false, items: _cleanItems(d.items) },
+    });
+    res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+router.put('/maintenance-checklists/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = checklistSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data; const data = {};
+    if (d.name !== undefined) data.name = d.name.trim();
+    if (d.description !== undefined) data.description = d.description || null;
+    if (d.active !== undefined) data.active = d.active;
+    if (d.items !== undefined) data.items = _cleanItems(d.items);
+    res.json(await prisma.maintenanceChecklist.update({ where: { id }, data }));
+  } catch (err) { next(err); }
+});
+
+router.delete('/maintenance-checklists/:id', async (req, res, next) => {
+  try {
+    await prisma.maintenanceChecklist.delete({ where: { id: parseInt(req.params.id, 10) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
