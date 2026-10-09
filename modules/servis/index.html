@@ -2173,6 +2173,7 @@
           '<div class="form-row"><label>Revize (příští)</label><input id="sm-rev" type="date" value="'+toInput(row.revision_at)+'"></div>'+
         '</div>'+
         '<div class="form-row"><label>Poznámka</label><textarea id="sm-note" rows="3" placeholder="výrobní číslo, další info o stroji…">'+esc(row.note||'')+'</textarea></div>'+
+        '<div class="form-row"><label>Korekce vodoměru (m³)</label><input id="sm-wcorr" inputmode="decimal" value="'+esc(row.water_correction==null?'':String(row.water_correction).replace('.',','))+'" placeholder="např. 0,250 nebo -1,5"></div>'+
         extraFieldsHtml(row.extra)+
         '<div class="modal-actions">'+
           (isNew?'':'<button class="btn btn-danger" id="sm-del">Smazat</button>')+
@@ -2186,7 +2187,7 @@
       ov.querySelector('#sm-cancel').addEventListener('click',close);
       var delBtn=ov.querySelector('#sm-del'); if(delBtn) delBtn.addEventListener('click',function(){ if(!confirm('Smazat stroj?')) return; fetchJSON(API+'/machines/'+row.id,{method:'DELETE'}).then(function(){ close(); load(); }).catch(function(){ alert('Smazání selhalo.'); }); });
       ov.querySelector('#sm-save').addEventListener('click',function(){
-        var body={ name:val('sm-name'), type:val('sm-type'), status:val('sm-status'), commissioned_at:val('sm-comm')||null, revision_at:val('sm-rev')||null, note:val('sm-note'), extra:gatherExtra(ov) };
+        var body={ name:val('sm-name'), type:val('sm-type'), status:val('sm-status'), commissioned_at:val('sm-comm')||null, revision_at:val('sm-rev')||null, note:val('sm-note'), water_correction:val('sm-wcorr'), extra:gatherExtra(ov) };
         if(!body.name){ alert('Vyplň název stroje.'); return; }
         var p=isNew?fetchJSON(API+'/machines',{method:'POST',body:JSON.stringify(body)}):fetchJSON(API+'/machines/'+row.id,{method:'PATCH',body:JSON.stringify(body)});
         p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });

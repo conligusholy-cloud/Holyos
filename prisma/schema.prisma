@@ -5162,6 +5162,14 @@ model ServiceRequest {
   est_travel_min Int?   // odhadovaný čas cesty ze základny ke stroji (min) — spočítá se při vytvoření
   fix_photo_urls Json?  // fotodokumentace opravy (pole URL) — servisák fotí z telefonu
   created_by_user_id Int?   // kdo požadavek zadal (přihlášený uživatel) — u mobilního formuláře povinné z tokenu
+  // Dopad na provoz (přehled „Aktuální omezení" pro Infolinku + budoucí Hugo AI):
+  //   none = bez omezení, known = známý problém (funguje), limited = omezený provoz, out = zařízení mimo provoz, site_out = celý prádlomat mimo provoz
+  impact        String    @default("none") @db.VarChar(20)
+  devices       Json?     // dotčená zařízení ["Pračka 1","Platební terminál",…] — jeden požadavek může řešit víc zařízení
+  show_infoline Boolean   @default(false) // zobrazit infolince (dokud není Vyřešeno)
+  infoline_note String?   @db.VarChar(500) // krátká informace pro operátora / zákazníka
+  impact_since  DateTime? // od kdy omezení platí (nastaví se při zadání dopadu ≠ none)
+  resolved_at   DateTime? // kdy byl požadavek označen Vyřešeno
   created_at  DateTime @default(now())
   updated_at  DateTime @updatedAt
 
@@ -5169,6 +5177,7 @@ model ServiceRequest {
   @@index([assignee_id])
   @@index([created_by_user_id])
   @@index([voice_call_id])
+  @@index([show_infoline, status])
   @@map("service_requests")
 }
 
@@ -5233,6 +5242,7 @@ model ServiceMachine {
   commissioned_at DateTime? @db.Date           // uvedení do provozu
   revision_at     DateTime? @db.Date           // příští revize
   note            String?   @db.Text           // poznámka (do budoucna víc informací o stroji)
+  water_correction Decimal? @db.Decimal(12, 3) // korekce vodoměru (m3)
   extra           Json?     // všechny další sloupce z importu Excelu (klíč = název sloupce)
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt

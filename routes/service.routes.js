@@ -1371,6 +1371,7 @@ const machineSchema = z.object({
   commissioned_at: z.string().optional().nullable(),
   revision_at: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
+  water_correction: z.union([z.number(), z.string()]).optional().nullable(),
   extra: z.record(z.any()).optional().nullable(),
 });
 
@@ -1387,6 +1388,7 @@ router.post('/machines', async (req, res, next) => {
         commissioned_at: _toDate(d.commissioned_at),
         revision_at: _toDate(d.revision_at),
         note: d.note || null,
+        water_correction: _num(d.water_correction),
         extra: _cleanExtra(d.extra),
       },
     });
@@ -1431,6 +1433,7 @@ const machinePatchSchema = z.object({
   commissioned_at: z.string().optional().nullable(),
   revision_at: z.string().optional().nullable(),
   note: z.string().optional().nullable(),
+  water_correction: z.union([z.number(), z.string()]).optional().nullable(),
   extra: z.record(z.any()).optional().nullable(),
 });
 
@@ -1447,6 +1450,7 @@ router.patch('/machines/:id', async (req, res, next) => {
     if (d.commissioned_at !== undefined) data.commissioned_at = _toDate(d.commissioned_at);
     if (d.revision_at !== undefined) data.revision_at = _toDate(d.revision_at);
     if (d.note !== undefined) data.note = d.note || null;
+    if (d.water_correction !== undefined) data.water_correction = _num(d.water_correction);
     if (d.extra !== undefined) data.extra = _cleanExtra(d.extra);
     const row = await prisma.serviceMachine.update({ where: { id }, data });
     res.json(row);
