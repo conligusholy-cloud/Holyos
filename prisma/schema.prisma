@@ -5264,6 +5264,28 @@ model MaintenanceChecklist {
   @@map("maintenance_checklists")
 }
 
+// Provedená kontrola (vyplněný kontrolní protokol) — zadává údržba z mobilu.
+model MaintenanceInspection {
+  id             Int       @id @default(autoincrement())
+  checklist_id   Int?      // šablona (bez FK, jen odkaz)
+  checklist_name String?   @db.VarChar(200)
+  machine_id     Int?      // stroj/pobočka (ServiceMachine) — bez FK
+  machine_name   String?   @db.VarChar(200)
+  inspector_user_id Int?
+  inspector_name String?   @db.VarChar(200)
+  inspected_at   DateTime  @default(now())
+  results        Json      @default("[]") // pole { text, status: ok|zavada|na, note }
+  overall        String    @default("ok") @db.VarChar(10) // ok | zavada
+  defects        String?   @db.Text   // zjištěné závady / opatření
+  fix_deadline   DateTime? @db.Date   // termín odstranění
+  note           String?   @db.Text
+  created_at     DateTime  @default(now())
+
+  @@index([machine_id])
+  @@index([inspected_at])
+  @@map("maintenance_inspections")
+}
+
 // Odečet stavů měřidel (voda/elektro) — zadává kolegyně z mobilu, ukládá se do Odečtů.
 model MeterReading {
   id                  Int      @id @default(autoincrement())

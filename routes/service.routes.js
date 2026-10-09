@@ -1665,4 +1665,73 @@ router.delete('/maintenance-checklists/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Údržba: provedené kontroly (vyplněný protokol z mobilu) ────────────────
+const inspectionSchema = z.object({
+  checklist_id: z.number().int().optional().nullable(),
+  machine_id: z.number().int().optional().nullable(),
+  machine_name: z.string().max(200).optional().nullable(),
+  results: z.array(z.object({
+    text: z.string(),
+    status: z.enum(['ok', 'zavada', 'na']),
+    note: z.string().optional().nullable(),
+  })).min(1),
+  defects: z.string().optional().nullable(),
+  fix_deadline: z.string().optional().nullable(),
+  note: z.string().optional().nullable(),
+});
+
+// POST /api/service/maintenance-inspections — uloží vyplněný protokol (kdo = přihlášený uživatel).
+router.post('/maintenance-inspections', async (req, res, next) => {
+  try {
+    const parsed = inspectionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    let checklistName = null;
+    if (d.checklist_id) {
+      const c = await prisma.maintenanceChecklist.findUnique({ where: { id: d.checklist_id }, select: { name: true } });
+      checklistName = c ? c.name : null;
+    }
+    let inspectorName = null;
+    const uid = (req.user && req.user.id) || null;
+    if (uid) {
+      const u = await prisma.user.findUnique({ where: { id: uid }, select: { display_name: true, username: true } });
+      inspectorName = u ? (u.display_name || u.username) : null;
+    }
+    const results = d.results.map((r) => ({ text: r.text, status: r.status, note: (r.note || '').trim() || null }));
+    const row = await prisma.maintenanceInspection.create({
+      data: {
+        checklist_id: d.checklist_id || null,
+        checklist_name: checklistName,
+        machine_id: d.machine_id || null,
+        machine_name: d.machine_name || null,
+        inspector_user_id: uid,
+        inspector_name: inspectorName,
+        results,
+        overall: results.some((r) => r.status === 'zavada') ? 'zavada' : 'ok',
+        defects: (d.defects || '').trim() || null,
+        fix_deadline: _toDate(d.fix_deadline),
+        note: (d.note || '').trim() || null,
+      },
+    });
+    res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+// GET /api/service/maintenance-inspections — přehled kontrol (nejnovější první).
+router.get('/maintenance-inspections', async (req, res, next) => {
+  try {
+    const where = {};
+    if (req.query.machine_id) where.machine_id = parseInt(req.query.machine_id, 10) || undefined;
+    if (req.query.overall === 'ok' || req.query.overall === 'zavada') where.overall = req.query.overall;
+    res.json(await prisma.maintenanceInspection.findMany({ where, orderBy: { inspected_at: 'desc' }, take: 300 }));
+  } catch (err) { next(err); }
+});
+
+router.delete('/maintenance-inspections/:id', async (req, res, next) => {
+  try {
+    await prisma.maintenanceInspection.delete({ where: { id: parseInt(req.params.id, 10) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -705,6 +705,25 @@
           <table class="data-table"><thead><tr><th>Název šablony</th><th>Popis</th><th>Bodů</th><th>Stav</th><th></th></tr></thead>
           <tbody id="ud-tbody"><tr><td colspan="5" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
+
+        <div style="background:linear-gradient(90deg,rgba(16,185,129,0.10),rgba(16,185,129,0.02));border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:12px 16px;margin:22px 0 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <div style="font-size:22px;">📱</div>
+          <div style="flex:1;min-width:220px;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">Odkaz na mobilní aplikaci Údržba (přihlášení vlastním loginem)</div>
+            <div id="ud-share-url" style="font-family:monospace;font-size:13px;color:var(--acc,#22d3ee);word-break:break-all;">…</div>
+          </div>
+          <button class="btn btn-sm btn-secondary" id="ud-copy-btn">📋 Kopírovat</button>
+          <a href="modules/servis/udrzba.html" target="_blank" class="btn btn-sm btn-secondary">↗ Otevřít</a>
+        </div>
+        <div class="toolbar">
+          <h3 style="margin:0;font-size:16px;">Provedené kontroly</h3>
+          <select id="ui-filter" style="max-width:180px;"><option value="">Všechny výsledky</option><option value="zavada">Se závadou</option><option value="ok">V pořádku</option></select>
+          <button class="btn btn-secondary" id="ui-refresh">↻ Obnovit</button>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
+          <table class="data-table"><thead><tr><th>Kdy</th><th>Pobočka / stroj</th><th>Šablona</th><th>Kontroloval</th><th>Výsledek</th><th>Závad</th><th>Termín odstranění</th></tr></thead>
+          <tbody id="ui-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
+        </div>
       </div>
     </section>
 
@@ -2372,10 +2391,55 @@
         p.then(function(){ close(); load(); }).catch(function(){ alert('Uložení selhalo.'); });
       };
     }
+    // ── Provedené kontroly (přehled + detail) ──
+    var inspCache=[];
+    function fmtD(s){ if(!s) return '—'; try{ return new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
+    function fmtDay(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return '—'; } }
+    function stTag(o){ return o==='ok'?'<span style="color:#22c55e;font-weight:700;">OK</span>':'<span style="color:#ef4444;font-weight:700;">ZÁVADA</span>'; }
+    function renderInsp(rows){
+      inspCache=rows;
+      var tb=document.getElementById('ui-tbody'); if(!tb) return;
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné kontroly.</td></tr>'; return; }
+      tb.innerHTML=rows.map(function(r){
+        var bad=(r.results||[]).filter(function(x){ return x.status==='zavada'; }).length;
+        return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+'</td><td>'+(bad||'—')+'</td><td>'+esc(fmtDay(r.fix_deadline))+'</td></tr>';
+      }).join('');
+      tb.querySelectorAll('tr[data-iid]').forEach(function(tr){ tr.addEventListener('click',function(){ var r=inspCache.filter(function(x){ return String(x.id)===tr.dataset.iid; })[0]; if(r) openInsp(r); }); });
+    }
+    function loadInsp(){
+      var f=document.getElementById('ui-filter'); var q=f&&f.value?('?overall='+f.value):'';
+      fetchJSON(API+'/maintenance-inspections'+q).then(renderInsp).catch(function(){ var tb=document.getElementById('ui-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+    }
+    function openInsp(r){
+      var lbl={ok:'<span style="color:#22c55e;font-weight:700;">OK</span>',zavada:'<span style="color:#ef4444;font-weight:700;">ZÁVADA</span>',na:'<span style="color:var(--text2);">N/A</span>'};
+      var ov=document.createElement('div'); ov.className='modal-overlay';
+      ov.innerHTML='<div class="modal" style="width:720px;max-height:90vh;overflow:auto;"><h2>Kontrolní protokol – '+esc(r.machine_name||'')+'</h2>'+
+        '<div style="color:var(--text2);margin-bottom:10px;">'+esc(fmtD(r.inspected_at))+' · kontroloval: '+esc(r.inspector_name||'—')+' · celkově: '+stTag(r.overall)+'</div>'+
+        '<table class="data-table"><thead><tr><th>#</th><th>Kontrolní bod</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>'+
+        (r.results||[]).map(function(x,i){ return '<tr><td>'+(i+1)+'</td><td>'+esc(x.text)+'</td><td>'+(lbl[x.status]||'')+'</td><td>'+esc(x.note||'')+'</td></tr>'; }).join('')+
+        '</tbody></table>'+
+        (r.defects?'<div style="margin-top:12px;"><b>Zjištěné závady / opatření:</b><div style="white-space:pre-wrap;">'+esc(r.defects)+'</div></div>':'')+
+        '<div style="margin-top:8px;"><b>Termín odstranění:</b> '+esc(fmtDay(r.fix_deadline))+'</div>'+
+        (r.note?'<div style="margin-top:8px;"><b>Poznámka:</b> '+esc(r.note)+'</div>':'')+
+        '<div class="modal-actions"><button class="btn btn-danger" id="ui-del">Smazat</button><button class="btn btn-secondary" id="ui-close">Zavřít</button></div></div>';
+      document.getElementById('modal-root').appendChild(ov);
+      function close(){ ov.remove(); }
+      ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
+      ov.querySelector('#ui-close').onclick=close;
+      ov.querySelector('#ui-del').onclick=function(){ if(!confirm('Smazat tento protokol?')) return; fetchJSON(API+'/maintenance-inspections/'+r.id,{method:'DELETE'}).then(function(){ close(); loadInsp(); }).catch(function(){ alert('Smazání selhalo.'); }); };
+    }
     document.addEventListener('DOMContentLoaded',function(){
       var nb=document.getElementById('ud-new-btn'); if(nb) nb.addEventListener('click',function(){ openModal(null); });
+      var su=location.origin+'/modules/servis/udrzba.html';
+      var ue=document.getElementById('ud-share-url'); if(ue) ue.textContent=su;
+      var cb=document.getElementById('ud-copy-btn'); if(cb) cb.addEventListener('click',function(){
+        function ok(){ var t=cb.textContent; cb.textContent='✅ Zkopírováno'; setTimeout(function(){ cb.textContent=t; },1500); }
+        if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(su).then(ok,function(){ window.prompt('Zkopíruj odkaz:',su); }); } else { window.prompt('Zkopíruj odkaz:',su); }
+      });
+      var uf=document.getElementById('ui-filter'); if(uf) uf.addEventListener('change',loadInsp);
+      var ur=document.getElementById('ui-refresh'); if(ur) ur.addEventListener('click',loadInsp);
       var loaded=false;
-      function ensure(){ if(loaded) return; loaded=true; load(); }
+      function ensure(){ if(loaded) return; loaded=true; load(); loadInsp(); }
       window.udEnsure=ensure;
       var tabBtn=document.querySelector('.section-tab[data-section="udrzba"]');
       if(tabBtn) tabBtn.addEventListener('click',ensure);
