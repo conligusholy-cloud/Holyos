@@ -640,6 +640,7 @@
               <option value="zamitnuto">Zamítnuto</option>
             </select>
           </div>
+          <button class="btn btn-secondary" id="sr-clear-filters" style="display:none;margin-left:10px;">✕ Zrušit filtry a řazení</button>
           <button class="btn btn-secondary" id="sr-settings-btn" title="Nastavení – kdo může řešit požadavky" style="margin-left:auto;">⚙️ Nastavení řešitelů</button>
         </div>
         <div style="overflow-x:auto">
@@ -1832,7 +1833,112 @@
       if(est==null&&real==null) return '<td style="color:var(--text2)">—</td>';
       return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(overR?'#ef4444':'#22c55e')+'">'+r+'</b></td>';
     }
+    // ── Řazení a filtry po sloupcích (klik na ▾ v hlavičce) ──
+    var _srAll=[], _srSort=null /* {c,dir} */, _srFilt={} /* c → {q,mode} */, _srPop=null;
+    var SR_IMP_RANK={ site_out:4, out:3, limited:2, known:1, none:0 };
+    var SR_IMP_LBL={ site_out:'Celý prádlomat mimo provoz', out:'Mimo provoz zařízení', limited:'Omezený provoz', known:'Známý problém', none:'bez omezení' };
+    var SR_COLS=[
+      { t:'num', v:function(r){ return r.id; }, x:function(r){ return '#'+r.id+' '+r.id; } },
+      { t:'str', v:function(r){ return r.problem||''; }, x:function(r){ return [r.problem,(r.devices||[]).join(' '),r.description,r.voice_call&&r.voice_call.from_number].join(' '); } },
+      { t:'num', v:function(r){ return SR_IMP_RANK[r.impact||'none']; }, x:function(r){ return (SR_IMP_LBL[r.impact||'none']||'')+' '+(r.infoline_note||'')+' '+(r.show_infoline?'infolinka':''); }, hint:'největší = nejzávažnější omezení' },
+      { t:'str', v:function(r){ return [r.action,r.task].filter(Boolean).join(' · '); }, x:function(r){ return [r.action,r.task].filter(Boolean).join(' '); } },
+      { t:'str', v:function(r){ return r.ordered_by||''; }, x:function(r){ return r.ordered_by||''; } },
+      { t:'str', v:function(r){ return (STL[r.status]||[r.status])[0]; }, x:function(r){ return (STL[r.status]||[r.status])[0]; } },
+      { t:'str', v:function(r){ return r.assignee_name||''; }, x:function(r){ return r.assignee_name||''; } },
+      { t:'num', v:function(r){ return r.est_travel_min!=null?Number(r.est_travel_min):null; }, x:function(r){ return [r.est_travel_min,r.real_travel_min].join(' '); }, hint:'odhad (min)' },
+      { t:'num', v:function(r){ return r.est_work_min!=null?Number(r.est_work_min):null; }, x:function(r){ return [r.est_work_min,r.real_work_min].join(' '); }, hint:'odhad (min)' },
+      { t:'str', v:function(r){ return r.resolution||''; }, x:function(r){ return r.resolution||''; } },
+      { t:'num', v:function(r){ return r.created_at?new Date(r.created_at).getTime():null; }, x:function(r){ return fmtDate(r.created_at)+' '+String(r.created_at||'').slice(0,10); }, date:true }
+    ];
+    function srNorm(t){ return String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
+    function srMatch(ci,r){
+      var f=_srFilt[ci]; if(!f||!f.q) return true;
+      var col=SR_COLS[ci], q=f.q.trim();
+      if(col.t==='num' && !col.date){
+        var v=col.v(r), m;
+        if((m=q.match(/^(>=|<=|>|<|=)\s*(-?\d+(?:[.,]\d+)?)$/))){ if(v==null) return false; var n=parseFloat(m[2].replace(',','.')); return m[1]==='>'?v>n:m[1]==='<'?v<n:m[1]==='>='?v>=n:m[1]==='<='?v<=n:v===n; }
+        if((m=q.match(/^(-?\d+(?:[.,]\d+)?)\s*(?:-|–|až)\s*(-?\d+(?:[.,]\d+)?)$/))){ if(v==null) return false; return v>=parseFloat(m[1].replace(',','.')) && v<=parseFloat(m[2].replace(',','.')); }
+      }
+      var hay=srNorm(col.x(r)), nq=srNorm(q);
+      if(f.mode==='exact'){ var parts=hay.split(/\s{1,}/); return hay===nq || srNorm(col.v(r))===nq || (col.t==='num'&&!col.date&&String(col.v(r))===nq); }
+      return nq.split(/\s+/).every(function(w){ return hay.indexOf(w)>=0; }); // fulltext: všechna slova
+    }
+    function srApply(rows){
+      var out=rows.filter(function(r){ for(var ci in _srFilt){ if(!srMatch(+ci,r)) return false; } return true; });
+      if(_srSort){
+        var col=SR_COLS[_srSort.c], d=_srSort.dir==='desc'?-1:1;
+        out=out.slice().sort(function(a,b){
+          var x=col.v(a), y=col.v(b);
+          if(x==null||x==='') return (y==null||y==='')?0:1; // prázdné vždy dolů
+          if(y==null||y==='') return -1;
+          return (col.t==='num'?(x-y):String(x).localeCompare(String(y),'cs',{sensitivity:'base',numeric:true}))*d;
+        });
+      }
+      return out;
+    }
+    function srHeaderState(){
+      var ths=document.querySelectorAll('#sr-table thead th');
+      ths.forEach(function(th,i){
+        var b=th.querySelector('.sr-cf'); if(!b) return;
+        var active=!!(_srFilt[i]&&_srFilt[i].q), sorted=_srSort&&_srSort.c===i;
+        b.textContent=sorted?(_srSort.dir==='asc'?'▲':'▼'):(active?'⏷':'▾');
+        b.style.color=(active||sorted)?'#22d3ee':'var(--text2)';
+        b.style.background=(active||sorted)?'rgba(34,211,238,.15)':'transparent';
+      });
+      var any=Object.keys(_srFilt).some(function(k){ return _srFilt[k]&&_srFilt[k].q; })||_srSort;
+      var cb=document.getElementById('sr-clear-filters'); if(cb) cb.style.display=any?'':'none';
+    }
+    function srClosePop(){ if(_srPop){ _srPop.remove(); _srPop=null; } }
+    function srOpenPop(ci,th){
+      srClosePop();
+      var col=SR_COLS[ci], f=_srFilt[ci]||{q:'',mode:'contains'};
+      var pop=document.createElement('div'); _srPop=pop;
+      pop.style.cssText='position:fixed;z-index:3000;width:250px;background:var(--surface,#1b2530);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:10px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;';
+      var num=col.t==='num'&&!col.date;
+      pop.innerHTML=
+        '<div style="display:flex;gap:6px;margin-bottom:8px;">'+
+          '<button class="btn btn-sm btn-secondary" data-s="asc" style="flex:1;'+(_srSort&&_srSort.c===ci&&_srSort.dir==='asc'?'border-color:#22d3ee;color:#22d3ee;':'')+'">'+(col.t==='num'?'↑ Od nejmenšího':'↑ A → Z')+'</button>'+
+          '<button class="btn btn-sm btn-secondary" data-s="desc" style="flex:1;'+(_srSort&&_srSort.c===ci&&_srSort.dir==='desc'?'border-color:#22d3ee;color:#22d3ee;':'')+'">'+(col.t==='num'?'↓ Od největšího':'↓ Z → A')+'</button>'+
+        '</div>'+
+        (col.date?'<div style="color:var(--text2);font-size:11px;margin-bottom:6px;">Nejmenší = nejstarší, největší = nejnovější</div>':'')+
+        '<input class="sr-fq" placeholder="Hledat…" value="'+esc(f.q||'')+'" style="width:100%;margin-bottom:6px;">'+
+        '<select class="sr-fm" style="width:100%;margin-bottom:6px;"><option value="contains"'+(f.mode!=='exact'?' selected':'')+'>Obsahuje (fulltext, všechna slova)</option><option value="exact"'+(f.mode==='exact'?' selected':'')+'>Přesná shoda</option></select>'+
+        (num?'<div style="color:var(--text2);font-size:11px;margin-bottom:6px;">Číselně: <b>&gt;30</b>, <b>&lt;=120</b>, <b>10-50</b></div>':'')+
+        '<div style="display:flex;gap:6px;"><button class="btn btn-sm btn-primary" data-a="apply" style="flex:1;">Použít</button><button class="btn btn-sm btn-secondary" data-a="clear" style="flex:1;">Zrušit</button></div>';
+      document.body.appendChild(pop);
+      var r=th.getBoundingClientRect();
+      pop.style.top=Math.min(r.bottom+4,window.innerHeight-300)+'px';
+      pop.style.left=Math.max(8,Math.min(r.left,document.documentElement.clientWidth-262))+'px';
+      var inp=pop.querySelector('.sr-fq'); inp.focus();
+      function applyFilter(){ var q=inp.value.trim(); if(q) _srFilt[ci]={q:q,mode:pop.querySelector('.sr-fm').value}; else delete _srFilt[ci]; srClosePop(); srRerender(); }
+      inp.addEventListener('keydown',function(e){ if(e.key==='Enter') applyFilter(); if(e.key==='Escape') srClosePop(); });
+      pop.querySelectorAll('[data-s]').forEach(function(b){ b.addEventListener('click',function(){ _srSort=(_srSort&&_srSort.c===ci&&_srSort.dir===b.dataset.s)?null:{c:ci,dir:b.dataset.s}; var q=inp.value.trim(); if(q) _srFilt[ci]={q:q,mode:pop.querySelector('.sr-fm').value}; srClosePop(); srRerender(); }); });
+      pop.querySelector('[data-a="apply"]').addEventListener('click',applyFilter);
+      pop.querySelector('[data-a="clear"]').addEventListener('click',function(){ delete _srFilt[ci]; if(_srSort&&_srSort.c===ci) _srSort=null; srClosePop(); srRerender(); });
+    }
+    function srInitHeaders(){
+      var ths=document.querySelectorAll('#sr-table thead th');
+      ths.forEach(function(th,i){
+        if(i>=SR_COLS.length||th.querySelector('.sr-cf')) return;
+        var b=document.createElement('span'); b.className='sr-cf'; b.textContent='▾'; b.title='Řazení a filtr';
+        b.style.cssText='cursor:pointer;margin-left:6px;padding:1px 5px;border-radius:5px;font-size:11px;color:var(--text2);user-select:none;';
+        b.addEventListener('click',function(e){ e.stopPropagation(); if(_srPop&&_srPop._ci===i){ srClosePop(); return; } srOpenPop(i,th); if(_srPop) _srPop._ci=i; });
+        th.appendChild(b);
+      });
+      window.addEventListener('scroll',function(){ srClosePop(); },true);
+      document.addEventListener('click',function(e){ if(_srPop&&!_srPop.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('sr-cf'))) srClosePop(); });
+      var cb=document.getElementById('sr-clear-filters'); if(cb) cb.addEventListener('click',function(){ _srFilt={}; _srSort=null; srRerender(); });
+    }
+    function srRerender(){ renderRaw(srApply(_srAll)); srHeaderState(); }
     function render(rows){
+      _srAll=Array.isArray(rows)?rows:[];
+      srInitHeaders();
+      var shown=srApply(_srAll);
+      renderRaw(shown);
+      srHeaderState();
+      if(_srAll.length && !shown.length){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Filtru neodpovídá žádný požadavek ('+_srAll.length+' celkem). <a href="#" id="sr-nofilter">Zrušit filtry</a></td></tr>'; var nf=document.getElementById('sr-nofilter'); if(nf) nf.addEventListener('click',function(e){ e.preventDefault(); _srFilt={}; _srSort=null; srRerender(); }); }
+    }
+    function renderRaw(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
       if(!rows.length){ tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
