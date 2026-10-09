@@ -2238,7 +2238,11 @@
         var photos=[photoLink(r.water_photo_url,'voda',r.id,'water_photo_url'),photoLink(r.electricity_photo_url,'elektro',r.id,'electricity_photo_url')].join(' · ');
         // koeficient = elektroměr / (vodoměr + korekce vodoměru stroje)
         var wc=(r.water_m3!=null)?Number(r.water_m3)+Number(r.water_correction||0):null;
-        var koef=(wc>0&&r.electricity_kwh!=null)?(r.electricity_kwh/wc).toLocaleString('cs-CZ',{minimumFractionDigits:3,maximumFractionDigits:3}):'—';
+        var kval=(wc>0&&r.electricity_kwh!=null)?(r.electricity_kwh/wc):null;
+        var koef=kval!=null?kval.toLocaleString('cs-CZ',{minimumFractionDigits:3,maximumFractionDigits:3}):'—';
+        // barva: <25 červená, 25–30 žlutá, 30–90 zelená, 90–100 oranžová, ≥100 červená
+        var kcol=kval==null?'':(kval<25?'#ef4444':kval<30?'#eab308':kval<90?'#22c55e':kval<100?'#f97316':'#ef4444');
+        if(kcol) koef='<b style="color:'+kcol+';">'+koef+'</b>';
         return '<tr>'+
           '<td style="white-space:nowrap;">'+esc(fmtDate(r.created_at))+'</td>'+
           '<td>'+esc(r.machine_name||'—')+'</td>'+
