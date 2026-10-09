@@ -2404,6 +2404,16 @@
     var inspCache=[];
     function fmtD(s){ if(!s) return '—'; try{ return new Date(s).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return '—'; } }
     function fmtDay(s){ if(!s) return '—'; try{ return new Date(s).toLocaleDateString('cs-CZ'); }catch(e){ return '—'; } }
+    function openReq(id){
+      fetchJSON(API+'/requests').then(function(list){
+        var row=(list||[]).filter(function(x){ return x.id===id; })[0];
+        if(!row){ alert('Požadavek #'+id+' nebyl nalezen (mohl být smazán).'); return; }
+        if(typeof window.srOpenRow==='function') window.srOpenRow(row,null); else alert('Servisní požadavky se ještě načítají, zkus to za chvíli.');
+      }).catch(function(){ alert('Nepodařilo se načíst požadavek.'); });
+    }
+    function reqIcons(r){
+      return (r.results||[]).filter(function(x){ return x.request_id; }).map(function(x){ return ' <a href="#" data-req="'+x.request_id+'" title="Otevřít servisní požadavek #'+x.request_id+' ('+esc(x.text)+')" style="text-decoration:none;font-size:15px;">🛠️</a>'; }).join('');
+    }
     function stTag(o){ return o==='ok'?'<span style="color:#22c55e;font-weight:700;">OK</span>':'<span style="color:#ef4444;font-weight:700;">ZÁVADA</span>'; }
     function renderInsp(rows){
       inspCache=rows;
@@ -2411,8 +2421,9 @@
       if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné kontroly.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var bad=(r.results||[]).filter(function(x){ return x.status==='zavada'; }).length;
-        return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+'</td><td>'+(bad||'—')+'</td><td>'+esc(fmtDay(r.fix_deadline))+'</td></tr>';
+        return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+reqIcons(r)+'</td><td>'+(bad||'—')+'</td><td>'+esc(fmtDay(r.fix_deadline))+'</td></tr>';
       }).join('');
+      tb.querySelectorAll('a[data-req]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); openReq(+a.dataset.req); }); });
       tb.querySelectorAll('tr[data-iid]').forEach(function(tr){ tr.addEventListener('click',function(){ var r=inspCache.filter(function(x){ return String(x.id)===tr.dataset.iid; })[0]; if(r) openInsp(r); }); });
     }
     function loadInsp(){
@@ -2426,7 +2437,7 @@
         '<div style="color:var(--text2);margin-bottom:10px;">'+esc(fmtD(r.inspected_at))+' · kontroloval: '+esc(r.inspector_name||'—')+' · celkově: '+stTag(r.overall)+'</div>'+
         '<table class="data-table"><thead><tr><th>#</th><th>Kontrolní bod</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>'+
         (r.results||[]).map(function(x,i){ return '<tr><td>'+(i+1)+'</td><td>'+esc(x.text)+'</td><td>'+(lbl[x.status]||'')+'</td><td>'+esc(x.note||'')+
-          (x.status==='zavada'?('<div style="font-size:12px;color:var(--text2);margin-top:3px;">'+({none:'Bez omezení provozu',known:'Známý problém – funguje',limited:'Omezený provoz',out:'Zařízení mimo provoz',site_out:'Celý prádlomat mimo provoz'}[x.impact]||'')+(x.request_id?(' · požadavek #'+x.request_id):'')+(x.photo_url?(' · <a href="'+esc(x.photo_url)+'" target="_blank">🖼 foto</a>'):'')+'</div>'):'')+'</td></tr>'; }).join('')+
+          (x.status==='zavada'?('<div style="font-size:12px;color:var(--text2);margin-top:3px;">'+({none:'Bez omezení provozu',known:'Známý problém – funguje',limited:'Omezený provoz',out:'Zařízení mimo provoz',site_out:'Celý prádlomat mimo provoz'}[x.impact]||'')+(x.request_id?(' · <a href="#" data-req="'+x.request_id+'" style="text-decoration:none;">🛠️ požadavek #'+x.request_id+'</a>'):'')+(x.photo_url?(' · <a href="'+esc(x.photo_url)+'" target="_blank">🖼 foto</a>'):'')+'</div>'):'')+'</td></tr>'; }).join('')+
         '</tbody></table>'+
         (r.defects?'<div style="margin-top:12px;"><b>Zjištěné závady / opatření:</b><div style="white-space:pre-wrap;">'+esc(r.defects)+'</div></div>':'')+
         '<div style="margin-top:8px;"><b>Termín odstranění:</b> '+esc(fmtDay(r.fix_deadline))+'</div>'+
@@ -2436,6 +2447,7 @@
       function close(){ ov.remove(); }
       ov.addEventListener('click',function(e){ if(e.target===ov) close(); });
       ov.querySelector('#ui-close').onclick=close;
+      ov.querySelectorAll('a[data-req]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); close(); openReq(+a.dataset.req); }); });
       ov.querySelector('#ui-del').onclick=function(){ if(!confirm('Smazat tento protokol?')) return; fetchJSON(API+'/maintenance-inspections/'+r.id,{method:'DELETE'}).then(function(){ close(); loadInsp(); }).catch(function(){ alert('Smazání selhalo.'); }); };
     }
     document.addEventListener('DOMContentLoaded',function(){
