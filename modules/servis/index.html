@@ -778,6 +778,16 @@
       var saved = 'hugo';
       try { saved = localStorage.getItem(SEC_KEY) || 'hugo'; } catch (e) {}
       if (saved && saved !== 'hugo') activateSection(saved);
+      // Hluboký odkaz #request=<id> (z mobilní Infolinky / Aktuálních omezení) → otevřít servisní požadavek
+      var m = /[#&]request=(\d+)/.exec(location.hash || '');
+      if (m) {
+        activateSection('pozadavky');
+        var rid = parseInt(m[1], 10), tries = 0;
+        (function attempt() {
+          if (typeof window.infoOpenRequest === 'function') { window.infoOpenRequest(rid); }
+          else if (tries++ < 40) { setTimeout(attempt, 150); }
+        })();
+      }
     });
   </script>
 
@@ -2228,13 +2238,21 @@
         return '<tr>'+
           '<td style="white-space:nowrap;">'+esc(fmtDate(r.created_at))+'</td>'+
           '<td>'+esc(r.machine_name||'—')+'</td>'+
-          '<td><b>'+numCz(r.water_m3)+'</b></td>'+
-          '<td><b>'+numCz(r.electricity_kwh)+'</b></td>'+
+          '<td><b>'+numCz(r.water_m3)+'</b> <a href="#" data-ed="'+r.id+'" data-field="water_m3" data-val="'+(r.water_m3==null?'':r.water_m3)+'" title="Upravit stav vodoměru" style="text-decoration:none;color:var(--text2);">✏️</a></td>'+
+          '<td><b>'+numCz(r.electricity_kwh)+'</b> <a href="#" data-ed="'+r.id+'" data-field="electricity_kwh" data-val="'+(r.electricity_kwh==null?'':r.electricity_kwh)+'" title="Upravit stav elektroměru" style="text-decoration:none;color:var(--text2);">✏️</a></td>'+
           '<td style="font-size:12px;">'+photos+'</td>'+
           '<td style="color:var(--text2);">'+esc(r.created_by_name||'—')+'</td>'+
           '<td><button class="btn btn-sm btn-secondary" data-del="'+r.id+'">🗑</button></td>'+
         '</tr>';
       }).join('');
+      tb.querySelectorAll('[data-ed]').forEach(function(a){ a.addEventListener('click',function(e){
+        e.preventDefault();
+        var cur=a.dataset.val==='' ? '' : String(a.dataset.val).replace('.',',');
+        var v=window.prompt('Nový stav ('+(a.dataset.field==='water_m3'?'vodoměr, m³':'elektroměr, kWh')+'):',cur);
+        if(v===null) return;
+        var body={}; body[a.dataset.field]=v.trim();
+        fetchJSON(API+'/readings/'+a.dataset.ed,{method:'PUT',body:JSON.stringify(body)}).then(load).catch(function(){ alert('Uložení selhalo.'); });
+      }); });
       tb.querySelectorAll('[data-ph]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); uploadPhoto(a.dataset.ph,a.dataset.field); }); });
       tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ if(!confirm('Smazat tento odečet?')) return; fetchJSON(API+'/readings/'+b.dataset.del,{method:'DELETE'}).then(load).catch(function(){ alert('Smazání selhalo.'); }); }); });
     }
