@@ -645,9 +645,9 @@
         <div style="overflow-x:auto">
           <table class="data-table" id="sr-table">
             <thead><tr>
-              <th>Požadavek</th><th title="Dopad na provoz — co vidí infolinka v Aktuálních omezeních">🚨 Aktuální omezení</th><th>Úkon / úkol</th><th>Servis objednal</th><th>Stav</th><th>Řešitel</th><th title="odhad / reálný čas jízdy">Čas cesty<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th title="odhad / reálný čas opravy">Čas práce<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th>Způsob řešení</th><th>Vytvořeno</th><th></th>
+              <th title="Číslo požadavku">ID</th><th>Požadavek</th><th title="Dopad na provoz — co vidí infolinka v Aktuálních omezeních">🚨 Aktuální omezení</th><th>Úkon / úkol</th><th>Servis objednal</th><th>Stav</th><th>Řešitel</th><th title="odhad / reálný čas jízdy">Čas cesty<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th title="odhad / reálný čas opravy">Čas práce<br><span style="font-weight:400;color:var(--text2);font-size:11px;">odhad / reál</span></th><th>Způsob řešení</th><th>Vytvořeno</th><th></th>
             </tr></thead>
-            <tbody id="sr-tbody"><tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
+            <tbody id="sr-tbody"><tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1834,10 +1834,11 @@
     }
     function render(rows){
       var tb=document.getElementById('sr-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var st=STL[r.status]||['?','badge-draft']; var ukon=[r.action,r.task].filter(Boolean).join(' · ');
         return '<tr>'+
+          '<td style="white-space:nowrap;color:var(--text2);font-weight:700;">#'+r.id+'</td>'+
           '<td>'+(r.impact&&r.impact!=='none'?'<span title="'+esc(({known:'Známý problém',limited:'Omezený provoz',out:'Zařízení mimo provoz',site_out:'Celý prádlomat mimo provoz'})[r.impact]||r.impact)+(r.show_infoline?' — zobrazeno infolince':'')+'" style="margin-right:4px;">'+(({known:'🟡',limited:'🟠',out:'🔴',site_out:'⛔'})[r.impact]||'')+'</span>':'')+'<b>'+esc(r.problem)+'</b>'+(Array.isArray(r.devices)&&r.devices.length?'<div style="font-size:11px;color:#f59e0b;margin-top:2px;">'+esc(r.devices.join(', '))+'</div>':'')+(r.description?('<div style="color:var(--text2);font-size:12px;margin-top:2px">'+esc(String(r.description).slice(0,120))+'</div>'):'')+(r.voice_call?('<div style="margin-top:4px"><span class="badge" style="background:rgba(34,211,238,0.15);color:#22d3ee;">📞 z hovoru '+esc(r.voice_call.from_number||'')+(r.voice_call.started_at?(' · '+fmtDate(r.voice_call.started_at)):'')+'</span></div>'):'')+'</td>'+
           (function(){
             var IMP={known:['🟡','Známý problém','#eab308'],limited:['🟠','Omezený provoz','#f59e0b'],out:['🔴','Mimo provoz','#ef4444'],site_out:['⛔','Celý prádlomat mimo provoz','#ef4444']};
@@ -1864,7 +1865,7 @@
     }
     function load(){
       var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
-      fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="11" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+      fetchJSON(API+'/requests'+q).then(render).catch(function(){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
     }
     // ---- Dopad na provoz (Aktuální omezení pro Infolinku) ----
     var SR_IMPACTS=[['none','🟢 Bez omezení provozu'],['known','🟡 Známý problém – zařízení funguje'],['limited','🟠 Omezený provoz'],['out','🔴 Zařízení mimo provoz'],['site_out','⛔ Celý prádlomat mimo provoz']];
