@@ -1757,7 +1757,18 @@ router.get('/maintenance-inspections', async (req, res, next) => {
     const where = {};
     if (req.query.machine_id) where.machine_id = parseInt(req.query.machine_id, 10) || undefined;
     if (req.query.overall === 'ok' || req.query.overall === 'zavada') where.overall = req.query.overall;
-    res.json(await prisma.maintenanceInspection.findMany({ where, orderBy: { inspected_at: 'desc' }, take: 300 }));
+    const rows = await prisma.maintenanceInspection.findMany({ where, orderBy: { inspected_at: 'desc' }, take: 300 });
+    // Aktuální stav servisních požadavků vzniklých ze závad (pro ikonu stavu v přehledu).
+    const rids = new Set();
+    rows.forEach((r) => (Array.isArray(r.results) ? r.results : []).forEach((x) => { if (x && x.request_id) rids.add(x.request_id); }));
+    const st = {};
+    if (rids.size) {
+      const reqs = await prisma.serviceRequest.findMany({ where: { id: { in: Array.from(rids) } }, select: { id: true, status: true } });
+      reqs.forEach((q) => { st[q.id] = q.status; });
+    }
+    res.json(rows.map((r) => Object.assign({}, r, {
+      results: (Array.isArray(r.results) ? r.results : []).map((x) => (x && x.request_id ? Object.assign({}, x, { request_status: st[x.request_id] || 'smazan' }) : x)),
+    })));
   } catch (err) { next(err); }
 });
 
