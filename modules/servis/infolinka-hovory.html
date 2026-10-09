@@ -65,6 +65,29 @@
     .screen p{ color:var(--text2); font-size:14px; line-height:1.6; max-width:340px; margin:0 auto 18px; }
     .screen a.btn{ background:var(--acc); color:#04222b; text-decoration:none; border-radius:12px; padding:14px 22px; font-weight:800; display:inline-block; }
     .hidden{ display:none !important; }
+    /* Aktuální omezení provozu */
+    .omz{ margin:10px 0 12px; border-radius:14px; border:1px solid rgba(239,68,68,.45); background:rgba(239,68,68,.08); padding:10px 12px; }
+    .omz.ok{ border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.06); }
+    .omz .h{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .omz .h b{ font-size:15px; }
+    .omz .h .cnt{ margin-left:auto; font-size:12px; color:var(--text2); }
+    .omz .crit{ margin-top:6px; padding:6px 10px; border-radius:10px; background:#7f1d1d; color:#fff; font-weight:900; font-size:13px; letter-spacing:.02em; }
+    .omz .open{ margin-top:8px; width:100%; background:var(--err); color:#fff; border:0; border-radius:10px; padding:10px; font-weight:800; font-size:14px; }
+    .alert{ margin:6px 0 8px; padding:8px 10px; border-radius:10px; background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.5); font-size:13px; }
+    .alert b{ display:block; }
+    .alert .d{ color:var(--text2); font-size:12px; margin-top:2px; }
+    .alert .ln{ color:var(--acc); font-weight:700; font-size:12px; text-decoration:none; display:inline-block; margin-top:4px; }
+    .omz-list{ position:fixed; inset:0; background:var(--bg); z-index:60; overflow:auto; padding:12px 12px 40px; }
+    .omz-list .bar{ display:flex; gap:8px; align-items:center; position:sticky; top:0; background:var(--bg); padding:4px 0 8px; z-index:1; }
+    .omz-list .bar input{ flex:1; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; color:var(--text); font-size:16px; }
+    .omz-list .bar button{ background:var(--card); border:1px solid var(--border); color:var(--text); border-radius:12px; padding:10px 14px; font-size:16px; }
+    .oc{ border:1px solid var(--border); border-radius:14px; background:var(--card); padding:12px; margin:10px 0; border-left:5px solid #f59e0b; }
+    .oc.out{ border-left-color:var(--err); } .oc.site_out{ border-left-color:var(--err); background:rgba(239,68,68,.12); } .oc.known{ border-left-color:#eab308; }
+    .oc .loc{ font-weight:900; font-size:16px; } .oc .dev{ font-weight:800; margin-top:2px; } .oc .dev.out{ color:var(--err); }
+    .oc .p{ color:var(--text2); font-size:13px; margin-top:4px; }
+    .oc .cust{ margin-top:8px; padding:8px 10px; border-radius:10px; background:rgba(34,211,238,.1); border:1px solid rgba(34,211,238,.35); font-size:14px; }
+    .oc .cust small{ display:block; color:var(--acc); font-size:11px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:2px; }
+    .oc .since{ color:var(--text2); font-size:12px; margin-top:6px; }
     .empty{ text-align:center; color:var(--text2); padding:40px 10px; }
   </style>
 </head>
@@ -87,8 +110,13 @@
       </div>
       <button class="refresh" onclick="loadCalls()">↻</button>
     </div>
+    <div id="omz" class="omz ok hidden"></div>
     <div id="live"></div>
     <div id="list"><div class="empty">Načítám…</div></div>
+  </div>
+  <div id="omz-list" class="omz-list hidden">
+    <div class="bar"><input id="omz-q" type="search" placeholder="🔎 Hledat lokalitu…" oninput="omzRenderList()"><button onclick="omzClose()">✕ Zavřít</button></div>
+    <div id="omz-body"></div>
   </div>
 
   <script>
@@ -299,18 +327,63 @@
     }).then(function(j){
       if(!j) return;
       show('app');
-      loadFormCfg().then(loadCalls);
+      loadFormCfg().then(function(){ return loadCalls(); }).then(function(){ loadOmz(true); });
       // Živý stav (kdo právě volá + jeho kredit) — obnovuje se sám každých 8 s.
       loadLive(); setInterval(loadLive, 8000);
     }).catch(function(){ show('gate'); });
 
+    // ── Aktuální omezení provozu (ze servisních požadavků, stav ≠ Vyřešeno) ──
+    var _omz=[], _omzCounts={total:0}, _lastRows=null;
+    var OMZ_ICON={site_out:'⛔',out:'🔴',limited:'🟠',known:'🟡'}, OMZ_LBL={site_out:'CELÝ PRÁDLOMAT MIMO PROVOZ',out:'MIMO PROVOZ',limited:'OMEZENÝ PROVOZ',known:'ZNÁMÝ PROBLÉM'};
+    function nrm(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+    var LOC_GENERIC={tesco:1,albert:1,kaufland:1,lidl:1,penny:1,billa:1,globus:1,coop:1,obi:1,ulice:1,namesti:1,pradlomat:1,parkoviste:1};
+    function locMatch(a,b){ var na=nrm(a).trim(), nb=nrm(b).trim(); if(!na||!nb) return false; if(na.indexOf(nb)>=0||nb.indexOf(na)>=0) return true;
+      var ta=na.split(/[^a-z0-9]+/).filter(function(x){ return x.length>=3; }), tb={}; nb.split(/[^a-z0-9]+/).forEach(function(x){ if(x.length>=3) tb[x]=1; });
+      var common=ta.filter(function(x){ return tb[x]; }); if(common.length>=2) return true; return common.some(function(x){ return x.length>=5&&!LOC_GENERIC[x]; }); }
+    function omzFmt(d){ var x=new Date(d); return x.toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'})+' '+x.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}); }
+    function omzForLocation(loc){ if(!loc) return []; return _omz.filter(function(r){ return locMatch(r.location, loc); }); }
+    function omzAlert(c){ var m=omzForLocation(c.location); if(!m.length) return ''; var f=m[0];
+      return '<div class="alert"><b>🚨 '+esc(c.location)+' – známá závada'+(m.length>1?' ('+m.length+')':'')+'</b>'+OMZ_ICON[f.impact]+' '+esc((f.impact==='site_out'?'Celý prádlomat':(f.devices.join(', ')||'Zařízení'))+' – '+OMZ_LBL[f.impact].toLowerCase())+(f.infoline_note?'<div class="d">'+esc(f.infoline_note)+'</div>':'')+'<a class="ln" href="#" data-loc="'+esc(c.location)+'" onclick="omzOpen(this.getAttribute(\'data-loc\'));return false;">Zobrazit detail →</a></div>'; }
+    window.loadOmz = async function(rerender){
+      try{ var r=await api('/api/service/restrictions'); if(!r.ok) return; var j=await r.json(); _omz=j.items||[]; _omzCounts=j.counts||{total:0}; }catch(e){ return; }
+      var p=$('omz'); p.classList.remove('hidden'); var c=_omzCounts;
+      if(!c.total){ p.className='omz ok'; p.innerHTML='<div class="h"><b>✅ Žádná aktuální omezení provozu</b><span class="cnt">vše v provozu</span></div>'; }
+      else { p.className='omz';
+        p.innerHTML='<div class="h"><b>🚨 Aktuální omezení — '+c.total+'</b><span class="cnt">'+(c.site_out?'⛔ '+c.site_out+' · ':'')+'🔴 '+(c.out||0)+' mimo provoz · 🟠 '+(c.limited||0)+' omezení · 🟡 '+(c.known||0)+'</span></div>'+
+          (c.site_out?'<div class="crit">⛔ POZOR – '+c.site_out+' PRÁDLOMAT'+(c.site_out>1?'Y':'')+' MIMO PROVOZ</div>':'')+
+          '<button class="open" onclick="omzOpen()">Zobrazit závady</button>'; }
+      if(rerender!==false && _lastRows) renderCalls(_lastRows);
+      if(!$('omz-list').classList.contains('hidden')) omzRenderList();
+    };
+    window.omzOpen=function(q){ $('omz-list').classList.remove('hidden'); $('omz-q').value=q||''; omzRenderList(); window.scrollTo(0,0); };
+    window.omzClose=function(){ $('omz-list').classList.add('hidden'); };
+    window.omzRenderList=function(){
+      var q=nrm($('omz-q').value||'').trim(); var body=$('omz-body');
+      var rows=_omz.filter(function(r){ return !q||nrm(r.location+' '+r.devices.join(' ')+' '+(r.problem||'')+' '+(r.infoline_note||'')).indexOf(q)>=0||locMatch(r.location,q); });
+      if(!rows.length){ body.innerHTML='<div class="empty">'+(q?'Nic neodpovídá hledání.':'✅ Žádná aktivní omezení.')+'</div>'; return; }
+      body.innerHTML=rows.map(function(r){ var site=r.impact==='site_out';
+        return '<div class="oc '+r.impact+'">'+
+          '<div class="loc">'+OMZ_ICON[r.impact]+' '+esc(r.location)+'</div>'+
+          '<div class="dev'+(r.impact==='out'||site?' out':'')+'">'+esc(site?'CELÝ PRÁDLOMAT':(r.devices.join(', ')||'Zařízení'))+' – '+OMZ_LBL[r.impact]+'</div>'+
+          (r.problem?'<div class="p">'+esc(r.problem)+'</div>':'')+
+          '<div class="cust"><small>Pro zákazníka</small>'+esc(r.infoline_note||(site?'Servis pracuje na odstranění závady.':'—'))+'</div>'+
+          '<div class="since">Od: '+omzFmt(r.since)+' · servis: '+esc(r.status_label)+(r.assignee_name?' ('+esc(r.assignee_name)+')':'')+'</div>'+
+        '</div>'; }).join('');
+    };
+    setInterval(function(){ window.loadOmz(true); }, 45000);
     window.loadCalls = async function(){
       var box=$('list'); box.innerHTML='<div class="empty">Načítám…</div>';
       try{
         var r=await api('/api/voice/calls?line=infolinka&limit=100');
         if(!r.ok) throw new Error('HTTP '+r.status);
-        var rows=await r.json();
+        var rows=await r.json(); _lastRows=rows;
         if(!rows.length){ box.innerHTML='<div class="empty">Zatím žádné hovory.</div>'; return; }
+        renderCalls(rows);
+      }catch(e){ box.innerHTML='<div class="empty">Chyba: '+esc(e.message)+'</div>'; }
+    };
+    function renderCalls(rows){
+      var box=$('list');
+      try{
         // Spočítej, kolikrát každé číslo volalo na Infolinku (z načtené historie).
         var counts={};
         rows.forEach(function(c){ var k=digits(c.from_number); if(k) counts[k]=(counts[k]||0)+1; });
@@ -333,6 +406,8 @@
               +'<span class="time">'+esc(fmtDate(c.started_at))+'</span>'
             +'</div>'
             +'<div class="want'+(want?'':' empty')+'">'+(want?esc(want):'(bez shrnutí)')+'</div>'
+            +(c.location?'<div class="meta"><span class="chip none">📍 '+esc(c.location)+'</span></div>':'')
+            +omzAlert(c)
             +'<div class="meta">'+creditChip(creditTail)+repChip+chip+'<span class="chip len">⏱ '+fmtDur(c.duration_sec)+'</span>'+(c.caller_name?'<span class="chip none">👤 '+esc(c.caller_name)+'</span>':'')+'</div>'
             +creditNoteLine(creditTail)
             +'<div class="actions">'
@@ -341,7 +416,7 @@
               +(tel? '<a class="call-btn" style="background:#8b5cf6;color:#fff;" href="sms:'+esc(tel)+'?&body='+encodeURIComponent(smsBody())+'" onclick="markSms(\''+c.id+'\')">✉️ SMS - Doklad/reklamace</a>' : '')
               +(c.service_request_id
                   ? '<a class="call-btn" style="background:#0e3a2a;color:#22c55e;border:1px solid #22c55e;" href="/modules/servis/index.html#request='+esc(c.service_request_id)+'">✅ Požadavek #'+esc(c.service_request_id)+'</a>'
-                  : '<a class="call-btn" style="background:#22d3ee;color:#04222b;" href="/modules/servis/pozadavek.html?call='+encodeURIComponent(c.id)+'&phone='+encodeURIComponent(num||'')+'&desc='+encodeURIComponent(want||'')+'">🔧 Servisní požadavek</a>')
+                  : '<a class="call-btn" style="background:#22d3ee;color:#04222b;" href="/modules/servis/pozadavek.html?call='+encodeURIComponent(c.id)+'&phone='+encodeURIComponent(num||'')+'&desc='+encodeURIComponent(want||'')+'&loc='+encodeURIComponent(c.location||'')+'">🔧 Servisní požadavek</a>')
               +(rec||'')
               +transcriptBlock(c)
             +'</div>'
@@ -350,7 +425,7 @@
           +'</div>';
         }).join('');
       }catch(e){ box.innerHTML='<div class="empty" style="color:#ef4444;">Chyba: '+esc(e.message)+'</div>'; }
-    };
+    }
   })();
   </script>
   <script src="/js/version-watcher.js"></script>

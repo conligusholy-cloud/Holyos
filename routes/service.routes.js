@@ -1505,7 +1505,17 @@ async function _attachReadingUsers(rows) {
     const users = await prisma.user.findMany({ where: { id: { in: uids } }, select: { id: true, display_name: true, username: true } });
     users.forEach((u) => { umap[u.id] = u.display_name || u.username || ('#' + u.id); });
   }
+  // Korekce vodoměru ze stroje (podle machine_id, záloha podle názvu)
+  const machines = await prisma.serviceMachine.findMany({ select: { id: true, name: true, water_correction: true } });
+  const byId = {}, byName = {};
+  machines.forEach((m) => { byId[m.id] = m.water_correction; byName[String(m.name || '').trim().toLowerCase()] = m.water_correction; });
+  const corrOf = (r) => {
+    let c = r.machine_id != null ? byId[r.machine_id] : undefined;
+    if (c === undefined) c = byName[String(r.machine_name || '').split(' · ')[0].trim().toLowerCase()];
+    return c != null ? Number(c) : 0;
+  };
   return rows.map((r) => Object.assign({}, r, {
+    water_correction: corrOf(r),
     water_m3: r.water_m3 != null ? Number(r.water_m3) : null,
     electricity_kwh: r.electricity_kwh != null ? Number(r.electricity_kwh) : null,
     created_by_name: r.created_by_user_id != null ? (umap[r.created_by_user_id] || ('#' + r.created_by_user_id)) : null,

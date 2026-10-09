@@ -23,6 +23,20 @@
     input,textarea,select{ width:100%; background:var(--card2); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; padding:14px; font-family:inherit; }
     input:focus,textarea:focus,select:focus{ outline:none; border-color:var(--acc); }
     textarea{ min-height:96px; resize:vertical; }
+    .impact-box{ margin-top:14px; border:1px solid rgba(239,68,68,.45); border-radius:14px; padding:10px 12px; background:rgba(239,68,68,.06); }
+    .impact-box .t{ font-weight:800; }
+    .impact-box .s{ font-size:12px; color:var(--text2); margin-top:2px; }
+    .devs{ display:flex; flex-wrap:wrap; gap:6px; }
+    .devs label{ margin:0; text-transform:none; letter-spacing:0; font-size:13px; color:var(--text); padding:7px 11px; border-radius:999px; border:1px solid var(--border); background:var(--card); }
+    .devs label.on{ background:rgba(239,68,68,.2); border-color:#ef4444; }
+    .devs input{ display:none; }
+    .sw{ display:flex; align-items:center; gap:10px; margin-top:6px; font-size:14px; }
+    .sw input{ width:22px; height:22px; }
+    .dupw{ margin-top:14px; border:1px solid rgba(245,158,11,.6); background:rgba(245,158,11,.1); border-radius:14px; padding:10px 12px; font-size:13px; }
+    .dupw b{ display:block; margin-bottom:4px; }
+    .dupw .i{ padding:6px 0; border-top:1px solid rgba(245,158,11,.3); }
+    .dupw .i:first-of-type{ border-top:0; }
+    .dupw a{ color:var(--acc); font-weight:700; text-decoration:none; }
     .hint{ font-size:12px; color:var(--text2); margin-top:6px; }
     /* Foto */
     .photo-box{ margin-top:6px; }
@@ -128,6 +142,25 @@
     <label>Popis problému</label>
     <textarea id="f-desc" placeholder="Co se děje, kdy to začalo, co bliká…"></textarea>
 
+    <div class="impact-box">
+      <div class="t">🚨 Dopad na provoz</div>
+      <div class="s">Co uvidí ostatní operátoři v „Aktuálních omezeních" — dokud servis neoznačí Vyřešeno.</div>
+      <label>Dopad na provoz</label>
+      <select id="f-impact">
+        <option value="none">🟢 Bez omezení provozu</option>
+        <option value="known">🟡 Známý problém – zařízení funguje</option>
+        <option value="limited">🟠 Omezený provoz</option>
+        <option value="out">🔴 Zařízení mimo provoz</option>
+        <option value="site_out">⛔ Celý prádlomat mimo provoz</option>
+      </select>
+      <label>Dotčené zařízení (lze více)</label>
+      <div class="devs" id="f-devs"></div>
+      <div class="sw"><input type="checkbox" id="f-show"><label for="f-show" style="margin:0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--text);">Zobrazit infolince</label></div>
+      <label>Informace pro infolinku (co říct zákazníkovi)</label>
+      <input id="f-info" maxlength="500" placeholder="např. Platba kartou nefunguje. Použijte mince nebo bankovky.">
+    </div>
+    <div id="dupw" class="dupw hidden"></div>
+
     <label>Telefon volajícího (pro spárování s hovorem)</label>
     <input id="f-phone" type="tel" autocomplete="off" placeholder="+420…">
   </div>
@@ -158,6 +191,26 @@
     var voiceCallId = qs.get('call') || null;
     var callPhone = qs.get('phone') || '';
     var callDesc = qs.get('desc') || '';
+    var callLoc = qs.get('loc') || '';
+    // Dotčená zařízení (pevný seznam — stroje nejsou v systému evidovány po jednotlivých zařízeních)
+    var DEVICES=['Pračka 1','Pračka 2','Sušička 1','Sušička 2','Platební terminál','Bankovkový akceptor','Mincovník','Displej / ovládání','Internet / komunikace','Celý prádlomat','Jiné'];
+    $('f-devs').innerHTML=DEVICES.map(function(d){ return '<label><input type="checkbox" value="'+d.replace(/"/g,'&quot;')+'">'+d+'</label>'; }).join('');
+    $('f-devs').addEventListener('change', function(e){ var l=e.target.closest('label'); if(l) l.classList.toggle('on', e.target.checked); });
+    $('f-impact').addEventListener('change', function(){ $('f-show').checked = this.value!=='none'; }); // doporučené auto nastavení, lze změnit
+    function selectedDevices(){ return Array.prototype.map.call(document.querySelectorAll('#f-devs input:checked'), function(i){ return i.value; }); }
+    function nrm(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }
+    // Kontrola duplicit: na lokalitě už existuje aktivní požadavek → upozornit (nezakazovat)
+    async function checkDup(loc){
+      var box=$('dupw'); if(!loc){ box.classList.add('hidden'); return; }
+      try{
+        var r=await api(API+'/restrictions?location='+encodeURIComponent(loc)); if(!r.ok) return; var j=await r.json(); var items=j.items||[];
+        if(!items.length){ box.classList.add('hidden'); return; }
+        var ICON={site_out:'⛔',out:'🔴',limited:'🟠',known:'🟡'};
+        box.classList.remove('hidden');
+        box.innerHTML='<b>⚠️ Na této lokalitě již existuje aktivní servisní požadavek</b>'+items.map(function(x){ var d=new Date(x.since); return '<div class="i">'+(ICON[x.impact]||'')+' '+(x.devices.join(', ')||'Zařízení')+' – '+(x.problem||x.infoline_note||'')+'<div style="color:var(--text2);font-size:12px;">vytvořeno '+d.toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'})+' '+d.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+' · '+x.status_label+' · <a href="/modules/servis/index.html#request='+x.id+'">Zobrazit požadavek</a></div></div>'; }).join('')+
+          '<div style="margin-top:6px;color:var(--text2);">Pokud jde o jiný problém, můžete přesto vytvořit nový požadavek.</div>';
+      }catch(e){}
+    }
     function $(id){ return document.getElementById(id); }
     function show(id){ ['loading','gate','app','done'].forEach(function(s){ $(s).classList.toggle('hidden', s!==id); }); $('bar').classList.toggle('hidden', id!=='app'); if(id==='gate'){ var g=$('gate-login'); if(g){ g.href='/login.html?redirect='+encodeURIComponent(location.pathname+location.search); } } }
     function api(path, opts){ return fetch(path, Object.assign({credentials:'include'}, opts||{})); }
@@ -190,14 +243,23 @@
           return '<option value="'+nm.replace(/"/g,'&quot;')+'">'+nm+ty+'</option>';
         }).join('');
         sel.innerHTML='<option value="">— vyber stroj v provozu —</option>'+opts+'<option value="__other">✏️ Jiný / napsat ručně</option>';
+        // Předvyplnění lokality z hovoru (fuzzy shoda s názvem stroje)
+        if(callLoc){
+          var nl=nrm(callLoc), toks=nl.split(/[^a-z0-9]+/).filter(function(x){ return x.length>=4; });
+          var best=null, bestScore=0;
+          (Array.isArray(list)?list:[]).forEach(function(m){ var nm=nrm(m.name); var sc=0; if(nm.indexOf(nl)>=0||nl.indexOf(nm)>=0) sc=10; toks.forEach(function(t){ if(nm.indexOf(t)>=0) sc+=t.length; }); if(sc>bestScore){ bestScore=sc; best=m; } });
+          if(best&&bestScore>=4){ sel.value=best.name; $('f-problem').value=best.name; $('f-problem').style.display='none'; checkDup(best.name); }
+          else { sel.value='__other'; $('f-problem').style.display=''; $('f-problem').value=callLoc; checkDup(callLoc); }
+        }
       }).catch(function(){});
     }
     // Výběr stroje ze seznamu → nastaví hodnotu; „Jiný" odkryje textové pole.
     $('f-machine-sel').addEventListener('change', function(){
       var v=this.value, inp=$('f-problem');
-      if(v==='__other'){ inp.style.display=''; inp.value=''; inp.focus(); }
-      else { inp.style.display='none'; inp.value=v; }
+      if(v==='__other'){ inp.style.display=''; inp.value=''; inp.focus(); $('dupw').classList.add('hidden'); }
+      else { inp.style.display='none'; inp.value=v; checkDup(v); }
     });
+    $('f-problem').addEventListener('change', function(){ checkDup(this.value.trim()); });
 
     // 3) Foto — otevře fotoaparát, náhled, klientská komprese
     $('photo-btn').addEventListener('click', function(){ $('f-photo').click(); });
@@ -253,7 +315,11 @@
           photo_url: photoUrl,
           phone: ($('f-phone').value||'').trim() || null,
           voice_call_id: voiceCallId || null,
-          ordered_by: ($('who-name').textContent || 'Přihlášený uživatel')
+          ordered_by: ($('who-name').textContent || 'Přihlášený uživatel'),
+          impact: $('f-impact').value || 'none',
+          devices: selectedDevices(),
+          show_infoline: !!$('f-show').checked,
+          infoline_note: ($('f-info').value||'').trim() || null
         };
         var rr=await api(API+'/requests',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
         var rj={}; try{ rj=await rr.json(); }catch(_){}
@@ -280,7 +346,7 @@
 
     // 5) Zadat další
     $('again').addEventListener('click', function(){
-      $('f-problem').value=''; $('f-problem').style.display='none'; var ms=$('f-machine-sel'); if(ms) ms.value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value=''; $('f-phone').value='';
+      $('f-problem').value=''; $('f-problem').style.display='none'; var ms=$('f-machine-sel'); if(ms) ms.value=''; $('f-action').value=''; $('f-task').value=''; $('f-desc').value=''; $('f-phone').value=''; $('f-impact').value='none'; $('f-show').checked=false; $('f-info').value=''; document.querySelectorAll('#f-devs input').forEach(function(i){ i.checked=false; i.parentNode.classList.remove('on'); }); $('dupw').classList.add('hidden');
       photoDataFile=null; $('f-photo').value=''; $('photo-preview').style.display='none'; $('photo-hint').style.display='';
       var b=$('submit'); b.disabled=false; b.textContent='Odeslat požadavek'; $('msg').textContent='';
       show('app');
