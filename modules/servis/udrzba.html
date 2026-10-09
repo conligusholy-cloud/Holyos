@@ -91,8 +91,6 @@
     <div id="points"></div>
     <label class="l">Zjištěné závady / opatření</label>
     <textarea id="f-defects" placeholder="Co je potřeba opravit / zajistit"></textarea>
-    <label class="l">Termín odstranění</label>
-    <input id="f-deadline" type="date">
     <label class="l">Poznámka</label>
     <textarea id="f-note"></textarea>
     <div class="msg" id="msg"></div>
@@ -211,7 +209,7 @@
 
     $('start').addEventListener('click',function(){
       if(!tpls.length){ alert('Není žádná aktivní šablona. Vytvoř ji v HolyOS → Servis → Údržba.'); return; }
-      $('f-machine').value=''; $('f-defects').value=''; $('f-deadline').value=''; $('f-note').value=''; $('msg').textContent='';
+      $('f-machine').value=''; $('f-defects').value=''; $('f-note').value=''; $('msg').textContent='';
       cur=tpls[0]; $('f-tpl').value=cur.id; drawPoints(); show('form');
     });
     $('cancel').addEventListener('click',function(){ if(answers.some(function(a){ return a.status; }) && !confirm('Zahodit rozpracovaný protokol?')) return; show('home'); });
@@ -235,7 +233,7 @@
         }
         msg.textContent='Ukládám protokol…';
         var body={ checklist_id:cur?cur.id:null, machine_id:parseInt(sel.value,10), machine_name:sel.options[sel.selectedIndex].textContent,
-          results:res, defects:$('f-defects').value, fix_deadline:$('f-deadline').value||null, note:$('f-note').value };
+          results:res, defects:$('f-defects').value, note:$('f-note').value };
         var r=await api(API+'/maintenance-inspections',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
         if(!r.ok){ var e={}; try{ e=await r.json(); }catch(_){} throw new Error(e.error||('Uložení selhalo ('+r.status+')')); }
         var j=await r.json();

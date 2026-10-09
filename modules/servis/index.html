@@ -723,8 +723,8 @@
           <button class="btn btn-secondary" id="ui-refresh">↻ Obnovit</button>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
-          <table class="data-table"><thead><tr><th>Kdy</th><th>Pobočka / stroj</th><th>Šablona</th><th>Kontroloval</th><th>Výsledek</th><th>Závad</th><th>Termín odstranění</th></tr></thead>
-          <tbody id="ui-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
+          <table class="data-table"><thead><tr><th>Kdy</th><th>Pobočka / stroj</th><th>Šablona</th><th>Kontroloval</th><th>Výsledek</th><th>Závad</th></tr></thead>
+          <tbody id="ui-tbody"><tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
     </section>
@@ -2527,17 +2527,17 @@
     function renderInsp(rows){
       inspCache=rows;
       var tb=document.getElementById('ui-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné kontroly.</td></tr>'; return; }
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné kontroly.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var bad=(r.results||[]).filter(function(x){ return x.status==='zavada'; }).length;
-        return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+reqIcons(r)+'</td><td>'+(bad||'—')+'</td><td>'+esc(fmtDay(r.fix_deadline))+'</td></tr>';
+        return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+reqIcons(r)+'</td><td>'+(bad||'—')+'</td></tr>';
       }).join('');
       tb.querySelectorAll('a[data-req]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); openReq(+a.dataset.req); }); });
       tb.querySelectorAll('tr[data-iid]').forEach(function(tr){ tr.addEventListener('click',function(){ var r=inspCache.filter(function(x){ return String(x.id)===tr.dataset.iid; })[0]; if(r) openInsp(r); }); });
     }
     function loadInsp(){
       var f=document.getElementById('ui-filter'); var q=f&&f.value?('?overall='+f.value):'';
-      fetchJSON(API+'/maintenance-inspections'+q).then(renderInsp).catch(function(){ var tb=document.getElementById('ui-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+      fetchJSON(API+'/maintenance-inspections'+q).then(renderInsp).catch(function(){ var tb=document.getElementById('ui-tbody'); if(tb) tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
     }
     function openInsp(r){
       var lbl={ok:'<span style="color:#22c55e;font-weight:700;">OK</span>',zavada:'<span style="color:#ef4444;font-weight:700;">ZÁVADA</span>',na:'<span style="color:var(--text2);">N/A</span>'};
@@ -2549,7 +2549,6 @@
           (x.status==='zavada'?('<div style="font-size:12px;color:var(--text2);margin-top:3px;">'+({none:'Bez omezení provozu',known:'Známý problém – funguje',limited:'Omezený provoz',out:'Zařízení mimo provoz',site_out:'Celý prádlomat mimo provoz'}[x.impact]||'')+(x.request_id?(' · <a href="#" data-req="'+x.request_id+'" style="text-decoration:none;">'+((REQ_ST[x.request_status]||['🛠️',''])[0])+' požadavek #'+x.request_id+((REQ_ST[x.request_status]||['',''])[1]?(' – '+REQ_ST[x.request_status][1]):'')+'</a>'):'')+(x.photo_url?(' · <a href="'+esc(x.photo_url)+'" target="_blank">🖼 foto</a>'):'')+'</div>'):'')+'</td></tr>'; }).join('')+
         '</tbody></table>'+
         (r.defects?'<div style="margin-top:12px;"><b>Zjištěné závady / opatření:</b><div style="white-space:pre-wrap;">'+esc(r.defects)+'</div></div>':'')+
-        '<div style="margin-top:8px;"><b>Termín odstranění:</b> '+esc(fmtDay(r.fix_deadline))+'</div>'+
         (r.note?'<div style="margin-top:8px;"><b>Poznámka:</b> '+esc(r.note)+'</div>':'')+
         '<div class="modal-actions"><button class="btn btn-danger" id="ui-del">Smazat</button><button class="btn btn-secondary" id="ui-close">Zavřít</button></div></div>';
       document.getElementById('modal-root').appendChild(ov);
