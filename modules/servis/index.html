@@ -709,8 +709,8 @@
           <button class="btn btn-secondary" id="od-refresh">↻ Obnovit</button>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
-          <table class="data-table"><thead><tr><th>Kdy</th><th>Lokalita / stroj</th><th>Vodoměr (m³)</th><th>Elektroměr (kWh)</th><th>Fotky</th><th>Zadal</th><th></th></tr></thead>
-          <tbody id="od-tbody"><tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
+          <table class="data-table"><thead><tr><th>Kdy</th><th>Lokalita / stroj</th><th>Vodoměr (m³)</th><th>Elektroměr (kWh)</th><th title="Elektroměr / vodoměr">Koeficient (kWh/m³)</th><th>Fotky</th><th>Zadal</th><th></th></tr></thead>
+          <tbody id="od-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
     </section>
@@ -2232,14 +2232,16 @@
     }
     function render(rows){
       var tb=document.getElementById('od-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné odečty. Pošli kolegyni odkaz na formulář výše.</td></tr>'; return; }
+      if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné odečty. Pošli kolegyni odkaz na formulář výše.</td></tr>'; return; }
       tb.innerHTML=rows.map(function(r){
         var photos=[photoLink(r.water_photo_url,'voda',r.id,'water_photo_url'),photoLink(r.electricity_photo_url,'elektro',r.id,'electricity_photo_url')].join(' · ');
+        var koef=(r.water_m3>0&&r.electricity_kwh!=null)?(r.electricity_kwh/r.water_m3).toLocaleString('cs-CZ',{minimumFractionDigits:3,maximumFractionDigits:3}):'—';
         return '<tr>'+
           '<td style="white-space:nowrap;">'+esc(fmtDate(r.created_at))+'</td>'+
           '<td>'+esc(r.machine_name||'—')+'</td>'+
           '<td><b>'+numCz(r.water_m3)+'</b> <a href="#" data-ed="'+r.id+'" data-field="water_m3" data-val="'+(r.water_m3==null?'':r.water_m3)+'" title="Upravit stav vodoměru" style="text-decoration:none;color:var(--text2);">✏️</a></td>'+
           '<td><b>'+numCz(r.electricity_kwh)+'</b> <a href="#" data-ed="'+r.id+'" data-field="electricity_kwh" data-val="'+(r.electricity_kwh==null?'':r.electricity_kwh)+'" title="Upravit stav elektroměru" style="text-decoration:none;color:var(--text2);">✏️</a></td>'+
+          '<td>'+koef+'</td>'+
           '<td style="font-size:12px;">'+photos+'</td>'+
           '<td style="color:var(--text2);">'+esc(r.created_by_name||'—')+'</td>'+
           '<td><button class="btn btn-sm btn-secondary" data-del="'+r.id+'">🗑</button></td>'+
@@ -2257,8 +2259,8 @@
       tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ if(!confirm('Smazat tento odečet?')) return; fetchJSON(API+'/readings/'+b.dataset.del,{method:'DELETE'}).then(load).catch(function(){ alert('Smazání selhalo.'); }); }); });
     }
     function load(){
-      var tb=document.getElementById('od-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr>';
-      fetchJSON(API+'/readings').then(render).catch(function(){ if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
+      var tb=document.getElementById('od-tbody'); if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr>';
+      fetchJSON(API+'/readings').then(render).catch(function(){ if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
     }
     document.addEventListener('DOMContentLoaded',function(){
       var shareUrl=location.origin+'/modules/servis/odecet.html';
