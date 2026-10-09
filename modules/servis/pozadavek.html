@@ -193,7 +193,7 @@
     var callDesc = qs.get('desc') || '';
     var callLoc = qs.get('loc') || '';
     // Dotčená zařízení (pevný seznam — stroje nejsou v systému evidovány po jednotlivých zařízeních)
-    var DEVICES=['Pračka 1','Pračka 2','Sušička 1','Sušička 2','Platební terminál','Bankovkový akceptor','Mincovník','Displej / ovládání','Internet / komunikace','Celý prádlomat','Jiné'];
+    var DEVICES=['Pračka 1 – 8 kg','Pračka 2 – 18 kg','Sušička 1','Sušička 2','Platební terminál','Bankovkový akceptor','Mincovník','Displej / ovládání','Internet / komunikace','Celý prádlomat','Jiné'];
     $('f-devs').innerHTML=DEVICES.map(function(d){ return '<label><input type="checkbox" value="'+d.replace(/"/g,'&quot;')+'">'+d+'</label>'; }).join('');
     $('f-devs').addEventListener('change', function(e){ var l=e.target.closest('label'); if(l) l.classList.toggle('on', e.target.checked); });
     $('f-impact').addEventListener('change', function(){ $('f-show').checked = this.value!=='none'; }); // doporučené auto nastavení, lze změnit

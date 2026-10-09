@@ -1868,7 +1868,7 @@
     // ---- Dopad na provoz (Aktuální omezení pro Infolinku) ----
     var SR_IMPACTS=[['none','🟢 Bez omezení provozu'],['known','🟡 Známý problém – zařízení funguje'],['limited','🟠 Omezený provoz'],['out','🔴 Zařízení mimo provoz'],['site_out','⛔ Celý prádlomat mimo provoz']];
     var SR_IMPACT_ICON={none:'🟢',known:'🟡',limited:'🟠',out:'🔴',site_out:'⛔'};
-    var SR_DEVICES=['Pračka 1','Pračka 2','Sušička 1','Sušička 2','Platební terminál','Bankovkový akceptor','Mincovník','Displej / ovládání','Internet / komunikace','Celý prádlomat','Jiné'];
+    var SR_DEVICES=['Pračka 1 – 8 kg','Pračka 2 – 18 kg','Sušička 1','Sušička 2','Platební terminál','Bankovkový akceptor','Mincovník','Displej / ovládání','Internet / komunikace','Celý prádlomat','Jiné'];
     function srImpactBlock(row){
       var devs=Array.isArray(row.devices)?row.devices:[]; var imp=row.impact||'none';
       return '<div style="border:1px solid rgba(239,68,68,.35);border-radius:10px;padding:10px 12px;margin:6px 0 10px;background:rgba(239,68,68,.05);">'+
