@@ -1110,7 +1110,52 @@ router.post('/trips/:id/return-end', express.json(), async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ---- Dopad na provoz (Aktuální omezení pro Infolinku) ----
+const IMPACTS = ['none', 'known', 'limited', 'out', 'site_out'];
+const IMPACT_LABEL = { none: 'Bez omezení provozu', known: 'Známý problém – zařízení funguje', limited: 'Omezený provoz', out: 'Zařízení mimo provoz', site_out: 'Celý prádlomat mimo provoz' };
+const IMPACT_RANK = { site_out: 0, out: 1, limited: 2, known: 3, none: 9 };
+const impactFields = {
+  impact: z.enum(IMPACTS).optional(),
+  devices: z.array(z.string().max(80)).max(20).optional().nullable(),
+  show_infoline: z.boolean().optional(),
+  infoline_note: z.string().max(500).optional().nullable(),
+};
+// Fuzzy shoda lokality (text z hovoru / název stroje) — bez diakritiky, tokeny ≥ 3 znaky, generické řetězce ignorovány.
+const LOC_GENERIC = new Set(['tesco', 'albert', 'kaufland', 'lidl', 'penny', 'billa', 'globus', 'coop', 'obi', 'ulice', 'namesti', 'pradlomat', 'parkoviste']);
+const locNorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const locTokens = (t) => locNorm(t).split(/[^a-z0-9]+/).filter((x) => x.length >= 3);
+function locationMatches(a, b) {
+  const na = locNorm(a).trim(), nb = locNorm(b).trim();
+  if (!na || !nb) return false;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  const ta = locTokens(na), tb = new Set(locTokens(nb));
+  const common = ta.filter((x) => tb.has(x));
+  if (common.length >= 2) return true;
+  return common.some((x) => x.length >= 5 && !LOC_GENERIC.has(x));
+}
+
+// GET /api/service/restrictions?q=&location=  — aktivní omezení pro Infolinku (jen show_infoline, stav ≠ vyřešeno/zamítnuto),
+// řazeno podle závažnosti (⛔ → 🔴 → 🟠 → 🟡), v rámci závažnosti nejnovější nahoře.
+router.get('/restrictions', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim(), loc = String(req.query.location || '').trim();
+    const rows = await prisma.serviceRequest.findMany({
+      where: { show_infoline: true, status: { in: ['novy', 'reseni'] } },
+      select: { id: true, problem: true, action: true, description: true, impact: true, devices: true, infoline_note: true, impact_since: true, status: true, assignee_id: true, created_at: true, phone: true },
+    });
+    const withA = await _attachAssignees(rows);
+    let out = withA.map((r) => ({ id: r.id, location: r.problem, action: r.action, problem: r.description || r.action || '', impact: r.impact, impact_label: IMPACT_LABEL[r.impact] || r.impact, devices: Array.isArray(r.devices) ? r.devices : [], infoline_note: r.infoline_note, since: r.impact_since || r.created_at, status: r.status, status_label: STATUS_LABEL[r.status] || r.status, assignee_name: r.assignee_name || null }));
+    if (q) { const nq = locNorm(q); out = out.filter((r) => locNorm(r.location + ' ' + r.devices.join(' ') + ' ' + (r.problem || '') + ' ' + (r.infoline_note || '')).includes(nq)); }
+    if (loc) out = out.filter((r) => locationMatches(r.location, loc));
+    out.sort((a, b) => (IMPACT_RANK[a.impact] ?? 9) - (IMPACT_RANK[b.impact] ?? 9) || new Date(b.since) - new Date(a.since));
+    const counts = { total: out.length, site_out: 0, out: 0, limited: 0, known: 0 };
+    out.forEach((r) => { if (counts[r.impact] != null) counts[r.impact]++; });
+    res.json({ items: out, counts });
+  } catch (err) { next(err); }
+});
+
 const requestSchema = z.object({
+  ...impactFields,
   problem: z.string().min(1).max(255),
   action: z.string().max(255).optional().nullable(),
   task: z.string().max(255).optional().nullable(),
@@ -1141,10 +1186,12 @@ router.post('/requests', async (req, res, next) => {
       }
     }
     // Zadavatel = přihlášený uživatel (autoritativně z tokenu, ne z klienta).
-    const row = await prisma.serviceRequest.create({
-      data: Object.assign({}, parsed.data, { status: 'novy', created_by_user_id: (req.user && req.user.id) || null }),
-    });
+    const impact = parsed.data.impact || 'none';
+    const extra = { status: 'novy', created_by_user_id: (req.user && req.user.id) || null, impact, devices: parsed.data.devices || null,
+      show_infoline: parsed.data.show_infoline != null ? parsed.data.show_infoline : impact !== 'none', impact_since: impact !== 'none' ? new Date() : null };
+    const row = await prisma.serviceRequest.create({ data: Object.assign({}, parsed.data, extra) });
     await logReq(row.id, req, 'created', 'Požadavek vytvořen: ' + (row.problem || ''));
+    if (impact !== 'none') await logReq(row.id, req, 'impact', 'Dopad na provoz: ' + IMPACT_LABEL[impact] + (row.devices && row.devices.length ? ' (' + row.devices.join(', ') + ')' : '') + (row.show_infoline ? ' — zobrazeno infolince' : ''));
     res.status(201).json(row);
     // Na pozadí: AI odhad času opravy + odhad cesty ze základny ke stroji (nezdržuje odpověď).
     estimateForRequest(row).catch((e) => console.warn('[service] estimateForRequest:', e.message));
@@ -1194,6 +1241,7 @@ async function estimateForRequest(row) {
 }
 
 const requestPatchSchema = z.object({
+  ...impactFields,
   problem: z.string().min(1).max(255).optional(),
   action: z.string().max(255).optional().nullable(),
   task: z.string().max(255).optional().nullable(),
@@ -1215,11 +1263,26 @@ router.patch('/requests/:id', async (req, res, next) => {
     const parsed = requestPatchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
     const before = await prisma.serviceRequest.findUnique({ where: { id } });
-    const row = await prisma.serviceRequest.update({ where: { id }, data: parsed.data });
     const d = parsed.data;
+    const data = Object.assign({}, d);
+    if (before) {
+      // Od kdy omezení platí: při nastavení dopadu ≠ none (nově) nebo při znovuotevření vyřešeného požadavku
+      const newImpact = d.impact !== undefined ? d.impact : before.impact;
+      const reopened = d.status !== undefined && before.status === 'vyreseno' && ['novy', 'reseni'].includes(d.status);
+      if ((d.impact !== undefined && d.impact !== 'none' && (before.impact === 'none' || !before.impact_since)) || (reopened && newImpact !== 'none')) data.impact_since = new Date();
+      if (d.impact === 'none') data.impact_since = null;
+      // Kdy bylo vyřešeno (pro dohledání, jak dlouho bylo zařízení mimo provoz)
+      if (d.status === 'vyreseno' && before.status !== 'vyreseno') data.resolved_at = new Date();
+      if (reopened) data.resolved_at = null;
+    }
+    const row = await prisma.serviceRequest.update({ where: { id }, data });
     // Zaloguj smysluplné změny.
     if (before) {
-      if (d.status !== undefined && d.status !== before.status) await logReq(id, req, 'status', 'Změna stavu: ' + (STATUS_LABEL[before.status] || before.status) + ' → ' + (STATUS_LABEL[d.status] || d.status));
+      if (d.status !== undefined && d.status !== before.status) await logReq(id, req, 'status', 'Změna stavu: ' + (STATUS_LABEL[before.status] || before.status) + ' → ' + (STATUS_LABEL[d.status] || d.status) + (d.status === 'vyreseno' && before.show_infoline ? ' — omezení odstraněno z přehledu infolinky' : ''));
+      if (d.impact !== undefined && d.impact !== before.impact) await logReq(id, req, 'impact', 'Dopad na provoz: ' + (IMPACT_LABEL[before.impact] || before.impact) + ' → ' + (IMPACT_LABEL[d.impact] || d.impact));
+      if (d.devices !== undefined && JSON.stringify(d.devices || []) !== JSON.stringify(before.devices || [])) await logReq(id, req, 'devices', 'Dotčená zařízení: ' + ((d.devices || []).join(', ') || '—'));
+      if (d.show_infoline !== undefined && d.show_infoline !== before.show_infoline) await logReq(id, req, 'infoline', d.show_infoline ? 'Zobrazeno infolince' : 'Skryto infolince');
+      if (d.infoline_note !== undefined && (d.infoline_note || '') !== (before.infoline_note || '')) await logReq(id, req, 'infoline_note', 'Informace pro infolinku: ' + (d.infoline_note || '—'));
       if (d.assignee_id !== undefined && d.assignee_id !== before.assignee_id) {
         let nm = '—'; if (d.assignee_id) { const p = await prisma.person.findUnique({ where: { id: d.assignee_id }, select: { first_name: true, last_name: true } }).catch(() => null); if (p) nm = [p.first_name, p.last_name].filter(Boolean).join(' '); }
         await logReq(id, req, 'assignee', 'Řešitel: ' + nm);
@@ -1495,6 +1558,23 @@ router.post('/readings', async (req, res, next) => {
       },
     });
     res.status(201).json(row);
+  } catch (err) { next(err); }
+});
+
+// PUT /api/service/readings/:id — dodatečná změna fotek (a případně stavů) odečtu.
+router.put('/readings/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = readingSchema.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.flatten() });
+    const d = parsed.data;
+    const data = {};
+    if (d.water_photo_url !== undefined) data.water_photo_url = d.water_photo_url || null;
+    if (d.electricity_photo_url !== undefined) data.electricity_photo_url = d.electricity_photo_url || null;
+    if (d.water_m3 !== undefined) data.water_m3 = _num(d.water_m3);
+    if (d.electricity_kwh !== undefined) data.electricity_kwh = _num(d.electricity_kwh);
+    const row = await prisma.meterReading.update({ where: { id }, data });
+    res.json(row);
   } catch (err) { next(err); }
 });
 
