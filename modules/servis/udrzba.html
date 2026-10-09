@@ -30,6 +30,17 @@
     .seg button.on.zavada{ background:var(--bad); border-color:var(--bad); color:#fff; }
     .seg button.on.na{ background:var(--na); border-color:var(--na); color:#fff; }
     .pt input.note{ margin-top:8px; padding:11px 12px; font-size:14px; }
+    .zv{ display:none; margin-top:10px; padding-top:10px; border-top:1px dashed var(--border); }
+    .zv .lbl{ font-size:12px; color:var(--text2); text-transform:uppercase; letter-spacing:.4px; margin:8px 0 6px; }
+    .zv select{ padding:12px; font-size:15px; }
+    .zv select.miss{ border-color:#f59e0b; }
+    .zv .ph{ display:flex; align-items:center; gap:10px; margin-top:8px; }
+    .zv .ph label.pb{ flex:1; background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:12px; font-size:14px; color:var(--text2); cursor:pointer; text-align:center; }
+    .zv .ph label.pb.has{ color:var(--text); border-color:var(--acc); }
+    .zv .ph input[type=file]{ display:none; }
+    .zv .ph img{ width:56px; height:56px; object-fit:cover; border-radius:8px; border:1px solid var(--border); display:none; }
+    .zv .ph .rm{ background:none; border:none; color:var(--bad); font-size:20px; cursor:pointer; display:none; }
+    input[type=date]{ -webkit-appearance:none; appearance:none; min-width:0; max-width:100%; height:50px; }
     .bar{ position:fixed; left:0; right:0; bottom:0; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent,var(--bg) 40%); display:flex; gap:10px; justify-content:flex-end; align-items:center; }
     .bar .prog{ flex:1; font-size:13px; color:var(--text2); }
     .btn{ background:var(--acc); color:#04222b; border:none; border-radius:12px; padding:15px 24px; font-size:16px; font-weight:800; cursor:pointer; }
@@ -142,9 +153,14 @@
       $('points').innerHTML=items.map(function(it,i){
         return '<div class="pt" id="pt'+i+'"><div class="t"><span>'+(i+1)+'.</span>'+esc(it.text)+'</div>'+
           '<div class="seg" data-i="'+i+'"><button type="button" class="ok" data-s="ok">OK</button><button type="button" class="zavada" data-s="zavada">ZÁVADA</button><button type="button" class="na" data-s="na">N/A</button></div>'+
-          '<input class="note" data-n="'+i+'" placeholder="Poznámka / zjištění" style="display:none;"></div>';
+          '<input class="note" data-n="'+i+'" placeholder="Poznámka / zjištění" style="display:none;">'+
+          '<div class="zv" id="zv'+i+'">'+
+            '<div class="lbl">Vzniká omezení provozu? *</div>'+
+            '<select data-imp="'+i+'"><option value="">— vyber —</option><option value="none">Bez omezení provozu</option><option value="known">Známý problém – zařízení funguje</option><option value="limited">Omezený provoz</option><option value="out">Zařízení mimo provoz</option><option value="site_out">Celý prádlomat mimo provoz</option></select>'+
+            '<div class="ph"><label class="pb" for="pf'+i+'">📷 Vyfotit / nahrát fotku závady</label><input type="file" id="pf'+i+'" accept="image/*" data-pf="'+i+'"><img alt="" id="pi'+i+'"><button type="button" class="rm" data-prm="'+i+'" title="Odebrat foto">✕</button></div>'+
+          '</div></div>';
       }).join('');
-      answers=items.map(function(it){ return {text:it.text,status:null,note:''}; });
+      answers=items.map(function(it){ return {text:it.text,status:null,note:'',impact:'',photo:null}; });
       $('points').querySelectorAll('.seg button').forEach(function(b){
         b.addEventListener('click',function(){
           var i=+b.parentNode.dataset.i, s=b.dataset.s;
@@ -152,12 +168,43 @@
           b.parentNode.querySelectorAll('button').forEach(function(x){ x.classList.toggle('on', x===b); });
           var box=$('pt'+i); box.classList.toggle('bad', s==='zavada'); box.classList.remove('miss');
           var inp=box.querySelector('.note'); inp.style.display=(s==='zavada')?'block':(inp.value?'block':'none');
+          $('zv'+i).style.display=(s==='zavada')?'block':'none';
           if(s==='zavada') inp.focus();
           prog();
         });
       });
+      $('points').querySelectorAll('select[data-imp]').forEach(function(sel){ sel.addEventListener('change',function(){ answers[+sel.dataset.imp].impact=sel.value; sel.classList.remove('miss'); }); });
+      $('points').querySelectorAll('input[data-pf]').forEach(function(fi){
+        fi.addEventListener('change',function(){
+          var i=+fi.dataset.pf, f=fi.files&&fi.files[0]; if(!f) return;
+          compress(f,function(blob){ answers[i].photo=blob; var im=$('pi'+i); im.src=URL.createObjectURL(blob); im.style.display='block'; $('zv'+i).querySelector('label.pb').classList.add('has'); $('zv'+i).querySelector('label.pb').textContent='📷 Změnit fotku'; $('zv'+i).querySelector('.rm').style.display='block'; });
+        });
+      });
+      $('points').querySelectorAll('button[data-prm]').forEach(function(b){ b.addEventListener('click',function(){ var i=+b.dataset.prm; answers[i].photo=null; $('pf'+i).value=''; $('pi'+i).style.display='none'; b.style.display='none'; var l=$('zv'+i).querySelector('label.pb'); l.classList.remove('has'); l.textContent='📷 Vyfotit / nahrát fotku závady'; }); });
       $('points').querySelectorAll('input.note').forEach(function(inp){ inp.addEventListener('input',function(){ answers[+inp.dataset.n].note=inp.value; }); });
       prog();
+    }
+    // Zmenšení fotky na max 1600 px (JPEG) před nahráním
+    function compress(f,cb){
+      var reader=new FileReader();
+      reader.onload=function(e){
+        var im=new Image();
+        im.onload=function(){
+          var max=1600,w=im.width,h=im.height;
+          if(w>max||h>max){ if(w>=h){ h=Math.round(h*max/w); w=max; } else { w=Math.round(w*max/h); h=max; } }
+          var cv=document.createElement('canvas'); cv.width=w; cv.height=h; cv.getContext('2d').drawImage(im,0,0,w,h);
+          cv.toBlob(function(b){ cb(b||f); },'image/jpeg',0.82);
+        };
+        im.onerror=function(){ cb(f); };
+        im.src=e.target.result;
+      };
+      reader.readAsDataURL(f);
+    }
+    async function uploadPhoto(blob){
+      var fd=new FormData(); fd.append('photo',blob,'zavada.jpg');
+      var r=await api(API+'/readings/photo',{method:'POST',body:fd});
+      if(!r.ok){ var e={}; try{ e=await r.json(); }catch(_){} throw new Error(e.error||('Foto se nepodařilo nahrát ('+r.status+')')); }
+      return (await r.json()).url;
     }
     function prog(){ var done=answers.filter(function(a){ return a.status; }).length; var bad=answers.filter(function(a){ return a.status==='zavada'; }).length; $('prog').textContent=done+' / '+answers.length+(bad?(' · závad: '+bad):''); }
     $('f-tpl').addEventListener('change',function(){ cur=tpls.filter(function(t){ return String(t.id)===$('f-tpl').value; })[0]||null; drawPoints(); });
@@ -176,14 +223,24 @@
       if(!sel.value){ msg.className='msg err'; msg.textContent='Vyber pobočku / stroj.'; sel.scrollIntoView({block:'center'}); return; }
       var missing=-1; answers.forEach(function(a,i){ if(!a.status){ $('pt'+i).classList.add('miss'); if(missing<0) missing=i; } });
       if(missing>=0){ msg.className='msg err'; msg.textContent='Vyplň všechny kontrolní body (OK / ZÁVADA / N/A).'; $('pt'+missing).scrollIntoView({block:'center'}); return; }
+      var noImp=-1; answers.forEach(function(a,i){ if(a.status==='zavada' && !a.impact){ var se=document.querySelector('select[data-imp="'+i+'"]'); if(se) se.classList.add('miss'); if(noImp<0) noImp=i; } });
+      if(noImp>=0){ msg.className='msg err'; msg.textContent='U každé závady urči, zda vzniká omezení provozu.'; $('pt'+noImp).scrollIntoView({block:'center'}); return; }
       var btn=$('save'); btn.disabled=true; btn.textContent='Ukládám…';
       try{
+        var res=[];
+        for(var k=0;k<answers.length;k++){
+          var a=answers[k], photoUrl=null;
+          if(a.status==='zavada' && a.photo){ msg.textContent='Nahrávám foto závady '+(k+1)+'…'; photoUrl=await uploadPhoto(a.photo); }
+          res.push({ text:a.text, status:a.status, note:a.note, impact:a.status==='zavada'?a.impact:null, photo_url:photoUrl });
+        }
+        msg.textContent='Ukládám protokol…';
         var body={ checklist_id:cur?cur.id:null, machine_id:parseInt(sel.value,10), machine_name:sel.options[sel.selectedIndex].textContent,
-          results:answers, defects:$('f-defects').value, fix_deadline:$('f-deadline').value||null, note:$('f-note').value };
+          results:res, defects:$('f-defects').value, fix_deadline:$('f-deadline').value||null, note:$('f-note').value };
         var r=await api(API+'/maintenance-inspections',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
         if(!r.ok){ var e={}; try{ e=await r.json(); }catch(_){} throw new Error(e.error||('Uložení selhalo ('+r.status+')')); }
         var j=await r.json();
-        $('done-txt').textContent=(j.overall==='zavada'?'Kontrola uložena se zjištěnými závadami. ':'Kontrola uložena, vše v pořádku. ')+'Je vidět v HolyOS → Servis → Údržba.';
+        var n=(j.request_ids||[]).length;
+        $('done-txt').textContent=(j.overall==='zavada'?('Kontrola uložena se zjištěnými závadami. Automaticky '+(n===1?'vznikl 1 servisní požadavek':('vznikly servisní požadavky: '+n))+'. '):'Kontrola uložena, vše v pořádku. ')+'Je vidět v HolyOS → Servis → Údržba.';
         show('done');
       }catch(e){ msg.className='msg err'; msg.textContent=e.message||'Chyba uložení.'; }
       btn.disabled=false; btn.textContent='💾 Uložit';

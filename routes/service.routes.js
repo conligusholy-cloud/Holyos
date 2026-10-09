@@ -1674,6 +1674,8 @@ const inspectionSchema = z.object({
     text: z.string(),
     status: z.enum(['ok', 'zavada', 'na']),
     note: z.string().optional().nullable(),
+    photo_url: z.string().max(500).optional().nullable(),   // foto závady
+    impact: z.enum(IMPACTS).optional().nullable(),           // dopad závady na provoz (povinný u závady)
   })).min(1),
   defects: z.string().optional().nullable(),
   fix_deadline: z.string().optional().nullable(),
@@ -1697,7 +1699,11 @@ router.post('/maintenance-inspections', async (req, res, next) => {
       const u = await prisma.user.findUnique({ where: { id: uid }, select: { display_name: true, username: true } });
       inspectorName = u ? (u.display_name || u.username) : null;
     }
-    const results = d.results.map((r) => ({ text: r.text, status: r.status, note: (r.note || '').trim() || null }));
+    const results = d.results.map((r) => ({ text: r.text, status: r.status, note: (r.note || '').trim() || null,
+      photo_url: r.status === 'zavada' ? (r.photo_url || null) : null, impact: r.status === 'zavada' ? (r.impact || null) : null }));
+    // U každé závady musí být určeno, zda vzniká omezení provozu.
+    const missingImpact = results.findIndex((r) => r.status === 'zavada' && !r.impact);
+    if (missingImpact >= 0) return res.status(400).json({ error: 'U závady „' + results[missingImpact].text + '" urči, zda vzniká omezení provozu.' });
     const row = await prisma.maintenanceInspection.create({
       data: {
         checklist_id: d.checklist_id || null,
@@ -1713,7 +1719,35 @@ router.post('/maintenance-inspections', async (req, res, next) => {
         note: (d.note || '').trim() || null,
       },
     });
-    res.status(201).json(row);
+    // Každá závada → automaticky servisní požadavek (s fotkou a dopadem na provoz → „Aktuální omezení").
+    const created = [];
+    for (const r of results) {
+      if (r.status !== 'zavada') continue;
+      const impact = r.impact;
+      const sr = await prisma.serviceRequest.create({
+        data: {
+          problem: (d.machine_name || 'Neurčený stroj').slice(0, 255),
+          action: r.text.slice(0, 255),
+          description: ((r.note ? r.note + '\n' : '') + 'Závada zjištěna při kontrole (protokol #' + row.id + ').').trim(),
+          photo_url: r.photo_url || null,
+          ordered_by: (inspectorName || 'Údržba').slice(0, 120),
+          status: 'novy',
+          created_by_user_id: uid,
+          impact,
+          devices: [r.text.slice(0, 80)],
+          show_infoline: impact !== 'none',
+          impact_since: impact !== 'none' ? new Date() : null,
+          infoline_note: null,
+        },
+      });
+      r.request_id = sr.id;
+      created.push(sr.id);
+      await logReq(sr.id, req, 'created', 'Požadavek vytvořen automaticky z kontrolního protokolu #' + row.id + ': ' + r.text);
+      if (impact !== 'none') await logReq(sr.id, req, 'impact', 'Dopad na provoz: ' + IMPACT_LABEL[impact] + ' (' + r.text + ') — zobrazeno infolince');
+      estimateForRequest(sr).catch((e) => console.warn('[service] estimateForRequest:', e.message));
+    }
+    if (created.length) await prisma.maintenanceInspection.update({ where: { id: row.id }, data: { results } });
+    res.status(201).json(Object.assign({}, row, { results, request_ids: created }));
   } catch (err) { next(err); }
 });
 
