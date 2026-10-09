@@ -1768,4 +1768,40 @@ router.delete('/maintenance-inspections/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Údržba: tým údržby (kdo dělá kontroly) ─────────────────────────────────
+const MAINT_TEAM_KEY = 'service.maintenance_person_ids';
+async function readMaintTeamIds() {
+  let raw = null;
+  try { const row = await prisma.appSetting.findUnique({ where: { key: MAINT_TEAM_KEY } }); raw = row ? row.value : null; } catch (_) { raw = null; }
+  let ids = raw;
+  if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch (_) { ids = ids.split(',').map((x) => parseInt(x, 10)); } }
+  return Array.isArray(ids) ? ids.map((x) => parseInt(x, 10)).filter(Boolean) : [];
+}
+
+// GET /api/service/maintenance-settings — tým údržby (lidé z HR).
+router.get('/maintenance-settings', async (req, res, next) => {
+  try {
+    const ids = await readMaintTeamIds();
+    res.json({ person_ids: ids, people: await peopleByIds(ids) });
+  } catch (err) { next(err); }
+});
+
+// PUT /api/service/maintenance-settings { person_ids: [] } — uloží tým údržby.
+router.put('/maintenance-settings', express.json(), async (req, res, next) => {
+  try {
+    let ids = (req.body && req.body.person_ids) || [];
+    if (!Array.isArray(ids)) ids = [];
+    ids = Array.from(new Set(ids.map((x) => parseInt(x, 10)).filter(Boolean)));
+    const stored = JSON.stringify(ids);
+    const uid = (req.user && req.user.id) || null;
+    await prisma.appSetting.upsert({
+      where: { key: MAINT_TEAM_KEY },
+      update: { value: stored, value_type: 'json', updated_by_user_id: uid },
+      create: { key: MAINT_TEAM_KEY, value: stored, value_type: 'json', description: 'Servis — tým údržby (kdo provádí kontroly)', updated_by_user_id: uid },
+    });
+    const saved = await readMaintTeamIds();
+    res.json({ ok: true, person_ids: saved, people: await peopleByIds(saved) });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
