@@ -405,6 +405,15 @@
           <input id="info-number" type="text" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="+420…">
           <div style="font-size:11px;color:var(--text2);margin-top:3px;">Ve Twilio konzoli nastav u tohoto čísla webhook příchozího hovoru na <code>https://app.holyos.cz/api/voice/incoming</code>. Podle čísla systém pozná, že jde o Infolinku.</div>
 
+          <div style="margin:14px 0 0;">
+            <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">Hlas asistenta</label>
+            <select id="info-voice" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;">
+              <option value="default">Výchozí hlas (jako dřív)</option>
+              <option value="male">Mužský hlas</option>
+              <option value="female">Ženský hlas</option>
+            </select>
+            <div style="margin-top:3px;font-size:11px;color:var(--text2);">Mužský / ženský hlas se bere z nastavených hlasů (proměnné VOICE_TTS_VOICE_MALE / VOICE_TTS_VOICE_FEMALE na serveru). Změna platí od dalšího hovoru.</div>
+          </div>
           <label style="display:block;font-size:12px;color:var(--text2);margin:14px 0 4px;">Úvodní věta (co AI řekne jako první při zvednutí)</label>
           <textarea id="info-greeting" rows="2" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;" placeholder="Dobrý den, dovolali jste se na infolinku. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?"></textarea>
           <div id="info-greeting-cnt" style="margin-top:3px;font-size:11px;color:var(--text2);"></div>
@@ -883,6 +892,7 @@
           el('info-number').value=c.line_number||'';
           var intro=el('info-intro-banner'); if(intro) intro.style.display=(c.line_number&&String(c.line_number).trim())?'none':'';
           el('info-greeting').value=c.inbound_greeting||'';
+          if(el('info-voice')) el('info-voice').value=c.tts_voice||'default';
           el('info-prompt').value=c.inbound_prompt||'';
           el('info-notify').value=(c.notify_person_ids||[]).join(',');
           _ops=Array.isArray(c.operator_ids)?c.operator_ids.slice():[];
@@ -994,6 +1004,7 @@
           await api('/config?line='+INFO_LINE,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({
             line_number: (el('info-number').value||'').trim(),
             inbound_greeting: el('info-greeting').value,
+            tts_voice: (el('info-voice')||{}).value||'default',
             inbound_prompt: el('info-prompt').value,
             notify_person_ids: notify,
             transfer_enabled: !!(el('info-transfer-enabled')||{}).checked,

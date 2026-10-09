@@ -21,7 +21,7 @@ function getClient() {
 // Odbaví jedno kolo: vstup = text volajícího, výstup = { text, messages }.
 // `messages` vrací aktualizovanou historii (předej ji do dalšího kola).
 // toolset: null | { getTools: () => [...], execute: async (name, input) => any }
-async function runTurn({ system, history = [], userText, toolset = null, maxTokens = 300 }) {
+async function runTurn({ system, history = [], userText, toolset = null, maxTokens = 300, temperature = 0.4 }) {
   const client = getClient();
   const messages = [...history, { role: 'user', content: userText }];
   const tools = toolset ? toolset.getTools() : undefined;
@@ -30,7 +30,7 @@ async function runTurn({ system, history = [], userText, toolset = null, maxToke
     const params = {
       model: VOICE_MODEL,
       max_tokens: maxTokens,
-      temperature: 0.4,
+      temperature,
       system,
       messages,
     };

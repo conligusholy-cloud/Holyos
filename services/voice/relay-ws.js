@@ -48,6 +48,14 @@ function outboundSystem(script) {
   );
 }
 
+// Připomenutí na konci instrukcí: scénář má vždy přednost před podklady i obecným stylem.
+const SCENARIO_REMINDER =
+  '=== ZÁVAZNÉ PŘIPOMENUTÍ (platí nad vším výše) === ' +
+  'Postupuj PŘESNĚ podle scénáře a pravidel na začátku těchto instrukcí: dodrž pořadí kroků, doslovné formulace tam, kde jsou předepsané, ' +
+  'a všechny zákazy. Znalostní podklady a obecný styl slouží jen jako doplněk — při rozporu vždy vyhrává scénář. ' +
+  'Před každou odpovědí si v duchu ověř, že neporušuješ žádné pravidlo scénáře. Nevymýšlej si nic mimo scénář a podklady. ' +
+  'Mluv krátce: jedna až dvě věty a nejvýš jedna otázka.';
+
 function send(ws, obj) {
   try {
     ws.send(JSON.stringify(obj));
@@ -303,6 +311,8 @@ function attach(server) {
         ? (state.campaign && state.campaign.id ? ('outbound:' + state.campaign.id) : 'outbound')
         : (line === 'obchod' ? 'inbound' : ('inbound:' + line));
       state.system = await aic.augmentSystem(state.system, { voice: true, scope });
+      // Znalostní podklady jsou na konci dlouhé → zopakuj prioritu scénáře úplně nakonec (nejblíže odpovědi).
+      state.system += '\n\n' + SCENARIO_REMINDER;
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
       if (mode === 'outbound' && state.target) {
         let first = null, last = null, full = state.target.name || null;
@@ -420,6 +430,7 @@ function attach(server) {
             userText,
             toolset: null,
             maxTokens: 300,
+            temperature: 0.2, // přesnější dodržování scénáře (méně improvizace)
           });
           state.history = messages;
           state.transcript.push({ role: 'agent', text, ts: Date.now() });

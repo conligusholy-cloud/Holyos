@@ -553,8 +553,10 @@ router.post('/incoming', form, async (req, res) => {
   try {
     const get = settings ? settings.getSetting : null;
     greeting = (get ? await get(cfgKey(line, 'inbound_greeting')) : '') || '';
-    const gender = (get ? await get(cfgKey(line, 'tts_voice')) : '') || 'female';
-    voiceId = ttsVoiceId(gender);
+    // Infolinka: dokud není hlas výslovně zvolen, použije se výchozí hlas providera (jako dřív);
+    // 'female'/'male' → ElevenLabs voice ID z env. Ostatní linky: výchozí ženský (beze změny).
+    const gender = (get ? await get(cfgKey(line, 'tts_voice')) : '') || (line === 'infolinka' ? 'default' : 'female');
+    voiceId = gender === 'default' ? '' : ttsVoiceId(gender);
   } catch (_) { greeting = ''; }
   if (!String(greeting).trim()) {
     greeting = 'Dobrý den, dovolali jste se na asistenta. Hovor obsluhuje AI a je nahráván. Jak vám můžu pomoct?';
@@ -1574,7 +1576,8 @@ router.get('/config', requireAuth, async (req, res, next) => {
         for (const k of Object.keys(map)) { if (normLine(map[k]) === line) { line_number = k; break; } }
       }
     } catch (_) { /* ignore */ }
-    res.json({ line, line_number, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, shifts, work_from, work_to, work_person_id, default_from, sms_on_no_answer, sms_text, sms_gateway,
+    const tts_voice = get ? (await get(cfgKey(line, 'tts_voice'))) || (line === 'infolinka' ? 'default' : 'female') : 'default';
+    res.json({ line, line_number, tts_voice, inbound_prompt, inbound_greeting, notify_person_ids: notify_person_ids || [], operator_ids, shifts, work_from, work_to, work_person_id, default_from, sms_on_no_answer, sms_text, sms_gateway,
       transfer_enabled, transfer_fallback_numbers, transfer_inbound_number, transfer_ring_timeout, transfer_rounds,
       sms_form_text, sms_form_link });
   } catch (err) {
@@ -1590,6 +1593,8 @@ router.put('/config', requireAuth, express.json(), async (req, res, next) => {
     const line = normLine(req.query.line);
     if (inbound_prompt !== undefined)
       await settings.setSetting(cfgKey(line, 'inbound_prompt'), String(inbound_prompt || ''), { type: 'string', userId: uid });
+    if (req.body.tts_voice !== undefined)
+      await settings.setSetting(cfgKey(line, 'tts_voice'), ['male', 'female'].includes(req.body.tts_voice) ? req.body.tts_voice : 'default', { type: 'string', userId: uid });
     if (req.body.inbound_greeting !== undefined)
       await settings.setSetting(cfgKey(line, 'inbound_greeting'), String(req.body.inbound_greeting || ''), { type: 'string', userId: uid });
     if (notify_person_ids !== undefined) {
