@@ -164,9 +164,9 @@ function helpWidget(h) {
 }
 
 // ── AI chat pro přihlášené uživatele (plovoucí okno vpravo dole). Zobrazí se jen když je v adminu zapnutý. ──
-const AICHAT_CSS = `.aic-btn{display:none;align-items:center;gap:7px;margin-right:8px;padding:7px 13px;border-radius:999px;border:1px solid rgba(79,209,255,.6);background:linear-gradient(135deg,rgba(30,134,224,.85),rgba(124,92,255,.85));color:#fff;font:700 13px/1 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
-.acc-link{display:inline-flex;align-items:center;gap:6px;margin-right:6px;padding:7px 11px;border-radius:999px;color:#c9d6ee;font:600 13px/1 Inter,system-ui,sans-serif;text-decoration:none;white-space:nowrap}.acc-link:hover,.acc-link.on{color:#fff;background:rgba(79,209,255,.14)}@media(max-width:760px){.acc-link{font-size:0;gap:0}}.aic-btn:hover{filter:brightness(1.15)}.aic-btn.on{box-shadow:0 0 0 3px rgba(79,209,255,.25)}
-.aic-panel{position:fixed;right:18px;top:68px;z-index:61;width:min(400px,calc(100vw - 24px));height:min(560px,calc(100vh - 90px));display:none;flex-direction:column;background:rgba(7,12,24,.97);border:1px solid var(--border2,rgba(120,160,255,.3));border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
+const AICHAT_CSS = `.aic-btn{display:none;align-items:center;gap:7px;padding:12px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--text2);font:600 14px/1.2 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
+.acc-link{display:inline-flex;align-items:center;gap:6px;margin-right:6px;padding:7px 11px;border-radius:999px;color:#c9d6ee;font:600 13px/1 Inter,system-ui,sans-serif;text-decoration:none;white-space:nowrap}.acc-link:hover,.acc-link.on{color:#fff;background:rgba(79,209,255,.14)}@media(max-width:760px){.acc-link{font-size:0;gap:0}}.aic-btn:hover{color:var(--text)}.aic-btn.on{color:var(--accent2);border-bottom-color:var(--accent2)}
+.aic-panel{position:fixed;right:18px;top:122px;z-index:61;width:min(400px,calc(100vw - 24px));height:min(560px,calc(100vh - 140px));display:none;flex-direction:column;background:rgba(7,12,24,.97);border:1px solid var(--border2,rgba(120,160,255,.3));border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
 .aic-panel.open{display:flex}
 .aic-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(30,134,224,.25),rgba(124,92,255,.2))}
 .aic-head b{flex:1;font-size:15px}.aic-head button{background:none;border:0;color:var(--text2);cursor:pointer;font-size:13px;padding:4px 6px}
@@ -177,7 +177,7 @@ const AICHAT_CSS = `.aic-btn{display:none;align-items:center;gap:7px;margin-righ
 .aic-in input{flex:1;font-size:16px;padding:10px 12px}.aic-in button{padding:0 16px;border-radius:11px;border:0;background:linear-gradient(90deg,var(--accent),var(--vio));color:#fff;font-weight:700;cursor:pointer}
 .aic-in button:disabled{opacity:.5}
 .aic-note{font-size:11px;color:var(--text2);text-align:center;padding:0 10px 8px}
-@media(max-width:760px){.aic-panel{right:8px;top:62px;height:calc(100vh - 72px)}.aic-btn span{display:none}}`;
+@media(max-width:760px){.aic-panel{right:8px;top:112px;height:calc(100vh - 124px)}.aic-btn span{display:none}}`;
 const AICHAT_JS = `(function(){
 var btn=document.getElementById('aic-btn'),panel=document.getElementById('aic-panel'); if(!btn||!panel) return;
 var log=document.getElementById('aic-log'),inp=document.getElementById('aic-in'),send=document.getElementById('aic-send'),cfg=null,hist=[];
@@ -232,9 +232,9 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
-${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${fx && user ? '<button type="button" class="aic-btn" id="aic-btn" aria-label="AI chat" title="Zeptat se AI asistenta">💬 <span>AI chat</span></button>' : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
-${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
+${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${fx && user ? '<button type="button" class="aic-btn" id="aic-btn" aria-label="AI chat" title="Zeptat se AI asistenta">💬 <span>AI chat</span></button>' : ''}${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main>${helpWidget(h)}${fx && user ? aiChatWidget() : ''}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
@@ -670,6 +670,22 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '' } = {}) {
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"></form>
+  <div id="dcm" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(460px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">Uplatnit Discount Credit</b><button type="button" id="dcm-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
+    <div class="muted small" id="dcm-name" style="margin:2px 0 14px"></div>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span class="muted small">Kolik DC uplatnit</span><span class="muted small">max. <b id="dcm-cap"></b> DC</span></div>
+    <div style="display:flex;gap:10px;align-items:center;margin:8px 0 6px"><input type="range" id="dcm-r" min="0" max="0" step="1" value="0" style="flex:1;accent-color:var(--accent,#4fd1ff)"><input type="number" id="dcm-n" min="0" step="1" value="0" inputmode="numeric" style="width:110px;padding:8px 10px;text-align:right"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px"><button type="button" class="btn sec sm" data-pct="0">0</button><button type="button" class="btn sec sm" data-pct="25">25 %</button><button type="button" class="btn sec sm" data-pct="50">50 %</button><button type="button" class="btn sec sm" data-pct="75">75 %</button><button type="button" class="btn sec sm" data-pct="100">Max</button></div>
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;gap:6px;font-size:14px">
+      <div style="display:flex;justify-content:space-between"><span class="muted">Původní cena bez DPH</span><span id="dcm-p0"></span></div>
+      <div style="display:flex;justify-content:space-between"><span class="muted">Sleva z DC</span><b id="dcm-sv" style="color:var(--ok)"></b></div>
+      <div style="display:flex;justify-content:space-between;font-size:17px"><b>Cena po slevě bez DPH</b><b id="dcm-p1"></b></div>
+      <div style="display:flex;justify-content:space-between"><span class="muted">s DPH 21 %</span><span id="dcm-p2"></span></div>
+      <div style="display:flex;justify-content:space-between"><span class="muted">Zbude ti DC</span><span id="dcm-left"></span></div>
+      <div class="muted small" id="dcm-min"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button type="button" id="dcm-cancel" class="btn sec">Zrušit</button><button type="button" id="dcm-ok" class="btn">Použít</button></div>
+  </div></div>
   <div class="card" style="margin:0 0 14px;display:flex;flex-wrap:wrap;gap:18px;align-items:center;justify-content:space-between">
     <div><div class="small muted">Dostupné Discount Credit</div><div style="font-size:28px;font-weight:800;letter-spacing:-.02em"><span id="dc-left">${fmt(bal)}</span> <span style="font-size:18px">DC</span></div></div>
     <div class="small muted" style="max-width:520px">DC můžeš použít jako slevu na prádlomat. Klikni na <b>Uplatnit DC</b>, zadej kolik chceš uplatnit — cena se hned přepočítá. Tlačítkem <b>Koupit</b> odešleš objednávku, kterou potvrdíme.</div>
@@ -682,7 +698,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '' } = {}) {
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximální sleva z DC:</span> ${p.dc_use_pct == null && minB == null ? '<span class="muted">zatím nenastaveno</span>' : room > 0 ? `<b style="color:var(--ok)">${esc(Math.round(room).toLocaleString('cs-CZ'))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
       ${room > 0 && net != null ? `<div class="small" style="margin-top:4px"><span class="muted">Cena po odečtení slevy:</span> <b>${money(Math.round(Number(net) - room), sym)}</b> <span class="muted">bez DPH · ${money(Math.round((Number(net) - room) * 1.21), sym)} s DPH</span></div>` : ''}
       ${net != null ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tento prádlomat nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="${p.id}" data-name="${esc(p.name_cs)}">Koupit</button></div>` : ''}
-      ${net != null && bal > 0 && room > 0 ? `<div class="dc-panel" style="display:none;margin-top:12px"><div style="display:flex;gap:8px;align-items:center"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
+      ${net != null && bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div>
       ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}</div>` : ''}
     </div>`; }).join('')}</div>
@@ -706,14 +722,36 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '' } = {}) {
       });
       document.getElementById('dc-left').textContent=fmt(total-u);
     }
+    var M=document.getElementById('dcm'),mr=document.getElementById('dcm-r'),mn=document.getElementById('dcm-n'),cur=null,curBtn=null,curCap=0;
+    function $(id){return document.getElementById(id);}
+    function mupd(){
+      var v=Math.max(0,Math.min(curCap,parseInt(mn.value,10)||0)),price=parseFloat(cur.getAttribute('data-price'))||0;
+      $('dcm-p0').textContent=fmt(price)+' '+sym;$('dcm-sv').textContent='− '+fmt(v)+' '+sym;$('dcm-p1').textContent=fmt(price-v)+' '+sym;$('dcm-p2').textContent=fmt((price-v)*1.21)+' '+sym;$('dcm-left').textContent=fmt(total-used(cur)-v)+' DC';
+    }
+    function mset(v){v=Math.max(0,Math.min(curCap,Math.round(v)||0));mr.value=v;mn.value=v;mupd();}
+    function openDc(c,btn){
+      cur=c;curBtn=btn;var price=parseFloat(c.getAttribute('data-price'))||0,room=parseFloat(c.getAttribute('data-room'));if(isNaN(room))room=price;
+      curCap=Math.max(0,Math.min(room,total-used(c)));mr.max=curCap;mn.max=curCap;
+      $('dcm-name').textContent=c.querySelector('b').textContent;$('dcm-cap').textContent=fmt(curCap);
+      var minN=price-room;$('dcm-min').textContent=minN>0?'Nejnižší možná cena: '+fmt(minN)+' '+sym+' bez DPH':'';
+      mset(parseInt(c.querySelector('.dc-in').value,10)||0);M.style.display='flex';mn.focus();mn.select();
+    }
+    function closeDc(){M.style.display='none';cur=null;}
+    mr.addEventListener('input',function(){mset(parseInt(mr.value,10));});
+    mn.addEventListener('input',function(){var v=parseInt(mn.value,10)||0;if(v>curCap){v=curCap;mn.value=v;}mr.value=v;mupd();});
+    [].forEach.call(M.querySelectorAll('[data-pct]'),function(b){b.addEventListener('click',function(){mset(curCap*parseInt(b.getAttribute('data-pct'),10)/100);});});
+    $('dcm-x').addEventListener('click',closeDc);$('dcm-cancel').addEventListener('click',closeDc);
+    M.addEventListener('click',function(e){if(e.target===M)closeDc();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'&&cur)closeDc();if(e.key==='Enter'&&cur&&e.target===mn)$('dcm-ok').click();});
+    $('dcm-ok').addEventListener('click',function(){var v=parseInt(mn.value,10)||0;cur.querySelector('.dc-in').value=v;recalc();curBtn.textContent=v>0?'Změnit DC':'Uplatnit DC';closeDc();});
     cards.forEach(function(c){
       var tg=c.querySelector('.dc-toggle'), pn=c.querySelector('.dc-panel');
-      if(tg&&pn&&!tg.disabled)tg.addEventListener('click',function(){var open=pn.style.display==='none';pn.style.display=open?'block':'none';tg.textContent=open?'Skrýt DC':'Uplatnit DC';if(!open){var inp=pn.querySelector('.dc-in');inp.value=0;recalc();}});
+      if(tg&&pn&&!tg.disabled)tg.addEventListener('click',function(){openDc(c,tg);});
       var buy=c.querySelector('.dc-buy');
       if(buy)buy.addEventListener('click',function(){
         var inp=c.querySelector('.dc-in'), val=(inp&&c.querySelector('.dc-panel').style.display!=='none')?Math.max(0,parseInt(inp.value,10)||0):0;
         var price=parseFloat(c.getAttribute('data-price'))||0;
-        var txt='Objednat '+buy.getAttribute('data-name')+'?\n\nCena bez DPH: '+fmt(price-val)+' '+sym+(val>0?'\nUplatněno DC: '+fmt(val):'')+'\n\nObjednávku potvrdíme.';
+        var txt='Objednat '+buy.getAttribute('data-name')+'?\\n\\nCena bez DPH: '+fmt(price-val)+' '+sym+(val>0?'\\nUplatněno DC: '+fmt(val):'')+'\\n\\nObjednávku potvrdíme.';
         if(!confirm(txt))return;
         var f=document.getElementById('orderf');f.item.value=buy.getAttribute('data-item');f.dc.value=val;f.submit();
       });
