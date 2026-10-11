@@ -186,7 +186,9 @@ function save(){ try{ sessionStorage.setItem('aic_hist',JSON.stringify(hist.slic
 function add(role,text,cls){ var d=document.createElement('div'); d.className='aic-m '+(role==='user'?'u':'a')+(cls?' '+cls:''); d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 function draw(){ log.innerHTML=''; if(cfg&&cfg.greeting) add('assistant',cfg.greeting); hist.forEach(function(m){ add(m.role,m.content); }); }
 fetch('/api/ai-chat/config',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(c){
-  if(!c||!c.enabled) return; cfg=c; document.getElementById('aic-name').textContent=c.name||'Asistent'; btn.style.display='inline-flex'; draw();
+  if(!c||(!c.enabled&&!c.reason)) return; cfg=c; document.getElementById('aic-name').textContent=c.name||'Asistent'; btn.style.display='inline-flex';
+  if(!c.enabled){ btn.style.opacity='.6'; inp.disabled=true; send.disabled=true; inp.placeholder='Chat je vypnutý'; log.innerHTML=''; var m=add('assistant','⚠️ '+c.reason+' (Tuto zprávu vidí jen správce.)'); var l=document.createElement('a'); l.href='/admin/ai-chat'; l.textContent='→ Otevřít nastavení AI chatu'; l.style.cssText='display:block;margin-top:8px;color:var(--accent2)'; m.appendChild(l); return; }
+  draw();
   if(sessionStorage.getItem('aic_open')==='1') open();
 }).catch(function(){});
 function open(){ panel.classList.add('open'); btn.classList.add('on'); try{ sessionStorage.setItem('aic_open','1'); }catch(e){} log.scrollTop=log.scrollHeight; setTimeout(function(){ inp.focus(); },50); }

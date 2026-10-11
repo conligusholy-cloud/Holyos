@@ -643,7 +643,11 @@ app.get('/api/ai-chat/config', wrap(async (req, res) => {
   const s = readCookie(req, USER_COOKIE);
   if (!s || s.kind !== 'user') return res.status(401).json({ enabled: false });
   const cfg = await AI.loadConfig();
-  res.set('Cache-Control', 'no-store').json({ enabled: !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY, name: cfg.name, greeting: cfg.greeting });
+  const keyOk = !!process.env.ANTHROPIC_API_KEY, enabled = !!cfg.enabled && keyOk;
+  // Správce (platné přihlášení do adminu) vidí tlačítko i když chat nejede — a v něm důvod, ať ví, co zapnout
+  const a = readCookie(req, ADMIN_COOKIE), isAdmin = !!(a && a.kind === 'admin');
+  const reason = enabled ? '' : (!cfg.enabled ? 'Chat je zatím vypnutý. Zapni ho v Admin → AI chat (políčko „Chat je zapnutý na stránkách") a ulož.' : 'Na serveru BS2 chybí proměnná ANTHROPIC_API_KEY (Railway → projekt BS2 → Variables).');
+  res.set('Cache-Control', 'no-store').json({ enabled, name: cfg.name, greeting: cfg.greeting, reason: isAdmin ? reason : '' });
 }));
 app.post('/api/ai-chat', wrap(async (req, res) => {
   const s = await aiChatUser(req, res); if (!s) return;
