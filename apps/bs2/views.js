@@ -699,9 +699,12 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}</div>` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
-  ${services.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico('sprout', 18)} Služby</h2>
-  <div class="grid" id="svc-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">${services.map(sv => {
+  ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">${list.map(sv => {
     const net = sv.net;
+    if (sv.mode === 'percent') return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
+      <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${esc(String(sv.percent).replace('.', ','))} % z obratu</div><div class="small muted">cena včetně DPH · počítá se z obratu prádlomatu · DC půjde uplatnit</div>
+      <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}" data-ask="Mám zájem o službu: ${esc(sv.name)}?">Mám zájem</button></div></div>`;
     if (net == null) return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
       <div style="margin-top:14px;font-size:20px;font-weight:800;letter-spacing:-.01em">Individuální nacenění</div><div class="small muted">Cena se vytvoří podle konkrétní situace. Po odeslání poptávky se ti ozveme s nabídkou, DC půjde uplatnit.</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Poptat nacenění</button></div></div>`;
@@ -711,7 +714,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximálně z DC:</span> ${room > 0 ? `<b style="color:var(--ok)">${esc(fmt(room))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tuto službu nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Koupit</button></div>
       ${bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric"><button type="button" class="dc-max"></button></div>
-      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}</div>` : ''}
+      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}</div>` : ''; }).join('')}
   <script>
   (function(){
     var total=${bal}, sym=${JSON.stringify(sym)};
@@ -732,7 +735,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       document.getElementById('dc-left').textContent=fmt(total-u);
     }
     [].forEach.call(document.querySelectorAll('.svc-quote'),function(b){b.addEventListener('click',function(){
-      if(!confirm('Poptat nacenění: '+b.getAttribute('data-name')+'?\\n\\nOzveme se s individuální nabídkou.'))return;
+      if(!confirm((b.getAttribute('data-ask')||('Poptat nacenění: '+b.getAttribute('data-name')+'?'))+'\\n\\nOzveme se s individuální nabídkou.'))return;
       var f=document.getElementById('orderf');f.item.value=b.getAttribute('data-item');f.dc.value=0;f.submit();});});
     var M=document.getElementById('dcm'),mr=document.getElementById('dcm-r'),mn=document.getElementById('dcm-n'),cur=null,curBtn=null,curCap=0;
     function $(id){return document.getElementById(id);}
@@ -1157,10 +1160,10 @@ function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', count
     ${rows.map(o => `<tr><td data-l="Datum" class="small muted">${fmtDT(o.created_at)}</td>
       <td data-l="Uživatel"><a href="/admin/supporters/${o.supporter_id}"><b>${esc([o.last_name, o.first_name].filter(Boolean).join(' ') || o.email)}</b></a><div class="small muted">${esc(o.nick || '')}</div></td>
       <td data-l="Prádlomat"><b>${esc(o.product_name)}</b>${o.kind === 'service' ? ' <span class="small muted">služba</span>' : ''}</td>
-      <td data-l="Cena bez DPH">${o.kind === 'service' && !(Number(o.price_net) > 0) ? '<span class="muted">čeká na nacenění</span>' : `${money(o.final_net, sy(o))} <span class="small muted">(ceník ${money(o.price_net, sy(o))})</span>`}</td>
+      <td data-l="Cena bez DPH">${o.kind === 'service' && !(Number(o.price_net) > 0) ? `<span class="muted">${o.no_price ? '% z obratu' : 'čeká na nacenění'}</span>` : `${money(o.final_net, sy(o))} <span class="small muted">(ceník ${money(o.price_net, sy(o))})</span>`}</td>
       <td data-l="Uplatněno DC">${Number(o.dc_used) > 0 ? esc(Number(o.dc_used).toLocaleString('cs-CZ')) + ' DC' : '<span class="muted">—</span>'}</td>
       <td data-l="Stav">${st(o)}</td>
-      <td class="actions">${o.status === 'new' ? `<div class="row"><form method="post" action="/admin/orders/${o.id}/confirm" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${o.kind === 'service' && !(Number(o.price_net) > 0) ? `<input name="price" inputmode="decimal" placeholder="Cena bez DPH" required style="width:120px;padding:6px 8px;text-align:right"><input name="dc" inputmode="decimal" placeholder="DC" title="Kolik DC uplatnit (nepovinné)" style="width:80px;padding:6px 8px;text-align:right">` : ''}<button class="btn sm" type="submit">Potvrdit</button></form><form method="post" action="/admin/orders/${o.id}/cancel" onsubmit="return confirm('Zrušit objednávku a vrátit DC?')" style="margin:0"><button class="btn danger sm" type="submit">Zrušit</button></form></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
+      <td class="actions">${o.status === 'new' ? `<div class="row"><form method="post" action="/admin/orders/${o.id}/confirm" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${o.kind === 'service' && !(Number(o.price_net) > 0) ? `${o.no_price ? '' : '<input name="price" inputmode="decimal" placeholder="Cena bez DPH" required style="width:120px;padding:6px 8px;text-align:right">'}<input name="dc" inputmode="decimal" placeholder="DC" title="Kolik DC uplatnit (nepovinné)" style="width:80px;padding:6px 8px;text-align:right">` : ''}<button class="btn sm" type="submit">Potvrdit</button></form><form method="post" action="/admin/orders/${o.id}/cancel" onsubmit="return confirm('Zrušit objednávku a vrátit DC?')" style="margin:0"><button class="btn danger sm" type="submit">Zrušit</button></form></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
 }
 // URL obrázku produktu (BS2 proxy); null = bez obrázku
 const productImg = (p) => p && p.image_ext ? '/img/product/' + p.id + '?v=' + encodeURIComponent(p.image_updated_at ? new Date(p.image_updated_at).getTime() : '') : null;
@@ -1196,8 +1199,8 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
   <form method="post" action="/admin/services/save"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))">${services.map(sv => `<div class="card" style="margin:0">
     <label style="margin-top:0">Název</label><input name="name_${sv.key}" value="${esc(sv.name)}">
     <label>Popis (zobrazí se uživateli)</label><textarea name="desc_${sv.key}" rows="3" style="width:100%">${esc(sv.desc || '')}</textarea>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px"><div><label>Cena bez DPH (Kč)</label><input name="price_${sv.key}" inputmode="decimal" value="${sv.price_czk != null ? Number(sv.price_czk) : ''}" placeholder="individuálně" style="width:140px;text-align:right"></div>
-    <div><label>Může být využito DC (%)</label><input name="dc_${sv.key}" inputmode="decimal" value="${sv.dc_use_pct != null ? Number(sv.dc_use_pct) : 100}" style="width:110px;text-align:right"></div></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:6px">${sv.mode === 'percent' ? `<div><label>Cena: % z obratu (s DPH)</label><input name="percent_${sv.key}" inputmode="decimal" value="${sv.percent != null ? Number(sv.percent) : 13}" style="width:140px;text-align:right"></div>` : `<div><label>Cena bez DPH (Kč)</label><input name="price_${sv.key}" inputmode="decimal" value="${sv.price_czk != null ? Number(sv.price_czk) : ''}" placeholder="individuálně" style="width:140px;text-align:right"></div>
+    <div><label>Může být využito DC (%)</label><input name="dc_${sv.key}" inputmode="decimal" value="${sv.dc_use_pct != null ? Number(sv.dc_use_pct) : 100}" style="width:110px;text-align:right"></div>`}</div>
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" name="offered_${sv.key}" value="1" ${sv.offered ? 'checked' : ''} style="width:auto"> Nabízet uživatelům</label></div>`).join('')}</div>
   <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn sm" type="submit">Uložit služby</button></div></form>`, holyosUrl);
 }

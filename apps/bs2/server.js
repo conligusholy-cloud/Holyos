@@ -266,7 +266,9 @@ app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterComp
 // Služby (Najít místo, Přípojky): nastavení v app_settings 'services' (admin → Produkty)
 const SERVICE_DEFAULTS = [
   { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
-  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění.', price_czk: null, quote: true, dc_use_pct: 100, offered: true }
+  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění.', price_czk: null, quote: true, dc_use_pct: 100, offered: true },
+  { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Záruka na prádlomat prodloužená na 5 let.', price_czk: 50000, quote: false, dc_use_pct: 100, offered: true },
+  { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH).', price_czk: null, quote: false, dc_use_pct: 0, offered: true }
 ];
 async function loadServices() {
   let saved = []; try { const r = await q("SELECT value FROM app_settings WHERE key='services'"); saved = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { saved = []; }
@@ -279,7 +281,7 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   const sum = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0);
   const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK', rateV = cur === 'EUR' ? await eurRate() : 1;
-  const services = (await loadServices()).filter(x => x.offered).map(x => ({ ...x, net: (x.quote || x.price_czk == null) ? null : Math.round(Number(x.price_czk) / rateV * 100) / 100 }));
+  const services = (await loadServices()).filter(x => x.offered).map(x => ({ ...x, net: (x.mode === 'percent' || x.quote || x.price_czk == null) ? null : Math.round(Number(x.price_czk) / rateV * 100) / 100 }));
   res.send(V.supporterProducts(req.user, offers, { balance, msg: req.query.msg || '', services }));
 }));
 // Koupit (+ případně uplatnit DC): vše se přepočítá na serveru, DC se hned odečtou, objednávku potvrdí admin
@@ -290,10 +292,10 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
     const sv = (await loadServices()).find(x => 'svc:' + x.key === req.body.item && x.offered);
     if (!sv) return back('Tuto službu teď nelze objednat.');
     const rateS = cur === 'EUR' ? await eurRate() : 1;
-    if (sv.quote || sv.price_czk == null) {
+    if (sv.mode === 'percent' || sv.quote || sv.price_czk == null) {
       const ex = await q("SELECT id FROM orders WHERE supporter_id=$1 AND service_key=$2 AND status='new' LIMIT 1", [req.user.id, sv.key]);
       if (ex.rows[0]) return back('Poptávka „' + sv.name + '" už byla odeslána, ozveme se.');
-      const ins0 = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,0,0,0,'service',$4) RETURNING id", [req.user.id, sv.name + ' — poptávka nacenění', cur, sv.key]);
+      const ins0 = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,0,0,0,'service',$4) RETURNING id", [req.user.id, sv.name + (sv.mode === 'percent' ? ' — zájem (' + Number(sv.percent) + ' % z obratu s DPH)' : ' — poptávka nacenění'), cur, sv.key]);
       await log({ name: req.user.nick }, 'order_new', { id: ins0.rows[0].id, service: sv.key, quote: true });
       return res.redirect('/moje-pradlomaty?ordered=1');
     }
@@ -490,6 +492,7 @@ app.post('/admin/services/save', requireAdmin, wrap(async (req, res) => {
     const t = String(b['price_' + d.key] == null ? '' : b['price_' + d.key]).replace(/\s/g, '').replace(',', '.'), n = Number(t);
     const quote = b['quote_' + d.key] === '1' || t === '' || !isFinite(n) || n <= 0;
     const dp = Number(String(b['dc_' + d.key] || '').replace(',', '.'));
+    if (d.mode === 'percent') { const pc = Number(String(b['percent_' + d.key] || '').replace(',', '.')); out.push({ key: d.key, name: String(b['name_' + d.key] || d.name).trim().slice(0, 80) || d.name, desc: String(b['desc_' + d.key] || '').trim().slice(0, 600), percent: isFinite(pc) && pc > 0 ? Math.min(100, pc) : d.percent, offered: b['offered_' + d.key] === '1' }); continue; }
     out.push({ key: d.key, name: String(b['name_' + d.key] || d.name).trim().slice(0, 80) || d.name, desc: String(b['desc_' + d.key] || '').trim().slice(0, 600), price_czk: quote ? null : n, quote, dc_use_pct: isFinite(dp) ? Math.min(100, Math.max(0, dp)) : 100, offered: b['offered_' + d.key] === '1' });
   }
   await q("INSERT INTO app_settings (key, value) VALUES ('services', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [JSON.stringify(out)]);
@@ -498,7 +501,9 @@ app.post('/admin/services/save', requireAdmin, wrap(async (req, res) => {
 }));
 app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {
   const status = ['new', 'confirmed', 'cancelled'].includes(req.query.status) ? req.query.status : '';
+  const pctKeys = new Set((await loadServices()).filter(x => x.mode === 'percent').map(x => x.key));
   const rows = (await q("SELECT o.*, s.first_name, s.last_name, s.email, s.nick FROM orders o JOIN supporters s ON s.id=o.supporter_id " + (status ? 'WHERE o.status=$1 ' : '') + "ORDER BY (o.status='new') DESC, o.created_at DESC LIMIT 500", status ? [status] : [])).rows;
+  rows.forEach(o => { o.no_price = pctKeys.has(o.service_key); });
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM orders GROUP BY status')).rows.forEach(r => { counts[r.status] = r.c; });
   res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, status, counts }));
 }));
@@ -510,7 +515,18 @@ app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) 
     // Služba: žádný stroj ani provize. U poptávky (cena 0) admin zadá cenu a případné DC.
     const num = (x) => { const t = String(x == null ? '' : x).replace(/\s/g, '').replace(',', '.'); const n = Number(t); return t !== '' && isFinite(n) && n >= 0 ? n : null; };
     let price = Number(cur0.price_net), dc = Number(cur0.dc_used);
-    if (!(price > 0)) {
+    const svc = (await loadServices()).find(x => x.key === cur0.service_key) || {};
+    if (svc.mode === 'percent') {
+      // cena = % z obratu (nevyčísluje se); admin může uplatnit DC, která uživatel zaplatil kreditem
+      const rate = cur0.currency === 'EUR' ? await eurRate() : 1;
+      const bal = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [cur0.supporter_id])).rows[0] || {}).b || 0) / rate;
+      dc = Math.min(Math.floor(num(req.body.dc) || 0), Math.floor(bal));
+      if (dc > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [cur0.supporter_id, -Math.round(dc * rate * 100) / 100, 'Uplatnění DC: ' + cur0.product_name + ' (objednávka #' + oid + ')', oid]);
+      await q("UPDATE orders SET status='confirmed', decided_at=now(), dc_used=$2 WHERE id=$1", [oid, dc]);
+      await log(req.admin, 'order_confirm', { id: oid, service: cur0.service_key, dc });
+      return res.redirect('/admin/orders?msg=' + encodeURIComponent('Služba #' + oid + ' potvrzena.'));
+    }
+    else if (!(price > 0)) {
       const pr = num(req.body.price);
       if (!(pr > 0)) return res.redirect('/admin/orders?msg=' + encodeURIComponent('Zadej cenu bez DPH pro nacenění (číslo větší než 0).'));
       price = pr;
