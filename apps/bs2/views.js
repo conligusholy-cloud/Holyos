@@ -775,6 +775,7 @@ const ADMIN_NAV = [
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
+  { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -878,6 +879,82 @@ const leftOver = (p, cur, sym) => {
 const maxDisc = (price, min, sym) => { if (price == null || min == null || !Number(price)) return ''; const diff = Number(price) - Number(min); const pct = Math.round(diff / Number(price) * 1000) / 10; return `<div style="${diff < 0 ? 'color:var(--err)' : ''}"><b>${esc(String(pct).replace('.', ','))} %</b> <span class="small muted">(${money(diff, sym)})</span></div>`; };
 // Kolik DC lze využít: % z ceny bez DPH, nejvýš však po minimální cenu
 const dcUse = (p) => { if (p.dc_use_pct == null) return '<div class="small muted" style="margin-top:4px">bez omezení (jen min. cena)</div>'; const pct = Number(p.dc_use_pct); const f = (price, min, sym) => { if (price == null) return ''; let dc = Number(price) * pct / 100; if (min != null) dc = Math.min(dc, Math.max(0, Number(price) - Number(min))); return `<div class="small muted">= ${money(Math.round(dc), 'DC')} <span style="opacity:.7">(${sym})</span></div>`; }; return '<div style="margin-top:4px">' + f(p.price_czk, p.min_price_czk, 'Kč') + f(p.price_eur, p.min_price_eur, '€') + '</div>'; };
+function adminAiChat({ admin, cfg, models, tones, msg = '', holyosUrl, keyOk = false, preview = '' }) {
+  const o = (v, cur, label) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
+  const saveBtn = '<div style="text-align:right;margin-top:10px"><button class="btn" type="submit" form="aif">Uložit</button></div>';
+  const lbl = (t, hint) => `<label class="small" style="display:block;margin:12px 0 5px;font-weight:600">${t}${hint ? ` <span class="muted" style="font-weight:400">— ${hint}</span>` : ''}</label>`;
+  return adminLayout('AI chat', 'ai', admin, `
+  <h1 style="margin:0 0 6px">AI chat</h1>
+  <p class="muted" style="margin-top:0">Kompletní nastavení AI asistenta, který bude na stránkách odpovídat uživatelům. Čím přesnější instrukce a znalosti, tím přesnější odpovědi. Změny se projeví hned po uložení.</p>
+  ${msg ? `<div class="card" style="border-color:rgba(60,220,160,.4)">${esc(msg)}</div>` : ''}
+  <form id="aif" method="post" action="/admin/ai-chat"></form>
+
+  <div class="card"><h2 style="margin-top:0">Základ</h2>
+    <label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" name="enabled" value="1" form="aif" style="width:auto"${cfg.enabled ? ' checked' : ''}> <b>Chat je zapnutý na stránkách</b> <span class="muted small">(vypnutý se uživatelům nezobrazí)</span></label>
+    ${lbl('Jméno asistenta')}<input name="name" form="aif" value="${esc(cfg.name)}" maxlength="80">
+    ${lbl('Úvodní zpráva', 'první věta, kterou uživatel uvidí')}<textarea name="greeting" form="aif" rows="2" maxlength="600">${esc(cfg.greeting)}</textarea>
+    <div class="grid" style="margin-top:4px"><div>${lbl('Styl odpovědí')}<select name="tone" form="aif">${Object.keys(tones).map(k => o(k, cfg.tone, { friendly: 'Přátelský a věcný', expert: 'Odborný a přesný', concise: 'Maximálně stručný', formal: 'Formální (vykání)' }[k])).join('')}</select></div>
+    <div>${lbl('Jazyk')}<label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" name="reply_in_user_language" value="1" form="aif" style="width:auto"${cfg.reply_in_user_language ? ' checked' : ''}> Odpovídat v jazyce dotazu</label></div></div>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Instrukce</h2>
+    ${lbl('Role a úkol asistenta', 'kdo je, komu pomáhá, co má dělat')}<textarea name="instructions" form="aif" rows="6" maxlength="8000">${esc(cfg.instructions)}</textarea>
+    ${lbl('Pravidla a zákazy', 'co nesmí říkat nebo slibovat — závazné')}<textarea name="rules" form="aif" rows="5" maxlength="6000">${esc(cfg.rules)}</textarea>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Znalosti</h2>
+    <p class="muted small" style="margin-top:0">Jediný zdroj faktů pro asistenta. Vlož pravidla programu, Discount Credit, provize, postupy, často kladené otázky… Co tu není, to asistent neřekne.</p>
+    <textarea name="knowledge" form="aif" rows="14" maxlength="60000" placeholder="Např.:&#10;Discount Credit (DC): 1 DC = 1 Kč slevy…&#10;Provize z doporučení: …&#10;Jak funguje Moje svoboda: …">${esc(cfg.knowledge)}</textarea>
+    <div class="muted small" id="kcnt" style="margin-top:4px"></div>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer"><input type="checkbox" name="include_products" value="1" form="aif" style="width:auto"${cfg.include_products ? ' checked' : ''}> Automaticky vložit aktuální nabídku prádlomatů a ceny (z Produktů)</label>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Když asistent neví</h2>
+    ${lbl('Co řekne', 'použije se při nezodpovězené otázce místo odhadu')}<textarea name="unknown_reply" form="aif" rows="2" maxlength="800">${esc(cfg.unknown_reply)}</textarea>
+    ${lbl('Kontakt', 'e-mail / telefon, na který uživatele odkáže')}<textarea name="contact" form="aif" rows="2" maxlength="800">${esc(cfg.contact)}</textarea>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Model a přesnost</h2>
+    <div class="grid"><div>${lbl('Model')}<select name="model" form="aif">${models.map(m => o(m[0], cfg.model, m[1])).join('')}</select></div>
+    <div>${lbl('Teplota', '0 = nejpřesnější, 1 = nejkreativnější')}<input name="temperature" form="aif" type="number" step="0.1" min="0" max="1" value="${esc(cfg.temperature)}"></div>
+    <div>${lbl('Max. délka odpovědi', 'tokeny, 100–1500')}<input name="max_tokens" form="aif" type="number" step="50" min="100" max="1500" value="${esc(cfg.max_tokens)}"></div></div>
+    <p class="muted small">Pro co nejpřesnější odpovědi doporučuji teplotu 0–0,3 a model Sonnet. Haiku je rychlejší a levnější.</p>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Vyzkoušet chat <span class="badge ${keyOk ? 'active' : 'blocked'}" style="margin-left:6px;font-size:11px">${keyOk ? 'ANTHROPIC_API_KEY nastaven' : 'chybí ANTHROPIC_API_KEY'}</span></h2>
+    <p class="muted small" style="margin-top:0">Test používá <b>uložené</b> nastavení — nejdřív ulož, pak zkoušej.</p>
+    <div id="aichat-log" style="min-height:120px;max-height:380px;overflow:auto;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(4,8,16,.5)"><div class="muted small">Napiš dotaz a pošli…</div></div>
+    <div class="row" style="gap:8px;margin-top:10px"><input id="aichat-in" placeholder="Zeptej se asistenta…" style="flex:1"><button class="btn" type="button" id="aichat-send">Poslat</button><button class="btn sec" type="button" id="aichat-reset">Nový rozhovor</button></div>
+  </div>
+
+  <details class="card"><summary style="cursor:pointer;font-weight:700">Zobrazit celé systémové instrukce (co AI skutečně dostane)</summary>
+    <pre style="white-space:pre-wrap;word-break:break-word;font-size:12px;margin:12px 0 0;max-height:420px;overflow:auto">${esc(preview)}</pre></details>
+
+  <script>
+  (function(){
+    var k=document.querySelector('textarea[name=knowledge]'), c=document.getElementById('kcnt');
+    function upd(){ if(c&&k) c.textContent=k.value.length.toLocaleString('cs-CZ')+' / 60 000 znaků'; }
+    if(k){ k.addEventListener('input',upd); upd(); }
+    var log=document.getElementById('aichat-log'), inp=document.getElementById('aichat-in'), btn=document.getElementById('aichat-send'), hist=[];
+    function add(role,text,err){ if(!hist.length&&log.firstChild&&log.firstChild.className==='muted small') log.innerHTML='';
+      var d=document.createElement('div'); d.style.cssText='margin:6px 0;padding:8px 11px;border-radius:10px;max-width:88%;white-space:pre-wrap;'+(role==='user'?'margin-left:auto;background:rgba(79,209,255,.15)':'background:rgba(255,255,255,.06)')+(err?';color:#ff8a8a':'');
+      d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+    async function send(){
+      var t=inp.value.trim(); if(!t||btn.disabled) return; inp.value=''; add('user',t); hist.push({role:'user',content:t}); btn.disabled=true;
+      var wait=add('assistant','…');
+      try{
+        var r=await fetch('/admin/ai-chat/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:hist})});
+        var j=await r.json();
+        if(j.error){ wait.textContent=j.error; wait.style.color='#ff8a8a'; hist.pop(); }
+        else { wait.textContent=j.reply||'(prázdná odpověď)'; hist.push({role:'assistant',content:j.reply||''}); }
+      }catch(e){ wait.textContent='Chyba spojení: '+e.message; wait.style.color='#ff8a8a'; hist.pop(); }
+      btn.disabled=false; inp.focus();
+    }
+    btn.addEventListener('click',send); inp.addEventListener('keydown',function(e){ if(e.key==='Enter') send(); });
+    document.getElementById('aichat-reset').addEventListener('click',function(){ hist=[]; log.innerHTML='<div class="muted small">Napiš dotaz a pošli…</div>'; });
+  })();
+  </script>`, holyosUrl);
+}
 function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {} }) {
   const sy = (o) => (o.currency === 'EUR' ? '€' : 'Kč');
   const st = (o) => `<span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span>`;
@@ -1054,4 +1131,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, adminSupporterDetail, adminImport, errorPage };

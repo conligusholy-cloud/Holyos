@@ -16,6 +16,7 @@ const multer = require('multer');
 const { q, migrate } = require('./db');
 const V = require('./views');
 const { importSupporters, prepareImport, writeImport } = require('./import');
+const AI = require('./ai');
 
 const PORT = process.env.PORT || 3100;
 const SSO_SECRET = process.env.BS2_SSO_SECRET;
@@ -581,6 +582,36 @@ app.post('/admin/supporters/:id(\\d+)/delete', requireAdmin, wrap(async (req, re
 }));
 // Import běží na pozadí (28k řádků by přes proxy vypršelo) — úloha v paměti + průběh přes /admin/import/status/:id
 const importJobs = new Map();
+// ── AI chat (admin nastavení + zkušební chat) ─────────────────────────────
+async function aiProductsText() {
+  try {
+    const out = await loadProducts(); const set = await offeredSet();
+    return (out.items || []).filter(p => set.has(p.id)).map(p => {
+      const parts = [];
+      if (p.price_czk != null) parts.push(Number(p.price_czk).toLocaleString('cs-CZ') + ' Kč');
+      if (p.price_eur != null) parts.push(Number(p.price_eur).toLocaleString('cs-CZ') + ' €');
+      return '- ' + p.name + (parts.length ? ': ' + parts.join(' / ') : '');
+    }).join('\n');
+  } catch (e) { return ''; }
+}
+app.get('/admin/ai-chat', requireAdmin, wrap(async (req, res) => {
+  const cfg = await AI.loadConfig();
+  res.send(V.adminAiChat({ admin: req.admin, cfg, models: AI.MODELS, tones: AI.TONES, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, keyOk: !!process.env.ANTHROPIC_API_KEY, preview: AI.buildSystem(cfg, await aiProductsText()) }));
+}));
+app.post('/admin/ai-chat', requireAdmin, wrap(async (req, res) => {
+  await AI.saveConfig(AI.sanitize(req.body || {}));
+  await log(req.admin, 'ai_chat_save', null);
+  res.redirect('/admin/ai-chat?msg=' + encodeURIComponent('Nastavení AI chatu uloženo.'));
+}));
+app.post('/admin/ai-chat/test', requireAdmin, wrap(async (req, res) => {
+  const cfg = await AI.loadConfig();
+  const msgs = (Array.isArray(req.body && req.body.messages) ? req.body.messages : []).slice(-20)
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+    .map(m => ({ role: m.role, content: String(m.content).slice(0, 2000) }));
+  if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return res.json({ error: 'Prázdný dotaz.' });
+  try { res.json(await AI.chat(cfg, AI.buildSystem(cfg, await aiProductsText()), msgs)); }
+  catch (e) { res.json({ error: 'Chyba volání AI: ' + e.message }); }
+}));
 app.get('/admin/import', requireAdmin, (req, res) => {
   const job = req.query.job ? importJobs.get(String(req.query.job)) : null;
   if (job && job.done) return res.send(V.adminImport({ admin: req.admin, result: job.result, holyosUrl: HOLYOS_URL }));
