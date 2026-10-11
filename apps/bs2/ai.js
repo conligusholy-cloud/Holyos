@@ -145,7 +145,8 @@ function buildSystem(cfg, productsText) {
   parts.push('KDYŽ NEVÍŠ: Neodhaduj. Řekni: „' + (cfg.unknown_reply || DEFAULTS.unknown_reply) + '"' +
     (cfg.contact ? '\nKontakt, na který uživatele odkážeš:\n' + cfg.contact : ''));
   parts.push('=== ZÁVAZNÉ PŘIPOMENUTÍ === Odpovídej VÝHRADNĚ podle instrukcí, pravidel, znalostí, příkladů a nabídky výše. ' +
-    'Nic si nevymýšlej (ceny, procenta, termíny, podmínky). Při nejistotě použij větu pro nezodpovězené otázky. Odpověz co nejpřesněji a krátce.');
+    'Nic si nevymýšlej (ceny, procenta, termíny, podmínky). Při nejistotě použij větu pro nezodpovězené otázky. Odpověz co nejpřesněji a krátce. ' +
+    'FORMÁT: Piš prostý text bez markdownu — nikdy nepoužívej hvězdičky (*, **), podtržítka, křížky (#) ani zpětné apostrofy. Výčet piš jako řádky začínající číslem a tečkou nebo pomlčkou.');
   return parts.join('\n\n');
 }
 

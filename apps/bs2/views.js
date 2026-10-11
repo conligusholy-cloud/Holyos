@@ -179,7 +179,8 @@ const AICHAT_JS = `(function(){
 var log=document.getElementById('aic-log'),inp=document.getElementById('aic-in'),send=document.getElementById('aic-send'),cfg=null,hist=[];
 try{ hist=JSON.parse(sessionStorage.getItem('aic_hist')||'[]'); }catch(e){ hist=[]; }
 function save(){ try{ sessionStorage.setItem('aic_hist',JSON.stringify(hist.slice(-20))); }catch(e){} }
-function add(role,text,cls){ var d=document.createElement('div'); d.className='aic-m '+(role==='user'?'u':'a')+(cls?' '+cls:''); d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
+function rich(el,text){ el.textContent=String(text).split('*').join('').split(String.fromCharCode(96)).join('').split('### ').join('').split('## ').join(''); }
+function add(role,text,cls){ var d=document.createElement('div'); d.className='aic-m '+(role==='user'?'u':'a')+(cls?' '+cls:''); rich(d,text); log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 function draw(){ log.innerHTML=''; if(cfg&&cfg.greeting) add('assistant',cfg.greeting); hist.forEach(function(m){ add(m.role,m.content); }); }
 function off(msg,admin){ inp.disabled=true; send.disabled=true; inp.placeholder='Chat je vypnutý'; log.innerHTML=''; var m=add('assistant',msg); if(admin){ var l=document.createElement('a'); l.href='/admin/ai-chat'; l.textContent='→ Otevřít nastavení AI chatu'; l.style.cssText='display:block;margin-top:8px;color:var(--accent2)'; m.appendChild(l); } }
 fetch('/api/ai-chat/config',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(c){
@@ -196,7 +197,7 @@ async function go(){
     var r=await fetch('/api/ai-chat',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:hist.slice(-12)})});
     var j=await r.json().catch(function(){ return {}; });
     if(!r.ok||j.error){ w.textContent=j.error||'Chat je teď nedostupný, zkus to prosím za chvíli.'; w.classList.add('e'); hist.pop(); save(); }
-    else { w.textContent=j.reply||'(prázdná odpověď)'; hist.push({role:'assistant',content:j.reply||''}); save(); }
+    else { rich(w,j.reply||'(prázdná odpověď)'); hist.push({role:'assistant',content:j.reply||''}); save(); }
   }catch(e){ w.textContent='Chyba spojení, zkus to prosím znovu.'; w.classList.add('e'); hist.pop(); save(); }
   send.disabled=false; log.scrollTop=log.scrollHeight; inp.focus();
 }
