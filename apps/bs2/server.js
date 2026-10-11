@@ -17,6 +17,7 @@ const { q, migrate } = require('./db');
 const V = require('./views');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
+const BUILD = require('./build');
 
 const PORT = process.env.PORT || 3100;
 const SSO_SECRET = process.env.BS2_SSO_SECRET;
@@ -654,5 +655,5 @@ app.post('/admin/import', requireAdmin, upload.single('file'), wrap(async (req, 
 app.use((req, res) => res.status(404).send(V.errorPage('Stránka nenalezena', 'Tahle adresa neexistuje.', '/')));
 app.use((err, req, res, next) => { console.error('[bs2]', err); res.status(500).send(V.errorPage('Chyba serveru', process.env.NODE_ENV === 'production' ? 'Něco se pokazilo, zkus to znovu.' : err.message, '/')); });
 
-migrate().then(() => app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT}`)))
+migrate().then(() => BUILD.init().then(b => V.setBuild(b)).catch(e => console.warn('[bs2] verze:', e.message))).then(() => app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT}`)))
   .catch((e) => { console.error('[bs2] DB migrace selhala:', e.message); app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT} (BEZ DB — nastav DATABASE_URL)`)); });
