@@ -320,6 +320,7 @@ app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   const code = await ensureRefCode(req.user);
   res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
 }));
+app.get('/ai-chat', wrap(requireUser), (req, res) => res.send(V.aiChatPage(req.user)));
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   const { old = '', password = '', password2 = '' } = req.body;

@@ -163,38 +163,32 @@ function helpWidget(h) {
 <dialog id="helpdlg" class="helpdlg" onclick="if(event.target===this)this.close()"><div class="hd-in"><div class="hd-head"><span class="hd-q">?</span><h2>${esc(h.title)} — jak to funguje</h2><button type="button" class="hd-x" onclick="document.getElementById('helpdlg').close()" aria-label="Zavřít">✕</button></div><div class="hd-body">${h.html}</div></div></dialog>`;
 }
 
-// ── AI chat pro přihlášené uživatele (plovoucí okno vpravo dole). Zobrazí se jen když je v adminu zapnutý. ──
-const AICHAT_CSS = `.aic-btn{display:none;align-items:center;gap:7px;padding:12px 14px;border:0;border-bottom:2px solid transparent;background:none;color:var(--text2);font:600 14px/1.2 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
-.acc-link{display:inline-flex;align-items:center;gap:6px;margin-right:6px;padding:7px 11px;border-radius:999px;color:#c9d6ee;font:600 13px/1 Inter,system-ui,sans-serif;text-decoration:none;white-space:nowrap}.acc-link:hover,.acc-link.on{color:#fff;background:rgba(79,209,255,.14)}@media(max-width:760px){.acc-link{font-size:0;gap:0}}.aic-btn:hover{color:var(--text)}.aic-btn.on{color:var(--accent2);border-bottom-color:var(--accent2)}
-.aic-panel{position:fixed;right:18px;top:122px;z-index:61;width:min(400px,calc(100vw - 24px));height:min(560px,calc(100vh - 140px));display:none;flex-direction:column;background:rgba(7,12,24,.97);border:1px solid var(--border2,rgba(120,160,255,.3));border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
-.aic-panel.open{display:flex}
-.aic-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(30,134,224,.25),rgba(124,92,255,.2))}
-.aic-head b{flex:1;font-size:15px}.aic-head button{background:none;border:0;color:var(--text2);cursor:pointer;font-size:13px;padding:4px 6px}
-.aic-log{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:8px}
-.aic-m{max-width:88%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+// ── AI chat pro přihlášené uživatele: samostatná stránka /ai-chat (záložka v liště). ──
+const AICHAT_CSS = `.aic-wrap{max-width:860px;margin:18px auto 0;display:flex;flex-direction:column;height:calc(100vh - 250px);min-height:420px;background:var(--card);border:1px solid var(--border2);border-radius:20px;backdrop-filter:blur(14px);overflow:hidden}
+.aic-head{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(30,134,224,.25),rgba(124,92,255,.2))}
+.aic-head b{flex:1;font-size:17px}.aic-head button{background:none;border:1px solid var(--border2);border-radius:999px;color:var(--text2);cursor:pointer;font-size:13px;padding:6px 12px}
+.aic-log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.aic-m{max-width:80%;padding:10px 14px;border-radius:16px;font-size:15px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 .aic-m.u{align-self:flex-end;background:rgba(79,209,255,.18)}.aic-m.a{align-self:flex-start;background:rgba(255,255,255,.07)}.aic-m.e{color:#ff8a8a}
-.aic-in{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border)}
-.aic-in input{flex:1;font-size:16px;padding:10px 12px}.aic-in button{padding:0 16px;border-radius:11px;border:0;background:linear-gradient(90deg,var(--accent),var(--vio));color:#fff;font-weight:700;cursor:pointer}
+.aic-in{display:flex;gap:10px;padding:12px;border-top:1px solid var(--border)}
+.aic-in input{flex:1;font-size:16px;padding:12px 14px}.aic-in button{padding:0 22px;border-radius:12px;border:0;background:linear-gradient(90deg,var(--accent),var(--vio));color:#fff;font-weight:700;cursor:pointer}
 .aic-in button:disabled{opacity:.5}
-.aic-note{font-size:11px;color:var(--text2);text-align:center;padding:0 10px 8px}
-@media(max-width:760px){.aic-panel{right:8px;top:112px;height:calc(100vh - 124px)}.aic-btn span{display:none}}`;
+.aic-note{font-size:11px;color:var(--text2);text-align:center;padding:0 10px 10px}
+@media(max-width:760px){.aic-wrap{height:calc(100vh - 210px);border-radius:14px;margin-top:10px}.aic-m{max-width:92%}}`;
 const AICHAT_JS = `(function(){
-var btn=document.getElementById('aic-btn'),panel=document.getElementById('aic-panel'); if(!btn||!panel) return;
 var log=document.getElementById('aic-log'),inp=document.getElementById('aic-in'),send=document.getElementById('aic-send'),cfg=null,hist=[];
 try{ hist=JSON.parse(sessionStorage.getItem('aic_hist')||'[]'); }catch(e){ hist=[]; }
 function save(){ try{ sessionStorage.setItem('aic_hist',JSON.stringify(hist.slice(-20))); }catch(e){} }
 function add(role,text,cls){ var d=document.createElement('div'); d.className='aic-m '+(role==='user'?'u':'a')+(cls?' '+cls:''); d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
 function draw(){ log.innerHTML=''; if(cfg&&cfg.greeting) add('assistant',cfg.greeting); hist.forEach(function(m){ add(m.role,m.content); }); }
+function off(msg,admin){ inp.disabled=true; send.disabled=true; inp.placeholder='Chat je vypnutý'; log.innerHTML=''; var m=add('assistant',msg); if(admin){ var l=document.createElement('a'); l.href='/admin/ai-chat'; l.textContent='→ Otevřít nastavení AI chatu'; l.style.cssText='display:block;margin-top:8px;color:var(--accent2)'; m.appendChild(l); } }
 fetch('/api/ai-chat/config',{credentials:'same-origin'}).then(function(r){ return r.ok?r.json():null; }).then(function(c){
-  if(!c||(!c.enabled&&!c.reason)) return; cfg=c; document.getElementById('aic-name').textContent=c.name||'Asistent'; btn.style.display='inline-flex';
-  if(!c.enabled){ btn.style.opacity='.6'; inp.disabled=true; send.disabled=true; inp.placeholder='Chat je vypnutý'; log.innerHTML=''; var m=add('assistant','⚠️ '+c.reason+' (Tuto zprávu vidí jen správce.)'); var l=document.createElement('a'); l.href='/admin/ai-chat'; l.textContent='→ Otevřít nastavení AI chatu'; l.style.cssText='display:block;margin-top:8px;color:var(--accent2)'; m.appendChild(l); return; }
-  draw();
-  if(sessionStorage.getItem('aic_open')==='1') open();
-}).catch(function(){});
-function open(){ panel.classList.add('open'); btn.classList.add('on'); try{ sessionStorage.setItem('aic_open','1'); }catch(e){} log.scrollTop=log.scrollHeight; setTimeout(function(){ inp.focus(); },50); }
-function close(){ panel.classList.remove('open'); btn.classList.remove('on'); try{ sessionStorage.setItem('aic_open','0'); }catch(e){} }
-btn.addEventListener('click',function(){ if(panel.classList.contains('open')) close(); else open(); }); document.getElementById('aic-x').addEventListener('click',close);
-document.getElementById('aic-new').addEventListener('click',function(){ hist=[]; save(); draw(); });
+  if(!c){ off('Chat se nepodařilo načíst.'); return; }
+  cfg=c; document.getElementById('aic-name').textContent=c.name||'Asistent';
+  if(!c.enabled){ off(c.reason?('⚠️ '+c.reason+' (Tuto zprávu vidí jen správce.)'):'Chat teď není dostupný.',!!c.reason); return; }
+  draw(); inp.focus();
+}).catch(function(){ off('Chat se nepodařilo načíst.'); });
+document.getElementById('aic-new').addEventListener('click',function(){ hist=[]; save(); draw(); inp.focus(); });
 async function go(){
   var t=inp.value.trim(); if(!t||send.disabled) return; if(t.length>1500){ add('assistant','Zpráva je příliš dlouhá (max. 1 500 znaků).','e'); return; }
   inp.value=''; add('user',t); hist.push({role:'user',content:t}); save(); send.disabled=true; var w=add('assistant','…');
@@ -208,10 +202,11 @@ async function go(){
 }
 send.addEventListener('click',go); inp.addEventListener('keydown',function(e){ if(e.key==='Enter') go(); });
 })();`;
-function aiChatWidget() {
-  return `<style>${AICHAT_CSS}</style><div class="aic-panel" id="aic-panel" role="dialog" aria-label="AI chat"><div class="aic-head"><b id="aic-name">Asistent</b><button type="button" id="aic-new" title="Nový rozhovor">Nový rozhovor</button><button type="button" id="aic-x" aria-label="Zavřít">✕</button></div>
-<div class="aic-log" id="aic-log"></div><div class="aic-in"><input id="aic-in" placeholder="Napiš dotaz…" maxlength="1500" autocomplete="off"><button type="button" id="aic-send">Poslat</button></div>
-<div class="aic-note">Odpovídá AI — důležité údaje si prosím ověř u našeho týmu.</div></div><script>${AICHAT_JS}</script>`;
+function aiChatPage(s) {
+  return layout({ title: 'AI chat', user: s.nick, nav: userNav(s), active: 'aichat', fx: true, body: `<style>${AICHAT_CSS}</style>
+  <div class="aic-wrap"><div class="aic-head">${ico('chat', 20)}<b id="aic-name">Asistent</b><button type="button" id="aic-new">Nový rozhovor</button></div>
+  <div class="aic-log" id="aic-log"></div><div class="aic-in"><input id="aic-in" placeholder="Napiš dotaz…" maxlength="1500" autocomplete="off"><button type="button" id="aic-send">Poslat</button></div>
+  <div class="aic-note">Odpovídá AI — důležité údaje si prosím ověř u našeho týmu.</div></div><script>${AICHAT_JS}</script>` });
 }
 let BUILD = null;
 function setBuild(b) { BUILD = b; }
@@ -234,8 +229,8 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
 ${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
-${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${fx && user ? '<button type="button" class="aic-btn" id="aic-btn" aria-label="AI chat" title="Zeptat se AI asistenta">💬 <span>AI chat</span></button>' : ''}${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
-<main>${body}</main>${helpWidget(h)}${fx && user ? aiChatWidget() : ''}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
+${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
+<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
 // ── Veřejné / uživatel ──────────────────────────────────────────────────
@@ -307,7 +302,7 @@ const userNav = (s) => {
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }];
   if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, USER_NAV[1]);
+  nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, { id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' }, USER_NAV[1]);
   return nav;
 };
 function supporterHome(s, offers = [], extra = {}) {
@@ -1309,4 +1304,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
