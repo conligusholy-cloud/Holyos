@@ -895,7 +895,7 @@ function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [],
   // pole s kontrolou limitu: data-max → živé počítadlo (červené při překročení), kontrola i při uložení
   const ta = (name, val, max, rows) => `<textarea name="${name}" form="aif" rows="${rows}" data-max="${max}" data-label="${esc(name)}">${esc(val)}</textarea>`;
   const data = JSON.stringify({ items: cfg.knowledge_items || [], examples: cfg.examples || [], limits }).replace(/</g, '\\u003c');
-  const L = limits;
+  const L = limits; const fmtN = (n) => Number(n).toLocaleString('cs-CZ');
   return adminLayout('AI chat', 'ai', admin, `
   <h1 style="margin:0 0 6px">AI chat</h1>
   <p class="muted" style="margin-top:0">Kompletní nastavení AI asistenta, který bude na stránkách odpovídat uživatelům. Čím přesnější instrukce, znalosti a příklady, tím přesnější odpovědi. Změny se projeví hned po uložení.</p>
@@ -920,6 +920,13 @@ function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [],
 
   <div class="card"><h2 style="margin-top:0">Znalosti <span class="muted small" style="font-weight:400">— po tématech, počet témat není omezen</span></h2>
     <p class="muted small" style="margin-top:0">Jediný zdroj faktů pro asistenta. Rozděl je na krátká témata (Discount Credit, provize, Moje svoboda, nákup prádlomatu…). Vypnuté téma se do AI neposílá, ale zůstane uložené. Co tu není, to asistent neřekne.</p>
+    <details class="small" style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(79,209,255,.05)"><summary style="cursor:pointer;font-weight:700">Jak znalosti napsat a jak velké smí být</summary>
+      <div style="margin-top:8px;line-height:1.55">
+        <b>Formát:</b> čistý text (soubory PDF / Word / Excel se nenahrávají — zkopíruj z nich text).<br>
+        <b>Jak psát:</b> jedno téma = jedna věc, s výstižným názvem · krátké věty s konkrétními čísly a podmínkami („1 DC = 1 Kč slevy") · výčty po řádcích s pomlčkou nebo dvojice „Otázka: … / Odpověď: …" · tabulky z Excelu přepiš na řádky („Prádlomat V3: 52 000 €, kamion 47 000 €") · žádné obrázky ani dlouhé souvislé odstavce.<br>
+        <b>Velikost:</b> jedno téma max. ${fmtN(L.item_text)} znaků, témat max. ${fmtN(L.items_max)}. Rozhoduje <b>celkový objem</b> (ukazatel dole; 3 znaky ≈ 1 token): doporučeno do ${fmtN(L.tokens_warn)} tokenů (≈ ${fmtN(L.tokens_warn * 3)} znaků, asi 60 normostran) — chat je rychlý a levný; nad tím zpomaluje, zdražuje a klesá přesnost; maximum ${fmtN(L.tokens_hard)} tokenů, výš se nedá uložit.<br>
+        <b>Tip:</b> raději více krátkých a přesných témat než jeden dlouhý text. Co aktuálně nepotřebuješ, vypni zaškrtávátkem „zapnuto".
+      </div></details>
     <div id="kn-list"></div>
     <button class="btn sec" type="button" id="kn-add">＋ Přidat téma</button>
     <label style="display:flex;gap:10px;align-items:center;margin-top:14px;cursor:pointer"><input type="checkbox" name="include_products" value="1" form="aif" style="width:auto"${cfg.include_products ? ' checked' : ''}> Automaticky vložit aktuální nabídku prádlomatů a ceny (z Produktů)</label>
@@ -927,6 +934,8 @@ function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [],
 
   <div class="card"><h2 style="margin-top:0">Příklady správných odpovědí</h2>
     <p class="muted small" style="margin-top:0">Nejúčinnější způsob, jak asistenta „naučit" přesnou formulaci: zadej otázku a odpověď, jakou si přeješ. U podobných dotazů se jí bude držet.</p>
+    <details class="small" style="margin:0 0 12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(79,209,255,.05)"><summary style="cursor:pointer;font-weight:700">Jak příklady psát a jak velké smí být</summary>
+      <div style="margin-top:8px;line-height:1.55">Otázka max. ${fmtN(L.example_q)} znaků, odpověď max. ${fmtN(L.example_a)} znaků, příkladů max. ${fmtN(L.examples_max)}. Odpověď piš tak, jak ji chceš slyšet — stručně, ideálně do 500 znaků, s konkrétními čísly. Přidej příklady pro nejčastější dotazy a pro situace, kdy má asistent něco odmítnout nebo odkázat na kontakt.</div></details>
     <div id="ex-list"></div>
     <button class="btn sec" type="button" id="ex-add">＋ Přidat příklad</button>
     ${saveBtn}</div>
@@ -941,6 +950,8 @@ function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [],
     <div>${lbl('Teplota', '0 = nejpřesnější, 1 = nejkreativnější')}<input name="temperature" form="aif" type="number" step="0.1" min="${L.temperature[0]}" max="${L.temperature[1]}" value="${esc(cfg.temperature)}"></div>
     <div>${lbl('Max. délka odpovědi', 'tokeny, ' + L.max_tokens[0] + '–' + L.max_tokens[1])}<input name="max_tokens" form="aif" type="number" step="50" min="${L.max_tokens[0]}" max="${L.max_tokens[1]}" value="${esc(cfg.max_tokens)}"></div></div>
     <p class="muted small">Pro co nejpřesnější odpovědi doporučuji teplotu 0–0,3 a model Sonnet. Haiku je rychlejší a levnější.</p>
+    <details class="small" style="margin:0 0 8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:rgba(79,209,255,.05)"><summary style="cursor:pointer;font-weight:700">Jak dlouhé budou odpovědi asistenta</summary>
+      <div style="margin-top:8px;line-height:1.55">Délku určuje <b>Max. délka odpovědi</b> (${L.max_tokens[0]}–${L.max_tokens[1]} tokenů; výchozí 600 ≈ 1 800 znaků). Odpovědi jsou navíc vždy krátké, bez markdownu a emoji. Kratší a rychlejší: kolem 300 a styl „Maximálně stručný". Delší (např. podrobný postup): 1 000–1 500 a styl „Odborný a přesný".</div></details>
     ${saveBtn}</div>
 
   <div id="budget" class="card" style="position:sticky;bottom:10px;z-index:4;padding:12px 16px">
