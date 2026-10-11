@@ -165,7 +165,7 @@ function helpWidget(h) {
 
 // ── AI chat pro přihlášené uživatele (plovoucí okno vpravo dole). Zobrazí se jen když je v adminu zapnutý. ──
 const AICHAT_CSS = `.aic-btn{display:none;align-items:center;gap:7px;margin-right:8px;padding:7px 13px;border-radius:999px;border:1px solid rgba(79,209,255,.6);background:linear-gradient(135deg,rgba(30,134,224,.85),rgba(124,92,255,.85));color:#fff;font:700 13px/1 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
-.aic-btn:hover{filter:brightness(1.15)}.aic-btn.on{box-shadow:0 0 0 3px rgba(79,209,255,.25)}
+.acc-link{display:inline-flex;align-items:center;gap:6px;margin-right:6px;padding:7px 11px;border-radius:999px;color:#c9d6ee;font:600 13px/1 Inter,system-ui,sans-serif;text-decoration:none;white-space:nowrap}.acc-link:hover,.acc-link.on{color:#fff;background:rgba(79,209,255,.14)}@media(max-width:760px){.acc-link{font-size:0;gap:0}}.aic-btn:hover{filter:brightness(1.15)}.aic-btn.on{box-shadow:0 0 0 3px rgba(79,209,255,.25)}
 .aic-panel{position:fixed;right:18px;top:68px;z-index:61;width:min(400px,calc(100vw - 24px));height:min(560px,calc(100vh - 90px));display:none;flex-direction:column;background:rgba(7,12,24,.97);border:1px solid var(--border2,rgba(120,160,255,.3));border-radius:18px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden}
 .aic-panel.open{display:flex}
 .aic-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,rgba(30,134,224,.25),rgba(124,92,255,.2))}
@@ -232,9 +232,9 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
-${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? '<button type="button" class="aic-btn" id="aic-btn" aria-label="AI chat" title="Zeptat se AI asistenta">💬 <span>AI chat</span></button>' : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${fx && user ? '<button type="button" class="aic-btn" id="aic-btn" aria-label="AI chat" title="Zeptat se AI asistenta">💬 <span>AI chat</span></button>' : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
-${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
+${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main>${helpWidget(h)}${fx && user ? aiChatWidget() : ''}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
 }
 
