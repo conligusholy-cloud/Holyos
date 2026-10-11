@@ -63,6 +63,26 @@ async function requireUser(req, res, next) {
 const attempts = new Map();
 function tooMany(ip) { const a = attempts.get(ip) || { n: 0, t: Date.now() }; if (Date.now() - a.t > 15 * 60e3) { a.n = 0; a.t = Date.now(); } return a.n >= 20; }
 function noteFail(ip) { const a = attempts.get(ip) || { n: 0, t: Date.now() }; a.n++; attempts.set(ip, a); }
+// Přepínač prostředí Admin ⇄ Uživatel v hlavičce: obě přihlášení (bs2_admin a bs2_user) existují vedle sebe,
+// takže se dá mezi nimi přepínat bez nového přihlášení. Značka <!--BS2-SWITCH--> se nahradí až při odeslání stránky.
+app.use((req, res, next) => {
+  const send = res.send.bind(res);
+  res.send = (body) => {
+    if (typeof body === 'string' && body.includes('<!--BS2-SWITCH-->')) {
+      const a = readCookie(req, ADMIN_COOKIE), u = readCookie(req, USER_COOKIE);
+      const hasAdmin = !!(a && a.kind === 'admin'), hasUser = !!(u && u.kind === 'user');
+      const inAdmin = req.path.startsWith('/admin');
+      let html = '';
+      if (hasAdmin || (hasUser && inAdmin)) {
+        // z admina: „Uživatel" vede do uživatelského prostředí (bez uživatelského přihlášení na přihlašovací stránku)
+        html = `<span class="envsw" role="group" aria-label="Prostředí"><a href="/admin" class="${inAdmin ? 'on' : ''}" title="Administrace">🛠 <span>Admin</span></a><a href="${hasUser ? '/' : '/login'}" class="${inAdmin ? '' : 'on'}" title="${hasUser ? 'Uživatelské prostředí' : 'Uživatelské prostředí — nejdřív se přihlas jako uživatel'}">👤 <span>Uživatel</span></a></span>`;
+      }
+      body = body.replace('<!--BS2-SWITCH-->', html);
+    }
+    return send(body);
+  };
+  next();
+});
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 async function log(admin, action, detail) { try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [admin.pid || null, admin.name || null, action, detail ? JSON.stringify(detail) : null]); } catch (e) { /* log není kritický */ } }
 

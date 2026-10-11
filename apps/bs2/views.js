@@ -19,6 +19,7 @@ a{color:var(--blue)} .muted{color:var(--text2)} .small{font-size:12px}
 header,.banner,.tabs,main{position:relative;z-index:1}
 header{position:sticky;top:0;z-index:5;background:rgba(4,6,12,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:10px 18px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 header .brand{display:inline-flex;align-items:center;gap:10px;text-decoration:none;color:var(--text);font-weight:700;font-size:15px;letter-spacing:.02em}
+header .envsw{display:inline-flex;border:1px solid var(--border2,rgba(120,160,255,.3));border-radius:999px;overflow:hidden;margin-right:6px;font-size:12.5px;font-weight:700}header .envsw a{padding:6px 12px;color:var(--text2);text-decoration:none;display:inline-flex;gap:6px;align-items:center}header .envsw a.on{background:linear-gradient(90deg,rgba(30,134,224,.55),rgba(124,92,255,.55));color:#fff}header .envsw a:not(.on):hover{color:#fff;background:rgba(120,160,255,.12)}@media(max-width:560px){header .envsw a span{display:none}}
 header .ver{margin:0 auto;padding:0 12px;font-size:11.5px;color:var(--text2);opacity:.75;white-space:nowrap;letter-spacing:.01em;text-align:center;overflow:hidden;text-overflow:ellipsis}header .ver b{color:var(--text);font-weight:600}@media(max-width:820px){header .ver .vd{display:none}}
 header .brand .mark{display:inline-flex;filter:drop-shadow(0 6px 16px rgba(30,134,224,.45))}
 header .brand span.v{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -230,7 +231,7 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
-${buildBadge()}<nav>${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${buildBadge()}<nav><!--BS2-SWITCH-->${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main>${helpWidget(h)}${fx && user ? aiChatWidget() : ''}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
