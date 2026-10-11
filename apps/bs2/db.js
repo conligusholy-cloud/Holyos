@@ -128,6 +128,9 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS orders_supporter_idx ON orders (supporter_id);
     ALTER TABLE credits ADD COLUMN IF NOT EXISTS order_id INTEGER;
+    -- Služby (Najít místo, Přípojky): kind='service', service_key; cena 0 = čeká na individuální nacenění
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'machine';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
 
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
