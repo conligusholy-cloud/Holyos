@@ -610,6 +610,42 @@ app.post('/admin/ai-chat', requireAdmin, wrap(async (req, res) => {
   await log(req.admin, 'ai_chat_save', null);
   res.redirect('/admin/ai-chat?msg=' + encodeURIComponent('Nastavení AI chatu uloženo.'));
 }));
+// ── AI chat pro uživatele (plovoucí okno na stránkách) ──
+const aiHits = new Map(); // sid → časy zpráv (limit 30 / 10 min)
+async function aiChatUser(req, res) {
+  const s = readCookie(req, USER_COOKIE);
+  if (!s || s.kind !== 'user') { res.status(401).json({ error: 'Pro chat se prosím přihlas.' }); return null; }
+  const r = await q('SELECT id, status FROM supporters WHERE id=$1', [s.sid]);
+  if (!r.rows[0] || r.rows[0].status !== 'active') { res.status(401).json({ error: 'Pro chat se prosím přihlas.' }); return null; }
+  return s;
+}
+app.get('/api/ai-chat/config', wrap(async (req, res) => {
+  const s = readCookie(req, USER_COOKIE);
+  if (!s || s.kind !== 'user') return res.status(401).json({ enabled: false });
+  const cfg = await AI.loadConfig();
+  res.set('Cache-Control', 'no-store').json({ enabled: !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY, name: cfg.name, greeting: cfg.greeting });
+}));
+app.post('/api/ai-chat', wrap(async (req, res) => {
+  const s = await aiChatUser(req, res); if (!s) return;
+  const cfg = await AI.loadConfig();
+  if (!cfg.enabled) return res.status(403).json({ error: 'Chat je momentálně vypnutý.' });
+  const now = Date.now(), hits = (aiHits.get(s.sid) || []).filter(t => now - t < 10 * 60e3);
+  if (hits.length >= 30) return res.status(429).json({ error: 'Příliš mnoho zpráv, zkus to prosím za několik minut.' });
+  const msgs = (Array.isArray(req.body && req.body.messages) ? req.body.messages : []).slice(-12)
+    .filter(m => m && (m.role === 'user' || m.role === 'assistant') && String(m.content || '').trim())
+    .map(m => ({ role: m.role, content: String(m.content).slice(0, 1500) }));
+  while (msgs.length && msgs[0].role !== 'user') msgs.shift(); // historie musí začínat dotazem uživatele
+  if (!msgs.length || msgs[msgs.length - 1].role !== 'user') return res.status(400).json({ error: 'Prázdný dotaz.' });
+  hits.push(now); aiHits.set(s.sid, hits);
+  // Osobní údaje (zůstatek DC, objednávky) chat nemá → odkáže na sekce, nevymýšlí si
+  const system = AI.buildSystem(cfg, await aiProductsText()) +
+    '\n\nKONTEXT: Mluvíš s přihlášeným uživatelem. Jeho osobní údaje (zůstatek Discount Creditu, objednávky, doporučení) NEMÁŠ k dispozici — nikdy je neuváděj ani neodhaduj, odkaž ho na sekce Discount Credit, Moje svoboda, Moje doporučení nebo Můj účet.';
+  try {
+    const out = await AI.chat(cfg, system, msgs);
+    if (out.error) { console.warn('[bs2] AI chat:', out.error); return res.status(502).json({ error: 'Chat je teď nedostupný, zkus to prosím za chvíli.' }); }
+    res.json({ reply: out.reply });
+  } catch (e) { console.warn('[bs2] AI chat výjimka:', e.message); res.status(502).json({ error: 'Chat je teď nedostupný, zkus to prosím za chvíli.' }); }
+}));
 app.post('/admin/ai-chat/test', requireAdmin, wrap(async (req, res) => {
   const cfg = await AI.loadConfig();
   const msgs = (Array.isArray(req.body && req.body.messages) ? req.body.messages : []).slice(-20)
