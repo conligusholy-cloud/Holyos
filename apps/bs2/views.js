@@ -888,47 +888,66 @@ const leftOver = (p, cur, sym) => {
 const maxDisc = (price, min, sym) => { if (price == null || min == null || !Number(price)) return ''; const diff = Number(price) - Number(min); const pct = Math.round(diff / Number(price) * 1000) / 10; return `<div style="${diff < 0 ? 'color:var(--err)' : ''}"><b>${esc(String(pct).replace('.', ','))} %</b> <span class="small muted">(${money(diff, sym)})</span></div>`; };
 // Kolik DC lze využít: % z ceny bez DPH, nejvýš však po minimální cenu
 const dcUse = (p) => { if (p.dc_use_pct == null) return '<div class="small muted" style="margin-top:4px">bez omezení (jen min. cena)</div>'; const pct = Number(p.dc_use_pct); const f = (price, min, sym) => { if (price == null) return ''; let dc = Number(price) * pct / 100; if (min != null) dc = Math.min(dc, Math.max(0, Number(price) - Number(min))); return `<div class="small muted">= ${money(Math.round(dc), 'DC')} <span style="opacity:.7">(${sym})</span></div>`; }; return '<div style="margin-top:4px">' + f(p.price_czk, p.min_price_czk, 'Kč') + f(p.price_eur, p.min_price_eur, '€') + '</div>'; };
-function adminAiChat({ admin, cfg, models, tones, msg = '', holyosUrl, keyOk = false, preview = '' }) {
+function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [], holyosUrl, keyOk = false, preview = '' }) {
   const o = (v, cur, label) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
   const saveBtn = '<div style="text-align:right;margin-top:10px"><button class="btn" type="submit" form="aif">Uložit</button></div>';
   const lbl = (t, hint) => `<label class="small" style="display:block;margin:12px 0 5px;font-weight:600">${t}${hint ? ` <span class="muted" style="font-weight:400">— ${hint}</span>` : ''}</label>`;
+  // pole s kontrolou limitu: data-max → živé počítadlo (červené při překročení), kontrola i při uložení
+  const ta = (name, val, max, rows) => `<textarea name="${name}" form="aif" rows="${rows}" data-max="${max}" data-label="${esc(name)}">${esc(val)}</textarea>`;
+  const data = JSON.stringify({ items: cfg.knowledge_items || [], examples: cfg.examples || [], limits }).replace(/</g, '\\u003c');
+  const L = limits;
   return adminLayout('AI chat', 'ai', admin, `
   <h1 style="margin:0 0 6px">AI chat</h1>
-  <p class="muted" style="margin-top:0">Kompletní nastavení AI asistenta, který bude na stránkách odpovídat uživatelům. Čím přesnější instrukce a znalosti, tím přesnější odpovědi. Změny se projeví hned po uložení.</p>
+  <p class="muted" style="margin-top:0">Kompletní nastavení AI asistenta, který bude na stránkách odpovídat uživatelům. Čím přesnější instrukce, znalosti a příklady, tím přesnější odpovědi. Změny se projeví hned po uložení.</p>
   ${msg ? `<div class="card" style="border-color:rgba(60,220,160,.4)">${esc(msg)}</div>` : ''}
+  <div id="errbox" class="card" style="border-color:rgba(255,110,110,.55);${errors.length ? '' : 'display:none'}"><b style="color:var(--err)">Nelze uložit — oprav prosím:</b><ul id="errlist" style="margin:8px 0 0 18px;padding:0">${errors.map(e => `<li>${esc(e)}</li>`).join('')}</ul></div>
   <form id="aif" method="post" action="/admin/ai-chat"></form>
+  <input type="hidden" name="knowledge_json" form="aif" id="kj"><input type="hidden" name="examples_json" form="aif" id="ej">
+  <script type="application/json" id="ai-data">${data}</script>
 
   <div class="card"><h2 style="margin-top:0">Základ</h2>
     <label style="display:flex;gap:10px;align-items:center;cursor:pointer"><input type="checkbox" name="enabled" value="1" form="aif" style="width:auto"${cfg.enabled ? ' checked' : ''}> <b>Chat je zapnutý na stránkách</b> <span class="muted small">(vypnutý se uživatelům nezobrazí)</span></label>
-    ${lbl('Jméno asistenta')}<input name="name" form="aif" value="${esc(cfg.name)}" maxlength="80">
-    ${lbl('Úvodní zpráva', 'první věta, kterou uživatel uvidí')}<textarea name="greeting" form="aif" rows="2" maxlength="600">${esc(cfg.greeting)}</textarea>
+    ${lbl('Jméno asistenta')}<input name="name" form="aif" value="${esc(cfg.name)}" data-max="${L.name}" data-label="name">
+    ${lbl('Úvodní zpráva', 'první věta, kterou uživatel uvidí')}${ta('greeting', cfg.greeting, L.greeting, 2)}
     <div class="grid" style="margin-top:4px"><div>${lbl('Styl odpovědí')}<select name="tone" form="aif">${Object.keys(tones).map(k => o(k, cfg.tone, { friendly: 'Přátelský a věcný', expert: 'Odborný a přesný', concise: 'Maximálně stručný', formal: 'Formální (vykání)' }[k])).join('')}</select></div>
     <div>${lbl('Jazyk')}<label style="display:flex;gap:8px;align-items:center;margin-top:10px;cursor:pointer"><input type="checkbox" name="reply_in_user_language" value="1" form="aif" style="width:auto"${cfg.reply_in_user_language ? ' checked' : ''}> Odpovídat v jazyce dotazu</label></div></div>
     ${saveBtn}</div>
 
   <div class="card"><h2 style="margin-top:0">Instrukce</h2>
-    ${lbl('Role a úkol asistenta', 'kdo je, komu pomáhá, co má dělat')}<textarea name="instructions" form="aif" rows="6" maxlength="8000">${esc(cfg.instructions)}</textarea>
-    ${lbl('Pravidla a zákazy', 'co nesmí říkat nebo slibovat — závazné')}<textarea name="rules" form="aif" rows="5" maxlength="6000">${esc(cfg.rules)}</textarea>
+    ${lbl('Role a úkol asistenta', 'kdo je, komu pomáhá, co má dělat')}${ta('instructions', cfg.instructions, L.instructions, 6)}
+    ${lbl('Pravidla a zákazy', 'co nesmí říkat nebo slibovat — závazné')}${ta('rules', cfg.rules, L.rules, 5)}
     ${saveBtn}</div>
 
-  <div class="card"><h2 style="margin-top:0">Znalosti</h2>
-    <p class="muted small" style="margin-top:0">Jediný zdroj faktů pro asistenta. Vlož pravidla programu, Discount Credit, provize, postupy, často kladené otázky… Co tu není, to asistent neřekne.</p>
-    <textarea name="knowledge" form="aif" rows="14" maxlength="60000" placeholder="Např.:&#10;Discount Credit (DC): 1 DC = 1 Kč slevy…&#10;Provize z doporučení: …&#10;Jak funguje Moje svoboda: …">${esc(cfg.knowledge)}</textarea>
-    <div class="muted small" id="kcnt" style="margin-top:4px"></div>
-    <label style="display:flex;gap:10px;align-items:center;margin-top:12px;cursor:pointer"><input type="checkbox" name="include_products" value="1" form="aif" style="width:auto"${cfg.include_products ? ' checked' : ''}> Automaticky vložit aktuální nabídku prádlomatů a ceny (z Produktů)</label>
+  <div class="card"><h2 style="margin-top:0">Znalosti <span class="muted small" style="font-weight:400">— po tématech, počet témat není omezen</span></h2>
+    <p class="muted small" style="margin-top:0">Jediný zdroj faktů pro asistenta. Rozděl je na krátká témata (Discount Credit, provize, Moje svoboda, nákup prádlomatu…). Vypnuté téma se do AI neposílá, ale zůstane uložené. Co tu není, to asistent neřekne.</p>
+    <div id="kn-list"></div>
+    <button class="btn sec" type="button" id="kn-add">＋ Přidat téma</button>
+    <label style="display:flex;gap:10px;align-items:center;margin-top:14px;cursor:pointer"><input type="checkbox" name="include_products" value="1" form="aif" style="width:auto"${cfg.include_products ? ' checked' : ''}> Automaticky vložit aktuální nabídku prádlomatů a ceny (z Produktů)</label>
+    ${saveBtn}</div>
+
+  <div class="card"><h2 style="margin-top:0">Příklady správných odpovědí</h2>
+    <p class="muted small" style="margin-top:0">Nejúčinnější způsob, jak asistenta „naučit" přesnou formulaci: zadej otázku a odpověď, jakou si přeješ. U podobných dotazů se jí bude držet.</p>
+    <div id="ex-list"></div>
+    <button class="btn sec" type="button" id="ex-add">＋ Přidat příklad</button>
     ${saveBtn}</div>
 
   <div class="card"><h2 style="margin-top:0">Když asistent neví</h2>
-    ${lbl('Co řekne', 'použije se při nezodpovězené otázce místo odhadu')}<textarea name="unknown_reply" form="aif" rows="2" maxlength="800">${esc(cfg.unknown_reply)}</textarea>
-    ${lbl('Kontakt', 'e-mail / telefon, na který uživatele odkáže')}<textarea name="contact" form="aif" rows="2" maxlength="800">${esc(cfg.contact)}</textarea>
+    ${lbl('Co řekne', 'použije se při nezodpovězené otázce místo odhadu')}${ta('unknown_reply', cfg.unknown_reply, L.unknown_reply, 2)}
+    ${lbl('Kontakt', 'e-mail / telefon, na který uživatele odkáže')}${ta('contact', cfg.contact, L.contact, 2)}
     ${saveBtn}</div>
 
   <div class="card"><h2 style="margin-top:0">Model a přesnost</h2>
     <div class="grid"><div>${lbl('Model')}<select name="model" form="aif">${models.map(m => o(m[0], cfg.model, m[1])).join('')}</select></div>
-    <div>${lbl('Teplota', '0 = nejpřesnější, 1 = nejkreativnější')}<input name="temperature" form="aif" type="number" step="0.1" min="0" max="1" value="${esc(cfg.temperature)}"></div>
-    <div>${lbl('Max. délka odpovědi', 'tokeny, 100–1500')}<input name="max_tokens" form="aif" type="number" step="50" min="100" max="1500" value="${esc(cfg.max_tokens)}"></div></div>
+    <div>${lbl('Teplota', '0 = nejpřesnější, 1 = nejkreativnější')}<input name="temperature" form="aif" type="number" step="0.1" min="${L.temperature[0]}" max="${L.temperature[1]}" value="${esc(cfg.temperature)}"></div>
+    <div>${lbl('Max. délka odpovědi', 'tokeny, ' + L.max_tokens[0] + '–' + L.max_tokens[1])}<input name="max_tokens" form="aif" type="number" step="50" min="${L.max_tokens[0]}" max="${L.max_tokens[1]}" value="${esc(cfg.max_tokens)}"></div></div>
     <p class="muted small">Pro co nejpřesnější odpovědi doporučuji teplotu 0–0,3 a model Sonnet. Haiku je rychlejší a levnější.</p>
     ${saveBtn}</div>
+
+  <div id="budget" class="card" style="position:sticky;bottom:10px;z-index:4;padding:12px 16px">
+    <div class="row" style="justify-content:space-between;gap:10px"><b>Celkový objem instrukcí</b><span id="b-txt" class="small"></span></div>
+    <div style="height:8px;border-radius:6px;background:rgba(255,255,255,.08);margin-top:8px;overflow:hidden"><div id="b-bar" style="height:100%;width:0;background:var(--ok);transition:width .2s"></div></div>
+    <div id="b-hint" class="muted small" style="margin-top:6px"></div>
+  </div>
 
   <div class="card"><h2 style="margin-top:0">Vyzkoušet chat <span class="badge ${keyOk ? 'active' : 'blocked'}" style="margin-left:6px;font-size:11px">${keyOk ? 'ANTHROPIC_API_KEY nastaven' : 'chybí ANTHROPIC_API_KEY'}</span></h2>
     <p class="muted small" style="margin-top:0">Test používá <b>uložené</b> nastavení — nejdřív ulož, pak zkoušej.</p>
@@ -941,12 +960,61 @@ function adminAiChat({ admin, cfg, models, tones, msg = '', holyosUrl, keyOk = f
 
   <script>
   (function(){
-    var k=document.querySelector('textarea[name=knowledge]'), c=document.getElementById('kcnt');
-    function upd(){ if(c&&k) c.textContent=k.value.length.toLocaleString('cs-CZ')+' / 60 000 znaků'; }
-    if(k){ k.addEventListener('input',upd); upd(); }
+    var D=JSON.parse(document.getElementById('ai-data').textContent), LM=D.limits, form=document.getElementById('aif');
+    var items=D.items.slice(), exs=D.examples.slice();
+    var fmt=function(n){ return Number(n).toLocaleString('cs-CZ'); };
+    function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function counter(el,max){ var c=el.nextElementSibling; if(!c||!c.classList.contains('cc')){ c=document.createElement('div'); c.className='cc muted small'; c.style.cssText='text-align:right;margin-top:3px'; el.parentNode.insertBefore(c,el.nextSibling); }
+      var n=el.value.length, over=n>max; c.textContent=fmt(n)+' / '+fmt(max)+' znaků'+(over?' — přebývá '+fmt(n-max):''); c.style.color=over?'var(--err)':''; el.style.borderColor=over?'var(--err)':''; return over; }
+    function totalChars(){
+      var v=function(n){ var e=document.querySelector('[name="'+n+'"]'); return e?e.value.length:0; };
+      var n=v('instructions')+v('rules')+v('unknown_reply')+v('contact');
+      items.forEach(function(x){ if(x.enabled!==false) n+=(x.title||'').length+(x.text||'').length+6; });
+      exs.forEach(function(x){ n+=(x.q||'').length+(x.a||'').length+20; });
+      return n; }
+    function budget(){
+      var tok=Math.ceil(totalChars()/3), pct=Math.min(100,tok/LM.tokens_hard*100), bar=document.getElementById('b-bar');
+      bar.style.width=pct+'%'; bar.style.background=tok>LM.tokens_hard?'var(--err)':tok>LM.tokens_warn?'#f5a524':'var(--ok)';
+      document.getElementById('b-txt').textContent='≈ '+fmt(tok)+' tokenů z '+fmt(LM.tokens_hard)+' (max)';
+      document.getElementById('b-hint').textContent=tok>LM.tokens_hard?'Přes maximum — nelze uložit. Zkrať znalosti nebo vypni některá témata.':tok>LM.tokens_warn?'Nad doporučenou hranicí '+fmt(LM.tokens_warn)+' tokenů: chat bude pomalejší a dražší. Zvaž zkrácení.':'V pořádku. Doporučená hranice pro rychlý chat je '+fmt(LM.tokens_warn)+' tokenů.'; }
+    function bindFields(root){ root.querySelectorAll('[data-max]').forEach(function(el){ var mx=+el.dataset.max; counter(el,mx); if(!el.__b){ el.__b=1; el.addEventListener('input',function(){ counter(el,mx); budget(); }); } }); }
+    function renderItems(){
+      var box=document.getElementById('kn-list');
+      box.innerHTML=items.map(function(x,i){ return '<div class="card" style="padding:12px;margin-bottom:10px;background:rgba(255,255,255,.03)">'+
+        '<div class="row" style="gap:8px;align-items:center"><label style="display:flex;gap:6px;align-items:center;cursor:pointer;white-space:nowrap" title="Vypnuté téma se do AI neposílá"><input type="checkbox" data-k="en" data-i="'+i+'" style="width:auto"'+(x.enabled!==false?' checked':'')+'> zapnuto</label>'+
+        '<input data-k="title" data-i="'+i+'" data-max="'+LM.item_title+'" placeholder="Název tématu (např. Discount Credit)" value="'+esc(x.title)+'" style="flex:1"><button class="btn sec" type="button" data-rm="'+i+'" title="Odebrat téma">✕</button></div>'+
+        '<textarea data-k="text" data-i="'+i+'" data-max="'+LM.item_text+'" rows="6" placeholder="Text tématu — fakta, pravidla, postupy…" style="margin-top:8px">'+esc(x.text)+'</textarea></div>'; }).join('')||'<p class="muted small">Zatím žádné téma. Přidej první.</p>';
+      box.querySelectorAll('[data-k]').forEach(function(el){ el.addEventListener('input',function(){ var it=items[+el.dataset.i]; if(el.dataset.k==='title') it.title=el.value; else if(el.dataset.k==='text') it.text=el.value; budget(); }); if(el.dataset.k==='en') el.addEventListener('change',function(){ items[+el.dataset.i].enabled=el.checked; budget(); }); });
+      box.querySelectorAll('[data-rm]').forEach(function(b){ b.addEventListener('click',function(){ var it=items[+b.dataset.rm]; if((it.title||it.text)&&!confirm('Odebrat téma „'+(it.title||'bez názvu')+'"?')) return; items.splice(+b.dataset.rm,1); renderItems(); }); });
+      bindFields(box); budget(); }
+    function renderEx(){
+      var box=document.getElementById('ex-list');
+      box.innerHTML=exs.map(function(x,i){ return '<div class="card" style="padding:12px;margin-bottom:10px;background:rgba(255,255,255,.03)">'+
+        '<div class="row" style="gap:8px;align-items:center"><input data-e="q" data-i="'+i+'" data-max="'+LM.example_q+'" placeholder="Otázka uživatele" value="'+esc(x.q)+'" style="flex:1"><button class="btn sec" type="button" data-exrm="'+i+'" title="Odebrat příklad">✕</button></div>'+
+        '<textarea data-e="a" data-i="'+i+'" data-max="'+LM.example_a+'" rows="3" placeholder="Přesná odpověď, jakou si přeješ" style="margin-top:8px">'+esc(x.a)+'</textarea></div>'; }).join('')||'<p class="muted small">Zatím žádný příklad.</p>';
+      box.querySelectorAll('[data-e]').forEach(function(el){ el.addEventListener('input',function(){ exs[+el.dataset.i][el.dataset.e]=el.value; budget(); }); });
+      box.querySelectorAll('[data-exrm]').forEach(function(b){ b.addEventListener('click',function(){ exs.splice(+b.dataset.exrm,1); renderEx(); }); });
+      bindFields(box); budget(); }
+    document.getElementById('kn-add').addEventListener('click',function(){ items.push({title:'',text:'',enabled:true}); renderItems(); var t=document.querySelectorAll('#kn-list [data-k="title"]'); if(t.length) t[t.length-1].focus(); });
+    document.getElementById('ex-add').addEventListener('click',function(){ exs.push({q:'',a:''}); renderEx(); var t=document.querySelectorAll('#ex-list [data-e="q"]'); if(t.length) t[t.length-1].focus(); });
+    // kontrola limitů při uložení (server kontroluje znovu)
+    form.addEventListener('submit',function(e){
+      var errs=[];
+      document.querySelectorAll('[data-max]').forEach(function(el){ var mx=+el.dataset.max; if(el.value.length>mx) errs.push((el.placeholder||el.dataset.label||el.name||'Pole')+': '+fmt(el.value.length)+' znaků, limit je '+fmt(mx)+' (přebývá '+fmt(el.value.length-mx)+').'); });
+      items.forEach(function(x,i){ if((x.text||'')!==''&&!(x.title||'').trim()) errs.push('Téma '+(i+1)+': chybí název.'); });
+      exs.forEach(function(x,i){ if((x.q||x.a)&&(!(x.q||'').trim()||!(x.a||'').trim())) errs.push('Příklad '+(i+1)+': vyplň otázku i odpověď.'); });
+      var tok=Math.ceil(totalChars()/3); if(tok>LM.tokens_hard) errs.push('Celkový objem je ≈ '+fmt(tok)+' tokenů, maximum je '+fmt(LM.tokens_hard)+'.');
+      var t=document.querySelector('input[name=temperature]'), m=document.querySelector('input[name=max_tokens]');
+      if(t&&(+t.value<LM.temperature[0]||+t.value>LM.temperature[1]||t.value==='')) errs.push('Teplota musí být '+LM.temperature[0]+'–'+LM.temperature[1]+'.');
+      if(m&&(+m.value<LM.max_tokens[0]||+m.value>LM.max_tokens[1]||m.value==='')) errs.push('Max. délka odpovědi musí být '+LM.max_tokens[0]+'–'+LM.max_tokens[1]+'.');
+      if(errs.length){ e.preventDefault(); var box=document.getElementById('errbox'); document.getElementById('errlist').innerHTML=errs.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join(''); box.style.display=''; box.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+      document.getElementById('kj').value=JSON.stringify(items); document.getElementById('ej').value=JSON.stringify(exs);
+    });
+    bindFields(document); renderItems(); renderEx();
+    // zkušební chat
     var log=document.getElementById('aichat-log'), inp=document.getElementById('aichat-in'), btn=document.getElementById('aichat-send'), hist=[];
-    function add(role,text,err){ if(!hist.length&&log.firstChild&&log.firstChild.className==='muted small') log.innerHTML='';
-      var d=document.createElement('div'); d.style.cssText='margin:6px 0;padding:8px 11px;border-radius:10px;max-width:88%;white-space:pre-wrap;'+(role==='user'?'margin-left:auto;background:rgba(79,209,255,.15)':'background:rgba(255,255,255,.06)')+(err?';color:#ff8a8a':'');
+    function add(role,text){ if(!hist.length&&log.firstChild&&log.firstChild.className==='muted small') log.innerHTML='';
+      var d=document.createElement('div'); d.style.cssText='margin:6px 0;padding:8px 11px;border-radius:10px;max-width:88%;white-space:pre-wrap;'+(role==='user'?'margin-left:auto;background:rgba(79,209,255,.15)':'background:rgba(255,255,255,.06)');
       d.textContent=text; log.appendChild(d); log.scrollTop=log.scrollHeight; return d; }
     async function send(){
       var t=inp.value.trim(); if(!t||btn.disabled) return; inp.value=''; add('user',t); hist.push({role:'user',content:t}); btn.disabled=true;

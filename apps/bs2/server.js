@@ -32,8 +32,9 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Větší limit těla požadavku — nastavení AI chatu (znalosti po tématech) může mít stovky kB
+app.use(express.json({ limit: '8mb' }));
+app.use(express.urlencoded({ extended: false, limit: '8mb' }));
 app.use((req, res, next) => { res.set('X-Frame-Options', 'DENY'); res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'same-origin'); next(); });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -595,12 +596,17 @@ async function aiProductsText() {
     }).join('\n');
   } catch (e) { return ''; }
 }
+async function renderAiPage(req, cfg, extra) {
+  return V.adminAiChat({ admin: req.admin, cfg, models: AI.MODELS, tones: AI.TONES, limits: AI.LIMITS, holyosUrl: HOLYOS_URL, keyOk: !!process.env.ANTHROPIC_API_KEY, preview: AI.buildSystem(cfg, await aiProductsText()), ...extra });
+}
 app.get('/admin/ai-chat', requireAdmin, wrap(async (req, res) => {
-  const cfg = await AI.loadConfig();
-  res.send(V.adminAiChat({ admin: req.admin, cfg, models: AI.MODELS, tones: AI.TONES, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, keyOk: !!process.env.ANTHROPIC_API_KEY, preview: AI.buildSystem(cfg, await aiProductsText()) }));
+  res.send(await renderAiPage(req, await AI.loadConfig(), { msg: req.query.msg || '' }));
 }));
 app.post('/admin/ai-chat', requireAdmin, wrap(async (req, res) => {
-  await AI.saveConfig(AI.sanitize(req.body || {}));
+  const { cfg, errors } = AI.sanitize(req.body || {});
+  // Překročený limit = nic se neuloží ani neořízne; stránka se vrátí s vyplněnými hodnotami a seznamem chyb
+  if (errors.length) return res.status(400).send(await renderAiPage(req, cfg, { errors }));
+  await AI.saveConfig(cfg);
   await log(req.admin, 'ai_chat_save', null);
   res.redirect('/admin/ai-chat?msg=' + encodeURIComponent('Nastavení AI chatu uloženo.'));
 }));
