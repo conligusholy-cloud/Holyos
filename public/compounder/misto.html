@@ -507,7 +507,7 @@
     var mapEl=document.getElementById('czmap');
     function play(){ if(timer) clearInterval(timer); pinEls.forEach(function(e){ e.classList.remove('in'); }); mapEl.classList.remove('sweep'); mapEl.classList.remove('drawn'); void mapEl.offsetWidth; mapEl.classList.add('drawn'); var i=0;
       function step(){ var y=years[i]; yEl.textContent=y; track.querySelectorAll('i').forEach(function(t,k){ t.classList.toggle('on',k<=i); t.classList.toggle('now',k===i); });
-        var n=0; pinEls.forEach(function(e){ if(+e.getAttribute('data-y')<=y){ e.classList.add('in'); n++; } }); cEl.innerHTML='<b>'+n+'</b> '+(n===1?'prádlomat':n<5?'prádlomaty':'prádlomatů');
+        var n=0; pinEls.forEach(function(e){ if(+e.getAttribute('data-y')<=y){ e.classList.add('in'); n++; } }); var fin=(i>=years.length-1); cEl.innerHTML='<b>'+(fin?'70+':n)+'</b> '+(n===1&&!fin?'prádlomat':n<5&&!fin?'prádlomaty':'prádlomatů');
         i++; if(i>=years.length){ clearInterval(timer); timer=null; setTimeout(function(){ mapEl.classList.add('sweep'); },300); } }
       setTimeout(step,900); timer=setInterval(step,1100); }
     document.getElementById('cz-again').addEventListener('click',play);
