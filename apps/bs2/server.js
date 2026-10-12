@@ -508,14 +508,18 @@ app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) =
   const amount = Math.round(Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!(amount > 0) || amount > 100000000) return back('Zadej částku větší než 0.');
   const cur = req.body.cur === 'EUR' ? 'EUR' : 'CZK';
+  const kind = req.body.kind === 'payout' ? 'payout' : 'dc';
+  if (kind === 'payout' && !String(req.body.note || '').trim()) return back('U výběru uveď do poznámky číslo účtu pro vyplacení.');
   const pending = (await q("SELECT count(*)::int AS c FROM support_transfers WHERE supporter_id=$1 AND status='pending'", [req.user.id])).rows[0].c;
   if (pending >= 5) return back('Máš už několik nevyřízených žádostí. Počkej prosím na jejich zpracování.');
-  const rate = cur === 'EUR' ? await eurRate() : 1;
-  const dc = Math.round(amount * rate * 100) / 100;
+  const rate = kind === 'payout' ? 1 : (cur === 'EUR' ? await eurRate() : 1);
+  const dc = kind === 'payout' ? 0 : Math.round(amount * rate * 100) / 100;
   const note = String(req.body.note || '').trim().slice(0, 300) || null;
-  const ins = await q('INSERT INTO support_transfers (supporter_id, amount, currency, rate, dc_amount, note) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [req.user.id, amount, cur, rate, dc, note]);
-  try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [null, req.user.nick || req.user.email, 'support_transfer_request', JSON.stringify({ id: ins.rows[0].id, supporter_id: req.user.id, amount, cur, dc })]); } catch (e) { /* log není kritický */ }
-  back('Žádost o převod ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána. Zpracujeme ji ručně a dáme Ti vědět.');
+  const ins = await q('INSERT INTO support_transfers (supporter_id, amount, currency, rate, dc_amount, note, kind) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, amount, cur, rate, dc, note, kind]);
+  try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [null, req.user.nick || req.user.email, 'support_transfer_request', JSON.stringify({ id: ins.rows[0].id, supporter_id: req.user.id, kind, amount, cur, dc })]); } catch (e) { /* log není kritický */ }
+  back(kind === 'payout'
+    ? 'Žádost o výběr ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' byla odeslána. Zpracujeme ji ručně a dáme Ti vědět.'
+    : 'Žádost o převod ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána. Zpracujeme ji ručně a dáme Ti vědět.');
 }));
 // Admin: Převody podpory
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
@@ -526,10 +530,18 @@ app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
 }));
 app.post('/admin/transfers/:id(\\d+)/approve', requireAdmin, wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  const adminNote = String(req.body.admin_note || '').trim().slice(0, 300) || null;
+  const who = req.admin.name || req.admin.username || null;
+  const cur0 = (await q("SELECT kind FROM support_transfers WHERE id=$1 AND status='pending'", [id])).rows[0];
+  if (!cur0) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Žádost už byla zpracována.'));
+  if (cur0.kind === 'payout') {
+    const p = (await q("UPDATE support_transfers SET status='approved', admin_note=$2, processed_at=now(), processed_by=$3 WHERE id=$1 AND status='pending' RETURNING id, supporter_id", [id, adminNote, who])).rows[0];
+    if (p) await log(req.admin, 'support_payout_done', { id: p.id, supporter_id: p.supporter_id });
+    return res.redirect('/admin/transfers?msg=' + encodeURIComponent(p ? 'Výběr #' + p.id + ' označen jako vyplacený.' : 'Žádost už byla zpracována.'));
+  }
   const dc = Math.round(Number(String(req.body.dc || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!(dc > 0)) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Zadej počet DC větší než 0.'));
-  const adminNote = String(req.body.admin_note || '').trim().slice(0, 300) || null;
-  const t = (await q("UPDATE support_transfers SET status='approved', dc_amount=$2, admin_note=$3, processed_at=now(), processed_by=$4 WHERE id=$1 AND status='pending' RETURNING *", [id, dc, adminNote, req.admin.name || req.admin.username || null])).rows[0];
+  const t = (await q("UPDATE support_transfers SET status='approved', dc_amount=$2, admin_note=$3, processed_at=now(), processed_by=$4 WHERE id=$1 AND status='pending' RETURNING *", [id, dc, adminNote, who])).rows[0];
   if (!t) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Žádost už byla zpracována.'));
   const cr = await q('INSERT INTO credits (supporter_id, amount_czk, note) VALUES ($1,$2,$3) RETURNING id', [t.supporter_id, dc, 'Převod podpory ze starého systému (žádost #' + t.id + ')']);
   await q('UPDATE support_transfers SET credit_id=$2 WHERE id=$1', [t.id, cr.rows[0].id]);
