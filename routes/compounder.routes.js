@@ -2443,7 +2443,7 @@ router.post('/misto/interest', async (req, res, next) => {
 // GET /api/compounder/misto/map — veřejná anonymizovaná mapa českých prádlomatů
 // pro pradlomaty.info/misto. Zdroj: SIS kiosk-values (stejná data jako tab Compounding),
 // jen Česko, bez kódů a obratů. Adresy (label) geokódujeme přes Nominatim a trvale
-// cachujeme v AppSetting (misto.kiosk_geo), max. 12 nových adres na jeden request
+// cachujeme v AppSetting (misto.kiosk_geo), max. 6 nových adres na jeden request
 // (Nominatim limit 1 req/s) — zbytek se doplní při dalším volání.
 const MISTO_GEO_KEY = 'misto.kiosk_geo';
 let _mistoMapCache = { at: 0, data: null };
@@ -2459,26 +2459,44 @@ router.get('/misto/map', async (req, res, next) => {
     };
     const cz = kiosks.filter(isCz).filter((k) => k.label);
     const geo = (await getSetting(MISTO_GEO_KEY, { type: 'json', defaultValue: {} })) || {};
-    let budget = 12, changed = false;
+    let budget = 6, changed = false, pending = 0;
+    const DAY = 24 * 3600 * 1000;
     for (const k of cz) {
       const label = String(k.label).trim();
-      if (geo[label] !== undefined) continue;
-      if (budget-- <= 0) break;
-      const g = await geocodeAddress(label + ', Česko').catch(() => null);
-      geo[label] = g ? { lat: g.lat, lng: g.lon } : null;
+      const cur = geo[label];
+      // null = dřívější neúspěch → zkusit znovu nejdřív po 24 h (cur.t)
+      if (cur && cur.lat != null) continue;
+      if (cur && cur.t && (Date.now() - cur.t) < DAY) continue;
+      if (budget-- <= 0) { pending++; continue; }
+      // Postupně: celá adresa → bez PSČ → jen ulice + město → jen město. Vše omezeno na ČR.
+      const parts = label.split(',').map((x) => x.trim()).filter(Boolean);
+      const noZip = parts.filter((x) => !/^\d{3}\s?\d{2}$/.test(x));
+      const tries = [];
+      tries.push(label);
+      if (noZip.length !== parts.length) tries.push(noZip.join(', '));
+      if (noZip.length > 2) tries.push(noZip.slice(0, 2).join(', '));
+      if (parts.length > 1) tries.push(parts[0]);
+      let g = null;
+      for (const q of tries) {
+        g = await geocodeAddress(q + ', Česko').catch(() => null);
+        await new Promise((r) => setTimeout(r, 1100));
+        if (g && g.country_code && g.country_code !== 'cz') g = null;
+        if (g) break;
+      }
+      geo[label] = g ? { lat: g.lat, lng: g.lon } : { lat: null, t: Date.now() };
       changed = true;
-      await new Promise((r) => setTimeout(r, 1100));
     }
     if (changed) setSetting(MISTO_GEO_KEY, geo, { type: 'json', scope: 'compounding', description: 'Geokódované adresy kiosků pro mapu /misto' }).catch(() => {});
     const spots = cz.map((k) => {
       const g = geo[String(k.label).trim()];
-      if (!g) return null;
+      if (!g || g.lat == null) return null;
       const city = String(k.label).split(',')[0].trim().slice(0, 60);
       return { city, lat: Math.round(g.lat * 1000) / 1000, lng: Math.round(g.lng * 1000) / 1000 };
     }).filter(Boolean);
     const out = { total: cz.length, spots };
-    if (spots.length) _mistoMapCache = { at: Date.now(), data: out };
-    res.set('Cache-Control', 'public, max-age=300');
+    // Cachovat až když nic nečeká na geokódování (jinak by další načtení nepokračovalo).
+    if (spots.length && !pending) _mistoMapCache = { at: Date.now(), data: out };
+    res.set('Cache-Control', pending ? 'no-store' : 'public, max-age=300');
     res.json(out);
   } catch (err) { next(err); }
 });
