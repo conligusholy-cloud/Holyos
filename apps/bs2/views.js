@@ -419,12 +419,7 @@ function supporterCompounder(s) {
   // Fáze Compoundera — doplňujeme postupně
   const PHASES = [
     { no: '0', k: 'Jak to vlastně funguje', title: 'Prádlomat po spuštění', visual: 'how', lead: 'Než se pustíme do strategie, podívejte se, co se děje, když prádlomat <b>uvedete do chodu</b>. Stojí na dobrém místě, je otevřený <b>24 hodin denně, 7 dní v týdnu</b> — a nepotřebuje žádnou obsluhu. Zákazník přijde, zaplatí, vypere nebo usuší. Peníze jdou na Váš účet.',
-      points: [
-        ['sun', 'Žádná obsluha, žádná otevírací doba', 'Prádlomat je samoobslužný. Nikdo tam nemusí sedět, nikdo neotevírá ani nezavírá. Vydělává i o půlnoci, o víkendu a o svátcích.'],
-        ['bolt', 'Zákazník si zaplatí sám', 'Kartou, mincemi nebo bankovkami přímo na terminálu. Cena za praní či sušení je napsaná na stroji — nic nevysvětlujete, nic nevybíráte.'],
-        ['network', 'Vy vidíte všechno na dálku', 'Každá platba a každý cyklus se zapisují do systému. V telefonu vidíte obrat, vytížení i stav stroje — kdykoli, odkudkoli.'],
-        ['check', 'Servis řeší Best Series', 'Když se něco pokazí, volá zákazník na infolinku, ne Vám. Servis přijede, opraví, náhradní díly máme skladem. Vy se staráte o místo, my o stroj.'],
-      ] },
+      points: [] },
     { no: '1', k: 'Vztah s bankovním domem', title: 'Sblížení', visual: 'pilots', lead: 'Stejně jako mezi lidmi je i mezi Vámi a bankovním domem potřeba vybudovat vztah. Teď jste pro něj <b>nový partner</b> — a potřebuje Vás trochu poznat. Strategie je jednoduchá: <b>začněte jedním prvním prádlomatem</b> — verze MINI, ideálně bez financování.',
       points: [
         ['box', 'Jeden první prádlomat', 'Začněte <b>jedním strojem</b>. Ne třemi, ne pěti. Jeden stroj na jednom místě dá všechna data, která potřebujete — a nic Vás nenutí dělat další rozhodnutí dřív, než budete vědět.'],
@@ -756,7 +751,7 @@ requestAnimationFrame(tick);
       </div></div>` : ''}
       ${ph.visual === 'scale' ? `<div class="scale"><div class="sc-col ok"><div class="sc-h"><i></i>Místo verifikováno</div><div class="sc-m"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot</span></div><div class="sc-plus">+</div><div class="sc-m new"><img src="/img/pradlomat.webp?v=2" alt="Další stroj" loading="lazy" decoding="async"><span class="pl-tag z">100 % zafinancovaný</span></div><div class="sc-t">stroj splácí sám sebe — a ještě něco zbývá</div></div>
         <div class="sc-col wait"><div class="sc-h"><i></i>Místo neverifikováno</div><div class="sc-m dim"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag g">Pilot</span></div><div class="sc-arrow">⟶</div><div class="sc-t">počkat · nebo přemístit na nové místo a verifikovat znovu</div></div></div>` : ''}
-      <div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>
+      ${ph.points.length ? `<div class="ph-grid">${ph.points.map(pt => `<div class="c"><div class="i">${ico(pt[0], 20)}</div><b>${esc(pt[1])}</b><p>${pt[2]}</p></div>`).join('')}</div>` : ''}
       ${ph.timeline ? `<div class="ph-tl">${ph.timeline.map((t, i) => `<div class="s"><i>${i + 1}</i><b>${esc(t[0])}</b><span>${esc(t[1])}</span></div>`).join('')}</div>` : ''}
       ${ph.note ? `<p class="ph-note">${ph.note}</p>` : ''}
       ${ph.decision ? `<div class="dec"><div class="dec-q">Kolik prádlomatů vlastně chci?</div><div class="dec-opts">${[3, 5, 10, 100].map((n, i) => `<button type="button" class="dec-o${i === 1 ? ' on' : ''}" data-n="${n}" onclick="for(const b of this.parentNode.children)b.classList.remove('on');this.classList.add('on');document.getElementById('dec-n').textContent=this.dataset.n;document.getElementById('dec-m').textContent=(this.dataset.n*25000).toLocaleString('cs-CZ')">${n}</button>`).join('')}</div>
