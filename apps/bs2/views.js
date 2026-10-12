@@ -663,14 +663,16 @@ const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_c
 // a kalkulačka „čím víc DC, tím menší cena" s fotkou prádlomatu FLEX.
 function valueHero({ flex = null, sym = 'Kč' } = {}) {
   // ── Scéna 1: hledání místa (lidé z Best Series prohledávají mapu a označí parcelu) ──
-  const person = (kt, kp, color) => `<g><circle r="3.4" cy="-9" fill="#ffd9b0"/><rect x="-3.6" y="-6" width="7.2" height="9" rx="2.4" fill="${color}"/><rect x="-3.6" y="-1.5" width="7.2" height="1.8" fill="#fff" opacity=".85"/><animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="${kt}" keyPoints="${kp}" path="M14 59 H150 V100 H176"/></g>`;
+  const person = (kt, color) => `<g><circle r="3.4" cy="-9" fill="#ffd9b0"/><rect x="-3.6" y="-6" width="7.2" height="9" rx="2.4" fill="${color}"/><rect x="-3.6" y="-1.5" width="7.2" height="1.8" fill="#fff" opacity=".85"/><animateMotion dur="8s" repeatCount="indefinite" calcMode="linear" keyTimes="${kt}" keyPoints="0;.124;.124;.463;.463;1;1" path="M10 59 H37 H111 H150 V92 H195"/></g>`;
   const sceneFind = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Lidé z Best Series hledají vhodné místo"><rect width="240" height="150" rx="12" fill="#0a1426"/>
     <g fill="#10213f" stroke="#1d3563" stroke-width="1"><rect x="10" y="10" width="54" height="40" rx="4"/><rect x="80" y="10" width="62" height="40" rx="4"/><rect x="160" y="10" width="70" height="40" rx="4"/><rect x="10" y="70" width="54" height="34" rx="4"/><rect x="80" y="70" width="62" height="34" rx="4"/><rect x="10" y="114" width="54" height="30" rx="4"/><rect x="80" y="114" width="62" height="30" rx="4"/><rect x="160" y="124" width="70" height="20" rx="4"/></g>
     <g stroke="#2b4a86" stroke-width="1" stroke-dasharray="3 4" opacity=".6"><path d="M0 59 H240"/><path d="M72 0 V150"/><path d="M150 0 V150"/></g>
     <rect class="vh-lot" x="160" y="74" width="70" height="40" rx="5" fill="#2fe3a0" fill-opacity="0" stroke="#2fe3a0" stroke-width="1.5" stroke-dasharray="4 3"/>
-    ${person('0;0.62;1', '0;1;1', '#1e86e0')}${person('0;0.1;0.66;1', '0;0;0.93;0.93', '#7c5cff')}
-    <g class="vh-pin"><path d="M195 66c-6 0-10 4.4-10 9.800 0 7.200 10 17.200 10 17.200s10-10 10-17.200c0-5.400-4-9.800-10-9.800z" fill="#2fe3a0"/><circle cx="195" cy="75.500" r="3.800" fill="#04141a"/></g>
-    <g class="vh-chk" fill="none" stroke="#2fe3a0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M178 52l5 5 9-10" transform="translate(30 56)"/></g>
+    ${person('0;.12;.2;.34;.42;.66;1', '#1e86e0')}${person('0;.15;.25;.4;.48;.7;1', '#7c5cff')}
+    <g class="vh-x vh-x1" stroke="#ff5470" stroke-width="3" stroke-linecap="round"><path d="M29 22l16 16M45 22l-16 16"/></g>
+    <g class="vh-x vh-x2" stroke="#ff5470" stroke-width="3" stroke-linecap="round"><path d="M103 79l16 16M119 79l-16 16"/></g>
+    ${flex && flex.img ? `<image class="vh-chk" href="${flex.img}" x="166" y="76" width="58" height="36" preserveAspectRatio="xMidYMid meet"/>` : `<g class="vh-chk"><rect x="180" y="82" width="30" height="26" rx="3" fill="#1b2e57" stroke="#3a6cf5"/><rect x="180" y="82" width="30" height="6" rx="2" fill="#1e86e0"/><circle cx="195" cy="98" r="5" fill="#0a1426" stroke="#4fd1ff" stroke-width="1.5"/></g>`}
+    <g class="vh-chk"><circle cx="220" cy="80" r="9" fill="#2fe3a0"/><path d="M215 80l4 4 7-8" fill="none" stroke="#04141a" stroke-width="2.600" stroke-linecap="round" stroke-linejoin="round"/></g>
   </svg>`;
 
   // ── Scéna 2: bagr kope výkop pro přípojky (voda + elektřina) až k prádlomatu ──
@@ -747,11 +749,12 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   .vh-step b{font-size:16px;letter-spacing:-.01em;margin-top:6px}.vh-step span{font-size:13px;color:var(--text2);line-height:1.4}
   .vh-step em{font-style:normal;align-self:flex-start;margin-top:4px;font-size:12px;font-weight:800;color:var(--ok);background:rgba(47,227,160,.12);border:1px solid rgba(47,227,160,.35);padding:3px 9px;border-radius:999px}
   .vh-step .vh-num{font-size:13px;color:#fff}
-  .vh-pin{opacity:0;transform-box:fill-box;transform-origin:50% 100%;animation:vhpin 6s ease-in infinite}
-  .vh-lot{animation:vhlot 6s ease infinite}.vh-chk{opacity:0;animation:vhchk 6s ease infinite}
-  @keyframes vhpin{0%,60%{opacity:0;transform:translateY(-34px)}66%{opacity:1;transform:translateY(0)}69%{transform:translateY(-6px)}72%,94%{opacity:1;transform:translateY(0)}100%{opacity:0}}
-  @keyframes vhlot{0%,64%{fill-opacity:0;stroke-dashoffset:0}70%,94%{fill-opacity:.28}100%{fill-opacity:0}}
-  @keyframes vhchk{0%,72%{opacity:0}78%,94%{opacity:1}100%{opacity:0}}
+  .vh-x{opacity:0;animation:vhx1 8s ease infinite}.vh-x2{animation-name:vhx2}
+  .vh-lot{animation:vhlot 8s ease infinite}.vh-chk{opacity:0;animation:vhchk 8s ease infinite}
+  @keyframes vhx1{0%,18%{opacity:0}22%,92%{opacity:1}100%{opacity:0}}
+  @keyframes vhx2{0%,40%{opacity:0}44%,92%{opacity:1}100%{opacity:0}}
+  @keyframes vhlot{0%,66%{fill-opacity:0}72%,94%{fill-opacity:.28}100%{fill-opacity:0}}
+  @keyframes vhchk{0%,68%{opacity:0}76%,94%{opacity:1}100%{opacity:0}}
   .vh-trench{stroke-dasharray:143;animation:vhdig 6s linear infinite}.vh-water,.vh-drain,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-drain{animation-delay:.05s}.vh-elec{animation-delay:.1s}
   @keyframes vhdig{0%{stroke-dashoffset:143}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
   @keyframes vhpipe{0%,8%{stroke-dashoffset:200}72%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
@@ -776,7 +779,7 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   .vh-sv{margin-top:12px;font-size:13.5px;color:var(--text2);min-height:38px}.vh-sv b{color:var(--ok)}
   @media(max-width:900px){.vh-flow{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.vh-step::after,.vh-step::before{display:none!important}.vh-calc{grid-template-columns:1fr}}
   @media(max-width:520px){.vh-row{grid-template-columns:100px 1fr}}
-  @media(prefers-reduced-motion:reduce){.vh-pin,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-pin,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-drain,.vh-elec{stroke-dashoffset:0}}
+  @media(prefers-reduced-motion:reduce){.vh-x,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-x,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-drain,.vh-elec{stroke-dashoffset:0}}
   </style>
   <section class="vh">
     <h2>Prádlomat nekupujete sami. Best Series zařídí všechno ostatní.</h2>
