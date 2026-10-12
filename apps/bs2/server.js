@@ -193,22 +193,23 @@ app.post('/forgot', wrap(async (req, res) => {
   noteFail(ip);
   const r = await q('SELECT id, nick, first_name, status, password_hash FROM supporters WHERE lower(email)=$1 LIMIT 1', [email]);
   const u = r.rows[0];
-  let sent = false, why = '';
+  let sent = false, why = '', resetRowId = null;
   if (u && u.status !== 'blocked') {
     if (!u.password_hash) { // účet ještě není aktivovaný → pošleme odkaz na aktivaci (tam se potvrdí VOP a GDPR)
       try { await sendBs2Mail({ to: email, subject: 'Aktivace účtu — Best Series 2.0', link: PUBLIC_URL + '/activate', linkLabel: 'Aktivovat účet', body: (u.first_name ? 'Ahoj ' + u.first_name + ',' : 'Ahoj,') + '\n\nTvůj účet v Best Series 2.0 ještě není aktivovaný. Aktivuješ ho přes odkaz níže — zadáš tento e-mail a zvolíš si nick a heslo.' }); sent = true; } catch (e) { why = 'mail_error'; console.error('[bs2] aktivační e-mail:', e.message); }
     } else {
-    const recent = (await q("SELECT count(*)::int AS c FROM password_resets WHERE supporter_id=$1 AND created_at > now() - interval '1 hour'", [u.id])).rows[0].c;
+    const recent = (await q("SELECT count(*)::int AS c FROM password_resets WHERE supporter_id=$1 AND created_at > now() - interval '15 minutes'", [u.id])).rows[0].c;
     if (recent >= 3) why = 'limit';
     else {
       try {
         const raw = crypto.randomBytes(32).toString('hex');
-        await q("INSERT INTO password_resets (supporter_id, token_hash, expires_at) VALUES ($1,$2, now() + interval '1 hour')", [u.id, sha256(raw)]);
+        const ins = await q("INSERT INTO password_resets (supporter_id, token_hash, expires_at) VALUES ($1,$2, now() + interval '1 hour') RETURNING id", [u.id, sha256(raw)]);
+        resetRowId = ins.rows[0].id;
         const hello = u.first_name ? 'Ahoj ' + u.first_name + ',' : 'Ahoj,';
         await sendBs2Mail({ to: email, subject: 'Obnovení hesla — Best Series 2.0', link: PUBLIC_URL + '/reset/' + raw, linkLabel: 'Nastavit nové heslo',
           body: hello + '\n\nněkdo (doufáme, že Ty) požádal o obnovu hesla k účtu v Best Series 2.0' + (u.nick ? ' (nick ' + u.nick + ')' : '') + '. Nové heslo si nastavíš přes odkaz níže. Odkaz platí 1 hodinu a lze ho použít jen jednou.\n\nPokud jsi o obnovu nežádal, tento e-mail ignoruj — Tvoje heslo zůstane beze změny.' });
         sent = true;
-      } catch (e) { why = 'mail_error'; console.error('[bs2] obnova hesla — e-mail se nepodařilo odeslat:', e.message); }
+      } catch (e) { why = 'mail_error'; if (resetRowId) await q('DELETE FROM password_resets WHERE id=$1', [resetRowId]).catch(() => {}); console.error('[bs2] obnova hesla — e-mail se nepodařilo odeslat:', e.message); }
     }
     }
   }
