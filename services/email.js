@@ -130,8 +130,8 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
               <div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0d1730;border-radius:10px;color:#4fd1ff;font-size:22px;font-weight:800;font-family:Arial,Helvetica,sans-serif;">B</div>
             </td>
             <td style="padding-left:12px;">
-              <div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:#ffffff;line-height:1.1;">Best Series <span style="color:#4fd1ff;">2.0</span></div>
-              <div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#7a8aa6;margin-top:4px;">Prádlomat · Compounder</div>
+              <div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:#ffffff;line-height:1.1;">Best Series</div>
+              <div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#7a8aa6;margin-top:4px;">Prádlomat</div>
             </td>
           </tr></table>
         </td></tr>
@@ -145,7 +145,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
           ${flyerHtml('#dbe4f3', bLink)}
         </td></tr>
         <tr><td style="padding:22px 34px 28px;border-top:1px solid #e6edf8;font-size:11.5px;color:#7a8aa6;text-align:center;line-height:1.7;">
-          <b style="color:#46557a;">Best Series s.r.o.</b> · IČO 05643724 · Prádlomat · Compounder
+          <b style="color:#46557a;">Best Series s.r.o.</b> · IČO 05643724 · Prádlomat
         </td></tr>
       </table>
     </td></tr>
