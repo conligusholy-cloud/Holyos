@@ -490,7 +490,7 @@ function supporterCompounder(s) {
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
-  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto 0 calc(50% - 300px);aspect-ratio:1377/1142;overflow:visible}
+  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto 0 calc(50% - 300px);aspect-ratio:1000/820;overflow:visible}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .cp .how-w8{width:9%!important}
   .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
@@ -500,7 +500,7 @@ function supporterCompounder(s) {
   .cp .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
   @keyframes howspin{to{transform:rotate(360deg)}}
   .cp .how-cust,.cp .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
-  .cp .how-cust{width:16%;aspect-ratio:1/2} .cp .how-cust.flip svg{transform:scaleX(-1)} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  .cp .how-cust{width:22%;aspect-ratio:1/2} .cp .how-cust.flip svg{transform:scaleX(-1)} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
   @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
   .cp .how-bag{font-size:30px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
@@ -611,9 +611,8 @@ function supporterCompounder(s) {
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
       ${ph.visual === 'how' ? `<div class="how">
         <div class="how-stage">
-          <img class="how-img" src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" loading="lazy" decoding="async">
+          <img class="how-img" src="/img/pradlomat-mini.webp?v=3" alt="Prádlomat MINI" loading="lazy" decoding="async">
           <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
-          <div class="how-d how-w how-w8" id="how-w8"><i></i><span>Pračka 8 kg</span></div>
           <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
           <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
           <div class="how-bag" id="how-bag">🧺</div>
@@ -629,33 +628,32 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:45,y:55},M8={x:27,y:58},S={x:67,y:54},IN={x:-14,y:62},OUT={x:-14,y:62};
-        put(w,W); put(sd,S); var w8=document.getElementById('how-w8'); put(w8,M8);
+        var W={x:40,y:58},S={x:63,y:55},IN={x:-14,y:58},OUT={x:-14,y:58};
+        put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
-        var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[250,'Pračka 8 kg · 200 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[300,'Pračka 8 kg s aviváží · 250 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W']];
+        var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč',1],[400,'Pračka 18 kg · 300 Kč',2],[500,'Pračka 18 kg s aviváží · 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
         async function customer(){
-          var pr=PR[cnt%PR.length]; cnt++; var WW=pr[3]==='M'?M8:W, ring=pr[3]==='M'?w8:w;
+          var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
           min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
           cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
-          put(cust,{x:WW.x-14,y:62}); put(bag,{x:WW.x-6,y:72}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
-          say('zaplatí na terminálu · '+pr[1],{x:WW.x-6,y:WW.y-14}); await wait(1300);
+          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
+          say('zaplatí na terminálu · '+pr[1]+' + sušička '+cycles+'× 50 Kč',{x:WW.x-6,y:WW.y-14}); await wait(1300);
           bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
           ring.classList.add('on'); say('pere…',{x:WW.x,y:WW.y-16}); await wait(3200); ring.classList.remove('on');
           var END=WW;
           bag.style.transition='none'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
-          if(pr[2]){
-            bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('přehodí do sušičky · 50 Kč',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
-            sd.classList.add('on'); say('suší…',{x:S.x,y:S.y-16}); await wait(3000); sd.classList.remove('on'); END=S;
-          }
+          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('přehodí do sušičky · '+cycles+'× 50 Kč',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
+          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… cyklus '+cy+' / '+cycles,{x:S.x,y:S.y-16}); await wait(cycles>1?1600:3000); sd.classList.remove('on'); if(cy<cycles) await wait(250); }
+          END=S;
           // platba se připíše
           var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
           n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
           // odchází s čistým prádlem
-          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:62}); say('hotovo — odchází s čistým prádlem',{x:END.x,y:END.y-14}); await wait(700);
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo — odchází s čistým prádlem',{x:END.x,y:END.y-14}); await wait(700);
           cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
           await wait(900); customer();
         }
