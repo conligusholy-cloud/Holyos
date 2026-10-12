@@ -170,16 +170,16 @@
   .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
   .sim.first{margin-top:10px}
   .eq-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
-  .eq{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-  .eq-t{flex:1 1 0;min-width:112px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(4,8,16,.6);text-align:center;transition:border-color .35s,box-shadow .35s,transform .35s}
+  .eq{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:14px;padding:8px 4px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .eq-t{flex:1 1 0;min-width:112px;border:1px solid var(--border);border-radius:12px;padding:14px 12px;background:rgba(4,8,16,.6);text-align:center;transition:border-color .35s,box-shadow .35s,transform .35s}
   .eq-t .eq-k{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
   .eq-t b{display:block;font-size:24px;letter-spacing:-.02em;line-height:1.15;margin:4px 0 2px;font-variant-numeric:tabular-nums}
   .eq-t small{display:block;font-size:11px;color:var(--text2)}
-  .eq-t.rev b{color:var(--accent2)} .eq-t.unk b{font-size:30px;color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)} .eq-t.res{border-color:rgba(47,227,160,.45);background:rgba(47,227,160,.08)} .eq-t.res b{color:var(--ok)}
+  .eq-t.rev b,.eq-t.unk b{font-size:32px;font-weight:800;color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)} .eq-t.rev b{color:var(--accent2)} .eq-t.res{border-color:rgba(47,227,160,.45);background:rgba(47,227,160,.08)} .eq-t.res b{color:var(--ok)}
   .eq-t.lit{border-color:rgba(79,209,255,.85);box-shadow:0 0 24px rgba(79,209,255,.35);transform:translateY(-3px)} .eq-t.res.lit{border-color:var(--ok);box-shadow:0 0 28px rgba(47,227,160,.5)}
   .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
   .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
-  @media(max-width:720px){.eq{justify-content:flex-start}.eq-t{flex:none;width:112px;padding:8px 8px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
+  @media(max-width:720px){.eq{justify-content:flex-start;gap:8px}.eq-t{flex:none;width:112px;padding:8px 8px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
   .czmap-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 0 24px rgba(79,209,255,.25))}
   .cz-pins{position:absolute;inset:0;pointer-events:none}
@@ -317,15 +317,15 @@
     <p class="lead" style="margin:0 0 16px">Bankovní dům dokáže prádlomat zainvestovat a stroj je zároveň zajištěním. Platí jediná podmínka: prádlomat se musí na místě sám uživit včetně splátky. Tržbu vidíte v animaci výše – zbytek rovnice rozhoduje vaše lokalita.</p>
     <div class="eq-wrap">
       <div class="eq" id="eq">
-        <div class="eq-t rev" data-i="0"><span class="eq-k">tržby / měsíc</span><b id="eq-rev">0 Kč</b><small>z animace, s DPH</small></div>
+        <div class="eq-t rev" data-i="0"><span class="eq-k">tržby</span><b>T</b><small>tržby za měsíc</small></div>
         <div class="eq-op">−</div>
-        <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>?</b><small>podle místa</small></div>
+        <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>N</b><small>podle místa</small></div>
         <div class="eq-op">−</div>
-        <div class="eq-t unk" data-i="2"><span class="eq-k">energie</span><b>?</b><small>podle místa</small></div>
+        <div class="eq-t unk" data-i="2"><span class="eq-k">energie</span><b>E</b><small>podle místa</small></div>
         <div class="eq-op">−</div>
-        <div class="eq-t unk" data-i="3"><span class="eq-k">servis</span><b>?</b><small>podle smlouvy</small></div>
+        <div class="eq-t unk" data-i="3"><span class="eq-k">servis</span><b>S</b><small>podle smlouvy</small></div>
         <div class="eq-op">−</div>
-        <div class="eq-t unk" data-i="4"><span class="eq-k">splátka</span><b>?</b><small>podle financování</small></div>
+        <div class="eq-t unk" data-i="4"><span class="eq-k">splátka úvěru</span><b>U</b><small>podle financování</small></div>
         <div class="eq-op">=</div>
         <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small></div>
       </div>
@@ -446,12 +446,10 @@
   // ── Formulář ──
   // ── Mapa ČR + časová osa od 2019: FLEX miniatury se objevují podle roku instalace ──
   (function(){
-    // Zdroj: /api/compounder/misto/map — české lokality ze SIS (tab Compounding), anonymizované.
+    // Zdroj: veřejný seznam prádlomatů v ČR (kdepereme.cz/cs/map), souřadnice na úrovni města.
+    var SPOTS=[{"city":"Aš – Tesco","lat":50.224,"lng":12.195},{"city":"Bítov – Kemp","lat":48.94,"lng":15.72},{"city":"Boskovice – Tesco","lat":49.488,"lng":16.66},{"city":"Břeclav – Tesco","lat":48.759,"lng":16.882},{"city":"Brno – Redbox","lat":49.168,"lng":16.57},{"city":"Čelákovice – OC Tesco","lat":50.16,"lng":14.75},{"city":"České Budějovice – Penny Market","lat":48.975,"lng":14.475},{"city":"Český Krumlov","lat":48.81,"lng":14.315},{"city":"Cheb – Tesco","lat":50.08,"lng":12.37},{"city":"Chotěboř – Tesco","lat":49.72,"lng":15.67},{"city":"Chrudim – Tesco","lat":49.95,"lng":15.795},{"city":"Děčín – Tesco","lat":50.78,"lng":14.21},{"city":"Havlíčkův Brod – COOP TIP","lat":49.607,"lng":15.58},{"city":"Holešov – Tesco","lat":49.333,"lng":17.578},{"city":"Hostivice – OC Tesco","lat":50.08,"lng":14.26},{"city":"Hradec Králové – Billa","lat":50.21,"lng":15.83},{"city":"Ivančice – Tesco","lat":49.1,"lng":16.38},{"city":"Jičín – OC Tesco","lat":50.437,"lng":15.35},{"city":"Jirkov – Tesco","lat":50.5,"lng":13.45},{"city":"Karlovy Vary – OC Fontána","lat":50.225,"lng":12.86},{"city":"Karlovy Vary – OC Varyáda","lat":50.24,"lng":12.88},{"city":"Karviná – Tesco","lat":49.85,"lng":18.54},{"city":"Kladno – Tesco","lat":50.14,"lng":14.1},{"city":"Kolín – OC Tesco","lat":50.03,"lng":15.2},{"city":"Králíky – Penny Market","lat":50.08,"lng":16.76},{"city":"Kroměříž – OC Tesco","lat":49.3,"lng":17.39},{"city":"Luhačovice – Wash-ME","lat":49.1,"lng":17.76},{"city":"Mariánské Lázně – Tesco","lat":49.96,"lng":12.7},{"city":"Mělník – Tesco","lat":50.35,"lng":14.47},{"city":"Mladá Boleslav – OC Tesco","lat":50.41,"lng":14.9},{"city":"Most – OC Tesco","lat":50.5,"lng":13.64},{"city":"Nový Jičín – Kaufland","lat":49.59,"lng":18.01},{"city":"Olomouc – Kemp Krásná Morava","lat":49.61,"lng":17.26},{"city":"Olomouc – Terno","lat":49.57,"lng":17.23},{"city":"Ostrov nad Ohří – Tesco","lat":50.31,"lng":12.94},{"city":"Pardubice – Kaufland","lat":50.04,"lng":15.78},{"city":"Písek – OC Tesco","lat":49.31,"lng":14.15},{"city":"Plzeň – Lidl","lat":49.74,"lng":13.38},{"city":"Poděbrady – OC Tesco","lat":50.14,"lng":15.12},{"city":"Pohořelice – OC Aventin","lat":48.98,"lng":16.52},{"city":"Praha 13 – Stodůlky","lat":50.05,"lng":14.33},{"city":"Praha 9 – WashIN","lat":50.11,"lng":14.5},{"city":"Přelouč – Tesco","lat":50.04,"lng":15.56},{"city":"Přerov – Kaufland","lat":49.45,"lng":17.45},{"city":"Příbram – Nový Rybník","lat":49.69,"lng":14.01},{"city":"Prostějov – OC Tesco","lat":49.47,"lng":17.11},{"city":"Rychnov nad Kněžnou","lat":50.16,"lng":16.28},{"city":"Šternberk","lat":49.73,"lng":17.3},{"city":"Šumperk","lat":49.97,"lng":16.97},{"city":"Sušice – Tesco","lat":49.23,"lng":13.52},{"city":"Svitavy – U Stadionu","lat":49.76,"lng":16.47},{"city":"Tábor – Tesco","lat":49.41,"lng":14.66},{"city":"Uherské Hradiště – Tesco","lat":49.07,"lng":17.46},{"city":"Uherský Brod – Wash-ME","lat":49.03,"lng":17.65},{"city":"Uničov – OC Tesco","lat":49.77,"lng":17.12},{"city":"Ústí nad Orlicí – Tesco","lat":49.97,"lng":16.39},{"city":"Vlašim – OC Tesco","lat":49.7,"lng":14.9},{"city":"Vsetín – Kaufland","lat":49.34,"lng":18.0},{"city":"Žamberk – Penny Market","lat":50.09,"lng":16.47}];
     var sec=document.getElementById('mapa'); if(!sec) return;
-    fetch('/api/compounder/misto/map').then(function(r){ return r.ok?r.json():null; }).then(function(d){
-      var SPOTS=(d&&d.spots)||[]; if(!SPOTS.length) return;
-      sec.hidden=false; init(SPOTS, d.total||SPOTS.length);
-    }).catch(function(){});
+    sec.hidden=false; init(SPOTS, SPOTS.length);
     function init(SPOTS,TOTAL){
     var LON0=12.05,LON1=18.95,LAT0=48.5,LAT1=51.15;
     var pins=document.getElementById('cz-pins'), yEl=document.getElementById('cz-year'), cEl=document.getElementById('cz-count'), track=document.getElementById('cz-track');
@@ -473,8 +471,6 @@
   (function(){
     var terms=document.querySelectorAll('#eq .eq-t'); if(!terms.length) return; var i=0;
     setInterval(function(){ terms.forEach(function(t){ t.classList.remove('lit'); }); terms[i].classList.add('lit'); i=(i+1)%terms.length; }, 1100);
-    var src=document.getElementById('hs-m'), dst=document.getElementById('eq-rev');
-    if(src&&dst){ setInterval(function(){ if(dst.textContent!==src.textContent) dst.textContent=src.textContent; }, 500); }
   })();
   var $ = function(id){ return document.getElementById(id); };
   window.pickVariant=function(v){ $('variant').value=v; };
