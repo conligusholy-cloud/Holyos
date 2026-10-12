@@ -631,7 +631,7 @@ function supporterCompounder(s) {
         var W={x:40,y:58},S={x:60,y:49},IN={x:-14,y:58},OUT={x:-14,y:58};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
-        var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč',1],[400,'Pračka 18 kg · 300 Kč',2],[500,'Pračka 18 kg s aviváží · 350 Kč',3]];
+        var total=0,cnt=0,min=6*60,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
         async function customer(){
@@ -639,21 +639,21 @@ function supporterCompounder(s) {
           min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
           cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
-          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
-          say('zaplatí na terminálu · '+pr[1]+' + sušička '+cycles+'× 50 Kč',{x:WW.x-6,y:WW.y-14}); await wait(1300);
+          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await wait(2300);
+          say('platí: '+pr[1]+' + sušení '+cycles+'×50 Kč',{x:WW.x-6,y:WW.y-14}); await wait(1300);
           bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
           ring.classList.add('on'); say('pere…',{x:WW.x,y:WW.y-16}); await wait(3200); ring.classList.remove('on');
           var END=WW;
           bag.style.transition='none'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
-          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('přehodí do sušičky · '+cycles+'× 50 Kč',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
-          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… cyklus '+cy+' / '+cycles,{x:S.x,y:S.y-16}); await wait(cycles>1?1600:3000); sd.classList.remove('on'); if(cy<cycles) await wait(250); }
+          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('do sušičky',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
+          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… '+cy+'/'+cycles,{x:S.x,y:S.y-16}); await wait(cycles>1?1600:3000); sd.classList.remove('on'); if(cy<cycles) await wait(250); }
           END=S;
           // platba se připíše
           var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
           n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
           // odchází s čistým prádlem
-          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo — odchází s čistým prádlem',{x:END.x,y:END.y-14}); await wait(700);
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
           cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
           await wait(900); customer();
         }
