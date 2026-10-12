@@ -113,6 +113,47 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
 </body></html>`;
   }
 
+  // ── Best Series 2.0 brand (světlá karta, modro-fialové akcenty, bez HolyOS) ──
+  if (brand === 'bs2') {
+    const bLink = link && link.startsWith('http') ? link : null;
+    const bodyHtml = body ? escapeHtml(body).replace(/\n/g, '<br>') : '';
+    return `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
+<body style="margin:0;padding:0;background:#eef3fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0b1220;">
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef3fb;padding:32px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #dbe4f3;border-radius:18px;overflow:hidden;">
+        <tr><td style="background:#070b16;padding:22px 34px;">
+          <table cellpadding="0" cellspacing="0" border="0"><tr>
+            <td style="width:40px;height:40px;background:#3a6cf5;background-image:linear-gradient(135deg,#4fd1ff,#3a6cf5 55%,#7c5cff);border-radius:12px;padding:2px;">
+              <div style="width:36px;height:36px;line-height:36px;text-align:center;background:#0d1730;border-radius:10px;color:#4fd1ff;font-size:22px;font-weight:800;font-family:Arial,Helvetica,sans-serif;">B</div>
+            </td>
+            <td style="padding-left:12px;">
+              <div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:#ffffff;line-height:1.1;">Best Series <span style="color:#4fd1ff;">2.0</span></div>
+              <div style="font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#7a8aa6;margin-top:4px;">Prádlomat · Compounder</div>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="height:4px;line-height:4px;font-size:0;background:#3a6cf5;background-image:linear-gradient(90deg,#4fd1ff,#3a6cf5 55%,#7c5cff);">&nbsp;</td></tr>
+        <tr><td style="padding:30px 34px 6px;">
+          <div style="font-size:21px;font-weight:700;color:#0b1220;line-height:1.3;">${escapeHtml(title || '')}</div>
+        </td></tr>
+        <tr><td style="padding:12px 34px 8px;">
+          ${bodyHtml ? `<div style="font-size:15px;line-height:1.7;color:#46557a;">${bodyHtml}</div>` : ''}
+          ${bLink ? `<div style="margin:24px 0 6px;"><a href="${escapeHtml(bLink)}" style="display:inline-block;padding:13px 26px;background:#3a6cf5;background-image:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);color:#ffffff;text-decoration:none;border-radius:11px;font-size:14px;font-weight:700;">${escapeHtml(linkLabel || 'Otevřít')}</a></div>` : ''}
+          ${flyerHtml('#dbe4f3', bLink)}
+        </td></tr>
+        <tr><td style="padding:22px 34px 28px;border-top:1px solid #e6edf8;font-size:11.5px;color:#7a8aa6;text-align:center;line-height:1.7;">
+          <b style="color:#46557a;">Best Series s.r.o.</b> · IČO 05643724 · Prádlomat · Compounder
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+  ${pixelImg}
+</body></html>`;
+  }
+
   // ── Prádlomaty brand (modrá grafika jako stránka specialisty / leták) ─────
   if (brand === 'pradlomaty') {
     const site = 'https://pradlomaty.info';

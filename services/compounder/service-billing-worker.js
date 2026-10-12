@@ -31,7 +31,11 @@ async function ourCompanyForPdf() {
   try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
   return our || { name: process.env.OUR_COMPANY_NAME || 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '', email: process.env.COMPOUNDER_MAIL_FROM || 'compounder@bestseries.cz' };
 }
-function mailFrom() { return { from: process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.COMPOUNDER_MAIL_FROM_NAME || 'Best Series' }; }
+// Odesílatel servisních faktur = Best Series (ne Compounder): SERVICE_BILLING_MAIL_FROM, jinak fakturační e-mail naší firmy, jinak COMPOUNDER_MAIL_FROM.
+async function mailFrom() {
+  let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
+  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || 'Best Series' };
+}
 function mailBody(invNo, total, currency, monthName, test) {
   return (test ? 'TESTOVACÍ E-MAIL — takto bude vypadat zpráva pro odběratele. Faktura v příloze je jen ukázka (nebyla vystavena).\n\n' : '')
     + 'Dobrý den,\n\nv příloze zasíláme servisní fakturu ' + invNo + (monthName ? ' za ' + monthName : '') + '.\nČástka k úhradě: ' + Number(total).toLocaleString('cs-CZ') + ' ' + currency + ' (splatnost 14 dní).\n\nS pozdravem\nBest Series';
@@ -47,14 +51,14 @@ async function sendInvoiceEmail(invoiceId, opts) {
   const to = opts.to || (full.company && full.company.email);
   if (!to) return { sent: false, error: 'Odběratel nemá e-mail' };
   const pdf = await generateInvoicePdf(full, await ourCompanyForPdf());
-  const r = await sendMail(Object.assign({}, mailFrom(), {
-    to, brand: 'compounder',
+  const r = await sendMail(Object.assign({}, await mailFrom(), {
+    to, brand: 'bs2',
     subject: 'Servisní faktura ' + full.invoice_number + (opts.monthName ? ' — ' + opts.monthName : ''),
     body: mailBody(full.invoice_number, full.total, full.currency || 'CZK', opts.monthName, false),
     attachments: [{ filename: full.invoice_number + '.pdf', content: pdf, contentType: 'application/pdf' }],
   }));
   if (r && r.sent) await prisma.invoice.update({ where: { id: invoiceId }, data: { status: full.status === 'draft' ? 'sent' : full.status } }).catch(function () {});
-  return Object.assign({}, r, { to, from: (r && r.from) || mailFrom().from || null });
+  return Object.assign({}, r, { to, from: (r && r.from) || (await mailFrom()).from || null });
 }
 
 // Testovací e-mail: ukázková faktura (obrat minulého měsíce ze SIS, jinak vzorová částka) — NIC se nevystavuje ani neukládá.
@@ -78,13 +82,13 @@ async function sendTestEmail(sub, to) {
     note: 'TESTOVACÍ FAKTURA — ukázka, nebyla vystavena.',
   };
   const pdf = await generateInvoicePdf(inv, our);
-  const r = await sendMail(Object.assign({}, mailFrom(), {
-    to, brand: 'compounder',
+  const r = await sendMail(Object.assign({}, await mailFrom(), {
+    to, brand: 'bs2',
     subject: '[TEST] Servisní faktura ' + invNo + ' — ' + monthName,
     body: mailBody(invNo, total, currency, monthName, true),
     attachments: [{ filename: invNo + '.pdf', content: pdf, contentType: 'application/pdf' }],
   }));
-  return Object.assign({}, r, { to, from: (r && r.from) || mailFrom().from || null, via: r && r.via, invoice_total: total, currency });
+  return Object.assign({}, r, { to, from: (r && r.from) || (await mailFrom()).from || null, via: r && r.via, invoice_total: total, currency });
 }
 
 // Vyfakturuje jednu smlouvu za předchozí měsíc. Vrací {ok, skipped?, invoice_number?, reason?}.
