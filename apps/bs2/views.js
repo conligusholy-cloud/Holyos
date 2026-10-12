@@ -636,7 +636,7 @@ function supporterCompounder(s) {
           <div class="how-cas" id="how-cas">
           <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
           <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 3 000 Kč</b><small>bez DPH<br>nájem 3 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i><i id="hs-env" hidden></i></small></div>
-          <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 3 000 Kč</b><small>bez DPH · před splátkou</small></div>
+          <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 3 630 Kč</b><small>s DPH · před splátkou<br>bez DPH <i id="hs-resn">− 3 000 Kč</i></small></div>
           <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
         </div>
@@ -659,7 +659,7 @@ function supporterCompounder(s) {
         var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
         function monthCalc(){ var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-3000-serv-en;
           document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
-          document.getElementById('hs-cost').textContent='− '+fmtK(3000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); var rb=document.getElementById('hs-res'); rb.textContent=(res<0?'− ':'')+fmtK(Math.abs(res)); rb.parentNode.classList.toggle('neg',res<0); }
+          document.getElementById('hs-cost').textContent='− '+fmtK(3000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); var rb=document.getElementById('hs-res'), resV=res*1.21; rb.textContent=(resV<0?'− ':'')+fmtK(Math.abs(resV)); document.getElementById('hs-resn').textContent=(res<0?'− ':'')+fmtK(Math.abs(res)); rb.parentNode.classList.toggle('neg',res<0); }
         monthCalc(); // výchozí stav (záporné = červeně)
         function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say(''); monthCalc(); document.getElementById('hs-again').classList.add('in'); }
         function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
