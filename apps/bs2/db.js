@@ -161,6 +161,7 @@ async function migrate() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'machine';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
 
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS gdpr_consent_at TIMESTAMPTZ; -- kdy uživatel odsouhlasil zpracování osobních údajů
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

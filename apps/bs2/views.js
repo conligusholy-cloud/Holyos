@@ -283,9 +283,38 @@ function activatePage({ step = 'email', email = '', error = '', name = '', nick 
       <label>Nick</label>${field({ name: 'nick', value: nick, icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required' })}
       <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      ${gdprCheck(false)}
       <button class="btn" type="submit">Vytvořit účet a přihlásit ${ICON.arrow}</button></form>`;
   return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
+const GDPR_HTML = `<h1>Souhlas se zpracováním osobních údajů</h1>
+<p>Udělením tohoto souhlasu se zpracováním osobních údajů poskytujete souhlas k tomu, aby <b>Best Series s.r.o.</b> (provozovatel platformy <b>Best Series 2.0</b>, <a href="https://www.bestseries2.cz">www.bestseries2.cz</a>, dále jako „správce“) zpracovávala Vaše osobní údaje dle dále uvedených podmínek.</p>
+<h3>Rozsah zpracování Vašich osobních údajů</h3>
+<p>Správce bude Vaše osobní údaje zpracovávat v rozsahu, v jakém jste je poskytli při registraci do Best Series 2.0 a v souvislosti s marketingovými aktivitami správce, konkrétně s přihlášením odběru mailových, tištěných nebo telefonických sdělení. Správce bude zpracovávat především jméno, příjmení, e‑mail, telefonní číslo, nick, adresu bydliště nebo adresu provozovny, název organizace a pracovní pozici.</p>
+<h3>Účel zpracování Vašich osobních údajů</h3>
+<p>Správce bude Vaše osobní údaje zpracovávat za účelem vedení Vašeho uživatelského účtu v Best Series 2.0 a za účely přímého marketingu (tj. nabízení produktů a služeb správce či třetích osob) včetně zasílání obchodních sdělení ve smyslu zákona č. 480/2004 Sb., o některých službách informační společnosti, a analýzy Vašeho chování týkajícího se těchto obchodních sdělení za účelem personalizace nabídky služeb.</p>
+<h3>Právní základ zpracování osobních údajů</h3>
+<p>Právním základem zpracování je tento Váš souhlas a skutečnost, že Vaše osobní údaje jsou nezbytné pro naplnění jednotlivých účelů přímého marketingu, jejichž odběr jste přihlásili. Osobní údaje jsou zpracovávány v souladu s Obecným nařízením o ochraně osobních údajů – Nařízením Evropského parlamentu a Rady (EU) 2016/679 ze dne 27. 4. 2016 (dále jako „GDPR“).</p>
+<h3>Doba, po níž budou Vaše osobní údaje zpracovávány</h3>
+<p>Správce bude Vaše osobní údaje zpracovávat v souvislosti s účelem přímého marketingu po dobu neurčitou od zaškrtnutí ve webovém rozhraní a následné registrace do Best Series 2.0 (<a href="https://www.bestseries2.cz">www.bestseries2.cz</a>, <a href="https://www.bestseries.cz">www.bestseries.cz</a>, <a href="https://www.bestseries.com">www.bestseries.com</a>); souhlas trvá do té doby, dokud jej neodvoláte.</p>
+<h3>Odvolání souhlasu se zpracováním osobních údajů</h3>
+<p>Tento Váš dobrovolně udělený souhlas se zpracováním osobních údajů můžete kdykoli bezplatně odvolat, a to prostřednictvím zaslání e‑mailu na adresu <a href="mailto:info@bestseries.cz">info@bestseries.cz</a>. Odvolání souhlasu je rovněž možné přímo z každého Vám zaslaného obchodního sdělení e‑mailem. Odvoláním souhlasu není dotčena zákonnost zpracování vycházejícího ze souhlasu, který byl dán před jeho odvoláním. Odvolání souhlasu též nemá vliv na zpracování osobních údajů, které správce zpracovává na základě jiného právního základu, než je souhlas.</p>
+<h3>Osoby s přístupem k Vašim osobním údajům</h3>
+<p>K Vašim osobním údajům bude mít přístup správce, jeho zaměstnanci a případně též třetí osoby – zpracovatelé, kteří poskytují vhodné záruky a jejichž zpracování splňuje všechny požadavky GDPR a kteří budou dostatečně chránit Vaše práva a Vaše osobní údaje. Těmito osobami jsou zejména právní a marketingoví poradci. Tyto osoby však budou mít přístup k těmto údajům jen po dobu nezbytně nutnou a v nezbytně nutném rozsahu, pokud to bude nutné pro poskytnutí služby a splnění zákonných požadavků.</p>
+<h3>Kontaktní údaje správce</h3>
+<p>Správce můžete kontaktovat na e‑mailu <a href="mailto:info@bestseries.cz">info@bestseries.cz</a>. Správce je oprávněn požadovat prokázání Vaší totožnosti za účelem zamezení přístupu neoprávněných osob k Vašim osobním údajům. Za účelem zvyšování kvality služeb a uchovávání záznamů o plnění právních povinností správce může být veškerá komunikace mezi Vámi a správcem monitorována.</p>
+<h3>Vaše práva související s ochranou Vašich osobních údajů</h3>
+<p>Máte právo kdykoliv odvolat svůj souhlas, opravit či doplnit osobní údaje, požadovat omezení zpracování, vznést námitku či stížnost proti zpracování osobních údajů, požadovat přenesení údajů, přístup ke svým osobním údajům, být informován o porušení zabezpečení osobních údajů, výmaz a další práva stanovená v GDPR.</p>
+<h3>Právo vznést námitku</h3>
+<p>Máte právo vznést námitku proti zpracování Vašich osobních údajů, jestliže je správce zpracovává pro účely přímého marketingu. Námitku je nutné podat správci. V případě, že vznesete námitku proti zpracování za účelem přímého marketingu, správce osobní údaje v tomto rozsahu dále nezpracovává, pokud neprokáže závažné oprávněné důvody pro zpracování, které převažují nad Vašimi zájmy nebo právy a svobodami, nebo pro určení, výkon nebo obhajobu právních nároků. Bližší informace o tomto právu obsahuje zejména čl. 21 GDPR.</p>
+<h3>Právo podat stížnost u dozorového úřadu</h3>
+<p>Kdykoliv můžete podat stížnost týkající se zpracování Vašich osobních údajů nebo neplnění povinností správce plynoucích z GDPR k dozorovému úřadu. Dozorovým úřadem je v ČR Úřad pro ochranu osobních údajů, se sídlem Pplk. Sochora 27, 170 00 Praha 7, <a href="https://www.uoou.cz">www.uoou.cz</a>.</p>
+<h3>Povinnost poskytnout osobní údaje. Následky neposkytnutí osobních údajů</h3>
+<p>Vaše osobní údaje poskytujete zcela dobrovolně. Nemáte žádnou povinnost je poskytnout. V případě, že Vaše osobní údaje neposkytnete, nehrozí Vám žádná sankce. Nicméně pokud osobní údaje správci neposkytnete, nebude Vám moci založit uživatelský účet v Best Series 2.0 ani posílat jednotlivá obchodní sdělení, ke kterým se přihlašujete (např. bez Vaší e‑mailové adresy Vám správce nebude schopen zaslat informace o nabídce prádlomatů nebo o změnách v platformě). Je však zcela na Vašem uvážení, zda chcete tato sdělení odebírat, či nikoliv.</p>`;
+function gdprPage() {
+  return authShell({ title: 'Souhlas se zpracováním osobních údajů', esc, card: `<div class="gdpr">${GDPR_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/login">přihlášení</a></p>`, wide: true });
+}
+const gdprCheck = (checked) => `<label class="gdpr-chk"><input type="checkbox" name="gdpr" value="1" required${checked ? ' checked' : ''}> <span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> společností Best Series s.r.o. (Best Series 2.0)</span></label>`;
 // Registrace přes referenční odkaz prodejce (/join/<code>)
 function joinPage({ code, seller, f = {}, error = '' }) {
   const who = [seller.first_name, seller.last_name].filter(Boolean).join(' ') || seller.nick;
@@ -300,6 +329,7 @@ function joinPage({ code, seller, f = {}, error = '' }) {
       <label>Nick</label>${field({ name: 'nick', value: f.nick || '', icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" required' })}
       <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      ${gdprCheck(!!f.gdpr)}
       <button class="btn" type="submit">Vytvořit účet ${ICON.arrow}</button>
     </form>
     <p class="foot">Už účet máš? <a href="/login">Přihlas se</a></p>` });
@@ -1812,4 +1842,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

@@ -184,10 +184,11 @@ app.post('/activate/finish', wrap(async (req, res) => {
   if (nick.includes('@')) return back('Nick nesmí být e-mail.');
   if (password.length < 8) return back('Heslo musí mít aspoň 8 znaků.');
   if (password !== password2) return back('Hesla se neshodují.');
+  if (String(req.body.gdpr || '') !== '1') return back('Pro aktivaci účtu je nutné odsouhlasit zpracování osobních údajů.');
   const taken = await q('SELECT 1 FROM supporters WHERE lower(nick)=lower($1) AND id<>$2', [nick, u.id]);
   if (taken.rows.length) return back('Tenhle nick už někdo má, zvol jiný.');
   const hash = await bcrypt.hash(password, 11);
-  await q("UPDATE supporters SET nick=$1, password_hash=$2, status='active', activated_at=now(), last_login_at=now(), updated_at=now() WHERE id=$3", [nick, hash, u.id]);
+  await q("UPDATE supporters SET nick=$1, password_hash=$2, status='active', activated_at=now(), last_login_at=now(), updated_at=now(), gdpr_consent_at=now() WHERE id=$3", [nick, hash, u.id]);
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick }, 30 * 24 * 3600);
   res.redirect('/');
 }));
@@ -231,6 +232,7 @@ app.get('/join/:code', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
   res.send(V.joinPage({ code: req.params.code, seller }));
 }));
+app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
 app.post('/join/:code', wrap(async (req, res) => {
   const seller = await loadSeller(req.params.code);
   if (!seller) return res.status(404).send(V.errorPage('Odkaz neplatí', 'Tenhle registrační odkaz není platný.', '/login'));
@@ -239,7 +241,9 @@ app.post('/join/:code', wrap(async (req, res) => {
   const f = { first_name: String(req.body.first_name || '').trim(), last_name: String(req.body.last_name || '').trim(), email: String(req.body.email || '').trim().toLowerCase(), phone: String(req.body.phone || '').trim(), nick: String(req.body.nick || '').trim() };
   const password = String(req.body.password || ''), password2 = String(req.body.password2 || '');
   const back = (error) => res.status(400).send(V.joinPage({ code: req.params.code, seller, f, error }));
+  f.gdpr = String(req.body.gdpr || '') === '1';
   if (!f.first_name || !f.last_name) return back('Vyplň jméno a příjmení.');
+  if (!f.gdpr) return back('Pro registraci je nutné odsouhlasit zpracování osobních údajů.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return back('Zadej platný e-mail.');
   if (f.phone && !/^[+0-9 ()./-]{6,25}$/.test(f.phone)) return back('Telefon má neplatný formát.');
   if (!/^[A-Za-z0-9._-]{3,30}$/.test(f.nick)) return back('Nick: 3–30 znaků, jen písmena, čísla, tečka, podtržítko, pomlčka.');
@@ -250,8 +254,8 @@ app.post('/join/:code', wrap(async (req, res) => {
   // Telefon musí být jedinečný (porovnává se jen podle číslic, posledních 9)
   if (f.phone) { const tail = f.phone.replace(/\D/g, '').slice(-9); if (tail.length >= 9 && (await q("SELECT 1 FROM supporters WHERE phone IS NOT NULL AND right(regexp_replace(phone, '\\D', '', 'g'), 9)=$1", [tail])).rows.length) return back('Tento telefon už u nás účet má.'); }
   const hash = await bcrypt.hash(password, 11);
-  const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at)
-    VALUES ($1,$2,$3,$4,$5,$6,'active','standard',$7,'referral',now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
+  const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at, gdpr_consent_at)
+    VALUES ($1,$2,$3,$4,$5,$6,'active','standard',$7,'referral',now(),now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
   await log({ name: 'web' }, 'join_via_referral', { id: r.rows[0].id, email: f.email, seller_id: seller.id, seller_nick: seller.nick, ip });
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: r.rows[0].id, nick: f.nick }, 30 * 24 * 3600);
   res.redirect('/?welcome=1');

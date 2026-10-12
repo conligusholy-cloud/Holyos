@@ -46,6 +46,9 @@ label{display:flex;justify-content:space-between;align-items:baseline;font-size:
 .btn::after{content:"";position:absolute;top:0;left:-70%;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:shine 3.2s ease-in-out infinite}
 @keyframes shine{0%,60%{left:-70%}100%{left:130%}}
 .msg{padding:10px 12px;border-radius:10px;margin:0 0 6px;font-size:13.5px;line-height:1.4}.msg.err{background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.4);color:#ffb3bb}.msg.ok{background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.4);color:#a9f5d9}
+.gdpr-chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-size:12.5px;color:var(--ink2);line-height:1.45;cursor:pointer}.gdpr-chk input{width:18px;height:18px;margin-top:1px;flex:none;accent-color:#4fd1ff}.gdpr-chk a{color:#4fd1ff}
+.gdpr{font-size:13.5px;line-height:1.55;color:var(--ink2);max-height:70vh;overflow:auto;padding-right:6px}.gdpr h1{font-size:20px;color:var(--ink);margin:0 0 10px}.gdpr h3{font-size:14px;color:var(--ink);margin:16px 0 4px}.gdpr p{margin:0 0 8px}.gdpr a{color:#4fd1ff}
+.card.wide{max-width:760px}
 .foot{margin:18px 0 0;text-align:center;color:var(--ink3);font-size:11.5px}.foot a{color:var(--ink2);text-decoration:none}.foot a:hover{color:var(--ink)}
 .sec{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:14px;color:var(--ink3);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}.sec svg{width:14px;height:14px}
 .copy{position:relative;z-index:1;text-align:center;color:var(--ink3);font-size:12px;padding:0 20px 22px}
@@ -81,7 +84,7 @@ const ICON = {
 function fmtN(n) { return Number(n || 0).toLocaleString('cs-CZ'); }
 
 /** Společná obálka: hero vlevo + karta vpravo. `card` = vnitřní HTML karty. */
-function authShell({ title, card, members = null, esc }) {
+function authShell({ title, card, members = null, esc, wide = false }) {
   return `<!doctype html><html lang="cs"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#04060c">
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -98,7 +101,7 @@ function authShell({ title, card, members = null, esc }) {
     <div class="chips"><span>Přístup z mobilu i počítače</span><span>Výhody pro členy</span></div>
     ${members != null ? `<div class="stats"><div><b>${fmtN(members)}</b><small>aktivních uživatelů</small></div></div>` : ''}
   </section>
-  <section class="side"><div class="card"><div class="in">${card}</div></div></section>
+  <section class="side"><div class="card${wide ? ' wide' : ''}"><div class="in">${card}</div></div></section>
 </div>
 <p class="copy">© ${new Date().getFullYear()} Best Series s.r.o. · bestseries2.cz</p>
 <script>${AUTH_JS}</script></body></html>`;
