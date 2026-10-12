@@ -498,8 +498,10 @@ function supporterCompounder(s) {
   .cp .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
   .cp .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
   @keyframes howspin{to{transform:rotate(360deg)}}
-  .cp .how-cust,.cp .how-bag{position:absolute;font-size:26px;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
-  .cp .how-bag{font-size:20px;z-index:4}
+  .cp .how-cust,.cp .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
+  .cp .how-cust{width:9%;aspect-ratio:1/2} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
+  .cp .how-bag{font-size:22px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
   .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
   .cp .how-acc{position:absolute;right:-2%;top:-4%;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
@@ -611,12 +613,11 @@ function supporterCompounder(s) {
           <img class="how-img" src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" loading="lazy" decoding="async">
           <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
           <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
-          <div class="how-cust" id="how-cust">🧍</div>
+          <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
           <div class="how-acc"><span class="dec-k">dnes vyděláno</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
           <div class="how-coins" id="how-coins"></div>
-          <div class="how-door"><span>vchod</span></div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
@@ -626,7 +627,7 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:53,y:52},S={x:72,y:47},IN={x:-10,y:80},OUT={x:112,y:80};
+        var W={x:53,y:52},S={x:72,y:47},IN={x:-10,y:70},OUT={x:112,y:70};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[200,'Pračka 18 kg · 200 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč'],[150,'Pračka 8 kg · 150 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč']];
@@ -635,9 +636,9 @@ function supporterCompounder(s) {
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++;
           min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
-          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+3,y:IN.y+2}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+5,y:IN.y+6}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
-          put(cust,{x:W.x-9,y:W.y+6}); put(bag,{x:W.x-5,y:W.y+8}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
+          put(cust,{x:W.x-13,y:W.y+16}); put(bag,{x:W.x-7,y:W.y+22}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
           say('zaplatí na terminálu · '+pr[1],{x:W.x-6,y:W.y-14}); await wait(1300);
           bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.45)'); await wait(700); bag.style.opacity=0;
           w.classList.add('on'); say('pere…',{x:W.x,y:W.y-16}); await wait(3200); w.classList.remove('on');
@@ -649,8 +650,8 @@ function supporterCompounder(s) {
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
           n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
           // odchází s čistým prádlem
-          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:S.x-4,y:S.y+10},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:S.x-8,y:S.y+8}); say('hotovo — odchází s čistým prádlem',{x:S.x,y:S.y-14}); await wait(700);
-          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+3,y:OUT.y+2}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:S.x-6,y:S.y+24},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:S.x-12,y:S.y+18}); say('hotovo — odchází s čistým prádlem',{x:S.x,y:S.y-14}); await wait(700);
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+5,y:OUT.y+6}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
           await wait(900); customer();
         }
         customer();
