@@ -193,6 +193,13 @@
   .eq-g.g2{border-color:rgba(124,92,255,.55)} .eq-g.g2 .eq-gk{color:#b9a7ff;border-color:rgba(124,92,255,.55)}
   .eq-g.g3{border-color:rgba(245,180,0,.5)} .eq-g.g3 .eq-gk{color:#ffd866;border-color:rgba(245,180,0,.5)}
   .eq .eq-t.res{align-self:center}
+  .eq-t.res{position:relative;overflow:visible}
+  .eq-t.res.flash{animation:eqflash .7s ease-in-out 2}
+  @keyframes eqflash{0%,100%{box-shadow:0 0 0 rgba(47,227,160,0);background:rgba(47,227,160,.08)}50%{box-shadow:0 0 36px rgba(47,227,160,.9),0 0 90px rgba(47,227,160,.45);background:rgba(47,227,160,.28);transform:scale(1.06)}}
+  .eq-check{position:absolute;right:-14px;top:-14px;width:44px;height:44px;opacity:0;transform:scale(0);transition:transform .45s cubic-bezier(.2,1.6,.4,1),opacity .2s;filter:drop-shadow(0 0 14px rgba(47,227,160,.8))}
+  .eq-check svg{width:100%;height:100%;display:block} .eq-check path{stroke-dasharray:100;stroke-dashoffset:100}
+  .eq-t.res.ok .eq-check{opacity:1;transform:scale(1)} .eq-t.res.ok .eq-check path{animation:eqtick .5s ease-out .25s forwards}
+  @keyframes eqtick{to{stroke-dashoffset:0}}
   .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
   .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
   @media(max-width:720px){.eq{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:20px 6px 22px}.eq-g.g1{transform:none}.eq-g.g1 .eq-t b{font-size:30px}.eq-star{font-size:9px;right:6px}.eq{justify-content:flex-start;gap:8px}.eq-g{flex:none;padding:18px 8px 8px}.eq-g .eq-gi{gap:6px}.eq-gk{font-size:9px;left:8px}.eq-t{flex:none;width:104px;padding:8px 6px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
@@ -376,7 +383,7 @@
           <div class="eq-t unk" data-i="4"><span class="eq-k">úvěr</span><b>U</b><small>podle financování</small></div>
         </div></div>
         <div class="eq-op">=</div>
-        <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small></div>
+        <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small><span class="eq-check" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="rgba(47,227,160,.18)" stroke="#2fe3a0" stroke-width="2.5"/><path d="M14 25l7 7 13-15" fill="none" stroke="#2fe3a0" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/></svg></span></div>
       </div>
       <div class="eq-legend">
         <span class="ok"><i></i>&gt; 0 → použijte financování – prádlomat zaplatí sám sebe</span>
@@ -505,8 +512,11 @@
   })();
   // ── Rovnice financování: postupné rozsvěcení členů + tržba živě z animace ──
   (function(){
-    var terms=document.querySelectorAll('#eq .eq-t'); if(!terms.length) return; var i=0;
-    setInterval(function(){ terms.forEach(function(t){ t.classList.remove('lit'); }); terms[i].classList.add('lit'); i=(i+1)%terms.length; }, 1100);
+    var terms=document.querySelectorAll('#eq .eq-t'); if(!terms.length) return; var i=0, res=terms[terms.length-1];
+    (function tick(){ terms.forEach(function(t){ t.classList.remove('lit'); }); var t=terms[i]; t.classList.add('lit');
+      var last=(i===terms.length-1); i=(i+1)%terms.length;
+      if(last){ res.classList.remove('flash','ok'); void res.offsetWidth; res.classList.add('flash'); setTimeout(function(){ res.classList.add('ok'); },700); setTimeout(function(){ res.classList.remove('flash','ok'); tick(); },2600); }
+      else setTimeout(tick,1100); })();
   })();
   var $ = function(id){ return document.getElementById(id); };
   window.pickVariant=function(v){ $('variant').value=v; };
