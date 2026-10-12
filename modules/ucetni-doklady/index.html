@@ -1736,6 +1736,7 @@
               <label>Odběratel (provozovatel) *</label><div><input id="sub-name" value="${v('customer_name','')}" placeholder="Doplní se z Compoundingu po výběru stroje" oninput="subNameEdited()" style="${inp}"><input type="hidden" id="sub-companyid" value="${s && s.company_id ? s.company_id : ''}"><div id="sub-conote" style="font-size:11px;color:var(--text2);margin-top:3px;"></div></div>
               <label>IČO odběratele</label><input id="sub-ico" value="${v('buyer_ico','')}" placeholder="doplň, pokud chybí" style="${inp}">
               <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" placeholder="doplň, pokud chybí" style="${inp}">
+              <label>Číslo servisní smlouvy</label><input id="sub-contract" value="${v('contract_number','')}" placeholder="např. SS-2026-001" style="${inp}">
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
               <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
               <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
@@ -1814,7 +1815,7 @@
       if (!name) return alert('Vyplň odběratele (provozovatele).');
       const cid = parseInt(document.getElementById('sub-companyid').value, 10) || null;
       const body = { kiosk_code: kiosk, company_id: cid, customer_name: name, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
-        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null,
+        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null, contract_number: g('sub-contract') || null,
         active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
       if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
       const r = id ? await api('PUT', '/api/compounder/service-subscriptions/' + id, body) : await api('POST', '/api/compounder/service-subscriptions', body);
@@ -1827,7 +1828,7 @@
       const to = g('sub-testto');
       if (!to) { res.style.color = '#ef4444'; res.textContent = 'Zadej e-mail, na který se má test poslat.'; return; }
       res.style.color = 'var(--text2)'; res.textContent = 'Odesílám test…';
-      const r = await api('POST', '/api/compounder/service-subscriptions/test-email', { to, kiosk_code: g('sub-kiosk') || 'TEST', customer_name: g('sub-name') || null, buyer_ico: g('sub-ico') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase() });
+      const r = await api('POST', '/api/compounder/service-subscriptions/test-email', { to, kiosk_code: g('sub-kiosk') || 'TEST', customer_name: g('sub-name') || null, buyer_ico: g('sub-ico') || null, contract_number: g('sub-contract') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase() });
       if (r.status !== 200 || !r.data || !r.data.ok) { res.style.color = '#ef4444'; res.textContent = 'Chyba: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status); return; }
       res.style.color = '#16a34a';
       res.textContent = '✓ Odesláno na ' + r.data.sent_to + ' — odesílatel: ' + (r.data.sent_from || 'výchozí SMTP') + (r.data.via ? ' (přes ' + r.data.via + ')' : '') + '. Zkontroluj schránku (i spam).';

@@ -78,8 +78,8 @@ async function sendTestEmail(sub, to) {
     date_issued: new Date(), date_taxable: new Date(), date_due: new Date(Date.now() + 14 * 86400000), variable_symbol: '20260001',
     payment_method: 'bank_transfer', vat_regime: 'standard',
     company: { name: sub.customer_name || 'Ukázkový odběratel', ico: sub.buyer_ico || '', country: 'CZ' },
-    items: [{ line_order: 0, description: 'Servisní poplatek ' + feePct + ' % z obratu ' + monthName + ' (obrat ' + revenue.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code, quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }],
-    note: 'TESTOVACÍ FAKTURA — ukázka, nebyla vystavena.',
+    items: [{ line_order: 0, description: 'Servisní poplatek ' + feePct + ' % z obratu ' + monthName + ' (obrat ' + revenue.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code + (sub.contract_number ? ' — na základě servisní smlouvy č. ' + sub.contract_number : ''), quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }],
+    note: (sub.contract_number ? 'Fakturováno na základě servisní smlouvy č. ' + sub.contract_number + '. ' : '') + 'TESTOVACÍ FAKTURA — ukázka, nebyla vystavena.',
   };
   const pdf = await generateInvoicePdf(inv, our);
   const r = await sendMail(Object.assign({}, await mailFrom(), {
@@ -106,7 +106,8 @@ async function billSubscription(sub, opts) {
   const total = Math.round((subtotal + vat) * 100) / 100;
   const companyId = await resolveCompanyId(sub);
   const invNo = await generateInvoiceNumber('issued', { prisma });
-  const desc = 'Servisní poplatek ' + feePct + ' % z obratu ' + rev.prevMonthName + ' (obrat ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code;
+  const cn = (sub.contract_number || '').trim();
+  const desc = 'Servisní poplatek ' + feePct + ' % z obratu ' + rev.prevMonthName + ' (obrat ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code + (cn ? ' — na základě servisní smlouvy č. ' + cn : '');
 
   const invoice = await prisma.invoice.create({
     data: {
@@ -118,7 +119,7 @@ async function billSubscription(sub, opts) {
       date_taxable: new Date(),
       variable_symbol: (invNo.match(/(\d+)$/) || [])[1] || null,
       status: 'draft', source: 'service_billing',
-      note: 'Automatická servisní faktura za ' + rev.prevMonthName + ' · kiosk ' + sub.kiosk_code + ' · ' + feePct + ' % z obratu ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency,
+      note: (cn ? 'Fakturováno na základě servisní smlouvy č. ' + cn + '. ' : '') + 'Automatická servisní faktura za ' + rev.prevMonthName + ' · kiosk ' + sub.kiosk_code + ' · ' + feePct + ' % z obratu ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency,
       items: { create: [{ line_order: 0, description: desc, quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }] },
     },
   });

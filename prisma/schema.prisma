@@ -3187,6 +3187,7 @@ model ServiceSubscription {
   id                 Int      @id @default(autoincrement())
   kiosk_code         String   @unique @db.VarChar(40) // stroj v terénu (SIS)
   contract_id        Int? // CompoundingContract (servisní smlouva)
+  contract_number    String?  @db.VarChar(80) // číslo servisní smlouvy (uvádí se na faktuře)
   company_id         Int? // odběratel (Company) pro fakturu
   buyer_ico          String?  @db.VarChar(20)
   customer_name      String?  @db.VarChar(255)

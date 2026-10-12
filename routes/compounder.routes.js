@@ -3776,6 +3776,7 @@ const subSchema = z.object({
   auto_send: z.boolean().optional(),
   billing_day: z.number().int().optional(),
   contract_id: z.number().int().optional().nullable(),
+  contract_number: z.string().max(80).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
 });
 router.post('/service-subscriptions', requireAuth, async (req, res, next) => {
@@ -3789,7 +3790,7 @@ router.post('/service-subscriptions', requireAuth, async (req, res, next) => {
       fee_pct: d.fee_pct != null ? d.fee_pct : 13, currency: (d.currency || 'CZK').toUpperCase().slice(0, 3),
       vat_rate: d.vat_rate != null ? d.vat_rate : 21, active: d.active !== false,
       auto_send: !!d.auto_send, billing_day: d.billing_day != null ? d.billing_day : 3,
-      contract_id: d.contract_id || null, note: d.note || null,
+      contract_id: d.contract_id || null, contract_number: (d.contract_number || '').trim() || null, note: d.note || null,
       created_by_user_id: (req.user && req.user.id) || null,
     };
     // upsert dle kiosk_code (jeden aktivní záznam na stroj)
@@ -3806,7 +3807,7 @@ router.put('/service-subscriptions/:id', requireAuth, async (req, res, next) => 
     const p = subSchema.partial().safeParse(req.body);
     if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
     const d = p.data; const data = {};
-    ['company_id', 'buyer_ico', 'customer_name', 'email', 'currency', 'contract_id', 'note'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] || null; });
+    ['company_id', 'buyer_ico', 'customer_name', 'email', 'currency', 'contract_id', 'contract_number', 'note'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] || null; });
     ['fee_pct', 'vat_rate', 'billing_day'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k]; });
     ['active', 'auto_send'].forEach(function (k) { if (d[k] !== undefined) data[k] = !!d[k]; });
     const sub = await prisma.serviceSubscription.update({ where: { id }, data });
@@ -3839,7 +3840,7 @@ router.post('/service-subscriptions/test-email', requireAuth, async (req, res, n
     const to = String(b.to || (req.user && req.user.person && req.user.person.email) || '').trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Zadej platný e-mail, na který se má test poslat.' });
     const { sendTestEmail } = require('../services/compounder/service-billing-worker');
-    const r = await sendTestEmail({ kiosk_code: String(b.kiosk_code || 'TEST'), customer_name: b.customer_name, buyer_ico: b.buyer_ico, fee_pct: b.fee_pct, vat_rate: b.vat_rate, currency: b.currency }, to);
+    const r = await sendTestEmail({ kiosk_code: String(b.kiosk_code || 'TEST'), customer_name: b.customer_name, buyer_ico: b.buyer_ico, contract_number: b.contract_number, fee_pct: b.fee_pct, vat_rate: b.vat_rate, currency: b.currency }, to);
     if (!r.sent) return res.status(502).json({ error: 'Testovací e-mail se nepodařilo odeslat', reason: r.error || r.skipped || 'unknown' });
     res.json({ ok: true, sent_to: r.to, sent_from: r.from, via: r.via, total: r.invoice_total, currency: r.currency });
   } catch (err) { next(err); }
