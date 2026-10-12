@@ -79,6 +79,7 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .svc-h{display:flex;flex-direction:column;gap:2px;padding:2px 4px 0} .svc-h>b{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2)} .svc-h>span{font-size:12.5px;color:var(--text2);line-height:1.4}
 .svc-free{border-color:rgba(47,227,160,.5);background:linear-gradient(135deg,rgba(47,227,160,.1),rgba(14,22,40,.72))} .svc-free .svc-h>b{color:var(--ok)}
 @media(max-width:860px){.svc-split{grid-template-columns:1fr}}
+.svc-locked .btn:not(.dc-toggle){opacity:.45;cursor:not-allowed;pointer-events:none;filter:grayscale(.5)} .svc-locked .dc-toggle{opacity:.45;pointer-events:none} .svc-locked input[type=range]{opacity:.6}
 .svc-own.dim,.svc-free.dim{opacity:.35;filter:grayscale(.6);transition:opacity .3s} .svc-own.dim .btn,.svc-free.dim .btn{pointer-events:none}
 .pfo{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border2);background:rgba(4,8,16,.5);cursor:pointer;transition:border-color .2s,background .2s} .pfo input{display:none} .pfo>b{font-size:14px} .pfo>span{font-size:12px;color:var(--text2);line-height:1.4} .pfo>span b{color:var(--text)} .pfo.on{border-color:var(--ok);background:rgba(47,227,160,.08);box-shadow:0 0 0 1px rgba(47,227,160,.3)}
 @media(max-width:640px){.pfc{grid-template-columns:1fr!important}}
@@ -928,7 +929,7 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
     ${calc}
   </section>`;
 }
-function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [] } = {}) {
+function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [], hasMachine = true } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
   const bal = Math.max(0, Math.floor(Number(balance) || 0));
   const fmt = (n) => Math.round(n).toLocaleString('cs-CZ');
@@ -980,7 +981,8 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
 </div>` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
-  ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec && !x.hidden_card); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
+  ${!hasMachine && services.length ? `<div class="card" style="margin:26px 0 0;border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.07)"><b>🔒 Služby a záruku lze objednat až po koupi prádlomatu.</b><div class="small muted" style="margin-top:4px">Nejdřív si vyberte prádlomat výše — pak se tlačítka Koupit / Poptat odemknou.</div></div>` : ''}
+  ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec && !x.hidden_card); return list.length ? `<div class="${hasMachine ? '' : 'svc-locked'}"><h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
   ${sec === 'services' ? `<div class="card svc-q" style="margin:0 0 14px"><b style="font-size:16px">Chcete mít místo ve své správě, nebo ve správě Best Series?</b>
     <div class="pfc" id="svc-mgmt" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
       <label class="pfo on"><input type="radio" name="svc-mgmt" value="own" checked><b>Ve své správě</b><span>Místo i přípojky jsou <b>Vaše</b>. Pokud místo neumíte najít, zaplatíte si Najít místo; pokud neumíte udělat přípojky, zaplatíte si Přípojky. DC nelze uplatnit.</span></label>
@@ -1007,7 +1009,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <p class="small" style="margin:10px 0 0;line-height:1.5">Neplatíte Najít místo ani Přípojky. Místo i přípojky zajišťuje <b>Best Series</b> na vlastní smlouvu — místo <b>není Vaše</b>, nemáte k němu žádnou právní vazbu.</p>
       <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--ok)">0 Kč</div><div class="small muted">bez poplatků za místo a přípojky</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:place_free" data-name="Místo zdarma" data-ask="Mám zájem o místo zdarma — místo i přípojky zajistí Best Series na vlastní smlouvu (místo nebude Vaše).">Mám zájem o místo zdarma</button></div></div>
-  </div>` : `</div>`}` : ''; }).join('')}
+  </div>` : `</div>`}</div>` : ''; }).join('')}
   <script>
   (function(){
     var total=${bal}, sym=${JSON.stringify(sym)};

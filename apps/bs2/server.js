@@ -295,7 +295,9 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK', rateV = cur === 'EUR' ? await eurRate() : 1;
   const services = (await loadServices()).filter(x => x.offered).map(x => ({ ...x, net: (x.mode === 'percent' || x.quote || x.price_czk == null) ? null : Math.round(Number(x.price_czk) / rateV * 100) / 100, per_year_net: x.per_year_czk ? Math.round(Number(x.per_year_czk) / rateV) : null }));
-  res.send(V.supporterProducts(req.user, offers, { balance, msg: req.query.msg || '', services }));
+  // Služby a záruka jdou objednat až po koupi prádlomatu (potvrzený nákup v purchases, nebo typ „Koupil prádlomat")
+  const hasMachine = req.user.user_type === 'owner' || Number(((await q('SELECT count(*)::int AS c FROM purchases WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0) > 0;
+  res.send(V.supporterProducts(req.user, offers, { balance, msg: req.query.msg || '', services, hasMachine }));
 }));
 // Koupit (+ případně uplatnit DC): vše se přepočítá na serveru, DC se hned odečtou, objednávku potvrdí admin
 app.post('/order', wrap(requireUser), wrap(async (req, res) => {
@@ -303,6 +305,8 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
   if (String(req.body.item || '').startsWith('svc:')) {
     const parts = String(req.body.item).split(':'); const svKey = parts[1], svVariant = parts[2] || '';
+    const hasMachineS = req.user.user_type === 'owner' || Number(((await q('SELECT count(*)::int AS c FROM purchases WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0) > 0;
+    if (!hasMachineS) return res.redirect('/pradlomaty?msg=' + encodeURIComponent('Služby a záruku lze objednat až po koupi prádlomatu.'));
     const sv0 = (await loadServices()).find(x => x.key === svKey && x.offered);
     const sv = sv0 && svVariant === 'own' ? Object.assign({}, sv0, { quote: true, name: 'Vlastní místo (Najít místo + Přípojky)' }) : sv0;
     if (!sv) return back('Tuto službu teď nelze objednat.');
