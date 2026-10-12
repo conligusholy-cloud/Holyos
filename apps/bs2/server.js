@@ -376,6 +376,31 @@ app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   const code = await ensureRefCode(req.user);
   res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
 }));
+// ── Živá podpora (uživatel) ──────────────────────────────────────────────
+async function supportOnline() { try { const r = await q("SELECT value FROM app_settings WHERE key='support_online'"); return (r.rows[0] || {}).value === '1'; } catch (e) { return false; } }
+app.get('/podpora', wrap(requireUser), wrap(async (req, res) => {
+  const online = await supportOnline();
+  const msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [req.user.id])).rows;
+  await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2 AND read_by_user=false', [req.user.id, 'agent']);
+  res.send(V.supportPage(req.user, { online, msgs }));
+}));
+app.get('/api/support/state', wrap(async (req, res) => {
+  const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return res.status(401).json({});
+  const online = await supportOnline();
+  const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND sender='agent' AND read_by_user=false", [s.sid])).rows[0] || {}).c || 0);
+  const since = req.query.since ? new Date(req.query.since) : null;
+  let msgs = [];
+  if (since && !isNaN(since)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND created_at>$2 ORDER BY created_at, id', [s.sid, since])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
+  res.set('Cache-Control', 'no-store').json({ online, unread, msgs });
+}));
+app.post('/api/support/send', wrap(requireUser), wrap(async (req, res) => {
+  if (!(await supportOnline())) return res.status(403).json({ error: 'Podpora je momentálně offline.' });
+  const body = String((req.body || {}).body || '').trim().slice(0, 2000);
+  if (!body) return res.status(400).json({ error: 'Prázdná zpráva.' });
+  const r = await q('INSERT INTO support_messages (supporter_id, sender, body) VALUES ($1,$2,$3) RETURNING *', [req.user.id, 'user', body]);
+  res.json({ ok: true, msg: r.rows[0] });
+}));
+
 app.get('/ai-chat', wrap(requireUser), (req, res) => { if (!req.user.ai_chat_on) return res.redirect('/'); res.send(V.aiChatPage(req.user)); });
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
@@ -549,6 +574,41 @@ app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) =
   back('Žádost o převod ' + (kind === 'withdrawal' ? 'z výběru ' : 'z podpory ') + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána a je ve stavu zpracovává se. Dáme Ti vědět.');
 }));
 // Admin: Převody podpory
+// ── Živá podpora (admin) ─────────────────────────────────────────────────
+app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
+  const online = await supportOnline();
+  const threads = (await q(`SELECT s.id, s.nick, s.first_name, s.last_name, s.email,
+      (SELECT count(*)::int FROM support_messages m WHERE m.supporter_id=s.id AND m.sender='user' AND m.read_by_agent=false) AS unread,
+      (SELECT max(created_at) FROM support_messages m WHERE m.supporter_id=s.id) AS last_at,
+      (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body
+    FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
+  const sid = parseInt(req.query.u, 10) || (threads[0] && threads[0].id) || null;
+  let msgs = [], who = null;
+  if (sid) {
+    who = (await q('SELECT id, nick, first_name, last_name, email, phone FROM supporters WHERE id=$1', [sid])).rows[0] || null;
+    msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
+    await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
+  }
+  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '' }));
+}));
+app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
+  const on = String((req.body || {}).online) === '1';
+  await q("INSERT INTO app_settings (key,value) VALUES ('support_online',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [on ? '1' : '0']);
+  await log(req.admin, 'support_online', { online: on });
+  res.redirect('/admin/podpora?msg=' + encodeURIComponent(on ? 'Podpora je ONLINE — uživatelé mohou psát.' : 'Podpora je OFFLINE.'));
+}));
+app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+  if (body) await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true)', [sid, 'agent', req.admin.name || 'Podpora', body]);
+  res.redirect('/admin/podpora?u=' + sid);
+}));
+app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
+  const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false")).rows[0] || {}).c || 0);
+  const sid = parseInt(req.query.u, 10) || 0; const since = req.query.since ? new Date(req.query.since) : null; let msgs = [];
+  if (sid && since && !isNaN(since)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND created_at>$2 ORDER BY created_at, id', [sid, since])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
+  res.set('Cache-Control', 'no-store').json({ unread, msgs });
+}));
+
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
   const rows = (await q("SELECT t.*, s.first_name, s.last_name, s.email, s.nick FROM support_transfers t JOIN supporters s ON s.id=t.supporter_id " + (status ? 'WHERE t.status=$1 ' : '') + "ORDER BY (t.status='pending') DESC, t.created_at DESC LIMIT 500", status ? [status] : [])).rows;

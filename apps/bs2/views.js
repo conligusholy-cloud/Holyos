@@ -65,6 +65,13 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .hero h1{margin:14px 0 6px;font-size:clamp(28px,4vw,42px);line-height:1.08;letter-spacing:-.025em;font-weight:800}
 .hero h1 .g{background:linear-gradient(90deg,#fff 0%,var(--accent2) 50%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{margin:0;color:var(--text2)}
+.suplink{position:relative;display:inline-flex;align-items:center;gap:6px} .sup-dot{width:9px;height:9px;border-radius:50%;background:#64748b;display:inline-block;box-shadow:0 0 0 2px rgba(4,6,12,.9)} .sup-dot.on{background:var(--ok);box-shadow:0 0 0 2px rgba(4,6,12,.9),0 0 10px var(--ok)}
+.sup-badge{position:absolute;top:-6px;right:-10px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--err);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(255,93,108,.6)}
+.sp-wrap{max-width:820px} .sp-log{display:flex;flex-direction:column;gap:8px;min-height:260px;max-height:60vh;overflow:auto;padding:14px;border:1px solid var(--border);border-radius:16px;background:rgba(4,8,16,.5)}
+.sp-m{max-width:78%;padding:9px 13px;border-radius:14px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word} .sp-m small{display:block;font-size:10.5px;opacity:.6;margin-top:3px}
+.sp-m.user{align-self:flex-end;background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.5));border-bottom-right-radius:4px} .sp-m.agent{align-self:flex-start;background:rgba(120,160,255,.12);border:1px solid var(--border);border-bottom-left-radius:4px}
+.sp-off{padding:14px 16px;border-radius:14px;border:1px solid rgba(245,158,11,.5);background:rgba(245,158,11,.08);font-size:14px}
+.sp-on{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ok)} .sp-on i{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
 .helpbtn{position:fixed;right:18px;top:118px;z-index:40;width:44px;height:44px;border-radius:50%;border:1px solid rgba(79,209,255,.6);background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.55));color:#fff;font:800 20px/1 Inter,system-ui,sans-serif;cursor:pointer;box-shadow:0 10px 30px rgba(30,134,224,.35),0 0 0 6px rgba(79,209,255,.08);backdrop-filter:blur(10px);animation:helpbob 3.2s ease-in-out infinite;transition:transform .2s,box-shadow .2s}
 .helpbtn:hover{animation-play-state:paused;transform:scale(1.08);box-shadow:0 14px 36px rgba(79,209,255,.45),0 0 0 8px rgba(79,209,255,.12)}
 @keyframes helpbob{0%,100%{translate:0 0}50%{translate:0 -7px}}
@@ -80,6 +87,7 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .svc-free{border-color:rgba(47,227,160,.5);background:linear-gradient(135deg,rgba(47,227,160,.1),rgba(14,22,40,.72))} .svc-free .svc-h>b{color:var(--ok)}
 @media(max-width:860px){.svc-split{grid-template-columns:1fr}}
 .svc-locked .btn:not(.dc-toggle){opacity:.45;cursor:not-allowed;pointer-events:none;filter:grayscale(.5)} .svc-locked .dc-toggle{opacity:.45;pointer-events:none} .svc-locked input[type=range]{opacity:.6}
+.svc-inc{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px} .svc-inc li{font-size:13.5px;color:var(--text2);line-height:1.4} .svc-inc li b{color:var(--text)}
 .svc-own.dim,.svc-free.dim{opacity:.35;filter:grayscale(.6);transition:opacity .3s} .svc-own.dim .btn,.svc-free.dim .btn{pointer-events:none}
 .pfo{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border2);background:rgba(4,8,16,.5);cursor:pointer;transition:border-color .2s,background .2s} .pfo input{display:none} .pfo>b{font-size:14px} .pfo>span{font-size:12px;color:var(--text2);line-height:1.4} .pfo>span b{color:var(--text)} .pfo.on{border-color:var(--ok);background:rgba(47,227,160,.08);box-shadow:0 0 0 1px rgba(47,227,160,.3)}
 @media(max-width:640px){.pfc{grid-template-columns:1fr!important}}
@@ -236,7 +244,8 @@ function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '
 <style>${CSS}</style></head>
 <body>${fx ? '<canvas id="net" aria-hidden="true"></canvas>' : ''}<div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
 <header><a class="brand" href="/"><span class="mark">${logoSvg(32, 'h')}</span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">soukromé</span>
-${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user && !holyosUrl ? `<a href="/podpora" id="sup-link" class="suplink${active === 'podpora' ? ' on' : ''}" title="Živá podpora">${ico('chat', 16)} <span>Podpora</span><i id="sup-dot" class="sup-dot off"></i><b id="sup-badge" class="sup-badge" hidden>0</b></a>` : ''}${fx && user ? `<a href="/password" class="acc-link${active === 'acc' ? ' on' : ''}" title="Můj účet">${ico('user', 15)} Můj účet</a>` : ''}${holyosUrl ? `<a href="${holyosUrl}">${ico('back', 15)} HolyOS</a>` : ''}${user ? `<a href="/logout" title="Odhlásit">${esc(user)} ${ico('logout', 15)}</a>` : ''}</nav></header>
+${fx && user && !holyosUrl ? `<script>(function(){function f(){fetch('/api/support/state',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var d=document.getElementById('sup-dot'),b=document.getElementById('sup-badge'),l=document.getElementById('sup-link');if(d){d.className='sup-dot '+(j.online?'on':'off');}if(b){b.hidden=!j.unread;b.textContent=j.unread;}if(l)l.title=j.online?'Živá podpora — online':'Živá podpora — momentálně offline';}).catch(function(){});}f();setInterval(f,20000);})();</script>` : ''}
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
 <main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
@@ -771,6 +780,50 @@ requestAnimationFrame(tick);
 
   </div>` });
 }
+// ── Živá podpora — stránka uživatele ──
+function supportPage(s, { online = false, msgs = [] } = {}) {
+  const last = msgs.length ? new Date(msgs[msgs.length - 1].created_at).toISOString() : new Date(0).toISOString();
+  return layout({ title: 'Podpora', user: s.nick, nav: userNav(s), active: 'podpora', fx: true, help: null, body: `
+  <div class="sp-wrap">
+    <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px;flex-wrap:wrap;gap:10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('chat', 18)} Živá podpora</h2>
+      <span id="sp-state">${online ? '<span class="sp-on"><i></i>Podpora je online — odpovídá živý člověk</span>' : '<span class="muted small">● Podpora je momentálně offline</span>'}</span></div>
+    <div class="sp-off" id="sp-offbox" style="${online ? 'display:none' : ''}"><b>Teď tu nikdo není.</b> Živá podpora je momentálně offline — jakmile bude kolega online, zelená tečka u ikony Podpora se rozsvítí a budete moct psát.</div>
+    <div class="sp-log" id="sp-log" style="margin-top:12px">${msgs.length ? msgs.map(m => `<div class="sp-m ${m.sender === 'agent' ? 'agent' : 'user'}">${esc(m.body)}<small>${m.sender === 'agent' ? esc(m.agent_name || 'Podpora') + ' · ' : ''}${esc(fmtDT(m.created_at))}</small></div>`).join('') : '<div class="muted small" style="margin:auto">Zatím žádné zprávy. Napište nám, s čím můžeme pomoci.</div>'}</div>
+    <form id="sp-f" style="display:flex;gap:8px;margin-top:10px"><input id="sp-in" placeholder="${online ? 'Napište zprávu…' : 'Podpora je offline'}" ${online ? '' : 'disabled'} maxlength="2000" style="flex:1"><button class="btn" type="submit" id="sp-send" ${online ? '' : 'disabled'}>Odeslat</button></form>
+  </div>
+  <script>(function(){
+    var log=document.getElementById('sp-log'),f=document.getElementById('sp-f'),inp=document.getElementById('sp-in'),btn=document.getElementById('sp-send'),st=document.getElementById('sp-state'),since=${JSON.stringify(last)},online=${online ? 'true' : 'false'};
+    function esc(t){return String(t).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]});}
+    function add(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'agent':'user'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora')+' · ':'')+new Date(m.created_at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; since=new Date(m.created_at).toISOString(); }
+    function setOnline(o){ if(o===online)return; online=o; inp.disabled=!o; btn.disabled=!o; inp.placeholder=o?'Napište zprávu…':'Podpora je offline'; st.innerHTML=o?'<span class="sp-on"><i></i>Podpora je online — odpovídá živý člověk</span>':'<span class="muted small">● Podpora je momentálně offline</span>'; var ob=document.getElementById('sp-offbox'); if(ob) ob.style.display=o?'none':''; }
+    log.scrollTop=log.scrollHeight;
+    f.addEventListener('submit',async function(e){ e.preventDefault(); var t=inp.value.trim(); if(!t||!online)return; btn.disabled=true;
+      try{ var r=await fetch('/api/support/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:t})}); var j=await r.json(); if(!r.ok){ alert(j.error||'Odeslání selhalo'); if(r.status===403) setOnline(false); } else { inp.value=''; add(j.msg); } }catch(e){ alert('Odeslání selhalo'); }
+      btn.disabled=!online; inp.focus(); });
+    async function poll(){ try{ var r=await fetch('/api/support/state?since='+encodeURIComponent(since),{credentials:'same-origin'}); if(!r.ok)return; var j=await r.json(); setOnline(!!j.online); (j.msgs||[]).forEach(add); }catch(e){} }
+    setInterval(poll,5000);
+  })();</script>` });
+}
+// ── Živá podpora — admin ──
+function adminSupport({ admin, online = false, threads = [], who = null, msgs = [], holyosUrl, msg = '' }) {
+  const last = msgs.length ? new Date(msgs[msgs.length - 1].created_at).toISOString() : new Date(0).toISOString();
+  const nm = (t) => [t.first_name, t.last_name].filter(Boolean).join(' ') || t.nick || t.email;
+  return adminLayout('Podpora', 'sup2', admin, `
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><h1 style="margin:0">Živá podpora</h1>
+    <form method="post" action="/admin/podpora/online" class="row" style="gap:10px;align-items:center;margin:0">
+      <span class="${online ? 'sp-on' : 'muted small'}">${online ? '<i></i>Jste ONLINE — uživatelé mohou psát' : '● OFFLINE — uživatelé psát nemohou'}</span>
+      <input type="hidden" name="online" value="${online ? '0' : '1'}"><button class="btn sm ${online ? 'sec' : ''}" type="submit">${online ? 'Přejít offline' : 'Jít online'}</button></form></div>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start">
+    <div class="card" style="margin:0;padding:8px;max-height:70vh;overflow:auto">${threads.length ? threads.map(t => `<a href="/admin/podpora?u=${t.id}" style="display:block;padding:10px 12px;border-radius:12px;text-decoration:none;color:var(--text);${who && who.id === t.id ? 'background:rgba(79,209,255,.12);' : ''}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(nm(t))}</b>${t.unread ? `<span class="sup-badge" style="position:static">${t.unread}</span>` : ''}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.last_body || '')}</div><div class="small muted">${esc(fmtDT(t.last_at))}</div></a>`).join('') : '<p class="muted small" style="margin:8px">Zatím žádné konverzace.</p>'}</div>
+    <div class="card" style="margin:0">${who ? `<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><div><b style="font-size:16px">${esc(nm(who))}</b><div class="small muted">${esc(who.email || '')}${who.phone ? ' · ' + esc(who.phone) : ''} · <a href="/admin/supporters/${who.id}">detail uživatele</a></div></div></div>
+      <div class="sp-log" id="sp-log" style="max-height:50vh">${msgs.length ? msgs.map(m => `<div class="sp-m ${m.sender === 'agent' ? 'user' : 'agent'}">${esc(m.body)}<small>${m.sender === 'agent' ? esc(m.agent_name || 'Podpora') + ' · ' : esc(nm(who)) + ' · '}${esc(fmtDT(m.created_at))}</small></div>`).join('') : '<div class="muted small" style="margin:auto">Bez zpráv.</div>'}</div>
+      <form method="post" action="/admin/podpora/${who.id}/send" style="display:flex;gap:8px;margin-top:10px"><input name="body" placeholder="Odpověď uživateli…" maxlength="4000" required autofocus style="flex:1"><button class="btn" type="submit">Odeslat</button></form>
+      <script>(function(){ var log=document.getElementById('sp-log'),since=${JSON.stringify(last)}; log.scrollTop=log.scrollHeight;
+        function esc(t){return String(t).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]});}
+        setInterval(async function(){ try{ var r=await fetch('/admin/podpora/poll?u=${who.id}&since='+encodeURIComponent(since)); if(!r.ok)return; var j=await r.json(); (j.msgs||[]).forEach(function(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'user':'agent'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora'):${JSON.stringify(nm(who))})+' · '+new Date(m.created_at).toLocaleString('cs-CZ')+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; since=new Date(m.created_at).toISOString(); }); }catch(e){} },5000); })();</script>` : '<p class="muted">Vyberte konverzaci vlevo.</p>'}</div>
+  </div>`, holyosUrl);
+}
 // Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
 const curOf = (s) => (s && s.currency === 'EUR' ? 'EUR' : 'CZK');
 const curSw = (s, back) => `<form method="post" action="/currency" style="margin:0;display:inline-flex;gap:0;border:1px solid var(--border2);border-radius:999px;overflow:hidden"><input type="hidden" name="back" value="${esc(back)}">
@@ -992,6 +1045,13 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
     const net = sv.net;
     if (sv.mode === 'percent') return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
       <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${esc(String(sv.percent).replace('.', ','))} % z obratu</div><div class="small muted">cena včetně DPH · počítá se z obratu prádlomatu${sv.no_dc ? ' · <b style="color:#f59e0b">DC nelze uplatnit</b>' : ' · DC půjde uplatnit'}</div>
+      ${sv.key === 'service_contract' ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)"><div class="small muted" style="letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Co servis zahrnuje</div><ul class="svc-inc">
+        <li>📞 <b>Infolinka 24/7</b> — zákazníci volají nám, ne Vám</li>
+        <li>💻 <b>Softwarová podpora</b> v hodnotě 100 EUR / měsíc</li>
+        <li>🔧 <b>Pravidelná údržba</b> prádlomatu</li>
+        <li>🧴 <b>Detergenty</b> včetně jejich <b>doplňování</b></li>
+        <li>👷 <b>Práce servisního technika</b> při závadě</li>
+      </ul></div>` : ''}
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}" data-ask="Mám zájem o službu: ${esc(sv.name)}?">Mám zájem</button></div></div>`;
     if (net == null) return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
       <div style="margin-top:14px;font-size:20px;font-weight:800;letter-spacing:-.01em">Individuální nacenění</div><div class="small muted">Cena se vytvoří podle konkrétní situace. Po odeslání poptávky se ti ozveme s nabídkou.${sv.no_dc ? ' <b style="color:#f59e0b">DC nelze uplatnit.</b>' : ' DC půjde uplatnit.'}</div>
@@ -1257,6 +1317,7 @@ const ADMIN_NAV = [
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
   { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
+  { id: 'sup2', href: '/admin/podpora', label: 'Podpora', icon: 'chat' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
 ];
 function adminLayout(title, active, admin, body, holyosUrl) {
@@ -1725,4 +1786,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

@@ -165,6 +165,18 @@ async function migrate() {
       key   TEXT PRIMARY KEY,
       value TEXT
     );
+    -- Živá podpora: jeden vláknový chat na užívatele (supporter_id), zprávy od uživatele / od podpory
+    CREATE TABLE IF NOT EXISTS support_messages (
+      id           SERIAL PRIMARY KEY,
+      supporter_id INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      sender       TEXT NOT NULL,              -- 'user' | 'agent'
+      agent_name   TEXT,
+      body         TEXT NOT NULL,
+      read_by_agent BOOLEAN NOT NULL DEFAULT false,
+      read_by_user  BOOLEAN NOT NULL DEFAULT false,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS support_messages_sup_idx ON support_messages (supporter_id, created_at);
   `);
 }
 
