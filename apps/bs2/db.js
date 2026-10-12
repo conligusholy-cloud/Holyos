@@ -128,6 +128,24 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS orders_supporter_idx ON orders (supporter_id);
     ALTER TABLE credits ADD COLUMN IF NOT EXISTS order_id INTEGER;
+    -- Převody podpory ze starého systému: žádost uživatele → admin ručně ověří a zpracuje (schválí = připíše DC)
+    CREATE TABLE IF NOT EXISTS support_transfers (
+      id            SERIAL PRIMARY KEY,
+      supporter_id  INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      amount        NUMERIC(14,2) NOT NULL,
+      currency      TEXT NOT NULL DEFAULT 'CZK',
+      rate          NUMERIC(12,4) NOT NULL DEFAULT 1,
+      dc_amount     NUMERIC(14,2) NOT NULL,
+      note          TEXT,
+      status        TEXT NOT NULL DEFAULT 'pending',
+      admin_note    TEXT,
+      credit_id     INTEGER,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+      processed_at  TIMESTAMPTZ,
+      processed_by  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS support_transfers_supporter_idx ON support_transfers (supporter_id);
+    CREATE INDEX IF NOT EXISTS support_transfers_status_idx ON support_transfers (status);
     -- Služby (Najít místo, Přípojky): kind='service', service_key; cena 0 = čeká na individuální nacenění
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'machine';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
