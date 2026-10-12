@@ -2440,6 +2440,146 @@ router.post('/misto/interest', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Stripe Checkout pro /misto (balíček Základ / Plus) ──────────────────────
+// Bez SDK: Stripe REST API přes fetch (form-encoded). Klíče: STRIPE_SECRET_KEY,
+// STRIPE_WEBHOOK_SECRET. Není-li klíč, /misto/pay-config vrátí stripe:false a stránka
+// spadne do ručního režimu (žádost → platební údaje e-mailem).
+const MISTO_PACKAGES = {
+  basic: { name: 'Prověření lokality – Základ', desc: 'Přístup do aplikace na 12 měsíců, 3 lokality, export PDF', amount: 490000 },
+  plus:  { name: 'Prověření lokality – Plus',   desc: 'Přístup do aplikace na 12 měsíců, 10 lokalit, porovnání, 30min konzultace', amount: 990000 },
+};
+function mistoBase() {
+  return (process.env.PRADLOMATY_BASE_URL || 'https://pradlomaty.info').replace(/\/+$/, '');
+}
+function stripeForm(obj, prefix, out) {
+  out = out || [];
+  Object.keys(obj).forEach((k) => {
+    const key = prefix ? prefix + '[' + k + ']' : k;
+    const v = obj[k];
+    if (v === undefined || v === null) return;
+    if (Array.isArray(v)) v.forEach((x, i) => (typeof x === 'object' ? stripeForm(x, key + '[' + i + ']', out) : out.push(encodeURIComponent(key + '[' + i + ']') + '=' + encodeURIComponent(x))));
+    else if (typeof v === 'object') stripeForm(v, key, out);
+    else out.push(encodeURIComponent(key) + '=' + encodeURIComponent(v));
+  });
+  return out.join('&');
+}
+async function stripePost(path, body) {
+  const key = process.env.STRIPE_SECRET_KEY;
+  const r = await fetch('https://api.stripe.com/v1/' + path, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: stripeForm(body),
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Stripe ' + r.status + ': ' + ((j.error && j.error.message) || 'chyba'));
+  return j;
+}
+router.get('/misto/pay-config', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: { basic: MISTO_PACKAGES.basic.amount / 100, plus: MISTO_PACKAGES.plus.amount / 100 } });
+});
+
+// POST /api/compounder/misto/checkout — založí/aktualizuje lead a vrátí URL Stripe Checkout.
+router.post('/misto/checkout', async (req, res, next) => {
+  try {
+    if (!process.env.STRIPE_SECRET_KEY) return res.status(503).json({ ok: false, error: 'Online platba není dostupná.' });
+    const parsed = mistoSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Vyplňte prosím jméno a e-mail.' });
+    const d = parsed.data;
+    if (!d.consent) return res.status(400).json({ ok: false, error: 'Bez souhlasu se zpracováním údajů nemůžeme objednávku vyřídit.' });
+    if (!locRateOk(clientIp(req), 'misto-pay')) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
+    if (await _isBlocked(d.email, d.phone)) return res.status(400).json({ ok: false, error: 'Objednávku nelze dokončit.' });
+    const pkg = MISTO_PACKAGES[d.variant] || MISTO_PACKAGES.basic;
+    const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const noteText = '[' + stamp + '] OBJEDNÁVKA /misto — ' + pkg.name + ' (' + (pkg.amount / 100).toLocaleString('cs-CZ') + ' Kč s DPH) — čeká na platbu Stripe'
+      + (d.company ? ('\nFirma/IČO: ' + d.company) : '') + (phone ? ('\nTel: ' + phone) : '')
+      + (d.note ? ('\nPoznámka: ' + d.note) : '') + '\nMarketingový souhlas: ' + (d.marketing ? 'ANO' : 'ne');
+    const existing = await prisma.compounderLead.findFirst({
+      where: { email: { equals: d.email, mode: 'insensitive' } }, orderBy: { created_at: 'desc' }, select: { id: true, notes: true, phone: true },
+    });
+    let leadId;
+    if (existing) {
+      leadId = existing.id;
+      await prisma.compounderLead.update({ where: { id: leadId }, data: { phone: existing.phone || phone || undefined, notes: existing.notes ? (existing.notes + '\n\n' + noteText) : noteText } });
+    } else {
+      const lead = await prisma.compounderLead.create({ data: {
+        name: d.name, email: d.email, phone, role: 'compounder', lang: 'cs', source: 'misto', notes: noteText,
+        ip: clientIp(req), user_agent: (req.headers['user-agent'] || '').slice(0, 1000) || null,
+      }, select: { id: true } });
+      leadId = lead.id;
+    }
+    const base = mistoBase();
+    const session = await stripePost('checkout/sessions', {
+      mode: 'payment',
+      customer_email: d.email,
+      locale: 'cs',
+      success_url: base + '/misto?paid=1&s={CHECKOUT_SESSION_ID}#objednat',
+      cancel_url: base + '/misto?canceled=1#objednat',
+      line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pkg.amount, product_data: { name: pkg.name, description: pkg.desc } } }],
+      metadata: { lead_id: String(leadId), variant: d.variant, source: 'misto' },
+      payment_intent_data: { description: pkg.name + ' – ' + d.name, metadata: { lead_id: String(leadId), variant: d.variant } },
+      invoice_creation: { enabled: 'true' },
+    });
+    prisma.compounderEvent.create({ data: {
+      sid: d.sid || ('misto:' + leadId), event: 'misto_checkout_started',
+      props: { lead_id: leadId, variant: d.variant, session: session.id }, path: '/misto', lang: 'cs', ip: clientIp(req),
+    } }).catch(() => {});
+    console.log('[compounder] /misto checkout: lead #' + leadId + ' ' + d.variant + ' → ' + session.id);
+    return res.json({ ok: true, url: session.url });
+  } catch (err) { next(err); }
+});
+
+// POST /api/compounder/misto/stripe-webhook — raw body (viz app.js), ověření podpisu.
+router.post('/misto/stripe-webhook', express.raw({ type: '*/*', limit: '1mb' }), async (req, res) => {
+  try {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET;
+    const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
+    if (secret) {
+      const sig = String(req.headers['stripe-signature'] || '');
+      const parts = Object.fromEntries(sig.split(',').map((kv) => kv.split('=')).filter((a) => a.length === 2));
+      const t = parts.t, v1 = parts.v1;
+      if (!t || !v1) return res.status(400).send('Chybí podpis');
+      const expected = crypto.createHmac('sha256', secret).update(t + '.' + raw).digest('hex');
+      if (!safeEqStr(expected, v1) || Math.abs(Date.now() / 1000 - Number(t)) > 600) return res.status(400).send('Neplatný podpis');
+    } else {
+      console.warn('[compounder] STRIPE_WEBHOOK_SECRET chybí — webhook přijat bez ověření podpisu');
+    }
+    const ev = JSON.parse(raw);
+    if (ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') {
+      const sess = ev.data && ev.data.object || {};
+      if (sess.payment_status && sess.payment_status !== 'paid') return res.json({ received: true });
+      const leadId = Number(sess.metadata && sess.metadata.lead_id);
+      const variant = (sess.metadata && sess.metadata.variant) || 'basic';
+      const pkg = MISTO_PACKAGES[variant] || MISTO_PACKAGES.basic;
+      const amount = (sess.amount_total != null ? sess.amount_total : pkg.amount) / 100;
+      const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const noteText = '[' + stamp + '] ✅ ZAPLACENO (Stripe) — ' + pkg.name + ' — ' + amount.toLocaleString('cs-CZ') + ' Kč'
+        + (sess.id ? ('\nStripe session: ' + sess.id) : '') + (sess.customer_details && sess.customer_details.email ? ('\nE-mail: ' + sess.customer_details.email) : '')
+        + '\n→ Aktivovat přístup do aplikace na 12 měsíců.';
+      if (leadId) {
+        const lead = await prisma.compounderLead.findUnique({ where: { id: leadId }, select: { id: true, name: true, email: true, notes: true } }).catch(() => null);
+        if (lead) {
+          await prisma.compounderLead.update({ where: { id: leadId }, data: { status: 'qualified', notes: lead.notes ? (lead.notes + '\n\n' + noteText) : noteText } }).catch(() => {});
+          prisma.compounderEvent.create({ data: { sid: 'misto:' + leadId, event: 'misto_paid', props: { lead_id: leadId, variant, amount, session: sess.id || null }, path: '/misto', lang: 'cs' } }).catch(() => {});
+          try {
+            const userIds = await resolveOwnerUserIds();
+            for (const userId of userIds) {
+              await createNotification({ userId, type: 'compounder_lead', title: '💳 Zaplaceno /misto: ' + (lead.name || lead.email) + ' – ' + pkg.name,
+                body: amount.toLocaleString('cs-CZ') + ' Kč · ' + lead.email + ' · aktivovat přístup', link: '/modules/prodejni-objednavky/index.html', meta: { lead_id: leadId, source: 'misto', variant, paid: true } });
+            }
+          } catch (e) { console.error('[compounder] misto paid notifikace:', e && e.message); }
+          console.log('[compounder] /misto ZAPLACENO: lead #' + leadId + ' ' + variant + ' ' + amount + ' Kč');
+        }
+      }
+    }
+    res.json({ received: true });
+  } catch (e) {
+    console.error('[compounder] stripe webhook:', e && e.message);
+    res.status(400).send('Webhook error');
+  }
+});
+
 // POST /api/compounder/set-password  { t: token, password }
 // Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
 const setPwSchema = z.object({

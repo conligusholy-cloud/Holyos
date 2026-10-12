@@ -407,14 +407,6 @@
   </section>
 
 
-  <section class="sec">
-    <h2>Jak to probíhá</h2>
-    <div class="list">
-      <div class="item"><div class="n">1</div><div><b>Odešlete žádost o objednávku</b><span>Vyberete balíček a vyplníte kontakt. Adresu místa zatím nepotřebujeme.</span></div></div>
-      <div class="item"><div class="n">2</div><div><b>Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace</b><span>Po připsání platby aktivujeme přístup na 12 měsíců.</span></div></div>
-      <div class="item"><div class="n">3</div><div><b>V aplikaci založíte první lokalitu</b><span>Zadáte adresu a podklady, doplníte chybějící údaje, upravujete scénáře a stáhnete report v PDF.</span></div></div>
-    </div>
-  </section>
 
   <section class="sec" id="cena">
     <h2>Cena</h2>
@@ -451,13 +443,13 @@
     <details><summary>Z jakých dat aplikace vychází?</summary><p>Z podkladů, které zadáte (nájem, prostor, přípojky, vlastní měření frekvence), z modelových předpokladů, které vidíte a můžete změnit, a z ověřených skutečností, u kterých report uvádí zdroj a datum. Údaje, které aplikace nemá z připojeného zdroje (např. počet domácností nebo konkurence), označí jako chybějící a doplníte je ručně. Aplikace neuvádí skóre ani procento pravděpodobnosti úspěchu.</p></details>
     <details><summary>Je výsledek zárukou, že se místo vyplatí?</summary><p>Ne. Jde o orientační vyhodnocení podle dostupných podkladů a vašich předpokladů, ne o odborné schválení investice ani předpověď výdělku. Slouží jako podklad pro vaše rozhodnutí a jednání s pronajímatelem či bankou.</p></details>
     <details><summary>Co když má moje místo výsledek „Nevhodné"?</summary><p>Report uvádí, co chybí nebo kde je riziko. Můžete údaje doplnit a vyhodnotit znovu, nebo použít zbývající lokality na jinou adresu. Rozhodnutí Best Series o prodeji stroje je samostatné a na výsledku aplikace nezávisí.</p></details>
-    <details><summary>Jak probíhá objednávka a platba?</summary><p>Odešlete žádost o objednávku. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace. Po připsání platby aktivujeme přístup.</p></details>
+    <details><summary>Jak probíhá objednávka a platba?</summary><p>Vyberete balíček, vyplníte kontakt a zaplatíte kartou přes Stripe (bezpečná platební brána, údaje o kartě k nám nikdy nejdou). Po zaplacení vám do jednoho pracovního dne aktivujeme přístup do aplikace na 12 měsíců a pošleme doklad e-mailem. Pokud online platba není zrovna dostupná, přijmeme žádost a pošleme platební údaje e-mailem.</p></details>
     <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
   </section>
 
   <section class="sec" id="objednat">
     <h2>Žádost o objednávku</h2>
-    <p class="lead" style="margin:0 0 16px">Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace. Adresu místa zadáte až v aplikaci.</p>
+    <p class="lead" style="margin:0 0 16px" id="order-lead">Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace. Adresu místa zadáte až v aplikaci.</p>
     <form id="f" novalidate>
       <label>Jméno a příjmení *<input name="name" required maxlength="255" autocomplete="name" /></label>
       <label>E-mail *<input name="email" type="email" required maxlength="255" autocomplete="email" /></label>
@@ -468,7 +460,7 @@
       <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Souhlasím se zpracováním uvedených údajů společností Best Series s.r.o. (IČO 05643724) za účelem vyřízení této žádosti o objednávku a zpřístupnění aplikace. *</span></label>
       <label class="chk full"><input type="checkbox" name="marketing" value="1" /><span>Chci dostávat informace o prádlomatech a novinkách Best Series e-mailem (dobrovolné, kdykoli odvolatelné).</span></label>
       <div class="msg" id="msg"></div>
-      <div class="full"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button></div>
+      <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
     </form>
   </section>
 
@@ -520,23 +512,39 @@
   })();
   var $ = function(id){ return document.getElementById(id); };
   window.pickVariant=function(v){ $('variant').value=v; };
-  var f=$('f'), msg=$('msg'), sub=$('sub');
+  var f=$('f'), msg=$('msg'), sub=$('sub'), STRIPE=false;
+  var BTN_REQ='Odeslat žádost o objednávku', BTN_PAY='Zaplatit kartou a získat přístup';
+  function setMsg(cls,t){ msg.className='msg '+cls; msg.textContent=t; }
+  // Režim platby: Stripe Checkout, nebo ruční žádost (bez klíče na serveru).
+  fetch('/api/compounder/misto/pay-config').then(function(r){ return r.ok?r.json():null; }).then(function(c){
+    if(c&&c.stripe){ STRIPE=true; sub.textContent=BTN_PAY; $('pay-note').textContent='Bezpečná platba kartou přes Stripe · přístup aktivujeme po připsání platby.';
+      $('order-lead').textContent='Vyberte balíček, vyplňte kontakt a zaplaťte kartou. Po zaplacení vám pošleme přístup do aplikace na 12 měsíců. Adresu místa zadáte až v aplikaci.'; }
+  }).catch(function(){});
+  // Návrat ze Stripe
+  try { var q=new URLSearchParams(location.search);
+    if(q.get('paid')==='1'){ setMsg('ok','Děkujeme, platba proběhla. Potvrzení přijde e-mailem a do jednoho pracovního dne vám aktivujeme přístup do aplikace.'); track('misto_paid_return'); }
+    else if(q.get('canceled')==='1'){ setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
+    if(q.get('paid')||q.get('canceled')) history.replaceState(null,'',location.pathname+'#objednat');
+  } catch(e){}
   f.addEventListener('submit', async function(e){
     e.preventDefault();
     msg.className='msg';
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
     body.consent = !!fd.get('consent'); body.marketing = !!fd.get('marketing'); body.sid=SID;
-    if(!body.name||!body.email){ msg.className='msg err'; msg.textContent='Vyplňte prosím jméno a e-mail.'; return; }
-    if(!body.consent){ msg.className='msg err'; msg.textContent='Potvrďte prosím souhlas se zpracováním údajů.'; return; }
-    sub.disabled=true; sub.textContent='Odesílám…';
+    if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
+    if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
+    sub.disabled=true; sub.textContent=STRIPE?'Přesměrování na platbu…':'Odesílám…';
     try {
-      var r=await fetch('/api/compounder/misto/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var url=STRIPE?'/api/compounder/misto/checkout':'/api/compounder/misto/interest';
+      var r=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       var j=await r.json().catch(function(){ return {}; });
-      if(r.ok && j.ok){ msg.className='msg ok'; msg.textContent='Děkujeme! Žádost jsme přijali. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace.'; f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
-      else { msg.className='msg err'; msg.textContent=(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'; }
-    } catch(err){ msg.className='msg err'; msg.textContent='Odeslání se nepodařilo, zkuste to prosím znovu.'; }
-    sub.disabled=false; sub.textContent='Odeslat žádost o objednávku';
+      if(STRIPE && r.ok && j.ok && j.url){ track('misto_checkout',{ variant: body.variant }); location.href=j.url; return; }
+      if(STRIPE && r.status===503){ STRIPE=false; sub.textContent=BTN_REQ; r=await fetch('/api/compounder/misto/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); j=await r.json().catch(function(){ return {}; }); }
+      if(r.ok && j.ok){ setMsg('ok','Děkujeme! Žádost jsme přijali. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace.'); f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
+      else { setMsg('err',(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'); }
+    } catch(err){ setMsg('err','Odeslání se nepodařilo, zkuste to prosím znovu.'); }
+    sub.disabled=false; sub.textContent=STRIPE?BTN_PAY:BTN_REQ;
   });
 })();
 </script>

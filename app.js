@@ -98,6 +98,8 @@ app.use(cors({
 app.use((req, res, next) => {
   // Přeskočit JSON parsing pro /api/ai/transcribe (potřebuje raw multipart body)
   if (req.path === '/api/ai/transcribe') return next();
+  // Stripe webhook (/misto) potřebuje raw body kvůli ověření podpisu.
+  if (req.path === '/api/compounder/misto/stripe-webhook') return next();
   express.json({ limit: '50mb' })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true }));
