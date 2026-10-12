@@ -388,9 +388,9 @@ app.get('/api/support/state', wrap(async (req, res) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return res.status(401).json({});
   const online = await supportOnline();
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND sender='agent' AND read_by_user=false", [s.sid])).rows[0] || {}).c || 0);
-  const since = req.query.since ? new Date(req.query.since) : null;
+  const after = parseInt(req.query.after, 10);
   let msgs = [];
-  if (since && !isNaN(since)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND created_at>$2 ORDER BY created_at, id', [s.sid, since])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
+  if (Number.isFinite(after)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
   res.set('Cache-Control', 'no-store').json({ online, unread, msgs });
 }));
 app.post('/api/support/send', wrap(requireUser), wrap(async (req, res) => {
@@ -599,13 +599,15 @@ app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
 }));
 app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, wrap(async (req, res) => {
   const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
-  if (body) await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true)', [sid, 'agent', req.admin.name || 'Podpora', body]);
+  let row = null;
+  if (body) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true) RETURNING *', [sid, 'agent', req.admin.name || 'Podpora', body])).rows[0];
+  if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);
 }));
 app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false")).rows[0] || {}).c || 0);
-  const sid = parseInt(req.query.u, 10) || 0; const since = req.query.since ? new Date(req.query.since) : null; let msgs = [];
-  if (sid && since && !isNaN(since)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND created_at>$2 ORDER BY created_at, id', [sid, since])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
+  const sid = parseInt(req.query.u, 10) || 0; const after = parseInt(req.query.after, 10); let msgs = [];
+  if (sid && Number.isFinite(after)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [sid, after])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 

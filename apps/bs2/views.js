@@ -66,7 +66,7 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .hero h1 .g{background:linear-gradient(90deg,#fff 0%,var(--accent2) 50%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .hero p{margin:0;color:var(--text2)}
 .suplink{position:relative;display:inline-flex;align-items:center;gap:6px} .sup-dot{width:9px;height:9px;border-radius:50%;background:#64748b;display:inline-block;box-shadow:0 0 0 2px rgba(4,6,12,.9)} .sup-dot.on{background:var(--ok);box-shadow:0 0 0 2px rgba(4,6,12,.9),0 0 10px var(--ok)}
-.sup-badge{position:absolute;top:-6px;right:-10px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--err);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(255,93,108,.6)}
+.sup-badge[hidden]{display:none!important} .sup-badge{position:absolute;top:-6px;right:-10px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--err);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(255,93,108,.6)}
 .sp-wrap{max-width:820px} .sp-log{display:flex;flex-direction:column;gap:8px;min-height:260px;max-height:60vh;overflow:auto;padding:14px;border:1px solid var(--border);border-radius:16px;background:rgba(4,8,16,.5)}
 .sp-m{max-width:78%;padding:9px 13px;border-radius:14px;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word} .sp-m small{display:block;font-size:10.5px;opacity:.6;margin-top:3px}
 .sp-m.user{align-self:flex-end;background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.5));border-bottom-right-radius:4px} .sp-m.agent{align-self:flex-start;background:rgba(120,160,255,.12);border:1px solid var(--border);border-bottom-left-radius:4px}
@@ -782,7 +782,7 @@ requestAnimationFrame(tick);
 }
 // ── Živá podpora — stránka uživatele ──
 function supportPage(s, { online = false, msgs = [] } = {}) {
-  const last = msgs.length ? new Date(msgs[msgs.length - 1].created_at).toISOString() : new Date(0).toISOString();
+  const last = msgs.length ? msgs[msgs.length - 1].id : 0;
   return layout({ title: 'Podpora', user: s.nick, nav: userNav(s), active: 'podpora', fx: true, help: null, body: `
   <div class="sp-wrap">
     <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px;flex-wrap:wrap;gap:10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('chat', 18)} Živá podpora</h2>
@@ -794,19 +794,19 @@ function supportPage(s, { online = false, msgs = [] } = {}) {
   <script>(function(){
     var log=document.getElementById('sp-log'),f=document.getElementById('sp-f'),inp=document.getElementById('sp-in'),btn=document.getElementById('sp-send'),st=document.getElementById('sp-state'),since=${JSON.stringify(last)},online=${online ? 'true' : 'false'};
     function esc(t){return String(t).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]});}
-    function add(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'agent':'user'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora')+' · ':'')+new Date(m.created_at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; since=new Date(m.created_at).toISOString(); }
+    function add(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'agent':'user'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora')+' · ':'')+new Date(m.created_at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; if(m.id>since) since=m.id; }
     function setOnline(o){ if(o===online)return; online=o; inp.disabled=!o; btn.disabled=!o; inp.placeholder=o?'Napište zprávu…':'Podpora je offline'; st.innerHTML=o?'<span class="sp-on"><i></i>Podpora je online — odpovídá živý člověk</span>':'<span class="muted small">● Podpora je momentálně offline</span>'; var ob=document.getElementById('sp-offbox'); if(ob) ob.style.display=o?'none':''; }
     log.scrollTop=log.scrollHeight;
     f.addEventListener('submit',async function(e){ e.preventDefault(); var t=inp.value.trim(); if(!t||!online)return; btn.disabled=true;
       try{ var r=await fetch('/api/support/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:t})}); var j=await r.json(); if(!r.ok){ alert(j.error||'Odeslání selhalo'); if(r.status===403) setOnline(false); } else { inp.value=''; add(j.msg); } }catch(e){ alert('Odeslání selhalo'); }
       btn.disabled=!online; inp.focus(); });
-    async function poll(){ try{ var r=await fetch('/api/support/state?since='+encodeURIComponent(since),{credentials:'same-origin'}); if(!r.ok)return; var j=await r.json(); setOnline(!!j.online); (j.msgs||[]).forEach(add); }catch(e){} }
-    setInterval(poll,5000);
+    async function poll(){ try{ var r=await fetch('/api/support/state?after='+since,{credentials:'same-origin',cache:'no-store'}); if(!r.ok)return; var j=await r.json(); setOnline(!!j.online); (j.msgs||[]).forEach(function(m){ if(m.id>since) add(m); }); }catch(e){} }
+    setInterval(poll,3000); document.addEventListener('visibilitychange',function(){ if(!document.hidden) poll(); });
   })();</script>` });
 }
 // ── Živá podpora — admin ──
 function adminSupport({ admin, online = false, threads = [], who = null, msgs = [], holyosUrl, msg = '' }) {
-  const last = msgs.length ? new Date(msgs[msgs.length - 1].created_at).toISOString() : new Date(0).toISOString();
+  const last = msgs.length ? msgs[msgs.length - 1].id : 0;
   const nm = (t) => [t.first_name, t.last_name].filter(Boolean).join(' ') || t.nick || t.email;
   return adminLayout('Podpora', 'sup2', admin, `
   <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><h1 style="margin:0">Živá podpora</h1>
@@ -818,10 +818,13 @@ function adminSupport({ admin, online = false, threads = [], who = null, msgs = 
     <div class="card" style="margin:0;padding:8px;max-height:70vh;overflow:auto">${threads.length ? threads.map(t => `<a href="/admin/podpora?u=${t.id}" style="display:block;padding:10px 12px;border-radius:12px;text-decoration:none;color:var(--text);${who && who.id === t.id ? 'background:rgba(79,209,255,.12);' : ''}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(nm(t))}</b>${t.unread ? `<span class="sup-badge" style="position:static">${t.unread}</span>` : ''}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.last_body || '')}</div><div class="small muted">${esc(fmtDT(t.last_at))}</div></a>`).join('') : '<p class="muted small" style="margin:8px">Zatím žádné konverzace.</p>'}</div>
     <div class="card" style="margin:0">${who ? `<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><div><b style="font-size:16px">${esc(nm(who))}</b><div class="small muted">${esc(who.email || '')}${who.phone ? ' · ' + esc(who.phone) : ''} · <a href="/admin/supporters/${who.id}">detail uživatele</a></div></div></div>
       <div class="sp-log" id="sp-log" style="max-height:50vh">${msgs.length ? msgs.map(m => `<div class="sp-m ${m.sender === 'agent' ? 'user' : 'agent'}">${esc(m.body)}<small>${m.sender === 'agent' ? esc(m.agent_name || 'Podpora') + ' · ' : esc(nm(who)) + ' · '}${esc(fmtDT(m.created_at))}</small></div>`).join('') : '<div class="muted small" style="margin:auto">Bez zpráv.</div>'}</div>
-      <form method="post" action="/admin/podpora/${who.id}/send" style="display:flex;gap:8px;margin-top:10px"><input name="body" placeholder="Odpověď uživateli…" maxlength="4000" required autofocus style="flex:1"><button class="btn" type="submit">Odeslat</button></form>
-      <script>(function(){ var log=document.getElementById('sp-log'),since=${JSON.stringify(last)}; log.scrollTop=log.scrollHeight;
+      <form id="sp-af" method="post" action="/admin/podpora/${who.id}/send" style="display:flex;gap:8px;margin-top:10px"><input id="sp-ain" name="body" placeholder="Odpověď uživateli…" maxlength="4000" required autofocus autocomplete="off" style="flex:1"><button class="btn" type="submit" id="sp-abtn">Odeslat</button></form>
+      <script>(function(){ var log=document.getElementById('sp-log'),since=${JSON.stringify(last)},f=document.getElementById('sp-af'),inp=document.getElementById('sp-ain'),btn=document.getElementById('sp-abtn'); log.scrollTop=log.scrollHeight;
         function esc(t){return String(t).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]});}
-        setInterval(async function(){ try{ var r=await fetch('/admin/podpora/poll?u=${who.id}&since='+encodeURIComponent(since)); if(!r.ok)return; var j=await r.json(); (j.msgs||[]).forEach(function(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'user':'agent'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora'):${JSON.stringify(nm(who))})+' · '+new Date(m.created_at).toLocaleString('cs-CZ')+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; since=new Date(m.created_at).toISOString(); }); }catch(e){} },5000); })();</script>` : '<p class="muted">Vyberte konverzaci vlevo.</p>'}</div>
+        function add(m){ if(m.id<=since)return; var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'user':'agent'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora'):${JSON.stringify(nm(who))})+' · '+new Date(m.created_at).toLocaleString('cs-CZ')+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; since=m.id; }
+        f.addEventListener('submit',async function(e){ e.preventDefault(); var t=inp.value.trim(); if(!t)return; btn.disabled=true; try{ var r=await fetch(f.action,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({body:t})}); var j=await r.json(); if(r.ok&&j.msg){ inp.value=''; add(j.msg); } else alert('Odeslání selhalo'); }catch(e){ alert('Odeslání selhalo'); } btn.disabled=false; inp.focus(); });
+        async function poll(){ try{ var r=await fetch('/admin/podpora/poll?u=${who.id}&after='+since,{cache:'no-store'}); if(!r.ok)return; var j=await r.json(); (j.msgs||[]).forEach(add); }catch(e){} }
+        setInterval(poll,3000); })();</script>` : '<p class="muted">Vyberte konverzaci vlevo.</p>'}</div>
   </div>`, holyosUrl);
 }
 // Přepínač zobrazovací měny (CZK / EUR) — ukládá se u uživatele
