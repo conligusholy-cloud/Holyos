@@ -183,11 +183,13 @@ function renderTable() {
   const cols = ALL_COLUMNS.filter(c => activeCols.has(c.id));
   const head = '<th style="width:30px;"></th>' + cols.map(c => `<th>${esc(c.label)}</th>`).join('');
 
+  // Nabídka od Tesca (název lokality nebo vlastník obsahuje „Tesco") — v seznamu zvýrazněno modře
+  const isTesco = (s) => /tesco/i.test((s.name || '') + ' ' + (s.owner_name || '') + ' ' + ((s.company && s.company.name) || ''));
   const rows = sites.map(s => {
     const isCompared = compareIds.has(s.id);
     const cells = cols.map(col => {
       switch (col.id) {
-        case 'name':    return `<td><strong>${esc(s.name)}</strong>${s.cadastral_parcel ? `<div style="font-size:11px;color:var(--text2);">parc. ${esc(s.cadastral_parcel)}</div>` : ''}</td>`;
+        case 'name':    return `<td${isTesco(s) ? ' class="tesco-cell"' : ''}><strong>${esc(s.name)}</strong>${isTesco(s) ? ' <span class="tesco-tag">Tesco</span>' : ''}${s.cadastral_parcel ? `<div style="font-size:11px;color:var(--text2);">parc. ${esc(s.cadastral_parcel)}</div>` : ''}</td>`;
         case 'status':  return `<td><span class="badge badge-${esc(s.status)}">${esc(STATUS_LABEL[s.status]||s.status)}</span></td>`;
         case 'type':    return `<td><span class="badge badge-type-${esc(s.site_type)}">${esc(TYPE_LABEL[s.site_type]||s.site_type)}</span></td>`;
         case 'city':    return `<td>${esc(s.city || '—')}</td>`;
@@ -211,7 +213,7 @@ function renderTable() {
         default: return '<td>—</td>';
       }
     }).join('');
-    return `<tr data-id="${s.id}" onclick="openSiteModal(${s.id})">
+    return `<tr data-id="${s.id}"${isTesco(s) ? ' class="tesco-row"' : ''} onclick="openSiteModal(${s.id})">
       <td onclick="event.stopPropagation(); toggleCompare(${s.id});" title="Vybrat do porovnání" style="cursor:pointer;text-align:center;">
         <input type="checkbox" ${isCompared?'checked':''} style="cursor:pointer;">
       </td>${cells}</tr>`;
@@ -343,7 +345,8 @@ function renderSiteModal() {
         <button class="site-tab" data-tab="contacts" onclick="switchTab('contacts')">Kontakty (${(s.contacts||[]).length})</button>
         <button class="site-tab" data-tab="comm" onclick="switchTab('comm')">Komunikace (${(s.communications||[]).length})</button>
         <button class="site-tab" data-tab="photos" onclick="switchTab('photos')">Fotky &amp; mapa (${(s.photos||[]).length})</button>
-        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).length})</button>
+        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>d.doc_type!=='construction'&&d.doc_type!=='building').length})</button>
+        <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Místní šetření (${(s.documents||[]).filter(d=>d.doc_type==='construction'||d.doc_type==='building').length})</button>
       `}
     </div>
 
@@ -357,6 +360,7 @@ function renderSiteModal() {
       <div class="site-tab-panel" id="tab-comm">${renderCommTab(s)}</div>
       <div class="site-tab-panel" id="tab-photos">${renderPhotosTab(s)}</div>
       <div class="site-tab-panel" id="tab-docs">${renderDocsTab(s)}</div>
+      <div class="site-tab-panel" id="tab-survey">${renderSurveyDocsTab(s)}</div>
     `}
 
     <div class="modal-actions">
@@ -532,7 +536,8 @@ function renderPhotosTab(s){
     </div>`;
 }
 function renderDocsTab(s){
-  const docs = (s.documents||[]).map(d => `
+  // Stavební dokumenty (construction/building) mají vlastní záložku Místní šetření.
+  const docs = (s.documents||[]).filter(d => d.doc_type!=='construction' && d.doc_type!=='building').map(d => `
     <div class="contact-card">
       <div class="info">
         <div class="name">📄 ${esc(d.title)} <span class="badge badge-type-rent">${esc(d.doc_type)}</span></div>
@@ -570,13 +575,79 @@ function renderDocsTab(s){
     <button class="btn btn-secondary btn-sm" onclick="addDoc()" style="margin-top:10px;">+ Přidat</button>`;
 }
 
+// ─── Záložka Místní šetření — stavební dokumenty ve dvou kategoriích ──────
+const SURVEY_DOC_CATS = [
+  { key:'construction', icon:'🏗️', label:'Výstavba',            hint:'Projekt, situace, harmonogram, fotky z místa…' },
+  { key:'building',     icon:'📑', label:'Dokumenty stavební',  hint:'Stavební povolení, ohlášení, vyjádření úřadů, Portál stavebníka…' },
+];
+function renderSurveyDocsTab(s){
+  const all = s.documents || [];
+  const fmtSize = b => b==null ? '' : (b<1024 ? b+' B' : b<1048576 ? Math.round(b/1024)+' kB' : (b/1048576).toFixed(1)+' MB');
+  return `<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Dokumenty k místnímu šetření a výstavbě lokality, rozdělené do dvou kategorií. Nahrávej PDF, Word, Excel nebo fotky (max 25 MB).</div>`
+    + SURVEY_DOC_CATS.map(c => {
+      const items = all.filter(d => d.doc_type === c.key);
+      const list = items.length ? items.map(d => `
+        <div class="contact-card">
+          <div class="info">
+            <div class="name">📄 ${esc(d.title)}</div>
+            <div class="meta">${d.signed_at?'Datum: '+esc(fmtDate(d.signed_at))+' • ':''}${esc(fmtRel(d.created_at))}${d.note?' • '+esc(d.note):''}</div>
+            <div style="margin-top:4px;display:flex;gap:12px;flex-wrap:wrap;">
+              ${d.file_path?`<a href="/api/sites/documents/${d.id}/download" style="font-size:12px;color:#14b8a6;">⬇️ Stáhnout${d.size_bytes?` (${fmtSize(d.size_bytes)})`:''}</a>`:''}
+              ${d.external_url?`<a href="${esc(d.external_url)}" target="_blank" style="font-size:12px;color:#14b8a6;">🔗 Otevřít odkaz</a>`:''}
+            </div>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="delSurveyDoc(${d.id})">Smazat</button>
+        </div>`).join('') : '<div style="color:var(--text2);font-size:13px;padding:4px 0;">Zatím žádné dokumenty.</div>';
+      return `<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:var(--bg);">
+        <h3 style="font-size:14px;margin:0 0 4px;display:flex;align-items:center;gap:8px;">${c.icon} ${esc(c.label)} <span class="badge badge-lead">${items.length}</span></h3>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">${esc(c.hint)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">${list}</div>
+        <div class="form-grid" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">
+          ${inp('Název (nebo se vezme z názvu souboru)','sdoc_title_'+c.key,'')}
+          ${inp('Datum dokumentu','sdoc_date_'+c.key,'','date')}
+          <div class="form-row span2"><label>Soubor</label><input type="file" id="sdoc_file_${c.key}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic"></div>
+          ${inp('Poznámka','sdoc_note_'+c.key,'')}
+          <div class="form-row" style="justify-content:flex-end;"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="addSurveyDoc('${c.key}')">＋ Přidat do „${esc(c.label)}"</button></div>
+        </div>
+      </div>`;
+    }).join('');
+}
+async function addSurveyDoc(cat) {
+  if (!currentSite || !currentSite.id) return;
+  const q = n => document.querySelector(`[name="${n}"]`);
+  const fileEl = document.getElementById('sdoc_file_' + cat);
+  const file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
+  const title = ((q('sdoc_title_'+cat)||{}).value||'').trim() || (file ? file.name : '');
+  if (!title) { alert('Zadej název nebo vyber soubor'); return; }
+  if (file && file.size > 25*1024*1024) { alert('Soubor je větší než 25 MB'); return; }
+  const body = {
+    title, doc_type: cat,
+    signed_at: ((q('sdoc_date_'+cat)||{}).value||'') || null,
+    note: ((q('sdoc_note_'+cat)||{}).value||'').trim() || null,
+  };
+  if (file) {
+    try { body.data_url = await readFileAsDataURL(file); body.filename = file.name; }
+    catch (e) { alert(e.message); return; }
+  }
+  const r = await fetch('/api/sites/' + currentSite.id + '/documents', fetchOpts({ method:'POST', body: JSON.stringify(body) }));
+  if (!r.ok) { const e = await r.json().catch(()=>({})); alert('Chyba: ' + (e.error || r.status)); return; }
+  await refreshCurrent(); renderSiteModal(); switchTab('survey');
+}
+window.addSurveyDoc = addSurveyDoc;
+async function delSurveyDoc(id) {
+  if (!confirm('Smazat dokument?')) return;
+  await fetch('/api/sites/documents/' + id, fetchOpts({ method:'DELETE' }));
+  await refreshCurrent(); renderSiteModal(); switchTab('survey');
+}
+window.delSurveyDoc = delSurveyDoc;
+
 // ─── Sbírání hodnot z formuláře ────────────────────────────────────────────
 function collectForm() {
   const root = document.querySelector('.modal');
   if (!root) return {};
   const out = {};
   root.querySelectorAll('input[name], select[name], textarea[name]').forEach(el => {
-    if (el.name.startsWith('contact_') || el.name.startsWith('comm_') || el.name.startsWith('doc_')) return;
+    if (el.name.startsWith('contact_') || el.name.startsWith('comm_') || el.name.startsWith('doc_') || el.name.startsWith('sdoc_')) return;
     if (el.type === 'checkbox') out[el.name] = el.checked;
     else if (el.value === '') out[el.name] = null;
     else if (el.type === 'number') out[el.name] = el.value === '' ? null : Number(el.value);

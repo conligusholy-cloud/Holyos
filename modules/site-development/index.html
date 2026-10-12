@@ -145,7 +145,13 @@
     .compare-table th { font-size:11px; }
     .compare-table td { vertical-align:top; font-size:13px; }
     .compare-table .name-cell { font-weight:600; color:#14b8a6; }
-  </style>
+    /* Tesco — nabídky od Tesca modře */
+  .data-table tr.tesco-row td{background:rgba(59,130,246,.10)}
+  .data-table tr.tesco-row:hover td{background:rgba(59,130,246,.18)}
+  .data-table td.tesco-cell{border-left:3px solid #3b82f6}
+  .data-table td.tesco-cell strong{color:#60a5fa}
+  .tesco-tag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;background:#3b82f6;color:#fff;vertical-align:middle}
+</style>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -221,7 +227,7 @@
     document.head.appendChild(s);
   </script>
 
-  <script src="modules/site-development/app.js?v=20260925f"></script>
+  <script src="modules/site-development/app.js?v=20260929"></script>
   <script src="modules/site-development/lokality-tab.js?v=20260925g"></script>
   <script src="modules/prodejni-objednavky/predjednana-mista.js?v=20260925e"></script>
 </body>
