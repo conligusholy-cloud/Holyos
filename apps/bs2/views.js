@@ -513,7 +513,7 @@ function supporterCompounder(s) {
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
   @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
-  .cp .how-cas{position:absolute;right:-32%;top:26%;width:200px;display:flex;flex-direction:column;gap:6px;z-index:6} .cp .how-cas[hidden]{display:none}
+  .cp .how-cas{position:absolute;right:-32%;top:26%;width:200px;display:flex;flex-direction:column;gap:6px;z-index:6}
   .cp .how-cas .cs,.cp .how-cas button{opacity:0;transform:translateY(-14px) scale(.96);transition:opacity .45s,transform .45s cubic-bezier(.2,1.3,.4,1)} .cp .how-cas .in{opacity:1;transform:none}
   .cp .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
   .cp .how-cas .cs small{display:block;font-size:10.5px;color:var(--text2);line-height:1.35;margin-top:3px} .cp .how-cas .cs small i{font-style:normal;color:#fff} .cp .how-cas .cs b{font-size:clamp(18px,2.2vw,24px);letter-spacing:-.02em;color:#fff;margin-top:2px;white-space:nowrap}
@@ -633,11 +633,11 @@ function supporterCompounder(s) {
           <div class="how-acc"><span class="dec-k">tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
-        <div class="how-cas" id="how-cas" hidden>
-          <div class="cs"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>× 30,5 dne · s DPH<br>bez DPH <i id="hs-mn"></i></small></div>
-          <div class="cs m"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">0 Kč</b><small>nájem 3 000 Kč<br>servis 13 % <i id="hs-serv"></i><br>energie <i id="hs-en"></i> (s DPH 15 % <i id="hs-env"></i>)</small></div>
-          <div class="cs r"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">0 Kč</b><small>bez DPH · před splátkou</small></div>
-          <button type="button" class="btn sec sm" onclick="location.reload()">↻ Spustit znovu</button>
+        <div class="how-cas" id="how-cas">
+          <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>× 30,5 dne · s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
+          <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 3 000 Kč</b><small>nájem 3 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i> (s DPH 15 % <i id="hs-env">0 Kč</i>)</small></div>
+          <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 3 000 Kč</b><small>bez DPH · před splátkou</small></div>
+          <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
@@ -655,12 +655,11 @@ function supporterCompounder(s) {
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
         var stopped=false;
-        function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say('');
-          var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
-          var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-3000-serv-en;
+        var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
+        function monthCalc(){ var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-3000-serv-en;
           document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
-          document.getElementById('hs-cost').textContent='− '+fmtK(3000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); document.getElementById('hs-res').textContent=fmtK(res);
-          var box=document.getElementById('how-cas'); box.hidden=false; var items=box.querySelectorAll('.cs,button'); items.forEach(function(el,i){ setTimeout(function(){ el.classList.add('in'); },400+i*650); }); }
+          document.getElementById('hs-cost').textContent='− '+fmtK(3000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); document.getElementById('hs-res').textContent=(res<0?'− ':'')+fmtK(Math.abs(res)); }
+        function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say(''); monthCalc(); document.getElementById('hs-again').classList.add('in'); }
         function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
           hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
@@ -685,7 +684,7 @@ function supporterCompounder(s) {
           var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
           if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
-          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů');
+          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů'); monthCalc();
           // odchází s čistým prádlem
           bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
           cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
