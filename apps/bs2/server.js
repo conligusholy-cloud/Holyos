@@ -298,7 +298,7 @@ app.post('/join/:code', wrap(async (req, res) => {
   if (f.phone) { const tail = f.phone.replace(/\D/g, '').slice(-9); if (tail.length >= 9 && (await q("SELECT 1 FROM supporters WHERE phone IS NOT NULL AND right(regexp_replace(phone, '\\D', '', 'g'), 9)=$1", [tail])).rows.length) return back('Tento telefon už u nás účet má.'); }
   const hash = await bcrypt.hash(password, 11);
   const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at, gdpr_consent_at, vop_consent_at)
-    VALUES ($1,$2,$3,$4,$5,$6,'active','standard',$7,'referral',now(),now(),now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
+    VALUES ($1,$2,$3,$4,$5,$6,'active','new',$7,'referral',now(),now(),now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
   await log({ name: 'web' }, 'join_via_referral', { id: r.rows[0].id, email: f.email, seller_id: seller.id, seller_nick: seller.nick, ip });
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: r.rows[0].id, nick: f.nick }, 30 * 24 * 3600);
   res.redirect('/?welcome=1');
@@ -525,7 +525,7 @@ app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
   res.cookie(COLS_COOKIE, JSON.stringify(cols), { httpOnly: true, secure: isHttps(req), sameSite: 'lax', maxAge: 365 * 24 * 3600 * 1000 });
   res.redirect(back);
 });
-const USER_TYPES = ['standard', 'owner', 'seller'];
+const USER_TYPES = ['new', 'standard', 'owner', 'seller'];
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(), status = String(req.query.status || ''), utype = String(req.query.type || '');
   const where = [], params = [];
@@ -807,7 +807,7 @@ app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) 
   let m = null; try { m = ((await loadProducts()).items || []).find(p => p.id === o.holyos_item_id) || null; } catch (e) { /* bez parametrů */ }
   const ins = await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, note) VALUES ($1,$2,$3,$4,$5) RETURNING id', [s.id, o.holyos_item_id, o.product_name, priceCzk, 'Objednávka #' + o.id + (Number(o.dc_used) > 0 ? ' · uplatněno ' + Number(o.dc_used).toLocaleString('cs-CZ') + ' DC' : '')]);
   const creditMsg = await grantSellerCredit(s, m ? { id: m.id } : (o.holyos_item_id ? { id: o.holyos_item_id } : null), priceCzk, o.product_name, ins.rows[0].id);
-  if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
+  if (['standard', 'new'].includes(s.user_type)) await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'order_confirm', { id: o.id });
   res.redirect('/admin/orders?msg=' + encodeURIComponent('Objednávka #' + o.id + ' potvrzena, nákup zapsán.' + creditMsg));
 }));
@@ -864,7 +864,7 @@ app.post('/admin/supporters/:id(\\d+)/purchases', requireAdmin, wrap(async (req,
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body.date || '') ? req.body.date : new Date().toISOString().slice(0, 10);
   const ins = await q('INSERT INTO purchases (supporter_id, holyos_item_id, product_name, price_czk, purchased_at, note) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [s.id, m ? m.id : null, name, price, date, String(req.body.note || '').trim().slice(0, 500) || null]);
   const creditMsg = await grantSellerCredit(s, m, price, name, ins.rows[0].id);
-  if (s.user_type === 'standard') await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
+  if (['standard', 'new'].includes(s.user_type)) await q("UPDATE supporters SET user_type='owner', updated_at=now() WHERE id=$1", [s.id]);
   await log(req.admin, 'purchase_add', { id: s.id, product: name });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Nákup přidán.' + creditMsg));
 }));
