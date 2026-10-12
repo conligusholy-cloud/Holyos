@@ -83,7 +83,7 @@ app.use((req, res, next) => {
       const hasAdmin = !!(a && a.kind === 'admin' && isAllowedAdmin(a)), hasUser = !!(u && u.kind === 'user');
       const inAdmin = req.path.startsWith('/admin');
       let html = '';
-      if (hasAdmin || (hasUser && inAdmin)) {
+      if (false && (hasAdmin || (hasUser && inAdmin))) { // přepínač Admin/Uživatel vypnut — do administrace se chodí jen z menu HolyOS
         // z admina: „Uživatel" vede do uživatelského prostředí (bez uživatelského přihlášení na přihlašovací stránku)
         html = `<span class="envsw" role="group" aria-label="Prostředí"><a href="/admin" class="${inAdmin ? 'on' : ''}" title="Administrace">🛠 <span>Admin</span></a><a href="${hasUser ? '/' : '/login'}" class="${inAdmin ? '' : 'on'}" title="${hasUser ? 'Uživatelské prostředí' : 'Uživatelské prostředí — nejdřív se přihlas jako uživatel'}">👤 <span>Uživatel</span></a></span>`;
       }

@@ -635,7 +635,7 @@ function supporterCompounder(s) {
           <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
         </div>
-        <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
+        <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
       <script>(function(){
         var $=function(id){return document.getElementById(id);};
