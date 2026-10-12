@@ -1681,6 +1681,10 @@
     window.openSubModal = async function(id) {
       const s = id ? window.__subs.find(x => x.id === id) : null;
       const kiosks = await loadKiosks();
+      if (!window.__companies) { const rc = await api('GET', '/api/wh/companies'); window.__companies = (rc.status === 200 && Array.isArray(rc.data)) ? rc.data : []; }
+      const companies = window.__companies;
+      const selCo = s ? (companies.find(c => c.id === s.company_id) || companies.find(c => s.buyer_ico && c.ico === s.buyer_ico)) : null;
+      const companyOpts = '<option value="">— vyber společnost —</option>' + companies.map(c => '<option value="' + c.id + '"' + (selCo && selCo.id === c.id ? ' selected' : '') + '>' + escapeHtml(c.name) + (c.ico ? ' (' + escapeHtml(c.ico) + ')' : '') + '</option>').join('');
       const used = new Set((window.__subs || []).map(x => x.kiosk_code));
       if (!kiosks.length && !s) { window.__kiosks = null; alert('Stroje z Compoundingu se nepodařilo načíst' + (window.__kioskErr ? ': ' + window.__kioskErr : '') + '. Zkontroluj SIS_KIOSK_API_KEY na serveru.'); return; }
       const kioskOpts = (s ? '' : '<option value="">— vyber stroj z Compoundingu —</option>')
@@ -1694,8 +1698,8 @@
             <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
               <label>Stroj (Compounding) *</label><select id="sub-kiosk" ${s ? 'disabled' : ''} onchange="subKioskChanged()" style="${inp}">${kioskOpts}</select>
-              <label>Odběratel (název)</label><input id="sub-name" value="${v('customer_name','')}" style="${inp}">
-              <label>IČO odběratele</label><input id="sub-ico" value="${v('buyer_ico','')}" style="${inp}">
+              <label>Odběratel (společnost) *</label><select id="sub-company" onchange="subCompanyChanged()" style="${inp}">${companyOpts}</select>
+              <label>IČO / DIČ odběratele</label><input id="sub-ico" readonly value="${selCo ? escapeHtml((selCo.ico || '') + (selCo.dic ? ' · ' + selCo.dic : '')) : v('buyer_ico','')}" style="${inp}opacity:.8;">
               <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" style="${inp}">
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
               <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
@@ -1714,6 +1718,12 @@
         </div>`;
    
       if (s) subRevenuePreview();
+    };
+    // Výběr společnosti vyplní IČO a e-mail (e-mail jde přepsat)
+    window.subCompanyChanged = function() {
+      const c = (window.__companies || []).find(x => String(x.id) === document.getElementById('sub-company').value);
+      document.getElementById('sub-ico').value = c ? ((c.ico || '') + (c.dic ? ' · ' + c.dic : '')) : '';
+      document.getElementById('sub-email').value = c && c.email ? c.email : '';
     };
     window.subKioskChanged = function() {
       const sel = document.getElementById('sub-kiosk');
@@ -1742,7 +1752,9 @@
       const g = (i) => document.getElementById(i).value.trim();
       const kiosk = g('sub-kiosk');
       if (!kiosk) return alert('Zadej kód stroje');
-      const body = { kiosk_code: kiosk, customer_name: g('sub-name') || null, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null,
+      const co = (window.__companies || []).find(x => String(x.id) === document.getElementById('sub-company').value);
+      if (!co) return alert('Vyber odběratele (společnost).');
+      const body = { kiosk_code: kiosk, company_id: co.id, customer_name: co.name, buyer_ico: co.ico || null, email: g('sub-email') || co.email || null,
         fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
         billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null,
         active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
