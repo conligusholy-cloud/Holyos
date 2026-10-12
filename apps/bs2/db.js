@@ -169,6 +169,12 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS user_events_created_idx ON user_events (created_at);
     CREATE INDEX IF NOT EXISTS user_events_sup_idx ON user_events (supporter_id, created_at);
     CREATE INDEX IF NOT EXISTS user_events_type_idx ON user_events (type, created_at);
+    -- Podněty uživatelů na vylepšení aplikace
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id SERIAL PRIMARY KEY, supporter_id INT REFERENCES supporters(id) ON DELETE SET NULL, body TEXT NOT NULL, page TEXT, device TEXT,
+      status TEXT NOT NULL DEFAULT 'new', admin_note TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), handled_at TIMESTAMPTZ, handled_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS suggestions_status_idx ON suggestions (status, created_at);
     CREATE TABLE IF NOT EXISTS password_resets (
       id SERIAL PRIMARY KEY, supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
       token_hash TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()

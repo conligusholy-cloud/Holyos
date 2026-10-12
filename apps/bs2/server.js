@@ -821,6 +821,36 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 
+// ── Podněty na vylepšení ──────────────────────────────────────────────
+app.post('/api/suggestion', wrap(async (req, res) => {
+  const s = readCookie(req, USER_COOKIE);
+  if (!s || s.kind !== 'user') return res.status(401).json({ error: 'Přihlas se prosím.' });
+  const text = String((req.body || {}).text || '').trim();
+  if (text.length < 3) return res.status(400).json({ error: 'Napiš prosím alespoň pár slov.' });
+  if (text.length > 3000) return res.status(400).json({ error: 'Text je příliš dlouhý (max. 3000 znaků).' });
+  if (rateLimited('sug:' + s.sid, 10, 60 * 60e3)) return res.status(429).json({ error: 'Příliš mnoho podnětů za hodinu. Zkus to později.' });
+  const page = String((req.body || {}).page || '').slice(0, 200) || null;
+  const r = await q('INSERT INTO suggestions (supporter_id, body, page, device) VALUES ($1,$2,$3,$4) RETURNING id', [s.sid, text, page, ST.deviceOf(req.get('user-agent'))]);
+  ST.track(req, s.sid, 'suggestion', { path: page, label: text.slice(0, 80) });
+  await log({ name: s.nick || String(s.sid) }, 'suggestion_new', { id: r.rows[0].id, supporter_id: s.sid });
+  res.json({ ok: true });
+}));
+app.get('/admin/suggestions', requireAdmin, wrap(async (req, res) => {
+  const status = ['new', 'done', 'dismissed'].includes(req.query.status) ? req.query.status : '';
+  const rows = (await q(`SELECT g.*, s.email, s.nick, s.first_name, s.last_name FROM suggestions g LEFT JOIN supporters s ON s.id=g.supporter_id ${status ? 'WHERE g.status=$1' : ''} ORDER BY (g.status='new') DESC, g.created_at DESC LIMIT 500`, status ? [status] : [])).rows;
+  const counts = Object.fromEntries((await q('SELECT status, count(*)::int n FROM suggestions GROUP BY status')).rows.map(r => [r.status, r.n]));
+  res.send(V.adminSuggestions({ admin: req.admin, rows, status, counts, msg: req.query.msg || '', holyosUrl: HOLYOS_URL }));
+}));
+app.post('/admin/suggestions/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => {
+  const st = ['new', 'done', 'dismissed'].includes(req.body.status) ? req.body.status : null;
+  if (!st) return res.redirect('/admin/suggestions');
+  await q('UPDATE suggestions SET status=$2, admin_note=$3, handled_at=CASE WHEN $2=\'new\' THEN NULL ELSE now() END, handled_by=CASE WHEN $2=\'new\' THEN NULL ELSE $4 END WHERE id=$1', [parseInt(req.params.id, 10), st, String(req.body.admin_note || '').trim().slice(0, 1000) || null, req.admin.name || req.admin.username || 'admin']);
+  res.redirect('/admin/suggestions' + (req.body.back ? '?status=' + encodeURIComponent(req.body.back) : '') + (req.body.back ? '&' : '?') + 'msg=' + encodeURIComponent('Uloženo.'));
+}));
+app.post('/admin/suggestions/:id(\\d+)/delete', requireAdmin, wrap(async (req, res) => {
+  await q('DELETE FROM suggestions WHERE id=$1', [parseInt(req.params.id, 10)]);
+  res.redirect('/admin/suggestions?msg=' + encodeURIComponent('Podnět smazán.'));
+}));
 app.get('/admin/stats/live', requireAdmin, (req, res) => res.send(V.adminLive({ admin: req.admin, holyosUrl: HOLYOS_URL })));
 app.get('/admin/stats/live.json', requireAdmin, wrap(async (req, res) => { res.set('Cache-Control', 'no-store'); res.json(await ST.loadLive(req.query.since)); }));
 app.get('/admin/stats', requireAdmin, wrap(async (req, res) => {

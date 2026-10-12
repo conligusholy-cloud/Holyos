@@ -235,6 +235,21 @@ function buildBadge() {
   try { when = new Date(BUILD.at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { when = ''; }
   return `<span class="ver" title="Aktuální verze ${esc(BUILD.version)}${BUILD.sha ? ' · ' + esc(BUILD.sha) : ''}">Verze <b>${esc(BUILD.version)}</b><span class="vd"> · poslední aktualizace ${esc(when)}</span></span>`;
 }
+// Plovoucí tlačítko „Nápad na vylepšení“ + okno s textovým polem (jen pro přihlášené uživatele)
+const IDEA_WIDGET = `<button type="button" id="idea-btn" data-track="Nápad na vylepšení" style="position:fixed;left:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid rgba(255,184,77,.5);background:rgba(20,16,6,.85);color:#ffd9a0;font-weight:700;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 8px 26px rgba(0,0,0,.45)"><span aria-hidden="true">💡</span> Nápad na vylepšení</button>
+<div id="idea-m" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(520px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">💡 Nápad na vylepšení</b><button type="button" id="idea-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
+  <p class="muted small" style="margin:6px 0 10px">Co by mohlo být v Best Series 2.0 lepší nebo co ti chybí? Napiš nám to, každý nápad čteme.</p>
+  <textarea id="idea-t" rows="6" maxlength="3000" placeholder="Tvůj nápad…" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
+  <div id="idea-msg" class="small" style="margin-top:8px;min-height:18px"></div>
+  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" id="idea-c" class="btn sec">Zrušit</button><button type="button" id="idea-s" class="btn">Odeslat</button></div>
+</div></div>
+<script>(function(){var b=document.getElementById('idea-btn'),m=document.getElementById('idea-m'),t=document.getElementById('idea-t'),g=document.getElementById('idea-msg'),s=document.getElementById('idea-s');if(!b)return;
+function open(){m.style.display='flex';g.textContent='';t.focus();}function close(){m.style.display='none';}
+b.addEventListener('click',open);document.getElementById('idea-x').addEventListener('click',close);document.getElementById('idea-c').addEventListener('click',close);m.addEventListener('click',function(e){if(e.target===m)close();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.style.display==='flex')close();});
+s.addEventListener('click',function(){var v=t.value.trim();if(v.length<3){g.style.color='var(--err,#ff5d6c)';g.textContent='Napiš prosím alespoň pár slov.';return;}s.disabled=true;
+fetch('/api/suggestion',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:v,page:location.pathname})}).then(function(r){return r.json().then(function(j){return{ok:r.ok,j:j};});}).then(function(x){s.disabled=false;if(x.ok){t.value='';g.style.color='var(--ok,#2fe3a0)';g.textContent='Díky! Tvůj nápad jsme přijali.';setTimeout(close,1400);}else{g.style.color='var(--err,#ff5d6c)';g.textContent=(x.j&&x.j.error)||'Nepodařilo se odeslat.';}}).catch(function(){s.disabled=false;g.style.color='var(--err,#ff5d6c)';g.textContent='Chyba připojení, zkus to znovu.';});});})();</script>`;
 function layout({ title, body, nav = [], active = '', user = null, holyosUrl = '', banner = null, fx = false, help }) {
   const { AUTH_JS } = require('./auth-shell');
   const h = help === null ? null : (help || HELP[active] || null);
@@ -250,7 +265,7 @@ ${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user && !holyosUrl ? `<a href="/pod
 ${fx && user && !holyosUrl ? `<script>(function(){function f(){fetch('/api/support/state',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var d=document.getElementById('sup-dot'),b=document.getElementById('sup-badge'),l=document.getElementById('sup-link');if(d){d.className='sup-dot '+(j.online?'on':'off');}if(b){b.hidden=!j.unread;b.textContent=j.unread;}if(l)l.title=j.online?'Živá podpora — online':'Živá podpora — momentálně offline';}).catch(function(){});}f();setInterval(f,20000);})();</script>` : ''}
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
-<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}${fx && user && !holyosUrl ? `<script>${require('./stats-track').TRACK_JS}</script>` : ''}</body></html>`;
+<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}${fx && user && !holyosUrl ? `<script>${require('./stats-track').TRACK_JS}</script>` + IDEA_WIDGET : ''}</body></html>`;
 }
 
 // ── Veřejné / uživatel ──────────────────────────────────────────────────
@@ -1415,6 +1430,7 @@ const ADMIN_NAV = [
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
   { id: 'stat', href: '/admin/stats', label: 'Statistiky', icon: 'chart' },
+  { id: 'sug', href: '/admin/suggestions', label: 'Podněty', icon: 'bolt' },
   { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
   { id: 'sup2', href: '/admin/podpora', label: 'Podpora', icon: 'chat' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
@@ -1700,6 +1716,25 @@ function adminTransfers({ admin, rows = [], msg = '', holyosUrl, status = '', co
         <form method="post" action="/admin/transfers/${t.id}/reject" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input name="admin_note" placeholder="Důvod zamítnutí" style="width:150px;padding:6px 8px"><button class="btn sec sm" type="submit" onclick="return confirm('Žádost zamítnout?')">Zamítnout</button></form></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné žádosti o převod podpory.</p>'}</div>`, holyosUrl);
 }
+function adminSuggestions({ admin, rows = [], status = '', counts = {}, msg = '', holyosUrl }) {
+  const all = (counts.new || 0) + (counts.done || 0) + (counts.dismissed || 0);
+  const ST = { new: ['invited', 'nový'], done: ['active', 'vyřešeno'], dismissed: ['blocked', 'zamítnuto'] };
+  const tab = (k, l, n) => `<a class="btn sec sm" href="/admin/suggestions${k ? '?status=' + k : ''}"${status === k ? ' style="border-color:var(--accent);color:var(--accent2)"' : ''}>${l} <b>${n}</b></a>`;
+  return adminLayout('Podněty', 'sug', admin, `
+  <h1 style="margin:0 0 6px">Podněty na vylepšení <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+  <p class="muted" style="margin-top:0">Nápady, které uživatelé poslali tlačítkem „Nápad na vylepšení" v aplikaci.</p>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <div class="row" style="gap:8px;margin:10px 0 12px;flex-wrap:wrap">${tab('', 'Všechny', all)}${tab('new', 'Nové', counts.new || 0)}${tab('done', 'Vyřešené', counts.done || 0)}${tab('dismissed', 'Zamítnuté', counts.dismissed || 0)}</div>
+  ${rows.length ? rows.map(g => { const st = ST[g.status] || ST.new; const nm = [g.last_name, g.first_name].filter(Boolean).join(' ') || g.email || 'smazaný uživatel'; return `<div class="card" style="margin:0 0 10px">
+    <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div>${g.supporter_id ? `<a href="/admin/supporters/${g.supporter_id}"><b>${esc(nm)}</b></a>` : `<b>${esc(nm)}</b>`}${g.nick ? ` <span class="muted small">${esc(g.nick)}</span>` : ''} <span class="muted small">· ${fmtDT(g.created_at)}${g.page ? ' · ze stránky ' + esc(g.page) : ''}${g.device ? ' · ' + esc(g.device) : ''}</span></div><span class="badge ${st[0]}">${st[1]}</span></div>
+    <p style="white-space:pre-wrap;margin:10px 0 12px;font-size:15px">${esc(g.body)}</p>
+    ${g.handled_at ? `<div class="small muted" style="margin-bottom:8px">Zpracoval ${esc(g.handled_by || '')} · ${fmtDT(g.handled_at)}</div>` : ''}
+    <form method="post" action="/admin/suggestions/${g.id}/status" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin:0"><input type="hidden" name="back" value="${esc(status)}"><input name="admin_note" value="${esc(g.admin_note || '')}" placeholder="Poznámka (nepovinné)" style="flex:1;min-width:200px">
+      ${g.status !== 'done' ? '<button class="btn sm" name="status" value="done" type="submit">Vyřešeno</button>' : ''}${g.status !== 'dismissed' ? '<button class="btn sec sm" name="status" value="dismissed" type="submit">Zamítnout</button>' : ''}${g.status !== 'new' ? '<button class="btn sec sm" name="status" value="new" type="submit">Znovu otevřít</button>' : ''}
+    </form>
+    <form method="post" action="/admin/suggestions/${g.id}/delete" style="margin:8px 0 0" onsubmit="return confirm('Opravdu smazat podnět?')"><button class="btn danger sm" type="submit">Smazat</button></form>
+  </div>`; }).join('') : '<div class="card"><p class="muted" style="margin:0">Zatím žádné podněty.</p></div>'}`, holyosUrl);
+}
 function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {} }) {
   const sy = (o) => (o.currency === 'EUR' ? '€' : 'Kč');
   const st = (o) => `<span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span>`;
@@ -1899,4 +1934,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
