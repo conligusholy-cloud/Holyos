@@ -492,7 +492,7 @@ function supporterCompounder(s) {
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
   .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1377/1142;overflow:visible}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
-  .cp .how-d{position:absolute;width:9%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+  .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
   .cp .how-d i{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(79,209,255,.0);transition:border-color .3s}
   .cp .how-d span{position:absolute;left:50%;top:106%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.7);padding:1px 6px;border-radius:999px;opacity:0;transition:opacity .3s} .cp .how-d.on span{opacity:1}
   .cp .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
@@ -627,7 +627,7 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:41,y:49},S={x:57,y:44},IN={x:-12,y:62},OUT={x:114,y:62};
+        var W={x:45,y:50},S={x:67,y:43},IN={x:-12,y:62},OUT={x:114,y:62};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[300,'Pračka 18 kg · 300 Kč',false],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true]];
