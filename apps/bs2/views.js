@@ -968,7 +968,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       ${net != null ? `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tento prádlomat nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="${p.id}" data-name="${esc(p.name_cs)}">Koupit</button></div>` : ''}
       ${net != null && bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric" style="width:120px;padding:8px 10px;text-align:right"><span class="muted">DC</span><button type="button" class="btn sec sm dc-max">Max</button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div>
-      ${minN > 0 ? `<div class="small muted" style="margin-top:6px">Nejnižší možná cena: ${money(minN, sym)} bez DPH</div>` : ''}</div>` : ''}
+</div>` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
   ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
@@ -1020,7 +1020,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       cur=c;curBtn=btn;var price=parseFloat(c.getAttribute('data-price'))||0,room=parseFloat(c.getAttribute('data-room'));if(isNaN(room))room=price;
       curCap=Math.max(0,Math.min(room,total-used(c)));mr.max=curCap;mn.max=curCap;
       $('dcm-name').textContent=c.querySelector('b').textContent;$('dcm-cap').textContent=fmt(curCap);
-      var minN=price-room;$('dcm-min').textContent=minN>0?'Nejnižší možná cena: '+fmt(minN)+' '+sym+' bez DPH':'';
+      var mn=$('dcm-min'); if(mn) mn.textContent='';
       mset(parseInt(c.querySelector('.dc-in').value,10)||0);M.style.display='flex';mn.focus();mn.select();
     }
     function closeDc(){M.style.display='none';cur=null;}
