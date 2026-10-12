@@ -118,6 +118,63 @@
   .rep-box ul{padding-left:16px;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--text2)} .rep-box li i{color:var(--text3);font-style:normal} .rep-box li b{color:#ffd866}
   .scen{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px} .sc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:rgba(4,8,16,.5)} .sc.hi{border-color:rgba(79,209,255,.45)}
   .sc-k{font-size:12px;color:var(--text2);margin-bottom:4px} .sc-v{font-size:13.5px;font-variant-numeric:tabular-nums} .sc-v.pos{color:var(--ok);font-weight:700} .sc-v.neg{color:var(--err);font-weight:700}
+  .sim .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
+  .sim .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
+  .sim .how-mach{position:absolute;inset:0}
+  .sim .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
+  .sim .how-w8{width:9%!important}
+  .sim .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+  .sim .how-d i{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(79,209,255,.0);transition:border-color .3s}
+  .sim .how-d span{position:absolute;left:50%;top:106%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.7);padding:1px 6px;border-radius:999px;opacity:0;transition:opacity .3s} .sim .how-d.on span{opacity:1}
+  .sim .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
+  .sim .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
+  @keyframes howspin{to{transform:rotate(360deg)}}
+  .sim .how-cust,.sim .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
+  .sim .how-cust{width:22%;aspect-ratio:1/2} .sim .how-cust.flip svg{transform:scaleX(-1)} .sim .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
+  .sim .how-bag{font-size:30px;z-index:4}
+  .sim .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
+  .sim .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
+  .sim .how-clock{position:absolute;left:-32%;top:0;width:24%;text-align:center;z-index:6}
+  .sim .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
+  .sim .how-clock .hc-txt{margin-top:6px} .sim .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .sim .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
+  @media(max-width:700px){.sim .how-clock{position:static;transform:none;width:120px;margin:0 auto 8px}}
+  .sim .how-acc{position:absolute;right:-34%;top:0;width:210px;box-sizing:border-box;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .sim .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sim .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .sim .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
+  @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
+  .sim .how-cas{position:absolute;right:-34%;top:26%;width:210px;display:flex;flex-direction:column;gap:6px;z-index:6}
+  .sim .how-cas .cs,.sim .how-cas button{opacity:0;transform:translateY(-14px) scale(.96);transition:opacity .45s,transform .45s cubic-bezier(.2,1.3,.4,1)} .sim .how-cas .in{opacity:1;transform:none}
+  .sim .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;box-sizing:border-box;width:100%;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
+  .sim .how-cas .cs small{display:block;font-size:10.5px;color:var(--text2);line-height:1.35;margin-top:3px} .sim .how-cas .cs small i{font-style:normal;color:#fff} .sim .how-cas .cs b{font-size:clamp(18px,2.2vw,24px);letter-spacing:-.02em;color:#fff;margin-top:2px;white-space:nowrap}
+  .sim .how-cas .cs.m{border-color:rgba(245,158,11,.4)} .sim .how-cas .cs.m b{color:#f59e0b}
+  .sim .how-cas .cs.r{border-color:rgba(47,227,160,.6);background:rgba(47,227,160,.12);box-shadow:0 10px 30px rgba(47,227,160,.25)} .sim .how-cas .cs.r b{font-size:22px;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sim .how-cas .cs.r.neg{border-color:rgba(239,68,68,.7);background:rgba(239,68,68,.14);box-shadow:0 10px 30px rgba(239,68,68,.3)} .sim .how-cas .cs.r.neg b{background-image:linear-gradient(180deg,#fff,#ef4444);text-shadow:0 0 14px rgba(239,68,68,.6)}
+  .sim .how-cas button{align-self:stretch}
+  @media(max-width:700px){.sim .how-cas{position:static;width:100%;margin-top:90px} .sim .how-cas .cs{align-items:stretch;text-align:left}}
+  .sim .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .sim .how-foot b{color:var(--accent2)}
+  @media(max-width:700px){.sim .how-stage{margin:0 auto 80px} .sim .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .sim .how-cust{font-size:24px} .sim .how-bag{font-size:18px} .sim .how-tag{font-size:10px} .sim .how-acc{padding:6px 10px} .sim .how-acc b{font-size:18px}}
+    .sim .how{padding:12px 10px}
+    .sim .how-stage{width:100%;aspect-ratio:auto;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+    .sim .how-clock{order:0;position:static;width:104px;margin:0 auto}
+    .sim .how-mach{order:1;position:relative;inset:auto;width:100%;aspect-ratio:1000/820}
+    .sim .how-acc{order:2;position:static;right:auto;left:auto;top:auto;bottom:auto;transform:none;width:100%;text-align:center;white-space:normal}
+    .sim .how-cas{order:3;position:static;right:auto;top:auto;width:100%;margin-top:0}
+    .sim .how-cas .cs{align-items:stretch;text-align:left}
+    .sim .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}
+  .sim .dec-k{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .sim .dec-s{display:block;font-size:13px;color:var(--text2);margin-top:2px}
+  @media(max-width:700px){
+    .sim .how{padding:12px 10px}
+    .sim .how-stage{width:100%;aspect-ratio:auto;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+    .sim .how-clock{order:0;position:static;width:104px;margin:0 auto}
+    .sim .how-mach{order:1;position:relative;inset:auto;width:100%;aspect-ratio:1000/820}
+    .sim .how-acc{order:2;position:static;right:auto;left:auto;top:auto;bottom:auto;transform:none;width:100%;text-align:center;white-space:normal}
+    .sim .how-cas{order:3;position:static;right:auto;top:auto;width:100%;margin-top:0}
+    .sim .how-cas .cs{align-items:stretch;text-align:left}
+    .sim .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}
+  }
+  .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
   .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
   @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
 </style>
@@ -138,47 +195,83 @@
    <img class="pm3d" src="/assets/pradlomat-flex.webp?v=1" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async">
   </section>
 
-  <section class="sec" id="ukazka">
-    <h2>Takto vypadá vyhodnocení vašeho místa</h2>
-    <div class="demo-flag">Modelový příklad — nejde o skutečnou lokalitu. Hodnoty jsou ilustrativní.</div>
-    <div class="report">
-      <div class="rep-head">
-        <div><div class="rep-k">Lokalita</div><div class="rep-v">Modelová 12, Vzorov (modelový příklad)</div></div>
-        <div><div class="rep-k">Prostor</div><div class="rep-v">18 m², vstup z ulice, 24/7</div></div>
-        <div><div class="rep-k">Nájem</div><div class="rep-v">6 000 Kč / měsíc bez energií</div></div>
-        <div><div class="rep-k">Výsledek</div><div class="rep-v res cond">Vhodné při splnění podmínek</div></div>
-      </div>
-      <div class="rep-grid">
-        <div class="rep-box"><h4>Ověřené skutečnosti <small>zdroj · datum</small></h4><ul>
-          <li>Prostor 18 m² s vlastním vstupem – <i>nájemní nabídka, 1. 10. 2026</i></li>
-          <li>Přípojka vody a odpadu v prostoru – <i>fotodokumentace zákazníka, 1. 10. 2026</i></li>
-          <li>Elektrická přípojka 3× 25 A – <i>sdělení pronajímatele, 1. 10. 2026</i></li></ul></div>
-        <div class="rep-box"><h4>Zadal zákazník</h4><ul>
-          <li>Nájem 6 000 Kč / měsíc, výpovědní lhůta 3 měsíce</li>
-          <li>Pěší frekvence 140 osob / 30 min (všední den 17–18 h)</li>
-          <li>Předpokládaná návštěvnost: 8 praní / den</li></ul></div>
-        <div class="rep-box"><h4>Modelové předpoklady a odhady</h4><ul>
-          <li>Cena praní 300 Kč, sušení 350 Kč (s DPH), 60 % zákazníků i suší</li>
-          <li>Servisní smlouva 13 % z tržby bez DPH, energie a voda 9,5 % z tržby bez DPH</li>
-          <li>Scénáře se liší jen návštěvností: slabý 5 / střední 8 / silný 12 praní za den</li></ul></div>
-        <div class="rep-box"><h4>Chybějící údaje</h4><ul>
-          <li>Počet domácností v docházkové vzdálenosti – <b>doplňte ručně</b> (ČSÚ, mapy)</li>
-          <li>Konkurence do 2 km – <b>doplňte ručně</b></li>
-          <li>Cena energií od dodavatele – zatím odhad v % z tržby</li></ul></div>
-      </div>
-      <div class="rep-box" style="margin-top:12px"><h4>Ekonomické scénáře <small>měsíčně, orientačně, před daní</small></h4>
-        <div class="scen">
-          <div class="sc"><div class="sc-k">Slabý · 5 / den</div><div class="sc-v">Tržba s DPH 76 500 Kč</div><div class="sc-v pos">Přebytek 43 000 Kč</div></div>
-          <div class="sc hi"><div class="sc-k">Střední · 8 / den</div><div class="sc-v">Tržba s DPH 122 400 Kč</div><div class="sc-v pos">Přebytek 72 400 Kč</div></div>
-          <div class="sc"><div class="sc-k">Silný · 12 / den</div><div class="sc-v">Tržba s DPH 183 600 Kč</div><div class="sc-v pos">Přebytek 111 600 Kč</div></div>
+  <section class="sec sim" id="ukazka">
+    <h2>Jak prádlomat vydělává – den za 100 sekund</h2>
+    <p class="lead" style="margin:0 0 16px">Modelový příklad jednoho dne provozu: zákazníci, cykly a měsíční kaskáda tržba → náklady → co zbude. Hodnoty jsou ilustrativní, ne skutečná lokalita.</p>
+<div class="how">
+        <div class="how-stage">
+          <div class="how-mach">
+          <img class="how-img" src="/assets/pradlomat-mini.webp?v=1" alt="Prádlomat MINI" loading="lazy" decoding="async">
+          <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
+          <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
+          <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
+          <div class="how-bag" id="how-bag">🧺</div>
+          <div class="how-tag" id="how-tag"></div>
+          <div class="how-coins" id="how-coins"></div>
+          </div>
+          <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(0 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(30 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(60 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(90 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(120 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(150 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(180 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(210 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(240 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(270 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(300 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(330 50 50)"/><circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">06:00</b><span id="hc-d">den 1</span></div></div>
+          <div class="how-acc"><span class="dec-k">průměrná tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
+          <div class="how-cas" id="how-cas">
+          <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
+          <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 5 000 Kč</b><small>bez DPH<br>nájem 5 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i><i id="hs-env" hidden></i></small></div>
+          <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 6 050 Kč</b><small>s DPH<br>bez DPH <i id="hs-resn">− 5 000 Kč</i></small></div>
+          <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
-        <p class="small" style="color:var(--text3);margin-top:8px">Přebytek po uvedených nákladech (servis, energie, nájem) před financováním a daní. Bez investice do zařízení, dopravy, financování, pojištění a rezervy – v plné aplikaci se zadávají zvlášť a výrazně mění peněžní tok.</p>
+        </div>
+        <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
-      <div class="rep-grid" style="margin-top:12px">
-        <div class="rep-box"><h4>Hlavní rizika</h4><ul><li>Návštěvnost 8 praní / den je nepodložený předpoklad zákazníka – výsledek na ní stojí</li><li>Výpovědní lhůta 3 měsíce – riziko ztráty místa dřív, než se investice vrátí</li><li>Neověřená konkurence v okolí</li></ul></div>
-        <div class="rep-box"><h4>Závěr a další kroky</h4><ul><li>Spočítat domácnosti do 500 m a ověřit konkurenci</li><li>Vyjednat výpovědní lhůtu min. 12 měsíců</li><li>Zopakovat pěší měření o víkendu a po doplnění údajů vyhodnotit znovu</li></ul></div>
-      </div>
-    </div>
+      <script>(function(){
+        var $=function(id){return document.getElementById(id);};
+        var cust=$('how-cust'),bag=$('how-bag'),w=$('how-w'),sd=$('how-s'),tag=$('how-tag'),sum=$('how-sum'),n=$('how-n'),clk=$('how-clock'),coins=$('how-coins');
+        if(!cust)return;
+        // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
+        function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
+        var W={x:40,y:52},S={x:60,y:49},IN={x:-14,y:58},OUT={x:-14,y:58};
+        put(w,W); put(sd,S);
+        function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
+        var SPEED=70; // ms na jednu simulovanou minutu → 24 h ≈ 100 s
+        var total=0,cnt=0,min=6*60,T0=performance.now()-6*60*SPEED,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
+        function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
+        var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
+        var stopped=false;
+        var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
+        function monthCalc(){ var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-5000-serv-en;
+          document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
+          document.getElementById('hs-cost').textContent='− '+fmtK(5000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); var rb=document.getElementById('hs-res'), resV=res*1.21; rb.textContent=(resV<0?'− ':'')+fmtK(Math.abs(resV)); document.getElementById('hs-resn').textContent=(res<0?'− ':'')+fmtK(Math.abs(res)); rb.parentNode.classList.toggle('neg',res<0); }
+        monthCalc(); // výchozí stav (záporné = červeně)
+        function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say(''); monthCalc(); document.getElementById('hs-again').classList.add('in'); }
+        function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
+          hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
+        function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+        function simWait(minutes){ return wait(minutes*SPEED); }
+        (function clockLoop(){ if(stopped) return; var f=(performance.now()-T0)/SPEED; min=Math.floor(f); face(f); requestAnimationFrame(clockLoop); })();
+        async function customer(){
+          if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
+          var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
+          await simWait(3+Math.random()*8);
+          cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
+          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await simWait(5);
+          say('platí: '+pr[1]+' + sušení '+cycles+'×50 Kč',{x:WW.x-6,y:WW.y-14}); await simWait(3);
+          bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
+          ring.classList.add('on'); say('pere… 40 min',{x:WW.x,y:WW.y-16}); await simWait(40); ring.classList.remove('on');
+          var END=WW;
+          bag.style.transition='none'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
+          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('do sušičky',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
+          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… '+cy+'/'+cycles+' · 15 min',{x:S.x,y:S.y-16}); await simWait(15); sd.classList.remove('on'); if(cy<cycles) await simWait(1); }
+          END=S;
+          // platba se připíše
+          var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
+          if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
+          total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
+          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů'); monthCalc();
+          // odchází s čistým prádlem
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+          await simWait(10+Math.random()*25); if(!stopped) customer();
+        }
+        customer();
+      })();</script>
   </section>
 
   <section class="sec">
