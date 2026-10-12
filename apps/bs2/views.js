@@ -629,7 +629,7 @@ function supporterCompounder(s) {
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
           <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/>${Array.from({ length: 12 }, (_, i) => `<line x1="50" y1="8" x2="50" y2="${i % 3 === 0 ? 15 : 12}" stroke="${i % 3 === 0 ? '#fff' : 'rgba(255,255,255,.45)'}" stroke-width="${i % 3 === 0 ? 2.5 : 1.5}" transform="rotate(${i * 30} 50 50)"/>`).join('')}<circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">06:00</b><span id="hc-d">den 1</span></div></div>
-          <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
+          <div class="how-acc"><span class="dec-k">tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
         <div class="how-sum" id="how-month" hidden>
