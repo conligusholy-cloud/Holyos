@@ -802,7 +802,7 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   </svg>`;
 
   // ── Scéna 2: bagr kope výkop pro přípojky (voda + elektřina) až k prádlomatu ──
-  const sceneDig = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Bagr vykope přípojky vody, odpadu a elektřiny k prádlomatu"><rect width="240" height="150" rx="12" fill="#0a1426"/>
+  const sceneDig = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Bagr vykope přípojky, položí se zámková dlažba a auto s rukou usadí prádlomat"><rect width="240" height="150" rx="12" fill="#0a1426"/>
     <rect x="0" y="70" width="240" height="80" fill="#2a2018"/><rect x="0" y="70" width="240" height="5" fill="#2d6b4a"/>
     <rect x="0" y="75" width="240" height="75" fill="url(#vhg)" opacity=".5"/>
     <defs><linearGradient id="vhg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2b1e"/><stop offset="1" stop-color="#1a130d"/></linearGradient></defs>
@@ -810,11 +810,15 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
     <path class="vh-water" d="M65 94 H188 V70" fill="none" stroke="#4fd1ff" stroke-width="2.800" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
     <path class="vh-drain" d="M65 100 H198 V70" fill="none" stroke="#b79a73" stroke-width="3.600" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
     <path class="vh-elec" d="M65 106 H208 V70" fill="none" stroke="#ffd23f" stroke-width="2.800" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
-    ${flex && flex.img ? `<image class="vh-box" href="${flex.img}" x="166" y="10" width="70" height="60" preserveAspectRatio="xMidYMax meet"/>` : `<g class="vh-box"><rect x="188" y="26" width="44" height="44" rx="5" fill="#1b2e57" stroke="#3a6cf5"/><rect x="188" y="26" width="44" height="9" rx="3" fill="#1e86e0"/><circle cx="200" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="220" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/></g>`}
+    <g class="vh-pavg"><rect class="vh-pav" style="animation-delay:5.00s" x="164.0" y="62" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.07s" x="174.3" y="62" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.14s" x="184.6" y="62" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.21s" x="194.9" y="62" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.28s" x="205.2" y="62" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.35s" x="215.5" y="62" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.42s" x="225.8" y="62" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.49s" x="164.0" y="66" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.56s" x="174.3" y="66" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.63s" x="184.6" y="66" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.70s" x="194.9" y="66" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.77s" x="205.2" y="66" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.84s" x="215.5" y="66" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:5.91s" x="225.8" y="66" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:5.98s" x="164.0" y="70" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:6.05s" x="174.3" y="70" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:6.12s" x="184.6" y="70" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:6.19s" x="194.9" y="70" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:6.26s" x="205.2" y="70" width="9" height="3.4" rx="0.8" fill="#8a8f98"/><rect class="vh-pav" style="animation-delay:6.33s" x="215.5" y="70" width="9" height="3.4" rx="0.8" fill="#6e737c"/><rect class="vh-pav" style="animation-delay:6.40s" x="225.8" y="70" width="9" height="3.4" rx="0.8" fill="#8a8f98"/></g>
+    ${flex && flex.img ? `<image class="vh-box" href="${flex.img}" x="166" y="10" width="70" height="60" preserveAspectRatio="xMidYMax meet"/>` : `<g class="vh-box"><rect x="188" y="26" width="44" height="44" rx="5" fill="#1b2e57" stroke="#3a6cf5"/><rect x="188" y="26" width="44" height="9" rx="3" fill="#3a6cf5"/><circle cx="203" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff"/><circle cx="219" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff"/></g>`}
     <g font-size="8.500" fill="#b8c6e0"><circle cx="22" cy="136" r="3" fill="#4fd1ff"/><text x="29" y="139">voda</text><circle cx="78" cy="136" r="3" fill="#b79a73"/><text x="85" y="139">odpad</text><circle cx="140" cy="136" r="3" fill="#ffd23f"/><text x="147" y="139">elektřina</text></g>
-    <g><rect x="-17" y="-8" width="34" height="9" rx="4.500" fill="#2b3b5e"/><rect x="-13" y="-21" width="28" height="13" rx="2" fill="#f5b82e"/><rect x="-13" y="-33" width="15" height="13" rx="2" fill="#f5b82e"/><rect x="-10" y="-30" width="9" height="7" rx="1" fill="#a9d8ff"/>
+    <g class="vh-exc"><rect x="-17" y="-8" width="34" height="9" rx="4.500" fill="#2b3b5e"/><rect x="-13" y="-21" width="28" height="13" rx="2" fill="#f5b82e"/><rect x="-13" y="-33" width="15" height="13" rx="2" fill="#f5b82e"/><rect x="-10" y="-30" width="9" height="7" rx="1" fill="#a9d8ff"/>
       <g transform="translate(13 -19)"><g><animateTransform attributeName="transform" type="rotate" values="-10;16;-10" dur="1s" repeatCount="indefinite"/><line x1="0" y1="0" x2="22" y2="-11" stroke="#f5b82e" stroke-width="4.500" stroke-linecap="round"/><line x1="22" y1="-11" x2="33" y2="14" stroke="#e8a417" stroke-width="3.800" stroke-linecap="round"/><path d="M33 14l8-3-3 9z" fill="#aab6d0"/></g></g>
-      <animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.7;1" keyPoints="0;1;1" path="M22 70 H165"/></g>
+      <animateMotion dur="12s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.3;0.34;0.44;1" keyPoints="0;0.514;0.514;1;1" path="M22 70 H165 H300"/></g>
+    <g class="vh-truck"><rect x="-38" y="-14" width="52" height="12" rx="2" fill="#2b3b5e"/><rect x="14" y="-20" width="20" height="18" rx="3" fill="#3a6cf5"/><rect x="18" y="-17" width="10" height="7" rx="1" fill="#a9d8ff"/><circle cx="-26" cy="0" r="5" fill="#111"/><circle cx="-6" cy="0" r="5" fill="#111"/><circle cx="24" cy="0" r="5" fill="#111"/>
+      <g class="vh-crane"><line x1="-10" y1="-14" x2="-10" y2="-50" stroke="#f5b82e" stroke-width="4" stroke-linecap="round"/><line x1="-10" y1="-50" x2="75" y2="-62" stroke="#f5b82e" stroke-width="3.5" stroke-linecap="round"/><line class="vh-hook" x1="75" y1="-62" x2="75" y2="-62" stroke="#dfe6f2" stroke-width="1.2"/></g>
+      <animateMotion dur="12s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.5;0.62;0.9;1" keyPoints="0;0;0.5;0.5;1" path="M-70 70 H126 H-70"/></g>
   </svg>`;
 
   // ── Scéna 3: provoz za 13 % z obratu ──
@@ -834,7 +838,7 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
     const room = Math.max(0, Math.floor(flex.room || 0));
     const step = Math.max(1, Math.round(room / 100));
     calc = `<div class="vh-calc">
-      <div class="vh-cimg">${flex.img ? `<img src="${flex.img}" alt="${esc(flex.name)}">` : ''}<span class="vh-badge" id="vh-bd">−0 %</span></div>
+      <div class="vh-cimg">${flex.img ? `<img src="${flex.img}" alt="${esc(flex.name)}">` : ''}</div>
       <div class="vh-cbody">
         <div class="vh-ct"><span class="vh-n4">4</span><span>DC snižuje cenu — čím víc DC, tím menší cena</span></div>
         <div class="vh-nm">${esc(flex.name)}</div>
@@ -847,13 +851,13 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
       </div>
     </div>
     <script>(function(){var NET=${JSON.stringify(Math.round(flex.net))},ROOM=${JSON.stringify(room)},SYM=${JSON.stringify(sym)};
-      var r=document.getElementById('vh-r');if(!r)return;var nw=document.getElementById('vh-new'),dcE=document.getElementById('vh-dc'),bd=document.getElementById('vh-bd'),b1=document.getElementById('vh-b1'),b2=document.getElementById('vh-b2'),sv=document.getElementById('vh-sv'),old=document.getElementById('vh-old');
+      var r=document.getElementById('vh-r');if(!r)return;var nw=document.getElementById('vh-new'),dcE=document.getElementById('vh-dc'),bd=document.createElement('i'),b1=document.getElementById('vh-b1'),b2=document.getElementById('vh-b2'),sv=document.getElementById('vh-sv'),old=document.getElementById('vh-old');
       function f(n){return Math.round(n).toLocaleString('cs-CZ');}
       var shown=NET,raf=null,touched=false;
       function paint(v){var dc=Math.max(0,Math.min(ROOM,v)),pr=NET-dc,pct=NET>0?dc/NET*100:0;
         nw.textContent=f(pr);dcE.textContent=f(dc)+' DC';bd.textContent='−'+(Math.round(pct*10)/10).toLocaleString('cs-CZ')+' %';bd.style.transform='scale('+(1+Math.min(pct,40)/200)+')';
         b1.style.width=(NET>0?pr/NET*100:100)+'%';b2.style.width=(NET>0?pr/NET*100:100)+'%';old.style.opacity=dc>0?'.7':'0';
-        sv.innerHTML=dc>0?('Ušetříš <b>'+f(dc)+' '+SYM+'</b> už při nákupu. Návratnost se zkrátí přibližně o <b>'+(Math.round(pct*10)/10).toLocaleString('cs-CZ')+' %</b>.'):'Posuň posuvník a uvidíš, o kolik se zlevní prádlomat.';}
+        sv.innerHTML=dc>0?('Ušetříš <b>'+f(dc)+' '+SYM+'</b> už při nákupu.'):'Posuň posuvník a uvidíš, o kolik se zlevní prádlomat.';}
       function go(to){cancelAnimationFrame(raf);var from=shown,t0=null,d=Math.min(900,200+Math.abs(to-from)/Math.max(1,ROOM)*700);(function st(ts){if(t0==null)t0=ts;var k=Math.min(1,(ts-t0)/d),e=1-Math.pow(1-k,3);shown=from+(to-from)*e;paint(shown);r.value=shown;if(k<1)raf=requestAnimationFrame(st);})(performance.now());}
       shown=0;paint(0);
       r.addEventListener('input',function(){touched=true;cancelAnimationFrame(raf);shown=+r.value;paint(shown);});
@@ -882,10 +886,12 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   @keyframes vhlot{0%,66%{fill-opacity:0}72%,94%{fill-opacity:.28}100%{fill-opacity:0}}
   @keyframes vhchk2{0%,56%{opacity:0}64%,94%{opacity:1}100%{opacity:0}}
   @keyframes vhchk{0%,68%{opacity:0}76%,94%{opacity:1}100%{opacity:0}}
-  .vh-trench{stroke-dasharray:143;animation:vhdig 6s linear infinite}.vh-water,.vh-drain,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-drain{animation-delay:.05s}.vh-elec{animation-delay:.1s}
-  @keyframes vhdig{0%{stroke-dashoffset:143}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
-  @keyframes vhpipe{0%,8%{stroke-dashoffset:200}72%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
-  .vh-box{animation:vhbox 6s ease infinite}@keyframes vhbox{0%,74%{filter:none}82%,94%{filter:drop-shadow(0 0 7px #4fd1ff)}100%{filter:none}}
+  .vh-trench{stroke-dasharray:143;animation:vhdig 12s linear infinite}.vh-water,.vh-drain,.vh-elec{stroke-dasharray:200;animation:vhpipe 12s linear infinite}.vh-drain{animation-delay:.05s}.vh-elec{animation-delay:.1s}
+  @keyframes vhdig{0%{stroke-dashoffset:143}30%,96%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  @keyframes vhpipe{0%,4%{stroke-dashoffset:200}31%,96%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  .vh-pav{opacity:0;animation:vhpav 12s linear infinite}@keyframes vhpav{0%{opacity:0;transform:translateY(-6px)}3%,96%{opacity:1;transform:none}100%{opacity:0}}
+  .vh-box{opacity:0;transform-box:fill-box;animation:vhbox 12s linear infinite}@keyframes vhbox{0%,62%{opacity:0;transform:translateY(-46px)}66%{opacity:1;transform:translateY(-46px)}80%{opacity:1;transform:translateY(0)}86%,96%{opacity:1;transform:translateY(0);filter:drop-shadow(0 0 7px #4fd1ff)}100%{opacity:0;transform:translateY(0)}}
+  .vh-hook{animation:vhhook 12s linear infinite}@keyframes vhhook{0%,62%{y2:-62px}66%{y2:-62px}80%{y2:-10px}84%,100%{y2:-62px}}
   .vh-arc{animation:vharc 6s ease infinite}@keyframes vharc{0%{stroke-dasharray:0 100}25%,92%{stroke-dasharray:13 100}100%{stroke-dasharray:0 100}}
   .vh-b{transform-box:fill-box;transform-origin:50% 100%;animation:vhgrow 6s ease infinite}.vh-b:nth-of-type(2){animation-delay:.12s}.vh-b:nth-of-type(3){animation-delay:.24s}
   @keyframes vhgrow{0%{transform:scaleY(.05)}25%,92%{transform:scaleY(1)}100%{transform:scaleY(.05)}}
