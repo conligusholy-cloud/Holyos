@@ -22,6 +22,7 @@ router.get('/whoami', (req, res) => {
     id: req.user.id,
     username: req.user.username,
     displayName: req.user.displayName,
+    email: (req.user.person && req.user.person.email) || null,
     isSuperAdmin: !!req.user.isSuperAdmin,
     role: req.user.role,
   });

@@ -3832,6 +3832,28 @@ router.get('/service-subscriptions/revenue/:code', requireAuth, async (req, res,
     next(err);
   }
 });
+// POST /service-subscriptions/test-email — testovací e-mail na zadanou adresu (výchozí: e-mail přihlášeného). Nic se nevystavuje.
+router.post('/service-subscriptions/test-email', requireAuth, async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const to = String(b.to || (req.user && req.user.person && req.user.person.email) || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Zadej platný e-mail, na který se má test poslat.' });
+    const { sendTestEmail } = require('../services/compounder/service-billing-worker');
+    const r = await sendTestEmail({ kiosk_code: String(b.kiosk_code || 'TEST'), customer_name: b.customer_name, buyer_ico: b.buyer_ico, fee_pct: b.fee_pct, vat_rate: b.vat_rate, currency: b.currency }, to);
+    if (!r.sent) return res.status(502).json({ error: 'Testovací e-mail se nepodařilo odeslat', reason: r.error || r.skipped || 'unknown' });
+    res.json({ ok: true, sent_to: r.to, sent_from: r.from, via: r.via, total: r.invoice_total, currency: r.currency });
+  } catch (err) { next(err); }
+});
+// POST /service-subscriptions/send-invoice/:invoiceId — ruční odeslání vystavené servisní faktury odběrateli
+router.post('/service-subscriptions/send-invoice/:invoiceId', requireAuth, async (req, res, next) => {
+  try {
+    const { sendInvoiceEmail } = require('../services/compounder/service-billing-worker');
+    const to = String((req.body && req.body.to) || '').trim() || undefined;
+    const r = await sendInvoiceEmail(Number(req.params.invoiceId), { to });
+    if (!r.sent) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat', reason: r.error || r.skipped || 'unknown' });
+    res.json({ ok: true, sent_to: r.to, sent_from: r.from, via: r.via });
+  } catch (err) { next(err); }
+});
 router.post('/service-subscriptions/:id/bill-now', requireAuth, async (req, res, next) => {
   try {
     const sub = await prisma.serviceSubscription.findUnique({ where: { id: Number(req.params.id) } });

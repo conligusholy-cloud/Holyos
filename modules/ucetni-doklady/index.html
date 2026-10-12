@@ -481,7 +481,7 @@
           <div style="font-size:13px; color:var(--text2); line-height:1.5;">
             U každého stroje se v nastavený <b>den v měsíci</b> automaticky vystaví faktura za <b>předchozí měsíc</b>:
             poplatek = <b>% z obratu stroje vč. DPH</b> (obrat se bere ze systému SIS). Faktura vznikne jako <b>koncept</b>;
-            e-mailem se odešle automaticky jen u smluv se zapnutým <b>Odesílat e-mailem</b> a pokud je na serveru povoleno <code>SERVICE_BILLING_AUTO_SEND=1</code>.
+            e-mailem se odešle <b>automaticky</b> jen u smluv se zapnutým <b>Odesílat automaticky</b>; jinak zůstane koncept a odešleš ho <b>tlačítkem Odeslat</b> v seznamu faktur. Před ostrým provozem si můžeš poslat <b>testovací e-mail</b> (ve smlouvě).
             Měsíc se nikdy nevyfakturuje dvakrát.
           </div>
         </div>
@@ -495,8 +495,8 @@
         <div class="pb-card" style="margin-top:16px;">
           <h3>🧾 Vystavené servisní faktury</h3>
           <table class="data-table" id="subinv-table" style="width:100%;">
-            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th></tr></thead>
-            <tbody><tr><td colspan="6" class="empty-hint">Načítám…</td></tr></tbody>
+            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th></th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
           </table>
         </div>
       </div><!-- /tab-servicebilling -->
@@ -1666,8 +1666,8 @@
       const ri = await api('GET', '/api/accounting/invoices?source=service_billing&limit=100');
       const tb2 = document.querySelector('#subinv-table tbody');
       const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
-      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td></tr>').join('')
-        : '<tr><td colspan="6" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
+      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendServiceInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
+        : '<tr><td colspan="7" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
     };
     // ─── Chytré vyhledávání (typeahead): píšeš, pod polem se nabízí odpovídající možnosti ──
     function comboNorm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
@@ -1743,7 +1743,8 @@
               <label>Poznámka</label><input id="sub-note" value="${v('note','')}" style="${inp}">
               <label>Tržby za minulý měsíc</label><div id="sub-rev" style="font-size:13px;color:var(--text2);">Vyber stroj — načtou se tržby ze SIS.</div>
               <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-active" type="checkbox" ${!s || s.active ? 'checked' : ''}> automaticky fakturovat</label>
-              <label>Odesílat e-mailem</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-auto" type="checkbox" ${s && s.auto_send ? 'checked' : ''}> poslat fakturu odběrateli (jinak jen koncept)</label>
+              <label>Odesílání faktur</label><label style="display:flex;gap:8px;align-items:flex-start;"><input id="sub-auto" type="checkbox" ${s && s.auto_send ? 'checked' : ''} style="margin-top:3px;"> <span>Odesílat automaticky e-mailem po vystavení<br><span style="font-size:11px;color:var(--text2);">Nezaškrtnuto = faktura zůstane jako koncept a odešleš ji ručně tlačítkem „Odeslat".</span></span></label>
+              <label>Testovací e-mail</label><div><div style="display:flex;gap:8px;"><input id="sub-testto" type="email" placeholder="na jaký e-mail poslat test" value="${escapeHtml((window.currentUser && window.currentUser.email) || '')}" style="${inp}"><button type="button" class="btn btn-secondary btn-sm" onclick="sendSubTest()" style="white-space:nowrap;">✉ Poslat test</button></div><div id="sub-testres" style="font-size:11.5px;color:var(--text2);margin-top:4px;">Pošle ukázkovou fakturu (nic se nevystaví) — uvidíš odesílatele i vzhled zprávy.</div></div>
             </div>
             <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
               <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
@@ -1820,6 +1821,25 @@
       if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status));
       closeModal(); loadServiceBilling();
     };
+    window.sendSubTest = async function() {
+      const g = (i) => document.getElementById(i).value.trim();
+      const res = document.getElementById('sub-testres');
+      const to = g('sub-testto');
+      if (!to) { res.style.color = '#ef4444'; res.textContent = 'Zadej e-mail, na který se má test poslat.'; return; }
+      res.style.color = 'var(--text2)'; res.textContent = 'Odesílám test…';
+      const r = await api('POST', '/api/compounder/service-subscriptions/test-email', { to, kiosk_code: g('sub-kiosk') || 'TEST', customer_name: g('sub-name') || null, buyer_ico: g('sub-ico') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase() });
+      if (r.status !== 200 || !r.data || !r.data.ok) { res.style.color = '#ef4444'; res.textContent = 'Chyba: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status); return; }
+      res.style.color = '#16a34a';
+      res.textContent = '✓ Odesláno na ' + r.data.sent_to + ' — odesílatel: ' + (r.data.sent_from || 'výchozí SMTP') + (r.data.via ? ' (přes ' + r.data.via + ')' : '') + '. Zkontroluj schránku (i spam).';
+    };
+    window.sendServiceInvoice = async function(id, number, email) {
+      const to = prompt('Odeslat fakturu ' + number + ' na e-mail:', email || '');
+      if (to === null) return;
+      const r = await api('POST', '/api/compounder/service-subscriptions/send-invoice/' + id, { to: to.trim() || undefined });
+      if (r.status !== 200 || !r.data || !r.data.ok) return alert('Odeslání selhalo: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status));
+      alert('Faktura ' + number + ' odeslána na ' + r.data.sent_to + ' (odesílatel: ' + (r.data.sent_from || 'výchozí') + ').');
+      loadServiceBilling();
+    };
     window.deleteSub = async function(id) {
       if (!confirm('Smazat servisní smlouvu? Už vystavené faktury zůstanou.')) return;
       const r = await api('DELETE', '/api/compounder/service-subscriptions/' + id);
@@ -1831,7 +1851,7 @@
       const r = await api('POST', '/api/compounder/service-subscriptions/' + id + '/bill-now');
       if (r.status !== 200 || !r.data) return alert('Chyba: ' + (r.data?.error || r.status));
       if (r.data.skipped) return alert(r.data.reason === 'no_revenue' ? 'Za předchozí měsíc je nulový obrat — nic k fakturaci.' : 'Tento měsíc už byl vyfakturován.');
-      alert('Vystaveno: ' + r.data.invoice_number + ' (' + Number(r.data.total).toLocaleString('cs-CZ') + ' ' + r.data.currency + ')' + (r.data.sent ? ' — odesláno e-mailem.' : ' — koncept.'));
+      alert('Vystaveno: ' + r.data.invoice_number + ' (' + Number(r.data.total).toLocaleString('cs-CZ') + ' ' + r.data.currency + ')' + (r.data.sent ? ' — odesláno e-mailem.' : ' — koncept (odešleš ho tlačítkem Odeslat v seznamu faktur).') + (r.data.send_error ? '\nPoznámka: automatické odeslání selhalo — ' + r.data.send_error : ''));
       loadServiceBilling(); loadSummary();
     };
 
