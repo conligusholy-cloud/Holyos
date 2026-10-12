@@ -120,6 +120,7 @@
   .sc-k{font-size:12px;color:var(--text2);margin-bottom:4px} .sc-v{font-size:13.5px;font-variant-numeric:tabular-nums} .sc-v.pos{color:var(--ok);font-weight:700} .sc-v.neg{color:var(--err);font-weight:700}
   .sim .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
   .sim .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
+  .sim .how.fit{overflow:visible} .sim .how.fit .how-stage{width:440px;min-height:560px;height:560px;aspect-ratio:auto;margin:0;transform-origin:0 0}
   .sim .how-mach{position:absolute;inset:0}
   .sim .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .sim .how-w8{width:9%!important}
@@ -138,7 +139,6 @@
   .sim .how-clock{position:absolute;left:-32%;top:0;width:24%;text-align:center;z-index:6}
   .sim .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
   .sim .how-clock .hc-txt{margin-top:6px} .sim .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .sim .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
-  @media(max-width:700px){.sim .how-clock{position:static;transform:none;width:120px;margin:0 auto 8px}}
   .sim .how-acc{position:absolute;right:-34%;top:0;width:210px;box-sizing:border-box;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
   .sim .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .sim .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .sim .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
@@ -151,21 +151,9 @@
   .sim .how-cas .cs.r{border-color:rgba(47,227,160,.6);background:rgba(47,227,160,.12);box-shadow:0 10px 30px rgba(47,227,160,.25)} .sim .how-cas .cs.r b{font-size:22px;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .sim .how-cas .cs.r.neg{border-color:rgba(239,68,68,.7);background:rgba(239,68,68,.14);box-shadow:0 10px 30px rgba(239,68,68,.3)} .sim .how-cas .cs.r.neg b{background-image:linear-gradient(180deg,#fff,#ef4444);text-shadow:0 0 14px rgba(239,68,68,.6)}
   .sim .how-cas button{align-self:stretch}
-  @media(max-width:700px){.sim .how-cas{position:static;width:100%;margin-top:90px} .sim .how-cas .cs{align-items:stretch;text-align:left}}
   .sim .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .sim .how-foot b{color:var(--accent2)}
-  @media(max-width:700px){.sim .how-stage{margin:0 auto 80px} .sim .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .sim .how-cust{font-size:24px} .sim .how-bag{font-size:18px} .sim .how-tag{font-size:10px} .sim .how-acc{padding:6px 10px} .sim .how-acc b{font-size:18px}}
   .sim .dec-k{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
   .sim .dec-s{display:block;font-size:13px;color:var(--text2);margin-top:2px}
-  @media(max-width:700px){
-    .sim .how{padding:12px 10px}
-    .sim .how-stage{width:100%;aspect-ratio:auto;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:12px}
-    .sim .how-clock{order:0;position:static;width:104px;margin:0 auto}
-    .sim .how-mach{order:1;position:relative;inset:auto;width:100%;aspect-ratio:1000/820}
-    .sim .how-acc{order:2;position:static;right:auto;left:auto;top:auto;bottom:auto;transform:none;width:100%;text-align:center;white-space:normal}
-    .sim .how-cas{order:3;position:static;right:auto;top:auto;width:100%;margin-top:0}
-    .sim .how-cas .cs{align-items:stretch;text-align:left}
-    .sim .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}
-  }
   .sim .how-cas .cs.unk b{font-size:34px!important;line-height:1;color:#fff!important;background:none!important;-webkit-text-fill-color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)}
   .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
   .sim.first{margin-top:10px}
@@ -290,6 +278,12 @@
       </div>
       <script>(function(){
         var $=function(id){return document.getElementById(id);};
+        // Mobil: celou scénu (hodiny + stroj + kaskáda) zmenšit, ať se vejde na šířku, místo skládání pod sebe.
+        (function fitSim(){ var how=document.querySelector('.sim .how'), st=how&&how.querySelector('.how-stage'); if(!st) return;
+          var FULL_W=740, FULL_H=500, LEFT=145; // rozsah scény v px při 440px stage (hodiny vlevo, kaskáda vpravo)
+          function apply(){ var avail=how.clientWidth-20; if(avail>=FULL_W){ how.classList.remove('fit'); st.style.transform=''; st.style.marginBottom=''; return; }
+            var sc=avail/FULL_W; how.classList.add('fit'); st.style.transform='translateX('+(LEFT*sc)+'px) scale('+sc+')'; st.style.marginBottom=(-(560-FULL_H*sc)+8)+'px'; }
+          apply(); window.addEventListener('resize',apply); })();
         var cust=$('how-cust'),bag=$('how-bag'),w=$('how-w'),sd=$('how-s'),tag=$('how-tag'),sum=$('how-sum'),n=$('how-n'),clk=$('how-clock'),coins=$('how-coins');
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
