@@ -265,7 +265,10 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný příjemce' });
     const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
     const link = b.link ? String(b.link) : undefined;
-    if (link && !link.startsWith(base + '/')) return res.status(400).json({ error: 'Odkaz mimo BS2' });
+    if (link) { // host odkazu musí odpovídat BS2_URL (www. se ignoruje)
+      const hostOf = (u) => { try { return new URL(u).host.replace(/^www\./, '').toLowerCase(); } catch (e) { return ''; } };
+      if (!/^https:\/\//.test(link) || hostOf(link) !== hostOf(base)) { console.warn('[bs2 mail] odkaz mimo BS2:', link, 'BS2_URL =', base); return res.status(400).json({ error: 'Odkaz mimo BS2' }); }
+    }
     let our = null; try { our = await require('../services/settings').getOurCompany(); } catch (e) { our = null; }
     const from = process.env.BS2_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const r = await require('../services/email').sendMail({
