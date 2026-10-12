@@ -95,7 +95,7 @@ function requireAdmin(req, res, next) {
   if (!isAllowedAdmin(s)) { res.clearCookie(ADMIN_COOKIE); return res.status(403).send(V.errorPage('Přístup odepřen', 'Administrace je dostupná jen Tomáši a Janu Holému.', '/')); }
   req.admin = s; next();
 }
-async function requireUser(req, res, next) {
+async function requireUser(req, res, next, skipConsent) {
   const s = readCookie(req, USER_COOKIE);
   if (!s || s.kind !== 'user') return res.redirect('/login');
   const r = await q('SELECT * FROM supporters WHERE id=$1', [s.sid]);
@@ -103,8 +103,11 @@ async function requireUser(req, res, next) {
   if (!u || u.status !== 'active') { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
   // Záložka AI chat se v menu ukáže jen když je chat zapnutý v Admin → AI chat (a je k dispozici API klíč)
   try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
+  // Kdo ještě nepotvrdil VOP a souhlas se zpracováním osobních údajů (např. přenesený ze starého systému), musí je nejdřív odsouhlasit
+  if (!skipConsent && (!u.vop_consent_at || !u.gdpr_consent_at)) return res.redirect('/souhlas');
   req.user = u; next();
 }
+const requireUserNoConsent = (req, res, next) => requireUser(req, res, next, true);
 // Obecný rate-limit v paměti: key (např. 'support:'+id), max pokusů za okno
 const _rl = new Map();
 function rateLimited(key, max, windowMs) { const now = Date.now(); const a = _rl.get(key) || { n: 0, t: now }; if (now - a.t > windowMs) { a.n = 0; a.t = now; } a.n++; _rl.set(key, a); if (_rl.size > 20000) _rl.clear(); return a.n > max; }
@@ -334,6 +337,17 @@ app.get('/join/:code', wrap(async (req, res) => {
 }));
 app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
 app.get('/vop', (req, res) => res.send(V.vopPage()));
+// Povinné potvrzení VOP + ochrany údajů po prvním přihlášení
+app.get('/souhlas', wrap(requireUserNoConsent), (req, res) => {
+  if (req.user.vop_consent_at && req.user.gdpr_consent_at) return res.redirect('/');
+  res.send(V.consentPage({ name: req.user.first_name || req.user.nick || '' }));
+});
+app.post('/souhlas', wrap(requireUserNoConsent), wrap(async (req, res) => {
+  if (String(req.body.vop || '') !== '1' || String(req.body.gdpr || '') !== '1') return res.status(400).send(V.consentPage({ name: req.user.first_name || req.user.nick || '', error: 'Pro pokračování je nutné odsouhlasit obě podmínky.' }));
+  await q('UPDATE supporters SET vop_consent_at=COALESCE(vop_consent_at, now()), gdpr_consent_at=COALESCE(gdpr_consent_at, now()), updated_at=now() WHERE id=$1', [req.user.id]);
+  await log({ name: req.user.nick || req.user.email }, 'consent_accepted', { supporter_id: req.user.id, ip: req.ip });
+  res.redirect('/');
+}));
 app.post('/join/:code', wrap(async (req, res) => {
   const seller = await loadSeller(req.params.code);
   if (!seller) return res.status(404).send(V.errorPage('Odkaz neplatí', 'Tenhle registrační odkaz není platný.', '/login'));

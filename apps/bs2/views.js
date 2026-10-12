@@ -312,6 +312,15 @@ const GDPR_HTML = `<h1>Souhlas se zpracováním osobních údajů</h1>
 <h3>Povinnost poskytnout osobní údaje. Následky neposkytnutí osobních údajů</h3>
 <p>Vaše osobní údaje poskytujete zcela dobrovolně. Nemáte žádnou povinnost je poskytnout. V případě, že Vaše osobní údaje neposkytnete, nehrozí Vám žádná sankce. Nicméně pokud osobní údaje správci neposkytnete, nebude Vám moci založit uživatelský účet v Best Series 2.0 ani posílat jednotlivá obchodní sdělení, ke kterým se přihlašujete (např. bez Vaší e‑mailové adresy Vám správce nebude schopen zaslat informace o nabídce prádlomatů nebo o změnách v platformě). Je však zcela na Vašem uvážení, zda chcete tato sdělení odebírat, či nikoliv.</p>`;
 const VOP_HTML = require('./vop');
+function consentPage({ name = '', error = '' } = {}) {
+  return authShell({ title: 'Souhlas s podmínkami', esc, card: `
+    <h2>Než budeš pokračovat</h2><p class="sub">${name ? 'Ahoj ' + esc(name) + '. ' : ''}Při prvním přihlášení potřebujeme tvůj souhlas s podmínkami.</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/souhlas" novalidate>
+      ${vopCheck(false)}${gdprCheck(false)}
+      <button class="btn" type="submit">Souhlasím a pokračuji ${ICON.arrow}</button></form>
+    <p class="foot"><a href="/logout">Odhlásit se</a></p>` });
+}
 function vopPage() {
   return authShell({ title: 'Všeobecné obchodní podmínky', esc, card: `<div class="gdpr">${VOP_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/login">přihlášení</a></p>`, wide: true });
 }
@@ -1872,4 +1881,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
