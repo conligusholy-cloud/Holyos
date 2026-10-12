@@ -244,6 +244,10 @@ router.get('/bs2/products', async (req, res, next) => {
       orderBy: [{ model_version: 'asc' }, { model_variant: 'asc' }, { name_cs: 'asc' }],
       select: { id: true, name_cs: true, name_en: true, price_czk: true, price_eur: true, truck_price_czk: true, truck_price_eur: true, truck_capacity: true, model_version: true, model_variant: true, machine_code: true, image_ext: true, image_updated_at: true },
     });
+    // Obrázek se nabízí jen když soubor opravdu existuje na disku (jinak by BS2 ukázal rozbitý obrázek)
+    const fsx = require('fs'), pathx = require('path');
+    const imgDir = pathx.join(__dirname, '..', 'data', 'pricelist-images');
+    items.forEach(i => { if (i.image_ext && !fsx.existsSync(pathx.join(imgDir, 'pl-' + i.id + '.' + i.image_ext))) { i.image_ext = null; i.image_updated_at = null; } });
     res.json(items.map(i => ({ ...i, price_czk: i.price_czk == null ? null : Number(i.price_czk), price_eur: i.price_eur == null ? null : Number(i.price_eur), truck_price_czk: i.truck_price_czk == null ? null : Number(i.truck_price_czk), truck_price_eur: i.truck_price_eur == null ? null : Number(i.truck_price_eur) })));
   } catch (err) { next(err); }
 });
