@@ -2370,8 +2370,10 @@ const mistoSchema = z.object({
   name: z.string().trim().min(2).max(255),
   email: z.string().trim().email().max(255),
   phone: z.string().trim().max(40).optional().nullable(),
-  address: z.string().trim().min(3).max(500),
+  address: z.string().trim().max(500).optional().nullable(),
+  company: z.string().trim().max(255).optional().nullable(),
   variant: z.enum(['basic', 'plus']).default('basic'),
+  marketing: z.coerce.boolean().optional().default(false),
   note: z.string().trim().max(2000).optional().nullable(),
   sid: z.string().trim().max(64).optional().nullable(),
   consent: z.coerce.boolean(),
@@ -2379,17 +2381,19 @@ const mistoSchema = z.object({
 router.post('/misto/interest', async (req, res, next) => {
   try {
     const parsed = mistoSchema.safeParse(req.body || {});
-    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Vyplňte prosím jméno, e-mail a adresu místa.' });
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Vyplňte prosím jméno a e-mail.' });
     const d = parsed.data;
-    if (!d.consent) return res.status(400).json({ ok: false, error: 'Bez souhlasu se zpracováním údajů nemůžeme místo prověřit.' });
+    if (!d.consent) return res.status(400).json({ ok: false, error: 'Bez souhlasu se zpracováním údajů nemůžeme žádost vyřídit.' });
     if (!locRateOk(clientIp(req), 'misto')) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
     if (await _isBlocked(d.email, d.phone)) return res.json({ ok: true });
     const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
-    const variantLabel = d.variant === 'plus' ? 'PLUS 9 900 Kč' : 'ZÁKLAD 4 900 Kč';
+    const variantLabel = d.variant === 'plus' ? 'PLUS 9 900 Kč (10 lokalit)' : 'ZÁKLAD 4 900 Kč (3 lokality)';
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
-    const noteText = '[' + stamp + '] PROVĚŘENÍ MÍSTA (pradlomaty.info/misto) — varianta ' + variantLabel
-      + '\nMísto: ' + d.address
+    const noteText = '[' + stamp + '] ŽÁDOST O OBJEDNÁVKU — Prověření lokality (pradlomaty.info/misto) — balíček ' + variantLabel
+      + (d.address ? ('\nMísto: ' + d.address) : '')
+      + (d.company ? ('\nFirma/IČO: ' + d.company) : '')
       + (phone ? ('\nTel: ' + phone) : '')
+      + '\nMarketingový souhlas: ' + (d.marketing ? 'ANO' : 'ne')
       + (d.note ? ('\nPoznámka: ' + d.note) : '');
     const existing = await prisma.compounderLead.findFirst({
       where: { email: { equals: d.email, mode: 'insensitive' } },
@@ -2416,7 +2420,7 @@ router.post('/misto/interest', async (req, res, next) => {
     }
     prisma.compounderEvent.create({ data: {
       sid: d.sid || ('misto:' + leadId), event: 'misto_interest',
-      props: { lead_id: leadId, variant: d.variant, address: d.address.slice(0, 300), existing: !!existing },
+      props: { lead_id: leadId, variant: d.variant, address: (d.address || '').slice(0, 300), marketing: !!d.marketing, existing: !!existing },
       path: '/misto', lang: 'cs', ip: clientIp(req),
     } }).catch(() => {});
     try {
@@ -2424,8 +2428,8 @@ router.post('/misto/interest', async (req, res, next) => {
       for (const userId of userIds) {
         await createNotification({
           userId, type: 'compounder_lead',
-          title: '📍 Prověření místa: ' + d.name + ' (' + variantLabel + ')',
-          body: d.address.slice(0, 160) + (phone ? (' · ' + phone) : '') + ' · ' + d.email,
+          title: '📍 Žádost o objednávku /misto: ' + d.name + ' (' + variantLabel + ')',
+          body: d.email + (phone ? (' · ' + phone) : '') + (d.company ? (' · ' + d.company.slice(0, 80)) : ''),
           link: '/modules/prodejni-objednavky/index.html',
           meta: { lead_id: leadId, source: 'misto', variant: d.variant },
         });
