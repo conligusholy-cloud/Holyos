@@ -51,7 +51,7 @@ async function ourCompanyForPdf() {
 }
 async function mailFrom() {
   let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
-  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || 'Best Series' };
+  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || '🧾 Fakturace Best Series - Prádlomat' };
 }
 function mailTexts(lang, invNo, total, currency, label, test) {
   if (lang === 'en') {

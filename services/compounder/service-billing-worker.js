@@ -36,7 +36,7 @@ async function ourCompanyForPdf() {
 // Odesílatel servisních faktur = Best Series (ne Compounder): SERVICE_BILLING_MAIL_FROM, jinak fakturační e-mail naší firmy, jinak COMPOUNDER_MAIL_FROM.
 async function mailFrom() {
   let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
-  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || 'Best Series' };
+  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || '🧾 Fakturace Best Series - Prádlomat' };
 }
 function mailBody(invNo, total, currency, monthName, test) {
   return (test ? 'TESTOVACÍ E-MAIL — takto bude vypadat zpráva pro odběratele. Faktura v příloze je jen ukázka (nebyla vystavena).\n\n' : '')
