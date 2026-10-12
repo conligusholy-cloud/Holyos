@@ -96,10 +96,11 @@ router.get('/invoices', async (req, res, next) => {
   try {
     const {
       type, direction, status, company_id, search,
-      date_from, date_to, overdue, needs_review, limit = '200',
+      date_from, date_to, overdue, needs_review, limit = '200', source,
     } = req.query;
 
     const where = {};
+    if (source) where.source = String(source);
     if (type) where.type = type;
     if (direction) where.direction = direction;
     if (status) where.status = status;

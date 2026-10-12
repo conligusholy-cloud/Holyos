@@ -174,6 +174,7 @@
         <button type="button" class="tab-btn" onclick="switchAccountingTab('bank',null,event)">🏦 Banka</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders',null,event)">📨 Upomínky</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers',null,event)">📦 Účetní firma</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('servicebilling',null,event)">🔧 Fakturace servisních smluv</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -468,6 +469,37 @@
           </table>
         </div>
       </div><!-- /tab-handovers -->
+
+      <!-- TAB: FAKTURACE SERVISNÍCH SMLUV -->
+      <div class="tab-pane" id="tab-servicebilling">
+        <div class="pb-card">
+          <h3>🔧 Automatická fakturace servisních smluv</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+            <button class="btn btn-primary btn-sm" onclick="openSubModal()">+ Nová servisní smlouva</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadServiceBilling()">🔄 Obnovit</button>
+          </div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5;">
+            U každého stroje se v nastavený <b>den v měsíci</b> automaticky vystaví faktura za <b>předchozí měsíc</b>:
+            poplatek = <b>% z obratu stroje vč. DPH</b> (obrat se bere ze systému SIS). Faktura vznikne jako <b>koncept</b>;
+            e-mailem se odešle automaticky jen u smluv se zapnutým <b>Odesílat e-mailem</b> a pokud je na serveru povoleno <code>SERVICE_BILLING_AUTO_SEND=1</code>.
+            Měsíc se nikdy nevyfakturuje dvakrát.
+          </div>
+        </div>
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>📋 Servisní smlouvy</h3>
+          <table class="data-table" id="subs-table" style="width:100%;">
+            <thead><tr><th>Stroj (kód)</th><th>Odběratel</th><th>E-mail</th><th>Poplatek</th><th>DPH</th><th>Den</th><th>Auto e-mail</th><th>Naposledy</th><th>Stav</th><th></th></tr></thead>
+            <tbody><tr><td colspan="10" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>🧾 Vystavené servisní faktury</h3>
+          <table class="data-table" id="subinv-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th></tr></thead>
+            <tbody><tr><td colspan="6" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div><!-- /tab-servicebilling -->
 
     </div>
   </div>
@@ -1595,7 +1627,7 @@
       // Zvýrazni kliknuté tlačítko (u faktur jsou dvě – Vydané / Přijaté)
       if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
       else {
-        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5 };
+        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6 };
         const b = document.querySelectorAll('.tab-btn')[btnIdxMap[name] ?? 0];
         if (b) b.classList.add('active');
       }
@@ -1608,6 +1640,89 @@
       if (name === 'payments') loadPaymentsTab();
       if (name === 'reminders') loadRemindersTab();
       if (name === 'handovers') loadHandovers();
+      if (name === 'servicebilling') loadServiceBilling();
+    };
+
+
+    // ─── Tab „Fakturace servisních smluv" (13 % z obratu stroje, API /api/compounder/service-subscriptions) ──
+    window.__subs = [];
+    window.loadServiceBilling = async function() {
+      const tb = document.querySelector('#subs-table tbody');
+      const r = await api('GET', '/api/compounder/service-subscriptions');
+      if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="10" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
+      window.__subs = r.data;
+      tb.innerHTML = r.data.length ? r.data.map(s => '<tr>' +
+        '<td><b>' + escapeHtml(s.kiosk_code) + '</b></td>' +
+        '<td>' + escapeHtml(s.customer_name || '—') + (s.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(s.buyer_ico) + '</div>' : '') + '</td>' +
+        '<td>' + escapeHtml(s.email || '—') + '</td>' +
+        '<td>' + Number(s.fee_pct) + ' % z obratu</td><td>' + Number(s.vat_rate) + ' %</td><td>' + s.billing_day + '.</td>' +
+        '<td>' + (s.auto_send ? '✅ ano' : 'ne (koncept)') + '</td>' +
+        '<td>' + escapeHtml(s.last_billed_ym || '—') + '</td>' +
+        '<td>' + (s.active ? '<span style="color:#16a34a;font-weight:600;">aktivní</span>' : '<span style="color:var(--text2);">vypnuto</span>') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openSubModal(' + s.id + ')">Upravit</button> ' +
+        '<button class="btn btn-secondary btn-sm" title="Vystavit fakturu za předchozí měsíc hned" onclick="billSubNow(' + s.id + ')">Vyfakturovat teď</button> ' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteSub(' + s.id + ')">Smazat</button></td></tr>').join('')
+        : '<tr><td colspan="10" class="empty-hint">Zatím žádná servisní smlouva. Přidej ji tlačítkem „+ Nová servisní smlouva".</td></tr>';
+      const ri = await api('GET', '/api/accounting/invoices?source=service_billing&limit=100');
+      const tb2 = document.querySelector('#subinv-table tbody');
+      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
+      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td></tr>').join('')
+        : '<tr><td colspan="6" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
+    };
+    window.openSubModal = function(id) {
+      const s = id ? window.__subs.find(x => x.id === id) : null;
+      const v = (k, d) => escapeHtml(String(s && s[k] != null ? s[k] : d));
+      const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(560px,94vw); max-height:92vh; overflow:auto;">
+            <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
+            <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
+              <label>Kód stroje (SIS) *</label><input id="sub-kiosk" value="${v('kiosk_code','')}" ${s ? 'readonly' : ''} style="${inp}">
+              <label>Odběratel (název)</label><input id="sub-name" value="${v('customer_name','')}" style="${inp}">
+              <label>IČO odběratele</label><input id="sub-ico" value="${v('buyer_ico','')}" style="${inp}">
+              <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" style="${inp}">
+              <label>Poplatek (% z obratu)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" style="${inp}">
+              <label>DPH (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" style="${inp}">
+              <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
+              <label>Den fakturace v měsíci</label><input id="sub-day" type="number" min="1" max="28" value="${v('billing_day',3)}" style="${inp}">
+              <label>Poznámka</label><input id="sub-note" value="${v('note','')}" style="${inp}">
+              <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-active" type="checkbox" ${!s || s.active ? 'checked' : ''}> automaticky fakturovat</label>
+              <label>Odesílat e-mailem</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-auto" type="checkbox" ${s && s.auto_send ? 'checked' : ''}> poslat fakturu odběrateli (jinak jen koncept)</label>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveSub(${s ? s.id : 0})">Uložit</button>
+            </div>
+          </div>
+        </div>`;
+    };
+    window.saveSub = async function(id) {
+      const g = (i) => document.getElementById(i).value.trim();
+      const kiosk = g('sub-kiosk');
+      if (!kiosk) return alert('Zadej kód stroje');
+      const body = { kiosk_code: kiosk, customer_name: g('sub-name') || null, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null,
+        fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
+        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null,
+        active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
+      if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
+      const r = id ? await api('PUT', '/api/compounder/service-subscriptions/' + id, body) : await api('POST', '/api/compounder/service-subscriptions', body);
+      if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadServiceBilling();
+    };
+    window.deleteSub = async function(id) {
+      if (!confirm('Smazat servisní smlouvu? Už vystavené faktury zůstanou.')) return;
+      const r = await api('DELETE', '/api/compounder/service-subscriptions/' + id);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadServiceBilling();
+    };
+    window.billSubNow = async function(id) {
+      if (!confirm('Vystavit servisní fakturu za předchozí měsíc teď? (Vznikne koncept; e-mail se pošle jen u smluv s auto-odesíláním.)')) return;
+      const r = await api('POST', '/api/compounder/service-subscriptions/' + id + '/bill-now');
+      if (r.status !== 200 || !r.data) return alert('Chyba: ' + (r.data?.error || r.status));
+      if (r.data.skipped) return alert(r.data.reason === 'no_revenue' ? 'Za předchozí měsíc je nulový obrat — nic k fakturaci.' : 'Tento měsíc už byl vyfakturován.');
+      alert('Vystaveno: ' + r.data.invoice_number + ' (' + Number(r.data.total).toLocaleString('cs-CZ') + ' ' + r.data.currency + ')' + (r.data.sent ? ' — odesláno e-mailem.' : ' — koncept.'));
+      loadServiceBilling(); loadSummary();
     };
 
     // ─── Tab "Odevzdání účetní firmě" — Fáze 10 ────────────────────────
