@@ -1251,6 +1251,8 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
       </div>
       <label class="small muted" id="tfm-nl" style="display:block;margin-top:14px">Poznámka (nepovinné — např. přihlašovací jméno / ID ve starém systému)</label>
       <input type="text" name="note" maxlength="300" style="width:100%;margin-top:4px">
+      <div style="margin-top:16px;padding:12px 14px;border-radius:12px;background:rgba(255,184,77,.1);border:1px solid rgba(255,184,77,.45);font-size:13px;line-height:1.5"><b>⚠ Důležité</b><br>Žádost je <b>závazná a nelze ji zrušit ani vzít zpět</b>. Bude splněna <b>maximálně do výše podpory, resp. výběru</b>, kterou ve starém systému skutečně umožňuje – pokud zadáte víc, převede se jen povolená částka.
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;cursor:pointer"><input type="checkbox" name="confirm" value="1" required style="margin-top:3px"><span>Rozumím a souhlasím, že žádost je závazná a nelze ji zrušit.</span></label></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px"><button type="button" id="tfm-cancel" class="btn sec">Zrušit</button><button type="submit" class="btn">Odeslat žádost</button></div>
     </form></div></div>
   <script>(function(){var RT=${JSON.stringify(rt)};var m=document.getElementById('tfm'),o=document.getElementById('tfm-open');if(!m||!o)return;

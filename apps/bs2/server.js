@@ -647,6 +647,7 @@ async function tfEventsFor(ids) {
 app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) => {
   const back = (m) => res.redirect('/discount-credit?msg=' + encodeURIComponent(m));
   if (req.user.user_type !== 'standard') return back('Převod podpory je dostupný jen pro uživatele typu Stávající.');
+  if (String(req.body.confirm || '') !== '1') return back('Potvrď, že rozumíš, že je žádost závazná a nelze ji zrušit.');
   const amount = Math.round(Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!(amount > 0) || amount > 100000000) return back('Zadej částku větší než 0.');
   const cur = req.body.cur === 'EUR' ? 'EUR' : 'CZK';
