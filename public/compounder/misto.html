@@ -33,7 +33,11 @@
   header nav a{display:inline-flex;align-items:center;gap:6px;color:var(--text2);padding:6px 10px;border-radius:9px;font-size:13.5px;border:1px solid transparent}
   header nav a:hover{background:rgba(120,160,255,.08);border-color:var(--border);color:var(--text)}
   main{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:22px 18px calc(40px + env(safe-area-inset-bottom))}
-  .hero{padding:26px 0 30px}
+  .hero{padding:26px 0 30px;display:flex;align-items:center;justify-content:space-between;gap:28px}
+  .hero .txt{flex:1;min-width:0}
+  .pm3d{flex:none;width:min(40%,440px);height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
+  @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
+  @media (max-width:860px){.hero{flex-direction:column;align-items:flex-start}.pm3d{width:min(100%,360px);align-self:center}}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;background:rgba(255,255,255,.02)}
   .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.7);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,227,160,.7)}70%{box-shadow:0 0 0 9px rgba(47,227,160,0)}100%{box-shadow:0 0 0 0 rgba(47,227,160,0)}}
@@ -122,6 +126,7 @@
 <header><div class="in"><a class="brand" href="/"><span class="mark"><svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:block;flex:none"><defs><linearGradient id="lg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient><linearGradient id="lb" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#121d36"/><stop offset="1" stop-color="#070b16"/></linearGradient><radialGradient id="lr" cx="46" cy="18" r="22" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></radialGradient><filter id="lf" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="url(#lb)"/><rect x="2" y="2" width="60" height="60" rx="17" fill="url(#lr)"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lg)" stroke-width="1.5"/><path d="M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22" stroke="url(#lg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="32" cy="32" rx="26" ry="11" transform="rotate(-28 32 32)" stroke="url(#lg)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 4"/><circle cx="50.5" cy="15" r="4.5" fill="#4fd1ff" filter="url(#lf)" opacity=".7"/><circle cx="50.5" cy="15" r="2.6" fill="#eaf2ff"/></svg></span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">Prověření lokality</span></div></header>
 <main>
   <section class="hero">
+   <div class="txt">
     <span class="eyebrow"><i></i>Webová aplikace pro prověření lokality</span>
     <h1>Než koupíte prádlomat, <span class="g">prověřte si místo a spočítejte jeho ekonomiku.</span></h1>
     <p class="lead">Prověřte svou lokalitu, porovnejte ekonomické scénáře a zjistěte, co potřebujete ověřit před investicí. Vše přehledně v jedné webové aplikaci.</p>
@@ -130,6 +135,8 @@
       <a class="btn sec" href="#kalkulacka" data-cta="calc">Vyzkoušet orientační kalkulačku</a>
     </div>
     <p class="small" style="margin-top:14px;color:var(--text3)">Aplikaci připravuje Best Series s.r.o., výrobce a provozovatel prádlomatů. Výsledky jsou orientační podklad pro vaše rozhodnutí, ne předpověď výdělku.</p>
+   </div>
+   <img class="pm3d" src="/assets/pradlomat-flex.webp?v=1" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async">
   </section>
 
   <section class="sec" id="ukazka">
