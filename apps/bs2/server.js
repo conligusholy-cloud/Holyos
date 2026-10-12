@@ -18,6 +18,7 @@ const V = require('./views');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
 const BUILD = require('./build');
+const ST = require('./stats');
 
 const PORT = process.env.PORT || 3100;
 const SSO_SECRET = process.env.BS2_SSO_SECRET;
@@ -217,6 +218,7 @@ app.post('/forgot', wrap(async (req, res) => {
     }
   }
   console.log('[bs2] obnova hesla: e-mail=' + email + ' nalezen=' + !!u + (u ? ' stav=' + u.status + ' heslo=' + !!u.password_hash : '') + ' odesláno=' + sent + (why ? ' důvod=' + why : ''));
+  if (u) ST.track(req, u.id, 'reset_request', { meta: { sent } });
   await log({ name: 'web' }, 'forgot_password', { email, known: !!u, sent, why: why || undefined, supporter_id: u ? u.id : null, ip });
   res.send(V.forgotPage({ email, done: true }));
 }));
@@ -253,12 +255,14 @@ app.post('/login', wrap(async (req, res) => {
   if (u && u.locked_until && new Date(u.locked_until) > new Date()) return res.status(429).send(V.loginPage({ error: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za ' + Math.ceil((new Date(u.locked_until) - Date.now()) / 60000) + ' min.', login }));
   if (!u || !u.password_hash || !(await bcrypt.compare(password, u.password_hash))) {
     noteFail(ip);
+    ST.track(req, u && u.id, 'login_fail', { meta: { known: !!u, activated: !!(u && u.password_hash) } });
     if (u) await q("UPDATE supporters SET failed_logins=COALESCE(failed_logins,0)+1, locked_until=CASE WHEN COALESCE(failed_logins,0)+1>=10 THEN now()+interval '15 minutes' ELSE locked_until END WHERE id=$1", [u.id]).catch(() => {});
     const hint = u && !u.password_hash ? 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.' : 'Nesprávný nick/e-mail nebo heslo.';
     return res.status(401).send(V.loginPage({ error: hint, login, members: await memberCount() }));
   }
   if (u.status === 'blocked') return res.status(403).send(V.loginPage({ error: 'Účet je zablokovaný. Ozvi se nám.', login }));
   await q('UPDATE supporters SET last_login_at=now(), failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
+  ST.track(req, u.id, 'login', { meta: { by: login.includes('@') ? 'email' : 'nick' } });
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 30 * 24 * 3600);
   res.redirect('/');
 }));
@@ -295,7 +299,7 @@ app.post('/activate/finish', wrap(async (req, res) => {
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick }, 30 * 24 * 3600);
   res.redirect('/');
 }));
-app.get('/logout', (req, res) => { res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
+app.get('/logout', (req, res) => { try { const ls = readCookie(req, USER_COOKIE); if (ls && ls.kind === 'user') ST.track(req, ls.sid, 'logout'); } catch (e) {} res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
 
 // ── Referenční program (prodejci) ───────────────────────────────────────
 const PUBLIC_URL = (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
@@ -336,6 +340,17 @@ app.get('/join/:code', wrap(async (req, res) => {
   res.send(V.joinPage({ code: req.params.code, seller }));
 }));
 app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
+// Sběr událostí z prohlížeče přihlášeného uživatele (stránky, kliknutí, čas, scroll) — vždy 204, chyby se ignorují
+const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact'];
+app.post('/api/track', (req, res) => {
+  try {
+    const s = readCookie(req, USER_COOKIE); const b = req.body || {};
+    if (!s || s.kind !== 'user' || !TRACK_TYPES.includes(b.type) || rateLimited('trk:' + s.sid, 900, 60e3)) return res.status(204).end();
+    let meta = b.meta && typeof b.meta === 'object' ? b.meta : null; if (meta && JSON.stringify(meta).length > 1200) meta = null;
+    ST.track(req, s.sid, b.type, { sid: b.sid, path: b.path, label: b.label, meta });
+  } catch (e) { /* ignoruj */ }
+  res.status(204).end();
+});
 app.get('/vop', (req, res) => res.send(V.vopPage()));
 // Povinné potvrzení VOP + ochrany údajů po prvním přihlášení
 app.get('/souhlas', wrap(requireUserNoConsent), (req, res) => {
@@ -345,6 +360,7 @@ app.get('/souhlas', wrap(requireUserNoConsent), (req, res) => {
 app.post('/souhlas', wrap(requireUserNoConsent), wrap(async (req, res) => {
   if (String(req.body.vop || '') !== '1' || String(req.body.gdpr || '') !== '1') return res.status(400).send(V.consentPage({ name: req.user.first_name || req.user.nick || '', error: 'Pro pokračování je nutné odsouhlasit obě podmínky.' }));
   await q('UPDATE supporters SET vop_consent_at=COALESCE(vop_consent_at, now()), gdpr_consent_at=COALESCE(gdpr_consent_at, now()), updated_at=now() WHERE id=$1', [req.user.id]);
+  ST.track(req, req.user.id, 'consent');
   await log({ name: req.user.nick || req.user.email }, 'consent_accepted', { supporter_id: req.user.id, ip: req.ip });
   res.redirect('/');
 }));
@@ -803,6 +819,16 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 
+app.get('/admin/stats', requireAdmin, wrap(async (req, res) => {
+  const days = req.query.days === 'all' ? 3650 : Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 3650));
+  res.send(V.adminStats({ admin: req.admin, data: await ST.loadOverview(days), days, holyosUrl: HOLYOS_URL }));
+}));
+app.get('/admin/stats/user/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const days = req.query.days === 'all' ? 3650 : Math.max(1, Math.min(parseInt(req.query.days, 10) || 90, 3650));
+  const data = await ST.loadUser(Number(req.params.id), days);
+  if (!data) return res.status(404).send(V.errorPage('Uživatel nenalezen', 'Takový uživatel neexistuje.', '/admin/stats'));
+  res.send(V.adminStatsUser({ admin: req.admin, data, days, holyosUrl: HOLYOS_URL }));
+}));
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
   const rows = (await q("SELECT t.*, s.first_name, s.last_name, s.email, s.nick FROM support_transfers t JOIN supporters s ON s.id=t.supporter_id " + (status ? 'WHERE t.status=$1 ' : '') + "ORDER BY (t.status='pending') DESC, t.created_at DESC LIMIT 500", status ? [status] : [])).rows;

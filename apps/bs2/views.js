@@ -250,7 +250,7 @@ ${buildBadge()}<nav><!--BS2-SWITCH-->${fx && user && !holyosUrl ? `<a href="/pod
 ${fx && user && !holyosUrl ? `<script>(function(){function f(){fetch('/api/support/state',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null}).then(function(j){if(!j)return;var d=document.getElementById('sup-dot'),b=document.getElementById('sup-badge'),l=document.getElementById('sup-link');if(d){d.className='sup-dot '+(j.online?'on':'off');}if(b){b.hidden=!j.unread;b.textContent=j.unread;}if(l)l.title=j.online?'Živá podpora — online':'Živá podpora — momentálně offline';}).catch(function(){});}f();setInterval(f,20000);})();</script>` : ''}
 ${banner ? `<div class="banner"><div class="in"><div class="ico">${ico(banner.icon || 'lock', 26)}</div><div><h1>${esc(banner.title)}</h1>${banner.subtitle ? `<p>${esc(banner.subtitle)}</p>` : ''}</div></div></div>` : ''}
 ${nav.length ? `<div class="tabs"><div class="in">${nav.filter(n => !n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}<span class="right">${nav.filter(n => n.right && !(fx && user && n.id === 'acc')).map(n => `<a href="${n.href}" class="${n.id === active ? 'active' : ''}">${n.icon ? ico(n.icon, 16) + ' ' : ''}${n.label}</a>`).join('')}</span></div></div>` : ''}
-<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}</body></html>`;
+<main>${body}</main>${helpWidget(h)}${fx ? `<script>${AUTH_JS}</script>` : ''}${fx && user && !holyosUrl ? `<script>${require('./stats-track').TRACK_JS}</script>` : ''}</body></html>`;
 }
 
 // ── Veřejné / uživatel ──────────────────────────────────────────────────
@@ -1399,6 +1399,7 @@ const ADMIN_NAV = [
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
+  { id: 'stat', href: '/admin/stats', label: 'Statistiky', icon: 'chart' },
   { id: 'ai', href: '/admin/ai-chat', label: 'AI chat', icon: 'bolt' },
   { id: 'sup2', href: '/admin/podpora', label: 'Podpora', icon: 'chat' },
   { id: 'imp', href: '/admin/import', label: 'Import', icon: 'upload', right: true },
@@ -1774,6 +1775,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div class="list-item"><span class="muted">Import</span><span class="small">${esc(s.source || '—')} ${s.imported_at ? '· ' + fmtDT(s.imported_at) : ''}</span></div>
       <div class="row" style="margin-top:12px">
         <form method="post" action="/admin/supporters/${s.id}/password" onsubmit="return confirm('Vygenerovat nové dočasné heslo? Nick zůstane, staré heslo přestane platit.')"><button class="btn sm" type="submit">${ico('key', 16)} Nové heslo</button></form>
+        <a class="btn sec sm" href="/admin/stats/user/${s.id}">Chování a statistiky</a>
         <form method="post" action="/admin/supporters/${s.id}/${s.status === 'blocked' ? 'unblock' : 'block'}"><button class="btn ${s.status === 'blocked' ? 'sec' : 'danger'} sm" type="submit">${s.status === 'blocked' ? ico('check', 16) + ' Odblokovat' : ico('block', 16) + ' Blokovat'}</button></form>
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">${ico('trash', 16)} Smazat</button></form>
       </div>
@@ -1877,8 +1879,9 @@ function admin2faPage({ setup = false, secret = '', uri = '', error = '' }) {
     <button class="btn" type="submit">Ověřit ${ICON.arrow}</button></form>
     <p class="foot"><a href="/logout">Odhlásit</a></p>` });
 }
+const SV = require('./stats-views')({ esc, fmtDT, adminLayout });
 function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

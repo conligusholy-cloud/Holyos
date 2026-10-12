@@ -63,7 +63,7 @@ module.exports = `<h1>VŠEOBECNÉ OBCHODNÍ PODMÍNKY</h1>
 <p><b>9.2. Ukončení Uživatelem</b> – Uživatel může požádat o zrušení Účtu e-mailem na info@bestseries.cz. Zrušením Účtu zanikají nevyužité DC; Podpora a již uzavřené smlouvy zůstávají dotčeny podle příslušných dokumentů.</p>
 <p><b>9.3. Zablokování</b> – Zablokování nebo zrušení Účtu nemá vliv na již uzavřené smlouvy o prádlomatech ani na jejich plnění.</p>
 <h3>10. OCHRANA OSOBNÍCH ÚDAJŮ</h3>
-<p><b>10.1. Zpracování</b> – Provozovatel zpracovává osobní údaje v souladu s nařízením (EU) 2016/679 (GDPR) a zákonem č. 110/2019 Sb., a to v rozsahu nezbytném pro provoz Aplikace, vedení Účtu, evidenci Podpory a DC, doporučení a plnění smluv.</p>
+<p><b>10.1. Zpracování</b> – Provozovatel zpracovává osobní údaje v souladu s nařízením (EU) 2016/679 (GDPR) a zákonem č. 110/2019 Sb., a to v rozsahu nezbytném pro provoz Aplikace, vedení Účtu, evidenci Podpory a DC, doporučení a plnění smluv. Provozovatel dále eviduje používání Aplikace přihlášeným Uživatelem (přihlášení, navštívené stránky, kliknutí, čas strávený v Aplikaci a typ zařízení) za účelem zabezpečení, zlepšování Aplikace a vyhodnocování zájmu o nabídku; obsah vyplňovaných polí se neeviduje.</p>
 <p><b>10.2. Doporučení</b> – V partnerské síti může Uživatel zobrazit omezený rozsah údajů osob z první linie (jméno, typ prádlomatu, cena, datum nákupu). Tyto údaje je Uživatel povinen užívat jen k účelu spolupráce a nesmí je sdílet dále.</p>
 <p><b>10.3. Informace</b> – Podrobnosti o zpracování, právech subjektů údajů a kontaktech jsou uvedeny v dokumentu Podmínky nakládání s osobními údaji dostupném v Aplikaci.</p>
 <h3>11. OMEZENÍ ODPOVĚDNOSTI</h3>

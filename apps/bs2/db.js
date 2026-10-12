@@ -161,6 +161,14 @@ async function migrate() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'machine';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
 
+    -- Statistiky chování uživatelů (přihlášení, zobrazení stránek, kliknutí, čas, scroll, čtené sekce, interakce)
+    CREATE TABLE IF NOT EXISTS user_events (
+      id BIGSERIAL PRIMARY KEY, supporter_id INT REFERENCES supporters(id) ON DELETE CASCADE, sid TEXT, type TEXT NOT NULL,
+      path TEXT, label TEXT, meta JSONB, ip TEXT, ua TEXT, device TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS user_events_created_idx ON user_events (created_at);
+    CREATE INDEX IF NOT EXISTS user_events_sup_idx ON user_events (supporter_id, created_at);
+    CREATE INDEX IF NOT EXISTS user_events_type_idx ON user_events (type, created_at);
     CREATE TABLE IF NOT EXISTS password_resets (
       id SERIAL PRIMARY KEY, supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
       token_hash TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
