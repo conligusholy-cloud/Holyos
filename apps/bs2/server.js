@@ -277,7 +277,7 @@ app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterComp
 const SERVICE_DEFAULTS = [
   { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
   { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění. Na tuto položku nelze uplatnit DC.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true, place_free: true },
-  { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Prodloužení záruky na prádlomat o 2 až 5 let. Každý rok stojí 15 000 Kč bez DPH.', price_czk: 30000, per_year_czk: 15000, years_min: 2, years_max: 5, quote: false, dc_use_pct: 100, offered: true },
+  { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Záruka na prádlomat celkem 2 až 5 let. První rok je ze zákona zdarma, každý další rok stojí 15 000 Kč bez DPH.', price_czk: 15000, per_year_czk: 15000, years_min: 2, years_max: 5, free_years: 1, quote: false, dc_use_pct: 100, offered: true },
   { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH). Na tuto položku nelze uplatnit DC.', price_czk: null, quote: false, dc_use_pct: 0, offered: true, no_dc: true, place_free: true }
 ];
 async function loadServices() {
@@ -311,8 +311,8 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
     }
     // Prodloužená záruka: počet let (2–5) × cena za rok
     let yearsS = null, nameS = sv.name;
-    if (sv.per_year_czk) { yearsS = Math.min(sv.years_max || 5, Math.max(sv.years_min || 2, parseInt(req.body.years, 10) || (sv.years_min || 2))); nameS = sv.name + ' — ' + yearsS + ' ' + (yearsS === 1 ? 'rok' : yearsS < 5 ? 'roky' : 'let'); }
-    const netS = Math.round(Number(yearsS ? sv.per_year_czk * yearsS : sv.price_czk) / rateS * 100) / 100;
+    if (sv.per_year_czk) { yearsS = Math.min(sv.years_max || 5, Math.max(sv.years_min || 2, parseInt(req.body.years, 10) || (sv.years_min || 2))); nameS = sv.name + ' — ' + yearsS + ' ' + (yearsS === 1 ? 'rok' : yearsS < 5 ? 'roky' : 'let') + ' (1. rok zdarma, placeno ' + (yearsS - (sv.free_years || 0)) + ')'; }
+    const netS = Math.round(Number(yearsS ? sv.per_year_czk * Math.max(0, yearsS - (sv.free_years || 0)) : sv.price_czk) / rateS * 100) / 100;
     const roomS = Math.max(0, Math.floor(netS * (sv.dc_use_pct == null ? 100 : Number(sv.dc_use_pct)) / 100));
     const balS = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0) / rateS;
     const dcS = Math.min(Math.max(0, parseInt(req.body.dc, 10) || 0), roomS, Math.floor(balS));
