@@ -1669,6 +1669,39 @@
       tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td></tr>').join('')
         : '<tr><td colspan="6" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
     };
+    // ─── Chytré vyhledávání (typeahead): píšeš, pod polem se nabízí odpovídající možnosti ──
+    function comboNorm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+    window.comboHtml = function(id, placeholder, label, value, locked, inpStyle) {
+      return '<div style="position:relative;"><input type="text" id="' + id + '-q" autocomplete="off" placeholder="' + escapeHtml(placeholder) + '" value="' + escapeHtml(label || '') + '"' + (locked ? ' readonly' : '') + ' style="' + inpStyle + (locked ? 'opacity:.8;' : '') + '">'
+        + '<input type="hidden" id="' + id + '" value="' + escapeHtml(String(value == null ? '' : value)) + '">'
+        + '<div id="' + id + '-list" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;max-height:260px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.45);"></div></div>';
+    };
+    window.initCombo = function(id, items, onPick) {
+      const q = document.getElementById(id + '-q'), hid = document.getElementById(id), list = document.getElementById(id + '-list');
+      if (!q || q.readOnly) return;
+      let shown = [], active = -1;
+      function render() {
+        const words = comboNorm(q.value).split(/\s+/).filter(Boolean);
+        const hits = items.filter(it => { const h = comboNorm(it.hay + ' ' + it.label); return words.every(w => h.indexOf(w) !== -1); });
+        shown = hits.slice(0, 50); active = shown.length ? 0 : -1;
+        list.innerHTML = shown.length ? shown.map((it, i) => '<div data-i="' + i + '" style="padding:8px 10px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;' + (i === 0 ? 'background:rgba(8,145,178,.18);' : '') + '"><span>' + escapeHtml(it.label) + '</span>' + (it.tag ? '<span style="color:#f59e0b;font-size:11px;white-space:nowrap;">' + escapeHtml(it.tag) + '</span>' : '') + '</div>').join('')
+          + (hits.length > 50 ? '<div style="padding:6px 10px;color:var(--text2);font-size:11px;">…a dalších ' + (hits.length - 50) + ' — upřesni hledání</div>' : '')
+          : '<div style="padding:10px;color:var(--text2);font-size:12px;">Nic nenalezeno</div>';
+        list.style.display = 'block';
+      }
+      function mark() { [].forEach.call(list.querySelectorAll('[data-i]'), (el, i) => { el.style.background = i === active ? 'rgba(8,145,178,.18)' : ''; if (i === active) el.scrollIntoView({ block: 'nearest' }); }); }
+      function pick(i) { const it = shown[i]; if (!it) return; hid.value = it.v; q.value = it.label; list.style.display = 'none'; if (onPick) onPick(it.v); }
+      q.addEventListener('focus', () => { q.select(); render(); });
+      q.addEventListener('input', () => { hid.value = ''; render(); });
+      q.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (list.style.display === 'none') render(); active = Math.min(shown.length - 1, active + 1); mark(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); mark(); }
+        else if (e.key === 'Enter') { if (list.style.display !== 'none') { e.preventDefault(); pick(active); } }
+        else if (e.key === 'Escape') { list.style.display = 'none'; }
+      });
+      list.addEventListener('mousedown', e => { const el = e.target.closest('[data-i]'); if (el) { e.preventDefault(); pick(parseInt(el.getAttribute('data-i'), 10)); } });
+      q.addEventListener('blur', () => { setTimeout(() => { list.style.display = 'none'; if (!hid.value) q.value = ''; }, 120); });
+    };
     // Stroje z modulu Compounding (SIS kiosk-values) — výběr stroje do servisní smlouvy
     window.__kiosks = null;
     async function loadKiosks() {
@@ -1690,6 +1723,8 @@
       const kioskOpts = (s ? '' : '<option value="">— vyber stroj z Compoundingu —</option>')
         + kiosks.filter(k => s ? k.code === s.kiosk_code : true).map(k => '<option value="' + escapeHtml(k.code) + '" data-cur="' + escapeHtml(k.currency || '') + '">' + escapeHtml((k.label || k.code) + ' (' + k.code + ')') + (used.has(k.code) && !s ? ' — už má smlouvu' : '') + '</option>').join('')
         + (s && !kiosks.some(k => k.code === s.kiosk_code) ? '<option value="' + escapeHtml(s.kiosk_code) + '">' + escapeHtml(s.kiosk_code) + '</option>' : '');
+      const kObj = s ? kiosks.find(k => k.code === s.kiosk_code) : null;
+      const kioskLabel = s ? (kObj ? (kObj.label || kObj.code) + ' (' + kObj.code + ')' : s.kiosk_code) : '';
       const v = (k, d) => escapeHtml(String(s && s[k] != null ? s[k] : d));
       const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
       document.getElementById('modal-root').innerHTML = `
@@ -1697,8 +1732,8 @@
           <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(560px,94vw); max-height:92vh; overflow:auto;">
             <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
-              <label>Stroj (Compounding) *</label><select id="sub-kiosk" ${s ? 'disabled' : ''} onchange="subKioskChanged()" style="${inp}">${kioskOpts}</select>
-              <label>Odběratel (společnost) *</label><select id="sub-company" onchange="subCompanyChanged()" style="${inp}">${companyOpts}</select>
+              <label>Stroj (Compounding) *</label>${comboHtml('sub-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, s ? s.kiosk_code : '', !!s, inp)}
+              <label>Odběratel (společnost) *</label>${comboHtml('sub-company', 'Začni psát: název nebo IČO společnosti…', selCo ? selCo.name + (selCo.ico ? ' (' + selCo.ico + ')' : '') : '', selCo ? selCo.id : '', false, inp)}
               <label>IČO / DIČ odběratele</label><input id="sub-ico" readonly value="${selCo ? escapeHtml((selCo.ico || '') + (selCo.dic ? ' · ' + selCo.dic : '')) : v('buyer_ico','')}" style="${inp}opacity:.8;">
               <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" style="${inp}">
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
@@ -1717,6 +1752,8 @@
           </div>
         </div>`;
    
+      initCombo('sub-kiosk', kiosks.map(k => ({ v: k.code, label: (k.label || k.code) + ' (' + k.code + ')', tag: used.has(k.code) ? 'už má smlouvu' : '', hay: (k.label || '') + ' ' + k.code })), subKioskChanged);
+      initCombo('sub-company', companies.map(c => ({ v: String(c.id), label: c.name + (c.ico ? ' (' + c.ico + ')' : ''), tag: '', hay: c.name + ' ' + (c.ico || '') })), subCompanyChanged);
       if (s) subRevenuePreview();
     };
     // Výběr společnosti vyplní IČO a e-mail (e-mail jde přepsat)
@@ -1726,9 +1763,9 @@
       document.getElementById('sub-email').value = c && c.email ? c.email : '';
     };
     window.subKioskChanged = function() {
-      const sel = document.getElementById('sub-kiosk');
-      const cur = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].getAttribute('data-cur');
-      if (cur) document.getElementById('sub-cur').value = cur;
+      const code = document.getElementById('sub-kiosk').value;
+      const k = (window.__kiosks || []).find(x => x.code === code);
+      if (k && k.currency) document.getElementById('sub-cur').value = k.currency;
       subRevenuePreview();
     };
     let __revTimer = null;
