@@ -490,7 +490,7 @@ function supporterCompounder(s) {
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
-  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible}
+  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .cp .how-w8{width:9%!important}
   .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
@@ -522,7 +522,7 @@ function supporterCompounder(s) {
   .cp .how-cas .cs.r.neg{border-color:rgba(239,68,68,.7);background:rgba(239,68,68,.14);box-shadow:0 10px 30px rgba(239,68,68,.3)} .cp .how-cas .cs.r.neg b{background-image:linear-gradient(180deg,#fff,#ef4444);text-shadow:0 0 14px rgba(239,68,68,.6)}
   .cp .how-cas button{align-self:stretch}
   @media(max-width:700px){.cp .how-cas{position:static;width:100%;margin-top:90px} .cp .how-cas .cs{align-items:stretch;text-align:left}}
-  .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
+  .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
   @media(max-width:700px){.cp .how-stage{margin:0 auto 80px} .cp .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
