@@ -269,7 +269,7 @@ function loginPage({ error = '', info = '', login = '', members = null } = {}) {
       <button class="btn" type="submit">Přihlásit se ${ICON.arrow}</button>
     </form>
     <div class="sec">${ICON.shield} Zabezpečené přihlášení</div>
-    <p class="foot">Přihlášením souhlasíš s podmínkami členství</p>` });
+    <p class="foot">Přihlášením souhlasíš s <a href="/vop">obchodními podmínkami</a></p>` });
 }
 function activatePage({ step = 'email', email = '', error = '', name = '', nick = '' } = {}) {
   const inner = step === 'email' ? `
@@ -283,7 +283,7 @@ function activatePage({ step = 'email', email = '', error = '', name = '', nick 
       <label>Nick</label>${field({ name: 'nick', value: nick, icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" pattern="[A-Za-z0-9._\\-]{3,30}" required' })}
       <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
-      ${gdprCheck(false)}
+      ${vopCheck(false)}${gdprCheck(false)}
       <button class="btn" type="submit">Vytvořit účet a přihlásit ${ICON.arrow}</button></form>`;
   return authShell({ title: 'Aktivace účtu', esc, card: inner + `<p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
@@ -311,9 +311,14 @@ const GDPR_HTML = `<h1>Souhlas se zpracováním osobních údajů</h1>
 <p>Kdykoliv můžete podat stížnost týkající se zpracování Vašich osobních údajů nebo neplnění povinností správce plynoucích z GDPR k dozorovému úřadu. Dozorovým úřadem je v ČR Úřad pro ochranu osobních údajů, se sídlem Pplk. Sochora 27, 170 00 Praha 7, <a href="https://www.uoou.cz">www.uoou.cz</a>.</p>
 <h3>Povinnost poskytnout osobní údaje. Následky neposkytnutí osobních údajů</h3>
 <p>Vaše osobní údaje poskytujete zcela dobrovolně. Nemáte žádnou povinnost je poskytnout. V případě, že Vaše osobní údaje neposkytnete, nehrozí Vám žádná sankce. Nicméně pokud osobní údaje správci neposkytnete, nebude Vám moci založit uživatelský účet v Best Series 2.0 ani posílat jednotlivá obchodní sdělení, ke kterým se přihlašujete (např. bez Vaší e‑mailové adresy Vám správce nebude schopen zaslat informace o nabídce prádlomatů nebo o změnách v platformě). Je však zcela na Vašem uvážení, zda chcete tato sdělení odebírat, či nikoliv.</p>`;
+const VOP_HTML = require('./vop');
+function vopPage() {
+  return authShell({ title: 'Všeobecné obchodní podmínky', esc, card: `<div class="gdpr">${VOP_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/login">přihlášení</a></p>`, wide: true });
+}
 function gdprPage() {
   return authShell({ title: 'Souhlas se zpracováním osobních údajů', esc, card: `<div class="gdpr">${GDPR_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/login">přihlášení</a></p>`, wide: true });
 }
+const vopCheck = (checked) => `<label class="gdpr-chk"><input type="checkbox" name="vop" value="1" required${checked ? ' checked' : ''}> <span>Souhlasím se <a href="/vop" target="_blank">všeobecnými obchodními podmínkami</a> Best Series 2.0</span></label>`;
 const gdprCheck = (checked) => `<label class="gdpr-chk"><input type="checkbox" name="gdpr" value="1" required${checked ? ' checked' : ''}> <span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> společností Best Series s.r.o. (Best Series 2.0)</span></label>`;
 // Registrace přes referenční odkaz prodejce (/join/<code>)
 function joinPage({ code, seller, f = {}, error = '' }) {
@@ -329,7 +334,7 @@ function joinPage({ code, seller, f = {}, error = '' }) {
       <label>Nick</label>${field({ name: 'nick', value: f.nick || '', icon: 'user', placeholder: '3–30 znaků, písmena/čísla/._-', auto: 'username', extra: 'autocapitalize="none" autocorrect="off" minlength="3" maxlength="30" required' })}
       <label>Heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
       <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
-      ${gdprCheck(!!f.gdpr)}
+      ${vopCheck(!!f.vop)}${gdprCheck(!!f.gdpr)}
       <button class="btn" type="submit">Vytvořit účet ${ICON.arrow}</button>
     </form>
     <p class="foot">Už účet máš? <a href="/login">Přihlas se</a></p>` });
@@ -1842,4 +1847,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
