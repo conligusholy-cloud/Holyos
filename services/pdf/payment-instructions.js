@@ -107,7 +107,7 @@ async function generatePaymentInstructionsPdf({ title, buyer, items, bank, note,
     .note{font-size:11px;color:#777;margin-top:8px;line-height:1.6;border-top:1px solid #eee;padding-top:12px}
   </style></head><body>
     <h1>${esc(title || tr.title)}</h1>
-    <div class="sub">COMPOUNDER · Best Series s.r.o. · IČO 05643724 — ${esc(tr.notdoc)}</div>
+    <div class="sub">Best Series s.r.o. · IČO 05643724 — ${esc(tr.notdoc)}</div>
     ${buyer ? `<div class="buyer"><b>${esc(buyer.name || '')}</b>${buyer.email ? ' · ' + esc(buyer.email) : ''}${buyer.phone ? ' · ' + esc(buyer.phone) : ''}</div>` : ''}
     ${parts.join('')}
     <div class="note">${esc(note || tr.note)}</div>

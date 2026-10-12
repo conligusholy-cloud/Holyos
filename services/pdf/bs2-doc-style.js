@@ -2,7 +2,7 @@
 // Okraje řídí @page (preferCSSPageSize), patička se opakuje na každé straně, tabulky se nelámou uprostřed řádku.
 'use strict';
 
-const FOOTER_TEXT = 'Best Series s.r.o. · Prádlomat · Compounder';
+const FOOTER_TEXT = 'Best Series s.r.o. · Prádlomat';
 
 // Monogram „B" z BS2 (tmavá kapsle s gradientovým okrajem a oběžnou drahou).
 function logoSvg(size, id) {
@@ -89,7 +89,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 // Hlavička: logo + název dokladu + číslo (+ štítek)
 function header(o) {
   o = o || {};
-  return '<div class="hdr"><div class="brand">' + logoSvg(38, 'h' + Math.floor(Math.random() * 1e6)) + '<div><div class="wm">Best Series <span>2.0</span></div><div class="sub">Prádlomat · Compounder</div></div></div>'
+  return '<div class="hdr"><div class="brand">' + logoSvg(38, 'h' + Math.floor(Math.random() * 1e6)) + '<div><div class="wm">Best Series</div><div class="sub">Prádlomat</div></div></div>'
     + '<div class="doc"><div class="t">' + esc(o.title) + '</div>' + (o.number ? '<div class="n">' + esc(o.number) + '</div>' : '')
     + (o.pill ? '<div class="p">' + esc(o.pill) + '</div>' : '') + (o.ext ? '<div class="e">' + esc(o.ext) + '</div>' : '') + '</div></div>';
 }
