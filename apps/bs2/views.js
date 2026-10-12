@@ -634,7 +634,7 @@ function supporterCompounder(s) {
           <div class="how-acc"><span class="dec-k">průměrná tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-coins" id="how-coins"></div>
           <div class="how-cas" id="how-cas">
-          <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>× 30,5 dne · s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
+          <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
           <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 3 000 Kč</b><small>nájem 3 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i> (s DPH 15 % <i id="hs-env">0 Kč</i>)</small></div>
           <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 3 000 Kč</b><small>bez DPH · před splátkou</small></div>
           <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
