@@ -169,6 +169,17 @@
   .sim .how-cas .cs.unk b{font-size:34px!important;line-height:1;color:#fff!important;background:none!important;-webkit-text-fill-color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)}
   .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
   .sim.first{margin-top:10px}
+  .eq-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .eq{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .eq-t{flex:1 1 0;min-width:112px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:rgba(4,8,16,.6);text-align:center;transition:border-color .35s,box-shadow .35s,transform .35s}
+  .eq-t .eq-k{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .eq-t b{display:block;font-size:24px;letter-spacing:-.02em;line-height:1.15;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+  .eq-t small{display:block;font-size:11px;color:var(--text2)}
+  .eq-t.rev b{color:var(--accent2)} .eq-t.unk b{font-size:30px;color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)} .eq-t.res{border-color:rgba(47,227,160,.45);background:rgba(47,227,160,.08)} .eq-t.res b{color:var(--ok)}
+  .eq-t.lit{border-color:rgba(79,209,255,.85);box-shadow:0 0 24px rgba(79,209,255,.35);transform:translateY(-3px)} .eq-t.res.lit{border-color:var(--ok);box-shadow:0 0 28px rgba(47,227,160,.5)}
+  .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
+  .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
+  @media(max-width:720px){.eq{justify-content:flex-start}.eq-t{flex:none;width:112px;padding:8px 8px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
   .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
   @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
 </style>
@@ -259,6 +270,30 @@
           while(!stopped){ await simWait(10+Math.random()*25); await customer(); }
         })();
       })();</script>
+  </section>
+  <section class="sec" id="rovnice">
+    <h2>Od 24. 9. 2026 financuje prádlomat bankovní dům – a prádlomat si ručí sám</h2>
+    <p class="lead" style="margin:0 0 16px">Bankovní dům dokáže prádlomat zainvestovat a stroj je zároveň zajištěním. Platí jediná podmínka: prádlomat se musí na místě sám uživit včetně splátky. Tržbu vidíte v animaci výše – zbytek rovnice rozhoduje vaše lokalita.</p>
+    <div class="eq-wrap">
+      <div class="eq" id="eq">
+        <div class="eq-t rev" data-i="0"><span class="eq-k">tržby / měsíc</span><b id="eq-rev">0 Kč</b><small>z animace, s DPH</small></div>
+        <div class="eq-op">−</div>
+        <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>?</b><small>podle místa</small></div>
+        <div class="eq-op">−</div>
+        <div class="eq-t unk" data-i="2"><span class="eq-k">energie</span><b>?</b><small>podle místa</small></div>
+        <div class="eq-op">−</div>
+        <div class="eq-t unk" data-i="3"><span class="eq-k">servis</span><b>?</b><small>podle smlouvy</small></div>
+        <div class="eq-op">−</div>
+        <div class="eq-t unk" data-i="4"><span class="eq-k">splátka</span><b>?</b><small>podle financování</small></div>
+        <div class="eq-op">=</div>
+        <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small></div>
+      </div>
+      <div class="eq-legend">
+        <span class="ok"><i></i>&gt; 0 → bankovní dům může financovat, prádlomat si ručí sám</span>
+        <span class="bad"><i></i>&lt; 0 → místo rovnici nesplní</span>
+      </div>
+      <p class="small" style="color:var(--text3);margin-top:10px">Jestli vaše místo rovnici splní, zjistíte v analýze lokality. Rozhodnutí o financování je vždy na bankovním domě.</p>
+    </div>
   </section>
   <section class="hero sec">
    <div class="txt">
@@ -380,6 +415,13 @@
 
 
   // ── Formulář ──
+  // ── Rovnice financování: postupné rozsvěcení členů + tržba živě z animace ──
+  (function(){
+    var terms=document.querySelectorAll('#eq .eq-t'); if(!terms.length) return; var i=0;
+    setInterval(function(){ terms.forEach(function(t){ t.classList.remove('lit'); }); terms[i].classList.add('lit'); i=(i+1)%terms.length; }, 1100);
+    var src=document.getElementById('hs-m'), dst=document.getElementById('eq-rev');
+    if(src&&dst){ setInterval(function(){ if(dst.textContent!==src.textContent) dst.textContent=src.textContent; }, 500); }
+  })();
   var $ = function(id){ return document.getElementById(id); };
   window.pickVariant=function(v){ $('variant').value=v; };
   var f=$('f'), msg=$('msg'), sub=$('sub');
