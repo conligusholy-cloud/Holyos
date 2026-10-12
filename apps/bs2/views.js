@@ -513,6 +513,13 @@ function supporterCompounder(s) {
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
   @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
+  .cp .how-sum{margin:14px 0 4px;padding:16px 18px;border-radius:16px;border:1px solid rgba(47,227,160,.45);background:linear-gradient(135deg,rgba(47,227,160,.1),rgba(30,134,224,.08))}
+  .cp .hs-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px} .cp .hs-h .k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ok);font-weight:700}
+  .cp .hs-grid{display:flex;flex-direction:column;gap:4px}
+  .cp .hs-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:7px 10px;border-radius:10px;background:rgba(4,8,16,.45);font-size:14px} .cp .hs-row small{display:block;font-size:11px;color:var(--text2)} .cp .hs-row b{white-space:nowrap;font-size:16px}
+  .cp .hs-row.big b{font-size:clamp(20px,2.6vw,28px);background-image:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .hs-row.minus b{color:#f59e0b} .cp .hs-row.res{border:1px solid rgba(47,227,160,.5);background:rgba(47,227,160,.1)} .cp .hs-row.res b{font-size:clamp(22px,3vw,32px);background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .hs-note{font-size:11.5px;color:var(--text3);margin-top:8px}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
   @media(max-width:700px){.cp .how-stage{margin:0 auto 80px} .cp .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
@@ -625,6 +632,19 @@ function supporterCompounder(s) {
           <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
+        <div class="how-sum" id="how-month" hidden>
+          <div class="hs-h"><span class="k">Po 24 hodinách · co z toho máte za měsíc</span><button type="button" class="btn sec sm" onclick="location.reload()">↻ Spustit znovu</button></div>
+          <div class="hs-grid">
+            <div class="hs-row top"><span>Denní tržba <small>× 30,5 dne</small></span><b><span id="hs-day">0</span> Kč</b></div>
+            <div class="hs-row big"><span>Měsíční tržba <small>s DPH</small></span><b><span id="hs-m">0</span> Kč</b></div>
+            <div class="hs-row"><span>Měsíční tržba <small>bez DPH 21 %</small></span><b><span id="hs-mn">0</span> Kč</b></div>
+            <div class="hs-row minus"><span>− Nájem <small>bez DPH</small></span><b>− 3 000 Kč</b></div>
+            <div class="hs-row minus"><span>− Servis Best Series <small>13 % z tržby s DPH = cena bez DPH</small></span><b>− <span id="hs-serv">0</span> Kč</b></div>
+            <div class="hs-row minus"><span>− Energie <small>cca 9,5 % z tržby bez DPH (DPH 15 %: <span id="hs-env">0</span> Kč)</small></span><b>− <span id="hs-en">0</span> Kč</b></div>
+            <div class="hs-row res"><span>Zůstane Vám měsíčně <small>bez DPH · před splátkou financování</small></span><b><span id="hs-res">0</span> Kč</b></div>
+          </div>
+          <div class="hs-note">Orientační model z této simulace (ceny 300/350 Kč praní, 50 Kč sušení). Skutečná čísla závisí na místě — proto Fáze 1 začíná Pilotem.</div>
+        </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
       <script>(function(){
@@ -640,12 +660,20 @@ function supporterCompounder(s) {
         var total=0,cnt=0,min=6*60,T0=performance.now()-6*60*SPEED,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
-        function face(m){ var mm=m%1440, mi=Math.floor(mm); if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; n.textContent='0 zákazníků'; } lastM=mm;
+        var stopped=false;
+        function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say('');
+          var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ'); };
+          var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-3000-serv-en;
+          document.getElementById('hs-day').textContent=fmtK(day); document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
+          document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); document.getElementById('hs-res').textContent=fmtK(res);
+          var box=document.getElementById('how-month'); box.hidden=false; box.scrollIntoView({behavior:'smooth',block:'nearest'}); }
+        function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
           hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
         function simWait(minutes){ return wait(minutes*SPEED); }
-        (function clockLoop(){ var f=(performance.now()-T0)/SPEED; min=Math.floor(f); face(f); requestAnimationFrame(clockLoop); })();
+        (function clockLoop(){ if(stopped) return; var f=(performance.now()-T0)/SPEED; min=Math.floor(f); face(f); requestAnimationFrame(clockLoop); })();
         async function customer(){
+          if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
           var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
           await simWait(3+Math.random()*8);
           cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
@@ -666,7 +694,7 @@ function supporterCompounder(s) {
           // odchází s čistým prádlem
           bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
           cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
-          await simWait(10+Math.random()*25); customer();
+          await simWait(10+Math.random()*25); if(!stopped) customer();
         }
         customer();
       })();</script>` : ''}
