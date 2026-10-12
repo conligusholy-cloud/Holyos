@@ -162,6 +162,23 @@ function buildSpaydString({ iban, amount, currency = 'CZK', vs, message }) {
   return parts.join('*');
 }
 
+/** QR kód generovaný lokálně (SVG data URL) — funguje v PDF, náhledu i offline, bez externí služby. */
+function buildQrLocal(spaydString) {
+  if (!spaydString) return null;
+  try {
+    const QRCode = require('qrcode');
+    const qr = QRCode.create(spaydString, { errorCorrectionLevel: 'M' });
+    const n = qr.modules.size, data = qr.modules.data, q = 2; // quiet zone 2 moduly
+    let d = '';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (data[y * n + x]) d += 'M' + (x + q) + ' ' + (y + q) + 'h1v1h-1z';
+    const size = n + q * 2;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" shape-rendering="crispEdges"><rect width="' + size + '" height="' + size + '" fill="#fff"/><path d="' + d + '" fill="#000"/></svg>';
+    return 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
+  } catch (e) {
+    return buildQrUrl(spaydString); // záloha: externí služba
+  }
+}
+
 /** Vrátí URL na hostovaný QR kód nebo null pokud iban chybí. */
 function buildQrUrl(spaydString) {
   if (!spaydString) return null;
@@ -244,7 +261,11 @@ function buildTemplateData(invoice, ourCompany) {
 
   // Bankovní účet pro QR — preferujeme partner_bank_account z faktury,
   // jinak bank_account z our company. Pro AR fakturu má smysl jen ourCompany.
-  const bankAccount = ourCompany?.bank_account || invoice.partner_bank_account || '';
+  // U vydané faktury (AR) má přednost účet uložený na faktuře (dle měny — CZK / EUR), jinak účet naší firmy.
+  const isAr = invoice.direction === 'ar';
+  const bankAccount = isAr
+    ? (invoice.partner_bank_account || (invoice.partner_iban ? '' : (ourCompany?.bank_account || '')))
+    : (ourCompany?.bank_account || invoice.partner_bank_account || '');
   const iban = invoice.partner_iban || ourCompany?.iban || (bankAccount ? czAccountToIban(bankAccount) : '');
 
   const spayd = buildSpaydString({
@@ -287,6 +308,8 @@ function buildTemplateData(invoice, ourCompany) {
     // Platba
     bank_account: bankAccount,
     iban: iban || '',
+    bic: invoice.partner_bic || '',
+    l_bic: 'BIC / SWIFT',
     variable_symbol: invoice.variable_symbol || invoice.invoice_number,
     constant_symbol: invoice.constant_symbol || '',
     specific_symbol: invoice.specific_symbol || '',
@@ -317,7 +340,7 @@ function buildTemplateData(invoice, ourCompany) {
     note: invoice.note || '',
 
     // QR
-    qr_url: buildQrUrl(spayd) || '',
+    qr_url: buildQrLocal(spayd) || '',
 
     // Design Best Series 2.0 (jednotný vzhled dokladů)
     doc_css: bs2style.CSS,

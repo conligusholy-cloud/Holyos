@@ -6,6 +6,7 @@
 
 const { prisma } = require('../../config/database');
 const { generateInvoiceNumber } = require('../accountant/invoice-numbering');
+const { invoiceBankFields } = require('../accountant/billing-accounts');
 
 const STARTUP_DELAY_MS = 60 * 1000;
 const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -112,7 +113,7 @@ async function sendTestEmail(sub, to) {
     invoice_number: invNo, type: 'issued', direction: 'ar', language: lang, currency,
     subtotal: a.subtotal, vat_amount: a.vat, total: a.total,
     date_issued: now, date_taxable: now, date_due: new Date(Date.now() + 14 * 86400000), variable_symbol: String(now.getFullYear()) + '00001',
-    payment_method: 'bank_transfer', vat_regime: a.regime,
+    payment_method: 'bank_transfer', vat_regime: a.regime, ...(await invoiceBankFields(currency)),
     company: { name: sub.customer_name || (lang === 'en' ? 'Sample customer' : 'Ukázkový odběratel'), ico: sub.buyer_ico || '', dic: sub.buyer_dic || '', country: sub.country || 'CZ' },
     items: [{ line_order: 0, description: itemDescription(sub, label, lang), quantity: 1, unit: lang === 'en' ? 'month' : 'měs.', unit_price: a.subtotal, vat_rate: a.vatRate, subtotal: a.subtotal, vat_amount: a.vat, total: a.total }],
     note: (lang === 'en' ? 'TEST INVOICE — sample, not issued. ' : 'TESTOVACÍ FAKTURA — ukázka, nebyla vystavena. ') + invoiceNote(sub, label, lang),
@@ -139,6 +140,7 @@ async function billSubscription(sub, opts) {
   const currency = (sub.currency || 'EUR').toUpperCase();
   const companyId = await resolveCompanyId(sub);
   const invNo = await generateInvoiceNumber('software_issued', { prisma });
+  const bank = await invoiceBankFields(currency);
 
   const invoice = await prisma.invoice.create({
     data: {
@@ -147,7 +149,7 @@ async function billSubscription(sub, opts) {
       vat_regime: a.regime,
       date_issued: now, date_taxable: now, date_due: new Date(Date.now() + 14 * 86400000),
       variable_symbol: invNo.replace(/\D/g, '') || null,
-      status: 'draft', source: 'software_billing',
+      status: 'draft', source: 'software_billing', ...bank,
       note: invoiceNote(sub, label, lang),
       items: { create: [{ line_order: 0, description: itemDescription(sub, label, lang), quantity: 1, unit: lang === 'en' ? 'month' : 'měs.', unit_price: a.subtotal, vat_rate: a.vatRate, subtotal: a.subtotal, vat_amount: a.vat, total: a.total }] },
     },

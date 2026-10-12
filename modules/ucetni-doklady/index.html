@@ -478,6 +478,17 @@
           <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
             <button class="btn btn-primary btn-sm" onclick="openSubModal()">+ Nová servisní smlouva</button>
             <button class="btn btn-secondary btn-sm" onclick="loadServiceBilling()">🔄 Obnovit</button>
+            <div id="sb-bank" style="margin-left:auto; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap; padding:8px 12px; border:1px solid var(--border); border-radius:10px; background:var(--bg);">
+              <div><div style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;">🏦 Účet pro platby servisních faktur</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+                  <input id="sb-acc" placeholder="číslo účtu / kód banky (221913663/0600)" style="width:230px;">
+                  <input id="sb-iban" placeholder="IBAN (CZ67 0600 …)" style="width:240px;">
+                  <input id="sb-bic" placeholder="BIC" style="width:100px;">
+                  <button class="btn btn-primary btn-sm" onclick="saveServiceBank()">Uložit</button>
+                </div>
+                <div id="sb-bank-hint" style="font-size:11px;color:var(--text2);margin-top:4px;"></div>
+              </div>
+            </div>
           </div>
           <div style="font-size:13px; color:var(--text2); line-height:1.5;">
             U každého stroje se v nastavený <b>den v měsíci</b> automaticky vystaví faktura za <b>předchozí měsíc</b>:
@@ -516,6 +527,17 @@
             (přenesená daňová povinnost / mimo působnost). Faktura má vlastní řadu <b>SW-RRRR-NNNNN</b>, vznikne jako <b>koncept</b>;
             e-mailem (ve zvoleném jazyce) se odešle <b>automaticky</b> jen u smluv se zapnutým <b>Odesílat automaticky</b>. Měsíc se nikdy nevyfakturuje dvakrát.
           </div>
+        </div>
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>🏦 Bankovní účty pro příchozí platby</h3>
+          <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px;">Na faktuře se použije účet podle její měny (CZK / EUR) a vytvoří se podle něj QR platba. Platí pro softwarovou podporu i servisní faktury.</div>
+          <div style="display:grid;grid-template-columns:70px 1fr 1fr 150px;gap:8px;align-items:center;max-width:900px;">
+            <span></span><b style="font-size:11px;color:var(--text2);">Číslo účtu (volitelně)</b><b style="font-size:11px;color:var(--text2);">IBAN</b><b style="font-size:11px;color:var(--text2);">BIC / SWIFT</b>
+            <b>CZK</b><input id="acc-czk-account" placeholder="123456789/0800" class="acc-in"><input id="acc-czk-iban" placeholder="CZ.." class="acc-in"><input id="acc-czk-bic" placeholder="GIBACZPX" class="acc-in">
+            <b>EUR</b><input id="acc-eur-account" placeholder="(nepovinné)" class="acc-in"><input id="acc-eur-iban" placeholder="CZ.. / DE.." class="acc-in"><input id="acc-eur-bic" placeholder="BIC" class="acc-in">
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:10px;"><button class="btn btn-primary btn-sm" onclick="saveBillingAccounts()">Uložit účty</button><span id="acc-res" style="font-size:12px;color:var(--text2);"></span></div>
+          <style>.acc-in{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;}</style>
         </div>
         <div class="pb-card" style="margin-top:16px;">
           <h3>📋 Softwarová podpora strojů</h3>
@@ -1679,7 +1701,23 @@
 
     // ─── Tab „Fakturace servisních smluv" (13 % z obratu stroje, API /api/compounder/service-subscriptions) ──
     window.__subs = [];
+    // Bankovní účet pro servisní faktury (na faktuře + QR platba). Prázdné = účet naší firmy.
+    window.loadServiceBank = async function() {
+      const r = await api('GET', '/api/compounder/service-subscriptions/settings');
+      if (r.status !== 200 || !r.data) return;
+      const d = r.data; document.getElementById('sb-acc').value = d.bank_account || ''; document.getElementById('sb-iban').value = d.iban || ''; document.getElementById('sb-bic').value = d.bic || '';
+      const fb = d.fallback || {}; const hint = document.getElementById('sb-bank-hint');
+      hint.textContent = (d.bank_account || d.iban) ? 'Platby servisních faktur chodí na tento účet (je na faktuře i v QR kódu).' : ('Nenastaveno — použije se účet naší firmy' + (fb.bank_account ? ' ' + fb.bank_account : '') + (fb.iban ? ' / ' + fb.iban : '') + '.');
+    };
+    window.saveServiceBank = async function() {
+      const body = { bank_account: document.getElementById('sb-acc').value, iban: document.getElementById('sb-iban').value, bic: document.getElementById('sb-bic').value };
+      const r = await api('PUT', '/api/compounder/service-subscriptions/settings', body);
+      if (r.status !== 200) { alert((r.data && r.data.error) || ('Uložení selhalo (' + r.status + ')')); return; }
+      if (typeof showToast === 'function') showToast('Účet pro servisní faktury uložen'); else alert('Účet pro servisní faktury uložen.');
+      loadServiceBank();
+    };
     window.loadServiceBilling = async function() {
+      loadServiceBank();
       const tb = document.querySelector('#subs-table tbody');
       const r = await api('GET', '/api/compounder/service-subscriptions');
       if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="10" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
@@ -1893,6 +1931,7 @@
     window.__sws = [];
     const SW_REGIME = { standard: 'DPH', reverse_charge: 'přenesená daň. povinnost (0 %)', outside_scope: 'mimo působnost DPH (0 %)' };
     window.loadSoftwareBilling = async function() {
+      loadBillingAccounts();
       const tb = document.querySelector('#sw-table tbody');
       const r = await api('GET', '/api/compounder/software-subscriptions');
       if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="11" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
@@ -1916,6 +1955,20 @@
       const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
       tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'EUR') + '</td><td>' + (i.language === 'en' ? 'EN' : 'CS') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendSwInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
         : '<tr><td colspan="8" class="empty-hint">Zatím žádné vystavené faktury za softwarovou podporu.</td></tr>';
+    };
+
+    window.loadBillingAccounts = async function() {
+      const r = await api('GET', '/api/compounder/software-subscriptions/accounts');
+      if (r.status !== 200 || !r.data) return;
+      ['CZK', 'EUR'].forEach(c => ['account', 'iban', 'bic'].forEach(f => { const el = document.getElementById('acc-' + c.toLowerCase() + '-' + f); if (el) el.value = (r.data[c] && r.data[c][f]) || ''; }));
+    };
+    window.saveBillingAccounts = async function() {
+      const g = (c, f) => document.getElementById('acc-' + c + '-' + f).value.trim();
+      const res = document.getElementById('acc-res');
+      const body = { CZK: { account: g('czk', 'account'), iban: g('czk', 'iban'), bic: g('czk', 'bic') }, EUR: { account: g('eur', 'account'), iban: g('eur', 'iban'), bic: g('eur', 'bic') } };
+      const r = await api('PUT', '/api/compounder/software-subscriptions/accounts', body);
+      if (r.status !== 200) { res.style.color = '#ef4444'; res.textContent = 'Chyba: ' + ((r.data && r.data.error) || r.status); return; }
+      res.style.color = '#16a34a'; res.textContent = '✓ Uloženo — použije se u nově vystavených faktur.';
     };
     window.openSwModal = async function(id) {
       const s = id ? window.__sws.find(x => x.id === id) : null;

@@ -7,6 +7,7 @@
 const { prisma } = require('../../config/database');
 const { computePrevMonthRevenue } = require('./kiosk-revenue');
 const { generateInvoiceNumber } = require('../accountant/invoice-numbering');
+const { invoiceBankFields } = require('../accountant/billing-accounts');
 
 const STARTUP_DELAY_MS = 45 * 1000;
 const POLL_INTERVAL_MS = 6 * 60 * 60 * 1000; // každých 6 h; kalendářní cit řeší last_billed_ym
@@ -29,7 +30,15 @@ async function resolveCompanyId(sub) {
 async function ourCompanyForPdf() {
   let our = null;
   try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
-  return our || { name: process.env.OUR_COMPANY_NAME || 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '', email: process.env.COMPOUNDER_MAIL_FROM || 'compounder@bestseries.cz' };
+  our = Object.assign({}, our || { name: process.env.OUR_COMPANY_NAME || 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '', email: process.env.COMPOUNDER_MAIL_FROM || 'compounder@bestseries.cz' });
+  // Účet pro servisní faktury (nastavení v záložce Fakturace servisních smluv) — přebíjí účet naší firmy na faktuře i v QR platbě
+  try {
+    const { getSetting } = require('../settings');
+    const acc = await getSetting('service_billing.bank_account'), iban = await getSetting('service_billing.iban');
+    if (acc) our.bank_account = acc;
+    if (iban) our.iban = iban;
+  } catch (e) { /* ponech účet firmy */ }
+  return our;
 }
 // Odesílatel servisních faktur = Best Series (ne Compounder): SERVICE_BILLING_MAIL_FROM, jinak fakturační e-mail naší firmy, jinak COMPOUNDER_MAIL_FROM.
 async function mailFrom() {
@@ -76,7 +85,7 @@ async function sendTestEmail(sub, to) {
   const inv = {
     invoice_number: invNo, type: 'issued', direction: 'ar', currency, subtotal, vat_amount: vat, total,
     date_issued: new Date(), date_taxable: new Date(), date_due: new Date(Date.now() + 14 * 86400000), variable_symbol: '20260001',
-    payment_method: 'bank_transfer', vat_regime: 'standard',
+    payment_method: 'bank_transfer', vat_regime: 'standard', ...(await invoiceBankFields(currency)),
     company: { name: sub.customer_name || 'Ukázkový odběratel', ico: sub.buyer_ico || '', country: 'CZ' },
     items: [{ line_order: 0, description: 'Servisní poplatek ' + feePct + ' % z obratu ' + monthName + ' (obrat ' + revenue.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code + (sub.contract_number ? ' — na základě servisní smlouvy č. ' + sub.contract_number : ''), quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }],
     note: (sub.contract_number ? 'Fakturováno na základě servisní smlouvy č. ' + sub.contract_number + '. ' : '') + 'TESTOVACÍ FAKTURA — ukázka, nebyla vystavena.',
@@ -106,6 +115,7 @@ async function billSubscription(sub, opts) {
   const total = Math.round((subtotal + vat) * 100) / 100;
   const companyId = await resolveCompanyId(sub);
   const invNo = await generateInvoiceNumber('service_issued', { prisma });
+  const bank = await invoiceBankFields(currency);
   const cn = (sub.contract_number || '').trim();
   const desc = 'Servisní poplatek ' + feePct + ' % z obratu ' + rev.prevMonthName + ' (obrat ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code + (cn ? ' — na základě servisní smlouvy č. ' + cn : '');
 
@@ -118,7 +128,7 @@ async function billSubscription(sub, opts) {
       date_issued: new Date(), date_due: new Date(Date.now() + 14 * 86400000),
       date_taxable: new Date(),
       variable_symbol: invNo.replace(/\D/g, '') || null, // rok + pořadí (odliší od ostatních řad)
-      status: 'draft', source: 'service_billing',
+      status: 'draft', source: 'service_billing', ...bank,
       note: (cn ? 'Fakturováno na základě servisní smlouvy č. ' + cn + '. ' : '') + 'Automatická servisní faktura za ' + rev.prevMonthName + ' · kiosk ' + sub.kiosk_code + ' · ' + feePct + ' % z obratu ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency,
       items: { create: [{ line_order: 0, description: desc, quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }] },
     },
