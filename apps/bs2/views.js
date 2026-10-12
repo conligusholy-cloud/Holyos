@@ -659,58 +659,150 @@ const curSw = (s, back) => `<form method="post" action="/currency" style="margin
 // cena s DPH 21 % v měně uživatele (EUR bere cenu EUR z ceníku)
 const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_czk; return b == null ? null : Math.round(Number(b) * 1.21); };
 
-// Úvodní grafika na stránce Prádlomaty: Best Series zařídí místo, přípojky, provoz za 13 % z obratu; DC snižuje pořizovací cenu → rychlejší návratnost
-function valueHero() {
-  const step = (n, icon, title, text, tag) => `<div class="vh-step"><div class="vh-n">${n}</div><div class="vh-ic">${ico(icon, 24)}</div><b>${title}</b><span>${text}</span>${tag ? `<em>${tag}</em>` : ''}</div>`;
+// Úvodní interaktivní grafika na stránce Prádlomaty: animace hledání místa, bagr s přípojkami, provoz za 13 % z obratu
+// a kalkulačka „čím víc DC, tím menší cena" s fotkou prádlomatu FLEX.
+function valueHero({ flex = null, sym = 'Kč' } = {}) {
+  // ── Scéna 1: hledání místa (lidé z Best Series prohledávají mapu a označí parcelu) ──
+  const person = (kt, kp, color) => `<g><circle r="3.4" cy="-9" fill="#ffd9b0"/><rect x="-3.6" y="-6" width="7.2" height="9" rx="2.4" fill="${color}"/><rect x="-3.6" y="-1.5" width="7.2" height="1.8" fill="#fff" opacity=".85"/><animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="${kt}" keyPoints="${kp}" path="M14 59 H150 V100 H176"/></g>`;
+  const sceneFind = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Lidé z Best Series hledají vhodné místo"><rect width="240" height="150" rx="12" fill="#0a1426"/>
+    <g fill="#10213f" stroke="#1d3563" stroke-width="1"><rect x="10" y="10" width="54" height="40" rx="4"/><rect x="80" y="10" width="62" height="40" rx="4"/><rect x="160" y="10" width="70" height="40" rx="4"/><rect x="10" y="70" width="54" height="34" rx="4"/><rect x="80" y="70" width="62" height="34" rx="4"/><rect x="10" y="114" width="54" height="30" rx="4"/><rect x="80" y="114" width="62" height="30" rx="4"/><rect x="160" y="124" width="70" height="20" rx="4"/></g>
+    <g stroke="#2b4a86" stroke-width="1" stroke-dasharray="3 4" opacity=".6"><path d="M0 59 H240"/><path d="M72 0 V150"/><path d="M150 0 V150"/></g>
+    <rect class="vh-lot" x="160" y="74" width="70" height="40" rx="5" fill="#2fe3a0" fill-opacity="0" stroke="#2fe3a0" stroke-width="1.5" stroke-dasharray="4 3"/>
+    ${person('0;0.62;1', '0;1;1', '#1e86e0')}${person('0;0.1;0.66;1', '0;0;0.93;0.93', '#7c5cff')}
+    <g class="vh-pin"><path d="M195 66c-6 0-10 4.4-10 9.800 0 7.200 10 17.200 10 17.200s10-10 10-17.200c0-5.400-4-9.800-10-9.800z" fill="#2fe3a0"/><circle cx="195" cy="75.500" r="3.800" fill="#04141a"/></g>
+    <g class="vh-chk" fill="none" stroke="#2fe3a0" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M178 52l5 5 9-10" transform="translate(30 56)"/></g>
+  </svg>`;
+
+  // ── Scéna 2: bagr kope výkop pro přípojky (voda + elektřina) až k prádlomatu ──
+  const sceneDig = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Bagr vykope přípojky k prádlomatu"><rect width="240" height="150" rx="12" fill="#0a1426"/>
+    <rect x="0" y="70" width="240" height="80" fill="#2a2018"/><rect x="0" y="70" width="240" height="5" fill="#2d6b4a"/>
+    <rect x="0" y="75" width="240" height="75" fill="url(#vhg)" opacity=".5"/>
+    <defs><linearGradient id="vhg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2b1e"/><stop offset="1" stop-color="#1a130d"/></linearGradient></defs>
+    <path class="vh-trench" d="M65 100 H195" fill="none" stroke="#120d09" stroke-width="13" stroke-linecap="round" pathLength="130"/>
+    <path class="vh-water" d="M65 96 H195 V70" fill="none" stroke="#4fd1ff" stroke-width="2.600" stroke-linecap="round" pathLength="200"/>
+    <path class="vh-elec" d="M65 104 H202 V70" fill="none" stroke="#ffd23f" stroke-width="2.600" stroke-linecap="round" stroke-dasharray="1 0" pathLength="200"/>
+    <g class="vh-box"><rect x="188" y="26" width="44" height="44" rx="5" fill="#1b2e57" stroke="#3a6cf5"/><rect x="188" y="26" width="44" height="9" rx="3" fill="#1e86e0"/><circle cx="200" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="220" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="210" cy="26" r="0" fill="#2fe3a0"/></g>
+    <g><rect x="-17" y="-8" width="34" height="9" rx="4.500" fill="#2b3b5e"/><rect x="-13" y="-21" width="28" height="13" rx="2" fill="#f5b82e"/><rect x="-13" y="-33" width="15" height="13" rx="2" fill="#f5b82e"/><rect x="-10" y="-30" width="9" height="7" rx="1" fill="#a9d8ff"/>
+      <g transform="translate(13 -19)"><g><animateTransform attributeName="transform" type="rotate" values="-10;16;-10" dur="1s" repeatCount="indefinite"/><line x1="0" y1="0" x2="22" y2="-11" stroke="#f5b82e" stroke-width="4.500" stroke-linecap="round"/><line x1="22" y1="-11" x2="33" y2="14" stroke="#e8a417" stroke-width="3.800" stroke-linecap="round"/><path d="M33 14l8-3-3 9z" fill="#aab6d0"/></g></g>
+      <animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.7;1" keyPoints="0;1;1" path="M22 70 H152"/></g>
+  </svg>`;
+
+  // ── Scéna 3: provoz za 13 % z obratu ──
+  const sceneRun = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Provoz za 13 procent z obratu"><rect width="240" height="150" rx="12" fill="#0a1426"/>
+    <g transform="translate(76 75) rotate(-90)"><circle r="34" fill="none" stroke="#1b2c52" stroke-width="14"/><circle class="vh-arc" r="34" fill="none" stroke="#2fe3a0" stroke-width="14" stroke-linecap="butt" pathLength="100" stroke-dasharray="0 100"/></g>
+    <text x="76" y="76" text-anchor="middle" font-size="19" font-weight="800" fill="#eaf2ff">13 %</text><text x="76" y="90" text-anchor="middle" font-size="8.500" fill="#8ea2c2">z obratu</text>
+    <g><rect class="vh-b" x="136" y="40" width="20" height="85" rx="3" fill="#2a4478" style="--h:85"/><rect class="vh-b" x="162" y="20" width="20" height="105" rx="3" fill="#3a6cf5" style="--h:105"/><rect class="vh-b" x="188" y="8" width="20" height="117" rx="3" fill="#7c5cff" style="--h:117"/>
+      <rect class="vh-b13" x="188" y="8" width="20" height="15" rx="3" fill="#2fe3a0"/></g>
+    <path d="M130 125 H214" stroke="#2b4a86" stroke-width="1.500"/>
+  </svg>`;
+
+  const scene = (n, title, text, svg, tag) => `<div class="vh-step"><div class="vh-sc">${svg}<span class="vh-num">${n}</span></div><b>${title}</b><span>${text}</span>${tag ? `<em>${tag}</em>` : ''}</div>`;
+
+  // ── Kalkulačka: FLEX + posuvník DC ──
+  let calc = '';
+  if (flex && flex.net > 0) {
+    const room = Math.max(0, Math.floor(flex.room || 0));
+    const step = Math.max(1, Math.round(room / 100));
+    calc = `<div class="vh-calc">
+      <div class="vh-cimg">${flex.img ? `<img src="${flex.img}" alt="${esc(flex.name)}">` : ''}<span class="vh-badge" id="vh-bd">−0 %</span></div>
+      <div class="vh-cbody">
+        <div class="vh-ct"><span class="vh-n4">4</span><span>DC snižuje cenu — čím víc DC, tím menší cena</span></div>
+        <div class="vh-nm">${esc(flex.name)}</div>
+        <div class="vh-price"><b id="vh-new">${Math.round(flex.net).toLocaleString('cs-CZ')}</b> <small>${sym} bez DPH</small> <s id="vh-old">${Math.round(flex.net).toLocaleString('cs-CZ')} ${sym}</s></div>
+        <div class="vh-sl"><span class="small muted">Uplatněné DC</span><b id="vh-dc">0 DC</b></div>
+        <input type="range" id="vh-r" min="0" max="${room}" step="${step}" value="0" aria-label="Kolik DC uplatnit" ${room ? '' : 'disabled'}>
+        <div class="vh-q"><button type="button" data-p="0">0</button><button type="button" data-p="25">25 %</button><button type="button" data-p="50">50 %</button><button type="button" data-p="100">Maximum</button></div>
+        <div class="vh-cmp"><div class="vh-row"><span>Pořizovací cena</span><div class="vh-bar"><i id="vh-b1" style="width:100%"></i></div></div><div class="vh-row"><span>Doba návratnosti</span><div class="vh-bar"><i id="vh-b2" class="g" style="width:100%"></i></div></div></div>
+        <div class="vh-sv" id="vh-sv">Posuň posuvník a uvidíš, o kolik se zlevní prádlomat.</div>
+      </div>
+    </div>
+    <script>(function(){var NET=${JSON.stringify(Math.round(flex.net))},ROOM=${JSON.stringify(room)},SYM=${JSON.stringify(sym)};
+      var r=document.getElementById('vh-r');if(!r)return;var nw=document.getElementById('vh-new'),dcE=document.getElementById('vh-dc'),bd=document.getElementById('vh-bd'),b1=document.getElementById('vh-b1'),b2=document.getElementById('vh-b2'),sv=document.getElementById('vh-sv'),old=document.getElementById('vh-old');
+      function f(n){return Math.round(n).toLocaleString('cs-CZ');}
+      var shown=NET,raf=null,touched=false;
+      function paint(v){var dc=Math.max(0,Math.min(ROOM,v)),pr=NET-dc,pct=NET>0?dc/NET*100:0;
+        nw.textContent=f(pr);dcE.textContent=f(dc)+' DC';bd.textContent='−'+(Math.round(pct*10)/10).toLocaleString('cs-CZ')+' %';bd.style.transform='scale('+(1+Math.min(pct,40)/200)+')';
+        b1.style.width=(NET>0?pr/NET*100:100)+'%';b2.style.width=(NET>0?pr/NET*100:100)+'%';old.style.opacity=dc>0?'.7':'0';
+        sv.innerHTML=dc>0?('Ušetříš <b>'+f(dc)+' '+SYM+'</b> už při nákupu. Návratnost se zkrátí přibližně o <b>'+(Math.round(pct*10)/10).toLocaleString('cs-CZ')+' %</b>.'):'Posuň posuvník a uvidíš, o kolik se zlevní prádlomat.';}
+      function go(to){cancelAnimationFrame(raf);var from=shown,t0=null,d=Math.min(900,200+Math.abs(to-from)/Math.max(1,ROOM)*700);(function st(ts){if(t0==null)t0=ts;var k=Math.min(1,(ts-t0)/d),e=1-Math.pow(1-k,3);shown=from+(to-from)*e;paint(shown);r.value=shown;if(k<1)raf=requestAnimationFrame(st);})(performance.now());}
+      shown=0;paint(0);
+      r.addEventListener('input',function(){touched=true;cancelAnimationFrame(raf);shown=+r.value;paint(shown);});
+      [].forEach.call(document.querySelectorAll('.vh-q button'),function(b){b.addEventListener('click',function(){touched=true;go(ROOM*(+b.getAttribute('data-p'))/100);});});
+      if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!touched){io.disconnect();setTimeout(function(){if(!touched)go(ROOM*0.6);},600);}});},{threshold:.5});io.observe(document.querySelector('.vh-calc'));}
+    })();</script>`;
+  }
+
   return `<style>
-  .vh{position:relative;overflow:hidden;margin:22px 0 18px;padding:24px 22px 20px;border-radius:20px;border:1px solid var(--border2);background:radial-gradient(900px 260px at 0% 0%,rgba(30,134,224,.22),transparent 60%),radial-gradient(700px 260px at 100% 100%,rgba(124,92,255,.22),transparent 60%),var(--card2);box-shadow:0 24px 70px rgba(0,0,0,.4)}
+  .vh{position:relative;overflow:hidden;margin:22px 0 18px;padding:24px 22px 22px;border-radius:20px;border:1px solid var(--border2);background:radial-gradient(900px 260px at 0% 0%,rgba(30,134,224,.22),transparent 60%),radial-gradient(700px 260px at 100% 100%,rgba(124,92,255,.22),transparent 60%),var(--card2);box-shadow:0 24px 70px rgba(0,0,0,.4)}
   .vh h2{margin:0 0 4px;font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;font-weight:800;line-height:1.15;background:linear-gradient(90deg,#fff 0%,var(--accent2) 55%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
   .vh .vh-sub{margin:0 0 18px;color:var(--text2);font-size:14px;max-width:760px}
-  .vh-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative}
-  .vh-step{position:relative;display:flex;flex-direction:column;gap:6px;padding:16px 14px 14px;border-radius:16px;background:rgba(10,18,36,.7);border:1px solid var(--border)}
-  .vh-step:not(:last-child)::after{content:"";position:absolute;top:50%;right:-15px;width:16px;height:2px;background:linear-gradient(90deg,var(--accent2),var(--vio));opacity:.8}
-  .vh-step:not(:last-child)::before{content:"";position:absolute;top:calc(50% - 4px);right:-16px;border:5px solid transparent;border-left:7px solid var(--vio);opacity:.9}
-  .vh-n{position:absolute;top:10px;right:12px;font-size:12px;font-weight:800;color:var(--text3)}
-  .vh-ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);box-shadow:0 8px 24px rgba(30,134,224,.22)}
-  .vh-step b{font-size:16px;letter-spacing:-.01em;margin-top:4px}
-  .vh-step span{font-size:13px;color:var(--text2);line-height:1.4}
+  .vh-flow{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .vh-step{position:relative;display:flex;flex-direction:column;gap:6px;padding:12px 12px 14px;border-radius:16px;background:rgba(10,18,36,.7);border:1px solid var(--border)}
+  .vh-step:not(:last-child)::after{content:"";position:absolute;top:34%;right:-17px;width:18px;height:2px;background:linear-gradient(90deg,var(--accent2),var(--vio));opacity:.85}
+  .vh-step:not(:last-child)::before{content:"";position:absolute;top:calc(34% - 4px);right:-18px;border:5px solid transparent;border-left:7px solid var(--vio)}
+  .vh-sc{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);line-height:0}.vh-svg{width:100%;height:auto;display:block}
+  .vh-num{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--vio));color:#fff;font-weight:800;font-size:13px;line-height:24px;text-align:center;box-shadow:0 4px 14px rgba(30,134,224,.5)}
+  .vh-step b{font-size:16px;letter-spacing:-.01em;margin-top:6px}.vh-step span{font-size:13px;color:var(--text2);line-height:1.4}
   .vh-step em{font-style:normal;align-self:flex-start;margin-top:4px;font-size:12px;font-weight:800;color:var(--ok);background:rgba(47,227,160,.12);border:1px solid rgba(47,227,160,.35);padding:3px 9px;border-radius:999px}
-  .vh-pay{margin-top:16px;display:grid;grid-template-columns:1.1fr 1fr;gap:18px;align-items:center;padding:16px;border-radius:16px;background:rgba(6,12,26,.7);border:1px solid var(--border)}
-  .vh-pay h3{margin:0 0 4px;font-size:16px}.vh-pay p{margin:0;color:var(--text2);font-size:13.5px;line-height:1.45}
-  .vh-bars{display:grid;gap:9px}.vh-row{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center;font-size:12.5px;color:var(--text2)}
-  .vh-bar{height:20px;border-radius:7px;position:relative}
-  .vh-b1{width:100%;background:linear-gradient(90deg,#3a4a6e,#5a6f9a)}
-  .vh-b2{width:68%;background:linear-gradient(90deg,var(--accent),#3a6cf5 55%,var(--vio));box-shadow:0 0 18px rgba(58,108,245,.45)}
-  .vh-b2::after{content:"− DC";position:absolute;left:100%;top:0;margin-left:8px;height:20px;line-height:20px;font-size:12px;font-weight:800;color:var(--ok);white-space:nowrap}
-  .vh-fast{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--ok);font-size:13.5px;margin-top:2px}
-  @media(max-width:900px){.vh-flow{grid-template-columns:repeat(2,1fr)}.vh-step:nth-child(2)::after,.vh-step:nth-child(2)::before{display:none}.vh-pay{grid-template-columns:1fr}}
-  @media(max-width:520px){.vh-flow{grid-template-columns:1fr}.vh-step::after,.vh-step::before{display:none!important}.vh-row{grid-template-columns:96px 1fr}}
+  .vh-step .vh-num{font-size:13px;color:#fff}
+  .vh-pin{opacity:0;transform-box:fill-box;transform-origin:50% 100%;animation:vhpin 6s ease-in infinite}
+  .vh-lot{animation:vhlot 6s ease infinite}.vh-chk{opacity:0;animation:vhchk 6s ease infinite}
+  @keyframes vhpin{0%,60%{opacity:0;transform:translateY(-34px)}66%{opacity:1;transform:translateY(0)}69%{transform:translateY(-6px)}72%,94%{opacity:1;transform:translateY(0)}100%{opacity:0}}
+  @keyframes vhlot{0%,64%{fill-opacity:0;stroke-dashoffset:0}70%,94%{fill-opacity:.28}100%{fill-opacity:0}}
+  @keyframes vhchk{0%,72%{opacity:0}78%,94%{opacity:1}100%{opacity:0}}
+  .vh-trench{stroke-dasharray:130;animation:vhdig 6s linear infinite}.vh-water,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-elec{animation-delay:.1s}
+  @keyframes vhdig{0%{stroke-dashoffset:130}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  @keyframes vhpipe{0%,8%{stroke-dashoffset:200}72%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  .vh-box{animation:vhbox 6s ease infinite}@keyframes vhbox{0%,74%{filter:none}82%,94%{filter:drop-shadow(0 0 7px #4fd1ff)}100%{filter:none}}
+  .vh-arc{animation:vharc 6s ease infinite}@keyframes vharc{0%{stroke-dasharray:0 100}25%,92%{stroke-dasharray:13 100}100%{stroke-dasharray:0 100}}
+  .vh-b{transform-box:fill-box;transform-origin:50% 100%;animation:vhgrow 6s ease infinite}.vh-b:nth-of-type(2){animation-delay:.12s}.vh-b:nth-of-type(3){animation-delay:.24s}
+  @keyframes vhgrow{0%{transform:scaleY(.05)}25%,92%{transform:scaleY(1)}100%{transform:scaleY(.05)}}
+  .vh-b13{transform-box:fill-box;transform-origin:50% 0;animation:vhb13 6s ease infinite}@keyframes vhb13{0%,25%{opacity:0;transform:scaleY(.05)}35%,92%{opacity:1;transform:scaleY(1)}100%{opacity:0}}
+  .vh-calc{margin-top:18px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:20px;align-items:center;padding:18px;border-radius:18px;background:rgba(6,12,26,.72);border:1px solid var(--border2)}
+  .vh-cimg{position:relative;display:flex;align-items:center;justify-content:center;min-height:180px;border-radius:14px;background:radial-gradient(ellipse at 50% 60%,rgba(79,209,255,.16),transparent 70%)}
+  .vh-cimg img{width:100%;max-width:420px;height:auto;object-fit:contain;filter:drop-shadow(0 18px 30px rgba(0,0,0,.55));transition:transform .4s}.vh-calc:hover .vh-cimg img{transform:scale(1.03)}
+  .vh-badge{position:absolute;top:6px;right:6px;font-weight:800;font-size:18px;color:#04141a;background:linear-gradient(135deg,#2fe3a0,#4fd1ff);padding:7px 13px;border-radius:999px;box-shadow:0 8px 24px rgba(47,227,160,.4);transition:transform .2s}
+  .vh-ct{display:flex;gap:10px;align-items:center;font-weight:800;font-size:16px}.vh-n4{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--vio));color:#fff;text-align:center;line-height:26px;font-size:13px;flex:none}
+  .vh-nm{margin:8px 0 2px;color:var(--text2);font-size:14px}.vh-price{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.vh-price b{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-.02em}.vh-price small{color:var(--text2);font-size:13px}.vh-price s{color:var(--text3);font-size:14px;transition:opacity .3s}
+  .vh-sl{display:flex;justify-content:space-between;align-items:baseline;margin-top:12px}.vh-sl b{color:var(--ok);font-size:16px}
+  #vh-r{-webkit-appearance:none;appearance:none;width:100%;height:10px;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--vio));padding:0;border:0;margin:8px 0 10px;cursor:pointer;outline:none;box-shadow:0 0 18px rgba(58,108,245,.3)}
+  #vh-r::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:#fff;border:3px solid var(--accent2);box-shadow:0 4px 14px rgba(0,0,0,.5),0 0 0 6px rgba(79,209,255,.2)}
+  #vh-r::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--accent2)}
+  .vh-q{display:flex;gap:6px;flex-wrap:wrap}.vh-q button{font:inherit;font-size:13px;font-weight:700;color:var(--text);background:rgba(120,160,255,.1);border:1px solid var(--border2);border-radius:999px;padding:6px 13px;cursor:pointer;min-height:34px}.vh-q button:hover{background:rgba(79,209,255,.18)}
+  .vh-cmp{margin-top:14px;display:grid;gap:9px}.vh-row{display:grid;grid-template-columns:124px 1fr;gap:10px;align-items:center;font-size:12.5px;color:var(--text2)}
+  .vh-bar{height:18px;border-radius:7px;background:rgba(120,160,255,.1);overflow:hidden}.vh-bar i{display:block;height:100%;border-radius:7px;background:linear-gradient(90deg,#3a4a6e,#6a7fae);transition:width .08s linear}.vh-bar i.g{background:linear-gradient(90deg,var(--accent),#3a6cf5 55%,var(--vio))}
+  .vh-sv{margin-top:12px;font-size:13.5px;color:var(--text2);min-height:38px}.vh-sv b{color:var(--ok)}
+  @media(max-width:900px){.vh-flow{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.vh-step::after,.vh-step::before{display:none!important}.vh-calc{grid-template-columns:1fr}}
+  @media(max-width:520px){.vh-row{grid-template-columns:100px 1fr}}
+  @media(prefers-reduced-motion:reduce){.vh-pin,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-pin,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-elec{stroke-dashoffset:0}}
   </style>
   <section class="vh">
     <h2>Prádlomat nekupujete sami. Best Series zařídí všechno ostatní.</h2>
     <p class="vh-sub">Od prvního místa po provoz hotového stroje. Vy si vyberete prádlomat, my se postaráme o zbytek.</p>
     <div class="vh-flow">
-      ${step(1, 'home', 'Zařídíme místo', 'Najdeme a vyhodnotíme vhodnou lokalitu pro váš prádlomat.')}
-      ${step(2, 'bolt', 'Vytvoříme přípojky', 'Zajistíme a vybudujeme potřebné přípojky na místě.')}
-      ${step(3, 'settings', 'Provozujeme za 13 % z obratu', 'Postaráme se o provoz. Platíte jen z toho, co stroj skutečně vydělá.', '13 % z obratu')}
-      ${step(4, 'chart', 'DC snižuje cenu', 'Discount Credit uplatníte jako slevu při nákupu prádlomatu.')}
+      ${scene(1, 'Zařídíme místo', 'Naši lidé najdou a vyhodnotí vhodnou lokalitu pro váš prádlomat.', sceneFind)}
+      ${scene(2, 'Vytvoříme přípojky', 'Zajistíme a vybudujeme přípojky vody a elektřiny až k prádlomatu.', sceneDig)}
+      ${scene(3, 'Provozujeme za 13 % z obratu', 'Postaráme se o provoz. Platíte jen z toho, co stroj skutečně vydělá.', sceneRun, '13 % z obratu')}
     </div>
-    <div class="vh-pay">
-      <div><h3>Nižší pořizovací cena = rychlejší návratnost</h3><p>Každé DC, které uplatníte, snižuje cenu prádlomatu. Čím méně do stroje vložíte na začátku, tím dřív se Vám investice vrátí.</p></div>
-      <div class="vh-bars">
-        <div class="vh-row"><span>Cena bez DC</span><div class="vh-bar vh-b1"></div></div>
-        <div class="vh-row"><span>Cena s DC</span><div class="vh-bar vh-b2"></div></div>
-        <div class="vh-fast">${ico('chart', 16)} Rychlejší návratnost investice</div>
-      </div>
-    </div>
+    ${calc}
   </section>`;
 }
 function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [] } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
   const bal = Math.max(0, Math.floor(Number(balance) || 0));
   const fmt = (n) => Math.round(n).toLocaleString('cs-CZ');
+  // Prádlomat FLEX pro interaktivní kalkulačku v úvodní grafice (cena, max. využitelné DC, fotka)
+  const flexOffer = offers.find(p => /flex/i.test(p.name_cs || '') && (cur === 'EUR' ? p.price_eur : p.price_czk) != null) || null;
+  let flexData = null;
+  if (flexOffer) {
+    const fnet = Number(cur === 'EUR' ? flexOffer.price_eur : flexOffer.price_czk);
+    const fminB = cur === 'EUR' ? flexOffer.min_price_eur : flexOffer.min_price_czk;
+    let froom = Math.max(0, Math.round(fnet - (fminB == null ? 0 : Number(fminB))));
+    if (flexOffer.dc_use_pct != null) froom = Math.min(froom, Math.floor(fnet * Number(flexOffer.dc_use_pct) / 100));
+    flexData = { name: flexOffer.name_cs, net: fnet, room: froom, img: productImg(flexOffer) };
+  }
   return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
-  ${valueHero()}
+  ${valueHero({ flex: flexData, sym })}
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"></form>
