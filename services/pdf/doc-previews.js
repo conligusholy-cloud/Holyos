@@ -67,7 +67,7 @@ table.items td.d{font-weight:700}table.items td.c{color:var(--gold);font-weight:
 .letter{margin-top:8px;font-size:11pt;line-height:1.6;white-space:pre-wrap}
 .sig{display:flex;justify-content:space-between;gap:40px;margin-top:54px}.sig div{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;color:var(--ink2);font-size:9.5pt}
 .footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:8pt;text-align:center}
-.demo{position:fixed;top:6px;right:10px;font-size:8pt;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;padding:2px 8px;border-radius:999px}
+.demo{position:fixed;top:6px;left:50%;transform:translateX(-50%);font-size:8pt;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;padding:2px 8px;border-radius:999px}
 @media print{.demo{display:none}}`;
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const money = (n, cur) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
@@ -98,6 +98,25 @@ function receiptHtml() {
   <div class="box"><h3>Poznámka ke kontrole</h3>Zboží přijato bez závad, počet kusů odpovídá objednávce.</div>
   <div class="sig"><div>Předal (dodavatel / dopravce)</div><div>Převzal (skladník)</div></div>`);
 }
+
+function issueHtml() {
+  const rows = [['Motor pračky 18 kg', 2, 'ks', 'A-02-3'], ['Ložisko 6205 2RS', 8, 'ks', 'A-02-3'], ['Těsnění dveří — sada', 2, 'ks', 'B-01-1']].map((r, i) => `<tr><td class="c">${i + 1}</td><td class="d">${esc(r[0])}</td><td class="r">${r[1]} ${r[2]}</td><td class="r">${r[1]} ${r[2]}</td><td>Sklad ${r[3]}</td></tr>`).join('');
+  return shell('Výdejka', 'VY-2026-00061', 'Skladový doklad', `
+  <div class="parties">${party('Vydává', OUR)}<div class="party"><span class="h">Příjemce / účel výdeje</span><div class="name">Výroba — prádlomat PRO CZ</div><div class="row">Zakázka: SO-MUZ7QI1S</div><div class="row">Pracoviště: Montáž 1</div><div class="row">Převzal: Petr Montér</div></div></div>
+  <div class="meta"><div><div class="l">Datum výdeje</div><div class="v">6. 10. 2026</div></div><div><div class="l">Zdrojový sklad</div><div class="v">Sklad A</div></div><div><div class="l">Důvod výdeje</div><div class="v">Výroba</div></div><div><div class="l">Vydal</div><div class="v">Jana Skladnice</div></div></div>
+  <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Požadováno</th><th class="r">Vydáno</th><th>Skladová pozice</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="box"><h3>Poznámka</h3>Materiál vydán dle výrobní zakázky, zbývající množství se odepíše ze skladu.</div>
+  <div class="sig"><div>Vydal (skladník)</div><div>Převzal (výroba)</div></div>`);
+}
+function transferHtml() {
+  const rows = [['Motor pračky 18 kg', 6, 'ks', 'A-02-3', 'V-01-1'], ['Ložisko 6205 2RS', 24, 'ks', 'A-02-3', 'V-01-2'], ['Řemen pohonu — sada', 6, 'ks', 'B-03-2', 'V-01-3']].map((r, i) => `<tr><td class="c">${i + 1}</td><td class="d">${esc(r[0])}</td><td class="r">${r[1]} ${r[2]}</td><td>${r[3]}</td><td>${r[4]}</td></tr>`).join('');
+  return shell('Přesun materiálu', 'PM-2026-00017', 'Skladový doklad', `
+  <div class="parties"><div class="party"><span class="h">Z (zdroj)</span><div class="name">Sklad A — hlavní sklad</div><div class="row">Brno, Ukázková 123</div></div><div class="party"><span class="h">Do (cíl)</span><div class="name">Sklad Výroba</div><div class="row">Brno, hala 2</div></div></div>
+  <div class="meta"><div><div class="l">Datum přesunu</div><div class="v">7. 10. 2026</div></div><div><div class="l">Důvod</div><div class="v">Zásobení výroby</div></div><div><div class="l">Přesunul</div><div class="v">Jana Skladnice</div></div><div><div class="l">Převzal</div><div class="v">Petr Montér</div></div></div>
+  <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Množství</th><th>Z pozice</th><th>Na pozici</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="box"><h3>Poznámka</h3>Vnitřní přesun mezi sklady — nemění celkový stav zásob, mění jen umístění.</div>
+  <div class="sig"><div>Odeslal (zdrojový sklad)</div><div>Převzal (cílový sklad)</div></div>`);
+}
 function reminderHtml(level) {
   const inv = { invoice_number: 'FV-2026-00009', date_issued: '2026-09-10', date_due: '2026-09-24', total: 1796850, currency: 'CZK', variable_symbol: '2026000009' };
   const today = new Date('2026-09-24'); today.setDate(today.getDate() + (level === 1 ? 7 : level === 2 ? 14 : 21));
@@ -117,6 +136,8 @@ const CATALOG = [
   { key: 'offer',            group: 'Obchod', name: 'Cenová nabídka', desc: 'Nabídka prádlomatu s platebními podmínkami a akceptací.', used: 'Prodejní objednávky' },
   { key: 'order',            group: 'Obchod', name: 'Potvrzená objednávka', desc: 'Potvrzení objednávky se sloty výroby a platebním kalendářem.', used: 'Prodejní objednávky → průvodce' },
   { key: 'delivery_note',    group: 'Sklad a expedice', name: 'Dodací list', desc: 'Předávací doklad k expedici s podpisy.', used: 'Prodejní objednávky / Skladové doklady' },
+  { key: 'goods_issue',      group: 'Sklad a expedice', name: 'Výdejka', desc: 'Doklad o výdeji materiálu ze skladu do výroby / na zakázku.', used: 'Skladové doklady' },
+  { key: 'stock_transfer',   group: 'Sklad a expedice', name: 'Přesun materiálu (převodka)', desc: 'Doklad o přesunu zboží mezi sklady nebo pozicemi.', used: 'Skladové doklady / Sklady' },
   { key: 'goods_receipt',    group: 'Sklad a expedice', name: 'Příjemka', desc: 'Doklad o příjmu zboží na sklad.', used: 'Skladové doklady' },
   { key: 'invoice_received', group: 'Přijaté doklady', name: 'Faktura přijatá (evidenční karta)', desc: 'Vzhled přijaté faktury při vlastním tisku / archivaci.', used: 'Účetní doklady → Přijaté' },
   { key: 'reminder_1',       group: 'Upomínky', name: '1. upomínka', desc: 'Zdvořilá připomínka — 7 dní po splatnosti.', used: 'Automatické upomínky' },
@@ -133,6 +154,8 @@ async function renderPreview(key) {
     case 'invoice_received': return renderInvoiceHtml(sampleInvoice('received', 'ap', { note: 'Přijatá faktura — evidenční karta.' }));
     case 'offer': return offerHtml();
     case 'goods_receipt': return receiptHtml();
+    case 'goods_issue': return issueHtml();
+    case 'stock_transfer': return transferHtml();
     case 'reminder_1': return reminderHtml(1);
     case 'reminder_2': return reminderHtml(2);
     case 'reminder_3': return reminderHtml(3);
