@@ -618,7 +618,7 @@ function supporterCompounder(s) {
           <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
-          <div class="how-acc"><span class="dec-k">dnes vyděláno</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
+          <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
@@ -629,7 +629,7 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:45,y:55},M8={x:27,y:58},S={x:67,y:48},IN={x:-12,y:62},OUT={x:114,y:62};
+        var W={x:45,y:55},M8={x:27,y:58},S={x:67,y:54},IN={x:-12,y:62},OUT={x:114,y:62};
         put(w,W); put(sd,S); var w8=document.getElementById('how-w8'); put(w8,M8);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[250,'Pračka 8 kg · 200 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[300,'Pračka 8 kg s aviváží · 250 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W']];
