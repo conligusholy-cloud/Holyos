@@ -15,6 +15,8 @@ const fs = require('fs');
 const path = require('path');
 
 let _puppeteer = null;
+const bs2style = require('./bs2-doc-style');
+
 function getPuppeteer() {
   if (_puppeteer) return _puppeteer;
   try {
@@ -275,8 +277,10 @@ function buildTemplateData(invoice, ourCompany) {
     // QR
     qr_url: buildQrUrl(spayd) || '',
 
-    // Zápatí
-    generated_at: new Date().toLocaleString('cs-CZ'),
+    // Design Best Series 2.0 (jednotný vzhled dokladů)
+    doc_css: bs2style.CSS,
+    logo_svg: bs2style.logoSvg(38, 'inv'),
+    footer_text: bs2style.FOOTER_TEXT,
   };
 }
 

@@ -20,32 +20,25 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 
 // dn = { number, date_issued, customer_name, order_number, note, items:[{name,quantity,unit,serial_number}] }
 // our = { name, address, ico, dic }
-function buildHtml(dn, our) {
-  our = our || {};
+function buildHtml(dn, our, opts) {
+  const bs2 = require('./bs2-doc-style');
+  our = our || {}; opts = opts || {};
   const rows = (Array.isArray(dn.items) ? dn.items : []).map(function (it, i) {
-    return '<tr><td>' + (i + 1) + '</td><td>' + esc(it.name) + (it.serial_number ? ' <span style="color:#888">(v.č. ' + esc(it.serial_number) + ')</span>' : '') + '</td>'
-      + '<td style="text-align:right">' + esc(it.quantity != null ? it.quantity : 1) + '</td><td>' + esc(it.unit || 'ks') + '</td></tr>';
+    return '<tr><td class="c">' + (i + 1) + '</td><td class="d">' + esc(it.name) + (it.serial_number ? '<span class="code">výrobní číslo ' + esc(it.serial_number) + '</span>' : '') + '</td>'
+      + '<td class="r">' + esc(it.quantity != null ? it.quantity : 1) + '</td><td>' + esc(it.unit || 'ks') + '</td></tr>';
   }).join('');
   const d = dn.date_issued ? new Date(dn.date_issued) : new Date();
-  return '<!DOCTYPE html><html lang="cs"><head><meta charset="utf-8"><style>'
-    + 'body{font-family:Arial,Helvetica,sans-serif;color:#111;font-size:12px;margin:32px;}'
-    + 'h1{font-size:20px;margin:0 0 2px;}.muted{color:#666;}'
-    + '.head{display:flex;justify-content:space-between;margin-bottom:24px;}'
-    + '.box{max-width:48%;}table{width:100%;border-collapse:collapse;margin-top:12px;}'
-    + 'th,td{border-bottom:1px solid #ddd;padding:7px 6px;text-align:left;}th{background:#f4f4f4;font-size:11px;text-transform:uppercase;letter-spacing:.4px;}'
-    + '.sig{margin-top:56px;display:flex;justify-content:space-between;}.sig div{width:44%;border-top:1px solid #999;padding-top:6px;text-align:center;color:#666;}'
-    + '</style></head><body>'
-    + '<div class="head"><div class="box"><h1>Dodací list</h1><div class="muted">Číslo: ' + esc(dn.number) + '</div>'
-    + '<div class="muted">Datum: ' + d.toLocaleDateString('cs-CZ') + '</div>'
-    + (dn.order_number ? '<div class="muted">Objednávka: ' + esc(dn.order_number) + '</div>' : '') + '</div>'
-    + '<div class="box" style="text-align:right"><b>' + esc(our.name || 'Best Series s.r.o.') + '</b><br>'
-    + esc(our.address || '') + '<br>' + (our.ico ? 'IČO: ' + esc(our.ico) : '') + (our.dic ? ' · DIČ: ' + esc(our.dic) : '') + '</div></div>'
-    + '<div><b>Odběratel:</b> ' + esc(dn.customer_name || '') + '</div>'
-    + '<table><thead><tr><th>#</th><th>Položka</th><th style="text-align:right">Množství</th><th>MJ</th></tr></thead><tbody>'
-    + (rows || '<tr><td colspan="4" class="muted">Bez položek</td></tr>') + '</tbody></table>'
-    + (dn.note ? '<p class="muted" style="margin-top:16px">' + esc(dn.note) + '</p>' : '')
-    + '<div class="sig"><div>Předal (dodavatel)</div><div>Převzal (odběratel)</div></div>'
-    + '</body></html>';
+  const body = '<div class="parties"><div class="party"><span class="h">Dodavatel</span><div class="name">' + esc(our.name || 'Best Series s.r.o.') + '</div>'
+    + (our.address ? '<div class="row">' + esc(our.address) + '</div>' : '')
+    + ((our.ico || our.dic) ? '<div class="row">' + (our.ico ? 'IČO: ' + esc(our.ico) : '') + (our.dic ? ' · DIČ: ' + esc(our.dic) : '') + '</div>' : '') + '</div>'
+    + '<div class="party"><span class="h">Odběratel</span><div class="name">' + esc(dn.customer_name || '') + '</div></div></div>'
+    + '<div class="meta"><div><div class="l">Datum vystavení</div><div class="v">' + d.toLocaleDateString('cs-CZ') + '</div></div>'
+    + '<div><div class="l">Objednávka</div><div class="v">' + esc(dn.order_number || '—') + '</div></div><div></div><div></div></div>'
+    + '<table class="items"><thead><tr><th class="r">#</th><th>Položka</th><th class="r">Množství</th><th>MJ</th></tr></thead><tbody>'
+    + (rows || '<tr><td colspan="4">Bez položek</td></tr>') + '</tbody></table>'
+    + (dn.note ? '<div class="note"><strong>Poznámka:</strong> ' + esc(dn.note) + '</div>' : '')
+    + '<div class="sig"><div>Předal (dodavatel)</div><div>Převzal (odběratel)</div></div>';
+  return bs2.page({ title: 'Dodací list', number: dn.number, pill: 'Expedice', demo: opts.demo }, body);
 }
 
 async function generateDeliveryNotePdf(dn, our) {
@@ -53,7 +46,7 @@ async function generateDeliveryNotePdf(dn, our) {
   const page = await browser.newPage();
   try {
     await page.setContent(buildHtml(dn, our), { waitUntil: 'networkidle0' });
-    return await page.pdf({ format: 'A4', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
+    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
   } finally {
     try { await page.close(); } catch (e) {}
   }

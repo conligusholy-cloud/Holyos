@@ -40,43 +40,16 @@ async function renderInvoiceHtml(inv, ourCompany) {
     const spayd = invoicePdf.buildSpaydString({ iban: OUR.iban, amount: inv.total, currency: inv.currency, vs: inv.variable_symbol, message: 'Faktura ' + inv.invoice_number });
     if (spayd) data.qr_url = await QRCode.toDataURL(spayd, { margin: 1, width: 220 });
   } catch (e) { data.qr_url = ''; }
-  return invoicePdf.renderTemplate(invoicePdf.loadTemplate(), data);
+  return invoicePdf.renderTemplate(invoicePdf.loadTemplate(), data).replace('<body>', '<body><div class="demo">UKÁZKA — smyšlená data</div>');
 }
 
-// ── Společný obal pro nové šablony (nabídka, příjemka, upomínka) — vzhled navazuje na fakturu ──
-const CSS = `@page{size:A4;margin:14mm 13mm 16mm 13mm}*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,Arial,sans-serif;font-size:10.5pt;color:#14141a;line-height:1.45;--gold:#c9a24b;--gold-soft:#d8bd78;--gold-grad:linear-gradient(135deg,#f6e6ad 0%,#cda454 42%,#9a7a34 100%);--dark:#0e0e11;--ink2:#5b5b66;--muted:#8a8a95;--line:#e7e4dc;--soft:#faf8f3}
-.top{background:var(--dark);color:#fff;display:flex;justify-content:space-between;align-items:flex-start;padding:18px 22px;border-radius:12px;margin-bottom:20px}
-.logo{font-size:17pt;font-weight:800;letter-spacing:.3px}.logo b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-.tag{display:block;font-size:7.5pt;letter-spacing:.28em;color:var(--gold-soft);font-weight:700;margin-top:3px;text-transform:uppercase}
-.dn{text-align:right}.dn .t{font-size:13pt;font-weight:800}.dn .n{font-size:15pt;font-weight:800;color:var(--gold-soft);font-family:Consolas,monospace;margin-top:2px}
-.dn .p{display:inline-block;margin-top:6px;font-size:8pt;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#0e0e11;background:var(--gold-grad);padding:2px 10px;border-radius:999px}
-.parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px}
-.party .h{font-size:9pt;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);font-weight:800;border-bottom:2px solid var(--gold);display:block;padding-bottom:3px;margin-bottom:6px}
-.party .name{font-weight:800;font-size:12pt;margin-bottom:3px}.party .row{margin:2px 0;font-size:10pt;color:var(--ink2)}
-.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;background:var(--soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 12px;margin-bottom:16px}
-.meta .l{font-size:8pt;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}.meta .v{font-weight:800;margin-top:1px}
-table.items{width:100%;border-collapse:collapse;margin-bottom:8px}
-table.items th{background:var(--dark);color:var(--gold-soft);text-align:left;padding:8px 10px;font-size:8.5pt;text-transform:uppercase;letter-spacing:.05em}
-table.items th.r,table.items td.r{text-align:right}table.items td{padding:8px 10px;border-bottom:1px solid var(--line);font-size:10pt;vertical-align:top}
-table.items td.d{font-weight:700}table.items td.c{color:var(--gold);font-weight:800;text-align:center;width:26px}
-.sum{margin-left:auto;width:52%;margin-top:12px}.sum .row{display:flex;justify-content:space-between;padding:6px 12px;font-size:11pt}
-.sum .row.total{background:var(--gold-grad);color:#241c05;font-size:13pt;font-weight:800;border-radius:8px;margin-top:6px}
-.box{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--soft);margin-top:14px}
-.box h3{font-size:9pt;text-transform:uppercase;letter-spacing:.1em;color:var(--gold);font-weight:800;margin-bottom:6px}
-.letter{margin-top:8px;font-size:11pt;line-height:1.6;white-space:pre-wrap}
-.sig{display:flex;justify-content:space-between;gap:40px;margin-top:54px}.sig div{flex:1;border-top:1px solid #999;padding-top:6px;text-align:center;color:var(--ink2);font-size:9.5pt}
-.footer{margin-top:26px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:8pt;text-align:center}
-.demo{position:fixed;top:6px;left:50%;transform:translateX(-50%);font-size:8pt;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;padding:2px 8px;border-radius:999px}
-@media print{.demo{display:none}}`;
-const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// ── Společný vzhled (Best Series 2.0) — bs2-doc-style.js ──
+const bs2 = require('./bs2-doc-style');
+const esc = bs2.esc;
 const money = (n, cur) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
 const addr = (c) => [c.address, [c.zip, c.city].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 const party = (label, c) => `<div class="party"><span class="h">${label}</span><div class="name">${esc(c.name)}</div><div class="row">${esc(addr(c))}</div><div class="row">IČO: ${esc(c.ico || '')}${c.dic ? ' · DIČ: ' + esc(c.dic) : ''}</div>${c.email ? `<div class="row">${esc(c.email)}</div>` : ''}</div>`;
-const shell = (title, number, pill, inner) => `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>
-<div class="demo">UKÁZKA — smyšlená data</div>
-<div class="top"><div><div class="logo"><b>BEST</b> SERIES</div><span class="tag">Prádlomat · Compounder</span></div><div class="dn"><div class="t">${esc(title)}</div><div class="n">${esc(number)}</div>${pill ? `<div class="p">${esc(pill)}</div>` : ''}</div></div>
-${inner}<div class="footer">Best Series s.r.o. · Prádlomat · Compounder · vygenerováno systémem HolyOS</div></body></html>`;
+const shell = (title, number, pill, inner) => bs2.page({ title, number, pill, demo: true }, inner);
 
 function offerHtml() {
   const rows = ITEMS.map((it, i) => `<tr><td class="c">${i + 1}</td><td class="d">${esc(it.description)}</td><td class="r">${it.quantity} ${it.unit}</td><td class="r">${money(it.unit_price)}</td><td class="r">${it.vat_rate} %</td><td class="r">${money(it.total)}</td></tr>`).join('');
@@ -125,7 +98,7 @@ function reminderHtml(level) {
   return shell('Upomínka', 'UP-2026-0' + level, names[level][1], `
   <div class="parties">${party('Odesílatel', OUR)}${party('Adresát', CUSTOMER)}</div>
   <div class="box" style="margin-top:0"><h3>Předmět</h3><b>${esc(r.subject)}</b></div>
-  <div class="letter">${esc(r.body)}</div>`);
+  <div class="letter">${esc(r.body).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")}</div>`);
 }
 
 const CATALOG = [
@@ -160,9 +133,9 @@ async function renderPreview(key) {
     case 'reminder_2': return reminderHtml(2);
     case 'reminder_3': return reminderHtml(3);
     case 'delivery_note':
-      return deliveryNote.buildHtml({ number: 'DL-2026-00018', date_issued: new Date('2026-10-05'), customer_name: CUSTOMER.name, order_number: 'SO-MUZ7QI1S', note: 'Zboží převzato bez výhrad.', items: [{ name: 'Prádlomat PRO CZ', quantity: 1, unit: 'ks', serial_number: 'PRO-2026-0042' }, { name: 'Sada klíčů a dokumentace', quantity: 1, unit: 'ks' }] }, { name: OUR.name, address: addr(OUR), ico: OUR.ico, dic: OUR.dic });
+      return deliveryNote.buildHtml({ number: 'DL-2026-00018', date_issued: new Date('2026-10-05'), customer_name: CUSTOMER.name, order_number: 'SO-MUZ7QI1S', note: 'Zboží převzato bez výhrad.', items: [{ name: 'Prádlomat PRO CZ', quantity: 1, unit: 'ks', serial_number: 'PRO-2026-0042' }, { name: 'Sada klíčů a dokumentace', quantity: 1, unit: 'ks' }] }, { name: OUR.name, address: addr(OUR), ico: OUR.ico, dic: OUR.dic }, { demo: true });
     case 'order':
-      return orderPdf.buildHtml({ order_number: 'SO-MUZ7QI1S', currency: 'CZK', company: Object.assign({}, CUSTOMER), total_amount: 1485000, payment_split: true, deposit_percent: 75, created_at: new Date('2026-10-01'), authorized_at: new Date('2026-10-02'), items: [{ name: 'Prádlomat PRO CZ', quantity: 1, unit_price: 1450000, note: 'TYP:L1H2W3D1' }, { name: 'Doprava a montáž', quantity: 1, unit_price: 35000 }] }, OUR, { slotDates: [new Date('2026-12-07')] });
+      return orderPdf.buildHtml({ order_number: 'SO-MUZ7QI1S', currency: 'CZK', company: Object.assign({}, CUSTOMER), total_amount: 1485000, payment_split: true, deposit_percent: 75, created_at: new Date('2026-10-01'), authorized_at: new Date('2026-10-02'), items: [{ name: 'Prádlomat PRO CZ', quantity: 1, unit_price: 1450000, note: 'TYP:L1H2W3D1' }, { name: 'Doprava a montáž', quantity: 1, unit_price: 35000 }] }, OUR, { slotDates: [new Date('2026-12-07')], demo: true });
     default: return null;
   }
 }
