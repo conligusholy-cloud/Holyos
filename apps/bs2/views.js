@@ -418,6 +418,13 @@ function supporterCompounder(s) {
   const steps = [['Rok 1', 1, 'první stroj si splácí sám'], ['Rok 2', 2, 'výnos z prvního = záloha na druhý'], ['Rok 3', 4, 'dva stroje platí dva další'], ['Rok 4', 8, 'síť roste rychleji než Vaše výdaje'], ['Rok 5', 16, 'linka — svoboda']];
   // Fáze Compoundera — doplňujeme postupně
   const PHASES = [
+    { no: '0', k: 'Jak to vlastně funguje', title: 'Prádlomat po spuštění', visual: 'how', lead: 'Než se pustíme do strategie, podívejte se, co se děje, když prádlomat <b>uvedete do chodu</b>. Stojí na dobrém místě, je otevřený <b>24 hodin denně, 7 dní v týdnu</b> — a nepotřebuje žádnou obsluhu. Zákazník přijde, zaplatí, vypere nebo usuší. Peníze jdou na Váš účet.',
+      points: [
+        ['sun', 'Žádná obsluha, žádná otevírací doba', 'Prádlomat je samoobslužný. Nikdo tam nemusí sedět, nikdo neotevírá ani nezavírá. Vydělává i o půlnoci, o víkendu a o svátcích.'],
+        ['bolt', 'Zákazník si zaplatí sám', 'Kartou, mincemi nebo bankovkami přímo na terminálu. Cena za praní či sušení je napsaná na stroji — nic nevysvětlujete, nic nevybíráte.'],
+        ['network', 'Vy vidíte všechno na dálku', 'Každá platba a každý cyklus se zapisují do systému. V telefonu vidíte obrat, vytížení i stav stroje — kdykoli, odkudkoli.'],
+        ['check', 'Servis řeší Best Series', 'Když se něco pokazí, volá zákazník na infolinku, ne Vám. Servis přijede, opraví, náhradní díly máme skladem. Vy se staráte o místo, my o stroj.'],
+      ] },
     { no: '1', k: 'Vztah s bankovním domem', title: 'Sblížení', visual: 'pilots', lead: 'Stejně jako mezi lidmi je i mezi Vámi a bankovním domem potřeba vybudovat vztah. Teď jste pro něj <b>nový partner</b> — a potřebuje Vás trochu poznat. Strategie je jednoduchá: <b>začněte jedním prvním prádlomatem</b> — verze MINI, ideálně bez financování.',
       points: [
         ['box', 'Jeden první prádlomat', 'Začněte <b>jedním strojem</b>. Ne třemi, ne pěti. Jeden stroj na jednom místě dá všechna data, která potřebujete — a nic Vás nenutí dělat další rozhodnutí dřív, než budete vědět.'],
@@ -482,6 +489,23 @@ function supporterCompounder(s) {
   .cp .ph-k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);font-weight:700}
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
+  .cp .how{margin:4px 0 22px;padding:18px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45);position:relative}
+  .cp .how-flow{display:flex;align-items:stretch;gap:8px}
+  .cp .how-col{flex:1;min-width:0;position:relative;text-align:center;padding:14px 10px;border-radius:14px;border:1px solid var(--border);background:rgba(4,8,16,.5)}
+  .cp .how-col b{display:block;font-size:14px;margin-top:4px} .cp .how-col span{display:block;font-size:11.5px;color:var(--text2)}
+  .cp .how-ic{font-size:34px;line-height:1}
+  .cp .how-arrow{display:flex;align-items:center;font-size:26px;color:var(--accent2);text-shadow:0 0 12px rgba(79,209,255,.6)}
+  .cp .how-machine{flex:1.6;border-color:rgba(79,209,255,.4)} .cp .how-machine img{width:100%;max-width:220px;height:auto;filter:drop-shadow(0 16px 26px rgba(0,0,0,.65)) drop-shadow(0 0 16px rgba(79,209,255,.3))}
+  .cp .how-prices{margin-top:8px;display:flex;flex-direction:column;gap:3px} .cp .how-prices i{font-style:normal;font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid rgba(79,209,255,.35);color:var(--accent2)}
+  .cp .how-walk{position:absolute;left:0;right:0;bottom:6px;height:22px;pointer-events:none} .cp .how-walk em{position:absolute;left:-10%;top:0;font-style:normal;font-size:18px;animation:howwalk 1.8s linear forwards}
+  @keyframes howwalk{from{left:-10%;opacity:0}15%{opacity:1}to{left:110%;opacity:0}}
+  .cp .how-drum{display:flex;justify-content:center;gap:6px;margin-top:8px} .cp .how-drum i{width:10px;height:10px;border-radius:50%;background:rgba(79,209,255,.25)} .cp .how-drum.on i{animation:howdrum .6s ease-in-out infinite} .cp .how-drum.on i:nth-child(2){animation-delay:.2s} .cp .how-drum.on i:nth-child(3){animation-delay:.4s}
+  @keyframes howdrum{0%,100%{background:rgba(79,209,255,.25);transform:translateY(0)}50%{background:var(--accent2);transform:translateY(-5px);box-shadow:0 0 10px var(--accent2)}}
+  .cp .how-money{border-color:rgba(47,227,160,.45)} .cp .how-acc{margin-top:8px;padding:8px;border-radius:10px;background:rgba(47,227,160,.08);border:1px solid rgba(47,227,160,.35)} .cp .how-acc b{font-size:clamp(18px,2.4vw,26px);letter-spacing:-.02em;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent;margin:0}
+  .cp .how-coins{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;overflow:hidden} .cp .how-coins .coin{position:absolute;left:58%;top:40%;font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.9s ease-out forwards}
+  @keyframes howcoin{0%{left:58%;top:42%;opacity:0;transform:scale(.6)}20%{opacity:1;transform:scale(1.1)}100%{left:84%;top:28%;opacity:0;transform:scale(.9)}}
+  .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
+  @media(max-width:900px){.cp .how-flow{flex-direction:column} .cp .how-arrow{justify-content:center;transform:rotate(90deg)} .cp .how-coins .coin{display:none}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -580,6 +604,34 @@ function supporterCompounder(s) {
     ${PHASES.map(ph => `<section class="ph">
       <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
+      ${ph.visual === 'how' ? `<div class="how">
+        <div class="how-flow">
+          <div class="how-col"><div class="how-ic">👤</div><b>Zákazník přijde</b><span>kdykoli, 24/7</span><div class="how-walk" id="how-walk"></div></div>
+          <div class="how-arrow">→</div>
+          <div class="how-col how-pay"><div class="how-ic">💳</div><b>Zaplatí</b><span>karta · mince · bankovky</span><div class="how-prices"><i>Pračka 8 kg · 150 Kč</i><i>Pračka 18 kg · 200 Kč</i><i>Sušička · 50 Kč</i></div></div>
+          <div class="how-arrow">→</div>
+          <div class="how-col how-machine"><img src="/img/pradlomat.webp?v=2" alt="Prádlomat" loading="lazy" decoding="async"><b>Stroj pere a suší</b><span>sám · bez obsluhy</span><div class="how-drum" id="how-drum"><i></i><i></i><i></i></div></div>
+          <div class="how-arrow">→</div>
+          <div class="how-col how-money"><div class="how-ic">💰</div><b>Peníze na Váš účet</b><span>každá platba se připíše</span><div class="how-acc"><span class="dec-k">dnes vyděláno</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 00:00</span></div></div>
+        </div>
+        <div class="how-coins" id="how-coins"></div>
+        <div class="how-foot"><span>🕐 <b id="how-clock">00:00</b> · prádlomat běží</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
+      </div>
+      <script>(function(){
+        var sum=document.getElementById('how-sum'),n=document.getElementById('how-n'),clk=document.getElementById('how-clock'),coins=document.getElementById('how-coins'),walk=document.getElementById('how-walk'),drum=document.getElementById('how-drum');
+        if(!sum)return; var total=0,cnt=0,min=6*60,PR=[150,200,50,150,200];
+        function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
+        function cycle(){
+          min=(min+Math.floor(20+Math.random()*50))%1440; clk.textContent=fmt(min);
+          var p=PR[cnt%PR.length]; cnt++;
+          walk.innerHTML='<em>👤</em>'; setTimeout(function(){ walk.innerHTML=''; },1800);
+          setTimeout(function(){ drum.classList.add('on'); setTimeout(function(){ drum.classList.remove('on'); },2600); },900);
+          setTimeout(function(){ var c=document.createElement('em'); c.className='coin'; c.textContent='+'+p+' Kč'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1900);
+            total+=p; var shown=parseInt(sum.textContent.replace(/\s/g,''),10)||0; var st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/600); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
+            n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min); },1500);
+        }
+        cycle(); setInterval(cycle,4200);
+      })();</script>` : ''}
       ${ph.visual === 'loop' ? `<div class="loopwrap"><div class="loop">
         <svg viewBox="0 0 420 420" class="loop-svg" aria-hidden="true">
           <defs><linearGradient id="lpG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
