@@ -162,7 +162,10 @@ async function migrate() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
 
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vop_consent_at TIMESTAMPTZ; -- kdy uživatel odsouhlasil VOP
-    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS gdpr_consent_at TIMESTAMPTZ; -- kdy uživatel odsouhlasil zpracování osobních údajů
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS gdpr_consent_at TIMESTAMPTZ;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS failed_logins INTEGER NOT NULL DEFAULT 0; -- zamykání účtu po opakovaných neúspěších
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS totp_secret TEXT; -- (nepoužito pro uživatele; 2FA správců je v app_settings) -- kdy uživatel odsouhlasil zpracování osobních údajů
     CREATE TABLE IF NOT EXISTS app_settings (
       key   TEXT PRIMARY KEY,
       value TEXT

@@ -35,7 +35,31 @@ app.use(cookieParser());
 // Větší limit těla požadavku — nastavení AI chatu (znalosti po tématech) může mít stovky kB
 app.use(express.json({ limit: '8mb' }));
 app.use(express.urlencoded({ extended: false, limit: '8mb' }));
-app.use((req, res, next) => { res.set('X-Frame-Options', 'DENY'); res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'same-origin'); next(); });
+app.use((req, res, next) => {
+  res.set('X-Frame-Options', 'DENY'); res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'same-origin');
+  res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (isHttps(req)) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // CSP: cizí skripty se nespustí, formuláře nejdou odeslat jinam, stránku nelze vložit do iframe. Inline skripty/handlery aplikace jsou povoleny ('unsafe-inline').
+  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  next();
+});
+// ---- CSRF: každý POST musí přijít z našeho webu (Origin/Referer = náš host). Formuláře navíc nesou token svázaný s relací. ----
+const CSRF_SECRET = (process.env.BS2_SESSION_SECRET || 'dev') + ':csrf';
+function csrfToken(req) { const a = req.cookies && (req.cookies.bs2_user || req.cookies.bs2_admin || ''); return require('crypto').createHmac('sha256', CSRF_SECRET).update(String(a)).digest('hex').slice(0, 32); }
+app.use((req, res, next) => {
+  if (req.method !== 'POST' || req.path === '/sso' || req.path.startsWith('/api/health')) return next();
+  const host = req.get('host'); const src = req.get('origin') || req.get('referer') || '';
+  if (src) { try { if (new URL(src).host !== host) return res.status(403).send('Požadavek odmítnut (CSRF).'); } catch (e) { return res.status(403).send('Požadavek odmítnut (CSRF).'); } }
+  else if (!(req.get('content-type') || '').includes('application/json')) return res.status(403).send('Požadavek odmítnut (CSRF).');
+  req.csrfToken = csrfToken(req); next();
+});
+app.use((req, res, next) => {
+  req.csrfToken = req.csrfToken || csrfToken(req);
+  if (req.method === 'POST' && (req.get('content-type') || '').includes('application/x-www-form-urlencoded') && req.path !== '/login' && req.path !== '/activate' && req.path !== '/activate/finish' && req.path !== '/forgot' && !req.path.startsWith('/join/')) {
+    if (String((req.body || {})._csrf || '') !== req.csrfToken) return res.status(403).send('Formulář vypršel nebo byl odeslán odjinud — obnovte stránku a zkuste to znovu.');
+  }
+  next();
+});
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 // ── Sessions ───────────────────────────────────────────────────────────────
@@ -54,8 +78,18 @@ function isAllowedAdmin(p) {
   const first = parts[0] || '', last = parts[parts.length - 1] || '';
   return last === 'holy' && (first === 'tomas' || first === 'jan');
 }
+// ── Volitelné 2FA pro správce (zapne se env BS2_ADMIN_2FA=1): TOTP (Google/Microsoft Authenticator), tajemství per správce v app_settings ──
+const ADMIN_2FA = String(process.env.BS2_ADMIN_2FA || '') === '1';
+const crypto = require('crypto');
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function b32enc(buf) { let bits = '', out = ''; for (const b of buf) bits += b.toString(2).padStart(8, '0'); for (let i = 0; i + 5 <= bits.length; i += 5) out += B32[parseInt(bits.slice(i, i + 5), 2)]; return out; }
+function b32dec(str) { let bits = '', out = []; for (const c of String(str).toUpperCase().replace(/[^A-Z2-7]/g, '')) bits += B32.indexOf(c).toString(2).padStart(5, '0'); for (let i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i + 8), 2)); return Buffer.from(out); }
+function totp(secret, t = Date.now(), step = 30) { const ctr = Buffer.alloc(8); ctr.writeBigUInt64BE(BigInt(Math.floor(t / 1000 / step))); const h = crypto.createHmac('sha1', b32dec(secret)).update(ctr).digest(); const o = h[h.length - 1] & 0xf; const code = ((h.readUInt32BE(o) & 0x7fffffff) % 1000000).toString().padStart(6, '0'); return code; }
+function totpOk(secret, code) { const c = String(code || '').replace(/\s/g, ''); if (!/^\d{6}$/.test(c)) return false; for (const d of [-1, 0, 1]) if (totp(secret, Date.now() + d * 30000) === c) return true; return false; }
+async function adminTotpSecret(pid) { try { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_' + pid]); return (r.rows[0] || {}).value || null; } catch (e) { return null; } }
 function requireAdmin(req, res, next) {
   const s = readCookie(req, ADMIN_COOKIE);
+  if (ADMIN_2FA && s && s.kind === 'admin' && !s.tfa && !req.path.startsWith('/admin/2fa')) return res.redirect('/admin/2fa');
   // Nepřihlášený nikdy nesmí být poslán do HolyOS — admin se dostane jen z menu HolyOS; návštěvník uvidí jen BS2 login
   if (!s || s.kind !== 'admin') return res.redirect('/login');
   if (!isAllowedAdmin(s)) { res.clearCookie(ADMIN_COOKIE); return res.status(403).send(V.errorPage('Přístup odepřen', 'Administrace je dostupná jen Tomáši a Janu Holému.', '/')); }
@@ -71,6 +105,9 @@ async function requireUser(req, res, next) {
   try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
   req.user = u; next();
 }
+// Obecný rate-limit v paměti: key (např. 'support:'+id), max pokusů za okno
+const _rl = new Map();
+function rateLimited(key, max, windowMs) { const now = Date.now(); const a = _rl.get(key) || { n: 0, t: now }; if (now - a.t > windowMs) { a.n = 0; a.t = now; } a.n++; _rl.set(key, a); if (_rl.size > 20000) _rl.clear(); return a.n > max; }
 // Jednoduchý rate-limit přihlašování per IP (v paměti)
 const attempts = new Map();
 function tooMany(ip) { const a = attempts.get(ip) || { n: 0, t: Date.now() }; if (Date.now() - a.t > 15 * 60e3) { a.n = 0; a.t = Date.now(); } return a.n >= 20; }
@@ -91,6 +128,7 @@ app.use((req, res, next) => {
       }
       body = body.replace('<!--BS2-SWITCH-->', html);
     }
+    if (typeof body === 'string' && body.includes('<form')) body = body.replace(/<form\b([^>]*method=["']?post["']?[^>]*)>/gi, (m) => m + '<input type="hidden" name="_csrf" value="' + csrfToken(req) + '">');
     return send(body);
   };
   next();
@@ -150,13 +188,15 @@ app.post('/login', wrap(async (req, res) => {
   const login = String(req.body.login || '').trim(), password = String(req.body.password || '');
   const r = await q('SELECT * FROM supporters WHERE lower(email)=lower($1) OR lower(nick)=lower($1) LIMIT 1', [login]);
   const u = r.rows[0];
+  if (u && u.locked_until && new Date(u.locked_until) > new Date()) return res.status(429).send(V.loginPage({ error: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za ' + Math.ceil((new Date(u.locked_until) - Date.now()) / 60000) + ' min.', login }));
   if (!u || !u.password_hash || !(await bcrypt.compare(password, u.password_hash))) {
     noteFail(ip);
+    if (u) await q("UPDATE supporters SET failed_logins=COALESCE(failed_logins,0)+1, locked_until=CASE WHEN COALESCE(failed_logins,0)+1>=10 THEN now()+interval '15 minutes' ELSE locked_until END WHERE id=$1", [u.id]).catch(() => {});
     const hint = u && !u.password_hash ? 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.' : 'Nesprávný nick/e-mail nebo heslo.';
     return res.status(401).send(V.loginPage({ error: hint, login, members: await memberCount() }));
   }
   if (u.status === 'blocked') return res.status(403).send(V.loginPage({ error: 'Účet je zablokovaný. Ozvi se nám.', login }));
-  await q('UPDATE supporters SET last_login_at=now() WHERE id=$1', [u.id]);
+  await q('UPDATE supporters SET last_login_at=now(), failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick: u.nick }, 30 * 24 * 3600);
   res.redirect('/');
 }));
@@ -310,6 +350,7 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
 }));
 // Koupit (+ případně uplatnit DC): vše se přepočítá na serveru, DC se hned odečtou, objednávku potvrdí admin
 app.post('/order', wrap(requireUser), wrap(async (req, res) => {
+  if (rateLimited('order:' + req.user.id, 5, 60 * 60e3)) return res.redirect('/pradlomaty?msg=' + encodeURIComponent('Příliš mnoho objednávek za hodinu. Zkuste to později.'));
   const back = (m) => res.redirect('/pradlomaty?msg=' + encodeURIComponent(m));
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
   if (String(req.body.item || '').startsWith('svc:')) {
@@ -406,10 +447,32 @@ app.get('/api/support/state', wrap(async (req, res) => {
 }));
 const SUP_COLS = 'id, supporter_id, sender, agent_name, body, read_by_agent, read_by_user, created_at, file_name, file_type, file_size';
 const supUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+// Skutečný typ souboru podle hlavičky (magic bytes) — nevěříme příponě ani MIME od prohlížeče
+function sniffType(buf) {
+  if (!buf || buf.length < 4) return null;
+  const h = buf.subarray(0, 12);
+  if (h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47) return 'image/png';
+  if (h[0] === 0xff && h[1] === 0xd8 && h[2] === 0xff) return 'image/jpeg';
+  if (h[0] === 0x47 && h[1] === 0x49 && h[2] === 0x46) return 'image/gif';
+  if (h.toString('ascii', 0, 4) === 'RIFF' && h.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+  if (h.toString('ascii', 0, 4) === '%PDF') return 'application/pdf';
+  if (h[0] === 0x50 && h[1] === 0x4b && h[2] === 0x03 && h[3] === 0x04) return 'application/zip'; // zip / docx / xlsx
+  if (h[0] === 0xd0 && h[1] === 0xcf && h[2] === 0x11 && h[3] === 0xe0) return 'application/msoffice'; // doc / xls
+  const txt = buf.subarray(0, 512).toString('utf8'); if (!/[\x00-\x08\x0e-\x1f]/.test(txt)) return 'text/plain';
+  return null;
+}
+function checkedFile(f) {
+  if (!f) return { ok: true, f: null };
+  const real = sniffType(f.buffer); if (!real) return { ok: false, error: 'Tento typ souboru nelze přiložit (povoleno: obrázky, PDF, Word, Excel, TXT, ZIP).' };
+  const name = String(f.originalname || 'soubor').replace(/[\\/:*?"<>|\x00-\x1f]/g, '_').slice(0, 200);
+  const safeType = real.startsWith('image/') || real === 'application/pdf' ? real : 'application/octet-stream'; // ostatní jen ke stažení
+  return { ok: true, f: { originalname: name, mimetype: safeType, size: f.size, buffer: f.buffer } };
+}
 app.post('/api/support/send', wrap(requireUser), supUpload.single('file'), wrap(async (req, res) => {
+  if (rateLimited('support:' + req.user.id, 30, 10 * 60e3)) return res.status(429).json({ error: 'Příliš mnoho zpráv za sebou. Zkuste to za chvíli.' });
   if (!(await supportOnline())) return res.status(403).json({ error: 'Podpora je momentálně offline.' });
   const body = String((req.body || {}).body || '').trim().slice(0, 2000);
-  const f = req.file || null;
+  const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   if (!body && !f) return res.status(400).json({ error: 'Prázdná zpráva.' });
   const r = await q('INSERT INTO support_messages (supporter_id, sender, body, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ' + SUP_COLS, [req.user.id, 'user', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null]);
   res.json({ ok: true, msg: r.rows[0] });
@@ -422,7 +485,8 @@ app.get('/support/file/:id(\\d+)', wrap(async (req, res) => {
   const r = await q('SELECT supporter_id, file_name, file_type, file_data FROM support_messages WHERE id=$1', [parseInt(req.params.id, 10)]);
   const m = r.rows[0]; if (!m || !m.file_data) return res.status(404).end();
   if (!isAdmin && m.supporter_id !== uid) return res.status(403).end();
-  res.set('Content-Type', m.file_type || 'application/octet-stream').set('Content-Disposition', (req.query.dl ? 'attachment' : 'inline') + '; filename*=UTF-8\'\'' + encodeURIComponent(m.file_name || 'soubor')).set('Cache-Control', 'private, max-age=86400').send(m.file_data);
+  const inlineOk = /^image\/(png|jpeg|gif|webp)$/.test(m.file_type || '') || m.file_type === 'application/pdf';
+  res.set('Content-Type', inlineOk ? m.file_type : 'application/octet-stream').set('X-Content-Type-Options', 'nosniff').set('Content-Security-Policy', "default-src 'none'; sandbox").set('Content-Disposition', (req.query.dl || !inlineOk ? 'attachment' : 'inline') + '; filename*=UTF-8\'\'' + encodeURIComponent(m.file_name || 'soubor')).set('Cache-Control', 'private, max-age=86400').send(m.file_data);
 }));
 
 app.get('/ai-chat', wrap(requireUser), (req, res) => { if (!req.user.ai_chat_on) return res.redirect('/'); res.send(V.aiChatPage(req.user)); });
@@ -599,6 +663,26 @@ app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) =
 }));
 // Admin: Převody podpory
 // ── Živá podpora (admin) ─────────────────────────────────────────────────
+// 2FA správce: nastavení (QR) a ověření kódu
+app.get('/admin/2fa', wrap(async (req, res) => {
+  const s = readCookie(req, ADMIN_COOKIE); if (!s || s.kind !== 'admin' || !isAllowedAdmin(s)) return res.redirect('/login');
+  if (!ADMIN_2FA || s.tfa) return res.redirect('/admin');
+  let secret = await adminTotpSecret(s.pid); let setup = false;
+  if (!secret) { secret = b32enc(crypto.randomBytes(20)); setup = true; await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_pending_' + s.pid, secret]); }
+  const uri = 'otpauth://totp/' + encodeURIComponent('Best Series 2.0:' + (s.name || s.username || 'admin')) + '?secret=' + secret + '&issuer=' + encodeURIComponent('Best Series 2.0') + '&digits=6&period=30';
+  res.send(V.admin2faPage({ setup, secret, uri, error: req.query.err ? 'Kód nesedí. Zkuste to znovu.' : '' }));
+}));
+app.post('/admin/2fa', wrap(async (req, res) => {
+  const s = readCookie(req, ADMIN_COOKIE); if (!s || s.kind !== 'admin' || !isAllowedAdmin(s)) return res.redirect('/login');
+  if (rateLimited('2fa:' + s.pid, 10, 15 * 60e3)) return res.status(429).send(V.errorPage('Příliš mnoho pokusů', 'Zkuste to za 15 minut.', '/admin/2fa'));
+  let secret = await adminTotpSecret(s.pid); let pending = false;
+  if (!secret) { const r = await q("SELECT value FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); secret = (r.rows[0] || {}).value || null; pending = true; }
+  if (!secret || !totpOk(secret, req.body.code)) return res.redirect('/admin/2fa?err=1');
+  if (pending) { await q("INSERT INTO app_settings (key,value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", ['admin_totp_' + s.pid, secret]); await q("DELETE FROM app_settings WHERE key=$1", ['admin_totp_pending_' + s.pid]); await log(s, '2fa_setup', { pid: s.pid }); }
+  setCookie(req, res, ADMIN_COOKIE, Object.assign({}, s, { tfa: true, iat: undefined, exp: undefined }), 12 * 3600);
+  res.redirect('/admin');
+}));
+
 app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
   const online = await supportOnline();
   const threads = (await q(`SELECT s.id, s.nick, s.first_name, s.last_name, s.email,
@@ -631,7 +715,8 @@ app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
   res.redirect('/admin/podpora?msg=' + encodeURIComponent(on ? 'Podpora je ONLINE — uživatelé mohou psát.' : 'Podpora je OFFLINE.'));
 }));
 app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file'), wrap(async (req, res) => {
-  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000); const f = req.file || null;
+  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+  const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   let row = null;
   if (body || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null])).rows[0];
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });

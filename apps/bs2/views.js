@@ -1843,8 +1843,20 @@ function adminImport({ admin, result = null, error = '', holyosUrl, job = null }
     <div style="height:12px"></div><button class="btn" type="submit">Importovat</button></form></div>
   ${res}`, holyosUrl);
 }
+// 2FA správce (volitelné, BS2_ADMIN_2FA=1)
+function admin2faPage({ setup = false, secret = '', uri = '', error = '' }) {
+  const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(uri);
+  return authShell({ title: 'Ověření správce', esc, card: `
+    <h2>${setup ? 'Nastavení dvoufázového ověření' : 'Ověření správce'}</h2>
+    <p class="sub">${setup ? 'Naskenujte QR kód v aplikaci Google Authenticator / Microsoft Authenticator a zadejte vygenerovaný kód.' : 'Zadejte 6místný kód z aplikace Authenticator.'}</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    ${setup ? `<div style="text-align:center;margin:10px 0"><img src="${qr}" alt="QR" width="200" height="200" style="border-radius:12px;background:#fff;padding:8px"><div class="small muted" style="margin-top:6px">Ruční zadání: <code>${esc(secret)}</code></div></div>` : ''}
+    <form method="post" action="/admin/2fa"><label>Kód</label>${field({ name: 'code', value: '', icon: 'lock', placeholder: '123 456', auto: 'one-time-code', extra: 'inputmode="numeric" required autofocus' })}
+    <button class="btn" type="submit">Ověřit ${ICON.arrow}</button></form>
+    <p class="foot"><a href="/logout">Odhlásit</a></p>` });
+}
 function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
