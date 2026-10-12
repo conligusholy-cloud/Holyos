@@ -180,13 +180,21 @@
   .eq-g{position:relative;display:flex;flex-direction:column;border:1px dashed rgba(120,160,255,.35);border-radius:16px;padding:22px 10px 10px;flex:1 1 0}
   .eq-g .eq-gi{display:flex;gap:10px;align-items:stretch} .eq-g .eq-gi .eq-t{flex:1 1 0}
   .eq-gk{position:absolute;top:-10px;left:12px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--border2);color:var(--text2);white-space:nowrap}
-  .eq-g.g1{border-color:rgba(79,209,255,.55)} .eq-g.g1 .eq-gk{color:var(--accent2);border-color:rgba(79,209,255,.55)}
+  .eq-g.g1{border:0;padding:24px 12px 12px;background:linear-gradient(var(--bg),var(--bg)) padding-box,conic-gradient(from var(--eqa,0deg),#4fd1ff,#7c5cff,#2fe3a0,#4fd1ff) border-box;border:2px solid transparent;border-radius:18px;box-shadow:0 0 34px rgba(79,209,255,.35),0 0 80px rgba(124,92,255,.2);animation:eqspin 4s linear infinite,eqpulse 2.4s ease-in-out infinite;transform:scale(1.04);z-index:2}
+  @property --eqa{syntax:'<angle>';inherits:false;initial-value:0deg}
+  @keyframes eqspin{to{--eqa:360deg}}
+  @keyframes eqpulse{0%,100%{box-shadow:0 0 30px rgba(79,209,255,.3),0 0 70px rgba(124,92,255,.18)}50%{box-shadow:0 0 50px rgba(79,209,255,.6),0 0 110px rgba(124,92,255,.35)}}
+  .eq-g.g1 .eq-gk{color:#fff;border-color:rgba(79,209,255,.85);background:linear-gradient(90deg,var(--accent),var(--vio));box-shadow:0 6px 18px rgba(58,108,245,.5)}
+  .eq-g.g1 .eq-t{background:linear-gradient(180deg,rgba(30,134,224,.22),rgba(124,92,255,.14));border-color:rgba(79,209,255,.55)}
+  .eq-g.g1 .eq-t b{font-size:44px;background:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(79,209,255,.75))}
+  .eq-g.g1 .eq-t .eq-k{color:var(--accent2)} .eq-g.g1 .eq-t small{color:var(--text)}
+  .eq-star{position:absolute;right:12px;bottom:-11px;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:linear-gradient(90deg,#f5b400,#ff8a3d);color:#1a1200;box-shadow:0 6px 18px rgba(245,180,0,.45);white-space:nowrap}
   .eq-g.g2{border-color:rgba(124,92,255,.55)} .eq-g.g2 .eq-gk{color:#b9a7ff;border-color:rgba(124,92,255,.55)}
   .eq-g.g3{border-color:rgba(245,180,0,.5)} .eq-g.g3 .eq-gk{color:#ffd866;border-color:rgba(245,180,0,.5)}
   .eq .eq-t.res{align-self:center}
   .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
   .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
-  @media(max-width:720px){.eq{justify-content:flex-start;gap:8px}.eq-g{flex:none;padding:18px 8px 8px}.eq-g .eq-gi{gap:6px}.eq-gk{font-size:9px;left:8px}.eq-t{flex:none;width:104px;padding:8px 6px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
+  @media(max-width:720px){.eq-g.g1{transform:none}.eq-g.g1 .eq-t b{font-size:30px}.eq-star{font-size:9px;right:6px}.eq{justify-content:flex-start;gap:8px}.eq-g{flex:none;padding:18px 8px 8px}.eq-g .eq-gi{gap:6px}.eq-gk{font-size:9px;left:8px}.eq-t{flex:none;width:104px;padding:8px 6px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
   .czmap-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(79,209,255,.22))}
   .cz-pins{position:absolute;inset:0;pointer-events:none}
@@ -350,7 +358,7 @@
     <p class="lead" style="margin:0 0 16px">Bankovní domy dokážou prádlomat zainvestovat a stroj je zároveň zajištěním – prádlomat si ručí sám. Proto platí jedna matematická podmínka: prádlomat musí stát na takovém místě, kde jeho tržby pokryjí nájem, energie, servis i splátku úvěru.</p>
     <div class="eq-wrap">
       <div class="eq" id="eq">
-        <div class="eq-g g1"><span class="eq-gk">M · dramaticky ovlivňuje místo</span><div class="eq-gi">
+        <div class="eq-g g1"><span class="eq-gk">M · dramaticky ovlivňuje místo</span><span class="eq-star">★ 2 nejdůležitější položky</span><div class="eq-gi">
           <div class="eq-t rev" data-i="0"><span class="eq-k">tržby</span><b>T</b><small>tržby za měsíc</small></div>
           <div class="eq-op">−</div>
           <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>N</b><small>podle místa</small></div>
