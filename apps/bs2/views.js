@@ -492,16 +492,16 @@ function supporterCompounder(s) {
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
   .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1377/1142;overflow:visible}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
-  .cp .how-d{position:absolute;width:17%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+  .cp .how-d{position:absolute;width:9%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
   .cp .how-d i{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(79,209,255,.0);transition:border-color .3s}
   .cp .how-d span{position:absolute;left:50%;top:106%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.7);padding:1px 6px;border-radius:999px;opacity:0;transition:opacity .3s} .cp .how-d.on span{opacity:1}
   .cp .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
   .cp .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
   @keyframes howspin{to{transform:rotate(360deg)}}
   .cp .how-cust,.cp .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
-  .cp .how-cust{width:9%;aspect-ratio:1/2} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  .cp .how-cust{width:16%;aspect-ratio:1/2} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
   @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
-  .cp .how-bag{font-size:22px;z-index:4}
+  .cp .how-bag{font-size:30px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
   .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
   .cp .how-acc{position:absolute;right:-2%;top:-4%;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
@@ -627,31 +627,34 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:53,y:52},S={x:72,y:47},IN={x:-10,y:70},OUT={x:112,y:70};
+        var W={x:41,y:49},S={x:57,y:44},IN={x:-12,y:62},OUT={x:114,y:62};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
-        var total=0,cnt=0,min=6*60,PR=[[200,'Pračka 18 kg · 200 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč'],[150,'Pračka 8 kg · 150 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč']];
+        var total=0,cnt=0,min=6*60,PR=[[300,'Pračka 18 kg · 300 Kč',false],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++;
           min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
-          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+5,y:IN.y+6}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
-          put(cust,{x:W.x-13,y:W.y+16}); put(bag,{x:W.x-7,y:W.y+22}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
+          put(cust,{x:W.x-14,y:62}); put(bag,{x:W.x-6,y:72}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
           say('zaplatí na terminálu · '+pr[1],{x:W.x-6,y:W.y-14}); await wait(1300);
-          bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.45)'); await wait(700); bag.style.opacity=0;
+          bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
           w.classList.add('on'); say('pere…',{x:W.x,y:W.y-16}); await wait(3200); w.classList.remove('on');
-          bag.style.transition='none'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.45)'); bag.style.opacity=1; await wait(30);
-          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.45)'); say('přehodí do sušičky',{x:(W.x+S.x)/2,y:S.y-16}); await wait(950);
-          sd.classList.add('on'); say('suší…',{x:S.x,y:S.y-16}); await wait(3000); sd.classList.remove('on');
+          var END=W;
+          bag.style.transition='none'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
+          if(pr[2]){
+            bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('přehodí do sušičky · 50 Kč',{x:(W.x+S.x)/2,y:S.y-16}); await wait(950);
+            sd.classList.add('on'); say('suší…',{x:S.x,y:S.y-16}); await wait(3000); sd.classList.remove('on'); END=S;
+          }
           // platba se připíše
-          var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=S.x+'%'; c.style.top=S.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
+          var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
           n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
           // odchází s čistým prádlem
-          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:S.x-6,y:S.y+24},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:S.x-12,y:S.y+18}); say('hotovo — odchází s čistým prádlem',{x:S.x,y:S.y-14}); await wait(700);
-          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+5,y:OUT.y+6}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:62}); say('hotovo — odchází s čistým prádlem',{x:END.x,y:END.y-14}); await wait(700);
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
           await wait(900); customer();
         }
         customer();
