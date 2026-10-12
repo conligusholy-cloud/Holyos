@@ -640,11 +640,11 @@ function supporterCompounder(s) {
         var total=0,cnt=0,min=6*60,T0=performance.now()-6*60*SPEED,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
-        function face(m){ var mm=m%1440; if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; n.textContent='0 zákazníků'; } lastM=mm;
-          hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mm); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mm); }
+        function face(m){ var mm=m%1440, mi=Math.floor(mm); if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; n.textContent='0 zákazníků'; } lastM=mm;
+          hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
         function simWait(minutes){ return wait(minutes*SPEED); }
-        (function clockLoop(){ min=Math.floor((performance.now()-T0)/SPEED); face(min); requestAnimationFrame(clockLoop); })();
+        (function clockLoop(){ var f=(performance.now()-T0)/SPEED; min=Math.floor(f); face(f); requestAnimationFrame(clockLoop); })();
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
           await simWait(3+Math.random()*8);
