@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>První prádlomat: prověř místo a spočítej ekonomiku před nákupem</title>
+<meta name="description" content="Než utratíte 750 000 Kč za první prádlomat, prověřte si místo. Videa, kalkulačka ekonomiky, checklist a verdikt místa do 7 dnů. Cena se odečte z ceny stroje." />
+<meta name="theme-color" content="#0c1826" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z' fill='%231e86e0'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0c1826; --card:#13233a; --card2:#102a45; --line:rgba(46,140,224,.3);
+    --blue:#1e86e0; --blue-soft:#4aa3ea; --text:#e9f0f7; --muted:#9db6cd; --muted2:#7fa6c8;
+    --green:#22c55e; --red:#ef4444; --amber:#eab308;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 70% at 50% -10%, rgba(30,134,224,.14), transparent 55%), var(--bg)}
+  a{color:inherit;text-decoration:none}
+  .wrap{width:100%;max-width:960px;margin:0 auto;padding:24px 20px 70px}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:34px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+  .brand .drop{width:34px;height:34px;border-radius:9px;background:var(--blue);display:flex;align-items:center;justify-content:center}
+  .brand .drop svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:1.8}
+  .brand .name{font-weight:600;letter-spacing:.14em;font-size:16px}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#a9cdec;background:rgba(30,134,224,.14);border:.5px solid rgba(46,140,224,.4);padding:6px 13px;border-radius:999px}
+  .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-soft);margin-bottom:10px}
+  h1{font-weight:700;font-size:clamp(28px,5.5vw,44px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{color:var(--blue-soft)}
+  h2{font-weight:700;font-size:clamp(21px,3.5vw,28px);line-height:1.2;margin-bottom:14px}
+  .lead{font-size:16.5px;line-height:1.65;color:var(--muted);max-width:640px;margin-top:16px}
+  .sec{margin-top:54px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--blue);color:#fff;font-weight:700;font-size:15.5px;padding:14px 26px;border-radius:12px;border:0;cursor:pointer;font-family:inherit;transition:background .15s,transform .1s}
+  .btn:hover{background:#1a76c6;transform:translateY(-1px)}
+  .btn.sec{background:transparent;border:1px solid var(--line);color:var(--text)}
+  .cta-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:24px}
+  .cta-row .hint{font-size:13px;color:var(--muted2)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  .card{background:var(--card);border:.5px solid var(--line);border-radius:16px;padding:20px 20px 22px}
+  .card h3{font-size:16.5px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{font-size:14.5px;color:var(--muted)}
+  .card ul{padding-left:18px;display:flex;flex-direction:column;gap:5px}
+  .card.ok{border-color:rgba(34,197,94,.4)} .card.no{border-color:rgba(239,68,68,.35)}
+  .list{display:flex;flex-direction:column;gap:12px}
+  .item{display:flex;gap:14px;background:var(--card);border:.5px solid var(--line);border-radius:14px;padding:16px 18px}
+  .item .n{flex:none;width:34px;height:34px;border-radius:10px;background:rgba(30,134,224,.18);color:var(--blue-soft);font-weight:800;display:flex;align-items:center;justify-content:center}
+  .item b{display:block;font-size:15.5px;margin-bottom:3px}
+  .item span{font-size:14px;color:var(--muted)}
+  mark{background:rgba(234,179,8,.22);color:#f6e27a;padding:0 5px;border-radius:5px;font-weight:600}
+  /* kalkulačka */
+  .calc{background:var(--card);border:.5px solid var(--line);border-radius:18px;padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .calc .inp label{display:block;font-size:13px;color:var(--muted2);margin:12px 0 4px}
+  .calc .inp label b{color:var(--text);float:right}
+  .calc input[type=range]{width:100%;accent-color:var(--blue)}
+  .calc input[type=number]{width:100%;background:#0e1e33;border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:14px}
+  .cascade{display:flex;flex-direction:column;gap:7px}
+  .cascade .row{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:.5px solid rgba(46,140,224,.22);border-radius:10px;padding:9px 13px;font-size:14px}
+  .cascade .row span{color:var(--muted)}
+  .cascade .row b{font-variant-numeric:tabular-nums}
+  .cascade .row.minus b{color:#fca5a5}
+  .cascade .row.total{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.1);font-size:16px}
+  .cascade .row.total.neg{border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.1)}
+  .calc .note{grid-column:1/-1;font-size:12.5px;color:var(--muted2)}
+  /* ceny */
+  .prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+  .price{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;display:flex;flex-direction:column}
+  .price.hi{border-color:var(--blue);box-shadow:0 14px 40px -18px rgba(30,134,224,.6)}
+  .price .tag{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--blue-soft);margin-bottom:8px}
+  .price .amt{font-size:36px;font-weight:800;line-height:1}
+  .price .amt small{font-size:14px;font-weight:500;color:var(--muted2)}
+  .price .was{font-size:13px;color:var(--muted2);text-decoration:line-through;margin-top:4px}
+  .price ul{list-style:none;margin:16px 0 20px;display:flex;flex-direction:column;gap:7px;font-size:14px;color:var(--muted)}
+  .price li::before{content:'✓';color:var(--green);font-weight:800;margin-right:8px}
+  .price .btn{margin-top:auto}
+  .credit{background:rgba(34,197,94,.1);border:.5px solid rgba(34,197,94,.4);border-radius:14px;padding:16px 18px;margin-top:16px;font-size:14.5px}
+  /* faq */
+  details{background:var(--card);border:.5px solid var(--line);border-radius:12px;padding:14px 18px;margin-bottom:10px}
+  summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none;display:flex;justify-content:space-between;gap:10px}
+  summary::after{content:'+';color:var(--blue-soft);font-weight:800}
+  details[open] summary::after{content:'–'}
+  details p{margin-top:10px;font-size:14.5px;color:var(--muted)}
+  /* formulář */
+  form{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:24px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  form label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted2)}
+  form input,form textarea,form select{background:#0e1e33;border:1px solid var(--line);border-radius:10px;padding:11px 13px;color:var(--text);font-family:inherit;font-size:14.5px;width:100%}
+  form input:focus,form textarea:focus,form select:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(30,134,224,.15)}
+  form .full{grid-column:1/-1}
+  form .chk{flex-direction:row;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--muted)}
+  form .chk input{width:auto;margin-top:3px}
+  .msg{grid-column:1/-1;font-size:14px;padding:10px 13px;border-radius:10px;display:none}
+  .msg.ok{display:block;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.4);color:#8ef0b4}
+  .msg.err{display:block;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:#fca5a5}
+  .foot{margin-top:60px;font-size:12.5px;color:var(--muted2);text-align:center}
+  @media (max-width:720px){.calc,form{grid-template-columns:1fr}.wrap{padding-bottom:50px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a class="brand" href="/"><span class="drop"><svg viewBox="0 0 24 24"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg></span><span class="name">PRÁDLOMATY</span></a>
+    <span class="badge">Prověření místa · Best Series</span>
+  </div>
+
+  <section class="hero">
+    <div class="eyebrow">První prádlomat</div>
+    <h1>Než utratíte 750 000 Kč za první prádlomat, <span class="g">prověřte si místo.</span></h1>
+    <p class="lead">Za 7 dní budete vědět, jestli má vaše místo šanci – a kolik si na něm reálně vyděláte. Postaveno na provozních datech z vlastní sítě prádlomatů, ne na odhadech z internetu.</p>
+    <div class="cta-row">
+      <a class="btn" href="#objednat" data-cta="hero">Chci prověřit své místo</a>
+      <a class="btn sec" href="#kalkulacka">Spočítat rychlý odhad</a>
+      <span class="hint">Cena analýzy se vám odečte z ceny prádlomatu.</span>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Pro koho to je</h2>
+    <div class="cards">
+      <div class="card ok"><h3>✅ Pro vás, pokud…</h3><ul>
+        <li>zvažujete svůj první (nebo druhý) prádlomat a máte v hlavě konkrétní místo,</li>
+        <li>máte kapitál 0,5–2 mil. Kč nebo dostupné financování,</li>
+        <li>chcete rozhodnutí postavit na číslech, ne na pocitu,</li>
+        <li>nechcete zjistit až po roce, že se místo nevyplatí.</li></ul></div>
+      <div class="card no"><h3>❌ Není to pro vás, pokud…</h3><ul>
+        <li>hledáte zaručený pasivní příjem bez práce,</li>
+        <li>chcete flotilu 10+ strojů (pro vás je <a href="/home" style="color:var(--blue-soft)">model Compounder</a>),</li>
+        <li>zatím nemáte žádné místo ani kapitál – začněte zdarma na <a href="/info" style="color:var(--blue-soft)">/info</a>.</li></ul></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Co dostanete</h2>
+    <div class="list">
+      <div class="item"><div class="n">1</div><div><b>6 krátkých videí (cca 60 minut)</b><span>Nejčastější chyby prvního prádlomatu, 5 kritérií dobrého místa, přípojky a nájemní smlouva, jak číst ekonomiku, prvních 90 dní provozu, jak rozhodnout.</span></div></div>
+      <div class="item"><div class="n">2</div><div><b>Kalkulačka ekonomiky prádlomatu (Excel / Google Sheets)</b><span>Měsíční kaskáda tržba → DPH → servis → energie → nájem → splátka → čistý výnos. Scénáře na 5 let, citlivost, bod zvratu v cyklech za den.</span></div></div>
+      <div class="item"><div class="n">3</div><div><b>Checklist prověření místa</b><span>2 strany: co si změřit, spočítat a vyjednat, než podepíšete nájem.</span></div></div>
+      <div class="item"><div class="n">4</div><div><b>3 anonymizované případové studie z naší sítě</b><span>Dobré, průměrné a špatné místo – reálná čísla cyklů a výnosů po 1., 3. a 6. měsíci. <mark>[DOPLNIT: pásma z vlastních lokalit]</mark></span></div></div>
+      <div class="item"><div class="n">5</div><div><b>Verdikt vašeho místa do 7 dnů</b><span>Pošlete adresu, fotky a podmínky nájmu. Vrátíme vám jednoznačné <b style="display:inline">ANO / ANO S PODMÍNKOU / NE</b> a 1 stranu odůvodnění. Když řekneme NE, prádlomat vám na to místo neprodáme.</span></div></div>
+      <div class="item"><div class="n">6</div><div><b>Kredit na stroj</b><span>Celou cenu analýzy vám odečteme z ceny prádlomatu při nákupu do 6 měsíců. <mark>[DOPLNIT: přesné podmínky kreditu]</mark></span></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="kalkulacka">
+    <h2>Rychlý odhad ekonomiky</h2>
+    <p class="lead" style="margin:0 0 16px">Posuňte, kolik cyklů praní denně na místě čekáte. Čísla jsou <b>ilustrativní</b> – přesný výpočet pro vaše místo je součástí analýzy.</p>
+    <div class="calc">
+      <div class="inp">
+        <label>Cyklů praní za den <b id="vC">8</b></label><input type="range" id="c" min="1" max="24" value="8" />
+        <label>Cena praní (Kč s DPH)</label><input type="number" id="pw" value="300" min="0" />
+        <label>Cena sušení (Kč s DPH)</label><input type="number" id="pd" value="350" min="0" />
+        <label>Podíl zákazníků, kteří i suší <b id="vD">60 %</b></label><input type="range" id="d" min="0" max="100" value="60" />
+        <label>Nájem (Kč / měsíc)</label><input type="number" id="rent" value="5000" min="0" />
+        <label>Splátka financování (Kč / měsíc, 0 = hotově)</label><input type="number" id="loan" value="0" min="0" />
+      </div>
+      <div class="cascade" id="cas"></div>
+      <div class="note">Předpoklady (ilustrativní): 30 dní, DPH 21 %, servisní smlouva 13 % z tržby bez DPH, energie a voda 9,5 % z tržby bez DPH. Nezahrnuje marketing, pojištění ani daň z příjmu. Skutečná obsazenost se u jednotlivých míst liší <mark>[DOPLNIT: reálné pásmo cyklů/den z vlastní sítě]</mark>.</div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>Jak to probíhá</h2>
+    <div class="list">
+      <div class="item"><div class="n">1</div><div><b>Objednáte a zaplatíte</b><span>Do pár minut přijde e-mail s přístupem k videím, kalkulačce a checklistu.</span></div></div>
+      <div class="item"><div class="n">2</div><div><b>Vyplníte formulář místa</b><span>Adresa, fotky, nájem, přípojky. Podle checklistu si spočítáte pěší frekvenci (2× 30 minut).</span></div></div>
+      <div class="item"><div class="n">3</div><div><b>Do 7 dnů dostanete verdikt</b><span>ANO / ANO S PODMÍNKOU / NE + odůvodnění. Ve variantě PLUS k tomu 30min hovor a prověření druhého místa.</span></div></div>
+    </div>
+  </section>
+
+  <section class="sec" id="cena">
+    <h2>Cena</h2>
+    <div class="prices">
+      <div class="price hi">
+        <div class="tag">Základ · zaváděcí cena</div>
+        <div class="amt">4 900 <small>Kč s DPH</small></div>
+        <div class="was">běžně 7 900 Kč</div>
+        <ul><li>6 videí + kalkulačka + checklist</li><li>3 případové studie</li><li>Verdikt 1 místa do 7 dnů</li><li>Kredit 4 900 Kč na stroj</li></ul>
+        <a class="btn" href="#objednat" data-cta="basic" onclick="pickVariant('basic')">Objednat Základ</a>
+      </div>
+      <div class="price">
+        <div class="tag">Plus · osobní</div>
+        <div class="amt">9 900 <small>Kč s DPH</small></div>
+        <div class="was">&nbsp;</div>
+        <ul><li>Vše ze Základu</li><li>30min hovor s námi</li><li>Verdikt 2 míst</li><li>Prioritní termín výroby stroje</li><li>Kredit 9 900 Kč na stroj</li></ul>
+        <a class="btn sec" href="#objednat" data-cta="plus" onclick="pickVariant('plus')">Objednat Plus</a>
+      </div>
+    </div>
+    <div class="credit">💡 <b>Záruka:</b> pokud do 14 dnů usoudíte, že vám analýza nepomohla, vrátíme peníze. A pokud koupíte prádlomat, zaplatili jste vlastně nulu – cena se odečte.</div>
+  </section>
+
+  <section class="sec">
+    <h2>Časté otázky</h2>
+    <details><summary>Vždyť mi chcete prodat stroj. Jak můžu věřit, že analýza bude poctivá?</summary><p>Právě proto má verdikt tři možnosti včetně NE – a při NE vám stroj na to místo neprodáme. Nespokojený provozovatel na špatném místě nás stojí víc než jeden neuskutečněný prodej. Analýza vám navíc dává pásma výnosů, ne jedno „pěkné" číslo.</p></details>
+    <details><summary>Co když místo nevyjde?</summary><p>Dostanete odůvodnění, co chybí (domácnosti, frekvence, nájem), a checklist můžete použít na další místo. Ve variantě Plus prověříme dvě místa.</p></details>
+    <details><summary>Co když už mám místo vybrané a smlouvu skoro podepsanou?</summary><p>Tím spíš. 7 dní a 4 900 Kč je zlomek toho, co stojí špatný nájem na 5 let.</p></details>
+    <details><summary>Jak dlouho mám přístup k materiálům?</summary><p>Neomezeně, včetně aktualizací kalkulačky.</p></details>
+    <details><summary>Z čeho vycházejí vaše čísla?</summary><p>Z provozu vlastní sítě prádlomatů Best Series <mark>[DOPLNIT: počet lokalit a od kdy]</mark>. Konkrétní lokality anonymizujeme, pásma jsou reálná.</p></details>
+    <details><summary>Kdo za tím stojí?</summary><p><mark>[DOPLNIT: jméno, foto a 2 věty o autorovi – Tomáš Holý, Best Series s.r.o.]</mark></p></details>
+  </section>
+
+  <section class="sec" id="objednat">
+    <h2>Objednávka</h2>
+    <p class="lead" style="margin:0 0 16px">Vyplňte údaje, ozveme se do 1 pracovního dne s platebními údaji a přístupem. <mark>[DOPLNIT: platební brána – po zapojení platba ihned]</mark></p>
+    <form id="f" novalidate>
+      <label>Jméno a příjmení *<input name="name" required maxlength="255" autocomplete="name" /></label>
+      <label>E-mail *<input name="email" type="email" required maxlength="255" autocomplete="email" /></label>
+      <label>Telefon<input name="phone" maxlength="40" autocomplete="tel" /></label>
+      <label>Varianta<select name="variant" id="variant"><option value="basic">Základ – 4 900 Kč</option><option value="plus">Plus – 9 900 Kč</option></select></label>
+      <label class="full">Adresa místa, které chcete prověřit *<input name="address" required maxlength="500" placeholder="Ulice, město – případně „ještě nemám, hledám v Brně"" /></label>
+      <label class="full">Poznámka<textarea name="note" rows="3" maxlength="2000" placeholder="Nájem, plocha, co o místě víte…"></textarea></label>
+      <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Souhlasím se zpracováním údajů pro účely prověření místa a kontaktování ohledně prádlomatů (Best Series s.r.o.). <mark>[DOPLNIT: odkaz na zásady a VOP]</mark></span></label>
+      <div class="msg" id="msg"></div>
+      <div class="full"><button class="btn" type="submit" id="sub">Odeslat objednávku</button></div>
+    </form>
+  </section>
+
+  <div class="foot">© Best Series s.r.o. · <a href="/" style="color:var(--blue-soft)">pradlomaty.info</a> · <a href="/info" style="color:var(--blue-soft)">Informace o prádlomatu</a></div>
+</div>
+
+<script>
+(function(){
+  // ── Analytika (best-effort, stejný beacon jako ostatní stránky) ──
+  var SID = (function(){ try { var k='misto_sid', v=sessionStorage.getItem(k); if(!v){ v=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem(k,v);} return v; } catch(e){ return 'anon'; } })();
+  function track(ev, props){ try { navigator.sendBeacon('/api/compounder/track', new Blob([JSON.stringify({ sid:SID, event:ev, props:props||{}, path:'/misto', lang:'cs' })], { type:'application/json' })); } catch(e){} }
+  track('misto_view');
+  document.querySelectorAll('[data-cta]').forEach(function(a){ a.addEventListener('click', function(){ track('misto_cta', { cta: a.getAttribute('data-cta') }); }); });
+
+  // ── Rychlý odhad (ilustrativní kaskáda, stejné předpoklady jako BS2 simulace) ──
+  var $ = function(id){ return document.getElementById(id); };
+  var fmt = function(n){ return Math.round(n).toLocaleString('cs-CZ') + ' Kč'; };
+  function calc(){
+    var c=+$('c').value, pw=+$('pw').value||0, pd=+$('pd').value||0, d=(+$('d').value)/100, rent=+$('rent').value||0, loan=+$('loan').value||0;
+    $('vC').textContent=c; $('vD').textContent=Math.round(d*100)+' %';
+    var gross=(c*pw + c*d*pd)*30, net=gross/1.21, vat=gross-net, svc=net*0.13, energy=net*0.095;
+    var profit=net-svc-energy-rent-loan;
+    var rows=[['Tržba za měsíc (s DPH)',gross,''],['DPH 21 %',-vat,'minus'],['Tržba bez DPH',net,''],['Servisní smlouva 13 %',-svc,'minus'],['Energie a voda 9,5 %',-energy,'minus'],['Nájem',-rent,'minus']];
+    if(loan>0) rows.push(['Splátka financování',-loan,'minus']);
+    rows.push(['Čistý měsíční výnos (před daní)',profit,'total'+(profit<0?' neg':'')]);
+    $('cas').innerHTML=rows.map(function(r){ return '<div class="row '+r[2]+'"><span>'+r[0]+'</span><b>'+(r[1]<0?'− ':'')+fmt(Math.abs(r[1]))+'</b></div>'; }).join('');
+  }
+  ['c','pw','pd','d','rent','loan'].forEach(function(id){ $(id).addEventListener('input', calc); });
+  calc();
+
+  // ── Formulář ──
+  window.pickVariant=function(v){ $('variant').value=v; };
+  var f=$('f'), msg=$('msg'), sub=$('sub');
+  f.addEventListener('submit', async function(e){
+    e.preventDefault();
+    msg.className='msg';
+    var fd=new FormData(f), body={};
+    fd.forEach(function(v,k){ body[k]=v; });
+    body.consent = !!fd.get('consent'); body.sid=SID;
+    if(!body.name||!body.email||!body.address){ msg.className='msg err'; msg.textContent='Vyplňte prosím jméno, e-mail a adresu místa.'; return; }
+    if(!body.consent){ msg.className='msg err'; msg.textContent='Potvrďte prosím souhlas se zpracováním údajů.'; return; }
+    sub.disabled=true; sub.textContent='Odesílám…';
+    try {
+      var r=await fetch('/api/compounder/misto/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var j=await r.json().catch(function(){ return {}; });
+      if(r.ok && j.ok){ msg.className='msg ok'; msg.textContent='Děkujeme! Objednávku jsme přijali, ozveme se do 1 pracovního dne.'; f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
+      else { msg.className='msg err'; msg.textContent=(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'; }
+    } catch(err){ msg.className='msg err'; msg.textContent='Odeslání se nepodařilo, zkuste to prosím znovu.'; }
+    sub.disabled=false; sub.textContent='Odeslat objednávku';
+  });
+})();
+</script>
+</body>
+</html>

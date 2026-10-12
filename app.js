@@ -880,6 +880,8 @@ function serveCompounderPage(file) {
 const serveVlastniKapital = serveCompounderPage('vlastni-kapital.html');
 const serveFinancovani = serveCompounderPage('financovani.html');
 const serveSchuzka = serveCompounderPage('schuzka.html');
+// První prádlomat: prověř místo — prodejní stránka produktu (pradlomaty.info/misto).
+const serveMisto = serveCompounderPage('misto.html');
 // Předjednaná místa — veřejný přehled (pradlomaty.info/location).
 function serveLocationOverview(req, res) {
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -907,6 +909,7 @@ app.use((req, res, next) => {
   if (req.path === '/schuzka' || req.path === '/schuzka/') return serveSchuzka(req, res);
   if (req.path === '/portal' || req.path === '/portal/') return serveCompounderPortal(req, res);
   if (req.path === '/location' || req.path === '/location/') return serveLocationOverview(req, res);
+  if (req.path === '/misto' || req.path === '/misto/') return serveMisto(req, res);
   if (req.path === '/ai' || req.path === '/ai/') return serveAiSpecialist(req, res);
   // Zkrácený odkaz na AI specialistu: /s/<kód> → 302 na /ai?t=<token>.
   if (req.path.startsWith('/s/')) {

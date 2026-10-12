@@ -2362,6 +2362,80 @@ router.post('/portal/purchase-inquiry', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── VEŘEJNÉ: „První prádlomat: prověř místo" (pradlomaty.info/misto) ────────
+// POST /api/compounder/misto/interest — předobjednávka / zájem o prověření místa.
+// Založí lead (source 'misto') nebo k existujícímu (stejný e-mail) připíše poznámku
+// + event, a upozorní majitele (zvonek). Bez tokenu — veřejný formulář, rate-limit po IP.
+const mistoSchema = z.object({
+  name: z.string().trim().min(2).max(255),
+  email: z.string().trim().email().max(255),
+  phone: z.string().trim().max(40).optional().nullable(),
+  address: z.string().trim().min(3).max(500),
+  variant: z.enum(['basic', 'plus']).default('basic'),
+  note: z.string().trim().max(2000).optional().nullable(),
+  sid: z.string().trim().max(64).optional().nullable(),
+  consent: z.coerce.boolean(),
+});
+router.post('/misto/interest', async (req, res, next) => {
+  try {
+    const parsed = mistoSchema.safeParse(req.body || {});
+    if (!parsed.success) return res.status(400).json({ ok: false, error: 'Vyplňte prosím jméno, e-mail a adresu místa.' });
+    const d = parsed.data;
+    if (!d.consent) return res.status(400).json({ ok: false, error: 'Bez souhlasu se zpracováním údajů nemůžeme místo prověřit.' });
+    if (!locRateOk(clientIp(req), 'misto')) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
+    if (await _isBlocked(d.email, d.phone)) return res.json({ ok: true });
+    const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
+    const variantLabel = d.variant === 'plus' ? 'PLUS 9 900 Kč' : 'ZÁKLAD 4 900 Kč';
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const noteText = '[' + stamp + '] PROVĚŘENÍ MÍSTA (pradlomaty.info/misto) — varianta ' + variantLabel
+      + '\nMísto: ' + d.address
+      + (phone ? ('\nTel: ' + phone) : '')
+      + (d.note ? ('\nPoznámka: ' + d.note) : '');
+    const existing = await prisma.compounderLead.findFirst({
+      where: { email: { equals: d.email, mode: 'insensitive' } },
+      orderBy: { created_at: 'desc' },
+      select: { id: true, notes: true, phone: true },
+    });
+    let leadId;
+    if (existing) {
+      leadId = existing.id;
+      await prisma.compounderLead.update({
+        where: { id: leadId },
+        data: { phone: existing.phone || phone || undefined, notes: existing.notes ? (existing.notes + '\n\n' + noteText) : noteText },
+      });
+    } else {
+      const lead = await prisma.compounderLead.create({
+        data: {
+          name: d.name, email: d.email, phone, role: 'compounder', lang: 'cs',
+          source: 'misto', notes: noteText,
+          ip: clientIp(req), user_agent: (req.headers['user-agent'] || '').slice(0, 1000) || null,
+        },
+        select: { id: true },
+      });
+      leadId = lead.id;
+    }
+    prisma.compounderEvent.create({ data: {
+      sid: d.sid || ('misto:' + leadId), event: 'misto_interest',
+      props: { lead_id: leadId, variant: d.variant, address: d.address.slice(0, 300), existing: !!existing },
+      path: '/misto', lang: 'cs', ip: clientIp(req),
+    } }).catch(() => {});
+    try {
+      const userIds = await resolveOwnerUserIds();
+      for (const userId of userIds) {
+        await createNotification({
+          userId, type: 'compounder_lead',
+          title: '📍 Prověření místa: ' + d.name + ' (' + variantLabel + ')',
+          body: d.address.slice(0, 160) + (phone ? (' · ' + phone) : '') + ' · ' + d.email,
+          link: '/modules/prodejni-objednavky/index.html',
+          meta: { lead_id: leadId, source: 'misto', variant: d.variant },
+        });
+      }
+    } catch (e) { console.error('[compounder] misto notifikace:', e && e.message); }
+    console.log('[compounder] Prověření místa: lead #' + leadId + ' (' + variantLabel + ')' + (existing ? ' [existující]' : ''));
+    return res.status(existing ? 200 : 201).json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/set-password  { t: token, password }
 // Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
 const setPwSchema = z.object({
