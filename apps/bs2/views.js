@@ -79,6 +79,7 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .svc-h{display:flex;flex-direction:column;gap:2px;padding:2px 4px 0} .svc-h>b{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2)} .svc-h>span{font-size:12.5px;color:var(--text2);line-height:1.4}
 .svc-free{border-color:rgba(47,227,160,.5);background:linear-gradient(135deg,rgba(47,227,160,.1),rgba(14,22,40,.72))} .svc-free .svc-h>b{color:var(--ok)}
 @media(max-width:860px){.svc-split{grid-template-columns:1fr}}
+.svc-own.dim,.svc-free.dim{opacity:.35;filter:grayscale(.6);transition:opacity .3s} .svc-own.dim .btn,.svc-free.dim .btn{pointer-events:none}
 .pfo{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border2);background:rgba(4,8,16,.5);cursor:pointer;transition:border-color .2s,background .2s} .pfo input{display:none} .pfo>b{font-size:14px} .pfo>span{font-size:12px;color:var(--text2);line-height:1.4} .pfo>span b{color:var(--text)} .pfo.on{border-color:var(--ok);background:rgba(47,227,160,.08);box-shadow:0 0 0 1px rgba(47,227,160,.3)}
 @media(max-width:640px){.pfc{grid-template-columns:1fr!important}}
 .soon{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 12px;border-radius:12px;border:1px dashed var(--border2);color:var(--text2);font-size:13px}
@@ -980,7 +981,12 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
   ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec && !x.hidden_card); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
-  ${sec === 'services' ? `<div class="svc-split"><div class="svc-own"><div class="svc-h"><b>Vlastní místo</b><span>Zaplatíte Najít místo a Přípojky. Místo i přípojky jsou <b>Vaše</b> — máte k nim právní vazbu. DC nelze uplatnit.</span></div>` : `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">`}${list.map(sv => {
+  ${sec === 'services' ? `<div class="card svc-q" style="margin:0 0 14px"><b style="font-size:16px">Chcete mít místo ve své správě, nebo ve správě Best Series?</b>
+    <div class="pfc" id="svc-mgmt" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+      <label class="pfo on"><input type="radio" name="svc-mgmt" value="own" checked><b>Ve své správě</b><span>Místo i přípojky jsou <b>Vaše</b>. Pokud místo neumíte najít, zaplatíte si Najít místo; pokud neumíte udělat přípojky, zaplatíte si Přípojky. DC nelze uplatnit.</span></label>
+      <label class="pfo"><input type="radio" name="svc-mgmt" value="bs"><b>Ve správě Best Series</b><span>Místo i přípojky zajistí Best Series na vlastní smlouvu — <b>zdarma</b>. Místo není Vaše, nemáte k němu právní vazbu.</span></label>
+    </div></div>
+  <div class="svc-split"><div class="svc-own" id="svc-own"><div class="svc-h"><b>Ve své správě</b><span>Objednejte jen to, co neumíte zajistit sami.</span></div>` : `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">`}${list.map(sv => {
     const net = sv.net;
     if (sv.mode === 'percent') return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
       <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${esc(String(sv.percent).replace('.', ','))} % z obratu</div><div class="small muted">cena včetně DPH · počítá se z obratu prádlomatu${sv.no_dc ? ' · <b style="color:#f59e0b">DC nelze uplatnit</b>' : ' · DC půjde uplatnit'}</div>
@@ -997,7 +1003,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <div style="margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tuto službu nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Koupit</button></div>
       ${bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric"><button type="button" class="dc-max"></button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}${sec === 'services' ? `</div>
-    <div class="card svc-free" style="margin:0;display:flex;flex-direction:column"><div class="svc-h"><b>Místo zdarma</b><span>Druhá cesta — nic neplatíte.</span></div>
+    <div class="card svc-free" id="svc-free" style="margin:0;display:flex;flex-direction:column"><div class="svc-h"><b>Ve správě Best Series — zdarma</b><span>Nic neplatíte.</span></div>
       <p class="small" style="margin:10px 0 0;line-height:1.5">Neplatíte Najít místo ani Přípojky. Místo i přípojky zajišťuje <b>Best Series</b> na vlastní smlouvu — místo <b>není Vaše</b>, nemáte k němu žádnou právní vazbu.</p>
       <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em;color:var(--ok)">0 Kč</div><div class="small muted">bez poplatků za místo a přípojky</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:place_free" data-name="Místo zdarma" data-ask="Mám zájem o místo zdarma — místo i přípojky zajistí Best Series na vlastní smlouvu (místo nebude Vaše).">Mám zájem o místo zdarma</button></div></div>
@@ -1030,6 +1036,9 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
         var rm=c.querySelector('.dc-room'); if(rm)rm.textContent=fmt(room)+' DC'; recalc(); }
       r.addEventListener('input',upd); upd();
     });
+    (function(){ var g=document.getElementById('svc-mgmt'), own=document.getElementById('svc-own'), fr=document.getElementById('svc-free'); if(!g)return;
+      function up(){ var v=(g.querySelector('input:checked')||{}).value; [].forEach.call(g.querySelectorAll('.pfo'),function(l){ l.classList.toggle('on', l.querySelector('input').checked); }); if(own) own.classList.toggle('dim', v!=='own'); if(fr) fr.classList.toggle('dim', v!=='bs'); }
+      g.addEventListener('change',up); up(); })();
     [].forEach.call(document.querySelectorAll('.svc-quote'),function(b){b.addEventListener('click',function(){
       var ask = b.getAttribute('data-ask') || ('Poptat nacenění: '+b.getAttribute('data-name')+'?');
       if(!confirm(ask+'\\n\\nOzveme se s individuální nabídkou.'))return;
