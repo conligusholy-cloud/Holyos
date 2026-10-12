@@ -516,7 +516,7 @@ function supporterCompounder(s) {
   .cp .how-cas{position:absolute;right:-32%;top:24%;width:200px;display:flex;flex-direction:column;gap:6px;z-index:6}
   .cp .how-cas .cs,.cp .how-cas button{opacity:0;transform:translateY(-14px) scale(.96);transition:opacity .45s,transform .45s cubic-bezier(.2,1.3,.4,1)} .cp .how-cas .in{opacity:1;transform:none}
   .cp .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
-  .cp .how-cas .cs span{font-size:11px;color:var(--text2);line-height:1.2} .cp .how-cas .cs small{display:block;font-size:10px;color:var(--text3)} .cp .how-cas .cs b{font-size:16px;color:#fff;margin-top:2px;white-space:nowrap}
+  .cp .how-cas .cs small{display:block;font-size:10.5px;color:var(--text2);line-height:1.35;margin-top:3px} .cp .how-cas .cs small i{font-style:normal;color:#fff} .cp .how-cas .cs b{font-size:clamp(18px,2.2vw,24px);letter-spacing:-.02em;color:#fff;margin-top:2px;white-space:nowrap}
   .cp .how-cas .cs.m{border-color:rgba(245,158,11,.4)} .cp .how-cas .cs.m b{color:#f59e0b}
   .cp .how-cas .cs.r{border-color:rgba(47,227,160,.6);background:rgba(47,227,160,.12);box-shadow:0 10px 30px rgba(47,227,160,.25)} .cp .how-cas .cs.r b{font-size:22px;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-cas button{align-self:flex-end}
@@ -634,12 +634,9 @@ function supporterCompounder(s) {
           <div class="how-coins" id="how-coins"></div>
         </div>
         <div class="how-cas" id="how-cas" hidden>
-          <div class="cs"><span>× 30,5 dne = měsíc <small>s DPH</small></span><b id="hs-m">0 Kč</b></div>
-          <div class="cs"><span>bez DPH 21 %</span><b id="hs-mn">0 Kč</b></div>
-          <div class="cs m"><span>− nájem <small>bez DPH</small></span><b>− 3 000 Kč</b></div>
-          <div class="cs m"><span>− servis Best Series <small>13 % z tržby s DPH</small></span><b id="hs-serv">0 Kč</b></div>
-          <div class="cs m"><span>− energie <small>9,5 % bez DPH · s DPH 15 % <i id="hs-env"></i></small></span><b id="hs-en">0 Kč</b></div>
-          <div class="cs r"><span>zůstane Vám měsíčně <small>bez DPH · před splátkou</small></span><b id="hs-res">0 Kč</b></div>
+          <div class="cs"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>× 30,5 dne · s DPH<br>bez DPH <i id="hs-mn"></i></small></div>
+          <div class="cs m"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">0 Kč</b><small>nájem 3 000 Kč<br>servis 13 % <i id="hs-serv"></i><br>energie <i id="hs-en"></i> (s DPH 15 % <i id="hs-env"></i>)</small></div>
+          <div class="cs r"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">0 Kč</b><small>bez DPH · před splátkou</small></div>
           <button type="button" class="btn sec sm" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
@@ -662,7 +659,7 @@ function supporterCompounder(s) {
           var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
           var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-3000-serv-en;
           document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
-          document.getElementById('hs-serv').textContent='− '+fmtK(serv); document.getElementById('hs-en').textContent='− '+fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); document.getElementById('hs-res').textContent=fmtK(res);
+          document.getElementById('hs-cost').textContent='− '+fmtK(3000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); document.getElementById('hs-res').textContent=fmtK(res);
           var box=document.getElementById('how-cas'); box.hidden=false; var items=box.querySelectorAll('.cs,button'); items.forEach(function(el,i){ setTimeout(function(){ el.classList.add('in'); },400+i*650); }); }
         function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
           hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
