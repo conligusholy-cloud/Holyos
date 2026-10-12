@@ -2440,6 +2440,49 @@ router.post('/misto/interest', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/compounder/misto/map — veřejná anonymizovaná mapa českých prádlomatů
+// pro pradlomaty.info/misto. Zdroj: SIS kiosk-values (stejná data jako tab Compounding),
+// jen Česko, bez kódů a obratů. Adresy (label) geokódujeme přes Nominatim a trvale
+// cachujeme v AppSetting (misto.kiosk_geo), max. 12 nových adres na jeden request
+// (Nominatim limit 1 req/s) — zbytek se doplní při dalším volání.
+const MISTO_GEO_KEY = 'misto.kiosk_geo';
+let _mistoMapCache = { at: 0, data: null };
+router.get('/misto/map', async (req, res, next) => {
+  try {
+    if (_mistoMapCache.data && (Date.now() - _mistoMapCache.at) < 10 * 60 * 1000) return res.json(_mistoMapCache.data);
+    const kiosks = await portalKiosks();
+    const isCz = (k) => {
+      const cur = String(k.currency || '').toUpperCase();
+      if (cur === 'PLN' || cur === 'EUR') return false;
+      if (cur === 'CZK') return true;
+      return !/polsk|poland|\bpl\b|irsk|ireland|\bie\b/i.test((k.label || '') + ' ' + (k.companyName || ''));
+    };
+    const cz = kiosks.filter(isCz).filter((k) => k.label);
+    const geo = (await getSetting(MISTO_GEO_KEY, { type: 'json', defaultValue: {} })) || {};
+    let budget = 12, changed = false;
+    for (const k of cz) {
+      const label = String(k.label).trim();
+      if (geo[label] !== undefined) continue;
+      if (budget-- <= 0) break;
+      const g = await geocodeAddress(label + ', Česko').catch(() => null);
+      geo[label] = g ? { lat: g.lat, lng: g.lon } : null;
+      changed = true;
+      await new Promise((r) => setTimeout(r, 1100));
+    }
+    if (changed) setSetting(MISTO_GEO_KEY, geo, { type: 'json', scope: 'compounding', description: 'Geokódované adresy kiosků pro mapu /misto' }).catch(() => {});
+    const spots = cz.map((k) => {
+      const g = geo[String(k.label).trim()];
+      if (!g) return null;
+      const city = String(k.label).split(',')[0].trim().slice(0, 60);
+      return { city, lat: Math.round(g.lat * 1000) / 1000, lng: Math.round(g.lng * 1000) / 1000 };
+    }).filter(Boolean);
+    const out = { total: cz.length, spots };
+    if (spots.length) _mistoMapCache = { at: Date.now(), data: out };
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 // POST /api/compounder/set-password  { t: token, password }
 // Nastaví/změní heslo přihlášeného leada. Vyžaduje platný token (z odkazu nebo session).
 const setPwSchema = z.object({

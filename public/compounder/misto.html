@@ -183,14 +183,14 @@
   .czmap-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 0 24px rgba(79,209,255,.25))}
   .cz-pins{position:absolute;inset:0;pointer-events:none}
-  .cz-pin{position:absolute;width:6.5%;transform:translate(-50%,-60%) scale(.2);opacity:0;transition:transform .6s cubic-bezier(.2,1.4,.4,1),opacity .4s}
+  .cz-pin{position:absolute;width:4.2%;pointer-events:auto;transform:translate(-50%,-60%) scale(.2);opacity:0;transition:transform .6s cubic-bezier(.2,1.4,.4,1),opacity .4s}
   .cz-pin.in{opacity:1;transform:translate(-50%,-60%) scale(1)}
   .cz-pin img{width:100%;height:auto;display:block;filter:drop-shadow(0 8px 14px rgba(0,0,0,.7)) drop-shadow(0 0 10px rgba(79,209,255,.35))}
   .cz-pin span{position:absolute;left:50%;top:100%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.75);border:1px solid rgba(79,209,255,.35);padding:1px 6px;border-radius:999px}
   .cz-tl{display:flex;align-items:center;gap:16px;margin-top:14px;flex-wrap:wrap}
   .cz-year b{font-size:30px;font-weight:800;letter-spacing:-.02em;display:block;line-height:1;background:linear-gradient(90deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent} .cz-year span{font-size:12px;color:var(--text2)}
   .cz-track{flex:1;min-width:200px;display:flex;gap:4px} .cz-track i{flex:1;height:8px;border-radius:4px;background:rgba(120,160,255,.12);border:1px solid var(--border);position:relative;transition:background .3s} .cz-track i.on{background:linear-gradient(90deg,var(--accent),var(--vio))} .cz-track i::after{content:attr(data-y);position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:10.5px;color:var(--text3)}
-  @media(max-width:720px){.cz-pin{width:9%}.cz-pin span{display:none}.cz-track i::after{font-size:9px}}
+  @media(max-width:720px){.cz-pin{width:6%}.cz-pin span{display:none}.cz-track i::after{font-size:9px}}
   .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
   @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
 </style>
@@ -446,16 +446,19 @@
   // ── Formulář ──
   // ── Mapa ČR + časová osa od 2019: FLEX miniatury se objevují podle roku instalace ──
   (function(){
-    // Zdroj: seznam lokalit prádlomatů (město, souřadnice, rok). Doplňuje provozovatel.
-    var SPOTS = [];
+    // Zdroj: /api/compounder/misto/map — české lokality ze SIS (tab Compounding), anonymizované.
     var sec=document.getElementById('mapa'); if(!sec) return;
-    if(!SPOTS.length){ return; } // bez dat sekci neukazujeme
-    sec.hidden=false;
+    fetch('/api/compounder/misto/map').then(function(r){ return r.ok?r.json():null; }).then(function(d){
+      var SPOTS=(d&&d.spots)||[]; if(!SPOTS.length) return;
+      sec.hidden=false; init(SPOTS, d.total||SPOTS.length);
+    }).catch(function(){});
+    function init(SPOTS,TOTAL){
     var LON0=12.05,LON1=18.95,LAT0=48.5,LAT1=51.15;
     var pins=document.getElementById('cz-pins'), yEl=document.getElementById('cz-year'), cEl=document.getElementById('cz-count'), track=document.getElementById('cz-track');
     var Y0=2019, Y1=new Date().getFullYear(); var years=[]; for(var y=Y0;y<=Y1;y++) years.push(y);
     track.innerHTML=years.map(function(y){ return '<i data-y="'+y+'"></i>'; }).join('');
-    pins.innerHTML=SPOTS.map(function(p){ var x=(p.lng-LON0)/(LON1-LON0)*100, yv=(LAT1-p.lat)/(LAT1-LAT0)*100; return '<div class="cz-pin" data-y="'+p.year+'" style="left:'+x.toFixed(2)+'%;top:'+yv.toFixed(2)+'%"><img src="/assets/pradlomat-flex.webp?v=1" alt="" loading="lazy"><span>'+(p.city||'')+'</span></div>'; }).join('');
+    // Rok instalace SIS neposílá → lokality přibývají na ose rovnoměrně v pořadí seznamu.
+    pins.innerHTML=SPOTS.map(function(p,i){ var x=(p.lng-LON0)/(LON1-LON0)*100, yv=(LAT1-p.lat)/(LAT1-LAT0)*100; var yr=years[Math.min(years.length-1,Math.floor(i/SPOTS.length*years.length))]; return '<div class="cz-pin" data-y="'+yr+'" title="'+(p.city||'').replace(/"/g,'')+'" style="left:'+x.toFixed(2)+'%;top:'+yv.toFixed(2)+'%"><img src="/assets/pradlomat-flex.webp?v=1" alt="" loading="lazy"></div>'; }).join('');
     var pinEls=pins.querySelectorAll('.cz-pin'), timer=null;
     function play(){ if(timer) clearInterval(timer); pinEls.forEach(function(e){ e.classList.remove('in'); }); var i=0;
       function step(){ var y=years[i]; yEl.textContent=y; track.querySelectorAll('i').forEach(function(t,k){ t.classList.toggle('on',k<=i); });
@@ -464,6 +467,7 @@
       step(); timer=setInterval(step,1100); }
     document.getElementById('cz-again').addEventListener('click',play);
     var started=false; var io=new IntersectionObserver(function(en){ if(en[0].isIntersecting&&!started){ started=true; play(); } },{threshold:.3}); io.observe(sec);
+    }
   })();
   // ── Rovnice financování: postupné rozsvěcení členů + tržba živě z animace ──
   (function(){
