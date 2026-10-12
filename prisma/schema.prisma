@@ -3055,6 +3055,8 @@ model Invoice {
 
   // DPH režim
   vat_regime String @default("standard") @db.VarChar(30) // standard, reverse_charge, eu_goods, non_vat_payer
+  // Jazyk dokladu (PDF/e-mail): cs | en
+  language String @default("cs") @db.VarChar(5)
 
   // Data
   date_issued   DateTime  @db.Date
@@ -7107,4 +7109,33 @@ model LeasingDocument {
   @@index([leasing_company_id])
   @@index([category])
   @@map("leasing_documents")
+}
+
+
+// Softwarová podpora stroje — měsíční paušál (např. 60 EUR bez DPH), automatická fakturace, jazyk cs/en.
+model SoftwareSubscription {
+  id              Int      @id @default(autoincrement())
+  kiosk_code      String   @unique @db.VarChar(40) // stroj v terénu (SIS)
+  contract_number String?  @db.VarChar(80)
+  company_id      Int?
+  buyer_ico       String?  @db.VarChar(20)
+  buyer_dic       String?  @db.VarChar(30) // DIČ / VAT ID
+  customer_name   String?  @db.VarChar(255)
+  email           String?  @db.VarChar(255)
+  amount          Decimal  @default(60) @db.Decimal(12, 2) // měsíční cena bez DPH
+  currency        String   @default("EUR") @db.VarChar(3)
+  vat_regime      String   @default("standard") @db.VarChar(20) // standard | reverse_charge | outside_scope
+  vat_rate        Decimal  @default(21) @db.Decimal(5, 2) // použije se jen u standard
+  language        String   @default("cs") @db.VarChar(5) // jazyk faktury a e-mailu: cs | en
+  active          Boolean  @default(true)
+  auto_send       Boolean  @default(false)
+  billing_day     Int      @default(1) // den v měsíci, kdy se vystaví faktura za běžný měsíc (předem)
+  last_billed_ym  String?  @db.VarChar(7) // "2026-10" — naposledy vyfakturovaný měsíc
+  note            String?  @db.Text
+  created_by_user_id Int?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@index([active])
+  @@map("software_subscriptions")
 }

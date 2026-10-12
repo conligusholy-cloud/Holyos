@@ -175,6 +175,7 @@
         <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders',null,event)">📨 Upomínky</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers',null,event)">📦 Účetní firma</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('servicebilling',null,event)">🔧 Fakturace servisních smluv</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('softwarebilling',null,event)">💻 Softwarová podpora</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -500,6 +501,37 @@
           </table>
         </div>
       </div><!-- /tab-servicebilling -->
+
+      <!-- TAB: SOFTWAROVÁ PODPORA -->
+      <div class="tab-pane" id="tab-softwarebilling">
+        <div class="pb-card">
+          <h3>💻 Automatická fakturace softwarové podpory</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+            <button class="btn btn-primary btn-sm" onclick="openSwModal()">+ Nová softwarová podpora</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadSoftwareBilling()">🔄 Obnovit</button>
+          </div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5;">
+            U každého stroje se v nastavený <b>den v měsíci</b> automaticky vystaví faktura za <b>běžný měsíc (předem)</b>:
+            <b>pevná měsíční cena bez DPH</b> (výchozí 60 EUR). U zahraničních odběratelů nastav <b>jazyk faktury EN</b> a <b>DPH režim</b>
+            (přenesená daňová povinnost / mimo působnost). Faktura má vlastní řadu <b>SW-RRRR-NNNNN</b>, vznikne jako <b>koncept</b>;
+            e-mailem (ve zvoleném jazyce) se odešle <b>automaticky</b> jen u smluv se zapnutým <b>Odesílat automaticky</b>. Měsíc se nikdy nevyfakturuje dvakrát.
+          </div>
+        </div>
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>📋 Softwarová podpora strojů</h3>
+          <table class="data-table" id="sw-table" style="width:100%;">
+            <thead><tr><th>Stroj (kód)</th><th>Odběratel</th><th>Smlouva</th><th>Cena / měs.</th><th>DPH</th><th>Jazyk</th><th>Den</th><th>Auto e-mail</th><th>Naposledy</th><th>Stav</th><th></th></tr></thead>
+            <tbody><tr><td colspan="11" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>🧾 Vystavené faktury za softwarovou podporu</h3>
+          <table class="data-table" id="swinv-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Jazyk</th><th>Stav</th><th></th></tr></thead>
+            <tbody><tr><td colspan="8" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div><!-- /tab-softwarebilling -->
 
     </div>
   </div>
@@ -1627,7 +1659,7 @@
       // Zvýrazni kliknuté tlačítko (u faktur jsou dvě – Vydané / Přijaté)
       if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
       else {
-        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6 };
+        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6, softwarebilling: 7 };
         const b = document.querySelectorAll('.tab-btn')[btnIdxMap[name] ?? 0];
         if (b) b.classList.add('active');
       }
@@ -1641,6 +1673,7 @@
       if (name === 'reminders') loadRemindersTab();
       if (name === 'handovers') loadHandovers();
       if (name === 'servicebilling') loadServiceBilling();
+      if (name === 'softwarebilling') loadSoftwareBilling();
     };
 
 
@@ -1854,6 +1887,166 @@
       if (r.data.skipped) return alert(r.data.reason === 'no_revenue' ? 'Za předchozí měsíc je nulový obrat — nic k fakturaci.' : 'Tento měsíc už byl vyfakturován.');
       alert('Vystaveno: ' + r.data.invoice_number + ' (' + Number(r.data.total).toLocaleString('cs-CZ') + ' ' + r.data.currency + ')' + (r.data.sent ? ' — odesláno e-mailem.' : ' — koncept (odešleš ho tlačítkem Odeslat v seznamu faktur).') + (r.data.send_error ? '\nPoznámka: automatické odeslání selhalo — ' + r.data.send_error : ''));
       loadServiceBilling(); loadSummary();
+    };
+
+    // ─── Tab „Softwarová podpora" (pevný měsíční paušál, jazyk cs/en, API /api/compounder/software-subscriptions) ──
+    window.__sws = [];
+    const SW_REGIME = { standard: 'DPH', reverse_charge: 'přenesená daň. povinnost (0 %)', outside_scope: 'mimo působnost DPH (0 %)' };
+    window.loadSoftwareBilling = async function() {
+      const tb = document.querySelector('#sw-table tbody');
+      const r = await api('GET', '/api/compounder/software-subscriptions');
+      if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="11" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
+      window.__sws = r.data;
+      tb.innerHTML = r.data.length ? r.data.map(s => '<tr>' +
+        '<td><b>' + escapeHtml(s.kiosk_code) + '</b></td>' +
+        '<td>' + escapeHtml(s.customer_name || '—') + (s.buyer_dic ? '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(s.buyer_dic) + '</div>' : '') + '</td>' +
+        '<td>' + escapeHtml(s.contract_number || '—') + '</td>' +
+        '<td>' + Number(s.amount).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(s.currency) + '</td>' +
+        '<td>' + (s.vat_regime === 'standard' ? Number(s.vat_rate) + ' %' : escapeHtml(SW_REGIME[s.vat_regime] || s.vat_regime)) + '</td>' +
+        '<td><b>' + (s.language === 'en' ? 'EN' : 'CS') + '</b></td><td>' + s.billing_day + '.</td>' +
+        '<td>' + (s.auto_send ? '✅ ano' : 'ne (koncept)') + '</td>' +
+        '<td>' + escapeHtml(s.last_billed_ym || '—') + '</td>' +
+        '<td>' + (s.active ? '<span style="color:#16a34a;font-weight:600;">aktivní</span>' : '<span style="color:var(--text2);">vypnuto</span>') + '</td>' +
+        '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openSwModal(' + s.id + ')">Upravit</button> ' +
+        '<button class="btn btn-secondary btn-sm" title="Vystavit fakturu za běžný měsíc hned" onclick="billSwNow(' + s.id + ')">Vyfakturovat teď</button> ' +
+        '<button class="btn btn-danger btn-sm" onclick="deleteSw(' + s.id + ')">Smazat</button></td></tr>').join('')
+        : '<tr><td colspan="11" class="empty-hint">Zatím žádná softwarová podpora. Přidej ji tlačítkem „+ Nová softwarová podpora".</td></tr>';
+      const ri = await api('GET', '/api/accounting/invoices?source=software_billing&limit=100');
+      const tb2 = document.querySelector('#swinv-table tbody');
+      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
+      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'EUR') + '</td><td>' + (i.language === 'en' ? 'EN' : 'CS') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendSwInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
+        : '<tr><td colspan="8" class="empty-hint">Zatím žádné vystavené faktury za softwarovou podporu.</td></tr>';
+    };
+    window.openSwModal = async function(id) {
+      const s = id ? window.__sws.find(x => x.id === id) : null;
+      const kiosks = await loadKiosks();
+      if (!window.__companies) { const rc = await api('GET', '/api/wh/companies'); window.__companies = (rc.status === 200 && Array.isArray(rc.data)) ? rc.data : []; }
+      const used = new Set((window.__sws || []).map(x => x.kiosk_code));
+      if (!kiosks.length && !s) { window.__kiosks = null; alert('Stroje z Compoundingu se nepodařilo načíst' + (window.__kioskErr ? ': ' + window.__kioskErr : '') + '. Zkontroluj SIS_KIOSK_API_KEY na serveru.'); return; }
+      const kObj = s ? kiosks.find(k => k.code === s.kiosk_code) : null;
+      const kioskLabel = s ? (kObj ? (kObj.label || kObj.code) + ' (' + kObj.code + ')' : s.kiosk_code) : '';
+      const v = (k, d) => escapeHtml(String(s && s[k] != null ? s[k] : d));
+      const sel = (k, val, d) => ((s ? s[k] : d) === val ? ' selected' : '');
+      const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(580px,94vw); max-height:92vh; overflow:auto;">
+            <h3 style="margin-top:0;">${s ? 'Upravit softwarovou podporu' : '+ Nová softwarová podpora'}</h3>
+            <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
+              <label>Stroj (Compounding) *</label>${comboHtml('sw-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, s ? s.kiosk_code : '', !!s, inp)}
+              <label>Odběratel *</label><div><input id="sw-name" value="${v('customer_name','')}" placeholder="Doplní se z Compoundingu po výběru stroje" oninput="swNameEdited()" style="${inp}"><input type="hidden" id="sw-companyid" value="${s && s.company_id ? s.company_id : ''}"><div id="sw-conote" style="font-size:11px;color:var(--text2);margin-top:3px;"></div></div>
+              <label>IČO / Company ID</label><input id="sw-ico" value="${v('buyer_ico','')}" placeholder="doplň, pokud chybí" style="${inp}">
+              <label>DIČ / VAT ID</label><input id="sw-dic" value="${v('buyer_dic','')}" placeholder="např. DE123456789" style="${inp}">
+              <label>E-mail pro fakturu</label><input id="sw-email" type="email" value="${v('email','')}" placeholder="doplň, pokud chybí" style="${inp}">
+              <label>Číslo smlouvy</label><input id="sw-contract" value="${v('contract_number','')}" placeholder="např. SW-2026-001" style="${inp}">
+              <label>Jazyk faktury a e-mailu</label><select id="sw-lang" style="${inp}"><option value="cs"${sel('language','cs','cs')}>Čeština (CS)</option><option value="en"${sel('language','en','cs')}>English (EN)</option></select>
+              <label>Cena za měsíc (bez DPH)</label><div style="display:flex;gap:8px;"><input id="sw-amount" type="number" step="0.01" min="0" value="${v('amount',60)}" style="${inp}"><input id="sw-cur" maxlength="3" value="${v('currency','EUR')}" style="${inp}width:90px;"></div>
+              <label>DPH režim</label><select id="sw-regime" onchange="swRegimeChanged()" style="${inp}"><option value="standard"${sel('vat_regime','standard','standard')}>Tuzemsko — účtovat DPH</option><option value="reverse_charge"${sel('vat_regime','reverse_charge','standard')}>EU — přenesená daňová povinnost (0 %)</option><option value="outside_scope"${sel('vat_regime','outside_scope','standard')}>Mimo EU — mimo působnost DPH (0 %)</option></select>
+              <label id="sw-vatlbl">Sazba DPH (%)</label><input id="sw-vat" type="number" step="0.01" min="0" value="${v('vat_rate',21)}" style="${inp}">
+              <label>Den fakturace v měsíci</label><input id="sw-day" type="number" min="1" max="28" value="${v('billing_day',1)}" style="${inp}">
+              <label>Poznámka</label><input id="sw-note" value="${v('note','')}" style="${inp}">
+              <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="sw-active" type="checkbox" ${!s || s.active ? 'checked' : ''}> automaticky fakturovat</label>
+              <label>Odesílání faktur</label><label style="display:flex;gap:8px;align-items:flex-start;"><input id="sw-auto" type="checkbox" ${s && s.auto_send ? 'checked' : ''} style="margin-top:3px;"> <span>Odesílat automaticky e-mailem po vystavení<br><span style="font-size:11px;color:var(--text2);">Nezaškrtnuto = faktura zůstane jako koncept a odešleš ji ručně tlačítkem „Odeslat".</span></span></label>
+              <label>Testovací e-mail</label><div><div style="display:flex;gap:8px;"><input id="sw-testto" type="email" placeholder="na jaký e-mail poslat test" value="${escapeHtml((window.currentUser && window.currentUser.email) || '')}" style="${inp}"><button type="button" class="btn btn-secondary btn-sm" onclick="sendSwTest()" style="white-space:nowrap;">✉ Poslat test</button></div><div id="sw-testres" style="font-size:11.5px;color:var(--text2);margin-top:4px;">Pošle ukázkovou fakturu ve zvoleném jazyce (nic se nevystaví).</div></div>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+              <button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveSw(${s ? s.id : 0})">Uložit</button>
+            </div>
+          </div>
+        </div>`;
+      initCombo('sw-kiosk', kiosks.map(k => ({ v: k.code, label: (k.label || k.code) + ' (' + k.code + ')', tag: used.has(k.code) ? 'už má podporu' : '', hay: (k.label || '') + ' ' + k.code })), swKioskChanged);
+      swRegimeChanged();
+      if (s) applySwCompany(false, false);
+    };
+    window.swRegimeChanged = function() {
+      const std = document.getElementById('sw-regime').value === 'standard';
+      document.getElementById('sw-vat').disabled = !std;
+      document.getElementById('sw-vat').style.opacity = std ? '1' : '.5';
+      document.getElementById('sw-vatlbl').style.opacity = std ? '1' : '.5';
+    };
+    // Odběratel z Compoundingu; u zahraniční společnosti (jiná země než CZ) se předvolí EN + přenesená daňová povinnost (jde změnit).
+    function applySwCompany(forceFill, suggest) {
+      const name = document.getElementById('sw-name').value;
+      const c = matchCompany(name), note = document.getElementById('sw-conote');
+      document.getElementById('sw-companyid').value = c ? c.id : '';
+      if (c) {
+        const ico = document.getElementById('sw-ico'), dic = document.getElementById('sw-dic'), em = document.getElementById('sw-email');
+        if (forceFill || !ico.value.trim()) ico.value = c.ico || '';
+        if (forceFill || !dic.value.trim()) dic.value = c.dic || '';
+        if (forceFill || !em.value.trim()) em.value = c.email || '';
+        const foreign = c.country && String(c.country).toUpperCase() !== 'CZ';
+        if (suggest) {
+          document.getElementById('sw-lang').value = foreign ? 'en' : 'cs';
+          document.getElementById('sw-regime').value = foreign && c.dic ? 'reverse_charge' : 'standard';
+          swRegimeChanged();
+        }
+        note.textContent = '✓ nalezeno ve Společnostech' + (c.country ? ' (' + c.country + ')' : '') + (suggest && foreign ? ' — předvolen jazyk EN a přenesená daňová povinnost' : '') + ' — údaje můžeš upravit';
+        note.style.color = '#16a34a';
+      } else {
+        note.textContent = name.trim() ? 'Společnost zatím není v evidenci — doplň IČO, DIČ a e-mail, při první faktuře se založí.' : '';
+        note.style.color = '#f59e0b';
+      }
+    }
+    window.swNameEdited = function() { applySwCompany(false, false); };
+    window.swKioskChanged = function() {
+      const k = (window.__kiosks || []).find(x => x.code === document.getElementById('sw-kiosk').value);
+      if (k) {
+        const op = String(k.companyName || '').trim();
+        if (op) { document.getElementById('sw-name').value = op; document.getElementById('sw-ico').value = ''; document.getElementById('sw-dic').value = ''; document.getElementById('sw-email').value = ''; applySwCompany(true, true); }
+      }
+    };
+    function swBody() {
+      const g = (i) => document.getElementById(i).value.trim();
+      return { kiosk_code: g('sw-kiosk'), company_id: parseInt(document.getElementById('sw-companyid').value, 10) || null, customer_name: g('sw-name') || null,
+        buyer_ico: g('sw-ico') || null, buyer_dic: g('sw-dic') || null, email: g('sw-email') || null, contract_number: g('sw-contract') || null,
+        language: g('sw-lang') === 'en' ? 'en' : 'cs', amount: Number(g('sw-amount')) || 0, currency: (g('sw-cur') || 'EUR').toUpperCase(),
+        vat_regime: g('sw-regime'), vat_rate: Number(g('sw-vat')) || 0, billing_day: Math.min(28, Math.max(1, parseInt(g('sw-day'), 10) || 1)),
+        note: g('sw-note') || null, active: document.getElementById('sw-active').checked, auto_send: document.getElementById('sw-auto').checked };
+    }
+    window.saveSw = async function(id) {
+      const body = swBody();
+      if (!body.kiosk_code) return alert('Zadej kód stroje');
+      if (!body.customer_name) return alert('Vyplň odběratele.');
+      if (!(body.amount > 0)) return alert('Zadej cenu za měsíc.');
+      if (body.vat_regime === 'reverse_charge' && !body.buyer_dic) return alert('Pro přenesenou daňovou povinnost vyplň DIČ / VAT ID odběratele.');
+      if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
+      const r = id ? await api('PUT', '/api/compounder/software-subscriptions/' + id, body) : await api('POST', '/api/compounder/software-subscriptions', body);
+      if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status));
+      closeModal(); loadSoftwareBilling();
+    };
+    window.sendSwTest = async function() {
+      const res = document.getElementById('sw-testres');
+      const to = document.getElementById('sw-testto').value.trim();
+      if (!to) { res.style.color = '#ef4444'; res.textContent = 'Zadej e-mail, na který se má test poslat.'; return; }
+      res.style.color = 'var(--text2)'; res.textContent = 'Odesílám test…';
+      const b = swBody(); b.to = to; b.kiosk_code = b.kiosk_code || 'TEST';
+      const r = await api('POST', '/api/compounder/software-subscriptions/test-email', b);
+      if (r.status !== 200 || !r.data || !r.data.ok) { res.style.color = '#ef4444'; res.textContent = 'Chyba: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status); return; }
+      res.style.color = '#16a34a';
+      res.textContent = '✓ Odesláno na ' + r.data.sent_to + ' — odesílatel: ' + (r.data.sent_from || 'výchozí SMTP') + (r.data.via ? ' (přes ' + r.data.via + ')' : '') + '. Zkontroluj schránku (i spam).';
+    };
+    window.sendSwInvoice = async function(id, number, email) {
+      const to = prompt('Odeslat fakturu ' + number + ' na e-mail:', email || '');
+      if (to === null) return;
+      const r = await api('POST', '/api/compounder/software-subscriptions/send-invoice/' + id, { to: to.trim() || undefined });
+      if (r.status !== 200 || !r.data || !r.data.ok) return alert('Odeslání selhalo: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status));
+      alert('Faktura ' + number + ' odeslána na ' + r.data.sent_to + ' (odesílatel: ' + (r.data.sent_from || 'výchozí') + ').');
+      loadSoftwareBilling();
+    };
+    window.deleteSw = async function(id) {
+      if (!confirm('Smazat softwarovou podporu? Už vystavené faktury zůstanou.')) return;
+      const r = await api('DELETE', '/api/compounder/software-subscriptions/' + id);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadSoftwareBilling();
+    };
+    window.billSwNow = async function(id) {
+      if (!confirm('Vystavit fakturu za softwarovou podporu za běžný měsíc teď? (Vznikne koncept; e-mail se pošle jen u smluv s auto-odesíláním.)')) return;
+      const r = await api('POST', '/api/compounder/software-subscriptions/' + id + '/bill-now');
+      if (r.status !== 200 || !r.data) return alert('Chyba: ' + (r.data?.error || r.status));
+      if (r.data.skipped) return alert('Nic k fakturaci (' + r.data.reason + ').');
+      alert('Vystaveno: ' + r.data.invoice_number + ' (' + Number(r.data.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + r.data.currency + ')' + (r.data.sent ? ' — odesláno e-mailem.' : ' — koncept (odešleš ho tlačítkem Odeslat v seznamu faktur).') + (r.data.send_error ? '\nPoznámka: automatické odeslání selhalo — ' + r.data.send_error : ''));
+      loadSoftwareBilling(); loadSummary();
     };
 
     // ─── Tab "Odevzdání účetní firmě" — Fáze 10 ────────────────────────

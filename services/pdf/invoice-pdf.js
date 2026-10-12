@@ -101,19 +101,20 @@ function escapeHtml(s) {
 
 // ─── FORMÁTOVÁNÍ ────────────────────────────────────────────────────────────
 
-function fmtAmount(n, currency = 'CZK') {
+function fmtAmount(n, currency = 'CZK', locale = 'cs-CZ') {
   const num = Number(n) || 0;
-  return num.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currency;
+  return num.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + currency;
 }
 
-function fmtAmountPlain(n) {
+function fmtAmountPlain(n, locale = 'cs-CZ') {
   const num = Number(n) || 0;
-  return num.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return num.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtDate(d) {
+function fmtDate(d, lang) {
   if (!d) return '—';
   const dt = new Date(d);
+  if (lang === 'en') return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   return `${dt.getDate()}. ${dt.getMonth() + 1}. ${dt.getFullYear()}`;
 }
 
@@ -170,6 +171,39 @@ function buildQrUrl(spaydString) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encoded}`;
 }
 
+// ─── JAZYKY DOKLADU (cs / en) ───────────────────────────────────────────────
+const I18N = {
+  cs: {
+    ext: 'Externí č.:', supplier: 'Dodavatel', customer: 'Odběratel', ico: 'IČO', dic: 'DIČ',
+    issued: 'Vystaveno', duzp: 'DUZP', due: 'Splatnost', paymethod: 'Forma úhrady',
+    desc: 'Popis', qty: 'Množství', unit: 'Jedn.', unitprice: 'Cena / ks', vatpct: 'DPH', base: 'Základ', vat: 'DPH', total: 'Celkem',
+    config: 'Konfigurace / výbava', subtotal_all: 'Základ celkem', vat_all: 'DPH celkem', grand: 'Celkem k úhradě',
+    paydetails: 'Platební údaje', account: 'Bankovní účet', vs: 'Variabilní symbol', ks: 'Konstantní symbol', ss: 'Specifický symbol',
+    qr: 'QR platba', note: 'Poznámka:',
+    reverse: '<strong>Režim přenesení daňové povinnosti.</strong> Daň odvede zákazník (reverse charge) — dodání do jiného členského státu EU osobě registrované k DPH dle čl. 196 směrnice 2006/112/ES, § 92 zákona č. 235/2004 Sb.',
+    outside: '<strong>Plnění mimo působnost české DPH.</strong> Místo plnění mimo tuzemsko (§ 9 zákona č. 235/2004 Sb.); DPH není účtována.',
+    direction_ar: 'FAKTURA — daňový doklad', direction_ap: 'FAKTURA PŘIJATÁ', direction_tax: 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ',
+    pm: { bank_transfer: 'Bankovním převodem', cash: 'Hotově', card: 'Kartou', barter: 'Zápočet' },
+    types: { received: 'Faktura přijatá', issued: 'Faktura vydaná', credit_note_received: 'Dobropis přijatý', credit_note_issued: 'Dobropis vydaný', proforma_received: 'Záloha přijatá', proforma_issued: 'Zálohová faktura', tax_receipt: 'Daňový doklad k platbě' },
+    locale: 'cs-CZ',
+  },
+  en: {
+    ext: 'Ext. no.:', supplier: 'Supplier', customer: 'Customer', ico: 'Company ID', dic: 'VAT ID',
+    issued: 'Issue date', duzp: 'Tax point', due: 'Due date', paymethod: 'Payment method',
+    desc: 'Description', qty: 'Quantity', unit: 'Unit', unitprice: 'Unit price', vatpct: 'VAT', base: 'Net', vat: 'VAT', total: 'Total',
+    config: 'Configuration', subtotal_all: 'Total net', vat_all: 'Total VAT', grand: 'Total due',
+    paydetails: 'Payment details', account: 'Bank account', vs: 'Variable symbol', ks: 'Constant symbol', ss: 'Specific symbol',
+    qr: 'QR payment', note: 'Note:',
+    reverse: '<strong>Reverse charge.</strong> VAT to be accounted for by the customer — supply of services to a taxable person in another EU Member State (Article 196 of Council Directive 2006/112/EC).',
+    outside: '<strong>Outside the scope of Czech VAT.</strong> Place of supply is outside the Czech Republic; no VAT charged.',
+    direction_ar: 'INVOICE — tax document', direction_ap: 'RECEIVED INVOICE', direction_tax: 'TAX DOCUMENT FOR RECEIVED PAYMENT',
+    pm: { bank_transfer: 'Bank transfer', cash: 'Cash', card: 'Card', barter: 'Offset' },
+    types: { received: 'Received invoice', issued: 'Invoice', credit_note_received: 'Received credit note', credit_note_issued: 'Credit note', proforma_received: 'Received proforma', proforma_issued: 'Proforma invoice', tax_receipt: 'Tax document for payment' },
+    locale: 'en-GB',
+  },
+};
+function langOf(invoice) { return invoice && invoice.language === 'en' ? 'en' : 'cs'; }
+
 // ─── PŘÍPRAVA DAT PRO ŠABLONU ──────────────────────────────────────────────
 
 /**
@@ -179,6 +213,7 @@ function buildTemplateData(invoice, ourCompany) {
   if (!invoice) throw new Error('buildTemplateData: chybí invoice');
 
   const partner = invoice.company || {};
+  const lang = langOf(invoice); const L = I18N[lang]; const loc = L.locale;
   // Do tabulky jde jen krátký název položky; výbava/konfigurace se přesune do
   // odstavce pod tabulku (segmenty s „·" nebo Rám:/Barva:/Akceptory:/Vytápění:).
   const configNotes = [];
@@ -197,13 +232,13 @@ function buildTemplateData(invoice, ourCompany) {
     return {
       line_order: it.line_order,
       description: shortName,
-      quantity: fmtAmountPlain(it.quantity),
+      quantity: fmtAmountPlain(it.quantity, loc),
       unit: it.unit || 'ks',
-      unit_price: fmtAmountPlain(it.unit_price),
+      unit_price: fmtAmountPlain(it.unit_price, loc),
       vat_rate: `${Number(it.vat_rate || 0)}%`,
-      subtotal: fmtAmountPlain(it.subtotal),
-      vat_amount: fmtAmountPlain(it.vat_amount),
-      total: fmtAmountPlain(it.total),
+      subtotal: fmtAmountPlain(it.subtotal, loc),
+      vat_amount: fmtAmountPlain(it.vat_amount, loc),
+      total: fmtAmountPlain(it.total, loc),
     };
   });
 
@@ -224,15 +259,15 @@ function buildTemplateData(invoice, ourCompany) {
     // Hlavička
     invoice_number: invoice.invoice_number,
     external_number: invoice.external_number || '',
-    type_label: typeLabel(invoice.type),
+    type_label: L.types[invoice.type] || typeLabel(invoice.type),
     direction_label: invoice.type === 'tax_receipt'
-      ? 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ'
-      : (invoice.direction === 'ar' ? 'FAKTURA — daňový doklad' : 'FAKTURA PŘIJATÁ'),
+      ? L.direction_tax
+      : (invoice.direction === 'ar' ? L.direction_ar : L.direction_ap),
 
     // Datumy
-    date_issued: fmtDate(invoice.date_issued),
-    date_taxable: fmtDate(invoice.date_taxable || invoice.date_issued),
-    date_due: fmtDate(invoice.date_due),
+    date_issued: fmtDate(invoice.date_issued, lang),
+    date_taxable: fmtDate(invoice.date_taxable || invoice.date_issued, lang),
+    date_due: fmtDate(invoice.date_due, lang),
 
     // Dodavatel (my)
     supplier_name: ourCompany?.name || '',
@@ -255,7 +290,7 @@ function buildTemplateData(invoice, ourCompany) {
     variable_symbol: invoice.variable_symbol || invoice.invoice_number,
     constant_symbol: invoice.constant_symbol || '',
     specific_symbol: invoice.specific_symbol || '',
-    payment_method: paymentMethodLabel(invoice.payment_method || 'bank_transfer'),
+    payment_method: L.pm[invoice.payment_method || 'bank_transfer'] || paymentMethodLabel(invoice.payment_method || 'bank_transfer'),
 
     // Položky
     items,
@@ -263,13 +298,20 @@ function buildTemplateData(invoice, ourCompany) {
     config_notes: configNotes,
 
     // Sumy
-    subtotal: fmtAmount(invoice.subtotal, invoice.currency || 'CZK'),
-    vat_amount: fmtAmount(invoice.vat_amount, invoice.currency || 'CZK'),
-    total: fmtAmount(invoice.total, invoice.currency || 'CZK'),
+    subtotal: fmtAmount(invoice.subtotal, invoice.currency || 'CZK', loc),
+    vat_amount: fmtAmount(invoice.vat_amount, invoice.currency || 'CZK', loc),
+    total: fmtAmount(invoice.total, invoice.currency || 'CZK', loc),
     currency: invoice.currency || 'CZK',
 
     // Přenesení daňové povinnosti (EU plátce DPH) — právní doložka na faktuře.
-    reverse_charge: invoice.vat_regime === 'reverse_charge',
+    reverse_charge: invoice.vat_regime === 'reverse_charge' || invoice.vat_regime === 'outside_scope',
+    reverse_charge_text: invoice.vat_regime === 'outside_scope' ? L.outside : L.reverse,
+    lang,
+    l_ext: L.ext, l_supplier: L.supplier, l_customer: L.customer, l_ico: L.ico, l_dic: L.dic,
+    l_issued: L.issued, l_duzp: L.duzp, l_due: L.due, l_paymethod: L.paymethod,
+    l_desc: L.desc, l_qty: L.qty, l_unit: L.unit, l_unitprice: L.unitprice, l_vatpct: L.vatpct, l_base: L.base, l_vat: L.vat, l_total: L.total,
+    l_config: L.config, l_subtotal_all: L.subtotal_all, l_vat_all: L.vat_all, l_grand: L.grand,
+    l_paydetails: L.paydetails, l_account: L.account, l_vs: L.vs, l_ks: L.ks, l_ss: L.ss, l_qr: L.qr, l_note: L.note,
 
     // Poznámka
     note: invoice.note || '',

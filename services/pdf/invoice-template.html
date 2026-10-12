@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="{{lang}}">
 <head>
 <meta charset="UTF-8">
 <title>{{type_label}} {{invoice_number}}</title>
@@ -14,39 +14,39 @@
       <div class="t">{{direction_label}}</div>
       <div class="n">{{invoice_number}}</div>
       <div class="p">{{type_label}}</div>
-      {{#if external_number}}<div class="e">Externí č.: {{external_number}}</div>{{/if}}
+      {{#if external_number}}<div class="e">{{l_ext}} {{external_number}}</div>{{/if}}
     </div>
   </div>
 
   <div class="parties">
     <div class="party">
-      <span class="h">Dodavatel</span>
+      <span class="h">{{l_supplier}}</span>
       <div class="name">{{supplier_name}}</div>
       <div class="row">{{supplier_address}}</div>
-      {{#if supplier_ico}}<div class="row">IČO: {{supplier_ico}}</div>{{/if}}{{#if supplier_dic}}<div class="row">DIČ: {{supplier_dic}}</div>{{/if}}
+      {{#if supplier_ico}}<div class="row">{{l_ico}}: {{supplier_ico}}</div>{{/if}}{{#if supplier_dic}}<div class="row">{{l_dic}}: {{supplier_dic}}</div>{{/if}}
       {{#if supplier_email}}<div class="row">{{supplier_email}}</div>{{/if}}
       {{#if supplier_phone}}<div class="row">{{supplier_phone}}</div>{{/if}}
     </div>
     <div class="party">
-      <span class="h">Odběratel</span>
+      <span class="h">{{l_customer}}</span>
       <div class="name">{{customer_name}}</div>
       <div class="row">{{customer_address}}</div>
-      {{#if customer_ico}}<div class="row">IČO: {{customer_ico}}</div>{{/if}}{{#if customer_dic}}<div class="row">DIČ: {{customer_dic}}</div>{{/if}}
+      {{#if customer_ico}}<div class="row">{{l_ico}}: {{customer_ico}}</div>{{/if}}{{#if customer_dic}}<div class="row">{{l_dic}}: {{customer_dic}}</div>{{/if}}
     </div>
   </div>
 
   <div class="meta">
-    <div><div class="l">Vystaveno</div><div class="v">{{date_issued}}</div></div>
-    <div><div class="l">DUZP</div><div class="v">{{date_taxable}}</div></div>
-    <div><div class="l">Splatnost</div><div class="v">{{date_due}}</div></div>
-    <div><div class="l">Forma úhrady</div><div class="v">{{payment_method}}</div></div>
+    <div><div class="l">{{l_issued}}</div><div class="v">{{date_issued}}</div></div>
+    <div><div class="l">{{l_duzp}}</div><div class="v">{{date_taxable}}</div></div>
+    <div><div class="l">{{l_due}}</div><div class="v">{{date_due}}</div></div>
+    <div><div class="l">{{l_paymethod}}</div><div class="v">{{payment_method}}</div></div>
   </div>
 
   <table class="items">
     <thead>
       <tr>
-        <th class="r">#</th><th>Popis</th><th class="r">Množství</th><th>Jedn.</th><th class="r">Cena / ks</th>
-        <th class="r">DPH</th><th class="r">Základ</th><th class="r">DPH</th><th class="r">Celkem</th>
+        <th class="r">#</th><th>{{l_desc}}</th><th class="r">{{l_qty}}</th><th>{{l_unit}}</th><th class="r">{{l_unitprice}}</th>
+        <th class="r">{{l_vatpct}}</th><th class="r">{{l_base}}</th><th class="r">{{l_vat}}</th><th class="r">{{l_total}}</th>
       </tr>
     </thead>
     <tbody>
@@ -68,7 +68,7 @@
 
   {{#if has_config}}
   <div class="box">
-    <h3>Konfigurace / výbava</h3>
+    <h3>{{l_config}}</h3>
     {{#each config_notes}}
     <div class="row"><b>{{name}}</b> — {{cfg}}</div>
     {{/each}}
@@ -76,31 +76,31 @@
   {{/if}}
 
   <div class="sum">
-    <div class="row"><span>Základ celkem</span><strong>{{subtotal}}</strong></div>
-    <div class="row"><span>DPH celkem</span><strong>{{vat_amount}}</strong></div>
-    <div class="row total"><span>Celkem k úhradě</span><span>{{total}}</span></div>
+    <div class="row"><span>{{l_subtotal_all}}</span><strong>{{subtotal}}</strong></div>
+    <div class="row"><span>{{l_vat_all}}</span><strong>{{vat_amount}}</strong></div>
+    <div class="row total"><span>{{l_grand}}</span><span>{{total}}</span></div>
   </div>
 
   <div class="payment">
     <div class="box">
-      <h3>Platební údaje</h3>
-      {{#if bank_account}}<div class="row"><span class="label">Bankovní účet</span><span class="value">{{bank_account}}</span></div>{{/if}}
+      <h3>{{l_paydetails}}</h3>
+      {{#if bank_account}}<div class="row"><span class="label">{{l_account}}</span><span class="value">{{bank_account}}</span></div>{{/if}}
       {{#if iban}}<div class="row"><span class="label">IBAN</span><span class="value">{{iban}}</span></div>{{/if}}
-      <div class="row"><span class="label">Variabilní symbol</span><span class="value">{{variable_symbol}}</span></div>
-      {{#if constant_symbol}}<div class="row"><span class="label">Konstantní symbol</span><span class="value">{{constant_symbol}}</span></div>{{/if}}
-      {{#if specific_symbol}}<div class="row"><span class="label">Specifický symbol</span><span class="value">{{specific_symbol}}</span></div>{{/if}}
+      <div class="row"><span class="label">{{l_vs}}</span><span class="value">{{variable_symbol}}</span></div>
+      {{#if constant_symbol}}<div class="row"><span class="label">{{l_ks}}</span><span class="value">{{constant_symbol}}</span></div>{{/if}}
+      {{#if specific_symbol}}<div class="row"><span class="label">{{l_ss}}</span><span class="value">{{specific_symbol}}</span></div>{{/if}}
     </div>
     {{#if qr_url}}
-    <div class="qr"><img src="{{qr_url}}" alt="QR platba"><div class="ql">QR platba</div></div>
+    <div class="qr"><img src="{{qr_url}}" alt="QR"><div class="ql">{{l_qr}}</div></div>
     {{/if}}
   </div>
 
   {{#if reverse_charge}}
-  <div class="note"><strong>Režim přenesení daňové povinnosti.</strong> Daň odvede zákazník (reverse charge) — dodání do jiného členského státu EU osobě registrované k DPH dle čl. 196 směrnice 2006/112/ES, § 92 zákona č. 235/2004 Sb.</div>
+  <div class="note">{{{reverse_charge_text}}}</div>
   {{/if}}
 
   {{#if note}}
-  <div class="note"><strong>Poznámka:</strong> {{note}}</div>
+  <div class="note"><strong>{{l_note}}</strong> {{note}}</div>
   {{/if}}
 
   <div class="footer">{{footer_text}}</div>

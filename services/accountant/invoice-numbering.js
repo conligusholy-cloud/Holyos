@@ -16,6 +16,7 @@
 //   proforma_issued      → ZA-2026-00001  (zálohová faktura vydaná)
 //   tax_receipt          → DD-2026-00001  (daňový doklad k přijaté platbě, DPPP)
 //   service_issued       → FS-2026-00001  (faktura za servisní poplatek; Invoice.type zůstává 'issued')
+//   software_issued      → SW-2026-00001  (faktura za softwarovou podporu; Invoice.type zůstává 'issued')
 //
 // Řada se při prvním použití „naseeduje" z nejvyššího existujícího čísla se
 // stejným prefixem (aby se nikdy nezopakovalo už vystavené číslo).
@@ -31,6 +32,7 @@ const PREFIX_MAP = {
   proforma_issued: 'ZA',
   tax_receipt: 'DD',
   service_issued: 'FS', // servisní poplatky — vlastní řada
+  software_issued: 'SW', // softwarová podpora — vlastní řada
 };
 
 /**

@@ -1285,6 +1285,12 @@ server.listen(PORT, async () => {
     console.error('[app] service-billing-worker nelze spustit:', err.message);
   }
   try {
+    const softwareBillingWorker = require('./services/compounder/software-billing-worker');
+    softwareBillingWorker.start();
+  } catch (err) {
+    console.error('[app] software-billing-worker nelze spustit:', err.message);
+  }
+  try {
     const unsignedOrderWorker = require('./services/orders/unsigned-order-worker');
     unsignedOrderWorker.start();
   } catch (err) {

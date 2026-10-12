@@ -3868,6 +3868,9 @@ router.post('/service-subscriptions/:id/bill-now', requireAuth, async (req, res,
   }
 });
 
+// Softwarová podpora strojů (měsíční fakturace cs/en) — /api/compounder/software-subscriptions
+router.use('/software-subscriptions', require('./software-subscriptions.routes'));
+
 // GET /leads/:id — základní údaje leadu pro předvyplnění průvodce objednávkou.
 router.get('/leads/:id(\\d+)', requireAuth, async (req, res, next) => {
   try {
