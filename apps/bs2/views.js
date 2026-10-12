@@ -658,11 +658,59 @@ const curSw = (s, back) => `<form method="post" action="/currency" style="margin
   ${['CZK', 'EUR'].map(c => `<button type="submit" name="cur" value="${c}" class="btn sm ${curOf(s) === c ? '' : 'sec'}" style="border-radius:0;border:0;min-width:64px">${c === 'CZK' ? 'Kč' : '€'}</button>`).join('')}</form>`;
 // cena s DPH 21 % v měně uživatele (EUR bere cenu EUR z ceníku)
 const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_czk; return b == null ? null : Math.round(Number(b) * 1.21); };
+
+// Úvodní grafika na stránce Prádlomaty: Best Series zařídí místo, přípojky, provoz za 13 % z obratu; DC snižuje pořizovací cenu → rychlejší návratnost
+function valueHero() {
+  const step = (n, icon, title, text, tag) => `<div class="vh-step"><div class="vh-n">${n}</div><div class="vh-ic">${ico(icon, 24)}</div><b>${title}</b><span>${text}</span>${tag ? `<em>${tag}</em>` : ''}</div>`;
+  return `<style>
+  .vh{position:relative;overflow:hidden;margin:22px 0 18px;padding:24px 22px 20px;border-radius:20px;border:1px solid var(--border2);background:radial-gradient(900px 260px at 0% 0%,rgba(30,134,224,.22),transparent 60%),radial-gradient(700px 260px at 100% 100%,rgba(124,92,255,.22),transparent 60%),var(--card2);box-shadow:0 24px 70px rgba(0,0,0,.4)}
+  .vh h2{margin:0 0 4px;font-size:clamp(20px,2.6vw,28px);letter-spacing:-.02em;font-weight:800;line-height:1.15;background:linear-gradient(90deg,#fff 0%,var(--accent2) 55%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .vh .vh-sub{margin:0 0 18px;color:var(--text2);font-size:14px;max-width:760px}
+  .vh-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative}
+  .vh-step{position:relative;display:flex;flex-direction:column;gap:6px;padding:16px 14px 14px;border-radius:16px;background:rgba(10,18,36,.7);border:1px solid var(--border)}
+  .vh-step:not(:last-child)::after{content:"";position:absolute;top:50%;right:-15px;width:16px;height:2px;background:linear-gradient(90deg,var(--accent2),var(--vio));opacity:.8}
+  .vh-step:not(:last-child)::before{content:"";position:absolute;top:calc(50% - 4px);right:-16px;border:5px solid transparent;border-left:7px solid var(--vio);opacity:.9}
+  .vh-n{position:absolute;top:10px;right:12px;font-size:12px;font-weight:800;color:var(--text3)}
+  .vh-ic{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);box-shadow:0 8px 24px rgba(30,134,224,.22)}
+  .vh-step b{font-size:16px;letter-spacing:-.01em;margin-top:4px}
+  .vh-step span{font-size:13px;color:var(--text2);line-height:1.4}
+  .vh-step em{font-style:normal;align-self:flex-start;margin-top:4px;font-size:12px;font-weight:800;color:var(--ok);background:rgba(47,227,160,.12);border:1px solid rgba(47,227,160,.35);padding:3px 9px;border-radius:999px}
+  .vh-pay{margin-top:16px;display:grid;grid-template-columns:1.1fr 1fr;gap:18px;align-items:center;padding:16px;border-radius:16px;background:rgba(6,12,26,.7);border:1px solid var(--border)}
+  .vh-pay h3{margin:0 0 4px;font-size:16px}.vh-pay p{margin:0;color:var(--text2);font-size:13.5px;line-height:1.45}
+  .vh-bars{display:grid;gap:9px}.vh-row{display:grid;grid-template-columns:118px 1fr;gap:10px;align-items:center;font-size:12.5px;color:var(--text2)}
+  .vh-bar{height:20px;border-radius:7px;position:relative}
+  .vh-b1{width:100%;background:linear-gradient(90deg,#3a4a6e,#5a6f9a)}
+  .vh-b2{width:68%;background:linear-gradient(90deg,var(--accent),#3a6cf5 55%,var(--vio));box-shadow:0 0 18px rgba(58,108,245,.45)}
+  .vh-b2::after{content:"− DC";position:absolute;left:100%;top:0;margin-left:8px;height:20px;line-height:20px;font-size:12px;font-weight:800;color:var(--ok);white-space:nowrap}
+  .vh-fast{display:flex;align-items:center;gap:8px;font-weight:800;color:var(--ok);font-size:13.5px;margin-top:2px}
+  @media(max-width:900px){.vh-flow{grid-template-columns:repeat(2,1fr)}.vh-step:nth-child(2)::after,.vh-step:nth-child(2)::before{display:none}.vh-pay{grid-template-columns:1fr}}
+  @media(max-width:520px){.vh-flow{grid-template-columns:1fr}.vh-step::after,.vh-step::before{display:none!important}.vh-row{grid-template-columns:96px 1fr}}
+  </style>
+  <section class="vh">
+    <h2>Prádlomat nekupujete sami. Best Series zařídí všechno ostatní.</h2>
+    <p class="vh-sub">Od prvního místa po provoz hotového stroje. Vy si vyberete prádlomat, my se postaráme o zbytek.</p>
+    <div class="vh-flow">
+      ${step(1, 'home', 'Zařídíme místo', 'Najdeme a vyhodnotíme vhodnou lokalitu pro váš prádlomat.')}
+      ${step(2, 'bolt', 'Vytvoříme přípojky', 'Zajistíme a vybudujeme potřebné přípojky na místě.')}
+      ${step(3, 'settings', 'Provozujeme za 13 % z obratu', 'Postaráme se o provoz. Platíte jen z toho, co stroj skutečně vydělá.', '13 % z obratu')}
+      ${step(4, 'chart', 'DC snižuje cenu', 'Discount Credit uplatníte jako slevu při nákupu prádlomatu.')}
+    </div>
+    <div class="vh-pay">
+      <div><h3>Nižší pořizovací cena = rychlejší návratnost</h3><p>Každé DC, které uplatníte, snižuje cenu prádlomatu. Čím méně do stroje vložíte na začátku, tím dřív se Vám investice vrátí.</p></div>
+      <div class="vh-bars">
+        <div class="vh-row"><span>Cena bez DC</span><div class="vh-bar vh-b1"></div></div>
+        <div class="vh-row"><span>Cena s DC</span><div class="vh-bar vh-b2"></div></div>
+        <div class="vh-fast">${ico('chart', 16)} Rychlejší návratnost investice</div>
+      </div>
+    </div>
+  </section>`;
+}
 function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [] } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč';
   const bal = Math.max(0, Math.floor(Number(balance) || 0));
   const fmt = (n) => Math.round(n).toLocaleString('cs-CZ');
   return layout({ title: 'Prádlomaty', user: s.nick, nav: userNav(s), active: 'products', fx: true, body: `
+  ${valueHero()}
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"></form>
@@ -780,7 +828,14 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
 }
 const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', delivered: 'Dodáno', running: 'V provozu' };
 const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
-function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [], msg = '' } = {}) {
+
+// Pohyby žádosti o převod podpory (evidence): ev = [{event, actor, detail, created_at}]
+const TF_EV = { created: 'Žádost podána', amount_changed: 'Upravena částka DC', approved: 'Převedeno na Discount Credit', paid: 'Výběr vyplacen', rejected: 'Zamítnuto' };
+function tfEvents(ev, showActor) {
+  if (!ev || !ev.length) return '';
+  return `<details style="margin-top:6px"><summary class="small muted" style="cursor:pointer">Pohyby (${ev.length})</summary><div class="small" style="margin-top:4px;display:grid;gap:3px">${ev.map(e => `<div><span class="muted">${fmtDT(e.created_at)}</span> · ${esc(TF_EV[e.event] || e.event)}${showActor && e.actor ? ' <span class="muted">(' + esc(e.actor) + ')</span>' : ''}${e.detail ? ' — <span class="muted">' + esc(e.detail) + '</span>' : ''}</div>`).join('')}</div></details>`;
+}
+function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [], msg = '', tfEv = {} } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč', k = cur === 'EUR' ? 1 / (Number(rate) || 25) : 1;
   const conv = (x) => Math.round(Number(x) * k * 100) / 100;
   const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0) * k;
@@ -791,10 +846,10 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   const creditHelp = { title: HELP.credit.title, html: HELP.credit.html.replace('1 DC = 1 Kč slevy na nákup prádlomatu.', '1 DC = 1 Kč slevy na nákup prádlomatu (v eurech ≈ ' + eurTxt + ' €, tedy ' + rtTxt + ' DC ≈ 1 €; kurz ' + rtTxt + ' Kč / 1 €).') };
   // Převod podpory ze starého systému (jen uživatelé typu Stávající): žádost → admin zpracuje ručně
   const canTransfer = s.user_type === 'standard';
-  const TF_ST = { pending: ['invited', 'čeká na zpracování'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
+  const TF_ST = { pending: ['invited', 'zpracovává se'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
   const tfSt = (t) => (t.status === 'approved' && t.kind === 'payout' ? ['active', 'vyplaceno'] : (TF_ST[t.status] || TF_ST.pending));
   const transferList = (transfers && transfers.length) ? `<h3 style="margin:20px 0 8px">Moje žádosti o převod podpory</h3><div class="card tbl-wrap"><table class="cards"><thead><tr><th>Datum</th><th>Požadavek</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>
-    ${transfers.map(t => { const st = tfSt(t); const po = t.kind === 'payout'; return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td><td data-l="Požadavek">${po ? 'Výběr (vyplacení)' : 'Převod na DC'}</td><td data-l="Částka">${money(t.amount, t.currency === 'EUR' ? '€' : 'Kč')}</td><td data-l="Kurz" class="small muted">${!po && t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td><td data-l="DC">${po ? '<span class="muted">—</span>' : `<b>${money(t.dc_amount, 'DC')}</b>`}</td><td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span></td><td data-l="Poznámka" class="small muted">${esc(t.admin_note || '')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+    ${transfers.map(t => { const st = tfSt(t); const po = t.kind === 'payout'; return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td><td data-l="Požadavek">${po ? 'Výběr (vyplacení)' : 'Převod na DC'}</td><td data-l="Částka">${money(t.amount, t.currency === 'EUR' ? '€' : 'Kč')}</td><td data-l="Kurz" class="small muted">${!po && t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td><td data-l="DC">${po ? '<span class="muted">—</span>' : `<b>${money(t.dc_amount, 'DC')}</b>`}</td><td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${tfEvents(tfEv[t.id], false)}</td><td data-l="Poznámka" class="small muted">${esc(t.admin_note || '')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
   const transferModal = `<div id="tfm" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(460px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">Přenést podporu ze starého systému</b><button type="button" id="tfm-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
     <p class="muted small" style="margin:6px 0 12px">Vyber, co chceš s podporou ze starého systému udělat, a zadej částku. Žádost zpracujeme ručně.</p>
@@ -1202,15 +1257,15 @@ function adminAiChat({ admin, cfg, models, tones, limits, msg = '', errors = [],
 }
 
 // Admin: Převody podpory ze starého systému — žádosti uživatelů, zpracovává se ručně
-function adminTransfers({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {}, rate = 25 }) {
-  const ST = { pending: ['invited', 'čeká na zpracování'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
+function adminTransfers({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {}, rate = 25, tfEv = {} }) {
+  const ST = { pending: ['invited', 'zpracovává se'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
   const sy = (t) => (t.currency === 'EUR' ? '€' : 'Kč');
   const all = (counts.pending || 0) + (counts.approved || 0) + (counts.rejected || 0);
   return adminLayout('Převody podpory', 'trf', admin, `
   <h1 style="margin:0 0 6px">Převody podpory <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
-  <p class="muted" style="margin-top:0">Žádosti uživatelů typu Stávající o podporu ze starého systému: buď <b>převod na Discount Credit</b>, nebo <b>výběr</b> (vyplacení). Kontrola probíhá ručně: ověř nárok ve starém systému. U převodu na DC můžeš upravit počet DC a žádost <b>schválit</b> (uživateli se připíše kredit); u výběru provedeš výplatu sám a žádost <b>označíš jako vyplacenou</b>. Nevyhovující žádost <b>zamítni</b>. Aktuální kurz: 1 € = ${esc(Number(rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }))} Kč.</p>
+  <p class="muted" style="margin-top:0">Žádosti uživatelů typu Stávající o podporu ze starého systému. Dokud žádost ručně nezpracuješ, zůstává ve stavu <b>zpracovává se</b>; všechny pohyby se evidují (rozbal „Pohyby"): buď <b>převod na Discount Credit</b>, nebo <b>výběr</b> (vyplacení). Kontrola probíhá ručně: ověř nárok ve starém systému. U převodu na DC můžeš upravit počet DC a žádost <b>schválit</b> (uživateli se připíše kredit); u výběru provedeš výplatu sám a žádost <b>označíš jako vyplacenou</b>. Nevyhovující žádost <b>zamítni</b>. Aktuální kurz: 1 € = ${esc(Number(rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }))} Kč.</p>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
-  <div class="row" style="gap:8px;margin:10px 0 12px">${[['', 'Všechny', all], ['pending', 'Čekají', counts.pending || 0], ['approved', 'Převedené', counts.approved || 0], ['rejected', 'Zamítnuté', counts.rejected || 0]].map(([k, l, n]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/transfers${k ? '?status=' + k : ''}">${l} (${n})</a>`).join('')}</div>
+  <div class="row" style="gap:8px;margin:10px 0 12px">${[['', 'Všechny', all], ['pending', 'Zpracovávají se', counts.pending || 0], ['approved', 'Převedené', counts.approved || 0], ['rejected', 'Zamítnuté', counts.rejected || 0]].map(([k, l, n]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/transfers${k ? '?status=' + k : ''}">${l} (${n})</a>`).join('')}</div>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Požadavek</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Poznámka uživatele</th><th>Stav</th><th></th></tr></thead><tbody>
     ${rows.map(t => { const po = t.kind === 'payout'; const st = (t.status === 'approved' && po) ? ['active', 'vyplaceno'] : (ST[t.status] || ST.pending); return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td>
       <td data-l="Uživatel"><a href="/admin/supporters/${t.supporter_id}"><b>${esc([t.last_name, t.first_name].filter(Boolean).join(' ') || t.email)}</b></a><div class="small muted">${esc(t.nick || t.email || '')}</div></td>
@@ -1219,7 +1274,7 @@ function adminTransfers({ admin, rows = [], msg = '', holyosUrl, status = '', co
       <td data-l="Kurz" class="small muted">${!po && t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td>
       <td data-l="DC">${po ? '<span class="muted">—</span>' : `<b>${money(t.dc_amount, 'DC')}</b>`}</td>
       <td data-l="Poznámka" class="small">${esc(t.note || '') || '<span class="muted">—</span>'}</td>
-      <td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${t.processed_at ? `<div class="small muted">${fmtDT(t.processed_at)}${t.processed_by ? ' · ' + esc(t.processed_by) : ''}</div>` : ''}${t.admin_note ? `<div class="small muted">${esc(t.admin_note)}</div>` : ''}</td>
+      <td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${t.processed_at ? `<div class="small muted">${fmtDT(t.processed_at)}${t.processed_by ? ' · ' + esc(t.processed_by) : ''}</div>` : ''}${t.admin_note ? `<div class="small muted">${esc(t.admin_note)}</div>` : ''}${tfEvents(tfEv[t.id], true)}</td>
       <td class="actions">${t.status === 'pending' ? `<div class="row" style="flex-direction:column;gap:8px;align-items:stretch;min-width:240px">
         <form method="post" action="/admin/transfers/${t.id}/approve" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${po ? '' : `<input name="dc" inputmode="decimal" value="${esc(String(Number(t.dc_amount)))}" required title="Počet DC k připsání" style="width:110px;padding:6px 8px;text-align:right">`}<input name="admin_note" placeholder="Poznámka (nepovinné)" style="width:150px;padding:6px 8px"><button class="btn sm" type="submit" onclick="return confirm('${po ? 'Označit žádost jako vyplacenou? (Výplatu proveď ručně.)' : 'Připsat uživateli DC a žádost schválit?'}')">${po ? 'Označit jako vyplaceno' : 'Schválit'}</button></form>
         <form method="post" action="/admin/transfers/${t.id}/reject" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input name="admin_note" placeholder="Důvod zamítnutí" style="width:150px;padding:6px 8px"><button class="btn sec sm" type="submit" onclick="return confirm('Žádost zamítnout?')">Zamítnout</button></form></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
