@@ -247,6 +247,8 @@ app.post('/join/:code', wrap(async (req, res) => {
   if (password !== password2) return back('Hesla se neshodují.');
   if ((await q('SELECT 1 FROM supporters WHERE email=$1', [f.email])).rows.length) return back('Tento e-mail už u nás účet má — přihlas se, nebo použij Zapomenuté heslo.');
   if ((await q('SELECT 1 FROM supporters WHERE lower(nick)=lower($1)', [f.nick])).rows.length) return back('Tenhle nick už někdo má, zvol jiný.');
+  // Telefon musí být jedinečný (porovnává se jen podle číslic, posledních 9)
+  if (f.phone) { const tail = f.phone.replace(/\D/g, '').slice(-9); if (tail.length >= 9 && (await q("SELECT 1 FROM supporters WHERE phone IS NOT NULL AND right(regexp_replace(phone, '\\D', '', 'g'), 9)=$1", [tail])).rows.length) return back('Tento telefon už u nás účet má.'); }
   const hash = await bcrypt.hash(password, 11);
   const r = await q(`INSERT INTO supporters (email, first_name, last_name, phone, nick, password_hash, status, user_type, referred_by, source, activated_at, last_login_at)
     VALUES ($1,$2,$3,$4,$5,$6,'active','standard',$7,'referral',now(),now()) RETURNING id`, [f.email, f.first_name, f.last_name, f.phone || null, f.nick, hash, seller.id]);
