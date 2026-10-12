@@ -72,7 +72,7 @@ async function sendTestEmail(sub, to) {
   const monthName = rev && rev.prevMonth > 0 ? rev.prevMonthName : 'ukázkový měsíc';
   const subtotal = Math.round(revenue * feePct) / 100, vat = Math.round(subtotal * vatRate) / 100, total = Math.round((subtotal + vat) * 100) / 100;
   const our = await ourCompanyForPdf();
-  const invNo = 'TEST-' + new Date().getFullYear() + '-0001';
+  const invNo = 'FS-' + new Date().getFullYear() + '-00001';
   const inv = {
     invoice_number: invNo, type: 'issued', direction: 'ar', currency, subtotal, vat_amount: vat, total,
     date_issued: new Date(), date_taxable: new Date(), date_due: new Date(Date.now() + 14 * 86400000), variable_symbol: '20260001',
@@ -105,7 +105,7 @@ async function billSubscription(sub, opts) {
   const vat = Math.round(subtotal * vatRate) / 100;
   const total = Math.round((subtotal + vat) * 100) / 100;
   const companyId = await resolveCompanyId(sub);
-  const invNo = await generateInvoiceNumber('issued', { prisma });
+  const invNo = await generateInvoiceNumber('service_issued', { prisma });
   const cn = (sub.contract_number || '').trim();
   const desc = 'Servisní poplatek ' + feePct + ' % z obratu ' + rev.prevMonthName + ' (obrat ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency + ') — kiosk ' + sub.kiosk_code + (cn ? ' — na základě servisní smlouvy č. ' + cn : '');
 
@@ -117,7 +117,7 @@ async function billSubscription(sub, opts) {
       vat_regime: 'standard',
       date_issued: new Date(), date_due: new Date(Date.now() + 14 * 86400000),
       date_taxable: new Date(),
-      variable_symbol: (invNo.match(/(\d+)$/) || [])[1] || null,
+      variable_symbol: invNo.replace(/\D/g, '') || null, // rok + pořadí (odliší od ostatních řad)
       status: 'draft', source: 'service_billing',
       note: (cn ? 'Fakturováno na základě servisní smlouvy č. ' + cn + '. ' : '') + 'Automatická servisní faktura za ' + rev.prevMonthName + ' · kiosk ' + sub.kiosk_code + ' · ' + feePct + ' % z obratu ' + rev.prevMonth.toLocaleString('cs-CZ') + ' ' + currency,
       items: { create: [{ line_order: 0, description: desc, quantity: 1, unit: 'ks', unit_price: subtotal, vat_rate: vatRate, subtotal, vat_amount: vat, total }] },
