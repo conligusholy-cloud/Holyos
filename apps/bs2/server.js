@@ -377,12 +377,14 @@ app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
 }));
 // ── Živá podpora (uživatel) ──────────────────────────────────────────────
+async function supportAgents() { try { const r = await q("SELECT value FROM app_settings WHERE key='support_agents'"); const a = JSON.parse((r.rows[0] || {}).value || '[]'); return Array.isArray(a) ? a.filter(x => x && x.name) : []; } catch (e) { return []; } }
+async function supportAgent() { try { const r = await q("SELECT value FROM app_settings WHERE key='support_agent'"); return (r.rows[0] || {}).value || ''; } catch (e) { return ''; } }
 async function supportOnline() { try { const r = await q("SELECT value FROM app_settings WHERE key='support_online'"); return (r.rows[0] || {}).value === '1'; } catch (e) { return false; } }
 app.get('/podpora', wrap(requireUser), wrap(async (req, res) => {
   const online = await supportOnline();
   const msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [req.user.id])).rows;
   await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2 AND read_by_user=false', [req.user.id, 'agent']);
-  res.send(V.supportPage(req.user, { online, msgs }));
+  res.send(V.supportPage(req.user, { online, msgs, agent: await supportAgent() }));
 }));
 app.get('/api/support/state', wrap(async (req, res) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return res.status(401).json({});
@@ -391,7 +393,7 @@ app.get('/api/support/state', wrap(async (req, res) => {
   const after = parseInt(req.query.after, 10);
   let msgs = [];
   if (Number.isFinite(after)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
-  res.set('Cache-Control', 'no-store').json({ online, unread, msgs });
+  res.set('Cache-Control', 'no-store').json({ online, unread, msgs, agent: await supportAgent() });
 }));
 app.post('/api/support/send', wrap(requireUser), wrap(async (req, res) => {
   if (!(await supportOnline())) return res.status(403).json({ error: 'Podpora je momentálně offline.' });
@@ -589,10 +591,19 @@ app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
     msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
     await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
   }
-  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '' }));
+  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent() }));
+}));
+app.post('/admin/podpora/agents', requireAdmin, wrap(async (req, res) => {
+  const b = req.body || {}; let agents = await supportAgents();
+  if (b.add) { const n = String(b.add).trim().slice(0, 60); if (n && !agents.some(a => a.name === n)) agents.push({ name: n }); }
+  if (b.remove) agents = agents.filter(a => a.name !== String(b.remove));
+  await q("INSERT INTO app_settings (key,value) VALUES ('support_agents',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [JSON.stringify(agents)]);
+  if (b.current !== undefined) await q("INSERT INTO app_settings (key,value) VALUES ('support_agent',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [String(b.current || '').slice(0, 60)]);
+  res.redirect('/admin/podpora?msg=' + encodeURIComponent('Profily podpory uloženy.'));
 }));
 app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
   const on = String((req.body || {}).online) === '1';
+  if (on && (req.body || {}).agent !== undefined) await q("INSERT INTO app_settings (key,value) VALUES ('support_agent',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [String(req.body.agent || '').slice(0, 60)]);
   await q("INSERT INTO app_settings (key,value) VALUES ('support_online',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [on ? '1' : '0']);
   await log(req.admin, 'support_online', { online: on });
   res.redirect('/admin/podpora?msg=' + encodeURIComponent(on ? 'Podpora je ONLINE — uživatelé mohou psát.' : 'Podpora je OFFLINE.'));
@@ -600,7 +611,7 @@ app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
 app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, wrap(async (req, res) => {
   const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
   let row = null;
-  if (body) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true) RETURNING *', [sid, 'agent', req.admin.name || 'Podpora', body])).rows[0];
+  if (body) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true) RETURNING *', [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', body])).rows[0];
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);
 }));

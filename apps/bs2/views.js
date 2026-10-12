@@ -781,12 +781,12 @@ requestAnimationFrame(tick);
   </div>` });
 }
 // ── Živá podpora — stránka uživatele ──
-function supportPage(s, { online = false, msgs = [] } = {}) {
+function supportPage(s, { online = false, msgs = [], agent = '' } = {}) {
   const last = msgs.length ? msgs[msgs.length - 1].id : 0;
   return layout({ title: 'Podpora', user: s.nick, nav: userNav(s), active: 'podpora', fx: true, help: null, body: `
   <div class="sp-wrap">
     <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px;flex-wrap:wrap;gap:10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('chat', 18)} Živá podpora</h2>
-      <span id="sp-state">${online ? '<span class="sp-on"><i></i>Podpora je online — odpovídá živý člověk</span>' : '<span class="muted small">● Podpora je momentálně offline</span>'}</span></div>
+      <span id="sp-state">${online ? `<span class="sp-on"><i></i>Online — odpovídá ${esc(agent || 'živý člověk')}</span>` : '<span class="muted small">● Podpora je momentálně offline</span>'}</span></div>
     <div class="sp-off" id="sp-offbox" style="${online ? 'display:none' : ''}"><b>Teď tu nikdo není.</b> Živá podpora je momentálně offline — jakmile bude kolega online, zelená tečka u ikony Podpora se rozsvítí a budete moct psát.</div>
     <div class="sp-log" id="sp-log" style="margin-top:12px">${msgs.length ? msgs.map(m => `<div class="sp-m ${m.sender === 'agent' ? 'agent' : 'user'}">${esc(m.body)}<small>${m.sender === 'agent' ? esc(m.agent_name || 'Podpora') + ' · ' : ''}${esc(fmtDT(m.created_at))}</small></div>`).join('') : '<div class="muted small" style="margin:auto">Zatím žádné zprávy. Napište nám, s čím můžeme pomoci.</div>'}</div>
     <form id="sp-f" style="display:flex;gap:8px;margin-top:10px"><input id="sp-in" placeholder="${online ? 'Napište zprávu…' : 'Podpora je offline'}" ${online ? '' : 'disabled'} maxlength="2000" style="flex:1"><button class="btn" type="submit" id="sp-send" ${online ? '' : 'disabled'}>Odeslat</button></form>
@@ -797,24 +797,31 @@ function supportPage(s, { online = false, msgs = [] } = {}) {
     function beep(){ try{ var C=window.AudioContext||window.webkitAudioContext; if(!C)return; var c=beep.ctx||(beep.ctx=new C()); if(c.state==='suspended')c.resume(); var t=c.currentTime; [[880,0],[1320,.12]].forEach(function(p){ var o=c.createOscillator(),g=c.createGain(); o.type='sine'; o.frequency.value=p[0]; g.gain.setValueAtTime(0,t+p[1]); g.gain.linearRampToValueAtTime(.25,t+p[1]+.02); g.gain.exponentialRampToValueAtTime(.001,t+p[1]+.25); o.connect(g).connect(c.destination); o.start(t+p[1]); o.stop(t+p[1]+.3); }); }catch(e){} }
     document.addEventListener('click',function(){ try{ var C=window.AudioContext||window.webkitAudioContext; if(C&&!beep.ctx) beep.ctx=new C(); }catch(e){} },{once:true});
     function add(m){ var e=log.querySelector('.muted'); if(e)e.remove(); var d=document.createElement('div'); d.className='sp-m '+(m.sender==='agent'?'agent':'user'); d.innerHTML=esc(m.body)+'<small>'+(m.sender==='agent'?esc(m.agent_name||'Podpora')+' · ':'')+new Date(m.created_at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'})+'</small>'; log.appendChild(d); log.scrollTop=log.scrollHeight; if(m.id>since) since=m.id; }
-    function setOnline(o){ if(o===online)return; online=o; inp.disabled=!o; btn.disabled=!o; inp.placeholder=o?'Napište zprávu…':'Podpora je offline'; st.innerHTML=o?'<span class="sp-on"><i></i>Podpora je online — odpovídá živý člověk</span>':'<span class="muted small">● Podpora je momentálně offline</span>'; var ob=document.getElementById('sp-offbox'); if(ob) ob.style.display=o?'none':''; }
+    var agent=${JSON.stringify(agent || '')};
+    function setOnline(o,a){ if(a!==undefined&&a!==agent){ agent=a; if(online) st.innerHTML='<span class="sp-on"><i></i>Online — odpovídá '+esc(agent||'živý člověk')+'</span>'; } if(o===online)return; online=o; inp.disabled=!o; btn.disabled=!o; inp.placeholder=o?'Napište zprávu…':'Podpora je offline'; st.innerHTML=o?'<span class="sp-on"><i></i>Online — odpovídá '+esc(agent||'živý člověk')+'</span>':'<span class="muted small">● Podpora je momentálně offline</span>'; var ob=document.getElementById('sp-offbox'); if(ob) ob.style.display=o?'none':''; }
     log.scrollTop=log.scrollHeight;
     f.addEventListener('submit',async function(e){ e.preventDefault(); var t=inp.value.trim(); if(!t||!online)return; btn.disabled=true;
       try{ var r=await fetch('/api/support/send',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({body:t})}); var j=await r.json(); if(!r.ok){ alert(j.error||'Odeslání selhalo'); if(r.status===403) setOnline(false); } else { inp.value=''; add(j.msg); } }catch(e){ alert('Odeslání selhalo'); }
       btn.disabled=!online; inp.focus(); });
-    async function poll(){ try{ var r=await fetch('/api/support/state?after='+since,{credentials:'same-origin',cache:'no-store'}); if(!r.ok)return; var j=await r.json(); setOnline(!!j.online); var nw=(j.msgs||[]).filter(function(m){ return m.id>since; }); nw.forEach(add); if(nw.some(function(m){ return m.sender==='agent'; })) beep(); }catch(e){} }
+    async function poll(){ try{ var r=await fetch('/api/support/state?after='+since,{credentials:'same-origin',cache:'no-store'}); if(!r.ok)return; var j=await r.json(); setOnline(!!j.online, j.agent||''); var nw=(j.msgs||[]).filter(function(m){ return m.id>since; }); nw.forEach(add); if(nw.some(function(m){ return m.sender==='agent'; })) beep(); }catch(e){} }
     setInterval(poll,3000); document.addEventListener('visibilitychange',function(){ if(!document.hidden) poll(); });
   })();</script>` });
 }
 // ── Živá podpora — admin ──
-function adminSupport({ admin, online = false, threads = [], who = null, msgs = [], holyosUrl, msg = '' }) {
+function adminSupport({ admin, online = false, threads = [], who = null, msgs = [], holyosUrl, msg = '', agents = [], agent = '' }) {
   const last = msgs.length ? msgs[msgs.length - 1].id : 0;
   const nm = (t) => [t.first_name, t.last_name].filter(Boolean).join(' ') || t.nick || t.email;
   return adminLayout('Podpora', 'sup2', admin, `
   <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><h1 style="margin:0">Živá podpora</h1>
-    <form method="post" action="/admin/podpora/online" class="row" style="gap:10px;align-items:center;margin:0">
-      <span class="${online ? 'sp-on' : 'muted small'}">${online ? '<i></i>Jste ONLINE — uživatelé mohou psát' : '● OFFLINE — uživatelé psát nemohou'}</span>
+    <form method="post" action="/admin/podpora/online" class="row" style="gap:10px;align-items:center;margin:0;flex-wrap:wrap">
+      <span class="${online ? 'sp-on' : 'muted small'}">${online ? `<i></i>ONLINE jako <b>${esc(agent || admin.name || 'Podpora')}</b> — uživatelé mohou psát` : '● OFFLINE — uživatelé psát nemohou'}</span>
+      ${online ? '' : `<select name="agent" style="width:auto;padding:8px 10px"><option value="">— kdo obsluhuje podporu —</option>${agents.map(a => `<option value="${esc(a.name)}"${a.name === agent ? ' selected' : ''}>${esc(a.name)}</option>`).join('')}${!agents.some(a => a.name === (admin.name || '')) && admin.name ? `<option value="${esc(admin.name)}">${esc(admin.name)}</option>` : ''}</select>`}
       <input type="hidden" name="online" value="${online ? '0' : '1'}"><button class="btn sm ${online ? 'sec' : ''}" type="submit">${online ? 'Přejít offline' : 'Jít online'}</button></form></div>
+  <details class="card" style="margin:0 0 12px;padding:10px 14px"><summary style="cursor:pointer;font-weight:700">👤 Profily lidí na podpoře <span class="muted small">(${agents.length})</span></summary>
+    <div class="small muted" style="margin:6px 0 8px">Jméno, pod kterým uživatel uvidí odpovědi („Online — odpovídá Jana"). Při přechodu online vyberete, kdo zrovna obsluhuje.</div>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:8px">${agents.map(a => `<form method="post" action="/admin/podpora/agents" style="margin:0"><span class="badge type-owner" style="padding:6px 10px">${esc(a.name)}${a.name === agent ? ' · aktivní' : ''} <button type="submit" name="remove" value="${esc(a.name)}" title="Odebrat" style="background:none;border:0;color:var(--err);cursor:pointer;font-size:14px;margin-left:4px">×</button></span></form>`).join('') || '<span class="muted small">Zatím žádný profil.</span>'}</div>
+    <form method="post" action="/admin/podpora/agents" class="row" style="gap:8px;margin:0"><input name="add" placeholder="Jméno (např. Jana Nováková)" maxlength="60" required style="width:260px"><button class="btn sm" type="submit">Přidat profil</button></form>
+  </details>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start">
     <div class="card" id="sp-threads" style="margin:0;padding:8px;max-height:70vh;overflow:auto">${threads.length ? threads.map(t => `<a href="/admin/podpora?u=${t.id}" style="display:block;padding:10px 12px;border-radius:12px;text-decoration:none;color:var(--text);${who && who.id === t.id ? 'background:rgba(79,209,255,.12);' : ''}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(nm(t))}</b>${t.unread ? `<span class="sup-badge" style="position:static">${t.unread}</span>` : ''}</div><div class="small muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.last_body || '')}</div><div class="small muted">${esc(fmtDT(t.last_at))}</div></a>`).join('') : '<p class="muted small" style="margin:8px">Zatím žádné konverzace.</p>'}</div>
