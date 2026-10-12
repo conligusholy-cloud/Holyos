@@ -145,6 +145,16 @@ async function migrate() {
       processed_by  TEXT
     );
     ALTER TABLE support_transfers ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'dc'; -- dc = převod na Discount Credit, payout = výběr (vyplacení)
+    -- Evidence všech pohybů žádosti (vytvoření, úprava částky, schválení / vyplacení, zamítnutí)
+    CREATE TABLE IF NOT EXISTS support_transfer_events (
+      id          SERIAL PRIMARY KEY,
+      transfer_id INTEGER NOT NULL REFERENCES support_transfers(id) ON DELETE CASCADE,
+      event       TEXT NOT NULL,
+      actor       TEXT,
+      detail      TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS support_transfer_events_tid_idx ON support_transfer_events (transfer_id);
     CREATE INDEX IF NOT EXISTS support_transfers_supporter_idx ON support_transfers (supporter_id);
     CREATE INDEX IF NOT EXISTS support_transfers_status_idx ON support_transfers (status);
     -- Služby (Najít místo, Přípojky): kind='service', service_key; cena 0 = čeká na individuální nacenění
