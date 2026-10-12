@@ -342,7 +342,7 @@ app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
     sellable = items.filter(p => off.get(p.id) && off.get(p.id).offered).map(p => ({ ...p, credit_pct: Number(off.get(p.id).credit_pct) }));
   } catch (e) { /* bez tabulky */ }
   const transfers = (await q('SELECT * FROM support_transfers WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 50', [req.user.id])).rows;
-  res.send(V.supporterCredit(req.user, { rows, sellable, rate: await eurRate(), transfers, msg: req.query.msg || '' }));
+  res.send(V.supporterCredit(req.user, { rows, sellable, rate: await eurRate(), transfers, msg: req.query.msg || '', tfEv: await tfEventsFor(transfers.map(t => t.id)) }));
 }));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
   if (req.user.user_type !== 'seller') return res.redirect('/');
@@ -501,6 +501,13 @@ app.post('/admin/services/save', requireAdmin, wrap(async (req, res) => {
   res.redirect('/admin/products?msg=' + encodeURIComponent('Služby uloženy.'));
 }));
 
+// Evidence pohybů žádosti o převod podpory
+async function tfEvent(tid, event, actor, detail) { try { await q('INSERT INTO support_transfer_events (transfer_id, event, actor, detail) VALUES ($1,$2,$3,$4)', [tid, event, actor || null, detail || null]); } catch (e) { /* evidence není kritická */ } }
+async function tfEventsFor(ids) {
+  const out = {}; if (!ids.length) return out;
+  (await q('SELECT * FROM support_transfer_events WHERE transfer_id = ANY($1::int[]) ORDER BY created_at, id', [ids])).rows.forEach(e => { (out[e.transfer_id] = out[e.transfer_id] || []).push(e); });
+  return out;
+}
 // Žádost o převod podpory ze starého systému (jen uživatelé typu Stávající) — zpracovává admin ručně
 app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) => {
   const back = (m) => res.redirect('/discount-credit?msg=' + encodeURIComponent(m));
@@ -508,43 +515,38 @@ app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) =
   const amount = Math.round(Number(String(req.body.amount || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!(amount > 0) || amount > 100000000) return back('Zadej částku větší než 0.');
   const cur = req.body.cur === 'EUR' ? 'EUR' : 'CZK';
-  const kind = req.body.kind === 'payout' ? 'payout' : 'dc';
-  if (kind === 'payout' && !String(req.body.note || '').trim()) return back('U výběru uveď do poznámky číslo účtu pro vyplacení.');
+  const kind = req.body.kind === 'withdrawal' ? 'withdrawal' : 'support'; // zdroj částky ve starém systému; vždy se převádí na DC
   const pending = (await q("SELECT count(*)::int AS c FROM support_transfers WHERE supporter_id=$1 AND status='pending'", [req.user.id])).rows[0].c;
   if (pending >= 5) return back('Máš už několik nevyřízených žádostí. Počkej prosím na jejich zpracování.');
-  const rate = kind === 'payout' ? 1 : (cur === 'EUR' ? await eurRate() : 1);
-  const dc = kind === 'payout' ? 0 : Math.round(amount * rate * 100) / 100;
+  const rate = cur === 'EUR' ? await eurRate() : 1;
+  const dc = Math.round(amount * rate * 100) / 100;
   const note = String(req.body.note || '').trim().slice(0, 300) || null;
   const ins = await q('INSERT INTO support_transfers (supporter_id, amount, currency, rate, dc_amount, note, kind) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, amount, cur, rate, dc, note, kind]);
+  await tfEvent(ins.rows[0].id, 'created', req.user.nick || req.user.email, (kind === 'withdrawal' ? 'z výběru ' : 'z podpory ') + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' = ' + dc.toLocaleString('cs-CZ') + ' DC (kurz ' + rate + ')');
   try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [null, req.user.nick || req.user.email, 'support_transfer_request', JSON.stringify({ id: ins.rows[0].id, supporter_id: req.user.id, kind, amount, cur, dc })]); } catch (e) { /* log není kritický */ }
-  back(kind === 'payout'
-    ? 'Žádost o výběr ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' byla odeslána. Zpracujeme ji ručně a dáme Ti vědět.'
-    : 'Žádost o převod ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána. Zpracujeme ji ručně a dáme Ti vědět.');
+  back('Žádost o převod ' + (kind === 'withdrawal' ? 'z výběru ' : 'z podpory ') + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána a je ve stavu zpracovává se. Dáme Ti vědět.');
 }));
 // Admin: Převody podpory
 app.get('/admin/transfers', requireAdmin, wrap(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
   const rows = (await q("SELECT t.*, s.first_name, s.last_name, s.email, s.nick FROM support_transfers t JOIN supporters s ON s.id=t.supporter_id " + (status ? 'WHERE t.status=$1 ' : '') + "ORDER BY (t.status='pending') DESC, t.created_at DESC LIMIT 500", status ? [status] : [])).rows;
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM support_transfers GROUP BY status')).rows.forEach(r => { counts[r.status] = r.c; });
-  res.send(V.adminTransfers({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, status, counts, rate: await eurRate() }));
+  res.send(V.adminTransfers({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, status, counts, rate: await eurRate(), tfEv: await tfEventsFor(rows.map(t => t.id)) }));
 }));
 app.post('/admin/transfers/:id(\\d+)/approve', requireAdmin, wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const adminNote = String(req.body.admin_note || '').trim().slice(0, 300) || null;
   const who = req.admin.name || req.admin.username || null;
-  const cur0 = (await q("SELECT kind FROM support_transfers WHERE id=$1 AND status='pending'", [id])).rows[0];
+  const cur0 = (await q("SELECT kind, dc_amount FROM support_transfers WHERE id=$1 AND status='pending'", [id])).rows[0];
   if (!cur0) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Žádost už byla zpracována.'));
-  if (cur0.kind === 'payout') {
-    const p = (await q("UPDATE support_transfers SET status='approved', admin_note=$2, processed_at=now(), processed_by=$3 WHERE id=$1 AND status='pending' RETURNING id, supporter_id", [id, adminNote, who])).rows[0];
-    if (p) await log(req.admin, 'support_payout_done', { id: p.id, supporter_id: p.supporter_id });
-    return res.redirect('/admin/transfers?msg=' + encodeURIComponent(p ? 'Výběr #' + p.id + ' označen jako vyplacený.' : 'Žádost už byla zpracována.'));
-  }
   const dc = Math.round(Number(String(req.body.dc || '').replace(/\s/g, '').replace(',', '.')) * 100) / 100;
   if (!(dc > 0)) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Zadej počet DC větší než 0.'));
   const t = (await q("UPDATE support_transfers SET status='approved', dc_amount=$2, admin_note=$3, processed_at=now(), processed_by=$4 WHERE id=$1 AND status='pending' RETURNING *", [id, dc, adminNote, who])).rows[0];
   if (!t) return res.redirect('/admin/transfers?msg=' + encodeURIComponent('Žádost už byla zpracována.'));
-  const cr = await q('INSERT INTO credits (supporter_id, amount_czk, note) VALUES ($1,$2,$3) RETURNING id', [t.supporter_id, dc, 'Převod podpory ze starého systému (žádost #' + t.id + ')']);
+  const cr = await q('INSERT INTO credits (supporter_id, amount_czk, note) VALUES ($1,$2,$3) RETURNING id', [t.supporter_id, dc, 'Převod ' + (t.kind === 'withdrawal' ? 'z výběru' : 'z podpory') + ' ze starého systému (žádost #' + t.id + ')']);
   await q('UPDATE support_transfers SET credit_id=$2 WHERE id=$1', [t.id, cr.rows[0].id]);
+  if (Number(cur0.dc_amount) !== dc) await tfEvent(t.id, 'amount_changed', who, Number(cur0.dc_amount).toLocaleString('cs-CZ') + ' → ' + dc.toLocaleString('cs-CZ') + ' DC');
+  await tfEvent(t.id, 'approved', who, 'připsáno ' + dc.toLocaleString('cs-CZ') + ' DC' + (adminNote ? ' — ' + adminNote : ''));
   await log(req.admin, 'support_transfer_approve', { id: t.id, supporter_id: t.supporter_id, dc });
   res.redirect('/admin/transfers?msg=' + encodeURIComponent('Převod #' + t.id + ' schválen, připsáno ' + dc.toLocaleString('cs-CZ') + ' DC.'));
 }));
@@ -552,7 +554,7 @@ app.post('/admin/transfers/:id(\\d+)/reject', requireAdmin, wrap(async (req, res
   const id = parseInt(req.params.id, 10);
   const adminNote = String(req.body.admin_note || '').trim().slice(0, 300) || null;
   const t = (await q("UPDATE support_transfers SET status='rejected', admin_note=$2, processed_at=now(), processed_by=$3 WHERE id=$1 AND status='pending' RETURNING id, supporter_id", [id, adminNote, req.admin.name || req.admin.username || null])).rows[0];
-  if (t) await log(req.admin, 'support_transfer_reject', { id: t.id, supporter_id: t.supporter_id });
+  if (t) { await log(req.admin, 'support_transfer_reject', { id: t.id, supporter_id: t.supporter_id }); await tfEvent(t.id, 'rejected', req.admin.name || req.admin.username || null, adminNote); }
   res.redirect('/admin/transfers?msg=' + encodeURIComponent(t ? 'Žádost #' + t.id + ' zamítnuta.' : 'Žádost už byla zpracována.'));
 }));
 app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {

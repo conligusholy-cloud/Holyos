@@ -830,7 +830,7 @@ const PURCHASE_STATUS = { ordered: 'Objednáno', production: 'Ve výrobě', deli
 const MODEL_L = { L1: 'L1 — nejkratší', L2: 'L2', L3: 'L3', L4: 'L4 — nejdelší' };
 
 // Pohyby žádosti o převod podpory (evidence): ev = [{event, actor, detail, created_at}]
-const TF_EV = { created: 'Žádost podána', amount_changed: 'Upravena částka DC', approved: 'Převedeno na Discount Credit', paid: 'Výběr vyplacen', rejected: 'Zamítnuto' };
+const TF_EV = { created: 'Žádost podána', amount_changed: 'Upravena částka DC', approved: 'Převedeno na Discount Credit', rejected: 'Zamítnuto' };
 function tfEvents(ev, showActor) {
   if (!ev || !ev.length) return '';
   return `<details style="margin-top:6px"><summary class="small muted" style="cursor:pointer">Pohyby (${ev.length})</summary><div class="small" style="margin-top:4px;display:grid;gap:3px">${ev.map(e => `<div><span class="muted">${fmtDT(e.created_at)}</span> · ${esc(TF_EV[e.event] || e.event)}${showActor && e.actor ? ' <span class="muted">(' + esc(e.actor) + ')</span>' : ''}${e.detail ? ' — <span class="muted">' + esc(e.detail) + '</span>' : ''}</div>`).join('')}</div></details>`;
@@ -847,18 +847,19 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   // Převod podpory ze starého systému (jen uživatelé typu Stávající): žádost → admin zpracuje ručně
   const canTransfer = s.user_type === 'standard';
   const TF_ST = { pending: ['invited', 'zpracovává se'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
-  const tfSt = (t) => (t.status === 'approved' && t.kind === 'payout' ? ['active', 'vyplaceno'] : (TF_ST[t.status] || TF_ST.pending));
-  const transferList = (transfers && transfers.length) ? `<h3 style="margin:20px 0 8px">Moje žádosti o převod podpory</h3><div class="card tbl-wrap"><table class="cards"><thead><tr><th>Datum</th><th>Požadavek</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>
-    ${transfers.map(t => { const st = tfSt(t); const po = t.kind === 'payout'; return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td><td data-l="Požadavek">${po ? 'Výběr (vyplacení)' : 'Převod na DC'}</td><td data-l="Částka">${money(t.amount, t.currency === 'EUR' ? '€' : 'Kč')}</td><td data-l="Kurz" class="small muted">${!po && t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td><td data-l="DC">${po ? '<span class="muted">—</span>' : `<b>${money(t.dc_amount, 'DC')}</b>`}</td><td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${tfEvents(tfEv[t.id], false)}</td><td data-l="Poznámka" class="small muted">${esc(t.admin_note || '')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
+  const tfSt = (t) => (TF_ST[t.status] || TF_ST.pending);
+  const tfSrc = (t) => (t.kind === 'withdrawal' ? 'Z výběru' : 'Z podpory');
+  const transferList = (transfers && transfers.length) ? `<h3 style="margin:20px 0 8px">Moje žádosti o převod podpory</h3><div class="card tbl-wrap"><table class="cards"><thead><tr><th>Datum</th><th>Zdroj</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Stav</th><th>Poznámka</th></tr></thead><tbody>
+    ${transfers.map(t => { const st = tfSt(t); return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td><td data-l="Zdroj">${tfSrc(t)}</td><td data-l="Částka">${money(t.amount, t.currency === 'EUR' ? '€' : 'Kč')}</td><td data-l="Kurz" class="small muted">${t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td><td data-l="DC"><b>${money(t.dc_amount, 'DC')}</b></td><td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${tfEvents(tfEv[t.id], false)}</td><td data-l="Poznámka" class="small muted">${esc(t.admin_note || '')}</td></tr>`; }).join('')}</tbody></table></div>` : '';
   const transferModal = `<div id="tfm" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(460px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">Přenést podporu ze starého systému</b><button type="button" id="tfm-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
-    <p class="muted small" style="margin:6px 0 12px">Vyber, co chceš s podporou ze starého systému udělat, a zadej částku. Žádost zpracujeme ručně.</p>
-    <div style="display:grid;gap:8px;margin-bottom:14px">
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:12px"><input type="radio" name="kind" value="dc" checked style="margin-top:3px;width:auto"><span><b>Převést na Discount Credit</b><br><span class="small muted">Částka se po ověření připíše jako DC (sleva na nákup prádlomatu).</span></span></label>
-      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:12px"><input type="radio" name="kind" value="payout" style="margin-top:3px;width:auto"><span><b>Požádat o výběr</b><br><span class="small muted">Částku Ti po ověření vyplatíme. Do poznámky uveď číslo účtu.</span></span></label>
-    </div>
+    <p class="muted small" style="margin:6px 0 12px">Vyber, odkud ve starém systému částku přenášíš. V obou případech se po ověření připíše jako Discount Credit. Žádost zpracujeme ručně.</p>
     <form method="post" action="/discount-credit/transfer" id="tfm-f" style="margin:0">
-      <label class="small muted">Částka ze staré podpory</label>
+      <div style="display:grid;gap:8px;margin-bottom:14px">
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:12px"><input type="radio" name="kind" value="support" checked style="margin-top:3px;width:auto"><span><b>Z podpořené částky</b><br><span class="small muted">Přenesu část podpory, kterou mám nasbíranou ve starém systému.</span></span></label>
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;padding:10px 12px;border:1px solid var(--border);border-radius:12px"><input type="radio" name="kind" value="withdrawal" style="margin-top:3px;width:auto"><span><b>Z výběru</b><br><span class="small muted">Přenesu částku, kterou bych si jinak nechal vybrat ve starém systému.</span></span></label>
+      </div>
+      <label class="small muted" id="tfm-al">Částka z podpory</label>
       <div style="display:flex;gap:8px;margin:4px 0 12px"><input type="number" name="amount" id="tfm-a" min="1" step="0.01" inputmode="decimal" required placeholder="např. 5000" style="flex:1;text-align:right"><select name="cur" id="tfm-c" style="width:auto"><option value="CZK"${cur === 'EUR' ? '' : ' selected'}>Kč</option><option value="EUR"${cur === 'EUR' ? ' selected' : ''}>€</option></select></div>
       <div style="border-top:1px solid var(--border);padding-top:12px;display:grid;gap:6px;font-size:14px">
         <div id="tfm-rrow" style="display:flex;justify-content:space-between"><span class="muted">Kurz</span><span id="tfm-rate"></span></div>
@@ -872,13 +873,9 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   <script>(function(){var RT=${JSON.stringify(rt)};var m=document.getElementById('tfm'),o=document.getElementById('tfm-open');if(!m||!o)return;
     var a=document.getElementById('tfm-a'),c=document.getElementById('tfm-c'),dc=document.getElementById('tfm-dc'),rate=document.getElementById('tfm-rate');
     function fm(n,d){return Number(n).toLocaleString('cs-CZ',{maximumFractionDigits:d==null?2:d});}
-    function kind(){var r=document.querySelector('#tfm-f input[name=kind]:checked');return r?r.value:'dc';}
-    function calc(){var eur=c.value==='EUR',v=parseFloat(String(a.value).replace(',','.'))||0,po=kind()==='payout';
-      document.getElementById('tfm-rrow').style.display=po?'none':'flex';document.getElementById('tfm-hint').style.display=po?'none':'block';
-      document.getElementById('tfm-lbl').textContent=po?'Bude vyplaceno':'Bude připsáno';
-      document.getElementById('tfm-nl').textContent=po?'Číslo účtu pro vyplacení a poznámka (povinné)':'Poznámka (nepovinné — např. přihlašovací jméno / ID ve starém systému)';
-      document.querySelector('#tfm-f input[name=note]').required=po;
-      if(po){dc.textContent=fm(v)+' '+(eur?'€':'Kč');return;}
+    function kind(){var r=document.querySelector('#tfm-f input[name=kind]:checked');return r?r.value:'support';}
+    function calc(){var eur=c.value==='EUR',v=parseFloat(String(a.value).replace(',','.'))||0;
+      document.getElementById('tfm-al').textContent=kind()==='withdrawal'?'Částka z výběru':'Částka z podpory';
       rate.textContent=eur?('1 € = '+fm(RT,4)+' Kč'):'1 Kč = 1 DC';dc.textContent=fm(Math.round((eur?v*RT:v)*100)/100)+' DC';}
     function open(){m.style.display='flex';calc();setTimeout(function(){a.focus();},50);}function close(){m.style.display='none';}
     o.addEventListener('click',open);document.getElementById('tfm-x').addEventListener('click',close);document.getElementById('tfm-cancel').addEventListener('click',close);
@@ -1263,20 +1260,20 @@ function adminTransfers({ admin, rows = [], msg = '', holyosUrl, status = '', co
   const all = (counts.pending || 0) + (counts.approved || 0) + (counts.rejected || 0);
   return adminLayout('Převody podpory', 'trf', admin, `
   <h1 style="margin:0 0 6px">Převody podpory <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
-  <p class="muted" style="margin-top:0">Žádosti uživatelů typu Stávající o podporu ze starého systému. Dokud žádost ručně nezpracuješ, zůstává ve stavu <b>zpracovává se</b>; všechny pohyby se evidují (rozbal „Pohyby"): buď <b>převod na Discount Credit</b>, nebo <b>výběr</b> (vyplacení). Kontrola probíhá ručně: ověř nárok ve starém systému. U převodu na DC můžeš upravit počet DC a žádost <b>schválit</b> (uživateli se připíše kredit); u výběru provedeš výplatu sám a žádost <b>označíš jako vyplacenou</b>. Nevyhovující žádost <b>zamítni</b>. Aktuální kurz: 1 € = ${esc(Number(rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }))} Kč.</p>
+  <p class="muted" style="margin-top:0">Žádosti uživatelů typu Stávající o přenesení částky ze starého systému — buď <b>z podpořené částky</b>, nebo <b>z výběru</b>. Vždy se převádí na Discount Credit. Dokud žádost ručně nezpracuješ, zůstává ve stavu <b>zpracovává se</b>; všechny pohyby se evidují (rozbal „Pohyby"). Ověř nárok ve starém systému, případně uprav počet DC a žádost <b>schval</b> (uživateli se připíše kredit) nebo <b>zamítni</b>. Aktuální kurz: 1 € = ${esc(Number(rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }))} Kč.</p>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <div class="row" style="gap:8px;margin:10px 0 12px">${[['', 'Všechny', all], ['pending', 'Zpracovávají se', counts.pending || 0], ['approved', 'Převedené', counts.approved || 0], ['rejected', 'Zamítnuté', counts.rejected || 0]].map(([k, l, n]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/transfers${k ? '?status=' + k : ''}">${l} (${n})</a>`).join('')}</div>
-  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Požadavek</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Poznámka uživatele</th><th>Stav</th><th></th></tr></thead><tbody>
-    ${rows.map(t => { const po = t.kind === 'payout'; const st = (t.status === 'approved' && po) ? ['active', 'vyplaceno'] : (ST[t.status] || ST.pending); return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Zdroj</th><th>Částka</th><th>Kurz</th><th>DC</th><th>Poznámka uživatele</th><th>Stav</th><th></th></tr></thead><tbody>
+    ${rows.map(t => { const st = ST[t.status] || ST.pending; return `<tr><td data-l="Datum" class="small muted">${fmtDT(t.created_at)}</td>
       <td data-l="Uživatel"><a href="/admin/supporters/${t.supporter_id}"><b>${esc([t.last_name, t.first_name].filter(Boolean).join(' ') || t.email)}</b></a><div class="small muted">${esc(t.nick || t.email || '')}</div></td>
-      <td data-l="Požadavek">${po ? '<b>Výběr (vyplacení)</b>' : 'Převod na DC'}</td>
+      <td data-l="Zdroj">${t.kind === 'withdrawal' ? 'Z výběru' : 'Z podpory'}</td>
       <td data-l="Částka">${money(t.amount, sy(t))}</td>
-      <td data-l="Kurz" class="small muted">${!po && t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td>
-      <td data-l="DC">${po ? '<span class="muted">—</span>' : `<b>${money(t.dc_amount, 'DC')}</b>`}</td>
+      <td data-l="Kurz" class="small muted">${t.currency === 'EUR' ? '1 € = ' + esc(Number(t.rate).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })) + ' Kč' : '—'}</td>
+      <td data-l="DC"><b>${money(t.dc_amount, 'DC')}</b></td>
       <td data-l="Poznámka" class="small">${esc(t.note || '') || '<span class="muted">—</span>'}</td>
       <td data-l="Stav"><span class="badge ${st[0]}">${st[1]}</span>${t.processed_at ? `<div class="small muted">${fmtDT(t.processed_at)}${t.processed_by ? ' · ' + esc(t.processed_by) : ''}</div>` : ''}${t.admin_note ? `<div class="small muted">${esc(t.admin_note)}</div>` : ''}${tfEvents(tfEv[t.id], true)}</td>
       <td class="actions">${t.status === 'pending' ? `<div class="row" style="flex-direction:column;gap:8px;align-items:stretch;min-width:240px">
-        <form method="post" action="/admin/transfers/${t.id}/approve" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${po ? '' : `<input name="dc" inputmode="decimal" value="${esc(String(Number(t.dc_amount)))}" required title="Počet DC k připsání" style="width:110px;padding:6px 8px;text-align:right">`}<input name="admin_note" placeholder="Poznámka (nepovinné)" style="width:150px;padding:6px 8px"><button class="btn sm" type="submit" onclick="return confirm('${po ? 'Označit žádost jako vyplacenou? (Výplatu proveď ručně.)' : 'Připsat uživateli DC a žádost schválit?'}')">${po ? 'Označit jako vyplaceno' : 'Schválit'}</button></form>
+        <form method="post" action="/admin/transfers/${t.id}/approve" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input name="dc" inputmode="decimal" value="${esc(String(Number(t.dc_amount)))}" required title="Počet DC k připsání" style="width:110px;padding:6px 8px;text-align:right"><input name="admin_note" placeholder="Poznámka (nepovinné)" style="width:150px;padding:6px 8px"><button class="btn sm" type="submit" onclick="return confirm('Připsat uživateli DC a žádost schválit?')">Schválit</button></form>
         <form method="post" action="/admin/transfers/${t.id}/reject" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><input name="admin_note" placeholder="Důvod zamítnutí" style="width:150px;padding:6px 8px"><button class="btn sec sm" type="submit" onclick="return confirm('Žádost zamítnout?')">Zamítnout</button></form></div>` : ''}</td></tr>`; }).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím žádné žádosti o převod podpory.</p>'}</div>`, holyosUrl);
 }
