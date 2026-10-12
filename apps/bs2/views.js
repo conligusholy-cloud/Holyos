@@ -236,15 +236,14 @@ function buildBadge() {
   return `<span class="ver" title="Aktuální verze ${esc(BUILD.version)}${BUILD.sha ? ' · ' + esc(BUILD.sha) : ''}">Verze <b>${esc(BUILD.version)}</b><span class="vd"> · poslední aktualizace ${esc(when)}</span></span>`;
 }
 // Plovoucí tlačítko „Nápad na vylepšení“ + okno s textovým polem (jen pro přihlášené uživatele)
-const IDEA_WIDGET = `<button type="button" id="idea-btn" class="idea-open" data-track="Nápad na vylepšení" style="position:fixed;left:16px;bottom:16px;z-index:60;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid rgba(255,184,77,.5);background:rgba(20,16,6,.85);color:#ffd9a0;font-weight:700;font-size:14px;cursor:pointer;backdrop-filter:blur(8px);box-shadow:0 8px 26px rgba(0,0,0,.45)"><span aria-hidden="true">💡</span> Nápad na vylepšení</button>
-<div id="idea-m" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(520px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+const IDEA_WIDGET = `<div id="idea-m" style="display:none;position:fixed;inset:0;z-index:95;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(520px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
   <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">💡 Nápad na vylepšení</b><button type="button" id="idea-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
   <p class="muted small" style="margin:6px 0 10px">Co by mohlo být v Best Series 2.0 lepší nebo co ti chybí? Napiš nám to, každý nápad čteme.</p>
   <textarea id="idea-t" rows="6" maxlength="3000" placeholder="Tvůj nápad…" style="width:100%;box-sizing:border-box;resize:vertical"></textarea>
   <div id="idea-msg" class="small" style="margin-top:8px;min-height:18px"></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button type="button" id="idea-c" class="btn sec">Zrušit</button><button type="button" id="idea-s" class="btn">Odeslat</button></div>
 </div></div>
-<script>(function(){var b=document.getElementById('idea-btn'),m=document.getElementById('idea-m'),t=document.getElementById('idea-t'),g=document.getElementById('idea-msg'),s=document.getElementById('idea-s');if(!b)return;
+<script>(function(){var m=document.getElementById('idea-m'),t=document.getElementById('idea-t'),g=document.getElementById('idea-msg'),s=document.getElementById('idea-s');if(!m)return;
 function open(){m.style.display='flex';g.textContent='';t.focus();}function close(){m.style.display='none';}
 [].forEach.call(document.querySelectorAll('.idea-open'),function(x){x.addEventListener('click',function(e){e.preventDefault();open();});});document.getElementById('idea-x').addEventListener('click',close);document.getElementById('idea-c').addEventListener('click',close);m.addEventListener('click',function(e){if(e.target===m)close();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.style.display==='flex')close();});
