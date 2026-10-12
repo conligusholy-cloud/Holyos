@@ -166,6 +166,7 @@
     .sim .how-cas .cs{align-items:stretch;text-align:left}
     .sim .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}
   }
+  .sim .how-cas .cs.unk b{font-size:34px!important;line-height:1;color:#fff!important;background:none!important;-webkit-text-fill-color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)}
   .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
   .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
   @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
@@ -205,8 +206,8 @@
           <div class="how-acc"><span class="dec-k">průměrná tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-cas" id="how-cas">
           <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
-          <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 5 000 Kč</b><small>bez DPH<br>nájem 5 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i><i id="hs-env" hidden></i></small></div>
-          <div class="cs r in"><span class="dec-k">zbude Vám měsíčně</span><b id="hs-res">− 6 050 Kč</b><small>s DPH<br>bez DPH <i id="hs-resn">− 5 000 Kč</i></small></div>
+          <div class="cs m in unk"><span class="dec-k">náklady za měsíc</span><b>?</b><small>záleží na lokalitě<br>nájem · energie · servis</small></div>
+          <div class="cs r in unk"><span class="dec-k">zbude Vám měsíčně</span><b>?</b><small>právě to zjistíte v analýze<br>vaší lokality</small></div>
           <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
         </div>
         </div>
@@ -229,7 +230,7 @@
         var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
         function monthCalc(){ var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-5000-serv-en;
           document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
-          document.getElementById('hs-cost').textContent='− '+fmtK(5000+serv+en); document.getElementById('hs-serv').textContent=fmtK(serv); document.getElementById('hs-en').textContent=fmtK(en); document.getElementById('hs-env').textContent=fmtK(env); var rb=document.getElementById('hs-res'), resV=res*1.21; rb.textContent=(resV<0?'− ':'')+fmtK(Math.abs(resV)); document.getElementById('hs-resn').textContent=(res<0?'− ':'')+fmtK(Math.abs(res)); rb.parentNode.classList.toggle('neg',res<0); }
+          /* naklady a vysledek zavisi na lokalite -> zobrazeno jako otaznik */ }
         monthCalc(); // výchozí stav (záporné = červeně)
         function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say(''); monthCalc(); document.getElementById('hs-again').classList.add('in'); }
         function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
