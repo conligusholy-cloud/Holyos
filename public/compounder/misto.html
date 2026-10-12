@@ -37,7 +37,7 @@
   .hero .txt{flex:1;min-width:0}
   .pm3d{flex:none;width:min(40%,440px);height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
   @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
-  @media (max-width:860px){.hero{flex-direction:column;align-items:flex-start}.pm3d{width:min(100%,360px);align-self:center}}
+  @media (max-width:860px){.hero{flex-direction:column;align-items:flex-start;padding:14px 0 18px}.pm3d{width:min(100%,320px);align-self:center}h1{font-size:clamp(26px,8vw,34px)}.lead{font-size:15px}}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;background:rgba(255,255,255,.02)}
   .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.7);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,227,160,.7)}70%{box-shadow:0 0 0 9px rgba(47,227,160,0)}100%{box-shadow:0 0 0 0 rgba(47,227,160,0)}}
@@ -189,6 +189,7 @@
   .eq-g.g1 .eq-t{background:linear-gradient(180deg,rgba(30,134,224,.22),rgba(124,92,255,.14));border-color:rgba(79,209,255,.55)}
   .eq-g.g1 .eq-t b{font-size:44px;background:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(79,209,255,.75))}
   .eq-g.g1 .eq-t .eq-k{color:var(--accent2)} .eq-g.g1 .eq-t small{color:var(--text)}
+  .eq-gk .sm,.eq-star .sm{display:none}
   .eq-star{position:absolute;right:12px;bottom:-11px;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:linear-gradient(90deg,#f5b400,#ff8a3d);color:#1a1200;box-shadow:0 6px 18px rgba(245,180,0,.45);white-space:nowrap}
   .eq-g.g2{border-color:rgba(124,92,255,.55)} .eq-g.g2 .eq-gk{color:#b9a7ff;border-color:rgba(124,92,255,.55)}
   .eq-g.g3{border-color:rgba(245,180,0,.5)} .eq-g.g3 .eq-gk{color:#ffd866;border-color:rgba(245,180,0,.5)}
@@ -202,7 +203,22 @@
   @keyframes eqtick{to{stroke-dashoffset:0}}
   .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
   .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
-  @media(max-width:720px){.eq{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:20px 6px 22px}.eq-g.g1{transform:none}.eq-g.g1 .eq-t b{font-size:30px}.eq-star{font-size:9px;right:6px}.eq{justify-content:flex-start;gap:8px}.eq-g{flex:none;padding:18px 8px 8px}.eq-g .eq-gi{gap:6px}.eq-gk{font-size:9px;left:8px}.eq-t{flex:none;width:104px;padding:8px 6px}.eq-t b{font-size:18px}.eq-t.unk b{font-size:24px}.eq-op{font-size:20px}}
+  @media(max-width:720px){
+    .eq-wrap{padding:18px 8px 16px}
+    .eq-title b{font-size:20px}
+    .eq{gap:3px;padding:22px 0 26px;overflow:visible;justify-content:center}
+    .eq-g{flex:none;padding:12px 3px 4px;border-radius:10px} .eq-g.g1{transform:none;padding:12px 3px 4px;border-width:1.5px}
+    .eq-g .eq-gi{gap:3px}
+    .eq-t{flex:none;width:36px;min-width:0;padding:6px 1px;border-radius:8px}
+    .eq-t .eq-k,.eq-t small{display:none}
+    .eq-t b{font-size:17px;margin:0;line-height:1.2} .eq-g.g1 .eq-t b{font-size:21px} .eq-t.unk b{font-size:17px}
+    .eq-t.res{width:50px;align-self:center} .eq-t.res b{font-size:15px}
+    .eq-op{font-size:15px;line-height:1}
+    .eq-gk{font-size:7.5px;letter-spacing:.04em;left:3px;top:-8px;padding:2px 5px} .eq-gk .lg{display:none} .eq-gk .sm{display:inline}
+    .eq-star{font-size:7px;right:3px;bottom:-9px;padding:2px 5px} .eq-star .lg{display:none} .eq-star .sm{display:inline}
+    .eq-check{width:24px;height:24px;right:-9px;top:-9px}
+    .eq-legend{font-size:12px;gap:6px 14px}
+  }
   .czmap-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(79,209,255,.22))}
   .cz-pins{position:absolute;inset:0;pointer-events:none}
@@ -367,19 +383,19 @@
     <div class="eq-wrap">
       <div class="eq-title"><span class="eq-title-k">Název rovnice</span><b>Rovnice, která z Vás udělá miliardáře</b></div>
       <div class="eq" id="eq">
-        <div class="eq-g g1"><span class="eq-gk">M · dramaticky ovlivňuje místo</span><span class="eq-star">★ 2 nejdůležitější položky</span><div class="eq-gi">
+        <div class="eq-g g1"><span class="eq-gk"><span class="lg">M · dramaticky ovlivňuje místo</span><span class="sm">M · místo</span></span><span class="eq-star"><span class="lg">★ 2 nejdůležitější položky</span><span class="sm">★ nejdůležitější</span></span><div class="eq-gi">
           <div class="eq-t rev" data-i="0"><span class="eq-k">tržby</span><b>T</b><small>tržby za měsíc</small></div>
           <div class="eq-op">−</div>
           <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>N</b><small>podle místa</small></div>
         </div></div>
         <div class="eq-op">−</div>
-        <div class="eq-g g2"><span class="eq-gk">přímo úměrné počtu zákazníků</span><div class="eq-gi">
+        <div class="eq-g g2"><span class="eq-gk"><span class="lg">přímo úměrné počtu zákazníků</span><span class="sm">zákazníci</span></span><div class="eq-gi">
           <div class="eq-t unk" data-i="2"><span class="eq-k">energie</span><b>E</b><small>na cyklus</small></div>
           <div class="eq-op">−</div>
           <div class="eq-t unk" data-i="3"><span class="eq-k">servis</span><b>S</b><small>podle smlouvy</small></div>
         </div></div>
         <div class="eq-op">−</div>
-        <div class="eq-g g3"><span class="eq-gk">dáno výší splátky</span><div class="eq-gi">
+        <div class="eq-g g3"><span class="eq-gk"><span class="lg">dáno výší splátky</span><span class="sm">splátka</span></span><div class="eq-gi">
           <div class="eq-t unk" data-i="4"><span class="eq-k">úvěr</span><b>U</b><small>podle financování</small></div>
         </div></div>
         <div class="eq-op">=</div>
