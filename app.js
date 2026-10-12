@@ -51,6 +51,7 @@ const fleetRoutes = require('./routes/fleet.routes');
 const cadRoutes = require('./routes/cad.routes');
 const printRoutes = require('./routes/print.routes');
 const accountingRoutes = require('./routes/accounting.routes');
+const docTemplatesRoutes = require('./routes/doc-templates.routes');
 const bankingRoutes = require('./routes/banking.routes');
 const cashRegisterRoutes = require('./routes/cash-register.routes');
 const reportsRoutes = require('./routes/reports.routes');
@@ -717,6 +718,7 @@ app.use('/api/fleet', fleetRoutes);
 app.use('/api/cad', cadRoutes);
 app.use('/api/print', printRoutes);
 app.use('/api/accounting', accountingRoutes);
+app.use('/api/doc-templates', docTemplatesRoutes); // Šablony dokumentů — náhledy
 app.use('/api/banking', bankingRoutes);
 app.use('/api/cash', cashRegisterRoutes);
 app.use('/api/reports', reportsRoutes);

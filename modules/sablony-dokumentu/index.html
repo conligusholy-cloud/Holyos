@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Šablony dokumentů | HOLYOS</title>
+  <link rel="icon" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .tpl-wrap { display: grid; grid-template-columns: 330px 1fr; gap: 18px; align-items: start; }
+    .tpl-list { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 8px; position: sticky; top: 12px; max-height: calc(100vh - 140px); overflow-y: auto; }
+    .tpl-group { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text2); font-weight: 700; padding: 12px 10px 4px; }
+    .tpl-item { padding: 9px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; }
+    .tpl-item:hover { background: rgba(20,184,166,.08); }
+    .tpl-item.active { background: rgba(20,184,166,.14); border-color: rgba(20,184,166,.45); }
+    .tpl-item .n { font-weight: 600; font-size: 13.5px; }
+    .tpl-item .d { font-size: 11.5px; color: var(--text2); margin-top: 2px; }
+    .tpl-view { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .tpl-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .tpl-bar h2 { font-size: 16px; margin: 0; flex: 1; min-width: 200px; }
+    .tpl-bar .u { font-size: 12px; color: var(--text2); }
+    .tpl-paper { background: #55565d; padding: 18px; display: flex; justify-content: center; }
+    .tpl-paper iframe { width: 794px; max-width: 100%; height: calc(100vh - 230px); min-height: 640px; border: 0; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+    @media (max-width: 900px) { .tpl-wrap { grid-template-columns: 1fr; } .tpl-list { position: static; max-height: none; } }
+  </style>
+</head>
+<body>
+  <aside id="sidebar"></aside>
+  <div class="main-wrapper">
+    <div class="main-header">
+      <h1>📄 Šablony dokumentů</h1>
+      <p>Náhled vzhledu všech dokladů, které systém vystavuje — faktury, zálohy, dobropisy, nabídky, dodací listy, příjemky, upomínky. Zobrazeno s ukázkovými daty.</p>
+    </div>
+    <div class="main-content">
+      <div class="tpl-wrap">
+        <div class="tpl-list" id="tpl-list"><div class="d" style="padding:14px;color:var(--text2);">Načítám…</div></div>
+        <div class="tpl-view">
+          <div class="tpl-bar">
+            <div style="flex:1;min-width:200px;"><h2 id="tpl-title">—</h2><div class="u" id="tpl-used"></div></div>
+            <button class="btn btn-secondary btn-sm" onclick="openFull()">↗ Otevřít na celou obrazovku</button>
+            <button class="btn btn-primary btn-sm" onclick="printTpl()">🖨️ Tisk / PDF</button>
+          </div>
+          <div class="tpl-paper"><iframe id="tpl-frame" title="Náhled šablony"></iframe></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var CAT = [], CUR = null;
+    function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    async function loadCatalog() {
+      var r = await fetch('/api/doc-templates', { credentials: 'include' });
+      if (!r.ok) { document.getElementById('tpl-list').innerHTML = '<div style="padding:14px;color:var(--text2);">Chyba načtení (' + r.status + ')</div>'; return; }
+      CAT = await r.json();
+      var html = '', last = '';
+      CAT.forEach(function (c) {
+        if (c.group !== last) { html += '<div class="tpl-group">' + esc(c.group) + '</div>'; last = c.group; }
+        html += '<div class="tpl-item" data-k="' + esc(c.key) + '" onclick="selectTpl(\'' + esc(c.key) + '\')"><div class="n">' + esc(c.name) + '</div><div class="d">' + esc(c.desc) + '</div></div>';
+      });
+      document.getElementById('tpl-list').innerHTML = html;
+      var h = (location.hash || '').replace('#', '');
+      selectTpl(CAT.some(function (c) { return c.key === h; }) ? h : CAT[0].key);
+    }
+    async function selectTpl(key) {
+      CUR = CAT.find(function (c) { return c.key === key; }); if (!CUR) return;
+      history.replaceState(null, '', '#' + key);
+      document.querySelectorAll('.tpl-item').forEach(function (e) { e.classList.toggle('active', e.getAttribute('data-k') === key); });
+      document.getElementById('tpl-title').textContent = CUR.name;
+      document.getElementById('tpl-used').textContent = 'Používá se: ' + CUR.used;
+      var fr = document.getElementById('tpl-frame');
+      var r = await fetch('/api/doc-templates/' + encodeURIComponent(key) + '/preview', { credentials: 'include' });
+      fr.srcdoc = r.ok ? await r.text() : '<p style="font-family:sans-serif;padding:24px;">Náhled se nepodařilo načíst (' + r.status + ').</p>';
+    }
+    function openFull() {
+      if (!CUR) return;
+      fetch('/api/doc-templates/' + encodeURIComponent(CUR.key) + '/preview', { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (t) {
+        var w = window.open('', '_blank'); if (w) { w.document.open(); w.document.write(t); w.document.close(); }
+      });
+    }
+    function printTpl() { var fr = document.getElementById('tpl-frame'); if (fr.contentWindow) { fr.contentWindow.focus(); fr.contentWindow.print(); } }
+    loadCatalog();
+
+    var s = document.createElement('script');
+    s.src = '/js/sidebar.js?v=' + Date.now();
+    s.onload = function () { renderSidebar('sablony-dokumentu'); };
+    document.head.appendChild(s);
+    var tb = document.createElement('script');
+    tb.src = '/js/top-bar.js?v=' + Date.now();
+    document.head.appendChild(tb);
+  </script>
+</body>
+</html>

@@ -371,4 +371,5 @@ module.exports = {
   czAccountToIban,
   buildTemplateData,
   renderTemplate,
+  loadTemplate,
 };

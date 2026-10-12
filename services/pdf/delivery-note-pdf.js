@@ -59,4 +59,4 @@ async function generateDeliveryNotePdf(dn, our) {
   }
 }
 
-module.exports = { generateDeliveryNotePdf };
+module.exports = { generateDeliveryNotePdf, buildHtml };
