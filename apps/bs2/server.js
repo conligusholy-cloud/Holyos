@@ -382,7 +382,7 @@ async function supportAgent() { try { const r = await q("SELECT value FROM app_s
 async function supportOnline() { try { const r = await q("SELECT value FROM app_settings WHERE key='support_online'"); return (r.rows[0] || {}).value === '1'; } catch (e) { return false; } }
 app.get('/podpora', wrap(requireUser), wrap(async (req, res) => {
   const online = await supportOnline();
-  const msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [req.user.id])).rows;
+  const msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [req.user.id])).rows;
   await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2 AND read_by_user=false', [req.user.id, 'agent']);
   res.send(V.supportPage(req.user, { online, msgs, agent: await supportAgent() }));
 }));
@@ -392,15 +392,28 @@ app.get('/api/support/state', wrap(async (req, res) => {
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND sender='agent' AND read_by_user=false", [s.sid])).rows[0] || {}).c || 0);
   const after = parseInt(req.query.after, 10);
   let msgs = [];
-  if (Number.isFinite(after)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
+  if (Number.isFinite(after)) { msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
   res.set('Cache-Control', 'no-store').json({ online, unread, msgs, agent: await supportAgent() });
 }));
-app.post('/api/support/send', wrap(requireUser), wrap(async (req, res) => {
+const SUP_COLS = 'id, supporter_id, sender, agent_name, body, read_by_agent, read_by_user, created_at, file_name, file_type, file_size';
+const supUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+app.post('/api/support/send', wrap(requireUser), supUpload.single('file'), wrap(async (req, res) => {
   if (!(await supportOnline())) return res.status(403).json({ error: 'Podpora je momentálně offline.' });
   const body = String((req.body || {}).body || '').trim().slice(0, 2000);
-  if (!body) return res.status(400).json({ error: 'Prázdná zpráva.' });
-  const r = await q('INSERT INTO support_messages (supporter_id, sender, body) VALUES ($1,$2,$3) RETURNING *', [req.user.id, 'user', body]);
+  const f = req.file || null;
+  if (!body && !f) return res.status(400).json({ error: 'Prázdná zpráva.' });
+  const r = await q('INSERT INTO support_messages (supporter_id, sender, body, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ' + SUP_COLS, [req.user.id, 'user', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null]);
   res.json({ ok: true, msg: r.rows[0] });
+}));
+// Stažení přílohy — uživatel jen své, admin vše
+app.get('/support/file/:id(\\d+)', wrap(async (req, res) => {
+  const a = readCookie(req, ADMIN_COOKIE), u = readCookie(req, USER_COOKIE);
+  const isAdmin = !!(a && a.kind === 'admin' && isAllowedAdmin(a)), uid = u && u.kind === 'user' ? u.sid : null;
+  if (!isAdmin && !uid) return res.status(401).end();
+  const r = await q('SELECT supporter_id, file_name, file_type, file_data FROM support_messages WHERE id=$1', [parseInt(req.params.id, 10)]);
+  const m = r.rows[0]; if (!m || !m.file_data) return res.status(404).end();
+  if (!isAdmin && m.supporter_id !== uid) return res.status(403).end();
+  res.set('Content-Type', m.file_type || 'application/octet-stream').set('Content-Disposition', (req.query.dl ? 'attachment' : 'inline') + '; filename*=UTF-8\'\'' + encodeURIComponent(m.file_name || 'soubor')).set('Cache-Control', 'private, max-age=86400').send(m.file_data);
 }));
 
 app.get('/ai-chat', wrap(requireUser), (req, res) => { if (!req.user.ai_chat_on) return res.redirect('/'); res.send(V.aiChatPage(req.user)); });
@@ -588,7 +601,7 @@ app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
   let msgs = [], who = null;
   if (sid) {
     who = (await q('SELECT id, nick, first_name, last_name, email, phone FROM supporters WHERE id=$1', [sid])).rows[0] || null;
-    msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
+    msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
     await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
   }
   res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent() }));
@@ -608,17 +621,17 @@ app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
   await log(req.admin, 'support_online', { online: on });
   res.redirect('/admin/podpora?msg=' + encodeURIComponent(on ? 'Podpora je ONLINE — uživatelé mohou psát.' : 'Podpora je OFFLINE.'));
 }));
-app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, wrap(async (req, res) => {
-  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file'), wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000); const f = req.file || null;
   let row = null;
-  if (body) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent) VALUES ($1,$2,$3,$4,true) RETURNING *', [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', body])).rows[0];
+  if (body || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null])).rows[0];
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);
 }));
 app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false")).rows[0] || {}).c || 0);
   const sid = parseInt(req.query.u, 10) || 0; const after = parseInt(req.query.after, 10); let msgs = [];
-  if (sid && Number.isFinite(after)) { msgs = (await q('SELECT * FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [sid, after])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
+  if (sid && Number.isFinite(after)) { msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [sid, after])).rows; if (msgs.length) await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user'", [sid]); }
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 

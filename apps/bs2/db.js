@@ -177,6 +177,11 @@ async function migrate() {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS support_messages_sup_idx ON support_messages (supporter_id, created_at);
+    -- Přílohy ke zprávám podpory (screenshot / soubor), uložené přímo v DB (max 10 MB)
+    ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_name TEXT;
+    ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_type TEXT;
+    ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_size INTEGER;
+    ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_data BYTEA;
   `);
 }
 
