@@ -489,23 +489,25 @@ function supporterCompounder(s) {
   .cp .ph-k{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);font-weight:700}
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
-  .cp .how{margin:4px 0 22px;padding:18px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45);position:relative}
-  .cp .how-flow{display:flex;align-items:stretch;gap:8px}
-  .cp .how-col{flex:1;min-width:0;position:relative;text-align:center;padding:14px 10px;border-radius:14px;border:1px solid var(--border);background:rgba(4,8,16,.5)}
-  .cp .how-col b{display:block;font-size:14px;margin-top:4px} .cp .how-col span{display:block;font-size:11.5px;color:var(--text2)}
-  .cp .how-ic{font-size:34px;line-height:1}
-  .cp .how-arrow{display:flex;align-items:center;font-size:26px;color:var(--accent2);text-shadow:0 0 12px rgba(79,209,255,.6)}
-  .cp .how-machine{flex:1.6;border-color:rgba(79,209,255,.4)} .cp .how-machine img{width:100%;max-width:220px;height:auto;filter:drop-shadow(0 16px 26px rgba(0,0,0,.65)) drop-shadow(0 0 16px rgba(79,209,255,.3))}
-  .cp .how-prices{margin-top:8px;display:flex;flex-direction:column;gap:3px} .cp .how-prices i{font-style:normal;font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid rgba(79,209,255,.35);color:var(--accent2)}
-  .cp .how-walk{position:absolute;left:0;right:0;bottom:6px;height:22px;pointer-events:none} .cp .how-walk em{position:absolute;left:-10%;top:0;font-style:normal;font-size:18px;animation:howwalk 1.8s linear forwards}
-  @keyframes howwalk{from{left:-10%;opacity:0}15%{opacity:1}to{left:110%;opacity:0}}
-  .cp .how-drum{display:flex;justify-content:center;gap:6px;margin-top:8px} .cp .how-drum i{width:10px;height:10px;border-radius:50%;background:rgba(79,209,255,.25)} .cp .how-drum.on i{animation:howdrum .6s ease-in-out infinite} .cp .how-drum.on i:nth-child(2){animation-delay:.2s} .cp .how-drum.on i:nth-child(3){animation-delay:.4s}
-  @keyframes howdrum{0%,100%{background:rgba(79,209,255,.25);transform:translateY(0)}50%{background:var(--accent2);transform:translateY(-5px);box-shadow:0 0 10px var(--accent2)}}
-  .cp .how-money{border-color:rgba(47,227,160,.45)} .cp .how-acc{margin-top:8px;padding:8px;border-radius:10px;background:rgba(47,227,160,.08);border:1px solid rgba(47,227,160,.35)} .cp .how-acc b{font-size:clamp(18px,2.4vw,26px);letter-spacing:-.02em;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent;margin:0}
-  .cp .how-coins{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;overflow:hidden} .cp .how-coins .coin{position:absolute;left:58%;top:40%;font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.9s ease-out forwards}
-  @keyframes howcoin{0%{left:58%;top:42%;opacity:0;transform:scale(.6)}20%{opacity:1;transform:scale(1.1)}100%{left:84%;top:28%;opacity:0;transform:scale(.9)}}
+  .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
+  .cp .how-stage{position:relative;width:min(100%,760px);margin:0 auto;aspect-ratio:1377/1142;overflow:visible}
+  .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
+  .cp .how-d{position:absolute;width:13%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+  .cp .how-d i{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(79,209,255,.0);transition:border-color .3s}
+  .cp .how-d span{position:absolute;left:50%;top:106%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;color:var(--text2);opacity:.85}
+  .cp .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
+  .cp .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
+  @keyframes howspin{to{transform:rotate(360deg)}}
+  .cp .how-cust,.cp .how-bag{position:absolute;font-size:34px;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
+  .cp .how-bag{font-size:26px;z-index:4}
+  .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
+  .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
+  .cp .how-acc{position:absolute;right:0;top:0;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
+  @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
-  @media(max-width:900px){.cp .how-flow{flex-direction:column} .cp .how-arrow{justify-content:center;transform:rotate(90deg)} .cp .how-coins .coin{display:none}}
+  @media(max-width:700px){.cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -605,32 +607,52 @@ function supporterCompounder(s) {
       <div class="ph-head"><div class="ph-no"><span>Fáze</span><b>${ph.no}</b></div><div><div class="ph-k">${esc(ph.k)}</div><h2>${esc(ph.title)}</h2><p>${ph.lead}</p></div></div>
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
       ${ph.visual === 'how' ? `<div class="how">
-        <div class="how-flow">
-          <div class="how-col"><div class="how-ic">👤</div><b>Zákazník přijde</b><span>kdykoli, 24/7</span><div class="how-walk" id="how-walk"></div></div>
-          <div class="how-arrow">→</div>
-          <div class="how-col how-pay"><div class="how-ic">💳</div><b>Zaplatí</b><span>karta · mince · bankovky</span><div class="how-prices"><i>Pračka 8 kg · 150 Kč</i><i>Pračka 18 kg · 200 Kč</i><i>Sušička · 50 Kč</i></div></div>
-          <div class="how-arrow">→</div>
-          <div class="how-col how-machine"><img src="/img/pradlomat.webp?v=2" alt="Prádlomat" loading="lazy" decoding="async"><b>Stroj pere a suší</b><span>sám · bez obsluhy</span><div class="how-drum" id="how-drum"><i></i><i></i><i></i></div></div>
-          <div class="how-arrow">→</div>
-          <div class="how-col how-money"><div class="how-ic">💰</div><b>Peníze na Váš účet</b><span>každá platba se připíše</span><div class="how-acc"><span class="dec-k">dnes vyděláno</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 00:00</span></div></div>
+        <div class="how-stage">
+          <img class="how-img" src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" loading="lazy" decoding="async">
+          <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
+          <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
+          <div class="how-cust" id="how-cust">🧍</div>
+          <div class="how-bag" id="how-bag">🧺</div>
+          <div class="how-tag" id="how-tag"></div>
+          <div class="how-acc"><span class="dec-k">dnes vyděláno</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
+          <div class="how-coins" id="how-coins"></div>
+          <div class="how-door"><span>vchod</span></div>
         </div>
-        <div class="how-coins" id="how-coins"></div>
-        <div class="how-foot"><span>🕐 <b id="how-clock">00:00</b> · prádlomat běží</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
+        <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
       </div>
       <script>(function(){
-        var sum=document.getElementById('how-sum'),n=document.getElementById('how-n'),clk=document.getElementById('how-clock'),coins=document.getElementById('how-coins'),walk=document.getElementById('how-walk'),drum=document.getElementById('how-drum');
-        if(!sum)return; var total=0,cnt=0,min=6*60,PR=[150,200,50,150,200];
+        var $=function(id){return document.getElementById(id);};
+        var cust=$('how-cust'),bag=$('how-bag'),w=$('how-w'),sd=$('how-s'),tag=$('how-tag'),sum=$('how-sum'),n=$('how-n'),clk=$('how-clock'),coins=$('how-coins');
+        if(!cust)return;
+        // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
+        var W={x:49,y:58},S={x:70,y:54},IN={x:-8,y:78},DOOR={x:14,y:82},OUT={x:112,y:78};
+        function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
+        function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
+        var total=0,cnt=0,min=6*60,PR=[[200,'Pračka 18 kg · 200 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč'],[150,'Pračka 8 kg · 150 Kč'],[250,'Pračka 18 kg + sušička · 250 Kč']];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
-        function cycle(){
-          min=(min+Math.floor(20+Math.random()*50))%1440; clk.textContent=fmt(min);
-          var p=PR[cnt%PR.length]; cnt++;
-          walk.innerHTML='<em>👤</em>'; setTimeout(function(){ walk.innerHTML=''; },1800);
-          setTimeout(function(){ drum.classList.add('on'); setTimeout(function(){ drum.classList.remove('on'); },2600); },900);
-          setTimeout(function(){ var c=document.createElement('em'); c.className='coin'; c.textContent='+'+p+' Kč'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1900);
-            total+=p; var shown=parseInt(sum.textContent.replace(/\s/g,''),10)||0; var st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/600); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
-            n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min); },1500);
+        function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+        async function customer(){
+          var pr=PR[cnt%PR.length]; cnt++;
+          min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
+          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+3,y:IN.y+2}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
+          put(cust,{x:W.x-9,y:W.y+6}); put(bag,{x:W.x-5,y:W.y+8}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
+          say('zaplatí na terminálu · '+pr[1],{x:W.x-6,y:W.y-14}); await wait(1300);
+          bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.45)'); await wait(700); bag.style.opacity=0;
+          w.classList.add('on'); say('pere…',{x:W.x,y:W.y-16}); await wait(3200); w.classList.remove('on');
+          bag.style.transition='none'; put(bag,{x:W.x,y:W.y},'translate(-50%,-50%) scale(.45)'); bag.style.opacity=1; await wait(30);
+          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.45)'); say('přehodí do sušičky',{x:(W.x+S.x)/2,y:S.y-16}); await wait(950);
+          sd.classList.add('on'); say('suší…',{x:S.x,y:S.y-16}); await wait(3000); sd.classList.remove('on');
+          // platba se připíše
+          var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=S.x+'%'; c.style.top=S.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
+          total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
+          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
+          // odchází s čistým prádlem
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:S.x-4,y:S.y+10},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:S.x-8,y:S.y+8}); say('hotovo — odchází s čistým prádlem',{x:S.x,y:S.y-14}); await wait(700);
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+3,y:OUT.y+2}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+          await wait(900); customer();
         }
-        cycle(); setInterval(cycle,4200);
+        customer();
       })();</script>` : ''}
       ${ph.visual === 'loop' ? `<div class="loopwrap"><div class="loop">
         <svg viewBox="0 0 420 420" class="loop-svg" aria-hidden="true">
@@ -715,7 +737,7 @@ const vatPrice = (p, cur) => { const b = cur === 'EUR' ? p.price_eur : p.price_c
 // a kalkulačka „čím víc DC, tím menší cena" s fotkou prádlomatu FLEX.
 function valueHero({ flex = null, sym = 'Kč' } = {}) {
   // ── Scéna 1: hledání místa (lidé z Best Series prohledávají mapu a označí parcelu) ──
-  const person = (kt, color) => `<g><circle r="3.4" cy="-9" fill="#ffd9b0"/><rect x="-3.6" y="-6" width="7.2" height="9" rx="2.4" fill="${color}"/><rect x="-3.6" y="-1.5" width="7.2" height="1.8" fill="#fff" opacity=".85"/><animateMotion dur="8s" repeatCount="indefinite" calcMode="linear" keyTimes="${kt}" keyPoints="0;.124;.124;.463;.463;1;1" path="M10 59 H37 H111 H150 V92 H195"/></g>`;
+  const person = (kt, kp, path, color) => `<g><circle r="3.4" cy="-9" fill="#ffd9b0"/><rect x="-3.6" y="-6" width="7.2" height="9" rx="2.4" fill="${color}"/><rect x="-3.6" y="-1.5" width="7.2" height="1.8" fill="#fff" opacity=".85"/><animateMotion dur="8s" repeatCount="indefinite" calcMode="linear" keyTimes="${kt}" keyPoints="${kp}" path="${path}"/></g>`;
   const sceneFind = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Lidé z Best Series hledají vhodné místo"><rect width="240" height="150" rx="12" fill="#0a1426"/>
     <g><rect x="160" y="74" width="70" height="40" rx="4" fill="#1c3b6e" stroke="#4fa3ff" stroke-width=".8"/><path d="M178 76v26M192 76v26M206 76v26M220 76v26" stroke="#7fb4ff" stroke-width=".7" opacity=".5"/><rect x="164" y="77" width="12" height="12" rx="3" fill="#1e86e0"/><text x="170" y="87" font-size="9.500" fill="#fff" text-anchor="middle" font-weight="800">P</text><text x="195" y="111" font-size="5.500" fill="#a9ccff" text-anchor="middle">Parkoviště</text></g>
     <g fill="#16294a" stroke="#22407a" stroke-width=".6"><rect x="9.5" y="9.5" width="17.0" height="19.5" rx="1.5"/><rect x="9.5" y="32.0" width="17.0" height="19.5" rx="1.5"/><rect x="29.5" y="9.5" width="17.0" height="19.5" rx="1.5"/><rect x="29.5" y="32.0" width="17.0" height="19.5" rx="1.5"/><rect x="49.5" y="9.5" width="17.0" height="19.5" rx="1.5"/><rect x="49.5" y="32.0" width="17.0" height="19.5" rx="1.5"/><rect x="77.5" y="9.5" width="14.5" height="19.5" rx="1.5"/><rect x="77.5" y="32.0" width="14.5" height="19.5" rx="1.5"/><rect x="95.0" y="9.5" width="14.5" height="19.5" rx="1.5"/><rect x="95.0" y="32.0" width="14.5" height="19.5" rx="1.5"/><rect x="112.5" y="9.5" width="14.5" height="19.5" rx="1.5"/><rect x="112.5" y="32.0" width="14.5" height="19.5" rx="1.5"/><rect x="130.0" y="9.5" width="14.5" height="19.5" rx="1.5"/><rect x="130.0" y="32.0" width="14.5" height="19.5" rx="1.5"/><rect x="155.5" y="9.5" width="17.5" height="19.5" rx="1.5"/><rect x="155.5" y="32.0" width="17.5" height="19.5" rx="1.5"/><rect x="176.0" y="9.5" width="17.5" height="19.5" rx="1.5"/><rect x="176.0" y="32.0" width="17.5" height="19.5" rx="1.5"/><rect x="196.5" y="9.5" width="17.5" height="19.5" rx="1.5"/><rect x="196.5" y="32.0" width="17.5" height="19.5" rx="1.5"/><rect x="217.0" y="9.5" width="17.5" height="19.5" rx="1.5"/><rect x="217.0" y="32.0" width="17.5" height="19.5" rx="1.5"/><rect x="9.5" y="67.5" width="17.0" height="18.0" rx="1.5"/><rect x="9.5" y="88.5" width="17.0" height="18.0" rx="1.5"/><rect x="29.5" y="67.5" width="17.0" height="18.0" rx="1.5"/><rect x="29.5" y="88.5" width="17.0" height="18.0" rx="1.5"/><rect x="49.5" y="67.5" width="17.0" height="18.0" rx="1.5"/><rect x="49.5" y="88.5" width="17.0" height="18.0" rx="1.5"/><rect x="77.5" y="67.5" width="14.5" height="18.0" rx="1.5"/><rect x="77.5" y="88.5" width="14.5" height="18.0" rx="1.5"/><rect x="95.0" y="67.5" width="14.5" height="18.0" rx="1.5"/><rect x="95.0" y="88.5" width="14.5" height="18.0" rx="1.5"/><rect x="112.5" y="67.5" width="14.5" height="18.0" rx="1.5"/><rect x="112.5" y="88.5" width="14.5" height="18.0" rx="1.5"/><rect x="130.0" y="67.5" width="14.5" height="18.0" rx="1.5"/><rect x="130.0" y="88.5" width="14.5" height="18.0" rx="1.5"/><rect x="9.5" y="119.5" width="17.0" height="23.0" rx="1.5"/><rect x="29.5" y="119.5" width="17.0" height="23.0" rx="1.5"/><rect x="49.5" y="119.5" width="17.0" height="23.0" rx="1.5"/><rect x="77.5" y="119.5" width="14.5" height="23.0" rx="1.5"/><rect x="95.0" y="119.5" width="14.5" height="23.0" rx="1.5"/><rect x="112.5" y="119.5" width="14.5" height="23.0" rx="1.5"/><rect x="130.0" y="119.5" width="14.5" height="23.0" rx="1.5"/><rect x="155.5" y="121.5" width="17.5" height="21.0" rx="1.5"/><rect x="176.0" y="121.5" width="17.5" height="21.0" rx="1.5"/><rect x="196.5" y="121.5" width="17.5" height="21.0" rx="1.5"/><rect x="217.0" y="121.5" width="17.5" height="21.0" rx="1.5"/></g>
@@ -725,12 +747,14 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
     <rect x="78" y="119" width="66" height="25" rx="4" fill="#14452f"/><g fill="#1f7a4d" stroke="#2fe3a0" stroke-width=".4"><circle cx="84" cy="126" r="3.2"/><circle cx="94" cy="138" r="3.2"/><circle cx="104" cy="127" r="3.2"/><circle cx="116" cy="137" r="3.2"/><circle cx="126" cy="126" r="3.2"/><circle cx="138" cy="136" r="3.2"/><circle cx="132" cy="131" r="3.2"/><circle cx="90" cy="131" r="3.2"/></g>
     <g><rect x="158" y="12" width="74" height="38" rx="3" fill="#2a2f66" stroke="#5560d6" stroke-width=".8"/><rect x="170" y="24" width="24" height="16" fill="#e8ecff"/><path d="M167 24h30l-3-7h-24z" fill="#ff5470"/><rect x="179" y="31" width="6" height="9" fill="#2a2f66"/><text x="204" y="35" font-size="6.500" fill="#cfd6ff" font-weight="700">Obchod</text></g>
     <g><rect x="80" y="12" width="62" height="38" rx="3" fill="#3a2f45" stroke="#8a6fb0" stroke-width=".8"/><path d="M100 42V28l6-6 6 6v14z" fill="#d9c9f0"/><rect x="104" y="12.500" width="4" height="9" fill="#d9c9f0"/><path d="M102.500 15.500h7" stroke="#d9c9f0" stroke-width="1.600"/><path d="M106 12.500v-4" stroke="#d9c9f0" stroke-width="1.600"/><rect x="123" y="30" width="12" height="12" fill="#b9a4d8"/><text x="115" y="48" font-size="5.500" fill="#cdbfe6" text-anchor="middle">Kostel</text></g>
-    <g><rect x="12" y="120" width="52" height="22" rx="3" fill="#3a2e1a" stroke="#d0a23a" stroke-width=".8"/><rect x="20" y="126" width="9" height="12" rx="1.500" fill="#ffd23f"/><rect x="22" y="128" width="5" height="3" fill="#3a2e1a"/><text x="48" y="134" font-size="5.500" fill="#f0d68a" text-anchor="middle">Čerp. stanice</text></g>
+    <g><rect x="12" y="120" width="52" height="22" rx="3" fill="#3a2e1a" stroke="#d0a23a" stroke-width=".8"/><rect x="17" y="125" width="8" height="11" rx="1.500" fill="#ffd23f"/><rect x="19" y="127" width="4" height="3" fill="#3a2e1a"/><text x="38" y="140" font-size="5" fill="#f0d68a" text-anchor="middle">Čerp. stanice</text>
+    ${flex && flex.img ? `<image class="vh-chk2" href="${flex.img}" x="30" y="121" width="26" height="16" preserveAspectRatio="xMidYMid meet"/>` : `<g class="vh-chk2"><rect x="34" y="123" width="14" height="13" rx="2" fill="#1b2e57" stroke="#3a6cf5" stroke-width=".8"/><circle cx="41" cy="130" r="3.500" fill="#0a1426" stroke="#4fd1ff"/></g>`}
+    <g class="vh-chk2"><circle cx="58" cy="125" r="5" fill="#2fe3a0"/><path d="M55.500 125l2 2 3.500-4" fill="none" stroke="#04141a" stroke-width="1.400" stroke-linecap="round" stroke-linejoin="round"/></g></g>
     <g><rect x="158" y="124" width="74" height="18" rx="3" fill="#1f3a4a" stroke="#3a8bb0" stroke-width=".8"/><circle cx="170" cy="133" r="4" fill="#4fd1ff"/><text x="200" y="135" font-size="5.500" fill="#b8e6f7" text-anchor="middle">Škola</text></g>
     <text x="111" y="132" font-size="5" fill="#bff3d9" text-anchor="middle" opacity=".0">Park</text>
     <g fill="#0a1426" opacity=".0"></g>
     <rect class="vh-lot" x="160" y="74" width="70" height="40" rx="5" fill="#2fe3a0" fill-opacity="0" stroke="#2fe3a0" stroke-width="1.5" stroke-dasharray="4 3"/>
-    ${person('0;.12;.2;.34;.42;.66;1', '#1e86e0')}${person('0;.15;.25;.4;.48;.7;1', '#7c5cff')}
+    ${person('0;.12;.2;.34;.42;.66;1', '0;.124;.124;.463;.463;1;1', 'M10 59 H37 H111 H150 V92 H195', '#1e86e0')}${person('0;.3;.4;.56;1', '0;.4;.4;1;1', 'M10 59 H72 V112 H38 V122', '#7c5cff')}
     <g class="vh-x vh-x1" stroke="#ff5470" stroke-width="3" stroke-linecap="round"><path d="M29 22l16 16M45 22l-16 16"/></g>
     <g class="vh-x vh-x2" stroke="#ff5470" stroke-width="3" stroke-linecap="round"><path d="M103 79l16 16M119 79l-16 16"/></g>
     ${flex && flex.img ? `<image class="vh-chk" href="${flex.img}" x="178" y="79" width="44" height="30" preserveAspectRatio="xMidYMid meet"/>` : `<g class="vh-chk"><rect x="182" y="82" width="30" height="24" rx="3" fill="#1b2e57" stroke="#3a6cf5"/><rect x="180" y="82" width="30" height="6" rx="2" fill="#1e86e0"/><circle cx="195" cy="98" r="5" fill="#0a1426" stroke="#4fd1ff" stroke-width="1.5"/></g>`}
@@ -812,10 +836,11 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   .vh-step em{font-style:normal;align-self:flex-start;margin-top:4px;font-size:12px;font-weight:800;color:var(--ok);background:rgba(47,227,160,.12);border:1px solid rgba(47,227,160,.35);padding:3px 9px;border-radius:999px}
   .vh-step .vh-num{font-size:13px;color:#fff}
   .vh-x{opacity:0;animation:vhx1 8s ease infinite}.vh-x2{animation-name:vhx2}
-  .vh-lot{animation:vhlot 8s ease infinite}.vh-chk{opacity:0;animation:vhchk 8s ease infinite}
+  .vh-lot{animation:vhlot 8s ease infinite}.vh-chk{opacity:0;animation:vhchk 8s ease infinite}.vh-chk2{opacity:0;animation:vhchk2 8s ease infinite}
   @keyframes vhx1{0%,18%{opacity:0}22%,92%{opacity:1}100%{opacity:0}}
   @keyframes vhx2{0%,40%{opacity:0}44%,92%{opacity:1}100%{opacity:0}}
   @keyframes vhlot{0%,66%{fill-opacity:0}72%,94%{fill-opacity:.28}100%{fill-opacity:0}}
+  @keyframes vhchk2{0%,56%{opacity:0}64%,94%{opacity:1}100%{opacity:0}}
   @keyframes vhchk{0%,68%{opacity:0}76%,94%{opacity:1}100%{opacity:0}}
   .vh-trench{stroke-dasharray:143;animation:vhdig 6s linear infinite}.vh-water,.vh-drain,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-drain{animation-delay:.05s}.vh-elec{animation-delay:.1s}
   @keyframes vhdig{0%{stroke-dashoffset:143}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
@@ -841,7 +866,7 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   .vh-sv{margin-top:12px;font-size:13.5px;color:var(--text2);min-height:38px}.vh-sv b{color:var(--ok)}
   @media(max-width:900px){.vh-flow{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.vh-step::after,.vh-step::before{display:none!important}.vh-calc{grid-template-columns:1fr}}
   @media(max-width:520px){.vh-row{grid-template-columns:100px 1fr}}
-  @media(prefers-reduced-motion:reduce){.vh-x,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-x,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-drain,.vh-elec{stroke-dashoffset:0}}
+  @media(prefers-reduced-motion:reduce){.vh-x,.vh-lot,.vh-chk,.vh-chk2,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-x,.vh-chk,.vh-chk2,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-drain,.vh-elec{stroke-dashoffset:0}}
   </style>
   <section class="vh">
     <h2>Prádlomat nekupujete sami. Best Series zařídí všechno ostatní.</h2>
