@@ -674,17 +674,19 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   </svg>`;
 
   // ── Scéna 2: bagr kope výkop pro přípojky (voda + elektřina) až k prádlomatu ──
-  const sceneDig = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Bagr vykope přípojky k prádlomatu"><rect width="240" height="150" rx="12" fill="#0a1426"/>
+  const sceneDig = `<svg viewBox="0 0 240 150" class="vh-svg" role="img" aria-label="Bagr vykope přípojky vody, odpadu a elektřiny k prádlomatu"><rect width="240" height="150" rx="12" fill="#0a1426"/>
     <rect x="0" y="70" width="240" height="80" fill="#2a2018"/><rect x="0" y="70" width="240" height="5" fill="#2d6b4a"/>
     <rect x="0" y="75" width="240" height="75" fill="url(#vhg)" opacity=".5"/>
     <defs><linearGradient id="vhg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2b1e"/><stop offset="1" stop-color="#1a130d"/></linearGradient></defs>
-    <path class="vh-trench" d="M65 100 H195" fill="none" stroke="#120d09" stroke-width="13" stroke-linecap="round" pathLength="130"/>
-    <path class="vh-water" d="M65 96 H195 V70" fill="none" stroke="#4fd1ff" stroke-width="2.600" stroke-linecap="round" pathLength="200"/>
-    <path class="vh-elec" d="M65 104 H202 V70" fill="none" stroke="#ffd23f" stroke-width="2.600" stroke-linecap="round" stroke-dasharray="1 0" pathLength="200"/>
-    <g class="vh-box"><rect x="188" y="26" width="44" height="44" rx="5" fill="#1b2e57" stroke="#3a6cf5"/><rect x="188" y="26" width="44" height="9" rx="3" fill="#1e86e0"/><circle cx="200" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="220" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="210" cy="26" r="0" fill="#2fe3a0"/></g>
+    <path class="vh-trench" d="M65 100 H208" fill="none" stroke="#120d09" stroke-width="20" stroke-linecap="round" pathLength="143"/>
+    <path class="vh-water" d="M65 94 H188 V70" fill="none" stroke="#4fd1ff" stroke-width="2.800" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
+    <path class="vh-drain" d="M65 100 H198 V70" fill="none" stroke="#b79a73" stroke-width="3.600" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
+    <path class="vh-elec" d="M65 106 H208 V70" fill="none" stroke="#ffd23f" stroke-width="2.800" stroke-linecap="round" stroke-linejoin="round" pathLength="200"/>
+    ${flex && flex.img ? `<image class="vh-box" href="${flex.img}" x="166" y="10" width="70" height="60" preserveAspectRatio="xMidYMax meet"/>` : `<g class="vh-box"><rect x="188" y="26" width="44" height="44" rx="5" fill="#1b2e57" stroke="#3a6cf5"/><rect x="188" y="26" width="44" height="9" rx="3" fill="#1e86e0"/><circle cx="200" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/><circle cx="220" cy="52" r="7" fill="#0a1426" stroke="#4fd1ff" stroke-width="2"/></g>`}
+    <g font-size="8.500" fill="#b8c6e0"><circle cx="22" cy="136" r="3" fill="#4fd1ff"/><text x="29" y="139">voda</text><circle cx="78" cy="136" r="3" fill="#b79a73"/><text x="85" y="139">odpad</text><circle cx="140" cy="136" r="3" fill="#ffd23f"/><text x="147" y="139">elektřina</text></g>
     <g><rect x="-17" y="-8" width="34" height="9" rx="4.500" fill="#2b3b5e"/><rect x="-13" y="-21" width="28" height="13" rx="2" fill="#f5b82e"/><rect x="-13" y="-33" width="15" height="13" rx="2" fill="#f5b82e"/><rect x="-10" y="-30" width="9" height="7" rx="1" fill="#a9d8ff"/>
       <g transform="translate(13 -19)"><g><animateTransform attributeName="transform" type="rotate" values="-10;16;-10" dur="1s" repeatCount="indefinite"/><line x1="0" y1="0" x2="22" y2="-11" stroke="#f5b82e" stroke-width="4.500" stroke-linecap="round"/><line x1="22" y1="-11" x2="33" y2="14" stroke="#e8a417" stroke-width="3.800" stroke-linecap="round"/><path d="M33 14l8-3-3 9z" fill="#aab6d0"/></g></g>
-      <animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.7;1" keyPoints="0;1;1" path="M22 70 H152"/></g>
+      <animateMotion dur="6s" repeatCount="indefinite" calcMode="linear" keyTimes="0;0.7;1" keyPoints="0;1;1" path="M22 70 H165"/></g>
   </svg>`;
 
   // ── Scéna 3: provoz za 13 % z obratu ──
@@ -750,8 +752,8 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   @keyframes vhpin{0%,60%{opacity:0;transform:translateY(-34px)}66%{opacity:1;transform:translateY(0)}69%{transform:translateY(-6px)}72%,94%{opacity:1;transform:translateY(0)}100%{opacity:0}}
   @keyframes vhlot{0%,64%{fill-opacity:0;stroke-dashoffset:0}70%,94%{fill-opacity:.28}100%{fill-opacity:0}}
   @keyframes vhchk{0%,72%{opacity:0}78%,94%{opacity:1}100%{opacity:0}}
-  .vh-trench{stroke-dasharray:130;animation:vhdig 6s linear infinite}.vh-water,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-elec{animation-delay:.1s}
-  @keyframes vhdig{0%{stroke-dashoffset:130}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+  .vh-trench{stroke-dasharray:143;animation:vhdig 6s linear infinite}.vh-water,.vh-drain,.vh-elec{stroke-dasharray:200;animation:vhpipe 6s linear infinite}.vh-drain{animation-delay:.05s}.vh-elec{animation-delay:.1s}
+  @keyframes vhdig{0%{stroke-dashoffset:143}70%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
   @keyframes vhpipe{0%,8%{stroke-dashoffset:200}72%,94%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
   .vh-box{animation:vhbox 6s ease infinite}@keyframes vhbox{0%,74%{filter:none}82%,94%{filter:drop-shadow(0 0 7px #4fd1ff)}100%{filter:none}}
   .vh-arc{animation:vharc 6s ease infinite}@keyframes vharc{0%{stroke-dasharray:0 100}25%,92%{stroke-dasharray:13 100}100%{stroke-dasharray:0 100}}
@@ -774,14 +776,14 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
   .vh-sv{margin-top:12px;font-size:13.5px;color:var(--text2);min-height:38px}.vh-sv b{color:var(--ok)}
   @media(max-width:900px){.vh-flow{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}.vh-step::after,.vh-step::before{display:none!important}.vh-calc{grid-template-columns:1fr}}
   @media(max-width:520px){.vh-row{grid-template-columns:100px 1fr}}
-  @media(prefers-reduced-motion:reduce){.vh-pin,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-pin,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-elec{stroke-dashoffset:0}}
+  @media(prefers-reduced-motion:reduce){.vh-pin,.vh-lot,.vh-chk,.vh-trench,.vh-water,.vh-elec,.vh-box,.vh-arc,.vh-b,.vh-b13{animation:none!important}.vh-pin,.vh-chk,.vh-b13{opacity:1}.vh-arc{stroke-dasharray:13 100}.vh-trench,.vh-water,.vh-drain,.vh-elec{stroke-dashoffset:0}}
   </style>
   <section class="vh">
     <h2>Prádlomat nekupujete sami. Best Series zařídí všechno ostatní.</h2>
     <p class="vh-sub">Od prvního místa po provoz hotového stroje. Vy si vyberete prádlomat, my se postaráme o zbytek.</p>
     <div class="vh-flow">
       ${scene(1, 'Zařídíme místo', 'Naši lidé najdou a vyhodnotí vhodnou lokalitu pro váš prádlomat.', sceneFind)}
-      ${scene(2, 'Vytvoříme přípojky', 'Zajistíme a vybudujeme přípojky vody a elektřiny až k prádlomatu.', sceneDig)}
+      ${scene(2, 'Vytvoříme přípojky', 'Zajistíme a vybudujeme přípojky vody, odpadu a elektřiny až k prádlomatu.', sceneDig)}
       ${scene(3, 'Provozujeme za 13 % z obratu', 'Postaráme se o provoz. Platíte jen z toho, co stroj skutečně vydělá.', sceneRun, '13 % z obratu')}
     </div>
     ${calc}
