@@ -277,7 +277,7 @@ app.post('/admin/settings/eur-rate', requireAdmin, wrap(async (req, res) => {
 app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterCompounder(req.user)));
 // Služby (Najít místo, Přípojky): nastavení v app_settings 'services' (admin → Produkty)
 const SERVICE_DEFAULTS = [
-  { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
+  { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení. Na tuto položku nelze uplatnit DC.', price_czk: 25000, quote: false, dc_use_pct: 0, offered: true, no_dc: true },
   { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění. Na tuto položku nelze uplatnit DC.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true },
   { key: 'place_free', name: 'Místo zdarma', desc: 'Místo i přípojky zajišťuje Best Series na vlastní smlouvu — zákazník neplatí Najít místo ani Přípojky, ale k místu nemá žádnou právní vazbu.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true, hidden_card: true },
   { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Záruka na prádlomat celkem 2 až 5 let. První rok je ze zákona zdarma, každý další rok stojí 15 000 Kč bez DPH.', price_czk: 15000, per_year_czk: 15000, years_min: 2, years_max: 5, free_years: 1, quote: false, dc_use_pct: 100, offered: true },
