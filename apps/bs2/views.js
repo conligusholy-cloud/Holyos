@@ -490,7 +490,7 @@ function supporterCompounder(s) {
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
-  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1377/1142;overflow:visible}
+  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto 0 calc(50% - 300px);aspect-ratio:1377/1142;overflow:visible}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .cp .how-w8{width:9%!important}
   .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
@@ -500,17 +500,17 @@ function supporterCompounder(s) {
   .cp .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
   @keyframes howspin{to{transform:rotate(360deg)}}
   .cp .how-cust,.cp .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
-  .cp .how-cust{width:16%;aspect-ratio:1/2} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  .cp .how-cust{width:16%;aspect-ratio:1/2} .cp .how-cust.flip svg{transform:scaleX(-1)} .cp .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
   @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
   .cp .how-bag{font-size:30px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
   .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
-  .cp .how-acc{position:absolute;right:-2%;top:-4%;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .cp .how-acc{position:absolute;right:-30%;top:50%;transform:translateY(-50%);padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
   @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
-  @media(max-width:700px){.cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
+  @media(max-width:700px){.cp .how-stage{margin:0 auto 70px} .cp .how-acc{right:50%;top:auto;bottom:-70px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -629,7 +629,7 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:45,y:55},M8={x:27,y:58},S={x:67,y:54},IN={x:-12,y:62},OUT={x:114,y:62};
+        var W={x:45,y:55},M8={x:27,y:58},S={x:67,y:54},IN={x:-14,y:62},OUT={x:-14,y:62};
         put(w,W); put(sd,S); var w8=document.getElementById('how-w8'); put(w8,M8);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[250,'Pračka 8 kg · 200 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W'],[350,'Pračka 18 kg · 300 Kč + sušička · 50 Kč',true,'W'],[300,'Pračka 8 kg s aviváží · 250 Kč + sušička · 50 Kč',true,'M'],[400,'Pračka 18 kg s aviváží · 350 Kč + sušička · 50 Kč',true,'W']];
@@ -638,7 +638,7 @@ function supporterCompounder(s) {
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++; var WW=pr[3]==='M'?M8:W, ring=pr[3]==='M'?w8:w;
           min=(min+Math.floor(25+Math.random()*60))%1440; clk.textContent=fmt(min);
-          cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
           put(cust,{x:WW.x-14,y:62}); put(bag,{x:WW.x-6,y:72}); say('zákazník přichází s prádlem',{x:20,y:70}); await wait(2300);
           say('zaplatí na terminálu · '+pr[1],{x:WW.x-6,y:WW.y-14}); await wait(1300);
@@ -656,7 +656,7 @@ function supporterCompounder(s) {
           n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min);
           // odchází s čistým prádlem
           bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:62}); say('hotovo — odchází s čistým prádlem',{x:END.x,y:END.y-14}); await wait(700);
-          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; put(cust,OUT); put(bag,{x:OUT.x+8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
           await wait(900); customer();
         }
         customer();
