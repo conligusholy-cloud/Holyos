@@ -1733,9 +1733,9 @@
             <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
               <label>Stroj (Compounding) *</label>${comboHtml('sub-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, s ? s.kiosk_code : '', !!s, inp)}
-              <label>Odběratel (společnost) *</label>${comboHtml('sub-company', 'Začni psát: název nebo IČO společnosti…', selCo ? selCo.name + (selCo.ico ? ' (' + selCo.ico + ')' : '') : '', selCo ? selCo.id : '', false, inp)}
-              <label>IČO / DIČ odběratele</label><input id="sub-ico" readonly value="${selCo ? escapeHtml((selCo.ico || '') + (selCo.dic ? ' · ' + selCo.dic : '')) : v('buyer_ico','')}" style="${inp}opacity:.8;">
-              <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" style="${inp}">
+              <label>Odběratel (provozovatel) *</label><div><input id="sub-name" value="${v('customer_name','')}" placeholder="Doplní se z Compoundingu po výběru stroje" oninput="subNameEdited()" style="${inp}"><input type="hidden" id="sub-companyid" value="${s && s.company_id ? s.company_id : ''}"><div id="sub-conote" style="font-size:11px;color:var(--text2);margin-top:3px;"></div></div>
+              <label>IČO odběratele</label><input id="sub-ico" value="${v('buyer_ico','')}" placeholder="doplň, pokud chybí" style="${inp}">
+              <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" placeholder="doplň, pokud chybí" style="${inp}">
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
               <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
               <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
@@ -1753,19 +1753,39 @@
         </div>`;
    
       initCombo('sub-kiosk', kiosks.map(k => ({ v: k.code, label: (k.label || k.code) + ' (' + k.code + ')', tag: used.has(k.code) ? 'už má smlouvu' : '', hay: (k.label || '') + ' ' + k.code })), subKioskChanged);
-      initCombo('sub-company', companies.map(c => ({ v: String(c.id), label: c.name + (c.ico ? ' (' + c.ico + ')' : ''), tag: '', hay: c.name + ' ' + (c.ico || '') })), subCompanyChanged);
-      if (s) subRevenuePreview();
+      if (s) { applyCompanyMatch(false); subRevenuePreview(); }
     };
-    // Výběr společnosti vyplní IČO a e-mail (e-mail jde přepsat)
-    window.subCompanyChanged = function() {
-      const c = (window.__companies || []).find(x => String(x.id) === document.getElementById('sub-company').value);
-      document.getElementById('sub-ico').value = c ? ((c.ico || '') + (c.dic ? ' · ' + c.dic : '')) : '';
-      document.getElementById('sub-email').value = c && c.email ? c.email : '';
-    };
+    // Odběratel = provozovatel z Compoundingu (kiosk.companyName). Doplní se podle stroje, jde ručně upravit.
+    function normName(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
+    function matchCompany(name) {
+      const n = normName(name); if (!n) return null;
+      return (window.__companies || []).find(c => normName(c.name) === n) || null;
+    }
+    // Najde společnost podle názvu; pokud existuje, doplní IČO/e-mail (jen prázdná pole, aby se nepřepsala ruční úprava)
+    function applyCompanyMatch(forceFill) {
+      const name = document.getElementById('sub-name').value;
+      const c = matchCompany(name), note = document.getElementById('sub-conote');
+      document.getElementById('sub-companyid').value = c ? c.id : '';
+      if (c) {
+        const ico = document.getElementById('sub-ico'), em = document.getElementById('sub-email');
+        if (forceFill || !ico.value.trim()) ico.value = c.ico || '';
+        if (forceFill || !em.value.trim()) em.value = c.email || '';
+        note.textContent = '✓ nalezeno ve Společnostech' + (c.ico ? ' (IČO ' + c.ico + ')' : '') + ' — údaje můžeš upravit';
+        note.style.color = '#16a34a';
+      } else {
+        note.textContent = name.trim() ? 'Společnost zatím není v evidenci — doplň IČO a e-mail, při první faktuře se založí.' : '';
+        note.style.color = '#f59e0b';
+      }
+    }
+    window.subNameEdited = function() { applyCompanyMatch(false); };
     window.subKioskChanged = function() {
       const code = document.getElementById('sub-kiosk').value;
       const k = (window.__kiosks || []).find(x => x.code === code);
-      if (k && k.currency) document.getElementById('sub-cur').value = k.currency;
+      if (k) {
+        if (k.currency) document.getElementById('sub-cur').value = k.currency;
+        const op = String(k.companyName || '').trim();
+        if (op) { document.getElementById('sub-name').value = op; document.getElementById('sub-ico').value = ''; document.getElementById('sub-email').value = ''; applyCompanyMatch(true); }
+      }
       subRevenuePreview();
     };
     let __revTimer = null;
@@ -1789,10 +1809,10 @@
       const g = (i) => document.getElementById(i).value.trim();
       const kiosk = g('sub-kiosk');
       if (!kiosk) return alert('Zadej kód stroje');
-      const co = (window.__companies || []).find(x => String(x.id) === document.getElementById('sub-company').value);
-      if (!co) return alert('Vyber odběratele (společnost).');
-      const body = { kiosk_code: kiosk, company_id: co.id, customer_name: co.name, buyer_ico: co.ico || null, email: g('sub-email') || co.email || null,
-        fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
+      const name = g('sub-name');
+      if (!name) return alert('Vyplň odběratele (provozovatele).');
+      const cid = parseInt(document.getElementById('sub-companyid').value, 10) || null;
+      const body = { kiosk_code: kiosk, company_id: cid, customer_name: name, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
         billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null,
         active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
       if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
