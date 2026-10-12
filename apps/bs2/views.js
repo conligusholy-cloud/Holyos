@@ -505,16 +505,16 @@ function supporterCompounder(s) {
   .cp .how-bag{font-size:30px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
   .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
-  .cp .how-clock{position:absolute;left:-30%;top:50%;transform:translateY(-50%);width:26%;text-align:center;z-index:6}
+  .cp .how-clock{position:absolute;left:-32%;top:0;width:24%;text-align:center;z-index:6}
   .cp .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
   .cp .how-clock .hc-txt{margin-top:6px} .cp .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .cp .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
   @media(max-width:700px){.cp .how-clock{position:static;transform:none;width:120px;margin:0 auto 8px}}
-  .cp .how-acc{position:absolute;right:-30%;top:50%;transform:translateY(-50%);padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .cp .how-acc{position:absolute;right:-32%;top:0;max-width:200px;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
   @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
-  @media(max-width:700px){.cp .how-stage{margin:0 auto 70px} .cp .how-acc{right:50%;top:auto;bottom:-70px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
+  @media(max-width:700px){.cp .how-stage{margin:0 auto 80px} .cp .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -622,7 +622,7 @@ function supporterCompounder(s) {
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
           <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/>${Array.from({ length: 12 }, (_, i) => `<line x1="50" y1="8" x2="50" y2="${i % 3 === 0 ? 15 : 12}" stroke="${i % 3 === 0 ? '#fff' : 'rgba(255,255,255,.45)'}" stroke-width="${i % 3 === 0 ? 2.5 : 1.5}" transform="rotate(${i * 30} 50 50)"/>`).join('')}<circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">06:00</b><span id="hc-d">den 1</span></div></div>
-          <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
+          <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>💳 karta · mince · bankovky</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
@@ -636,35 +636,37 @@ function supporterCompounder(s) {
         var W={x:40,y:52},S={x:60,y:49},IN={x:-14,y:58},OUT={x:-14,y:58};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
-        var total=0,cnt=0,min=6*60,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
+        var SPEED=70; // ms na jednu simulovanou minutu → 24 h ≈ 100 s
+        var total=0,cnt=0,min=6*60,T0=performance.now()-6*60*SPEED,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
         var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
-        function face(m){ var mm=m%1440; if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; } lastM=mm;
+        function face(m){ var mm=m%1440; if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; n.textContent='0 zákazníků'; } lastM=mm;
           hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mm); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mm); }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
-        function tickClock(minutes,ms){ return new Promise(function(r){ var st=Date.now(),base=min; (function f(){ var k=Math.min(1,(Date.now()-st)/ms); face(base+Math.round(minutes*k)); if(k<1) requestAnimationFrame(f); else { min=(base+minutes)%1440; r(); } })(); }); }
+        function simWait(minutes){ return wait(minutes*SPEED); }
+        (function clockLoop(){ min=Math.floor((performance.now()-T0)/SPEED); face(min); requestAnimationFrame(clockLoop); })();
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
-          min=(min+Math.floor(3+Math.random()*8))%1440; face(min);
+          await simWait(3+Math.random()*8);
           cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
-          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await wait(2300);
-          say('platí: '+pr[1]+' + sušení '+cycles+'×50 Kč',{x:WW.x-6,y:WW.y-14}); await wait(1300);
+          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await simWait(5);
+          say('platí: '+pr[1]+' + sušení '+cycles+'×50 Kč',{x:WW.x-6,y:WW.y-14}); await simWait(3);
           bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
-          ring.classList.add('on'); say('pere… 40 min',{x:WW.x,y:WW.y-16}); await tickClock(40,3200); ring.classList.remove('on');
+          ring.classList.add('on'); say('pere… 40 min',{x:WW.x,y:WW.y-16}); await simWait(40); ring.classList.remove('on');
           var END=WW;
           bag.style.transition='none'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
           bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('do sušičky',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
-          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… '+cy+'/'+cycles+' · 15 min',{x:S.x,y:S.y-16}); await tickClock(15,cycles>1?1500:2400); sd.classList.remove('on'); if(cy<cycles) await wait(250); }
+          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… '+cy+'/'+cycles+' · 15 min',{x:S.x,y:S.y-16}); await simWait(15); sd.classList.remove('on'); if(cy<cycles) await simWait(1); }
           END=S;
           // platba se připíše
           var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
           total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
-          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů')+' · '+fmt(min)+' · praní 40 min · sušení '+(cycles*15)+' min';
+          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů');
           // odchází s čistým prádlem
           bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
           cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
-          await wait(900); customer();
+          await simWait(10+Math.random()*25); customer();
         }
         customer();
       })();</script>` : ''}
