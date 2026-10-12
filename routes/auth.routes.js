@@ -276,6 +276,7 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
       subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000),
       link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined,
     });
+    console.log('[bs2 mail] příjemce=' + to + ' from=' + (from || '—') + ' výsledek=' + JSON.stringify({ sent: !!(r && r.sent), via: r && r.via, error: r && (r.error || r.skipped) }));
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true });
   } catch (err) { next(err); }

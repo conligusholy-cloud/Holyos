@@ -180,6 +180,7 @@ async function sendBs2Mail({ to, subject, body, link, linkLabel }) {
   const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
   const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
   const r = await fetch(HOLYOS_URL + '/api/auth/bs2/send-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body, link, linkLabel }), signal: AbortSignal.timeout(20000) });
+  console.log('[bs2] HolyOS send-mail odpověď ' + r.status);
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
 const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
@@ -211,6 +212,7 @@ app.post('/forgot', wrap(async (req, res) => {
     }
     }
   }
+  console.log('[bs2] obnova hesla: e-mail=' + email + ' nalezen=' + !!u + (u ? ' stav=' + u.status + ' heslo=' + !!u.password_hash : '') + ' odesláno=' + sent + (why ? ' důvod=' + why : ''));
   await log({ name: 'web' }, 'forgot_password', { email, known: !!u, sent, why: why || undefined, supporter_id: u ? u.id : null, ip });
   res.send(V.forgotPage({ email, done: true }));
 }));
