@@ -45,10 +45,20 @@ function setCookie(req, res, name, payload, maxAgeSec) {
   res.cookie(name, t, { httpOnly: true, secure: isHttps(req), sameSite: 'lax', maxAge: maxAgeSec * 1000 });
 }
 function readCookie(req, name) { const t = req.cookies && req.cookies[name]; if (!t || !SESSION_SECRET) return null; try { return jwt.verify(t, SESSION_SECRET); } catch (e) { return null; } }
+// Správce BS2 = jen Tomáš Holý a Jan Holý (nezávisle na nastavení HolyOS). BS2_ALLOWED_PIDS může seznam zúžit na konkrétní person id.
+function isAllowedAdmin(p) {
+  if (!p) return false;
+  if (ALLOWED_PIDS.length && !ALLOWED_PIDS.includes(Number(p.pid))) return false;
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const parts = norm(p.name).split(/\s+/).filter(Boolean);
+  const first = parts[0] || '', last = parts[parts.length - 1] || '';
+  return last === 'holy' && (first === 'tomas' || first === 'jan');
+}
 function requireAdmin(req, res, next) {
   const s = readCookie(req, ADMIN_COOKIE);
   // Nepřihlášený nikdy nesmí být poslán do HolyOS — admin se dostane jen z menu HolyOS; návštěvník uvidí jen BS2 login
   if (!s || s.kind !== 'admin') return res.redirect('/login');
+  if (!isAllowedAdmin(s)) { res.clearCookie(ADMIN_COOKIE); return res.status(403).send(V.errorPage('Přístup odepřen', 'Administrace je dostupná jen Tomáši a Janu Holému.', '/')); }
   req.admin = s; next();
 }
 async function requireUser(req, res, next) {
@@ -70,7 +80,7 @@ app.use((req, res, next) => {
   res.send = (body) => {
     if (typeof body === 'string' && body.includes('<!--BS2-SWITCH-->')) {
       const a = readCookie(req, ADMIN_COOKIE), u = readCookie(req, USER_COOKIE);
-      const hasAdmin = !!(a && a.kind === 'admin'), hasUser = !!(u && u.kind === 'user');
+      const hasAdmin = !!(a && a.kind === 'admin' && isAllowedAdmin(a)), hasUser = !!(u && u.kind === 'user');
       const inAdmin = req.path.startsWith('/admin');
       let html = '';
       if (hasAdmin || (hasUser && inAdmin)) {
@@ -98,7 +108,7 @@ app.get('/sso', (req, res) => {
   if (!SSO_SECRET) return res.status(500).send(V.errorPage('Služba není nakonfigurována', 'Zkus to prosím později.', '/login'));
   try {
     const p = jwt.verify(String(req.query.t || ''), SSO_SECRET, { audience: 'bs2', issuer: 'holyos' });
-    if (ALLOWED_PIDS.length && !ALLOWED_PIDS.includes(Number(p.pid))) return res.status(403).send(V.errorPage('Přístup odepřen', 'Do této sekce nemáš přístup.', '/login'));
+    if (!isAllowedAdmin(p)) return res.status(403).send(V.errorPage('Přístup odepřen', 'Administrace je dostupná jen Tomáši a Janu Holému.', '/login'));
     setCookie(req, res, ADMIN_COOKIE, { kind: 'admin', uid: p.uid, pid: p.pid, name: p.name, username: p.username }, 12 * 3600);
     res.redirect('/admin');
   } catch (e) {
@@ -245,7 +255,7 @@ app.post('/join/:code', wrap(async (req, res) => {
 
 // ── Uživatel: domů + heslo ──────────────────────────────────────────────
 app.get('/', (req, res, next) => {
-  if (readCookie(req, ADMIN_COOKIE)) return res.redirect('/admin');
+  if (isAllowedAdmin(readCookie(req, ADMIN_COOKIE))) return res.redirect('/admin');
   return requireUser(req, res, async () => {
     res.send(V.supporterHome(req.user));
   });
@@ -783,7 +793,7 @@ app.get('/api/ai-chat/config', wrap(async (req, res) => {
   const cfg = await AI.loadConfig();
   const keyOk = !!process.env.ANTHROPIC_API_KEY, enabled = !!cfg.enabled && keyOk;
   // Správce (platné přihlášení do adminu) vidí tlačítko i když chat nejede — a v něm důvod, ať ví, co zapnout
-  const a = readCookie(req, ADMIN_COOKIE), isAdmin = !!(a && a.kind === 'admin');
+  const a = readCookie(req, ADMIN_COOKIE), isAdmin = !!(a && a.kind === 'admin' && isAllowedAdmin(a));
   const reason = enabled ? '' : (!cfg.enabled ? 'Chat je zatím vypnutý. Zapni ho v Admin → AI chat (políčko „Chat je zapnutý na stránkách") a ulož.' : 'Na serveru BS2 chybí proměnná ANTHROPIC_API_KEY (Railway → projekt BS2 → Variables).');
   res.set('Cache-Control', 'no-store').json({ enabled, name: cfg.name, greeting: cfg.greeting, reason: isAdmin ? reason : '' });
 }));
