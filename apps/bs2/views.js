@@ -305,7 +305,9 @@ const userNav = (s) => {
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
-  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, { id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' }, USER_NAV[1]);
+  nav.push({ id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' });
+  if (s && s.ai_chat_on) nav.push({ id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' });
+  nav.push(USER_NAV[1]);
   return nav;
 };
 function supporterHome(s, offers = [], extra = {}) {

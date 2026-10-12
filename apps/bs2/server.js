@@ -67,6 +67,8 @@ async function requireUser(req, res, next) {
   const r = await q('SELECT * FROM supporters WHERE id=$1', [s.sid]);
   const u = r.rows[0];
   if (!u || u.status !== 'active') { res.clearCookie(USER_COOKIE); return res.redirect('/login'); }
+  // Záložka AI chat se v menu ukáže jen když je chat zapnutý v Admin → AI chat (a je k dispozici API klíč)
+  try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
   req.user = u; next();
 }
 // Jednoduchý rate-limit přihlašování per IP (v paměti)
@@ -369,7 +371,7 @@ app.get('/team', wrap(requireUser), wrap(async (req, res) => {
   const code = await ensureRefCode(req.user);
   res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
 }));
-app.get('/ai-chat', wrap(requireUser), (req, res) => res.send(V.aiChatPage(req.user)));
+app.get('/ai-chat', wrap(requireUser), (req, res) => { if (!req.user.ai_chat_on) return res.redirect('/'); res.send(V.aiChatPage(req.user)); });
 app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   const { old = '', password = '', password2 = '' } = req.body;
