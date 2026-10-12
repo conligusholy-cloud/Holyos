@@ -6,7 +6,23 @@ const { TRACK_JS } = require('./stats-track');
 
 const deviceOf = (ua) => /iPad|Tablet/i.test(ua || '') ? 'tablet' : /Mobi|Android|iPhone/i.test(ua || '') ? 'mobile' : 'desktop';
 
+// Přítomnost uživatelů v paměti (kdo je právě online); plní se z událostí i z pingů, do databáze se neukládá
+const presence = new Map();
+const LIVE_TYPES = ['pageview', 'click', 'section', 'interact', 'time', 'scroll', 'login', 'ping', 'consent'];
+function touch(id, o = {}) {
+  if (!id) return;
+  const p = presence.get(id) || { since: Date.now() };
+  if (!presence.has(id) || Date.now() - p.last > 15 * 60e3) p.since = Date.now();
+  if (o.path) p.path = String(o.path).slice(0, 200);
+  if (o.device) p.device = o.device; if (o.ip) p.ip = o.ip; if (o.sid) p.sid = o.sid;
+  p.last = Date.now(); presence.set(id, p);
+  if (presence.size > 5000) { const lim = Date.now() - 3600e3; for (const [k, v] of presence) if (v.last < lim) presence.delete(k); }
+}
+function leave(id) { presence.delete(id); }
+function ping(req, supporterId, o = {}) { touch(supporterId, { path: o.path, sid: o.sid, device: deviceOf(req.get('user-agent')), ip: req.ip }); }
+
 async function track(req, supporterId, type, o = {}) {
+  if (supporterId && LIVE_TYPES.includes(type)) touch(supporterId, { path: o.path, sid: o.sid, device: deviceOf(req.get('user-agent')), ip: req.ip });
   try {
     const ua = String(req.get('user-agent') || '').slice(0, 300);
     await q('INSERT INTO user_events (supporter_id, sid, type, path, label, meta, ip, ua, device) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
@@ -95,4 +111,33 @@ async function loadUser(id, days) {
   return { days: d, s, tot: tot.rows[0], pages: pages.rows, clicks: clicks.rows, events: events.rows, transfers: tr.rows, orders: ord.rows, balance: cr.rows[0].balance };
 }
 
-module.exports = { TRACK_JS, track, deviceOf, loadOverview, loadUser };
+async function loadLive(sinceId) {
+  const now = Date.now();
+  const ids = [...presence.keys()].filter(id => now - presence.get(id).last < 10 * 60e3);
+  const one = async (sql, p) => (await q(sql, p)).rows;
+  const [users, lastActs, feed, counters, logins, minutes, pend] = await Promise.all([
+    ids.length ? one('SELECT id, email, nick, first_name, last_name, user_type FROM supporters WHERE id = ANY($1)', [ids]) : [],
+    ids.length ? one(`SELECT DISTINCT ON (supporter_id) supporter_id, type, label, path, created_at FROM user_events
+        WHERE supporter_id = ANY($1) AND type IN ('pageview','click','section','interact') AND created_at > now() - interval '1 day' ORDER BY supporter_id, created_at DESC`, [ids]) : [],
+    one(`SELECT e.id, e.created_at, e.type, e.path, e.label, e.meta, e.device, s.id AS uid, s.nick, s.first_name, s.last_name
+         FROM user_events e LEFT JOIN supporters s ON s.id = e.supporter_id WHERE e.type NOT IN ('time','scroll') AND e.id > $1
+         ORDER BY e.id DESC LIMIT 60`, [Number(sinceId) || 0]),
+    one(`SELECT count(*) FILTER (WHERE created_at > now() - interval '5 minutes' AND type IN ('pageview','click'))::int ev5,
+           count(*) FILTER (WHERE created_at > now() - interval '60 minutes' AND type = 'pageview')::int pv60,
+           count(DISTINCT supporter_id) FILTER (WHERE created_at > now() - interval '60 minutes')::int users60
+         FROM user_events WHERE created_at > now() - interval '2 hours'`),
+    one(`SELECT count(*)::int n FROM user_events WHERE type='login' AND (created_at AT TIME ZONE 'Europe/Prague')::date = (now() AT TIME ZONE 'Europe/Prague')::date`),
+    one(`SELECT m AS t, count(e.id)::int n FROM generate_series(date_trunc('minute', now()) - interval '29 minutes', date_trunc('minute', now()), interval '1 minute') m
+         LEFT JOIN user_events e ON date_trunc('minute', e.created_at) = m AND e.type IN ('pageview','click') GROUP BY m ORDER BY m`),
+    one(`SELECT (SELECT count(*) FROM support_transfers WHERE status='pending')::int pending_tr, (SELECT count(*) FROM orders WHERE status='new')::int new_orders`),
+  ]);
+  const act = new Map(lastActs.map(a => [a.supporter_id, a]));
+  const byId = new Map(users.map(u => [u.id, u]));
+  const online = ids.map(id => { const p = presence.get(id), u = byId.get(id); if (!u) return null; const a = act.get(id);
+    return { id, nick: u.nick, first_name: u.first_name, last_name: u.last_name, email: u.email, user_type: u.user_type, path: p.path || (a && a.path) || null, device: p.device || null, ip: p.ip || null,
+      idle_s: Math.round((now - p.last) / 1000), on_s: Math.round((now - p.since) / 1000), state: now - p.last < 90e3 ? 'online' : 'idle',
+      last_type: a ? a.type : null, last_label: a ? a.label : null, last_path: a ? a.path : null, last_at: a ? a.created_at : null }; }).filter(Boolean).sort((a, b) => a.idle_s - b.idle_s);
+  return { now: new Date().toISOString(), online, feed, counters: Object.assign({}, counters[0], { logins_today: logins[0].n }), minutes, pending: pend[0] };
+}
+
+module.exports = { loadLive, leave, ping, touch, TRACK_JS, track, deviceOf, loadOverview, loadUser };

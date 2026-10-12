@@ -41,6 +41,7 @@ module.exports = function ({ esc, fmtDT, adminLayout }) {
     return adminLayout('Statistiky', 'stat', admin, `
   <h1 style="margin:0 0 6px">Statistiky chování uživatelů</h1>
   <p class="muted" style="margin-top:0">Co uživatelé dělají v Best Series 2.0: přihlášení, zobrazené stránky, kliknutí, čas v aplikaci, co čtou a kolik převedli DC. Sbírá se jen u přihlášených uživatelů; obsah vyplněných polí se neukládá.</p>
+  <div class="row" style="gap:8px;margin:10px 0 0"><a class="btn sm" href="/admin/stats/live">● Živě — co se děje právě teď</a></div>
   ${periodBar('/admin/stats', days)}
   <h3 style="margin:6px 0 8px">Přehled za ${days >= 3650 ? 'celou dobu' : days === 1 ? 'dnešek' : 'posledních ' + days + ' dní'}</h3>
   <div class="grid">
@@ -113,5 +114,48 @@ module.exports = function ({ esc, fmtDT, adminLayout }) {
   <div class="card tbl-wrap">${tbl(['Kdy', 'Událost', 'Stránka', 'Detail', 'Zařízení'], D.events.map(e => `<tr><td data-l="Kdy" class="small muted" style="white-space:nowrap">${fmtDT(e.created_at)}</td><td data-l="Událost">${typeBadge(e.type)}</td><td data-l="Stránka" class="small">${pageName(e.path)}</td><td data-l="Detail" class="small">${e.label ? '<b>' + esc(e.label) + '</b> ' : ''}<span class="muted">${esc(metaTxt(e))}</span></td><td data-l="Zařízení" class="small muted">${esc(devName[e.device] || e.device || '')}</td></tr>`), 'Zatím žádné zaznamenané události.')}</div>`, holyosUrl);
   }
 
-  return { adminStats, adminStatsUser };
+  function adminLive({ admin, holyosUrl }) {
+    return adminLayout('Statistiky živě', 'stat', admin, `
+  <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px"><h1 style="margin:0">Živě <span id="lv-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2fe3a0;box-shadow:0 0 0 0 rgba(47,227,160,.6);animation:lvp 1.6s infinite;vertical-align:middle"></span></h1>
+    <div class="row" style="gap:8px"><a class="btn sec sm" href="/admin/stats">← Přehled statistik</a><button class="btn sec sm" id="lv-pause" type="button">Pozastavit</button></div></div>
+  <p class="muted" style="margin-top:6px">Kdo je právě v aplikaci, na které stránce je a co dělá. Obnovuje se každé 3 sekundy. „Online" = aktivní v posledních 90 s, „nečinný" = otevřená stránka bez aktivity (do 10 min).</p>
+  <style>@keyframes lvp{0%{box-shadow:0 0 0 0 rgba(47,227,160,.6)}70%{box-shadow:0 0 0 10px rgba(47,227,160,0)}100%{box-shadow:0 0 0 0 rgba(47,227,160,0)}} .lv-new{animation:lvn 1.6s ease-out} @keyframes lvn{from{background:rgba(79,209,255,.22)}to{background:transparent}} .lvd{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}</style>
+  <div class="grid" id="lv-kpi" style="margin-top:12px"></div>
+  <h3 style="margin:20px 0 8px">Aktivita posledních 30 minut</h3>
+  <div class="card" style="padding:14px 16px"><div id="lv-chart"></div><div class="small muted" style="display:flex;justify-content:space-between;margin-top:4px"><span>před 30 min</span><span>teď</span></div></div>
+  <h3 style="margin:20px 0 8px">Právě online</h3>
+  <div class="card tbl-wrap" id="lv-online"></div>
+  <h3 style="margin:20px 0 8px">Kde se zrovna nacházejí</h3>
+  <div class="card" style="padding:14px 16px" id="lv-pages"></div>
+  <h3 style="margin:20px 0 8px">Proud událostí</h3>
+  <div class="card tbl-wrap" id="lv-feed"></div>
+  <script>(function(){
+    var PAGES=${JSON.stringify(PAGES)},DEV={mobile:'Mobil',desktop:'Počítač',tablet:'Tablet'},TY={pageview:'otevřel stránku',click:'klikl',section:'čte',interact:'změnil',login:'přihlášení',login_fail:'neúspěšné přihlášení',logout:'odhlášení',consent:'souhlas s podmínkami',reset_request:'žádost o heslo'};
+    function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+    function pg(p){return p?(PAGES[p]?esc(PAGES[p]):esc(p)):'—';}
+    function nm(u){var n=[u.last_name,u.first_name].filter(Boolean).join(' ')||u.email||u.nick||'?';return (u.id||u.uid)?'<a href="/admin/stats/user/'+(u.id||u.uid)+'"><b>'+esc(n)+'</b></a>'+(u.nick?'<div class="small muted">'+esc(u.nick)+'</div>':''):'<span class="muted">neznámý</span>';}
+    function ago(s){s=Math.max(0,Math.round(s));if(s<60)return s+' s';var m=Math.floor(s/60);if(m<60)return m+' min';return Math.floor(m/60)+' h '+(m%60)+' min';}
+    function hhmm(d){return new Date(d).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Europe/Prague'});}
+    function stat(v,l,c){return '<div class="stat"><div class="v"'+(c?' style="color:'+c+'"':'')+'>'+v+'</div><div class="l">'+l+'</div></div>';}
+    var since=0,seen={},feedRows=[],paused=false;
+    function render(d){
+      var on=d.online.filter(function(u){return u.state==='online';}),idle=d.online.length-on.length,c=d.counters||{},p=d.pending||{};
+      document.getElementById('lv-kpi').innerHTML=stat(on.length,'Online právě teď','#2fe3a0')+stat(idle,'Nečinných (stránka otevřená)')+stat(c.ev5||0,'Akcí za posledních 5 min')+stat(c.pv60||0,'Zobrazení za 60 min')+stat(c.users60||0,'Aktivních lidí za 60 min')+stat(c.logins_today||0,'Přihlášení dnes')+stat(p.pending_tr||0,'Převodů čeká na zpracování',(p.pending_tr?'#4fd1ff':''))+stat(p.new_orders||0,'Nových objednávek',(p.new_orders?'#4fd1ff':''));
+      var mx=Math.max(1,Math.max.apply(null,d.minutes.map(function(m){return m.n;})));
+      document.getElementById('lv-chart').innerHTML='<svg viewBox="0 0 100 70" preserveAspectRatio="none" style="width:100%;height:80px;display:block">'+d.minutes.map(function(m,i){var h=Math.max(m.n?2:0,m.n/mx*64),w=100/d.minutes.length;return '<rect x="'+(i*w+w*.12).toFixed(2)+'" y="'+(70-h).toFixed(1)+'" width="'+(w*.76).toFixed(2)+'" height="'+h.toFixed(1)+'" rx=".6" fill="#4fd1ff"><title>'+hhmm(m.t)+': '+m.n+'</title></rect>';}).join('')+'</svg>';
+      document.getElementById('lv-online').innerHTML=d.online.length?'<table class="cards"><thead><tr><th>Uživatel</th><th>Stav</th><th>Právě na stránce</th><th>Poslední akce</th><th>Zařízení</th><th>V aplikaci</th></tr></thead><tbody>'+d.online.map(function(u){var col=u.state==='online'?'#2fe3a0':'#ffb84d';return '<tr><td data-l="Uživatel">'+nm(u)+'</td><td data-l="Stav"><span class="lvd" style="background:'+col+'"></span>'+(u.state==='online'?'online':'nečinný '+ago(u.idle_s))+'</td><td data-l="Stránka"><b>'+pg(u.path)+'</b></td><td data-l="Akce" class="small">'+(u.last_type?(esc(TY[u.last_type]||u.last_type)+(u.last_label?': <b>'+esc(u.last_label)+'</b>':'')+' <span class="muted">před '+ago((Date.now()-new Date(u.last_at))/1000)+'</span>'):'<span class="muted">—</span>')+'</td><td data-l="Zařízení" class="small">'+esc(DEV[u.device]||u.device||'—')+'</td><td data-l="V aplikaci" class="small muted">'+ago(u.on_s)+'</td></tr>';}).join('')+'</tbody></table>':'<p class="muted" style="margin:0">Právě nikdo není v aplikaci.</p>';
+      var g={};d.online.forEach(function(u){var k=u.path||'?';g[k]=(g[k]||0)+1;});var ks=Object.keys(g).sort(function(a,b){return g[b]-g[a];});
+      document.getElementById('lv-pages').innerHTML=ks.length?ks.map(function(k){return '<span class="badge invited" style="margin:2px 8px 2px 0">'+pg(k)+': <b>'+g[k]+'</b></span>';}).join(''):'<span class="muted">—</span>';
+      var fresh=d.feed.filter(function(e){return !seen[e.id];});fresh.forEach(function(e){seen[e.id]=1;e._new=since>0;if(e.id>since)since=e.id;});
+      feedRows=fresh.concat(feedRows).slice(0,80);
+      document.getElementById('lv-feed').innerHTML=feedRows.length?'<table class="cards"><thead><tr><th>Čas</th><th>Uživatel</th><th>Událost</th><th>Stránka</th><th>Detail</th></tr></thead><tbody>'+feedRows.map(function(e){var m=e.meta||{},det=(e.label?'<b>'+esc(e.label)+'</b> ':'')+(m.href?'<span class="muted">→ '+esc(m.href)+'</span>':(m.v!=null?'<span class="muted">hodnota '+esc(m.v)+'</span>':''));return '<tr'+(e._new?' class="lv-new"':'')+'><td data-l="Čas" class="small muted" style="white-space:nowrap">'+hhmm(e.created_at)+'</td><td data-l="Uživatel">'+nm(e)+'</td><td data-l="Událost">'+esc(TY[e.type]||e.type)+'</td><td data-l="Stránka" class="small">'+pg(e.path)+'</td><td data-l="Detail" class="small">'+det+'</td></tr>';}).join('')+'</tbody></table>':'<p class="muted" style="margin:0">Zatím žádné události.</p>';
+      fresh.forEach(function(e){e._new=false;});
+    }
+    function tick(){if(paused)return;fetch('/admin/stats/live.json?since='+since,{credentials:'same-origin',cache:'no-store'}).then(function(r){return r.ok?r.json():null;}).then(function(d){if(d)render(d);document.getElementById('lv-dot').style.background=d?'#2fe3a0':'#ff5d6c';}).catch(function(){document.getElementById('lv-dot').style.background='#ff5d6c';});}
+    document.getElementById('lv-pause').addEventListener('click',function(){paused=!paused;this.textContent=paused?'Pokračovat':'Pozastavit';document.getElementById('lv-dot').style.animationPlayState=paused?'paused':'running';if(!paused)tick();});
+    tick();setInterval(tick,3000);
+  })();</script>`, holyosUrl);
+  }
+
+  return { adminStats, adminStatsUser, adminLive };
 };

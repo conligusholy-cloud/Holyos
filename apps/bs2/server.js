@@ -299,7 +299,7 @@ app.post('/activate/finish', wrap(async (req, res) => {
   setCookie(req, res, USER_COOKIE, { kind: 'user', sid: u.id, nick }, 30 * 24 * 3600);
   res.redirect('/');
 }));
-app.get('/logout', (req, res) => { try { const ls = readCookie(req, USER_COOKIE); if (ls && ls.kind === 'user') ST.track(req, ls.sid, 'logout'); } catch (e) {} res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
+app.get('/logout', (req, res) => { try { const ls = readCookie(req, USER_COOKIE); if (ls && ls.kind === 'user') { ST.track(req, ls.sid, 'logout'); ST.leave(ls.sid); } } catch (e) {} res.clearCookie(USER_COOKIE); res.clearCookie(ADMIN_COOKIE); res.redirect('/login?out=1'); });
 
 // ── Referenční program (prodejci) ───────────────────────────────────────
 const PUBLIC_URL = (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
@@ -341,13 +341,13 @@ app.get('/join/:code', wrap(async (req, res) => {
 }));
 app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
 // Sběr událostí z prohlížeče přihlášeného uživatele (stránky, kliknutí, čas, scroll) — vždy 204, chyby se ignorují
-const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact'];
+const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact', 'ping'];
 app.post('/api/track', (req, res) => {
   try {
     const s = readCookie(req, USER_COOKIE); const b = req.body || {};
     if (!s || s.kind !== 'user' || !TRACK_TYPES.includes(b.type) || rateLimited('trk:' + s.sid, 900, 60e3)) return res.status(204).end();
     let meta = b.meta && typeof b.meta === 'object' ? b.meta : null; if (meta && JSON.stringify(meta).length > 1200) meta = null;
-    ST.track(req, s.sid, b.type, { sid: b.sid, path: b.path, label: b.label, meta });
+    if (b.type === 'ping') ST.ping(req, s.sid, { sid: b.sid, path: b.path }); else ST.track(req, s.sid, b.type, { sid: b.sid, path: b.path, label: b.label, meta });
   } catch (e) { /* ignoruj */ }
   res.status(204).end();
 });
@@ -821,6 +821,8 @@ app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store').json({ unread, msgs });
 }));
 
+app.get('/admin/stats/live', requireAdmin, (req, res) => res.send(V.adminLive({ admin: req.admin, holyosUrl: HOLYOS_URL })));
+app.get('/admin/stats/live.json', requireAdmin, wrap(async (req, res) => { res.set('Cache-Control', 'no-store'); res.json(await ST.loadLive(req.query.since)); }));
 app.get('/admin/stats', requireAdmin, wrap(async (req, res) => {
   const days = req.query.days === 'all' ? 3650 : Math.max(1, Math.min(parseInt(req.query.days, 10) || 30, 3650));
   res.send(V.adminStats({ admin: req.admin, data: await ST.loadOverview(days), days, holyosUrl: HOLYOS_URL }));
