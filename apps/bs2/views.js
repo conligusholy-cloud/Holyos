@@ -784,7 +784,12 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25 } = {}) {
   const cur = curOf(s), sym = cur === 'EUR' ? '€' : 'Kč', k = cur === 'EUR' ? 1 / (Number(rate) || 25) : 1;
   const conv = (x) => Math.round(Number(x) * k * 100) / 100;
   const bal = rows.reduce((a, r) => a + Number(r.amount_czk), 0) * k;
-  return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, body: `
+  // Nápověda s přepočtem na eura podle aktuálního kurzu (1 DC = 1 Kč)
+  const rt = Number(rate) || 25, eurOne = Math.round(1 / rt * 10000) / 10000;
+  const eurTxt = eurOne.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const rtTxt = rt.toLocaleString('cs-CZ', { maximumFractionDigits: 2 });
+  const creditHelp = { title: HELP.credit.title, html: HELP.credit.html.replace('1 DC = 1 Kč slevy na nákup prádlomatu.', '1 DC = 1 Kč slevy na nákup prádlomatu (v eurech ≈ ' + eurTxt + ' €, tedy ' + rtTxt + ' DC ≈ 1 €; kurz ' + rtTxt + ' Kč / 1 €).') };
+  return layout({ title: 'Discount Credit', user: s.nick, nav: userNav(s), active: 'credit', fx: true, help: creditHelp, body: `
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('bolt', 18)} Discount Credit</h2>${curSw(s, '/discount-credit')}</div>
   <div class="card" style="max-width:420px"><div class="small muted">Dostupný kredit</div><div style="font-size:34px;font-weight:800;letter-spacing:-.02em">${money(bal, 'DC')}</div></div>
   <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
