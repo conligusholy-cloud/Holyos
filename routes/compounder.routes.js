@@ -2489,7 +2489,7 @@ router.post('/misto/checkout', async (req, res, next) => {
     const d = parsed.data;
     if (!d.consent) return res.status(400).json({ ok: false, error: 'Bez souhlasu se zpracováním údajů nemůžeme objednávku vyřídit.' });
     if (!locRateOk(clientIp(req), 'misto-pay')) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
-    if (await _isBlocked(d.email, d.phone)) return res.status(400).json({ ok: false, error: 'Objednávku nelze dokončit.' });
+    // Black list u placené objednávky záměrně neuplatňujeme — kdo platí, není spam.
     const pkg = MISTO_PACKAGES[d.variant] || MISTO_PACKAGES.basic;
     const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
