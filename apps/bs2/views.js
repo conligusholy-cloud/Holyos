@@ -490,7 +490,7 @@ function supporterCompounder(s) {
   .cp .ph-head h2{margin:4px 0 8px;font-size:clamp(24px,3.2vw,36px);letter-spacing:-.025em}
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
-  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto 0 calc(50% - 300px);aspect-ratio:1000/820;overflow:visible}
+  .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .cp .how-w8{width:9%!important}
   .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
@@ -505,6 +505,10 @@ function supporterCompounder(s) {
   .cp .how-bag{font-size:30px;z-index:4}
   .cp .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
   .cp .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
+  .cp .how-clock{position:absolute;left:-30%;top:50%;transform:translateY(-50%);width:26%;text-align:center;z-index:6}
+  .cp .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
+  .cp .how-clock .hc-txt{margin-top:6px} .cp .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .cp .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
+  @media(max-width:700px){.cp .how-clock{position:static;transform:none;width:120px;margin:0 auto 8px}}
   .cp .how-acc{position:absolute;right:-30%;top:50%;transform:translateY(-50%);padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
@@ -617,6 +621,7 @@ function supporterCompounder(s) {
           <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
+          <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/>${Array.from({ length: 12 }, (_, i) => `<line x1="50" y1="8" x2="50" y2="${i % 3 === 0 ? 15 : 12}" stroke="${i % 3 === 0 ? '#fff' : 'rgba(255,255,255,.45)'}" stroke-width="${i % 3 === 0 ? 2.5 : 1.5}" transform="rotate(${i * 30} 50 50)"/>`).join('')}<circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">06:00</b><span id="hc-d">den 1</span></div></div>
           <div class="how-acc"><span class="dec-k">dnes tržba</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků · 06:00</span></div>
           <div class="how-coins" id="how-coins"></div>
         </div>
@@ -633,11 +638,14 @@ function supporterCompounder(s) {
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
         function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
+        var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
+        function face(m){ var mm=m%1440; if(mm<lastM){ dayNo++; hcD.textContent='den '+dayNo; total=0; cnt=0; sum.textContent='0'; } lastM=mm;
+          hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mm); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mm); }
         function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
-        function tickClock(minutes,ms){ return new Promise(function(r){ var st=Date.now(),base=min; (function f(){ var k=Math.min(1,(Date.now()-st)/ms); clk.textContent=fmt((base+Math.round(minutes*k))%1440); if(k<1) requestAnimationFrame(f); else { min=(base+minutes)%1440; r(); } })(); }); }
+        function tickClock(minutes,ms){ return new Promise(function(r){ var st=Date.now(),base=min; (function f(){ var k=Math.min(1,(Date.now()-st)/ms); face(base+Math.round(minutes*k)); if(k<1) requestAnimationFrame(f); else { min=(base+minutes)%1440; r(); } })(); }); }
         async function customer(){
           var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
-          min=(min+Math.floor(3+Math.random()*8))%1440; clk.textContent=fmt(min);
+          min=(min+Math.floor(3+Math.random()*8))%1440; face(min);
           cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
           cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
           put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await wait(2300);
