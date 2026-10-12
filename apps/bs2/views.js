@@ -998,6 +998,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <label class="pfo on"><input type="radio" name="pf-place" value="paid" checked><b>Vlastní místo</b><span>Zaplatíte <b>Najít místo ${(() => { const fp = services.find(x => x.key === 'find_place'); return fp && fp.net != null ? money(fp.net, sym) + ' bez DPH' : ''; })()}</b> a <b>Přípojky (individuální nacenění)</b>. Místo i přípojky jsou <b>Vaše</b> — máte k nim právní vazbu. <b style="color:#f59e0b">DC nelze uplatnit.</b></span></label>
       <label class="pfo"><input type="radio" name="pf-place" value="free"><b>Místo zdarma</b><span>Neplatíte Najít místo ani Přípojky. Místo i přípojky zajišťuje <b>Best Series</b> na vlastní smlouvu — místo <b>není Vaše</b>, nemáte k němu žádnou právní vazbu.</span></label>
     </div>
+    <div id="pf-paid-act" style="display:flex;margin-top:12px;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:find_place:own" data-name="Vlastní místo" data-ask="Mám zájem o vlastní místo — Najít místo 25 000 Kč bez DPH + Přípojky (individuální nacenění). Místo i přípojky budou Vaše.">Mám zájem o vlastní místo</button></div>
     <div id="pf-free-act" style="display:none;margin-top:12px;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:place_free" data-name="Místo zdarma" data-ask="Mám zájem o místo zdarma — místo i přípojky zajistí Best Series na vlastní smlouvu (místo nebude Vaše).">Mám zájem o místo zdarma</button></div>
   </div>` : ''}` : ''; }).join('')}
   <script>
@@ -1028,7 +1029,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
         var rm=c.querySelector('.dc-room'); if(rm)rm.textContent=fmt(room)+' DC'; recalc(); }
       r.addEventListener('input',upd); upd();
     });
-    [].forEach.call(document.querySelectorAll('.pfc'),function(g){ var act=document.getElementById('pf-free-act'); function up(){ var v=(g.querySelector('input:checked')||{}).value; [].forEach.call(g.querySelectorAll('.pfo'),function(l){ l.classList.toggle('on', l.querySelector('input').checked); }); if(act) act.style.display = v==='free' ? 'flex' : 'none'; } g.addEventListener('change',up); up(); });
+    [].forEach.call(document.querySelectorAll('.pfc'),function(g){ var act=document.getElementById('pf-free-act'); function up(){ var v=(g.querySelector('input:checked')||{}).value; [].forEach.call(g.querySelectorAll('.pfo'),function(l){ l.classList.toggle('on', l.querySelector('input').checked); }); if(act) act.style.display = v==='free' ? 'flex' : 'none'; var pa=document.getElementById('pf-paid-act'); if(pa) pa.style.display = v==='paid' ? 'flex' : 'none'; } g.addEventListener('change',up); up(); });
     [].forEach.call(document.querySelectorAll('.svc-quote'),function(b){b.addEventListener('click',function(){
       var ask = b.getAttribute('data-ask') || ('Poptat nacenění: '+b.getAttribute('data-name')+'?');
       if(!confirm(ask+'\\n\\nOzveme se s individuální nabídkou.'))return;

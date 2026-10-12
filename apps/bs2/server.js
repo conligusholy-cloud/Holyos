@@ -303,7 +303,8 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
   if (String(req.body.item || '').startsWith('svc:')) {
     const parts = String(req.body.item).split(':'); const svKey = parts[1], svVariant = parts[2] || '';
-    const sv = (await loadServices()).find(x => x.key === svKey && x.offered);
+    const sv0 = (await loadServices()).find(x => x.key === svKey && x.offered);
+    const sv = sv0 && svVariant === 'own' ? Object.assign({}, sv0, { quote: true, name: 'Vlastní místo (Najít místo + Přípojky)' }) : sv0;
     if (!sv) return back('Tuto službu teď nelze objednat.');
     const rateS = cur === 'EUR' ? await eurRate() : 1;
     if (sv.mode === 'percent' || sv.quote || sv.price_czk == null) {
