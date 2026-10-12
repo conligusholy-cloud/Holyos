@@ -843,7 +843,8 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   const rt = Number(rate) || 25, eurOne = Math.round(1 / rt * 10000) / 10000;
   const eurTxt = eurOne.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const rtTxt = rt.toLocaleString('cs-CZ', { maximumFractionDigits: 2 });
-  const creditHelp = { title: HELP.credit.title, html: HELP.credit.html.replace('1 DC = 1 Kč slevy na nákup prádlomatu.', '1 DC = 1 Kč slevy na nákup prádlomatu (v eurech ≈ ' + eurTxt + ' €, tedy ' + rtTxt + ' DC ≈ 1 €; kurz ' + rtTxt + ' Kč / 1 €).') };
+  const isSeller = s.user_type === 'seller';
+  const creditHelp = { title: HELP.credit.title, html: HELP.credit.html.replace(/<p>DC se Vám připíše[\s\S]*?<\/p>/, isSeller ? '$&' : '<p>DC Vám připíše administrátor — například po převodu podpory ze starého systému (tlačítko <b>Přenést podporu ze starého systému</b>) nebo jako bonus.</p>').replace('1 DC = 1 Kč slevy na nákup prádlomatu.', '1 DC = 1 Kč slevy na nákup prádlomatu (v eurech ≈ ' + eurTxt + ' €, tedy ' + rtTxt + ' DC ≈ 1 €; kurz ' + rtTxt + ' Kč / 1 €).') };
   // Převod podpory ze starého systému (jen uživatelé typu Stávající): žádost → admin zpracuje ručně
   const canTransfer = s.user_type === 'standard';
   const TF_ST = { pending: ['invited', 'zpracovává se'], approved: ['active', 'převedeno'], rejected: ['blocked', 'zamítnuto'] };
@@ -890,11 +891,12 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   </div>
   ${canTransfer ? transferModal : ''}
   ${transferList}
-  <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
+  ${isSeller ? `  <h3 style="margin:20px 0 8px">Prádlomaty, které mohu prodávat</h3>
   <div class="card tbl-wrap">${sellable.length ? `<table class="cards"><thead><tr><th>Prádlomat</th><th>Cena bez DPH</th><th>Discount Credit</th></tr></thead><tbody>
     ${sellable.map(p => { const vat = vatPrice(p, cur); const net = cur === 'EUR' ? p.price_eur : p.price_czk; const pct = Number(p.credit_pct || 0); return `<tr><td data-l="Prádlomat"><b>${esc(p.name_cs)}</b></td><td data-l="Cena bez DPH">${money(net, sym)}</td><td data-l="Discount Credit">${pct > 0 && net != null ? `<b style="color:var(--ok)">+${money(Math.round(Number(net) * pct) / 100, 'DC')}</b>` : '<span class="muted">—</span>'}</td></tr>`; }).join('')}</tbody></table>
     <p class="small muted" style="margin:10px 0 0">Credit se připíše, když člověk z tvého doporučení zakoupí prádlomat.</p>`
     : '<p class="muted" style="margin:0">Momentálně není nastavena žádná nabídka.</p>'}</div>
+` : ''}
   <h3 style="margin:20px 0 8px">Historie</h3>
   <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Popis</th><th>Částka</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td data-l="Datum" class="small muted">${fmtDT(r.created_at)}</td><td data-l="Popis">${esc(r.note || '—')}</td><td data-l="Částka"><b style="color:${Number(r.amount_czk) < 0 ? 'var(--err)' : 'var(--ok)'}">${Number(r.amount_czk) > 0 ? '+' : ''}${money(conv(r.amount_czk), 'DC')}</b></td></tr>`).join('')}</tbody></table>`
