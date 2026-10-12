@@ -1669,8 +1669,23 @@
       tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td></tr>').join('')
         : '<tr><td colspan="6" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
     };
-    window.openSubModal = function(id) {
+    // Stroje z modulu Compounding (SIS kiosk-values) — výběr stroje do servisní smlouvy
+    window.__kiosks = null;
+    async function loadKiosks() {
+      if (window.__kiosks) return window.__kiosks;
+      const r = await api('GET', '/api/compounder/kiosk-values');
+      window.__kiosks = (r.status === 200 && r.data && Array.isArray(r.data.kiosks)) ? r.data.kiosks : [];
+      window.__kioskErr = r.status === 200 ? '' : ((r.data && (r.data.error || r.data.detail)) || ('HTTP ' + r.status));
+      return window.__kiosks;
+    }
+    window.openSubModal = async function(id) {
       const s = id ? window.__subs.find(x => x.id === id) : null;
+      const kiosks = await loadKiosks();
+      const used = new Set((window.__subs || []).map(x => x.kiosk_code));
+      if (!kiosks.length && !s) { window.__kiosks = null; alert('Stroje z Compoundingu se nepodařilo načíst' + (window.__kioskErr ? ': ' + window.__kioskErr : '') + '. Zkontroluj SIS_KIOSK_API_KEY na serveru.'); return; }
+      const kioskOpts = (s ? '' : '<option value="">— vyber stroj z Compoundingu —</option>')
+        + kiosks.filter(k => s ? k.code === s.kiosk_code : true).map(k => '<option value="' + escapeHtml(k.code) + '" data-cur="' + escapeHtml(k.currency || '') + '">' + escapeHtml((k.label || k.code) + ' (' + k.code + ')') + (used.has(k.code) && !s ? ' — už má smlouvu' : '') + '</option>').join('')
+        + (s && !kiosks.some(k => k.code === s.kiosk_code) ? '<option value="' + escapeHtml(s.kiosk_code) + '">' + escapeHtml(s.kiosk_code) + '</option>' : '');
       const v = (k, d) => escapeHtml(String(s && s[k] != null ? s[k] : d));
       const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
       document.getElementById('modal-root').innerHTML = `
@@ -1678,15 +1693,16 @@
           <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(560px,94vw); max-height:92vh; overflow:auto;">
             <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
-              <label>Kód stroje (SIS) *</label><input id="sub-kiosk" value="${v('kiosk_code','')}" ${s ? 'readonly' : ''} style="${inp}">
+              <label>Stroj (Compounding) *</label><select id="sub-kiosk" ${s ? 'disabled' : ''} onchange="subKioskChanged()" style="${inp}">${kioskOpts}</select>
               <label>Odběratel (název)</label><input id="sub-name" value="${v('customer_name','')}" style="${inp}">
               <label>IČO odběratele</label><input id="sub-ico" value="${v('buyer_ico','')}" style="${inp}">
               <label>E-mail pro fakturu</label><input id="sub-email" type="email" value="${v('email','')}" style="${inp}">
-              <label>Poplatek (% z obratu)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" style="${inp}">
-              <label>DPH (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" style="${inp}">
+              <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
+              <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
               <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
               <label>Den fakturace v měsíci</label><input id="sub-day" type="number" min="1" max="28" value="${v('billing_day',3)}" style="${inp}">
               <label>Poznámka</label><input id="sub-note" value="${v('note','')}" style="${inp}">
+              <label>Tržby za minulý měsíc</label><div id="sub-rev" style="font-size:13px;color:var(--text2);">Vyber stroj — načtou se tržby ze SIS.</div>
               <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-active" type="checkbox" ${!s || s.active ? 'checked' : ''}> automaticky fakturovat</label>
               <label>Odesílat e-mailem</label><label style="display:flex;gap:8px;align-items:center;"><input id="sub-auto" type="checkbox" ${s && s.auto_send ? 'checked' : ''}> poslat fakturu odběrateli (jinak jen koncept)</label>
             </div>
@@ -1696,6 +1712,31 @@
             </div>
           </div>
         </div>`;
+   
+      if (s) subRevenuePreview();
+    };
+    window.subKioskChanged = function() {
+      const sel = document.getElementById('sub-kiosk');
+      const cur = sel.options[sel.selectedIndex] && sel.options[sel.selectedIndex].getAttribute('data-cur');
+      if (cur) document.getElementById('sub-cur').value = cur;
+      subRevenuePreview();
+    };
+    let __revTimer = null;
+    window.subRevenuePreview = function() {
+      clearTimeout(__revTimer);
+      __revTimer = setTimeout(async () => {
+        const box = document.getElementById('sub-rev'); const code = document.getElementById('sub-kiosk').value;
+        if (!box) return;
+        if (!code) { box.textContent = 'Vyber stroj — načtou se tržby ze SIS.'; return; }
+        box.textContent = 'Načítám tržby ze SIS…';
+        const fee = document.getElementById('sub-fee').value || 13, vat = document.getElementById('sub-vat').value || 21;
+        const r = await api('GET', '/api/compounder/service-subscriptions/revenue/' + encodeURIComponent(code) + '?fee_pct=' + encodeURIComponent(fee) + '&vat_rate=' + encodeURIComponent(vat));
+        if (!document.getElementById('sub-rev')) return;
+        if (r.status !== 200) { box.innerHTML = '<span style="color:#ef4444;">' + escapeHtml((r.data && r.data.error) || ('Chyba ' + r.status)) + '</span>'; return; }
+        const d = r.data, f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + d.currency;
+        box.innerHTML = '<b style="color:var(--text);">' + escapeHtml(d.month) + ':</b> obrat ' + f(d.revenue) + (d.complete ? '' : ' <span style="color:#f59e0b;">(neúplné načtení)</span>')
+          + '<br>Poplatek ' + Number(d.fee_pct) + ' %: <b style="color:var(--text);">' + f(d.fee_net) + '</b> + DPH ' + f(d.fee_vat) + ' = <b style="color:var(--text);">' + f(d.fee_total) + '</b>';
+      }, 350);
     };
     window.saveSub = async function(id) {
       const g = (i) => document.getElementById(i).value.trim();

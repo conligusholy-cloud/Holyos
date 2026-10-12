@@ -3817,6 +3817,21 @@ router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) 
   try { await prisma.serviceSubscription.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
   catch (err) { next(err); }
 });
+// GET /service-subscriptions/revenue/:code?fee_pct=13&vat_rate=21 — tržby stroje za předchozí měsíc ze SIS + vypočtený poplatek (náhled)
+router.get('/service-subscriptions/revenue/:code', requireAuth, async (req, res, next) => {
+  try {
+    const { computePrevMonthRevenue } = require('../services/compounder/kiosk-revenue');
+    const rev = await computePrevMonthRevenue(req.params.code);
+    const feePct = Number(req.query.fee_pct) || 13, vatRate = req.query.vat_rate != null && req.query.vat_rate !== '' ? Number(req.query.vat_rate) : 21;
+    const subtotal = Math.round(rev.prevMonth * feePct) / 100;
+    const vat = Math.round(subtotal * vatRate) / 100;
+    res.json({ code: rev.code, currency: rev.currency, month: rev.prevMonthName, month_ym: rev.prevMonthYm, revenue: rev.prevMonth, complete: rev.complete, fee_pct: feePct, vat_rate: vatRate, fee_net: subtotal, fee_vat: vat, fee_total: Math.round((subtotal + vat) * 100) / 100 });
+  } catch (err) {
+    if (err && err.code === 'SIS_NOT_CONFIGURED') return res.status(400).json({ error: 'SIS není nakonfigurovaný (chybí SIS_KIOSK_API_KEY).' });
+    if (err && err.code === 'BAD_CODE') return res.status(400).json({ error: 'Neplatný kód stroje.' });
+    next(err);
+  }
+});
 router.post('/service-subscriptions/:id/bill-now', requireAuth, async (req, res, next) => {
   try {
     const sub = await prisma.serviceSubscription.findUnique({ where: { id: Number(req.params.id) } });
