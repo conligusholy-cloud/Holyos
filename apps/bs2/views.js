@@ -509,17 +509,17 @@ function supporterCompounder(s) {
   .cp .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
   .cp .how-clock .hc-txt{margin-top:6px} .cp .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .cp .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
   @media(max-width:700px){.cp .how-clock{position:static;transform:none;width:120px;margin:0 auto 8px}}
-  .cp .how-acc{position:absolute;right:-32%;top:0;max-width:200px;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .cp .how-acc{position:absolute;right:-34%;top:0;width:210px;box-sizing:border-box;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
   .cp .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
   .cp .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .cp .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
   @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
-  .cp .how-cas{position:absolute;right:-32%;top:26%;width:200px;display:flex;flex-direction:column;gap:6px;z-index:6}
+  .cp .how-cas{position:absolute;right:-34%;top:26%;width:210px;display:flex;flex-direction:column;gap:6px;z-index:6}
   .cp .how-cas .cs,.cp .how-cas button{opacity:0;transform:translateY(-14px) scale(.96);transition:opacity .45s,transform .45s cubic-bezier(.2,1.3,.4,1)} .cp .how-cas .in{opacity:1;transform:none}
-  .cp .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
+  .cp .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;box-sizing:border-box;width:100%;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
   .cp .how-cas .cs small{display:block;font-size:10.5px;color:var(--text2);line-height:1.35;margin-top:3px} .cp .how-cas .cs small i{font-style:normal;color:#fff} .cp .how-cas .cs b{font-size:clamp(18px,2.2vw,24px);letter-spacing:-.02em;color:#fff;margin-top:2px;white-space:nowrap}
   .cp .how-cas .cs.m{border-color:rgba(245,158,11,.4)} .cp .how-cas .cs.m b{color:#f59e0b}
   .cp .how-cas .cs.r{border-color:rgba(47,227,160,.6);background:rgba(47,227,160,.12);box-shadow:0 10px 30px rgba(47,227,160,.25)} .cp .how-cas .cs.r b{font-size:22px;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .cp .how-cas button{align-self:flex-end}
+  .cp .how-cas button{align-self:stretch}
   @media(max-width:700px){.cp .how-cas{position:static;width:100%;margin-top:90px} .cp .how-cas .cs{align-items:stretch;text-align:left}}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:12px;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
   @media(max-width:700px){.cp .how-stage{margin:0 auto 80px} .cp .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
