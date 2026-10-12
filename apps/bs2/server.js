@@ -276,9 +276,9 @@ app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterComp
 // Služby (Najít místo, Přípojky): nastavení v app_settings 'services' (admin → Produkty)
 const SERVICE_DEFAULTS = [
   { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
-  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění.', price_czk: null, quote: true, dc_use_pct: 100, offered: true },
+  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění. Na tuto položku nelze uplatnit DC.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true, place_free: true },
   { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Prodloužení záruky na prádlomat o 2 až 5 let. Každý rok stojí 15 000 Kč bez DPH.', price_czk: 30000, per_year_czk: 15000, years_min: 2, years_max: 5, quote: false, dc_use_pct: 100, offered: true },
-  { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH).', price_czk: null, quote: false, dc_use_pct: 0, offered: true }
+  { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH). Na tuto položku nelze uplatnit DC.', price_czk: null, quote: false, dc_use_pct: 0, offered: true, no_dc: true, place_free: true }
 ];
 async function loadServices() {
   let saved = []; try { const r = await q("SELECT value FROM app_settings WHERE key='services'"); saved = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { saved = []; }
