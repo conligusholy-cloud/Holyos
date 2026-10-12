@@ -845,7 +845,6 @@ function valueHero({ flex = null, sym = 'Kč' } = {}) {
         <div class="vh-price"><b id="vh-new">${Math.round(flex.net).toLocaleString('cs-CZ')}</b> <small>${sym} bez DPH</small> <s id="vh-old">${Math.round(flex.net).toLocaleString('cs-CZ')} ${sym}</s></div>
         <div class="vh-sl"><span class="small muted">Uplatněné DC</span><b id="vh-dc">0 DC</b></div>
         <input type="range" id="vh-r" min="0" max="${room}" step="${step}" value="0" aria-label="Kolik DC uplatnit" ${room ? '' : 'disabled'}>
-        <div class="vh-q"><button type="button" data-p="0">0</button><button type="button" data-p="25">25 %</button><button type="button" data-p="50">50 %</button><button type="button" data-p="100">Maximum</button></div>
         <div class="vh-cmp"><div class="vh-row"><span>Pořizovací cena</span><div class="vh-bar"><i id="vh-b1" style="width:100%"></i></div></div><div class="vh-row"><span>Doba návratnosti</span><div class="vh-bar"><i id="vh-b2" class="g" style="width:100%"></i></div></div></div>
         <div class="vh-sv" id="vh-sv">Posuň posuvník a uvidíš, o kolik se zlevní prádlomat.</div>
       </div>
