@@ -279,7 +279,7 @@ function buildTemplateData(invoice, ourCompany) {
 
     // Design Best Series 2.0 (jednotný vzhled dokladů)
     doc_css: bs2style.CSS,
-    logo_svg: bs2style.logoSvg(38, 'inv'),
+    logo_svg: bs2style.logoSvg(54),
     footer_text: bs2style.FOOTER_TEXT,
   };
 }

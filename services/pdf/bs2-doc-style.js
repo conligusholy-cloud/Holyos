@@ -4,17 +4,17 @@
 
 const FOOTER_TEXT = 'Best Series s.r.o. · Prádlomat';
 
-// Monogram „B" z BS2 (tmavá kapsle s gradientovým okrajem a oběžnou drahou).
-function logoSvg(size, id) {
-  size = size || 38; id = id || 'dl';
-  return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;flex:none">'
-    + '<defs><linearGradient id="' + id + 'g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>'
-    + '<linearGradient id="' + id + 'b" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#121d36"/><stop offset="1" stop-color="#070b16"/></linearGradient></defs>'
-    + '<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#' + id + 'b)"/>'
-    + '<rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#' + id + 'g)" stroke-width="1.5"/>'
-    + '<path d="M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22" stroke="url(#' + id + 'g)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>'
-    + '<ellipse cx="32" cy="32" rx="26" ry="11" transform="rotate(-28 32 32)" stroke="url(#' + id + 'g)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 4"/>'
-    + '<circle cx="50.5" cy="15" r="2.6" fill="#eaf2ff"/></svg>';
+// Logo Best Series s.r.o. (PNG s průhledným pozadím, vložené jako data URL — funguje v PDF i e-mailu).
+let _logoUrl = null;
+function logoDataUrl() {
+  if (_logoUrl) return _logoUrl;
+  _logoUrl = 'data:image/png;base64,' + require('fs').readFileSync(require('path').join(__dirname, 'bs-logo.png')).toString('base64');
+  return _logoUrl;
+}
+// size = výška loga v px
+function logoSvg(size) {
+  size = size || 44;
+  return '<img class="bslogo" src="' + logoDataUrl() + '" alt="Best Series s.r.o." style="height:' + size + 'px;width:auto;display:block">';
 }
 
 const CSS = `
@@ -89,7 +89,7 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repla
 // Hlavička: logo + název dokladu + číslo (+ štítek)
 function header(o) {
   o = o || {};
-  return '<div class="hdr"><div class="brand">' + logoSvg(38, 'h' + Math.floor(Math.random() * 1e6)) + '<div><div class="wm">Best Series</div><div class="sub">Prádlomat</div></div></div>'
+  return '<div class="hdr"><div class="brand">' + logoSvg(54) + '</div>'
     + '<div class="doc"><div class="t">' + esc(o.title) + '</div>' + (o.number ? '<div class="n">' + esc(o.number) + '</div>' : '')
     + (o.pill ? '<div class="p">' + esc(o.pill) + '</div>' : '') + (o.ext ? '<div class="e">' + esc(o.ext) + '</div>' : '') + '</div></div>';
 }
