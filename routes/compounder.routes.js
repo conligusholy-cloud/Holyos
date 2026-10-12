@@ -2372,7 +2372,7 @@ const mistoSchema = z.object({
   phone: z.string().trim().max(40).optional().nullable(),
   address: z.string().trim().max(500).optional().nullable(),
   company: z.string().trim().max(255).optional().nullable(),
-  variant: z.enum(['basic', 'plus']).default('basic'),
+  variant: z.enum(['basic', 'plus', 'premium']).default('basic'),
   marketing: z.coerce.boolean().optional().default(false),
   note: z.string().trim().max(2000).optional().nullable(),
   sid: z.string().trim().max(64).optional().nullable(),
@@ -2387,7 +2387,7 @@ router.post('/misto/interest', async (req, res, next) => {
     if (!locRateOk(clientIp(req), 'misto')) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
     if (await _isBlocked(d.email, d.phone)) return res.json({ ok: true });
     const phone = d.phone ? d.phone.replace(/[^\d+ ()\/-]/g, '').slice(0, 40) : null;
-    const variantLabel = d.variant === 'plus' ? 'PLUS 9 900 Kč (10 lokalit)' : 'ZÁKLAD 4 900 Kč (3 lokality)';
+    const variantLabel = d.variant === 'premium' ? 'PREMIUM 15 900 Kč (10 lokalit + místní šetření)' : d.variant === 'plus' ? 'PLUS 9 900 Kč (10 lokalit)' : 'ZÁKLAD 4 900 Kč (3 lokality)';
     const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const noteText = '[' + stamp + '] ŽÁDOST O OBJEDNÁVKU — Prověření lokality (pradlomaty.info/misto) — balíček ' + variantLabel
       + (d.address ? ('\nMísto: ' + d.address) : '')
@@ -2447,6 +2447,7 @@ router.post('/misto/interest', async (req, res, next) => {
 const MISTO_PACKAGES = {
   basic: { name: 'Prověření lokality – Základ', desc: 'Přístup do aplikace na 12 měsíců, 3 lokality, export PDF', amount: 490000 },
   plus:  { name: 'Prověření lokality – Plus',   desc: 'Přístup do aplikace na 12 měsíců, 10 lokalit, porovnání, 30min konzultace', amount: 990000 },
+  premium: { name: 'Prověření lokality – Premium', desc: 'Vše z Plus + místní šetření technikem Best Series na jedné lokalitě', amount: 1590000 },
 };
 function mistoBase() {
   return (process.env.PRADLOMATY_BASE_URL || 'https://pradlomaty.info').replace(/\/+$/, '');
@@ -2476,7 +2477,7 @@ async function stripePost(path, body) {
 }
 router.get('/misto/pay-config', (req, res) => {
   res.set('Cache-Control', 'no-store');
-  res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: { basic: MISTO_PACKAGES.basic.amount / 100, plus: MISTO_PACKAGES.plus.amount / 100 } });
+  res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: { basic: MISTO_PACKAGES.basic.amount / 100, plus: MISTO_PACKAGES.plus.amount / 100, premium: MISTO_PACKAGES.premium.amount / 100 } });
 });
 
 // POST /api/compounder/misto/checkout — založí/aktualizuje lead a vrátí URL Stripe Checkout.
