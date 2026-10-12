@@ -301,8 +301,8 @@ const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id:
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
 const userNav = (s) => {
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }];
-  if (s && s.user_type === 'seller') nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
-  if (s && s.user_type === 'seller') nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
+  if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
+  if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
   nav.push({ id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }, { id: 'mine', href: '/moje-pradlomaty', label: 'Moje svoboda', icon: 'sun' }, { id: 'credit', href: '/discount-credit', label: 'Discount Credit', icon: 'bolt' }, { id: 'aichat', href: '/ai-chat', label: 'AI chat', icon: 'chat' }, USER_NAV[1]);
   return nav;
 };
@@ -935,7 +935,7 @@ function supporterCredit(s, { rows = [], sellable = [], rate = 25, transfers = [
   const rt = Number(rate) || 25, eurOne = Math.round(1 / rt * 10000) / 10000;
   const eurTxt = eurOne.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   const rtTxt = rt.toLocaleString('cs-CZ', { maximumFractionDigits: 2 });
-  const isSeller = s.user_type === 'seller';
+  const isSeller = ['seller', 'standard'].includes(s.user_type); // Stávající vidí totéž co Může prodávat
   const creditHelp = { title: HELP.credit.title, html: HELP.credit.html.replace(/<p>DC se Vám připíše[\s\S]*?<\/p>/, isSeller ? '$&' : '<p>DC Vám připíše administrátor — například po převodu podpory ze starého systému (tlačítko <b>Přenést podporu ze starého systému</b>) nebo jako bonus.</p>').replace('1 DC = 1 Kč slevy na nákup prádlomatu.', '1 DC = 1 Kč slevy na nákup prádlomatu (v eurech ≈ ' + eurTxt + ' €, tedy ' + rtTxt + ' DC ≈ 1 €; kurz ' + rtTxt + ' Kč / 1 €).') };
   // Převod podpory ze starého systému (jen uživatelé typu Stávající): žádost → admin zpracuje ručně
   const canTransfer = s.user_type === 'standard';

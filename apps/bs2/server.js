@@ -211,7 +211,7 @@ async function loadSeller(code) {
   if (!/^[a-z0-9]{6,20}$/.test(String(code || ''))) return null;
   const r = await q("SELECT id, nick, first_name, last_name, status, user_type FROM supporters WHERE ref_code=$1", [code]);
   const s = r.rows[0];
-  return s && s.status !== 'blocked' && s.user_type === 'seller' ? s : null;
+  return s && s.status !== 'blocked' && ['seller', 'standard'].includes(s.user_type) ? s : null; // doporučovat mohou typy Může prodávat i Stávající
 }
 app.get('/join/:code', wrap(async (req, res) => {
   const seller = await loadSeller(req.params.code);
@@ -345,12 +345,12 @@ app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   res.send(V.supporterCredit(req.user, { rows, sellable, rate: await eurRate(), transfers, msg: req.query.msg || '', tfEv: await tfEventsFor(transfers.map(t => t.id)) }));
 }));
 app.get('/sit', wrap(requireUser), wrap(async (req, res) => {
-  if (req.user.user_type !== 'seller') return res.redirect('/');
+  if (!['seller', 'standard'].includes(req.user.user_type)) return res.redirect('/');
   const [rows, line] = await Promise.all([loadNetwork(req.user), loadFirstLine(req.user)]);
   res.send(V.supporterNetwork(req.user, { rows, lineCount: line.length }));
 }));
 app.get('/team', wrap(requireUser), wrap(async (req, res) => {
-  if (req.user.user_type !== 'seller') return res.redirect('/');
+  if (!['seller', 'standard'].includes(req.user.user_type)) return res.redirect('/');
   const code = await ensureRefCode(req.user);
   res.send(V.supporterTeam(req.user, { team: await loadFirstLine(req.user), refUrl: PUBLIC_URL + '/join/' + code }));
 }));
