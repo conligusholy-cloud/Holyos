@@ -339,14 +339,26 @@ function joinPage({ code, seller, f = {}, error = '' }) {
     </form>
     <p class="foot">Už účet máš? <a href="/login">Přihlas se</a></p>` });
 }
+function resetPage({ token = '', nick = '', error = '', invalid = false } = {}) {
+  return authShell({ title: 'Nové heslo', esc, card: invalid ? `
+    <h2>Odkaz už neplatí</h2><p class="sub">Odkaz pro obnovu hesla vypršel nebo už byl použit. Vyžádej si prosím nový.</p>
+    <p class="foot"><a href="/forgot">Zapomenuté heslo</a> · <a href="/login">přihlášení</a></p>` : `
+    <h2>Nové heslo</h2><p class="sub">${nick ? 'Účet <b>' + esc(nick) + '</b>. ' : ''}Zvol si nové heslo (aspoň 8 znaků).</p>
+    ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+    <form method="post" action="/reset/${esc(token)}" novalidate>
+      <label>Nové heslo</label>${field({ name: 'password', type: 'password', icon: 'lock', placeholder: 'min. 8 znaků', auto: 'new-password', extra: 'minlength="8" required autofocus', eye: true })}
+      <label>Heslo znovu</label>${field({ name: 'password2', type: 'password', icon: 'lock', placeholder: 'pro kontrolu', auto: 'new-password', extra: 'minlength="8" required', eye: true })}
+      <button class="btn" type="submit">Uložit heslo ${ICON.arrow}</button></form>
+    <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
+}
 function forgotPage({ email = '', error = '', done = false } = {}) {
   return authShell({ title: 'Zapomenuté heslo', esc, card: done ? `
-    <h2>Zpráva přijata</h2><p class="sub">Pokud e-mail <b>${esc(email)}</b> známe, ozveme se ti s dalším postupem. Obvykle do jednoho pracovního dne.</p>
+    <h2>Zpráva přijata</h2><p class="sub">Pokud e-mail <b>${esc(email)}</b> v systému máme, právě jsme na něj poslali odkaz pro nastavení nového hesla. Platí 1 hodinu. Nic nepřišlo? Zkontroluj spam.</p>
     <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` : `
-    <h2>Zapomenuté heslo</h2><p class="sub">Zadej e-mail, pod kterým jsi u nás veden. Postaráme se o obnovu přístupu.</p>
+    <h2>Zapomenuté heslo</h2><p class="sub">Zadej e-mail, pod kterým jsi u nás veden. Pošleme ti odkaz pro nastavení nového hesla.</p>
     ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
     <form method="post" action="/forgot" novalidate><label>E-mail</label>${field({ name: 'email', type: 'email', value: email, icon: 'mail', placeholder: 'jmeno@email.cz', auto: 'email', extra: 'inputmode="email" autocapitalize="none" required autofocus' })}
-    <button class="btn" type="submit">Požádat o obnovu ${ICON.arrow}</button></form>
+    <button class="btn" type="submit">Poslat odkaz na e-mail ${ICON.arrow}</button></form>
     <p class="foot"><a href="/login">${ico('back', 14)} zpět na přihlášení</a></p>` });
 }
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
@@ -1860,4 +1872,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

@@ -161,6 +161,11 @@ async function migrate() {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'machine';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS service_key TEXT;
 
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY, supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS password_resets_sup_idx ON password_resets(supporter_id, created_at);
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS vop_consent_at TIMESTAMPTZ; -- kdy uživatel odsouhlasil VOP
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS gdpr_consent_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS failed_logins INTEGER NOT NULL DEFAULT 0; -- zamykání účtu po opakovaných neúspěších

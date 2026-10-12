@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 });
 app.use((req, res, next) => {
   req.csrfToken = req.csrfToken || csrfToken(req);
-  if (req.method === 'POST' && (req.get('content-type') || '').includes('application/x-www-form-urlencoded') && req.path !== '/login' && req.path !== '/activate' && req.path !== '/activate/finish' && req.path !== '/forgot' && !req.path.startsWith('/join/')) {
+  if (req.method === 'POST' && (req.get('content-type') || '').includes('application/x-www-form-urlencoded') && req.path !== '/login' && req.path !== '/activate' && req.path !== '/activate/finish' && req.path !== '/forgot' && !req.path.startsWith('/join/') && !req.path.startsWith('/reset/')) {
     if (String((req.body || {})._csrf || '') !== req.csrfToken) return res.status(403).send('Formulář vypršel nebo byl odeslán odjinud — obnovte stránku a zkuste to znovu.');
   }
   next();
@@ -171,16 +171,72 @@ app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, m
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat-mini.webp')));
 app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
-  res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
+  res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.reset ? 'Heslo je změněné, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
 }));
 // Zapomenuté heslo — zatím bez automatického e-mailu: žádost se zapíše do admin_log, Tomáš/Jan ji vyřídí ručně (reset v adminu)
 app.get('/forgot', (req, res) => res.send(V.forgotPage()));
+// Odeslání e-mailu přes HolyOS (Graph send-as); BS2 samo e-maily neodesílá.
+async function sendBs2Mail({ to, subject, body, link, linkLabel }) {
+  const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + '/api/auth/bs2/send-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body, link, linkLabel }), signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
+}
+const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
+// Obnova hesla: ověří e-mail v databázi a pokud existuje, pošle odkaz (platí 1 hodinu, jednorázový). Odpověď je vždy stejná.
 app.post('/forgot', wrap(async (req, res) => {
+  const ip = req.ip;
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).send(V.forgotPage({ email, error: 'Zadej platný e-mail.' }));
-  const r = await q('SELECT id, nick FROM supporters WHERE lower(email)=$1 LIMIT 1', [email]);
-  await log({ name: 'web' }, 'forgot_password', { email, known: !!r.rows[0], supporter_id: r.rows[0] ? r.rows[0].id : null, ip: req.ip });
+  if (tooMany(ip)) return res.status(429).send(V.forgotPage({ email, error: 'Příliš mnoho pokusů. Zkus to za 15 minut.' }));
+  noteFail(ip);
+  const r = await q('SELECT id, nick, first_name, status, password_hash FROM supporters WHERE lower(email)=$1 LIMIT 1', [email]);
+  const u = r.rows[0];
+  let sent = false, why = '';
+  if (u && u.status !== 'blocked') {
+    if (!u.password_hash) { // účet ještě není aktivovaný → pošleme odkaz na aktivaci (tam se potvrdí VOP a GDPR)
+      try { await sendBs2Mail({ to: email, subject: 'Aktivace účtu — Best Series 2.0', link: PUBLIC_URL + '/activate', linkLabel: 'Aktivovat účet', body: (u.first_name ? 'Ahoj ' + u.first_name + ',' : 'Ahoj,') + '\n\nTvůj účet v Best Series 2.0 ještě není aktivovaný. Aktivuješ ho přes odkaz níže — zadáš tento e-mail a zvolíš si nick a heslo.' }); sent = true; } catch (e) { why = 'mail_error'; console.error('[bs2] aktivační e-mail:', e.message); }
+    } else {
+    const recent = (await q("SELECT count(*)::int AS c FROM password_resets WHERE supporter_id=$1 AND created_at > now() - interval '1 hour'", [u.id])).rows[0].c;
+    if (recent >= 3) why = 'limit';
+    else {
+      try {
+        const raw = crypto.randomBytes(32).toString('hex');
+        await q("INSERT INTO password_resets (supporter_id, token_hash, expires_at) VALUES ($1,$2, now() + interval '1 hour')", [u.id, sha256(raw)]);
+        const hello = u.first_name ? 'Ahoj ' + u.first_name + ',' : 'Ahoj,';
+        await sendBs2Mail({ to: email, subject: 'Obnovení hesla — Best Series 2.0', link: PUBLIC_URL + '/reset/' + raw, linkLabel: 'Nastavit nové heslo',
+          body: hello + '\n\nněkdo (doufáme, že Ty) požádal o obnovu hesla k účtu v Best Series 2.0' + (u.nick ? ' (nick ' + u.nick + ')' : '') + '. Nové heslo si nastavíš přes odkaz níže. Odkaz platí 1 hodinu a lze ho použít jen jednou.\n\nPokud jsi o obnovu nežádal, tento e-mail ignoruj — Tvoje heslo zůstane beze změny.' });
+        sent = true;
+      } catch (e) { why = 'mail_error'; console.error('[bs2] obnova hesla — e-mail se nepodařilo odeslat:', e.message); }
+    }
+    }
+  }
+  await log({ name: 'web' }, 'forgot_password', { email, known: !!u, sent, why: why || undefined, supporter_id: u ? u.id : null, ip });
   res.send(V.forgotPage({ email, done: true }));
+}));
+async function findReset(raw) {
+  const r = await q("SELECT pr.id, pr.supporter_id, s.nick, s.email FROM password_resets pr JOIN supporters s ON s.id=pr.supporter_id WHERE pr.token_hash=$1 AND pr.used_at IS NULL AND pr.expires_at > now() AND s.status<>'blocked'", [sha256(String(raw || ''))]);
+  return r.rows[0] || null;
+}
+app.get('/reset/:token', wrap(async (req, res) => {
+  const t = await findReset(req.params.token);
+  if (!t) return res.status(400).send(V.resetPage({ invalid: true }));
+  res.send(V.resetPage({ token: req.params.token, nick: t.nick }));
+}));
+app.post('/reset/:token', wrap(async (req, res) => {
+  const ip = req.ip;
+  if (tooMany(ip)) return res.status(429).send(V.resetPage({ token: req.params.token, error: 'Příliš mnoho pokusů. Zkus to za 15 minut.' }));
+  const t = await findReset(req.params.token);
+  if (!t) { noteFail(ip); return res.status(400).send(V.resetPage({ invalid: true })); }
+  const password = String(req.body.password || ''), password2 = String(req.body.password2 || '');
+  const back = (error) => res.status(400).send(V.resetPage({ token: req.params.token, nick: t.nick, error }));
+  if (password.length < 8) return back('Heslo musí mít aspoň 8 znaků.');
+  if (password !== password2) return back('Hesla se neshodují.');
+  const hash = await bcrypt.hash(password, 11);
+  await q("UPDATE supporters SET password_hash=$1, updated_at=now() WHERE id=$2", [hash, t.supporter_id]);
+  await q('UPDATE password_resets SET used_at=now() WHERE supporter_id=$1 AND used_at IS NULL', [t.supporter_id]);
+  await log({ name: 'web' }, 'password_reset_done', { supporter_id: t.supporter_id, ip });
+  res.redirect('/login?reset=1');
 }));
 app.post('/login', wrap(async (req, res) => {
   const ip = req.ip;

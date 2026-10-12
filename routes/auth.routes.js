@@ -252,6 +252,32 @@ router.get('/bs2/products', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/bs2/send-mail — odeslání systémového e-mailu z BS2 (obnova hesla). Volá server BS2, ověření JWT sdíleným BS2_SSO_SECRET.
+// Odkaz v e-mailu smí mířit jen na adresu BS2 (BS2_URL), aby endpoint nešel zneužít k rozesílání cizích odkazů.
+router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.BS2_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'bs2' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const to = String(b.to || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Neplatný příjemce' });
+    const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+    const link = b.link ? String(b.link) : undefined;
+    if (link && !link.startsWith(base + '/')) return res.status(400).json({ error: 'Odkaz mimo BS2' });
+    let our = null; try { our = await require('../services/settings').getOurCompany(); } catch (e) { our = null; }
+    const from = process.env.BS2_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+    const r = await require('../services/email').sendMail({
+      to, brand: 'bs2', from, fromName: process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0',
+      subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000),
+      link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined,
+    });
+    if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/bs2/products/:id/image — obrázek položky ceníku pro BS2 (stejná autorizace tokenem)
 router.get('/bs2/products/:id/image', async (req, res, next) => {
   try {
