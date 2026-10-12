@@ -276,9 +276,10 @@ app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterComp
 // Služby (Najít místo, Přípojky): nastavení v app_settings 'services' (admin → Produkty)
 const SERVICE_DEFAULTS = [
   { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
-  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění. Na tuto položku nelze uplatnit DC.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true, place_free: true },
+  { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění. Na tuto položku nelze uplatnit DC.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true },
+  { key: 'place_free', name: 'Místo zdarma', desc: 'Místo i přípojky zajišťuje Best Series na vlastní smlouvu — zákazník neplatí Najít místo ani Přípojky, ale k místu nemá žádnou právní vazbu.', price_czk: null, quote: true, dc_use_pct: 0, offered: true, no_dc: true, hidden_card: true },
   { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Záruka na prádlomat celkem 2 až 5 let. První rok je ze zákona zdarma, každý další rok stojí 15 000 Kč bez DPH.', price_czk: 15000, per_year_czk: 15000, years_min: 2, years_max: 5, free_years: 1, quote: false, dc_use_pct: 100, offered: true },
-  { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH). Na tuto položku nelze uplatnit DC.', price_czk: null, quote: false, dc_use_pct: 0, offered: true, no_dc: true, place_free: true }
+  { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH). Na tuto položku nelze uplatnit DC.', price_czk: null, quote: false, dc_use_pct: 0, offered: true, no_dc: true }
 ];
 async function loadServices() {
   let saved = []; try { const r = await q("SELECT value FROM app_settings WHERE key='services'"); saved = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { saved = []; }
@@ -299,14 +300,15 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
   const back = (m) => res.redirect('/pradlomaty?msg=' + encodeURIComponent(m));
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK';
   if (String(req.body.item || '').startsWith('svc:')) {
-    const sv = (await loadServices()).find(x => 'svc:' + x.key === req.body.item && x.offered);
+    const parts = String(req.body.item).split(':'); const svKey = parts[1], svVariant = parts[2] || '';
+    const sv = (await loadServices()).find(x => x.key === svKey && x.offered);
     if (!sv) return back('Tuto službu teď nelze objednat.');
     const rateS = cur === 'EUR' ? await eurRate() : 1;
     if (sv.mode === 'percent' || sv.quote || sv.price_czk == null) {
       const ex = await q("SELECT id FROM orders WHERE supporter_id=$1 AND service_key=$2 AND status='new' LIMIT 1", [req.user.id, sv.key]);
       if (ex.rows[0]) return back('Poptávka „' + sv.name + '" už byla odeslána, ozveme se.');
-      const ins0 = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,0,0,0,'service',$4) RETURNING id", [req.user.id, sv.name + (sv.mode === 'percent' ? ' — zájem (' + Number(sv.percent) + ' % z obratu s DPH)' : ' — poptávka nacenění'), cur, sv.key]);
-      await log({ name: req.user.nick }, 'order_new', { id: ins0.rows[0].id, service: sv.key, quote: true });
+      const ins0 = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,0,0,0,'service',$4) RETURNING id", [req.user.id, sv.name + (sv.mode === 'percent' ? ' — zájem (' + Number(sv.percent) + ' % z obratu s DPH)' : (sv.key === 'place_free' ? ' — zájem (místo a přípojky zajistí Best Series, bez právní vazby zákazníka)' : ' — poptávka nacenění')), cur, sv.key]);
+      await log({ name: req.user.nick }, 'order_new', { id: ins0.rows[0].id, service: sv.key, quote: true, variant: svVariant || null });
       return res.redirect('/moje-pradlomaty?ordered=1');
     }
     // Prodloužená záruka: počet let (2–5) × cena za rok

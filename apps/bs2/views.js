@@ -75,6 +75,8 @@ code{background:var(--card2);border:1px solid var(--border);padding:1px 6px;bord
 .helpdlg .hd-q{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;background:linear-gradient(135deg,rgba(30,134,224,.55),rgba(124,92,255,.55));border:1px solid rgba(79,209,255,.5);flex:none}
 .helpdlg .hd-x{background:transparent;border:0;color:var(--text2);font-size:16px;cursor:pointer;padding:6px;border-radius:8px} .helpdlg .hd-x:hover{color:var(--text);background:rgba(255,255,255,.06)}
 .helpdlg .hd-body{padding:16px 18px 18px;font-size:14.5px;line-height:1.55;color:var(--text)} .helpdlg .hd-body p{margin:0 0 10px} .helpdlg .hd-body p:last-child{margin:0} .helpdlg .hd-body b{color:var(--accent2)}
+.pfo{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:12px;border:1px solid var(--border2);background:rgba(4,8,16,.5);cursor:pointer;transition:border-color .2s,background .2s} .pfo input{display:none} .pfo>b{font-size:14px} .pfo>span{font-size:12px;color:var(--text2);line-height:1.4} .pfo>span b{color:var(--text)} .pfo.on{border-color:var(--ok);background:rgba(47,227,160,.08);box-shadow:0 0 0 1px rgba(47,227,160,.3)}
+@media(max-width:640px){.pfc{grid-template-columns:1fr!important}}
 .soon{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 12px;border-radius:12px;border:1px dashed var(--border2);color:var(--text2);font-size:13px}
 .soon b{color:var(--accent2)}
 @media (prefers-reduced-motion:reduce){.glow,.hero .eyebrow i{animation:none}}
@@ -971,14 +973,14 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
 </div>` : ''}
     </div>`; }).join('')}</div>
   ${offers.length ? '' : '<p class="muted">Momentálně nemáme žádnou nabídku.</p>'}
-  ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
+  ${['services', 'warranty'].map(sec => { const list = services.filter(x => (x.section || 'services') === sec && !x.hidden_card); return list.length ? `<h2 style="margin:30px 0 10px;display:flex;align-items:center;gap:8px">${ico(sec === 'warranty' ? 'lock' : 'sprout', 18)} ${sec === 'warranty' ? 'Záruka a servis' : 'Služby'}</h2>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))">${list.map(sv => {
     const net = sv.net;
     if (sv.mode === 'percent') return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
-      <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${esc(String(sv.percent).replace('.', ','))} % z obratu</div><div class="small muted">cena včetně DPH · počítá se z obratu prádlomatu${sv.no_dc ? ' · <b style="color:#f59e0b">DC nelze uplatnit</b>' : ' · DC půjde uplatnit'}</div>${sv.place_free ? `<div class="small" style="margin-top:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(47,227,160,.4);background:rgba(47,227,160,.08);line-height:1.45"><b style="color:var(--ok)">Místo může být zcela zdarma.</b> <span class="muted">Místo zajišťuje Best Series na vlastní smlouvu — zákazník k němu nemá žádnou právní vazbu.</span></div>` : ''}
+      <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${esc(String(sv.percent).replace('.', ','))} % z obratu</div><div class="small muted">cena včetně DPH · počítá se z obratu prádlomatu${sv.no_dc ? ' · <b style="color:#f59e0b">DC nelze uplatnit</b>' : ' · DC půjde uplatnit'}</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}" data-ask="Mám zájem o službu: ${esc(sv.name)}?">Mám zájem</button></div></div>`;
     if (net == null) return `<div class="card" style="margin:0;display:flex;flex-direction:column"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
-      <div style="margin-top:14px;font-size:20px;font-weight:800;letter-spacing:-.01em">Individuální nacenění</div><div class="small muted">Cena se vytvoří podle konkrétní situace. Po odeslání poptávky se ti ozveme s nabídkou.${sv.no_dc ? ' <b style="color:#f59e0b">DC nelze uplatnit.</b>' : ' DC půjde uplatnit.'}</div>${sv.place_free ? `<div class="small" style="margin-top:10px;padding:8px 10px;border-radius:10px;border:1px solid rgba(47,227,160,.4);background:rgba(47,227,160,.08);line-height:1.45"><b style="color:var(--ok)">Místo může být zcela zdarma.</b> <span class="muted">Místo zajišťuje Best Series na vlastní smlouvu — zákazník k němu nemá žádnou právní vazbu.</span></div>` : ''}
+      <div style="margin-top:14px;font-size:20px;font-weight:800;letter-spacing:-.01em">Individuální nacenění</div><div class="small muted">Cena se vytvoří podle konkrétní situace. Po odeslání poptávky se ti ozveme s nabídkou.${sv.no_dc ? ' <b style="color:#f59e0b">DC nelze uplatnit.</b>' : ' DC půjde uplatnit.'}</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Poptat nacenění</button></div></div>`;
     const room = Math.max(0, Math.floor(net * (sv.dc_use_pct == null ? 100 : Number(sv.dc_use_pct)) / 100));
     const yr = sv.per_year_net ? { per: Number(sv.per_year_net), min: sv.years_min || 2, max: sv.years_max || 5, free: sv.free_years || 0 } : null;
@@ -988,7 +990,14 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximálně z DC:</span> ${room > 0 ? `<b class="dc-room" style="color:var(--ok)">${esc(fmt(room))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tuto službu nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Koupit</button></div>
       ${bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric"><button type="button" class="dc-max"></button></div>
-      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}</div>` : ''; }).join('')}
+      <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}</div>${sec === 'services' && services.some(x => x.key === 'place_free') ? `
+  <div class="card" style="margin:12px 0 0;padding:16px 18px"><b style="font-size:15px">Jak chcete řešit místo a přípojky?</b><p class="small muted" style="margin:4px 0 12px">Vyberte jednu ze dvou cest.</p>
+    <div class="pfc" style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <label class="pfo on"><input type="radio" name="pf-place" value="paid" checked><b>Vlastní místo</b><span>Zaplatíte <b>Najít místo</b> a <b>Přípojky</b> (výše). Místo i přípojky jsou <b>Vaše</b> — máte k nim právní vazbu.</span></label>
+      <label class="pfo"><input type="radio" name="pf-place" value="free"><b>Místo zdarma</b><span>Neplatíte Najít místo ani Přípojky. Místo i přípojky zajišťuje <b>Best Series</b> na vlastní smlouvu — místo <b>není Vaše</b>, nemáte k němu žádnou právní vazbu.</span></label>
+    </div>
+    <div id="pf-free-act" style="display:none;margin-top:12px;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:place_free" data-name="Místo zdarma" data-ask="Mám zájem o místo zdarma — místo i přípojky zajistí Best Series na vlastní smlouvu (místo nebude Vaše).">Mám zájem o místo zdarma</button></div>
+  </div>` : ''}` : ''; }).join('')}
   <script>
   (function(){
     var total=${bal}, sym=${JSON.stringify(sym)};
@@ -1017,8 +1026,10 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
         var rm=c.querySelector('.dc-room'); if(rm)rm.textContent=fmt(room)+' DC'; recalc(); }
       r.addEventListener('input',upd); upd();
     });
+    [].forEach.call(document.querySelectorAll('.pfc'),function(g){ var act=document.getElementById('pf-free-act'); function up(){ var v=(g.querySelector('input:checked')||{}).value; [].forEach.call(g.querySelectorAll('.pfo'),function(l){ l.classList.toggle('on', l.querySelector('input').checked); }); if(act) act.style.display = v==='free' ? 'flex' : 'none'; } g.addEventListener('change',up); up(); });
     [].forEach.call(document.querySelectorAll('.svc-quote'),function(b){b.addEventListener('click',function(){
-      if(!confirm((b.getAttribute('data-ask')||('Poptat nacenění: '+b.getAttribute('data-name')+'?'))+'\\n\\nOzveme se s individuální nabídkou.'))return;
+      var ask = b.getAttribute('data-ask') || ('Poptat nacenění: '+b.getAttribute('data-name')+'?');
+      if(!confirm(ask+'\\n\\nOzveme se s individuální nabídkou.'))return;
       var f=document.getElementById('orderf');f.item.value=b.getAttribute('data-item');f.dc.value=0;f.submit();});});
     var M=document.getElementById('dcm'),mr=document.getElementById('dcm-r'),mn=document.getElementById('dcm-n'),cur=null,curBtn=null,curCap=0;
     function $(id){return document.getElementById(id);}
