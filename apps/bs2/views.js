@@ -1340,9 +1340,8 @@ function supporterTeam(s, { team = [], refUrl = '' } = {}) {
       </div>
     </div>
   </div>
-  <div class="card tbl-wrap">${(team || []).length ? `<table class="cards"><thead><tr><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Registrace</th><th>Stav účtu</th><th>Objednávky</th></tr></thead><tbody>
-    ${team.map(r => `<tr><td data-l="Jméno" class="nm"><b>${esc([r.first_name, r.last_name].filter(Boolean).join(' ') || r.nick || '—')}</b>${r.nick ? `<div class="small muted">${esc(r.nick)}</div>` : ''}</td>
-      <td data-l="E-mail"><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td><td data-l="Telefon">${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : '<span class="muted">—</span>'}</td>
+  <div class="card tbl-wrap">${(team || []).length ? `<table class="cards"><thead><tr><th>Nick</th><th>Registrace</th><th>Stav účtu</th><th>Objednávky</th></tr></thead><tbody>
+    ${team.map(r => `<tr><td data-l="Nick" class="nm"><b>${esc(r.nick || '—')}</b></td>
       <td data-l="Registrace" class="small muted">${fmtDT(r.activated_at || r.created_at)}</td>
       <td data-l="Stav"><span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>${r.user_type === 'owner' ? ' <span class="badge type-owner">koupil prádlomat</span>' : ''}</td>
       <td data-l="Objednávky" class="small muted">${r.user_type === 'owner' ? 'prádlomat pořízen' : 'zatím bez objednávky'}</td></tr>`).join('')}</tbody></table>`
