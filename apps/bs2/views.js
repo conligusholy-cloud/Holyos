@@ -561,6 +561,7 @@ function supporterCompounder(s) {
   .cp .ph-head p{margin:0;color:var(--text);line-height:1.55;max-width:760px;font-size:15.5px}
   .cp .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
   .cp .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
+  .cp .how-mach{position:absolute;inset:0}
   .cp .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
   .cp .how-w8{width:9%!important}
   .cp .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
@@ -594,6 +595,16 @@ function supporterCompounder(s) {
   @media(max-width:700px){.cp .how-cas{position:static;width:100%;margin-top:90px} .cp .how-cas .cs{align-items:stretch;text-align:left}}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
   @media(max-width:700px){.cp .how-stage{margin:0 auto 80px} .cp .how-acc{right:50%;top:auto;bottom:-80px;transform:translateX(50%)} .cp .how-cust{font-size:24px} .cp .how-bag{font-size:18px} .cp .how-tag{font-size:10px} .cp .how-acc{padding:6px 10px} .cp .how-acc b{font-size:18px}}
+  @media(max-width:700px){
+    .cp .how{padding:12px 10px}
+    .cp .how-stage{width:100%;aspect-ratio:auto;min-height:0;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+    .cp .how-clock{order:0;position:static;width:104px;margin:0 auto}
+    .cp .how-mach{order:1;position:relative;inset:auto;width:100%;aspect-ratio:1000/820}
+    .cp .how-acc{order:2;position:static;right:auto;left:auto;top:auto;bottom:auto;transform:none;width:100%;text-align:center;white-space:normal}
+    .cp .how-cas{order:3;position:static;right:auto;top:auto;width:100%;margin-top:0}
+    .cp .how-cas .cs{align-items:stretch;text-align:left}
+    .cp .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}
+  }
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -694,15 +705,17 @@ function supporterCompounder(s) {
       ${ph.visual === 'pilots' ? `<div class="pilots"><div class="pl-row one"><div class="pl"><img src="/img/pradlomat-mini.webp?v=3" alt="Pilot MINI" loading="lazy" decoding="async"><span class="pl-tag">Pilot — Váš první prádlomat</span><span class="pl-mini">MINI · ideálně bez financování</span></div></div><div class="pl-cap"><span><i></i>1 stroj · verze MINI · za vlastní (nebo s max. akontací)</span><span class="pl-arrow">→</span><span class="pl-goal">cíl: ověřit místo do ~6 měsíců</span></div></div>` : ''}
       ${ph.visual === 'how' ? `<div class="how">
         <div class="how-stage">
+          <div class="how-mach">
           <img class="how-img" src="/img/pradlomat-mini.webp?v=3" alt="Prádlomat MINI" loading="lazy" decoding="async">
           <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
           <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
           <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
           <div class="how-bag" id="how-bag">🧺</div>
           <div class="how-tag" id="how-tag"></div>
+          <div class="how-coins" id="how-coins"></div>
+          </div>
           <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/>${Array.from({ length: 12 }, (_, i) => `<line x1="50" y1="8" x2="50" y2="${i % 3 === 0 ? 15 : 12}" stroke="${i % 3 === 0 ? '#fff' : 'rgba(255,255,255,.45)'}" stroke-width="${i % 3 === 0 ? 2.5 : 1.5}" transform="rotate(${i * 30} 50 50)"/>`).join('')}<circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">06:00</b><span id="hc-d">den 1</span></div></div>
           <div class="how-acc"><span class="dec-k">průměrná tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
-          <div class="how-coins" id="how-coins"></div>
           <div class="how-cas" id="how-cas">
           <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
           <div class="cs m in"><span class="dec-k">náklady za měsíc</span><b id="hs-cost">− 5 000 Kč</b><small>bez DPH<br>nájem 5 000 Kč<br>servis 13 % <i id="hs-serv">0 Kč</i><br>energie <i id="hs-en">0 Kč</i><i id="hs-env" hidden></i></small></div>
