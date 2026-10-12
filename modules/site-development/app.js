@@ -316,6 +316,7 @@ window.closeModal = closeModal;
 
 // ─── Detail / editace lokality ─────────────────────────────────────────────
 async function openSiteModal(id) {
+  dataFolder = null; // složka DATA: vždy začít v kořeni
   if (id) {
     const r = await fetch('/api/sites/' + id, fetchOpts());
     if (!r.ok) { alert('Nepodařilo se načíst lokalitu'); return; }
@@ -345,7 +346,8 @@ function renderSiteModal() {
         <button class="site-tab" data-tab="contacts" onclick="switchTab('contacts')">Kontakty (${(s.contacts||[]).length})</button>
         <button class="site-tab" data-tab="comm" onclick="switchTab('comm')">Komunikace (${(s.communications||[]).length})</button>
         <button class="site-tab" data-tab="photos" onclick="switchTab('photos')">Fotky &amp; mapa (${(s.photos||[]).length})</button>
-        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>d.doc_type!=='construction'&&d.doc_type!=='building').length})</button>
+        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>d.doc_type!=='construction'&&d.doc_type!=='building'&&!isDataDoc(d)).length})</button>
+        <button class="site-tab" data-tab="data" onclick="switchTab('data')">📁 DATA (${(s.documents||[]).filter(d=>isDataDoc(d)&&d.doc_type!=='data_root').length})</button>
         <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Místní šetření (${(s.documents||[]).filter(d=>d.doc_type==='construction'||d.doc_type==='building').length})</button>
       `}
     </div>
@@ -361,6 +363,7 @@ function renderSiteModal() {
       <div class="site-tab-panel" id="tab-photos">${renderPhotosTab(s)}</div>
       <div class="site-tab-panel" id="tab-docs">${renderDocsTab(s)}</div>
       <div class="site-tab-panel" id="tab-survey">${renderSurveyDocsTab(s)}</div>
+      <div class="site-tab-panel" id="tab-data">${renderDataTab(s)}</div>
     `}
 
     <div class="modal-actions">
@@ -537,7 +540,7 @@ function renderPhotosTab(s){
 }
 function renderDocsTab(s){
   // Stavební dokumenty (construction/building) mají vlastní záložku Místní šetření.
-  const docs = (s.documents||[]).filter(d => d.doc_type!=='construction' && d.doc_type!=='building').map(d => `
+  const docs = (s.documents||[]).filter(d => d.doc_type!=='construction' && d.doc_type!=='building' && !isDataDoc(d)).map(d => `
     <div class="contact-card">
       <div class="info">
         <div class="name">📄 ${esc(d.title)} <span class="badge badge-type-rent">${esc(d.doc_type)}</span></div>
@@ -640,6 +643,117 @@ async function delSurveyDoc(id) {
   await refreshCurrent(); renderSiteModal(); switchTab('survey');
 }
 window.delSurveyDoc = delSurveyDoc;
+
+// ─── Záložka DATA — složka lokality s podsložkami (nájemní smlouva, foto, …) ──
+// Soubory jsou SiteDocument: doc_type 'data_root' = značka vytvořené složky DATA, 'data_*' = podsložky.
+const DATA_FOLDERS = [
+  { key:'data_najemni',     icon:'📝', label:'Nájemní smlouva' },
+  { key:'data_foto',        icon:'📷', label:'Foto místní šetření' },
+  { key:'data_koordinace',  icon:'📐', label:'Koordinace umístění' },
+  { key:'data_vizualizace', icon:'🎨', label:'Vizualizace' },
+  { key:'data_sit',         icon:'🌐', label:'Dokumenty sítě' },
+];
+let dataFolder = null; // null = kořen DATA, jinak klíč podsložky
+function isDataDoc(d){ return String((d && d.doc_type) || '').startsWith('data_'); }
+function renderDataTab(s){
+  const all = s.documents || [];
+  const root = all.find(d => d.doc_type === 'data_root');
+  if (!root) {
+    return `<div style="text-align:center;padding:34px 10px;">
+      <div style="font-size:46px;">📁</div>
+      <div style="font-size:15px;font-weight:600;margin:8px 0 4px;">Složka DATA zatím neexistuje</div>
+      <div style="color:var(--text2);font-size:12px;margin-bottom:16px;">Vytvoří se složka DATA s podsložkami: ${DATA_FOLDERS.map(f => esc(f.label)).join(', ')}.</div>
+      <button class="btn btn-primary" onclick="createDataFolder()">＋ Vytvořit složku DATA</button></div>`;
+  }
+  const fmtSize = b => b==null ? '' : (b<1024 ? b+' B' : b<1048576 ? Math.round(b/1024)+' kB' : (b/1048576).toFixed(1)+' MB');
+  const crumb = (inner) => `<div style="display:flex;align-items:center;gap:6px;font-size:14px;margin-bottom:12px;">${inner}</div>`;
+  const f = DATA_FOLDERS.find(x => x.key === dataFolder);
+  if (!f) {
+    return crumb(`<span style="font-weight:700;">📁 DATA</span>`)
+      + `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;">${DATA_FOLDERS.map(x => {
+        const n = all.filter(d => d.doc_type === x.key).length;
+        return `<div onclick="openDataFolder('${x.key}')" style="cursor:pointer;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--bg);">
+          <div style="font-size:30px;">📁</div><div style="font-weight:600;font-size:13px;margin-top:4px;">${x.icon} ${esc(x.label)}</div>
+          <div style="color:var(--text2);font-size:11px;margin-top:2px;">${n} ${n===1?'soubor':(n>=2&&n<=4?'soubory':'souborů')}</div></div>`; }).join('')}</div>`;
+  }
+  const items = all.filter(d => d.doc_type === f.key);
+  const list = items.length ? items.map(d => `
+    <div class="contact-card" id="data-doc-${d.id}">
+      <div class="info">
+        <div class="name">📄 ${esc(d.title)}</div>
+        <div class="meta">${esc(fmtRel(d.created_at))}${d.size_bytes?' • '+esc(fmtSize(d.size_bytes)):''}${d.note?' • '+esc(d.note):''}</div>
+        <div style="margin-top:4px;">${d.file_path?`<a href="/api/sites/documents/${d.id}/download" style="font-size:12px;color:#14b8a6;">⬇️ Stáhnout</a>`:'<span style="font-size:12px;color:var(--text2);">bez souboru</span>'}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-secondary" onclick="renameDataDoc(${d.id})">Přejmenovat</button>
+        <button class="btn btn-sm btn-secondary" onclick="editDataDoc(${d.id})">Upravit</button>
+        <button class="btn btn-sm btn-danger" onclick="delDataDoc(${d.id})">Smazat</button>
+      </div>
+    </div>`).join('') : '<div style="color:var(--text2);font-size:13px;padding:4px 0;">Složka je prázdná. Nahraj první soubor níže.</div>';
+  return crumb(`<a href="#" onclick="openDataFolder(null);return false;" style="color:#14b8a6;">📁 DATA</a><span style="color:var(--text2);">›</span><span style="font-weight:700;">${f.icon} ${esc(f.label)}</span>`)
+    + `<div style="display:flex;flex-direction:column;gap:8px;">${list}</div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
+      <div class="form-row"><label>Nahrát soubory (PDF, Word, Excel, obrázky… max 25 MB na soubor)</label><input type="file" id="data_files" multiple></div>
+      <button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="uploadDataFiles('${f.key}')">⬆️ Nahrát do „${esc(f.label)}"</button>
+    </div>`;
+}
+function rerenderData(){ renderSiteModal(); switchTab('data'); }
+async function createDataFolder(){
+  if (!currentSite || !currentSite.id) return;
+  const r = await fetch('/api/sites/' + currentSite.id + '/documents', fetchOpts({ method:'POST', body: JSON.stringify({ title:'DATA', doc_type:'data_root' }) }));
+  if (!r.ok) { const e = await r.json().catch(()=>({})); alert('Chyba: ' + (e.error || r.status)); return; }
+  dataFolder = null; await refreshCurrent(); rerenderData();
+}
+function openDataFolder(key){ dataFolder = key; const el = document.getElementById('tab-data'); if (el) el.innerHTML = renderDataTab(currentSite); }
+async function uploadDataFiles(cat){
+  const el = document.getElementById('data_files');
+  const files = el && el.files ? Array.from(el.files) : [];
+  if (!files.length) { alert('Vyber soubor'); return; }
+  for (const file of files) {
+    if (file.size > 25*1024*1024) { alert('Soubor „' + file.name + '" je větší než 25 MB — přeskočen.'); continue; }
+    let body = { title: file.name, doc_type: cat, filename: file.name };
+    try { body.data_url = await readFileAsDataURL(file); } catch (e) { alert(e.message); continue; }
+    const r = await fetch('/api/sites/' + currentSite.id + '/documents', fetchOpts({ method:'POST', body: JSON.stringify(body) }));
+    if (!r.ok) { const e = await r.json().catch(()=>({})); alert('Chyba u „' + file.name + '": ' + (e.error || r.status)); }
+  }
+  await refreshCurrent(); rerenderData();
+}
+async function patchDataDoc(id, body){
+  const r = await fetch('/api/sites/documents/' + id, fetchOpts({ method:'PATCH', body: JSON.stringify(body) }));
+  if (!r.ok) { const e = await r.json().catch(()=>({})); alert('Chyba: ' + (e.error || r.status)); return false; }
+  return true;
+}
+async function renameDataDoc(id){
+  const d = (currentSite.documents||[]).find(x => x.id === id); if (!d) return;
+  const t = prompt('Nový název souboru:', d.title); if (t == null || !t.trim()) return;
+  if (await patchDataDoc(id, { title: t.trim() })) { await refreshCurrent(); rerenderData(); }
+}
+function editDataDoc(id){
+  const d = (currentSite.documents||[]).find(x => x.id === id); if (!d) return;
+  const box = document.getElementById('data-doc-' + id); if (!box) return;
+  box.innerHTML = `<div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+    <div class="form-row"><label>Název</label><input id="de_title_${id}" value="${esc(d.title)}"></div>
+    <div class="form-row"><label>Poznámka</label><input id="de_note_${id}" value="${esc(d.note||'')}"></div>
+    <div class="form-row"><label>Nahradit soubor (nepovinné)</label><input type="file" id="de_file_${id}"></div>
+    <div style="display:flex;gap:8px;"><button class="btn btn-primary btn-sm" onclick="saveDataDoc(${id})">Uložit</button><button class="btn btn-secondary btn-sm" onclick="rerenderData()">Zrušit</button></div></div>`;
+}
+async function saveDataDoc(id){
+  const title = (document.getElementById('de_title_' + id).value || '').trim();
+  if (!title) { alert('Název je povinný'); return; }
+  const body = { title, note: (document.getElementById('de_note_' + id).value || '').trim() || null };
+  const fileEl = document.getElementById('de_file_' + id), file = fileEl && fileEl.files && fileEl.files[0];
+  if (file) {
+    if (file.size > 25*1024*1024) { alert('Soubor je větší než 25 MB'); return; }
+    try { body.data_url = await readFileAsDataURL(file); body.filename = file.name; } catch (e) { alert(e.message); return; }
+  }
+  if (await patchDataDoc(id, body)) { await refreshCurrent(); rerenderData(); }
+}
+async function delDataDoc(id){
+  if (!confirm('Smazat soubor? Tato akce je nevratná.')) return;
+  await fetch('/api/sites/documents/' + id, fetchOpts({ method:'DELETE' }));
+  await refreshCurrent(); rerenderData();
+}
+Object.assign(window, { createDataFolder, openDataFolder, uploadDataFiles, renameDataDoc, editDataDoc, saveDataDoc, delDataDoc, rerenderData });
 
 // ─── Sbírání hodnot z formuláře ────────────────────────────────────────────
 function collectForm() {

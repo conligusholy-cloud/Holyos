@@ -20,7 +20,10 @@ const { requireAuth } = require('../middleware/auth');
 const SITE_TYPES   = ['rent', 'purchase', 'other'];
 const SITE_STATUSES = ['lead', 'researching', 'negotiating', 'contract', 'operational', 'rejected', 'lost'];
 const COMM_CHANNELS = ['call', 'email', 'meeting', 'sms', 'note'];
-const DOC_TYPES     = ['contract', 'offer', 'cadastre', 'technical', 'other'];
+// construction = Výstavba, building = Dokumenty stavební (záložka Místní šetření)
+// data_* = složka DATA v detailu lokality (data_root = značka vytvořené složky, ostatní = podsložky)
+const DATA_FOLDERS  = ['data_najemni', 'data_foto', 'data_koordinace', 'data_vizualizace', 'data_sit'];
+const DOC_TYPES     = ['contract', 'offer', 'cadastre', 'technical', 'construction', 'building', 'other', 'data_root', ...DATA_FOLDERS];
 
 // Úložiště pro fotky a dokumenty (Railway persistent volume)
 const DATA_ROOT = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -818,6 +821,43 @@ router.post('/:id(\\d+)/documents', async (req, res, next) => {
 });
 
 // ─── Stažení nahraného dokumentu ────────────────────────────────────────────
+// Úprava dokumentu (přejmenování, poznámka, nahrazení souboru) — složka DATA
+router.patch('/documents/:did(\\d+)', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.did, 10);
+    const schema = z.object({
+      title: z.string().min(1).max(500).optional(),
+      note: z.string().optional().nullable(),
+      data_url: z.string().optional().nullable(),
+      filename: z.string().max(300).optional().nullable(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: 'Neplatná data', detail: parsed.error.format() });
+    const d = parsed.data;
+    const doc = await prisma.siteDocument.findUnique({ where: { id } });
+    if (!doc) return res.status(404).json({ error: 'Dokument nenalezen' });
+    const data = {};
+    if (d.title !== undefined) data.title = d.title;
+    if (d.note !== undefined) data.note = d.note;
+    if (d.data_url) {
+      const m = /^data:([^;]+);base64,(.+)$/.exec(d.data_url);
+      if (!m) return res.status(400).json({ error: 'Očekávám data URL (data:...;base64,...)' });
+      const buf = Buffer.from(m[2], 'base64');
+      if (buf.length > 25 * 1024 * 1024) return res.status(413).json({ error: 'Soubor je větší než 25 MB' });
+      const rawExt = (d.filename && d.filename.includes('.')) ? d.filename.split('.').pop() : (m[1].split('/')[1] || 'bin');
+      const ext = String(rawExt).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) || 'bin';
+      const fname = `site-${doc.site_id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      fs.writeFileSync(path.join(DOCS_DIR, fname), buf);
+      if (doc.file_path) { try { const old = path.join(DATA_ROOT, doc.file_path); if (fs.existsSync(old)) fs.unlinkSync(old); } catch (e) { /* ignore */ } }
+      data.file_path = `site-docs/${fname}`; data.size_bytes = buf.length; data.mime_type = m[1];
+    }
+    const upd = await prisma.siteDocument.update({ where: { id }, data });
+    res.json(upd);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/documents/:did(\\d+)/download', async (req, res, next) => {
   try {
     const doc = await prisma.siteDocument.findUnique({ where: { id: parseInt(req.params.did, 10) } });
