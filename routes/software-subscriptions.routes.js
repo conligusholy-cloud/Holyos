@@ -28,20 +28,23 @@ const schema = z.object({
   note: z.string().max(2000).optional().nullable(),
 });
 
-// Bankovní účty pro fakturaci (CZK / EUR) — používají se i u servisních faktur.
+// Bankovní účty pro fakturaci (CZK / EUR) — výběr z agendy Banka; používá se i u servisních faktur.
 router.get('/accounts', async (req, res, next) => {
-  try { res.json(await require('../services/accountant/billing-accounts').getAccounts()); } catch (err) { next(err); }
+  try { res.json(await require('../services/accountant/billing-accounts').getOverview()); } catch (err) { next(err); }
 });
 router.put('/accounts', async (req, res, next) => {
   try {
-    const f = z.object({ account: z.string().max(60).optional().nullable(), iban: z.string().max(40).optional().nullable(), bic: z.string().max(20).optional().nullable() }).optional();
-    const p = z.object({ CZK: f, EUR: f }).safeParse(req.body || {});
+    const p = z.object({ CZK: z.number().int().optional().nullable(), EUR: z.number().int().optional().nullable() }).safeParse(req.body || {});
     if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
     const ba = require('../services/accountant/billing-accounts');
-    const v = ba.normalize(p.data);
-    if (v.EUR.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(v.EUR.iban)) return res.status(400).json({ error: 'EUR účet: neplatný IBAN.' });
-    if (v.CZK.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(v.CZK.iban)) return res.status(400).json({ error: 'CZK účet: neplatný IBAN.' });
-    res.json(await ba.setAccounts(v, req.user && req.user.id));
+    for (const c of ['CZK', 'EUR']) {
+      if (p.data[c]) {
+        const a = await prisma.bankAccount.findUnique({ where: { id: p.data[c] } });
+        if (!a || !a.active) return res.status(400).json({ error: 'Vybraný ' + c + ' účet v agendě Banka neexistuje nebo je neaktivní.' });
+      }
+    }
+    await ba.setSelection(p.data, req.user && req.user.id);
+    res.json(await ba.getOverview());
   } catch (err) { next(err); }
 });
 

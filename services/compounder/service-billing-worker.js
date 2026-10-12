@@ -30,14 +30,7 @@ async function resolveCompanyId(sub) {
 async function ourCompanyForPdf() {
   let our = null;
   try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
-  our = Object.assign({}, our || { name: process.env.OUR_COMPANY_NAME || 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '', email: process.env.COMPOUNDER_MAIL_FROM || 'compounder@bestseries.cz' });
-  // Účet pro servisní faktury (nastavení v záložce Fakturace servisních smluv) — přebíjí účet naší firmy na faktuře i v QR platbě
-  try {
-    const { getSetting } = require('../settings');
-    const acc = await getSetting('service_billing.bank_account'), iban = await getSetting('service_billing.iban');
-    if (acc) our.bank_account = acc;
-    if (iban) our.iban = iban;
-  } catch (e) { /* ponech účet firmy */ }
+  our = our || { name: process.env.OUR_COMPANY_NAME || 'Best Series s.r.o.', ico: process.env.BEST_SERIES_ICO || '05643724', dic: process.env.BEST_SERIES_DIC || '', email: process.env.COMPOUNDER_MAIL_FROM || 'compounder@bestseries.cz' };
   return our;
 }
 // Odesílatel servisních faktur = Best Series (ne Compounder): SERVICE_BILLING_MAIL_FROM, jinak fakturační e-mail naší firmy, jinak COMPOUNDER_MAIL_FROM.
