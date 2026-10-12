@@ -270,13 +270,19 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
       if (!/^https:\/\//.test(link) || hostOf(link) !== hostOf(base)) { console.warn('[bs2 mail] odkaz mimo BS2:', link, 'BS2_URL =', base); return res.status(400).json({ error: 'Odkaz mimo BS2' }); }
     }
     let our = null; try { our = await require('../services/settings').getOurCompany(); } catch (e) { our = null; }
-    const from = process.env.BS2_MAIL_FROM || process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
-    const r = await require('../services/email').sendMail({
-      to, brand: 'bs2', from, fromName: process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0',
-      subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000),
-      link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined,
-    });
-    console.log('[bs2 mail] příjemce=' + to + ' from=' + (from || '—') + ' výsledek=' + JSON.stringify({ sent: !!(r && r.sent), via: r && r.via, error: r && (r.error || r.skipped) }));
+    // Odesílatel: BS2_MAIL_FROM, jinak info@pradlomaty.info; když ho Graph odmítne (schránka neexistuje / není povolená), záloha = dosavadní fakturační schránka.
+    const preferred = process.env.BS2_MAIL_FROM || 'info@pradlomaty.info';
+    const fallback = process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
+    const mailer = require('../services/email');
+    const base2 = { to, brand: 'bs2', fromName: process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0', subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
+    let from = preferred;
+    let r = await mailer.sendMail(Object.assign({}, base2, { from }));
+    if ((!r || !r.sent) && fallback && fallback !== preferred) {
+      console.warn('[bs2 mail] odeslání z ' + preferred + ' selhalo (' + (r && (r.error || r.skipped)) + '), zkouším ' + fallback);
+      from = fallback;
+      r = await mailer.sendMail(Object.assign({}, base2, { from }));
+    }
+    console.log('[bs2 mail] příjemce=' + to + ' from=' + from + ' výsledek=' + JSON.stringify({ sent: !!(r && r.sent), via: r && r.via, error: r && (r.error || r.skipped) }));
     if (!r || !r.sent) return res.status(502).json({ error: (r && (r.error || r.skipped)) || 'E-mail se nepodařilo odeslat' });
     res.json({ ok: true });
   } catch (err) { next(err); }
