@@ -628,7 +628,7 @@ function supporterCompounder(s) {
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
         function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
-        var W={x:40,y:58},S={x:63,y:55},IN={x:-14,y:58},OUT={x:-14,y:58};
+        var W={x:40,y:58},S={x:60,y:49},IN={x:-14,y:58},OUT={x:-14,y:58};
         put(w,W); put(sd,S);
         function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
         var total=0,cnt=0,min=6*60,PR=[[400,'Pračka 18 kg s aviváží · 350 Kč',1],[400,'Pračka 18 kg · 300 Kč',2],[500,'Pračka 18 kg s aviváží · 350 Kč',3]];
