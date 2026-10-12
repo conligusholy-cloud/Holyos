@@ -277,7 +277,7 @@ app.get('/compounder', wrap(requireUser), (req, res) => res.send(V.supporterComp
 const SERVICE_DEFAULTS = [
   { key: 'find_place', name: 'Najít místo', desc: 'Pomůžeme ti najít vhodné místo pro tvůj prádlomat — analýza lokality, oslovení majitelů a doporučení.', price_czk: 25000, quote: false, dc_use_pct: 100, offered: true },
   { key: 'connections', name: 'Přípojky', desc: 'Zajištění přípojek pro prádlomat (voda, elektřina, odpad). Cena se vytváří podle konkrétní situace — individuální nacenění.', price_czk: null, quote: true, dc_use_pct: 100, offered: true },
-  { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Záruka na prádlomat prodloužená na 5 let.', price_czk: 50000, quote: false, dc_use_pct: 100, offered: true },
+  { key: 'extended_warranty', section: 'warranty', name: 'Prodloužená záruka', desc: 'Prodloužení záruky na prádlomat o 2 až 5 let. Každý rok stojí 15 000 Kč bez DPH.', price_czk: 30000, per_year_czk: 15000, years_min: 2, years_max: 5, quote: false, dc_use_pct: 100, offered: true },
   { key: 'service_contract', section: 'warranty', mode: 'percent', percent: 13, name: 'Servisní smlouva', desc: 'Pravidelný servis a údržba prádlomatu. Cena je procento z obratu stroje (s DPH).', price_czk: null, quote: false, dc_use_pct: 0, offered: true }
 ];
 async function loadServices() {
@@ -291,7 +291,7 @@ app.get('/pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   const sum = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0);
   const balance = req.user.currency === 'EUR' ? sum / (await eurRate()) : sum;
   const cur = req.user.currency === 'EUR' ? 'EUR' : 'CZK', rateV = cur === 'EUR' ? await eurRate() : 1;
-  const services = (await loadServices()).filter(x => x.offered).map(x => ({ ...x, net: (x.mode === 'percent' || x.quote || x.price_czk == null) ? null : Math.round(Number(x.price_czk) / rateV * 100) / 100 }));
+  const services = (await loadServices()).filter(x => x.offered).map(x => ({ ...x, net: (x.mode === 'percent' || x.quote || x.price_czk == null) ? null : Math.round(Number(x.price_czk) / rateV * 100) / 100, per_year_net: x.per_year_czk ? Math.round(Number(x.per_year_czk) / rateV) : null }));
   res.send(V.supporterProducts(req.user, offers, { balance, msg: req.query.msg || '', services }));
 }));
 // Koupit (+ případně uplatnit DC): vše se přepočítá na serveru, DC se hned odečtou, objednávku potvrdí admin
@@ -309,12 +309,15 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
       await log({ name: req.user.nick }, 'order_new', { id: ins0.rows[0].id, service: sv.key, quote: true });
       return res.redirect('/moje-pradlomaty?ordered=1');
     }
-    const netS = Math.round(Number(sv.price_czk) / rateS * 100) / 100;
+    // Prodloužená záruka: počet let (2–5) × cena za rok
+    let yearsS = null, nameS = sv.name;
+    if (sv.per_year_czk) { yearsS = Math.min(sv.years_max || 5, Math.max(sv.years_min || 2, parseInt(req.body.years, 10) || (sv.years_min || 2))); nameS = sv.name + ' — ' + yearsS + ' ' + (yearsS === 1 ? 'rok' : yearsS < 5 ? 'roky' : 'let'); }
+    const netS = Math.round(Number(yearsS ? sv.per_year_czk * yearsS : sv.price_czk) / rateS * 100) / 100;
     const roomS = Math.max(0, Math.floor(netS * (sv.dc_use_pct == null ? 100 : Number(sv.dc_use_pct)) / 100));
     const balS = Number(((await q('SELECT COALESCE(SUM(amount_czk),0) AS b FROM credits WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).b || 0) / rateS;
     const dcS = Math.min(Math.max(0, parseInt(req.body.dc, 10) || 0), roomS, Math.floor(balS));
-    const insS = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,$4,$5,$6,'service',$7) RETURNING id", [req.user.id, sv.name, cur, netS, dcS, netS - dcS, sv.key]);
-    if (dcS > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [req.user.id, -Math.round(dcS * rateS * 100) / 100, 'Uplatnění DC: ' + sv.name + ' (objednávka #' + insS.rows[0].id + ')', insS.rows[0].id]);
+    const insS = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,$4,$5,$6,'service',$7) RETURNING id", [req.user.id, nameS, cur, netS, dcS, netS - dcS, sv.key]);
+    if (dcS > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [req.user.id, -Math.round(dcS * rateS * 100) / 100, 'Uplatnění DC: ' + nameS + ' (objednávka #' + insS.rows[0].id + ')', insS.rows[0].id]);
     await log({ name: req.user.nick }, 'order_new', { id: insS.rows[0].id, service: sv.key, dc: dcS });
     return res.redirect('/moje-pradlomaty?ordered=1');
   }

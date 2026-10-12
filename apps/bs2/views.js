@@ -937,7 +937,7 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
   ${valueHero({ flex: flexData, sym })}
   <div class="row" style="justify-content:space-between;align-items:center;margin:22px 0 10px"><h2 style="margin:0;display:flex;align-items:center;gap:8px">${ico('box', 18)} Prádlomaty, které si můžeš pořídit</h2>${curSw(s, '/pradlomaty')}</div>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
-  <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"></form>
+  <form id="orderf" method="post" action="/order" style="display:none"><input name="item"><input name="dc"><input name="years"></form>
   <div id="dcm" style="display:none;position:fixed;inset:0;z-index:90;background:rgba(2,6,16,.72);backdrop-filter:blur(3px);align-items:center;justify-content:center;padding:16px"><div class="card" style="width:min(460px,100%);margin:0;box-shadow:0 30px 80px rgba(0,0,0,.6)">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:18px">Uplatnit Discount Credit</b><button type="button" id="dcm-x" class="btn sec sm" aria-label="Zavřít">✕</button></div>
     <div class="muted small" id="dcm-name" style="margin:2px 0 14px"></div>
@@ -981,9 +981,11 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       <div style="margin-top:14px;font-size:20px;font-weight:800;letter-spacing:-.01em">Individuální nacenění</div><div class="small muted">Cena se vytvoří podle konkrétní situace. Po odeslání poptávky se ti ozveme s nabídkou, DC půjde uplatnit.</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;justify-content:flex-end"><button type="button" class="btn sm svc-quote" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Poptat nacenění</button></div></div>`;
     const room = Math.max(0, Math.floor(net * (sv.dc_use_pct == null ? 100 : Number(sv.dc_use_pct)) / 100));
-    return `<div class="card dc-card" style="margin:0;display:flex;flex-direction:column" data-price="${net}" data-room="${room}"><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
-      <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em">${money(net, sym)}</div><div class="small muted">cena bez DPH · ${money(Math.round(net * 1.21), sym)} s DPH 21 %</div>
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximálně z DC:</span> ${room > 0 ? `<b style="color:var(--ok)">${esc(fmt(room))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
+    const yr = sv.per_year_net ? { per: Number(sv.per_year_net), min: sv.years_min || 2, max: sv.years_max || 5 } : null;
+    return `<div class="card dc-card" style="margin:0;display:flex;flex-direction:column" data-price="${net}" data-room="${room}"${yr ? ` data-per="${yr.per}" data-pct="${sv.dc_use_pct == null ? 100 : Number(sv.dc_use_pct)}"` : ''}><b style="font-size:17px">${esc(sv.name)}</b><p class="small muted" style="margin:8px 0 0">${esc(sv.desc || '')}</p>
+      ${yr ? `<div class="wy" style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="small muted">Délka prodloužení</span><b class="wy-n" style="color:var(--accent2)">${yr.min} roky</b></div><input type="range" class="wy-r" min="${yr.min}" max="${yr.max}" step="1" value="${yr.min}" style="width:100%;accent-color:#4fd1ff;margin:6px 0 2px"><div class="small muted" style="display:flex;justify-content:space-between"><span>${yr.min} roky</span><span>${money(yr.per, sym)} / rok</span><span>${yr.max} let</span></div></div>` : ''}
+      <div style="margin-top:14px;font-size:24px;font-weight:800;letter-spacing:-.02em"><span class="dc-price">${money(net, sym)}</span></div><div class="small muted">cena bez DPH · <span class="dc-vat">${money(Math.round(net * 1.21), sym)}</span> s DPH 21 %</div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)" class="small"><span class="muted">Maximálně z DC:</span> ${room > 0 ? `<b class="dc-room" style="color:var(--ok)">${esc(fmt(room))} DC</b>` : '<span class="muted">nelze uplatnit</span>'}</div>
       <div style="margin-top:auto;padding-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button type="button" class="btn sec sm dc-toggle"${bal > 0 && room > 0 ? '' : ' disabled style="opacity:.5;cursor:not-allowed" title="' + (bal > 0 ? 'Na tuto službu nelze DC uplatnit' : 'Nemáš žádné DC') + '"'}>Uplatnit DC</button><button type="button" class="btn sm dc-buy" data-item="svc:${sv.key}" data-name="${esc(sv.name)}">Koupit</button></div>
       ${bal > 0 && room > 0 ? `<div class="dc-panel" style="margin-top:12px"><div style="display:none"><input type="number" class="dc-in" min="0" max="${Math.min(bal, room)}" step="1" value="0" inputmode="numeric"><button type="button" class="dc-max"></button></div>
       <div class="dc-after small" style="margin-top:8px;display:none">Po slevě: <b class="dc-new"></b> bez DPH <span class="muted">(<span class="dc-gross"></span> s DPH · ušetříš <span class="dc-saved"></span>)</span></div></div>` : ''}</div>`; }).join('')}</div>` : ''; }).join('')}
@@ -1006,6 +1008,15 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       });
       document.getElementById('dc-left').textContent=fmt(total-u);
     }
+    [].forEach.call(document.querySelectorAll('.dc-card[data-per]'),function(c){
+      var r=c.querySelector('.wy-r'), n=c.querySelector('.wy-n'), per=parseFloat(c.getAttribute('data-per'))||0, pct=parseFloat(c.getAttribute('data-pct'))||100;
+      function lab(y){return y+' '+(y<5?'roky':'let');}
+      function upd(){ var y=parseInt(r.value,10)||2, price=per*y, room=Math.floor(price*pct/100); c.setAttribute('data-price',price); c.setAttribute('data-room',room); n.textContent=lab(y);
+        var p=c.querySelector('.dc-price'); if(p)p.textContent=fmt(price)+' '+sym; var v=c.querySelector('.dc-vat'); if(v)v.textContent=fmt(price*1.21)+' '+sym;
+        var mx=c.querySelector('.dc-in'); if(mx){ mx.max=Math.min(total,room); if(parseInt(mx.value,10)>room) mx.value=room; }
+        var rm=c.querySelector('.dc-room'); if(rm)rm.textContent=fmt(room)+' DC'; recalc(); }
+      r.addEventListener('input',upd); upd();
+    });
     [].forEach.call(document.querySelectorAll('.svc-quote'),function(b){b.addEventListener('click',function(){
       if(!confirm((b.getAttribute('data-ask')||('Poptat nacenění: '+b.getAttribute('data-name')+'?'))+'\\n\\nOzveme se s individuální nabídkou.'))return;
       var f=document.getElementById('orderf');f.item.value=b.getAttribute('data-item');f.dc.value=0;f.submit();});});
@@ -1038,9 +1049,10 @@ function supporterProducts(s, offers = [], { balance = 0, msg = '', services = [
       if(buy)buy.addEventListener('click',function(){
         var inp=c.querySelector('.dc-in'), val=(inp&&c.querySelector('.dc-panel').style.display!=='none')?Math.max(0,parseInt(inp.value,10)||0):0;
         var price=parseFloat(c.getAttribute('data-price'))||0;
-        var txt='Objednat '+buy.getAttribute('data-name')+'?\\n\\nCena bez DPH: '+fmt(price-val)+' '+sym+(val>0?'\\nUplatněno DC: '+fmt(val):'')+'\\n\\nObjednávku potvrdíme.';
+        var yr=c.querySelector('.wy-r'), ys=yr?parseInt(yr.value,10):0;
+        var txt='Objednat '+buy.getAttribute('data-name')+(ys?' — '+ys+' '+(ys<5?'roky':'let'):'')+'?\\n\\nCena bez DPH: '+fmt(price-val)+' '+sym+(val>0?'\\nUplatněno DC: '+fmt(val):'')+'\\n\\nObjednávku potvrdíme.';
         if(!confirm(txt))return;
-        var f=document.getElementById('orderf');f.item.value=buy.getAttribute('data-item');f.dc.value=val;f.submit();
+        var f=document.getElementById('orderf');f.item.value=buy.getAttribute('data-item');f.dc.value=val;f.years.value=ys||'';f.submit();
       });
     });
     cards.forEach(function(c){var i=c.querySelector('.dc-in'); if(!i)return;
