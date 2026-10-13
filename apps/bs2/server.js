@@ -637,7 +637,25 @@ app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
     const r = await holyosPublic('/api/pradlomat-spots/public/case-studies');
     if (r.ok && r.j && Array.isArray(r.j.studies)) _caseStudies = { at: Date.now(), data: r.j };
   }
-  res.send(LAPP.studiesPage(req.user, _caseStudies.data));
+  // Investice = prádlomat z nabídky Best Series 2.0 (cena + obrázek): k verzi stroje (V2/V3) se přiřadí nabízený produkt
+  // podle názvu (obsahuje V2/V3), jinak nejbližší cenou k ceníkové ceně verze. Návratnost se přepočítá z této ceny.
+  let data = _caseStudies.data;
+  if (data && Array.isArray(data.studies)) {
+    try {
+      const out = await loadProducts(); const set = await offeredSet();
+      const prods = (out.items || []).filter((p) => set.has(p.id) && p.price_czk > 0);
+      const productImg = (p) => p && p.image_ext ? '/img/product/' + p.id + '?v=' + encodeURIComponent(p.image_updated_at ? new Date(p.image_updated_at).getTime() : '') : null;
+      data = Object.assign({}, data, { studies: data.studies.map((x) => {
+        const ver = String(x.machine_version || '').toUpperCase();
+        let p = prods.find((q0) => new RegExp('\\b' + ver + '\\b', 'i').test(q0.name_cs || q0.name || ''));
+        if (!p && x.machine_price_czk) p = prods.slice().sort((a, b) => Math.abs(a.price_czk - x.machine_price_czk) - Math.abs(b.price_czk - x.machine_price_czk))[0];
+        if (!p) return x;
+        const price = Number(p.price_czk), op = Number(x.operating_month || 0);
+        return Object.assign({}, x, { product: { id: p.id, name: p.name_cs || p.name, price_czk: price, img: productImg(p) }, machine_price_czk: price, payback_years: op > 0 ? Math.round(price / (op * 12) * 10) / 10 : null, roi_pct: op > 0 ? Math.round(op * 12 / price * 1000) / 10 : null });
+      }) });
+    } catch (e) { console.warn('[bs2] studie produkty:', e.message); }
+  }
+  res.send(LAPP.studiesPage(req.user, data));
 }));
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
   const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
