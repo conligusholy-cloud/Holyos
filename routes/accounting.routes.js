@@ -16,6 +16,31 @@ const { z } = require('zod');
 
 router.use(requireAuth);
 
+// ─── Fakturace Best Series 2.0: nastavení (šablona + bankovní účty CZK/EUR) per kategorie ───
+router.get('/bs2-billing/config', async (req, res, next) => {
+  try {
+    const svc = require('../services/bs2-billing');
+    const ov = await require('../services/accountant/billing-accounts').getOverview();
+    res.json({ config: await svc.getConfig(), templates: svc.TEMPLATES, accounts: ov.accounts });
+  } catch (err) { next(err); }
+});
+router.put('/bs2-billing/config', async (req, res, next) => {
+  try {
+    const svc = require('../services/bs2-billing');
+    const body = req.body || {};
+    for (const cat of svc.CATS) {
+      for (const c of ['CZK', 'EUR']) {
+        const id = parseInt(body[cat] && body[cat][c], 10);
+        if (id > 0) {
+          const a = await prisma.bankAccount.findUnique({ where: { id } });
+          if (!a || !a.active) return res.status(400).json({ error: 'Vybraný ' + c + ' účet neexistuje nebo je neaktivní.' });
+        }
+      }
+    }
+    res.json({ config: await svc.setConfig(body, req.user && req.user.id) });
+  } catch (err) { next(err); }
+});
+
 // Pro UI — info o aktuálním uživateli (potřeba pro skryté akce)
 router.get('/whoami', (req, res) => {
   res.json({

@@ -17,6 +17,7 @@
 //   tax_receipt          → DD-2026-00001  (daňový doklad k přijaté platbě, DPPP)
 //   service_issued       → FS-2026-00001  (faktura za servisní poplatek; Invoice.type zůstává 'issued')
 //   software_issued      → SW-2026-00001  (faktura za softwarovou podporu; Invoice.type zůstává 'issued')
+//   bs2_proforma / bs2_final / bs2_online → ZB / FB / OB (Best Series 2.0)
 //
 // Řada se při prvním použití „naseeduje" z nejvyššího existujícího čísla se
 // stejným prefixem (aby se nikdy nezopakovalo už vystavené číslo).
@@ -33,6 +34,9 @@ const PREFIX_MAP = {
   tax_receipt: 'DD',
   service_issued: 'FS', // servisní poplatky — vlastní řada
   software_issued: 'SW', // softwarová podpora — vlastní řada
+  bs2_proforma: 'ZB', // Best Series 2.0 — zálohová faktura k objednávce produktu
+  bs2_final: 'FB', // Best Series 2.0 — finální faktura po zaplacení zálohy
+  bs2_online: 'OB', // Best Series 2.0 — online produkty (faktura po platbě přes Stripe)
 };
 
 /**

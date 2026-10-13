@@ -539,19 +539,48 @@
       <!-- TAB: BEST SERIES 2.0 -->
       <div class="tab-pane" id="tab-bs2">
         <div class="pb-card">
-          <h3>🅱️ Faktury z Best Series 2.0</h3>
-          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <h3>🅱️ Best Series 2.0 — fakturace</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
             <button class="btn btn-secondary btn-sm" onclick="loadBs2Invoices()">🔄 Obnovit</button>
-            <input type="text" id="bs2-search" placeholder="Hledat číslo, odběratele, VS…" style="min-width:260px;" oninput="clearTimeout(window.__bs2t); window.__bs2t=setTimeout(loadBs2Invoices,350)">
-            <select id="bs2-status" onchange="loadBs2Invoices()"><option value="">Všechny stavy</option></select>
+            <span style="font-size:13px;color:var(--text2);">Dvě kategorie, každá s vlastní číselnou řadou, šablonou a bankovními účty.</span>
           </div>
-          <div style="font-size:13px; color:var(--text2); line-height:1.5;">Všechny faktury, které vznikly přes aplikaci <b>Best Series 2.0</b> (prodej strojů, služeb a online produktů). Doklady mají zdroj <code>bs2</code>.</div>
         </div>
-        <div id="bs2-kpi" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;"></div>
+
         <div class="pb-card" style="margin-top:16px;">
-          <table class="data-table" id="bs2-table" style="width:100%;">
-            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th></th></tr></thead>
-            <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
+          <h3>📦 Produkty z Best Series 2.0 (stroje a služby)</h3>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">Při objednávce se zákazníkovi <b>automaticky e-mailem</b> odešle <b>zálohová faktura</b> (řada <b>ZB</b>, splatnost <b>3 dny</b>). Až dorazí platba na zálohu (spárování v agendě Banka), vystaví se a odešle <b>finální faktura</b> (řada <b>FB</b>, uhrazená zálohou). Finální faktura se tedy odešle až po přijetí platby.</div>
+          <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:6px;">
+            <label style="font-size:12px;">Šablona dokladu<br><select id="bs2-products-template" style="min-width:210px;"></select></label>
+            <label style="font-size:12px;">Účet CZK<br><select id="bs2-products-CZK" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">Účet EUR<br><select id="bs2-products-EUR" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-products-vat" min="0" max="30" style="width:70px;"></label>
+            <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
+            <span id="bs2-products-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+        </div>
+        <div class="pb-card" style="margin-top:12px;">
+          <table class="data-table" id="bs2-products-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Typ</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th>E-mail</th><th></th></tr></thead>
+            <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="pb-card" style="margin-top:16px;">
+          <h3>🌐 Online produkty (Prověření lokality, Vyhledávač míst)</h3>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">Po zaplacení přes <b>Stripe</b> se rovnou vystaví <b>faktura</b> (řada <b>OB</b>, již uhrazená) a automaticky se odešle na e-mail zákazníka.</div>
+          <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:6px;">
+            <label style="font-size:12px;">Šablona dokladu<br><select id="bs2-online-template" style="min-width:210px;"></select></label>
+            <label style="font-size:12px;">Účet CZK<br><select id="bs2-online-CZK" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">Účet EUR<br><select id="bs2-online-EUR" style="min-width:260px;"></select></label>
+            <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-online-vat" min="0" max="30" style="width:70px;"></label>
+            <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
+            <span id="bs2-online-msg" style="font-size:12px;color:var(--text2);"></span>
+          </div>
+        </div>
+        <div class="pb-card" style="margin-top:12px;">
+          <table class="data-table" id="bs2-online-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Typ</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th>E-mail</th><th></th></tr></thead>
+            <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
           </table>
         </div>
       </div><!-- /tab-bs2 -->
@@ -1700,25 +1729,46 @@
       if (name === 'bs2') loadBs2Invoices();
     };
 
-    // ─── Tab „Best Series 2.0" (faktury vzniklé přes BS2, Invoice.source = 'bs2') ──
+    // ─── Tab „Best Series 2.0" (dvě kategorie: produkty = záloha + finální, online = faktura po platbě; Invoice.source = bs2_products | bs2_online) ──
+    window.__bs2cfg = null;
+    function bs2Opt(v, l, sel) { return '<option value="' + v + '"' + (sel ? ' selected' : '') + '>' + escapeHtml(l) + '</option>'; }
+    async function loadBs2Config() {
+      const r = await api('GET', '/api/accounting/bs2-billing/config');
+      if (r.status !== 200 || !r.data) return;
+      window.__bs2cfg = r.data;
+      ['products', 'online'].forEach(cat => {
+        const c = r.data.config[cat] || {};
+        document.getElementById('bs2-' + cat + '-template').innerHTML = r.data.templates.map(t => bs2Opt(t.key, t.label, t.key === c.template)).join('');
+        ['CZK', 'EUR'].forEach(cur => {
+          document.getElementById('bs2-' + cat + '-' + cur).innerHTML = bs2Opt('', '— výchozí z nastavení fakturace —', !c[cur]) + r.data.accounts.filter(a => a.currency === cur).map(a => bs2Opt(a.id, (a.name || a.bank || '') + ' · ' + a.number, c[cur] === a.id)).join('');
+        });
+        document.getElementById('bs2-' + cat + '-vat').value = c.vat_rate != null ? c.vat_rate : 21;
+      });
+    }
+    window.saveBs2Config = async function() {
+      const body = {};
+      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value }; });
+      const r = await api('PUT', '/api/accounting/bs2-billing/config', body);
+      ['products', 'online'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
+    };
+    const BS2_TYPE = { proforma_issued: 'Záloha', issued: 'Faktura', tax_receipt: 'DPPP' };
+    window.resendBs2 = async function(id, no) {
+      if (!confirm('Poslat fakturu ' + no + ' znovu e-mailem odběrateli?')) return;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/send', {});
+      alert(r.status === 200 ? 'Odesláno.' : 'Odeslání selhalo: ' + ((r.data && r.data.error) || r.status));
+      loadBs2Invoices();
+    };
     window.loadBs2Invoices = async function() {
-      const tb = document.querySelector('#bs2-table tbody');
-      const sel = document.getElementById('bs2-status');
-      if (sel && sel.options.length <= 1) Object.keys(STATUS_LABEL).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = STATUS_LABEL[k]; sel.appendChild(o); });
-      const qs = ['source=bs2', 'limit=500'];
-      const s = (document.getElementById('bs2-search') || {}).value; if (s) qs.push('search=' + encodeURIComponent(s));
-      const st = sel && sel.value; if (st) qs.push('status=' + encodeURIComponent(st));
-      const r = await api('GET', '/api/accounting/invoices?' + qs.join('&'));
-      const list = (r.status === 200 && r.data && (r.data.invoices || r.data)) || null;
-      if (!Array.isArray(list)) { tb.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
-      const paid = list.filter(i => i.status === 'paid'), open = list.filter(i => !['paid', 'cancelled', 'written_off', 'archived', 'draft'].includes(i.status));
-      const sum = (a) => a.reduce((t, i) => t + Number(i.total || 0), 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2 });
-      document.getElementById('bs2-kpi').innerHTML =
-        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + list.length + '</div><div style="font-size:12px;color:var(--text2);">faktur celkem</div></div>' +
-        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + open.length + '</div><div style="font-size:12px;color:var(--text2);">nezaplacených (' + sum(open) + ')</div></div>' +
-        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + paid.length + '</div><div style="font-size:12px;color:var(--text2);">zaplacených (' + sum(paid) + ')</div></div>';
-      tb.innerHTML = list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/accounting/invoices/' + i.id + '/pdf" target="_blank">📄 PDF</a></td></tr>').join('')
-        : '<tr><td colspan="7" class="empty-hint">Zatím žádné faktury z Best Series 2.0.</td></tr>';
+      await loadBs2Config();
+      for (const [cat, src] of [['products', 'bs2_products'], ['online', 'bs2_online']]) {
+        const tb = document.querySelector('#bs2-' + cat + '-table tbody');
+        const r = await api('GET', '/api/accounting/invoices?source=' + src + '&limit=300');
+        const list = (r.status === 200 && r.data && (r.data.invoices || r.data)) || null;
+        if (!Array.isArray(list)) { tb.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; continue; }
+        const DL = { sent: '✅ odesláno', failed: '❌ chyba', queued: '⏳ odesílá se', not_sent: '—' };
+        tb.innerHTML = list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + (BS2_TYPE[i.type] || i.type) + '</td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td title="' + escapeHtml(i.send_error || '') + '">' + (DL[i.delivery_status] || '—') + '</td><td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/accounting/invoices/' + i.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-secondary btn-sm" onclick="resendBs2(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\')">✉ Znovu</button></td></tr>').join('')
+          : '<tr><td colspan="9" class="empty-hint">Zatím žádné faktury.</td></tr>';
+      }
     };
 
 

@@ -57,6 +57,8 @@ async function createDepositTaxDocsForPayment(paymentId, opts = {}) {
     const src = alloc.invoice;
     // Jen zálohové faktury VYDANÉ zákazníkovi (AR proforma_issued).
     if (!src || src.direction !== 'ar' || src.type !== 'proforma_issued') continue;
+    // Zálohy z Best Series 2.0: místo DPPP se po zaplacení vystavuje finální faktura (services/bs2-billing)
+    if (src.source === 'bs2_products') continue;
     const gross = Number(alloc.amount);
     if (!(gross > 0)) continue;
 
@@ -197,6 +199,8 @@ async function sendDepositTaxDoc(invoiceId, opts = {}) {
  */
 async function processPaymentForDepositTaxDocs(paymentId, opts = {}) {
   try {
+    // Best Series 2.0: finální faktura k zaplacené záloze + e-mail (nezávisle na DEPOSIT_TAX_AUTO_SEND)
+    require('../bs2-billing').processPayment(paymentId).catch((e) => console.warn('[bs2-billing] processPayment:', e.message));
     const created = await createDepositTaxDocsForPayment(paymentId, opts);
     const autoSend = process.env.DEPOSIT_TAX_AUTO_SEND === '1';
     if (autoSend) {

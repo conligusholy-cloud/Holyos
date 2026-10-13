@@ -288,6 +288,35 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/bs2/invoice/proforma — BS2 odešle objednávku produktu → zálohová faktura (splatnost 3 dny) + e-mail zákazníkovi
+// POST /api/auth/bs2/invoice/online   — BS2 odešle zaplacenou online objednávku (Stripe) → faktura + e-mail
+function verifyBs2Token(req, res) {
+  const secret = process.env.BS2_SSO_SECRET;
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) { res.status(401).json({ error: 'Neautorizováno' }); return false; }
+  try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'bs2' }); return true; } catch (e) { res.status(401).json({ error: 'Neplatný token' }); return false; }
+}
+router.post('/bs2/invoice/proforma', express.json({ limit: '100kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {};
+    if (!b.ref || !Array.isArray(b.items) || !b.items.length) return res.status(400).json({ error: 'Chybí ref nebo položky' });
+    const r = await require('../services/bs2-billing').issueProforma(b);
+    console.log('[bs2 invoice] záloha ref=' + b.ref + ' → ' + JSON.stringify(r));
+    res.status(r.ok ? 200 : 422).json(r);
+  } catch (err) { next(err); }
+});
+router.post('/bs2/invoice/online', express.json({ limit: '100kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {};
+    if (!b.ref || !Array.isArray(b.items) || !b.items.length) return res.status(400).json({ error: 'Chybí ref nebo položky' });
+    const r = await require('../services/bs2-billing').issueOnline(b);
+    console.log('[bs2 invoice] online ref=' + b.ref + ' → ' + JSON.stringify(r));
+    res.status(r.ok ? 200 : 422).json(r);
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/bs2/notify — push do Velína + zvonek v HolyOS pro Tomáše a Jana Holého (nová objednávka, převod, podnět, zpráva v BS2).
 // Příjemci: AppSetting bs2.velin_notify_emails (JSON pole e-mailů) nebo výchozí tomas.holy@ + jan.holy@bestseries.cz (Person.email).
 router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, next) => {
@@ -307,6 +336,16 @@ router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, nex
       where: { active: true, OR: emails.map((e) => ({ email: { equals: String(e), mode: 'insensitive' } })) },
       select: { id: true, user_id: true },
     });
+    // Záloha (když Person nemá e-mail vyplněný): shoda podle jména
+    try {
+      const have = new Set(persons.map((p) => p.id));
+      const byName = await prisma.person.findMany({
+        where: { active: true, last_name: { equals: 'Holý', mode: 'insensitive' }, first_name: { in: ['Tomáš', 'Jan'], mode: 'insensitive' } },
+        select: { id: true, user_id: true },
+      });
+      byName.forEach((p) => { if (!have.has(p.id)) persons.push(p); });
+    } catch (e) { console.warn('[bs2 notify] záloha podle jména:', e.message); }
+    console.log('[bs2 notify] "' + title + '" → osoby: ' + (persons.map((p) => p.id).join(',') || 'ŽÁDNÁ (zkontroluj e-maily u Person / bs2.velin_notify_emails)'));
     const { notifyPerson } = require('../services/push/expo-push');
     const { createNotification } = require('./notifications.routes');
     const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');

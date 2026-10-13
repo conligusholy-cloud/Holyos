@@ -208,6 +208,22 @@ async function sendBs2MailRaw({ to, subject, body, link, linkLabel }) {
   console.log('[bs2] HolyOS send-mail odpověď ' + r.status);
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
+// Fakturace přes HolyOS (zálohová faktura k objednávce produktu / faktura po platbě online produktu). Fire-and-forget, selhání se jen zaloguje.
+function holyosInvoice(kind, payload) {
+  try {
+    const secret = process.env.BS2_SSO_SECRET; if (!secret || !HOLYOS_URL) return;
+    const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+    fetch(HOLYOS_URL + '/api/auth/bs2/invoice/' + kind, { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      .then(async (r) => { const t = await r.text().catch(() => ''); console.log('[bs2] faktura ' + kind + ' ref=' + payload.ref + ' → ' + r.status + ' ' + t.slice(0, 160)); })
+      .catch((e) => console.warn('[bs2] faktura ' + kind + ':', e.message));
+  } catch (e) { console.warn('[bs2] faktura ' + kind + ':', e.message); }
+}
+const invCustomer = (u) => ({ name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.nick || u.email, email: u.email, phone: u.phone || null });
+function orderInvItems(name, net, disc) {
+  const it = [{ description: name, quantity: 1, unit_price: Number(net) }];
+  if (Number(disc) > 0) it.push({ description: 'Sleva (Discount Credit)', quantity: 1, unit_price: -Number(disc) });
+  return it;
+}
 // Push do Velína (Tomáš + Jan Holý) přes HolyOS. Fire-and-forget; selhání nikdy neshodí požadavek.
 function notifyVelin(title, body, path, type) {
   try {
@@ -484,6 +500,7 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
       if (o) {
         console.log('[bs2] /location ZAPLACENO #' + o.id + ' ' + o.package + ' ' + o.amount_czk + ' Kč');
         const pkg = LOC.PACKAGES[o.package] || LOC.EVAL_PACKS[o.package] || LOC.UPGRADE_PACKS[o.package] || {};
+        holyosInvoice('online', { ref: o.id, currency: 'CZK', gross: true, paid_at: o.paid_at, customer: { name: o.company || o.name, email: o.email, phone: o.phone || null }, items: [{ description: (pkg.label || o.package) + ' — Best Series 2.0 online', quantity: 1, unit_price: Number(o.amount_czk) }] });
         try { await locGrantAccess(o, req); } catch (e) { console.error('[bs2] location grant:', e.message); }
         locNotify('Zaplaceno: ' + (pkg.label || o.package) + ' – ' + o.name, o.name + ' (' + o.email + (o.phone ? ', ' + o.phone : '') + ') zaplatil ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Předejte přístup do aplikace a označte v administraci.').catch(() => {});
       }
@@ -1057,6 +1074,7 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
     const insS = await q("INSERT INTO orders (supporter_id, product_name, currency, price_net, dc_used, final_net, kind, service_key) VALUES ($1,$2,$3,$4,$5,$6,'service',$7) RETURNING id", [req.user.id, nameS, cur, netS, discS, netS - discS, sv.key]);
     if (dcS > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [req.user.id, -dcS, 'Uplatnění DC: ' + nameS + ' (objednávka #' + insS.rows[0].id + ')', insS.rows[0].id]);
     await log({ name: req.user.nick }, 'order_new', { id: insS.rows[0].id, service: sv.key, dc: dcS });
+  holyosInvoice('proforma', { ref: insS.rows[0].id, currency: cur, customer: invCustomer(req.user), items: orderInvItems(nameS, netS, discS), note: 'Objednávka služby.' });
     return res.redirect('/moje-pradlomaty?ordered=1');
   }
   const items = (await loadProducts()).items || [];
@@ -1076,6 +1094,7 @@ app.post('/order', wrap(requireUser), wrap(async (req, res) => {
   const ins = await q('INSERT INTO orders (supporter_id, holyos_item_id, product_name, currency, price_net, dc_used, final_net) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, p.id, p.name_cs, cur, net, disc, net - disc]);
   if (dc > 0) await q('INSERT INTO credits (supporter_id, amount_czk, note, order_id) VALUES ($1,$2,$3,$4)', [req.user.id, -dc, 'Uplatnění DC: ' + p.name_cs + ' (objednávka #' + ins.rows[0].id + ')', ins.rows[0].id]);
   await log({ name: req.user.nick }, 'order_new', { id: ins.rows[0].id, product: p.name_cs, dc });
+  holyosInvoice('proforma', { ref: ins.rows[0].id, currency: cur, customer: invCustomer(req.user), items: orderInvItems(p.name_cs, net, disc), note: 'Objednávka prádlomatu.' });
   res.redirect('/moje-pradlomaty?ordered=1');
 }));
 app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
