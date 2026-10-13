@@ -176,6 +176,7 @@
         <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers',null,event)">📦 Účetní firma</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('servicebilling',null,event)">🔧 Fakturace servisních smluv</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('softwarebilling',null,event)">💻 Softwarová podpora</button>
+        <button type="button" class="tab-btn" onclick="switchAccountingTab('bs2',null,event)">🅱️ Best Series 2.0</button>
       </div>
 
       <!-- TAB: FAKTURY -->
@@ -534,6 +535,26 @@
           </table>
         </div>
       </div><!-- /tab-softwarebilling -->
+
+      <!-- TAB: BEST SERIES 2.0 -->
+      <div class="tab-pane" id="tab-bs2">
+        <div class="pb-card">
+          <h3>🅱️ Faktury z Best Series 2.0</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="loadBs2Invoices()">🔄 Obnovit</button>
+            <input type="text" id="bs2-search" placeholder="Hledat číslo, odběratele, VS…" style="min-width:260px;" oninput="clearTimeout(window.__bs2t); window.__bs2t=setTimeout(loadBs2Invoices,350)">
+            <select id="bs2-status" onchange="loadBs2Invoices()"><option value="">Všechny stavy</option></select>
+          </div>
+          <div style="font-size:13px; color:var(--text2); line-height:1.5;">Všechny faktury, které vznikly přes aplikaci <b>Best Series 2.0</b> (prodej strojů, služeb a online produktů). Doklady mají zdroj <code>bs2</code>.</div>
+        </div>
+        <div id="bs2-kpi" style="display:flex; gap:12px; flex-wrap:wrap; margin-top:12px;"></div>
+        <div class="pb-card" style="margin-top:16px;">
+          <table class="data-table" id="bs2-table" style="width:100%;">
+            <thead><tr><th>Číslo</th><th>Odběratel</th><th>Vystaveno</th><th>Splatnost</th><th>Částka</th><th>Stav</th><th></th></tr></thead>
+            <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
+          </table>
+        </div>
+      </div><!-- /tab-bs2 -->
 
     </div>
   </div>
@@ -1661,7 +1682,7 @@
       // Zvýrazni kliknuté tlačítko (u faktur jsou dvě – Vydané / Přijaté)
       if (ev && ev.currentTarget) ev.currentTarget.classList.add('active');
       else {
-        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6, softwarebilling: 7 };
+        const btnIdxMap = { invoices: 0, payments: 2, bank: 3, reminders: 4, handovers: 5, servicebilling: 6, softwarebilling: 7, bs2: 8 };
         const b = document.querySelectorAll('.tab-btn')[btnIdxMap[name] ?? 0];
         if (b) b.classList.add('active');
       }
@@ -1676,6 +1697,28 @@
       if (name === 'handovers') loadHandovers();
       if (name === 'servicebilling') loadServiceBilling();
       if (name === 'softwarebilling') loadSoftwareBilling();
+      if (name === 'bs2') loadBs2Invoices();
+    };
+
+    // ─── Tab „Best Series 2.0" (faktury vzniklé přes BS2, Invoice.source = 'bs2') ──
+    window.loadBs2Invoices = async function() {
+      const tb = document.querySelector('#bs2-table tbody');
+      const sel = document.getElementById('bs2-status');
+      if (sel && sel.options.length <= 1) Object.keys(STATUS_LABEL).forEach(k => { const o = document.createElement('option'); o.value = k; o.textContent = STATUS_LABEL[k]; sel.appendChild(o); });
+      const qs = ['source=bs2', 'limit=500'];
+      const s = (document.getElementById('bs2-search') || {}).value; if (s) qs.push('search=' + encodeURIComponent(s));
+      const st = sel && sel.value; if (st) qs.push('status=' + encodeURIComponent(st));
+      const r = await api('GET', '/api/accounting/invoices?' + qs.join('&'));
+      const list = (r.status === 200 && r.data && (r.data.invoices || r.data)) || null;
+      if (!Array.isArray(list)) { tb.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
+      const paid = list.filter(i => i.status === 'paid'), open = list.filter(i => !['paid', 'cancelled', 'written_off', 'archived', 'draft'].includes(i.status));
+      const sum = (a) => a.reduce((t, i) => t + Number(i.total || 0), 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2 });
+      document.getElementById('bs2-kpi').innerHTML =
+        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + list.length + '</div><div style="font-size:12px;color:var(--text2);">faktur celkem</div></div>' +
+        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + open.length + '</div><div style="font-size:12px;color:var(--text2);">nezaplacených (' + sum(open) + ')</div></div>' +
+        '<div class="pb-card" style="margin:0;min-width:170px;"><div style="font-size:22px;font-weight:800;">' + paid.length + '</div><div style="font-size:12px;color:var(--text2);">zaplacených (' + sum(paid) + ')</div></div>';
+      tb.innerHTML = list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/accounting/invoices/' + i.id + '/pdf" target="_blank">📄 PDF</a></td></tr>').join('')
+        : '<tr><td colspan="7" class="empty-hint">Zatím žádné faktury z Best Series 2.0.</td></tr>';
     };
 
 
