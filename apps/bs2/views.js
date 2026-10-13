@@ -1427,6 +1427,7 @@ const ADMIN_NAV = [
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
+  { id: 'loc', href: '/admin/location', label: 'Prověření lokality', icon: 'box' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
   { id: 'stat', href: '/admin/stats', label: 'Statistiky', icon: 'chart' },
   { id: 'sug', href: '/admin/suggestions', label: 'Podněty', icon: 'bolt' },
@@ -1933,4 +1934,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

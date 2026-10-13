@@ -15,6 +15,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const { q, migrate } = require('./db');
 const V = require('./views');
+const LOC = require('./location');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
 const BUILD = require('./build');
@@ -34,7 +35,7 @@ app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(cookieParser());
 // Větší limit těla požadavku — nastavení AI chatu (znalosti po tématech) může mít stovky kB
-app.use(express.json({ limit: '8mb' }));
+app.use(express.json({ limit: '8mb', verify: (req, res, buf) => { if (req.originalUrl === '/api/location/stripe-webhook') req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: false, limit: '8mb' }));
 app.use((req, res, next) => {
   res.set('X-Frame-Options', 'DENY'); res.set('X-Content-Type-Options', 'nosniff'); res.set('Referrer-Policy', 'same-origin');
@@ -352,6 +353,114 @@ app.post('/api/track', (req, res) => {
   res.status(204).end();
 });
 app.get('/vop', (req, res) => res.send(V.vopPage()));
+
+// ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
+// Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
+app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage()); });
+function stripeForm(obj, prefix, out) {
+  out = out || [];
+  Object.keys(obj).forEach((k) => { const key = prefix ? prefix + '[' + k + ']' : k; const v = obj[k]; if (v === undefined || v === null) return;
+    if (Array.isArray(v)) v.forEach((x, i) => (typeof x === 'object' ? stripeForm(x, key + '[' + i + ']', out) : out.push(encodeURIComponent(key + '[' + i + ']') + '=' + encodeURIComponent(x))));
+    else if (typeof v === 'object') stripeForm(v, key, out); else out.push(encodeURIComponent(key) + '=' + encodeURIComponent(v)); });
+  return out.join('&');
+}
+async function stripePost(path, body) {
+  const r = await fetch('https://api.stripe.com/v1/' + path, { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY, 'Content-Type': 'application/x-www-form-urlencoded' }, body: stripeForm(body), signal: AbortSignal.timeout(15000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error('Stripe ' + r.status + ': ' + ((j.error && j.error.message) || 'chyba'));
+  return j;
+}
+const locBase = (req) => (process.env.BS2_BASE_URL || ((isHttps(req) ? 'https' : 'http') + '://' + req.get('host'))).replace(/\/+$/, '');
+function locParse(b) {
+  const t = (x, n) => String(x == null ? '' : x).trim().slice(0, n);
+  const name = t(b.name, 255), email = t(b.email, 255).toLowerCase(), phone = t(b.phone, 40).replace(/[^\d+ ()\/-]/g, ''), company = t(b.company, 255);
+  const pkg = LOC.PACKAGES[b.variant] ? b.variant : 'basic';
+  if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'Vyplňte prosím jméno a e-mail.' };
+  if (!b.consent) return { error: 'Bez souhlasu se zpracováním údajů nemůžeme objednávku vyřídit.' };
+  return { name, email, phone: phone || null, company: company || null, pkg, marketing: !!b.marketing };
+}
+app.get('/api/location/pay-config', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: Object.fromEntries(Object.entries(LOC.PACKAGES).map(([k, v]) => [k, v.amount / 100])) }); });
+// Platba kartou: založí objednávku (pending) a vrátí URL Stripe Checkout.
+app.post('/api/location/checkout', wrap(async (req, res) => {
+  if (!process.env.STRIPE_SECRET_KEY) return res.status(503).json({ ok: false, error: 'Online platba není dostupná.' });
+  if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
+  const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
+  const pkg = LOC.PACKAGES[d.pkg];
+  const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9) RETURNING id',
+    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64)]);
+  const oid = ins.rows[0].id; const base = locBase(req);
+  const session = await stripePost('checkout/sessions', {
+    mode: 'payment', customer_email: d.email, locale: 'cs',
+    success_url: base + '/location?paid=1&s={CHECKOUT_SESSION_ID}#objednat', cancel_url: base + '/location?canceled=1#objednat',
+    line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pkg.amount, product_data: { name: pkg.name, description: pkg.desc } } }],
+    metadata: { order_id: String(oid), package: d.pkg, source: 'bs2-location' },
+    payment_intent_data: { description: pkg.name + ' – ' + d.name, metadata: { order_id: String(oid), package: d.pkg } },
+    invoice_creation: { enabled: 'true' },
+  });
+  await q('UPDATE location_orders SET stripe_session=$1 WHERE id=$2', [session.id, oid]);
+  console.log('[bs2] /location checkout #' + oid + ' ' + d.pkg + ' → ' + session.id);
+  res.json({ ok: true, url: session.url });
+}));
+// Náhradní režim bez Stripe: žádost o objednávku (admin pošle platební údaje ručně).
+app.post('/api/location/interest', wrap(async (req, res) => {
+  if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
+  const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
+  const pkg = LOC.PACKAGES[d.pkg];
+  await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9)',
+    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64)]);
+  locNotify('Nová žádost o balíček ' + pkg.label + ' – ' + d.name, 'Žádost (bez online platby): ' + d.name + ', ' + d.email + (d.phone ? ', ' + d.phone : '') + '. Pošlete platební údaje a po úhradě předejte přístup.').catch(() => {});
+  res.json({ ok: true });
+}));
+async function locNotify(subject, body) {
+  const to = (process.env.BS2_LOCATION_NOTIFY_EMAIL || 'tomas.holy@bestseries.cz').split(',').map((x) => x.trim()).filter(Boolean);
+  for (const t of to) { try { await sendBs2Mail({ to: t, subject: '[BS2] ' + subject, body, link: (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '') + '/admin/location', linkLabel: 'Otevřít administraci' }); } catch (e) { console.warn('[bs2] location notify:', e.message); } }
+}
+// Stripe webhook: ověří podpis (raw body) a označí objednávku jako zaplacenou.
+app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
+  const raw = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body || {});
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (secret) {
+    const sig = String(req.get('stripe-signature') || ''); const parts = Object.fromEntries(sig.split(',').map((kv) => kv.split('=')).filter((a) => a.length === 2));
+    if (!parts.t || !parts.v1) return res.status(400).send('Chybí podpis');
+    const expected = crypto.createHmac('sha256', secret).update(parts.t + '.' + raw).digest('hex');
+    const ok = expected.length === parts.v1.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1));
+    if (!ok || Math.abs(Date.now() / 1000 - Number(parts.t)) > 600) return res.status(400).send('Neplatný podpis');
+  } else console.warn('[bs2] STRIPE_WEBHOOK_SECRET chybí — webhook bez ověření podpisu');
+  let ev; try { ev = JSON.parse(raw); } catch (e) { return res.status(400).send('Bad JSON'); }
+  if (ev.type === 'checkout.session.completed' || ev.type === 'checkout.session.async_payment_succeeded') {
+    const sess = (ev.data && ev.data.object) || {};
+    if (!sess.payment_status || sess.payment_status === 'paid') {
+      const oid = Number(sess.metadata && sess.metadata.order_id);
+      const r = await q("UPDATE location_orders SET status=CASE WHEN status IN ('pending','request') THEN 'paid' ELSE status END, paid_at=COALESCE(paid_at, now()), stripe_session=COALESCE(stripe_session,$2), stripe_payment_intent=COALESCE($3, stripe_payment_intent), amount_czk=COALESCE($4, amount_czk) WHERE id=$1 OR stripe_session=$2 RETURNING *",
+        [oid || 0, sess.id || null, typeof sess.payment_intent === 'string' ? sess.payment_intent : null, sess.amount_total != null ? Math.round(sess.amount_total / 100) : null]);
+      const o = r.rows[0];
+      if (o) {
+        console.log('[bs2] /location ZAPLACENO #' + o.id + ' ' + o.package + ' ' + o.amount_czk + ' Kč');
+        const pkg = LOC.PACKAGES[o.package] || {};
+        locNotify('Zaplaceno: ' + (pkg.label || o.package) + ' – ' + o.name, o.name + ' (' + o.email + (o.phone ? ', ' + o.phone : '') + ') zaplatil ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Předejte přístup do aplikace a označte v administraci.').catch(() => {});
+        sendBs2Mail({ to: o.email, subject: 'Potvrzení platby – Prověření lokality (' + (pkg.label || o.package) + ')', body: 'Dobrý den, děkujeme za platbu ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Do jednoho pracovního dne vám pošleme přístup do aplikace na 12 měsíců. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: locBase(req) + '/location', linkLabel: 'Prověření lokality' }).catch((e) => console.warn('[bs2] location mail zákazník:', e.message));
+      }
+    }
+  }
+  res.json({ received: true });
+}));
+// Admin: objednávky balíčků
+app.get('/admin/location', requireAdmin, wrap(async (req, res) => {
+  const status = Object.keys(LOC.STATUS).includes(req.query.status) ? req.query.status : '';
+  const rows = (await q('SELECT * FROM location_orders ' + (status ? 'WHERE status=$1 ' : '') + "ORDER BY (status='paid') DESC, created_at DESC LIMIT 500", status ? [status] : [])).rows;
+  const counts = {}; (await q('SELECT status, count(*)::int AS c FROM location_orders GROUP BY status')).rows.forEach((r) => { counts[r.status] = r.c; });
+  res.send(LOC.adminLocationOrders({ adminLayout: V.adminLayout, admin: req.admin, rows, counts, status, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, stripeOn: !!process.env.STRIPE_SECRET_KEY }));
+}));
+app.post('/admin/location/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => {
+  const st = String(req.body.status || ''); if (!Object.keys(LOC.STATUS).includes(st)) return res.redirect('/admin/location');
+  await q('UPDATE location_orders SET status=$1, access_granted_at=CASE WHEN $1=\'granted\' THEN now() ELSE access_granted_at END WHERE id=$2', [st, parseInt(req.params.id, 10)]);
+  await log(req.admin, 'location_status', { id: req.params.id, status: st });
+  res.redirect('/admin/location?msg=' + encodeURIComponent('Stav objednávky #' + req.params.id + ' změněn.'));
+}));
+app.post('/admin/location/:id(\\d+)/note', requireAdmin, wrap(async (req, res) => {
+  await q('UPDATE location_orders SET note=$1 WHERE id=$2', [String(req.body.note || '').slice(0, 2000) || null, parseInt(req.params.id, 10)]);
+  res.redirect('/admin/location?msg=' + encodeURIComponent('Poznámka uložena.'));
+}));
 // Povinné potvrzení VOP + ochrany údajů po prvním přihlášení
 app.get('/souhlas', wrap(requireUserNoConsent), (req, res) => {
   if (req.user.vop_consent_at && req.user.gdpr_consent_at) return res.redirect('/');

@@ -206,6 +206,28 @@ async function migrate() {
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_type TEXT;
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_size INTEGER;
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_data BYTEA;
+    -- Prověření lokality (/location): objednávky balíčků placené přes Stripe
+    CREATE TABLE IF NOT EXISTS location_orders (
+      id            SERIAL PRIMARY KEY,
+      name          TEXT NOT NULL,
+      email         TEXT NOT NULL,
+      phone         TEXT,
+      company       TEXT,
+      package       TEXT NOT NULL,              -- basic | plus | premium
+      amount_czk    INTEGER NOT NULL,           -- s DPH
+      status        TEXT NOT NULL DEFAULT 'pending', -- pending | request | paid | granted | canceled | refunded
+      consent       BOOLEAN NOT NULL DEFAULT false,
+      marketing     BOOLEAN NOT NULL DEFAULT false,
+      stripe_session        TEXT,
+      stripe_payment_intent TEXT,
+      paid_at       TIMESTAMPTZ,
+      access_granted_at TIMESTAMPTZ,
+      note          TEXT,
+      ip            TEXT,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS location_orders_status_idx ON location_orders (status, created_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
   `);
 }
 

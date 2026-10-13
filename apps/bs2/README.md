@@ -50,3 +50,6 @@ Generování tajemství (PowerShell): `[Convert]::ToBase64String((1..48 | % { Ge
 cd apps/bs2 && npm install
 $env:BS2_SSO_SECRET="test"; $env:HOLYOS_URL="http://localhost:3000"; npm start   # http://localhost:3100
 ```
+
+# BS2 /location – Stripe platby balíčků Prověření lokality
+# STRIPE_SECRET_KEY=, STRIPE_WEBHOOK_SECRET=, BS2_BASE_URL=https://www.bestseries2.cz, BS2_LOCATION_NOTIFY_EMAIL=tomas.holy@bestseries.cz

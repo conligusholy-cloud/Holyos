@@ -1,0 +1,614 @@
+// BS2 — Prověření lokality (/location): veřejná prodejní stránka aplikace „Prověř místo
+// a spočítej ekonomiku", platba balíčků přes Stripe Checkout a administrace objednávek.
+// Stránka je samostatné HTML (převzato z pradlomaty.info/misto), aby nezávisela na layoutu BS2.
+const { esc } = require('./views');
+
+const PACKAGES = {
+  basic:   { name: 'Prověření lokality – Základ',  desc: 'Přístup do aplikace na 12 měsíců, 3 lokality, export PDF', amount: 490000, label: 'Základ' },
+  plus:    { name: 'Prověření lokality – Plus',    desc: 'Přístup do aplikace na 12 měsíců, 10 lokalit, porovnání, 30min konzultace', amount: 990000, label: 'Plus' },
+  premium: { name: 'Prověření lokality – Premium', desc: 'Vše z Plus + místní šetření technikem Best Series na jedné lokalitě', amount: 1590000, label: 'Premium' },
+};
+
+const PAGE = `<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prověřte si místo a spočítejte ekonomiku prádlomatu – webová aplikace</title>
+<meta name="description" content="Než koupíte prádlomat, prověřte si místo a spočítejte jeho ekonomiku. Webová aplikace: 3 reálné případové studie, kalkulačka ekonomiky, checklist a orientační vyhodnocení lokality s exportem do PDF. Přístup na 12 měsíců, jednorázová platba." />
+<meta name="theme-color" content="#04060c" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='17' fill='%23121d36'/%3E%3Cpath d='M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22' stroke='%234fd1ff' stroke-width='4.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{--bg:#04060c;--card:rgba(14,22,40,.72);--card2:rgba(8,13,26,.85);--border:rgba(120,160,255,.14);--border2:rgba(120,160,255,.28);
+    --text:#eaf2ff;--text2:#8ea2c2;--text3:#58698a;--accent:#1e86e0;--accent2:#4fd1ff;--vio:#7c5cff;--ok:#2fe3a0;--err:#ff5d6c;--blue:#4fd1ff;--amber:#f5b400}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+  body{font:15px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue);text-decoration:none}
+  #net{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:.7}
+  .glow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:0;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
+  .glow.a{width:620px;height:620px;left:-200px;top:-200px;background:radial-gradient(circle,rgba(30,134,224,.6),transparent 65%)}
+  .glow.b{width:560px;height:560px;right:-180px;bottom:-220px;background:radial-gradient(circle,rgba(124,92,255,.5),transparent 65%);animation-delay:-9s}
+  @keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(50px,30px,0) scale(1.1)}}
+  .gridfx{position:fixed;inset:auto 0 0 0;height:40vh;z-index:0;pointer-events:none;background-image:linear-gradient(var(--border) 1px,transparent 1px),linear-gradient(90deg,var(--border) 1px,transparent 1px);background-size:64px 64px;transform:perspective(600px) rotateX(62deg);transform-origin:top;mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent)}
+  header{position:sticky;top:0;z-index:5;background:rgba(4,6,12,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--border);padding:10px 18px;padding-top:calc(10px + env(safe-area-inset-top))}
+  header .in{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header .brand{display:inline-flex;align-items:center;gap:10px;color:var(--text);font-weight:700;font-size:15px;letter-spacing:.02em}
+  header .brand .mark{display:inline-flex;filter:drop-shadow(0 6px 16px rgba(30,134,224,.45))}
+  header .brand span.v{background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
+  header .tag{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:3px 9px;background:rgba(255,255,255,.02)}
+  header nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  header nav a{display:inline-flex;align-items:center;gap:6px;color:var(--text2);padding:6px 10px;border-radius:9px;font-size:13.5px;border:1px solid transparent}
+  header nav a:hover{background:rgba(120,160,255,.08);border-color:var(--border);color:var(--text)}
+  main{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:22px 18px calc(40px + env(safe-area-inset-bottom))}
+  .hero{padding:26px 0 30px;display:flex;align-items:center;justify-content:space-between;gap:28px}
+  .hero .txt{flex:1;min-width:0}
+  .pm3d{flex:none;width:min(40%,440px);height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
+  @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
+  @media (max-width:860px){.hero{flex-direction:column;align-items:flex-start;padding:14px 0 18px}.pm3d{width:min(100%,320px);align-self:center}h1{font-size:clamp(26px,8vw,34px)}.lead{font-size:15px}}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;background:rgba(255,255,255,.02)}
+  .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.7);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,227,160,.7)}70%{box-shadow:0 0 0 9px rgba(47,227,160,0)}100%{box-shadow:0 0 0 0 rgba(47,227,160,0)}}
+  h1{margin:14px 0 10px;font-size:clamp(30px,4.6vw,48px);line-height:1.08;letter-spacing:-.025em;font-weight:800}
+  h1 .g{background:linear-gradient(90deg,#fff 0%,var(--accent2) 50%,var(--vio) 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2{font-size:clamp(20px,3vw,26px);letter-spacing:-.02em;font-weight:800;margin:0 0 14px}
+  .lead{font-size:16px;color:var(--text2);max-width:640px}
+  .sec{margin-top:52px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;font:inherit;font-size:15px;font-weight:700;background:linear-gradient(90deg,var(--accent),#3a6cf5 55%,var(--vio));color:#fff;border:0;border-radius:12px;padding:12px 20px;cursor:pointer;min-height:44px;box-shadow:0 10px 28px rgba(58,108,245,.35);transition:transform .15s,box-shadow .15s}
+  .btn:hover{transform:translateY(-1px);box-shadow:0 14px 34px rgba(58,108,245,.5)}
+  .btn.sec{background:rgba(120,160,255,.08);color:var(--text);border:1px solid var(--border2);box-shadow:none}
+  .btn:disabled{opacity:.5;cursor:default;transform:none}
+  .cta-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:22px}
+  .cta-row .hint{font-size:13px;color:var(--text2)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .card p,.card li{font-size:14.5px;color:var(--text2)}
+  .card ul{padding-left:18px;display:flex;flex-direction:column;gap:5px}
+  .card.ok{border-color:rgba(47,227,160,.35)} .card.no{border-color:rgba(255,93,108,.3)}
+  .list{display:flex;flex-direction:column;gap:10px}
+  .item{display:flex;gap:14px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .item .n{flex:none;width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);color:var(--accent2);font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(30,134,224,.25)}
+  .item b{display:block;font-size:15.5px;margin-bottom:3px}
+  .item span{font-size:14px;color:var(--text2)}
+  mark{background:rgba(245,180,0,.18);color:#ffd866;padding:0 5px;border-radius:5px;font-weight:600}
+  /* kalkulačka */
+  .calc{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:22px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .calc .inp label{display:block;font-size:12.5px;color:var(--text2);margin:12px 0 5px;letter-spacing:.02em}
+  .calc .inp label b{color:var(--text);float:right}
+  .calc input[type=range]{width:100%;accent-color:var(--accent2)}
+  input[type=number],input[type=text],input[type=email],input:not([type]),textarea,select{width:100%;font:inherit;font-size:16px;color:var(--text);background:rgba(4,8,16,.8);border:1px solid rgba(120,160,255,.18);border-radius:11px;padding:12px 13px;outline:none;transition:border-color .2s,box-shadow .2s}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent2);box-shadow:0 0 0 4px rgba(79,209,255,.12),0 0 20px rgba(79,209,255,.15)}
+  .cascade{display:flex;flex-direction:column;gap:7px}
+  .cascade .row{display:flex;justify-content:space-between;align-items:center;background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:9px 13px;font-size:14px}
+  .cascade .row span{color:var(--text2)}
+  .cascade .row b{font-variant-numeric:tabular-nums}
+  .cascade .row.minus b{color:#ffb3bb}
+  .cascade .row.total{border-color:rgba(47,227,160,.5);background:rgba(47,227,160,.1);font-size:14px} .cascade .row.total span{color:var(--text)}
+  .cascade .row.total b{color:var(--ok)}
+  .cascade .row.total.neg{border-color:rgba(255,93,108,.5);background:rgba(255,93,108,.1)} .cascade .row.total.neg b{color:var(--err)}
+  .calc .note{grid-column:1/-1;font-size:12.5px;color:var(--text3)}
+  /* ceny */
+  .prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .price{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;display:flex;flex-direction:column;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .price.hi{border-color:rgba(79,209,255,.5);box-shadow:0 20px 60px rgba(0,0,0,.35),0 0 40px rgba(79,209,255,.12)}
+  .price .tag{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent2);margin-bottom:8px}
+  .price .amt{font-size:36px;font-weight:800;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .price .amt small{font-size:14px;font-weight:500;color:var(--text2)}
+  .price .was{font-size:13px;color:var(--text3);text-decoration:line-through;margin-top:4px}
+  .price ul{list-style:none;margin:16px 0 20px;display:flex;flex-direction:column;gap:7px;font-size:14px;color:var(--text2)}
+  .price li::before{content:'✓';color:var(--ok);font-weight:800;margin-right:8px}
+  .price .btn{margin-top:auto}
+  .credit{background:rgba(47,227,160,.08);border:1px solid rgba(47,227,160,.35);border-radius:14px;padding:14px 16px;margin-top:14px;font-size:14.5px;color:#d7fff0}
+  /* faq */
+  details{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 16px;margin-bottom:8px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none;display:flex;justify-content:space-between;gap:10px}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:'+';color:var(--accent2);font-weight:800}
+  details[open] summary::after{content:'–'}
+  details p{margin-top:10px;font-size:14.5px;color:var(--text2)}
+  /* formulář */
+  form{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  form label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--text2);letter-spacing:.02em}
+  form .full{grid-column:1/-1}
+  form .chk{flex-direction:row;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text2)}
+  form .chk input{width:auto;margin-top:3px;accent-color:var(--accent2)}
+  .msg{grid-column:1/-1;font-size:14px;padding:10px 12px;border-radius:10px;display:none}
+  .msg.ok{display:block;background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.4);color:#a9f5d9}
+  .msg.err{display:block;background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.4);color:#ffb3bb}
+  .demo-flag{display:inline-block;font-size:12.5px;font-weight:700;color:#ffd866;background:rgba(245,180,0,.12);border:1px solid rgba(245,180,0,.45);border-radius:999px;padding:5px 12px;margin-bottom:12px}
+  .report{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .rep-head{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding-bottom:14px;border-bottom:1px solid var(--border);margin-bottom:14px}
+  .rep-k{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)} .rep-v{font-size:14.5px;font-weight:600;margin-top:2px}
+  .rep-v.res{display:inline-block;border-radius:999px;padding:4px 11px;font-size:13px} .rep-v.res.cond{color:#ffd866;border:1px solid rgba(245,180,0,.5);background:rgba(245,180,0,.1)}
+  .rep-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .rep-box{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:13px 14px} .rep-box h4{font-size:13.5px;margin-bottom:7px;display:flex;justify-content:space-between;gap:8px;align-items:baseline} .rep-box h4 small{font-weight:500;color:var(--text3);font-size:11px}
+  .rep-box ul{padding-left:16px;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--text2)} .rep-box li i{color:var(--text3);font-style:normal} .rep-box li b{color:#ffd866}
+  .scen{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px} .sc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:rgba(4,8,16,.5)} .sc.hi{border-color:rgba(79,209,255,.45)}
+  .sc-k{font-size:12px;color:var(--text2);margin-bottom:4px} .sc-v{font-size:13.5px;font-variant-numeric:tabular-nums} .sc-v.pos{color:var(--ok);font-weight:700} .sc-v.neg{color:var(--err);font-weight:700}
+  .sim .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
+  .sim .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
+  .sim .how.fit{overflow:visible} .sim .how.fit .how-stage{width:440px;min-height:560px;height:560px;aspect-ratio:auto;margin:0;transform-origin:0 0}
+  .sim .how-mach{position:absolute;inset:0}
+  .sim .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
+  .sim .how-w8{width:9%!important}
+  .sim .how-d{position:absolute;width:12%;aspect-ratio:1;transform:translate(-50%,-50%);pointer-events:none}
+  .sim .how-d i{position:absolute;inset:0;border-radius:50%;border:3px solid rgba(79,209,255,.0);transition:border-color .3s}
+  .sim .how-d span{position:absolute;left:50%;top:106%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.7);padding:1px 6px;border-radius:999px;opacity:0;transition:opacity .3s} .sim .how-d.on span{opacity:1}
+  .sim .how-d.on i{border-color:rgba(79,209,255,.85);box-shadow:0 0 22px rgba(79,209,255,.55),inset 0 0 18px rgba(79,209,255,.25);border-top-color:#fff;animation:howspin .7s linear infinite}
+  .sim .how-s.on i{border-color:rgba(245,158,11,.9);box-shadow:0 0 22px rgba(245,158,11,.55),inset 0 0 18px rgba(245,158,11,.25);border-top-color:#fff;animation:howspin 1s linear infinite}
+  @keyframes howspin{to{transform:rotate(360deg)}}
+  .sim .how-cust,.sim .how-bag{position:absolute;line-height:1;transform:translate(-50%,-50%);opacity:0;filter:drop-shadow(0 6px 10px rgba(0,0,0,.7));z-index:3}
+  .sim .how-cust{width:22%;aspect-ratio:1/2} .sim .how-cust.flip svg{transform:scaleX(-1)} .sim .how-cust svg{width:100%;height:100%;display:block;animation:howbob .7s ease-in-out infinite}
+  @keyframes howbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-3%)}}
+  .sim .how-bag{font-size:30px;z-index:4}
+  .sim .how-tag{position:absolute;transform:translate(-50%,-100%);padding:5px 10px;border-radius:999px;background:rgba(4,8,16,.85);border:1px solid rgba(79,209,255,.45);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;opacity:0;transition:opacity .3s,left .5s,top .5s;z-index:5;pointer-events:none}
+  .sim .how-door{position:absolute;left:2%;bottom:6%;width:9%;height:40%;border-radius:8px;border:1px dashed rgba(79,209,255,.35);display:flex;align-items:flex-end;justify-content:center;font-size:10px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding-bottom:4px}
+  .sim .how-clock{position:absolute;left:-32%;top:0;width:24%;text-align:center;z-index:6}
+  .sim .how-clock svg{width:100%;height:auto;display:block;filter:drop-shadow(0 10px 24px rgba(0,0,0,.6)) drop-shadow(0 0 16px rgba(79,209,255,.2))}
+  .sim .how-clock .hc-txt{margin-top:6px} .sim .how-clock .hc-txt b{display:block;font-size:clamp(16px,2.2vw,24px);letter-spacing:-.02em;color:#fff} .sim .how-clock .hc-txt span{font-size:11px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase}
+  .sim .how-acc{position:absolute;right:-34%;top:0;width:210px;box-sizing:border-box;white-space:nowrap;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.85);border:1px solid rgba(47,227,160,.45);box-shadow:0 14px 34px rgba(0,0,0,.5),0 0 24px rgba(47,227,160,.15);text-align:right;z-index:6;backdrop-filter:blur(8px)}
+  .sim .how-acc b{display:block;font-size:clamp(20px,2.6vw,30px);letter-spacing:-.02em;line-height:1.1;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sim .how-coins{position:absolute;inset:0;pointer-events:none;z-index:5} .sim .how-coins .coin{position:absolute;transform:translate(-50%,-50%);font-style:normal;font-weight:900;color:var(--ok);text-shadow:0 0 12px rgba(47,227,160,.7);animation:howcoin 1.8s ease-out forwards}
+  @keyframes howcoin{0%{opacity:0;margin-top:0;transform:translate(-50%,-50%) scale(.6)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.15)}100%{opacity:0;margin-top:-120px;margin-left:120px;transform:translate(-50%,-50%) scale(.9)}}
+  .sim .how-cas{position:absolute;right:-34%;top:26%;width:210px;display:flex;flex-direction:column;gap:6px;z-index:6}
+  .sim .how-cas .cs,.sim .how-cas button{opacity:0;transform:translateY(-14px) scale(.96);transition:opacity .45s,transform .45s cubic-bezier(.2,1.3,.4,1)} .sim .how-cas .in{opacity:1;transform:none}
+  .sim .how-cas .cs{display:flex;flex-direction:column;align-items:flex-end;text-align:right;padding:7px 12px;box-sizing:border-box;width:100%;border-radius:12px;background:rgba(4,8,16,.85);border:1px solid var(--border2);backdrop-filter:blur(8px);box-shadow:0 10px 24px rgba(0,0,0,.45)}
+  .sim .how-cas .cs small{display:block;font-size:10.5px;color:var(--text2);line-height:1.35;margin-top:3px} .sim .how-cas .cs small i{font-style:normal;color:#fff} .sim .how-cas .cs b{font-size:clamp(18px,2.2vw,24px);letter-spacing:-.02em;color:#fff;margin-top:2px;white-space:nowrap}
+  .sim .how-cas .cs.m{border-color:rgba(245,158,11,.4)} .sim .how-cas .cs.m b{color:#f59e0b}
+  .sim .how-cas .cs.r{border-color:rgba(47,227,160,.6);background:rgba(47,227,160,.12);box-shadow:0 10px 30px rgba(47,227,160,.25)} .sim .how-cas .cs.r b{font-size:22px;background-image:linear-gradient(180deg,#fff,var(--ok));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sim .how-cas .cs.r.neg{border-color:rgba(239,68,68,.7);background:rgba(239,68,68,.14);box-shadow:0 10px 30px rgba(239,68,68,.3)} .sim .how-cas .cs.r.neg b{background-image:linear-gradient(180deg,#fff,#ef4444);text-shadow:0 0 14px rgba(239,68,68,.6)}
+  .sim .how-cas button{align-self:stretch}
+  .sim .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .sim .how-foot b{color:var(--accent2)}
+  .sim .dec-k{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .sim .dec-s{display:block;font-size:13px;color:var(--text2);margin-top:2px}
+  .sim .how-cas .cs.unk b{font-size:34px!important;line-height:1;color:#fff!important;background:none!important;-webkit-text-fill-color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)}
+  .btn.sm{padding:7px 11px;font-size:13px;min-height:34px;border-radius:9px}
+  .sim.first{margin-top:10px}
+  .eq-title{text-align:center;margin:4px 0 18px} .eq-title .eq-title-k{display:block;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text3);font-weight:700;margin-bottom:6px} .eq-title b{display:block;font-size:clamp(22px,3.2vw,32px);font-weight:800;letter-spacing:-.02em;line-height:1.15;background:linear-gradient(90deg,#fff 0%,var(--accent2) 45%,#f5b400 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 18px rgba(79,209,255,.35))}
+  .eq-wrap{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:30px 24px 26px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .eq{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:14px;padding:34px 8px 36px;overflow:visible}
+  .eq-t{flex:1 1 0;min-width:112px;border:1px solid var(--border);border-radius:12px;padding:14px 12px;background:rgba(4,8,16,.6);text-align:center;transition:border-color .35s,box-shadow .35s,transform .35s}
+  .eq-t .eq-k{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .eq-t b{display:block;font-size:24px;letter-spacing:-.02em;line-height:1.15;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+  .eq-t small{display:block;font-size:11px;color:var(--text2)}
+  .eq-t.rev b,.eq-t.unk b{font-size:32px;font-weight:800;color:#fff;text-shadow:0 0 18px rgba(79,209,255,.6)} .eq-t.rev b{color:var(--accent2)} .eq-t.res{border-color:rgba(47,227,160,.45);background:rgba(47,227,160,.08)} .eq-t.res b{color:var(--ok)}
+  .eq-t.lit{border-color:rgba(79,209,255,.85);box-shadow:0 0 24px rgba(79,209,255,.35);transform:translateY(-3px)} .eq-t.res.lit{border-color:var(--ok);box-shadow:0 0 28px rgba(47,227,160,.5)}
+  .eq-g{position:relative;display:flex;flex-direction:column;border:1px dashed rgba(120,160,255,.35);border-radius:16px;padding:22px 10px 10px;flex:1 1 0}
+  .eq-g .eq-gi{display:flex;gap:10px;align-items:stretch} .eq-g .eq-gi .eq-t{flex:1 1 0}
+  .eq-gk{position:absolute;top:-10px;left:12px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--border2);color:var(--text2);white-space:nowrap}
+  .eq-g.g1{border:0;padding:24px 12px 12px;background:linear-gradient(var(--bg),var(--bg)) padding-box,conic-gradient(from var(--eqa,0deg),#4fd1ff,#7c5cff,#2fe3a0,#4fd1ff) border-box;border:2px solid transparent;border-radius:18px;box-shadow:0 0 34px rgba(79,209,255,.35),0 0 80px rgba(124,92,255,.2);animation:eqspin 4s linear infinite,eqpulse 2.4s ease-in-out infinite;transform:scale(1.04);z-index:2}
+  @property --eqa{syntax:'<angle>';inherits:false;initial-value:0deg}
+  @keyframes eqspin{to{--eqa:360deg}}
+  @keyframes eqpulse{0%,100%{box-shadow:0 0 30px rgba(79,209,255,.3),0 0 70px rgba(124,92,255,.18)}50%{box-shadow:0 0 50px rgba(79,209,255,.6),0 0 110px rgba(124,92,255,.35)}}
+  .eq-g.g1 .eq-gk{color:#fff;border-color:rgba(79,209,255,.85);background:linear-gradient(90deg,var(--accent),var(--vio));box-shadow:0 6px 18px rgba(58,108,245,.5)}
+  .eq-g.g1 .eq-t{background:linear-gradient(180deg,rgba(30,134,224,.22),rgba(124,92,255,.14));border-color:rgba(79,209,255,.55)}
+  .eq-g.g1 .eq-t b{font-size:44px;background:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;filter:drop-shadow(0 0 16px rgba(79,209,255,.75))}
+  .eq-g.g1 .eq-t .eq-k{color:var(--accent2)} .eq-g.g1 .eq-t small{color:var(--text)}
+  .eq-gk .sm,.eq-star .sm{display:none}
+  .eq-star{position:absolute;right:12px;bottom:-11px;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:linear-gradient(90deg,#f5b400,#ff8a3d);color:#1a1200;box-shadow:0 6px 18px rgba(245,180,0,.45);white-space:nowrap}
+  .eq-g.g2{border-color:rgba(124,92,255,.55)} .eq-g.g2 .eq-gk{color:#b9a7ff;border-color:rgba(124,92,255,.55)}
+  .eq-g.g3{border-color:rgba(245,180,0,.5)} .eq-g.g3 .eq-gk{color:#ffd866;border-color:rgba(245,180,0,.5)}
+  .eq .eq-t.res{align-self:center}
+  .eq-t.res{position:relative;overflow:visible}
+  .eq-t.res.flash{animation:eqflash .7s ease-in-out 2}
+  @keyframes eqflash{0%,100%{box-shadow:0 0 0 rgba(47,227,160,0);background:rgba(47,227,160,.08)}50%{box-shadow:0 0 36px rgba(47,227,160,.9),0 0 90px rgba(47,227,160,.45);background:rgba(47,227,160,.28);transform:scale(1.06)}}
+  .eq-check{position:absolute;right:-14px;top:-14px;width:44px;height:44px;opacity:0;transform:scale(0);transition:transform .45s cubic-bezier(.2,1.6,.4,1),opacity .2s;filter:drop-shadow(0 0 14px rgba(47,227,160,.8))}
+  .eq-check svg{width:100%;height:100%;display:block} .eq-check path{stroke-dasharray:100;stroke-dashoffset:100}
+  .eq-t.res.ok .eq-check{opacity:1;transform:scale(1)} .eq-t.res.ok .eq-check path{animation:eqtick .5s ease-out .25s forwards}
+  @keyframes eqtick{to{stroke-dashoffset:0}}
+  .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
+  .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
+  @media(max-width:720px){
+    .eq-wrap{padding:18px 8px 16px}
+    .eq-title b{font-size:20px}
+    .eq{gap:3px;padding:22px 0 26px;overflow:visible;justify-content:center}
+    .eq-g{flex:none;padding:12px 3px 4px;border-radius:10px} .eq-g.g1{transform:none;padding:12px 3px 4px;border-width:1.5px}
+    .eq-g .eq-gi{gap:3px}
+    .eq-t{flex:none;width:36px;min-width:0;padding:6px 1px;border-radius:8px}
+    .eq-t .eq-k,.eq-t small{display:none}
+    .eq-t b{font-size:17px;margin:0;line-height:1.2} .eq-g.g1 .eq-t b{font-size:21px} .eq-t.unk b{font-size:17px}
+    .eq-t.res{width:50px;align-self:center} .eq-t.res b{font-size:15px}
+    .eq-op{font-size:15px;line-height:1}
+    .eq-gk{font-size:7.5px;letter-spacing:.04em;left:3px;top:-8px;padding:2px 5px} .eq-gk .lg{display:none} .eq-gk .sm{display:inline}
+    .eq-star{font-size:7px;right:3px;bottom:-9px;padding:2px 5px} .eq-star .lg{display:none} .eq-star .sm{display:inline}
+    .eq-check{width:24px;height:24px;right:-9px;top:-9px}
+    .eq-legend{font-size:12px;gap:6px 14px}
+  }
+  .czmap-wrap{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(79,209,255,.22))}
+  .cz-pins{position:absolute;inset:0;pointer-events:none}
+  #cz-border{stroke-dasharray:1000;stroke-dashoffset:1000;transition:stroke-dashoffset 2.6s ease-in-out} .czmap.drawn #cz-border{stroke-dashoffset:0}
+  #cz-sweep{opacity:0} .czmap.sweep #cz-sweep{animation:czsweep 2.2s ease-in-out 1}
+  @keyframes czsweep{0%{opacity:1;transform:translateX(0)}100%{opacity:1;transform:translateX(1500px)}}
+  .cz-pin::before{content:'';position:absolute;left:50%;top:60%;width:260%;height:260%;border-radius:50%;transform:translate(-50%,-50%) scale(0);border:1.5px solid rgba(79,209,255,.9);box-shadow:0 0 14px rgba(79,209,255,.6);opacity:0;pointer-events:none}
+  .cz-pin.in::before{animation:czripple 1.3s ease-out 1}
+  .cz-pin::after{content:'';position:absolute;left:50%;top:60%;width:120%;height:120%;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle,rgba(79,209,255,.55),rgba(79,209,255,0) 70%);opacity:0;transition:opacity .5s;z-index:-1}
+  .cz-pin.in::after{opacity:1;animation:czbreathe 3s ease-in-out infinite}
+  @keyframes czripple{0%{transform:translate(-50%,-50%) scale(.2);opacity:1}100%{transform:translate(-50%,-50%) scale(1.6);opacity:0}}
+  @keyframes czbreathe{0%,100%{opacity:.55}50%{opacity:1}}
+  .cz-pin{position:absolute;width:1.4%;pointer-events:auto;transform:translate(-50%,-60%) scale(.2);opacity:0;transition:transform .6s cubic-bezier(.2,1.4,.4,1),opacity .4s}
+  .cz-pin.in{opacity:1;transform:translate(-50%,-60%) scale(1)}
+  .cz-pin img{width:100%;height:auto;display:block;filter:drop-shadow(0 8px 14px rgba(0,0,0,.7)) drop-shadow(0 0 10px rgba(79,209,255,.35))}
+  .cz-pin span{position:absolute;left:50%;top:100%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;background:rgba(4,8,16,.75);border:1px solid rgba(79,209,255,.35);padding:1px 6px;border-radius:999px}
+  .cz-cap{position:absolute;right:18px;top:18px;text-align:right;padding:10px 14px;border-radius:14px;background:rgba(4,8,16,.72);border:1px solid var(--border2);backdrop-filter:blur(8px);z-index:3}
+  .cz-cap .cz-cap-k{display:block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--text3);font-weight:700}
+  .cz-cap b{display:block;font-size:26px;font-weight:800;letter-spacing:-.02em;line-height:1.1;background:linear-gradient(90deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cz-cap span:last-child{font-size:12px;color:var(--text2)}
+  @media(max-width:720px){.cz-cap{position:static;text-align:left;margin-top:12px}}
+  .cz-tl{display:flex;align-items:center;gap:16px;margin-top:14px;flex-wrap:wrap}
+  .cz-year b{font-size:40px;font-weight:800;letter-spacing:-.03em;display:block;line-height:1;background:linear-gradient(90deg,#fff,var(--accent2) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 14px rgba(79,209,255,.45))} .cz-year span b{display:inline;font-size:14px;filter:none} .cz-year span{font-size:12px;color:var(--text2)}
+  .cz-track{flex:1;min-width:200px;display:flex;gap:4px} .cz-track i{flex:1;height:8px;border-radius:4px;background:rgba(120,160,255,.12);border:1px solid var(--border);position:relative;transition:background .3s} .cz-track i.on{background:linear-gradient(90deg,var(--accent),var(--vio));box-shadow:0 0 12px rgba(79,209,255,.45);border-color:rgba(79,209,255,.5)} .cz-track i.now{animation:czbreathe 1.2s ease-in-out infinite} .cz-track i::after{content:attr(data-y);position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:10.5px;color:var(--text3)}
+  @media(max-width:720px){.cz-pin{width:2.2%}.cz-pin span{display:none}.cz-track i::after{font-size:9px}}
+  .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
+  @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
+</style>
+</head>
+<body><canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="gridfx" aria-hidden="true"></div>
+<header><div class="in"><a class="brand" href="/location"><span class="mark"><svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:block;flex:none"><defs><linearGradient id="lg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient><linearGradient id="lb" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#121d36"/><stop offset="1" stop-color="#070b16"/></linearGradient><radialGradient id="lr" cx="46" cy="18" r="22" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></radialGradient><filter id="lf" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter></defs><rect x="2" y="2" width="60" height="60" rx="17" fill="url(#lb)"/><rect x="2" y="2" width="60" height="60" rx="17" fill="url(#lr)"/><rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#lg)" stroke-width="1.5"/><path d="M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22" stroke="url(#lg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/><ellipse cx="32" cy="32" rx="26" ry="11" transform="rotate(-28 32 32)" stroke="url(#lg)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 4"/><circle cx="50.5" cy="15" r="4.5" fill="#4fd1ff" filter="url(#lf)" opacity=".7"/><circle cx="50.5" cy="15" r="2.6" fill="#eaf2ff"/></svg></span>Best Series&nbsp;<span class="v">2.0</span></a><span class="tag">Prověření lokality</span></div></header>
+<main>
+  <section class="hero">
+   <div class="txt">
+    <span class="eyebrow"><i></i>Webová aplikace pro prověření lokality</span>
+    <h1>Než koupíte prádlomat, <span class="g">prověřte si místo a spočítejte jeho ekonomiku.</span></h1>
+    <p class="lead">Prověřte svou lokalitu, porovnejte ekonomické scénáře a zjistěte, co potřebujete ověřit před investicí. Vše přehledně v jedné webové aplikaci.</p>
+    <div class="cta-row">
+      <a class="btn" href="#objednat" data-cta="hero">Chci prověřit své místo</a>
+    </div>
+    <p class="small" style="margin-top:14px;color:var(--text3)">Aplikaci připravuje Best Series s.r.o., výrobce a provozovatel prádlomatů. Výsledky jsou orientační podklad pro vaše rozhodnutí, ne předpověď výdělku.</p>
+   </div>
+   <img class="pm3d" src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async">
+  </section>
+  <section class="sec sim" id="ukazka">
+    <h2>Takto prádlomat vydělává</h2>
+    <p class="lead" style="margin:0 0 16px">Jeden den provozu ve zrychlené animaci: zákazníci přicházejí, perou, suší, platí – a vy vidíte tržbu. Kolik ale bude stát nájem, energie a servis a kolik vám nakonec zbude, závisí na konkrétním místě. Přesně to zjistíte v analýze své lokality.</p>
+<div class="how">
+        <div class="how-stage">
+          <div class="how-mach">
+          <img class="how-img" src="/img/pradlomat-mini.webp?v=3" alt="Prádlomat MINI" loading="lazy" decoding="async">
+          <div class="how-d how-w" id="how-w"><i></i><span>Pračka 18 kg</span></div>
+          <div class="how-d how-s" id="how-s"><i></i><span>Sušička</span></div>
+          <div class="how-cust" id="how-cust"><svg viewBox="0 0 60 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="hcB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#1e86e0"/></linearGradient></defs><circle cx="30" cy="16" r="12" fill="#f3c6a0"/><path d="M18 14c2-10 22-10 24 0-4-4-20-4-24 0z" fill="#3b2a20"/><path d="M14 44c0-10 8-14 16-14s16 4 16 14l-2 34H16z" fill="url(#hcB)"/><path d="M12 36l-8 30 7 2 7-26z" fill="#f3c6a0"/><path d="M48 36l8 30-7 2-7-26z" fill="#f3c6a0"/><path d="M17 76l-2 40h10l4-36zM43 76l2 40H35l-4-36z" fill="#1b2a44"/><path d="M12 116h14v4H12zM34 116h14v4H34z" fill="#0b1220"/><g class="hc-walk"><animateTransform attributeName="transform" type="rotate" values="-6 30 78;6 30 78;-6 30 78" dur=".7s" repeatCount="indefinite"/></g></svg></div>
+          <div class="how-bag" id="how-bag">🧺</div>
+          <div class="how-tag" id="how-tag"></div>
+          <div class="how-coins" id="how-coins"></div>
+          </div>
+          <div class="how-clock" aria-hidden="true"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(4,8,16,.8)" stroke="rgba(79,209,255,.5)" stroke-width="2"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(0 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(30 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(60 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(90 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(120 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(150 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(180 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(210 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(240 50 50)"/><line x1="50" y1="8" x2="50" y2="15" stroke="#fff" stroke-width="2.5" transform="rotate(270 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(300 50 50)"/><line x1="50" y1="8" x2="50" y2="12" stroke="rgba(255,255,255,.45)" stroke-width="1.5" transform="rotate(330 50 50)"/><circle id="hc-day" cx="50" cy="50" r="46" fill="none" stroke="rgba(79,209,255,.35)" stroke-width="4" stroke-dasharray="289" stroke-dashoffset="289" transform="rotate(-90 50 50)"/><line id="hc-h" x1="50" y1="50" x2="50" y2="26" stroke="#fff" stroke-width="4" stroke-linecap="round"/><line id="hc-m" x1="50" y1="50" x2="50" y2="14" stroke="#4fd1ff" stroke-width="2.5" stroke-linecap="round"/><circle cx="50" cy="50" r="3" fill="#4fd1ff"/></svg><div class="hc-txt"><b id="hc-t">00:00</b><span id="hc-d">den 1</span></div></div>
+          <div class="how-acc"><span class="dec-k">průměrná tržba za den</span><b><span id="how-sum">0</span> Kč</b><span class="dec-s" id="how-n">0 zákazníků</span></div>
+          <div class="how-cas" id="how-cas">
+          <div class="cs in"><span class="dec-k">tržba za měsíc</span><b id="hs-m">0 Kč</b><small>s DPH<br>bez DPH <i id="hs-mn">0 Kč</i></small></div>
+          <div class="cs m in unk"><span class="dec-k">náklady za měsíc</span><b>?</b><small>záleží na lokalitě<br>nájem · energie · servis</small></div>
+          <div class="cs r in unk"><span class="dec-k">zbude Vám měsíčně</span><b>?</b><small>právě to zjistíte v analýze<br>vaší lokality</small></div>
+          <button type="button" class="btn sec sm" id="hs-again" onclick="location.reload()">↻ Spustit znovu</button>
+        </div>
+        </div>
+        <div class="how-foot"><span>🕐 <b id="how-clock">00:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
+      </div>
+      <script>(function(){
+        var $=function(id){return document.getElementById(id);};
+        // Mobil: celou scénu (hodiny + stroj + kaskáda) zmenšit, ať se vejde na šířku, místo skládání pod sebe.
+        (function fitSim(){ var how=document.querySelector('.sim .how'), st=how&&how.querySelector('.how-stage'); if(!st) return;
+          var FULL_W=740, FULL_H=500, LEFT=145; // rozsah scény v px při 440px stage (hodiny vlevo, kaskáda vpravo)
+          function apply(){ var avail=how.clientWidth-20; if(avail>=FULL_W){ how.classList.remove('fit'); st.style.transform=''; st.style.marginBottom=''; return; }
+            var sc=avail/FULL_W; how.classList.add('fit'); st.style.transform='translateX('+(LEFT*sc)+'px) scale('+sc+')'; st.style.marginBottom=(-(560-FULL_H*sc)+8)+'px'; }
+          apply(); window.addEventListener('resize',apply); })();
+        var cust=$('how-cust'),bag=$('how-bag'),w=$('how-w'),sd=$('how-s'),tag=$('how-tag'),sum=$('how-sum'),n=$('how-n'),clk=$('how-clock'),coins=$('how-coins');
+        if(!cust)return;
+        // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
+        function put(el,p,extra){ el.style.left=p.x+'%'; el.style.top=p.y+'%'; if(extra) el.style.transform=extra; }
+        var W={x:40,y:52},S={x:60,y:49},IN={x:-14,y:58},OUT={x:-14,y:58};
+        put(w,W); put(sd,S);
+        function say(t,p){ tag.textContent=t; tag.style.opacity=t?1:0; if(p){ tag.style.left=p.x+'%'; tag.style.top=(p.y-16)+'%'; } }
+        var SPEED=70; // ms na jednu simulovanou minutu → 24 h ≈ 100 s
+        var total=0,cnt=0,min=0,T0=performance.now(),PR=[[400,'praní s aviváží 350 Kč',1],[400,'praní 300 Kč',2],[500,'praní s aviváží 350 Kč',3]];
+        function fmt(m){ var h=Math.floor(m/60)%24,mm=m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
+        var hcH=document.getElementById('hc-h'),hcM=document.getElementById('hc-m'),hcT=document.getElementById('hc-t'),hcD=document.getElementById('hc-d'),hcDay=document.getElementById('hc-day'),dayNo=1,lastM=0,dayTotal=0;
+        var stopped=false;
+        var fmtK=function(x){ return Math.round(x).toLocaleString('cs-CZ')+' Kč'; };
+        function monthCalc(){ var day=total, m=day*30.5, mn=m/1.21, serv=m*0.13, en=mn*0.095, env=en*1.15, res=mn-5000-serv-en;
+          document.getElementById('hs-m').textContent=fmtK(m); document.getElementById('hs-mn').textContent=fmtK(mn);
+          /* naklady a vysledek zavisi na lokalite -> zobrazeno jako otaznik */ }
+        monthCalc(); // výchozí stav (záporné = červeně)
+        function finishDay(){ if(stopped) return; stopped=true; hcT.textContent='24:00'; hcD.textContent='konec dne'; clk.textContent='24:00'; hcDay.setAttribute('stroke-dashoffset','0'); say(''); monthCalc(); document.getElementById('hs-again').classList.add('in'); }
+        function face(m){ if(stopped) return; if(m>=1440){ finishDay(); return; } var mm=m%1440, mi=Math.floor(mm); lastM=mm;
+          hcH.setAttribute('transform','rotate('+((mm/60)%12)*30+' 50 50)'); hcM.setAttribute('transform','rotate('+(mm%60)*6+' 50 50)'); hcT.textContent=fmt(mi); hcDay.setAttribute('stroke-dashoffset',String(289-289*(mm/1440))); clk.textContent=fmt(mi); }
+        function wait(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+        function simWait(minutes){ return wait(minutes*SPEED); }
+        (function clockLoop(){ if(stopped) return; var f=(performance.now()-T0)/SPEED; min=Math.floor(f); face(f); requestAnimationFrame(clockLoop); })();
+        async function customer(){
+          if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
+          var pr=PR[cnt%PR.length]; cnt++; var WW=W, ring=w, cycles=pr[2];
+          await simWait(3+Math.random()*8);
+          cust.classList.remove('flip'); cust.style.transition='none'; bag.style.transition='none'; put(cust,IN); put(bag,{x:IN.x+8,y:IN.y+10}); cust.style.opacity=1; bag.style.opacity=1; await wait(50);
+          cust.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s'; bag.style.transition='left 2.2s linear, top 2.2s linear, opacity .4s, transform .6s';
+          put(cust,{x:WW.x-15,y:58}); put(bag,{x:WW.x-5,y:72}); say('přichází s prádlem',{x:20,y:70}); await simWait(5);
+          say('platí: '+pr[1]+' + sušení '+cycles+'×50 Kč',{x:WW.x-6,y:WW.y-14}); await simWait(3);
+          bag.style.transition='left .7s ease-in, top .7s ease-in, transform .7s, opacity .4s'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); await wait(700); bag.style.opacity=0;
+          ring.classList.add('on'); say('pere… 40 min',{x:WW.x,y:WW.y-16}); await simWait(40); ring.classList.remove('on');
+          var END=WW;
+          bag.style.transition='none'; put(bag,{x:WW.x,y:WW.y},'translate(-50%,-50%) scale(.4)'); bag.style.opacity=1; await wait(30);
+          bag.style.transition='left .9s ease-in-out, top .9s ease-in-out, transform .9s'; put(bag,{x:S.x,y:S.y},'translate(-50%,-50%) scale(.4)'); say('do sušičky',{x:(WW.x+S.x)/2,y:S.y-16}); await wait(950);
+          for(var cy=1;cy<=cycles;cy++){ sd.classList.add('on'); say('suší… '+cy+'/'+cycles+' · 15 min',{x:S.x,y:S.y-16}); await simWait(15); sd.classList.remove('on'); if(cy<cycles) await simWait(1); }
+          END=S;
+          // platba se připíše
+          var c=document.createElement('em'); c.className='coin'; c.textContent='+'+pr[0]+' Kč'; c.style.left=END.x+'%'; c.style.top=END.y+'%'; coins.appendChild(c); setTimeout(function(){ c.remove(); },1800);
+          if(stopped){ cust.style.opacity=0; bag.style.opacity=0; return; }
+          total+=pr[0]; var shown=parseInt(sum.textContent.replace(/\\s/g,''),10)||0, st=Date.now(); (function tw(){ var k=Math.min(1,(Date.now()-st)/700); sum.textContent=Math.round(shown+(total-shown)*k).toLocaleString('cs-CZ'); if(k<1) requestAnimationFrame(tw); })();
+          n.textContent=cnt+' zákazník'+(cnt===1?'':cnt<5?'ci':'ů'); monthCalc();
+          // odchází s čistým prádlem
+          bag.style.transition='left .6s ease-out, top .6s ease-out, transform .6s'; put(bag,{x:END.x+8,y:72},'translate(-50%,-50%) scale(1)'); cust.style.transition='left .6s, top .6s'; put(cust,{x:END.x,y:58}); say('hotovo ✓',{x:END.x,y:END.y-14}); await wait(700);
+          cust.style.transition='left 2s linear, top 2s linear, opacity .5s'; bag.style.transition='left 2s linear, top 2s linear, opacity .5s'; cust.classList.add('flip'); put(cust,OUT); put(bag,{x:OUT.x-8,y:OUT.y+10}); await wait(1600); cust.style.opacity=0; bag.style.opacity=0; say('');
+        }
+        // Den začíná 0:00. V noci (0:00–7:00) přijdou přesně 2 zákazníci, od 7:00 běží běžný provoz.
+        function waitUntil(m){ return new Promise(function(r){ (function t(){ if(stopped||min>=m) r(); else setTimeout(t,120); })(); }); }
+        (async function loop(){
+          await waitUntil(25); await customer();
+          await waitUntil(235); await customer();
+          await waitUntil(420);
+          while(!stopped){ await simWait(10+Math.random()*25); await customer(); }
+        })();
+      })();</script>
+  </section>
+  <section class="sec" id="mapa" hidden>
+    <h2>Dnes to není o penězích</h2>
+    <p class="lead" style="margin:0 0 16px">8 let tvrdé práce a prádlomat zvládl časový test – teď už není pochyb, že má své místo. Prádlomat byl zalistován jako produkt, který lze financovat a zároveň s ním ručit.</p>
+    <div class="czmap-wrap">
+      <div class="czmap" id="czmap">
+        <svg viewBox="0 0 1000 595" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="czg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e86e0" stop-opacity=".34"/><stop offset=".6" stop-color="#3a6cf5" stop-opacity=".22"/><stop offset="1" stop-color="#7c5cff" stop-opacity=".28"/></linearGradient>
+            <radialGradient id="czr" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#4fd1ff" stop-opacity=".18"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></radialGradient>
+            <pattern id="czdots" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.1" fill="rgba(79,209,255,.22)"/></pattern>
+            <filter id="czglow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <clipPath id="czclip"><path d="M327.8 21.4 L324.3 24.7 L323.8 27.2 L320.5 31.9 L320.3 36.7 L326.9 37.9 L330.3 39.9 L326.2 41.5 L327.7 43.9 L331.9 45.1 L338.4 46.9 L340.6 51.0 L338.9 55.2 L333.2 56.3 L327.8 58.7 L322.0 56.9 L316.6 58.8 L315.5 65.3 L311.4 67.5 L303.0 69.9 L294.2 73.8 L289.1 76.0 L286.0 76.6 L280.9 74.5 L276.0 77.8 L271.8 80.7 L268.0 82.0 L267.8 89.8 L262.2 91.9 L256.8 95.2 L248.9 93.1 L243.9 93.8 L241.0 97.2 L233.7 93.9 L228.5 97.3 L218.2 97.8 L216.6 103.4 L214.9 108.3 L213.7 112.2 L209.3 116.4 L197.4 119.5 L191.6 111.8 L189.8 119.3 L184.3 127.8 L178.5 125.1 L171.5 127.8 L170.2 131.9 L170.1 135.8 L165.7 142.5 L160.4 144.0 L157.5 143.3 L152.2 145.6 L144.4 143.8 L140.6 151.2 L137.6 160.5 L130.7 165.1 L130.4 168.1 L128.5 165.6 L123.5 163.4 L111.6 155.0 L110.3 161.8 L99.2 160.9 L95.6 166.4 L94.5 168.7 L87.3 166.4 L80.3 166.5 L72.1 168.3 L63.5 174.7 L63.1 179.8 L56.9 180.6 L50.7 186.1 L50.3 192.3 L43.5 200.3 L43.8 204.2 L41.3 208.8 L40.2 211.5 L40.0 217.2 L39.2 219.7 L33.2 214.3 L33.9 211.0 L33.4 207.2 L29.0 201.0 L30.1 198.5 L22.2 189.5 L9.8 187.4 L7.5 186.7 L10.4 192.1 L12.9 196.3 L7.3 200.1 L8.0 203.7 L14.1 205.9 L16.1 210.6 L19.2 212.9 L20.4 214.7 L22.5 220.2 L23.0 222.1 L21.7 230.7 L25.4 235.3 L28.9 237.0 L30.3 244.8 L38.3 245.8 L41.1 250.0 L46.0 254.4 L50.6 255.1 L54.7 257.6 L54.8 260.3 L59.6 259.5 L63.8 262.6 L61.9 268.2 L64.8 272.9 L71.9 281.1 L68.3 286.8 L65.3 290.5 L63.8 293.8 L61.4 298.5 L60.2 303.8 L50.8 312.0 L54.5 318.8 L62.5 326.5 L67.8 328.2 L68.5 334.3 L68.1 337.9 L69.0 341.6 L69.4 343.3 L73.9 343.4 L76.2 351.2 L78.9 361.7 L83.4 364.2 L86.3 364.8 L85.8 372.2 L87.1 377.5 L90.5 386.4 L96.9 389.8 L102.6 394.7 L103.8 400.5 L105.9 404.6 L112.9 406.1 L118.3 407.5 L120.4 403.9 L132.2 407.0 L138.5 413.8 L142.9 416.6 L142.5 423.3 L146.5 426.0 L149.7 426.9 L154.5 433.3 L156.9 438.7 L163.0 444.4 L164.3 452.4 L173.2 456.8 L180.1 456.5 L189.9 466.7 L195.1 471.7 L196.3 476.8 L196.9 481.6 L196.9 486.2 L207.2 493.3 L211.7 495.5 L211.9 489.9 L218.0 489.9 L220.0 490.0 L223.5 491.2 L225.7 496.0 L228.9 494.4 L229.6 499.2 L234.6 507.4 L237.3 509.6 L243.9 508.3 L248.6 520.1 L252.9 523.6 L254.2 532.0 L259.4 534.0 L260.2 534.2 L278.1 546.0 L291.3 558.7 L288.9 569.3 L302.0 574.1 L331.5 582.7 L338.6 578.6 L347.4 575.0 L347.4 562.3 L354.6 568.8 L370.1 566.8 L376.9 570.9 L384.8 575.0 L386.8 567.2 L389.6 550.1 L399.9 533.0 L413.5 534.2 L423.8 534.6 L421.0 529.0 L424.6 502.6 L427.0 479.5 L439.3 484.0 L450.9 496.9 L468.4 488.0 L473.6 486.8 L485.5 491.2 L497.5 494.9 L506.6 503.8 L528.1 514.3 L541.2 511.5 L563.5 520.8 L591.0 541.2 L623.2 542.0 L635.6 535.1 L647.1 527.3 L657.1 529.0 L667.8 532.2 L673.0 542.4 L684.5 545.2 L702.9 545.6 L705.7 567.6 L710.5 567.3 L712.2 557.8 L717.3 549.9 L721.5 539.7 L727.1 532.6 L730.5 528.1 L732.6 521.9 L741.6 515.5 L748.5 511.6 L757.2 514.0 L764.1 517.3 L768.8 522.2 L772.0 523.5 L778.0 521.0 L780.6 518.5 L782.1 517.5 L790.8 522.9 L792.6 523.7 L797.8 523.0 L797.4 520.9 L803.7 521.5 L807.7 517.7 L815.3 514.3 L820.4 512.3 L828.1 502.9 L830.6 499.7 L842.6 500.5 L846.3 495.1 L847.4 488.6 L850.3 479.1 L858.9 477.4 L866.0 477.8 L872.6 473.6 L875.3 467.5 L879.0 462.3 L880.0 456.4 L878.9 450.6 L881.9 446.1 L881.6 440.8 L884.8 433.6 L883.1 430.9 L885.7 424.9 L889.0 418.9 L897.9 416.5 L906.0 413.3 L918.5 406.1 L920.2 402.9 L921.4 393.4 L927.0 393.2 L931.3 387.9 L933.5 385.2 L941.9 377.4 L941.6 370.3 L946.6 369.0 L950.0 371.4 L955.8 370.2 L960.7 368.6 L962.0 370.3 L965.3 369.9 L966.6 370.6 L967.9 371.5 L970.3 373.1 L971.7 373.1 L973.4 371.6 L975.1 369.5 L978.2 368.4 L980.2 366.8 L984.3 367.1 L984.7 366.7 L985.7 366.4 L983.9 364.7 L986.5 359.5 L982.8 352.0 L982.0 348.3 L979.1 335.6 L974.1 329.3 L967.0 329.6 L960.0 325.0 L953.1 320.8 L951.2 312.8 L945.4 295.1 L944.9 286.3 L945.6 276.0 L941.2 278.9 L933.1 278.9 L924.5 271.7 L911.3 270.8 L905.0 274.1 L893.7 264.8 L887.5 258.8 L881.3 258.8 L876.7 254.6 L871.2 245.1 L862.7 245.8 L866.6 249.4 L868.7 257.0 L862.5 254.0 L855.1 257.0 L846.3 263.0 L837.4 260.3 L837.3 256.4 L829.6 250.0 L826.1 241.3 L823.4 236.7 L815.5 235.0 L810.4 229.1 L803.8 223.0 L808.4 219.6 L819.4 216.8 L824.3 213.2 L827.4 209.1 L822.4 200.7 L826.3 191.1 L821.8 186.4 L816.4 191.1 L805.0 198.3 L799.6 197.4 L787.6 196.6 L782.8 201.4 L778.4 196.1 L770.3 195.0 L768.0 199.1 L767.9 193.8 L768.9 189.1 L766.7 186.0 L767.8 184.4 L762.0 186.6 L754.4 184.4 L747.0 177.1 L746.8 171.7 L741.9 172.0 L738.0 172.8 L733.8 170.1 L729.9 167.3 L725.3 166.8 L719.6 164.5 L713.5 163.8 L704.5 157.8 L699.6 159.5 L702.0 170.2 L706.0 174.9 L707.9 181.2 L710.4 188.0 L714.8 189.3 L720.1 196.7 L721.4 206.6 L716.4 208.2 L711.8 204.4 L711.0 208.3 L703.4 208.0 L701.0 209.5 L698.4 213.9 L693.0 213.7 L690.3 215.5 L688.2 220.4 L685.8 225.3 L680.5 227.8 L674.6 236.5 L664.6 233.0 L660.1 227.7 L657.1 223.6 L653.9 217.7 L653.2 212.2 L650.1 204.9 L645.9 200.1 L640.3 194.7 L634.9 185.2 L630.5 186.6 L625.8 176.4 L620.8 173.0 L615.2 173.6 L611.3 172.8 L608.4 169.0 L606.6 165.5 L603.0 165.8 L600.9 161.3 L603.9 156.9 L605.7 158.9 L604.9 154.8 L606.6 153.6 L608.9 152.8 L610.1 150.6 L611.7 149.5 L616.1 148.1 L617.4 145.9 L622.9 146.4 L626.6 142.3 L630.7 139.3 L632.0 135.4 L631.1 131.4 L633.8 130.2 L634.8 123.4 L629.6 119.4 L627.5 115.5 L624.9 112.6 L623.3 112.5 L619.4 108.5 L616.7 110.0 L613.0 108.3 L609.7 108.2 L604.7 111.4 L603.8 116.0 L600.1 117.2 L598.4 115.5 L594.0 111.6 L590.8 109.8 L587.1 109.3 L585.5 111.7 L580.5 121.3 L575.9 123.9 L573.8 122.5 L571.4 118.7 L573.8 115.6 L573.3 111.4 L571.2 106.5 L567.3 102.8 L561.6 105.4 L556.2 106.5 L552.3 106.7 L551.2 99.6 L548.1 91.5 L542.1 89.3 L538.0 91.4 L532.4 92.4 L526.7 89.0 L516.9 84.6 L508.8 83.7 L503.7 83.3 L497.4 80.9 L491.6 76.7 L484.7 83.8 L480.9 78.3 L481.2 72.5 L473.2 65.5 L466.4 49.3 L469.9 43.8 L467.8 38.5 L462.3 34.5 L455.3 37.7 L452.8 29.4 L447.1 34.2 L442.4 35.1 L442.8 31.4 L436.1 30.9 L431.9 28.8 L427.9 31.0 L423.0 36.0 L428.3 36.8 L429.7 42.0 L426.0 51.2 L428.7 54.4 L426.7 57.4 L426.0 63.2 L413.4 61.3 L408.4 60.9 L403.1 62.2 L402.2 63.3 L399.5 68.3 L397.1 73.4 L391.1 71.8 L385.6 69.9 L379.6 68.0 L372.2 64.4 L375.9 49.6 L363.5 51.4 L368.8 42.3 L364.6 31.9 L361.3 30.5 L355.7 24.0 L353.5 28.7 L347.7 26.2 L338.4 27.9 L334.9 23.5 L327.8 21.4 Z"/></clipPath>
+          </defs>
+          <path d="M327.8 21.4 L324.3 24.7 L323.8 27.2 L320.5 31.9 L320.3 36.7 L326.9 37.9 L330.3 39.9 L326.2 41.5 L327.7 43.9 L331.9 45.1 L338.4 46.9 L340.6 51.0 L338.9 55.2 L333.2 56.3 L327.8 58.7 L322.0 56.9 L316.6 58.8 L315.5 65.3 L311.4 67.5 L303.0 69.9 L294.2 73.8 L289.1 76.0 L286.0 76.6 L280.9 74.5 L276.0 77.8 L271.8 80.7 L268.0 82.0 L267.8 89.8 L262.2 91.9 L256.8 95.2 L248.9 93.1 L243.9 93.8 L241.0 97.2 L233.7 93.9 L228.5 97.3 L218.2 97.8 L216.6 103.4 L214.9 108.3 L213.7 112.2 L209.3 116.4 L197.4 119.5 L191.6 111.8 L189.8 119.3 L184.3 127.8 L178.5 125.1 L171.5 127.8 L170.2 131.9 L170.1 135.8 L165.7 142.5 L160.4 144.0 L157.5 143.3 L152.2 145.6 L144.4 143.8 L140.6 151.2 L137.6 160.5 L130.7 165.1 L130.4 168.1 L128.5 165.6 L123.5 163.4 L111.6 155.0 L110.3 161.8 L99.2 160.9 L95.6 166.4 L94.5 168.7 L87.3 166.4 L80.3 166.5 L72.1 168.3 L63.5 174.7 L63.1 179.8 L56.9 180.6 L50.7 186.1 L50.3 192.3 L43.5 200.3 L43.8 204.2 L41.3 208.8 L40.2 211.5 L40.0 217.2 L39.2 219.7 L33.2 214.3 L33.9 211.0 L33.4 207.2 L29.0 201.0 L30.1 198.5 L22.2 189.5 L9.8 187.4 L7.5 186.7 L10.4 192.1 L12.9 196.3 L7.3 200.1 L8.0 203.7 L14.1 205.9 L16.1 210.6 L19.2 212.9 L20.4 214.7 L22.5 220.2 L23.0 222.1 L21.7 230.7 L25.4 235.3 L28.9 237.0 L30.3 244.8 L38.3 245.8 L41.1 250.0 L46.0 254.4 L50.6 255.1 L54.7 257.6 L54.8 260.3 L59.6 259.5 L63.8 262.6 L61.9 268.2 L64.8 272.9 L71.9 281.1 L68.3 286.8 L65.3 290.5 L63.8 293.8 L61.4 298.5 L60.2 303.8 L50.8 312.0 L54.5 318.8 L62.5 326.5 L67.8 328.2 L68.5 334.3 L68.1 337.9 L69.0 341.6 L69.4 343.3 L73.9 343.4 L76.2 351.2 L78.9 361.7 L83.4 364.2 L86.3 364.8 L85.8 372.2 L87.1 377.5 L90.5 386.4 L96.9 389.8 L102.6 394.7 L103.8 400.5 L105.9 404.6 L112.9 406.1 L118.3 407.5 L120.4 403.9 L132.2 407.0 L138.5 413.8 L142.9 416.6 L142.5 423.3 L146.5 426.0 L149.7 426.9 L154.5 433.3 L156.9 438.7 L163.0 444.4 L164.3 452.4 L173.2 456.8 L180.1 456.5 L189.9 466.7 L195.1 471.7 L196.3 476.8 L196.9 481.6 L196.9 486.2 L207.2 493.3 L211.7 495.5 L211.9 489.9 L218.0 489.9 L220.0 490.0 L223.5 491.2 L225.7 496.0 L228.9 494.4 L229.6 499.2 L234.6 507.4 L237.3 509.6 L243.9 508.3 L248.6 520.1 L252.9 523.6 L254.2 532.0 L259.4 534.0 L260.2 534.2 L278.1 546.0 L291.3 558.7 L288.9 569.3 L302.0 574.1 L331.5 582.7 L338.6 578.6 L347.4 575.0 L347.4 562.3 L354.6 568.8 L370.1 566.8 L376.9 570.9 L384.8 575.0 L386.8 567.2 L389.6 550.1 L399.9 533.0 L413.5 534.2 L423.8 534.6 L421.0 529.0 L424.6 502.6 L427.0 479.5 L439.3 484.0 L450.9 496.9 L468.4 488.0 L473.6 486.8 L485.5 491.2 L497.5 494.9 L506.6 503.8 L528.1 514.3 L541.2 511.5 L563.5 520.8 L591.0 541.2 L623.2 542.0 L635.6 535.1 L647.1 527.3 L657.1 529.0 L667.8 532.2 L673.0 542.4 L684.5 545.2 L702.9 545.6 L705.7 567.6 L710.5 567.3 L712.2 557.8 L717.3 549.9 L721.5 539.7 L727.1 532.6 L730.5 528.1 L732.6 521.9 L741.6 515.5 L748.5 511.6 L757.2 514.0 L764.1 517.3 L768.8 522.2 L772.0 523.5 L778.0 521.0 L780.6 518.5 L782.1 517.5 L790.8 522.9 L792.6 523.7 L797.8 523.0 L797.4 520.9 L803.7 521.5 L807.7 517.7 L815.3 514.3 L820.4 512.3 L828.1 502.9 L830.6 499.7 L842.6 500.5 L846.3 495.1 L847.4 488.6 L850.3 479.1 L858.9 477.4 L866.0 477.8 L872.6 473.6 L875.3 467.5 L879.0 462.3 L880.0 456.4 L878.9 450.6 L881.9 446.1 L881.6 440.8 L884.8 433.6 L883.1 430.9 L885.7 424.9 L889.0 418.9 L897.9 416.5 L906.0 413.3 L918.5 406.1 L920.2 402.9 L921.4 393.4 L927.0 393.2 L931.3 387.9 L933.5 385.2 L941.9 377.4 L941.6 370.3 L946.6 369.0 L950.0 371.4 L955.8 370.2 L960.7 368.6 L962.0 370.3 L965.3 369.9 L966.6 370.6 L967.9 371.5 L970.3 373.1 L971.7 373.1 L973.4 371.6 L975.1 369.5 L978.2 368.4 L980.2 366.8 L984.3 367.1 L984.7 366.7 L985.7 366.4 L983.9 364.7 L986.5 359.5 L982.8 352.0 L982.0 348.3 L979.1 335.6 L974.1 329.3 L967.0 329.6 L960.0 325.0 L953.1 320.8 L951.2 312.8 L945.4 295.1 L944.9 286.3 L945.6 276.0 L941.2 278.9 L933.1 278.9 L924.5 271.7 L911.3 270.8 L905.0 274.1 L893.7 264.8 L887.5 258.8 L881.3 258.8 L876.7 254.6 L871.2 245.1 L862.7 245.8 L866.6 249.4 L868.7 257.0 L862.5 254.0 L855.1 257.0 L846.3 263.0 L837.4 260.3 L837.3 256.4 L829.6 250.0 L826.1 241.3 L823.4 236.7 L815.5 235.0 L810.4 229.1 L803.8 223.0 L808.4 219.6 L819.4 216.8 L824.3 213.2 L827.4 209.1 L822.4 200.7 L826.3 191.1 L821.8 186.4 L816.4 191.1 L805.0 198.3 L799.6 197.4 L787.6 196.6 L782.8 201.4 L778.4 196.1 L770.3 195.0 L768.0 199.1 L767.9 193.8 L768.9 189.1 L766.7 186.0 L767.8 184.4 L762.0 186.6 L754.4 184.4 L747.0 177.1 L746.8 171.7 L741.9 172.0 L738.0 172.8 L733.8 170.1 L729.9 167.3 L725.3 166.8 L719.6 164.5 L713.5 163.8 L704.5 157.8 L699.6 159.5 L702.0 170.2 L706.0 174.9 L707.9 181.2 L710.4 188.0 L714.8 189.3 L720.1 196.7 L721.4 206.6 L716.4 208.2 L711.8 204.4 L711.0 208.3 L703.4 208.0 L701.0 209.5 L698.4 213.9 L693.0 213.7 L690.3 215.5 L688.2 220.4 L685.8 225.3 L680.5 227.8 L674.6 236.5 L664.6 233.0 L660.1 227.7 L657.1 223.6 L653.9 217.7 L653.2 212.2 L650.1 204.9 L645.9 200.1 L640.3 194.7 L634.9 185.2 L630.5 186.6 L625.8 176.4 L620.8 173.0 L615.2 173.6 L611.3 172.8 L608.4 169.0 L606.6 165.5 L603.0 165.8 L600.9 161.3 L603.9 156.9 L605.7 158.9 L604.9 154.8 L606.6 153.6 L608.9 152.8 L610.1 150.6 L611.7 149.5 L616.1 148.1 L617.4 145.9 L622.9 146.4 L626.6 142.3 L630.7 139.3 L632.0 135.4 L631.1 131.4 L633.8 130.2 L634.8 123.4 L629.6 119.4 L627.5 115.5 L624.9 112.6 L623.3 112.5 L619.4 108.5 L616.7 110.0 L613.0 108.3 L609.7 108.2 L604.7 111.4 L603.8 116.0 L600.1 117.2 L598.4 115.5 L594.0 111.6 L590.8 109.8 L587.1 109.3 L585.5 111.7 L580.5 121.3 L575.9 123.9 L573.8 122.5 L571.4 118.7 L573.8 115.6 L573.3 111.4 L571.2 106.5 L567.3 102.8 L561.6 105.4 L556.2 106.5 L552.3 106.7 L551.2 99.6 L548.1 91.5 L542.1 89.3 L538.0 91.4 L532.4 92.4 L526.7 89.0 L516.9 84.6 L508.8 83.7 L503.7 83.3 L497.4 80.9 L491.6 76.7 L484.7 83.8 L480.9 78.3 L481.2 72.5 L473.2 65.5 L466.4 49.3 L469.9 43.8 L467.8 38.5 L462.3 34.5 L455.3 37.7 L452.8 29.4 L447.1 34.2 L442.4 35.1 L442.8 31.4 L436.1 30.9 L431.9 28.8 L427.9 31.0 L423.0 36.0 L428.3 36.8 L429.7 42.0 L426.0 51.2 L428.7 54.4 L426.7 57.4 L426.0 63.2 L413.4 61.3 L408.4 60.9 L403.1 62.2 L402.2 63.3 L399.5 68.3 L397.1 73.4 L391.1 71.8 L385.6 69.9 L379.6 68.0 L372.2 64.4 L375.9 49.6 L363.5 51.4 L368.8 42.3 L364.6 31.9 L361.3 30.5 L355.7 24.0 L353.5 28.7 L347.7 26.2 L338.4 27.9 L334.9 23.5 L327.8 21.4 Z" fill="url(#czg)"/>
+          <path d="M327.8 21.4 L324.3 24.7 L323.8 27.2 L320.5 31.9 L320.3 36.7 L326.9 37.9 L330.3 39.9 L326.2 41.5 L327.7 43.9 L331.9 45.1 L338.4 46.9 L340.6 51.0 L338.9 55.2 L333.2 56.3 L327.8 58.7 L322.0 56.9 L316.6 58.8 L315.5 65.3 L311.4 67.5 L303.0 69.9 L294.2 73.8 L289.1 76.0 L286.0 76.6 L280.9 74.5 L276.0 77.8 L271.8 80.7 L268.0 82.0 L267.8 89.8 L262.2 91.9 L256.8 95.2 L248.9 93.1 L243.9 93.8 L241.0 97.2 L233.7 93.9 L228.5 97.3 L218.2 97.8 L216.6 103.4 L214.9 108.3 L213.7 112.2 L209.3 116.4 L197.4 119.5 L191.6 111.8 L189.8 119.3 L184.3 127.8 L178.5 125.1 L171.5 127.8 L170.2 131.9 L170.1 135.8 L165.7 142.5 L160.4 144.0 L157.5 143.3 L152.2 145.6 L144.4 143.8 L140.6 151.2 L137.6 160.5 L130.7 165.1 L130.4 168.1 L128.5 165.6 L123.5 163.4 L111.6 155.0 L110.3 161.8 L99.2 160.9 L95.6 166.4 L94.5 168.7 L87.3 166.4 L80.3 166.5 L72.1 168.3 L63.5 174.7 L63.1 179.8 L56.9 180.6 L50.7 186.1 L50.3 192.3 L43.5 200.3 L43.8 204.2 L41.3 208.8 L40.2 211.5 L40.0 217.2 L39.2 219.7 L33.2 214.3 L33.9 211.0 L33.4 207.2 L29.0 201.0 L30.1 198.5 L22.2 189.5 L9.8 187.4 L7.5 186.7 L10.4 192.1 L12.9 196.3 L7.3 200.1 L8.0 203.7 L14.1 205.9 L16.1 210.6 L19.2 212.9 L20.4 214.7 L22.5 220.2 L23.0 222.1 L21.7 230.7 L25.4 235.3 L28.9 237.0 L30.3 244.8 L38.3 245.8 L41.1 250.0 L46.0 254.4 L50.6 255.1 L54.7 257.6 L54.8 260.3 L59.6 259.5 L63.8 262.6 L61.9 268.2 L64.8 272.9 L71.9 281.1 L68.3 286.8 L65.3 290.5 L63.8 293.8 L61.4 298.5 L60.2 303.8 L50.8 312.0 L54.5 318.8 L62.5 326.5 L67.8 328.2 L68.5 334.3 L68.1 337.9 L69.0 341.6 L69.4 343.3 L73.9 343.4 L76.2 351.2 L78.9 361.7 L83.4 364.2 L86.3 364.8 L85.8 372.2 L87.1 377.5 L90.5 386.4 L96.9 389.8 L102.6 394.7 L103.8 400.5 L105.9 404.6 L112.9 406.1 L118.3 407.5 L120.4 403.9 L132.2 407.0 L138.5 413.8 L142.9 416.6 L142.5 423.3 L146.5 426.0 L149.7 426.9 L154.5 433.3 L156.9 438.7 L163.0 444.4 L164.3 452.4 L173.2 456.8 L180.1 456.5 L189.9 466.7 L195.1 471.7 L196.3 476.8 L196.9 481.6 L196.9 486.2 L207.2 493.3 L211.7 495.5 L211.9 489.9 L218.0 489.9 L220.0 490.0 L223.5 491.2 L225.7 496.0 L228.9 494.4 L229.6 499.2 L234.6 507.4 L237.3 509.6 L243.9 508.3 L248.6 520.1 L252.9 523.6 L254.2 532.0 L259.4 534.0 L260.2 534.2 L278.1 546.0 L291.3 558.7 L288.9 569.3 L302.0 574.1 L331.5 582.7 L338.6 578.6 L347.4 575.0 L347.4 562.3 L354.6 568.8 L370.1 566.8 L376.9 570.9 L384.8 575.0 L386.8 567.2 L389.6 550.1 L399.9 533.0 L413.5 534.2 L423.8 534.6 L421.0 529.0 L424.6 502.6 L427.0 479.5 L439.3 484.0 L450.9 496.9 L468.4 488.0 L473.6 486.8 L485.5 491.2 L497.5 494.9 L506.6 503.8 L528.1 514.3 L541.2 511.5 L563.5 520.8 L591.0 541.2 L623.2 542.0 L635.6 535.1 L647.1 527.3 L657.1 529.0 L667.8 532.2 L673.0 542.4 L684.5 545.2 L702.9 545.6 L705.7 567.6 L710.5 567.3 L712.2 557.8 L717.3 549.9 L721.5 539.7 L727.1 532.6 L730.5 528.1 L732.6 521.9 L741.6 515.5 L748.5 511.6 L757.2 514.0 L764.1 517.3 L768.8 522.2 L772.0 523.5 L778.0 521.0 L780.6 518.5 L782.1 517.5 L790.8 522.9 L792.6 523.7 L797.8 523.0 L797.4 520.9 L803.7 521.5 L807.7 517.7 L815.3 514.3 L820.4 512.3 L828.1 502.9 L830.6 499.7 L842.6 500.5 L846.3 495.1 L847.4 488.6 L850.3 479.1 L858.9 477.4 L866.0 477.8 L872.6 473.6 L875.3 467.5 L879.0 462.3 L880.0 456.4 L878.9 450.6 L881.9 446.1 L881.6 440.8 L884.8 433.6 L883.1 430.9 L885.7 424.9 L889.0 418.9 L897.9 416.5 L906.0 413.3 L918.5 406.1 L920.2 402.9 L921.4 393.4 L927.0 393.2 L931.3 387.9 L933.5 385.2 L941.9 377.4 L941.6 370.3 L946.6 369.0 L950.0 371.4 L955.8 370.2 L960.7 368.6 L962.0 370.3 L965.3 369.9 L966.6 370.6 L967.9 371.5 L970.3 373.1 L971.7 373.1 L973.4 371.6 L975.1 369.5 L978.2 368.4 L980.2 366.8 L984.3 367.1 L984.7 366.7 L985.7 366.4 L983.9 364.7 L986.5 359.5 L982.8 352.0 L982.0 348.3 L979.1 335.6 L974.1 329.3 L967.0 329.6 L960.0 325.0 L953.1 320.8 L951.2 312.8 L945.4 295.1 L944.9 286.3 L945.6 276.0 L941.2 278.9 L933.1 278.9 L924.5 271.7 L911.3 270.8 L905.0 274.1 L893.7 264.8 L887.5 258.8 L881.3 258.8 L876.7 254.6 L871.2 245.1 L862.7 245.8 L866.6 249.4 L868.7 257.0 L862.5 254.0 L855.1 257.0 L846.3 263.0 L837.4 260.3 L837.3 256.4 L829.6 250.0 L826.1 241.3 L823.4 236.7 L815.5 235.0 L810.4 229.1 L803.8 223.0 L808.4 219.6 L819.4 216.8 L824.3 213.2 L827.4 209.1 L822.4 200.7 L826.3 191.1 L821.8 186.4 L816.4 191.1 L805.0 198.3 L799.6 197.4 L787.6 196.6 L782.8 201.4 L778.4 196.1 L770.3 195.0 L768.0 199.1 L767.9 193.8 L768.9 189.1 L766.7 186.0 L767.8 184.4 L762.0 186.6 L754.4 184.4 L747.0 177.1 L746.8 171.7 L741.9 172.0 L738.0 172.8 L733.8 170.1 L729.9 167.3 L725.3 166.8 L719.6 164.5 L713.5 163.8 L704.5 157.8 L699.6 159.5 L702.0 170.2 L706.0 174.9 L707.9 181.2 L710.4 188.0 L714.8 189.3 L720.1 196.7 L721.4 206.6 L716.4 208.2 L711.8 204.4 L711.0 208.3 L703.4 208.0 L701.0 209.5 L698.4 213.9 L693.0 213.7 L690.3 215.5 L688.2 220.4 L685.8 225.3 L680.5 227.8 L674.6 236.5 L664.6 233.0 L660.1 227.7 L657.1 223.6 L653.9 217.7 L653.2 212.2 L650.1 204.9 L645.9 200.1 L640.3 194.7 L634.9 185.2 L630.5 186.6 L625.8 176.4 L620.8 173.0 L615.2 173.6 L611.3 172.8 L608.4 169.0 L606.6 165.5 L603.0 165.8 L600.9 161.3 L603.9 156.9 L605.7 158.9 L604.9 154.8 L606.6 153.6 L608.9 152.8 L610.1 150.6 L611.7 149.5 L616.1 148.1 L617.4 145.9 L622.9 146.4 L626.6 142.3 L630.7 139.3 L632.0 135.4 L631.1 131.4 L633.8 130.2 L634.8 123.4 L629.6 119.4 L627.5 115.5 L624.9 112.6 L623.3 112.5 L619.4 108.5 L616.7 110.0 L613.0 108.3 L609.7 108.2 L604.7 111.4 L603.8 116.0 L600.1 117.2 L598.4 115.5 L594.0 111.6 L590.8 109.8 L587.1 109.3 L585.5 111.7 L580.5 121.3 L575.9 123.9 L573.8 122.5 L571.4 118.7 L573.8 115.6 L573.3 111.4 L571.2 106.5 L567.3 102.8 L561.6 105.4 L556.2 106.5 L552.3 106.7 L551.2 99.6 L548.1 91.5 L542.1 89.3 L538.0 91.4 L532.4 92.4 L526.7 89.0 L516.9 84.6 L508.8 83.7 L503.7 83.3 L497.4 80.9 L491.6 76.7 L484.7 83.8 L480.9 78.3 L481.2 72.5 L473.2 65.5 L466.4 49.3 L469.9 43.8 L467.8 38.5 L462.3 34.5 L455.3 37.7 L452.8 29.4 L447.1 34.2 L442.4 35.1 L442.8 31.4 L436.1 30.9 L431.9 28.8 L427.9 31.0 L423.0 36.0 L428.3 36.8 L429.7 42.0 L426.0 51.2 L428.7 54.4 L426.7 57.4 L426.0 63.2 L413.4 61.3 L408.4 60.9 L403.1 62.2 L402.2 63.3 L399.5 68.3 L397.1 73.4 L391.1 71.8 L385.6 69.9 L379.6 68.0 L372.2 64.4 L375.9 49.6 L363.5 51.4 L368.8 42.3 L364.6 31.9 L361.3 30.5 L355.7 24.0 L353.5 28.7 L347.7 26.2 L338.4 27.9 L334.9 23.5 L327.8 21.4 Z" fill="url(#czdots)"/>
+          <path d="M327.8 21.4 L324.3 24.7 L323.8 27.2 L320.5 31.9 L320.3 36.7 L326.9 37.9 L330.3 39.9 L326.2 41.5 L327.7 43.9 L331.9 45.1 L338.4 46.9 L340.6 51.0 L338.9 55.2 L333.2 56.3 L327.8 58.7 L322.0 56.9 L316.6 58.8 L315.5 65.3 L311.4 67.5 L303.0 69.9 L294.2 73.8 L289.1 76.0 L286.0 76.6 L280.9 74.5 L276.0 77.8 L271.8 80.7 L268.0 82.0 L267.8 89.8 L262.2 91.9 L256.8 95.2 L248.9 93.1 L243.9 93.8 L241.0 97.2 L233.7 93.9 L228.5 97.3 L218.2 97.8 L216.6 103.4 L214.9 108.3 L213.7 112.2 L209.3 116.4 L197.4 119.5 L191.6 111.8 L189.8 119.3 L184.3 127.8 L178.5 125.1 L171.5 127.8 L170.2 131.9 L170.1 135.8 L165.7 142.5 L160.4 144.0 L157.5 143.3 L152.2 145.6 L144.4 143.8 L140.6 151.2 L137.6 160.5 L130.7 165.1 L130.4 168.1 L128.5 165.6 L123.5 163.4 L111.6 155.0 L110.3 161.8 L99.2 160.9 L95.6 166.4 L94.5 168.7 L87.3 166.4 L80.3 166.5 L72.1 168.3 L63.5 174.7 L63.1 179.8 L56.9 180.6 L50.7 186.1 L50.3 192.3 L43.5 200.3 L43.8 204.2 L41.3 208.8 L40.2 211.5 L40.0 217.2 L39.2 219.7 L33.2 214.3 L33.9 211.0 L33.4 207.2 L29.0 201.0 L30.1 198.5 L22.2 189.5 L9.8 187.4 L7.5 186.7 L10.4 192.1 L12.9 196.3 L7.3 200.1 L8.0 203.7 L14.1 205.9 L16.1 210.6 L19.2 212.9 L20.4 214.7 L22.5 220.2 L23.0 222.1 L21.7 230.7 L25.4 235.3 L28.9 237.0 L30.3 244.8 L38.3 245.8 L41.1 250.0 L46.0 254.4 L50.6 255.1 L54.7 257.6 L54.8 260.3 L59.6 259.5 L63.8 262.6 L61.9 268.2 L64.8 272.9 L71.9 281.1 L68.3 286.8 L65.3 290.5 L63.8 293.8 L61.4 298.5 L60.2 303.8 L50.8 312.0 L54.5 318.8 L62.5 326.5 L67.8 328.2 L68.5 334.3 L68.1 337.9 L69.0 341.6 L69.4 343.3 L73.9 343.4 L76.2 351.2 L78.9 361.7 L83.4 364.2 L86.3 364.8 L85.8 372.2 L87.1 377.5 L90.5 386.4 L96.9 389.8 L102.6 394.7 L103.8 400.5 L105.9 404.6 L112.9 406.1 L118.3 407.5 L120.4 403.9 L132.2 407.0 L138.5 413.8 L142.9 416.6 L142.5 423.3 L146.5 426.0 L149.7 426.9 L154.5 433.3 L156.9 438.7 L163.0 444.4 L164.3 452.4 L173.2 456.8 L180.1 456.5 L189.9 466.7 L195.1 471.7 L196.3 476.8 L196.9 481.6 L196.9 486.2 L207.2 493.3 L211.7 495.5 L211.9 489.9 L218.0 489.9 L220.0 490.0 L223.5 491.2 L225.7 496.0 L228.9 494.4 L229.6 499.2 L234.6 507.4 L237.3 509.6 L243.9 508.3 L248.6 520.1 L252.9 523.6 L254.2 532.0 L259.4 534.0 L260.2 534.2 L278.1 546.0 L291.3 558.7 L288.9 569.3 L302.0 574.1 L331.5 582.7 L338.6 578.6 L347.4 575.0 L347.4 562.3 L354.6 568.8 L370.1 566.8 L376.9 570.9 L384.8 575.0 L386.8 567.2 L389.6 550.1 L399.9 533.0 L413.5 534.2 L423.8 534.6 L421.0 529.0 L424.6 502.6 L427.0 479.5 L439.3 484.0 L450.9 496.9 L468.4 488.0 L473.6 486.8 L485.5 491.2 L497.5 494.9 L506.6 503.8 L528.1 514.3 L541.2 511.5 L563.5 520.8 L591.0 541.2 L623.2 542.0 L635.6 535.1 L647.1 527.3 L657.1 529.0 L667.8 532.2 L673.0 542.4 L684.5 545.2 L702.9 545.6 L705.7 567.6 L710.5 567.3 L712.2 557.8 L717.3 549.9 L721.5 539.7 L727.1 532.6 L730.5 528.1 L732.6 521.9 L741.6 515.5 L748.5 511.6 L757.2 514.0 L764.1 517.3 L768.8 522.2 L772.0 523.5 L778.0 521.0 L780.6 518.5 L782.1 517.5 L790.8 522.9 L792.6 523.7 L797.8 523.0 L797.4 520.9 L803.7 521.5 L807.7 517.7 L815.3 514.3 L820.4 512.3 L828.1 502.9 L830.6 499.7 L842.6 500.5 L846.3 495.1 L847.4 488.6 L850.3 479.1 L858.9 477.4 L866.0 477.8 L872.6 473.6 L875.3 467.5 L879.0 462.3 L880.0 456.4 L878.9 450.6 L881.9 446.1 L881.6 440.8 L884.8 433.6 L883.1 430.9 L885.7 424.9 L889.0 418.9 L897.9 416.5 L906.0 413.3 L918.5 406.1 L920.2 402.9 L921.4 393.4 L927.0 393.2 L931.3 387.9 L933.5 385.2 L941.9 377.4 L941.6 370.3 L946.6 369.0 L950.0 371.4 L955.8 370.2 L960.7 368.6 L962.0 370.3 L965.3 369.9 L966.6 370.6 L967.9 371.5 L970.3 373.1 L971.7 373.1 L973.4 371.6 L975.1 369.5 L978.2 368.4 L980.2 366.8 L984.3 367.1 L984.7 366.7 L985.7 366.4 L983.9 364.7 L986.5 359.5 L982.8 352.0 L982.0 348.3 L979.1 335.6 L974.1 329.3 L967.0 329.6 L960.0 325.0 L953.1 320.8 L951.2 312.8 L945.4 295.1 L944.9 286.3 L945.6 276.0 L941.2 278.9 L933.1 278.9 L924.5 271.7 L911.3 270.8 L905.0 274.1 L893.7 264.8 L887.5 258.8 L881.3 258.8 L876.7 254.6 L871.2 245.1 L862.7 245.8 L866.6 249.4 L868.7 257.0 L862.5 254.0 L855.1 257.0 L846.3 263.0 L837.4 260.3 L837.3 256.4 L829.6 250.0 L826.1 241.3 L823.4 236.7 L815.5 235.0 L810.4 229.1 L803.8 223.0 L808.4 219.6 L819.4 216.8 L824.3 213.2 L827.4 209.1 L822.4 200.7 L826.3 191.1 L821.8 186.4 L816.4 191.1 L805.0 198.3 L799.6 197.4 L787.6 196.6 L782.8 201.4 L778.4 196.1 L770.3 195.0 L768.0 199.1 L767.9 193.8 L768.9 189.1 L766.7 186.0 L767.8 184.4 L762.0 186.6 L754.4 184.4 L747.0 177.1 L746.8 171.7 L741.9 172.0 L738.0 172.8 L733.8 170.1 L729.9 167.3 L725.3 166.8 L719.6 164.5 L713.5 163.8 L704.5 157.8 L699.6 159.5 L702.0 170.2 L706.0 174.9 L707.9 181.2 L710.4 188.0 L714.8 189.3 L720.1 196.7 L721.4 206.6 L716.4 208.2 L711.8 204.4 L711.0 208.3 L703.4 208.0 L701.0 209.5 L698.4 213.9 L693.0 213.7 L690.3 215.5 L688.2 220.4 L685.8 225.3 L680.5 227.8 L674.6 236.5 L664.6 233.0 L660.1 227.7 L657.1 223.6 L653.9 217.7 L653.2 212.2 L650.1 204.9 L645.9 200.1 L640.3 194.7 L634.9 185.2 L630.5 186.6 L625.8 176.4 L620.8 173.0 L615.2 173.6 L611.3 172.8 L608.4 169.0 L606.6 165.5 L603.0 165.8 L600.9 161.3 L603.9 156.9 L605.7 158.9 L604.9 154.8 L606.6 153.6 L608.9 152.8 L610.1 150.6 L611.7 149.5 L616.1 148.1 L617.4 145.9 L622.9 146.4 L626.6 142.3 L630.7 139.3 L632.0 135.4 L631.1 131.4 L633.8 130.2 L634.8 123.4 L629.6 119.4 L627.5 115.5 L624.9 112.6 L623.3 112.5 L619.4 108.5 L616.7 110.0 L613.0 108.3 L609.7 108.2 L604.7 111.4 L603.8 116.0 L600.1 117.2 L598.4 115.5 L594.0 111.6 L590.8 109.8 L587.1 109.3 L585.5 111.7 L580.5 121.3 L575.9 123.9 L573.8 122.5 L571.4 118.7 L573.8 115.6 L573.3 111.4 L571.2 106.5 L567.3 102.8 L561.6 105.4 L556.2 106.5 L552.3 106.7 L551.2 99.6 L548.1 91.5 L542.1 89.3 L538.0 91.4 L532.4 92.4 L526.7 89.0 L516.9 84.6 L508.8 83.7 L503.7 83.3 L497.4 80.9 L491.6 76.7 L484.7 83.8 L480.9 78.3 L481.2 72.5 L473.2 65.5 L466.4 49.3 L469.9 43.8 L467.8 38.5 L462.3 34.5 L455.3 37.7 L452.8 29.4 L447.1 34.2 L442.4 35.1 L442.8 31.4 L436.1 30.9 L431.9 28.8 L427.9 31.0 L423.0 36.0 L428.3 36.8 L429.7 42.0 L426.0 51.2 L428.7 54.4 L426.7 57.4 L426.0 63.2 L413.4 61.3 L408.4 60.9 L403.1 62.2 L402.2 63.3 L399.5 68.3 L397.1 73.4 L391.1 71.8 L385.6 69.9 L379.6 68.0 L372.2 64.4 L375.9 49.6 L363.5 51.4 L368.8 42.3 L364.6 31.9 L361.3 30.5 L355.7 24.0 L353.5 28.7 L347.7 26.2 L338.4 27.9 L334.9 23.5 L327.8 21.4 Z" fill="url(#czr)"/>
+          <g clip-path="url(#czclip)"><rect id="cz-sweep" x="-300" y="0" width="220" height="595" fill="url(#czsw)"/></g>
+          <linearGradient id="czsw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4fd1ff" stop-opacity="0"/><stop offset=".5" stop-color="#4fd1ff" stop-opacity=".22"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></linearGradient>
+          <path id="cz-border" d="M327.8 21.4 L324.3 24.7 L323.8 27.2 L320.5 31.9 L320.3 36.7 L326.9 37.9 L330.3 39.9 L326.2 41.5 L327.7 43.9 L331.9 45.1 L338.4 46.9 L340.6 51.0 L338.9 55.2 L333.2 56.3 L327.8 58.7 L322.0 56.9 L316.6 58.8 L315.5 65.3 L311.4 67.5 L303.0 69.9 L294.2 73.8 L289.1 76.0 L286.0 76.6 L280.9 74.5 L276.0 77.8 L271.8 80.7 L268.0 82.0 L267.8 89.8 L262.2 91.9 L256.8 95.2 L248.9 93.1 L243.9 93.8 L241.0 97.2 L233.7 93.9 L228.5 97.3 L218.2 97.8 L216.6 103.4 L214.9 108.3 L213.7 112.2 L209.3 116.4 L197.4 119.5 L191.6 111.8 L189.8 119.3 L184.3 127.8 L178.5 125.1 L171.5 127.8 L170.2 131.9 L170.1 135.8 L165.7 142.5 L160.4 144.0 L157.5 143.3 L152.2 145.6 L144.4 143.8 L140.6 151.2 L137.6 160.5 L130.7 165.1 L130.4 168.1 L128.5 165.6 L123.5 163.4 L111.6 155.0 L110.3 161.8 L99.2 160.9 L95.6 166.4 L94.5 168.7 L87.3 166.4 L80.3 166.5 L72.1 168.3 L63.5 174.7 L63.1 179.8 L56.9 180.6 L50.7 186.1 L50.3 192.3 L43.5 200.3 L43.8 204.2 L41.3 208.8 L40.2 211.5 L40.0 217.2 L39.2 219.7 L33.2 214.3 L33.9 211.0 L33.4 207.2 L29.0 201.0 L30.1 198.5 L22.2 189.5 L9.8 187.4 L7.5 186.7 L10.4 192.1 L12.9 196.3 L7.3 200.1 L8.0 203.7 L14.1 205.9 L16.1 210.6 L19.2 212.9 L20.4 214.7 L22.5 220.2 L23.0 222.1 L21.7 230.7 L25.4 235.3 L28.9 237.0 L30.3 244.8 L38.3 245.8 L41.1 250.0 L46.0 254.4 L50.6 255.1 L54.7 257.6 L54.8 260.3 L59.6 259.5 L63.8 262.6 L61.9 268.2 L64.8 272.9 L71.9 281.1 L68.3 286.8 L65.3 290.5 L63.8 293.8 L61.4 298.5 L60.2 303.8 L50.8 312.0 L54.5 318.8 L62.5 326.5 L67.8 328.2 L68.5 334.3 L68.1 337.9 L69.0 341.6 L69.4 343.3 L73.9 343.4 L76.2 351.2 L78.9 361.7 L83.4 364.2 L86.3 364.8 L85.8 372.2 L87.1 377.5 L90.5 386.4 L96.9 389.8 L102.6 394.7 L103.8 400.5 L105.9 404.6 L112.9 406.1 L118.3 407.5 L120.4 403.9 L132.2 407.0 L138.5 413.8 L142.9 416.6 L142.5 423.3 L146.5 426.0 L149.7 426.9 L154.5 433.3 L156.9 438.7 L163.0 444.4 L164.3 452.4 L173.2 456.8 L180.1 456.5 L189.9 466.7 L195.1 471.7 L196.3 476.8 L196.9 481.6 L196.9 486.2 L207.2 493.3 L211.7 495.5 L211.9 489.9 L218.0 489.9 L220.0 490.0 L223.5 491.2 L225.7 496.0 L228.9 494.4 L229.6 499.2 L234.6 507.4 L237.3 509.6 L243.9 508.3 L248.6 520.1 L252.9 523.6 L254.2 532.0 L259.4 534.0 L260.2 534.2 L278.1 546.0 L291.3 558.7 L288.9 569.3 L302.0 574.1 L331.5 582.7 L338.6 578.6 L347.4 575.0 L347.4 562.3 L354.6 568.8 L370.1 566.8 L376.9 570.9 L384.8 575.0 L386.8 567.2 L389.6 550.1 L399.9 533.0 L413.5 534.2 L423.8 534.6 L421.0 529.0 L424.6 502.6 L427.0 479.5 L439.3 484.0 L450.9 496.9 L468.4 488.0 L473.6 486.8 L485.5 491.2 L497.5 494.9 L506.6 503.8 L528.1 514.3 L541.2 511.5 L563.5 520.8 L591.0 541.2 L623.2 542.0 L635.6 535.1 L647.1 527.3 L657.1 529.0 L667.8 532.2 L673.0 542.4 L684.5 545.2 L702.9 545.6 L705.7 567.6 L710.5 567.3 L712.2 557.8 L717.3 549.9 L721.5 539.7 L727.1 532.6 L730.5 528.1 L732.6 521.9 L741.6 515.5 L748.5 511.6 L757.2 514.0 L764.1 517.3 L768.8 522.2 L772.0 523.5 L778.0 521.0 L780.6 518.5 L782.1 517.5 L790.8 522.9 L792.6 523.7 L797.8 523.0 L797.4 520.9 L803.7 521.5 L807.7 517.7 L815.3 514.3 L820.4 512.3 L828.1 502.9 L830.6 499.7 L842.6 500.5 L846.3 495.1 L847.4 488.6 L850.3 479.1 L858.9 477.4 L866.0 477.8 L872.6 473.6 L875.3 467.5 L879.0 462.3 L880.0 456.4 L878.9 450.6 L881.9 446.1 L881.6 440.8 L884.8 433.6 L883.1 430.9 L885.7 424.9 L889.0 418.9 L897.9 416.5 L906.0 413.3 L918.5 406.1 L920.2 402.9 L921.4 393.4 L927.0 393.2 L931.3 387.9 L933.5 385.2 L941.9 377.4 L941.6 370.3 L946.6 369.0 L950.0 371.4 L955.8 370.2 L960.7 368.6 L962.0 370.3 L965.3 369.9 L966.6 370.6 L967.9 371.5 L970.3 373.1 L971.7 373.1 L973.4 371.6 L975.1 369.5 L978.2 368.4 L980.2 366.8 L984.3 367.1 L984.7 366.7 L985.7 366.4 L983.9 364.7 L986.5 359.5 L982.8 352.0 L982.0 348.3 L979.1 335.6 L974.1 329.3 L967.0 329.6 L960.0 325.0 L953.1 320.8 L951.2 312.8 L945.4 295.1 L944.9 286.3 L945.6 276.0 L941.2 278.9 L933.1 278.9 L924.5 271.7 L911.3 270.8 L905.0 274.1 L893.7 264.8 L887.5 258.8 L881.3 258.8 L876.7 254.6 L871.2 245.1 L862.7 245.8 L866.6 249.4 L868.7 257.0 L862.5 254.0 L855.1 257.0 L846.3 263.0 L837.4 260.3 L837.3 256.4 L829.6 250.0 L826.1 241.3 L823.4 236.7 L815.5 235.0 L810.4 229.1 L803.8 223.0 L808.4 219.6 L819.4 216.8 L824.3 213.2 L827.4 209.1 L822.4 200.7 L826.3 191.1 L821.8 186.4 L816.4 191.1 L805.0 198.3 L799.6 197.4 L787.6 196.6 L782.8 201.4 L778.4 196.1 L770.3 195.0 L768.0 199.1 L767.9 193.8 L768.9 189.1 L766.7 186.0 L767.8 184.4 L762.0 186.6 L754.4 184.4 L747.0 177.1 L746.8 171.7 L741.9 172.0 L738.0 172.8 L733.8 170.1 L729.9 167.3 L725.3 166.8 L719.6 164.5 L713.5 163.8 L704.5 157.8 L699.6 159.5 L702.0 170.2 L706.0 174.9 L707.9 181.2 L710.4 188.0 L714.8 189.3 L720.1 196.7 L721.4 206.6 L716.4 208.2 L711.8 204.4 L711.0 208.3 L703.4 208.0 L701.0 209.5 L698.4 213.9 L693.0 213.7 L690.3 215.5 L688.2 220.4 L685.8 225.3 L680.5 227.8 L674.6 236.5 L664.6 233.0 L660.1 227.7 L657.1 223.6 L653.9 217.7 L653.2 212.2 L650.1 204.9 L645.9 200.1 L640.3 194.7 L634.9 185.2 L630.5 186.6 L625.8 176.4 L620.8 173.0 L615.2 173.6 L611.3 172.8 L608.4 169.0 L606.6 165.5 L603.0 165.8 L600.9 161.3 L603.9 156.9 L605.7 158.9 L604.9 154.8 L606.6 153.6 L608.9 152.8 L610.1 150.6 L611.7 149.5 L616.1 148.1 L617.4 145.9 L622.9 146.4 L626.6 142.3 L630.7 139.3 L632.0 135.4 L631.1 131.4 L633.8 130.2 L634.8 123.4 L629.6 119.4 L627.5 115.5 L624.9 112.6 L623.3 112.5 L619.4 108.5 L616.7 110.0 L613.0 108.3 L609.7 108.2 L604.7 111.4 L603.8 116.0 L600.1 117.2 L598.4 115.5 L594.0 111.6 L590.8 109.8 L587.1 109.3 L585.5 111.7 L580.5 121.3 L575.9 123.9 L573.8 122.5 L571.4 118.7 L573.8 115.6 L573.3 111.4 L571.2 106.5 L567.3 102.8 L561.6 105.4 L556.2 106.5 L552.3 106.7 L551.2 99.6 L548.1 91.5 L542.1 89.3 L538.0 91.4 L532.4 92.4 L526.7 89.0 L516.9 84.6 L508.8 83.7 L503.7 83.3 L497.4 80.9 L491.6 76.7 L484.7 83.8 L480.9 78.3 L481.2 72.5 L473.2 65.5 L466.4 49.3 L469.9 43.8 L467.8 38.5 L462.3 34.5 L455.3 37.7 L452.8 29.4 L447.1 34.2 L442.4 35.1 L442.8 31.4 L436.1 30.9 L431.9 28.8 L427.9 31.0 L423.0 36.0 L428.3 36.8 L429.7 42.0 L426.0 51.2 L428.7 54.4 L426.7 57.4 L426.0 63.2 L413.4 61.3 L408.4 60.9 L403.1 62.2 L402.2 63.3 L399.5 68.3 L397.1 73.4 L391.1 71.8 L385.6 69.9 L379.6 68.0 L372.2 64.4 L375.9 49.6 L363.5 51.4 L368.8 42.3 L364.6 31.9 L361.3 30.5 L355.7 24.0 L353.5 28.7 L347.7 26.2 L338.4 27.9 L334.9 23.5 L327.8 21.4 Z" fill="none" stroke="rgba(79,209,255,.95)" stroke-width="2.2" stroke-linejoin="round" filter="url(#czglow)" pathLength="1000"/>
+        </svg>
+        <div class="cz-pins" id="cz-pins"></div>
+      </div>
+      <div class="cz-cap"><span class="cz-cap-k">Kapacita České republiky</span><b>850 – 1 000</b><span>prádlomatů · tohle je začátek</span></div>
+      <div class="cz-tl">
+        <div class="cz-year"><b id="cz-year">2019</b><span id="cz-count">0 prádlomatů</span></div>
+        <div class="cz-track" id="cz-track"></div>
+        <button type="button" class="btn sec sm" id="cz-again">↻ Přehrát znovu</button>
+      </div>
+    </div>
+  </section>
+  <section class="sec" id="rovnice">
+    <h2>Od 24. 9. 2026 umí prádlomat konečně financovat bankovní domy</h2>
+    <p class="lead" style="margin:0 0 16px">Bankovní domy dokážou prádlomat zainvestovat a stroj je zároveň zajištěním – prádlomat si ručí sám. Proto platí jedna matematická podmínka: prádlomat musí stát na takovém místě, kde jeho tržby pokryjí nájem, energie, servis i splátku úvěru.</p>
+    <div class="eq-wrap">
+      <div class="eq-title"><span class="eq-title-k">Název rovnice</span><b>Rovnice, která z Vás udělá miliardáře</b></div>
+      <div class="eq" id="eq">
+        <div class="eq-g g1"><span class="eq-gk"><span class="lg">M · dramaticky ovlivňuje místo</span><span class="sm">M · místo</span></span><span class="eq-star"><span class="lg">★ 2 nejdůležitější položky</span><span class="sm">★ nejdůležitější</span></span><div class="eq-gi">
+          <div class="eq-t rev" data-i="0"><span class="eq-k">tržby</span><b>T</b><small>tržby za měsíc</small></div>
+          <div class="eq-op">−</div>
+          <div class="eq-t unk" data-i="1"><span class="eq-k">nájem</span><b>N</b><small>podle místa</small></div>
+        </div></div>
+        <div class="eq-op">−</div>
+        <div class="eq-g g2"><span class="eq-gk"><span class="lg">přímo úměrné počtu zákazníků</span><span class="sm">zákazníci</span></span><div class="eq-gi">
+          <div class="eq-t unk" data-i="2"><span class="eq-k">energie</span><b>E</b><small>na cyklus</small></div>
+          <div class="eq-op">−</div>
+          <div class="eq-t unk" data-i="3"><span class="eq-k">servis</span><b>S</b><small>podle smlouvy</small></div>
+        </div></div>
+        <div class="eq-op">−</div>
+        <div class="eq-g g3"><span class="eq-gk"><span class="lg">dáno výší splátky</span><span class="sm">splátka</span></span><div class="eq-gi">
+          <div class="eq-t unk" data-i="4"><span class="eq-k">úvěr</span><b>U</b><small>podle financování</small></div>
+        </div></div>
+        <div class="eq-op">=</div>
+        <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small><span class="eq-check" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="rgba(47,227,160,.18)" stroke="#2fe3a0" stroke-width="2.5"/><path d="M14 25l7 7 13-15" fill="none" stroke="#2fe3a0" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/></svg></span></div>
+      </div>
+      <div class="eq-legend">
+        <span class="ok"><i></i>&gt; 0 → použijte financování – prádlomat zaplatí sám sebe</span>
+        <span class="bad"><i></i>&lt; 0 → pozor, místo bude tvořit záporné cash flow</span>
+      </div>
+    </div>
+  </section>
+
+
+
+  <section class="sec">
+    <h2>Co dostanete</h2>
+    <div class="list">
+      <div class="item"><div class="n">1</div><div><b>Přístup do webové aplikace na 12 měsíců</b><span>Jednorázová platba, přístup se automaticky placeně neobnovuje. Funguje v mobilu i na počítači.</span></div></div>
+      <div class="item"><div class="n">2</div><div><b>3 reálné případové studie z naší sítě</b><span>Tři skutečné lokality – dobrá, průměrná a slabá: jak vypadá místo, nájem, počet zákazníků a cykly po 1., 3. a 6. měsíci, a jak dopadla rovnice T − N − E − S − U. Anonymizováno, čísla reálná.</span></div></div>
+      <div class="item"><div class="n">3</div><div><b>Kalkulačka ekonomiky a checklist prověření místa</b><span>Investice, doprava a instalace, nájem, energie a voda podle spotřeby nebo zjednodušeně v %, servis, software, platební poplatky, pojištění, marketing, rezerva na obnovu, financování. Slabý / střední / silný scénář, bod zvratu, citlivost na návštěvnost a nájem. Odděleně provozní výsledek, peněžní tok po splátkách a návratnost. Částky s DPH i bez DPH, režim plátce / neplátce.</span></div></div>
+      <div class="item"><div class="n">4</div><div><b>Orientační vyhodnocení lokality</b><span>Pro každou adresu report se čtyřmi možnými výsledky: <b style="display:inline">Vhodné podle dostupných podkladů</b> · <b style="display:inline">Vhodné při splnění podmínek</b> · <b style="display:inline">Nevhodné podle dostupných podkladů</b> · <b style="display:inline">Nedostatek údajů pro posouzení</b>. Report odděluje ověřené skutečnosti (se zdrojem a datem), údaje zadané vámi, modelové předpoklady, chybějící údaje, hlavní rizika a doporučené další kroky. Údaje, které aplikace nemá z připojeného zdroje, označí jako chybějící a doplníte je ručně.</span></div></div>
+      <div class="item"><div class="n">5</div><div><b>Export výsledků do PDF</b><span>Report i scénáře si stáhnete pro banku, společníka nebo pronajímatele.</span></div></div>
+    </div>
+    <p class="small" style="color:var(--text3);margin-top:10px">Vyhodnocení je automatický orientační výstup z dostupných podkladů, nikoli odborné schválení investice. Rozhodnutí Best Series o prodeji stroje na konkrétní místo je samostatný krok nezávislý na výsledku aplikace.</p>
+  </section>
+
+
+
+  <section class="sec" id="cena">
+    <h2>Cena</h2>
+    <div class="prices">
+      <div class="price hi">
+        <div class="tag">Základ</div>
+        <div class="amt">4 900 <small>Kč s DPH · jednorázově</small></div>
+        <ul><li>Přístup do aplikace na 12 měsíců</li><li>3 reálné případové studie</li><li>Kalkulačka a checklist</li><li>Vyhodnocení 3 různých adres</li><li>Neomezené změny scénářů u těchto adres</li><li>Export výsledků do PDF</li></ul>
+        <a class="btn" href="#objednat" data-cta="basic" onclick="pickVariant('basic')">Vybrat Základ</a>
+      </div>
+      <div class="price">
+        <div class="tag">Plus</div>
+        <div class="amt">9 900 <small>Kč s DPH · jednorázově</small></div>
+        <ul><li>Vše ze Základu</li><li>Celkem 10 různých adres</li><li>Porovnání lokalit vedle sebe</li><li>Jeden 30minutový konzultační hovor</li></ul>
+        <a class="btn sec" href="#objednat" data-cta="plus" onclick="pickVariant('plus')">Vybrat Plus</a>
+      </div>
+      <div class="price">
+        <div class="tag">Premium</div>
+        <div class="amt">15 900 <small>Kč s DPH · jednorázově</small></div>
+        <ul><li>Vše z Plus</li><li>Místní šetření přímo na místě naším technikem na jedné lokalitě</li><li>Zpráva z šetření v aplikaci</li></ul>
+        <a class="btn sec" href="#objednat" data-cta="premium" onclick="pickVariant('premium')">Vybrat Premium</a>
+      </div>
+    </div>
+    <div class="credit"><b>Připravujeme: sleva z následného nákupu prádlomatu.</b> Zvažujeme možnost odečíst cenu balíčku z ceny prádlomatu Best Series při nákupu do 6 měsíců. Přesné podmínky (poskytovatel slevy, kterých strojů se týká, od kdy běží lhůta, slučitelnost s jinými nabídkami, způsob uplatnění a zacházení s DPH) zveřejníme v obchodních podmínkách. Do jejich zveřejnění sleva není součástí nabídky.</div>
+  </section>
+
+  <section class="sec">
+    <h2>Časté otázky</h2>
+    <details><summary>Jak dlouho mám přístup?</summary><p>12 měsíců od aktivace. Platba je jednorázová, přístup se automaticky neobnovuje a nic dalšího vám nestrháváme. Cenu případného prodloužení oznámíme před koncem platnosti.</p></details>
+    <details><summary>Co je „lokalita" a kdy se odečte?</summary><p>Jedna konkrétní adresa. Základ obsahuje 3, Plus a Premium 10. Odečte se až po úspěšném vytvoření prvního reportu dané adresy. Úpravy parametrů stejné adresy jsou neomezené.</p></details>
+    <details><summary>Z jakých dat aplikace vychází?</summary><p>Z podkladů, které zadáte (nájem, prostor, přípojky, vlastní měření frekvence), z modelových předpokladů, které vidíte a můžete změnit, a z ověřených skutečností, u kterých report uvádí zdroj a datum. Údaje, které aplikace nemá z připojeného zdroje (např. počet domácností nebo konkurence), označí jako chybějící a doplníte je ručně. Aplikace neuvádí skóre ani procento pravděpodobnosti úspěchu.</p></details>
+    <details><summary>Je výsledek zárukou, že se místo vyplatí?</summary><p>Ne. Jde o orientační vyhodnocení podle dostupných podkladů a vašich předpokladů, ne o odborné schválení investice ani předpověď výdělku. Slouží jako podklad pro vaše rozhodnutí a jednání s pronajímatelem či bankou.</p></details>
+    <details><summary>Co když má moje místo výsledek „Nevhodné"?</summary><p>Report uvádí, co chybí nebo kde je riziko. Můžete údaje doplnit a vyhodnotit znovu, nebo použít zbývající lokality na jinou adresu. Rozhodnutí Best Series o prodeji stroje je samostatné a na výsledku aplikace nezávisí.</p></details>
+    <details><summary>Jak probíhá objednávka a platba?</summary><p>Vyberete balíček, vyplníte kontakt a zaplatíte kartou přes Stripe (bezpečná platební brána, údaje o kartě k nám nikdy nejdou). Po zaplacení vám do jednoho pracovního dne aktivujeme přístup do aplikace na 12 měsíců a pošleme doklad e-mailem. Pokud online platba není zrovna dostupná, přijmeme žádost a pošleme platební údaje e-mailem.</p></details>
+    <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
+  </section>
+
+  <section class="sec" id="objednat">
+    <h2>Získat aplikaci</h2>
+    <p class="lead" style="margin:0 0 16px" id="order-lead">Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace. Adresu místa zadáte až v aplikaci.</p>
+    <form id="f" novalidate>
+      <label>Jméno a příjmení *<input name="name" required maxlength="255" autocomplete="name" /></label>
+      <label>E-mail *<input name="email" type="email" required maxlength="255" autocomplete="email" /></label>
+      <label>Telefon<input name="phone" maxlength="40" autocomplete="tel" /></label>
+      <label>Balíček *<select name="variant" id="variant"><option value="basic">Základ – 4 900 Kč s DPH (3 lokality)</option><option value="plus">Plus – 9 900 Kč s DPH (10 lokalit + hovor)</option><option value="premium">Premium – 15 900 Kč s DPH (Plus + místní šetření technikem)</option></select></label>
+      <label class="full">Firma / IČO (nepovinné, pro fakturu)<input name="company" maxlength="255" /></label>
+      <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Souhlasím se zpracováním uvedených údajů společností Best Series s.r.o. (IČO 05643724) za účelem vyřízení této žádosti o objednávku a zpřístupnění aplikace. *</span></label>
+      <label class="chk full"><input type="checkbox" name="marketing" value="1" /><span>Chci dostávat informace o prádlomatech a novinkách Best Series e-mailem (dobrovolné, kdykoli odvolatelné).</span></label>
+      <div class="msg" id="msg"></div>
+      <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
+    </form>
+  </section>
+
+  <div class="foot">Provozovatel: Best Series s.r.o. · IČO 05643724 · <a href="/vop">Obchodní podmínky</a> · <a href="/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení do Best Series 2.0</a></div>
+</main>
+
+<script>
+(function(){var c=document.getElementById('net');if(!c)return;var x=c.getContext('2d'),w,h,P=[],N=70,R=150,dpr=Math.min(2,window.devicePixelRatio||1),mx=-1e4,my=-1e4;function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);N=Math.max(34,Math.min(90,Math.round(w*h/16000)));P=[];for(var i=0;i<N;i++)P.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35,r:Math.random()*1.6+.6})}window.addEventListener('resize',size);size();window.addEventListener('pointermove',function(e){mx=e.clientX;my=e.clientY},{passive:true});var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;function step(){x.clearRect(0,0,w,h);for(var i=0;i<P.length;i++){var p=P[i];if(!reduce){p.x+=p.vx;p.y+=p.vy;var dx=p.x-mx,dy=p.y-my,d=Math.hypot(dx,dy);if(d<140){p.x+=dx/d*.6;p.y+=dy/d*.6}}if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}for(var i=0;i<P.length;i++){for(var j=i+1;j<P.length;j++){var a=P[i],b=P[j],dd=Math.hypot(a.x-b.x,a.y-b.y);if(dd<R){x.globalAlpha=(1-dd/R)*.35;x.strokeStyle='#4fa3ff';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}x.globalAlpha=1;for(var i=0;i<P.length;i++){var p=P[i];x.fillStyle='#8fd0ff';x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill()}if(!reduce)requestAnimationFrame(step)}step();})();
+(function(){
+  // ── Analytika (best-effort, stejný beacon jako ostatní stránky) ──
+  var SID = (function(){ try { var k='misto_sid', v=sessionStorage.getItem(k); if(!v){ v=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem(k,v);} return v; } catch(e){ return 'anon'; } })();
+  function track(ev, props){ /* BS2: bez veřejné analytiky */ }
+  track('misto_view');
+  document.querySelectorAll('[data-cta]').forEach(function(a){ a.addEventListener('click', function(){ track('misto_cta', { cta: a.getAttribute('data-cta') }); }); });
+
+
+  // ── Formulář ──
+  // ── Mapa ČR + časová osa od 2019: FLEX miniatury se objevují podle roku instalace ──
+  (function(){
+    // Zdroj: veřejný seznam prádlomatů v ČR (kdepereme.cz/cs/map), souřadnice na úrovni města.
+    var SPOTS=[{"city":"Aš – Tesco","lat":50.224,"lng":12.195},{"city":"Bítov – Kemp","lat":48.94,"lng":15.72},{"city":"Boskovice – Tesco","lat":49.488,"lng":16.66},{"city":"Břeclav – Tesco","lat":48.759,"lng":16.882},{"city":"Brno – Redbox","lat":49.168,"lng":16.57},{"city":"Čelákovice – OC Tesco","lat":50.16,"lng":14.75},{"city":"České Budějovice – Penny Market","lat":48.975,"lng":14.475},{"city":"Český Krumlov","lat":48.81,"lng":14.315},{"city":"Cheb – Tesco","lat":50.08,"lng":12.37},{"city":"Chotěboř – Tesco","lat":49.72,"lng":15.67},{"city":"Chrudim – Tesco","lat":49.95,"lng":15.795},{"city":"Děčín – Tesco","lat":50.78,"lng":14.21},{"city":"Havlíčkův Brod – COOP TIP","lat":49.607,"lng":15.58},{"city":"Holešov – Tesco","lat":49.333,"lng":17.578},{"city":"Hostivice – OC Tesco","lat":50.08,"lng":14.26},{"city":"Hradec Králové – Billa","lat":50.21,"lng":15.83},{"city":"Ivančice – Tesco","lat":49.1,"lng":16.38},{"city":"Jičín – OC Tesco","lat":50.437,"lng":15.35},{"city":"Jirkov – Tesco","lat":50.5,"lng":13.45},{"city":"Karlovy Vary – OC Fontána","lat":50.225,"lng":12.86},{"city":"Karlovy Vary – OC Varyáda","lat":50.24,"lng":12.88},{"city":"Karviná – Tesco","lat":49.85,"lng":18.54},{"city":"Kladno – Tesco","lat":50.14,"lng":14.1},{"city":"Kolín – OC Tesco","lat":50.03,"lng":15.2},{"city":"Králíky – Penny Market","lat":50.08,"lng":16.76},{"city":"Kroměříž – OC Tesco","lat":49.3,"lng":17.39},{"city":"Luhačovice – Wash-ME","lat":49.1,"lng":17.76},{"city":"Mariánské Lázně – Tesco","lat":49.96,"lng":12.7},{"city":"Mělník – Tesco","lat":50.35,"lng":14.47},{"city":"Mladá Boleslav – OC Tesco","lat":50.41,"lng":14.9},{"city":"Most – OC Tesco","lat":50.5,"lng":13.64},{"city":"Nový Jičín – Kaufland","lat":49.59,"lng":18.01},{"city":"Olomouc – Kemp Krásná Morava","lat":49.61,"lng":17.26},{"city":"Olomouc – Terno","lat":49.57,"lng":17.23},{"city":"Ostrov nad Ohří – Tesco","lat":50.31,"lng":12.94},{"city":"Pardubice – Kaufland","lat":50.04,"lng":15.78},{"city":"Písek – OC Tesco","lat":49.31,"lng":14.15},{"city":"Plzeň – Lidl","lat":49.74,"lng":13.38},{"city":"Poděbrady – OC Tesco","lat":50.14,"lng":15.12},{"city":"Pohořelice – OC Aventin","lat":48.98,"lng":16.52},{"city":"Praha 13 – Stodůlky","lat":50.05,"lng":14.33},{"city":"Praha 9 – WashIN","lat":50.11,"lng":14.5},{"city":"Přelouč – Tesco","lat":50.04,"lng":15.56},{"city":"Přerov – Kaufland","lat":49.45,"lng":17.45},{"city":"Příbram – Nový Rybník","lat":49.69,"lng":14.01},{"city":"Prostějov – OC Tesco","lat":49.47,"lng":17.11},{"city":"Rychnov nad Kněžnou","lat":50.16,"lng":16.28},{"city":"Šternberk","lat":49.73,"lng":17.3},{"city":"Šumperk","lat":49.97,"lng":16.97},{"city":"Sušice – Tesco","lat":49.23,"lng":13.52},{"city":"Svitavy – U Stadionu","lat":49.76,"lng":16.47},{"city":"Tábor – Tesco","lat":49.41,"lng":14.66},{"city":"Uherské Hradiště – Tesco","lat":49.07,"lng":17.46},{"city":"Uherský Brod – Wash-ME","lat":49.03,"lng":17.65},{"city":"Uničov – OC Tesco","lat":49.77,"lng":17.12},{"city":"Ústí nad Orlicí – Tesco","lat":49.97,"lng":16.39},{"city":"Vlašim – OC Tesco","lat":49.7,"lng":14.9},{"city":"Vsetín – Kaufland","lat":49.34,"lng":18.0},{"city":"Žamberk – Penny Market","lat":50.09,"lng":16.47}];
+    var sec=document.getElementById('mapa'); if(!sec) return;
+    sec.hidden=false; init(SPOTS, SPOTS.length);
+    function init(SPOTS,TOTAL){
+    var LON0=12.05,LON1=18.95,LAT0=48.5,LAT1=51.15;
+    var pins=document.getElementById('cz-pins'), yEl=document.getElementById('cz-year'), cEl=document.getElementById('cz-count'), track=document.getElementById('cz-track');
+    var Y0=2019, Y1=new Date().getFullYear(); var years=[]; for(var y=Y0;y<=Y1;y++) years.push(y);
+    track.innerHTML=years.map(function(y){ return '<i data-y="'+y+'"></i>'; }).join('');
+    // Rok instalace SIS neposílá → lokality přibývají na ose rovnoměrně v pořadí seznamu.
+    pins.innerHTML=SPOTS.map(function(p,i){ var x=(p.lng-LON0)/(LON1-LON0)*100, yv=(LAT1-p.lat)/(LAT1-LAT0)*100; var yr=years[Math.min(years.length-1,Math.floor(i/SPOTS.length*years.length))]; return '<div class="cz-pin" data-y="'+yr+'" title="'+(p.city||'').replace(/"/g,'')+'" style="left:'+x.toFixed(2)+'%;top:'+yv.toFixed(2)+'%"><img src="/img/pradlomat.webp?v=2" alt="" loading="lazy"></div>'; }).join('');
+    var pinEls=pins.querySelectorAll('.cz-pin'), timer=null;
+    var mapEl=document.getElementById('czmap');
+    function play(){ if(timer) clearInterval(timer); pinEls.forEach(function(e){ e.classList.remove('in'); }); mapEl.classList.remove('sweep'); mapEl.classList.remove('drawn'); void mapEl.offsetWidth; mapEl.classList.add('drawn'); var i=0;
+      function step(){ var y=years[i]; yEl.textContent=y; track.querySelectorAll('i').forEach(function(t,k){ t.classList.toggle('on',k<=i); t.classList.toggle('now',k===i); });
+        var n=0; pinEls.forEach(function(e){ if(+e.getAttribute('data-y')<=y){ e.classList.add('in'); n++; } }); var fin=(i>=years.length-1); cEl.innerHTML='<b>'+(fin?'70+':n)+'</b> '+(n===1&&!fin?'prádlomat':n<5&&!fin?'prádlomaty':'prádlomatů');
+        i++; if(i>=years.length){ clearInterval(timer); timer=null; setTimeout(function(){ mapEl.classList.add('sweep'); },300); } }
+      setTimeout(step,900); timer=setInterval(step,1100); }
+    document.getElementById('cz-again').addEventListener('click',play);
+    var started=false; var io=new IntersectionObserver(function(en){ if(en[0].isIntersecting&&!started){ started=true; play(); } },{threshold:.3}); io.observe(sec);
+    }
+  })();
+  // ── Rovnice financování: postupné rozsvěcení členů + tržba živě z animace ──
+  (function(){
+    var terms=document.querySelectorAll('#eq .eq-t'); if(!terms.length) return; var i=0, res=terms[terms.length-1];
+    (function tick(){ terms.forEach(function(t){ t.classList.remove('lit'); }); var t=terms[i]; t.classList.add('lit');
+      var last=(i===terms.length-1); i=(i+1)%terms.length;
+      if(last){ res.classList.remove('flash','ok'); void res.offsetWidth; res.classList.add('flash'); setTimeout(function(){ res.classList.add('ok'); },700); setTimeout(function(){ res.classList.remove('flash','ok'); tick(); },2600); }
+      else setTimeout(tick,1100); })();
+  })();
+  var $ = function(id){ return document.getElementById(id); };
+  window.pickVariant=function(v){ $('variant').value=v; };
+  var f=$('f'), msg=$('msg'), sub=$('sub'), STRIPE=false;
+  var BTN_REQ='Odeslat žádost o objednávku', BTN_PAY='Zaplatit kartou a získat přístup';
+  function setMsg(cls,t){ msg.className='msg '+cls; msg.textContent=t; }
+  // Režim platby: Stripe Checkout, nebo ruční žádost (bez klíče na serveru).
+  fetch('/api/location/pay-config').then(function(r){ return r.ok?r.json():null; }).then(function(c){
+    if(c&&c.stripe){ STRIPE=true; sub.textContent=BTN_PAY; $('pay-note').textContent='Bezpečná platba kartou přes Stripe · přístup aktivujeme po připsání platby.';
+      $('order-lead').textContent='Vyberte balíček, vyplňte kontakt a zaplaťte kartou. Po zaplacení vám pošleme přístup do aplikace na 12 měsíců. Adresu místa zadáte až v aplikaci.'; }
+  }).catch(function(){});
+  // Návrat ze Stripe
+  try { var q=new URLSearchParams(location.search);
+    if(q.get('paid')==='1'){ setMsg('ok','Děkujeme, platba proběhla. Potvrzení přijde e-mailem a do jednoho pracovního dne vám aktivujeme přístup do aplikace.'); track('misto_paid_return'); }
+    else if(q.get('canceled')==='1'){ setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
+    if(q.get('paid')||q.get('canceled')) history.replaceState(null,'',location.pathname+'#objednat');
+  } catch(e){}
+  f.addEventListener('submit', async function(e){
+    e.preventDefault();
+    msg.className='msg';
+    var fd=new FormData(f), body={};
+    fd.forEach(function(v,k){ body[k]=v; });
+    body.consent = !!fd.get('consent'); body.marketing = !!fd.get('marketing'); body.sid=SID;
+    if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
+    if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
+    sub.disabled=true; sub.textContent=STRIPE?'Přesměrování na platbu…':'Odesílám…';
+    try {
+      var url=STRIPE?'/api/location/checkout':'/api/location/interest';
+      var r=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+      var j=await r.json().catch(function(){ return {}; });
+      if(STRIPE && r.ok && j.ok && j.url){ track('misto_checkout',{ variant: body.variant }); location.href=j.url; return; }
+      if(STRIPE && r.status===503){ STRIPE=false; sub.textContent=BTN_REQ; r=await fetch('/api/location/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); j=await r.json().catch(function(){ return {}; }); }
+      if(r.ok && j.ok){ setMsg('ok','Děkujeme! Žádost jsme přijali. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace.'); f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
+      else { setMsg('err',(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'); }
+    } catch(err){ setMsg('err','Odeslání se nepodařilo, zkuste to prosím znovu.'); }
+    sub.disabled=false; sub.textContent=STRIPE?BTN_PAY:BTN_REQ;
+  });
+})();
+</script>
+</body>
+</html>
+`;
+function locationPage() { return PAGE; }
+
+function fmtDT(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } }
+const kc = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
+const STATUS = {
+  pending:  ['čeká na platbu', 'invited'],
+  request:  ['žádost (bez platby)', 'invited'],
+  paid:     ['zaplaceno', 'active'],
+  granted:  ['přístup předán', 'active'],
+  canceled: ['zrušeno', 'blocked'],
+  refunded: ['vráceno', 'blocked'],
+};
+
+// Administrace: seznam objednávek balíčků + akce (přístup předán / zrušit / poznámka).
+function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, status = '', msg = '', holyosUrl, stripeOn }) {
+  const badge = (o) => { const x = STATUS[o.status] || [o.status, 'invited']; return `<span class="badge ${x[1]}">${esc(x[0])}</span>`; };
+  const tabs = [['', 'Vše'], ['paid', 'Zaplacené'], ['granted', 'Přístup předán'], ['pending', 'Čekají na platbu'], ['request', 'Žádosti'], ['canceled', 'Zrušené']];
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const paidSum = rows.filter((o) => o.status === 'paid' || o.status === 'granted').reduce((a, o) => a + Number(o.amount_czk || 0), 0);
+  return adminLayout('Prověření lokality', 'loc', admin, `
+  <h1 style="margin:0 0 6px">Prověření lokality <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+  <p class="muted" style="margin-top:0">Objednávky balíčků z prodejní stránky <a href="/location" target="_blank">/location</a>. Platba kartou přes Stripe ${stripeOn ? '<span class="badge active">zapnuto</span>' : '<span class="badge blocked">vypnuto – chybí STRIPE_SECRET_KEY</span>'}. Po zaplacení zákazníkovi ručně zpřístupněte aplikaci a klikněte <b>Přístup předán</b>.</p>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  <div class="row" style="gap:8px;margin:10px 0 12px">${tabs.map(([k, l]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/location${k ? '?status=' + k : ''}">${l} <span class="muted">${k ? (counts[k] || 0) : total}</span></a>`).join('')}
+    <span class="muted small" style="margin-left:auto">Zaplaceno v zobrazení: <b>${kc(paidSum)}</b></span></div>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Zákazník</th><th>Balíček</th><th>Částka</th><th>Stav</th><th>Stripe</th><th>Poznámka</th><th></th></tr></thead><tbody>
+    ${rows.map((o) => `<tr>
+      <td data-l="Datum" class="small muted">${fmtDT(o.created_at)}${o.paid_at ? `<div>zapl. ${fmtDT(o.paid_at)}</div>` : ''}${o.access_granted_at ? `<div>předáno ${fmtDT(o.access_granted_at)}</div>` : ''}</td>
+      <td data-l="Zákazník"><b>${esc(o.name)}</b><div class="small"><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></div>${o.phone ? `<div class="small muted">${esc(o.phone)}</div>` : ''}${o.company ? `<div class="small muted">${esc(o.company)}</div>` : ''}${o.marketing ? '<div class="small muted">✓ marketing</div>' : ''}</td>
+      <td data-l="Balíček"><b>${esc((PACKAGES[o.package] || {}).label || o.package)}</b></td>
+      <td data-l="Částka">${kc(o.amount_czk)} <span class="small muted">s DPH</span></td>
+      <td data-l="Stav">${badge(o)}</td>
+      <td data-l="Stripe" class="small">${o.stripe_payment_intent ? `<a href="https://dashboard.stripe.com/payments/${esc(o.stripe_payment_intent)}" target="_blank" rel="noopener">platba ↗</a>` : (o.stripe_session ? `<span class="muted">session</span>` : '<span class="muted">—</span>')}</td>
+      <td data-l="Poznámka"><form method="post" action="/admin/location/${o.id}/note" style="margin:0;display:flex;gap:6px"><input name="note" value="${esc(o.note || '')}" placeholder="interní poznámka" style="font-size:13px;padding:7px 9px;min-width:160px"><button class="btn sec sm" type="submit">Uložit</button></form></td>
+      <td class="actions"><div class="row">
+        ${(o.status === 'paid' || o.status === 'request') ? `<form method="post" action="/admin/location/${o.id}/status" style="margin:0"><input type="hidden" name="status" value="granted"><button class="btn sm" type="submit">Přístup předán</button></form>` : ''}
+        ${o.status === 'granted' ? `<form method="post" action="/admin/location/${o.id}/status" style="margin:0"><input type="hidden" name="status" value="paid"><button class="btn sec sm" type="submit">Vrátit na zaplaceno</button></form>` : ''}
+        ${(o.status === 'pending' || o.status === 'request') ? `<form method="post" action="/admin/location/${o.id}/status" style="margin:0" onsubmit="return confirm('Zrušit objednávku?')"><input type="hidden" name="status" value="canceled"><button class="btn danger sm" type="submit">Zrušit</button></form>` : ''}
+        ${(o.status === 'paid' || o.status === 'granted') ? `<form method="post" action="/admin/location/${o.id}/status" style="margin:0" onsubmit="return confirm('Označit jako vráceno? Peníze vraťte ve Stripe (Refund).')"><input type="hidden" name="status" value="refunded"><button class="btn danger sm" type="submit">Vráceno</button></form>` : ''}
+      </div></td></tr>`).join('')}
+  </tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
+}
+
+module.exports = { PACKAGES, locationPage, adminLocationOrders, STATUS };
