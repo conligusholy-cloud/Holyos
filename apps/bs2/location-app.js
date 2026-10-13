@@ -195,27 +195,6 @@ function siteForm(s, site, d, error, saved) {
     <label>Voda${sel('conn_water', YNU)}</label><label>Odpad${sel('conn_sewer', YNU)}</label><label>Elektřina${sel('conn_power', YNU)}</label>
     ${inp('power_amp', 'Jištění / příkon', 'maxlength="60" placeholder="např. 3× 25 A"')}
     ${inp('conn_src', 'Zdroj (ověření přípojek)', 'maxlength="200" placeholder="např. fotodokumentace, sdělení pronajímatele"')}
-    <h3>Ceny a návštěvnost (váš předpoklad)</h3>
-    ${inp('price_wash', 'Cena praní (Kč s DPH)', 'inputmode="decimal"')}
-    ${inp('price_dry', 'Cena sušení za cyklus (Kč s DPH)', 'inputmode="decimal"')}
-    ${inp('dry_share', 'Podíl zákazníků, kteří suší (%)', 'inputmode="decimal"')}
-    ${inp('dry_cycles', 'Cyklů sušení na jedno praní', 'inputmode="decimal"')}
-    ${inp('washes_weak', 'Slabý scénář – praní / den', 'inputmode="decimal"')}
-    ${inp('washes_mid', 'Střední scénář – praní / den', 'inputmode="decimal"')}
-    ${inp('washes_strong', 'Silný scénář – praní / den', 'inputmode="decimal"')}
-    <h3>Náklady provozu</h3>
-    <label>DPH${sel('vat_payer', [['yes', 'plátce DPH (21 % z tržeb)'], ['no', 'neplátce DPH']])}</label>
-    <label>Energie a voda${sel('energy_mode', [['percent', 'zjednodušeně – % z tržby bez DPH'], ['consumption', 'podle spotřeby na cyklus']])}</label>
-    ${inp('energy_pct', 'Energie zjednodušeně (% z tržby bez DPH)', 'inputmode="decimal"')}
-    ${inp('kwh_wash', 'kWh na praní', 'inputmode="decimal"')}${inp('kwh_dry', 'kWh na cyklus sušení', 'inputmode="decimal"')}${inp('kwh_price', 'Cena elektřiny (Kč / kWh)', 'inputmode="decimal"')}
-    ${inp('water_wash', 'Voda na praní (litry)', 'inputmode="decimal"')}${inp('water_price', 'Vodné + stočné (Kč / m³)', 'inputmode="decimal"')}
-    ${inp('service_pct', 'Servisní smlouva (% z tržby bez DPH)', 'inputmode="decimal"', 'Pokud servis zahrnuje i prací prostředky, nezapočítávejte je znovu jinde.')}
-    ${inp('software', 'Software (Kč / měsíc)', 'inputmode="decimal"')}
-    ${inp('fee_pct', 'Platební poplatky (% z tržby)', 'inputmode="decimal"')}
-    ${inp('insurance', 'Pojištění (Kč / měsíc)', 'inputmode="decimal"')}
-    ${inp('marketing', 'Marketing (Kč / měsíc)', 'inputmode="decimal"')}
-    ${inp('reserve_pct', 'Rezerva na opravy a obnovu (% z tržby bez DPH)', 'inputmode="decimal"', 'Plánované odložení prostředků, ne účetní náklad.')}
-    ${inp('other', 'Další náklady (Kč / měsíc)', 'inputmode="decimal"')}
     <h3>Investice a financování</h3>
     ${inp('machine_price', 'Cena zařízení (Kč)', 'inputmode="decimal"')}
     ${inp('delivery', 'Doprava a instalace (Kč)', 'inputmode="decimal"')}
