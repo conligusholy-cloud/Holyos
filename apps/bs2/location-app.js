@@ -44,8 +44,8 @@ function annuity(principal, ratePa, months) { if (!(principal > 0) || !(months >
 /** d = uložená data lokality (viz FIELDS). Vrací scénáře + bod zvratu. */
 function calc(d) {
   const vat = d.vat_payer === 'no' ? 0 : 0.21;
-  const pw = num(d.price_wash, 300), pd = num(d.price_dry, 50), dryShare = num(d.dry_share, 60) / 100, dryCycles = num(d.dry_cycles, 2);
-  const perWash = pw + dryShare * dryCycles * pd;                // tržba s DPH na jedno praní (vč. sušení)
+  const pw = num(d.price_wash, 300), pws = num(d.price_wash_soft, 350), softShare = num(d.soft_share, 50) / 100, pd = num(d.price_dry, 50), dryShare = num(d.dry_share, 60) / 100, dryCycles = num(d.dry_cycles, 2);
+  const perWash = pw * (1 - softShare) + pws * softShare + dryShare * dryCycles * pd;   // průměrná tržba na zákazníka s DPH                // tržba s DPH na jedno praní (vč. sušení)
   const days = 30.4;
   const payer = d.vat_payer !== 'no';
   const normCost = (v, mode) => { if (!v) return 0; if (payer) return mode === 'incl' ? v / 1.21 : v; return mode === 'incl' ? v : v * 1.21; };
@@ -107,7 +107,7 @@ function evaluate(d, c) {
   const needPrep = ['conn_water', 'conn_sewer', 'conn_power', 'surface'].some((k) => d[k] === 'no');
   if (needPrep) { if (d.site_prep_known !== 'yes') missing.push('Cena vybudování přípojek / zpevněné plochy (počítáno 0 Kč)'); else if (num(d.site_prep)) given.push('Příprava místa / přípojky: ' + num(d.site_prep).toLocaleString('cs-CZ') + ' Kč bez DPH'); }
   if (!own) { v('Výpovědní lhůta', d.notice_known === 'no' ? 'zatím neznámá' : num(d.notice) ? num(d.notice) + ' měs.' : '', ''); v('Délka smlouvy', num(d.contract_years) ? num(d.contract_years) + ' let' : '', ''); }
-  assumed.push(`Ceny: praní ${num(d.price_wash, 300)} Kč, sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly)`);
+  assumed.push(`Ceny s DPH: praní ${num(d.price_wash, 300)} Kč, praní s aviváží ${num(d.price_wash_soft, 350)} Kč (volí ${num(d.soft_share, 50)} % zákazníků), sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly) → průměr ${Math.round(c.perWash)} Kč na zákazníka`);
   assumed.push(`Návštěvnost: slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} zákazníků za den (1 zákazník = 1 praní vč. sušení)`);
   assumed.push(d.energy_mode === 'consumption' ? `Energie podle spotřeby: ${num(d.kwh_wash)} kWh/praní, ${num(d.kwh_dry)} kWh/sušení, ${num(d.water_wash)} l/praní, ${num(d.kwh_price)} Kč/kWh, ${num(d.water_price)} Kč/m³` : `Energie a voda zjednodušeně ${num(d.energy_pct, 9.5)} % z tržby bez DPH`);
   assumed.push(`Servis ${num(d.service_pct, 13)} % z tržby bez DPH, platební poplatky ${num(d.fee_pct, 1.5)} % z tržby, rezerva na opravy a obnovu ${num(d.reserve_pct, 5)} % (plánované odložení prostředků)`);
@@ -165,7 +165,7 @@ const POI_TYPES = [
 const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'product_id', 'product_name', 'access', 'access_note', 'down_mode', 'delivery_known', 'site_prep_known', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
-const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: '', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
+const DEFAULTS = { price_wash: 300, price_wash_soft: 350, soft_share: 50, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: '', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
 function siteForm(s, site, d, error, saved, noeval, products) {
