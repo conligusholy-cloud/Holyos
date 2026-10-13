@@ -211,7 +211,7 @@ const I18N = {
     qr: 'QR platba', note: 'Poznámka:',
     reverse: '<strong>Režim přenesení daňové povinnosti.</strong> Daň odvede zákazník (reverse charge) — dodání do jiného členského státu EU osobě registrované k DPH dle čl. 196 směrnice 2006/112/ES, § 92 zákona č. 235/2004 Sb.',
     outside: '<strong>Plnění mimo působnost české DPH.</strong> Dodání zákazníkovi ze třetí země (mimo EU) — místo plnění mimo tuzemsko (§ 9 zákona č. 235/2004 Sb.); DPH se neúčtuje (0 %).',
-    direction_ar: 'FAKTURA — daňový doklad', direction_ap: 'FAKTURA PŘIJATÁ', direction_tax: 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ',
+    direction_ar: 'FAKTURA — daňový doklad', direction_ap: 'FAKTURA PŘIJATÁ', direction_tax: 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ', direction_proforma: 'ZÁLOHOVÁ FAKTURA', direction_proforma_sub: 'není daňový doklad',
     pm: { bank_transfer: 'Bankovním převodem', cash: 'Hotově', card: 'Kartou', barter: 'Zápočet' },
     types: { received: 'Faktura přijatá', issued: 'Faktura vydaná', credit_note_received: 'Dobropis přijatý', credit_note_issued: 'Dobropis vydaný', proforma_received: 'Záloha přijatá', proforma_issued: 'Zálohová faktura', tax_receipt: 'Daňový doklad k platbě' },
     locale: 'cs-CZ',
@@ -225,7 +225,7 @@ const I18N = {
     qr: 'QR payment', note: 'Note:',
     reverse: '<strong>Reverse charge.</strong> VAT to be accounted for by the customer — supply of services to a taxable person in another EU Member State (Article 196 of Council Directive 2006/112/EC).',
     outside: '<strong>Outside the scope of Czech VAT.</strong> Supply to a customer outside the European Union — the place of supply is outside the Czech Republic; VAT is not charged (0 %).',
-    direction_ar: 'INVOICE — tax document', direction_ap: 'RECEIVED INVOICE', direction_tax: 'TAX DOCUMENT FOR RECEIVED PAYMENT',
+    direction_ar: 'INVOICE — tax document', direction_ap: 'RECEIVED INVOICE', direction_tax: 'TAX DOCUMENT FOR RECEIVED PAYMENT', direction_proforma: 'PROFORMA INVOICE', direction_proforma_sub: 'not a tax document',
     pm: { bank_transfer: 'Bank transfer', cash: 'Cash', card: 'Card', barter: 'Offset' },
     types: { received: 'Received invoice', issued: 'Invoice', credit_note_received: 'Received credit note', credit_note_issued: 'Credit note', proforma_received: 'Received proforma', proforma_issued: 'Proforma invoice', tax_receipt: 'Tax document for payment' },
     locale: 'en-GB',
@@ -296,9 +296,12 @@ function buildTemplateData(invoice, ourCompany) {
     invoice_number: invoice.invoice_number,
     external_number: invoice.external_number || '',
     type_label: L.types[invoice.type] || typeLabel(invoice.type),
+    // Zálohová faktura není daňový doklad → v titulku „ZÁLOHOVÁ FAKTURA" (ne „FAKTURA — daňový doklad")
     direction_label: invoice.type === 'tax_receipt'
       ? L.direction_tax
-      : (invoice.direction === 'ar' ? L.direction_ar : L.direction_ap),
+      : (String(invoice.type || '').startsWith('proforma')
+        ? L.direction_proforma + ' — ' + L.direction_proforma_sub
+        : (invoice.direction === 'ar' ? L.direction_ar : L.direction_ap)),
 
     // Datumy
     date_issued: fmtDate(invoice.date_issued, lang),
