@@ -214,11 +214,10 @@ function notifyVelin(title, body, path, type) {
     const secret = process.env.BS2_SSO_SECRET; if (!secret || !HOLYOS_URL) return;
     const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
     fetch(HOLYOS_URL + '/api/auth/bs2/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body, path, type }) })
-      .then(async (r) => { if (!r.ok) console.warn('[bs2] velín notify ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120)); })
+      .then(async (r) => { const t = await r.text().catch(() => ''); if (!r.ok) console.warn('[bs2] velín notify ' + r.status + ' ' + t.slice(0, 120)); else console.log('[bs2] velín notify OK: ' + title + ' → ' + t.slice(0, 80)); })
       .catch((e) => console.warn('[bs2] velín notify:', e.message));
   } catch (e) { console.warn('[bs2] velín notify:', e.message); }
 }
-const _supNotifyAt = new Map(); // omezení: zpráva z podpory max 1× za 2 min na uživatele
 // Odeslání + zápis do mail_log (úspěch i chyba), aby šlo e-maily vidět v aktivitě uživatele
 async function sendBs2Mail(o) {
   try { await sendBs2MailRaw(o); logMail(o, 'sent', null); }
@@ -908,7 +907,7 @@ app.post('/admin/online/pricing', requireAdmin, wrap(async (req, res) => {
   await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY + '_saved_at', new Date().toISOString()]);
   LADM.applyPricing(p);
   const back = /^product:(location|finder)$/.test(String(req.query.back || '')) ? String(req.query.back) : 'pricing';
-  res.redirect('/admin/online?tab=' + encodeURIComponent(back) + '&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : (p.test_mode ? 'Ceník uložen – TESTOVACÍ CENY ZAPNUTY (vše za ' + (LADM.TEST_AMOUNT / 100) + ' Kč).' : 'Ceník uložen.')));
+  res.redirect('/admin/online?tab=' + encodeURIComponent(back) + '&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : ((p.test_loc || p.test_find) ? 'Ceník uložen – TESTOVACÍ CENY ZAPNUTY (' + [p.test_loc ? 'Prověření lokality' : '', p.test_find ? 'Vyhledávač míst' : ''].filter(Boolean).join(' + ') + ', vše za ' + (LADM.TEST_AMOUNT / 100) + ' Kč).' : 'Ceník uložen.')));
 }));
 app.post('/admin/online/customer/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10); const u = (await q('SELECT * FROM supporters WHERE id=$1', [id])).rows[0]; if (!u) return res.redirect('/admin/online?tab=customers');
@@ -1156,7 +1155,7 @@ app.post('/api/support/send', wrap(requireUser), supUpload.single('file'), wrap(
   const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   if (!body && !f) return res.status(400).json({ error: 'Prázdná zpráva.' });
   const r = await q('INSERT INTO support_messages (supporter_id, sender, body, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ' + SUP_COLS, [req.user.id, 'user', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null]);
-  { const last = _supNotifyAt.get(req.user.id) || 0; if (Date.now() - last > 120e3) { _supNotifyAt.set(req.user.id, Date.now()); notifyVelin('💬 Nová zpráva v podpoře', (req.user.nick || req.user.email) + ': ' + (body || 'příloha').slice(0, 120), '/admin/podpora?u=' + req.user.id, 'support'); } }
+  notifyVelin('💬 Nová zpráva v podpoře', (req.user.nick || req.user.email) + ': ' + (body || 'příloha').slice(0, 120), '/admin/podpora?u=' + req.user.id, 'support');
   res.json({ ok: true, msg: r.rows[0] });
 }));
 // Stažení přílohy — uživatel jen své, admin vše
