@@ -506,7 +506,6 @@ fit();addEventListener('resize',fit);addEventListener('orientationchange',functi
       <label class="full">Firma / IČO (nepovinné, pro fakturu)<input name="company" maxlength="255" /></label>
       <label class="chk full"><input type="checkbox" name="terms" value="1" required /><span>Souhlasím s <a href="/location/vop" target="_blank" rel="noopener">obchodními podmínkami</a> a žádám o zpřístupnění aplikace ihned po zaplacení (tím zaniká právo na odstoupení v rozsahu zpřístupněného obsahu). Informace o <a href="/location/gdpr" target="_blank" rel="noopener">zpracování osobních údajů</a>. *</span></label>
       <input type="hidden" name="consent" value="1">
-      <label class="chk full"><input type="checkbox" name="marketing" value="1" /><span>Chci dostávat informace o prádlomatech a novinkách Best Series e-mailem (dobrovolné, kdykoli odvolatelné).</span></label>
       <div class="msg" id="msg"></div>
       <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
     </form>
@@ -579,7 +578,7 @@ fit();addEventListener('resize',fit);addEventListener('orientationchange',functi
     msg.className='msg';
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
-    body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = !!fd.get('marketing'); body.sid=SID;
+    body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = body.terms; body.sid=SID;
     if(!body.terms){ setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
     if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }

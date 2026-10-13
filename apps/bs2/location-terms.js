@@ -80,7 +80,7 @@ const LOC_GDPR_HTML = `<h1>OCHRANA OSOBNÍCH ÚDAJŮ</h1>
 <li><b>Uzavření a plnění smlouvy</b> (čl. 6 odst. 1 písm. b GDPR): vyřízení objednávky, založení účtu, zpřístupnění aplikací, zpracování lokalit a sestavení studií, místní šetření, dokoupení položek, podpora.</li>
 <li><b>Plnění právních povinností</b> (čl. 6 odst. 1 písm. c): vystavení a archivace daňových dokladů, účetnictví.</li>
 <li><b>Oprávněný zájem</b> (čl. 6 odst. 1 písm. f): zabezpečení aplikací, prevence zneužití, zlepšování funkcí na základě anonymizovaných statistik, vymáhání nároků.</li>
-<li><b>Souhlas</b> (čl. 6 odst. 1 písm. a): zasílání informací o prádlomatech a novinkách Best Series e-mailem, pokud jej udělíte; souhlas lze kdykoli odvolat odkazem v e-mailu nebo na kontaktní adrese.</li>
+<li><b>Oprávněný zájem – obchodní sdělení zákazníkům</b> (čl. 6 odst. 1 písm. f GDPR a § 7 odst. 3 zákona č. 480/2004 Sb.): jako našemu zákazníkovi vám můžeme na e-mail uvedený při objednávce zasílat informace o prádlomatech, aplikacích a novinkách Best Series. Zasílání můžete kdykoli odmítnout odkazem v každém e-mailu nebo zprávou na tomas.holy@bestseries.cz.</li>
 </ul>
 
 <h3>4. PŘÍJEMCI A ZPRACOVATELÉ</h3>
@@ -101,7 +101,7 @@ const LOC_GDPR_HTML = `<h1>OCHRANA OSOBNÍCH ÚDAJŮ</h1>
 <li>Účet, lokality, studie a výsledky vyhledávání: po dobu platnosti přístupu a dalších 24 měsíců, aby bylo možné přístup obnovit; poté anonymizace nebo výmaz.</li>
 <li>Objednávky a daňové doklady: 10 let (zákonná archivace).</li>
 <li>Technické logy: zpravidla 90 dnů.</li>
-<li>Marketingový souhlas: do odvolání, nejdéle 5 let od posledního kontaktu.</li>
+<li>Zasílání obchodních sdělení: do odmítnutí, nejdéle 5 let od posledního kontaktu.</li>
 </ul>
 
 <h3>6. VAŠE PRÁVA</h3>
