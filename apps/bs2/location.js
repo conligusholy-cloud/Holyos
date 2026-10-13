@@ -219,6 +219,7 @@ const PAGE = `<!DOCTYPE html>
   .eq-t.res.ok .eq-check{opacity:1;transform:scale(1)} .eq-t.res.ok .eq-check path{animation:eqtick .5s ease-out .25s forwards}
   @keyframes eqtick{to{stroke-dashoffset:0}}
   .eq-op{align-self:center;font-size:26px;font-weight:800;color:var(--text2)}
+  .eq-key{display:none;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:14px;font-size:13px;color:var(--text2)} .eq-key b{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:8px;border-radius:6px;background:rgba(79,209,255,.14);border:1px solid var(--border2);color:#fff;font-size:13px}
   .eq-legend{display:flex;flex-wrap:wrap;gap:8px 22px;justify-content:center;margin-top:14px;font-size:13px;color:var(--text2)} .eq-legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px} .eq-legend .ok i{background:var(--ok);box-shadow:0 0 10px var(--ok)} .eq-legend .bad i{background:var(--err);box-shadow:0 0 10px var(--err)}
   @media(max-width:720px){
     .eq-wrap{padding:18px 8px 16px}
@@ -235,6 +236,7 @@ const PAGE = `<!DOCTYPE html>
     .eq-star{font-size:7px;right:3px;bottom:-9px;padding:2px 5px} .eq-star .lg{display:none} .eq-star .sm{display:inline}
     .eq-check{width:24px;height:24px;right:-9px;top:-9px}
     .eq-legend{font-size:12px;gap:6px 14px}
+    .eq-key{display:grid!important}
   }
   .czmap-wrap{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
   .czmap{position:relative;width:min(100%,820px);margin:0 auto} .czmap svg{width:100%;height:auto;display:block;filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(79,209,255,.22))}
@@ -435,6 +437,13 @@ const PAGE = `<!DOCTYPE html>
         <div class="eq-op">=</div>
         <div class="eq-t res" data-i="5"><span class="eq-k">výsledek</span><b>&gt; 0</b><small>musí být kladný</small><span class="eq-check" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="22" fill="rgba(47,227,160,.18)" stroke="#2fe3a0" stroke-width="2.5"/><path d="M14 25l7 7 13-15" fill="none" stroke="#2fe3a0" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/></svg></span></div>
       </div>
+      <div class="eq-key">
+        <span><b>T</b> tržby za měsíc</span>
+        <span><b>N</b> nájem</span>
+        <span><b>E</b> energie</span>
+        <span><b>S</b> servis</span>
+        <span><b>U</b> úvěr (splátka)</span>
+      </div>
       <div class="eq-legend">
         <span class="ok"><i></i>&gt; 0 → použijte financování – prádlomat zaplatí sám sebe</span>
         <span class="bad"><i></i>&lt; 0 → pozor, místo bude tvořit záporné cash flow</span>
@@ -479,7 +488,6 @@ const PAGE = `<!DOCTYPE html>
         <a class="btn sec" href="#objednat" data-cta="premium" onclick="pickVariant('premium')">Vybrat Premium</a>
       </div>
     </div>
-    <div class="credit"><b>Připravujeme: sleva z následného nákupu prádlomatu.</b> Zvažujeme možnost odečíst cenu balíčku z ceny prádlomatu Best Series při nákupu do 6 měsíců. Přesné podmínky (poskytovatel slevy, kterých strojů se týká, od kdy běží lhůta, slučitelnost s jinými nabídkami, způsob uplatnění a zacházení s DPH) zveřejníme v obchodních podmínkách. Do jejich zveřejnění sleva není součástí nabídky.</div>
   </section>
 
   <section class="sec">
