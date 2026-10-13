@@ -696,6 +696,7 @@ function supporterCompounder(s) {
   .cp .dec-q{font-size:clamp(20px,2.6vw,28px);font-weight:900;letter-spacing:-.02em;margin-bottom:12px}
   .cp .dec-opts{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
   .cp .dec-o{font:inherit;font-weight:800;font-size:20px;min-width:72px;padding:12px 18px;border-radius:14px;border:1px solid var(--border2);background:rgba(4,8,16,.6);color:var(--text2);cursor:pointer;transition:all .2s}
+  @media(max-width:700px){.cp .dec-opts{flex-wrap:nowrap;gap:6px} .cp .dec-o{flex:1 1 0;min-width:0;padding:10px 4px;font-size:18px}}
   .cp .dec-o:hover{color:var(--text);border-color:rgba(79,209,255,.5)} .cp .dec-o.on{color:#fff;background:linear-gradient(135deg,var(--accent),var(--vio));border-color:transparent;box-shadow:0 10px 30px rgba(30,134,224,.4);transform:translateY(-2px)}
   .cp .dec-money{margin-left:auto;text-align:right} .cp .dec-money b{background-image:linear-gradient(180deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
   @media(max-width:640px){.cp .dec-out{flex-direction:column;align-items:flex-start} .cp .dec-money{margin-left:0;text-align:left}}
