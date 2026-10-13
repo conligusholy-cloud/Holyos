@@ -161,7 +161,7 @@ const lo = (a, unit) => Array.isArray(a) ? 'od ' + Math.round(a[0]).toLocaleStri
 const li = (arr) => (Array.isArray(arr) && arr.length) ? '<ul style="margin:0;padding-left:18px;color:var(--text2);display:flex;flex-direction:column;gap:5px">' + arr.map((t) => '<li>' + esc(String(t)) + '</li>').join('') + '</ul>' : '<p class="small muted" style="margin:0">—</p>';
 const CLS = { 'Vhodné podle dostupných podkladů': 'ok', 'Vhodné při splnění podmínek': 'cond', 'Nevhodné podle dostupných podkladů': 'bad', 'Nedostatek údajů pro posouzení': 'na' };
 
-function studyPage(s, site, st, nav, R, siteCoords, d) {
+function studyBody(s, site, st, nav, R, siteCoords, d) {
   d = d || {};
   const own = d.ownership === 'own', rentKnown = d.ownership === 'rent' && d.rent_known === 'yes' && Number(String(d.rent || '').replace(/\s/g, '')) > 0, rentVal = Number(String(d.rent || '').replace(/\s/g, ''));
   R = R || { map: '', scenarios: '', facts: '' };
@@ -174,46 +174,9 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
   <style>.rep h4{margin:16px 0 6px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent2)} .rep ul{margin:0;padding-left:18px;color:var(--text2);font-size:14px} .rep .warn li{color:#ffd9a0} .rep .miss li{color:#ffd866} .lk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px} .sc{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px} .sc .c{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px} .sc .c.hi{border-color:rgba(79,209,255,.45)} .sc .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)} .sc .v{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:2px 0 6px;font-variant-numeric:tabular-nums} .sc .pos{color:var(--ok)} .sc .neg{color:var(--err)} .cas{display:flex;flex-direction:column;gap:5px} .cas div{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:6px 10px;border-radius:8px;background:rgba(4,8,16,.5);border:1px solid var(--border)} .cas div span{color:var(--text2)} .cas div.t{border-color:rgba(79,209,255,.4);font-weight:700}
   .st h2{margin:0 0 10px} .st .card{margin-bottom:12px} .st table{font-size:13.5px} .st th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)} .st .big{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums} .st .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
   .res{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid} .res.ok{color:var(--ok);border-color:rgba(47,227,160,.5);background:rgba(47,227,160,.1)} .res.cond{color:#ffd866;border-color:rgba(245,180,0,.5);background:rgba(245,180,0,.1)} .res.bad{color:var(--err);border-color:rgba(255,93,108,.5);background:rgba(255,93,108,.1)} .res.na{color:var(--text2);border-color:var(--border2)}
-  /* ── Tisk / PDF: čistý dokument A4, bez prvků webu, vlastní hlavička a patička ── */
-  @page{size:A4;margin:0}
-  @media print{
-    html,body{background:#fff!important;color:#111!important;font-size:11.5px;line-height:1.45}
-    header,.tabs,.banner,.glow,.gridfx,#net,.helpbtn,.no-print,.idea-fab,.sup-badge{display:none!important}
-    main{max-width:none;padding:0;margin:0}
-    .st{padding:16mm 15mm 18mm}
-    .print-head{display:flex!important;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1e86e0;padding-bottom:8px;margin-bottom:14px;font-size:11px;color:#444}
-    .print-head b{font-size:15px;color:#111;letter-spacing:.02em}
-    .print-foot{display:block!important;position:fixed;bottom:7mm;left:15mm;right:15mm;font-size:9.5px;color:#777;border-top:1px solid #ddd;padding-top:4px}
-    .card,.stat,.sc .c,.an-box,.rep-box{background:#fff!important;border:1px solid #cfd6e0!important;box-shadow:none!important;color:#111!important;break-inside:avoid;page-break-inside:avoid;backdrop-filter:none!important}
-    .card{margin-bottom:10px;padding:12px 14px}
-    .st h1{font-size:22px;color:#111!important;-webkit-text-fill-color:#111;background:none!important}
-    .st h2{font-size:14px;color:#1e86e0!important;border-bottom:1px solid #e3e8ef;padding-bottom:4px;margin-bottom:8px;break-after:avoid}
-    .st h4,.rep h4{color:#1e86e0!important}
-    .muted,.small,.st .k,.st th,.stat .l,.sc .k,.cas div span,.rep ul,.rep li,.sc .c,.small.muted,p{color:#333!important}
-    .stat .v,.st .big,.sc .v{color:#111!important;-webkit-text-fill-color:#111;background:none!important;filter:none!important}
-    .big{font-size:20px}
-    .sc .pos,.cas .pos,.stat .v.pos{color:#0a7a4a!important;-webkit-text-fill-color:#0a7a4a} .sc .neg,.cas .neg{color:#b3261e!important;-webkit-text-fill-color:#b3261e}
-    .res{border-width:1.5px;color:#111!important;background:#fff!important} .res.ok{border-color:#0a7a4a;color:#0a7a4a!important} .res.cond{border-color:#b8860b;color:#8a6508!important} .res.bad{border-color:#b3261e;color:#b3261e!important}
-    .badge{color:#333!important;border-color:#999!important;background:#fff!important}
-    table{font-size:10.5px} th,td{border-top:1px solid #e3e8ef!important;padding:5px 6px} th{color:#555!important}
-    tr{break-inside:avoid}
-    .grid{gap:8px} .stat{padding:8px 10px}
-    #rep-map,#st-map{height:300px!important;border:1px solid #cfd6e0;border-radius:6px}
-    .leaflet-control-zoom,.leaflet-control-container .leaflet-top{display:none!important} .leaflet-control-attribution{font-size:8px;background:rgba(255,255,255,.8)!important;color:#555!important}
-    .leaflet-tooltip{box-shadow:none}
-    .cas div{background:#fff!important;border-color:#e3e8ef!important} .cas div.t{border-color:#1e86e0!important}
-    .sc{grid-template-columns:repeat(3,1fr)}
-    div[style*="rgba(245,180,0"]{background:#fff8e1!important;border-color:#e0b64d!important;color:#5b4300!important} div[style*="rgba(245,180,0"] *{color:#5b4300!important}
-    div[style*="rgba(30,134,224,.1)"],div[style*="rgba(30,134,224,.12)"]{background:#eef5fc!important;border-color:#bcd6f0!important} div[style*="rgba(30,134,224"] *{color:#123!important}
-    div[style*="rgba(47,227,160"]{background:#edfaf3!important;border-color:#9cd9b8!important;color:#0a5a36!important}
-    a{color:#111!important;text-decoration:none}
-    .page-break{break-before:page;page-break-before:always}
-  }
-  .print-head,.print-foot{display:none}</style>
+  @media print{.no-print{display:none!important}}</style>
   <div class="st">
-  <div class="print-head"><div><b>Best Series 2.0 · Prověření lokality</b><div>Studie lokality ${esc(site.name || '')}${site.city ? ' · ' + esc(site.city) : ''}</div></div><div style="text-align:right">${meta.at ? new Date(meta.at).toLocaleDateString('cs-CZ') : ''}<br>www.bestseries2.cz</div></div>
-  <div class="print-foot">Best Series s.r.o. · IČO 05643724 · Orientační studie – odhady z dostupných podkladů, nikoli odborné schválení investice ani předpověď výdělku.</div>
-  <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><div class="row"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a></div><div class="row"><form method="post" action="/lokalita/${site.id}/studie" style="margin:0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Zpracovávám… (až 2 min)'"><button class="btn sec sm" type="submit">🔄 Aktualizovat studii</button></form><button class="btn sm" type="button" onclick="window.print()">Uložit jako PDF / tisk</button></div></div>
+  <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><div class="row"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a></div><div class="row"><form method="post" action="/lokalita/${site.id}/studie" style="margin:0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Zpracovávám… (až 2 min)'"><button class="btn sec sm" type="submit">🔄 Aktualizovat studii</button></form><a class="btn sm" href="/lokalita/${site.id}/studie/tisk" target="_blank">Uložit jako PDF / tisk</a></div></div>
   <div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Studie lokality · ${meta.at ? new Date(meta.at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : ''}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(site.address || '')}${site.city ? ', ' + esc(site.city) : ''}</div></div>${v.label ? `<span class="res ${CLS[v.label] || 'na'}">${esc(v.label)}</span>` : ''}</div>
     <p style="margin:12px 0 4px">${esc(st.summary || '')}</p>${v.reason ? `<p class="small muted" style="margin:0">${esc(v.reason)}</p>` : ''}
     ${(v.scorecard || []).length ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:14px">${v.scorecard.map((x) => { const r = String(x.rating || ''); const col = r === 'dobré' ? 'var(--ok)' : r === 'podmíněné' ? '#ffd866' : r === 'slabé' ? 'var(--err)' : 'var(--text2)'; const ic = r === 'dobré' ? '✓' : r === 'podmíněné' ? '!' : r === 'slabé' ? '✕' : '?'; return `<div class="stat" style="border-color:${col}55"><div class="l">${esc(x.area || '')}</div><div class="v" style="font-size:16px;color:${col}">${ic} ${esc(r)}</div><div class="small muted" style="margin-top:4px">${esc(x.note || '')}</div></div>`; }).join('')}</div>` : ''}
@@ -288,8 +251,65 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
     <div class="card" style="margin:0"><h2 style="font-size:15px">Chybějící data</h2>${li(st.data_gaps)}</div></div>
 
   </div>`;
-  const LEAF = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
-  return layout({ title: 'AI studie – ' + (site.name || ''), user: s.nick, nav, active: 'loc', fx: true, help: null, body }).replace('</head>', LEAF + '</head>');
+  return { body, meta };
+}
+const LEAF = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
+function studyPage(s, site, st, nav, R, siteCoords, d) {
+  const { body } = studyBody(s, site, st, nav, R, siteCoords, d);
+  return layout({ title: 'Studie – ' + (site.name || ''), user: s.nick, nav, active: 'loc', fx: true, help: null, body }).replace('</head>', LEAF + '</head>');
+}
+// Tisková verze: samostatný A4 dokument ve stylu Best Series 2.0 (světlý papír, tmavá hlavička, modrý akcent), bez prvků webu.
+function studyPrintPage(s, site, st, R, siteCoords, d) {
+  const { body, meta } = studyBody(s, site, st, [], R, siteCoords, d);
+  const dateS = meta.at ? new Date(meta.at).toLocaleDateString('cs-CZ') : '';
+  const { logoSvg } = require('./logo');
+  return `<!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Studie lokality ${esc(site.name || '')} · Best Series 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">${LEAF}
+<style>
+  @page{size:A4;margin:16mm 14mm 18mm}
+  :root{--bg:#fff;--card:#fff;--card2:#f4f7fb;--border:#d9e1ec;--border2:#b9c7d8;--text:#111827;--text2:#3b4a5e;--text3:#6b7a90;--accent:#1e86e0;--accent2:#1668b8;--vio:#5b47c9;--ok:#0a7a4a;--err:#b3261e;--blue:#1668b8}
+  *{box-sizing:border-box} html,body{margin:0;background:#fff;color:var(--text);font:11.5px/1.5 Inter,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  body{padding:0} main{max-width:none;padding:0;margin:0}
+  .toolbar{position:sticky;top:0;background:#0a1220;color:#fff;padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:space-between;font-size:13px}
+  .toolbar button{font:inherit;font-weight:700;background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);color:#fff;border:0;border-radius:10px;padding:9px 16px;cursor:pointer}
+  .doc{max-width:190mm;margin:0 auto;padding:10mm 0}
+  .ph{display:flex;justify-content:space-between;align-items:center;background:#0a1220;color:#fff;border-radius:12px;padding:14px 18px;margin-bottom:14px}
+  .ph .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px} .ph .brand span.v{color:#4fd1ff} .ph .meta{text-align:right;font-size:11px;color:#b9c7d8} .ph .meta b{display:block;color:#fff;font-size:13px}
+  .pf{margin-top:14px;border-top:1px solid var(--border);padding-top:6px;font-size:9.5px;color:var(--text3);display:flex;justify-content:space-between;gap:10px}
+  .card{background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;box-shadow:none}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .stat{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;break-inside:avoid} .stat .v{font-size:19px;font-weight:800;letter-spacing:-.02em} .stat .l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .badge{display:inline-block;font-size:10px;font-weight:700;border-radius:999px;padding:1px 7px;border:1px solid var(--border2);color:var(--text2);background:#fff} .badge.active{color:var(--ok);border-color:#9cd9b8} .badge.blocked{color:var(--err);border-color:#e6a8a3} .badge.invited{color:var(--blue);border-color:#bcd6f0}
+  table{width:100%;border-collapse:collapse;font-size:10.5px} th,td{text-align:left;padding:5px 6px;border-top:1px solid var(--border);vertical-align:top} th{color:var(--text3);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;border-top:0} tr{break-inside:avoid} .tbl-wrap{overflow:visible}
+  .small{font-size:10.5px} .muted{color:var(--text3)}
+  .st h1{font-size:22px;margin:2px 0 4px;letter-spacing:-.02em} .st h2{font-size:14px;color:var(--accent2);border-bottom:2px solid #e3ebf5;padding-bottom:4px;margin:0 0 8px;break-after:avoid} .st h3{font-size:12.5px;margin:12px 0 4px}
+  .rep h4{margin:12px 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent2)} .rep ul{margin:0;padding-left:16px;color:var(--text2)} .rep .warn li{color:#7a4b00} .rep .miss li{color:#7a5a00}
+  .lk-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .sc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px} .sc .c{background:var(--card2);border:1px solid var(--border);border-radius:9px;padding:9px 11px;break-inside:avoid} .sc .c.hi{border-color:var(--accent)} .sc .k{font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)} .sc .v{font-size:16px;font-weight:800;margin:2px 0 5px} .sc .pos{color:var(--ok)} .sc .neg{color:var(--err)}
+  .cas{display:flex;flex-direction:column;gap:3px} .cas div{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;padding:3px 7px;border-radius:6px;background:#fff;border:1px solid var(--border)} .cas div span{color:var(--text2)} .cas div.t{border-color:var(--accent);font-weight:700}
+  .res{display:inline-flex;align-items:center;border-radius:999px;padding:5px 12px;font-weight:700;font-size:12.5px;border:1.5px solid} .res.ok{color:var(--ok);border-color:var(--ok);background:#edfaf3} .res.cond{color:#8a6508;border-color:#d9a21b;background:#fff8e1} .res.bad{color:var(--err);border-color:var(--err);background:#fdecea} .res.na{color:var(--text2);border-color:var(--border2)}
+  .an-big .n{font-size:26px;font-weight:800;color:var(--accent2)} .an-big .l{font-size:10px;color:var(--text3)}
+  .town{display:inline-flex;align-items:center;gap:5px;font-size:10px;color:var(--text2);background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:2px 8px} .town .d{width:7px;height:7px;border-radius:50%;display:inline-block} .towns{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+  .an-box{margin-top:8px;padding:9px 11px;border-radius:9px;border:1px solid #bcd6f0;background:#eef5fc} .an-box.ok{border-color:#9cd9b8;background:#edfaf3;color:#0a5a36} .an-box b.t{color:var(--accent2)}
+  div[style*="rgba(245,180,0"]{background:#fff8e1!important;border-color:#e0b64d!important;color:#5b4300!important} div[style*="rgba(245,180,0"] *{color:#5b4300!important}
+  div[style*="rgba(30,134,224,.1"]{background:#eef5fc!important;border-color:#bcd6f0!important} div[style*="rgba(30,134,224,.1"] *{color:#123!important}
+  div[style*="rgba(47,227,160"]{background:#edfaf3!important;border-color:#9cd9b8!important;color:#0a5a36!important}
+  .stat .v,.an-big .n,.big{-webkit-text-fill-color:initial;background:none!important;color:var(--text)!important;filter:none!important} .big{font-size:18px;font-weight:800}
+  #rep-map,#st-map{height:300px!important;border:1px solid var(--border);border-radius:8px;break-inside:avoid} .leaflet-control-zoom{display:none!important} .leaflet-control-attribution{font-size:8px}
+  .no-print,.helpbtn{display:none!important}
+  .mapcard{break-inside:avoid}
+  a{color:inherit;text-decoration:none}
+  @media print{.toolbar{display:none}.doc{padding:0;max-width:none}.card{break-inside:auto}.card.mapcard,.stat,.sc .c,.rep-box{break-inside:avoid}}
+</style></head><body>
+<div class="toolbar"><span>Tisková verze studie – v dialogu tisku zvolte „Uložit jako PDF", okraje Výchozí a vypněte záhlaví/zápatí prohlížeče.</span><button type="button" onclick="window.print()">🖨 Vytisknout / uložit PDF</button></div>
+<div class="doc">
+  <div class="ph"><div class="brand">${logoSvg(34, 'p')}Best Series&nbsp;<span class="v">2.0</span> · Prověření lokality</div><div class="meta"><b>Studie lokality ${esc(site.name || '')}</b>${esc(site.address || '')}${site.city ? ', ' + esc(site.city) : ''} · ${dateS}</div></div>
+  ${body.replace(/<div class="card" style="padding:10px"><div id="rep-map"/g, '<div class="card mapcard" style="padding:10px"><div id="rep-map"').replace(/<div class="card" style="padding:10px"><div id="st-map"/g, '<div class="card mapcard" style="padding:10px"><div id="st-map"')}
+  <div class="pf"><span>Best Series s.r.o. · IČO 05643724 · www.bestseries2.cz</span><span>Orientační studie – odhady z dostupných podkladů, nikoli odborné schválení investice ani předpověď výdělku.</span></div>
+</div>
+<script>window.addEventListener('load',function(){ setTimeout(function(){ try{ document.querySelectorAll('.leaflet-container').forEach(function(el){ var m=el._leaflet_map; }); }catch(e){} },300); });</script>
+</body></html>`;
 }
 
-module.exports = { runStudy, studyPage, gatherOsm };
+module.exports = { runStudy, studyPage, studyPrintPage, gatherOsm };
