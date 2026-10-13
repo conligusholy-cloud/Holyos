@@ -103,8 +103,9 @@ function evaluate(d, c) {
   if (roads.some((p) => !p.visible)) missing.push('Viditelnost prádlomatu z hlavní silnice');
   if (!pois.some((p) => p.type === 'parking')) missing.push('Nejbližší parkoviště zakreslené v mapě (povinné)');
   if (d.product_name) given.push('Zvolený prádlomat: ' + d.product_name);
+  if (d.delivery_known !== 'yes') { missing.push('Cena dopravy a instalace (počítáno 0 Kč)'); } else if (num(d.delivery)) given.push('Doprava a instalace: ' + num(d.delivery).toLocaleString('cs-CZ') + ' Kč bez DPH');
   const needPrep = ['conn_water', 'conn_sewer', 'conn_power', 'surface'].some((k) => d[k] === 'no');
-  if (needPrep) assumed.push('Náklady na vybudování přípojek / zpevněné plochy nejsou v kalkulaci (naceníme individuálně)');
+  if (needPrep) { if (d.site_prep_known !== 'yes') missing.push('Cena vybudování přípojek / zpevněné plochy (počítáno 0 Kč)'); else if (num(d.site_prep)) given.push('Příprava místa / přípojky: ' + num(d.site_prep).toLocaleString('cs-CZ') + ' Kč bez DPH'); }
   if (!own) { v('Výpovědní lhůta', d.notice_known === 'no' ? 'zatím neznámá' : num(d.notice) ? num(d.notice) + ' měs.' : '', ''); v('Délka smlouvy', num(d.contract_years) ? num(d.contract_years) + ' let' : '', ''); }
   assumed.push(`Ceny: praní ${num(d.price_wash, 300)} Kč, sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly)`);
   assumed.push(`Návštěvnost (váš předpoklad): slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} praní za den`);
@@ -124,7 +125,8 @@ function evaluate(d, c) {
   const cm = (k, l) => { if (d[k] !== 'no') return; const m = num(d[k + '_m']); if (!m) { missing.push('Délka trasy přípojky – ' + l); risks.push('Chybí ' + l + ' – délka trasy není uvedena'); } else { given.push('Přípojka ' + l + ': nutno vybudovat, trasa ' + m + ' m'); risks.push('Nutno vybudovat přípojku: ' + l + ' (' + m + ' m) – náklady zahrňte do „Příprava místa / přípojky"'); } };
   cm('conn_water', 'voda'); cm('conn_sewer', 'odpad'); cm('conn_power', 'elektřina');
   if (d.surface === 'yes') given.push('Zpevněná plocha: už vybudovaná'); else if (d.surface === 'no') { given.push('Zpevněná plocha: bude se budovat'); risks.push('Nutno vybudovat zpevněnou plochu pod prádlomat – náklady zahrňte do „Příprava místa / přípojky"'); } else missing.push('Zpevněná plocha pod prádlomat (vybudovaná / bude se budovat)');
-  if (needPrep) steps.push('Nechat nacenit vybudování přípojek / zpevněné plochy (Best Series)');
+  if (needPrep && d.site_prep_known !== 'yes') steps.push('Nacenit vybudování přípojek / zpevněné plochy a doplnit do investice');
+  if (d.delivery_known !== 'yes') steps.push('Zjistit cenu dopravy a instalace a doplnit do investice');
   const compN = pois.filter((p) => p.type === 'competition').length;
   if (compN >= 2) risks.push(`Konkurence v okolí: ${compN} provozoven zakreslených v mapě`);
   if (!pois.some((p) => p.type === 'housing')) missing.push('Bytové domy v okolí zakreslené v mapě');
@@ -221,6 +223,13 @@ function siteForm(s, site, d, error, saved, noeval, products) {
     <input type="hidden" name="product_name" id="f-product-name" value="${V('product_name')}"><input type="hidden" name="machine_price" id="f-machine-price" value="${V('machine_price')}"><input type="hidden" name="invest_vat" value="excl">
     <script>(function(){ var sel=document.getElementById('f-product'), nm=document.getElementById('f-product-name'), price=document.getElementById('f-machine-price');
       function u(){ var o=sel.options[sel.selectedIndex]; if(!o) return; nm.value=o.getAttribute('data-name')||''; price.value=o.getAttribute('data-price')||''; } sel.addEventListener('change',u); if(sel.value) u(); })();</script>
+    <label>Doprava a instalace${sel('delivery_known', [['no', 'neznám'], ['yes', 'znám cenu']])}</label>
+    ${inp('delivery', 'Doprava a instalace (Kč bez DPH)', 'inputmode="decimal" data-known="delivery_known"')}
+    <label class="prep-row">Přípojky / zpevněná plocha – cena${sel('site_prep_known', [['no', 'neznám'], ['yes', 'znám cenu']])}</label>
+    ${inp('site_prep', 'Příprava místa / přípojky (Kč bez DPH)', 'inputmode="decimal" data-known="site_prep_known"')}
+    <script>(function(){ function needPrep(){ return ['conn_water','conn_sewer','conn_power','surface'].some(function(n){ var e=document.querySelector('select[name='+n+']'); return e&&e.value==='no'; }); }
+      function u(){ document.querySelectorAll('input[data-known]').forEach(function(i){ var k=document.querySelector('select[name='+i.getAttribute('data-known')+']'); var show=k.value==='yes'; if(i.name==='site_prep'){ var np=needPrep(); k.parentNode.style.display=np?'':'none'; show=show&&np; if(!np){ k.value='no'; } } i.parentNode.style.display=show?'':'none'; if(!show) i.value=''; }); }
+      document.querySelectorAll('select[name=delivery_known],select[name=site_prep_known],select[name=conn_water],select[name=conn_sewer],select[name=conn_power],select[name=surface]').forEach(function(e){ e.addEventListener('change',u); }); u(); })();</script>
     <label>Financování${sel('financing', [['no', 'vlastní kapitál'], ['yes', 'úvěr / leasing']])}</label>
     <label>Akontace<div style="display:flex;gap:6px"><input name="down_payment" value="${V('down_payment')}" inputmode="decimal" style="flex:1"><select name="down_mode" style="width:auto">${[['czk', 'Kč'], ['pct', '%']].map(([v, l]) => `<option value="${v}"${(d.down_mode || 'czk') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></label>
     ${inp('interest', 'Úrok (% p.a.)', 'inputmode="decimal"')}
