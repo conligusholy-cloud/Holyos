@@ -71,9 +71,10 @@ async function resolveCompany(c) {
   let ico = c.ico ? String(c.ico).replace(/\D/g, '') : '';
   if (!ico) { const m = name.match(/\b(\d{8})\b/); if (m) { ico = m[1]; const rest = name.replace(m[0], '').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim(); if (rest) name = rest; } }
   let co = null;
-  // Spárování jen podle IČO nebo přesného názvu. Shoda jen podle e-mailu se nepoužívá — e-mail může patřit jiné firmě.
+  // Držíme se údajů z formuláře objednávky: existující firmu použijeme jen při shodě IČO, nebo při shodě názvu A e-mailu zároveň
+  // (opakovaný zákazník). Jinak vznikne nová karta z vyplněných údajů — žádné „přibližné" přiřazení k cizí firmě.
   if (ico) co = await prisma.company.findFirst({ where: { ico } }).catch(() => null);
-  if (!co) co = await prisma.company.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } }).catch(() => null);
+  if (!co && c.email) co = await prisma.company.findFirst({ where: { name: { equals: name, mode: 'insensitive' }, email: { equals: String(c.email), mode: 'insensitive' } } }).catch(() => null);
   if (!co) {
     co = await prisma.company.create({ data: {
       name: name.slice(0, 255), ico: ico || null, dic: c.dic || null, type: 'customer', email: c.email || null, phone: c.phone ? String(c.phone).slice(0, 20) : null,
