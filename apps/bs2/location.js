@@ -304,28 +304,26 @@ const PAGE = `<!DOCTYPE html>
         </div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">00:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
-        <script>(function(){var how=document.querySelector('.sim .how'),st=document.querySelector('.sim .how-stage');if(!how||!st)return;
-function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}
-st.style.width='440px';st.style.transform='none';st.style.marginLeft='0';st.style.marginBottom='0';
-var r=st.getBoundingClientRect(),minL=r.left,maxR=r.right;st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){var b=el.getBoundingClientRect();if(b.width>0){minL=Math.min(minL,b.left);maxR=Math.max(maxR,b.right);}});
-var full=Math.max(440,maxR-minL),left=r.left-minL,nat=st.offsetHeight||560;
-var cs=getComputedStyle(how);var w=how.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-4;var s=Math.min(1,w/full);
-st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-full*s)/2+left*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';
-// korekce podle skutečné polohy po zmenšení: obsah zarovnat na střed rámečku, nikdy nepřetéct vpravo
-var hr=how.getBoundingClientRect(),cl=hr.left+(parseFloat(cs.paddingLeft)||0),cr=hr.right-(parseFloat(cs.paddingRight)||0);
-for(var k=0;k<2;k++){var r2=st.getBoundingClientRect(),a=r2.left,b=r2.right;st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){var q=el.getBoundingClientRect();if(q.width>0){a=Math.min(a,q.left);b=Math.max(b,q.right);}});
-var cw=b-a,avail=cr-cl;if(cw>avail+1){s=s*avail/cw;st.style.transform='scale('+s+')';st.style.marginBottom=(-nat*(1-s))+'px';continue;}
-var shift=(cl+(avail-cw)/2)-a;st.style.marginLeft=(parseFloat(st.style.marginLeft)+shift)+'px';}}
-fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);setTimeout(fit,1200);})();</script>
+
       </div>
       <script>(function(){
         var $=function(id){return document.getElementById(id);};
         // Mobil: celou scénu (hodiny + stroj + kaskáda) zmenšit, ať se vejde na šířku, místo skládání pod sebe.
         (function fitSim(){ var how=document.querySelector('.sim .how'), st=how&&how.querySelector('.how-stage'); if(!st) return;
-          var FULL_W=740, FULL_H=500, LEFT=145; // rozsah scény v px při 440px stage (hodiny vlevo, kaskáda vpravo)
-          function apply(){ var avail=how.clientWidth-20; if(avail>=FULL_W){ how.classList.remove('fit'); st.style.transform=''; st.style.marginBottom=''; return; }
-            var sc=avail/FULL_W; how.classList.add('fit'); st.style.transform='translateX('+(LEFT*sc)+'px) scale('+sc+')'; st.style.marginBottom=(-(560-FULL_H*sc)+8)+'px'; }
-          apply(); window.addEventListener('resize',apply); })();
+          function apply(){
+            if(window.innerWidth>700){ how.classList.remove('fit'); st.style.transform=''; st.style.marginBottom=''; return; }
+            var cs=getComputedStyle(how), padL=parseFloat(cs.paddingLeft)||0, padR=parseFloat(cs.paddingRight)||0;
+            var avail=how.clientWidth-padL-padR;
+            how.classList.add('fit'); st.style.transition='none'; st.style.marginLeft='0'; st.style.marginRight='0'; st.style.transform='none'; st.style.marginBottom='0';
+            function bounds(){ var r=st.getBoundingClientRect(), a=r.left, b=r.right; st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){ var q=el.getBoundingClientRect(); if(q.width>0){ a=Math.min(a,q.left); b=Math.max(b,q.right); } }); return {a:a,b:b}; }
+            var bb=bounds(), sc=Math.min(1,avail/Math.max(1,bb.b-bb.a));
+            st.style.transform='scale('+sc+')';
+            // celou scénu zarovnat doleva: nejlevější prvek (hodiny) přesně k levému okraji rámečku
+            var b2=bounds(), want=how.getBoundingClientRect().left+padL, shift=want-b2.a;
+            st.style.transform='translateX('+shift+'px) scale('+sc+')';
+            st.style.marginBottom=(-(560-500*sc)+8)+'px';
+          }
+          apply(); setTimeout(apply,300); setTimeout(apply,1200); window.addEventListener('resize',apply); window.addEventListener('orientationchange',function(){ setTimeout(apply,250); }); })();
         var cust=$('how-cust'),bag=$('how-bag'),w=$('how-w'),sd=$('how-s'),tag=$('how-tag'),sum=$('how-sum'),n=$('how-n'),clk=$('how-clock'),coins=$('how-coins');
         if(!cust)return;
         // pozice v % plochy obrázku: pračka 18 kg a sušička (bubny na fotce), vchod vlevo
