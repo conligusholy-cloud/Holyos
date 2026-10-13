@@ -16,6 +16,7 @@ const multer = require('multer');
 const { q, migrate } = require('./db');
 const V = require('./views');
 const LOC = require('./location');
+const LAPP = require('./location-app');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
 const BUILD = require('./build');
@@ -141,6 +142,14 @@ app.use((req, res, next) => {
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 async function log(admin, action, detail) { try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [admin.pid || null, admin.name || null, action, detail ? JSON.stringify(detail) : null]); } catch (e) { /* log není kritický */ } }
 
+// Zákazník aplikace vidí jen /lokalita*; ostatní uživatelé do /lokalita nesmí.
+app.use((req, res, next) => {
+  const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return next();
+  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|location)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
+    return q('SELECT user_type FROM supporters WHERE id=$1', [s.sid]).then((r) => { const u = r.rows[0]; if (u && u.user_type === 'location') return res.redirect('/lokalita'); next(); }).catch(() => next());
+  }
+  next();
+});
 // ── Health ─────────────────────────────────────────────────────────────────
 app.get('/api/health', wrap(async (req, res) => {
   let db = false, db_error;
@@ -437,28 +446,99 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
       if (o) {
         console.log('[bs2] /location ZAPLACENO #' + o.id + ' ' + o.package + ' ' + o.amount_czk + ' Kč');
         const pkg = LOC.PACKAGES[o.package] || {};
+        try { await locGrantAccess(o, req); } catch (e) { console.error('[bs2] location grant:', e.message); }
         locNotify('Zaplaceno: ' + (pkg.label || o.package) + ' – ' + o.name, o.name + ' (' + o.email + (o.phone ? ', ' + o.phone : '') + ') zaplatil ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Předejte přístup do aplikace a označte v administraci.').catch(() => {});
-        sendBs2Mail({ to: o.email, subject: 'Potvrzení platby – Prověření lokality (' + (pkg.label || o.package) + ')', body: 'Dobrý den, děkujeme za platbu ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Do jednoho pracovního dne vám pošleme přístup do aplikace na 12 měsíců. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: locBase(req) + '/location', linkLabel: 'Prověření lokality' }).catch((e) => console.warn('[bs2] location mail zákazník:', e.message));
       }
     }
   }
   res.json({ received: true });
 }));
+// Zpřístupnění aplikace: účet typu 'location' (12 měsíců), aktivační e-mail, objednávka → granted.
+async function locGrantAccess(o, req) {
+  const pkg = LOC.PACKAGES[o.package] || LOC.PACKAGES.basic;
+  const parts = String(o.name || '').trim().split(/\s+/); const first = parts.shift() || null, last = parts.join(' ') || null;
+  let u = (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
+  if (!u) {
+    u = (await q("INSERT INTO supporters (email, first_name, last_name, phone, status, user_type, source, location_package, location_expires_at) VALUES ($1,$2,$3,$4,'invited','location','location',$5, now() + interval '12 months') RETURNING *", [o.email, first, last, o.phone || null, o.package])).rows[0];
+  } else {
+    // existující účet (např. starý uživatel): typ ponechat, jen přidat balíček a platnost; typ 'new' povýšit na location
+    u = (await q("UPDATE supporters SET location_package=$2, location_expires_at=GREATEST(COALESCE(location_expires_at, now()), now()) + interval '12 months', user_type=CASE WHEN user_type IN ('new') THEN 'location' ELSE user_type END, phone=COALESCE(phone,$3), updated_at=now() WHERE id=$1 RETURNING *", [u.id, o.package, o.phone || null])).rows[0];
+  }
+  await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
+  const base = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
+  const activated = !!u.password_hash;
+  const body = 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč za balíček ' + pkg.label + '.\n\n'
+    + (activated ? 'Aplikace Prověření lokality je zpřístupněna ve vašem účtu Best Series 2.0 – po přihlášení ji najdete v záložce Moje lokality.' : 'Váš přístup je připraven. Aktivujte si účet: na stránce Aktivace zadejte tento e-mail (' + o.email + '), zvolte si nick a heslo.')
+    + '\n\nPřístup platí 12 měsíců. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.';
+  await sendBs2Mail({ to: o.email, subject: 'Přístup do aplikace Prověření lokality (' + pkg.label + ')', body, link: activated ? base + '/lokalita' : base + '/activate', linkLabel: activated ? 'Otevřít aplikaci' : 'Aktivovat účet' });
+  console.log('[bs2] /location přístup předán: účet #' + u.id + ' ' + o.email);
+}
+async function requireLocation(req, res, next) {
+  return requireUser(req, res, async () => {
+    const u = req.user;
+    if (!u.location_package) return res.status(403).send(V.errorPage('Bez přístupu', 'Aplikace Prověření lokality není součástí vašeho účtu.', '/'));
+    if (u.location_expires_at && new Date(u.location_expires_at) < new Date()) return res.send(LAPP.expiredPage(u));
+    next();
+  });
+}
+async function locInfo(u, msg) {
+  const o = (await q("SELECT survey_date, survey_tech, survey_report FROM location_orders WHERE supporter_id=$1 AND package='premium' ORDER BY id DESC LIMIT 1", [u.id])).rows[0] || {};
+  return { package: u.location_package, expires_at: u.location_expires_at, msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
+}
+app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
+  const sites = (await q('SELECT id, name, address, city, calc, result FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
+  res.send(LAPP.listPage(req.user, sites, await locInfo(req.user, req.query.msg)));
+}));
+app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
+app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
+  const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));
+  let studies = []; try { studies = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { studies = []; }
+  res.send(LAPP.studiesPage(req.user, studies));
+}));
+app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
+  const n = Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0);
+  if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
+  res.send(LAPP.siteForm(req.user, null, {}, ''));
+}));
+async function locSave(req, res, site) {
+  const d = LAPP.clean(req.body || {});
+  if (!d.name || !d.address) return res.status(400).send(LAPP.siteForm(req.user, site, d, 'Vyplňte název a adresu lokality.'));
+  const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
+  const calcSummary = { mid_operating: c.S.mid.operating, mid_cash: c.S.mid.cash, weak_cash: c.S.weak.cash, strong_cash: c.S.strong.cash, be_operating: c.be_operating, be_cash: c.be_cash, invest: c.invest, payment: c.payment };
+  const result = { result: ev.result, cls: ev.cls, at: new Date().toISOString() };
+  let id;
+  if (site) { await q('UPDATE location_sites SET name=$2, address=$3, city=$4, data=$5, calc=$6, result=$7, updated_at=now() WHERE id=$1 AND supporter_id=$8', [site.id, d.name, d.address, d.city || null, JSON.stringify(d), JSON.stringify(calcSummary), JSON.stringify(result), req.user.id]); id = site.id; }
+  else {
+    const n = Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0);
+    if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
+    id = (await q('INSERT INTO location_sites (supporter_id, name, address, city, data, calc, result) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), JSON.stringify(calcSummary), JSON.stringify(result)])).rows[0].id;
+  }
+  res.redirect('/lokalita/' + id + '/report');
+}
+app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
+async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
+app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, '')); }));
+app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
+app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
+app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {
   const status = Object.keys(LOC.STATUS).includes(req.query.status) ? req.query.status : '';
-  const rows = (await q('SELECT * FROM location_orders ' + (status ? 'WHERE status=$1 ' : '') + "ORDER BY (status='paid') DESC, created_at DESC LIMIT 500", status ? [status] : [])).rows;
+  const rows = (await q('SELECT o.*, (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=o.supporter_id) AS sites_count FROM location_orders o ' + (status ? 'WHERE o.status=$1 ' : '') + "ORDER BY (o.status='paid') DESC, o.created_at DESC LIMIT 500", status ? [status] : [])).rows;
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM location_orders GROUP BY status')).rows.forEach((r) => { counts[r.status] = r.c; });
   res.send(LOC.adminLocationOrders({ adminLayout: V.adminLayout, admin: req.admin, rows, counts, status, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, stripeOn: !!process.env.STRIPE_SECRET_KEY }));
 }));
 app.post('/admin/location/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => {
   const st = String(req.body.status || ''); if (!Object.keys(LOC.STATUS).includes(st)) return res.redirect('/admin/location');
-  await q('UPDATE location_orders SET status=$1, access_granted_at=CASE WHEN $1=\'granted\' THEN now() ELSE access_granted_at END WHERE id=$2', [st, parseInt(req.params.id, 10)]);
+  const o = (await q('SELECT * FROM location_orders WHERE id=$1', [parseInt(req.params.id, 10)])).rows[0]; if (!o) return res.redirect('/admin/location');
+  if (st === 'granted') { try { await locGrantAccess(o, req); } catch (e) { return res.redirect('/admin/location?msg=' + encodeURIComponent('Účet se nepodařilo založit: ' + e.message)); } }
+  else await q('UPDATE location_orders SET status=$1 WHERE id=$2', [st, o.id]);
   await log(req.admin, 'location_status', { id: req.params.id, status: st });
   res.redirect('/admin/location?msg=' + encodeURIComponent('Stav objednávky #' + req.params.id + ' změněn.'));
 }));
 app.post('/admin/location/:id(\\d+)/note', requireAdmin, wrap(async (req, res) => {
-  await q('UPDATE location_orders SET note=$1 WHERE id=$2', [String(req.body.note || '').slice(0, 2000) || null, parseInt(req.params.id, 10)]);
+  const b = req.body || {}; const t = (k, n) => (b[k] == null ? undefined : (String(b[k]).trim().slice(0, n) || null));
+  await q('UPDATE location_orders SET note=$1, survey_date=COALESCE($3, survey_date), survey_tech=COALESCE($4, survey_tech), survey_report=COALESCE($5, survey_report) WHERE id=$2', [t('note', 2000), parseInt(req.params.id, 10), t('survey_date', 100), t('survey_tech', 100), t('survey_report', 8000)]);
   res.redirect('/admin/location?msg=' + encodeURIComponent('Poznámka uložena.'));
 }));
 // Povinné potvrzení VOP + ochrany údajů po prvním přihlášení
@@ -725,7 +805,7 @@ app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
   res.cookie(COLS_COOKIE, JSON.stringify(cols), { httpOnly: true, secure: isHttps(req), sameSite: 'lax', maxAge: 365 * 24 * 3600 * 1000 });
   res.redirect(back);
 });
-const USER_TYPES = ['new', 'standard', 'owner', 'seller'];
+const USER_TYPES = ['new', 'standard', 'owner', 'seller', 'location'];
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(), status = String(req.query.status || ''), utype = String(req.query.type || '');
   const where = [], params = [];

@@ -387,6 +387,7 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
 const userNav = (s) => {
+  if (s && s.user_type === 'location') return [{ id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' }, { id: 'check', href: '/lokalita/checklist', label: 'Checklist', icon: 'check' }, { id: 'studie', href: '/lokalita/studie', label: 'Případové studie', icon: 'chart' }, USER_NAV[1]];
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });

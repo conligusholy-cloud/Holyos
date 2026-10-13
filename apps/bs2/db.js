@@ -228,6 +228,27 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS location_orders_status_idx ON location_orders (status, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_date TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_tech TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_report TEXT;
+    -- Účet zákazníka aplikace Prověření lokality (user_type='location'): balíček + platnost
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_package TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_expires_at TIMESTAMPTZ;
+    -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
+    CREATE TABLE IF NOT EXISTS location_sites (
+      id           SERIAL PRIMARY KEY,
+      supporter_id INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      name         TEXT NOT NULL,
+      address      TEXT,
+      city         TEXT,
+      data         JSONB NOT NULL DEFAULT '{}'::jsonb,
+      calc         JSONB,
+      result       JSONB,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS location_sites_sup_idx ON location_sites (supporter_id, created_at);
   `);
 }
 
