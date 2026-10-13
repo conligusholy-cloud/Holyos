@@ -66,6 +66,9 @@ function haversineM(lat1, lon1, lat2, lon2) {
 
 // ─── Geokódování oblasti → bounding box ──────────────────────────────────────
 async function geocodeArea(query) {
+  // Přímé souřadnice „lat,lon" (např. z BS2 aplikace Prověření lokality) → bez geokódování.
+  const mc = String(query || '').trim().match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (mc) { const lat = parseFloat(mc[1]), lon = parseFloat(mc[2]); if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon, display_name: lat.toFixed(5) + ', ' + lon.toFixed(5), bbox: { s: lat - 0.09, n: lat + 0.09, w: lon - 0.14, e: lon + 0.14 }, country_code: 'cz' }; }
   const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=' + encodeURIComponent(query);
   const j = await fetchJson(url);
   if (!Array.isArray(j) || !j.length) return null;

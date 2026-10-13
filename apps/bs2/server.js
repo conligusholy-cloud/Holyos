@@ -575,7 +575,15 @@ async function locSave(req, res, site) {
     id = (await q('INSERT INTO location_sites (supporter_id, name, address, city, data, calc, result, evaluated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
       [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), calcSummary ? JSON.stringify(calcSummary) : null, result ? JSON.stringify(result) : null, evalNow ? new Date() : null])).rows[0].id;
   }
-  if (evalNow) return res.redirect('/lokalita/' + id + '/report');
+  if (evalNow) {
+    // po vyhodnocení rovnou AI studie (= report)
+    try {
+      const siteNow = (await q('SELECT * FROM location_sites WHERE id=$1', [id])).rows[0];
+      const study = await locBuildStudy(siteNow, d, c, ev);
+      await q('UPDATE location_sites SET study=$2, study_at=now() WHERE id=$1', [id, JSON.stringify(study)]);
+      return res.redirect('/lokalita/' + id + '/studie');
+    } catch (e) { console.error('[bs2] studie:', e.message); return res.redirect('/lokalita/' + id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
+  }
   return res.redirect('/lokalita/' + id + '?saved=1' + (mode === 'form' ? '#najem' : ''));
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
@@ -584,20 +592,26 @@ app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.siteForm(req.user, site, dd, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
 app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c), req.query.study_err ? String(req.query.study_err).slice(0, 300) : '')); }));
+async function locBuildStudy(site, d, c, ev) {
+  // Spádová oblast: přesně kolem prádlomatu (lat,lng); když HolyOS souřadnice nezpracuje nebo nevrátí obce, zkusit město
+  let area = null;
+  try { const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.lat + ',' + d.lng) + '&radius_km=15'); if (r.ok && r.j && (r.j.places || []).length) area = r.j; } catch (e) { area = null; }
+  if (!area) { try { const r2 = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent((d.city || d.address || '').trim()) + '&radius_km=15'); if (r2.ok && r2.j && !r2.j.error) area = r2.j; } catch (e) { /* bez spádové oblasti */ } }
+  return LSTUDY.runStudy({ site, d, c, ev, area });
+}
 // AI studie lokality: sběr OSM + spádová oblast + Claude → uloží se k lokalitě
 app.post('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => {
   const site = await locSite(req); if (!site) return res.redirect('/lokalita');
   if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1');
   if (rateLimited('study:' + req.user.id, 6, 3600e3)) return res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Příliš mnoho studií za hodinu, zkuste to později.'));
   const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
-  let area = null; try { const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.lat + ',' + d.lng) + '&radius_km=15'); if (r.ok) area = r.j; else { const r2 = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.city || d.address) + '&radius_km=15'); if (r2.ok) area = r2.j; } } catch (e) { area = null; }
   try {
-    const study = await LSTUDY.runStudy({ site, d, c, ev, area });
+    const study = await locBuildStudy(site, d, c, ev);
     await q('UPDATE location_sites SET study=$2, study_at=now() WHERE id=$1', [site.id, JSON.stringify(study)]);
     res.redirect('/lokalita/' + site.id + '/studie');
   } catch (e) { console.error('[bs2] studie:', e.message); res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
 }));
-app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); res.send(LSTUDY.studyPage(req.user, site, site.study, LAPP.NAV(req.user))); }));
+app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c); res.send(LSTUDY.studyPage(req.user, site, site.study, LAPP.NAV(req.user), LAPP.reportSections(site, d, c, ev))); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {
