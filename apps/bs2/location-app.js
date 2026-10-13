@@ -211,8 +211,8 @@ function siteForm(s, site, d, error) {
     function save(a,b){ lat.value=a.toFixed(6); lng.value=b.toFixed(6); msg.textContent='Poloha: '+lat.value+', '+lng.value+' (uloží se s lokalitou)'; }
     if(has) setPin(+lat.value,+lng.value);
     map.on('click',function(e){ setPin(e.latlng.lat,e.latlng.lng); });
-    document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var q=[f.address.value,f.city.value].filter(Boolean).join(', ').trim(); if(q.length<3){ msg.textContent='Nejdřív vyplňte adresu.'; return; } msg.textContent='Hledám…';
-      fetch('/api/location/geocode?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(j){ if(j&&j.lat!=null){ setPin(j.lat,j.lon,17); msg.textContent='Nalezeno: '+(j.display_name||q)+' – upřesněte špendlík přetažením.'; } else msg.textContent=(j&&j.error)||'Adresa nenalezena – klikněte do mapy ručně.'; }).catch(function(){ msg.textContent='Vyhledání selhalo – klikněte do mapy ručně.'; }); });
+    document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var ad=f.address.value.trim(), ci=f.city.value.trim(); if(ad.length<2&&ci.length<2){ msg.textContent='Nejdřív vyplňte adresu nebo město.'; return; } msg.textContent='Hledám…';
+      fetch('/api/location/geocode?address='+encodeURIComponent(ad)+'&city='+encodeURIComponent(ci)).then(function(r){return r.json();}).then(function(j){ if(j&&j.lat!=null){ setPin(j.lat,j.lon,j.level==='town'?15:17); msg.textContent=(j.level==='town'?'Přesná adresa nenalezena, zobrazuji obec: ':'Nalezeno: ')+(j.display_name||ad)+' – špendlík přetáhněte přesně na místo.'; } else msg.textContent=(j&&j.error)||'Adresa nenalezena – klikněte do mapy ručně.'; }).catch(function(){ msg.textContent='Vyhledání selhalo – klikněte do mapy ručně.'; }); });
   })();</script>`, LEAFLET_HEAD);
 }
 
