@@ -567,9 +567,21 @@ fit();addEventListener('resize',fit);addEventListener('orientationchange',functi
     if(c&&c.stripe){ STRIPE=true; sub.textContent=BTN_PAY; $('pay-note').textContent='Bezpečná platba kartou přes Stripe · přístup aktivujeme po připsání platby.';
       $('order-lead').textContent='Vyberte balíček, vyplňte kontakt a zaplaťte kartou. Po zaplacení vám pošleme přístup do aplikace na 12 měsíců. Adresu místa zadáte až v aplikaci.'; }
   }).catch(function(){});
+  // Děkovná stránka po úspěšné platbě (celoobrazovkové okno)
+  function showThanks(){
+    var st=document.createElement('style');
+    st.textContent='.thx{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(2,6,16,.86);backdrop-filter:blur(5px)}.thx .b{max-width:520px;width:100%;text-align:center;padding:34px 26px;border-radius:22px;border:1px solid rgba(79,209,255,.35);background:linear-gradient(160deg,#0d1730,#0a1020);box-shadow:0 30px 90px rgba(0,0,0,.6),0 0 60px rgba(46,229,157,.15);animation:thxin .5s ease}.thx .ok{width:76px;height:76px;margin:0 auto 18px;border-radius:50%;background:rgba(46,229,157,.14);border:2px solid #2ee59d;display:flex;align-items:center;justify-content:center;font-size:40px;color:#2ee59d}.thx h2{margin:0 0 10px;font-size:26px;color:#fff}.thx p{margin:0 0 12px;color:#b9c6e4;line-height:1.55;font-size:15.5px}.thx .mail{display:inline-block;margin:6px 0 14px;padding:10px 16px;border-radius:12px;background:rgba(79,209,255,.1);border:1px solid rgba(79,209,255,.35);color:#dff6ff;font-weight:600}.thx button{margin-top:6px;padding:12px 28px;border:0;border-radius:12px;font-weight:800;font-size:15px;color:#04101c;background:linear-gradient(90deg,#4fd1ff,#7c9bff);cursor:pointer}@keyframes thxin{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}';
+    document.head.appendChild(st);
+    var d=document.createElement('div'); d.className='thx'; d.setAttribute('role','dialog'); d.setAttribute('aria-modal','true');
+    d.innerHTML='<div class="b"><div class="ok">&#10003;</div><h2>Děkujeme, platba proběhla!</h2><p>Údaje pro přihlášení do aplikace (odkaz k aktivaci účtu) jsme vám právě odeslali na <b>e-mail, který jste zadali v objednávce</b>.</p><div class="mail">&#9993; Zkontrolujte svou e-mailovou schránku</div><p style="font-size:13.5px;color:#8fa0c4">Zpráva obvykle dorazí do několika minut. Nenajdete-li ji, podívejte se prosím i do nevyžádané pošty (spam). Potvrzení platby a fakturu pošleme také e-mailem.</p><button type="button" id="thx-x">Rozumím</button></div>';
+    document.body.appendChild(d);
+    function close(){ d.remove(); }
+    document.getElementById('thx-x').addEventListener('click',close);
+    document.addEventListener('keydown',function(e){ if(e.key==='Escape') close(); });
+  }
   // Návrat ze Stripe
   try { var q=new URLSearchParams(location.search);
-    if(q.get('paid')==='1'){ setMsg('ok','Děkujeme, platba proběhla. Potvrzení přijde e-mailem a do jednoho pracovního dne vám aktivujeme přístup do aplikace.'); track('misto_paid_return'); }
+    if(q.get('paid')==='1'){ track('misto_paid_return'); showThanks(); }
     else if(q.get('canceled')==='1'){ setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
     if(q.get('paid')||q.get('canceled')) history.replaceState(null,'',location.pathname+'#objednat');
   } catch(e){}
