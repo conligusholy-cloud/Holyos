@@ -209,6 +209,11 @@ async function sendBs2MailRaw({ to, subject, body, link, linkLabel }) {
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
 // Fakturace přes HolyOS (zálohová faktura k objednávce produktu / faktura po platbě online produktu). Fire-and-forget, selhání se jen zaloguje.
+async function holyosFetch(method, path, body) {
+  const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+  return fetch(HOLYOS_URL + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) });
+}
 function holyosInvoice(kind, payload) {
   try {
     const secret = process.env.BS2_SSO_SECRET; if (!secret || !HOLYOS_URL) return;
@@ -1537,8 +1542,41 @@ app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {
   const pctKeys = new Set((await loadServices()).filter(x => x.mode === 'percent').map(x => x.key));
   const rows = (await q("SELECT o.*, s.first_name, s.last_name, s.email, s.nick FROM orders o JOIN supporters s ON s.id=o.supporter_id " + (status ? 'WHERE o.status=$1 ' : '') + "ORDER BY (o.status='new') DESC, o.created_at DESC LIMIT 500", status ? [status] : [])).rows;
   rows.forEach(o => { o.no_price = pctKeys.has(o.service_key); });
+  // Faktury k objednávkám (záloha + finální) z HolyOS: stav, odeslání e-mailem
+  let invErr = '';
+  try {
+    const r = await holyosFetch('GET', '/api/auth/bs2/invoices?refs=' + rows.map(o => o.id).join(','));
+    if (r.ok) { const m = await r.json(); rows.forEach(o => { o.inv = m[String(o.id)] || {}; }); } else invErr = 'HolyOS ' + r.status;
+  } catch (e) { invErr = e.message; }
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM orders GROUP BY status')).rows.forEach(r => { counts[r.status] = r.c; });
-  res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, status, counts }));
+  res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || (invErr ? 'Faktury se nepodařilo načíst z HolyOS (' + invErr + ').' : ''), holyosUrl: HOLYOS_URL, status, counts }));
+}));
+// PDF faktury z HolyOS (proxy s tokenem BS2)
+app.get('/admin/orders/invoice/:id(\\d+)/pdf', requireAdmin, wrap(async (req, res) => {
+  const r = await holyosFetch('GET', '/api/auth/bs2/invoice/' + parseInt(req.params.id, 10) + '/pdf');
+  if (!r.ok) return res.status(502).send(V.errorPage('Faktura', 'Fakturu se nepodařilo načíst z HolyOS (' + r.status + ').', '/admin/orders'));
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': r.headers.get('content-disposition') || 'inline' }).send(Buffer.from(await r.arrayBuffer()));
+}));
+// Ruční odeslání faktury e-mailem odběrateli
+app.post('/admin/orders/invoice/:id(\\d+)/send', requireAdmin, wrap(async (req, res) => {
+  let msg = '';
+  try { const r = await holyosFetch('POST', '/api/auth/bs2/invoice/' + parseInt(req.params.id, 10) + '/send'); const j = await r.json().catch(() => ({})); msg = r.ok ? 'Faktura odeslána na ' + (j.to || 'e-mail odběratele') + '.' : 'Odeslání selhalo: ' + (j.error || r.status); }
+  catch (e) { msg = 'Odeslání selhalo: ' + e.message; }
+  await log(req.admin, 'invoice_send', { invoice_id: req.params.id });
+  res.redirect('/admin/orders?msg=' + encodeURIComponent(msg));
+}));
+// Vystavení zálohové faktury ručně (objednávky vzniklé před zapnutím fakturace)
+app.post('/admin/orders/:id(\\d+)/invoice', requireAdmin, wrap(async (req, res) => {
+  const o = (await q('SELECT o.*, s.first_name, s.last_name, s.email, s.nick, s.phone FROM orders o JOIN supporters s ON s.id=o.supporter_id WHERE o.id=$1', [parseInt(req.params.id, 10)])).rows[0];
+  let msg = 'Objednávka nenalezena.';
+  if (o) {
+    try {
+      const r = await holyosFetch('POST', '/api/auth/bs2/invoice/proforma', { ref: o.id, currency: o.currency, customer: invCustomer(o), items: orderInvItems(o.product_name, o.price_net, o.dc_used), note: 'Objednávka produktu.' });
+      const j = await r.json().catch(() => ({}));
+      msg = r.ok ? 'Zálohová faktura ' + (j.invoice_number || '') + (j.existing ? ' už existovala' : (j.sent ? ' vystavena a odeslána' : ' vystavena, ale e-mail se neodeslal (' + (j.send_error || '') + ')')) + '.' : 'Vystavení selhalo: ' + (j.error || j.reason || r.status);
+    } catch (e) { msg = 'Vystavení selhalo: ' + e.message; }
+  }
+  res.redirect('/admin/orders?msg=' + encodeURIComponent(msg));
 }));
 app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) => {
   const oid = parseInt(req.params.id, 10);

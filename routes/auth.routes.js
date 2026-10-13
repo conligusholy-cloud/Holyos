@@ -317,6 +317,51 @@ router.post('/bs2/invoice/online', express.json({ limit: '100kb' }), async (req,
   } catch (err) { next(err); }
 });
 
+// GET  /api/auth/bs2/invoices?refs=1,2,3 — stav faktur (záloha + finální) k objednávkám BS2 (ref = id objednávky v BS2)
+// GET  /api/auth/bs2/invoice/:id/pdf     — PDF faktury z BS2 (jen faktury se zdrojem bs2_*)
+// POST /api/auth/bs2/invoice/:id/send    — ruční (opětovné) odeslání faktury e-mailem odběrateli
+router.get('/bs2/invoices', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const refs = String(req.query.refs || '').split(',').map((x) => parseInt(x, 10)).filter((n) => n > 0).slice(0, 300);
+    const out = {};
+    if (refs.length) {
+      const rows = await prisma.invoice.findMany({
+        where: { source: 'bs2_products', external_number: { in: refs.map((r) => 'BS2-O' + r) }, type: { in: ['proforma_issued', 'issued'] } },
+        select: { id: true, invoice_number: true, type: true, external_number: true, status: true, delivery_status: true, sent_at: true, sent_to: true, send_error: true, total: true, currency: true },
+        orderBy: { id: 'asc' },
+      });
+      rows.forEach((r) => {
+        const ref = String(r.external_number).replace('BS2-O', '');
+        out[ref] = out[ref] || {};
+        out[ref][r.type === 'proforma_issued' ? 'proforma' : 'final'] = r;
+      });
+    }
+    res.json(out);
+  } catch (err) { next(err); }
+});
+router.get('/bs2/invoice/:id(\\d+)/pdf', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const inv = await prisma.invoice.findUnique({ where: { id: parseInt(req.params.id, 10) }, include: { company: true, items: { orderBy: { line_order: 'asc' } } } });
+    if (!inv || !String(inv.source || '').startsWith('bs2_')) return res.status(404).json({ error: 'Faktura nenalezena' });
+    const { generateInvoicePdf } = require('../services/pdf/invoice-pdf');
+    const our = await require('../services/settings').getOurCompany().catch(() => null);
+    const pdf = await generateInvoicePdf(inv, our || { name: 'Best Series s.r.o.' });
+    res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'inline; filename="' + inv.invoice_number + '.pdf"' }).send(pdf);
+  } catch (err) { next(err); }
+});
+router.post('/bs2/invoice/:id(\\d+)/send', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const inv = await prisma.invoice.findUnique({ where: { id: parseInt(req.params.id, 10) }, select: { id: true, type: true, source: true } });
+    if (!inv || !String(inv.source || '').startsWith('bs2_')) return res.status(404).json({ error: 'Faktura nenalezena' });
+    const kind = inv.source === 'bs2_online' ? 'online' : (inv.type === 'proforma_issued' ? 'proforma' : 'final');
+    const r = await require('../services/bs2-billing').sendInvoice(inv.id, kind);
+    res.status(r.ok ? 200 : 502).json(r);
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/bs2/notify — push do Velína + zvonek v HolyOS pro Tomáše a Jana Holého (nová objednávka, převod, podnět, zpráva v BS2).
 // Příjemci: AppSetting bs2.velin_notify_emails (JSON pole e-mailů) nebo výchozí tomas.holy@ + jan.holy@bestseries.cz (Person.email).
 router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, next) => {

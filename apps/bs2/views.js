@@ -1751,6 +1751,20 @@ function adminSuggestions({ admin, rows = [], status = '', counts = {}, msg = ''
     <form method="post" action="/admin/suggestions/${g.id}/delete" style="margin:8px 0 0" onsubmit="return confirm('Opravdu smazat podnět?')"><button class="btn danger sm" type="submit">Smazat</button></form>
   </div>`; }).join('') : '<div class="card"><p class="muted" style="margin:0">Zatím žádné podněty.</p></div>'}`, holyosUrl);
 }
+// Buňka faktury v Objednávkách: ikona (klik = PDF), stav odeslání e-mailem a ruční odeslání
+function invCell(o, which) {
+  const i = o.inv && o.inv[which];
+  if (!i) {
+    if (which === 'final') return '<span class="muted small" title="Vystaví se automaticky po zaplacení zálohy">—</span>';
+    if (o.kind === 'service' && !(Number(o.price_net) > 0)) return '<span class="muted small">—</span>';
+    return `<form method="post" action="/admin/orders/${o.id}/invoice" style="margin:0" onsubmit="return confirm('Vystavit zálohovou fakturu a odeslat ji e-mailem zákazníkovi?')"><button class="btn sec sm" type="submit" title="Zálohová faktura ještě nebyla vystavena">Vystavit</button></form>`;
+  }
+  const sent = i.delivery_status === 'sent';
+  const when = i.sent_at ? new Date(i.sent_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  return `<div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start"><a href="/admin/orders/invoice/${i.id}/pdf" target="_blank" title="Zobrazit fakturu ${esc(i.invoice_number)}" style="font-size:22px;text-decoration:none;line-height:1">📄</a><span class="small muted">${esc(i.invoice_number)}</span>
+    ${sent ? `<span class="badge active" title="${esc(i.sent_to || '')}">✉ odesláno${when ? ' ' + esc(when) : ''}</span>` : `<span class="badge blocked" title="${esc(i.send_error || '')}">✉ neodesláno</span>`}
+    <form method="post" action="/admin/orders/invoice/${i.id}/send" style="margin:0"><button class="btn sec sm" type="submit">${sent ? 'Poslat znovu' : 'Odeslat'}</button></form></div>`;
+}
 function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', counts = {} }) {
   const sy = (o) => (o.currency === 'EUR' ? '€' : 'Kč');
   const st = (o) => `<span class="badge ${o.status === 'confirmed' ? 'active' : o.status === 'cancelled' ? 'blocked' : 'invited'}">${o.status === 'confirmed' ? 'potvrzeno' : o.status === 'cancelled' ? 'zrušeno' : 'čeká na potvrzení'}</span>`;
@@ -1759,12 +1773,14 @@ function adminOrders({ admin, rows = [], msg = '', holyosUrl, status = '', count
   <p class="muted" style="margin-top:0">Objednávky odeslané uživateli tlačítkem <b>Koupit</b>. Potvrzením vznikne nákup a prodejci se připíše provize v DC. Zrušením se uživateli vrátí uplatněné DC.</p>
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   <div class="row" style="gap:8px;margin:10px 0 12px">${[['', 'Všechny', (counts.new || 0) + (counts.confirmed || 0) + (counts.cancelled || 0)], ['new', 'Čekají na potvrzení', counts.new || 0], ['confirmed', 'Potvrzené', counts.confirmed || 0], ['cancelled', 'Zrušené', counts.cancelled || 0]].map(([k, l, n]) => `<a class="btn sm ${status === k ? '' : 'sec'}" href="/admin/orders${k ? '?status=' + k : ''}">${l} <span style="opacity:.7">${n}</span></a>`).join('')}</div>
-  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Prádlomat</th><th>Cena bez DPH</th><th>Chat</th><th>Uplatněno DC</th><th>Stav</th><th></th></tr></thead><tbody>
+  <div class="card tbl-wrap">${rows.length ? `<table class="cards"><thead><tr><th>Datum</th><th>Uživatel</th><th>Prádlomat</th><th>Cena bez DPH</th><th>Chat</th><th>Záloha</th><th>Faktura</th><th>Uplatněno DC</th><th>Stav</th><th></th></tr></thead><tbody>
     ${rows.map(o => `<tr><td data-l="Datum" class="small muted">${fmtDT(o.created_at)}</td>
       <td data-l="Uživatel"><a href="/admin/supporters/${o.supporter_id}"><b>${esc([o.last_name, o.first_name].filter(Boolean).join(' ') || o.email)}</b></a><div class="small muted">${esc(o.nick || '')}</div></td>
       <td data-l="Prádlomat"><b>${esc(o.product_name)}</b>${o.kind === 'service' ? ' <span class="small muted">služba</span>' : ''}</td>
       <td data-l="Cena bez DPH">${o.kind === 'service' && !(Number(o.price_net) > 0) ? `<span class="muted">${o.no_price ? '% z obratu' : 'čeká na nacenění'}</span>` : `${money(o.final_net, sy(o))} <span class="small muted">(ceník ${money(o.price_net, sy(o))})</span>`}</td>
       <td data-l="Chat"><a class="btn sec sm" href="/admin/podpora?u=${o.supporter_id}&order=${o.id}" title="Napsat uživateli zprávu k objednávce č. ${o.id}">💬 Napsat</a></td>
+      <td data-l="Záloha">${invCell(o, 'proforma')}</td>
+      <td data-l="Faktura">${invCell(o, 'final')}</td>
       <td data-l="Uplatněno DC">${Number(o.dc_used) > 0 ? esc(Number(o.dc_used).toLocaleString('cs-CZ')) + ' DC' : '<span class="muted">—</span>'}</td>
       <td data-l="Stav">${st(o)}</td>
       <td class="actions">${o.status === 'new' ? `<div class="row"><form method="post" action="/admin/orders/${o.id}/confirm" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${o.kind === 'service' && !(Number(o.price_net) > 0) ? `${o.no_price ? '' : '<input name="price" inputmode="decimal" placeholder="Cena bez DPH" required style="width:120px;padding:6px 8px;text-align:right">'}<input name="dc" inputmode="decimal" placeholder="DC" title="Kolik DC uplatnit (nepovinné)" style="width:80px;padding:6px 8px;text-align:right">` : ''}<button class="btn sm" type="submit">Potvrdit</button></form><form method="post" action="/admin/orders/${o.id}/cancel" onsubmit="return confirm('Zrušit objednávku a vrátit DC?')" style="margin:0"><button class="btn danger sm" type="submit">Zrušit</button></form></div>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
