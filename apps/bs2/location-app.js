@@ -89,7 +89,7 @@ function evaluate(d, c) {
   // ověřené skutečnosti = zadané s uvedeným zdrojem
   const v = (label, val, src) => { if (val === '' || val == null) return; if (src) verified.push(`${label}: ${val} – ${src}`); else given.push(`${label}: ${val}`); };
   if (own) given.push('Místo: vlastní (nájem 0 Kč)'); else if (d.ownership === 'rent') given.push('Místo: v nájmu' + (num(d.deposit) ? ', kauce ' + num(d.deposit).toLocaleString('cs-CZ') + ' Kč' : d.deposit === '0' ? ', bez kauce' : ''));
-  if (!own) v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', d.rent_src);
+  if (!own) v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', '');
   v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
   v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
   if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng + ' · prádlomat 3 × 2 m, otočení ' + (d.heading || 0) + '°');
@@ -189,16 +189,14 @@ function siteForm(s, site, d, error, saved) {
     <div class="rent-only" style="display:contents">
       <label>Znáte výši nájmu?${sel('rent_known', [['', '— vyberte —'], ['yes', 'ano, znám'], ['no', 'ne, zatím nevím']])}</label>
       ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
-      ${inp('rent_src', 'Zdroj nájmu (ověření)', 'maxlength="200" placeholder="např. nabídka pronajímatele 1. 10. 2026"', 'Uvedený zdroj zařadí údaj mezi ověřené skutečnosti.')}
       ${inp('deposit', 'Kauce (Kč, 0 = bez kauce)', 'inputmode="decimal"')}
       ${inp('notice', 'Výpovědní lhůta (měsíce)', 'inputmode="numeric"')}
-      <label>Exkluzivita (bez konkurence v objektu)${sel('exclusive', YNU)}</label>
     </div>
-    <script>(function(){ var own=document.querySelector('select[name=ownership]'), known=document.querySelector('select[name=rent_known]'), box=document.querySelector('.rent-only'); var rentIn=document.querySelector('input[name=rent]'), srcIn=document.querySelector('input[name=rent_src]');
+    <script>(function(){ var own=document.querySelector('select[name=ownership]'), known=document.querySelector('select[name=rent_known]'), box=document.querySelector('.rent-only'); var rentIn=document.querySelector('input[name=rent]');
       function upd(){ var isOwn=own.value==='own', isRent=own.value==='rent'; box.querySelectorAll('label').forEach(function(l){ l.style.display=isRent?'':'none'; }); if(isOwn){ rentIn.value='0'; }
-        var unknown=known.value==='no', showRent=isRent&&known.value==='yes'; rentIn.parentNode.style.display=showRent?'':'none'; srcIn.parentNode.style.display=showRent?'':'none'; if(unknown&&isRent) rentIn.value='';
+        var unknown=known.value==='no', showRent=isRent&&known.value==='yes'; rentIn.parentNode.style.display=showRent?'':'none'; if(unknown&&isRent) rentIn.value='';
         // kauce/výpověď/exkluzivita až po volbě, zda zná nájem
-        ['deposit','notice'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=showRent?'':'none'; }); var ex=document.querySelector('select[name=exclusive]'); if(ex) ex.parentNode.style.display=showRent?'':'none'; }
+        ['deposit','notice'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=showRent?'':'none'; }); }
       own.addEventListener('change',upd); known.addEventListener('change',upd); upd(); })();</script>
     <h3>Přípojky</h3>
     <label>Voda${sel('conn_water', YNU)}</label><label>Odpad${sel('conn_sewer', YNU)}</label><label>Elektřina${sel('conn_power', YNU)}</label>
