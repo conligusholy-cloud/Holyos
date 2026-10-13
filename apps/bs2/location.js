@@ -501,14 +501,15 @@ const PAGE = `<!DOCTYPE html>
       <label>Telefon<input name="phone" maxlength="40" autocomplete="tel" /></label>
       <label>Balíček *<select name="variant" id="variant"><option value="basic">Základ – 4 900 Kč s DPH (3 lokality)</option><option value="plus">Plus – 9 900 Kč s DPH (10 lokalit + hovor)</option><option value="premium">Premium – 15 900 Kč s DPH (Plus + místní šetření technikem)</option></select></label>
       <label class="full">Firma / IČO (nepovinné, pro fakturu)<input name="company" maxlength="255" /></label>
-      <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Souhlasím se zpracováním uvedených údajů společností Best Series s.r.o. (IČO 05643724) za účelem vyřízení této žádosti o objednávku a zpřístupnění aplikace. *</span></label>
+      <label class="chk full"><input type="checkbox" name="terms" value="1" required /><span>Souhlasím s <a href="/location/vop" target="_blank" rel="noopener">obchodními podmínkami</a> aplikací Prověření lokality a Vyhledávač míst a výslovně žádám o zpřístupnění digitálního obsahu ihned po zaplacení; beru na vědomí, že tím ztrácím právo na odstoupení od smlouvy v rozsahu zpřístupněného obsahu. *</span></label>
+      <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Seznámil(a) jsem se s <a href="/location/gdpr" target="_blank" rel="noopener">informacemi o zpracování osobních údajů</a> společností Best Series s.r.o. (IČO 05643724) pro vyřízení objednávky a zpřístupnění aplikace. *</span></label>
       <label class="chk full"><input type="checkbox" name="marketing" value="1" /><span>Chci dostávat informace o prádlomatech a novinkách Best Series e-mailem (dobrovolné, kdykoli odvolatelné).</span></label>
       <div class="msg" id="msg"></div>
       <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
     </form>
   </section>
 
-  <div class="foot">Provozovatel: Best Series s.r.o. · IČO 05643724 · <a href="/vop">Obchodní podmínky</a> · <a href="/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení do Best Series 2.0</a></div>
+  <div class="foot">Provozovatel: Best Series s.r.o. · IČO 05643724 · <a href="/location/vop">Obchodní podmínky</a> · <a href="/location/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení do Best Series 2.0</a></div>
 </main>
 
 <script>
@@ -575,7 +576,8 @@ const PAGE = `<!DOCTYPE html>
     msg.className='msg';
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
-    body.consent = !!fd.get('consent'); body.marketing = !!fd.get('marketing'); body.sid=SID;
+    body.consent = !!fd.get('consent'); body.terms = !!fd.get('terms'); body.marketing = !!fd.get('marketing'); body.sid=SID;
+    if(!body.terms){ setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
     if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
     sub.disabled=true; sub.textContent=STRIPE?'Přesměrování na platbu…':'Odesílám…';

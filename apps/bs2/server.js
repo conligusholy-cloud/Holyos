@@ -367,6 +367,9 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 // ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
 // Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage()); });
+app.get('/location/vop', (req, res) => res.send(V.locVopPage()));
+app.get('/location/gdpr', (req, res) => res.send(V.locGdprPage()));
+const LT = require('./location-terms');
 function stripeForm(obj, prefix, out) {
   out = out || [];
   Object.keys(obj).forEach((k) => { const key = prefix ? prefix + '[' + k + ']' : k; const v = obj[k]; if (v === undefined || v === null) return;
@@ -386,7 +389,8 @@ function locParse(b) {
   const name = t(b.name, 255), email = t(b.email, 255).toLowerCase(), phone = t(b.phone, 40).replace(/[^\d+ ()\/-]/g, ''), company = t(b.company, 255);
   const pkg = LOC.PACKAGES[b.variant] ? b.variant : 'basic';
   if (name.length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'Vyplňte prosím jméno a e-mail.' };
-  if (!b.consent) return { error: 'Bez souhlasu se zpracováním údajů nemůžeme objednávku vyřídit.' };
+  if (!b.terms) return { error: 'Před platbou je třeba souhlasit s obchodními podmínkami.' };
+  if (!b.consent) return { error: 'Bez potvrzení informací o zpracování osobních údajů nemůžeme objednávku vyřídit.' };
   return { name, email, phone: phone || null, company: company || null, pkg, marketing: !!b.marketing };
 }
 app.get('/api/location/pay-config', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: Object.fromEntries(Object.entries(LOC.PACKAGES).map(([k, v]) => [k, v.amount / 100])) }); });
@@ -396,8 +400,8 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
   const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
   const pkg = LOC.PACKAGES[d.pkg];
-  const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9) RETURNING id',
-    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64)]);
+  const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
+    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   const oid = ins.rows[0].id; const base = locBase(req);
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
@@ -416,8 +420,8 @@ app.post('/api/location/interest', wrap(async (req, res) => {
   if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
   const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
   const pkg = LOC.PACKAGES[d.pkg];
-  await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9)',
-    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64)]);
+  await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10)',
+    [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   locNotify('Nová žádost o balíček ' + pkg.label + ' – ' + d.name, 'Žádost (bez online platby): ' + d.name + ', ' + d.email + (d.phone ? ', ' + d.phone : '') + '. Pošlete platební údaje a po úhradě předejte přístup.').catch(() => {});
   res.json({ ok: true });
 }));
@@ -533,6 +537,7 @@ async function locInfo(u, msg) {
 // Dokoupení vyhodnocení: objednávka vázaná na účet → Stripe Checkout → webhook připíše vyhodnocení (locGrantAccess)
 app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   const key = String((req.body || {}).pack || ''); let pk = LOC.EVAL_PACKS[key];
+  if (!(req.body || {}).terms) return res.redirect((LOC.UPGRADE_PACKS[key] ? '/lokalita/balicek' : LOC.EVAL_PACKS[key] && LOC.EVAL_PACKS[key].searches ? '/lokalita/analyza' : '/lokalita') + '?msg=' + encodeURIComponent('Před platbou je třeba zaškrtnout souhlas s obchodními podmínkami.'));
   const up = LOC.UPGRADE_PACKS[key];
   if (up) {
     // přechod na vyšší balíček: doplatek = cena cílového − cena stávajícího balíčku
@@ -546,8 +551,8 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   if (!process.env.STRIPE_SECRET_KEY) return res.redirect('/lokalita?msg=' + encodeURIComponent('Online platba momentálně není dostupná – napište nám přes Podporu.'));
   if (rateLimited('loctop:' + req.user.id, 10, 10 * 60e3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Příliš mnoho požadavků, zkuste to za chvíli.'));
   const u = req.user, name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.nick || u.email;
-  const oid = (await q('INSERT INTO location_orders (name,email,phone,package,amount_czk,status,consent,marketing,ip,supporter_id) VALUES ($1,$2,$3,$4,$5,$6,true,false,$7,$8) RETURNING id',
-    [name, u.email, u.phone || null, key, pk.amount / 100, 'pending', String(req.ip || '').slice(0, 64), u.id])).rows[0].id;
+  const oid = (await q('INSERT INTO location_orders (name,email,phone,package,amount_czk,status,consent,marketing,ip,supporter_id,terms_version) VALUES ($1,$2,$3,$4,$5,$6,true,false,$7,$8,$9) RETURNING id',
+    [name, u.email, u.phone || null, key, pk.amount / 100, 'pending', String(req.ip || '').slice(0, 64), u.id, LT.TERMS_VERSION])).rows[0].id;
   const base = locBase(req);
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: u.email, locale: 'cs',
@@ -583,7 +588,7 @@ app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
   // Otevření uloženého vyhledávání: výsledek jde rovnou do stránky, nic se znovu neanalyzuje
   const qq = String(req.query.q || '').trim().slice(0, 80);
   if (qq.length >= 2) { const cur = (await q('SELECT result, candidates, contacts, label FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [u.id, locAreaNorm(qq)])).rows[0]; if (cur && cur.result) credits.current = { result: Object.assign({}, cur.result, { label: cur.label || null }), candidates: cur.candidates, contacts: cur.contacts || {} }; }
-  const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : '';
+  const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : String(req.query.msg || '').slice(0, 200);
   res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
 }));
 // Proxy na veřejné API HolyOS (spádová oblast, provozované prádlomaty) — jen pro přihlášené zákazníky aplikace

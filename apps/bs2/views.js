@@ -341,6 +341,9 @@ function vopPage() {
 function gdprPage() {
   return authShell({ title: 'Souhlas se zpracováním osobních údajů', esc, card: `<div class="gdpr">${GDPR_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/login">přihlášení</a></p>`, wide: true });
 }
+const LT = require('./location-terms');
+function locVopPage() { return authShell({ title: 'Obchodní podmínky – Prověření lokality', esc, card: `<div class="gdpr">${LT.LOC_VOP_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/location">Prověření lokality</a></p>`, wide: true }); }
+function locGdprPage() { return authShell({ title: 'Ochrana osobních údajů – Prověření lokality', esc, card: `<div class="gdpr">${LT.LOC_GDPR_HTML}</div><p class="foot"><a href="javascript:history.back()">${ico('back', 14)} zpět</a> · <a href="/location">Prověření lokality</a></p>`, wide: true }); }
 const vopCheck = (checked) => `<label class="gdpr-chk"><input type="checkbox" name="vop" value="1" required${checked ? ' checked' : ''}> <span>Souhlasím se <a href="/vop" target="_blank">všeobecnými obchodními podmínkami</a> Best Series 2.0</span></label>`;
 const gdprCheck = (checked) => `<label class="gdpr-chk"><input type="checkbox" name="gdpr" value="1" required${checked ? ' checked' : ''}> <span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> společností Best Series s.r.o. (Best Series 2.0)</span></label>`;
 // Registrace přes referenční odkaz prodejce (/join/<code>)
@@ -1948,4 +1951,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

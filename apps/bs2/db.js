@@ -229,6 +229,7 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS location_orders_status_idx ON location_orders (status, created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS terms_version TEXT; -- verze obchodních podmínek odsouhlasená před platbou
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_date TEXT;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_tech TEXT;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_report TEXT;
