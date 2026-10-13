@@ -387,7 +387,7 @@ function forgotPage({ email = '', error = '', done = false } = {}) {
 const USER_NAV = [{ id: 'home', href: '/', label: 'Domů', icon: 'home' }, { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true }];
 // Prodejci (user_type = seller) mají navíc záložku Můj tým
 const userNav = (s) => {
-  if (s && s.user_type === 'location') return [{ id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' }, { id: 'check', href: '/lokalita/checklist', label: 'Checklist', icon: 'check' }, { id: 'studie', href: '/lokalita/studie', label: 'Případové studie', icon: 'chart' }, USER_NAV[1]];
+  if (s && s.user_type === 'location') return [{ id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' }, { id: 'anal', href: '/lokalita/analyza', label: 'Vyhledávač míst', icon: 'network' }, USER_NAV[1]];
   const nav = [USER_NAV[0], { id: 'cmp', href: '/compounder', label: 'Compounder', icon: 'sprout' }, { id: 'products', href: '/pradlomaty', label: 'Prádlomaty', icon: 'box' }];
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'team', href: '/team', label: 'Moje doporučení', icon: 'users' });
   if (s && ['seller', 'standard'].includes(s.user_type)) nav.push({ id: 'net', href: '/sit', label: 'Partnerská síť', icon: 'network' });
@@ -1400,7 +1400,17 @@ function supporterTeam(s, { team = [], refUrl = '' } = {}) {
       <td data-l="Objednávky" class="small muted">${r.user_type === 'owner' ? 'prádlomat pořízen' : 'zatím bez objednávky'}</td></tr>`).join('')}</tbody></table>`
     : '<p class="muted" style="margin:0">Zatím nikdo. Pošli svůj odkaz — první registrace se tu objeví hned.</p>'}</div>` });
 }
-function passwordPage({ s, nick, error = '', ok = '' }) {
+// Historie nákupů (aplikace Prověření lokality): balíčky, dokupy, přechody – jen u účtů s balíčkem
+const LOC_PURCHASE_STATUS = { pending: ['čeká na platbu', 'invited'], request: ['žádost', 'invited'], paid: ['zaplaceno', 'active'], granted: ['aktivováno', 'active'], canceled: ['zrušeno', 'blocked'], refunded: ['vráceno', 'blocked'] };
+function purchaseHistory(purchases) {
+  if (!purchases || !purchases.length) return '';
+  const kc = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
+  const total = purchases.filter((p) => p.status === 'paid' || p.status === 'granted').reduce((a, p) => a + Number(p.amount_czk || 0), 0);
+  return `<div class="card" style="grid-column:1/-1"><div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap"><h2 style="margin:0">Historie nákupů</h2><span class="small muted">celkem zaplaceno <b>${kc(total)}</b> s DPH</span></div>
+    <div class="tbl-wrap" style="margin-top:10px"><table class="cards"><thead><tr><th>Datum</th><th>Položka</th><th>Částka</th><th>Stav</th><th>Doklad</th></tr></thead><tbody>${purchases.map((p) => { const st = LOC_PURCHASE_STATUS[p.status] || [p.status, 'invited']; return `<tr><td data-l="Datum" class="small muted">${fmtDT(p.paid_at || p.created_at)}</td><td data-l="Položka"><b>${esc(p.item)}</b>${p.detail ? `<div class="small muted">${esc(p.detail)}</div>` : ''}</td><td data-l="Částka">${kc(p.amount_czk)} <span class="small muted">s DPH</span></td><td data-l="Stav"><span class="badge ${st[1]}">${esc(st[0])}</span></td><td data-l="Doklad" class="small">${p.receipt_url ? `<a href="${esc(p.receipt_url)}" target="_blank" rel="noopener">doklad ↗</a>` : '<span class="muted">e-mailem ze Stripe</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="small muted" style="margin:10px 0 0">Doklad o platbě posílá Stripe automaticky na váš e-mail při každé platbě.</p></div>`;
+}
+function passwordPage({ s, nick, error = '', ok = '', purchases = null }) {
   const u = s || { nick };
   const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ');
   return layout({ title: 'Můj účet', user: u.nick, nav: userNav(u), active: 'acc', fx: true, body: `
@@ -1419,6 +1429,7 @@ function passwordPage({ s, nick, error = '', ok = '' }) {
     <label>Nové heslo (min. 8)</label><input name="password" type="password" autocomplete="new-password" minlength="8" required>
     <label>Nové heslo znovu</label><input name="password2" type="password" autocomplete="new-password" minlength="8" required>
     <div style="height:14px"></div><button class="btn full" type="submit">Uložit nové heslo</button></form></div>
+    ${purchaseHistory(purchases)}
   </div>` });
 }
 

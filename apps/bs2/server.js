@@ -1056,15 +1056,24 @@ app.get('/support/file/:id(\\d+)', wrap(async (req, res) => {
 }));
 
 app.get('/ai-chat', wrap(requireUser), (req, res) => { if (!req.user.ai_chat_on) return res.redirect('/'); res.send(V.aiChatPage(req.user)); });
-app.get('/password', wrap(requireUser), (req, res) => res.send(V.passwordPage({ s: req.user })));
+// Historie nákupů aplikace Prověření lokality (balíčky, dokupy, přechody) – jen u účtů, které balíček mají
+async function locPurchases(u) {
+  if (!u || !u.location_package) return null;
+  const rows = (await q("SELECT id, package, amount_czk, status, created_at, paid_at, stripe_payment_intent FROM location_orders WHERE supporter_id=$1 OR (supporter_id IS NULL AND email=$2) ORDER BY created_at DESC LIMIT 100", [u.id, u.email])).rows;
+  return rows.map((o) => { const p = LOC.PACKAGES[o.package], e = LOC.EVAL_PACKS[o.package], up = LOC.UPGRADE_PACKS[o.package];
+    const item = p ? 'Balíček ' + p.label : e ? (e.evals ? 'Dokoupení vyhodnocení – ' + e.evals + ' ks' : 'Dokoupení vyhledání – ' + e.searches + ' ks') : up ? 'Přechod na balíček ' + LOC.PACKAGES[up.to].label : o.package;
+    const detail = p ? p.desc : e ? e.desc : up ? up.desc : '';
+    return { id: o.id, item, detail, amount_czk: o.amount_czk, status: o.status, created_at: o.created_at, paid_at: o.paid_at, receipt_url: null }; });
+}
+app.get('/password', wrap(requireUser), wrap(async (req, res) => res.send(V.passwordPage({ s: req.user, purchases: await locPurchases(req.user) }))));
 app.post('/password', wrap(requireUser), wrap(async (req, res) => {
   const { old = '', password = '', password2 = '' } = req.body;
-  const back = (error, ok) => res.send(V.passwordPage({ s: req.user, error, ok }));
+  const back = async (error, ok) => res.send(V.passwordPage({ s: req.user, error, ok, purchases: await locPurchases(req.user) }));
   if (!(await bcrypt.compare(String(old), req.user.password_hash))) return back('Současné heslo nesouhlasí.');
   if (String(password).length < 8) return back('Nové heslo musí mít aspoň 8 znaků.');
   if (password !== password2) return back('Nová hesla se neshodují.');
   await q('UPDATE supporters SET password_hash=$1, updated_at=now() WHERE id=$2', [await bcrypt.hash(String(password), 11), req.user.id]);
-  back('', 'Heslo změněno.');
+  await back('', 'Heslo změněno.');
 }));
 
 // ── Správa (SSO) ───────────────────────────────────────────────────────────
