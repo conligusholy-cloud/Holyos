@@ -550,10 +550,11 @@
           <h3>📦 Produkty z Best Series 2.0 (stroje a služby)</h3>
           <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">Při objednávce se zákazníkovi <b>automaticky e-mailem</b> odešle <b>zálohová faktura</b> (řada <b>ZB</b>, splatnost <b>3 dny</b>). Až dorazí platba na zálohu (spárování v agendě Banka), vystaví se a odešle <b>finální faktura</b> (řada <b>FB</b>, uhrazená zálohou). Finální faktura se tedy odešle až po přijetí platby.</div>
           <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:6px;">
-            <label style="font-size:12px;">Šablona dokladu<br><select id="bs2-products-template" style="min-width:210px;"></select></label>
+            <label style="font-size:12px;">Šablona dokladu <a href="#" onclick="bs2PreviewTemplate('products');return false;" style="font-size:11px;margin-left:6px;">🔍 náhled</a> · <a href="/modules/sablony-dokumentu/index.html" style="font-size:11px;">Šablony dokumentů</a><br><select id="bs2-products-template" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">Účet CZK<br><select id="bs2-products-CZK" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">Účet EUR<br><select id="bs2-products-EUR" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-products-vat" min="0" max="30" style="width:70px;"></label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;" title="Vypnuto = faktura se jen vystaví a odešleš ji ručně po kontrole (v BS2 → Objednávky)"><input type="checkbox" id="bs2-products-auto"> Odesílat automaticky</label>
             <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
             <span id="bs2-products-msg" style="font-size:12px;color:var(--text2);"></span>
           </div>
@@ -569,10 +570,11 @@
           <h3>🌐 Online produkty (Prověření lokality, Vyhledávač míst)</h3>
           <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">Po zaplacení přes <b>Stripe</b> se rovnou vystaví <b>faktura</b> (řada <b>OB</b>, již uhrazená) a automaticky se odešle na e-mail zákazníka.</div>
           <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:6px;">
-            <label style="font-size:12px;">Šablona dokladu<br><select id="bs2-online-template" style="min-width:210px;"></select></label>
+            <label style="font-size:12px;">Šablona dokladu <a href="#" onclick="bs2PreviewTemplate('online');return false;" style="font-size:11px;margin-left:6px;">🔍 náhled</a> · <a href="/modules/sablony-dokumentu/index.html" style="font-size:11px;">Šablony dokumentů</a><br><select id="bs2-online-template" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">Účet CZK<br><select id="bs2-online-CZK" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">Účet EUR<br><select id="bs2-online-EUR" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-online-vat" min="0" max="30" style="width:70px;"></label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;" title="Vypnuto = faktura se jen vystaví a odešleš ji ručně po kontrole (v BS2 → Objednávky)"><input type="checkbox" id="bs2-online-auto"> Odesílat automaticky</label>
             <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
             <span id="bs2-online-msg" style="font-size:12px;color:var(--text2);"></span>
           </div>
@@ -1732,6 +1734,13 @@
     // ─── Tab „Best Series 2.0" (dvě kategorie: produkty = záloha + finální, online = faktura po platbě; Invoice.source = bs2_products | bs2_online) ──
     window.__bs2cfg = null;
     function bs2Opt(v, l, sel) { return '<option value="' + v + '"' + (sel ? ' selected' : '') + '>' + escapeHtml(l) + '</option>'; }
+    // Náhled zvolené šablony (stejný renderer jako modul Šablony dokumentů → stejný vzhled jako ostrá faktura)
+    function bs2PreviewTemplate(cat) {
+      var sel = document.getElementById('bs2-' + cat + '-template'); var key = sel && sel.value; if (!key) return;
+      var t = (window.__bs2cfg && window.__bs2cfg.templates || []).find(function (x) { return x.key === key; });
+      var vat = (document.getElementById('bs2-' + cat + '-vat') || {}).value;
+      window.open((t && t.preview ? t.preview : '/api/doc-templates/' + key + '/preview') + '?lang=cs&cur=CZK' + (vat !== undefined && vat !== '' ? '&vat=' + encodeURIComponent(vat) : ''), '_blank');
+    }
     async function loadBs2Config() {
       const r = await api('GET', '/api/accounting/bs2-billing/config');
       if (r.status !== 200 || !r.data) return;
@@ -1743,11 +1752,12 @@
           document.getElementById('bs2-' + cat + '-' + cur).innerHTML = bs2Opt('', '— výchozí z nastavení fakturace —', !c[cur]) + r.data.accounts.filter(a => a.currency === cur).map(a => bs2Opt(a.id, (a.name || a.bank || '') + ' · ' + a.number, c[cur] === a.id)).join('');
         });
         document.getElementById('bs2-' + cat + '-vat').value = c.vat_rate != null ? c.vat_rate : 21;
+        document.getElementById('bs2-' + cat + '-auto').checked = !!c.auto_send;
       });
     }
     window.saveBs2Config = async function() {
       const body = {};
-      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value }; });
+      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_send: document.getElementById('bs2-' + cat + '-auto').checked }; });
       const r = await api('PUT', '/api/accounting/bs2-billing/config', body);
       ['products', 'online'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
     };

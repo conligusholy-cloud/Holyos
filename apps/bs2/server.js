@@ -1571,9 +1571,9 @@ app.post('/admin/orders/:id(\\d+)/invoice', requireAdmin, wrap(async (req, res) 
   let msg = 'Objednávka nenalezena.';
   if (o) {
     try {
-      const r = await holyosFetch('POST', '/api/auth/bs2/invoice/proforma', { ref: o.id, currency: o.currency, customer: invCustomer(o), items: orderInvItems(o.product_name, o.price_net, o.dc_used), note: 'Objednávka produktu.' });
+      const r = await holyosFetch('POST', '/api/auth/bs2/invoice/proforma', { ref: o.id, currency: o.currency, customer: invCustomer(o), items: orderInvItems(o.product_name, o.price_net, o.dc_used), note: 'Objednávka produktu.', send: false });
       const j = await r.json().catch(() => ({}));
-      msg = r.ok ? 'Zálohová faktura ' + (j.invoice_number || '') + (j.existing ? ' už existovala' : (j.sent ? ' vystavena a odeslána' : ' vystavena, ale e-mail se neodeslal (' + (j.send_error || '') + ')')) + '.' : 'Vystavení selhalo: ' + (j.error || j.reason || r.status);
+      msg = r.ok ? 'Zálohová faktura ' + (j.invoice_number || '') + (j.existing ? ' už existovala.' : ' je vystavena a ještě NEODESLANÁ — zkontroluj ji (ikona 📄) a pak ji odešli tlačítkem Odeslat.') : 'Vystavení selhalo: ' + (j.error || j.reason || r.status);
     } catch (e) { msg = 'Vystavení selhalo: ' + e.message; }
   }
   res.redirect('/admin/orders?msg=' + encodeURIComponent(msg));

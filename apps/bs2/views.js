@@ -1757,7 +1757,7 @@ function invCell(o, which) {
   if (!i) {
     if (which === 'final') return '<span class="muted small" title="Vystaví se automaticky po zaplacení zálohy">—</span>';
     if (o.kind === 'service' && !(Number(o.price_net) > 0)) return '<span class="muted small">—</span>';
-    return `<form method="post" action="/admin/orders/${o.id}/invoice" style="margin:0" onsubmit="return confirm('Vystavit zálohovou fakturu a odeslat ji e-mailem zákazníkovi?')"><button class="btn sec sm" type="submit" title="Zálohová faktura ještě nebyla vystavena">Vystavit</button></form>`;
+    return `<form method="post" action="/admin/orders/${o.id}/invoice" style="margin:0" onsubmit="return confirm('Vystavit zálohovou fakturu? Zatím se NEODEŠLE — nejdřív si ji zkontroluješ.')"><button class="btn sec sm" type="submit" title="Zálohová faktura ještě nebyla vystavena">Vystavit</button></form>`;
   }
   const sent = i.delivery_status === 'sent';
   const when = i.sent_at ? new Date(i.sent_at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
