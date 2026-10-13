@@ -262,9 +262,9 @@ const PAGE = `<!DOCTYPE html>
 <main>
   <section class="hero">
    <div class="txt">
-    <span class="eyebrow"><i></i>Webová aplikace pro prověření lokality</span>
+    <span class="eyebrow"><i></i>Dvě webové aplikace: Vyhledávač míst + Prověření lokality</span>
     <h1>Než koupíte prádlomat, <span class="g">prověřte si místo a spočítejte jeho ekonomiku.</span></h1>
-    <p class="lead">Prověřte svou lokalitu, porovnejte ekonomické scénáře a zjistěte, co potřebujete ověřit před investicí. Vše přehledně v jedné webové aplikaci.</p>
+    <p class="lead">Najděte v mapě místa, kde by prádlomat mohl stát, prověřte svou lokalitu, porovnejte ekonomické scénáře a zjistěte, co potřebujete ověřit před investicí. Dvě aplikace v jednom přístupu.</p>
     <div class="cta-row">
       <a class="btn" href="#objednat" data-cta="hero">Chci prověřit své místo</a>
     </div>
@@ -425,6 +425,17 @@ const PAGE = `<!DOCTYPE html>
 
 
 
+  <section class="sec" id="aplikace">
+    <h2>Dvě aplikace v jednom přístupu</h2>
+    <div class="prices" style="margin-bottom:8px">
+      <div class="price"><div class="tag">Aplikace 1</div><div class="amt" style="font-size:26px">🔎 Vyhledávač míst</div>
+        <p class="small" style="margin:6px 0 10px;color:var(--text2)">Ještě nemáte konkrétní místo? Zadejte město nebo umístěte špendlík do mapy.</p>
+        <ul><li>Spádovost v okruhu 5 / 10 / 15 km – obyvatelé a obce</li><li>Kapacita oblasti: kolik prádlomatů oblast uživí</li><li>Prádlomaty, které už v okolí fungují</li><li>Seznam míst, kde by prádlomat mohl stát – supermarkety, benzínky, myčky, výdejní boxy – se skóre parkování a konkurence</li><li>Kontakty na provozovatele míst (z mapových dat + AI dohledání)</li><li>Výsledky se ukládají, vracíte se k nim zdarma</li></ul></div>
+      <div class="price"><div class="tag">Aplikace 2</div><div class="amt" style="font-size:26px">🧠 Prověření lokality</div>
+        <p class="small" style="margin:6px 0 10px;color:var(--text2)">Máte vyhlédnuté místo? Zakreslete prádlomat přesně do letecké mapy a nechte ho vyhodnotit.</p>
+        <ul><li>Umístění prádlomatu 3 × 2 m do ortofoto mapy, parkoviště, silnice, obchody a zastávky kolem</li><li>Nájem, přípojky, zpevněná plocha, financování, plátce / neplátce DPH</li><li>AI studie lokality: hodnocení, spádovost, odhad poptávky, rizika a doporučení</li><li>Ekonomické scénáře slabý / střední / silný, návratnost</li><li>Verdikt: vhodné · vhodné při splnění podmínek · nevhodné</li><li>Tisková studie do PDF pro banku či pronajímatele</li></ul></div>
+    </div>
+  </section>
   <section class="sec">
     <h2>Co dostanete</h2>
     <div class="list">
