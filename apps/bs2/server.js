@@ -462,10 +462,11 @@ async function locGrantAccess(o, req) {
   if (ep) {
     const u = o.supporter_id ? (await q('SELECT * FROM supporters WHERE id=$1', [o.supporter_id])).rows[0] : (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
     if (!u) throw new Error('Účet pro dokoupení nenalezen (' + o.email + ')');
-    await q('UPDATE supporters SET location_extra_evals=COALESCE(location_extra_evals,0)+$2, updated_at=now() WHERE id=$1', [u.id, ep.evals]);
+    const isSearch = !!ep.searches, n = ep.searches || ep.evals;
+    await q(isSearch ? 'UPDATE supporters SET location_extra_searches=COALESCE(location_extra_searches,0)+$2, updated_at=now() WHERE id=$1' : 'UPDATE supporters SET location_extra_evals=COALESCE(location_extra_evals,0)+$2, updated_at=now() WHERE id=$1', [u.id, n]);
     await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
-    await sendBs2Mail({ to: u.email, subject: 'Připsáno: ' + ep.label.replace('+', '') + ' lokalit', body: 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč. K vašemu účtu v aplikaci Prověření lokality jsme připsali ' + ep.evals + ' vyhodnocení navíc. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: base0 + '/lokalita', linkLabel: 'Otevřít Moje lokality' }).catch((e) => console.warn('[bs2] topup mail:', e.message));
-    console.log('[bs2] /lokalita dokoupení připsáno: účet #' + u.id + ' +' + ep.evals);
+    await sendBs2Mail({ to: u.email, subject: 'Připsáno: ' + n + (isSearch ? ' vyhledání ve Vyhledávači míst' : ' vyhodnocení lokalit'), body: 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč. K vašemu účtu v aplikaci Prověření lokality jsme připsali ' + n + (isSearch ? ' vyhledání navíc.' : ' vyhodnocení navíc.') + ' Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: base0 + (isSearch ? '/lokalita/analyza' : '/lokalita'), linkLabel: isSearch ? 'Otevřít Vyhledávač míst' : 'Otevřít Moje lokality' }).catch((e) => console.warn('[bs2] topup mail:', e.message));
+    console.log('[bs2] /lokalita dokoupení připsáno: účet #' + u.id + ' +' + n + (isSearch ? ' vyhledání' : ' vyhodnocení'));
     return;
   }
   const pkg = LOC.PACKAGES[o.package] || LOC.PACKAGES.basic;
@@ -496,9 +497,13 @@ async function requireLocation(req, res, next) {
 }
 // Limit vyhodnocení = balíček + dokoupená vyhodnocení (supporters.location_extra_evals)
 const locLimit = (u) => (LAPP.LIMITS[u.location_package] || 3) + Number(u.location_extra_evals || 0);
+const locSearchLimit = (u) => (LAPP.SEARCH_LIMITS[u.location_package] || 3) + Number(u.location_extra_searches || 0);
+const locAreaNorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+async function locSearchUsed(uid) { return Number(((await q('SELECT count(*)::int AS c FROM location_searches WHERE supporter_id=$1', [uid])).rows[0] || {}).c || 0); }
+const locPacks = (kind) => process.env.STRIPE_SECRET_KEY ? Object.fromEntries(Object.entries(LOC.EVAL_PACKS).filter(([, p]) => p[kind])) : {};
 async function locInfo(u, msg) {
   const o = (await q("SELECT survey_date, survey_tech, survey_report FROM location_orders WHERE supporter_id=$1 AND package='premium' ORDER BY id DESC LIMIT 1", [u.id])).rows[0] || {};
-  return { package: u.location_package, expires_at: u.location_expires_at, limit: locLimit(u), packs: process.env.STRIPE_SECRET_KEY ? LOC.EVAL_PACKS : {}, msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
+  return { package: u.location_package, expires_at: u.location_expires_at, limit: locLimit(u), packs: locPacks('evals'), msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
 }
 // Dokoupení vyhodnocení: objednávka vázaná na účet → Stripe Checkout → webhook připíše vyhodnocení (locGrantAccess)
 app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
@@ -512,7 +517,7 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   const base = locBase(req);
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: u.email, locale: 'cs',
-    success_url: base + '/lokalita?topup=1', cancel_url: base + '/lokalita?topup=0',
+    success_url: base + (pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=1', cancel_url: base + (pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=0',
     line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pk.amount, product_data: { name: pk.name, description: pk.desc } } }],
     metadata: { order_id: String(oid), package: key, source: 'bs2-location-topup', supporter_id: String(u.id) },
     payment_intent_data: { description: pk.name + ' – ' + name, metadata: { order_id: String(oid), package: key } },
@@ -529,14 +534,25 @@ app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.listPage(req.user, sites, info));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
-app.get('/lokalita/analyza', wrap(requireLocation), (req, res) => res.send(LAPP.analyzerPage(req.user, String(req.query.q || '').slice(0, 80))));
+app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
+  const u = req.user;
+  const credits = { used: await locSearchUsed(u.id), limit: locSearchLimit(u), base: LAPP.SEARCH_LIMITS[u.location_package] || 3, packs: locPacks('searches') };
+  const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : '';
+  res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
+}));
 // Proxy na veřejné API HolyOS (spádová oblast, provozované prádlomaty) — jen pro přihlášené zákazníky aplikace
 async function holyosPublic(path) { try { const r = await fetch(HOLYOS_URL + path, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; } catch (e) { return { ok: false, status: 502, j: { error: 'Analýza momentálně není dostupná, zkuste to prosím později.' } }; } }
 app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
   const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
   if (rateLimited('area:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
+  // Kredity: nové město = 1 vyhledání; již hledané město je zdarma
+  const norm = locAreaNorm(area), limit = locSearchLimit(req.user);
+  const seen = (await q('SELECT 1 FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, norm])).rows.length > 0;
+  let used = await locSearchUsed(req.user.id);
+  if (!seen && used >= limit) return res.status(402).json({ error: 'Vyhledání v balíčku jsou vyčerpána (' + used + ' / ' + limit + ').', buy: true, credits: { used, limit } });
   const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15');
-  res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
+  if (r.ok && !seen) { await q('INSERT INTO location_searches (supporter_id, area_norm, area) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [req.user.id, norm, area]); used = await locSearchUsed(req.user.id); }
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.ok && r.j && typeof r.j === 'object' ? Object.assign({}, r.j, { credits: { used, limit } }) : r.j);
 }));
 // Geokódování adresy (Nominatim, server-side, limit 1 req/s per Nominatim pravidla → rate-limit per uživatel)
 app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) => {

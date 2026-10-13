@@ -13,6 +13,10 @@ const EVAL_PACKS = {
   eval1:  { name: 'Prověření lokality – 1 vyhodnocení navíc',   desc: 'Dokoupení 1 vyhodnocení lokality k aktivnímu balíčku',  amount: 99900,  label: '+1 vyhodnocení',  evals: 1 },
   eval3:  { name: 'Prověření lokality – 3 vyhodnocení navíc',   desc: 'Dokoupení 3 vyhodnocení lokalit k aktivnímu balíčku',  amount: 199900, label: '+3 vyhodnocení',  evals: 3 },
   eval10: { name: 'Prověření lokality – 10 vyhodnocení navíc',  desc: 'Dokoupení 10 vyhodnocení lokalit k aktivnímu balíčku', amount: 699900, label: '+10 vyhodnocení', evals: 10 },
+  // Vyhledávač míst: kredity na vyhledání (1 vyhledání = analýza spádové oblasti jednoho města)
+  search1:  { name: 'Vyhledávač míst – 1 vyhledání navíc',  desc: 'Dokoupení 1 vyhledání spádové oblasti',  amount: 49900,  label: '+1 vyhledání',  searches: 1 },
+  search3:  { name: 'Vyhledávač míst – 3 vyhledání navíc',  desc: 'Dokoupení 3 vyhledání spádové oblasti',  amount: 99900,  label: '+3 vyhledání',  searches: 3 },
+  search10: { name: 'Vyhledávač míst – 10 vyhledání navíc', desc: 'Dokoupení 10 vyhledání spádové oblasti', amount: 299900, label: '+10 vyhledání', searches: 10 },
 };
 
 const PAGE = `<!DOCTYPE html>

@@ -6,6 +6,7 @@
 const { esc, layout } = require('./views');
 
 const LIMITS = { basic: 3, plus: 10, premium: 10 };
+const SEARCH_LIMITS = { basic: 3, plus: 10, premium: 10 }; // vyhledání ve Vyhledávači míst
 const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 
 const NAV = (s) => [
@@ -236,7 +237,8 @@ function siteForm(s, site, d, error, saved, noeval, products) {
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
     <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.closest('label').style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&(!ir.value||ir.value==='8')) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000" lang="cs" spellcheck="true">${V('notes')}</textarea></label>
-    <div class="full row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sec" type="submit" name="goto" value="save">💾 Uložit</button><button class="btn" type="submit" name="goto" value="eval" onclick="this.form.addEventListener('submit',function(){ setTimeout(function(){ document.querySelectorAll('.lk-f button[type=submit]').forEach(function(b){ b.disabled=true; }); },0); })">🧠 Vyhodnotit a vypracovat studii</button><span class="small muted">Uložit = jen uloží údaje. Vyhodnotit = sestaví AI studii lokality (1–2 min)${site && site.evaluated_at ? '' : ' a odečte 1 lokalitu z balíčku'}.</span></div>
+    <div class="full msg err" id="lk-val" style="display:none;margin:4px 0 0"></div>
+    <div class="full row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sec" type="submit" name="goto" value="save">💾 Uložit</button><button class="btn" type="submit" name="goto" value="eval" id="btn-eval">🧠 Vyhodnotit a vypracovat studii</button><span class="small muted">Uložit = jen uloží údaje. Vyhodnotit = sestaví AI studii lokality (1–2 min)${site && site.evaluated_at ? '' : ' a odečte 1 lokalitu z balíčku'}.</span></div>
   </form>
   <script>(function(){ var fmt=function(v){ var t=String(v).replace(/\s/g,'').replace(',','.'); var n=Number(t); if(t===''||!isFinite(n)) return v; return n.toLocaleString('cs-CZ',{maximumFractionDigits:2}).replace(/\u00a0/g,' '); };
     document.querySelectorAll('form.lk-f input[inputmode=decimal], form.lk-f input[inputmode=numeric]').forEach(function(i){ if(i.name==='interest'||i.name==='months'||i.name==='notice'||/_m$/.test(i.name)) return; i.addEventListener('blur',function(){ this.value=fmt(this.value); }); i.addEventListener('focus',function(){ this.value=this.value.replace(/\s/g,''); }); if(i.value) i.value=fmt(i.value); }); })();</script>
@@ -291,7 +293,26 @@ function siteForm(s, site, d, error, saved, noeval, products) {
     document.querySelectorAll('.poi-btn').forEach(function(b){ b.addEventListener('dragstart',function(e){ e.dataTransfer.setData('text/plain',this.getAttribute('data-type')); e.dataTransfer.effectAllowed='copy'; mapEl.classList.add('poi-drop'); }); b.addEventListener('dragend',function(){ mapEl.classList.remove('poi-drop'); }); });
     mapEl.addEventListener('dragover',function(e){ e.preventDefault(); e.dataTransfer.dropEffect='copy'; });
     mapEl.addEventListener('drop',function(e){ e.preventDefault(); var type=e.dataTransfer.getData('text/plain'); if(!type) return; var r=mapEl.getBoundingClientRect(); var p=map.containerPointToLatLng(L.point(e.clientX-r.left,e.clientY-r.top)); addPoiAt(type,p); mapEl.classList.remove('poi-drop'); stopAdd(); });
-    document.querySelector('form.lk-f').addEventListener('submit',function(e){ if(!ACC.value){ e.preventDefault(); var sa=document.getElementById('f-access-sel'); if(sa){ sa.style.borderColor='rgba(245,180,0,.8)'; sa.scrollIntoView({behavior:'smooth',block:'center'}); sa.focus(); } alert('U prádlomatu vyplňte, zda bude pro zákazníky přístupný 24/7, nebo omezeně.'); return; } var bad=pois.filter(function(p){ return p.type==='road'&&!p.visible; }); if(bad.length){ e.preventDefault(); renderList(); var sel=listEl.querySelector('select[data-f="visible"]:invalid, select[data-f="visible"] option[value=""]:checked'); msg.textContent='U hlavní silnice vyplňte, zda bude prádlomat ze silnice vidět.'; var el=listEl.querySelector('select[data-f="visible"]'); if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.focus(); } alert('U hlavní silnice „'+(bad[0].label||'Hlavní silnice')+'“ vyplňte, zda bude prádlomat ze silnice vidět.'); } });
+    // Kontrola před odesláním: Uložit = jen název + adresa (koncept). Vyhodnotit = vše povinné; chybějící položky se vypíší přesně a tlačítka se nikdy nezablokují, dokud formulář neprojde.
+    var lastGoto='save'; document.querySelectorAll('.lk-f button[type=submit]').forEach(function(b){ b.addEventListener('click',function(){ lastGoto=b.value||'save'; }); });
+    function lkValidate(evalMode){ var form=document.querySelector('form.lk-f'), errs=[], first=null;
+      function add(text, el){ errs.push(text); if(!first&&el) first=el; }
+      if(!form.name.value.trim()) add('Vyplňte <b>Název lokality</b>.', form.name);
+      if(!form.address.value.trim()) add('Vyplňte <b>Adresu</b>.', form.address);
+      if(!evalMode) return {errs:errs, first:first};
+      if(!lat.value||!lng.value) add('Umístěte <b>prádlomat do mapy</b> – vyhledejte adresu tlačítkem Najít a přetáhněte modrý obdélník na přesné místo.', document.getElementById('site-map'));
+      if(!ACC.value) add('V tabulce bodů u řádku <b>Prádlomat</b> vyberte, zda bude <b>přístupný 24/7</b>, nebo omezeně.', document.getElementById('f-access-sel'));
+      if(!pois.some(function(p){return p.type==='parking';})) add('Přetáhněte do mapy ikonu <b>Nejbližší parkoviště</b> (povinný bod).', document.getElementById('poi-tools'));
+      var bad=pois.filter(function(p){ return p.type==='road'&&!p.visible; }); if(bad.length) add('U hlavní silnice „'+String(bad[0].label||'Hlavní silnice').replace(/[<>&]/g,'')+'“ vyberte ve sloupci vpravo, zda bude <b>prádlomat ze silnice vidět</b>.', listEl.querySelector('select[data-f="visible"]'));
+      if(form.ownership&&!form.ownership.value) add('V sekci Nájem a smlouva vyberte, zda je <b>místo vaše vlastní, nebo v nájmu</b>.', form.ownership);
+      if(form.vat_payer&&!form.vat_payer.value) add('V sekci Investice vyberte, zda <b>jste plátce DPH</b>.', form.vat_payer);
+      return {errs:errs, first:first}; }
+    document.querySelector('form.lk-f').addEventListener('submit',function(e){ var goto=(e.submitter&&e.submitter.value)||lastGoto; var evalMode=goto==='eval'; var v=lkValidate(evalMode); var box=document.getElementById('lk-val');
+      if(v.errs.length){ e.preventDefault(); renderList(); box.style.display='block'; box.innerHTML='<b>'+(evalMode?'Před vyhodnocením ještě doplňte:':'Před uložením doplňte:')+'</b><ul style="margin:6px 0 0 18px;padding:0">'+v.errs.map(function(t){return '<li>'+t+'</li>';}).join('')+'</ul>';
+        if(v.first){ if(v.first.style) v.first.style.outline='2px solid rgba(245,180,0,.8)'; try{ v.first.scrollIntoView({behavior:'smooth',block:'center'}); }catch(x){} if(v.first.focus) try{ v.first.focus({preventScroll:true}); }catch(x){} setTimeout(function(){ if(v.first.style) v.first.style.outline=''; },4000); }
+        document.querySelectorAll('.lk-f button[type=submit]').forEach(function(b){ b.disabled=false; }); return; }
+      box.style.display='none';
+      if(evalMode){ setTimeout(function(){ document.querySelectorAll('.lk-f button[type=submit]').forEach(function(b){ b.disabled=true; }); var be=document.getElementById('btn-eval'); if(be) be.textContent='⏳ Vyhodnocuji a sestavuji studii (1–2 min)…'; },0); } });
     function stopAdd(){ addType=null; cancelBtn.style.display='none'; document.querySelectorAll('.poi-btn').forEach(function(x){ x.classList.add('sec'); }); map.getContainer().style.cursor=''; }
     cancelBtn.addEventListener('click',stopAdd);
     redrawPois(); renderList();
@@ -304,31 +325,37 @@ function siteForm(s, site, d, error, saved, noeval, products) {
   })();</script>`, LEAFLET_HEAD);
 }
 
+// ── Dokoupení kreditů (vyhodnocení / vyhledání): kostky + modal se 3 balíčky → POST /lokalita/dokoupit → Stripe ──
+const BUY_CSS = `<style>.lk-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 14px}.lk-stats .st{padding:16px 18px;border:1px solid var(--border);border-radius:14px;background:var(--card)}.lk-stats .st .n{font-size:30px;font-weight:800;line-height:1.1}.lk-stats .st .l{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}.lk-stats .st.buy{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.08);display:flex;flex-direction:column;justify-content:center;gap:8px}
+  .lk-modal{position:fixed;inset:0;background:rgba(2,4,10,.78);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px}.lk-modal.on{display:flex}.lk-modal .bx{background:#0b1222;border:1px solid var(--border2);border-radius:18px;padding:22px;max-width:760px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+  .pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.pk{margin:0;padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--card);text-align:center}.pk:nth-child(2){border-color:rgba(79,209,255,.5)}.pk-n{font-size:34px;font-weight:800;color:var(--accent2)}.pk-l{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}.pk-p{font-size:20px;font-weight:700;margin-top:8px}
+  @media(max-width:700px){.lk-stats,.pk-grid{grid-template-columns:1fr}}</style>`;
+function buyBlock({ used, limit, base, packs, unit, unitPl, title, hint, extraLabel }) {
+  const left = Math.max(0, limit - used);
+  const packCard = (k, p) => { const n = p.evals || p.searches || 0; return `<form method="post" action="/lokalita/dokoupit" class="pk"><input type="hidden" name="pack" value="${k}"><div class="pk-n">${n}</div><div class="pk-l">${unitPl}</div><div class="pk-p">${Math.round(p.amount / 100).toLocaleString('cs-CZ')} Kč</div><div class="small muted">${Math.round(p.amount / 100 / n).toLocaleString('cs-CZ')} Kč / ${unit} · s DPH</div><button class="btn sm" type="submit" style="margin-top:10px;width:100%">Vybrat a zaplatit</button></form>`; };
+  return `${BUY_CSS}
+  <div class="lk-stats">
+    <div class="st"><div class="n" id="buy-used">${used}</div><div class="l">Využitá ${unitPl}</div></div>
+    <div class="st"><div class="n" id="buy-left" style="color:${left > 0 ? 'var(--ok)' : 'var(--err)'}">${left}</div><div class="l">Zbývá ${unitPl}${limit > base ? ` · z toho dokoupeno ${limit - base}` : ''}</div></div>
+    <div class="st buy"><div class="l" style="margin:0">${extraLabel}</div><button class="btn" type="button" id="buy-btn" style="width:100%">${title}</button></div>
+  </div>
+  <div class="lk-modal" id="buy-modal"><div class="bx"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0">${title}</h2><p class="muted small" style="margin:4px 0 0">${hint} Platnost přístupu se nemění. Platba kartou přes Stripe.</p></div><button class="btn sec sm" type="button" id="buy-close">✕</button></div>
+    <div class="pk-grid">${Object.entries(packs).map(([k, p]) => packCard(k, p)).join('')}</div></div></div>
+  <script>(function(){var m=document.getElementById('buy-modal'),b=document.getElementById('buy-btn');if(!m||!b)return;function open(){m.classList.add('on');}window.lkBuyOpen=open;b.addEventListener('click',open);document.getElementById('buy-close').addEventListener('click',function(){m.classList.remove('on');});m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});document.addEventListener('keydown',function(e){if(e.key==='Escape')m.classList.remove('on');});})();</script>`;
+}
+
 // ── Seznam lokalit ───────────────────────────────────────────────────────────
 function listPage(s, sites, info) {
   const limit = info.limit != null ? info.limit : (LIMITS[info.package] || 3), used = info.used != null ? info.used : sites.filter((x) => x.evaluated_at).length;
-  const left = Math.max(0, limit - used);
   const exp = info.expires_at ? new Date(info.expires_at) : null;
-  const packs = info.packs || {};
-  const packCard = (k, p) => `<form method="post" action="/lokalita/dokoupit" class="pk"><input type="hidden" name="pack" value="${k}"><div class="pk-n">${p.evals}</div><div class="pk-l">${p.evals === 1 ? 'vyhodnocení' : 'vyhodnocení'}</div><div class="pk-p">${Math.round(p.amount / 100).toLocaleString('cs-CZ')} Kč</div><div class="small muted">${Math.round(p.amount / 100 / p.evals).toLocaleString('cs-CZ')} Kč / lokalita · s DPH</div><button class="btn sm" type="submit" style="margin-top:10px;width:100%">Vybrat a zaplatit</button></form>`;
+  const packs = Object.fromEntries(Object.entries(info.packs || {}).filter(([, p]) => p.evals));
   return page(s, 'Moje lokality', 'loc', `
   <div class="hero"><span class="eyebrow"><i></i>Prověření lokality · balíček ${esc(PKG_LABEL[info.package] || info.package)}</span>
     <h1><span class="g">Moje lokality</span></h1>
     <p>Lokalita se z balíčku odečte až prvním vyhodnocením; ukládání a úpravy jsou neomezené${exp ? ` · přístup do ${exp.toLocaleDateString('cs-CZ')}` : ''}.</p></div>
   ${info.msg ? `<div class="msg ok">${esc(info.msg)}</div>` : ''}
-  <style>.lk-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 14px}.lk-stats .st{padding:16px 18px;border:1px solid var(--border);border-radius:14px;background:var(--card)}.lk-stats .st .n{font-size:30px;font-weight:800;line-height:1.1}.lk-stats .st .l{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}.lk-stats .st.buy{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.08);display:flex;flex-direction:column;justify-content:center;gap:8px}
-  .lk-modal{position:fixed;inset:0;background:rgba(2,4,10,.78);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}.lk-modal.on{display:flex}.lk-modal .bx{background:#0b1222;border:1px solid var(--border2);border-radius:18px;padding:22px;max-width:760px;width:100%;box-shadow:0 30px 80px rgba(0,0,0,.6)}
-  .pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.pk{margin:0;padding:16px;border:1px solid var(--border);border-radius:14px;background:var(--card);text-align:center}.pk:nth-child(2){border-color:rgba(79,209,255,.5)}.pk-n{font-size:34px;font-weight:800;color:var(--accent2)}.pk-l{font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}.pk-p{font-size:20px;font-weight:700;margin-top:8px}
-  @media(max-width:700px){.lk-stats,.pk-grid{grid-template-columns:1fr}}</style>
-  <div class="lk-stats">
-    <div class="st"><div class="n">${used}</div><div class="l">Využitá vyhodnocení</div></div>
-    <div class="st"><div class="n" style="color:${left > 0 ? 'var(--ok)' : 'var(--err)'}">${left}</div><div class="l">Zbývá vyhodnocení${limit > (LIMITS[info.package] || 3) ? ` · z toho dokoupeno ${limit - (LIMITS[info.package] || 3)}` : ''}</div></div>
-    <div class="st buy"><div class="l" style="margin:0">Potřebujete prověřit další místa?</div><button class="btn" type="button" id="buy-btn" style="width:100%">Dokoupit vyhodnocení</button></div>
-  </div>
+  ${buyBlock({ used, limit, base: LIMITS[info.package] || 3, packs, unit: 'lokalita', unitPl: 'vyhodnocení', title: 'Dokoupit vyhodnocení', hint: 'Vyhodnocení se po zaplacení ihned připíší k vašemu účtu.', extraLabel: 'Potřebujete prověřit další místa?' })}
   <div class="row" style="margin:6px 0 14px"><a class="btn" href="/lokalita/new">+ Nová lokalita</a>${used >= limit ? '<span class="muted small">Vyhodnocení v balíčku jsou vyčerpána – další lokality lze uložit, ale ne vyhodnotit. Dokupte vyhodnocení výše.</span>' : ''}<a class="btn sec" href="/lokalita/checklist">Checklist před podpisem nájmu</a></div>
-  <div class="lk-modal" id="buy-modal"><div class="bx"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h2 style="margin:0">Dokoupit vyhodnocení</h2><p class="muted small" style="margin:4px 0 0">Vyhodnocení se po zaplacení ihned připíší k vašemu účtu. Platnost přístupu se nemění. Platba kartou přes Stripe.</p></div><button class="btn sec sm" type="button" id="buy-close">✕</button></div>
-    <div class="pk-grid">${Object.entries(packs).map(([k, p]) => packCard(k, p)).join('')}</div></div></div>
-  <script>(function(){var m=document.getElementById('buy-modal'),b=document.getElementById('buy-btn');if(!m||!b)return;b.addEventListener('click',function(){m.classList.add('on');});document.getElementById('buy-close').addEventListener('click',function(){m.classList.remove('on');});m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});document.addEventListener('keydown',function(e){if(e.key==='Escape')m.classList.remove('on');});})();</script>
   ${sites.length ? `<div class="lk-grid">${sites.map((x) => { const ev = x.result || {}; return `<div class="card" style="margin:0"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><b style="font-size:16px">${esc(x.name)}</b><div class="small muted">${esc(x.address || '')}${x.city ? ', ' + esc(x.city) : ''}</div></div>${x.evaluated_at ? `<a class="btn sm" href="/lokalita/${x.id}/studie">🧠 Studie</a>` : '<span class="badge invited">koncept – nevyhodnoceno</span>'}</div>
     ${ev.result && x.evaluated_at ? `<div style="margin-top:10px"><span class="res ${ev.cls}" style="font-size:12px;padding:4px 10px">${esc(ev.result)}</span></div>` : ''}
     ${x.calc && x.evaluated_at ? (() => { const col = (v) => ev.cls === 'bad' || v < 0 ? 'var(--err)' : ev.cls === 'cond' ? '#ffd866' : 'var(--ok)'; return `<div class="small muted" style="margin-top:8px">Střední scénář: provozní výsledek <b style="color:${col(x.calc.mid_operating)}">${Math.round(x.calc.mid_operating).toLocaleString('cs-CZ')} Kč/měs</b>, po splátce <b style="color:${col(x.calc.mid_cash)}">${Math.round(x.calc.mid_cash).toLocaleString('cs-CZ')} Kč/měs</b></div>`; })() : ''}
@@ -377,11 +404,14 @@ function reportPage(s, site, d, c, ev, studyErr) {
 }
 // ── Vyhledávač míst: spádová oblast 15 km (populace, kapacita, provozované prádlomaty) ──
 // Data: HolyOS veřejné API /api/pradlomat-spots/public/* přes BS2 proxy (/api/location/area, /api/location/existing).
-function analyzerPage(s, q) {
+function analyzerPage(s, q, credits, msg) {
+  credits = credits || null;
   const head = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
   return page(s, 'Vyhledávač míst', 'anal', `
   <div class="hero"><span class="eyebrow"><i></i>Vyhledávač míst</span><h1><span class="g">Spádová oblast</span> vašeho města</h1><p>Zadejte město – ukážeme počet obyvatel v okruhu 15 km, odhad kapacity (kolik prádlomatů oblast uživí) a prádlomaty, které už v okolí fungují. Výsledek si přeneste do nové lokality.</p></div>
-  <div class="card" style="padding:12px"><div class="row" style="gap:8px;flex-wrap:wrap"><input id="an-q" value="${esc(q || '')}" placeholder="Zadejte své město, např. Tábor" style="flex:1;min-width:220px" autocomplete="off"><button class="btn" type="button" id="an-btn">🔎 Analyzovat</button></div></div>
+  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+  ${credits ? buyBlock({ used: credits.used, limit: credits.limit, base: credits.base, packs: credits.packs || {}, unit: 'vyhledání', unitPl: 'vyhledání', title: 'Dokoupit vyhledání', hint: 'Vyhledání se po zaplacení ihned připíší k vašemu účtu.', extraLabel: 'Chcete prověřit další města?' }) : ''}
+  <div class="card" style="padding:12px"><div class="row" style="gap:8px;flex-wrap:wrap"><input id="an-q" value="${esc(q || '')}" placeholder="Zadejte své město, např. Tábor" style="flex:1;min-width:220px" autocomplete="off"><button class="btn" type="button" id="an-btn">🔎 Analyzovat</button></div><div class="small muted" style="margin-top:8px">Každé nové město odečte 1 vyhledání. Opakované hledání stejného města je zdarma.</div></div>
   <div id="an-map" style="height:380px;border-radius:16px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
   <div id="an-out" style="margin-top:12px"></div>
   <style>.an-big{display:flex;flex-direction:column;align-items:flex-end}.an-big .n{font-size:34px;font-weight:800;letter-spacing:-.02em;background:linear-gradient(90deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}.an-big .l{font-size:12px;color:var(--text2)}
@@ -397,7 +427,7 @@ function analyzerPage(s, q) {
     fetch('/api/location/existing').then(function(r){return r.ok?r.json():[]}).then(function(list){(list||[]).forEach(function(w){if(w.lat==null||w.lon==null)return;var m=L.circleMarker([w.lat,w.lon],{radius:5,color:'#fff',weight:1.4,fillColor:'#1e86e0',fillOpacity:.95}).addTo(map);m.bindTooltip('🧺 '+esc(w.name),{direction:'top'});existing.push(m);});}).catch(function(){});
     var out=document.getElementById('an-out'),inp=document.getElementById('an-q'),btn=document.getElementById('an-btn');
     function run(){var q=inp.value.trim(); if(q.length<2)return; btn.disabled=true; var old=btn.textContent; btn.textContent='Hledám…'; out.innerHTML='<div class="card"><span class="muted">Analyzuji spádovou oblast '+esc(q)+' (15 km)…</span></div>';
-      fetch('/api/location/area?area='+encodeURIComponent(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){btn.disabled=false;btn.textContent=old; if(!res.ok){out.innerHTML='<div class="msg err">'+esc((res.j&&res.j.error)||'Analýzu se nepodařilo spustit.')+'</div>';return;} render(res.j,q);}).catch(function(){btn.disabled=false;btn.textContent=old;out.innerHTML='<div class="msg err">Chyba spojení, zkuste to prosím znovu.</div>';});}
+      fetch('/api/location/area?area='+encodeURIComponent(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){btn.disabled=false;btn.textContent=old; if(res.j&&res.j.credits){var u=document.getElementById('buy-used'),l=document.getElementById('buy-left');if(u)u.textContent=res.j.credits.used;if(l){var left=Math.max(0,res.j.credits.limit-res.j.credits.used);l.textContent=left;l.style.color=left>0?'var(--ok)':'var(--err)';}} if(!res.ok){out.innerHTML='<div class="msg err">'+esc((res.j&&res.j.error)||'Analýzu se nepodařilo spustit.')+(res.j&&res.j.buy?' <a href="#" id="an-buy">Dokoupit vyhledání</a>':'')+'</div>';var ab=document.getElementById('an-buy');if(ab)ab.addEventListener('click',function(e){e.preventDefault();if(window.lkBuyOpen)window.lkBuyOpen();});return;} render(res.j,q);}).catch(function(){btn.disabled=false;btn.textContent=old;out.innerHTML='<div class="msg err">Chyba spojení, zkuste to prosím znovu.</div>';});}
     function render(r,q){layers.forEach(function(l){try{map.removeLayer(l);}catch(e){}});layers=[];
       if(r.center){var rk=r.radius_km||15;var ring=L.circle([r.center.lat,r.center.lon],{radius:rk*1000,color:'#4fd1ff',weight:2,fill:true,fillColor:'#1e86e0',fillOpacity:.06,dashArray:'6 6'}).addTo(map);layers.push(ring);layers.push(L.circleMarker([r.center.lat,r.center.lon],{radius:5,color:'#fff',weight:2,fillColor:'#4fd1ff',fillOpacity:1}).addTo(map).bindTooltip('Střed',{direction:'top'}));
         (r.places||[]).forEach(function(p){var cm=L.circleMarker([p.lat,p.lon],{radius:popRadius(p.population),color:'rgba(0,0,0,.35)',weight:.5,fillColor:popColor(p.population),fillOpacity:.8}).addTo(map);cm.bindTooltip(esc(p.name)+': '+p.population.toLocaleString('cs-CZ'),{direction:'top'});layers.push(cm);});
@@ -431,4 +461,4 @@ function expiredPage(s) {
   return page(s, 'Přístup vypršel', 'loc', `<div class="card"><h1 style="margin:0 0 6px">Platnost přístupu skončila</h1><p class="muted">Váš přístup k aplikaci Prověření lokality vypršel. Pro prodloužení nás kontaktujte přes Podporu.</p></div>`);
 }
 
-module.exports = { NAV, reportSections, analyzerPage, LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
+module.exports = { NAV, reportSections, analyzerPage, LIMITS, SEARCH_LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };

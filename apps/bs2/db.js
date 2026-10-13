@@ -236,6 +236,16 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_package TEXT;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_expires_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_evals INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhodnocení navíc
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_searches INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhledání (Vyhledávač míst)
+    -- Vyhledávač míst: každé nové město odečte 1 vyhledání; opakované hledání stejného města je zdarma
+    CREATE TABLE IF NOT EXISTS location_searches (
+      id           SERIAL PRIMARY KEY,
+      supporter_id INTEGER NOT NULL REFERENCES supporters(id) ON DELETE CASCADE,
+      area_norm    TEXT NOT NULL,
+      area         TEXT,
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+      UNIQUE (supporter_id, area_norm)
+    );
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (
       id           SERIAL PRIMARY KEY,
