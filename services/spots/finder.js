@@ -98,17 +98,25 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
 ];
 // Zkusí postupně několik veřejných Overpass mirrorů (rate-limit/timeout na jednom
 // nemá shodit hledání). Vrací JSON, nebo null když selžou všechny.
+// Dva průchody přes všechny mirrory s pauzou (přetížení bývá chvilkové) + cache odpovědí na 24 h,
+// aby opakované dotazy (stejná oblast) už na Overpass vůbec nešly.
+const _overpassCache = new Map();
 async function overpass(query) {
-  for (let i = 0; i < OVERPASS_ENDPOINTS.length; i++) {
-    const j = await fetchJson(OVERPASS_ENDPOINTS[i], {
-      method: 'POST',
-      headers: { 'User-Agent': UA(), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(query),
-    }, 45000);
-    if (j && Array.isArray(j.elements)) return j;
+  const hit = _overpassCache.get(query); if (hit && Date.now() - hit.at < 24 * 3600e3) return hit.j;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < OVERPASS_ENDPOINTS.length; i++) {
+      const j = await fetchJson(OVERPASS_ENDPOINTS[i], {
+        method: 'POST',
+        headers: { 'User-Agent': UA(), 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      }, 45000);
+      if (j && Array.isArray(j.elements)) { _overpassCache.set(query, { at: Date.now(), j }); if (_overpassCache.size > 300) _overpassCache.delete(_overpassCache.keys().next().value); return j; }
+    }
+    if (pass === 0) await new Promise((r) => setTimeout(r, 4000));
   }
   return null;
 }
