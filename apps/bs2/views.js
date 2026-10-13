@@ -702,6 +702,8 @@ function supporterCompounder(s) {
   .cp .dec-s{display:block;font-size:13px;color:var(--text2);margin-top:2px}
   .cp .dec-ask{font-size:15px;line-height:1.5;color:var(--text)} .cp .dec-ask b{color:var(--accent2)}
   @media(max-width:760px){.cp .scale{grid-template-columns:1fr}}
+  /* Telefon: oba stroje vedle sebe s plusem jako na počítači, jen menší (žádné zalamování pod sebe) */
+  @media(max-width:700px){.cp .sc-col{flex-wrap:wrap;gap:6px 4px;padding:12px 8px 14px}.cp .sc-h{flex:0 0 100%;margin-bottom:2px}.cp .sc-col .sc-m{width:40%;min-width:0;flex:0 0 40%}.cp .sc-col.wait .sc-m{width:48%;flex-basis:48%}.cp .sc-plus{font-size:24px;flex:0 0 28px;text-align:center}.cp .sc-arrow{font-size:22px;flex:0 0 28px;text-align:center}.cp .sc-m .pl-tag{font-size:10px;padding:3px 9px;letter-spacing:.04em;white-space:nowrap}.cp .sc-t{flex:0 0 100%;font-size:12.5px;margin-top:4px}}
   .cp .ph-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:18px}
   .cp .ph-grid .c{padding:16px 18px;border-radius:16px;border:1px solid var(--border);background:rgba(4,8,16,.55)}
   .cp .ph-grid .i{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:var(--accent2);background:linear-gradient(135deg,rgba(30,134,224,.35),rgba(124,92,255,.35));border:1px solid var(--border2);margin-bottom:10px}
