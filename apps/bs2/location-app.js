@@ -339,7 +339,7 @@ function reportSections(site, d, c, ev) {
     <div class="card warn" style="margin:0"><h4 style="margin-top:0">Hlavní rizika</h4>${li(ev.risks)}</div>
     <div class="card" style="margin:0"><h4 style="margin-top:0">Doporučené další kroky</h4>${li(ev.steps)}</div>
   </div>
-  ${d.notes ? `<div class="card rep"><h4 style="margin-top:0">Poznámky</h4><p style="white-space:pre-wrap;color:var(--text2);margin:0">${esc(d.notes)}</p></div>` : ''}
+  ${d.notes ? `<div class="card rep" style="margin-top:12px"><h4 style="margin-top:0">Poznámky</h4><p style="white-space:pre-wrap;color:var(--text2);margin:0">${esc(d.notes)}</p></div>` : ''}
 ` };
 }
 function reportPage(s, site, d, c, ev, studyErr) {
