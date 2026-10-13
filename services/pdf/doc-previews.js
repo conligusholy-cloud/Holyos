@@ -14,6 +14,7 @@ const OUR = {
   bank_account: '1234567890/0800', iban: 'CZ6508000000001234567890',
 };
 const CUSTOMER = { name: 'LAUNDRY, j.s.a.', address: 'Příkladná 45', zip: '110 00', city: 'Praha', country: 'CZ', ico: '12345678', dic: 'CZ12345678', branch_address: 'Provozní 7', branch_zip: '251 01', branch_city: 'Říčany' };
+const CONSIGNEE = { name: 'Prádelna Sever a.s.', address: 'Skladová 21', zip: '700 30', city: 'Ostrava', country: 'CZ', ico: '27654321' };
 const CUSTOMER_EU = { name: 'Wäscherei Müller GmbH', address: 'Hauptstraße 12', zip: '10115', city: 'Berlin', country: 'DE', ico: 'HRB 123456', dic: 'DE123456789', branch_address: 'Industriestraße 3', branch_zip: '80331', branch_city: 'München' };
 const CUSTOMER_WORLD = { name: 'Lanterne Laundry LLC', address: '350 Fifth Avenue', zip: 'NY 10118', city: 'New York', country: 'USA', ico: '', dic: 'EIN 12-3456789', branch_address: '1200 Harbor Blvd', branch_zip: 'NJ 07302', branch_city: 'Jersey City' };
 const SUPPLIER = { name: 'Dodavatel komponent s.r.o.', address: 'Průmyslová 8', zip: '690 02', city: 'Břeclav', country: 'CZ', ico: '87654321', dic: 'CZ87654321' };
@@ -52,8 +53,10 @@ function variantInvoice(kind, o) {
     return { line_order: i, description: it.description, quantity: 1, unit: 'ks', unit_price: up, vat_rate: rate, subtotal: up, vat_amount: va, total: r2(up + va) };
   });
   const company = k.dir === 'ap' ? SUPPLIER : vatReg === 'outside_scope' ? CUSTOMER_WORLD : vatReg === 'reverse_charge' ? CUSTOMER_EU : CUSTOMER;
+  const withCons = o.cons === '1' || o.cons === 1 || o.cons === true;
+  const companyFinal = (withCons && k.dir !== 'ap') ? Object.assign({}, company, { consignee: CONSIGNEE }) : company;
   const note = o.note != null ? String(o.note) : (lang === 'en' ? k.note_en : k.note_cs);
-  return sampleInvoice(k.type, k.dir, { language: lang, vat_regime: vatReg, currency: cur, items, subtotal: r2(sub), vat_amount: r2(vat), total: r2(sub + vat), company, note, partner_bic: 'GIBACZPX', _variant: { lang, cur } });
+  return sampleInvoice(k.type, k.dir, { language: lang, vat_regime: vatReg, currency: cur, items, subtotal: r2(sub), vat_amount: r2(vat), total: r2(sub + vat), company: companyFinal, note, partner_bic: 'GIBACZPX', _variant: { lang, cur } });
 }
 
 function sampleInvoice(type, direction, extra) {

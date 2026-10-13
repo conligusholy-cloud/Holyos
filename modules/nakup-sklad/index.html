@@ -560,6 +560,9 @@
     async function openCompanyModal(id) {
       let c = {};
       if (id) { try { const r = await fetch('/api/wh/companies/' + id); c = await r.json(); } catch(e) {} }
+      let allCos = [];
+      try { allCos = await (await fetch('/api/wh/companies')).json(); } catch(e) {}
+      const consOpts = '<option value="">— žádný (dodává se odběrateli) —</option>' + allCos.filter(x => x.id !== id).map(x => '<option value="' + x.id + '"' + (c.consignee_id===x.id?' selected':'') + '>' + String(x.name).replace(/</g,'&lt;') + (x.ico ? ' (' + x.ico + ')' : '') + '</option>').join('');
       const typeOpts = Object.entries(COMPANY_TYPES).map(([k,v]) => '<option value="' + k + '"' + (c.type===k?' selected':'') + '>' + v + '</option>').join('');
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
         '<div class="modal" style="max-width:650px;"><h2>' + (id ? '✏️ Upravit společnost' : '➕ Nová společnost') + '</h2>' +
@@ -576,6 +579,11 @@
             '<div class="form-group"><label>Město</label><input type="text" name="city" value="' + (c.city||'') + '"></div>' +
             '<div class="form-group"><label>PSČ</label><input type="text" name="zip" value="' + (c.zip||'') + '"></div>' +
             '<div class="form-group"><label>Země</label><select name="country">' + HolyCountries.renderOptions(c.country || 'CZ') + '</select></div>' +
+            '<div class="form-group full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;"><label style="font-weight:700;">Dodací adresa (provozovna)</label><div style="font-size:11.5px;opacity:.7;margin-bottom:6px;">Kam se zboží dodává. Prázdné = adresa sídla. Je-li nastaven příjemce, platí jeho adresa.</div></div>' +
+            '<div class="form-group full"><label>Adresa provozovny</label><input type="text" name="branch_address" value="' + (c.branch_address||'') + '"></div>' +
+            '<div class="form-group"><label>Město</label><input type="text" name="branch_city" value="' + (c.branch_city||'') + '"></div>' +
+            '<div class="form-group"><label>PSČ</label><input type="text" name="branch_zip" value="' + (c.branch_zip||'') + '"></div>' +
+            '<div class="form-group full"><label>Příjemce (jiná společnost — nepovinné)</label><select name="consignee_id">' + consOpts + '</select><div style="font-size:11.5px;opacity:.7;margin-top:4px;">Na faktuře se zobrazí blok „Příjemce" a dodací adresa je shodná s adresou příjemce.</div></div>' +
             '<div class="form-group"><label>Kontaktní osoba</label><input type="text" name="contact_person" value="' + (c.contact_person||'') + '"></div>' +
             '<div class="form-group"><label>Email</label><input type="text" name="email" value="' + (c.email||'') + '"></div>' +
             '<div class="form-group"><label>Telefon</label><input type="text" name="phone" value="' + (c.phone||'') + '"></div>' +

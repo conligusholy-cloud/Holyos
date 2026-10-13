@@ -122,6 +122,8 @@ function fmtDate(d, lang) {
 // Dodací adresa odběratele = adresa provozovny (branch_*); není-li zadána, použije se adresa sídla.
 function joinDelivery(c) {
   if (!c) return '';
+  // Příjemce (jiná společnost) → dodací adresa je jeho adresa
+  if (c.consignee) return joinDelivery(Object.assign({}, c.consignee, { consignee: null }));
   if (c.branch_address || c.branch_city || c.branch_zip) {
     return joinAddress({ address: c.branch_address, city: c.branch_city, zip: c.branch_zip, country: c.country });
   }
@@ -201,7 +203,7 @@ function buildQrUrl(spaydString) {
 // ─── JAZYKY DOKLADU (cs / en) ───────────────────────────────────────────────
 const I18N = {
   cs: {
-    ext: 'Externí č.:', supplier: 'Dodavatel', customer: 'Odběratel', delivery: 'Dodací adresa', ico: 'IČO', dic: 'DIČ',
+    ext: 'Externí č.:', supplier: 'Dodavatel', customer: 'Odběratel', delivery: 'Dodací adresa', consignee: 'Příjemce', ico: 'IČO', dic: 'DIČ',
     issued: 'Vystaveno', duzp: 'DUZP', due: 'Splatnost', paymethod: 'Forma úhrady',
     desc: 'Popis', qty: 'Množství', unit: 'Jedn.', unitprice: 'Cena / ks', vatpct: 'DPH', base: 'Základ', vat: 'DPH', total: 'Celkem',
     config: 'Konfigurace / výbava', subtotal_all: 'Základ celkem', vat_all: 'DPH celkem', grand: 'Celkem k úhradě',
@@ -215,7 +217,7 @@ const I18N = {
     locale: 'cs-CZ',
   },
   en: {
-    ext: 'Ext. no.:', supplier: 'Supplier', customer: 'Customer', delivery: 'Delivery address', ico: 'Company ID', dic: 'VAT ID',
+    ext: 'Ext. no.:', supplier: 'Supplier', customer: 'Customer', delivery: 'Delivery address', consignee: 'Consignee', ico: 'Company ID', dic: 'VAT ID',
     issued: 'Issue date', duzp: 'Tax point', due: 'Due date', paymethod: 'Payment method',
     desc: 'Description', qty: 'Quantity', unit: 'Unit', unitprice: 'Unit price', vatpct: 'VAT', base: 'Net', vat: 'VAT', total: 'Total',
     config: 'Configuration', subtotal_all: 'Total net', vat_all: 'Total VAT', grand: 'Total due',
@@ -316,6 +318,7 @@ function buildTemplateData(invoice, ourCompany) {
     customer_name: partner.name || '',
     customer_address: joinAddress(partner),
     customer_delivery: joinDelivery(partner),
+    consignee_name: partner.consignee ? ((partner.consignee.name || '') + (partner.consignee.ico ? ` (${L.ico}: ${partner.consignee.ico})` : '')) : '',
     customer_ico: partner.ico || '',
     customer_dic: partner.dic || '',
 
@@ -345,7 +348,7 @@ function buildTemplateData(invoice, ourCompany) {
     reverse_charge: invoice.vat_regime === 'reverse_charge' || invoice.vat_regime === 'outside_scope',
     reverse_charge_text: invoice.vat_regime === 'outside_scope' ? L.outside : L.reverse,
     lang,
-    l_ext: L.ext, l_supplier: L.supplier, l_customer: L.customer, l_delivery: L.delivery, l_ico: L.ico, l_dic: L.dic,
+    l_ext: L.ext, l_supplier: L.supplier, l_customer: L.customer, l_delivery: L.delivery, l_consignee: L.consignee, l_ico: L.ico, l_dic: L.dic,
     l_issued: L.issued, l_duzp: L.duzp, l_due: L.due, l_paymethod: L.paymethod,
     l_desc: L.desc, l_qty: L.qty, l_unit: L.unit, l_unitprice: L.unitprice, l_vatpct: L.vatpct, l_base: L.base, l_vat: L.vat, l_total: L.total,
     l_config: L.config, l_subtotal_all: L.subtotal_all, l_vat_all: L.vat_all, l_grand: L.grand,
@@ -422,6 +425,16 @@ function czAccountToIban(account) {
 async function generateInvoicePdf(invoice, ourCompany, opts = {}) {
   if (!invoice) throw new Error('generateInvoicePdf: chybí invoice');
   if (!invoice.items) throw new Error('generateInvoicePdf: invoice musí mít načtené items (Prisma include)');
+
+  // Příjemce zboží (jiná společnost) — dočti z DB, pokud volající nenačetl relaci
+  const pc = invoice.company;
+  if (pc && pc.consignee_id && !pc.consignee) {
+    try {
+      const { prisma } = require('../../config/database');
+      const cons = await prisma.company.findUnique({ where: { id: pc.consignee_id } });
+      if (cons) invoice = Object.assign({}, invoice, { company: Object.assign({}, pc, { consignee: cons }) });
+    } catch (e) { console.warn('[invoice-pdf] příjemce se nepodařilo načíst:', e.message); }
+  }
 
   const data = buildTemplateData(invoice, ourCompany);
   const html = renderTemplate(loadTemplate(), data);

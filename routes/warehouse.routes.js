@@ -89,10 +89,22 @@ router.get('/companies', async (req, res, next) => {
   }
 });
 
+// Příjemce: consignee_id → číslo / null; firma nemůže být sama svým příjemcem
+function normalizeCompanyBody(body, selfId) {
+  const data = Object.assign({}, body);
+  delete data.consignee; delete data.consignee_of;
+  if ('consignee_id' in data) {
+    const n = parseInt(data.consignee_id, 10);
+    data.consignee_id = Number.isFinite(n) && n !== selfId ? n : null;
+  }
+  ['branch_address', 'branch_city', 'branch_zip'].forEach((k) => { if (k in data && data[k] === '') data[k] = null; });
+  return data;
+}
+
 // POST /api/wh/companies
 router.post('/companies', async (req, res, next) => {
   try {
-    const company = await prisma.company.create({ data: req.body });
+    const company = await prisma.company.create({ data: normalizeCompanyBody(req.body) });
     await logAudit({ action: 'create', entity: 'company', entity_id: company.id, description: `Vytvořena společnost: ${company.name}`, snapshot: makeSnapshot(company), user: req.user });
     res.status(201).json(company);
   } catch (err) {
@@ -104,7 +116,7 @@ router.post('/companies', async (req, res, next) => {
 router.put('/companies/:id', async (req, res, next) => {
   try {
     const before = await prisma.company.findUnique({ where: { id: parseInt(req.params.id) } });
-    const company = await prisma.company.update({ where: { id: parseInt(req.params.id) }, data: req.body });
+    const company = await prisma.company.update({ where: { id: parseInt(req.params.id) }, data: normalizeCompanyBody(req.body, parseInt(req.params.id)) });
     const changes = diffObjects(before, company);
     if (changes) await logAudit({ action: 'update', entity: 'company', entity_id: company.id, description: `Upravena společnost: ${company.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
     res.json(company);

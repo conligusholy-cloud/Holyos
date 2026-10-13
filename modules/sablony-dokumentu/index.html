@@ -54,6 +54,7 @@
           <div class="tpl-opts" id="tpl-opts">
             <div class="g"><span>Jazyk</span><div class="seg" id="o-lang"><button data-v="cs" class="on">CZ</button><button data-v="en">EN</button></div></div>
             <div class="g"><span>DPH</span><div class="seg" id="o-vat"><button data-v="standard" class="on" title="Tuzemský odběratel, DPH 21 %">Tuzemsko 21 %</button><button data-v="reverse_charge" title="Plátce DPH z jiného státu EU — přenesení daňové povinnosti">EU — přenesená daň</button><button data-v="outside_scope" title="Zákazník ze třetí země — bez rozpisu DPH, DPH 0">Mimo EU — bez DPH</button></div></div>
+            <div class="g"><span>Příjemce</span><div class="seg" id="o-cons"><button data-v="0" class="on" title="Zboží se dodává odběrateli">Žádný</button><button data-v="1" title="Příjemce je jiná společnost — dodací adresa je jeho adresa">Jiná společnost</button></div></div>
             <div class="g"><span>Měna</span><div class="seg" id="o-cur"><button data-v="CZK" class="on">CZK</button><button data-v="EUR">EUR</button><button data-v="USD">USD</button></div></div>
             <div class="g" style="flex:1;min-width:280px"><span>Poznámka</span><input type="text" id="o-note" maxlength="600" placeholder="Poznámka na dokladu — upravte text, náhled se obnoví"><button class="btn btn-secondary btn-sm" id="o-note-reset" title="Vrátit výchozí text">↺</button></div>
           </div>
@@ -65,20 +66,20 @@
 
   <script>
     var CAT = [], CUR = null;
-    var VAR = { lang: 'cs', vat: 'standard', cur: 'CZK', note: null }; // note === null → výchozí ukázková poznámka
+    var VAR = { lang: 'cs', vat: 'standard', cur: 'CZK', cons: '0', note: null }; // note === null → výchozí ukázková poznámka
     function previewUrl(key) {
       var u = '/api/doc-templates/' + encodeURIComponent(key) + '/preview';
-      if (CUR && CUR.variants) { u += '?lang=' + VAR.lang + '&vat=' + VAR.vat + '&cur=' + VAR.cur; if (VAR.note !== null) u += '&note=' + encodeURIComponent(VAR.note); }
+      if (CUR && CUR.variants) { u += '?lang=' + VAR.lang + '&vat=' + VAR.vat + '&cur=' + VAR.cur + '&cons=' + VAR.cons; if (VAR.note !== null) u += '&note=' + encodeURIComponent(VAR.note); }
       return u;
     }
     var optTimer = null;
     function syncOpts() {
       document.getElementById('tpl-opts').classList.toggle('on', !!(CUR && CUR.variants));
-      ['lang', 'vat', 'cur'].forEach(function (k) { document.querySelectorAll('#o-' + k + ' button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === VAR[k]); }); });
+      ['lang', 'vat', 'cur', 'cons'].forEach(function (k) { document.querySelectorAll('#o-' + k + ' button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === VAR[k]); }); });
       var n = document.getElementById('o-note'); if (document.activeElement !== n) n.value = VAR.note === null ? '' : VAR.note;
     }
     function bindOpts() {
-      ['lang', 'vat', 'cur'].forEach(function (k) {
+      ['lang', 'vat', 'cur', 'cons'].forEach(function (k) {
         document.getElementById('o-' + k).addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; VAR[k] = b.getAttribute('data-v'); syncOpts(); loadPreview(); });
       });
       document.getElementById('o-note').addEventListener('input', function () { VAR.note = this.value; clearTimeout(optTimer); optTimer = setTimeout(loadPreview, 450); });

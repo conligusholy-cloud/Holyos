@@ -537,6 +537,10 @@ model Company {
   branch_address         String? @db.VarChar(255)
   branch_city            String? @db.VarChar(100)
   branch_zip             String? @db.VarChar(10)
+  // Příjemce zboží — jiná společnost z adresáře, které se zboží dodává (na faktuře blok „Příjemce"; dodací adresa = jeho adresa)
+  consignee_id           Int?
+  consignee              Company?  @relation("CompanyConsignee", fields: [consignee_id], references: [id], onDelete: SetNull)
+  consignee_of           Company[] @relation("CompanyConsignee")
   type                   String  @db.VarChar(50) // supplier, customer, cooperation, both, service_provider
   contact_person         String? @db.VarChar(255)
   email                  String? @db.VarChar(255)
@@ -598,6 +602,7 @@ model Company {
   @@index([type])
   @@index([factorify_id])
   @@index([eshop_pricelist_id])
+  @@index([consignee_id])
   @@map("companies")
   coop_workstations Workstation[] @relation("WorkstationSupplier") // externí pracoviště (kooperace) u tohoto dodavatele
 }
