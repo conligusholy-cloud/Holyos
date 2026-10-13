@@ -431,6 +431,8 @@ app.get('/join/:code', wrap(async (req, res) => {
 app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
 // Sběr událostí z prohlížeče přihlášeného uživatele (stránky, kliknutí, čas, scroll) — vždy 204, chyby se ignorují
 const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact', 'ping'];
+// Živý počet lidí na webu pro lištu (přihlášení uživatelé; ping každých 30 s). Za hodinu = unikátní uživatelé s aktivitou do 60 min.
+app.get('/api/presence', (req, res) => { const s = readCookie(req, USER_COOKIE) || readCookie(req, ADMIN_COOKIE); if (!s) return res.status(401).json({}); res.set('Cache-Control', 'no-store'); const c = ST.presenceCounts(); const h = (c.hour > 0 ? Math.max(1, c.hour) : 0); res.json({ now: c.now, hour: Math.max(h, c.now) }); });
 app.post('/api/track', (req, res) => {
   try {
     const s = readCookie(req, USER_COOKIE); const b = req.body || {};
