@@ -333,7 +333,6 @@ function reportSections(site, d, c, ev) {
     <div class="sc">${sc(c.S.weak)}${sc(c.S.mid, true)}${sc(c.S.strong)}</div>
     <div class="row" style="margin-top:12px;gap:18px;flex-wrap:wrap"><span class="small">Bod zvratu provozu: <b>${c.be_operating != null ? c.be_operating + ' zákazníků / den' : 'nedosažen do 60/den'}</b></span>${c.payment ? `<span class="small">Bod zvratu po splátce: <b>${c.be_cash != null ? c.be_cash + ' zákazníků / den' : 'nedosažen'}</b></span>` : ''}<span class="small">Investice celkem: <b>${kc(c.invest)}</b> <span class="muted">${c.payer ? 'bez DPH' : 's DPH'}</span></span>${c.payment ? `<span class="small">Splátka: <b>${kc(c.payment)}/měs</b></span>` : ''}</div>
   </div>`, facts: `<div class="lk-grid rep">
-    <div class="card" style="margin:0"><h4 style="margin-top:0">Ověřené skutečnosti <span class="small muted">(se zdrojem)</span></h4>${li(ev.verified)}</div>
     <div class="card" style="margin:0"><h4 style="margin-top:0">Zadal zákazník</h4>${li(ev.given)}</div>
     <div class="card" style="margin:0"><h4 style="margin-top:0">Modelové předpoklady</h4>${li(ev.assumed)}</div>
     <div class="card miss" style="margin:0"><h4 style="margin-top:0">Chybějící údaje</h4>${li(ev.missing)}</div>
