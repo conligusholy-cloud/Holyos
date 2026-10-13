@@ -641,7 +641,7 @@ function supporterCompounder(s) {
   .cp .pl-cap span{display:inline-flex;align-items:center;gap:8px} .cp .pl-cap i{width:8px;height:8px;border-radius:50%;background:var(--accent2);box-shadow:0 0 10px var(--accent2)}
   .cp .pl-cap .pl-arrow{color:var(--text3);font-size:18px} .cp .pl-cap .pl-goal{color:var(--ok);font-weight:700}
   @keyframes pmfloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-  @media(max-width:760px){.cp .pl-row{grid-template-columns:1fr;gap:26px} .cp .pl img{max-width:300px}}
+  @media(max-width:760px){.cp .pl-row{grid-template-columns:1fr;gap:20px} .cp .pl img{max-width:220px} .cp .pl .pl-tag{font-size:10.5px;padding:4px 10px} .cp .pl .pl-mini{font-size:9.5px;padding:2px 7px}}
   .cp .scale{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin:4px 0 22px}
   .cp .sc-col{padding:16px;border-radius:18px;border:1px solid var(--border);background:rgba(4,8,16,.45);display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;position:relative}
   .cp .sc-col.ok{border-color:rgba(47,227,160,.45);background:radial-gradient(ellipse at 50% 100%,rgba(47,227,160,.12),transparent 60%),rgba(4,8,16,.45)}
