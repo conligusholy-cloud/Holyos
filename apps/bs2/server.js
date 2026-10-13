@@ -499,6 +499,17 @@ app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
   const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15');
   res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
 }));
+// Geokódování adresy (Nominatim, server-side, limit 1 req/s per Nominatim pravidla → rate-limit per uživatel)
+app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) => {
+  const qs = String(req.query.q || '').trim().slice(0, 200); if (qs.length < 3) return res.status(400).json({ error: 'Zadejte adresu.' });
+  if (rateLimited('geo:' + req.user.id, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cz,sk&q=' + encodeURIComponent(qs), { headers: { 'User-Agent': 'BestSeries2/1.0 (+https://www.bestseries2.cz)', Accept: 'application/json' }, signal: AbortSignal.timeout(10000) });
+    const j = await r.json().catch(() => []);
+    if (!Array.isArray(j) || !j.length) return res.json({ error: 'Adresa nenalezena.' });
+    res.json({ lat: parseFloat(j[0].lat), lon: parseFloat(j[0].lon), display_name: j[0].display_name });
+  } catch (e) { res.status(502).json({ error: 'Vyhledání adresy momentálně nefunguje.' }); }
+}));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));

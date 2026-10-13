@@ -88,6 +88,8 @@ function evaluate(d, c) {
   v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
   v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
   v('Plocha', num(d.area) ? num(d.area) + ' m²' : '', '');
+  if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng);
+  else missing.push('Přesné umístění prádlomatu na mapě');
   v('Domácnosti do 500 m', num(d.households) ? num(d.households).toLocaleString('cs-CZ') : '', d.households_src);
   v('Konkurence do 2 km', d.competition === '' || d.competition == null ? '' : String(num(d.competition)), '');
   v('Výpovědní lhůta', num(d.notice) ? num(d.notice) + ' měs.' : '', '');
@@ -127,8 +129,10 @@ function evaluate(d, c) {
   return { result, cls, missing, risks, steps, verified, given, assumed };
 }
 
+const LEAFLET_HEAD = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
+const TILES = "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:19})";
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
@@ -149,6 +153,10 @@ function siteForm(s, site, d, error) {
     ${inp('city', 'Město', 'maxlength="120"')}
     <label>Typ zástavby${sel('building', [['', '—'], ['sidliste', 'sídliště'], ['centrum', 'centrum města'], ['obchod', 'u obchodu / OC'], ['vesnice', 'obec / vesnice'], ['prumysl', 'průmyslová zóna'], ['kemp', 'kemp / rekreace']])}</label>
     ${inp('area', 'Plocha prostoru (m²)', 'inputmode="decimal"')}
+    <div class="full"><label style="margin:0 0 6px">Umístění prádlomatu na mapě <small>Klikněte „Najít adresu", pak špendlík přetáhněte přesně na místo, kde bude prádlomat stát (nebo klikněte do mapy).</small></label>
+      <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
+      <div id="site-map" style="height:320px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
+      <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"></div>
     <h3>Nájem a smlouva</h3>
     ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
     ${inp('rent_src', 'Zdroj nájmu (ověření)', 'maxlength="200" placeholder="např. nabídka pronajímatele 1. 10. 2026"', 'Uvedený zdroj zařadí údaj mezi ověřené skutečnosti.')}
@@ -197,7 +205,17 @@ function siteForm(s, site, d, error) {
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
     <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button>${site ? `<a class="btn sec" href="/lokalita/${site.id}/report">Zobrazit report</a>` : ''}</div>
-  </form>`);
+  </form>
+  <script>(function(){
+    var lat=document.getElementById('f-lat'),lng=document.getElementById('f-lng'),msg=document.getElementById('geo-msg');
+    var has=lat.value&&lng.value; var map=L.map('site-map',{scrollWheelZoom:false}).setView(has?[+lat.value,+lng.value]:[49.8,15.5],has?17:7); ${TILES}.addTo(map);
+    var marker=null; function setPin(a,b,zoom){ if(!marker){ marker=L.marker([a,b],{draggable:true}).addTo(map); marker.on('dragend',function(){ var p=marker.getLatLng(); save(p.lat,p.lng); }); } else marker.setLatLng([a,b]); save(a,b); if(zoom) map.setView([a,b],zoom); }
+    function save(a,b){ lat.value=a.toFixed(6); lng.value=b.toFixed(6); msg.textContent='Poloha: '+lat.value+', '+lng.value+' (uloží se s lokalitou)'; }
+    if(has) setPin(+lat.value,+lng.value);
+    map.on('click',function(e){ setPin(e.latlng.lat,e.latlng.lng); });
+    document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var q=[f.address.value,f.city.value].filter(Boolean).join(', ').trim(); if(q.length<3){ msg.textContent='Nejdřív vyplňte adresu.'; return; } msg.textContent='Hledám…';
+      fetch('/api/location/geocode?q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(j){ if(j&&j.lat!=null){ setPin(j.lat,j.lon,17); msg.textContent='Nalezeno: '+(j.display_name||q)+' – upřesněte špendlík přetažením.'; } else msg.textContent=(j&&j.error)||'Adresa nenalezena – klikněte do mapy ručně.'; }).catch(function(){ msg.textContent='Vyhledání selhalo – klikněte do mapy ručně.'; }); });
+  })();</script>`, LEAFLET_HEAD);
 }
 
 // ── Seznam lokalit ───────────────────────────────────────────────────────────
@@ -229,6 +247,7 @@ function reportPage(s, site, d, c, ev) {
     <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.area ? ' · ' + esc(d.area) + ' m²' : ''}${d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs' : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Automatický orientační výstup z dostupných podkladů a vašich předpokladů – nikoli odborné schválení investice ani předpověď výdělku. Bez skóre a pravděpodobností.</p>
   </div>
+  ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:260px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false}).setView([${num(d.lat)},${num(d.lng)}],17);${TILES}.addTo(m);L.marker([${num(d.lat)},${num(d.lng)}]).addTo(m);})();</script></div>` : ''}
   <div class="card rep"><h2 style="margin:0 0 10px">Ekonomické scénáře <span class="small muted" style="font-weight:500">měsíčně · liší se jen návštěvností</span></h2>
     <div class="sc">${sc(c.S.weak)}${sc(c.S.mid, true)}${sc(c.S.strong)}</div>
     <div class="row" style="margin-top:12px;gap:18px;flex-wrap:wrap"><span class="small">Bod zvratu provozu: <b>${c.be_operating != null ? c.be_operating + ' praní / den' : 'nedosažen do 60/den'}</b></span>${c.payment ? `<span class="small">Bod zvratu po splátce: <b>${c.be_cash != null ? c.be_cash + ' praní / den' : 'nedosažen'}</b></span>` : ''}<span class="small">Investice celkem: <b>${kc(c.invest)}</b></span>${c.payment ? `<span class="small">Splátka: <b>${kc(c.payment)}/měs</b></span>` : ''}</div>
@@ -242,7 +261,7 @@ function reportPage(s, site, d, c, ev) {
     <div class="card" style="margin:0"><h4 style="margin-top:0">Doporučené další kroky</h4>${li(ev.steps)}</div>
   </div>
   ${d.notes ? `<div class="card rep"><h4 style="margin-top:0">Poznámky</h4><p style="white-space:pre-wrap;color:var(--text2);margin:0">${esc(d.notes)}</p></div>` : ''}
-  <p class="small muted">Vyhodnocení: „Nedostatek údajů" = chybí 2+ klíčové údaje (nájem, přípojky, cena zařízení). „Nevhodné" = ani silný scénář nepokryje provoz, nebo je střední scénář po splátce záporný. „Vhodné při splnění podmínek" = slabý scénář záporný, chybí 1 klíčový údaj, krátká výpověď, konkurence 2+, neměřená frekvence nebo chybějící voda/odpad. Jinak „Vhodné podle dostupných podkladů".</p>`);
+  <p class="small muted">Vyhodnocení: „Nedostatek údajů" = chybí 2+ klíčové údaje (nájem, přípojky, cena zařízení). „Nevhodné" = ani silný scénář nepokryje provoz, nebo je střední scénář po splátce záporný. „Vhodné při splnění podmínek" = slabý scénář záporný, chybí 1 klíčový údaj, krátká výpověď, konkurence 2+, neměřená frekvence nebo chybějící voda/odpad. Jinak „Vhodné podle dostupných podkladů".</p>`, (d.lat && d.lng) ? LEAFLET_HEAD : '');
 }
 
 
