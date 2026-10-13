@@ -99,6 +99,7 @@ function evaluate(d, c) {
   if (roads.length && roads.every((p) => p.visible === 'no')) risks.push('Prádlomat není vidět z hlavní silnice (' + roads.map((p) => p.label || 'silnice').join(', ') + ')');
   if (roads.some((p) => !p.visible)) missing.push('Viditelnost prádlomatu z hlavní silnice');
   if (!pois.some((p) => p.type === 'parking')) missing.push('Nejbližší parkoviště zakreslené v mapě (povinné)');
+  if (d.product_name) given.push('Zvolený prádlomat: ' + d.product_name);
   if (!own) { v('Výpovědní lhůta', d.notice_known === 'no' ? 'zatím neznámá' : num(d.notice) ? num(d.notice) + ' měs.' : '', ''); v('Délka smlouvy', num(d.contract_years) ? num(d.contract_years) + ' let' : '', ''); }
   assumed.push(`Ceny: praní ${num(d.price_wash, 300)} Kč, sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly)`);
   assumed.push(`Návštěvnost (váš předpoklad): slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} praní za den`);
@@ -154,13 +155,14 @@ const POI_TYPES = [
   { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
 ];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'product_id', 'product_name', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
-function siteForm(s, site, d, error, saved, noeval) {
+function siteForm(s, site, d, error, saved, noeval, products) {
+  products = products || [];
   const V = (k) => esc(d[k] != null && d[k] !== '' ? d[k] : (DEFAULTS[k] != null ? DEFAULTS[k] : ''));
   const sel = (k, opts) => `<select name="${k}">${opts.map(([v, l]) => `<option value="${v}"${(d[k] || DEFAULTS[k] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const YNU = [['unknown', 'nevím / neověřeno'], ['yes', 'ano'], ['no', 'ne']];
@@ -209,8 +211,12 @@ function siteForm(s, site, d, error, saved, noeval) {
     <label>Zpevněná plocha pod prádlomat${sel('surface', [['unknown', 'nevím / neověřeno'], ['yes', 'už je vybudovaná'], ['no', 'bude se budovat']])}</label>
     <script>(function(){ document.querySelectorAll('input[data-conn]').forEach(function(inp){ var sel=document.querySelector('select[name='+inp.getAttribute('data-conn')+']'); function u(){ inp.parentNode.style.display=sel.value==='no'?'':'none'; if(sel.value!=='no') inp.value=''; } sel.addEventListener('change',u); u(); }); })();</script>
     <h3>Investice a financování</h3>
+    <label class="full">Prádlomat, který si na lokalitu představujete<select name="product_id" id="f-product">${products.length ? '<option value="">— vyberte z nabídky —</option>' + products.map((p) => `<option value="${p.id}" data-name="${esc(p.name)}" data-price="${p.price_czk != null ? Number(p.price_czk) : ''}"${String(d.product_id || '') === String(p.id) ? ' selected' : ''}>${esc(p.name)}${p.price_czk != null ? ' – ' + Number(p.price_czk).toLocaleString('cs-CZ') + ' Kč bez DPH' : ''}</option>`).join('') : '<option value="">— nabídka momentálně není dostupná —</option>'}</select><small>Po výběru se doplní cena zařízení z aktuální nabídky (bez DPH); můžete ji upravit.</small></label>
+    <input type="hidden" name="product_name" id="f-product-name" value="${V('product_name')}">
     <label>Částky investice jsou${sel('invest_vat', [['excl', 'bez DPH'], ['incl', 's DPH (21 %)']])}</label>
     ${inp('machine_price', 'Cena zařízení (Kč)', 'inputmode="decimal"')}
+    <script>(function(){ var sel=document.getElementById('f-product'), nm=document.getElementById('f-product-name'), price=document.querySelector('input[name=machine_price]'), vat=document.querySelector('select[name=invest_vat]');
+      sel.addEventListener('change',function(){ var o=this.options[this.selectedIndex]; nm.value=o.getAttribute('data-name')||''; var p=o.getAttribute('data-price'); if(p){ vat.value='excl'; price.value=Number(p).toLocaleString('cs-CZ').replace(/\u00a0/g,' '); } }); })();</script>
     ${inp('delivery', 'Doprava a instalace (Kč)', 'inputmode="decimal"')}
     ${inp('site_prep', 'Příprava místa / přípojky (Kč)', 'inputmode="decimal"')}
     <label>Financování${sel('financing', [['no', 'vlastní kapitál'], ['yes', 'úvěr / leasing']])}</label>

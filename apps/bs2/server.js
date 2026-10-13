@@ -536,13 +536,17 @@ app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.studiesPage(req.user, studies));
 }));
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
-  res.send(LAPP.siteForm(req.user, null, { city: String(req.query.city || '').slice(0, 120) }, ''));
+  res.send(LAPP.siteForm(req.user, null, { city: String(req.query.city || '').slice(0, 120) }, '', false, false, await locProducts()));
 }));
+// Nabídka prádlomatů pro výběr v lokalitě = stroje nabízené v BS2 (Produkty → nabízet), cena bez DPH
+async function locProducts() {
+  try { const out = await loadProducts(); const set = await offeredSet(); return (out.items || []).filter((p) => set.has(p.id)).map((p) => ({ id: p.id, name: p.name_cs || p.name, price_czk: p.price_czk })); } catch (e) { return []; }
+}
 async function locUsed(uid) { return Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1 AND evaluated_at IS NOT NULL', [uid])).rows[0] || {}).c || 0); }
 // Uložit = jen data (koncept). Vyhodnotit = data + výpočet + report; první vyhodnocení adresy odečte lokalitu z balíčku.
 async function locSave(req, res, site) {
   const d = LAPP.clean(req.body || {});
-  if (!d.name || !d.address) return res.status(400).send(LAPP.siteForm(req.user, site, d, 'Vyplňte název a adresu lokality.'));
+  if (!d.name || !d.address) return res.status(400).send(LAPP.siteForm(req.user, site, d, 'Vyplňte název a adresu lokality.', false, false, await locProducts()));
   const mode = String(req.body.goto || 'save'); // 'save' | 'form' | 'eval'
   const evalNow = mode === 'eval';
   let c = null, ev = null, calcSummary = null, result = null;
@@ -575,7 +579,7 @@ async function locSave(req, res, site) {
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
-app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1')); }));
+app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
 app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
