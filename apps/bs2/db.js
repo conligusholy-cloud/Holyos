@@ -169,6 +169,13 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS user_events_created_idx ON user_events (created_at);
     CREATE INDEX IF NOT EXISTS user_events_sup_idx ON user_events (supporter_id, created_at);
     CREATE INDEX IF NOT EXISTS user_events_type_idx ON user_events (type, created_at);
+    -- Evidence odeslaných e-mailů ze systému (součást časové osy aktivity uživatele)
+    CREATE TABLE IF NOT EXISTS mail_log (
+      id SERIAL PRIMARY KEY, supporter_id INT REFERENCES supporters(id) ON DELETE SET NULL, to_email TEXT NOT NULL, subject TEXT,
+      status TEXT NOT NULL DEFAULT 'sent', error TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS mail_log_sup_idx ON mail_log (supporter_id, created_at);
+    CREATE INDEX IF NOT EXISTS mail_log_email_idx ON mail_log (lower(to_email));
     -- Podněty uživatelů na vylepšení aplikace
     CREATE TABLE IF NOT EXISTS suggestions (
       id SERIAL PRIMARY KEY, supporter_id INT REFERENCES supporters(id) ON DELETE SET NULL, body TEXT NOT NULL, page TEXT, device TEXT,

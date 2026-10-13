@@ -201,7 +201,7 @@ app.get('/login', wrap(async (req, res) => {
 // Zapomenuté heslo — zatím bez automatického e-mailu: žádost se zapíše do admin_log, Tomáš/Jan ji vyřídí ručně (reset v adminu)
 app.get('/forgot', (req, res) => res.send(V.forgotPage()));
 // Odeslání e-mailu přes HolyOS (Graph send-as); BS2 samo e-maily neodesílá.
-async function sendBs2Mail({ to, subject, body, link, linkLabel }) {
+async function sendBs2MailRaw({ to, subject, body, link, linkLabel }) {
   const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
   const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
   const r = await fetch(HOLYOS_URL + '/api/auth/bs2/send-mail', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ to, subject, body, link, linkLabel }), signal: AbortSignal.timeout(20000) });
@@ -219,6 +219,15 @@ function notifyVelin(title, body, path, type) {
   } catch (e) { console.warn('[bs2] velín notify:', e.message); }
 }
 const _supNotifyAt = new Map(); // omezení: zpráva z podpory max 1× za 2 min na uživatele
+// Odeslání + zápis do mail_log (úspěch i chyba), aby šlo e-maily vidět v aktivitě uživatele
+async function sendBs2Mail(o) {
+  try { await sendBs2MailRaw(o); logMail(o, 'sent', null); }
+  catch (e) { logMail(o, 'failed', e.message); throw e; }
+}
+function logMail(o, status, error) {
+  const to = String((o && o.to) || '').trim().toLowerCase(); if (!to) return;
+  q('INSERT INTO mail_log (supporter_id, to_email, subject, status, error) VALUES ((SELECT id FROM supporters WHERE lower(email)=$1 LIMIT 1), $1, $2, $3, $4)', [to, String(o.subject || '').slice(0, 300), status, error ? String(error).slice(0, 300) : null]).catch(() => {});
+}
 const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
 // Obnova hesla: ověří e-mail v databázi a pokud existuje, pošle odkaz (platí 1 hodinu, jednorázový). Odpověď je vždy stejná.
 app.post('/forgot', wrap(async (req, res) => {
@@ -568,7 +577,7 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
     // přechod na vyšší balíček: doplatek = cena cílového − cena stávajícího balíčku
     const cur = req.user.location_package || 'basic';
     if ((LOC.PKG_RANK[up.to] || 0) <= (LOC.PKG_RANK[cur] || 0)) return res.redirect('/lokalita/balicek?msg=' + encodeURIComponent('Tento balíček už máte nebo máte vyšší.'));
-    const diff = LOC.PACKAGES[up.to].amount - (LOC.PACKAGES[cur] ? LOC.PACKAGES[cur].amount : 0);
+    const diff = LADM.testMode() ? LADM.TEST_AMOUNT : LOC.PACKAGES[up.to].amount - (LOC.PACKAGES[cur] ? LOC.PACKAGES[cur].amount : 0);
     if (diff <= 0) return res.redirect('/lokalita/balicek');
     pk = { name: up.name, desc: up.desc + ' (' + (LOC.PACKAGES[cur] || {}).label + ' → ' + LOC.PACKAGES[up.to].label + ')', amount: diff, upgrade: true };
   }
@@ -856,6 +865,7 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
   }
   const one = async (sql, p) => (await q(sql, p || [])).rows[0] || {};
   const savedAt = async () => { const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY + '_saved_at'])).rows[0]; return r && r.value; };
+  const savedPrices = async () => { try { const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY])).rows[0]; return JSON.parse((r || {}).value || '{}') || {}; } catch (e) { return {}; } };
   if (tab === 'pricing') return res.send(LADM.pricing({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt() }));
   if (tab === 'product:location') {
     const stats = {
@@ -866,7 +876,7 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
       errors: Number((await one("SELECT count(*)::int AS v FROM location_sites WHERE study_status='error'")).v || 0),
       revenue: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND package NOT LIKE 'search%'")).v || 0),
     };
-    return res.send(LADM.productLocation({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats }));
+    return res.send(LADM.productLocation({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats, saved_prices: await savedPrices() }));
   }
   if (tab === 'product:finder') {
     const stats = {
@@ -876,7 +886,7 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
       contacts: Number((await one("SELECT COALESCE(sum((SELECT count(*) FROM jsonb_object_keys(contacts))),0)::int AS v FROM location_searches")).v || 0),
       revenue: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND package LIKE 'search%'")).v || 0),
     };
-    return res.send(LADM.productFinder({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats }));
+    return res.send(LADM.productFinder({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats, saved_prices: await savedPrices() }));
   }
   const st = {
     revenue_total: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted')")).v || 0),
@@ -892,12 +902,13 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
   res.send(LADM.overview({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, stats: st, stripeOn: !!process.env.STRIPE_SECRET_KEY, termsVersion: LT.TERMS_VERSION }));
 }));
 app.post('/admin/online/pricing', requireAdmin, wrap(async (req, res) => {
-  const p = req.body.reset ? {} : LADM.parsePricing(req.body || {});
+  let curSaved = {}; try { const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY])).rows[0]; curSaved = JSON.parse((r || {}).value || '{}') || {}; } catch (e) { curSaved = {}; }
+  const p = req.body.reset ? {} : LADM.parsePricing(Object.assign({}, req.body || {}, { _current: curSaved }));
   await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY, JSON.stringify(p)]);
   await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY + '_saved_at', new Date().toISOString()]);
   LADM.applyPricing(p);
   const back = /^product:(location|finder)$/.test(String(req.query.back || '')) ? String(req.query.back) : 'pricing';
-  res.redirect('/admin/online?tab=' + encodeURIComponent(back) + '&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : 'Ceník uložen.'));
+  res.redirect('/admin/online?tab=' + encodeURIComponent(back) + '&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : (p.test_mode ? 'Ceník uložen – TESTOVACÍ CENY ZAPNUTY (vše za ' + (LADM.TEST_AMOUNT / 100) + ' Kč).' : 'Ceník uložen.')));
 }));
 app.post('/admin/online/customer/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10); const u = (await q('SELECT * FROM supporters WHERE id=$1', [id])).rows[0]; if (!u) return res.redirect('/admin/online?tab=customers');
@@ -1580,8 +1591,40 @@ app.get('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const purchases = (await q('SELECT * FROM purchases WHERE supporter_id=$1 ORDER BY purchased_at DESC, id DESC', [s.id])).rows;
   let machines = []; try { machines = (await loadProducts()).items || []; } catch (e) { /* bez výběru */ }
   const credits = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC', [s.id])).rows;
-  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits }));
+  let timeline = []; try { timeline = await loadTimeline(s); } catch (e) { console.warn('[bs2] timeline:', e.message); }
+  res.send(V.adminSupporterDetail({ admin: req.admin, s, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, firstLine, purchases, machines, credits, timeline }));
 }));
+// Kompletní časová osa aktivity uživatele: přihlášení, chování na webu, chat, e-maily, objednávky, převody, DC, podněty, zásahy admina
+const EV_TXT = { login: 'Přihlášení', login_fail: 'Neúspěšné přihlášení', logout: 'Odhlášení', consent: 'Souhlas s VOP a GDPR', reset_request: 'Žádost o obnovu hesla', suggestion: 'Podnět na vylepšení', pageview: 'Zobrazil stránku', click: 'Klikl', section: 'Četl sekci', interact: 'Použil prvek' };
+async function loadTimeline(s) {
+  const id = s.id, T = [];
+  const add = (at, kind, text, extra) => { if (at) T.push(Object.assign({ at, kind, text }, extra || {})); };
+  (await q("SELECT type, path, label, device, ip, created_at FROM user_events WHERE supporter_id=$1 AND type NOT IN ('ping','time','scroll') ORDER BY created_at DESC LIMIT 600", [id])).rows.forEach(e => {
+    const login = ['login', 'login_fail', 'logout', 'consent', 'reset_request'].includes(e.type);
+    add(e.created_at, login ? 'login' : 'web', (EV_TXT[e.type] || e.type) + (e.label ? ': ' + e.label : '') + (e.path && !login ? ' (' + e.path + ')' : ''), { meta: [e.device, login ? e.ip : null].filter(Boolean).join(' · ') });
+  });
+  (await q('SELECT sender, agent_name, body, file_name, order_id, created_at FROM support_messages WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 300', [id])).rows.forEach(m =>
+    add(m.created_at, 'chat', (m.sender === 'agent' ? 'Podpora' + (m.agent_name ? ' (' + m.agent_name + ')' : '') + ' → uživateli: ' : 'Uživatel → podpoře: ') + String(m.body || '').slice(0, 300) + (m.file_name ? ' 📎 ' + m.file_name : '')));
+  (await q('SELECT subject, status, error, to_email, created_at FROM mail_log WHERE supporter_id=$1 OR lower(to_email)=lower($2) ORDER BY created_at DESC LIMIT 200', [id, s.email || ''])).rows.forEach(m =>
+    add(m.created_at, 'mail', 'E-mail ' + (m.status === 'sent' ? 'odeslán' : 'NEODESLÁN') + ': ' + (m.subject || '(bez předmětu)'), { meta: m.to_email + (m.error ? ' · ' + m.error : '') }));
+  (await q('SELECT id, product_name, status, created_at, decided_at, final_net, currency FROM orders WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 100', [id])).rows.forEach(o => {
+    add(o.created_at, 'order', 'Objednávka #' + o.id + ': ' + o.product_name + ' (' + Number(o.final_net).toLocaleString('cs-CZ') + ' ' + (o.currency === 'EUR' ? '€' : 'Kč') + ')');
+    if (o.decided_at) add(o.decided_at, 'order', 'Objednávka #' + o.id + ' ' + (o.status === 'confirmed' ? 'potvrzena' : o.status === 'cancelled' ? 'zrušena' : o.status));
+  });
+  (await q('SELECT id, kind, dc_amount, status, created_at, processed_at, processed_by FROM support_transfers WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 100', [id])).rows.forEach(t => {
+    add(t.created_at, 'transfer', 'Žádost o převod #' + t.id + ': ' + Number(t.dc_amount).toLocaleString('cs-CZ') + ' DC (' + (t.kind === 'withdrawal' ? 'z výběru' : 'z podpory') + ')');
+    if (t.processed_at) add(t.processed_at, 'transfer', 'Převod #' + t.id + ' ' + (t.status === 'approved' ? 'schválen' : 'zamítnut') + (t.processed_by ? ' (' + t.processed_by + ')' : ''));
+  });
+  (await q('SELECT amount_czk, note, created_at FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 150', [id])).rows.forEach(c =>
+    add(c.created_at, 'dc', 'DC ' + (Number(c.amount_czk) > 0 ? '+' : '') + Number(c.amount_czk).toLocaleString('cs-CZ') + ': ' + (c.note || '—')));
+  (await q('SELECT body, status, created_at FROM suggestions WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 50', [id])).rows.forEach(x => add(x.created_at, 'suggestion', 'Podnět: ' + String(x.body).slice(0, 300)));
+  (await q('SELECT created_at, used_at FROM password_resets WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 30', [id])).rows.forEach(r => { add(r.created_at, 'login', 'Odkaz na obnovu hesla vygenerován'); if (r.used_at) add(r.used_at, 'login', 'Heslo změněno přes odkaz'); });
+  (await q("SELECT package, status, amount_czk, created_at, paid_at FROM location_orders WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 50", [id])).rows.forEach(o => { add(o.created_at, 'order', 'Online objednávka: balíček ' + o.package + ' (' + o.amount_czk + ' Kč)'); if (o.paid_at) add(o.paid_at, 'order', 'Online objednávka zaplacena: ' + o.package); });
+  (await q("SELECT admin_name, action, detail, created_at FROM admin_log WHERE detail->>'supporter_id' = $1 ORDER BY created_at DESC LIMIT 100", [String(id)])).rows.forEach(a => add(a.created_at, 'admin', 'Správa: ' + a.action + (a.admin_name ? ' (' + a.admin_name + ')' : '')));
+  if (s.created_at) add(s.created_at, 'login', 'Účet založen'); if (s.activated_at) add(s.activated_at, 'login', 'Účet aktivován');
+  T.sort((x, y) => new Date(y.at) - new Date(x.at));
+  return T.slice(0, 1000);
+}
 // Discount Credit prodejci: % z ceny bez DPH podle nastavení typu stroje; prodejce = kdo zákazníka přivedl (referred_by) nebo nick v tab3
 async function grantSellerCredit(s, m, price, name, purchaseId) {
   let creditMsg = '';

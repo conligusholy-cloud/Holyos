@@ -1808,7 +1808,7 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" name="offered_${sv.key}" value="1" ${sv.offered ? 'checked' : ''} style="width:auto"> Nabízet uživatelům</label></div>`).join('')}</div>
   <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn sm" type="submit">Uložit služby</button></div></form>`, holyosUrl);
 }
-function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [] }) {
+function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [], timeline = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
   const keys = s && s.extra ? Object.keys(s.extra).filter(k => !HIDE_IN_LIST.test(k)).sort((a, b) => { const ia = PRIO.indexOf(a), ib = PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); }) : [];
@@ -1890,6 +1890,12 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
       <div style="flex:1;min-width:200px"><label>Popis</label><input name="note" placeholder="např. bonus za doporučení"></div>
       <button class="btn sm" type="submit">+ Zapsat</button>
     </form>
+  </div></details>
+  <details class="card sec" data-sec="activity" open style="margin-top:12px"><summary><span>Kompletní aktivita <span class="muted small">(${timeline.length} záznamů)</span></span><span class="chev">▶</span></summary><div class="sec-body">
+    <div class="row" id="tl-f" style="gap:6px;flex-wrap:wrap;margin-bottom:10px">${[['', 'Vše'], ['login', 'Přihlášení'], ['web', 'Chování na webu'], ['chat', 'Chat'], ['mail', 'E-maily'], ['order', 'Objednávky'], ['transfer', 'Převody'], ['dc', 'DC'], ['suggestion', 'Podněty'], ['admin', 'Správa']].map(([k, l]) => `<button type="button" class="btn sm ${k ? 'sec' : ''}" data-k="${k}">${l}</button>`).join('')}</div>
+    ${timeline.length ? `<div id="tl-list" style="max-height:560px;overflow:auto">${timeline.map(t => `<div class="list-item tl-i" data-k="${esc(t.kind)}" style="gap:12px;align-items:flex-start"><span class="small muted" style="min-width:128px;flex:none">${fmtDT(t.at)}</span><span style="flex:1">${esc(t.text)}${t.meta ? `<div class="small muted">${esc(t.meta)}</div>` : ''}</span><span class="badge ${t.kind === 'mail' ? 'invited' : t.kind === 'login' ? 'active' : ''}" style="flex:none">${({ login: 'přihlášení', web: 'web', chat: 'chat', mail: 'e-mail', order: 'objednávka', transfer: 'převod', dc: 'DC', suggestion: 'podnět', admin: 'správa' })[t.kind] || esc(t.kind)}</span></div>`).join('')}</div>` : '<p class="muted">Zatím žádná aktivita.</p>'}
+    <p class="small muted" style="margin:10px 0 0">Zahrnuje přihlášení, chování na webu, chat, e-maily odeslané systémem (od nasazení této funkce), objednávky, převody, DC, podněty a zásahy administrátora. SMS BS2 zatím neodesílá.</p>
+    <script>(function(){var f=document.getElementById('tl-f');if(!f)return;f.addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;var k=b.getAttribute('data-k');f.querySelectorAll('button').forEach(function(x){x.classList.toggle('sec',x!==b);});document.querySelectorAll('.tl-i').forEach(function(r){r.style.display=(!k||r.getAttribute('data-k')===k)?'':'none';});});})();</script>
   </div></details>`}
   <script>
   // Sbalení sekcí se pamatuje (localStorage), stejné pro všechny uživatele

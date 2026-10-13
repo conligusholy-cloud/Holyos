@@ -18,23 +18,34 @@ const DEFAULTS = {
   limits: { basic: 3, plus: 10, premium: 10 },
   search_limits: { basic: 1, plus: 2, premium: 3 },
 };
+// Testovací režim cen: všechny položky za TEST_AMOUNT (Stripe má pro CZK minimum 15 Kč), uložený ceník zůstává
+const TEST_AMOUNT = 1500;
+let _testMode = false;
+const testMode = () => _testMode;
 // Aplikuje uložený ceník do běžících konstant (volá se po startu a po uložení)
 function applyPricing(p) {
   p = p || {};
+  _testMode = !!p.test_mode;
   Object.keys(DEFAULTS.packages).forEach((k) => { LOC.PACKAGES[k].amount = Number((p.packages || {})[k]) > 0 ? Number(p.packages[k]) : DEFAULTS.packages[k]; });
   Object.keys(DEFAULTS.evals).forEach((k) => { LOC.EVAL_PACKS[k].amount = Number((p.evals || {})[k]) > 0 ? Number(p.evals[k]) : DEFAULTS.evals[k]; });
   Object.keys(DEFAULTS.searches).forEach((k) => { LOC.EVAL_PACKS[k].amount = Number((p.searches || {})[k]) > 0 ? Number(p.searches[k]) : DEFAULTS.searches[k]; });
   Object.keys(DEFAULTS.limits).forEach((k) => { LAPP.LIMITS[k] = Number((p.limits || {})[k]) > 0 ? Number(p.limits[k]) : DEFAULTS.limits[k]; });
   Object.keys(DEFAULTS.search_limits).forEach((k) => { LAPP.SEARCH_LIMITS[k] = Number((p.search_limits || {})[k]) >= 0 && (p.search_limits || {})[k] !== undefined ? Number(p.search_limits[k]) : DEFAULTS.search_limits[k]; });
+  if (_testMode) { Object.keys(LOC.PACKAGES).forEach((k) => { LOC.PACKAGES[k].amount = TEST_AMOUNT; }); Object.keys(LOC.EVAL_PACKS).forEach((k) => { LOC.EVAL_PACKS[k].amount = TEST_AMOUNT; }); }
 }
 // Z formuláře ceníku → objekt (Kč → haléře)
 function parsePricing(b) {
   const n = (v) => { const x = Math.round(Number(String(v || '').replace(/\s/g, '').replace(',', '.')) * 100); return Number.isFinite(x) && x > 0 ? x : null; };
   const i = (v) => { const x = parseInt(v, 10); return Number.isFinite(x) && x >= 0 ? x : null; };
-  const out = { packages: {}, evals: {}, searches: {}, limits: {}, search_limits: {} };
-  Object.keys(DEFAULTS.packages).forEach((k) => { out.packages[k] = b['pkg_' + k] !== undefined ? (n(b['pkg_' + k]) || DEFAULTS.packages[k]) : LOC.PACKAGES[k].amount; });
-  Object.keys(DEFAULTS.evals).forEach((k) => { out.evals[k] = b['ev_' + k] !== undefined ? (n(b['ev_' + k]) || DEFAULTS.evals[k]) : LOC.EVAL_PACKS[k].amount; });
-  Object.keys(DEFAULTS.searches).forEach((k) => { out.searches[k] = b['se_' + k] !== undefined ? (n(b['se_' + k]) || DEFAULTS.searches[k]) : LOC.EVAL_PACKS[k].amount; });
+  const out = { packages: {}, evals: {}, searches: {}, limits: {}, search_limits: {}, test_mode: b.test_mode_present !== undefined ? !!b.test_mode : _testMode };
+  // v testovacím režimu běží konstanty na 15 Kč → chybějící pole doplnit z uloženého ceníku (cur), ne z konstant
+  const cur = b._current || {};
+  const curPkg = (k) => (cur.packages || {})[k] || (_testMode ? DEFAULTS.packages[k] : LOC.PACKAGES[k].amount);
+  const curEv = (k) => (cur.evals || {})[k] || (_testMode ? DEFAULTS.evals[k] : LOC.EVAL_PACKS[k].amount);
+  const curSe = (k) => (cur.searches || {})[k] || (_testMode ? DEFAULTS.searches[k] : LOC.EVAL_PACKS[k].amount);
+  Object.keys(DEFAULTS.packages).forEach((k) => { out.packages[k] = b['pkg_' + k] !== undefined ? (n(b['pkg_' + k]) || DEFAULTS.packages[k]) : curPkg(k); });
+  Object.keys(DEFAULTS.evals).forEach((k) => { out.evals[k] = b['ev_' + k] !== undefined ? (n(b['ev_' + k]) || DEFAULTS.evals[k]) : curEv(k); });
+  Object.keys(DEFAULTS.searches).forEach((k) => { out.searches[k] = b['se_' + k] !== undefined ? (n(b['se_' + k]) || DEFAULTS.searches[k]) : curSe(k); });
   Object.keys(DEFAULTS.limits).forEach((k) => { out.limits[k] = b['lim_' + k] !== undefined ? (i(b['lim_' + k]) || DEFAULTS.limits[k]) : LAPP.LIMITS[k]; });
   Object.keys(DEFAULTS.search_limits).forEach((k) => { const v = i(b['slim_' + k]); out.search_limits[k] = b['slim_' + k] !== undefined ? (v == null ? DEFAULTS.search_limits[k] : v) : LAPP.SEARCH_LIMITS[k]; });
   return out;
@@ -51,6 +62,7 @@ function shell(adminLayout, admin, holyosUrl, tab, msg, inner, counts) {
   <h1 style="margin:0 0 4px">Online produkty</h1>
   <p class="muted" style="margin:0 0 12px">Prověření lokality + Vyhledávač míst – prodej přes <a href="/location" target="_blank">/location</a>, platby Stripe, přístup 12 měsíců.</p>
   <div class="row" style="gap:8px;margin:0 0 14px;flex-wrap:wrap;align-items:center">${TABS.map(([k, l]) => `<a class="btn sm ${tab === k ? '' : 'sec'}" href="/admin/online${k ? '?tab=' + k : ''}">${l}${counts && counts[k] != null ? ` <span class="muted">${counts[k]}</span>` : ''}</a>`).join('')}<span class="muted small" style="margin:0 4px">│ Produkty:</span>${PRODUCTS.map((p) => `<a class="btn sm ${tab === 'product:' + p.key ? '' : 'sec'}" href="/admin/online?tab=product:${p.key}">${p.icon} ${p.label}</a>`).join('')}<a class="btn sec sm" href="#" title="Další online produkt – připravíme podle potřeby" style="opacity:.6">+ další</a></div>
+  ${_testMode ? `<div class="msg err" style="margin:0 0 12px"><b>⚠️ Testovací ceny jsou zapnuté</b> – všechny balíčky i dokupy se prodávají za ${TEST_AMOUNT / 100} Kč (minimum Stripe pro CZK). Nezapomeňte je po otestování platební brány vypnout v <a href="/admin/online?tab=product:location">ceníku</a>.</div>` : ''}
   ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
   ${inner}`, holyosUrl);
 }
@@ -99,7 +111,8 @@ function customers({ adminLayout, admin, holyosUrl, msg, rows, q }) {
 }
 
 // ── Produkt: Prověření lokality ──
-function productLocation({ adminLayout, admin, holyosUrl, msg, saved, stats }) {
+function productLocation({ adminLayout, admin, holyosUrl, msg, saved, stats, saved_prices }) {
+  saved_prices = saved_prices || {};
   const czk = (h) => (h / 100).toLocaleString('cs-CZ', { useGrouping: false });
   const inp = (name, val, w) => `<input name="${name}" value="${czk(val)}" inputmode="decimal" style="width:${w || 110}px;text-align:right">`;
   const box = (n, l) => `<div class="card" style="margin:0"><div style="font-size:24px;font-weight:800">${n}</div><div class="small muted">${l}</div></div>`;
@@ -107,20 +120,25 @@ function productLocation({ adminLayout, admin, holyosUrl, msg, saved, stats }) {
   <div class="card" style="margin:0 0 12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">🧠 Prověření lokality</h2><p class="muted" style="margin:0">Zákazník zakreslí prádlomat do letecké mapy, doplní nájem, přípojky a financování; aplikace sestaví AI studii s verdiktem, scénáři a PDF. Prodává se v balíčcích Základ / Plus / Premium (12 měsíců), vyhodnocení navíc se dokupují, přechod na vyšší balíček = doplatek rozdílu.</p></div><div class="row" style="gap:6px"><a class="btn sec sm" href="/location" target="_blank">Prodejní stránka ↗</a><a class="btn sec sm" href="/location/vop" target="_blank">VOP</a><a class="btn sec sm" href="/admin/location">Objednávky</a></div></div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px">${box(stats.customers, 'zákazníků s balíčkem')}${box(stats.sites, 'lokalit v aplikaci')}${box(stats.sites_eval, 'vyhodnocených lokalit')}${box(stats.running, 'studií právě běží')}${box(stats.errors, 'studií s chybou')}${box(kc(stats.revenue), 'tržby (balíčky + dokupy + přechody)')}</div>
   <form method="post" action="/admin/online/pricing?back=product:location">
-  <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;align-items:start">
-    <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Balíčky</h2><p class="small muted" style="margin:0 0 10px">Ceny s DPH v Kč. Vyhodnocení = kolik lokalit lze v balíčku vyhodnotit. Vyhledání v balíčku se nastavují u Vyhledávače míst.</p>
+  <div class="card" style="margin:0"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">Ceny balíčků</h2><p class="small muted" style="margin:0">Ceny s DPH v Kč. Vyhodnocení = kolik lokalit lze v balíčku vyhodnotit; přechod na vyšší balíček = rozdíl cen. Vyhledání v balíčku a dokup vyhledání se nastavují u Vyhledávače míst.</p></div>
+    <label class="row" style="gap:8px;align-items:center;padding:8px 12px;border:1px solid ${_testMode ? 'rgba(255,93,108,.6)' : 'var(--border)'};border-radius:12px;background:${_testMode ? 'rgba(255,93,108,.1)' : 'rgba(4,8,16,.4)'};cursor:pointer;white-space:nowrap"><input type="hidden" name="test_mode_present" value="1"><input type="checkbox" name="test_mode" value="1"${_testMode ? ' checked' : ''} style="width:auto;margin:0"><span><b>Testovací ceny</b> <span class="small muted">– vše za ${TEST_AMOUNT / 100} Kč pro test platební brány</span></span></label></div>
+    <div class="grid" style="grid-template-columns:1.3fr 1fr;gap:16px;align-items:start;margin-top:12px">
+      <div><div class="small muted" style="text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Balíčky</div>
       <table class="cards"><thead><tr><th>Balíček</th><th>Cena</th><th>Vyhodnocení</th><th>Přechod ze Základu</th></tr></thead><tbody>
-      ${['basic', 'plus', 'premium'].map((k) => `<tr><td>${LOC.PACKAGES[k].label}</td><td>${inp('pkg_' + k, LOC.PACKAGES[k].amount)}</td><td><input name="lim_${k}" type="number" min="1" max="999" value="${LAPP.LIMITS[k]}" style="width:80px;text-align:right"></td><td class="small muted">${k === 'basic' ? '—' : 'doplatek ' + kc((LOC.PACKAGES[k].amount - LOC.PACKAGES.basic.amount) / 100)}</td></tr>`).join('')}
+      ${['basic', 'plus', 'premium'].map((k) => { const v = _testMode ? (saved_prices.packages || {})[k] || DEFAULTS.packages[k] : LOC.PACKAGES[k].amount; const vb = _testMode ? (saved_prices.packages || {}).basic || DEFAULTS.packages.basic : LOC.PACKAGES.basic.amount; return `<tr><td>${LOC.PACKAGES[k].label}</td><td>${inp('pkg_' + k, v)}</td><td><input name="lim_${k}" type="number" min="1" max="999" value="${LAPP.LIMITS[k]}" style="width:80px;text-align:right"></td><td class="small muted">${k === 'basic' ? '—' : 'doplatek ' + kc((v - vb) / 100)}</td></tr>`; }).join('')}
       </tbody></table></div>
-    <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Dokoupení vyhodnocení</h2><p class="small muted" style="margin:0 0 10px">Ceny s DPH v Kč za 1 / 3 / 10 ks. Větší balení by mělo být levnější na kus.</p>
-      <table class="cards"><thead><tr><th>1 ks</th><th>3 ks</th><th>10 ks</th></tr></thead><tbody><tr><td>${inp('ev_eval1', LOC.EVAL_PACKS.eval1.amount, 96)}</td><td>${inp('ev_eval3', LOC.EVAL_PACKS.eval3.amount, 96)}</td><td>${inp('ev_eval10', LOC.EVAL_PACKS.eval10.amount, 96)}</td></tr></tbody></table>
-      <div class="small muted" style="margin-top:10px">Na kus nyní: ${(LOC.EVAL_PACKS.eval1.amount / 100).toFixed(0)} / ${(LOC.EVAL_PACKS.eval3.amount / 300).toFixed(0)} / ${(LOC.EVAL_PACKS.eval10.amount / 1000).toFixed(0)} Kč</div></div>
+      <div><div class="small muted" style="text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Dokoupení vyhodnocení (1 / 3 / 10 ks)</div>
+      <table class="cards"><thead><tr><th>1 ks</th><th>3 ks</th><th>10 ks</th></tr></thead><tbody><tr>${['eval1', 'eval3', 'eval10'].map((k) => `<td>${inp('ev_' + k, _testMode ? (saved_prices.evals || {})[k] || DEFAULTS.evals[k] : LOC.EVAL_PACKS[k].amount, 96)}</td>`).join('')}</tr></tbody></table>
+      <div class="small muted" style="margin-top:8px">Větší balení by mělo být levnější na kus.</div></div>
+    </div>
+    ${_testMode ? `<div class="small" style="color:#ffb3bb;margin-top:10px">Testovací režim je zapnutý – v polích jsou uložené ostré ceny, prodává se za ${TEST_AMOUNT / 100} Kč. Odškrtněte a uložte pro návrat k ostrým cenám.</div>` : ''}
   </div>
   <div class="row" style="gap:10px;margin-top:12px;align-items:center"><button class="btn" type="submit">Uložit</button><span class="small muted">Projeví se okamžitě na prodejní stránce, v aplikaci i ve Stripe. Zaplacené objednávky se nemění.${saved ? ' · Uloženo ' + fmtDT(saved) : ''}</span></div>
   </form>`);
 }
 // ── Produkt: Vyhledávač míst ──
-function productFinder({ adminLayout, admin, holyosUrl, msg, saved, stats }) {
+function productFinder({ adminLayout, admin, holyosUrl, msg, saved, stats, saved_prices }) {
+  saved_prices = saved_prices || {}; const seVal = (k) => _testMode ? (saved_prices.searches || {})[k] || DEFAULTS.searches[k] : LOC.EVAL_PACKS[k].amount;
   const czk = (h) => (h / 100).toLocaleString('cs-CZ', { useGrouping: false });
   const inp = (name, val, w) => `<input name="${name}" value="${czk(val)}" inputmode="decimal" style="width:${w || 110}px;text-align:right">`;
   const box = (n, l) => `<div class="card" style="margin:0"><div style="font-size:24px;font-weight:800">${n}</div><div class="small muted">${l}</div></div>`;
@@ -132,7 +150,7 @@ function productFinder({ adminLayout, admin, holyosUrl, msg, saved, stats }) {
     <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Vyhledání v balíčcích</h2><p class="small muted" style="margin:0 0 10px">Kolik vyhledání dostane zákazník v ceně balíčku Prověření lokality.</p>
       <table class="cards"><thead><tr><th>Balíček</th><th>Vyhledání v ceně</th></tr></thead><tbody>${['basic', 'plus', 'premium'].map((k) => `<tr><td>${LOC.PACKAGES[k].label} <span class="muted small">(${kc(LOC.PACKAGES[k].amount / 100)})</span></td><td><input name="slim_${k}" type="number" min="0" max="999" value="${LAPP.SEARCH_LIMITS[k]}" style="width:80px;text-align:right"></td></tr>`).join('')}</tbody></table></div>
     <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Dokoupení vyhledání</h2><p class="small muted" style="margin:0 0 10px">Ceny s DPH v Kč za 1 / 3 / 10 ks.</p>
-      <table class="cards"><thead><tr><th>1 ks</th><th>3 ks</th><th>10 ks</th></tr></thead><tbody><tr><td>${inp('se_search1', LOC.EVAL_PACKS.search1.amount, 96)}</td><td>${inp('se_search3', LOC.EVAL_PACKS.search3.amount, 96)}</td><td>${inp('se_search10', LOC.EVAL_PACKS.search10.amount, 96)}</td></tr></tbody></table>
+      <table class="cards"><thead><tr><th>1 ks</th><th>3 ks</th><th>10 ks</th></tr></thead><tbody><tr><td>${inp('se_search1', seVal('search1'), 96)}</td><td>${inp('se_search3', seVal('search3'), 96)}</td><td>${inp('se_search10', seVal('search10'), 96)}</td></tr></tbody></table>
       <div class="small muted" style="margin-top:10px">Na kus nyní: ${(LOC.EVAL_PACKS.search1.amount / 100).toFixed(0)} / ${(LOC.EVAL_PACKS.search3.amount / 300).toFixed(0)} / ${(LOC.EVAL_PACKS.search10.amount / 1000).toFixed(0)} Kč</div></div>
   </div>
   <div class="row" style="gap:10px;margin-top:12px;align-items:center"><button class="btn" type="submit">Uložit</button><span class="small muted">Projeví se okamžitě v aplikaci i ve Stripe.${saved ? ' · Uloženo ' + fmtDT(saved) : ''}</span></div>
@@ -161,4 +179,4 @@ function pricing({ adminLayout, admin, holyosUrl, msg, saved }) {
   </form>`);
 }
 
-module.exports = { PRICING_KEY, DEFAULTS, PRODUCTS, applyPricing, parsePricing, overview, customers, pricing, productLocation, productFinder, shell };
+module.exports = { PRICING_KEY, DEFAULTS, PRODUCTS, TEST_AMOUNT, testMode, applyPricing, parsePricing, overview, customers, pricing, productLocation, productFinder, shell };
