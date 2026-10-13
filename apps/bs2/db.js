@@ -246,6 +246,10 @@ async function migrate() {
       created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
       UNIQUE (supporter_id, area_norm)
     );
+    ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS result JSONB;     -- uložená analýza spádové oblasti
+    ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS candidates JSONB; -- uložená místa, kde by prádlomat mohl stát
+    ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS contacts JSONB NOT NULL DEFAULT '{}'::jsonb; -- dohledané kontakty (klíč = GPS)
+    ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (
       id           SERIAL PRIMARY KEY,

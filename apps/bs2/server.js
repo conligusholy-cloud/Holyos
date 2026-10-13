@@ -537,6 +537,7 @@ app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAP
 app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
   const u = req.user;
   const credits = { used: await locSearchUsed(u.id), limit: locSearchLimit(u), base: LAPP.SEARCH_LIMITS[u.location_package] || 3, packs: locPacks('searches') };
+  credits.saved = (await q('SELECT area, created_at, (candidates IS NOT NULL) AS has_cands, (SELECT count(*) FROM jsonb_object_keys(contacts)) AS n_contacts FROM location_searches WHERE supporter_id=$1 ORDER BY updated_at DESC', [u.id])).rows;
   const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : '';
   res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
 }));
@@ -547,11 +548,16 @@ app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
   if (rateLimited('area:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
   // Kredity: nové město = 1 vyhledání; již hledané město je zdarma
   const norm = locAreaNorm(area), limit = locSearchLimit(req.user);
-  const seen = (await q('SELECT 1 FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, norm])).rows.length > 0;
+  const row = (await q('SELECT id, result FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, norm])).rows[0];
   let used = await locSearchUsed(req.user.id);
-  if (!seen && used >= limit) return res.status(402).json({ error: 'Vyhledání v balíčku jsou vyčerpána (' + used + ' / ' + limit + ').', buy: true, credits: { used, limit } });
+  // Uložené vyhledávání → vrátit rovnou (zákazník se k výsledku vrací bez dalšího kreditu i bez čekání)
+  if (row && row.result && req.query.refresh !== '1') return res.json(Object.assign({}, row.result, { credits: { used, limit }, saved: true }));
+  if (!row && used >= limit) return res.status(402).json({ error: 'Vyhledání v balíčku jsou vyčerpána (' + used + ' / ' + limit + ').', buy: true, credits: { used, limit } });
   const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15');
-  if (r.ok && !seen) { await q('INSERT INTO location_searches (supporter_id, area_norm, area) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [req.user.id, norm, area]); used = await locSearchUsed(req.user.id); }
+  if (r.ok && r.j && typeof r.j === 'object') {
+    await q('INSERT INTO location_searches (supporter_id, area_norm, area, result) VALUES ($1,$2,$3,$4) ON CONFLICT (supporter_id, area_norm) DO UPDATE SET result=EXCLUDED.result, updated_at=now()', [req.user.id, norm, area, JSON.stringify(r.j)]);
+    used = await locSearchUsed(req.user.id);
+  }
   res.status(r.ok ? 200 : (r.status || 502)).json(r.ok && r.j && typeof r.j === 'object' ? Object.assign({}, r.j, { credits: { used, limit } }) : r.j);
 }));
 // Geokódování adresy (Nominatim, server-side, limit 1 req/s per Nominatim pravidla → rate-limit per uživatel)
@@ -586,11 +592,13 @@ app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) =>
 // Místa, kde by prádlomat mohl stát (HolyOS finder). Nestojí další kredit – jen pro město, které už bylo analyzováno.
 app.get('/api/location/candidates', wrap(requireLocation), wrap(async (req, res) => {
   const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
-  const seen = (await q('SELECT 1 FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, locAreaNorm(area)])).rows.length > 0;
-  if (!seen) return res.status(402).json({ error: 'Nejdřív spusťte analýzu města.' });
+  const row = (await q('SELECT id, candidates, contacts FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, locAreaNorm(area)])).rows[0];
+  if (!row) return res.status(402).json({ error: 'Nejdřív spusťte analýzu města.' });
+  if (row.candidates && req.query.refresh !== '1') return res.json(Object.assign({}, row.candidates, { contacts: row.contacts || {}, saved: true }));
   if (rateLimited('cand:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
   const r = await holyosPublic('/api/pradlomat-spots/public/candidates?area=' + encodeURIComponent(area));
-  res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
+  if (r.ok && r.j && Array.isArray(r.j.candidates)) await q('UPDATE location_searches SET candidates=$2, updated_at=now() WHERE id=$1', [row.id, JSON.stringify(r.j)]);
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.ok && r.j && typeof r.j === 'object' ? Object.assign({}, r.j, { contacts: row.contacts || {} }) : r.j);
 }));
 // AI dohledání kontaktu na provozovatele místa (HolyOS → Claude web search). Limit 30/h na účet.
 app.get('/api/location/contact', wrap(requireLocation), wrap(async (req, res) => {
@@ -598,6 +606,10 @@ app.get('/api/location/contact', wrap(requireLocation), wrap(async (req, res) =>
   if (rateLimited('contact:' + req.user.id, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
   const qs = ['name', 'city', 'lat', 'lon', 'kind', 'address'].filter((k) => req.query[k]).map((k) => k + '=' + encodeURIComponent(String(req.query[k]).slice(0, 200))).join('&');
   const r = await holyosPublic('/api/pradlomat-spots/public/contact?' + qs);
+  if (r.ok && r.j && typeof r.j === 'object' && req.query.city && isFinite(+req.query.lat) && isFinite(+req.query.lon)) {
+    const key = (+req.query.lat).toFixed(5) + ',' + (+req.query.lon).toFixed(5);
+    await q('UPDATE location_searches SET contacts = COALESCE(contacts, \'{}\'::jsonb) || jsonb_build_object($3::text, $4::jsonb), updated_at=now() WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, locAreaNorm(String(req.query.city)), key, JSON.stringify(r.j)]).catch((e) => console.warn('[bs2] contact save:', e.message));
+  }
   res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
 }));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
