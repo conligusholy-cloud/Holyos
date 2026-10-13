@@ -8,6 +8,12 @@ const PACKAGES = {
   plus:    { name: 'Prověření lokality – Plus',    desc: 'Přístup do aplikace na 12 měsíců, 10 lokalit, porovnání, 30min konzultace', amount: 990000, label: 'Plus' },
   premium: { name: 'Prověření lokality – Premium', desc: 'Vše z Plus + místní šetření technikem Best Series na jedné lokalitě', amount: 1590000, label: 'Premium' },
 };
+// Přechod na vyšší balíček: zákazník doplatí rozdíl cen (počítá se při checkoutu z aktuálního balíčku)
+const UPGRADE_PACKS = {
+  up_plus:    { to: 'plus',    name: 'Prověření lokality – přechod na Plus',    desc: 'Doplatek rozdílu ceny ze stávajícího balíčku na Plus',    label: 'Přechod → Plus' },
+  up_premium: { to: 'premium', name: 'Prověření lokality – přechod na Premium', desc: 'Doplatek rozdílu ceny ze stávajícího balíčku na Premium', label: 'Přechod → Premium' },
+};
+const PKG_RANK = { basic: 1, plus: 2, premium: 3 };
 // Dokoupení vyhodnocení (pro zákazníky, kteří vyčerpali balíček) – připíše se k účtu, platnost přístupu se nemění
 const EVAL_PACKS = {
   eval1:  { name: 'Prověření lokality – 1 vyhodnocení navíc',   desc: 'Dokoupení 1 vyhodnocení lokality k aktivnímu balíčku',  amount: 99900,  label: '+1 vyhodnocení',  evals: 1 },
@@ -618,7 +624,7 @@ function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, statu
     ${rows.map((o) => `<tr>
       <td data-l="Datum" class="small muted">${fmtDT(o.created_at)}${o.paid_at ? `<div>zapl. ${fmtDT(o.paid_at)}</div>` : ''}${o.access_granted_at ? `<div>předáno ${fmtDT(o.access_granted_at)}</div>` : ''}</td>
       <td data-l="Zákazník"><b>${esc(o.name)}</b>${o.supporter_id ? ` <a class="small" href="/admin/supporters/${o.supporter_id}">účet #${o.supporter_id}</a>` : ''}${o.sites_count != null ? `<div class="small muted">lokalit v aplikaci: ${o.sites_count}</div>` : ''}<div class="small"><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></div>${o.phone ? `<div class="small muted">${esc(o.phone)}</div>` : ''}${o.company ? `<div class="small muted">${esc(o.company)}</div>` : ''}${o.marketing ? '<div class="small muted">✓ marketing</div>' : ''}</td>
-      <td data-l="Balíček"><b>${esc((PACKAGES[o.package] || EVAL_PACKS[o.package] || {}).label || o.package)}</b></td>
+      <td data-l="Balíček"><b>${esc((PACKAGES[o.package] || EVAL_PACKS[o.package] || UPGRADE_PACKS[o.package] || {}).label || o.package)}</b></td>
       <td data-l="Částka">${kc(o.amount_czk)} <span class="small muted">s DPH</span></td>
       <td data-l="Stav">${badge(o)}</td>
       <td data-l="Stripe" class="small">${o.stripe_payment_intent ? `<a href="https://dashboard.stripe.com/payments/${esc(o.stripe_payment_intent)}" target="_blank" rel="noopener">platba ↗</a>` : (o.stripe_session ? `<span class="muted">session</span>` : '<span class="muted">—</span>')}</td>
@@ -632,4 +638,4 @@ function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, statu
   </tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
 }
 
-module.exports = { PACKAGES, EVAL_PACKS, locationPage, adminLocationOrders, STATUS };
+module.exports = { PACKAGES, EVAL_PACKS, UPGRADE_PACKS, PKG_RANK, locationPage, adminLocationOrders, STATUS };

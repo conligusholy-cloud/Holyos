@@ -446,7 +446,7 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
       const o = r.rows[0];
       if (o) {
         console.log('[bs2] /location ZAPLACENO #' + o.id + ' ' + o.package + ' ' + o.amount_czk + ' Kč');
-        const pkg = LOC.PACKAGES[o.package] || LOC.EVAL_PACKS[o.package] || {};
+        const pkg = LOC.PACKAGES[o.package] || LOC.EVAL_PACKS[o.package] || LOC.UPGRADE_PACKS[o.package] || {};
         try { await locGrantAccess(o, req); } catch (e) { console.error('[bs2] location grant:', e.message); }
         locNotify('Zaplaceno: ' + (pkg.label || o.package) + ' – ' + o.name, o.name + ' (' + o.email + (o.phone ? ', ' + o.phone : '') + ') zaplatil ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Předejte přístup do aplikace a označte v administraci.').catch(() => {});
       }
@@ -457,6 +457,19 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
 // Zpřístupnění aplikace: účet typu 'location' (12 měsíců), aktivační e-mail, objednávka → granted.
 async function locGrantAccess(o, req) {
   const base0 = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
+  // Přechod na vyšší balíček: změnit balíček účtu (platnost zůstává, dokoupená vyhodnocení zůstávají)
+  const upg = LOC.UPGRADE_PACKS[o.package];
+  if (upg) {
+    const u = o.supporter_id ? (await q('SELECT * FROM supporters WHERE id=$1', [o.supporter_id])).rows[0] : (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
+    if (!u) throw new Error('Účet pro přechod nenalezen (' + o.email + ')');
+    if ((LOC.PKG_RANK[upg.to] || 0) > (LOC.PKG_RANK[u.location_package] || 0)) await q('UPDATE supporters SET location_package=$2, updated_at=now() WHERE id=$1', [u.id, upg.to]);
+    await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
+    const pl = LOC.PACKAGES[upg.to];
+    await sendBs2Mail({ to: u.email, subject: 'Balíček ' + pl.label + ' je aktivní', body: 'Dobrý den, děkujeme za doplatek ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč. Váš účet v aplikaci Prověření lokality má nyní balíček ' + pl.label + ' (' + pl.desc + '). Platnost přístupu se nemění. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: base0 + '/lokalita', linkLabel: 'Otevřít aplikaci' }).catch((e) => console.warn('[bs2] upgrade mail:', e.message));
+    if (upg.to === 'premium') locNotify('Přechod na Premium – ' + (u.first_name || '') + ' ' + (u.last_name || '') + ' (' + u.email + ')', 'Zákazník doplatil přechod na Premium. Domluvte místní šetření technikem a zapište termín v administraci.').catch(() => {});
+    console.log('[bs2] /lokalita přechod na ' + upg.to + ': účet #' + u.id);
+    return;
+  }
   // Dokoupení vyhodnocení: jen připsat k účtu (balíček ani platnost se nemění)
   const ep = LOC.EVAL_PACKS[o.package];
   if (ep) {
@@ -519,7 +532,16 @@ async function locInfo(u, msg) {
 }
 // Dokoupení vyhodnocení: objednávka vázaná na účet → Stripe Checkout → webhook připíše vyhodnocení (locGrantAccess)
 app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
-  const key = String((req.body || {}).pack || ''); const pk = LOC.EVAL_PACKS[key];
+  const key = String((req.body || {}).pack || ''); let pk = LOC.EVAL_PACKS[key];
+  const up = LOC.UPGRADE_PACKS[key];
+  if (up) {
+    // přechod na vyšší balíček: doplatek = cena cílového − cena stávajícího balíčku
+    const cur = req.user.location_package || 'basic';
+    if ((LOC.PKG_RANK[up.to] || 0) <= (LOC.PKG_RANK[cur] || 0)) return res.redirect('/lokalita/balicek?msg=' + encodeURIComponent('Tento balíček už máte nebo máte vyšší.'));
+    const diff = LOC.PACKAGES[up.to].amount - (LOC.PACKAGES[cur] ? LOC.PACKAGES[cur].amount : 0);
+    if (diff <= 0) return res.redirect('/lokalita/balicek');
+    pk = { name: up.name, desc: up.desc + ' (' + (LOC.PACKAGES[cur] || {}).label + ' → ' + LOC.PACKAGES[up.to].label + ')', amount: diff, upgrade: true };
+  }
   if (!pk) return res.redirect('/lokalita?msg=' + encodeURIComponent('Neznámý balíček.'));
   if (!process.env.STRIPE_SECRET_KEY) return res.redirect('/lokalita?msg=' + encodeURIComponent('Online platba momentálně není dostupná – napište nám přes Podporu.'));
   if (rateLimited('loctop:' + req.user.id, 10, 10 * 60e3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Příliš mnoho požadavků, zkuste to za chvíli.'));
@@ -529,7 +551,7 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   const base = locBase(req);
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: u.email, locale: 'cs',
-    success_url: base + (pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=1', cancel_url: base + (pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=0',
+    success_url: base + (pk.upgrade ? '/lokalita/balicek' : pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=1', cancel_url: base + (pk.upgrade ? '/lokalita/balicek' : pk.searches ? '/lokalita/analyza' : '/lokalita') + '?topup=0',
     line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pk.amount, product_data: { name: pk.name, description: pk.desc } } }],
     metadata: { order_id: String(oid), package: key, source: 'bs2-location-topup', supporter_id: String(u.id) },
     payment_intent_data: { description: pk.name + ' – ' + name, metadata: { order_id: String(oid), package: key } },
@@ -544,6 +566,14 @@ app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
   const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhodnocení se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : req.query.msg;
   const info = await locInfo(req.user, msg); info.used = await locUsed(req.user.id); info.evaluating = Number(req.query.evaluating) || 0;
   res.send(LAPP.listPage(req.user, sites, info));
+}));
+// Můj balíček: přehled + přechod na vyšší balíček doplatkem rozdílu přes Stripe
+app.get('/lokalita/balicek', wrap(requireLocation), wrap(async (req, res) => {
+  const u = req.user; const cur = u.location_package || 'basic';
+  const msg = req.query.topup === '1' ? 'Platba přijata – balíček se aktivuje během chvíle (případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : (req.query.msg || '');
+  const used = await locUsed(u.id), sUsed = await locSearchUsed(u.id);
+  const upgrades = Object.entries(LOC.UPGRADE_PACKS).filter(([, x]) => (LOC.PKG_RANK[x.to] || 0) > (LOC.PKG_RANK[cur] || 0)).map(([k, x]) => ({ key: k, to: x.to, label: LOC.PACKAGES[x.to].label, desc: LOC.PACKAGES[x.to].desc, full: LOC.PACKAGES[x.to].amount / 100, diff: (LOC.PACKAGES[x.to].amount - (LOC.PACKAGES[cur] ? LOC.PACKAGES[cur].amount : 0)) / 100 }));
+  res.send(LAPP.packagePage(u, { current: cur, label: (LOC.PACKAGES[cur] || {}).label || cur, desc: (LOC.PACKAGES[cur] || {}).desc || '', expires_at: u.location_expires_at, used, limit: locLimit(u), sUsed, sLimit: locSearchLimit(u), extraEvals: Number(u.location_extra_evals || 0), extraSearches: Number(u.location_extra_searches || 0), upgrades, stripe: !!process.env.STRIPE_SECRET_KEY, msg }));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
 app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {

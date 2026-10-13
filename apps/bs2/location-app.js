@@ -20,7 +20,7 @@ function page(s, title, active, body, head) {
   if (s && s.location_package) {
     const pk = s.location_package, col = pk === 'premium' ? '#ffd866' : pk === 'plus' ? '#a78bfa' : '#4fd1ff';
     const exp = s.location_expires_at ? new Date(s.location_expires_at) : null;
-    const badge = `<a href="/lokalita" class="pkg-badge" title="Váš balíček Prověření lokality${exp ? ' · přístup do ' + exp.toLocaleDateString('cs-CZ') : ''}" style="display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;border:1px solid ${col}66;background:${col}14;color:${col};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 8px ${col}"></span>Balíček ${esc(PKG_LABEL[pk] || pk)}${exp ? `<span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:.85">· do ${exp.toLocaleDateString('cs-CZ')}</span>` : ''}</a>`;
+    const badge = `<a href="/lokalita/balicek" class="pkg-badge" title="Váš balíček${exp ? ' · přístup do ' + exp.toLocaleDateString('cs-CZ') : ''} – kliknutím zobrazíte detail a přechod na vyšší balíček" style="display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;border:1px solid ${col}66;background:${col}14;color:${col};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 8px ${col}"></span>Balíček ${esc(PKG_LABEL[pk] || pk)}${exp ? `<span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:.85">· do ${exp.toLocaleDateString('cs-CZ')}</span>` : ''}</a>`;
     html = html.replace('<!--BS2-SWITCH-->', '<!--BS2-SWITCH-->' + badge);
   }
   if (head) html = html.replace('</head>', head + '</head>');
@@ -349,6 +349,25 @@ function buyBlock({ used, limit, base, packs, unit, unitPl, title, hint, extraLa
   <script>(function(){var m=document.getElementById('buy-modal'),b=document.getElementById('buy-btn');if(!m||!b)return;function open(){m.classList.add('on');}window.lkBuyOpen=open;b.addEventListener('click',open);document.getElementById('buy-close').addEventListener('click',function(){m.classList.remove('on');});m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});document.addEventListener('keydown',function(e){if(e.key==='Escape')m.classList.remove('on');});})();</script>`;
 }
 
+// ── Můj balíček + přechod na vyšší ──────────────────────────────────────────
+function packagePage(s, p) {
+  const kc1 = (n) => Math.round(n).toLocaleString('cs-CZ') + ' Kč';
+  const col = p.current === 'premium' ? '#ffd866' : p.current === 'plus' ? '#a78bfa' : '#4fd1ff';
+  const exp = p.expires_at ? new Date(p.expires_at) : null;
+  const upCol = (k) => k === 'premium' ? '#ffd866' : '#a78bfa';
+  const upCard = (u) => `<div class="card" style="margin:0;border-color:${upCol(u.to)}55"><span class="eyebrow"><i style="background:${upCol(u.to)}"></i>Balíček ${esc(u.label)}</span><h2 style="margin:8px 0 4px">Přejít na ${esc(u.label)}</h2><p class="muted" style="margin:0 0 10px">${esc(u.desc)}</p>
+    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:30px;font-weight:800;color:${upCol(u.to)}">${kc1(u.diff)}</span><span class="small muted">doplatek rozdílu · s DPH (plná cena ${kc1(u.full)})</span></div>
+    <ul class="small" style="margin:10px 0 14px 18px;padding:0;color:var(--text2)">${u.to === 'plus' ? '<li>Vyhodnocení až 10 lokalit (místo 3)</li><li>Vyhledávač míst – 2 vyhledání v ceně</li><li>Porovnání lokalit, 30min konzultace</li>' : '<li>Vše z Plus – 10 lokalit, 3 vyhledání v ceně</li><li>Místní šetření technikem Best Series na jedné lokalitě</li><li>Zpráva z šetření přímo v aplikaci</li>'}<li>Platnost přístupu se nemění (${exp ? 'do ' + exp.toLocaleDateString('cs-CZ') : '12 měsíců'}), dokoupená vyhodnocení zůstávají</li></ul>
+    ${p.stripe ? `<form method="post" action="/lokalita/dokoupit" style="margin:0"><input type="hidden" name="pack" value="${u.key}"><button class="btn" type="submit" style="width:100%">Doplatit ${kc1(u.diff)} a přejít na ${esc(u.label)}</button></form>` : '<p class="small muted">Online platba momentálně není dostupná – napište nám přes Podporu.</p>'}</div>`;
+  return page(s, 'Můj balíček', 'loc', `
+  <div class="hero"><span class="eyebrow"><i style="background:${col}"></i>Prověření lokality · balíček ${esc(p.label)}</span><h1><span class="g">Můj balíček</span></h1><p>${esc(p.desc)}${exp ? ` · přístup do <b>${exp.toLocaleDateString('cs-CZ')}</b>` : ''}.</p></div>
+  ${p.msg ? `<div class="msg ok">${esc(p.msg)}</div>` : ''}
+  ${BUY_CSS}
+  <div class="lk-stats"><div class="st"><div class="n" style="color:${col}">${esc(p.label)}</div><div class="l">aktuální balíček</div></div><div class="st"><div class="n">${p.used} / ${p.limit}</div><div class="l">vyhodnocení lokalit${p.extraEvals ? ` · z toho dokoupeno ${p.extraEvals}` : ''}</div></div><div class="st"><div class="n">${p.sUsed} / ${p.sLimit}</div><div class="l">vyhledání ve Vyhledávači míst${p.extraSearches ? ` · dokoupeno ${p.extraSearches}` : ''}</div></div></div>
+  <div class="row" style="margin:0 0 18px;gap:8px"><a class="btn sec sm" href="/lokalita">Dokoupit vyhodnocení</a><a class="btn sec sm" href="/lokalita/analyza">Dokoupit vyhledání</a></div>
+  ${p.upgrades.length ? `<h2 style="margin:0 0 10px">Přechod na vyšší balíček</h2><p class="muted" style="margin:0 0 12px">Doplatíte jen rozdíl ceny. Po zaplacení kartou se balíček aktivuje automaticky.</p><div class="lk-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">${p.upgrades.map(upCard).join('')}</div>` : '<div class="card"><p class="muted" style="margin:0">Máte nejvyšší balíček Premium – děkujeme. Místní šetření technikem domluvíte přes Podporu.</p></div>'}`);
+}
+
 // ── Seznam lokalit ───────────────────────────────────────────────────────────
 function listPage(s, sites, info) {
   const limit = info.limit != null ? info.limit : (LIMITS[info.package] || 3), used = info.used != null ? info.used : sites.filter((x) => x.evaluated_at).length;
@@ -589,4 +608,4 @@ function expiredPage(s) {
   return page(s, 'Přístup vypršel', 'loc', `<div class="card"><h1 style="margin:0 0 6px">Platnost přístupu skončila</h1><p class="muted">Váš přístup k aplikaci Prověření lokality vypršel. Pro prodloužení nás kontaktujte přes Podporu.</p></div>`);
 }
 
-module.exports = { NAV, reportSections, analyzerPage, LIMITS, SEARCH_LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
+module.exports = { NAV, reportSections, analyzerPage, packagePage, LIMITS, SEARCH_LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
