@@ -150,7 +150,7 @@ const POI_TYPES = [
 const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
-const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
+const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
 function siteForm(s, site, d, error, saved) {
@@ -205,6 +205,7 @@ function siteForm(s, site, d, error, saved) {
     ${inp('down_payment', 'Akontace (Kč)', 'inputmode="decimal"')}
     ${inp('interest', 'Úrok (% p.a.)', 'inputmode="decimal"')}
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
+    <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
     <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button>${site ? `<a class="btn sec" href="/lokalita/${site.id}/report">Zobrazit report</a>` : ''}</div>
   </form>
