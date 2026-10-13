@@ -137,8 +137,6 @@ const TILES = "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services
 const POI_TYPES = [
   { key: 'parking', label: 'Parkoviště', icon: '🅿️', color: '#4fd1ff', required: true },
   { key: 'entrance', label: 'Vstup / přístup', icon: '🚪', color: '#2fe3a0' },
-  { key: 'power', label: 'Elektro přípojka', icon: '⚡', color: '#f5b400' },
-  { key: 'water', label: 'Voda / odpad', icon: '💧', color: '#60a5fa' },
   { key: 'shop', label: 'Obchod / supermarket', icon: '🛒', color: '#f97316' },
   { key: 'transit', label: 'Zastávka MHD', icon: '🚌', color: '#a78bfa' },
   { key: 'housing', label: 'Bytové domy', icon: '🏢', color: '#e879f9' },
