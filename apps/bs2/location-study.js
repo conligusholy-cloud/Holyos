@@ -250,8 +250,6 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
     <div class="card" style="margin:0"><h2 style="font-size:15px">Doporučení</h2>${li(st.recommendations)}</div>
     <div class="card" style="margin:0"><h2 style="font-size:15px">Chybějící data</h2>${li(st.data_gaps)}</div></div>
 
-  <details class="card" style="margin-top:12px"><summary style="cursor:pointer;font-weight:600">Podklady z map (${(meta.osm_counts || {}).pois || 0} služeb, ${(meta.osm_counts || {}).roads || 0} silnic, ${(meta.osm_counts || {}).parking || 0} parkovišť)${meta.osm_error ? ' – ⚠ OSM data se nepodařilo načíst' : ''}</summary>
-    <div class="small muted" style="margin-top:10px">${(f.pois || []).map((p) => esc((p.name || '—') + ' (' + p.cat + ', ' + p.dist_m + ' m)')).join(' · ')}</div></details>
   </div>`;
   const LEAF = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
   return layout({ title: 'AI studie – ' + (site.name || ''), user: s.nick, nav, active: 'loc', fx: true, help: null, body }).replace('</head>', LEAF + '</head>');
