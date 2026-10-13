@@ -486,8 +486,9 @@ async function locInfo(u, msg) {
   return { package: u.location_package, expires_at: u.location_expires_at, msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
 }
 app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
-  const sites = (await q('SELECT id, name, address, city, calc, result FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
-  res.send(LAPP.listPage(req.user, sites, await locInfo(req.user, req.query.msg)));
+  const sites = (await q('SELECT id, name, address, city, calc, result, evaluated_at FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
+  const info = await locInfo(req.user, req.query.msg); info.used = await locUsed(req.user.id);
+  res.send(LAPP.listPage(req.user, sites, info));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
 app.get('/lokalita/analyza', wrap(requireLocation), (req, res) => res.send(LAPP.analyzerPage(req.user, String(req.query.q || '').slice(0, 80))));
@@ -535,32 +536,48 @@ app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.studiesPage(req.user, studies));
 }));
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
-  const n = Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0);
-  if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
   res.send(LAPP.siteForm(req.user, null, { city: String(req.query.city || '').slice(0, 120) }, ''));
 }));
+async function locUsed(uid) { return Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1 AND evaluated_at IS NOT NULL', [uid])).rows[0] || {}).c || 0); }
+// Uložit = jen data (koncept). Vyhodnotit = data + výpočet + report; první vyhodnocení adresy odečte lokalitu z balíčku.
 async function locSave(req, res, site) {
   const d = LAPP.clean(req.body || {});
   if (!d.name || !d.address) return res.status(400).send(LAPP.siteForm(req.user, site, d, 'Vyplňte název a adresu lokality.'));
-  const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
-  const calcSummary = { mid_operating: c.S.mid.operating, mid_cash: c.S.mid.cash, weak_cash: c.S.weak.cash, strong_cash: c.S.strong.cash, be_operating: c.be_operating, be_cash: c.be_cash, invest: c.invest, payment: c.payment };
-  const result = { result: ev.result, cls: ev.cls, at: new Date().toISOString() };
-  let id;
-  if (site) { await q('UPDATE location_sites SET name=$2, address=$3, city=$4, data=$5, calc=$6, result=$7, updated_at=now() WHERE id=$1 AND supporter_id=$8', [site.id, d.name, d.address, d.city || null, JSON.stringify(d), JSON.stringify(calcSummary), JSON.stringify(result), req.user.id]); id = site.id; }
-  else {
-    const n = Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0);
-    if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
-    id = (await q('INSERT INTO location_sites (supporter_id, name, address, city, data, calc, result) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), JSON.stringify(calcSummary), JSON.stringify(result)])).rows[0].id;
+  const mode = String(req.body.goto || 'save'); // 'save' | 'form' | 'eval'
+  const evalNow = mode === 'eval';
+  let c = null, ev = null, calcSummary = null, result = null;
+  if (evalNow) {
+    c = LAPP.calc(d); ev = LAPP.evaluate(d, c);
+    calcSummary = { mid_operating: c.S.mid.operating, mid_cash: c.S.mid.cash, weak_cash: c.S.weak.cash, strong_cash: c.S.strong.cash, be_operating: c.be_operating, be_cash: c.be_cash, invest: c.invest, payment: c.payment };
+    result = { result: ev.result, cls: ev.cls, at: new Date().toISOString() };
+    const alreadyEvaluated = !!(site && site.evaluated_at);
+    if (!alreadyEvaluated) {
+      const used = await locUsed(req.user.id), limit = LAPP.LIMITS[req.user.location_package] || 3;
+      if (used >= limit) {
+        // uložit data, ale nevyhodnocovat
+        if (site) await q('UPDATE location_sites SET name=$2, address=$3, city=$4, data=$5, updated_at=now() WHERE id=$1 AND supporter_id=$6', [site.id, d.name, d.address, d.city || null, JSON.stringify(d), req.user.id]);
+        else site = { id: (await q('INSERT INTO location_sites (supporter_id, name, address, city, data) VALUES ($1,$2,$3,$4,$5) RETURNING id', [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d)])).rows[0].id };
+        return res.redirect('/lokalita/' + site.id + '?saved=1&limit=1');
+      }
+    }
   }
-  // Tlacitko Ulozit uprostred formulare -> zustat ve formulari, jinak rovnou report
-  if (String(req.body.goto || '') === 'form') return res.redirect('/lokalita/' + id + '?saved=1#najem');
-  res.redirect('/lokalita/' + id + '/report');
+  let id;
+  if (site) {
+    await q('UPDATE location_sites SET name=$2, address=$3, city=$4, data=$5, calc=COALESCE($6, calc), result=COALESCE($7, result), evaluated_at=CASE WHEN $9 THEN COALESCE(evaluated_at, now()) ELSE evaluated_at END, updated_at=now() WHERE id=$1 AND supporter_id=$8',
+      [site.id, d.name, d.address, d.city || null, JSON.stringify(d), calcSummary ? JSON.stringify(calcSummary) : null, result ? JSON.stringify(result) : null, req.user.id, evalNow]);
+    id = site.id;
+  } else {
+    id = (await q('INSERT INTO location_sites (supporter_id, name, address, city, data, calc, result, evaluated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), calcSummary ? JSON.stringify(calcSummary) : null, result ? JSON.stringify(result) : null, evalNow ? new Date() : null])).rows[0].id;
+  }
+  if (evalNow) return res.redirect('/lokalita/' + id + '/report');
+  return res.redirect('/lokalita/' + id + '?saved=1' + (mode === 'form' ? '#najem' : ''));
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
-app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, '', req.query.saved === '1')); }));
+app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1')); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
-app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
+app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {

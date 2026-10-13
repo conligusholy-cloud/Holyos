@@ -99,7 +99,7 @@ function evaluate(d, c) {
   if (roads.length && roads.every((p) => p.visible === 'no')) risks.push('Prádlomat není vidět z hlavní silnice (' + roads.map((p) => p.label || 'silnice').join(', ') + ')');
   if (roads.some((p) => !p.visible)) missing.push('Viditelnost prádlomatu z hlavní silnice');
   if (!pois.some((p) => p.type === 'parking')) missing.push('Nejbližší parkoviště zakreslené v mapě (povinné)');
-  v('Výpovědní lhůta', num(d.notice) ? num(d.notice) + ' měs.' : '', '');
+  if (!own) { v('Výpovědní lhůta', d.notice_known === 'no' ? 'zatím neznámá' : num(d.notice) ? num(d.notice) + ' měs.' : '', ''); v('Délka smlouvy', num(d.contract_years) ? num(d.contract_years) + ' let' : '', ''); }
   assumed.push(`Ceny: praní ${num(d.price_wash, 300)} Kč, sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly)`);
   assumed.push(`Návštěvnost (váš předpoklad): slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} praní za den`);
   assumed.push(d.energy_mode === 'consumption' ? `Energie podle spotřeby: ${num(d.kwh_wash)} kWh/praní, ${num(d.kwh_dry)} kWh/sušení, ${num(d.water_wash)} l/praní, ${num(d.kwh_price)} Kč/kWh, ${num(d.water_price)} Kč/m³` : `Energie a voda zjednodušeně ${num(d.energy_pct, 9.5)} % z tržby bez DPH`);
@@ -111,6 +111,9 @@ function evaluate(d, c) {
   if (c.S.mid.cash < 0) risks.push('Ve středním scénáři je peněžní tok po splátce záporný');
   if (c.S.weak.operating < 0) risks.push('Ve slabém scénáři nepokryje provoz ani fixní náklady');
   if (!own && num(d.notice) && num(d.notice) < 12) risks.push(`Výpovědní lhůta ${num(d.notice)} měs. je krátká – riziko ztráty místa před návratností`);
+  if (!own && d.rent_known === 'yes' && d.notice_known === 'no') missing.push('Výpovědní lhůta');
+  if (!own && d.rent_known === 'yes' && !num(d.contract_years)) missing.push('Délka nájemní smlouvy');
+  if (!own && num(d.contract_years) && c.S.mid.payback && num(d.contract_years) * 12 < c.S.mid.payback) risks.push(`Smlouva na ${num(d.contract_years)} let je kratší než návratnost investice (${(c.S.mid.payback / 12).toFixed(1)} roku)`);
   if (!own && d.rent_known === 'no') risks.push('Nájem zatím není známý – výsledek se změní podle skutečné výše');
   const cm = (k, l) => { if (d[k] !== 'no') return; const m = num(d[k + '_m']); if (!m) { missing.push('Délka trasy přípojky – ' + l); risks.push('Chybí ' + l + ' – délka trasy není uvedena'); } else { given.push('Přípojka ' + l + ': nutno vybudovat, trasa ' + m + ' m'); risks.push('Nutno vybudovat přípojku: ' + l + ' (' + m + ' m) – náklady zahrňte do „Příprava místa / přípojky"'); } };
   cm('conn_water', 'voda'); cm('conn_sewer', 'odpad'); cm('conn_power', 'elektřina');
@@ -150,20 +153,20 @@ const POI_TYPES = [
   { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
 ];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
-function siteForm(s, site, d, error, saved) {
+function siteForm(s, site, d, error, saved, noeval) {
   const V = (k) => esc(d[k] != null && d[k] !== '' ? d[k] : (DEFAULTS[k] != null ? DEFAULTS[k] : ''));
   const sel = (k, opts) => `<select name="${k}">${opts.map(([v, l]) => `<option value="${v}"${(d[k] || DEFAULTS[k] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const YNU = [['unknown', 'nevím / neověřeno'], ['yes', 'ano'], ['no', 'ne']];
   const inp = (k, label, extra = '', hint = '') => `<label>${label}<input name="${k}" value="${V(k)}" ${extra}>${hint ? `<small>${hint}</small>` : ''}</label>`;
   return page(s, site ? 'Lokalita' : 'Nová lokalita', 'loc', `
   <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h1 style="margin:0 0 4px">${site ? esc(site.name || 'Lokalita') : 'Nová lokalita'}</h1><p class="muted" style="margin:0">Vyplňte, co víte. Co neznáte, nechte prázdné – report to označí jako chybějící údaj.</p></div><a class="btn sec sm" href="/lokalita">← Moje lokality</a></div>
-  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${saved ? '<div class="msg ok">Uloženo.</div>' : ''}
+  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${saved ? '<div class="msg ok">Uloženo.</div>' : ''}${noeval ? '<div class="msg err">Lokalita ještě není vyhodnocená – klikněte dole na „Vyhodnotit a zobrazit report".</div>' : ''}
   <form method="post" action="${site ? '/lokalita/' + site.id : '/lokalita/new'}" class="card lk-f" style="margin-top:14px">
     <h3>Místo</h3>
     ${inp('name', 'Název lokality *', 'required maxlength="120" placeholder="např. Tábor – Tesco"')}
@@ -188,14 +191,16 @@ function siteForm(s, site, d, error, saved) {
       ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
       <label>Nájem je uveden${sel('rent_vat', [['excl', 'bez DPH'], ['incl', 's DPH']])}</label>
       ${inp('deposit', 'Kauce (Kč, 0 = bez kauce)', 'inputmode="decimal"')}
-      ${inp('notice', 'Výpovědní lhůta (měsíce)', 'inputmode="numeric"')}
+      <label>Znáte výpovědní lhůtu?${sel('notice_known', [['', '— vyberte —'], ['yes', 'ano, znám'], ['no', 'ne, zatím nevím']])}</label>
+      ${inp('notice', 'Výpovědní lhůta (měsíce)', 'inputmode="numeric" data-notice="1"')}
+      ${inp('contract_years', 'Délka smlouvy (roky)', 'inputmode="decimal"')}
     </div>
     <script>(function(){ var own=document.querySelector('select[name=ownership]'), known=document.querySelector('select[name=rent_known]'), box=document.querySelector('.rent-only'); var rentIn=document.querySelector('input[name=rent]');
       function upd(){ var isOwn=own.value==='own', isRent=own.value==='rent'; box.querySelectorAll('label').forEach(function(l){ l.style.display=isRent?'':'none'; }); if(isOwn){ rentIn.value='0'; }
         var unknown=known.value==='no', showRent=isRent&&known.value==='yes'; rentIn.parentNode.style.display=showRent?'':'none'; if(unknown&&isRent) rentIn.value='';
         // kauce/výpověď/exkluzivita až po volbě, zda zná nájem
-        ['deposit','notice'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=showRent?'':'none'; }); }
-      own.addEventListener('change',upd); known.addEventListener('change',upd); upd(); })();</script>
+        ['deposit','contract_years'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=showRent?'':'none'; }); var nk=document.querySelector('select[name=notice_known]'), nIn=document.querySelector('input[name=notice]'); nk.parentNode.style.display=showRent?'':'none'; nIn.parentNode.style.display=(showRent&&nk.value==='yes')?'':'none'; if(nk.value!=='yes') nIn.value=''; }
+      own.addEventListener('change',upd); known.addEventListener('change',upd); document.querySelector('select[name=notice_known]').addEventListener('change',upd); upd(); })();</script>
     <h3>Přípojky</h3>
     <label>Voda${sel('conn_water', YNU)}</label>${inp('conn_water_m', 'Délka trasy přípojky vody (m)', 'inputmode="decimal" data-conn="conn_water"', 'Od nejbližšího místa napojení k prádlomatu.')}
     <label>Odpad${sel('conn_sewer', YNU)}</label>${inp('conn_sewer_m', 'Délka trasy odpadu (m)', 'inputmode="decimal" data-conn="conn_sewer"')}
@@ -212,7 +217,7 @@ function siteForm(s, site, d, error, saved) {
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
     <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
-    <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button><span class="small muted">Po vyhodnocení se otevře report s výsledkem.</span></div>
+    <div class="full row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sec" type="submit" name="goto" value="save">💾 Uložit</button><button class="btn" type="submit" name="goto" value="eval">📊 Vyhodnotit a zobrazit report</button><span class="small muted">Uložit = jen uloží údaje. Vyhodnotit = zpracuje report${site && site.evaluated_at ? '' : ' a odečte 1 lokalitu z balíčku'}.</span></div>
   </form>
   <script>(function(){ var fmt=function(v){ var t=String(v).replace(/\s/g,'').replace(',','.'); var n=Number(t); if(t===''||!isFinite(n)) return v; return n.toLocaleString('cs-CZ',{maximumFractionDigits:2}).replace(/\u00a0/g,' '); };
     document.querySelectorAll('form.lk-f input[inputmode=decimal], form.lk-f input[inputmode=numeric]').forEach(function(i){ if(i.name==='interest'||i.name==='months'||i.name==='notice'||/_m$/.test(i.name)) return; i.addEventListener('blur',function(){ this.value=fmt(this.value); }); i.addEventListener('focus',function(){ this.value=this.value.replace(/\s/g,''); }); if(i.value) i.value=fmt(i.value); }); })();</script>
@@ -279,17 +284,17 @@ function siteForm(s, site, d, error, saved) {
 
 // ── Seznam lokalit ───────────────────────────────────────────────────────────
 function listPage(s, sites, info) {
-  const limit = LIMITS[info.package] || 3, used = sites.length;
+  const limit = LIMITS[info.package] || 3, used = info.used != null ? info.used : sites.filter((x) => x.evaluated_at).length;
   const exp = info.expires_at ? new Date(info.expires_at) : null;
   return page(s, 'Moje lokality', 'loc', `
   <div class="hero"><span class="eyebrow"><i></i>Prověření lokality · balíček ${esc(PKG_LABEL[info.package] || info.package)}</span>
     <h1><span class="g">Moje lokality</span></h1>
-    <p>Využito <b>${used} / ${limit}</b> adres${exp ? ` · přístup do ${exp.toLocaleDateString('cs-CZ')}` : ''}. Úpravy stejné adresy jsou neomezené; nová adresa se započítá až po uložení.</p></div>
+    <p>Vyhodnoceno <b>${used} / ${limit}</b> lokalit${exp ? ` · přístup do ${exp.toLocaleDateString('cs-CZ')}` : ''}. Lokalita se odečte až prvním vyhodnocením; ukládání a úpravy jsou neomezené.</p></div>
   ${info.msg ? `<div class="msg ok">${esc(info.msg)}</div>` : ''}
-  <div class="row" style="margin:6px 0 14px">${used < limit ? '<a class="btn" href="/lokalita/new">+ Nová lokalita</a>' : '<span class="muted">Limit adres balíčku je vyčerpán. Pro další adresy nás kontaktujte přes Podporu.</span>'}<a class="btn sec" href="/lokalita/checklist">Checklist před podpisem nájmu</a></div>
-  ${sites.length ? `<div class="lk-grid">${sites.map((x) => { const ev = x.result || {}; return `<div class="card" style="margin:0"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><b style="font-size:16px">${esc(x.name)}</b><div class="small muted">${esc(x.address || '')}${x.city ? ', ' + esc(x.city) : ''}</div></div>${ev.result ? `<span class="res ${ev.cls}" style="font-size:12px;padding:4px 10px">${esc(ev.result)}</span>` : ''}</div>
+  <div class="row" style="margin:6px 0 14px"><a class="btn" href="/lokalita/new">+ Nová lokalita</a>${used >= limit ? '<span class="muted small">Limit vyhodnocení balíčku je vyčerpán – další lokality lze uložit, ale ne vyhodnotit. Kontaktujte nás přes Podporu.</span>' : ''}<a class="btn sec" href="/lokalita/checklist">Checklist před podpisem nájmu</a></div>
+  ${sites.length ? `<div class="lk-grid">${sites.map((x) => { const ev = x.result || {}; return `<div class="card" style="margin:0"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><b style="font-size:16px">${esc(x.name)}</b><div class="small muted">${esc(x.address || '')}${x.city ? ', ' + esc(x.city) : ''}</div></div>${ev.result && x.evaluated_at ? `<span class="res ${ev.cls}" style="font-size:12px;padding:4px 10px">${esc(ev.result)}</span>` : '<span class="badge invited">koncept – nevyhodnoceno</span>'}</div>
     ${x.calc ? `<div class="small muted" style="margin-top:10px">Střední scénář: provozní výsledek <b style="color:${x.calc.mid_operating >= 0 ? 'var(--ok)' : 'var(--err)'}">${Math.round(x.calc.mid_operating).toLocaleString('cs-CZ')} Kč/měs</b>, po splátce <b style="color:${x.calc.mid_cash >= 0 ? 'var(--ok)' : 'var(--err)'}">${Math.round(x.calc.mid_cash).toLocaleString('cs-CZ')} Kč/měs</b></div>` : ''}
-    <div class="row" style="margin-top:12px"><a class="btn sm" href="/lokalita/${x.id}/report">Report</a><a class="btn sec sm" href="/lokalita/${x.id}">Upravit</a><form method="post" action="/lokalita/${x.id}/delete" style="margin:0" onsubmit="return confirm('Smazat lokalitu? Adresa se vrátí do limitu.')"><button class="btn danger sm" type="submit">Smazat</button></form></div></div>`; }).join('')}</div>` : '<div class="card"><p class="muted" style="margin:0">Zatím nemáte žádnou lokalitu. Začněte tlačítkem <b>Nová lokalita</b>.</p></div>'}
+    <div class="row" style="margin-top:12px">${x.evaluated_at ? `<a class="btn sm" href="/lokalita/${x.id}/report">Report</a>` : ''}<a class="btn sec sm" href="/lokalita/${x.id}">${x.evaluated_at ? 'Upravit' : 'Doplnit a vyhodnotit'}</a><form method="post" action="/lokalita/${x.id}/delete" style="margin:0" onsubmit="return confirm('Smazat lokalitu? Adresa se vrátí do limitu.')"><button class="btn danger sm" type="submit">Smazat</button></form></div></div>`; }).join('')}</div>` : '<div class="card"><p class="muted" style="margin:0">Zatím nemáte žádnou lokalitu. Začněte tlačítkem <b>Nová lokalita</b>.</p></div>'}
   ${info.package === 'premium' ? `<div class="card" style="margin-top:14px"><h2 style="margin:0 0 6px">Místní šetření technikem</h2>${info.survey_date ? `<p class="muted" style="margin:0">Termín: <b>${esc(info.survey_date)}</b>${info.survey_tech ? ' · technik ' + esc(info.survey_tech) : ''}</p>${info.survey_report ? `<div class="rep" style="margin-top:8px"><h4>Zpráva z šetření</h4><p style="white-space:pre-wrap;color:var(--text2)">${esc(info.survey_report)}</p></div>` : '<p class="small muted">Zpráva bude doplněna po návštěvě.</p>'}` : '<p class="muted" style="margin:0">Součást balíčku Premium. Napište nám přes Podporu, kterou lokalitu má technik navštívit – termín pak uvidíte zde.</p>'}</div>` : ''}`);
 }
 

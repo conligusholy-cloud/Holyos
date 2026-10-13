@@ -249,6 +249,7 @@ async function migrate() {
       updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS location_sites_sup_idx ON location_sites (supporter_id, created_at);
+    ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS evaluated_at TIMESTAMPTZ; -- první vyhodnocení = odečet lokality z balíčku
   `);
 }
 
