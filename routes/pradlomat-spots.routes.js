@@ -297,13 +297,45 @@ router.get('/public/candidates', async (req, res, next) => {
     const r = await finder.searchArea(area, cfg);
     if (r && r.error) return res.status(404).json(r);
     const cands = (r.candidates || []).map((c) => ({
-      lat: c.lat, lon: c.lon, name: c.name, shop: c.shop, shop_label: c.shop ? finder.shopLabel(c.shop) : 'Místo',
+      lat: c.lat, lon: c.lon, name: c.name, shop: c.shop, shop_label: c.shop ? finder.shopLabel(c.shop) : 'Místo', contact: c.contact || null,
       score: c.score, verdict: c.verdict, suitable: !!c.suitable,
       parking: c.metrics && c.metrics.parking ? { count: c.metrics.parking.count, nearest_m: c.metrics.parking.nearest_m != null ? Math.round(c.metrics.parking.nearest_m) : null } : null,
       competition: c.metrics && c.metrics.competition ? { count: c.metrics.competition.count, nearest_m: c.metrics.competition.nearest_m != null ? Math.round(c.metrics.competition.nearest_m) : null } : null,
       anchors: c.metrics && c.metrics.anchors ? c.metrics.anchors.count : 0,
     }));
     res.json({ area: r.area, population: r.population, counts: r.counts, note: r.note || null, candidates: cands });
+  } catch (err) { next(err); }
+});
+
+// GET /api/pradlomat-spots/public/contact?name=&city=&lat=&lon= — AI dohledání kontaktu na provozovatele místa
+// (Claude + web search). Výsledek se cachuje 7 dní. Pro BS2 Vyhledávač míst („Najít kontakt").
+const _contactCache = new Map();
+router.get('/public/contact', async (req, res, next) => {
+  try {
+    const name = String(req.query.name || '').trim().slice(0, 120), city = String(req.query.city || '').trim().slice(0, 80);
+    const lat = Number(req.query.lat), lon = Number(req.query.lon), kind = String(req.query.kind || '').slice(0, 40), addr = String(req.query.address || '').trim().slice(0, 160);
+    if (name.length < 2) return res.status(400).json({ error: 'Chybí název místa.' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(503).json({ error: 'Vyhledání kontaktu není dostupné.' });
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+    if (!pubAreaRateOk(ip)) return res.status(429).json({ error: 'Příliš mnoho dotazů. Zkus to prosím za chvíli.' });
+    const key = (name + '|' + city + '|' + (Number.isFinite(lat) ? lat.toFixed(3) + ',' + lon.toFixed(3) : '')).toLowerCase();
+    const hit = _contactCache.get(key); if (hit && Date.now() - hit.at < 7 * 86400e3) return res.json(hit.data);
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const model = process.env.SPOT_FINDER_MODEL || 'claude-sonnet-4-6';
+    const sys = 'Jsi asistent obchodníka, který hledá, koho oslovit kvůli pronájmu 6 m² venkovní plochy (parkoviště) u provozovny pro samoobslužný prádlomat. '
+      + 'Pomocí web search dohledej veřejně dostupné kontakty na provozovatele/majitele dané provozovny nebo objektu v ČR: ideálně kontaktní osobu (vedoucí provozovny, správce nemovitosti, majitel, u řetězců oddělení expanze/pronájmů), telefon, e-mail, web, provozovatele (firma, IČO pokud najdeš). '
+      + 'Uváděj jen to, co jsi skutečně našel – nic nevymýšlej; nenalezené nech null. Osobní údaje jen z veřejných firemních zdrojů (web firmy, rejstřík). '
+      + 'Odpověz POUZE platným JSON bez markdownu: {"company":<string|null>,"ico":<string|null>,"person":<string|null>,"role":<string|null>,"phone":<string|null>,"email":<string|null>,"website":<string|null>,"address":<string|null>,"note":<string|null – 1 věta, koho a jak oslovit>,"sources":[<url>...]}';
+    const usr = 'Místo: ' + name + (kind ? ' (' + kind + ')' : '') + (addr ? ', ' + addr : '') + (city ? ', ' + city : '') + (Number.isFinite(lat) ? ' (GPS ' + lat.toFixed(5) + ', ' + lon.toFixed(5) + ')' : '') + '. Česká republika.';
+    const msg = await client.messages.create({ model, max_tokens: 1200, system: sys, tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }], messages: [{ role: 'user', content: usr }] });
+    let text = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n');
+    text = text.replace(/^[\s\S]*?(\{[\s\S]*\})[\s\S]*$/, '$1').replace(/^```(json)?/i, '').replace(/```\s*$/, '').trim();
+    let j = {}; try { j = JSON.parse(text); } catch (_) { return res.status(502).json({ error: 'Kontakt se nepodařilo dohledat, zkuste to znovu.' }); }
+    const S = (v, n) => (v == null || v === '' ? null : String(v).slice(0, n || 160));
+    const data = { company: S(j.company), ico: S(j.ico, 20), person: S(j.person), role: S(j.role), phone: S(j.phone, 60), email: S(j.email), website: S(j.website, 300), address: S(j.address, 200), note: S(j.note, 400), sources: Array.isArray(j.sources) ? j.sources.slice(0, 5).map((u) => String(u).slice(0, 300)) : [] };
+    _contactCache.set(key, { at: Date.now(), data });
+    res.json(data);
   } catch (err) { next(err); }
 });
 

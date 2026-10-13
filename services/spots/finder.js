@@ -221,7 +221,7 @@ function clusterPoints(points, minGapM) {
   points.forEach((p) => {
     const near = out.find((o) => haversineM(o.lat, o.lon, p.lat, p.lon) < minGapM);
     if (near) { if (!near.name && p.name) near.name = p.name; return; }
-    out.push({ lat: p.lat, lon: p.lon, name: p.name, shop: p.shop });
+    out.push({ lat: p.lat, lon: p.lon, name: p.name, shop: p.shop, tags: p.tags });
   });
   return out;
 }
@@ -258,6 +258,7 @@ async function searchArea(query, rawCfg) {
       lat: c.lat, lon: c.lon,
       name: c.name || (c.shop ? shopLabel(c.shop) : 'Místo'),
       shop: c.shop || null,
+      contact: osmContact(c.tags),
       metrics: m, score: sc.score, verdict: sc.verdict, breakdown: sc.breakdown,
       suitable: sc.score >= cfg.min_score && (population == null || population >= cfg.min_population),
     };
@@ -271,6 +272,15 @@ async function searchArea(query, rawCfg) {
     counts: { retail: feat.retail.length, parking: feat.parking.length, competition: feat.competition.length, candidates: candidates.length },
     candidates: candidates,
   };
+}
+
+// Kontakt z OSM tagů (telefon, e-mail, web, provozovatel, adresa, otevírací doba) – co je v mapě vyplněno
+function osmContact(t) {
+  t = t || {};
+  const pick = (...ks) => { for (const k of ks) { if (t[k]) return String(t[k]).trim(); } return null; };
+  const addr = [[t['addr:street'], t['addr:housenumber']].filter(Boolean).join(' '), [t['addr:postcode'], t['addr:city']].filter(Boolean).join(' ')].filter(Boolean).join(', ') || null;
+  const c = { phone: pick('contact:phone', 'phone', 'contact:mobile', 'mobile'), email: pick('contact:email', 'email'), website: pick('contact:website', 'website', 'brand:website'), operator: pick('operator', 'brand'), address: addr, opening_hours: pick('opening_hours') };
+  return Object.values(c).some(Boolean) ? c : null;
 }
 
 function shopLabel(s) {

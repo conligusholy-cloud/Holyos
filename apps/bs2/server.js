@@ -592,6 +592,14 @@ app.get('/api/location/candidates', wrap(requireLocation), wrap(async (req, res)
   const r = await holyosPublic('/api/pradlomat-spots/public/candidates?area=' + encodeURIComponent(area));
   res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
 }));
+// AI dohledání kontaktu na provozovatele místa (HolyOS → Claude web search). Limit 30/h na účet.
+app.get('/api/location/contact', wrap(requireLocation), wrap(async (req, res) => {
+  const name = String(req.query.name || '').trim().slice(0, 120); if (name.length < 2) return res.status(400).json({ error: 'Chybí název místa.' });
+  if (rateLimited('contact:' + req.user.id, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
+  const qs = ['name', 'city', 'lat', 'lon', 'kind', 'address'].filter((k) => req.query[k]).map((k) => k + '=' + encodeURIComponent(String(req.query[k]).slice(0, 200))).join('&');
+  const r = await holyosPublic('/api/pradlomat-spots/public/contact?' + qs);
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
+}));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));
