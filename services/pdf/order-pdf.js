@@ -152,7 +152,8 @@ async function generateOrderPdf(order, our, opts) {
   const page = await browser.newPage();
   try {
     await page.setContent(buildHtml(order, our, opts), { waitUntil: 'networkidle0', timeout: 20000 });
-    const out = await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+    await require('./bs2-doc-style').preparePdfPage(page);
+    const out = await page.pdf(require('./bs2-doc-style').PDF_OPTIONS);
     return Buffer.isBuffer(out) ? out : Buffer.from(out);
   } finally {
     try { await page.close(); } catch (e) {}

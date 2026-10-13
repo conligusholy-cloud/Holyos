@@ -101,4 +101,10 @@ function page(opts, bodyHtml) {
     + header(opts) + bodyHtml + '<div class="footer">' + FOOTER_TEXT + '</div></body></html>';
 }
 
-module.exports = { CSS, FOOTER_TEXT, logoSvg, header, page, esc };
+// PDF přes Puppeteer: patička se kreslí jako skutečná patička stránky (footerTemplate v dolním okraji každé strany),
+// takže nikdy nepadne na zvláštní stránku. HTML patička (.footer) se pro PDF skryje; v prohlížeči / při tisku zůstává.
+const PDF_FOOTER_TEMPLATE = '<div style="width:100%;padding:0 15mm;font-family:Inter,Segoe UI,Arial,sans-serif;font-size:7.5pt;color:#7a8aa6;text-align:center;letter-spacing:.04em;-webkit-print-color-adjust:exact"><div style="border-top:1px solid #dbe4f3;padding-top:5px;margin:0 auto">' + FOOTER_TEXT + '</div></div>';
+async function preparePdfPage(page) { try { await page.addStyleTag({ content: '.footer{display:none!important}' }); } catch (e) { /* nekritické */ } }
+const PDF_OPTIONS = { format: 'A4', printBackground: true, preferCSSPageSize: true, displayHeaderFooter: true, headerTemplate: '<div></div>', footerTemplate: PDF_FOOTER_TEMPLATE };
+
+module.exports = { CSS, FOOTER_TEXT, logoSvg, header, page, esc, PDF_OPTIONS, preparePdfPage };

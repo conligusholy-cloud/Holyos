@@ -446,13 +446,9 @@ async function generateInvoicePdf(invoice, ourCompany, opts = {}) {
   const page = await browser.newPage();
   try {
     await page.setContent(html, { waitUntil: 'networkidle0', timeout: 15000 });
-    const pdfRaw = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      // Okraje řídí CSS @page v šabloně (preferCSSPageSize), aby se tisklo na A4 s rezervou.
-      preferCSSPageSize: true,
-      margin: { top: '0', right: '0', bottom: '0', left: '0' },
-    });
+    await bs2style.preparePdfPage(page);
+    // Okraje řídí CSS @page v šabloně (preferCSSPageSize); patička je skutečná patička stránky (footerTemplate).
+    const pdfRaw = await page.pdf(bs2style.PDF_OPTIONS);
     // Puppeteer v22+ vrací Uint8Array, ne Buffer. Express `res.send(uint8Array)`
     // by ho serializoval jako JSON object (klíč/hodnota); konverze na Buffer
     // zaručí, že odejde jako binární payload s Content-Type: application/pdf.

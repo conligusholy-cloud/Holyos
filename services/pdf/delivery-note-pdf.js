@@ -46,7 +46,8 @@ async function generateDeliveryNotePdf(dn, our) {
   const page = await browser.newPage();
   try {
     await page.setContent(buildHtml(dn, our), { waitUntil: 'networkidle0' });
-    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+    await require('./bs2-doc-style').preparePdfPage(page);
+    return await page.pdf(require('./bs2-doc-style').PDF_OPTIONS);
   } finally {
     try { await page.close(); } catch (e) {}
   }
