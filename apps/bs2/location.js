@@ -310,7 +310,12 @@ st.style.width='440px';st.style.transform='none';st.style.marginLeft='0';st.styl
 var r=st.getBoundingClientRect(),minL=r.left,maxR=r.right;st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){var b=el.getBoundingClientRect();if(b.width>0){minL=Math.min(minL,b.left);maxR=Math.max(maxR,b.right);}});
 var full=Math.max(440,maxR-minL),left=r.left-minL,nat=st.offsetHeight||560;
 var cs=getComputedStyle(how);var w=how.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-4;var s=Math.min(1,w/full);
-st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-full*s)/2+left*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
+st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-full*s)/2+left*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';
+// korekce podle skutečné polohy po zmenšení: obsah zarovnat na střed rámečku, nikdy nepřetéct vpravo
+var hr=how.getBoundingClientRect(),cl=hr.left+(parseFloat(cs.paddingLeft)||0),cr=hr.right-(parseFloat(cs.paddingRight)||0);
+for(var k=0;k<2;k++){var r2=st.getBoundingClientRect(),a=r2.left,b=r2.right;st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){var q=el.getBoundingClientRect();if(q.width>0){a=Math.min(a,q.left);b=Math.max(b,q.right);}});
+var cw=b-a,avail=cr-cl;if(cw>avail+1){s=s*avail/cw;st.style.transform='scale('+s+')';st.style.marginBottom=(-nat*(1-s))+'px';continue;}
+var shift=(cl+(avail-cw)/2)-a;st.style.marginLeft=(parseFloat(st.style.marginLeft)+shift)+'px';}}
 fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);setTimeout(fit,1200);})();</script>
       </div>
       <script>(function(){
