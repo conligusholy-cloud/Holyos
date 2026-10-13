@@ -385,13 +385,15 @@ async function buildCaseStudies() {
     const gross = avg12, net = gross / 1.21, service = gross * svcPct / 100, energy = net * enPct / 100, operating = net - service - rent - energy;
     const firstTs = agg.first || null; const daysOp = firstTs ? Math.max(30, (Date.now() - firstTs) / 86400000) : null;
     const yearStart = Date.now() - 365 * 86400000;
-    // zákazníci/den za posledních 12 měsíců ≈ úspěšné platby / dny (každá platba = jedna návštěva)
-    const txPerDay = daysOp ? agg.successCount / Math.min(daysOp, 365) : null;
+    // zákazníci/den ≈ průměrná měsíční tržba / průměrná útrata na platbu (za celou historii) / 30,44 dne
+    const lifetime = Object.values(agg.monthly).reduce((a, v) => a + num(v), 0);
+    const avgTicket = agg.successCount > 0 && lifetime > 0 ? lifetime / agg.successCount : null;
+    const txPerDay = avgTicket ? avg12 / avgTicket / 30.44 : (daysOp ? agg.successCount / daysOp : null);
     out.push({
       key: String.fromCharCode(65 + out.length), label: it.label, desc: it.desc, machine_version: ver.toUpperCase(),
       months_in_operation: firstTs ? Math.round((Date.now() - firstTs) / (30.44 * 86400000)) : null,
       months, avg_month_gross: avg12, best_month_gross: best, top3_avg_gross: Math.round(num(k.avgTop3)),
-      customers_per_day: txPerDay != null ? Math.round(txPerDay * 10) / 10 : null,
+      customers_per_day: txPerDay != null ? Math.round(txPerDay * 10) / 10 : null, avg_ticket: avgTicket ? Math.round(avgTicket) : null,
       transactions_total: agg.successCount,
       costs: { service: Math.round(service), rent: Math.round(rent), energy: Math.round(energy), service_pct: svcPct, energy_pct: enPct },
       net_month: Math.round(net), operating_month: Math.round(operating),
