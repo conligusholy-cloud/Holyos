@@ -184,7 +184,7 @@ async function log(admin, action, detail) { try { velinForLog(admin || {}, actio
 // Zákazník aplikace vidí jen /lokalita*; ostatní uživatelé do /lokalita nesmí.
 app.use((req, res, next) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return next();
-  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|location)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
+  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|api\/presence|location)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
     return q('SELECT user_type FROM supporters WHERE id=$1', [s.sid]).then((r) => { const u = r.rows[0]; if (u && u.user_type === 'location') return res.redirect('/lokalita'); next(); }).catch(() => next());
   }
   next();
