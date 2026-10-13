@@ -128,11 +128,11 @@ async function runStudy({ site, d, c, ev, area, model }) {
   const modelName = model || process.env.BS2_STUDY_MODEL || 'claude-sonnet-4-6';
   async function ask(extra, maxTokens) {
     const body = { model: modelName, max_tokens: maxTokens, temperature: 0.3, system: SYSTEM,
-      messages: [{ role: 'user', content: 'PODKLADY:\n' + context + '\n\nVrať studii přesně v tomto JSON schématu (čísla jako čísla, rozpětí jako [min,max]). Texty drž stručné (každé pole max. 2–3 věty), žádné trailing čárky, žádný text mimo JSON.' + (extra || '') + '\n' + schemaHint() }, { role: 'assistant', content: '{' }] };
+      messages: [{ role: 'user', content: 'PODKLADY:\n' + context + '\n\nVrať studii přesně v tomto JSON schématu (čísla jako čísla, rozpětí jako [min,max]). Texty drž stručné (každé pole max. 2–3 věty), žádné trailing čárky, žádný text mimo JSON.' + (extra || '') + '\n' + schemaHint() + '\n\nOdpověď začni znakem { a ukonči znakem }.' }] };
     const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout(240000) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error('Claude ' + r.status + ': ' + ((j.error && j.error.message) || 'chyba'));
-    return { text: '{' + (j.content || []).map((x) => x.text || '').join(''), stop: j.stop_reason, usage: j.usage };
+    return { text: (j.content || []).map((x) => x.text || '').join(''), stop: j.stop_reason, usage: j.usage };
   }
   function parseJson(text) {
     const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a < 0 || b < 0) return null;
