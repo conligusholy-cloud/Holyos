@@ -752,9 +752,14 @@ function supporterCompounder(s) {
         </div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
-        <script>(function(){var how=document.querySelector('.cp .how'),st=document.querySelector('.cp .how-stage');if(!how||!st)return;var FULL=670,LEFT=110,nat=0;
-function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}st.style.width='440px';st.style.transform='none';st.style.marginBottom='0';nat=st.offsetHeight||560;var cs=getComputedStyle(how);var w=how.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-4;var s=Math.min(1,w/FULL);st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-FULL*s)/2+LEFT*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
-fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);})();</script>
+        <script>(function(){var how=document.querySelector('.cp .how'),st=document.querySelector('.cp .how-stage');if(!how||!st)return;
+function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}
+st.style.width='440px';st.style.transform='none';st.style.marginLeft='0';st.style.marginBottom='0';
+var r=st.getBoundingClientRect(),minL=r.left,maxR=r.right;st.querySelectorAll('.how-clock,.how-acc,.how-cas').forEach(function(el){var b=el.getBoundingClientRect();if(b.width>0){minL=Math.min(minL,b.left);maxR=Math.max(maxR,b.right);}});
+var full=Math.max(440,maxR-minL),left=r.left-minL,nat=st.offsetHeight||560;
+var cs=getComputedStyle(how);var w=how.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-4;var s=Math.min(1,w/full);
+st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-full*s)/2+left*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
+fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);setTimeout(fit,1200);})();</script>
       </div>
       <script>(function(){
         var $=function(id){return document.getElementById(id);};
