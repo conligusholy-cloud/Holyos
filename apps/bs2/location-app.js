@@ -212,7 +212,7 @@ function siteForm(s, site, d, error, saved) {
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
     <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
-    <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button>${site ? `<a class="btn sec" href="/lokalita/${site.id}/report">Zobrazit report</a>` : ''}</div>
+    <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button><span class="small muted">Po vyhodnocení se otevře report s výsledkem.</span></div>
   </form>
   <script>(function(){ var fmt=function(v){ var t=String(v).replace(/\s/g,'').replace(',','.'); var n=Number(t); if(t===''||!isFinite(n)) return v; return n.toLocaleString('cs-CZ',{maximumFractionDigits:2}).replace(/\u00a0/g,' '); };
     document.querySelectorAll('form.lk-f input[inputmode=decimal], form.lk-f input[inputmode=numeric]').forEach(function(i){ if(i.name==='interest'||i.name==='months'||i.name==='notice'||/_m$/.test(i.name)) return; i.addEventListener('blur',function(){ this.value=fmt(this.value); }); i.addEventListener('focus',function(){ this.value=this.value.replace(/\s/g,''); }); if(i.value) i.value=fmt(i.value); }); })();</script>
