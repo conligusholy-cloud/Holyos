@@ -195,8 +195,10 @@ function siteForm(s, site, d, error, saved) {
       <label>Exkluzivita (bez konkurence v objektu)${sel('exclusive', YNU)}</label>
     </div>
     <script>(function(){ var own=document.querySelector('select[name=ownership]'), known=document.querySelector('select[name=rent_known]'), box=document.querySelector('.rent-only'); var rentIn=document.querySelector('input[name=rent]'), srcIn=document.querySelector('input[name=rent_src]');
-      function upd(){ var isOwn=own.value==='own'; box.querySelectorAll('label').forEach(function(l){ l.style.display=isOwn?'none':''; }); if(isOwn){ rentIn.value='0'; }
-        var unknown=known.value==='no'; rentIn.parentNode.style.display=(isOwn||unknown)?'none':''; srcIn.parentNode.style.display=(isOwn||unknown)?'none':''; if(unknown&&!isOwn) rentIn.value=''; }
+      function upd(){ var isOwn=own.value==='own', isRent=own.value==='rent'; box.querySelectorAll('label').forEach(function(l){ l.style.display=isRent?'':'none'; }); if(isOwn){ rentIn.value='0'; }
+        var unknown=known.value==='no', showRent=isRent&&known.value==='yes'; rentIn.parentNode.style.display=showRent?'':'none'; srcIn.parentNode.style.display=showRent?'':'none'; if(unknown&&isRent) rentIn.value='';
+        // kauce/výpověď/exkluzivita až po volbě, zda zná nájem
+        ['deposit','notice'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=(isRent&&known.value)?'':'none'; }); var ex=document.querySelector('select[name=exclusive]'); if(ex) ex.parentNode.style.display=(isRent&&known.value)?'':'none'; }
       own.addEventListener('change',upd); known.addEventListener('change',upd); upd(); })();</script>
     <h3>Přípojky</h3>
     <label>Voda${sel('conn_water', YNU)}</label><label>Odpad${sel('conn_sewer', YNU)}</label><label>Elektřina${sel('conn_power', YNU)}</label>
