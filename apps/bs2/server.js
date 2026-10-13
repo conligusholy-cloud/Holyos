@@ -1407,17 +1407,19 @@ app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file')
   if (Number.isFinite(oidIn)) ord = (await q('SELECT id, product_name FROM orders WHERE id=$1 AND supporter_id=$2', [oidIn, sid])).rows[0] || null;
   const bodyOut = ord && body ? 'K objednávce č. ' + ord.id + ' (' + ord.product_name + '): ' + body : body;
   if (bodyOut || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data, order_id) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8,$9) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', bodyOut || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null, ord ? ord.id : null])).rows[0];
-  // E-mail uživateli: nová zpráva v chatu k objednávce (nejvýš 1× za 10 min na objednávku, ať se nespamuje)
-  if (row && ord) {
+  // E-mail uživateli o nové zprávě v chatu — vždy, když není právě online na webu (nejvýš 1× za 10 min na uživatele, ať se nespamuje)
+  if (row) {
     try {
-      const recent = (await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND order_id=$2 AND sender='agent' AND created_at > now() - interval '10 minutes' AND id<>$3", [sid, ord.id, row.id])).rows[0].c;
+      const online = ST.isOnline(sid);
+      const recent = (await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND sender='agent' AND created_at > now() - interval '10 minutes' AND id<>$2", [sid, row.id])).rows[0].c;
       const u = (await q('SELECT email, first_name FROM supporters WHERE id=$1', [sid])).rows[0];
-      if (!recent && u && u.email) {
-        sendBs2Mail({ to: u.email, subject: 'Nová zpráva k objednávce č. ' + ord.id + ' — Best Series 2.0', link: PUBLIC_URL + '/podpora', linkLabel: 'Otevřít chat',
-          body: (u.first_name ? 'Dobrý den ' + u.first_name + ',' : 'Dobrý den,') + '\n\nmáte novou zprávu v chatu, která se týká vaší objednávky č. ' + ord.id + ' (' + ord.product_name + ').\n\nOdpovědět můžete v chatu v aplikaci Best Series 2.0.\n\nBest Series s.r.o.' })
-          .catch((e) => console.warn('[bs2] chat k objednávce mail:', e.message));
+      if (!online && !recent && u && u.email) {
+        const hello = u.first_name ? 'Dobrý den ' + u.first_name + ',' : 'Dobrý den,';
+        sendBs2Mail({ to: u.email, subject: ord ? 'Nová zpráva k objednávce č. ' + ord.id + ' — Best Series 2.0' : 'Nová zpráva z podpory — Best Series 2.0', link: PUBLIC_URL + '/podpora', linkLabel: 'Otevřít chat',
+          body: hello + '\n\n' + (ord ? 'máte novou zprávu v chatu, která se týká vaší objednávky č. ' + ord.id + ' (' + ord.product_name + ').' : 'máte novou zprávu z podpory Best Series 2.0.') + '\n\nPřihlaste se do aplikace a odpovězte v chatu.\n\nBest Series s.r.o.' })
+          .catch((e) => console.warn('[bs2] chat mail:', e.message));
       }
-    } catch (e) { console.warn('[bs2] chat k objednávce:', e.message); }
+    } catch (e) { console.warn('[bs2] chat mail:', e.message); }
   }
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);

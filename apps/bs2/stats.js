@@ -19,6 +19,8 @@ function touch(id, o = {}) {
   if (presence.size > 5000) { const lim = Date.now() - 3600e3; for (const [k, v] of presence) if (v.last < lim) presence.delete(k); }
 }
 function leave(id) { presence.delete(id); }
+// Je uživatel právě na webu s viditelnou záložkou? (ping každých 30 s)
+function isOnline(id, ms = 90e3) { const p = presence.get(id); return !!p && Date.now() - p.last < ms; }
 function ping(req, supporterId, o = {}) { touch(supporterId, { path: o.path, sid: o.sid, device: deviceOf(req.get('user-agent')), ip: req.ip }); }
 
 async function track(req, supporterId, type, o = {}) {
@@ -140,4 +142,4 @@ async function loadLive(sinceId) {
   return { now: new Date().toISOString(), online, feed, counters: Object.assign({}, counters[0], { logins_today: logins[0].n }), minutes, pending: pend[0] };
 }
 
-module.exports = { loadLive, leave, ping, touch, TRACK_JS, track, deviceOf, loadOverview, loadUser };
+module.exports = { isOnline, loadLive, leave, ping, touch, TRACK_JS, track, deviceOf, loadOverview, loadUser };
