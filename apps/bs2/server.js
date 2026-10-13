@@ -129,7 +129,7 @@ async function userDocs(u, fresh) {
         const i = m[ref][w];
         if (i && i.delivery_status === 'sent') {
           // Záloha čeká na zaplacení: není zaplacená, nemá finální fakturu a objednávka není zrušená
-          const paid = i.status === 'paid' || Number(i.paid_amount || 0) + 0.01 >= Number(i.total) || !!m[ref].final;
+          const paid = i.status === 'cancelled' || i.status === 'paid' || Number(i.paid_amount || 0) + 0.01 >= Number(i.total) || !!m[ref].final;
           docs.push({ ref: Number(ref), which: w, id: i.id, number: i.invoice_number, total: i.total, currency: i.currency, sent_at: i.sent_at, due: i.date_due, unpaid: w === 'proforma' && !paid && !cancelled.has(Number(ref)) });
         }
       }));
@@ -1590,7 +1590,16 @@ app.get('/admin/orders', requireAdmin, wrap(async (req, res) => {
   let invErr = '';
   try {
     const r = await holyosFetch('GET', '/api/auth/bs2/invoices?refs=' + rows.map(o => o.id).join(','));
-    if (r.ok) { const m = await r.json(); rows.forEach(o => { o.inv = m[String(o.id)] || {}; }); } else invErr = 'HolyOS ' + r.status;
+    if (r.ok) {
+      const m = await r.json(); rows.forEach(o => { o.inv = m[String(o.id)] || {}; });
+      // Sjednocení: zrušená objednávka v BS2 nesmí mít aktivní zálohu v HolyOS (zruší se nezaplacená záloha)
+      for (const o of rows) {
+        const pf = o.inv && o.inv.proforma;
+        if (o.status === 'cancelled' && pf && pf.status !== 'cancelled' && pf.status !== 'paid') {
+          try { const rc = await holyosFetch('POST', '/api/auth/bs2/invoice/cancel', { ref: o.id }, 8000); if (rc.ok) pf.status = 'cancelled'; } catch (e) { /* zkusí se příště */ }
+        }
+      }
+    } else invErr = 'HolyOS ' + r.status;
   } catch (e) { invErr = e.message; }
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM orders GROUP BY status')).rows.forEach(r => { counts[r.status] = r.c; });
   res.send(V.adminOrders({ admin: req.admin, rows, msg: req.query.msg || (invErr ? 'Faktury se nepodařilo načíst z HolyOS (' + invErr + ').' : ''), holyosUrl: HOLYOS_URL, status, counts }));
@@ -1668,7 +1677,7 @@ app.post('/admin/orders/:id(\\d+)/confirm', requireAdmin, wrap(async (req, res) 
 }));
 app.post('/admin/orders/:id(\\d+)/cancel', requireAdmin, wrap(async (req, res) => {
   const o = (await q("UPDATE orders SET status='cancelled', decided_at=now() WHERE id=$1 AND status='new' RETURNING id", [parseInt(req.params.id, 10)])).rows[0];
-  if (o) { await q('DELETE FROM credits WHERE order_id=$1', [o.id]); await log(req.admin, 'order_cancel', { id: o.id }); }
+  if (o) { await q('DELETE FROM credits WHERE order_id=$1', [o.id]); await log(req.admin, 'order_cancel', { id: o.id }); holyosFetch('POST', '/api/auth/bs2/invoice/cancel', { ref: o.id }, 10000).catch((e) => console.warn('[bs2] zrušení zálohy:', e.message)); }
   res.redirect('/admin/orders?msg=' + encodeURIComponent(o ? 'Objednávka zrušena, DC vráceny.' : 'Objednávku nelze zrušit.'));
 }));
 app.get('/admin/supporters/new', requireAdmin, (req, res) => res.send(V.adminSupporterDetail({ admin: req.admin, s: null, isNew: true, holyosUrl: HOLYOS_URL })));

@@ -362,6 +362,27 @@ router.post('/bs2/invoice/:id(\\d+)/send', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/bs2/invoice/cancel — objednávka v BS2 byla zrušena → zruší se nezaplacená zálohová faktura (zaplacená se nemění)
+router.post('/bs2/invoice/cancel', express.json({ limit: '10kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const ref = parseInt((req.body || {}).ref, 10);
+    if (!(ref > 0)) return res.status(400).json({ error: 'Chybí ref' });
+    const pfs = await prisma.invoice.findMany({ where: { source: 'bs2_products', external_number: 'BS2-O' + ref, type: 'proforma_issued' } });
+    const out = [];
+    for (const pf of pfs) {
+      const hasFinal = await prisma.invoice.findFirst({ where: { type: 'issued', parent_invoice_id: pf.id, source: 'bs2_products' }, select: { id: true } });
+      const paid = pf.status === 'paid' || Number(pf.paid_amount || 0) > 0 || !!hasFinal;
+      if (pf.status === 'cancelled') { out.push({ id: pf.id, already: true }); continue; }
+      if (paid) { out.push({ id: pf.id, skipped: 'zaplaceno — nezrušeno, vyřešte ručně' }); continue; }
+      await prisma.invoice.update({ where: { id: pf.id }, data: { status: 'cancelled' } });
+      out.push({ id: pf.id, number: pf.invoice_number, cancelled: true });
+    }
+    console.log('[bs2 invoice] zrušení ref=' + ref + ' → ' + JSON.stringify(out));
+    res.json({ ok: true, invoices: out });
+  } catch (err) { next(err); }
+});
+
 // POST /api/auth/bs2/notify — push do Velína + zvonek v HolyOS pro Tomáše a Jana Holého (nová objednávka, převod, podnět, zpráva v BS2).
 // Příjemci: AppSetting bs2.velin_notify_emails (JSON pole e-mailů) nebo výchozí tomas.holy@ + jan.holy@bestseries.cz (Person.email).
 router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, next) => {
