@@ -142,7 +142,16 @@ app.use((req, res, next) => {
   next();
 });
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-async function log(admin, action, detail) { try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [admin.pid || null, admin.name || null, action, detail ? JSON.stringify(detail) : null]); } catch (e) { /* log není kritický */ } }
+const LOC_STATUS_TXT = { pending: 'čeká na platbu', request: 'žádost', paid: 'zaplaceno', granted: 'přístup předán', cancelled: 'zrušeno' };
+function velinForLog(admin, action, d) {
+  d = d || {}; const who = (admin && admin.name) || '';
+  if (action === 'order_new') notifyVelin('🛒 Nová objednávka #' + d.id, (d.product || d.service || 'objednávka') + (who ? ' · ' + who : ''), '/admin/orders', 'order');
+  else if (action === 'order_confirm') notifyVelin('✅ Objednávka #' + d.id + ' potvrzena', (d.service ? 'služba ' + d.service : 'stav: potvrzeno') + (who ? ' · ' + who : ''), '/admin/orders', 'order');
+  else if (action === 'order_cancel') notifyVelin('❌ Objednávka #' + d.id + ' zrušena', who ? 'zrušil(a) ' + who : 'stav: zrušeno', '/admin/orders', 'order');
+  else if (action === 'location_status') notifyVelin('🌐 Online objednávka #' + d.id, 'nový stav: ' + (LOC_STATUS_TXT[d.status] || d.status) + (who ? ' · ' + who : ''), '/admin/online', 'order');
+  else if (action === 'suggestion_new') notifyVelin('💡 Nový podnět na vylepšení', (who ? 'od ' + who : 'nový podnět'), '/admin/suggestions', 'suggestion');
+}
+async function log(admin, action, detail) { try { velinForLog(admin || {}, action, detail); } catch (e) { /* notifikace nejsou kritické */ } try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [admin.pid || null, admin.name || null, action, detail ? JSON.stringify(detail) : null]); } catch (e) { /* log není kritický */ } }
 
 // Zákazník aplikace vidí jen /lokalita*; ostatní uživatelé do /lokalita nesmí.
 app.use((req, res, next) => {
@@ -199,6 +208,17 @@ async function sendBs2Mail({ to, subject, body, link, linkLabel }) {
   console.log('[bs2] HolyOS send-mail odpověď ' + r.status);
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
+// Push do Velína (Tomáš + Jan Holý) přes HolyOS. Fire-and-forget; selhání nikdy neshodí požadavek.
+function notifyVelin(title, body, path, type) {
+  try {
+    const secret = process.env.BS2_SSO_SECRET; if (!secret || !HOLYOS_URL) return;
+    const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+    fetch(HOLYOS_URL + '/api/auth/bs2/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body, path, type }) })
+      .then(async (r) => { if (!r.ok) console.warn('[bs2] velín notify ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120)); })
+      .catch((e) => console.warn('[bs2] velín notify:', e.message));
+  } catch (e) { console.warn('[bs2] velín notify:', e.message); }
+}
+const _supNotifyAt = new Map(); // omezení: zpráva z podpory max 1× za 2 min na uživatele
 const sha256 = (t) => crypto.createHash('sha256').update(t).digest('hex');
 // Obnova hesla: ověří e-mail v databázi a pokud existuje, pošle odkaz (platí 1 hodinu, jednorázový). Odpověď je vždy stejná.
 app.post('/forgot', wrap(async (req, res) => {
@@ -406,6 +426,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   const oid = ins.rows[0].id; const base = locBase(req);
+  notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
     success_url: base + '/location?paid=1&s={CHECKOUT_SESSION_ID}#objednat', cancel_url: base + '/location?canceled=1#objednat',
@@ -429,6 +450,7 @@ app.post('/api/location/interest', wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 async function locNotify(subject, body) {
+  notifyVelin('🌐 ' + subject, String(body || '').slice(0, 200), '/admin/online', 'order');
   const to = (process.env.BS2_LOCATION_NOTIFY_EMAIL || 'tomas.holy@bestseries.cz').split(',').map((x) => x.trim()).filter(Boolean);
   for (const t of to) { try { await sendBs2Mail({ to: t, subject: '[BS2] ' + subject, body, link: (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '') + '/admin/location', linkLabel: 'Otevřít administraci' }); } catch (e) { console.warn('[bs2] location notify:', e.message); } }
 }
@@ -556,6 +578,7 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   const u = req.user, name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.nick || u.email;
   const oid = (await q('INSERT INTO location_orders (name,email,phone,package,amount_czk,status,consent,marketing,ip,supporter_id,terms_version) VALUES ($1,$2,$3,$4,$5,$6,true,false,$7,$8,$9) RETURNING id',
     [name, u.email, u.phone || null, key, pk.amount / 100, 'pending', String(req.ip || '').slice(0, 64), u.id, LT.TERMS_VERSION])).rows[0].id;
+  notifyVelin('🌐 Nová online objednávka #' + oid, name + ' · balíček ' + key + ' · ' + (pk.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const base = locBase(req);
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: u.email, locale: 'cs',
@@ -1122,6 +1145,7 @@ app.post('/api/support/send', wrap(requireUser), supUpload.single('file'), wrap(
   const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   if (!body && !f) return res.status(400).json({ error: 'Prázdná zpráva.' });
   const r = await q('INSERT INTO support_messages (supporter_id, sender, body, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ' + SUP_COLS, [req.user.id, 'user', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null]);
+  { const last = _supNotifyAt.get(req.user.id) || 0; if (Date.now() - last > 120e3) { _supNotifyAt.set(req.user.id, Date.now()); notifyVelin('💬 Nová zpráva v podpoře', (req.user.nick || req.user.email) + ': ' + (body || 'příloha').slice(0, 120), '/admin/podpora?u=' + req.user.id, 'support'); } }
   res.json({ ok: true, msg: r.rows[0] });
 }));
 // Stažení přílohy — uživatel jen své, admin vše
@@ -1315,6 +1339,7 @@ app.post('/discount-credit/transfer', wrap(requireUser), wrap(async (req, res) =
   const note = String(req.body.note || '').trim().slice(0, 300) || null;
   const ins = await q('INSERT INTO support_transfers (supporter_id, amount, currency, rate, dc_amount, note, kind) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, amount, cur, rate, dc, note, kind]);
   await tfEvent(ins.rows[0].id, 'created', req.user.nick || req.user.email, (kind === 'withdrawal' ? 'z výběru ' : 'z podpory ') + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' = ' + dc.toLocaleString('cs-CZ') + ' DC (kurz ' + rate + ')');
+  notifyVelin('💸 Nová žádost o převod podpory', (req.user.nick || req.user.email) + ' · ' + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' = ' + dc.toLocaleString('cs-CZ') + ' DC', '/admin/transfers', 'transfer');
   try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [null, req.user.nick || req.user.email, 'support_transfer_request', JSON.stringify({ id: ins.rows[0].id, supporter_id: req.user.id, kind, amount, cur, dc })]); } catch (e) { /* log není kritický */ }
   back('Žádost o převod ' + (kind === 'withdrawal' ? 'z výběru ' : 'z podpory ') + amount.toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč') + ' (' + dc.toLocaleString('cs-CZ') + ' DC) byla odeslána a je ve stavu zpracovává se. Dáme Ti vědět.');
 }));
