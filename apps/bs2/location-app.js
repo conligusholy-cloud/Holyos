@@ -176,8 +176,8 @@ function siteForm(s, site, d, error, saved, noeval, products) {
   const inp = (k, label, extra = '', hint = '') => `<label>${label}<input name="${k}" value="${V(k)}" ${extra}>${hint ? `<small>${hint}</small>` : ''}</label>`;
   return page(s, site ? 'Lokalita' : 'Nová lokalita', 'loc', `
   <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h1 style="margin:0 0 4px">${site ? esc(site.name || 'Lokalita') : 'Nová lokalita'}</h1><p class="muted" style="margin:0">Vyplňte, co víte. Co neznáte, nechte prázdné – report to označí jako chybějící údaj.</p></div><a class="btn sec sm" href="/lokalita">← Moje lokality</a></div>
-  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${saved ? '<div class="msg ok">Uloženo.</div>' : ''}${noeval ? '<div class="msg err">Lokalita ještě není vyhodnocená – klikněte dole na „Vyhodnotit a zobrazit report".</div>' : ''}
-  <form method="post" action="${site ? '/lokalita/' + site.id : '/lokalita/new'}" class="card lk-f" style="margin-top:14px">
+  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${saved ? '<div class="msg ok">Uloženo.</div>' : ''}${d.washes_mid && d.washes_mid != DEFAULTS.washes_mid ? `<div class="msg ok">Scénáře návštěvnosti: slabý ${esc(d.washes_weak)} / střední ${esc(d.washes_mid)} / silný ${esc(d.washes_strong)} praní za den (z AI studie). Uložte pro přepočet.</div><input type="hidden" name="washes_weak" form="lkf" value="${esc(d.washes_weak)}"><input type="hidden" name="washes_mid" form="lkf" value="${esc(d.washes_mid)}"><input type="hidden" name="washes_strong" form="lkf" value="${esc(d.washes_strong)}">` : ''}${noeval ? '<div class="msg err">Lokalita ještě není vyhodnocená – klikněte dole na „Vyhodnotit a zobrazit report".</div>' : ''}
+  <form id="lkf" method="post" action="${site ? '/lokalita/' + site.id : '/lokalita/new'}" class="card lk-f" style="margin-top:14px">
     <h3>Místo</h3>
     ${inp('name', 'Název lokality *', 'required maxlength="120" placeholder="např. Tábor – Tesco"')}
     ${inp('address', 'Adresa *', 'required maxlength="300"')}
@@ -323,13 +323,14 @@ function listPage(s, sites, info) {
 // ── Report ───────────────────────────────────────────────────────────────────
 const kc = (n) => Math.round(n).toLocaleString('cs-CZ') + ' Kč';
 function parsePois(d) { try { const p = JSON.parse(d.pois || '[]'); return Array.isArray(p) ? p.filter((x) => x && isFinite(+x.lat) && isFinite(+x.lng)).slice(0, 50) : []; } catch (e) { return []; } }
-function reportPage(s, site, d, c, ev) {
+function reportPage(s, site, d, c, ev, studyErr) {
   const sc = (x, hi) => `<div class="c${hi ? ' hi' : ''}"><div class="k">${x.name} · ${x.washes} praní / den</div><div class="v">${kc(x.gross)}<span class="small muted" style="font-weight:500"> tržba s DPH</span></div>
     <div class="cas"><div><span>Tržba bez DPH</span><b>${kc(x.net)}</b></div><div><span>Energie a voda</span><b>− ${kc(x.energy)}</b></div><div><span>Servis</span><b>− ${kc(x.service)}</b></div><div><span>Platební poplatky</span><b>− ${kc(x.fees)}</b></div><div><span>Fixní (nájem, software, pojištění, marketing, ostatní)</span><b>− ${kc(x.fixed)}</b></div><div><span>Rezerva na obnovu</span><b>− ${kc(x.reserve)}</b></div>
     <div class="t"><span>Provozní výsledek (před financováním a daní)</span><b class="${x.operating >= 0 ? 'pos' : 'neg'}">${kc(x.operating)}</b></div>${x.payment ? `<div><span>Splátka financování</span><b>− ${kc(x.payment)}</b></div><div class="t"><span>Peněžní tok po splátce</span><b class="${x.cash >= 0 ? 'pos' : 'neg'}">${kc(x.cash)}</b></div>` : ''}<div><span>Návratnost investice</span><b>${x.payback ? (x.payback / 12).toFixed(1) + ' roku' : '—'}</b></div></div></div>`;
   const li = (arr) => arr.length ? '<ul>' + arr.map((t) => `<li>${esc(t)}</li>`).join('') + '</ul>' : '<p class="small muted" style="margin:0">—</p>';
   return page(s, 'Report – ' + (site.name || ''), 'loc', `
-  <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><div class="row"><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a><button class="btn sm" type="button" onclick="window.print()">Uložit jako PDF / tisk</button></div></div>
+  <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><div class="row"><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a>${site.study_at ? `<a class="btn sm" href="/lokalita/${site.id}/studie">🧠 AI studie lokality</a>` : `<form method="post" action="/lokalita/${site.id}/studie" style="margin:0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Zpracovávám studii… (1–2 min)'"><button class="btn sm" type="submit">🧠 Vypracovat AI studii</button></form>`}<button class="btn sec sm" type="button" onclick="window.print()">Uložit jako PDF / tisk</button></div></div>
+  ${studyErr ? `<div class="msg err" style="margin-top:10px">${esc(studyErr)}</div>` : ''}
   <div class="card" style="margin-top:12px">
     <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.ownership === 'own' ? ' · vlastní místo' : d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs ' + (d.rent_vat === 'incl' ? 's DPH' : 'bez DPH') : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Automatický orientační výstup z dostupných podkladů a vašich předpokladů – nikoli odborné schválení investice ani předpověď výdělku. Bez skóre a pravděpodobností.</p>
@@ -408,4 +409,4 @@ function expiredPage(s) {
   return page(s, 'Přístup vypršel', 'loc', `<div class="card"><h1 style="margin:0 0 6px">Platnost přístupu skončila</h1><p class="muted">Váš přístup k aplikaci Prověření lokality vypršel. Pro prodloužení nás kontaktujte přes Podporu.</p></div>`);
 }
 
-module.exports = { analyzerPage, LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
+module.exports = { NAV, analyzerPage, LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };

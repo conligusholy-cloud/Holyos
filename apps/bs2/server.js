@@ -17,6 +17,7 @@ const { q, migrate } = require('./db');
 const V = require('./views');
 const LOC = require('./location');
 const LAPP = require('./location-app');
+const LSTUDY = require('./location-study');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
 const BUILD = require('./build');
@@ -579,9 +580,24 @@ async function locSave(req, res, site) {
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
-app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
+app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const dd = Object.assign({}, site.data || {}); if (req.query.ai === '1' && site.study && site.study.demand && site.study.demand.washes_per_day) { const w = site.study.demand.washes_per_day; if (w.weak) dd.washes_weak = String(w.weak); if (w.mid) dd.washes_mid = String(w.mid); if (w.strong) dd.washes_strong = String(w.strong); }
+  res.send(LAPP.siteForm(req.user, site, dd, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
-app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
+app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c), req.query.study_err ? String(req.query.study_err).slice(0, 300) : '')); }));
+// AI studie lokality: sběr OSM + spádová oblast + Claude → uloží se k lokalitě
+app.post('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => {
+  const site = await locSite(req); if (!site) return res.redirect('/lokalita');
+  if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1');
+  if (rateLimited('study:' + req.user.id, 6, 3600e3)) return res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Příliš mnoho studií za hodinu, zkuste to později.'));
+  const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
+  let area = null; try { const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.lat + ',' + d.lng) + '&radius_km=15'); if (r.ok) area = r.j; else { const r2 = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.city || d.address) + '&radius_km=15'); if (r2.ok) area = r2.j; } } catch (e) { area = null; }
+  try {
+    const study = await LSTUDY.runStudy({ site, d, c, ev, area });
+    await q('UPDATE location_sites SET study=$2, study_at=now() WHERE id=$1', [site.id, JSON.stringify(study)]);
+    res.redirect('/lokalita/' + site.id + '/studie');
+  } catch (e) { console.error('[bs2] studie:', e.message); res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
+}));
+app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); res.send(LSTUDY.studyPage(req.user, site, site.study, LAPP.NAV(req.user))); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {
