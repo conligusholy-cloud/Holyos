@@ -36,7 +36,7 @@ async function getConfig() {
   const out = {};
   CATS.forEach((c) => {
     const x = (raw && raw[c]) || {};
-    out[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_send: x.auto_send === true, auto_send_final: x.auto_send_final === true, vat_rate: Number.isFinite(Number(x.vat_rate)) && x.vat_rate !== '' && x.vat_rate != null ? Number(x.vat_rate) : DEFAULT_VAT };
+    out[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_proforma: x.auto_proforma !== false, auto_final: x.auto_final !== false, auto_online: x.auto_online !== false, vat_rate: Number.isFinite(Number(x.vat_rate)) && x.vat_rate !== '' && x.vat_rate != null ? Number(x.vat_rate) : DEFAULT_VAT };
   });
   return out;
 }
@@ -45,7 +45,7 @@ async function setConfig(body, userId) {
   const v = {};
   CATS.forEach((c) => {
     const x = (body && body[c]) || {};
-    v[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_send: x.auto_send === true || x.auto_send === 'true', auto_send_final: x.auto_send_final === true || x.auto_send_final === 'true', vat_rate: Math.max(0, Math.min(30, Number(x.vat_rate))) || (x.vat_rate === 0 || x.vat_rate === '0' ? 0 : DEFAULT_VAT) };
+    v[c] = { template: normTemplate(x.template), CZK: toId(x.CZK), EUR: toId(x.EUR), auto_proforma: !(x.auto_proforma === false || x.auto_proforma === 'false'), auto_final: !(x.auto_final === false || x.auto_final === 'false'), auto_online: !(x.auto_online === false || x.auto_online === 'false'), vat_rate: Math.max(0, Math.min(30, Number(x.vat_rate))) || (x.vat_rate === 0 || x.vat_rate === '0' ? 0 : DEFAULT_VAT) };
   });
   await setSetting(KEY, v, { type: 'json', description: 'Fakturace Best Series 2.0 — šablona a bankovní účty (CZK/EUR) pro produkty a online produkty', scope: 'accounting', userId });
   return v;
@@ -172,7 +172,7 @@ async function issueProforma(p) {
     } });
   });
   // Dvoufázově: odeslání jen při zapnutém automatickém odesílání (a ne při ručním vystavení z BS2, p.send === false)
-  if (p.send === false || !cfg.auto_send) return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: false, held: true };
+  if (p.send === false || !cfg.auto_proforma) return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: false, held: true };
   const s = await sendInvoice(inv.id, 'proforma');
   return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: !!s.ok, send_error: s.ok ? null : s.error };
 }
@@ -205,7 +205,7 @@ async function processPayment(paymentId) {
           items: { create: pf.items.map((it, i) => ({ line_order: i, description: it.description, quantity: it.quantity, unit: it.unit, unit_price: it.unit_price, vat_rate: it.vat_rate, subtotal: it.subtotal, vat_amount: it.vat_amount, total: it.total })) },
         } });
       });
-      const autoSend = (await getConfig()).products.auto_send_final;
+      const autoSend = (await getConfig()).products.auto_final;
       const s = autoSend ? await sendInvoice(inv.id, 'final') : { ok: false, error: 'automatické odesílání je vypnuté — odešli ručně' };
       console.log('[bs2-billing] finální faktura ' + inv.invoice_number + ' k záloze ' + pf.invoice_number + (s.ok ? ' odeslána' : ' NEODESLÁNA: ' + s.error));
       out.push({ id: inv.id, invoice_number: inv.invoice_number, sent: !!s.ok });
@@ -237,7 +237,7 @@ async function issueOnline(p) {
       items: { create: b.rows },
     } });
   });
-  if (p.send === false || !cfg.auto_send) return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: false, held: true };
+  if (p.send === false || !cfg.auto_online) return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: false, held: true };
   const s = await sendInvoice(inv.id, 'online');
   return { ok: true, invoice_id: inv.id, invoice_number: inv.invoice_number, sent: !!s.ok, send_error: s.ok ? null : s.error };
 }

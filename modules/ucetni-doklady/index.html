@@ -1753,13 +1753,13 @@
           document.getElementById('bs2-' + cat + '-' + cur).innerHTML = bs2Opt('', '— výchozí z nastavení fakturace —', !c[cur]) + r.data.accounts.filter(a => a.currency === cur).map(a => bs2Opt(a.id, (a.name || a.bank || '') + ' · ' + a.number, c[cur] === a.id)).join('');
         });
         document.getElementById('bs2-' + cat + '-vat').value = c.vat_rate != null ? c.vat_rate : 21;
-        document.getElementById('bs2-' + cat + '-auto').checked = !!c.auto_send;
-        const af = document.getElementById('bs2-' + cat + '-autofinal'); if (af) af.checked = !!c.auto_send_final;
+        document.getElementById('bs2-' + cat + '-auto').checked = cat === 'online' ? c.auto_online !== false : c.auto_proforma !== false;
+        const af = document.getElementById('bs2-' + cat + '-autofinal'); if (af) af.checked = c.auto_final !== false;
       });
     }
     window.saveBs2Config = async function() {
       const body = {};
-      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_send: document.getElementById('bs2-' + cat + '-auto').checked, auto_send_final: !!(document.getElementById('bs2-' + cat + '-autofinal') || {}).checked }; });
+      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_proforma: cat === 'products' ? document.getElementById('bs2-' + cat + '-auto').checked : true, auto_final: cat === 'products' ? !!document.getElementById('bs2-' + cat + '-autofinal').checked : true, auto_online: cat === 'online' ? document.getElementById('bs2-' + cat + '-auto').checked : true }; });
       const r = await api('PUT', '/api/accounting/bs2-billing/config', body);
       ['products', 'online'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
     };
