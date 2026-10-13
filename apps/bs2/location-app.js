@@ -151,10 +151,10 @@ function siteForm(s, site, d, error) {
     ${inp('address', 'Adresa *', 'required maxlength="300"')}
     ${inp('city', 'Město', 'maxlength="120"')}
     <label>Typ zástavby${sel('building', [['', '—'], ['sidliste', 'sídliště'], ['centrum', 'centrum města'], ['obchod', 'u obchodu / OC'], ['vesnice', 'obec / vesnice'], ['prumysl', 'průmyslová zóna'], ['kemp', 'kemp / rekreace']])}</label>
-    <div class="full"><label style="margin:0 0 6px">Umístění prádlomatu na mapě <small>Klikněte „Najít adresu", pak špendlík přetáhněte přesně na místo, kde bude prádlomat stát (nebo klikněte do mapy).</small></label>
+    <div class="full"><label style="margin:0 0 6px">Umístění prádlomatu na mapě <small>Klikněte „Najít adresu", pak obdélník přetáhněte přesně na místo, kde bude prádlomat stát, a zeleným bodem ho otočte.</small></label>
       <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><select id="geo-pick" style="display:none;width:auto;max-width:420px;font-size:13px;padding:7px 10px"></select><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
       <div id="site-map" style="height:440px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
-      <div class="row" style="margin-top:8px;gap:10px;flex-wrap:wrap;align-items:center"><span class="small muted">Prádlomat <b>3 × 2 m</b> – modrý obdélník, šipka = vstup (čelo). Otočení:</span><input type="range" id="f-heading-r" min="0" max="359" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}" style="width:220px;accent-color:var(--accent2)"><b id="f-heading-v" style="min-width:44px">${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}°</b><button type="button" class="btn sec sm" id="rot-l">⟲ −15°</button><button type="button" class="btn sec sm" id="rot-r">⟳ +15°</button><span class="small muted" style="margin-left:6px">Podklad:</span><select id="base-sel" style="width:auto;font-size:13px;padding:7px 10px"><option value="street">🗺 Mapa</option><option value="cuzk" selected>🛰 Letecká</option></select></div>
+      <div class="row" style="margin-top:8px;gap:10px;flex-wrap:wrap;align-items:center"><span class="small muted">Prádlomat <b>3 × 2 m</b> – modrý obdélník = tažením přesunete, <span style="color:var(--ok)">zelený bod</span> na šipce (vstup) = tažením otočíte. Otočení: <b id="f-heading-v">${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}°</b></span><span class="small muted" style="margin-left:6px">Podklad:</span><select id="base-sel" style="width:auto;font-size:13px;padding:7px 10px"><option value="street">🗺 Mapa</option><option value="cuzk" selected>🛰 Letecká</option></select></div>
       <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"><input type="hidden" name="heading" id="f-heading" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}"></div>
     <h3>Nájem a smlouva</h3>
     ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
@@ -206,7 +206,7 @@ function siteForm(s, site, d, error) {
     <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button>${site ? `<a class="btn sec" href="/lokalita/${site.id}/report">Zobrazit report</a>` : ''}</div>
   </form>
   <script>(function(){
-    var lat=document.getElementById('f-lat'),lng=document.getElementById('f-lng'),hd=document.getElementById('f-heading'),hdr=document.getElementById('f-heading-r'),hdv=document.getElementById('f-heading-v'),msg=document.getElementById('geo-msg');
+    var lat=document.getElementById('f-lat'),lng=document.getElementById('f-lng'),hd=document.getElementById('f-heading'),hdv=document.getElementById('f-heading-v'),msg=document.getElementById('geo-msg');
     var has=lat.value&&lng.value; var map=L.map('site-map',{scrollWheelZoom:true,maxZoom:22}).setView(has?[+lat.value,+lng.value]:[49.8,15.5],has?20:7);
     var street=${TILES}; street.options.maxZoom=22; street.options.maxNativeZoom=19;
     // ČÚZK ortofoto ČR (WMS, 20 cm/px) – nejostřejší letecký podklad pro Česko
@@ -214,20 +214,26 @@ function siteForm(s, site, d, error) {
     var bases={street:street,cuzk:cuzk}, cur=null; function setBase(k){ if(cur) map.removeLayer(cur); cur=bases[k]||street; cur.addTo(map); try{ cur.bringToBack(); }catch(e){} }
     var sel=document.getElementById('base-sel'); setBase(sel.value); sel.addEventListener('change',function(){ setBase(this.value); });
     // Obdélník 3 × 2 m (délka × hloubka), otočený o heading (0° = čelo na sever), šipka = vstup
-    var W=3, D=2, rect=null, arrow=null, dragging=false;
+    var W=3, D=2, rect=null, arrow=null, knob=null, dragging=false, rotating=false;
     function corners(a,b,h){ var R=6378137, rad=h*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad), lat0=a*Math.PI/180; function off(x,y){ var xr=x*cos-y*sin, yr=x*sin+y*cos; return [a+(yr/R)*180/Math.PI, b+(xr/(R*Math.cos(lat0)))*180/Math.PI]; }
-      return { box:[off(-W/2,-D/2),off(W/2,-D/2),off(W/2,D/2),off(-W/2,D/2)], front:[off(0,D/2),off(0,D/2+1.2)], tipL:off(-0.5,D/2+0.7), tipR:off(0.5,D/2+0.7) }; }
+      return { box:[off(-W/2,-D/2),off(W/2,-D/2),off(W/2,D/2),off(-W/2,D/2)], front:[off(0,D/2),off(0,D/2+1.2)], tipL:off(-0.5,D/2+0.7), tipR:off(0.5,D/2+0.7), knob:off(0,D/2+1.6) }; }
+    function bearing(a,b,c,d){ var dy=(c-a), dx=(d-b)*Math.cos(a*Math.PI/180); return (Math.atan2(dx,dy)*180/Math.PI+360)%360; }
+    function stopEv(e){ L.DomEvent.stop(e.originalEvent||e); }
     function draw(){ if(!lat.value) return; var c=corners(+lat.value,+lng.value,+hd.value||0);
-      if(!rect){ rect=L.polygon(c.box,{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(map); arrow=L.polyline([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]],{color:'#2fe3a0',weight:3}).addTo(map);
-        rect.on('mousedown',function(e){ dragging=true; map.dragging.disable(); L.DomEvent.stop(e); }); map.on('mousemove',function(e){ if(dragging) save(e.latlng.lat,e.latlng.lng); }); map.on('mouseup',function(){ if(dragging){ dragging=false; map.dragging.enable(); } });
-        rect.on('touchstart',function(e){ dragging=true; map.dragging.disable(); }); map.on('touchend',function(){ dragging=false; map.dragging.enable(); });
-      } else { rect.setLatLngs(c.box); arrow.setLatLngs([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]]); } }
+      if(!rect){ rect=L.polygon(c.box,{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(map); arrow=L.polyline([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]],{color:'#2fe3a0',weight:3,interactive:false}).addTo(map);
+        knob=L.circleMarker(c.knob,{radius:8,color:'#fff',weight:2,fillColor:'#2fe3a0',fillOpacity:1}).addTo(map); knob.bindTooltip('Tažením otočíte',{direction:'top'});
+        rect.on('mousedown',function(e){ dragging=true; map.dragging.disable(); stopEv(e); }); knob.on('mousedown',function(e){ rotating=true; map.dragging.disable(); stopEv(e); });
+        map.on('mousemove',function(e){ if(dragging) save(e.latlng.lat,e.latlng.lng); else if(rotating) setHeading(bearing(+lat.value,+lng.value,e.latlng.lat,e.latlng.lng)); });
+        map.on('mouseup',function(){ if(dragging||rotating){ dragging=false; rotating=false; map.dragging.enable(); } });
+        var el=map.getContainer(); el.addEventListener('touchmove',function(ev){ if(!(dragging||rotating)) return; var t=ev.touches[0]; var p=map.containerPointToLatLng(L.point(t.clientX-el.getBoundingClientRect().left,t.clientY-el.getBoundingClientRect().top)); if(dragging) save(p.lat,p.lng); else setHeading(bearing(+lat.value,+lng.value,p.lat,p.lng)); ev.preventDefault(); },{passive:false});
+        el.addEventListener('touchend',function(){ dragging=false; rotating=false; map.dragging.enable(); }); rect.on('touchstart',function(e){ dragging=true; map.dragging.disable(); }); knob.on('touchstart',function(e){ rotating=true; map.dragging.disable(); });
+        try{ rect.getElement().style.cursor='move'; knob.getElement().style.cursor='grab'; }catch(e){}
+      } else { rect.setLatLngs(c.box); arrow.setLatLngs([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]]); knob.setLatLng(c.knob); } }
     function save(a,b){ lat.value=a.toFixed(7); lng.value=b.toFixed(7); msg.textContent='Poloha: '+lat.value+', '+lng.value+' · otočení '+hd.value+'° (uloží se s lokalitou)'; draw(); }
     function setPin(a,b,zoom){ save(a,b); if(zoom) map.setView([a,b],zoom); }
-    function setHeading(v){ v=((Math.round(v)%360)+360)%360; hd.value=v; hdr.value=v; hdv.textContent=v+'°'; draw(); }
-    hdr.addEventListener('input',function(){ setHeading(+this.value); }); document.getElementById('rot-l').addEventListener('click',function(){ setHeading(+hd.value-15); }); document.getElementById('rot-r').addEventListener('click',function(){ setHeading(+hd.value+15); });
+    function setHeading(v){ v=((Math.round(v)%360)+360)%360; hd.value=v; hdv.textContent=v+'°'; msg.textContent='Poloha: '+lat.value+', '+lng.value+' · otočení '+v+'°'; draw(); }
     if(has) draw();
-    map.on('click',function(e){ if(!dragging) setPin(e.latlng.lat,e.latlng.lng, map.getZoom()<19?20:null); });
+    map.on('click',function(e){ if(!dragging&&!rotating) setPin(e.latlng.lat,e.latlng.lng, map.getZoom()<19?20:null); });
     document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var ad=f.address.value.trim(), ci=f.city.value.trim(); if(ad.length<2&&ci.length<2){ msg.textContent='Nejdřív vyplňte adresu nebo město.'; return; } msg.textContent='Hledám…';
       fetch('/api/location/geocode?address='+encodeURIComponent(ad)+'&city='+encodeURIComponent(ci)).then(function(r){return r.json();}).then(function(j){ var pick=document.getElementById('geo-pick'); pick.style.display='none'; if(j&&j.lat!=null){ setPin(j.lat,j.lon,j.level==='town'?16:20); msg.textContent=(j.level==='town'?'Přesná adresa nenalezena, zobrazuji obec: ':'Nalezeno: ')+(j.display_name||ad)+' – prádlomat přetáhněte přesně na místo.';
         if(j.candidates&&j.candidates.length>1){ pick.innerHTML=j.candidates.map(function(c,i){ return '<option value="'+i+'">'+c.display_name.replace(/</g,'&lt;')+'</option>'; }).join(''); pick.style.display='inline-block'; pick.onchange=function(){ var c=j.candidates[+this.value]; setPin(c.lat,c.lon,20); msg.textContent='Nalezeno: '+c.display_name+' – prádlomat přetáhněte přesně na místo.'; }; }
