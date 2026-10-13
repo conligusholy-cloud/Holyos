@@ -10,12 +10,15 @@ const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 
 const NAV = (s) => [
   { id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' },
+  { id: 'anal', href: '/lokalita/analyza', label: 'Analyzátor místa', icon: 'network' },
   { id: 'check', href: '/lokalita/checklist', label: 'Checklist', icon: 'check' },
   { id: 'studie', href: '/lokalita/studie', label: 'Případové studie', icon: 'chart' },
   { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true },
 ];
-function page(s, title, active, body) {
-  return layout({ title, user: s.nick, nav: NAV(s), active, fx: true, help: null, body: `<style>${CSS}</style>${body}` });
+function page(s, title, active, body, head) {
+  let html = layout({ title, user: s.nick, nav: NAV(s), active, fx: true, help: null, body: `<style>${CSS}</style>${body}` });
+  if (head) html = html.replace('</head>', head + '</head>');
+  return html;
 }
 const CSS = `
 .lk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
@@ -242,6 +245,47 @@ function reportPage(s, site, d, c, ev) {
   <p class="small muted">Vyhodnocení: „Nedostatek údajů" = chybí 2+ klíčové údaje (nájem, přípojky, cena zařízení). „Nevhodné" = ani silný scénář nepokryje provoz, nebo je střední scénář po splátce záporný. „Vhodné při splnění podmínek" = slabý scénář záporný, chybí 1 klíčový údaj, krátká výpověď, konkurence 2+, neměřená frekvence nebo chybějící voda/odpad. Jinak „Vhodné podle dostupných podkladů".</p>`);
 }
 
+
+// ── Analyzátor místa: spádová oblast 15 km (populace, kapacita, provozované prádlomaty) ──
+// Data: HolyOS veřejné API /api/pradlomat-spots/public/* přes BS2 proxy (/api/location/area, /api/location/existing).
+function analyzerPage(s, q) {
+  const head = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
+  return page(s, 'Analyzátor místa', 'anal', `
+  <div class="hero"><span class="eyebrow"><i></i>Analyzátor místa</span><h1><span class="g">Spádová oblast</span> vašeho města</h1><p>Zadejte město – ukážeme počet obyvatel v okruhu 15 km, odhad kapacity (kolik prádlomatů oblast uživí) a prádlomaty, které už v okolí fungují. Výsledek si přeneste do nové lokality.</p></div>
+  <div class="card" style="padding:12px"><div class="row" style="gap:8px;flex-wrap:wrap"><input id="an-q" value="${esc(q || '')}" placeholder="Zadejte své město, např. Tábor" style="flex:1;min-width:220px" autocomplete="off"><button class="btn" type="button" id="an-btn">🔎 Analyzovat</button></div></div>
+  <div id="an-map" style="height:380px;border-radius:16px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
+  <div id="an-out" style="margin-top:12px"></div>
+  <style>.an-big{display:flex;flex-direction:column;align-items:flex-end}.an-big .n{font-size:34px;font-weight:800;letter-spacing:-.02em;background:linear-gradient(90deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}.an-big .l{font-size:12px;color:var(--text2)}
+  .town{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text2);background:rgba(4,8,16,.55);border:1px solid var(--border);border-radius:999px;padding:4px 10px}.town .d{width:9px;height:9px;border-radius:50%;display:inline-block}.towns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .an-box{margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border2);background:rgba(30,134,224,.1)} .an-box.ok{border-color:rgba(47,227,160,.4);background:rgba(47,227,160,.08);color:#a9f5d9} .an-box b.t{color:var(--accent2)}
+  .leaflet-container{font-family:inherit}</style>
+  <script>(function(){
+    var map=L.map('an-map',{scrollWheelZoom:false}).setView([49.8,15.5],7);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:19}).addTo(map);
+    var layers=[], existing=[]; function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+    function popColor(p){return p>=50000?'#7f0000':p>=20000?'#b30000':p>=10000?'#d7301f':p>=5000?'#ef6548':p>=2000?'#fc8d59':p>=1000?'#fdbb84':p>=500?'#fdd49e':'#fee8c8';}
+    function popRadius(p){return Math.max(4,Math.min(30,Math.sqrt(p)/3));}
+    fetch('/api/location/existing').then(function(r){return r.ok?r.json():[]}).then(function(list){(list||[]).forEach(function(w){if(w.lat==null||w.lon==null)return;var m=L.circleMarker([w.lat,w.lon],{radius:5,color:'#fff',weight:1.4,fillColor:'#1e86e0',fillOpacity:.95}).addTo(map);m.bindTooltip('🧺 '+esc(w.name),{direction:'top'});existing.push(m);});}).catch(function(){});
+    var out=document.getElementById('an-out'),inp=document.getElementById('an-q'),btn=document.getElementById('an-btn');
+    function run(){var q=inp.value.trim(); if(q.length<2)return; btn.disabled=true; var old=btn.textContent; btn.textContent='Hledám…'; out.innerHTML='<div class="card"><span class="muted">Analyzuji spádovou oblast '+esc(q)+' (15 km)…</span></div>';
+      fetch('/api/location/area?area='+encodeURIComponent(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){btn.disabled=false;btn.textContent=old; if(!res.ok){out.innerHTML='<div class="msg err">'+esc((res.j&&res.j.error)||'Analýzu se nepodařilo spustit.')+'</div>';return;} render(res.j,q);}).catch(function(){btn.disabled=false;btn.textContent=old;out.innerHTML='<div class="msg err">Chyba spojení, zkuste to prosím znovu.</div>';});}
+    function render(r,q){layers.forEach(function(l){try{map.removeLayer(l);}catch(e){}});layers=[];
+      if(r.center){var rk=r.radius_km||15;var ring=L.circle([r.center.lat,r.center.lon],{radius:rk*1000,color:'#4fd1ff',weight:2,fill:true,fillColor:'#1e86e0',fillOpacity:.06,dashArray:'6 6'}).addTo(map);layers.push(ring);layers.push(L.circleMarker([r.center.lat,r.center.lon],{radius:5,color:'#fff',weight:2,fillColor:'#4fd1ff',fillOpacity:1}).addTo(map).bindTooltip('Střed',{direction:'top'}));
+        (r.places||[]).forEach(function(p){var cm=L.circleMarker([p.lat,p.lon],{radius:popRadius(p.population),color:'rgba(0,0,0,.35)',weight:.5,fillColor:popColor(p.population),fillOpacity:.8}).addTo(map);cm.bindTooltip(esc(p.name)+': '+p.population.toLocaleString('cs-CZ'),{direction:'top'});layers.push(cm);});
+        try{map.fitBounds(ring.getBounds(),{padding:[20,20]});}catch(e){}}
+      var title=(r.center&&r.center.display_name)?r.center.display_name.split(',')[0]:q, rk2=r.radius_km||15;
+      var tot=r.total_population!=null?r.total_population.toLocaleString('cs-CZ'):'—', dens=r.density_per_km2!=null?r.density_per_km2.toLocaleString('cs-CZ'):'—';
+      var towns=(r.places||[]).slice(0,12).map(function(p){return '<span class="town"><span class="d" style="background:'+popColor(p.population)+'"></span>'+esc(p.name)+' — '+p.population.toLocaleString('cs-CZ')+(p.dist_km!=null?' · '+p.dist_km+' km':'')+'</span>';}).join('');
+      var cap=r.capacity,capHtml='';
+      if(cap&&cap.recommended>0){capHtml='<div class="an-box"><div class="row" style="justify-content:space-between;flex-wrap:wrap"><b class="t">📦 Kapacita oblasti: '+cap.recommended+'× prádlomat</b><span class="small muted">1 prádlomat / '+cap.per_pradlomat.toLocaleString('cs-CZ')+' obyvatel</span></div>'+((cap.allocation||[]).length?'<div class="towns">'+cap.allocation.map(function(a){return '<span class="town"><b style="color:var(--accent2)">'+a.units+'×</b>&nbsp;'+esc(a.name)+' <span class="muted">· '+a.population.toLocaleString('cs-CZ')+' obyv.</span></span>';}).join('')+'</div>':'')+'</div>';}
+      var op=r.operating||[]; var plur=function(n){return n===1?'prádelna':(n>=2&&n<=4?'prádelny':'prádelen');};
+      var oper=op.length?'<div class="an-box"><b class="t">🧺 V tomto okruhu už '+(op.length===1?'funguje':'fungují')+' '+op.length+' '+plur(op.length)+'</b><div class="towns">'+op.slice(0,12).map(function(w){return '<span class="town"><span class="d" style="background:#1e86e0"></span>'+esc(w.name)+' · '+w.dist_km+' km</span>';}).join('')+'</div></div>':'<div class="an-box ok">✓ V okruhu '+rk2+' km zatím žádný prádlomat v provozu není.</div>';
+      out.innerHTML='<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">🎯 Spádová oblast '+rk2+' km — '+esc(title)+'</h2><div class="small muted">Počet obyvatel v okruhu '+rk2+' km od středu · zdroj: '+esc(r.source||'')+'</div></div><div class="an-big"><div class="n">'+tot+'</div><div class="l">obyvatel · '+dens+' /km²</div></div></div>'+capHtml+oper+(towns?'<div class="towns">'+towns+'</div>':'')+'<div class="row" style="margin-top:14px"><a class="btn" href="/lokalita/new?city='+encodeURIComponent(title)+'">+ Založit lokalitu v '+esc(title)+'</a></div></div>';
+    }
+    btn.addEventListener('click',run); inp.addEventListener('keydown',function(e){if(e.key==='Enter')run();});
+    if(inp.value.trim().length>=2) run();
+  })();</script>`, head);
+}
 function checklistPage(s) {
   const sec = (t, items) => `<div class="card" style="margin:0 0 12px"><h2 style="margin:0 0 8px">${t}</h2><ul style="margin:0;padding-left:18px;color:var(--text2);display:flex;flex-direction:column;gap:6px">${items.map((i) => `<li>${i}</li>`).join('')}</ul></div>`;
   return page(s, 'Checklist', 'check', `<h1 style="margin:0 0 6px">Checklist prověření místa</h1><p class="muted" style="margin:0 0 14px">Co si změřit, spočítat a vyjednat, než podepíšete nájem. Výsledky zapište do formuláře lokality.</p>
@@ -258,4 +302,4 @@ function expiredPage(s) {
   return page(s, 'Přístup vypršel', 'loc', `<div class="card"><h1 style="margin:0 0 6px">Platnost přístupu skončila</h1><p class="muted">Váš přístup k aplikaci Prověření lokality vypršel. Pro prodloužení nás kontaktujte přes Podporu.</p></div>`);
 }
 
-module.exports = { LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };
+module.exports = { analyzerPage, LIMITS, PKG_LABEL, FIELDS, clean, calc, evaluate, siteForm, listPage, reportPage, checklistPage, studiesPage, expiredPage, num };

@@ -43,7 +43,7 @@ app.use((req, res, next) => {
   res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (isHttps(req)) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   // CSP: cizí skripty se nespustí, formuláře nejdou odeslat jinam, stránku nelze vložit do iframe. Inline skripty/handlery aplikace jsou povoleny ('unsafe-inline').
-  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
+  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
   next();
 });
 // ---- CSRF: každý POST musí přijít z našeho webu (Origin/Referer = náš host). Formuláře navíc nesou token svázaný s relací. ----
@@ -490,6 +490,16 @@ app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.listPage(req.user, sites, await locInfo(req.user, req.query.msg)));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
+app.get('/lokalita/analyza', wrap(requireLocation), (req, res) => res.send(LAPP.analyzerPage(req.user, String(req.query.q || '').slice(0, 80))));
+// Proxy na veřejné API HolyOS (spádová oblast, provozované prádlomaty) — jen pro přihlášené zákazníky aplikace
+async function holyosPublic(path) { try { const r = await fetch(HOLYOS_URL + path, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; } catch (e) { return { ok: false, status: 502, j: { error: 'Analýza momentálně není dostupná, zkuste to prosím později.' } }; } }
+app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
+  const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
+  if (rateLimited('area:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
+  const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15');
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
+}));
+app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));
   let studies = []; try { studies = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { studies = []; }
@@ -498,7 +508,7 @@ app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
   const n = Number(((await q('SELECT count(*)::int AS c FROM location_sites WHERE supporter_id=$1', [req.user.id])).rows[0] || {}).c || 0);
   if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
-  res.send(LAPP.siteForm(req.user, null, {}, ''));
+  res.send(LAPP.siteForm(req.user, null, { city: String(req.query.city || '').slice(0, 120) }, ''));
 }));
 async function locSave(req, res, site) {
   const d = LAPP.clean(req.body || {});
