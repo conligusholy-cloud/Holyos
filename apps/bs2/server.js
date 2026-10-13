@@ -552,11 +552,13 @@ async function locSave(req, res, site) {
     if (n >= (LAPP.LIMITS[req.user.location_package] || 3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Limit adres balíčku je vyčerpán.'));
     id = (await q('INSERT INTO location_sites (supporter_id, name, address, city, data, calc, result) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), JSON.stringify(calcSummary), JSON.stringify(result)])).rows[0].id;
   }
+  // Tlacitko Ulozit uprostred formulare -> zustat ve formulari, jinak rovnou report
+  if (String(req.body.goto || '') === 'form') return res.redirect('/lokalita/' + id + '?saved=1#najem');
   res.redirect('/lokalita/' + id + '/report');
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
-app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, '')); }));
+app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); res.send(LAPP.siteForm(req.user, site, site.data || {}, '', req.query.saved === '1')); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
 app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c))); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));

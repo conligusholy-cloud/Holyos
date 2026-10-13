@@ -153,14 +153,14 @@ const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'bui
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
-function siteForm(s, site, d, error) {
+function siteForm(s, site, d, error, saved) {
   const V = (k) => esc(d[k] != null && d[k] !== '' ? d[k] : (DEFAULTS[k] != null ? DEFAULTS[k] : ''));
   const sel = (k, opts) => `<select name="${k}">${opts.map(([v, l]) => `<option value="${v}"${(d[k] || DEFAULTS[k] || '') === v ? ' selected' : ''}>${l}</option>`).join('')}</select>`;
   const YNU = [['unknown', 'nevím / neověřeno'], ['yes', 'ano'], ['no', 'ne']];
   const inp = (k, label, extra = '', hint = '') => `<label>${label}<input name="${k}" value="${V(k)}" ${extra}>${hint ? `<small>${hint}</small>` : ''}</label>`;
   return page(s, site ? 'Lokalita' : 'Nová lokalita', 'loc', `
   <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h1 style="margin:0 0 4px">${site ? esc(site.name || 'Lokalita') : 'Nová lokalita'}</h1><p class="muted" style="margin:0">Vyplňte, co víte. Co neznáte, nechte prázdné – report to označí jako chybějící údaj.</p></div><a class="btn sec sm" href="/lokalita">← Moje lokality</a></div>
-  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}
+  ${error ? `<div class="msg err">${esc(error)}</div>` : ''}${saved ? '<div class="msg ok">Uloženo.</div>' : ''}
   <form method="post" action="${site ? '/lokalita/' + site.id : '/lokalita/new'}" class="card lk-f" style="margin-top:14px">
     <h3>Místo</h3>
     ${inp('name', 'Název lokality *', 'required maxlength="120" placeholder="např. Tábor – Tesco"')}
@@ -176,8 +176,9 @@ function siteForm(s, site, d, error) {
         <div class="small" style="margin-bottom:8px"><b>Důležité body v okolí</b> <span class="muted">– vyberte typ a klikněte do mapy. <b style="color:#ffd866">Parkoviště je povinné.</b> Body jdou přetáhnout, kliknutím na bod ho smažete.</span></div>
         <div class="row" style="gap:6px;flex-wrap:wrap" id="poi-tools">${POI_TYPES.map((t) => `<button type="button" class="btn sec sm poi-btn" data-type="${t.key}" style="border-color:${t.color}66">${t.icon} ${t.label}${t.required ? ' *' : ''}</button>`).join('')}<button type="button" class="btn sec sm" id="poi-cancel" style="display:none">✕ Zrušit přidávání</button></div>
         <div id="poi-list" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+        <div class="row" style="margin-top:12px;justify-content:flex-end"><button class="btn" type="submit" name="goto" value="form">💾 Uložit</button></div>
       </div></div>
-    <h3>Nájem a smlouva</h3>
+    <h3 id="najem">Nájem a smlouva</h3>
     ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
     ${inp('rent_src', 'Zdroj nájmu (ověření)', 'maxlength="200" placeholder="např. nabídka pronajímatele 1. 10. 2026"', 'Uvedený zdroj zařadí údaj mezi ověřené skutečnosti.')}
     ${inp('deposit', 'Kauce (Kč)', 'inputmode="decimal"')}
