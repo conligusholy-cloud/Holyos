@@ -87,7 +87,7 @@ function evaluate(d, c) {
   const v = (label, val, src) => { if (val === '' || val == null) return; if (src) verified.push(`${label}: ${val} – ${src}`); else given.push(`${label}: ${val}`); };
   if (own) given.push('Místo: vlastní (nájem 0 Kč)'); else if (d.ownership === 'rent') given.push('Místo: v nájmu' + (num(d.deposit) ? ', kauce ' + num(d.deposit).toLocaleString('cs-CZ') + ' Kč' : d.deposit === '0' ? ', bez kauce' : ''));
   if (!own) v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', '');
-  v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
+  v('Přípojky na místě', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina' : null].filter(Boolean).join(', '), '');
   if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng + ' · prádlomat 3 × 2 m, otočení ' + (d.heading || 0) + '°');
   else missing.push('Přesné umístění prádlomatu na mapě');
   const pois = parsePois(d); const tl = Object.fromEntries(POI_TYPES.map((t) => [t.key, t]));
@@ -109,8 +109,9 @@ function evaluate(d, c) {
   if (c.S.weak.operating < 0) risks.push('Ve slabém scénáři nepokryje provoz ani fixní náklady');
   if (!own && num(d.notice) && num(d.notice) < 12) risks.push(`Výpovědní lhůta ${num(d.notice)} měs. je krátká – riziko ztráty místa před návratností`);
   if (!own && d.rent_known === 'no') risks.push('Nájem zatím není známý – výsledek se změní podle skutečné výše');
-  if (d.conn_water === 'no' || d.conn_sewer === 'no') risks.push('Chybí voda nebo odpad – náklady na přípojku nejsou v kalkulaci');
-  if (d.conn_power === 'no') risks.push('Chybí dostatečná elektrická přípojka');
+  const cm = (k, l) => { if (d[k] !== 'no') return; const m = num(d[k + '_m']); if (!m) { missing.push('Délka trasy přípojky – ' + l); risks.push('Chybí ' + l + ' – délka trasy není uvedena'); } else { given.push('Přípojka ' + l + ': nutno vybudovat, trasa ' + m + ' m'); risks.push('Nutno vybudovat přípojku: ' + l + ' (' + m + ' m) – náklady zahrňte do „Příprava místa / přípojky"'); } };
+  cm('conn_water', 'voda'); cm('conn_sewer', 'odpad'); cm('conn_power', 'elektřina');
+  if (['conn_water', 'conn_sewer', 'conn_power'].some((k) => d[k] === 'no') && !num(d.site_prep)) steps.push('Nacenit vybudování přípojek a doplnit do investice (Příprava místa / přípojky)');
   const compN = pois.filter((p) => p.type === 'competition').length;
   if (compN >= 2) risks.push(`Konkurence v okolí: ${compN} provozoven zakreslených v mapě`);
   if (!pois.some((p) => p.type === 'housing')) missing.push('Bytové domy v okolí zakreslené v mapě');
@@ -146,7 +147,7 @@ const POI_TYPES = [
   { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
 ];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
@@ -192,9 +193,10 @@ function siteForm(s, site, d, error, saved) {
         ['deposit','notice'].forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=showRent?'':'none'; }); }
       own.addEventListener('change',upd); known.addEventListener('change',upd); upd(); })();</script>
     <h3>Přípojky</h3>
-    <label>Voda${sel('conn_water', YNU)}</label><label>Odpad${sel('conn_sewer', YNU)}</label><label>Elektřina${sel('conn_power', YNU)}</label>
-    ${inp('power_amp', 'Jištění / příkon', 'maxlength="60" placeholder="např. 3× 25 A"')}
-    ${inp('conn_src', 'Zdroj (ověření přípojek)', 'maxlength="200" placeholder="např. fotodokumentace, sdělení pronajímatele"')}
+    <label>Voda${sel('conn_water', YNU)}</label>${inp('conn_water_m', 'Délka trasy přípojky vody (m)', 'inputmode="decimal" data-conn="conn_water"', 'Od nejbližšího místa napojení k prádlomatu.')}
+    <label>Odpad${sel('conn_sewer', YNU)}</label>${inp('conn_sewer_m', 'Délka trasy odpadu (m)', 'inputmode="decimal" data-conn="conn_sewer"')}
+    <label>Elektřina${sel('conn_power', YNU)}</label>${inp('conn_power_m', 'Délka trasy el. přípojky (m)', 'inputmode="decimal" data-conn="conn_power"')}
+    <script>(function(){ document.querySelectorAll('input[data-conn]').forEach(function(inp){ var sel=document.querySelector('select[name='+inp.getAttribute('data-conn')+']'); function u(){ inp.parentNode.style.display=sel.value==='no'?'':'none'; if(sel.value!=='no') inp.value=''; } sel.addEventListener('change',u); u(); }); })();</script>
     <h3>Investice a financování</h3>
     ${inp('machine_price', 'Cena zařízení (Kč)', 'inputmode="decimal"')}
     ${inp('delivery', 'Doprava a instalace (Kč)', 'inputmode="decimal"')}
