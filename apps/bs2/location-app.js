@@ -52,7 +52,8 @@ function calc(d) {
   const rentN = normCost(num(d.rent), d.rent_vat || 'excl');
   const fixed = rentN + num(d.software) + num(d.insurance) + num(d.marketing) + num(d.other);
   const invest = normCost(num(d.machine_price) + num(d.delivery) + num(d.site_prep), d.invest_vat || 'excl');
-  const loanPrincipal = Math.max(0, invest - num(d.down_payment));
+  const down = d.down_mode === 'pct' ? invest * Math.min(100, num(d.down_payment)) / 100 : num(d.down_payment);
+  const loanPrincipal = Math.max(0, invest - down);
   const payment = d.financing === 'yes' ? annuity(loanPrincipal, num(d.interest), num(d.months, 60)) : 0;
   function scen(name, washes) {
     const gross = washes * perWash * days;                       // s DPH
@@ -110,7 +111,7 @@ function evaluate(d, c) {
   assumed.push(d.energy_mode === 'consumption' ? `Energie podle spotřeby: ${num(d.kwh_wash)} kWh/praní, ${num(d.kwh_dry)} kWh/sušení, ${num(d.water_wash)} l/praní, ${num(d.kwh_price)} Kč/kWh, ${num(d.water_price)} Kč/m³` : `Energie a voda zjednodušeně ${num(d.energy_pct, 9.5)} % z tržby bez DPH`);
   assumed.push(`Servis ${num(d.service_pct, 13)} % z tržby bez DPH, platební poplatky ${num(d.fee_pct, 1.5)} % z tržby, rezerva na opravy a obnovu ${num(d.reserve_pct, 5)} % (plánované odložení prostředků)`);
   assumed.push(d.vat_payer === 'no' ? 'Režim: neplátce DPH (tržby bez odvodu DPH, náklady vč. DPH)' : 'Režim: plátce DPH (21 % z tržeb odvedeno, nájem a investice počítány bez DPH)');
-  if (d.financing === 'yes') assumed.push(`Financování: ${c.loanPrincipal.toLocaleString('cs-CZ')} Kč, ${num(d.interest)} % p.a., ${num(d.months, 60)} měs. → splátka ${Math.round(c.payment).toLocaleString('cs-CZ')} Kč/měs`);
+  if (d.financing === 'yes') assumed.push(`Financování: akontace ${d.down_mode === 'pct' ? num(d.down_payment) + ' %' : num(d.down_payment).toLocaleString('cs-CZ') + ' Kč'}, úvěr ${Math.round(c.loanPrincipal).toLocaleString('cs-CZ')} Kč, ${num(d.interest)} % p.a., ${num(d.months, 60)} měs. → splátka ${Math.round(c.payment).toLocaleString('cs-CZ')} Kč/měs`);
   // rizika
   if (c.S.weak.cash < 0) risks.push('Ve slabém scénáři je peněžní tok po splátce záporný – místo stojí a padá s návštěvností');
   if (c.S.mid.cash < 0) risks.push('Ve středním scénáři je peněžní tok po splátce záporný');
@@ -160,7 +161,7 @@ const POI_TYPES = [
   { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
 ];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'product_id', 'product_name', 'access', 'access_note', 'delivery_known', 'site_prep_known', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'product_id', 'product_name', 'access', 'access_note', 'down_mode', 'delivery_known', 'site_prep_known', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
@@ -228,10 +229,10 @@ function siteForm(s, site, d, error, saved, noeval, products) {
       function u(){ document.querySelectorAll('input[data-known]').forEach(function(i){ var k=document.querySelector('select[name='+i.getAttribute('data-known')+']'); var show=k.value==='yes'; if(i.name==='site_prep'){ var np=needPrep(); k.parentNode.style.display=np?'':'none'; show=show&&np; if(!np){ k.value='no'; } } i.parentNode.style.display=show?'':'none'; if(!show) i.value=''; }); }
       document.querySelectorAll('select[name=delivery_known],select[name=site_prep_known],select[name=conn_water],select[name=conn_sewer],select[name=conn_power],select[name=surface]').forEach(function(e){ e.addEventListener('change',u); }); u(); })();</script>
     <label>Financování${sel('financing', [['no', 'vlastní kapitál'], ['yes', 'úvěr / leasing']])}</label>
-    ${inp('down_payment', 'Akontace (Kč)', 'inputmode="decimal"')}
+    <label>Akontace<div style="display:flex;gap:6px"><input name="down_payment" value="${V('down_payment')}" inputmode="decimal" style="flex:1"><select name="down_mode" style="width:auto">${[['czk', 'Kč'], ['pct', '%']].map(([v, l]) => `<option value="${v}"${(d.down_mode || 'czk') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></label>
     ${inp('interest', 'Úrok (% p.a.)', 'inputmode="decimal"')}
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
-    <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.parentNode.style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
+    <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.closest('label').style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
     <div class="full row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sec" type="submit" name="goto" value="save">💾 Uložit</button><button class="btn" type="submit" name="goto" value="eval">📊 Vyhodnotit a zobrazit report</button><span class="small muted">Uložit = jen uloží údaje. Vyhodnotit = zpracuje report${site && site.evaluated_at ? '' : ' a odečte 1 lokalitu z balíčku'}.</span></div>
   </form>
