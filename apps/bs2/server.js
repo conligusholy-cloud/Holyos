@@ -597,7 +597,17 @@ async function locBuildStudy(site, d, c, ev) {
   let area = null;
   try { const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(d.lat + ',' + d.lng) + '&radius_km=15'); if (r.ok && r.j && (r.j.places || []).length) area = r.j; } catch (e) { area = null; }
   if (!area) { try { const r2 = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent((d.city || d.address || '').trim()) + '&radius_km=15'); if (r2.ok && r2.j && !r2.j.error) area = r2.j; } catch (e) { /* bez spádové oblasti */ } }
-  return LSTUDY.runStudy({ site, d, c, ev, area });
+  const study = await LSTUDY.runStudy({ site, d, c, ev, area });
+  // Scénáře kalkulace = odhad AI (zákazníků/den slabý/střední/silný; 1 zákazník = 1 praní vč. sušení), aby studie a ekonomika korespondovaly
+  const w = study && study.demand && (study.demand.customers_per_day || study.demand.washes_per_day);
+  if (w && Number(w.weak) > 0 && Number(w.mid) > 0 && Number(w.strong) > 0) {
+    const nd = Object.assign({}, d, { washes_weak: String(Math.round(Number(w.weak) * 10) / 10), washes_mid: String(Math.round(Number(w.mid) * 10) / 10), washes_strong: String(Math.round(Number(w.strong) * 10) / 10) });
+    const nc = LAPP.calc(nd), nev = LAPP.evaluate(nd, nc);
+    const calcSummary = { mid_operating: nc.S.mid.operating, mid_cash: nc.S.mid.cash, weak_cash: nc.S.weak.cash, strong_cash: nc.S.strong.cash, be_operating: nc.be_operating, be_cash: nc.be_cash, invest: nc.invest, payment: nc.payment };
+    await q('UPDATE location_sites SET data=$2, calc=$3, result=$4, updated_at=now() WHERE id=$1', [site.id, JSON.stringify(nd), JSON.stringify(calcSummary), JSON.stringify({ result: nev.result, cls: nev.cls, at: new Date().toISOString() })]);
+    study._applied_washes = { weak: nd.washes_weak, mid: nd.washes_mid, strong: nd.washes_strong };
+  }
+  return study;
 }
 // AI studie lokality: sběr OSM + spádová oblast + Claude → uloží se k lokalitě
 app.post('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => {
