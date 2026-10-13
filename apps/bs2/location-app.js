@@ -341,7 +341,7 @@ function reportSections(site, d, c, ev) {
     <div class="card" style="margin:0"><h4 style="margin-top:0">Doporučené další kroky</h4>${li(ev.steps)}</div>
   </div>
   ${d.notes ? `<div class="card rep"><h4 style="margin-top:0">Poznámky</h4><p style="white-space:pre-wrap;color:var(--text2);margin:0">${esc(d.notes)}</p></div>` : ''}
-  <p class="small muted">Vyhodnocení: „Nedostatek údajů" = chybí 2+ klíčové údaje (nájem, přípojky, cena zařízení). „Nevhodné" = ani silný scénář nepokryje provoz, nebo je střední scénář po splátce záporný. „Vhodné při splnění podmínek" = slabý scénář záporný, chybí 1 klíčový údaj, krátká výpověď, konkurence 2+, neměřená frekvence nebo chybějící voda/odpad. Jinak „Vhodné podle dostupných podkladů".</p>` };
+` };
 }
 function reportPage(s, site, d, c, ev, studyErr) {
   const R = reportSections(site, d, c, ev);
