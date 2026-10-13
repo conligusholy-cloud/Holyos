@@ -753,7 +753,7 @@ function supporterCompounder(s) {
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
         <script>(function(){var how=document.querySelector('.cp .how'),st=document.querySelector('.cp .how-stage');if(!how||!st)return;var FULL=670,LEFT=110,nat=0;
-function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}st.style.width='440px';st.style.transform='none';st.style.marginBottom='0';nat=st.offsetHeight||560;var w=how.clientWidth-8;var s=Math.min(1,w/FULL);st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-FULL*s)/2+LEFT*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
+function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}st.style.width='440px';st.style.transform='none';st.style.marginBottom='0';nat=st.offsetHeight||560;var cs=getComputedStyle(how);var w=how.clientWidth-(parseFloat(cs.paddingLeft)||0)-(parseFloat(cs.paddingRight)||0)-4;var s=Math.min(1,w/FULL);st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-FULL*s)/2+LEFT*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
 fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);})();</script>
       </div>
       <script>(function(){
