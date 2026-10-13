@@ -89,6 +89,9 @@ function evaluate(d, c) {
   v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
   if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng + ' · prádlomat 3 × 2 m, otočení ' + (d.heading || 0) + '°');
   else missing.push('Přesné umístění prádlomatu na mapě');
+  const pois = parsePois(d); const tl = Object.fromEntries(POI_TYPES.map((t) => [t.key, t]));
+  if (pois.length) given.push('Důležité body v okolí: ' + pois.map((p) => (tl[p.type] || tl.other).icon + ' ' + (p.label || (tl[p.type] || tl.other).label)).join(', '));
+  if (!pois.some((p) => p.type === 'parking')) missing.push('Parkoviště zakreslené v mapě (povinné)');
   v('Domácnosti do 500 m', num(d.households) ? num(d.households).toLocaleString('cs-CZ') : '', d.households_src);
   v('Konkurence do 2 km', d.competition === '' || d.competition == null ? '' : String(num(d.competition)), '');
   v('Výpovědní lhůta', num(d.notice) ? num(d.notice) + ' měs.' : '', '');
@@ -130,12 +133,24 @@ function evaluate(d, c) {
 
 const LEAFLET_HEAD = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
 const TILES = "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:19})";
+// Důležité body v okolí lokality (zákazník zakreslí do mapy)
+const POI_TYPES = [
+  { key: 'parking', label: 'Parkoviště', icon: '🅿️', color: '#4fd1ff', required: true },
+  { key: 'entrance', label: 'Vstup / přístup', icon: '🚪', color: '#2fe3a0' },
+  { key: 'power', label: 'Elektro přípojka', icon: '⚡', color: '#f5b400' },
+  { key: 'water', label: 'Voda / odpad', icon: '💧', color: '#60a5fa' },
+  { key: 'shop', label: 'Obchod / supermarket', icon: '🛒', color: '#f97316' },
+  { key: 'transit', label: 'Zastávka MHD', icon: '🚌', color: '#a78bfa' },
+  { key: 'housing', label: 'Bytové domy', icon: '🏢', color: '#e879f9' },
+  { key: 'competition', label: 'Konkurence', icon: '⚠️', color: '#ff5d6c' },
+  { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
+];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
-function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : 300); d[k] = v; } return d; }
+function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
 function siteForm(s, site, d, error) {
   const V = (k) => esc(d[k] != null && d[k] !== '' ? d[k] : (DEFAULTS[k] != null ? DEFAULTS[k] : ''));
@@ -155,7 +170,12 @@ function siteForm(s, site, d, error) {
       <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><select id="geo-pick" style="display:none;width:auto;max-width:420px;font-size:13px;padding:7px 10px"></select><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
       <div id="site-map" style="height:440px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
       <div class="row" style="margin-top:8px;gap:10px;flex-wrap:wrap;align-items:center"><span class="small muted">Prádlomat <b>3 × 2 m</b> – modrý obdélník = tažením přesunete, <span style="color:var(--ok)">zelený bod</span> na šipce (vstup) = tažením otočíte. Otočení: <b id="f-heading-v">${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}°</b></span><span class="small muted" style="margin-left:6px">Podklad:</span><select id="base-sel" style="width:auto;font-size:13px;padding:7px 10px"><option value="street">🗺 Mapa</option><option value="cuzk" selected>🛰 Letecká</option></select></div>
-      <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"><input type="hidden" name="heading" id="f-heading" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}"></div>
+      <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"><input type="hidden" name="heading" id="f-heading" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}"><input type="hidden" name="pois" id="f-pois" value="${esc(d.pois || '[]')}">
+      <div style="margin-top:10px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:rgba(4,8,16,.45)">
+        <div class="small" style="margin-bottom:8px"><b>Důležité body v okolí</b> <span class="muted">– vyberte typ a klikněte do mapy. <b style="color:#ffd866">Parkoviště je povinné.</b> Body jdou přetáhnout, kliknutím na bod ho smažete.</span></div>
+        <div class="row" style="gap:6px;flex-wrap:wrap" id="poi-tools">${POI_TYPES.map((t) => `<button type="button" class="btn sec sm poi-btn" data-type="${t.key}" style="border-color:${t.color}66">${t.icon} ${t.label}${t.required ? ' *' : ''}</button>`).join('')}<button type="button" class="btn sec sm" id="poi-cancel" style="display:none">✕ Zrušit přidávání</button></div>
+        <div class="small muted" id="poi-list" style="margin-top:8px"></div>
+      </div></div>
     <h3>Nájem a smlouva</h3>
     ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
     ${inp('rent_src', 'Zdroj nájmu (ověření)', 'maxlength="200" placeholder="např. nabídka pronajímatele 1. 10. 2026"', 'Uvedený zdroj zařadí údaj mezi ověřené skutečnosti.')}
@@ -232,8 +252,22 @@ function siteForm(s, site, d, error) {
     function save(a,b){ lat.value=a.toFixed(7); lng.value=b.toFixed(7); msg.textContent='Poloha: '+lat.value+', '+lng.value+' · otočení '+hd.value+'° (uloží se s lokalitou)'; draw(); }
     function setPin(a,b,zoom){ save(a,b); if(zoom) map.setView([a,b],zoom); }
     function setHeading(v){ v=((Math.round(v)%360)+360)%360; hd.value=v; hdv.textContent=v+'°'; msg.textContent='Poloha: '+lat.value+', '+lng.value+' · otočení '+v+'°'; draw(); }
+    // ── Důležité body (POI) ──
+    var POI=${JSON.stringify(POI_TYPES)}, poisEl=document.getElementById('f-pois'), pois=[]; try{ pois=JSON.parse(poisEl.value||'[]'); if(!Array.isArray(pois)) pois=[]; }catch(e){ pois=[]; }
+    var poiMarkers=[], addType=null, cancelBtn=document.getElementById('poi-cancel'), listEl=document.getElementById('poi-list');
+    function ptype(k){ for(var i=0;i<POI.length;i++) if(POI[i].key===k) return POI[i]; return POI[POI.length-1]; }
+    function poiIcon(t){ return L.divIcon({className:'',html:'<div style="width:30px;height:30px;border-radius:50%;background:rgba(4,8,16,.85);border:2px solid '+t.color+';display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 0 12px '+t.color+'88">'+t.icon+'</div>',iconSize:[30,30],iconAnchor:[15,15]}); }
+    function savePois(){ poisEl.value=JSON.stringify(pois); renderList(); }
+    function renderList(){ if(!pois.length){ listEl.innerHTML='<span style="color:#ffd866">Zatím žádný bod – zakreslete alespoň parkoviště.</span>'; return; } listEl.innerHTML=pois.map(function(p,i){ var t=ptype(p.type); return '<span class="town" style="margin:2px 4px 2px 0">'+t.icon+' '+(p.label||t.label)+(p.type==='parking'?'':'')+' <a href="#" data-del="'+i+'" style="color:var(--err);margin-left:4px" title="Smazat">✕</a></span>'; }).join('')+(pois.some(function(p){return p.type==='parking';})?'':'<div style="color:#ffd866;margin-top:4px">Chybí parkoviště (povinné).</div>'); }
+    listEl.addEventListener('click',function(e){ var a=e.target.closest('[data-del]'); if(!a) return; e.preventDefault(); removePoi(+a.getAttribute('data-del')); });
+    function removePoi(i){ pois.splice(i,1); redrawPois(); savePois(); }
+    function redrawPois(){ poiMarkers.forEach(function(m){ map.removeLayer(m); }); poiMarkers=[]; pois.forEach(function(p,i){ var t=ptype(p.type); var m=L.marker([p.lat,p.lng],{icon:poiIcon(t),draggable:true}).addTo(map); m.bindTooltip((p.label||t.label)+' · kliknutím smažete',{direction:'top'}); m.on('dragend',function(){ var q=m.getLatLng(); pois[i].lat=+q.lat.toFixed(7); pois[i].lng=+q.lng.toFixed(7); savePois(); }); m.on('click',function(ev){ L.DomEvent.stop(ev); if(confirm('Smazat bod '+(p.label||t.label)+'?')) removePoi(i); }); poiMarkers.push(m); }); }
+    document.querySelectorAll('.poi-btn').forEach(function(b){ b.addEventListener('click',function(){ addType=this.getAttribute('data-type'); document.querySelectorAll('.poi-btn').forEach(function(x){ x.classList.add('sec'); }); this.classList.remove('sec'); cancelBtn.style.display='inline-flex'; map.getContainer().style.cursor='crosshair'; msg.textContent='Klikněte do mapy, kam umístit: '+ptype(addType).label; }); });
+    function stopAdd(){ addType=null; cancelBtn.style.display='none'; document.querySelectorAll('.poi-btn').forEach(function(x){ x.classList.add('sec'); }); map.getContainer().style.cursor=''; }
+    cancelBtn.addEventListener('click',stopAdd);
+    redrawPois(); renderList();
     if(has) draw();
-    map.on('click',function(e){ if(!dragging&&!rotating) setPin(e.latlng.lat,e.latlng.lng, map.getZoom()<19?20:null); });
+    map.on('click',function(e){ if(addType){ var t=ptype(addType); var label=t.key==='other'?(prompt('Popis bodu:')||'Jiné'):t.label; pois.push({type:addType,label:label,lat:+e.latlng.lat.toFixed(7),lng:+e.latlng.lng.toFixed(7)}); redrawPois(); savePois(); stopAdd(); return; } if(!dragging&&!rotating) setPin(e.latlng.lat,e.latlng.lng, map.getZoom()<19?20:null); });
     document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var ad=f.address.value.trim(), ci=f.city.value.trim(); if(ad.length<2&&ci.length<2){ msg.textContent='Nejdřív vyplňte adresu nebo město.'; return; } msg.textContent='Hledám…';
       fetch('/api/location/geocode?address='+encodeURIComponent(ad)+'&city='+encodeURIComponent(ci)).then(function(r){return r.json();}).then(function(j){ var pick=document.getElementById('geo-pick'); pick.style.display='none'; if(j&&j.lat!=null){ setPin(j.lat,j.lon,j.level==='town'?16:20); msg.textContent=(j.level==='town'?'Přesná adresa nenalezena, zobrazuji obec: ':'Nalezeno: ')+(j.display_name||ad)+' – prádlomat přetáhněte přesně na místo.';
         if(j.candidates&&j.candidates.length>1){ pick.innerHTML=j.candidates.map(function(c,i){ return '<option value="'+i+'">'+c.display_name.replace(/</g,'&lt;')+'</option>'; }).join(''); pick.style.display='inline-block'; pick.onchange=function(){ var c=j.candidates[+this.value]; setPin(c.lat,c.lon,20); msg.textContent='Nalezeno: '+c.display_name+' – prádlomat přetáhněte přesně na místo.'; }; }
@@ -259,6 +293,7 @@ function listPage(s, sites, info) {
 
 // ── Report ───────────────────────────────────────────────────────────────────
 const kc = (n) => Math.round(n).toLocaleString('cs-CZ') + ' Kč';
+function parsePois(d) { try { const p = JSON.parse(d.pois || '[]'); return Array.isArray(p) ? p.filter((x) => x && isFinite(+x.lat) && isFinite(+x.lng)).slice(0, 50) : []; } catch (e) { return []; } }
 function reportPage(s, site, d, c, ev) {
   const sc = (x, hi) => `<div class="c${hi ? ' hi' : ''}"><div class="k">${x.name} · ${x.washes} praní / den</div><div class="v">${kc(x.gross)}<span class="small muted" style="font-weight:500"> tržba s DPH</span></div>
     <div class="cas"><div><span>Tržba bez DPH</span><b>${kc(x.net)}</b></div><div><span>Energie a voda</span><b>− ${kc(x.energy)}</b></div><div><span>Servis</span><b>− ${kc(x.service)}</b></div><div><span>Platební poplatky</span><b>− ${kc(x.fees)}</b></div><div><span>Fixní (nájem, software, pojištění, marketing, ostatní)</span><b>− ${kc(x.fixed)}</b></div><div><span>Rezerva na obnovu</span><b>− ${kc(x.reserve)}</b></div>
@@ -270,7 +305,7 @@ function reportPage(s, site, d, c, ev) {
     <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs' : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Automatický orientační výstup z dostupných podkladů a vašich předpokladů – nikoli odborné schválení investice ani předpověď výdělku. Bez skóre a pravděpodobností.</p>
   </div>
-  ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:260px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var a=${num(d.lat)},b=${num(d.lng)},h=${num(d.heading)};var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false,maxZoom:22}).setView([a,b],20);L.tileLayer('https://ags.cuzk.gov.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/{z}/{y}/{x}',{attribution:'Ortofoto &copy; ČÚZK',maxZoom:22,maxNativeZoom:20}).addTo(m);var R=6378137,rad=h*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad),l0=a*Math.PI/180;function off(x,y){var xr=x*cs-y*sn,yr=x*sn+y*cs;return [a+(yr/R)*180/Math.PI,b+(xr/(R*Math.cos(l0)))*180/Math.PI];}L.polygon([off(-1.5,-1),off(1.5,-1),off(1.5,1),off(-1.5,1)],{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(m);L.polyline([off(-0.5,1.7),off(0,2.2),off(0.5,1.7),off(0,2.2),off(0,1)],{color:'#2fe3a0',weight:3}).addTo(m);})();</script></div>` : ''}
+  ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:340px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var a=${num(d.lat)},b=${num(d.lng)},h=${num(d.heading)};var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false,maxZoom:22}).setView([a,b],20);L.tileLayer('https://ags.cuzk.gov.cz/arcgis1/rest/services/ORTOFOTO_WM/MapServer/tile/{z}/{y}/{x}',{attribution:'Ortofoto &copy; ČÚZK',maxZoom:22,maxNativeZoom:20}).addTo(m);var R=6378137,rad=h*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad),l0=a*Math.PI/180;function off(x,y){var xr=x*cs-y*sn,yr=x*sn+y*cs;return [a+(yr/R)*180/Math.PI,b+(xr/(R*Math.cos(l0)))*180/Math.PI];}L.polygon([off(-1.5,-1),off(1.5,-1),off(1.5,1),off(-1.5,1)],{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(m);L.polyline([off(-0.5,1.7),off(0,2.2),off(0.5,1.7),off(0,2.2),off(0,1)],{color:'#2fe3a0',weight:3}).addTo(m);var P=${JSON.stringify(parsePois(d))},T=${JSON.stringify(Object.fromEntries(POI_TYPES.map((t) => [t.key, t])))};var bnd=[[a,b]];P.forEach(function(p){var t=T[p.type]||T.other;L.marker([p.lat,p.lng],{icon:L.divIcon({className:'',html:'<div style="width:28px;height:28px;border-radius:50%;background:rgba(4,8,16,.85);border:2px solid '+t.color+';display:flex;align-items:center;justify-content:center;font-size:14px">'+t.icon+'</div>',iconSize:[28,28],iconAnchor:[14,14]})}).addTo(m).bindTooltip(p.label||t.label,{permanent:true,direction:'right',offset:[14,0]});bnd.push([p.lat,p.lng]);});if(bnd.length>1){try{m.fitBounds(bnd,{padding:[30,30],maxZoom:20});}catch(e){}}})();</script></div>` : ''}
   <div class="card rep"><h2 style="margin:0 0 10px">Ekonomické scénáře <span class="small muted" style="font-weight:500">měsíčně · liší se jen návštěvností</span></h2>
     <div class="sc">${sc(c.S.weak)}${sc(c.S.mid, true)}${sc(c.S.strong)}</div>
     <div class="row" style="margin-top:12px;gap:18px;flex-wrap:wrap"><span class="small">Bod zvratu provozu: <b>${c.be_operating != null ? c.be_operating + ' praní / den' : 'nedosažen do 60/den'}</b></span>${c.payment ? `<span class="small">Bod zvratu po splátce: <b>${c.be_cash != null ? c.be_cash + ' praní / den' : 'nedosažen'}</b></span>` : ''}<span class="small">Investice celkem: <b>${kc(c.invest)}</b></span>${c.payment ? `<span class="small">Splátka: <b>${kc(c.payment)}/měs</b></span>` : ''}</div>
