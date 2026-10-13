@@ -25,7 +25,7 @@ const PAGE = `<!DOCTYPE html>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Prověřte si místo a spočítejte ekonomiku prádlomatu – webová aplikace</title>
-<meta name="description" content="Než koupíte prádlomat, prověřte si místo a spočítejte jeho ekonomiku. Webová aplikace: 3 reálné případové studie, kalkulačka ekonomiky, checklist a orientační vyhodnocení lokality s exportem do PDF. Přístup na 12 měsíců, jednorázová platba." />
+<meta name="description" content="Než koupíte prádlomat, prověřte si místo a spočítejte jeho ekonomiku. Webová aplikace: vyhledávač míst se spádovostí, kalkulačka ekonomiky a AI studie lokality s exportem do PDF. Přístup na 12 měsíců, jednorázová platba." />
 <meta name="theme-color" content="#04060c" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='17' fill='%23121d36'/%3E%3Cpath d='M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22' stroke='%234fd1ff' stroke-width='4.5' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -429,8 +429,8 @@ const PAGE = `<!DOCTYPE html>
     <h2>Co dostanete</h2>
     <div class="list">
       <div class="item"><div class="n">1</div><div><b>Přístup do webové aplikace na 12 měsíců</b><span>Jednorázová platba, přístup se automaticky placeně neobnovuje. Funguje v mobilu i na počítači.</span></div></div>
-      <div class="item"><div class="n">2</div><div><b>3 reálné případové studie z naší sítě</b><span>Tři skutečné lokality – dobrá, průměrná a slabá: jak vypadá místo, nájem, počet zákazníků a cykly po 1., 3. a 6. měsíci, a jak dopadla rovnice T − N − E − S − U. Anonymizováno, čísla reálná.</span></div></div>
-      <div class="item"><div class="n">3</div><div><b>Kalkulačka ekonomiky a checklist prověření místa</b><span>Investice, doprava a instalace, nájem, energie a voda podle spotřeby nebo zjednodušeně v %, servis, software, platební poplatky, pojištění, marketing, rezerva na obnovu, financování. Slabý / střední / silný scénář, bod zvratu, citlivost na návštěvnost a nájem. Odděleně provozní výsledek, peněžní tok po splátkách a návratnost. Částky s DPH i bez DPH, režim plátce / neplátce.</span></div></div>
+      <div class="item"><div class="n">2</div><div><b>Vyhledávač míst</b><span>Zadáte město nebo umístíte špendlík do mapy a dostanete spádovost v okruhu 5 / 10 / 15 km, kapacitu oblasti, prádlomaty, které už v okolí fungují, a seznam míst, kde by prádlomat mohl stát (supermarkety, benzínky, myčky…) včetně kontaktů na provozovatele.</span></div></div>
+      <div class="item"><div class="n">3</div><div><b>Kalkulačka ekonomiky lokality</b><span>Investice, doprava a instalace, nájem, energie a voda podle spotřeby nebo zjednodušeně v %, servis, software, platební poplatky, pojištění, marketing, rezerva na obnovu, financování. Slabý / střední / silný scénář, bod zvratu, citlivost na návštěvnost a nájem. Odděleně provozní výsledek, peněžní tok po splátkách a návratnost. Částky s DPH i bez DPH, režim plátce / neplátce.</span></div></div>
       <div class="item"><div class="n">4</div><div><b>Orientační vyhodnocení lokality</b><span>Pro každou adresu report se čtyřmi možnými výsledky: <b style="display:inline">Vhodné podle dostupných podkladů</b> · <b style="display:inline">Vhodné při splnění podmínek</b> · <b style="display:inline">Nevhodné podle dostupných podkladů</b> · <b style="display:inline">Nedostatek údajů pro posouzení</b>. Report odděluje ověřené skutečnosti (se zdrojem a datem), údaje zadané vámi, modelové předpoklady, chybějící údaje, hlavní rizika a doporučené další kroky. Údaje, které aplikace nemá z připojeného zdroje, označí jako chybějící a doplníte je ručně.</span></div></div>
       <div class="item"><div class="n">5</div><div><b>Export výsledků do PDF</b><span>Report i scénáře si stáhnete pro banku, společníka nebo pronajímatele.</span></div></div>
     </div>
@@ -445,13 +445,13 @@ const PAGE = `<!DOCTYPE html>
       <div class="price hi">
         <div class="tag">Základ</div>
         <div class="amt">4 900 <small>Kč s DPH · jednorázově</small></div>
-        <ul><li>Přístup do aplikace na 12 měsíců</li><li>3 reálné případové studie</li><li>Kalkulačka a checklist</li><li>Vyhodnocení 3 různých adres</li><li>Neomezené změny scénářů u těchto adres</li><li>Export výsledků do PDF</li></ul>
+        <ul><li>Přístup do aplikace na 12 měsíců</li><li>Vyhledávač míst – 3 vyhledání</li><li>Kalkulačka ekonomiky a AI studie lokality</li><li>Vyhodnocení 3 různých adres</li><li>Další vyhodnocení i vyhledání lze dokoupit</li><li>Neomezené změny scénářů u těchto adres</li><li>Export výsledků do PDF</li></ul>
         <a class="btn" href="#objednat" data-cta="basic" onclick="pickVariant('basic')">Vybrat Základ</a>
       </div>
       <div class="price">
         <div class="tag">Plus</div>
         <div class="amt">9 900 <small>Kč s DPH · jednorázově</small></div>
-        <ul><li>Vše ze Základu</li><li>Celkem 10 různých adres</li><li>Porovnání lokalit vedle sebe</li><li>Jeden 30minutový konzultační hovor</li></ul>
+        <ul><li>Vše ze Základu</li><li>Celkem 10 různých adres</li><li>Vyhledávač míst – 10 vyhledání</li><li>Porovnání lokalit vedle sebe</li><li>Jeden 30minutový konzultační hovor</li></ul>
         <a class="btn sec" href="#objednat" data-cta="plus" onclick="pickVariant('plus')">Vybrat Plus</a>
       </div>
       <div class="price">
