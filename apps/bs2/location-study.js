@@ -157,6 +157,7 @@ async function runStudy({ site, d, c, ev, area, model }) {
 // ── Render studie ──────────────────────────────────────────────────────────────
 const kc = (n) => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('cs-CZ') + ' Kč';
 const rng = (a, unit) => Array.isArray(a) ? Math.round(a[0]).toLocaleString('cs-CZ') + '–' + Math.round(a[1]).toLocaleString('cs-CZ') + (unit ? ' ' + unit : '') : (a == null ? '—' : String(a));
+const lo = (a, unit) => Array.isArray(a) ? 'od ' + Math.round(a[0]).toLocaleString('cs-CZ') + (unit ? ' ' + unit : '') : (a == null ? '—' : String(a));
 const li = (arr) => (Array.isArray(arr) && arr.length) ? '<ul style="margin:0;padding-left:18px;color:var(--text2);display:flex;flex-direction:column;gap:5px">' + arr.map((t) => '<li>' + esc(String(t)) + '</li>').join('') + '</ul>' : '<p class="small muted" style="margin:0">—</p>';
 const CLS = { 'Vhodné podle dostupných podkladů': 'ok', 'Vhodné při splnění podmínek': 'cond', 'Nevhodné podle dostupných podkladů': 'bad', 'Nedostatek údajů pro posouzení': 'na' };
 
@@ -227,15 +228,16 @@ function studyPage(s, site, st, nav, R, siteCoords) {
     <p class="small muted" style="margin:10px 0 0">${st._applied_washes ? 'Scénáře v ekonomické kalkulaci níže jsou nastavené podle tohoto odhadu (' + esc(st._applied_washes.weak) + ' / ' + esc(st._applied_washes.mid) + ' / ' + esc(st._applied_washes.strong) + ' zákazníků za den; 1 zákazník = 1 praní vč. sušení).' : ''}</p></div>
 
   ${R.scenarios}
-  <div class="card"><h2>Odhad nákladů – přípojky a doprava</h2>
+  <div class="card"><h2>Orientační náklady – přípojky a doprava</h2>
+    <div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(245,180,0,.5);background:rgba(245,180,0,.1);color:#ffd866;font-size:13.5px">⚠ Částky níže <b>nelze brát jako relevantní nabídku</b> – jde o hrubý spodní odhad podle délek tras. Skutečnou cenu určí až <b>místní šetření a konkrétní nacenění tohoto případu</b> (Best Series).</div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
-      <div class="stat"><div class="l">Voda</div><div class="v" style="font-size:18px">${cn.water_czk ? rng(cn.water_czk, 'Kč') : 'vybudována / —'}</div></div>
-      <div class="stat"><div class="l">Odpad</div><div class="v" style="font-size:18px">${cn.sewer_czk ? rng(cn.sewer_czk, 'Kč') : 'vybudován / —'}</div></div>
-      <div class="stat"><div class="l">Elektřina</div><div class="v" style="font-size:18px">${cn.power_czk ? rng(cn.power_czk, 'Kč') : 'vybudována / —'}</div></div>
-      <div class="stat"><div class="l">Zpevněná plocha</div><div class="v" style="font-size:18px">${cn.surface_czk ? rng(cn.surface_czk, 'Kč') : 'vybudována / —'}</div></div>
-      <div class="stat"><div class="l">Přípojky celkem</div><div class="v" style="font-size:18px">${rng(cn.total_czk, 'Kč')}</div></div>
-      <div class="stat"><div class="l">Doprava a usazení</div><div class="v" style="font-size:18px">${rng(co.delivery_czk, 'Kč')}</div></div></div>
-    <p class="small muted" style="margin:8px 0 0">Přípojky: ${esc(cn.assumptions || '')}</p><p class="small muted" style="margin:4px 0 0">Doprava: ${esc(co.delivery_assumptions || '')}</p><p class="small muted" style="margin:4px 0 0">Ceny bez DPH, orientační – přesnou cenu stanoví Best Series po místním šetření.</p></div>
+      <div class="stat"><div class="l">Voda</div><div class="v" style="font-size:18px">${cn.water_czk ? lo(cn.water_czk, 'Kč') : 'vybudována'}</div></div>
+      <div class="stat"><div class="l">Odpad</div><div class="v" style="font-size:18px">${cn.sewer_czk ? lo(cn.sewer_czk, 'Kč') : 'vybudován'}</div></div>
+      <div class="stat"><div class="l">Elektřina</div><div class="v" style="font-size:18px">${cn.power_czk ? lo(cn.power_czk, 'Kč') : 'vybudována'}</div></div>
+      <div class="stat"><div class="l">Zpevněná plocha</div><div class="v" style="font-size:18px">${cn.surface_czk ? lo(cn.surface_czk, 'Kč') : 'vybudována'}</div></div>
+      <div class="stat"><div class="l">Přípojky celkem</div><div class="v" style="font-size:18px">${lo(cn.total_czk, 'Kč')}</div></div>
+      <div class="stat"><div class="l">Doprava a usazení</div><div class="v" style="font-size:18px">${lo(co.delivery_czk, 'Kč')}</div></div></div>
+    <p class="small muted" style="margin:8px 0 0">Ceny bez DPH. Základ odhadu – přípojky: ${esc(cn.assumptions || '')}</p><p class="small muted" style="margin:4px 0 0">Doprava: ${esc(co.delivery_assumptions || '')}</p></div>
 
   <div class="card"><h2>Doporučená výše nájmu</h2><div class="row" style="gap:18px;flex-wrap:wrap"><div><div class="k">Doporučeno</div><div class="big">${kc(rent.recommended_monthly_czk)}<span class="small muted" style="font-weight:500"> /měs</span></div></div><div><div class="k">Rozpětí</div><div class="big" style="font-size:20px">${rng(rent.range_czk, 'Kč')}</div></div><div><div class="k">Maximum, při kterém to ještě dává smysl</div><div class="big" style="font-size:20px">${kc(rent.max_viable_czk)}</div></div></div><p class="small muted" style="margin:8px 0 0">${esc(rent.reasoning || '')}</p></div>
 
