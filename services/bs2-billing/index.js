@@ -66,14 +66,17 @@ async function bankFields(cat, currency) {
 // Odběratele najdi (IČO / e-mail / jméno) nebo založ.
 async function resolveCompany(c) {
   c = c || {};
-  const name = String(c.name || '').trim() || String(c.email || 'Zákazník BS2');
+  let name = String(c.name || '').trim() || String(c.email || 'Zákazník BS2');
+  // Pole „Firma / IČO" z objednávky: 8místné číslo = IČO (zbytek je název firmy)
+  let ico = c.ico ? String(c.ico).replace(/\D/g, '') : '';
+  if (!ico) { const m = name.match(/\b(\d{8})\b/); if (m) { ico = m[1]; const rest = name.replace(m[0], '').replace(/^[\s,;/-]+|[\s,;/-]+$/g, '').trim(); if (rest) name = rest; } }
   let co = null;
-  if (c.ico) co = await prisma.company.findFirst({ where: { ico: String(c.ico) } }).catch(() => null);
-  if (!co && c.email) co = await prisma.company.findFirst({ where: { email: { equals: String(c.email), mode: 'insensitive' }, type: 'customer' } }).catch(() => null);
+  // Spárování jen podle IČO nebo přesného názvu. Shoda jen podle e-mailu se nepoužívá — e-mail může patřit jiné firmě.
+  if (ico) co = await prisma.company.findFirst({ where: { ico } }).catch(() => null);
   if (!co) co = await prisma.company.findFirst({ where: { name: { equals: name, mode: 'insensitive' } } }).catch(() => null);
   if (!co) {
     co = await prisma.company.create({ data: {
-      name: name.slice(0, 255), ico: c.ico || null, dic: c.dic || null, type: 'customer', email: c.email || null, phone: c.phone ? String(c.phone).slice(0, 20) : null,
+      name: name.slice(0, 255), ico: ico || null, dic: c.dic || null, type: 'customer', email: c.email || null, phone: c.phone ? String(c.phone).slice(0, 20) : null,
       address: c.address || null, city: c.city || null, zip: c.zip || null, country: (c.country || 'CZ').slice(0, 2),
     } });
   } else if (!co.email && c.email) {
@@ -99,7 +102,8 @@ async function sendInvoice(invoiceId, kind) {
   const { sendMail } = require('../email');
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { company: true, items: { orderBy: { line_order: 'asc' } } } });
   if (!inv) return { ok: false, error: 'Faktura nenalezena' };
-  const to = inv.company && inv.company.email;
+  // Příjemce e-mailu = e-mail objednávajícího (uložený při vystavení), jinak e-mail firmy
+  const to = inv.sent_to || (inv.company && inv.company.email);
   if (!to) { await prisma.invoice.update({ where: { id: invoiceId }, data: { delivery_status: 'failed', send_error: 'Odběratel nemá e-mail' } }); return { ok: false, error: 'Odběratel nemá e-mail' }; }
   await prisma.invoice.update({ where: { id: invoiceId }, data: { delivery_status: 'queued', send_attempts: { increment: 1 } } });
   try {
@@ -165,7 +169,7 @@ async function issueProforma(p) {
       invoice_number: no, external_number: ref, type: 'proforma_issued', direction: 'ar', invoice_role: 'deposit', language: p.language === 'en' ? 'en' : 'cs',
       company_id: company.id, currency, subtotal: b.subtotal, vat_amount: b.vat, total: b.total, vat_regime: vatRate > 0 ? 'standard' : (p.vat_regime || 'outside_scope'),
       date_issued: now, date_taxable: now, date_due: new Date(Date.now() + PROFORMA_DUE_DAYS * 86400000),
-      variable_symbol: no.replace(/\D/g, '').slice(0, 10), status: 'issued', source: 'bs2_products',
+      variable_symbol: no.replace(/\D/g, '').slice(0, 10), status: 'issued', source: 'bs2_products', sent_to: (p.customer && p.customer.email) || null,
       note: (p.note ? p.note + ' ' : '') + 'Zálohová faktura k objednávce č. ' + p.ref + ' v Best Series 2.0. Splatnost ' + PROFORMA_DUE_DAYS + ' dny.',
       ...(await bankFields('products', currency)),
       items: { create: b.rows },
@@ -201,7 +205,7 @@ async function processPayment(paymentId) {
           currency: pf.currency, exchange_rate: pf.exchange_rate, subtotal: pf.subtotal, vat_amount: pf.vat_amount, total: pf.total, paid_amount: pf.total, vat_regime: pf.vat_regime,
           date_issued: new Date(), date_taxable: received, date_due: new Date(), variable_symbol: pf.variable_symbol, payment_method: 'bank_transfer',
           partner_bank_account: pf.partner_bank_account, partner_iban: pf.partner_iban, partner_bic: pf.partner_bic,
-          status: 'paid', source: 'bs2_products', note: 'Uhrazeno zálohovou fakturou ' + pf.invoice_number + '. K úhradě 0,00 ' + pf.currency + '.',
+          status: 'paid', source: 'bs2_products', sent_to: pf.sent_to || null, note: 'Uhrazeno zálohovou fakturou ' + pf.invoice_number + '. K úhradě 0,00 ' + pf.currency + '.',
           items: { create: pf.items.map((it, i) => ({ line_order: i, description: it.description, quantity: it.quantity, unit: it.unit, unit_price: it.unit_price, vat_rate: it.vat_rate, subtotal: it.subtotal, vat_amount: it.vat_amount, total: it.total })) },
         } });
       });
@@ -232,7 +236,7 @@ async function issueOnline(p) {
       invoice_number: no, external_number: ref, type: 'issued', direction: 'ar', invoice_role: 'full', language: p.language === 'en' ? 'en' : 'cs',
       company_id: company.id, currency, subtotal: b.subtotal, vat_amount: b.vat, total: b.total, paid_amount: b.total, vat_regime: vatRate > 0 ? 'standard' : (p.vat_regime || 'outside_scope'),
       date_issued: paidAt, date_taxable: paidAt, date_due: paidAt, variable_symbol: no.replace(/\D/g, '').slice(0, 10), payment_method: 'card',
-      status: 'paid', source: 'bs2_online', note: 'Zaplaceno online kartou přes Stripe' + (p.note ? ' — ' + p.note : '') + '. Objednávka č. ' + p.ref + '.',
+      status: 'paid', source: 'bs2_online', sent_to: (p.customer && p.customer.email) || null, note: 'Zaplaceno online kartou přes Stripe' + (p.note ? ' — ' + p.note : '') + '. Objednávka č. ' + p.ref + '.',
       ...(await bankFields('online', currency)),
       items: { create: b.rows },
     } });
