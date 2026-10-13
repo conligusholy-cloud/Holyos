@@ -102,6 +102,15 @@ function normalizeCompanyBody(body, selfId) {
 }
 
 // POST /api/wh/companies
+// GET /api/wh/companies/:id — detail společnosti (formulář Upravit společnost)
+router.get('/companies/:id(\\d+)', async (req, res, next) => {
+  try {
+    const c = await prisma.company.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (!c) return res.status(404).json({ error: 'Společnost nenalezena' });
+    res.json(c);
+  } catch (err) { next(err); }
+});
+
 router.post('/companies', async (req, res, next) => {
   try {
     const company = await prisma.company.create({ data: normalizeCompanyBody(req.body) });
