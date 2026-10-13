@@ -432,7 +432,18 @@ app.get('/gdpr', (req, res) => res.send(V.gdprPage()));
 // Sběr událostí z prohlížeče přihlášeného uživatele (stránky, kliknutí, čas, scroll) — vždy 204, chyby se ignorují
 const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact', 'ping'];
 // Živý počet lidí na webu pro lištu (přihlášení uživatelé; ping každých 30 s). Za hodinu = unikátní uživatelé s aktivitou do 60 min.
-app.get('/api/presence', (req, res) => { const s = readCookie(req, USER_COOKIE) || readCookie(req, ADMIN_COOKIE); if (!s) return res.status(401).json({}); res.set('Cache-Control', 'no-store'); const c = ST.presenceCounts(); res.json({ now: c.now, hour: Math.max(c.hour, c.now), total: Math.max(c.hour, c.now) }); });
+// Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
+let _presCache = { at: 0, data: null };
+app.get('/api/presence', wrap(async (req, res) => {
+  const s = readCookie(req, USER_COOKIE) || readCookie(req, ADMIN_COOKIE); if (!s) return res.status(401).json({});
+  res.set('Cache-Control', 'no-store');
+  if (!_presCache.data || Date.now() - _presCache.at > 10e3) {
+    const now = ST.presenceCounts().now;
+    let hour = 0; try { hour = Number(((await q("SELECT count(DISTINCT supporter_id)::int AS c FROM user_events WHERE created_at > now() - interval '60 minutes' AND supporter_id IS NOT NULL")).rows[0] || {}).c || 0); } catch (e) { hour = 0; }
+    _presCache = { at: Date.now(), data: { now, hour, total: now + hour } };
+  }
+  res.json(_presCache.data);
+}));
 app.post('/api/track', (req, res) => {
   try {
     const s = readCookie(req, USER_COOKIE); const b = req.body || {};
