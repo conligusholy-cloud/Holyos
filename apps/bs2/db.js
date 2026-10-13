@@ -263,6 +263,8 @@ async function migrate() {
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS evaluated_at TIMESTAMPTZ;
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study JSONB; -- AI studie lokality
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_at TIMESTAMPTZ; -- první vyhodnocení = odečet lokality z balíčku
+    ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_status TEXT; -- running | done | error (studie běží na pozadí)
+    ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_error TEXT;
   `);
 }
 

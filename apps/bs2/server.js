@@ -528,9 +528,9 @@ app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
   res.redirect(303, session.url);
 }));
 app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
-  const sites = (await q('SELECT id, name, address, city, calc, result, evaluated_at FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
+  const sites = (await q('SELECT id, name, address, city, calc, result, evaluated_at, study_status, study_error, (study IS NOT NULL) AS has_study FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
   const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhodnocení se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : req.query.msg;
-  const info = await locInfo(req.user, msg); info.used = await locUsed(req.user.id);
+  const info = await locInfo(req.user, msg); info.used = await locUsed(req.user.id); info.evaluating = Number(req.query.evaluating) || 0;
   res.send(LAPP.listPage(req.user, sites, info));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
@@ -602,7 +602,7 @@ async function locSave(req, res, site) {
   const d = LAPP.clean(req.body || {});
   if (!d.name || !d.address) return res.status(400).send(LAPP.siteForm(req.user, site, d, 'Vyplňte název a adresu lokality.', false, false, await locProducts()));
   const mode = String(req.body.goto || 'save'); // 'save' | 'form' | 'eval'
-  const evalNow = mode === 'eval';
+  const evalNow = mode === 'eval' && !(site && site.evaluated_at); // každá lokalita jen jednou
   let c = null, ev = null, calcSummary = null, result = null;
   if (evalNow) {
     c = LAPP.calc(d); ev = LAPP.evaluate(d, c);
@@ -629,22 +629,44 @@ async function locSave(req, res, site) {
       [req.user.id, d.name, d.address, d.city || null, JSON.stringify(d), calcSummary ? JSON.stringify(calcSummary) : null, result ? JSON.stringify(result) : null, evalNow ? new Date() : null])).rows[0].id;
   }
   if (evalNow) {
-    // po vyhodnocení rovnou AI studie (= report)
-    try {
-      const siteNow = (await q('SELECT * FROM location_sites WHERE id=$1', [id])).rows[0];
-      const study = await locBuildStudy(siteNow, d, c, ev);
-      await q('UPDATE location_sites SET study=$2, study_at=now() WHERE id=$1', [id, JSON.stringify(study)]);
-      return res.redirect('/lokalita/' + id + '/studie');
-    } catch (e) { console.error('[bs2] studie:', e.message); return res.redirect('/lokalita/' + id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
+    // AI studie běží na pozadí; zákazník vidí obrazovku „zpracováváme (cca 15 min)" a v seznamu běžící kolečko
+    await locStartStudy(id, req.user);
+    return res.redirect('/lokalita?evaluating=' + id);
   }
   return res.redirect('/lokalita/' + id + '?saved=1' + (mode === 'form' ? '#najem' : ''));
 }
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
+// Spuštění AI studie na pozadí (jedna lokalita = jedno vyhodnocení). Po dokončení e-mail zákazníkovi.
+const locStudyRunning = new Set();
+async function locStartStudy(id, user) {
+  if (locStudyRunning.has(id)) return;
+  await q("UPDATE location_sites SET study_status='running', study_error=NULL WHERE id=$1", [id]);
+  locStudyRunning.add(id);
+  const base = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
+  (async () => {
+    const site = (await q('SELECT * FROM location_sites WHERE id=$1', [id])).rows[0];
+    const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
+    try {
+      const study = await locBuildStudy(site, d, c, ev);
+      await q("UPDATE location_sites SET study=$2, study_at=now(), study_status='done', study_error=NULL WHERE id=$1", [id, JSON.stringify(study)]);
+      console.log('[bs2] studie hotova #' + id);
+      if (user && user.email) sendBs2Mail({ to: user.email, subject: 'Studie lokality „' + site.name + '" je hotová', body: 'Dobrý den, vyhodnocení lokality „' + site.name + '" je dokončené. Studii s hodnocením, spádovostí, odhadem poptávky a ekonomickými scénáři najdete v aplikaci.\n\nBest Series s.r.o.', link: base + '/lokalita/' + id + '/studie', linkLabel: 'Otevřít studii' }).catch((e) => console.warn('[bs2] studie mail:', e.message));
+    } catch (e) {
+      console.error('[bs2] studie #' + id + ':', e.message);
+      await q("UPDATE location_sites SET study_status='error', study_error=$2 WHERE id=$1", [id, String(e.message || e).slice(0, 500)]).catch(() => {});
+    } finally { locStudyRunning.delete(id); }
+  })();
+}
+app.get('/api/location/sites-status', wrap(requireLocation), wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const rows = (await q('SELECT id, study_status FROM location_sites WHERE supporter_id=$1 AND evaluated_at IS NOT NULL', [req.user.id])).rows;
+  res.json(rows.map((r) => ({ id: r.id, status: r.study_status || 'done' })));
+}));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
 app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const dd = Object.assign({}, site.data || {}); if (req.query.ai === '1' && site.study && site.study.demand && site.study.demand.washes_per_day) { const w = site.study.demand.washes_per_day; if (w.weak) dd.washes_weak = String(w.weak); if (w.mid) dd.washes_mid = String(w.mid); if (w.strong) dd.washes_strong = String(w.strong); }
   res.send(LAPP.siteForm(req.user, site, dd, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: vyhodnocení v balíčku jsou vyčerpána. Dokoupit je můžete v Moje lokality.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
-app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c), req.query.study_err ? String(req.query.study_err).slice(0, 300) : '')); }));
+app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); if (site.study_status === 'running') return res.redirect('/lokalita?evaluating=' + site.id); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c), req.query.study_err ? String(req.query.study_err).slice(0, 300) : '')); }));
 async function locBuildStudy(site, d, c, ev) {
   // Spádová oblast: přesně kolem prádlomatu (lat,lng); když HolyOS souřadnice nezpracuje nebo nevrátí obce, zkusit město
   let area = null;
@@ -666,15 +688,14 @@ async function locBuildStudy(site, d, c, ev) {
 app.post('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => {
   const site = await locSite(req); if (!site) return res.redirect('/lokalita');
   if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1');
-  if (rateLimited('study:' + req.user.id, 6, 3600e3)) return res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Příliš mnoho studií za hodinu, zkuste to později.'));
-  const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c);
-  try {
-    const study = await locBuildStudy(site, d, c, ev);
-    await q('UPDATE location_sites SET study=$2, study_at=now() WHERE id=$1', [site.id, JSON.stringify(study)]);
-    res.redirect('/lokalita/' + site.id + '/studie');
-  } catch (e) { console.error('[bs2] studie:', e.message); res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
+  // Každá lokalita se vyhodnocuje jen jednou; znovu jen po chybě nebo pro správce (Tomáš/Jan)
+  if (site.study && site.study_status !== 'error' && !isAllowedAdmin(req.user)) return res.redirect('/lokalita/' + site.id + '/studie');
+  if (site.study_status === 'running') return res.redirect('/lokalita?evaluating=' + site.id);
+  if (rateLimited('study:' + req.user.id, 6, 3600e3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Příliš mnoho studií za hodinu, zkuste to později.'));
+  await locStartStudy(site.id, req.user);
+  res.redirect('/lokalita?evaluating=' + site.id);
 }));
-app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); const d = Object.assign({}, site.data || {});
+app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study && site.study_status === 'running') return res.redirect('/lokalita?evaluating=' + site.id); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); site.can_refresh = isAllowedAdmin(req.user); const d = Object.assign({}, site.data || {});
   // Ekonomické scénáře ve studii vždy odpovídají odhadu poptávky (zákazníků/den slabý/střední/silný)
   const cd = site.study && site.study.demand && (site.study.demand.customers_per_day || site.study.demand.washes_per_day);
   if (cd && Number(cd.weak) > 0 && Number(cd.mid) > 0 && Number(cd.strong) > 0) { d.washes_weak = String(cd.weak); d.washes_mid = String(cd.mid); d.washes_strong = String(cd.strong); if (!site.study._applied_washes) site.study._applied_washes = { weak: d.washes_weak, mid: d.washes_mid, strong: d.washes_strong }; }
