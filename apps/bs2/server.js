@@ -1072,7 +1072,7 @@ app.get('/api/support/state', wrap(async (req, res) => {
   if (Number.isFinite(after)) { msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
   res.set('Cache-Control', 'no-store').json({ online, unread, msgs, agent: await supportAgent() });
 }));
-const SUP_COLS = 'id, supporter_id, sender, agent_name, body, read_by_agent, read_by_user, created_at, file_name, file_type, file_size';
+const SUP_COLS = 'id, supporter_id, sender, agent_name, body, read_by_agent, read_by_user, created_at, file_name, file_type, file_size, order_id';
 const supUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 // Skutečný typ souboru podle hlavičky (magic bytes) — nevěříme příponě ani MIME od prohlížeče
 function sniffType(buf) {
@@ -1334,7 +1334,9 @@ app.get('/admin/podpora', requireAdmin, wrap(async (req, res) => {
     msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [sid])).rows;
     await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
   }
-  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent() }));
+  let ord = null; const oid = parseInt(req.query.order, 10);
+  if (sid && Number.isFinite(oid)) ord = (await q('SELECT id, product_name FROM orders WHERE id=$1 AND supporter_id=$2', [oid, sid])).rows[0] || null;
+  res.send(V.adminSupport({ admin: req.admin, online, threads, who, msgs, holyosUrl: HOLYOS_URL, msg: req.query.msg || '', agents: await supportAgents(), agent: await supportAgent(), order: ord }));
 }));
 app.post('/admin/podpora/agents', requireAdmin, wrap(async (req, res) => {
   const b = req.body || {}; let agents = await supportAgents();
@@ -1355,7 +1357,23 @@ app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file')
   const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
   const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   let row = null;
-  if (body || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null])).rows[0];
+  // Zpráva k objednávce (tlačítko Chat v Objednávkách): ověř, že objednávka patří uživateli, a předřaď číslo objednávky
+  let ord = null; const oidIn = parseInt((req.body || {}).order_id, 10);
+  if (Number.isFinite(oidIn)) ord = (await q('SELECT id, product_name FROM orders WHERE id=$1 AND supporter_id=$2', [oidIn, sid])).rows[0] || null;
+  const bodyOut = ord && body ? 'K objednávce č. ' + ord.id + ' (' + ord.product_name + '): ' + body : body;
+  if (bodyOut || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data, order_id) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8,$9) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', bodyOut || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null, ord ? ord.id : null])).rows[0];
+  // E-mail uživateli: nová zpráva v chatu k objednávce (nejvýš 1× za 10 min na objednávku, ať se nespamuje)
+  if (row && ord) {
+    try {
+      const recent = (await q("SELECT count(*)::int AS c FROM support_messages WHERE supporter_id=$1 AND order_id=$2 AND sender='agent' AND created_at > now() - interval '10 minutes' AND id<>$3", [sid, ord.id, row.id])).rows[0].c;
+      const u = (await q('SELECT email, first_name FROM supporters WHERE id=$1', [sid])).rows[0];
+      if (!recent && u && u.email) {
+        sendBs2Mail({ to: u.email, subject: 'Nová zpráva k objednávce č. ' + ord.id + ' — Best Series 2.0', link: PUBLIC_URL + '/podpora', linkLabel: 'Otevřít chat',
+          body: (u.first_name ? 'Dobrý den ' + u.first_name + ',' : 'Dobrý den,') + '\n\nmáte novou zprávu v chatu, která se týká vaší objednávky č. ' + ord.id + ' (' + ord.product_name + ').\n\nOdpovědět můžete v chatu v aplikaci Best Series 2.0.\n\nBest Series s.r.o.' })
+          .catch((e) => console.warn('[bs2] chat k objednávce mail:', e.message));
+      }
+    } catch (e) { console.warn('[bs2] chat k objednávce:', e.message); }
+  }
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);
 }));

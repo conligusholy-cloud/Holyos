@@ -206,6 +206,8 @@ async function migrate() {
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_type TEXT;
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_size INTEGER;
     ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS file_data BYTEA;
+    -- Zpráva z administrace vázaná na objednávku (tlačítko Chat v Objednávkách)
+    ALTER TABLE support_messages ADD COLUMN IF NOT EXISTS order_id INTEGER;
     -- Prověření lokality (/location): objednávky balíčků placené přes Stripe
     CREATE TABLE IF NOT EXISTS location_orders (
       id            SERIAL PRIMARY KEY,
