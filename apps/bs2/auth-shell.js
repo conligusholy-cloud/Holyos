@@ -90,11 +90,11 @@ function authShell({ title, card, members = null, esc, wide = false }) {
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)} · Best Series 2.0</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
-<style>${AUTH_CSS}</style></head><body>
+<style>${AUTH_CSS}${require('./views').PRESENCE_CSS}</style></head><body>
 <canvas id="net" aria-hidden="true"></canvas><div class="glow a"></div><div class="glow b"></div><div class="glow c"></div><div class="grid" aria-hidden="true"></div>
 <div class="wrap">
   <section class="hero">
-    <div class="brand"><div class="mark">${logoSvg(44, 'a')}</div><b>Best Series <span>2.0</span></b></div>
+    <div class="brand" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div class="mark">${logoSvg(44, 'a')}</div><b>Best Series <span>2.0</span></b><span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut"><i></i>právě si prohlíží <b id="pr-hour">–</b></span></div>
     <div class="eyebrow"><i></i>Platforma nové generace · online</div>
     <h1><span class="g">Vítej zpět</span><br>v Best Series 2.0</h1>
     <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem jako dřív — zbytek je nový.</p>
@@ -104,7 +104,7 @@ function authShell({ title, card, members = null, esc, wide = false }) {
   <section class="side"><div class="card${wide ? ' wide' : ''}"><div class="in">${card}</div></div></section>
 </div>
 <p class="copy">© ${new Date().getFullYear()} Best Series s.r.o. · bestseries2.cz</p>
-<script>${AUTH_JS}</script></body></html>`;
+<script>${AUTH_JS}</script><script>${require('./views').PRESENCE_JS}</script></body></html>`;
 }
 
 module.exports = { authShell, ICON, AUTH_JS };

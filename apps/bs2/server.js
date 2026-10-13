@@ -434,13 +434,15 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Živý počet lidí na webu pro lištu (přihlášení uživatelé; ping každých 30 s). Za hodinu = unikátní uživatelé s aktivitou do 60 min.
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
+// Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
+app.post('/api/presence/ping', (req, res) => { const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) ST.anonTouch(sid); res.json({ ok: true }); });
 app.get('/api/presence', wrap(async (req, res) => {
-  const s = readCookie(req, USER_COOKIE) || readCookie(req, ADMIN_COOKIE); if (!s) return res.status(401).json({});
   res.set('Cache-Control', 'no-store');
   if (!_presCache.data || Date.now() - _presCache.at > 10e3) {
-    const now = ST.presenceCounts().now;
+    const c = ST.presenceCounts();
     let hour = 0; try { hour = Number(((await q("SELECT count(DISTINCT supporter_id)::int AS c FROM user_events WHERE created_at > now() - interval '60 minutes' AND supporter_id IS NOT NULL")).rows[0] || {}).c || 0); } catch (e) { hour = 0; }
-    _presCache = { at: Date.now(), data: { now, hour, total: now + hour } };
+    const now = c.now + c.anon_now, hr = Math.max(hour, c.hour) + c.anon_hour;
+    _presCache = { at: Date.now(), data: { now, hour: hr, total: now + hr } };
   }
   res.json(_presCache.data);
 }));
