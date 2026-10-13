@@ -611,7 +611,7 @@ app.post('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, r
     res.redirect('/lokalita/' + site.id + '/studie');
   } catch (e) { console.error('[bs2] studie:', e.message); res.redirect('/lokalita/' + site.id + '/report?study_err=' + encodeURIComponent('Studii se nepodařilo vypracovat: ' + e.message)); }
 }));
-app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c); res.send(LSTUDY.studyPage(req.user, site, site.study, LAPP.NAV(req.user), LAPP.reportSections(site, d, c, ev))); }));
+app.get('/lokalita/:id(\\d+)/studie', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.study) return res.redirect('/lokalita/' + site.id + '/report'); const d = site.data || {}; const c = LAPP.calc(d), ev = LAPP.evaluate(d, c); res.send(LSTUDY.studyPage(req.user, site, site.study, LAPP.NAV(req.user), LAPP.reportSections(site, d, c, ev), (d.lat && d.lng) ? { lat: +d.lat, lng: +d.lng } : null)); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {

@@ -135,8 +135,9 @@ const rng = (a, unit) => Array.isArray(a) ? Math.round(a[0]).toLocaleString('cs-
 const li = (arr) => (Array.isArray(arr) && arr.length) ? '<ul style="margin:0;padding-left:18px;color:var(--text2);display:flex;flex-direction:column;gap:5px">' + arr.map((t) => '<li>' + esc(String(t)) + '</li>').join('') + '</ul>' : '<p class="small muted" style="margin:0">—</p>';
 const CLS = { 'Vhodné podle dostupných podkladů': 'ok', 'Vhodné při splnění podmínek': 'cond', 'Nevhodné podle dostupných podkladů': 'bad', 'Nedostatek údajů pro posouzení': 'na' };
 
-function studyPage(s, site, st, nav, R) {
+function studyPage(s, site, st, nav, R, siteCoords) {
   R = R || { map: '', scenarios: '', facts: '' };
+  if (siteCoords && siteCoords.lat) { st._facts = st._facts || {}; st._facts.site = siteCoords; }
   const v = st.verdict || {}; const t = st.traffic || {}; const dem = st.demand || {}; const co = st.costs || {}; const cn = co.connections || {}; const rent = st.rent || {}; const pk = st.parking || {};
   const meta = st._meta || {}; const f = st._facts || {};
   const sizeBadge = (z) => `<span class="badge ${z === 'VELKÝ' ? 'blocked' : z === 'STŘEDNÍ' ? 'active' : 'invited'}">${esc(z || '')}</span>`;
