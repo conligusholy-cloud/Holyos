@@ -554,7 +554,8 @@
             <label style="font-size:12px;">Účet CZK<br><select id="bs2-products-CZK" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">Účet EUR<br><select id="bs2-products-EUR" style="min-width:260px;"></select></label>
             <label style="font-size:12px;">DPH %<br><input type="number" id="bs2-products-vat" min="0" max="30" style="width:70px;"></label>
-            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;" title="Vypnuto = faktura se jen vystaví a odešleš ji ručně po kontrole (v BS2 → Objednávky)"><input type="checkbox" id="bs2-products-auto"> Odesílat automaticky</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;" title="Vypnuto = faktura se jen vystaví a odešleš ji ručně po kontrole (v BS2 → Objednávky)"><input type="checkbox" id="bs2-products-auto"> Zálohu odesílat automaticky</label>
+            <label style="font-size:12px;display:flex;align-items:center;gap:6px;padding-bottom:6px;" title="Vypnuto = finální faktura se po zaplacení zálohy jen vystaví a odešleš ji ručně"><input type="checkbox" id="bs2-products-autofinal"> Finální fakturu odesílat automaticky</label>
             <button class="btn btn-primary btn-sm" onclick="saveBs2Config()">Uložit nastavení</button>
             <span id="bs2-products-msg" style="font-size:12px;color:var(--text2);"></span>
           </div>
@@ -1753,11 +1754,12 @@
         });
         document.getElementById('bs2-' + cat + '-vat').value = c.vat_rate != null ? c.vat_rate : 21;
         document.getElementById('bs2-' + cat + '-auto').checked = !!c.auto_send;
+        const af = document.getElementById('bs2-' + cat + '-autofinal'); if (af) af.checked = !!c.auto_send_final;
       });
     }
     window.saveBs2Config = async function() {
       const body = {};
-      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_send: document.getElementById('bs2-' + cat + '-auto').checked }; });
+      ['products', 'online'].forEach(cat => { body[cat] = { template: document.getElementById('bs2-' + cat + '-template').value, CZK: document.getElementById('bs2-' + cat + '-CZK').value || null, EUR: document.getElementById('bs2-' + cat + '-EUR').value || null, vat_rate: document.getElementById('bs2-' + cat + '-vat').value, auto_send: document.getElementById('bs2-' + cat + '-auto').checked, auto_send_final: !!(document.getElementById('bs2-' + cat + '-autofinal') || {}).checked }; });
       const r = await api('PUT', '/api/accounting/bs2-billing/config', body);
       ['products', 'online'].forEach(cat => { const m = document.getElementById('bs2-' + cat + '-msg'); m.textContent = r.status === 200 ? '✓ Uloženo' : ('Chyba: ' + ((r.data && r.data.error) || r.status)); setTimeout(() => { m.textContent = ''; }, 4000); });
     };
