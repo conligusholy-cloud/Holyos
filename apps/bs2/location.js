@@ -430,7 +430,7 @@ const PAGE = `<!DOCTYPE html>
     <div class="prices" style="margin-bottom:8px">
       <div class="price"><div class="tag">Aplikace 1</div><div class="amt" style="font-size:26px">🔎 Vyhledávač míst</div>
         <p class="small" style="margin:6px 0 10px;color:var(--text2)">Ještě nemáte konkrétní místo? Zadejte město nebo umístěte špendlík do mapy.</p>
-        <ul><li>Spádovost v okruhu 5 / 10 / 15 km – obyvatelé a obce</li><li>Kapacita oblasti: kolik prádlomatů oblast uživí</li><li>Prádlomaty, které už v okolí fungují</li><li>Seznam míst, kde by prádlomat mohl stát – supermarkety, benzínky, myčky, výdejní boxy – se skóre parkování a konkurence</li><li>Kontakty na provozovatele míst (z mapových dat + AI dohledání)</li><li>Výsledky se ukládají, vracíte se k nim zdarma</li></ul></div>
+        <ul><li>Spádovost v okruhu 5 / 10 / 15 km – obyvatelé a obce</li><li>Kapacita oblasti: kolik prádlomatů oblast uživí</li><li>Prádlomaty, které už v okolí fungují</li><li>Seznam míst, kde by prádlomat mohl stát – supermarkety, benzínky, myčky, výdejní boxy – se skóre parkování a konkurence</li><li>Kontakty na provozovatele míst (z mapových dat + AI dohledání)</li><li>Výsledky se ukládají, vracíte se k nim zdarma</li><li>1 vyhledání v ceně každého balíčku, další od 499 Kč</li></ul></div>
       <div class="price"><div class="tag">Aplikace 2</div><div class="amt" style="font-size:26px">🧠 Prověření lokality</div>
         <p class="small" style="margin:6px 0 10px;color:var(--text2)">Máte vyhlédnuté místo? Zakreslete prádlomat přesně do letecké mapy a nechte ho vyhodnotit.</p>
         <ul><li>Umístění prádlomatu 3 × 2 m do ortofoto mapy, parkoviště, silnice, obchody a zastávky kolem</li><li>Nájem, přípojky, zpevněná plocha, financování, plátce / neplátce DPH</li><li>AI studie lokality: hodnocení, spádovost, odhad poptávky, rizika a doporučení</li><li>Ekonomické scénáře slabý / střední / silný, návratnost</li><li>Verdikt: vhodné · vhodné při splnění podmínek · nevhodné</li><li>Tisková studie do PDF pro banku či pronajímatele</li></ul></div>
@@ -440,7 +440,7 @@ const PAGE = `<!DOCTYPE html>
     <h2>Co dostanete</h2>
     <div class="list">
       <div class="item"><div class="n">1</div><div><b>Přístup do webové aplikace na 12 měsíců</b><span>Jednorázová platba, přístup se automaticky placeně neobnovuje. Funguje v mobilu i na počítači.</span></div></div>
-      <div class="item"><div class="n">2</div><div><b>Vyhledávač míst</b><span>Zadáte město nebo umístíte špendlík do mapy a dostanete spádovost v okruhu 5 / 10 / 15 km, kapacitu oblasti, prádlomaty, které už v okolí fungují, a seznam míst, kde by prádlomat mohl stát (supermarkety, benzínky, myčky…) včetně kontaktů na provozovatele.</span></div></div>
+      <div class="item"><div class="n">2</div><div><b>Vyhledávač míst</b><span>Zadáte město nebo umístíte špendlík do mapy a dostanete spádovost v okruhu 5 / 10 / 15 km, kapacitu oblasti, prádlomaty, které už v okolí fungují, a seznam míst, kde by prádlomat mohl stát (supermarkety, benzínky, myčky…) včetně kontaktů na provozovatele. Jedno vyhledání máte v ceně, další lze dokoupit v aplikaci.</span></div></div>
       <div class="item"><div class="n">3</div><div><b>Kalkulačka ekonomiky lokality</b><span>Investice, doprava a instalace, nájem, energie a voda podle spotřeby nebo zjednodušeně v %, servis, software, platební poplatky, pojištění, marketing, rezerva na obnovu, financování. Slabý / střední / silný scénář, bod zvratu, citlivost na návštěvnost a nájem. Odděleně provozní výsledek, peněžní tok po splátkách a návratnost. Částky s DPH i bez DPH, režim plátce / neplátce.</span></div></div>
       <div class="item"><div class="n">4</div><div><b>Orientační vyhodnocení lokality</b><span>Pro každou adresu report se čtyřmi možnými výsledky: <b style="display:inline">Vhodné podle dostupných podkladů</b> · <b style="display:inline">Vhodné při splnění podmínek</b> · <b style="display:inline">Nevhodné podle dostupných podkladů</b> · <b style="display:inline">Nedostatek údajů pro posouzení</b>. Report odděluje ověřené skutečnosti (se zdrojem a datem), údaje zadané vámi, modelové předpoklady, chybějící údaje, hlavní rizika a doporučené další kroky. Údaje, které aplikace nemá z připojeného zdroje, označí jako chybějící a doplníte je ručně.</span></div></div>
       <div class="item"><div class="n">5</div><div><b>Export výsledků do PDF</b><span>Report i scénáře si stáhnete pro banku, společníka nebo pronajímatele.</span></div></div>
@@ -456,13 +456,13 @@ const PAGE = `<!DOCTYPE html>
       <div class="price hi">
         <div class="tag">Základ</div>
         <div class="amt">4 900 <small>Kč s DPH · jednorázově</small></div>
-        <ul><li>Přístup do aplikace na 12 měsíců</li><li>Vyhledávač míst – 3 vyhledání</li><li>Kalkulačka ekonomiky a AI studie lokality</li><li>Vyhodnocení 3 různých adres</li><li>Další vyhodnocení i vyhledání lze dokoupit</li><li>Neomezené změny scénářů u těchto adres</li><li>Export výsledků do PDF</li></ul>
+        <ul><li>Přístup do aplikace na 12 měsíců</li><li>Vyhledávač míst – 1 vyhledání zdarma</li><li>Kalkulačka ekonomiky a AI studie lokality</li><li>Vyhodnocení 3 různých adres</li><li>Další vyhodnocení i vyhledání lze dokoupit</li><li>Neomezené změny scénářů u těchto adres</li><li>Export výsledků do PDF</li></ul>
         <a class="btn" href="#objednat" data-cta="basic" onclick="pickVariant('basic')">Vybrat Základ</a>
       </div>
       <div class="price">
         <div class="tag">Plus</div>
         <div class="amt">9 900 <small>Kč s DPH · jednorázově</small></div>
-        <ul><li>Vše ze Základu</li><li>Celkem 10 různých adres</li><li>Vyhledávač míst – 10 vyhledání</li><li>Porovnání lokalit vedle sebe</li><li>Jeden 30minutový konzultační hovor</li></ul>
+        <ul><li>Vše ze Základu</li><li>Celkem 10 různých adres</li><li>Porovnání lokalit vedle sebe</li><li>Jeden 30minutový konzultační hovor</li></ul>
         <a class="btn sec" href="#objednat" data-cta="plus" onclick="pickVariant('plus')">Vybrat Plus</a>
       </div>
       <div class="price">

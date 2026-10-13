@@ -6,7 +6,7 @@
 const { esc, layout } = require('./views');
 
 const LIMITS = { basic: 3, plus: 10, premium: 10 };
-const SEARCH_LIMITS = { basic: 3, plus: 10, premium: 10 }; // vyhledání ve Vyhledávači míst
+const SEARCH_LIMITS = { basic: 1, plus: 1, premium: 1 }; // Vyhledávač míst: 1 vyhledání zdarma ke každému balíčku, další se dokupují
 const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 
 const NAV = (s) => [
