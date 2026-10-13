@@ -83,6 +83,7 @@ function evaluate(d, c) {
   const yes = (v) => v === 'yes', unk = (v) => !v || v === 'unknown';
   const own = d.ownership === 'own';
   if (!d.ownership) missing.push('Vlastní místo, nebo nájem?');
+  if (!d.vat_payer) missing.push('Plátce / neplátce DPH');
   else if (!own && d.rent_known === 'no') missing.push('Výše nájmu (zatím neznámá) – kalkulace počítá s 0 Kč');
   else if (!own && !num(d.rent)) missing.push('Výše nájmu');
   if (unk(d.conn_water)) missing.push('Přípojka vody'); if (unk(d.conn_sewer)) missing.push('Odpad'); if (unk(d.conn_power)) missing.push('Elektrická přípojka');
@@ -110,7 +111,7 @@ function evaluate(d, c) {
   assumed.push(`Návštěvnost (váš předpoklad): slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} praní za den`);
   assumed.push(d.energy_mode === 'consumption' ? `Energie podle spotřeby: ${num(d.kwh_wash)} kWh/praní, ${num(d.kwh_dry)} kWh/sušení, ${num(d.water_wash)} l/praní, ${num(d.kwh_price)} Kč/kWh, ${num(d.water_price)} Kč/m³` : `Energie a voda zjednodušeně ${num(d.energy_pct, 9.5)} % z tržby bez DPH`);
   assumed.push(`Servis ${num(d.service_pct, 13)} % z tržby bez DPH, platební poplatky ${num(d.fee_pct, 1.5)} % z tržby, rezerva na opravy a obnovu ${num(d.reserve_pct, 5)} % (plánované odložení prostředků)`);
-  assumed.push(d.vat_payer === 'no' ? 'Režim: neplátce DPH (tržby bez odvodu DPH, náklady vč. DPH)' : 'Režim: plátce DPH (21 % z tržeb odvedeno, nájem a investice počítány bez DPH)');
+  assumed.push(d.vat_payer === 'no' ? 'Režim: neplátce DPH (tržby bez odvodu DPH, náklady vč. DPH)' : (d.vat_payer === 'yes' ? 'Režim: plátce DPH (21 % z tržeb odvedeno, nájem a investice počítány bez DPH)' : 'Režim DPH neuveden – počítáno jako plátce DPH'));
   if (d.financing === 'yes') assumed.push(`Financování: akontace ${d.down_mode === 'pct' ? num(d.down_payment) + ' %' : num(d.down_payment).toLocaleString('cs-CZ') + ' Kč'}, úvěr ${Math.round(c.loanPrincipal).toLocaleString('cs-CZ')} Kč, ${num(d.interest)} % p.a., ${num(d.months, 60)} měs. → splátka ${Math.round(c.payment).toLocaleString('cs-CZ')} Kč/měs`);
   // rizika
   if (c.S.weak.cash < 0) risks.push('Ve slabém scénáři je peněžní tok po splátce záporný – místo stojí a padá s návštěvností');
@@ -140,7 +141,7 @@ function evaluate(d, c) {
   steps.push('Po 1., 3. a 6. měsíci provozu porovnat skutečné cykly se scénáři');
   // výsledek
   let result, cls;
-  const critical = missing.filter((m) => /nájmu|Vlastní místo|Přípojka|Odpad|Elektrick|Zvolený prádlomat|Přístupnost/.test(m)).length;
+  const critical = missing.filter((m) => /nájmu|Vlastní místo|Přípojka|Odpad|Elektrick|Zvolený prádlomat|Přístupnost|Plátce/.test(m)).length;
   if (critical >= 2) { result = 'Nedostatek údajů pro posouzení'; cls = 'na'; }
   else if (c.S.strong.operating <= 0 || c.S.mid.cash < 0) { result = 'Nevhodné podle dostupných podkladů'; cls = 'bad'; }
   else if (c.S.weak.cash < 0 || critical >= 1 || (num(d.notice) && num(d.notice) < 12) || compN >= 2 || d.conn_water === 'no' || d.conn_sewer === 'no') { result = 'Vhodné při splnění podmínek'; cls = 'cond'; }
@@ -164,7 +165,7 @@ const POI_TYPES = [
 const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'product_id', 'product_name', 'access', 'access_note', 'down_mode', 'delivery_known', 'site_prep_known', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
-const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
+const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: '', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
 function clean(body) { const d = {}; for (const k of FIELDS) { let v = body[k]; if (v == null) continue; v = String(v).trim().slice(0, k === 'notes' ? 4000 : (k === 'pois' ? 20000 : 300)); d[k] = v; } return d; }
 
 function siteForm(s, site, d, error, saved, noeval, products) {
@@ -217,6 +218,7 @@ function siteForm(s, site, d, error, saved, noeval, products) {
     <label>Zpevněná plocha pod prádlomat${sel('surface', [['unknown', 'nevím / neověřeno'], ['yes', 'už je vybudovaná'], ['no', 'bude se budovat']])}</label>
     <script>(function(){ document.querySelectorAll('input[data-conn]').forEach(function(inp){ var sel=document.querySelector('select[name='+inp.getAttribute('data-conn')+']'); function u(){ inp.parentNode.style.display=sel.value==='no'?'':'none'; if(sel.value!=='no') inp.value=''; } sel.addEventListener('change',u); u(); }); })();</script>
     <h3>Investice a financování</h3>
+    <label class="full">Jste plátce DPH? *${sel('vat_payer', [['', '— vyberte —'], ['yes', 'ano, plátce DPH'], ['no', 'ne, neplátce']])}<small>Plátce: tržby bez 21 % DPH, nájem a investice počítány bez DPH. Neplátce: celé tržby, náklady včetně DPH.</small></label>
     <label class="full">Prádlomat, který si na lokalitu představujete<select name="product_id" id="f-product">${products.length ? '<option value="">— vyberte z nabídky —</option>' + products.map((p) => `<option value="${p.id}" data-name="${esc(p.name)}" data-price="${p.price_czk != null ? Number(p.price_czk) : ''}"${String(d.product_id || '') === String(p.id) ? ' selected' : ''}>${esc(p.name)}${p.price_czk != null ? ' – ' + Number(p.price_czk).toLocaleString('cs-CZ') + ' Kč bez DPH' : ''}</option>`).join('') : '<option value="">— nabídka momentálně není dostupná —</option>'}</select><small>Cena zařízení se bere z aktuální nabídky (bez DPH).</small></label>
     <input type="hidden" name="product_name" id="f-product-name" value="${V('product_name')}"><input type="hidden" name="machine_price" id="f-machine-price" value="${V('machine_price')}"><input type="hidden" name="invest_vat" value="excl">
     <script>(function(){ var sel=document.getElementById('f-product'), nm=document.getElementById('f-product-name'), price=document.getElementById('f-machine-price');
@@ -232,7 +234,7 @@ function siteForm(s, site, d, error, saved, noeval, products) {
     <label>Akontace<div style="display:flex;gap:6px"><input name="down_payment" value="${V('down_payment')}" inputmode="decimal" style="flex:1"><select name="down_mode" style="width:auto">${[['czk', 'Kč'], ['pct', '%']].map(([v, l]) => `<option value="${v}"${(d.down_mode || 'czk') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></div></label>
     ${inp('interest', 'Úrok (% p.a.)', 'inputmode="decimal"')}
     ${inp('months', 'Délka splácení (měsíce)', 'inputmode="numeric"')}
-    <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.closest('label').style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&!ir.value) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
+    <script>(function(){ var f=document.querySelector('select[name=financing]'); var ids=['down_payment','interest','months']; function u(){ var on=f.value==='yes'; ids.forEach(function(n){ var el=document.querySelector('input[name='+n+']'); if(el) el.closest('label').style.display=on?'':'none'; }); var ir=document.querySelector('input[name=interest]'); if(on&&ir&&(!ir.value||ir.value==='8')) ir.value='9'; } f.addEventListener('change',u); u(); })();</script>
     <label class="full">Poznámky<textarea name="notes" rows="3" maxlength="4000">${V('notes')}</textarea></label>
     <div class="full row" style="margin-top:8px;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sec" type="submit" name="goto" value="save">💾 Uložit</button><button class="btn" type="submit" name="goto" value="eval">📊 Vyhodnotit a zobrazit report</button><span class="small muted">Uložit = jen uloží údaje. Vyhodnotit = zpracuje report${site && site.evaluated_at ? '' : ' a odečte 1 lokalitu z balíčku'}.</span></div>
   </form>
