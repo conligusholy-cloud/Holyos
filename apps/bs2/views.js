@@ -629,7 +629,7 @@ function supporterCompounder(s) {
   .cp .how-cas button{align-self:stretch}
   .cp .how-foot{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;margin-top:28px;position:relative;z-index:7;font-size:12.5px;color:var(--text2)} .cp .how-foot b{color:var(--accent2)}
   /* Telefon: stejné rozložení jako na počítači (hodiny vlevo, stroj uprostřed, karty vpravo), celé zmenšené podle šířky (zoom nastaví skript) */
-  @media(max-width:700px){.cp .how{padding:10px 4px;overflow:hidden} .cp .how-stage{width:440px;max-width:none;min-height:560px} .cp .how-foot{margin-top:14px;font-size:12px;gap:6px 14px}}
+  @media(max-width:700px){.cp .how{padding:10px 4px;overflow:hidden} .cp .how-stage{width:440px;max-width:none;min-height:560px} .cp .how-foot{margin-top:14px;font-size:12px;gap:6px 14px} .cp .how-clock{left:-25%;width:24%} .cp .how-clock .hc-txt b{font-size:24px} .cp .how-clock .hc-txt span{font-size:12px} .cp .how-acc,.cp .how-cas{right:-26%;width:215px} .cp .how-acc b{font-size:32px} .cp .how-acc .dec-k,.cp .how-cas .cs .dec-k{font-size:11px} .cp .how-acc .dec-s{font-size:14px} .cp .how-cas .cs b{font-size:27px} .cp .how-cas .cs small{font-size:12.5px} .cp .how-cas .cs.r b{font-size:27px} .cp .how-tag{font-size:14px}}
   .cp .pilots{margin:4px 0 22px;padding:18px 18px 14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.14),transparent 60%),rgba(4,8,16,.45)}
   .cp .pl-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:end}
   .cp .pl-row.one{grid-template-columns:1fr;justify-items:center} .cp .pl-row.one .pl{width:min(100%,520px)}
@@ -751,7 +751,7 @@ function supporterCompounder(s) {
         </div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">06:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
-        <script>(function(){var how=document.querySelector('.cp .how'),st=document.querySelector('.cp .how-stage');if(!how||!st)return;var FULL=820,LEFT=150,nat=0;
+        <script>(function(){var how=document.querySelector('.cp .how'),st=document.querySelector('.cp .how-stage');if(!how||!st)return;var FULL=670,LEFT=110,nat=0;
 function fit(){if(window.innerWidth>700){st.style.transform='';st.style.marginLeft='';st.style.marginBottom='';st.style.width='';return;}st.style.width='440px';st.style.transform='none';st.style.marginBottom='0';nat=st.offsetHeight||560;var w=how.clientWidth-8;var s=Math.min(1,w/FULL);st.style.transformOrigin='top left';st.style.transform='scale('+s+')';st.style.marginLeft=Math.max(0,(w-FULL*s)/2+LEFT*s)+'px';st.style.marginBottom=(-nat*(1-s))+'px';}
 fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,250);});setTimeout(fit,300);})();</script>
       </div>
