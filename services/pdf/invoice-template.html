@@ -46,20 +46,20 @@
     <thead>
       <tr>
         <th class="r">#</th><th>{{l_desc}}</th><th class="r">{{l_qty}}</th><th>{{l_unit}}</th><th class="r">{{l_unitprice}}</th>
-        <th class="r">{{l_vatpct}}</th><th class="r">{{l_base}}</th><th class="r">{{l_vat}}</th><th class="r">{{l_total}}</th>
+        {{#if show_vat}}<th class="r">{{l_vatpct}}</th><th class="r">{{l_base}}</th><th class="r">{{l_vat}}</th>{{/if}}<th class="r">{{l_total}}</th>
       </tr>
     </thead>
     <tbody>
       {{#each items}}
       <tr>
         <td class="c">{{@index}}</td>
-        <td class="d">{{description}}</td>
+        <td class="d">{{description}}<div class="cs">{{desc_cs}}</div></td>
         <td class="r">{{quantity}}</td>
         <td>{{unit}}</td>
         <td class="r">{{unit_price}}</td>
-        <td class="r">{{vat_rate}}</td>
+        {{#if show_vat}}<td class="r">{{vat_rate}}</td>
         <td class="r">{{subtotal}}</td>
-        <td class="r">{{vat_amount}}</td>
+        <td class="r">{{vat_amount}}</td>{{/if}}
         <td class="r">{{total}}</td>
       </tr>
       {{/each}}
@@ -76,8 +76,8 @@
   {{/if}}
 
   <div class="sum">
-    <div class="row"><span>{{l_subtotal_all}}</span><strong>{{subtotal}}</strong></div>
-    <div class="row"><span>{{l_vat_all}}</span><strong>{{vat_amount}}</strong></div>
+    {{#if show_vat}}<div class="row"><span>{{l_subtotal_all}}</span><strong>{{subtotal}}</strong></div>
+    <div class="row"><span>{{l_vat_all}}</span><strong>{{vat_amount}}</strong></div>{{/if}}
     <div class="row total"><span>{{l_grand}}</span><span>{{total}}</span></div>
   </div>
 

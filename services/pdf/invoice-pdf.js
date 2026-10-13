@@ -50,6 +50,7 @@ async function closeBrowser() {
 
 const TEMPLATE_PATH = path.join(__dirname, 'invoice-template.html');
 
+const itemI18n = require('../accountant/item-i18n');
 function loadTemplate() {
   return fs.readFileSync(TEMPLATE_PATH, 'utf8');
 }
@@ -198,7 +199,7 @@ const I18N = {
     paydetails: 'Platební údaje', account: 'Bankovní účet', vs: 'Variabilní symbol', ks: 'Konstantní symbol', ss: 'Specifický symbol',
     qr: 'QR platba', note: 'Poznámka:',
     reverse: '<strong>Režim přenesení daňové povinnosti.</strong> Daň odvede zákazník (reverse charge) — dodání do jiného členského státu EU osobě registrované k DPH dle čl. 196 směrnice 2006/112/ES, § 92 zákona č. 235/2004 Sb.',
-    outside: '<strong>Plnění mimo působnost české DPH.</strong> Místo plnění mimo tuzemsko (§ 9 zákona č. 235/2004 Sb.); DPH není účtována.',
+    outside: '<strong>Plnění mimo působnost české DPH.</strong> Dodání zákazníkovi ze třetí země (mimo EU) — místo plnění mimo tuzemsko (§ 9 zákona č. 235/2004 Sb.); DPH se neúčtuje (0 %).',
     direction_ar: 'FAKTURA — daňový doklad', direction_ap: 'FAKTURA PŘIJATÁ', direction_tax: 'DAŇOVÝ DOKLAD K PŘIJATÉ PLATBĚ',
     pm: { bank_transfer: 'Bankovním převodem', cash: 'Hotově', card: 'Kartou', barter: 'Zápočet' },
     types: { received: 'Faktura přijatá', issued: 'Faktura vydaná', credit_note_received: 'Dobropis přijatý', credit_note_issued: 'Dobropis vydaný', proforma_received: 'Záloha přijatá', proforma_issued: 'Zálohová faktura', tax_receipt: 'Daňový doklad k platbě' },
@@ -212,7 +213,7 @@ const I18N = {
     paydetails: 'Payment details', account: 'Bank account', vs: 'Variable symbol', ks: 'Constant symbol', ss: 'Specific symbol',
     qr: 'QR payment', note: 'Note:',
     reverse: '<strong>Reverse charge.</strong> VAT to be accounted for by the customer — supply of services to a taxable person in another EU Member State (Article 196 of Council Directive 2006/112/EC).',
-    outside: '<strong>Outside the scope of Czech VAT.</strong> Place of supply is outside the Czech Republic; no VAT charged.',
+    outside: '<strong>Outside the scope of Czech VAT.</strong> Supply to a customer outside the European Union — the place of supply is outside the Czech Republic; VAT is not charged (0 %).',
     direction_ar: 'INVOICE — tax document', direction_ap: 'RECEIVED INVOICE', direction_tax: 'TAX DOCUMENT FOR RECEIVED PAYMENT',
     pm: { bank_transfer: 'Bank transfer', cash: 'Cash', card: 'Card', barter: 'Offset' },
     types: { received: 'Received invoice', issued: 'Invoice', credit_note_received: 'Received credit note', credit_note_issued: 'Credit note', proforma_received: 'Received proforma', proforma_issued: 'Proforma invoice', tax_receipt: 'Tax document for payment' },
@@ -246,11 +247,14 @@ function buildTemplateData(invoice, ourCompany) {
     const shortName = nameSegs.filter(Boolean).join(' — ').trim() || full;
     const cfg = cfgSegs.filter(Boolean).join(' · ').trim();
     if (cfg) configNotes.push({ name: shortName, cfg });
+    // Doklad v angličtině: anglický název (vlastní description_en, jinak překlad glosářem) + pod ním malým písmem česky
+    const enName = lang === 'en' ? (it.description_en ? String(it.description_en) : itemI18n.translateItem(shortName)) : '';
     return {
       line_order: it.line_order,
-      description: shortName,
+      description: lang === 'en' ? enName : shortName,
+      desc_cs: lang === 'en' && enName && enName !== shortName ? shortName : '',
       quantity: fmtAmountPlain(it.quantity, loc),
-      unit: it.unit || 'ks',
+      unit: lang === 'en' ? itemI18n.translateUnit(it.unit) : (it.unit || 'ks'),
       unit_price: fmtAmountPlain(it.unit_price, loc),
       vat_rate: `${Number(it.vat_rate || 0)}%`,
       subtotal: fmtAmountPlain(it.subtotal, loc),
@@ -327,6 +331,7 @@ function buildTemplateData(invoice, ourCompany) {
     currency: invoice.currency || 'CZK',
 
     // Přenesení daňové povinnosti (EU plátce DPH) — právní doložka na faktuře.
+    show_vat: invoice.vat_regime !== 'outside_scope', // mimo EU: bez rozpisu DPH
     reverse_charge: invoice.vat_regime === 'reverse_charge' || invoice.vat_regime === 'outside_scope',
     reverse_charge_text: invoice.vat_regime === 'outside_scope' ? L.outside : L.reverse,
     lang,
@@ -343,7 +348,7 @@ function buildTemplateData(invoice, ourCompany) {
     qr_url: buildQrLocal(spayd) || '',
 
     // Design Best Series 2.0 (jednotný vzhled dokladů)
-    doc_css: bs2style.CSS,
+    doc_css: bs2style.CSS + '\ntable.items td.d .cs{font-weight:400;font-size:6.8pt;color:#8a94a8;margin-top:2px;line-height:1.25}table.items td.d .cs:empty{display:none}table.items td.d .sn{font-weight:400}',
     logo_svg: bs2style.logoSvg(54),
     footer_text: bs2style.FOOTER_TEXT,
   };

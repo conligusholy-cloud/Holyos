@@ -22,6 +22,16 @@
     .tpl-bar .u { font-size: 12px; color: var(--text2); }
     .tpl-paper { background: #55565d; padding: 18px; display: flex; justify-content: center; }
     .tpl-paper iframe { width: 794px; max-width: 100%; height: calc(100vh - 230px); min-height: 640px; border: 0; background: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+    .tpl-opts { display: none; align-items: center; gap: 14px 22px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; background: rgba(20,184,166,.05); }
+    .tpl-opts.on { display: flex; }
+    .tpl-opts .g { display: flex; align-items: center; gap: 8px; }
+    .tpl-opts .g > span { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text2); font-weight: 700; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .seg button { background: transparent; border: 0; color: var(--text); padding: 6px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; border-right: 1px solid var(--border); }
+    .seg button:last-child { border-right: 0; }
+    .seg button:hover { background: rgba(20,184,166,.1); }
+    .seg button.on { background: rgba(20,184,166,.28); color: #fff; }
+    .tpl-opts input[type=text] { min-width: 260px; flex: 1; background: var(--bg, #111); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 6px 10px; font-size: 12.5px; }
     @media (max-width: 900px) { .tpl-wrap { grid-template-columns: 1fr; } .tpl-list { position: static; max-height: none; } }
   </style>
 </head>
@@ -41,6 +51,12 @@
             <button class="btn btn-secondary btn-sm" onclick="openFull()">↗ Otevřít na celou obrazovku</button>
             <button class="btn btn-primary btn-sm" onclick="printTpl()">🖨️ Tisk / PDF</button>
           </div>
+          <div class="tpl-opts" id="tpl-opts">
+            <div class="g"><span>Jazyk</span><div class="seg" id="o-lang"><button data-v="cs" class="on">CZ</button><button data-v="en">EN</button></div></div>
+            <div class="g"><span>DPH</span><div class="seg" id="o-vat"><button data-v="standard" class="on" title="Tuzemský odběratel, DPH 21 %">Tuzemsko 21 %</button><button data-v="reverse_charge" title="Plátce DPH z jiného státu EU — přenesení daňové povinnosti">EU — přenesená daň</button><button data-v="outside_scope" title="Zákazník ze třetí země — bez rozpisu DPH, DPH 0">Mimo EU — bez DPH</button></div></div>
+            <div class="g"><span>Měna</span><div class="seg" id="o-cur"><button data-v="CZK" class="on">CZK</button><button data-v="EUR">EUR</button><button data-v="USD">USD</button></div></div>
+            <div class="g" style="flex:1;min-width:280px"><span>Poznámka</span><input type="text" id="o-note" maxlength="600" placeholder="Poznámka na dokladu — upravte text, náhled se obnoví"><button class="btn btn-secondary btn-sm" id="o-note-reset" title="Vrátit výchozí text">↺</button></div>
+          </div>
           <div class="tpl-paper"><iframe id="tpl-frame" title="Náhled šablony"></iframe></div>
         </div>
       </div>
@@ -49,6 +65,25 @@
 
   <script>
     var CAT = [], CUR = null;
+    var VAR = { lang: 'cs', vat: 'standard', cur: 'CZK', note: null }; // note === null → výchozí ukázková poznámka
+    function previewUrl(key) {
+      var u = '/api/doc-templates/' + encodeURIComponent(key) + '/preview';
+      if (CUR && CUR.variants) { u += '?lang=' + VAR.lang + '&vat=' + VAR.vat + '&cur=' + VAR.cur; if (VAR.note !== null) u += '&note=' + encodeURIComponent(VAR.note); }
+      return u;
+    }
+    var optTimer = null;
+    function syncOpts() {
+      document.getElementById('tpl-opts').classList.toggle('on', !!(CUR && CUR.variants));
+      ['lang', 'vat', 'cur'].forEach(function (k) { document.querySelectorAll('#o-' + k + ' button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === VAR[k]); }); });
+      var n = document.getElementById('o-note'); if (document.activeElement !== n) n.value = VAR.note === null ? '' : VAR.note;
+    }
+    function bindOpts() {
+      ['lang', 'vat', 'cur'].forEach(function (k) {
+        document.getElementById('o-' + k).addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; VAR[k] = b.getAttribute('data-v'); syncOpts(); loadPreview(); });
+      });
+      document.getElementById('o-note').addEventListener('input', function () { VAR.note = this.value; clearTimeout(optTimer); optTimer = setTimeout(loadPreview, 450); });
+      document.getElementById('o-note-reset').addEventListener('click', function () { VAR.note = null; document.getElementById('o-note').value = ''; loadPreview(); });
+    }
     function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     async function loadCatalog() {
       var r = await fetch('/api/doc-templates', { credentials: 'include' });
@@ -69,17 +104,23 @@
       document.querySelectorAll('.tpl-item').forEach(function (e) { e.classList.toggle('active', e.getAttribute('data-k') === key); });
       document.getElementById('tpl-title').textContent = CUR.name;
       document.getElementById('tpl-used').textContent = 'Používá se: ' + CUR.used;
+      syncOpts();
+      await loadPreview();
+    }
+    async function loadPreview() {
+      if (!CUR) return;
       var fr = document.getElementById('tpl-frame');
-      var r = await fetch('/api/doc-templates/' + encodeURIComponent(key) + '/preview', { credentials: 'include' });
+      var r = await fetch(previewUrl(CUR.key), { credentials: 'include' });
       fr.srcdoc = r.ok ? await r.text() : '<p style="font-family:sans-serif;padding:24px;">Náhled se nepodařilo načíst (' + r.status + ').</p>';
     }
     function openFull() {
       if (!CUR) return;
-      fetch('/api/doc-templates/' + encodeURIComponent(CUR.key) + '/preview', { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (t) {
+      fetch(previewUrl(CUR.key), { credentials: 'include' }).then(function (r) { return r.text(); }).then(function (t) {
         var w = window.open('', '_blank'); if (w) { w.document.open(); w.document.write(t); w.document.close(); }
       });
     }
     function printTpl() { var fr = document.getElementById('tpl-frame'); if (fr.contentWindow) { fr.contentWindow.focus(); fr.contentWindow.print(); } }
+    bindOpts();
     loadCatalog();
 
     var s = document.createElement('script');

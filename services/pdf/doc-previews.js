@@ -14,12 +14,47 @@ const OUR = {
   bank_account: '1234567890/0800', iban: 'CZ6508000000001234567890',
 };
 const CUSTOMER = { name: 'LAUNDRY, j.s.a.', address: 'Příkladná 45', zip: '110 00', city: 'Praha', country: 'CZ', ico: '12345678', dic: 'CZ12345678' };
+const CUSTOMER_EU = { name: 'Wäscherei Müller GmbH', address: 'Hauptstraße 12', zip: '10115', city: 'Berlin', country: 'DE', ico: 'HRB 123456', dic: 'DE123456789' };
+const CUSTOMER_WORLD = { name: 'Lanterne Laundry LLC', address: '350 Fifth Avenue', zip: 'NY 10118', city: 'New York', country: 'USA', ico: '', dic: 'EIN 12-3456789' };
 const SUPPLIER = { name: 'Dodavatel komponent s.r.o.', address: 'Průmyslová 8', zip: '690 02', city: 'Břeclav', country: 'CZ', ico: '87654321', dic: 'CZ87654321' };
 
 const ITEMS = [
   { line_order: 0, description: 'Prádlomat PRO CZ — 3 pračky 18 kg + sušička', quantity: 1, unit: 'ks', unit_price: 1450000, vat_rate: 21, subtotal: 1450000, vat_amount: 304500, total: 1754500 },
   { line_order: 1, description: 'Doprava a montáž', quantity: 1, unit: 'ks', unit_price: 35000, vat_rate: 21, subtotal: 35000, vat_amount: 7350, total: 42350 },
 ];
+
+// Ukázkové položky (základ v Kč bez DPH): každý stroj je samostatná položka s typem a výrobním číslem
+const MACH_ITEMS = [
+  { description: 'Prádlomat FLEX CZ, typ FLEX, výrobní číslo BS-FLEX-2026-0012', price: 1250000 },
+  { description: 'Prádlomat MINI CZ, typ MINI, výrobní číslo BS-MINI-2026-0007', price: 850000 },
+  { description: 'Doprava a montáž', price: 35000 },
+];
+const KIND = {
+  issued:      { type: 'issued', dir: 'ar', items: MACH_ITEMS, note_cs: 'Ukázkový doklad — údaje jsou smyšlené.', note_en: 'Sample document — the data are fictitious.' },
+  proforma:    { type: 'proforma_issued', dir: 'ar', items: MACH_ITEMS, note_cs: 'Zálohová faktura — neslouží jako daňový doklad.', note_en: 'Proforma invoice — not a tax document.' },
+  tax_receipt: { type: 'tax_receipt', dir: 'ar', items: [{ description: 'Přijatá záloha 75 % — Prádlomat FLEX CZ, typ FLEX', price: 937500 }], note_cs: 'Ukázkový doklad — údaje jsou smyšlené.', note_en: 'Sample document — the data are fictitious.' },
+  credit:      { type: 'credit_note_issued', dir: 'ar', items: [{ description: 'Dobropis — sleva na dopravu', price: -5000 }], note_cs: 'Opravný daňový doklad k faktuře FV-2026-00012.', note_en: 'Corrective document to invoice FV-2026-00012.' },
+  received:    { type: 'received', dir: 'ap', items: MACH_ITEMS, note_cs: 'Přijatá faktura — evidenční karta.', note_en: 'Received invoice — record card.' },
+};
+const FX = { CZK: 1, EUR: 25, USD: 23 };
+// Varianty náhledu: jazyk (cs/en), režim DPH (standard / reverse_charge / outside_scope), měna a vlastní poznámka
+function variantInvoice(kind, o) {
+  const k = KIND[kind]; o = o || {};
+  const lang = o.lang === 'en' ? 'en' : 'cs';
+  const vatReg = ['reverse_charge', 'outside_scope'].includes(o.vat) ? o.vat : 'standard';
+  const cur = FX[o.cur] ? o.cur : 'CZK';
+  const div = FX[cur], rate = vatReg === 'standard' ? 21 : 0;
+  const r2 = (n) => Math.round(n * 100) / 100;
+  let sub = 0, vat = 0;
+  const items = k.items.map((it, i) => {
+    const up = r2(it.price / div), va = r2(up * rate / 100);
+    sub += up; vat += va;
+    return { line_order: i, description: it.description, quantity: 1, unit: 'ks', unit_price: up, vat_rate: rate, subtotal: up, vat_amount: va, total: r2(up + va) };
+  });
+  const company = k.dir === 'ap' ? SUPPLIER : vatReg === 'outside_scope' ? CUSTOMER_WORLD : vatReg === 'reverse_charge' ? CUSTOMER_EU : CUSTOMER;
+  const note = o.note != null ? String(o.note) : (lang === 'en' ? k.note_en : k.note_cs);
+  return sampleInvoice(k.type, k.dir, { language: lang, vat_regime: vatReg, currency: cur, items, subtotal: r2(sub), vat_amount: r2(vat), total: r2(sub + vat), company, note, partner_bic: 'GIBACZPX', _variant: { lang, cur } });
+}
 
 function sampleInvoice(type, direction, extra) {
   const subtotal = 1485000, vat = 311850;
@@ -37,10 +72,12 @@ function sampleInvoice(type, direction, extra) {
 async function renderInvoiceHtml(inv, ourCompany) {
   const data = invoicePdf.buildTemplateData(inv, ourCompany || OUR);
   try {
-    const spayd = invoicePdf.buildSpaydString({ iban: OUR.iban, amount: inv.total, currency: inv.currency, vs: inv.variable_symbol, message: 'Faktura ' + inv.invoice_number });
-    if (spayd) data.qr_url = await QRCode.toDataURL(spayd, { margin: 1, width: 220 });
+    if (['CZK', 'EUR'].includes(inv.currency)) {
+      const spayd = invoicePdf.buildSpaydString({ iban: OUR.iban, amount: inv.total, currency: inv.currency, vs: inv.variable_symbol, message: (inv.language === 'en' ? 'Invoice ' : 'Faktura ') + inv.invoice_number });
+      if (spayd) data.qr_url = await QRCode.toDataURL(spayd, { margin: 1, width: 220 });
+    } else data.qr_url = '';
   } catch (e) { data.qr_url = ''; }
-  return invoicePdf.renderTemplate(invoicePdf.loadTemplate(), data).replace('<body>', '<body><div class="demo">UKÁZKA — smyšlená data</div>');
+  return invoicePdf.renderTemplate(invoicePdf.loadTemplate(), data).replace('<body>', '<body><div class="demo">' + (inv.language === 'en' ? 'SAMPLE — fictitious data' : 'UKÁZKA — smyšlená data') + '</div>');
 }
 
 // ── Společný vzhled (Best Series 2.0) — bs2-doc-style.js ──
@@ -102,29 +139,29 @@ function reminderHtml(level) {
 }
 
 const CATALOG = [
-  { key: 'invoice_issued',   group: 'Vydané doklady', name: 'Faktura vydaná', desc: 'Daňový doklad pro odběratele s QR platbou.', used: 'Účetní doklady → Vydané' },
-  { key: 'invoice_proforma', group: 'Vydané doklady', name: 'Zálohová faktura', desc: 'Výzva k zaplacení zálohy (není daňový doklad).', used: 'Prodejní objednávky → záloha' },
-  { key: 'invoice_tax_receipt', group: 'Vydané doklady', name: 'Daňový doklad k přijaté platbě (DPPP)', desc: 'Doklad k přijaté záloze po spárování platby.', used: 'Automaticky po spárování platby' },
-  { key: 'invoice_credit',   group: 'Vydané doklady', name: 'Dobropis vydaný', desc: 'Opravný doklad snižující fakturovanou částku.', used: 'Účetní doklady → Vydané' },
+  { variants: true, key: 'invoice_issued',   group: 'Vydané doklady', name: 'Faktura vydaná', desc: 'Daňový doklad pro odběratele s QR platbou.', used: 'Účetní doklady → Vydané' },
+  { variants: true, key: 'invoice_proforma', group: 'Vydané doklady', name: 'Zálohová faktura', desc: 'Výzva k zaplacení zálohy (není daňový doklad).', used: 'Prodejní objednávky → záloha' },
+  { variants: true, key: 'invoice_tax_receipt', group: 'Vydané doklady', name: 'Daňový doklad k přijaté platbě (DPPP)', desc: 'Doklad k přijaté záloze po spárování platby.', used: 'Automaticky po spárování platby' },
+  { variants: true, key: 'invoice_credit',   group: 'Vydané doklady', name: 'Dobropis vydaný', desc: 'Opravný doklad snižující fakturovanou částku.', used: 'Účetní doklady → Vydané' },
   { key: 'offer',            group: 'Obchod', name: 'Cenová nabídka', desc: 'Nabídka prádlomatu s platebními podmínkami a akceptací.', used: 'Prodejní objednávky' },
   { key: 'order',            group: 'Obchod', name: 'Potvrzená objednávka', desc: 'Potvrzení objednávky se sloty výroby a platebním kalendářem.', used: 'Prodejní objednávky → průvodce' },
   { key: 'delivery_note',    group: 'Sklad a expedice', name: 'Dodací list', desc: 'Předávací doklad k expedici s podpisy.', used: 'Prodejní objednávky / Skladové doklady' },
   { key: 'goods_issue',      group: 'Sklad a expedice', name: 'Výdejka', desc: 'Doklad o výdeji materiálu ze skladu do výroby / na zakázku.', used: 'Skladové doklady' },
   { key: 'stock_transfer',   group: 'Sklad a expedice', name: 'Přesun materiálu (převodka)', desc: 'Doklad o přesunu zboží mezi sklady nebo pozicemi.', used: 'Skladové doklady / Sklady' },
   { key: 'goods_receipt',    group: 'Sklad a expedice', name: 'Příjemka', desc: 'Doklad o příjmu zboží na sklad.', used: 'Skladové doklady' },
-  { key: 'invoice_received', group: 'Přijaté doklady', name: 'Faktura přijatá (evidenční karta)', desc: 'Vzhled přijaté faktury při vlastním tisku / archivaci.', used: 'Účetní doklady → Přijaté' },
+  { variants: true, key: 'invoice_received', group: 'Přijaté doklady', name: 'Faktura přijatá (evidenční karta)', desc: 'Vzhled přijaté faktury při vlastním tisku / archivaci.', used: 'Účetní doklady → Přijaté' },
   { key: 'reminder_1',       group: 'Upomínky', name: '1. upomínka', desc: 'Zdvořilá připomínka — 7 dní po splatnosti.', used: 'Automatické upomínky' },
   { key: 'reminder_2',       group: 'Upomínky', name: '2. upomínka', desc: 'Důraznější výzva — 14 dní po splatnosti.', used: 'Automatické upomínky' },
   { key: 'reminder_3',       group: 'Upomínky', name: '3. upomínka', desc: 'Předsoudní upomínka — 21 dní po splatnosti.', used: 'Automatické upomínky' },
 ];
 
-async function renderPreview(key) {
+async function renderPreview(key, opts) {
   switch (key) {
-    case 'invoice_issued': return renderInvoiceHtml(sampleInvoice('issued', 'ar'));
-    case 'invoice_proforma': return renderInvoiceHtml(sampleInvoice('proforma_issued', 'ar', { note: 'Zálohová faktura — neslouží jako daňový doklad.' }));
-    case 'invoice_tax_receipt': return renderInvoiceHtml(sampleInvoice('tax_receipt', 'ar', { items: [Object.assign({}, ITEMS[0], { description: 'Přijatá záloha 75 % — Prádlomat PRO CZ', unit_price: 1087500, subtotal: 1087500, vat_amount: 228375, total: 1315875 })], subtotal: 1087500, vat_amount: 228375, total: 1315875 }));
-    case 'invoice_credit': return renderInvoiceHtml(sampleInvoice('credit_note_issued', 'ar', { items: [Object.assign({}, ITEMS[1], { description: 'Dobropis — sleva na dopravu', unit_price: -5000, subtotal: -5000, vat_amount: -1050, total: -6050 })], subtotal: -5000, vat_amount: -1050, total: -6050, note: 'Opravný daňový doklad k faktuře FV-2026-00012.' }));
-    case 'invoice_received': return renderInvoiceHtml(sampleInvoice('received', 'ap', { note: 'Přijatá faktura — evidenční karta.' }));
+    case 'invoice_issued': return renderInvoiceHtml(variantInvoice('issued', opts));
+    case 'invoice_proforma': return renderInvoiceHtml(variantInvoice('proforma', opts));
+    case 'invoice_tax_receipt': return renderInvoiceHtml(variantInvoice('tax_receipt', opts));
+    case 'invoice_credit': return renderInvoiceHtml(variantInvoice('credit', opts));
+    case 'invoice_received': return renderInvoiceHtml(variantInvoice('received', opts));
     case 'offer': return offerHtml();
     case 'goods_receipt': return receiptHtml();
     case 'goods_issue': return issueHtml();
