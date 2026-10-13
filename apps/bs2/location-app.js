@@ -87,7 +87,6 @@ function evaluate(d, c) {
   v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', d.rent_src);
   v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
   v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
-  v('Plocha', num(d.area) ? num(d.area) + ' m²' : '', '');
   if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng);
   else missing.push('Přesné umístění prádlomatu na mapě');
   v('Domácnosti do 500 m', num(d.households) ? num(d.households).toLocaleString('cs-CZ') : '', d.households_src);
@@ -152,7 +151,6 @@ function siteForm(s, site, d, error) {
     ${inp('address', 'Adresa *', 'required maxlength="300"')}
     ${inp('city', 'Město', 'maxlength="120"')}
     <label>Typ zástavby${sel('building', [['', '—'], ['sidliste', 'sídliště'], ['centrum', 'centrum města'], ['obchod', 'u obchodu / OC'], ['vesnice', 'obec / vesnice'], ['prumysl', 'průmyslová zóna'], ['kemp', 'kemp / rekreace']])}</label>
-    ${inp('area', 'Plocha prostoru (m²)', 'inputmode="decimal"')}
     <div class="full"><label style="margin:0 0 6px">Umístění prádlomatu na mapě <small>Klikněte „Najít adresu", pak špendlík přetáhněte přesně na místo, kde bude prádlomat stát (nebo klikněte do mapy).</small></label>
       <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
       <div id="site-map" style="height:320px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
@@ -244,7 +242,7 @@ function reportPage(s, site, d, c, ev) {
   return page(s, 'Report – ' + (site.name || ''), 'loc', `
   <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><div class="row"><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a><button class="btn sm" type="button" onclick="window.print()">Uložit jako PDF / tisk</button></div></div>
   <div class="card" style="margin-top:12px">
-    <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.area ? ' · ' + esc(d.area) + ' m²' : ''}${d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs' : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
+    <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs' : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Automatický orientační výstup z dostupných podkladů a vašich předpokladů – nikoli odborné schválení investice ani předpověď výdělku. Bez skóre a pravděpodobností.</p>
   </div>
   ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:260px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false}).setView([${num(d.lat)},${num(d.lng)}],17);${TILES}.addTo(m);L.marker([${num(d.lat)},${num(d.lng)}]).addTo(m);})();</script></div>` : ''}
