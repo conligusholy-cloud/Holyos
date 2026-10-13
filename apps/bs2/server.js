@@ -831,11 +831,30 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
       FROM supporters s WHERE s.location_package IS NOT NULL ${qq ? "AND (s.email ILIKE $1 OR s.nick ILIKE $1 OR s.first_name ILIKE $1 OR s.last_name ILIKE $1)" : ''} ORDER BY s.location_expires_at DESC NULLS LAST, s.id DESC LIMIT 500`, qq ? ['%' + qq + '%'] : [])).rows;
     return res.send(LADM.customers({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, rows, q: qq }));
   }
-  if (tab === 'pricing') {
-    const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY + '_saved_at'])).rows[0];
-    return res.send(LADM.pricing({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: r && r.value }));
-  }
   const one = async (sql, p) => (await q(sql, p || [])).rows[0] || {};
+  const savedAt = async () => { const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY + '_saved_at'])).rows[0]; return r && r.value; };
+  if (tab === 'pricing') return res.send(LADM.pricing({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt() }));
+  if (tab === 'product:location') {
+    const stats = {
+      customers: Number((await one('SELECT count(*)::int AS v FROM supporters WHERE location_package IS NOT NULL')).v || 0),
+      sites: Number((await one('SELECT count(*)::int AS v FROM location_sites')).v || 0),
+      sites_eval: Number((await one('SELECT count(*)::int AS v FROM location_sites WHERE evaluated_at IS NOT NULL')).v || 0),
+      running: Number((await one("SELECT count(*)::int AS v FROM location_sites WHERE study_status='running'")).v || 0),
+      errors: Number((await one("SELECT count(*)::int AS v FROM location_sites WHERE study_status='error'")).v || 0),
+      revenue: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND package NOT LIKE 'search%'")).v || 0),
+    };
+    return res.send(LADM.productLocation({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats }));
+  }
+  if (tab === 'product:finder') {
+    const stats = {
+      searches: Number((await one('SELECT count(*)::int AS v FROM location_searches')).v || 0),
+      searches_30: Number((await one("SELECT count(*)::int AS v FROM location_searches WHERE created_at > now() - interval '30 days'")).v || 0),
+      with_cands: Number((await one('SELECT count(*)::int AS v FROM location_searches WHERE candidates IS NOT NULL')).v || 0),
+      contacts: Number((await one("SELECT COALESCE(sum((SELECT count(*) FROM jsonb_object_keys(contacts))),0)::int AS v FROM location_searches")).v || 0),
+      revenue: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND package LIKE 'search%'")).v || 0),
+    };
+    return res.send(LADM.productFinder({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: await savedAt(), stats }));
+  }
   const st = {
     revenue_total: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted')")).v || 0),
     revenue_30: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND COALESCE(paid_at, created_at) > now() - interval '30 days'")).v || 0),
@@ -854,7 +873,8 @@ app.post('/admin/online/pricing', requireAdmin, wrap(async (req, res) => {
   await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY, JSON.stringify(p)]);
   await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY + '_saved_at', new Date().toISOString()]);
   LADM.applyPricing(p);
-  res.redirect('/admin/online?tab=pricing&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : 'Ceník uložen.'));
+  const back = /^product:(location|finder)$/.test(String(req.query.back || '')) ? String(req.query.back) : 'pricing';
+  res.redirect('/admin/online?tab=' + encodeURIComponent(back) + '&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : 'Ceník uložen.'));
 }));
 app.post('/admin/online/customer/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   const id = parseInt(req.params.id, 10); const u = (await q('SELECT * FROM supporters WHERE id=$1', [id])).rows[0]; if (!u) return res.redirect('/admin/online?tab=customers');
