@@ -498,7 +498,19 @@ async function requireLocation(req, res, next) {
 // Limit vyhodnocení = balíček + dokoupená vyhodnocení (supporters.location_extra_evals)
 const locLimit = (u) => (LAPP.LIMITS[u.location_package] || 3) + Number(u.location_extra_evals || 0);
 const locSearchLimit = (u) => (LAPP.SEARCH_LIMITS[u.location_package] || 3) + Number(u.location_extra_searches || 0);
-const locAreaNorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const locAreaNorm = (t) => { const m = String(t || '').trim().match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/); if (m) return (+m[1]).toFixed(4) + ',' + (+m[2]).toFixed(4); return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); };
+const locIsCoords = (t) => /^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/.test(String(t || '').trim());
+// Špendlík v mapě → čitelný název místa (Nominatim reverse), např. „Praha 4 – Nusle, Křesomyslova"
+async function locReverseLabel(area) {
+  const m = String(area).trim().split(','); const lat = +m[0], lon = +m[1];
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&addressdetails=1&lat=' + lat + '&lon=' + lon, { headers: { 'User-Agent': 'BestSeries2/1.0 (+https://www.bestseries2.cz)', Accept: 'application/json', 'Accept-Language': 'cs' }, signal: AbortSignal.timeout(9000) });
+    const j = await r.json().catch(() => ({})); const a = j.address || {};
+    const town = a.city || a.town || a.village || a.municipality || a.county || ''; const part = a.suburb || a.neighbourhood || a.city_district || a.quarter || ''; const street = a.road || '';
+    const label = [town, part && part !== town ? part : '', street].filter(Boolean).join(' – ');
+    return (label || (j.display_name || '').split(',').slice(0, 2).join(',').trim() || null);
+  } catch (e) { return null; }
+}
 async function locSearchUsed(uid) { return Number(((await q('SELECT count(*)::int AS c FROM location_searches WHERE supporter_id=$1', [uid])).rows[0] || {}).c || 0); }
 const locPacks = (kind) => process.env.STRIPE_SECRET_KEY ? Object.fromEntries(Object.entries(LOC.EVAL_PACKS).filter(([, p]) => p[kind])) : {};
 async function locInfo(u, msg) {
@@ -537,10 +549,10 @@ app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAP
 app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
   const u = req.user;
   const credits = { used: await locSearchUsed(u.id), limit: locSearchLimit(u), base: LAPP.SEARCH_LIMITS[u.location_package] || 3, packs: locPacks('searches') };
-  credits.saved = (await q('SELECT area, created_at, (candidates IS NOT NULL) AS has_cands, (SELECT count(*) FROM jsonb_object_keys(contacts)) AS n_contacts FROM location_searches WHERE supporter_id=$1 ORDER BY updated_at DESC', [u.id])).rows;
+  credits.saved = (await q('SELECT area, label, created_at, (candidates IS NOT NULL) AS has_cands, (SELECT count(*) FROM jsonb_object_keys(contacts)) AS n_contacts FROM location_searches WHERE supporter_id=$1 ORDER BY updated_at DESC', [u.id])).rows;
   // Otevření uloženého vyhledávání: výsledek jde rovnou do stránky, nic se znovu neanalyzuje
   const qq = String(req.query.q || '').trim().slice(0, 80);
-  if (qq.length >= 2) { const cur = (await q('SELECT result, candidates, contacts FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [u.id, locAreaNorm(qq)])).rows[0]; if (cur && cur.result) credits.current = { result: cur.result, candidates: cur.candidates, contacts: cur.contacts || {} }; }
+  if (qq.length >= 2) { const cur = (await q('SELECT result, candidates, contacts, label FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [u.id, locAreaNorm(qq)])).rows[0]; if (cur && cur.result) credits.current = { result: Object.assign({}, cur.result, { label: cur.label || null }), candidates: cur.candidates, contacts: cur.contacts || {} }; }
   const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : '';
   res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
 }));
@@ -551,17 +563,19 @@ app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
   if (rateLimited('area:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
   // Kredity: nové město = 1 vyhledání; již hledané město je zdarma
   const norm = locAreaNorm(area), limit = locSearchLimit(req.user);
-  const row = (await q('SELECT id, result FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, norm])).rows[0];
+  const row = (await q('SELECT id, result, label FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, norm])).rows[0];
   let used = await locSearchUsed(req.user.id);
   // Uložené vyhledávání → vrátit rovnou (zákazník se k výsledku vrací bez dalšího kreditu i bez čekání)
-  if (row && row.result && req.query.refresh !== '1') return res.json(Object.assign({}, row.result, { credits: { used, limit }, saved: true }));
+  if (row && row.result && req.query.refresh !== '1') return res.json(Object.assign({}, row.result, { credits: { used, limit }, saved: true, label: row.label || null }));
   if (!row && used >= limit) return res.status(402).json({ error: 'Vyhledání v balíčku jsou vyčerpána (' + used + ' / ' + limit + ').', buy: true, credits: { used, limit } });
   const r = await holyosPublic('/api/pradlomat-spots/public/area-analysis?area=' + encodeURIComponent(area) + '&radius_km=15');
+  let label = null;
   if (r.ok && r.j && typeof r.j === 'object') {
-    await q('INSERT INTO location_searches (supporter_id, area_norm, area, result) VALUES ($1,$2,$3,$4) ON CONFLICT (supporter_id, area_norm) DO UPDATE SET result=EXCLUDED.result, updated_at=now()', [req.user.id, norm, area, JSON.stringify(r.j)]);
+    if (locIsCoords(area)) label = (await locReverseLabel(area)) || ('Špendlík ' + area);
+    await q('INSERT INTO location_searches (supporter_id, area_norm, area, result, label) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (supporter_id, area_norm) DO UPDATE SET result=EXCLUDED.result, label=COALESCE(EXCLUDED.label, location_searches.label), updated_at=now()', [req.user.id, norm, area, JSON.stringify(r.j), label]);
     used = await locSearchUsed(req.user.id);
   }
-  res.status(r.ok ? 200 : (r.status || 502)).json(r.ok && r.j && typeof r.j === 'object' ? Object.assign({}, r.j, { credits: { used, limit } }) : r.j);
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.ok && r.j && typeof r.j === 'object' ? Object.assign({}, r.j, { credits: { used, limit }, label }) : r.j);
 }));
 // Geokódování adresy (Nominatim, server-side, limit 1 req/s per Nominatim pravidla → rate-limit per uživatel)
 app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) => {

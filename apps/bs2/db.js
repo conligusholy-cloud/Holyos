@@ -250,6 +250,7 @@ async function migrate() {
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS candidates JSONB; -- uložená místa, kde by prádlomat mohl stát
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS contacts JSONB NOT NULL DEFAULT '{}'::jsonb; -- dohledané kontakty (klíč = GPS)
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+    ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS label TEXT; -- čitelný název (u špendlíku v mapě = reverzně geokódovaná adresa)
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (
       id           SERIAL PRIMARY KEY,
