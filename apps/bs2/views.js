@@ -1488,6 +1488,7 @@ function adminDash({ admin, stats, recent, holyosUrl }) {
     <div class="stat"><div class="v" style="color:var(--ok)">${stats.active}</div><div class="l">Aktivní (mají nick + heslo)</div></div>
     <div class="stat"><div class="v" style="color:var(--blue)">${stats.invited}</div><div class="l">Čeká na první přihlášení</div></div>
     <div class="stat"><div class="v" style="color:var(--err)">${stats.blocked}</div><div class="l">Blokovaní</div></div>
+    <div class="stat" title="Uživatelé, kteří se do Best Series 2.0 alespoň jednou sami přihlásili"><div class="v" style="color:#ffd866">${stats.logged != null ? stats.logged : '—'}</div><div class="l">Aktivní – aspoň 1× přihlášeni${stats.logged30 != null ? ` · <span style="color:var(--ok)">${stats.logged30}</span> za 30 dní` : ''}</div></div>
   </div>
 
   <div class="card"><h2 style="margin-top:0">Poslední přihlášení</h2>

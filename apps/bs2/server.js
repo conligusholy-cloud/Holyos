@@ -1277,7 +1277,7 @@ app.post('/password', wrap(requireUser), wrap(async (req, res) => {
 
 // ── Správa (SSO) ───────────────────────────────────────────────────────────
 app.get('/admin', requireAdmin, wrap(async (req, res) => {
-  const st = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status='active')::int AS active, count(*) FILTER (WHERE status='invited')::int AS invited, count(*) FILTER (WHERE status='blocked')::int AS blocked FROM supporters")).rows[0];
+  const st = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status='active')::int AS active, count(*) FILTER (WHERE status='invited')::int AS invited, count(*) FILTER (WHERE status='blocked')::int AS blocked, count(*) FILTER (WHERE last_login_at IS NOT NULL)::int AS logged, count(*) FILTER (WHERE last_login_at > now() - interval '30 days')::int AS logged30 FROM supporters")).rows[0];
   const recent = (await q('SELECT nick, email, last_login_at FROM supporters WHERE last_login_at IS NOT NULL ORDER BY last_login_at DESC LIMIT 8')).rows;
   res.send(V.adminDash({ admin: req.admin, stats: st, recent, holyosUrl: HOLYOS_URL }));
 }));
