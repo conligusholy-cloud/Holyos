@@ -13,9 +13,9 @@ const OUR = {
   ico: '05643724', dic: 'CZ05643724', email: 'fakturace@bestseries.cz', phone: '+420 600 000 000', web: 'www.bestseries.cz',
   bank_account: '1234567890/0800', iban: 'CZ6508000000001234567890',
 };
-const CUSTOMER = { name: 'LAUNDRY, j.s.a.', address: 'Příkladná 45', zip: '110 00', city: 'Praha', country: 'CZ', ico: '12345678', dic: 'CZ12345678' };
-const CUSTOMER_EU = { name: 'Wäscherei Müller GmbH', address: 'Hauptstraße 12', zip: '10115', city: 'Berlin', country: 'DE', ico: 'HRB 123456', dic: 'DE123456789' };
-const CUSTOMER_WORLD = { name: 'Lanterne Laundry LLC', address: '350 Fifth Avenue', zip: 'NY 10118', city: 'New York', country: 'USA', ico: '', dic: 'EIN 12-3456789' };
+const CUSTOMER = { name: 'LAUNDRY, j.s.a.', address: 'Příkladná 45', zip: '110 00', city: 'Praha', country: 'CZ', ico: '12345678', dic: 'CZ12345678', branch_address: 'Provozní 7', branch_zip: '251 01', branch_city: 'Říčany' };
+const CUSTOMER_EU = { name: 'Wäscherei Müller GmbH', address: 'Hauptstraße 12', zip: '10115', city: 'Berlin', country: 'DE', ico: 'HRB 123456', dic: 'DE123456789', branch_address: 'Industriestraße 3', branch_zip: '80331', branch_city: 'München' };
+const CUSTOMER_WORLD = { name: 'Lanterne Laundry LLC', address: '350 Fifth Avenue', zip: 'NY 10118', city: 'New York', country: 'USA', ico: '', dic: 'EIN 12-3456789', branch_address: '1200 Harbor Blvd', branch_zip: 'NJ 07302', branch_city: 'Jersey City' };
 const SUPPLIER = { name: 'Dodavatel komponent s.r.o.', address: 'Průmyslová 8', zip: '690 02', city: 'Břeclav', country: 'CZ', ico: '87654321', dic: 'CZ87654321' };
 
 const ITEMS = [

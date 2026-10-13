@@ -119,6 +119,15 @@ function fmtDate(d, lang) {
   return `${dt.getDate()}. ${dt.getMonth() + 1}. ${dt.getFullYear()}`;
 }
 
+// Dodací adresa odběratele = adresa provozovny (branch_*); není-li zadána, použije se adresa sídla.
+function joinDelivery(c) {
+  if (!c) return '';
+  if (c.branch_address || c.branch_city || c.branch_zip) {
+    return joinAddress({ address: c.branch_address, city: c.branch_city, zip: c.branch_zip, country: c.country });
+  }
+  return joinAddress(c);
+}
+
 function joinAddress(c) {
   if (!c) return '';
   const parts = [];
@@ -192,7 +201,7 @@ function buildQrUrl(spaydString) {
 // ─── JAZYKY DOKLADU (cs / en) ───────────────────────────────────────────────
 const I18N = {
   cs: {
-    ext: 'Externí č.:', supplier: 'Dodavatel', customer: 'Odběratel', ico: 'IČO', dic: 'DIČ',
+    ext: 'Externí č.:', supplier: 'Dodavatel', customer: 'Odběratel', delivery: 'Dodací adresa', ico: 'IČO', dic: 'DIČ',
     issued: 'Vystaveno', duzp: 'DUZP', due: 'Splatnost', paymethod: 'Forma úhrady',
     desc: 'Popis', qty: 'Množství', unit: 'Jedn.', unitprice: 'Cena / ks', vatpct: 'DPH', base: 'Základ', vat: 'DPH', total: 'Celkem',
     config: 'Konfigurace / výbava', subtotal_all: 'Základ celkem', vat_all: 'DPH celkem', grand: 'Celkem k úhradě',
@@ -206,7 +215,7 @@ const I18N = {
     locale: 'cs-CZ',
   },
   en: {
-    ext: 'Ext. no.:', supplier: 'Supplier', customer: 'Customer', ico: 'Company ID', dic: 'VAT ID',
+    ext: 'Ext. no.:', supplier: 'Supplier', customer: 'Customer', delivery: 'Delivery address', ico: 'Company ID', dic: 'VAT ID',
     issued: 'Issue date', duzp: 'Tax point', due: 'Due date', paymethod: 'Payment method',
     desc: 'Description', qty: 'Quantity', unit: 'Unit', unitprice: 'Unit price', vatpct: 'VAT', base: 'Net', vat: 'VAT', total: 'Total',
     config: 'Configuration', subtotal_all: 'Total net', vat_all: 'Total VAT', grand: 'Total due',
@@ -306,6 +315,7 @@ function buildTemplateData(invoice, ourCompany) {
     // Odběratel
     customer_name: partner.name || '',
     customer_address: joinAddress(partner),
+    customer_delivery: joinDelivery(partner),
     customer_ico: partner.ico || '',
     customer_dic: partner.dic || '',
 
@@ -335,7 +345,7 @@ function buildTemplateData(invoice, ourCompany) {
     reverse_charge: invoice.vat_regime === 'reverse_charge' || invoice.vat_regime === 'outside_scope',
     reverse_charge_text: invoice.vat_regime === 'outside_scope' ? L.outside : L.reverse,
     lang,
-    l_ext: L.ext, l_supplier: L.supplier, l_customer: L.customer, l_ico: L.ico, l_dic: L.dic,
+    l_ext: L.ext, l_supplier: L.supplier, l_customer: L.customer, l_delivery: L.delivery, l_ico: L.ico, l_dic: L.dic,
     l_issued: L.issued, l_duzp: L.duzp, l_due: L.due, l_paymethod: L.paymethod,
     l_desc: L.desc, l_qty: L.qty, l_unit: L.unit, l_unitprice: L.unitprice, l_vatpct: L.vatpct, l_base: L.base, l_vat: L.vat, l_total: L.total,
     l_config: L.config, l_subtotal_all: L.subtotal_all, l_vat_all: L.vat_all, l_grand: L.grand,
