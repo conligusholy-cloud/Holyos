@@ -235,6 +235,7 @@ async function migrate() {
     -- Účet zákazníka aplikace Prověření lokality (user_type='location'): balíček + platnost
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_package TEXT;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_expires_at TIMESTAMPTZ;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_evals INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhodnocení navíc
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (
       id           SERIAL PRIMARY KEY,

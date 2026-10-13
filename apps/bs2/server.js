@@ -446,7 +446,7 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
       const o = r.rows[0];
       if (o) {
         console.log('[bs2] /location ZAPLACENO #' + o.id + ' ' + o.package + ' ' + o.amount_czk + ' Kč');
-        const pkg = LOC.PACKAGES[o.package] || {};
+        const pkg = LOC.PACKAGES[o.package] || LOC.EVAL_PACKS[o.package] || {};
         try { await locGrantAccess(o, req); } catch (e) { console.error('[bs2] location grant:', e.message); }
         locNotify('Zaplaceno: ' + (pkg.label || o.package) + ' – ' + o.name, o.name + ' (' + o.email + (o.phone ? ', ' + o.phone : '') + ') zaplatil ' + o.amount_czk + ' Kč za balíček ' + (pkg.label || o.package) + '. Předejte přístup do aplikace a označte v administraci.').catch(() => {});
       }
@@ -456,6 +456,18 @@ app.post('/api/location/stripe-webhook', wrap(async (req, res) => {
 }));
 // Zpřístupnění aplikace: účet typu 'location' (12 měsíců), aktivační e-mail, objednávka → granted.
 async function locGrantAccess(o, req) {
+  const base0 = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
+  // Dokoupení vyhodnocení: jen připsat k účtu (balíček ani platnost se nemění)
+  const ep = LOC.EVAL_PACKS[o.package];
+  if (ep) {
+    const u = o.supporter_id ? (await q('SELECT * FROM supporters WHERE id=$1', [o.supporter_id])).rows[0] : (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
+    if (!u) throw new Error('Účet pro dokoupení nenalezen (' + o.email + ')');
+    await q('UPDATE supporters SET location_extra_evals=COALESCE(location_extra_evals,0)+$2, updated_at=now() WHERE id=$1', [u.id, ep.evals]);
+    await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
+    await sendBs2Mail({ to: u.email, subject: 'Připsáno: ' + ep.label.replace('+', '') + ' lokalit', body: 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč. K vašemu účtu v aplikaci Prověření lokality jsme připsali ' + ep.evals + ' vyhodnocení navíc. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.', link: base0 + '/lokalita', linkLabel: 'Otevřít Moje lokality' }).catch((e) => console.warn('[bs2] topup mail:', e.message));
+    console.log('[bs2] /lokalita dokoupení připsáno: účet #' + u.id + ' +' + ep.evals);
+    return;
+  }
   const pkg = LOC.PACKAGES[o.package] || LOC.PACKAGES.basic;
   const parts = String(o.name || '').trim().split(/\s+/); const first = parts.shift() || null, last = parts.join(' ') || null;
   let u = (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
@@ -482,13 +494,38 @@ async function requireLocation(req, res, next) {
     next();
   });
 }
+// Limit vyhodnocení = balíček + dokoupená vyhodnocení (supporters.location_extra_evals)
+const locLimit = (u) => (LAPP.LIMITS[u.location_package] || 3) + Number(u.location_extra_evals || 0);
 async function locInfo(u, msg) {
   const o = (await q("SELECT survey_date, survey_tech, survey_report FROM location_orders WHERE supporter_id=$1 AND package='premium' ORDER BY id DESC LIMIT 1", [u.id])).rows[0] || {};
-  return { package: u.location_package, expires_at: u.location_expires_at, msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
+  return { package: u.location_package, expires_at: u.location_expires_at, limit: locLimit(u), packs: process.env.STRIPE_SECRET_KEY ? LOC.EVAL_PACKS : {}, msg: msg || '', survey_date: o.survey_date, survey_tech: o.survey_tech, survey_report: o.survey_report };
 }
+// Dokoupení vyhodnocení: objednávka vázaná na účet → Stripe Checkout → webhook připíše vyhodnocení (locGrantAccess)
+app.post('/lokalita/dokoupit', wrap(requireLocation), wrap(async (req, res) => {
+  const key = String((req.body || {}).pack || ''); const pk = LOC.EVAL_PACKS[key];
+  if (!pk) return res.redirect('/lokalita?msg=' + encodeURIComponent('Neznámý balíček.'));
+  if (!process.env.STRIPE_SECRET_KEY) return res.redirect('/lokalita?msg=' + encodeURIComponent('Online platba momentálně není dostupná – napište nám přes Podporu.'));
+  if (rateLimited('loctop:' + req.user.id, 10, 10 * 60e3)) return res.redirect('/lokalita?msg=' + encodeURIComponent('Příliš mnoho požadavků, zkuste to za chvíli.'));
+  const u = req.user, name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.nick || u.email;
+  const oid = (await q('INSERT INTO location_orders (name,email,phone,package,amount_czk,status,consent,marketing,ip,supporter_id) VALUES ($1,$2,$3,$4,$5,$6,true,false,$7,$8) RETURNING id',
+    [name, u.email, u.phone || null, key, pk.amount / 100, 'pending', String(req.ip || '').slice(0, 64), u.id])).rows[0].id;
+  const base = locBase(req);
+  const session = await stripePost('checkout/sessions', {
+    mode: 'payment', customer_email: u.email, locale: 'cs',
+    success_url: base + '/lokalita?topup=1', cancel_url: base + '/lokalita?topup=0',
+    line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pk.amount, product_data: { name: pk.name, description: pk.desc } } }],
+    metadata: { order_id: String(oid), package: key, source: 'bs2-location-topup', supporter_id: String(u.id) },
+    payment_intent_data: { description: pk.name + ' – ' + name, metadata: { order_id: String(oid), package: key } },
+    invoice_creation: { enabled: 'true' },
+  });
+  await q('UPDATE location_orders SET stripe_session=$1 WHERE id=$2', [session.id, oid]);
+  console.log('[bs2] /lokalita dokoupení #' + oid + ' ' + key + ' účet #' + u.id + ' → ' + session.id);
+  res.redirect(303, session.url);
+}));
 app.get('/lokalita', wrap(requireLocation), wrap(async (req, res) => {
   const sites = (await q('SELECT id, name, address, city, calc, result, evaluated_at FROM location_sites WHERE supporter_id=$1 ORDER BY created_at', [req.user.id])).rows;
-  const info = await locInfo(req.user, req.query.msg); info.used = await locUsed(req.user.id);
+  const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhodnocení se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : req.query.msg;
+  const info = await locInfo(req.user, msg); info.used = await locUsed(req.user.id);
   res.send(LAPP.listPage(req.user, sites, info));
 }));
 app.get('/lokalita/checklist', wrap(requireLocation), (req, res) => res.send(LAPP.checklistPage(req.user)));
@@ -557,7 +594,7 @@ async function locSave(req, res, site) {
     result = { result: ev.result, cls: ev.cls, at: new Date().toISOString() };
     const alreadyEvaluated = !!(site && site.evaluated_at);
     if (!alreadyEvaluated) {
-      const used = await locUsed(req.user.id), limit = LAPP.LIMITS[req.user.location_package] || 3;
+      const used = await locUsed(req.user.id), limit = locLimit(req.user);
       if (used >= limit) {
         // uložit data, ale nevyhodnocovat
         if (site) await q('UPDATE location_sites SET name=$2, address=$3, city=$4, data=$5, updated_at=now() WHERE id=$1 AND supporter_id=$6', [site.id, d.name, d.address, d.city || null, JSON.stringify(d), req.user.id]);
@@ -589,7 +626,7 @@ async function locSave(req, res, site) {
 app.post('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => locSave(req, res, null)));
 async function locSite(req) { return (await q('SELECT * FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id])).rows[0]; }
 app.get('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); const dd = Object.assign({}, site.data || {}); if (req.query.ai === '1' && site.study && site.study.demand && site.study.demand.washes_per_day) { const w = site.study.demand.washes_per_day; if (w.weak) dd.washes_weak = String(w.weak); if (w.mid) dd.washes_mid = String(w.mid); if (w.strong) dd.washes_strong = String(w.strong); }
-  res.send(LAPP.siteForm(req.user, site, dd, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: limit lokalit balíčku je vyčerpán.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
+  res.send(LAPP.siteForm(req.user, site, dd, req.query.limit === '1' ? 'Uloženo, ale vyhodnocení neproběhlo: vyhodnocení v balíčku jsou vyčerpána. Dokoupit je můžete v Moje lokality.' : '', req.query.saved === '1', req.query.noeval === '1', await locProducts())); }));
 app.post('/lokalita/:id(\\d+)', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); return locSave(req, res, site); }));
 app.get('/lokalita/:id(\\d+)/report', wrap(requireLocation), wrap(async (req, res) => { const site = await locSite(req); if (!site) return res.redirect('/lokalita'); if (!site.evaluated_at) return res.redirect('/lokalita/' + site.id + '?noeval=1'); const d = site.data || {}; const c = LAPP.calc(d); res.send(LAPP.reportPage(req.user, site, d, c, LAPP.evaluate(d, c), req.query.study_err ? String(req.query.study_err).slice(0, 300) : '')); }));
 async function locBuildStudy(site, d, c, ev) {
