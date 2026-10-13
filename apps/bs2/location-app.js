@@ -87,7 +87,7 @@ function evaluate(d, c) {
   v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', d.rent_src);
   v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
   v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
-  if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng);
+  if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng + ' · prádlomat 3 × 2 m, otočení ' + (d.heading || 0) + '°');
   else missing.push('Přesné umístění prádlomatu na mapě');
   v('Domácnosti do 500 m', num(d.households) ? num(d.households).toLocaleString('cs-CZ') : '', d.households_src);
   v('Konkurence do 2 km', d.competition === '' || d.competition == null ? '' : String(num(d.competition)), '');
@@ -131,7 +131,7 @@ function evaluate(d, c) {
 const LEAFLET_HEAD = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>`;
 const TILES = "L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',{attribution:'Tiles &copy; Esri',maxZoom:19})";
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'power_amp', 'conn_src', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 8, months: 60, conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
@@ -152,9 +152,10 @@ function siteForm(s, site, d, error) {
     ${inp('city', 'Město', 'maxlength="120"')}
     <label>Typ zástavby${sel('building', [['', '—'], ['sidliste', 'sídliště'], ['centrum', 'centrum města'], ['obchod', 'u obchodu / OC'], ['vesnice', 'obec / vesnice'], ['prumysl', 'průmyslová zóna'], ['kemp', 'kemp / rekreace']])}</label>
     <div class="full"><label style="margin:0 0 6px">Umístění prádlomatu na mapě <small>Klikněte „Najít adresu", pak špendlík přetáhněte přesně na místo, kde bude prádlomat stát (nebo klikněte do mapy).</small></label>
-      <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
-      <div id="site-map" style="height:320px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
-      <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"></div>
+      <div class="row" style="margin-bottom:8px"><button type="button" class="btn sec sm" id="geo-btn">📍 Najít adresu na mapě</button><select id="geo-pick" style="display:none;width:auto;max-width:420px;font-size:13px;padding:7px 10px"></select><span class="small muted" id="geo-msg">${d.lat ? 'Poloha uložena: ' + esc(d.lat) + ', ' + esc(d.lng) : 'Poloha zatím není určena.'}</span></div>
+      <div id="site-map" style="height:440px;border-radius:14px;border:1px solid var(--border);background:#0e1e33;z-index:0;overflow:hidden"></div>
+      <div class="row" style="margin-top:8px;gap:10px;flex-wrap:wrap;align-items:center"><span class="small muted">Prádlomat <b>3 × 2 m</b> – modrý obdélník, šipka = vstup (čelo). Otočení:</span><input type="range" id="f-heading-r" min="0" max="359" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}" style="width:220px;accent-color:var(--accent2)"><b id="f-heading-v" style="min-width:44px">${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}°</b><button type="button" class="btn sec sm" id="rot-l">⟲ −15°</button><button type="button" class="btn sec sm" id="rot-r">⟳ +15°</button><button type="button" class="btn sec sm" id="sat-btn">🛰 Satelit</button></div>
+      <input type="hidden" name="lat" id="f-lat" value="${V('lat')}"><input type="hidden" name="lng" id="f-lng" value="${V('lng')}"><input type="hidden" name="heading" id="f-heading" value="${d.heading != null && d.heading !== '' ? esc(d.heading) : 0}"></div>
     <h3>Nájem a smlouva</h3>
     ${inp('rent', 'Nájem (Kč / měsíc, bez energií)', 'inputmode="decimal"')}
     ${inp('rent_src', 'Zdroj nájmu (ověření)', 'maxlength="200" placeholder="např. nabídka pronajímatele 1. 10. 2026"', 'Uvedený zdroj zařadí údaj mezi ověřené skutečnosti.')}
@@ -205,14 +206,29 @@ function siteForm(s, site, d, error) {
     <div class="full row" style="margin-top:8px"><button class="btn" type="submit">Uložit a vyhodnotit</button>${site ? `<a class="btn sec" href="/lokalita/${site.id}/report">Zobrazit report</a>` : ''}</div>
   </form>
   <script>(function(){
-    var lat=document.getElementById('f-lat'),lng=document.getElementById('f-lng'),msg=document.getElementById('geo-msg');
-    var has=lat.value&&lng.value; var map=L.map('site-map',{scrollWheelZoom:false}).setView(has?[+lat.value,+lng.value]:[49.8,15.5],has?17:7); ${TILES}.addTo(map);
-    var marker=null; function setPin(a,b,zoom){ if(!marker){ marker=L.marker([a,b],{draggable:true}).addTo(map); marker.on('dragend',function(){ var p=marker.getLatLng(); save(p.lat,p.lng); }); } else marker.setLatLng([a,b]); save(a,b); if(zoom) map.setView([a,b],zoom); }
-    function save(a,b){ lat.value=a.toFixed(6); lng.value=b.toFixed(6); msg.textContent='Poloha: '+lat.value+', '+lng.value+' (uloží se s lokalitou)'; }
-    if(has) setPin(+lat.value,+lng.value);
-    map.on('click',function(e){ setPin(e.latlng.lat,e.latlng.lng); });
+    var lat=document.getElementById('f-lat'),lng=document.getElementById('f-lng'),hd=document.getElementById('f-heading'),hdr=document.getElementById('f-heading-r'),hdv=document.getElementById('f-heading-v'),msg=document.getElementById('geo-msg');
+    var has=lat.value&&lng.value; var map=L.map('site-map',{scrollWheelZoom:true,maxZoom:22}).setView(has?[+lat.value,+lng.value]:[49.8,15.5],has?20:7);
+    var street=${TILES}; var sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Imagery &copy; Esri',maxZoom:22,maxNativeZoom:19}); street.options.maxZoom=22; street.options.maxNativeZoom=19; street.addTo(map); var satOn=false;
+    document.getElementById('sat-btn').addEventListener('click',function(){ satOn=!satOn; if(satOn){ map.removeLayer(street); sat.addTo(map); this.textContent='🗺 Mapa'; } else { map.removeLayer(sat); street.addTo(map); this.textContent='🛰 Satelit'; } });
+    // Obdélník 3 × 2 m (délka × hloubka), otočený o heading (0° = čelo na sever), šipka = vstup
+    var W=3, D=2, rect=null, arrow=null, dragging=false;
+    function corners(a,b,h){ var R=6378137, rad=h*Math.PI/180, cos=Math.cos(rad), sin=Math.sin(rad), lat0=a*Math.PI/180; function off(x,y){ var xr=x*cos-y*sin, yr=x*sin+y*cos; return [a+(yr/R)*180/Math.PI, b+(xr/(R*Math.cos(lat0)))*180/Math.PI]; }
+      return { box:[off(-W/2,-D/2),off(W/2,-D/2),off(W/2,D/2),off(-W/2,D/2)], front:[off(0,D/2),off(0,D/2+1.2)], tipL:off(-0.5,D/2+0.7), tipR:off(0.5,D/2+0.7) }; }
+    function draw(){ if(!lat.value) return; var c=corners(+lat.value,+lng.value,+hd.value||0);
+      if(!rect){ rect=L.polygon(c.box,{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(map); arrow=L.polyline([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]],{color:'#2fe3a0',weight:3}).addTo(map);
+        rect.on('mousedown',function(e){ dragging=true; map.dragging.disable(); L.DomEvent.stop(e); }); map.on('mousemove',function(e){ if(dragging) save(e.latlng.lat,e.latlng.lng); }); map.on('mouseup',function(){ if(dragging){ dragging=false; map.dragging.enable(); } });
+        rect.on('touchstart',function(e){ dragging=true; map.dragging.disable(); }); map.on('touchend',function(){ dragging=false; map.dragging.enable(); });
+      } else { rect.setLatLngs(c.box); arrow.setLatLngs([c.tipL,c.front[1],c.tipR,c.front[1],c.front[0]]); } }
+    function save(a,b){ lat.value=a.toFixed(7); lng.value=b.toFixed(7); msg.textContent='Poloha: '+lat.value+', '+lng.value+' · otočení '+hd.value+'° (uloží se s lokalitou)'; draw(); }
+    function setPin(a,b,zoom){ save(a,b); if(zoom) map.setView([a,b],zoom); }
+    function setHeading(v){ v=((Math.round(v)%360)+360)%360; hd.value=v; hdr.value=v; hdv.textContent=v+'°'; draw(); }
+    hdr.addEventListener('input',function(){ setHeading(+this.value); }); document.getElementById('rot-l').addEventListener('click',function(){ setHeading(+hd.value-15); }); document.getElementById('rot-r').addEventListener('click',function(){ setHeading(+hd.value+15); });
+    if(has) draw();
+    map.on('click',function(e){ if(!dragging) setPin(e.latlng.lat,e.latlng.lng, map.getZoom()<19?20:null); });
     document.getElementById('geo-btn').addEventListener('click',function(){ var f=document.querySelector('form.lk-f'); var ad=f.address.value.trim(), ci=f.city.value.trim(); if(ad.length<2&&ci.length<2){ msg.textContent='Nejdřív vyplňte adresu nebo město.'; return; } msg.textContent='Hledám…';
-      fetch('/api/location/geocode?address='+encodeURIComponent(ad)+'&city='+encodeURIComponent(ci)).then(function(r){return r.json();}).then(function(j){ if(j&&j.lat!=null){ setPin(j.lat,j.lon,j.level==='town'?15:17); msg.textContent=(j.level==='town'?'Přesná adresa nenalezena, zobrazuji obec: ':'Nalezeno: ')+(j.display_name||ad)+' – špendlík přetáhněte přesně na místo.'; } else msg.textContent=(j&&j.error)||'Adresa nenalezena – klikněte do mapy ručně.'; }).catch(function(){ msg.textContent='Vyhledání selhalo – klikněte do mapy ručně.'; }); });
+      fetch('/api/location/geocode?address='+encodeURIComponent(ad)+'&city='+encodeURIComponent(ci)).then(function(r){return r.json();}).then(function(j){ var pick=document.getElementById('geo-pick'); pick.style.display='none'; if(j&&j.lat!=null){ setPin(j.lat,j.lon,j.level==='town'?16:20); msg.textContent=(j.level==='town'?'Přesná adresa nenalezena, zobrazuji obec: ':'Nalezeno: ')+(j.display_name||ad)+' – prádlomat přetáhněte přesně na místo.';
+        if(j.candidates&&j.candidates.length>1){ pick.innerHTML=j.candidates.map(function(c,i){ return '<option value="'+i+'">'+c.display_name.replace(/</g,'&lt;')+'</option>'; }).join(''); pick.style.display='inline-block'; pick.onchange=function(){ var c=j.candidates[+this.value]; setPin(c.lat,c.lon,20); msg.textContent='Nalezeno: '+c.display_name+' – prádlomat přetáhněte přesně na místo.'; }; }
+      } else msg.textContent=(j&&j.error)||'Adresa nenalezena – klikněte do mapy ručně.'; }).catch(function(){ msg.textContent='Vyhledání selhalo – klikněte do mapy ručně.'; }); });
   })();</script>`, LEAFLET_HEAD);
 }
 
@@ -245,7 +261,7 @@ function reportPage(s, site, d, c, ev) {
     <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Orientační vyhodnocení lokality · ${new Date().toLocaleDateString('cs-CZ')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(d.address || '')}${d.city ? ', ' + esc(d.city) : ''}${d.rent ? ' · nájem ' + kc(num(d.rent)) + '/měs' : ''}</div></div><span class="res ${ev.cls}">${esc(ev.result)}</span></div>
     <p class="small muted" style="margin:10px 0 0">Automatický orientační výstup z dostupných podkladů a vašich předpokladů – nikoli odborné schválení investice ani předpověď výdělku. Bez skóre a pravděpodobností.</p>
   </div>
-  ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:260px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false}).setView([${num(d.lat)},${num(d.lng)}],17);${TILES}.addTo(m);L.marker([${num(d.lat)},${num(d.lng)}]).addTo(m);})();</script></div>` : ''}
+  ${d.lat && d.lng ? `<div class="card" style="padding:10px"><div id="rep-map" style="height:260px;border-radius:12px;overflow:hidden;z-index:0"></div><script>(function(){var a=${num(d.lat)},b=${num(d.lng)},h=${num(d.heading)};var m=L.map('rep-map',{scrollWheelZoom:false,dragging:false,zoomControl:false,maxZoom:22}).setView([a,b],20);var t=${TILES};t.options.maxZoom=22;t.options.maxNativeZoom=19;t.addTo(m);var R=6378137,rad=h*Math.PI/180,cs=Math.cos(rad),sn=Math.sin(rad),l0=a*Math.PI/180;function off(x,y){var xr=x*cs-y*sn,yr=x*sn+y*cs;return [a+(yr/R)*180/Math.PI,b+(xr/(R*Math.cos(l0)))*180/Math.PI];}L.polygon([off(-1.5,-1),off(1.5,-1),off(1.5,1),off(-1.5,1)],{color:'#4fd1ff',weight:2,fillColor:'#1e86e0',fillOpacity:.55}).addTo(m);L.polyline([off(-0.5,1.7),off(0,2.2),off(0.5,1.7),off(0,2.2),off(0,1)],{color:'#2fe3a0',weight:3}).addTo(m);})();</script></div>` : ''}
   <div class="card rep"><h2 style="margin:0 0 10px">Ekonomické scénáře <span class="small muted" style="font-weight:500">měsíčně · liší se jen návštěvností</span></h2>
     <div class="sc">${sc(c.S.weak)}${sc(c.S.mid, true)}${sc(c.S.strong)}</div>
     <div class="row" style="margin-top:12px;gap:18px;flex-wrap:wrap"><span class="small">Bod zvratu provozu: <b>${c.be_operating != null ? c.be_operating + ' praní / den' : 'nedosažen do 60/den'}</b></span>${c.payment ? `<span class="small">Bod zvratu po splátce: <b>${c.be_cash != null ? c.be_cash + ' praní / den' : 'nedosažen'}</b></span>` : ''}<span class="small">Investice celkem: <b>${kc(c.invest)}</b></span>${c.payment ? `<span class="small">Splátka: <b>${kc(c.payment)}/měs</b></span>` : ''}</div>

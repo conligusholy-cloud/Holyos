@@ -504,20 +504,28 @@ app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) =>
   const addr = String(req.query.address || req.query.q || '').trim().slice(0, 200), city = String(req.query.city || '').trim().slice(0, 100);
   if (addr.length < 2 && city.length < 2) return res.status(400).json({ error: 'Zadejte adresu.' });
   if (rateLimited('geo:' + req.user.id, 60, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // 1) RÚIAN (ČÚZK) – přesná adresní místa v ČR včetně č.p. bez ulice. Kandidáty seřadíme: adresní místo + shoda obce nahoru.
+  try {
+    const q1 = [addr, city].filter(Boolean).join(', ');
+    const r = await fetch('https://ags.cuzk.cz/arcgis/rest/services/RUIAN/Vyhledavaci_sluzba_nad_daty_RUIAN/MapServer/exts/GeocodeSOE/findAddressCandidates?outSR=4326&maxLocations=10&f=json&SingleLine=' + encodeURIComponent(q1), { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(9000) });
+    const j = await r.json().catch(() => ({}));
+    let cands = Array.isArray(j.candidates) ? j.candidates : [];
+    if (cands.length) {
+      const cn = norm(city);
+      const score = (c) => ((c.attributes && c.attributes.Type) === 'AdresniMisto' ? 2 : 0) + (cn && norm(c.address).includes(cn) ? 4 : 0) + (cn && norm(c.address).endsWith(cn) ? 1 : 0);
+      cands = cands.map((c) => ({ lat: c.location.y, lon: c.location.x, display_name: c.address, type: (c.attributes && c.attributes.Type) || '', s: score(c) })).sort((a, b) => b.s - a.s).slice(0, 8);
+      const best = cands[0];
+      return res.json({ lat: best.lat, lon: best.lon, display_name: best.display_name, level: 'exact', source: 'RÚIAN', candidates: cands.map(({ lat, lon, display_name }) => ({ lat, lon, display_name })) });
+    }
+  } catch (e) { /* RÚIAN nedostupný → Nominatim */ }
+  // 2) Nominatim – záloha (SK, cizí adresy) + obec
   const H = { 'User-Agent': 'BestSeries2/1.0 (+https://www.bestseries2.cz)', Accept: 'application/json', 'Accept-Language': 'cs' };
-  async function nom(params) { try { const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&addressdetails=1&countrycodes=cz,sk&' + params, { headers: H, signal: AbortSignal.timeout(9000) }); const j = await r.json().catch(() => []); return Array.isArray(j) && j.length ? j[0] : null; } catch (e) { return null; } }
-  // Postupně: volný text → strukturovaně (ulice/č.p. + obec) → jen obec. České „Obec 48" Nominatim často nenajde volným textem.
+  async function nom(params) { try { const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=cz,sk&' + params, { headers: H, signal: AbortSignal.timeout(9000) }); const j = await r.json().catch(() => []); return Array.isArray(j) && j.length ? j[0] : null; } catch (e) { return null; } }
   const tries = [];
   if (addr) tries.push(['exact', 'q=' + encodeURIComponent([addr, city].filter(Boolean).join(', '))]);
-  if (addr && city) tries.push(['exact', 'street=' + encodeURIComponent(addr) + '&city=' + encodeURIComponent(city)]);
-  if (addr && !city) { const m = addr.match(/^(.+?)\s+(\d+[a-zA-Z]?(?:\/\d+)?)$/); if (m) tries.push(['exact', 'street=' + encodeURIComponent(m[2] + ' ' + m[1]) + '&city=' + encodeURIComponent(m[1])]); }
   if (city) tries.push(['town', 'city=' + encodeURIComponent(city)]);
-  if (addr) { const m = addr.match(/^(.+?)\s+\d+/); if (m) tries.push(['town', 'city=' + encodeURIComponent(m[1])]); }
-  for (const [level, params] of tries) {
-    const x = await nom(params);
-    if (x) return res.json({ lat: parseFloat(x.lat), lon: parseFloat(x.lon), display_name: x.display_name, level });
-    await new Promise((r) => setTimeout(r, 1100)); // Nominatim: max 1 dotaz/s
-  }
+  for (const [level, params] of tries) { const x = await nom(params); if (x) return res.json({ lat: parseFloat(x.lat), lon: parseFloat(x.lon), display_name: x.display_name, level, source: 'OSM' }); await new Promise((r) => setTimeout(r, 1100)); }
   res.json({ error: 'Adresa nenalezena – přibližte mapu a klikněte na místo ručně.' });
 }));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
