@@ -82,16 +82,12 @@ function evaluate(d, c) {
   else if (!own && d.rent_known === 'no') missing.push('Výše nájmu (zatím neznámá) – kalkulace počítá s 0 Kč');
   else if (!own && !num(d.rent)) missing.push('Výše nájmu');
   if (unk(d.conn_water)) missing.push('Přípojka vody'); if (unk(d.conn_sewer)) missing.push('Odpad'); if (unk(d.conn_power)) missing.push('Elektrická přípojka');
-  if (!num(d.households)) missing.push('Počet domácností v docházkové vzdálenosti (doplňte ručně – ČSÚ, mapy)');
-  if (d.competition === '' || d.competition == null) missing.push('Konkurence do 2 km');
-  if (!num(d.foot_traffic)) missing.push('Vlastní měření pěší frekvence (2× 30 min)');
   if (!num(d.machine_price)) missing.push('Cena zařízení (investice)');
   // ověřené skutečnosti = zadané s uvedeným zdrojem
   const v = (label, val, src) => { if (val === '' || val == null) return; if (src) verified.push(`${label}: ${val} – ${src}`); else given.push(`${label}: ${val}`); };
   if (own) given.push('Místo: vlastní (nájem 0 Kč)'); else if (d.ownership === 'rent') given.push('Místo: v nájmu' + (num(d.deposit) ? ', kauce ' + num(d.deposit).toLocaleString('cs-CZ') + ' Kč' : d.deposit === '0' ? ', bez kauce' : ''));
   if (!own) v('Nájem', num(d.rent) ? num(d.rent).toLocaleString('cs-CZ') + ' Kč/měs' : '', '');
   v('Přípojky', [d.conn_water === 'yes' ? 'voda' : null, d.conn_sewer === 'yes' ? 'odpad' : null, d.conn_power === 'yes' ? 'elektřina ' + (d.power_amp || '') : null].filter(Boolean).join(', ') || (unk(d.conn_water) ? '' : 'chybí'), d.conn_src);
-  v('Pěší frekvence', num(d.foot_traffic) ? num(d.foot_traffic) + ' osob / 30 min' : '', d.foot_src);
   if (d.lat && d.lng) given.push('Umístění na mapě: ' + d.lat + ', ' + d.lng + ' · prádlomat 3 × 2 m, otočení ' + (d.heading || 0) + '°');
   else missing.push('Přesné umístění prádlomatu na mapě');
   const pois = parsePois(d); const tl = Object.fromEntries(POI_TYPES.map((t) => [t.key, t]));
@@ -100,8 +96,6 @@ function evaluate(d, c) {
   if (roads.length && roads.every((p) => p.visible === 'no')) risks.push('Prádlomat není vidět z hlavní silnice (' + roads.map((p) => p.label || 'silnice').join(', ') + ')');
   if (roads.some((p) => !p.visible)) missing.push('Viditelnost prádlomatu z hlavní silnice');
   if (!pois.some((p) => p.type === 'parking')) missing.push('Nejbližší parkoviště zakreslené v mapě (povinné)');
-  v('Domácnosti do 500 m', num(d.households) ? num(d.households).toLocaleString('cs-CZ') : '', d.households_src);
-  v('Konkurence do 2 km', d.competition === '' || d.competition == null ? '' : String(num(d.competition)), '');
   v('Výpovědní lhůta', num(d.notice) ? num(d.notice) + ' měs.' : '', '');
   assumed.push(`Ceny: praní ${num(d.price_wash, 300)} Kč, sušení ${num(d.price_dry, 50)} Kč/cyklus, ${num(d.dry_share, 60)} % zákazníků suší (${num(d.dry_cycles, 2)} cykly)`);
   assumed.push(`Návštěvnost (váš předpoklad): slabý ${c.S.weak.washes} / střední ${c.S.mid.washes} / silný ${c.S.strong.washes} praní za den`);
@@ -117,16 +111,15 @@ function evaluate(d, c) {
   if (!own && d.rent_known === 'no') risks.push('Nájem zatím není známý – výsledek se změní podle skutečné výše');
   if (d.conn_water === 'no' || d.conn_sewer === 'no') risks.push('Chybí voda nebo odpad – náklady na přípojku nejsou v kalkulaci');
   if (d.conn_power === 'no') risks.push('Chybí dostatečná elektrická přípojka');
-  if (num(d.competition) >= 2) risks.push(`Konkurence v okolí: ${num(d.competition)} provozoven do 2 km`);
-  if (d.visibility === 'no') risks.push('Místo není vidět z ulice');
-  if (d.parking === 'no' && d.transit === 'no') risks.push('Bez parkování i MHD – špatná dostupnost');
-  if (num(d.households) && num(d.households) < 800) risks.push('Málo domácností v docházkové vzdálenosti');
-  if (!num(d.foot_traffic)) risks.push('Návštěvnost není podložena vlastním měřením');
+  const compN = pois.filter((p) => p.type === 'competition').length;
+  if (compN >= 2) risks.push(`Konkurence v okolí: ${compN} provozoven zakreslených v mapě`);
+  if (!pois.some((p) => p.type === 'housing')) missing.push('Bytové domy v okolí zakreslené v mapě');
+  if (!pois.some((p) => p.type === 'transit')) risks.push('V mapě není zakreslená zastávka MHD');
   if (c.S.mid.payback && c.S.mid.payback > 84) risks.push(`Návratnost ve středním scénáři ${Math.round(c.S.mid.payback / 12)} let`);
   // kroky
   missing.forEach((m) => steps.push('Doplnit: ' + m));
   if (num(d.notice) && num(d.notice) < 12) steps.push('Vyjednat výpovědní lhůtu min. 12 měsíců (ideálně 24)');
-  if (!num(d.foot_traffic)) steps.push('Změřit pěší frekvenci 2× 30 min (všední den 17–18 h, sobota 10–11 h) a vyhodnotit znovu');
+  steps.push('Změřit pěší frekvenci 2× 30 min (všední den 17–18 h, sobota 10–11 h) u hlavní silnice / vstupu');
   if (c.S.weak.cash < 0 && c.S.mid.cash >= 0) steps.push('Zvážit vyšší akontaci nebo delší splácení, aby slabý scénář nebyl záporný');
   if (c.S.mid.cash < 0) steps.push('Vyjednat nižší nájem nebo hledat místo s vyšší návštěvností');
   steps.push('Po 1., 3. a 6. měsíci provozu porovnat skutečné cykly se scénáři');
@@ -135,7 +128,7 @@ function evaluate(d, c) {
   const critical = missing.filter((m) => /nájmu|Vlastní místo|Přípojka|Odpad|Elektrick|Cena zařízení/.test(m)).length;
   if (critical >= 2) { result = 'Nedostatek údajů pro posouzení'; cls = 'na'; }
   else if (c.S.strong.operating <= 0 || c.S.mid.cash < 0) { result = 'Nevhodné podle dostupných podkladů'; cls = 'bad'; }
-  else if (c.S.weak.cash < 0 || critical >= 1 || (num(d.notice) && num(d.notice) < 12) || num(d.competition) >= 2 || !num(d.foot_traffic) || d.conn_water === 'no' || d.conn_sewer === 'no') { result = 'Vhodné při splnění podmínek'; cls = 'cond'; }
+  else if (c.S.weak.cash < 0 || critical >= 1 || (num(d.notice) && num(d.notice) < 12) || compN >= 2 || d.conn_water === 'no' || d.conn_sewer === 'no') { result = 'Vhodné při splnění podmínek'; cls = 'cond'; }
   else { result = 'Vhodné podle dostupných podkladů'; cls = 'ok'; }
   return { result, cls, missing, risks, steps, verified, given, assumed };
 }
@@ -202,13 +195,6 @@ function siteForm(s, site, d, error, saved) {
     <label>Voda${sel('conn_water', YNU)}</label><label>Odpad${sel('conn_sewer', YNU)}</label><label>Elektřina${sel('conn_power', YNU)}</label>
     ${inp('power_amp', 'Jištění / příkon', 'maxlength="60" placeholder="např. 3× 25 A"')}
     ${inp('conn_src', 'Zdroj (ověření přípojek)', 'maxlength="200" placeholder="např. fotodokumentace, sdělení pronajímatele"')}
-    <h3>Okolí a dostupnost</h3>
-    <label>Viditelnost z ulice${sel('visibility', YNU)}</label><label>Parkování${sel('parking', YNU)}</label><label>MHD do 300 m${sel('transit', YNU)}</label>
-    ${inp('households', 'Domácnosti do 500 m', 'inputmode="numeric"', 'Doplňte ručně (ČSÚ, mapy). Aplikace tento údaj automaticky nezjišťuje.')}
-    ${inp('households_src', 'Zdroj počtu domácností', 'maxlength="200"')}
-    ${inp('competition', 'Konkurence do 2 km (počet)', 'inputmode="numeric"', 'samoobslužné prádelny, čistírny')}
-    ${inp('foot_traffic', 'Pěší frekvence (osob / 30 min)', 'inputmode="numeric"', 'Vlastní měření podle checklistu.')}
-    ${inp('foot_src', 'Kdy a kde měřeno', 'maxlength="200" placeholder="např. út 17:00–17:30 před vchodem"')}
     <h3>Ceny a návštěvnost (váš předpoklad)</h3>
     ${inp('price_wash', 'Cena praní (Kč s DPH)', 'inputmode="decimal"')}
     ${inp('price_dry', 'Cena sušení za cyklus (Kč s DPH)', 'inputmode="decimal"')}
