@@ -523,7 +523,8 @@ app.post('/api/location/interest', wrap(async (req, res) => {
 }));
 async function locNotify(subject, body) {
   notifyVelin('🌐 ' + subject, String(body || '').slice(0, 200), '/admin/online', 'order');
-  const to = (process.env.BS2_LOCATION_NOTIFY_EMAIL || 'tomas.holy@bestseries.cz').split(',').map((x) => x.trim()).filter(Boolean);
+  // Admin e-maily jsou volitelné (jen když je nastavené BS2_LOCATION_NOTIFY_EMAIL); výchozí = jen notifikace do Velína výše
+  const to = String(process.env.BS2_LOCATION_NOTIFY_EMAIL || '').split(',').map((x) => x.trim()).filter(Boolean);
   for (const t of to) { try { await sendBs2Mail({ to: t, subject: '[BS2] ' + subject, body, link: (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '') + '/admin/location', linkLabel: 'Otevřít administraci' }); } catch (e) { console.warn('[bs2] location notify:', e.message); } }
 }
 // Stripe webhook: ověří podpis (raw body) a označí objednávku jako zaplacenou.
