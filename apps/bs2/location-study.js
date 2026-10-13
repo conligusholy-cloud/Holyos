@@ -230,7 +230,7 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
 
   ${R.scenarios}
   <div class="card"><h2>Orientační náklady – přípojky a doprava</h2>
-    <div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(245,180,0,.5);background:rgba(245,180,0,.1);color:#ffd866;font-size:13.5px">⚠ Částky níže <b>nelze brát jako relevantní nabídku</b> – jde o hrubý spodní odhad podle délek tras. Skutečnou cenu určí až <b>místní šetření a konkrétní nacenění tohoto případu</b> (Best Series).</div>
+    <div style="margin:0 0 12px;padding:10px 12px;border-radius:12px;border:1px solid rgba(245,180,0,.5);background:rgba(245,180,0,.1);color:#ffd866;font-size:13.5px">⚠ Částky níže <b>nelze brát jako relevantní nabídku</b> – jde o hrubý spodní odhad podle délek tras. Skutečnou cenu určí až <b>místní šetření a konkrétní nacenění tohoto případu</b>.</div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">
       <div class="stat"><div class="l">Voda</div><div class="v" style="font-size:18px">${cn.water_czk ? lo(cn.water_czk, 'Kč') : 'vybudována'}</div></div>
       <div class="stat"><div class="l">Odpad</div><div class="v" style="font-size:18px">${cn.sewer_czk ? lo(cn.sewer_czk, 'Kč') : 'vybudován'}</div></div>
