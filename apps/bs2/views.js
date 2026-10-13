@@ -1467,7 +1467,7 @@ const BASE_COLS = [
 ];
 const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at'];
 // Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
-const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat' };
+const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat', location: 'Prověření lokality' };
 const typeBadge = (t) => { const k = USER_TYPE_LABEL[t] ? t : 'standard'; return `<span class="badge type-${k}">${USER_TYPE_LABEL[k]}</span>`; };
 const typeSelect = (cur, name = 'user_type') => `<select name="${name}" style="width:auto">${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${(cur || 'standard') === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>`;
 const EXTRA_PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
@@ -1813,7 +1813,9 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <label>E-mail (klíč pro první přihlášení)</label><input name="email" type="email" value="${esc(s ? s.email : '')}" required>
         <label>Jméno</label><input name="first_name" value="${esc(s ? s.first_name : '')}">
         <label>Příjmení</label><input name="last_name" value="${esc(s ? s.last_name : '')}">
-        ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Nový · Stávající · Koupil prádlomat · Může prodávat</div>
+        ${isNew ? '' : `<label>Typ uživatele</label>${typeSelect(s.user_type)}<div class="small muted" style="margin-top:4px">Nový · Stávající · Koupil prádlomat · Může prodávat · Prověření lokality (vidí jen aplikaci /lokalita)</div>
+        <label style="margin-top:12px">Balíček Prověření lokality</label><select name="location_package" style="width:auto"><option value="">— žádný —</option>${['basic', 'plus', 'premium'].map(k => `<option value="${k}"${s.location_package === k ? ' selected' : ''}>${({ basic: 'Základ (3 lokality)', plus: 'Plus (10)', premium: 'Premium (10 + šetření)' })[k]}</option>`).join('')}</select>
+        <div class="small muted" style="margin-top:4px">Platnost: <b>${s.location_expires_at ? new Date(s.location_expires_at).toLocaleDateString('cs-CZ') : '—'}</b> · při zvolení balíčku bez platnosti se nastaví 12 měsíců od teď. Po zaplacení na /location se vyplňuje samo.</div>
         <label style="margin-top:12px">Discount Credit (zůstatek)</label><div style="display:flex;gap:8px;align-items:center"><input name="dc_balance" inputmode="decimal" value="${credits.reduce((a, c) => a + Number(c.amount_czk), 0).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ')}" style="max-width:180px;text-align:right;font-weight:700"><span class="muted">DC</span></div><div class="small muted" style="margin-top:4px">Přepiš číslo a ulož — rozdíl se zapíše jako pohyb do historie DC níže a hned se promítne do účtu uživatele.</div>`}
         <div style="height:12px"></div><button class="btn" type="submit">${isNew ? 'Vytvořit' : 'Uložit'}</button>
       </form>

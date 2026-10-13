@@ -1222,6 +1222,12 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
   try {
     const utype = USER_TYPES.includes(String(req.body.user_type)) ? String(req.body.user_type) : (s.user_type || 'standard');
     await q('UPDATE supporters SET email=$1, first_name=$2, last_name=$3, user_type=$5, updated_at=now() WHERE id=$4', [email, String(req.body.first_name || '').trim() || null, String(req.body.last_name || '').trim() || null, s.id, utype]);
+    // Balíček Prověření lokality (ruční nastavení/testování): zvolený balíček → platnost 12 měsíců, pokud chybí nebo vypršela
+    if (req.body.location_package !== undefined) {
+      const lp = ['basic', 'plus', 'premium'].includes(String(req.body.location_package)) ? String(req.body.location_package) : null;
+      if (lp) await q("UPDATE supporters SET location_package=$2, location_expires_at=CASE WHEN location_expires_at IS NULL OR location_expires_at < now() THEN now() + interval '12 months' ELSE location_expires_at END WHERE id=$1", [s.id, lp]);
+      else await q('UPDATE supporters SET location_package=NULL WHERE id=$1', [s.id]);
+    }
     await log(req.admin, 'update', { id: s.id, email, user_type: utype });
     // Ruční nastavení zůstatku DC: rozdíl proti aktuálnímu zůstatku se zapíše jako pohyb v credits (historie zůstává)
     let dcMsg = '';
