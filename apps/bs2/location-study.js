@@ -174,10 +174,47 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
   <style>.rep h4{margin:16px 0 6px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent2)} .rep ul{margin:0;padding-left:18px;color:var(--text2);font-size:14px} .rep .warn li{color:#ffd9a0} .rep .miss li{color:#ffd866} .lk-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px} .sc{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px} .sc .c{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px} .sc .c.hi{border-color:rgba(79,209,255,.45)} .sc .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)} .sc .v{font-size:20px;font-weight:800;letter-spacing:-.02em;margin:2px 0 6px;font-variant-numeric:tabular-nums} .sc .pos{color:var(--ok)} .sc .neg{color:var(--err)} .cas{display:flex;flex-direction:column;gap:5px} .cas div{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:6px 10px;border-radius:8px;background:rgba(4,8,16,.5);border:1px solid var(--border)} .cas div span{color:var(--text2)} .cas div.t{border-color:rgba(79,209,255,.4);font-weight:700}
   .st h2{margin:0 0 10px} .st .card{margin-bottom:12px} .st table{font-size:13.5px} .st th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text3)} .st .big{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums} .st .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)}
   .res{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:6px 14px;font-weight:700;font-size:14px;border:1px solid} .res.ok{color:var(--ok);border-color:rgba(47,227,160,.5);background:rgba(47,227,160,.1)} .res.cond{color:#ffd866;border-color:rgba(245,180,0,.5);background:rgba(245,180,0,.1)} .res.bad{color:var(--err);border-color:rgba(255,93,108,.5);background:rgba(255,93,108,.1)} .res.na{color:var(--text2);border-color:var(--border2)}
-  @media print{header,.tabs,.banner,.glow,.gridfx,#net,.helpbtn,.no-print{display:none!important}body{background:#fff!important;color:#000!important}.card{background:#fff!important;border:1px solid #ccc!important;box-shadow:none!important;color:#000}.muted,.st .k,.st th{color:#333!important}}</style>
+  /* ── Tisk / PDF: čistý dokument A4, bez prvků webu, vlastní hlavička a patička ── */
+  @page{size:A4;margin:0}
+  @media print{
+    html,body{background:#fff!important;color:#111!important;font-size:11.5px;line-height:1.45}
+    header,.tabs,.banner,.glow,.gridfx,#net,.helpbtn,.no-print,.idea-fab,.sup-badge{display:none!important}
+    main{max-width:none;padding:0;margin:0}
+    .st{padding:16mm 15mm 18mm}
+    .print-head{display:flex!important;justify-content:space-between;align-items:flex-end;border-bottom:2px solid #1e86e0;padding-bottom:8px;margin-bottom:14px;font-size:11px;color:#444}
+    .print-head b{font-size:15px;color:#111;letter-spacing:.02em}
+    .print-foot{display:block!important;position:fixed;bottom:7mm;left:15mm;right:15mm;font-size:9.5px;color:#777;border-top:1px solid #ddd;padding-top:4px}
+    .card,.stat,.sc .c,.an-box,.rep-box{background:#fff!important;border:1px solid #cfd6e0!important;box-shadow:none!important;color:#111!important;break-inside:avoid;page-break-inside:avoid;backdrop-filter:none!important}
+    .card{margin-bottom:10px;padding:12px 14px}
+    .st h1{font-size:22px;color:#111!important;-webkit-text-fill-color:#111;background:none!important}
+    .st h2{font-size:14px;color:#1e86e0!important;border-bottom:1px solid #e3e8ef;padding-bottom:4px;margin-bottom:8px;break-after:avoid}
+    .st h4,.rep h4{color:#1e86e0!important}
+    .muted,.small,.st .k,.st th,.stat .l,.sc .k,.cas div span,.rep ul,.rep li,.sc .c,.small.muted,p{color:#333!important}
+    .stat .v,.st .big,.sc .v{color:#111!important;-webkit-text-fill-color:#111;background:none!important;filter:none!important}
+    .big{font-size:20px}
+    .sc .pos,.cas .pos,.stat .v.pos{color:#0a7a4a!important;-webkit-text-fill-color:#0a7a4a} .sc .neg,.cas .neg{color:#b3261e!important;-webkit-text-fill-color:#b3261e}
+    .res{border-width:1.5px;color:#111!important;background:#fff!important} .res.ok{border-color:#0a7a4a;color:#0a7a4a!important} .res.cond{border-color:#b8860b;color:#8a6508!important} .res.bad{border-color:#b3261e;color:#b3261e!important}
+    .badge{color:#333!important;border-color:#999!important;background:#fff!important}
+    table{font-size:10.5px} th,td{border-top:1px solid #e3e8ef!important;padding:5px 6px} th{color:#555!important}
+    tr{break-inside:avoid}
+    .grid{gap:8px} .stat{padding:8px 10px}
+    #rep-map,#st-map{height:300px!important;border:1px solid #cfd6e0;border-radius:6px}
+    .leaflet-control-zoom,.leaflet-control-container .leaflet-top{display:none!important} .leaflet-control-attribution{font-size:8px;background:rgba(255,255,255,.8)!important;color:#555!important}
+    .leaflet-tooltip{box-shadow:none}
+    .cas div{background:#fff!important;border-color:#e3e8ef!important} .cas div.t{border-color:#1e86e0!important}
+    .sc{grid-template-columns:repeat(3,1fr)}
+    div[style*="rgba(245,180,0"]{background:#fff8e1!important;border-color:#e0b64d!important;color:#5b4300!important} div[style*="rgba(245,180,0"] *{color:#5b4300!important}
+    div[style*="rgba(30,134,224,.1)"],div[style*="rgba(30,134,224,.12)"]{background:#eef5fc!important;border-color:#bcd6f0!important} div[style*="rgba(30,134,224"] *{color:#123!important}
+    div[style*="rgba(47,227,160"]{background:#edfaf3!important;border-color:#9cd9b8!important;color:#0a5a36!important}
+    a{color:#111!important;text-decoration:none}
+    .page-break{break-before:page;page-break-before:always}
+  }
+  .print-head,.print-foot{display:none}</style>
   <div class="st">
+  <div class="print-head"><div><b>Best Series 2.0 · Prověření lokality</b><div>Studie lokality ${esc(site.name || '')}${site.city ? ' · ' + esc(site.city) : ''}</div></div><div style="text-align:right">${meta.at ? new Date(meta.at).toLocaleDateString('cs-CZ') : ''}<br>www.bestseries2.cz</div></div>
+  <div class="print-foot">Best Series s.r.o. · IČO 05643724 · Orientační studie – odhady z dostupných podkladů, nikoli odborné schválení investice ani předpověď výdělku.</div>
   <div class="row no-print" style="justify-content:space-between;flex-wrap:wrap;gap:10px"><div class="row"><a class="btn sec sm" href="/lokalita">← Moje lokality</a><a class="btn sec sm" href="/lokalita/${site.id}">Upravit údaje</a></div><div class="row"><form method="post" action="/lokalita/${site.id}/studie" style="margin:0" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='Zpracovávám… (až 2 min)'"><button class="btn sec sm" type="submit">🔄 Aktualizovat studii</button></form><button class="btn sm" type="button" onclick="window.print()">Uložit jako PDF / tisk</button></div></div>
-  <div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">AI studie lokality · ${meta.at ? new Date(meta.at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : ''} · ${esc(meta.model || '')}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(site.address || '')}${site.city ? ', ' + esc(site.city) : ''}</div></div>${v.label ? `<span class="res ${CLS[v.label] || 'na'}">${esc(v.label)}</span>` : ''}</div>
+  <div class="card" style="margin-top:12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><div class="small muted">Studie lokality · ${meta.at ? new Date(meta.at).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague' }) : ''}</div><h1 style="margin:2px 0 4px">${esc(site.name)}</h1><div class="muted">${esc(site.address || '')}${site.city ? ', ' + esc(site.city) : ''}</div></div>${v.label ? `<span class="res ${CLS[v.label] || 'na'}">${esc(v.label)}</span>` : ''}</div>
     <p style="margin:12px 0 4px">${esc(st.summary || '')}</p>${v.reason ? `<p class="small muted" style="margin:0">${esc(v.reason)}</p>` : ''}
     ${(v.scorecard || []).length ? `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:14px">${v.scorecard.map((x) => { const r = String(x.rating || ''); const col = r === 'dobré' ? 'var(--ok)' : r === 'podmíněné' ? '#ffd866' : r === 'slabé' ? 'var(--err)' : 'var(--text2)'; const ic = r === 'dobré' ? '✓' : r === 'podmíněné' ? '!' : r === 'slabé' ? '✕' : '?'; return `<div class="stat" style="border-color:${col}55"><div class="l">${esc(x.area || '')}</div><div class="v" style="font-size:16px;color:${col}">${ic} ${esc(r)}</div><div class="small muted" style="margin-top:4px">${esc(x.note || '')}</div></div>`; }).join('')}</div>` : ''}
     ${(v.conditions || []).length ? `<div style="margin-top:14px;padding:12px 14px;border-radius:12px;border:1px solid rgba(245,180,0,.5);background:rgba(245,180,0,.08)"><div style="font-weight:700;color:#ffd866;margin-bottom:6px">Podmínky, které musí být splněny</div><ol style="margin:0;padding-left:20px;color:var(--text);display:flex;flex-direction:column;gap:5px">${v.conditions.map((t) => '<li>' + esc(String(t)) + '</li>').join('')}</ol></div>` : ''}
