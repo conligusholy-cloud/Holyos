@@ -633,6 +633,7 @@ app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) =
 // Případové studie: 3 anonymizované lokality s živými daty ze SIS (přes HolyOS public API), cache 1 h
 let _caseStudies = { at: 0, data: null };
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
+  if (!isAllowedAdmin(req.user)) return res.redirect('/lokalita'); // stránka vypnuta pro zákazníky (jen správce pro kontrolu dat)
   if (!_caseStudies.data || Date.now() - _caseStudies.at > 3600e3) {
     const r = await holyosPublic('/api/pradlomat-spots/public/case-studies');
     if (r.ok && r.j && Array.isArray(r.j.studies)) _caseStudies = { at: Date.now(), data: r.j };

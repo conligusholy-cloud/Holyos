@@ -12,7 +12,6 @@ const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 const NAV = (s) => [
   { id: 'loc', href: '/lokalita', label: 'Moje lokality', icon: 'box' },
   { id: 'anal', href: '/lokalita/analyza', label: 'Vyhledávač míst', icon: 'network' },
-  { id: 'studie', href: '/lokalita/studie', label: 'Případové studie', icon: 'chart' },
   { id: 'acc', href: '/password', label: 'Můj účet', icon: 'user', right: true },
 ];
 function page(s, title, active, body, head) {
