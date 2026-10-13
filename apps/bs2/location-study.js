@@ -125,15 +125,31 @@ async function runStudy({ site, d, c, ev, area, model }) {
   if (!d.lat || !d.lng) throw new Error('Lokalita nemá umístění na mapě.');
   let osm; try { osm = await gatherOsm(+d.lat, +d.lng); } catch (e) { osm = { pois: [], roads: [], parking: [], transit: [], apartments: 0, industrial: [], error: e.message }; }
   const context = buildContext({ site, d, c, ev, osm, area });
-  const body = { model: model || process.env.BS2_STUDY_MODEL || 'claude-sonnet-4-6', max_tokens: 7000, temperature: 0.3, system: SYSTEM,
-    messages: [{ role: 'user', content: 'PODKLADY:\n' + context + '\n\nVrať studii přesně v tomto JSON schématu (čísla jako čísla, rozpětí jako [min,max]):\n' + schemaHint() }] };
-  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout(180000) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error('Claude ' + r.status + ': ' + ((j.error && j.error.message) || 'chyba'));
-  const text = (j.content || []).map((x) => x.text || '').join('');
-  const m = text.match(/\{[\s\S]*\}/); if (!m) throw new Error('AI nevrátila JSON');
-  let study; try { study = JSON.parse(m[0]); } catch (e) { throw new Error('AI vrátila neplatný JSON'); }
-  study._meta = { at: new Date().toISOString(), model: body.model, osm_counts: { pois: osm.pois.length, roads: osm.roads.length, parking: osm.parking.length, transit: osm.transit.length, apartments: osm.apartments }, osm_error: osm.error || null, usage: j.usage || null };
+  const modelName = model || process.env.BS2_STUDY_MODEL || 'claude-sonnet-4-6';
+  async function ask(extra, maxTokens) {
+    const body = { model: modelName, max_tokens: maxTokens, temperature: 0.3, system: SYSTEM,
+      messages: [{ role: 'user', content: 'PODKLADY:\n' + context + '\n\nVrať studii přesně v tomto JSON schématu (čísla jako čísla, rozpětí jako [min,max]). Texty drž stručné (každé pole max. 2–3 věty), žádné trailing čárky, žádný text mimo JSON.' + (extra || '') + '\n' + schemaHint() }, { role: 'assistant', content: '{' }] };
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body: JSON.stringify(body), signal: AbortSignal.timeout(240000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error('Claude ' + r.status + ': ' + ((j.error && j.error.message) || 'chyba'));
+    return { text: '{' + (j.content || []).map((x) => x.text || '').join(''), stop: j.stop_reason, usage: j.usage };
+  }
+  function parseJson(text) {
+    const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a < 0 || b < 0) return null;
+    let t = text.slice(a, b + 1);
+    try { return JSON.parse(t); } catch (e) { /* oprava běžných chyb */ }
+    t = t.replace(/```json|```/g, '').replace(/,\s*([}\]])/g, '$1').replace(/[\u0000-\u001f]+/g, ' ');
+    try { return JSON.parse(t); } catch (e) { return null; }
+  }
+  let out = await ask('', 12000); let study = parseJson(out.text);
+  if (!study) {
+    console.warn('[bs2] studie: neplatný JSON (stop=' + out.stop + '), zkouším znovu stručněji; začátek: ' + out.text.slice(0, 300).replace(/\s+/g, ' '));
+    out = await ask(' DŮLEŽITÉ: předchozí odpověď nebyla validní JSON – odpověz výrazně stručněji (max. 6 segmentů, max. 5 položek v seznamech) a zkontroluj uzavření všech závorek.', 12000);
+    study = parseJson(out.text);
+  }
+  if (!study) throw new Error('AI vrátila neplatný JSON (' + (out.stop === 'max_tokens' ? 'odpověď byla příliš dlouhá' : 'chyba formátu') + ')');
+  const j = { usage: out.usage };
+  study._meta = { at: new Date().toISOString(), model: modelName, osm_counts: { pois: osm.pois.length, roads: osm.roads.length, parking: osm.parking.length, transit: osm.transit.length, apartments: osm.apartments }, osm_error: osm.error || null, usage: j.usage || null };
   study._facts = { roads: osm.roads, parking: osm.parking, transit: osm.transit, pois: osm.pois.slice(0, 120), apartments: osm.apartments, industrial: osm.industrial, area: area ? { total_population: area.total_population, density: area.density_per_km2, capacity: area.capacity, operating: area.operating, places: (area.places || []).slice(0, 60).map((p) => ({ name: p.name, population: p.population, dist_km: p.dist_km, lat: p.lat, lon: p.lon })), center: area.center ? { lat: area.center.lat, lon: area.center.lon } : null, radius_km: area.radius_km || 15 } : null, site: { lat: +d.lat, lng: +d.lng } };
   return study;
 }
