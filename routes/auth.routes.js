@@ -288,6 +288,37 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// POST /api/auth/bs2/notify — push do Velína + zvonek v HolyOS pro Tomáše a Jana Holého (nová objednávka, převod, podnět, zpráva v BS2).
+// Příjemci: AppSetting bs2.velin_notify_emails (JSON pole e-mailů) nebo výchozí tomas.holy@ + jan.holy@bestseries.cz (Person.email).
+router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const secret = process.env.BS2_SSO_SECRET;
+    const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+    if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+    try { jwt.verify(m[1], secret, { audience: 'holyos-api', issuer: 'bs2' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+    const b = req.body || {};
+    const title = String(b.title || 'Best Series 2.0').slice(0, 120);
+    const body = String(b.body || '').slice(0, 300);
+    const type = String(b.type || 'bs2').slice(0, 40);
+    const { getSetting } = require('../services/settings');
+    let emails = await getSetting('bs2.velin_notify_emails', { type: 'json', defaultValue: null }).catch(() => null);
+    if (!Array.isArray(emails) || !emails.length) emails = ['tomas.holy@bestseries.cz', 'jan.holy@bestseries.cz'];
+    const persons = await prisma.person.findMany({
+      where: { active: true, OR: emails.map((e) => ({ email: { equals: String(e), mode: 'insensitive' } })) },
+      select: { id: true, user_id: true },
+    });
+    const { notifyPerson } = require('../services/push/expo-push');
+    const { createNotification } = require('./notifications.routes');
+    const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+    const link = b.path ? base + String(b.path).slice(0, 200) : base + '/admin';
+    for (const p of persons) {
+      notifyPerson(prisma, p.id, { title, body, data: { type: 'bs2_' + type, link }, sound: 'default' }).catch((e) => console.warn('[bs2 notify] push', p.id, e.message));
+      if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch((e) => console.warn('[bs2 notify] zvonek', p.user_id, e.message));
+    }
+    res.json({ ok: true, recipients: persons.length });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/bs2/products/:id/image — obrázek položky ceníku pro BS2 (stejná autorizace tokenem)
 router.get('/bs2/products/:id/image', async (req, res, next) => {
   try {
