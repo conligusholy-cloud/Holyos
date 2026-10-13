@@ -453,11 +453,11 @@ function analyzerPage(s, q, credits, msg) {
       var oper=op.length?'<div class="an-box"><b class="t">🧺 V tomto okruhu už '+(op.length===1?'funguje':'fungují')+' '+op.length+' '+plur(op.length)+'</b><div class="towns">'+op.slice(0,12).map(function(w){return '<span class="town"><span class="d" style="background:#1e86e0"></span>'+esc(w.name)+' · '+w.dist_km+' km</span>';}).join('')+'</div></div>':'<div class="an-box ok">✓ V okruhu '+rk2+' km zatím žádný prádlomat v provozu není.</div>';
       out.innerHTML='<div class="card"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">🎯 Spádová oblast '+rk2+' km — '+esc(title)+'</h2><div class="small muted">Počet obyvatel v okruhu '+rk2+' km od středu · zdroj: '+esc(r.source||'')+(r.saved?' · 📌 uložené vyhledávání':'')+'</div></div><div class="an-big"><div class="n">'+tot+'</div><div class="l">obyvatel · '+dens+' /km²</div></div></div>'+radii+capHtml+oper+(towns?'<div class="towns">'+towns+'</div>':'')+'</div>'
         +'<div class="card" id="an-cands"><h2 style="margin:0 0 4px">📍 Místa, kde by prádlomat mohl stát</h2><div class="small muted">Hledáme supermarkety, benzínky, myčky a další tahouny provozu v okolí '+esc(title)+' a hodnotíme parkování, konkurenci a sousední provozy…</div><div class="row" style="gap:8px;margin-top:10px;align-items:center"><span class="lk-spin"></span><span class="small muted">Vyhledávám (až 1 min)…</span></div></div>';
-      loadCands(q,title);
+      loadCands(q,title,r._cands||null);
     }
     var candLayers=[];
-    function loadCands(q,title){ var box=document.getElementById('an-cands'); candLayers.forEach(function(l){try{map.removeLayer(l);}catch(e){}}); candLayers=[];
-      fetch('/api/location/candidates?area='+encodeURIComponent(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});}).then(function(res){ if(!box) return; if(!res.ok){ box.innerHTML='<h2 style="margin:0 0 4px">📍 Místa, kde by prádlomat mohl stát</h2><div class="msg err" style="margin:8px 0 0">'+esc((res.j&&res.j.error)||'Místa se nepodařilo načíst, zkuste to za chvíli.')+'</div>'; return; }
+    function loadCands(q,title,pre){ var box=document.getElementById('an-cands'); candLayers.forEach(function(l){try{map.removeLayer(l);}catch(e){}}); candLayers=[];
+      (pre?Promise.resolve({ok:true,j:pre}):fetch('/api/location/candidates?area='+encodeURIComponent(q)).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})).then(function(res){ if(!box) return; if(!res.ok){ box.innerHTML='<h2 style="margin:0 0 4px">📍 Místa, kde by prádlomat mohl stát</h2><div class="msg err" style="margin:8px 0 0">'+esc((res.j&&res.j.error)||'Místa se nepodařilo načíst, zkuste to za chvíli.')+'</div>'; return; }
         var cs=res.j.candidates||[]; if(!cs.length){ box.innerHTML='<h2 style="margin:0 0 4px">📍 Místa, kde by prádlomat mohl stát</h2><p class="muted" style="margin:6px 0 0">'+esc(res.j.note||'V okolí se nenašla žádná typická místa (supermarkety, benzínky apod.).')+'</p>'; return; }
         var vcol=function(c){return c.score>=70?'#2fe3a0':(c.score>=45?'#ffd866':'#ff5d6c');};
         cs.forEach(function(c,i){ var m=L.circleMarker([c.lat,c.lon],{radius:7,color:'#fff',weight:1.5,fillColor:vcol(c),fillOpacity:.95}).addTo(map); m.bindTooltip((i+1)+'. '+esc(c.name)+' · '+c.score+' b.',{direction:'top'}); candLayers.push(m); });
@@ -499,7 +499,9 @@ function analyzerPage(s, q, credits, msg) {
       cmBase.addTo(cm); cmBase.bringToBack(); document.querySelectorAll('#cand-modal [data-base]').forEach(function(b){ b.classList.toggle('sec', b.getAttribute('data-base')!==kind); }); }
     (function(){ var md=document.getElementById('cand-modal'); if(!md) return; document.getElementById('cand-close').addEventListener('click',function(){ md.classList.remove('on'); }); md.addEventListener('click',function(e){ if(e.target===md) md.classList.remove('on'); }); document.addEventListener('keydown',function(e){ if(e.key==='Escape') md.classList.remove('on'); }); md.querySelectorAll('[data-base]').forEach(function(b){ b.addEventListener('click',function(){ setCandBase(b.getAttribute('data-base')); }); }); })();
     btn.addEventListener('click',run); inp.addEventListener('keydown',function(e){if(e.key==='Enter')run();});
-    if(inp.value.trim().length>=2) run();
+    var SAVED=${JSON.stringify(credits && credits.current ? credits.current : null).replace(/</g, '\\u003c')};
+    if(SAVED&&SAVED.result){ var rr=SAVED.result; rr.saved=true; rr._cands=SAVED.candidates?Object.assign({},SAVED.candidates,{contacts:SAVED.contacts||{},saved:true}):null; render(rr,inp.value.trim()); }
+    else if(inp.value.trim().length>=2) run();
   })();</script>`, head);
 }
 function checklistPage(s) {

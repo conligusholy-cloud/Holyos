@@ -538,6 +538,9 @@ app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
   const u = req.user;
   const credits = { used: await locSearchUsed(u.id), limit: locSearchLimit(u), base: LAPP.SEARCH_LIMITS[u.location_package] || 3, packs: locPacks('searches') };
   credits.saved = (await q('SELECT area, created_at, (candidates IS NOT NULL) AS has_cands, (SELECT count(*) FROM jsonb_object_keys(contacts)) AS n_contacts FROM location_searches WHERE supporter_id=$1 ORDER BY updated_at DESC', [u.id])).rows;
+  // Otevření uloženého vyhledávání: výsledek jde rovnou do stránky, nic se znovu neanalyzuje
+  const qq = String(req.query.q || '').trim().slice(0, 80);
+  if (qq.length >= 2) { const cur = (await q('SELECT result, candidates, contacts FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [u.id, locAreaNorm(qq)])).rows[0]; if (cur && cur.result) credits.current = { result: cur.result, candidates: cur.candidates, contacts: cur.contacts || {} }; }
   const msg = req.query.topup === '1' ? 'Platba přijata – dokoupená vyhledání se připisují k účtu (obvykle do minuty, případně obnovte stránku).' : req.query.topup === '0' ? 'Platba byla zrušena, nic nebylo účtováno.' : '';
   res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
 }));
