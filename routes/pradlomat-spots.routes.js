@@ -362,7 +362,9 @@ async function buildCaseStudies() {
   const cs = await getSetting('compounding.settings', { type: 'json', defaultValue: {} }) || {};
   const kcfg = await getSetting('compounding.kiosks', { type: 'json', defaultValue: {} }) || {};
   const svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15, enPct = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
-  const fxEur = Number(process.env.BANK_PLAN_EUR_CZK) || 25;
+  // Kurz EUR stejně jako v HolyOS tabulce ekonomiky: denní kurz ČNB (fallback 25)
+  let fxEur = 25;
+  try { const r = await fetch('https://api.cnb.cz/cnbapi/exrates/daily?lang=CZ', { signal: AbortSignal.timeout(8000) }); const j = await r.json(); const e = (j.rates || []).find((x) => x.currencyCode === 'EUR'); if (e && e.rate && e.amount) fxEur = Number(e.rate) / Number(e.amount); } catch (_) {}
   const machineCzk = (ver) => { const p = cs.pricelist && cs.pricelist[ver] && cs.pricelist[ver].eur; return p != null ? Math.round(Number(p) * fxEur) : null; };
   const czBest = kiosks.filter((k) => /CZ$/i.test(String(k.code || '')) && /best series/i.test(String(k.companyName || '')) && !k.inIncubator && (k.currency || 'CZK') === 'CZK')
     .sort((a, b) => num(b.avgTop3) - num(a.avgTop3));
@@ -401,7 +403,7 @@ async function buildCaseStudies() {
       roi_pct: (machine && operating > 0) ? Math.round(operating * 12 / machine * 1000) / 10 : null,
     });
   }
-  return { generatedAt: new Date().toISOString(), note: 'Živá data ze sítě prádlomatů Best Series (anonymizováno). Tržby vč. DPH, náklady orientační dle interní metodiky.', studies: out };
+  return { generatedAt: new Date().toISOString(), fx_eur_czk: Math.round(fxEur * 1000) / 1000, note: 'Živá data ze sítě prádlomatů Best Series (anonymizováno). Tržby vč. DPH, náklady orientační dle interní metodiky.', studies: out };
 }
 // Předpočítat po startu a obnovovat každých 6 h (první sestavení prochází všechny transakce ze SIS)
 if (process.env.SIS_KIOSK_API_KEY) {
