@@ -224,7 +224,6 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
   <div class="card"><h2>Odhad poptávky</h2>
     <div class="tbl-wrap"><table><thead><tr><th></th><th>Slabý</th><th>Střední</th><th>Silný</th></tr></thead><tbody>
       <tr><td>Zákazníků / den</td><td>${(dem.customers_per_day || {}).weak ?? '—'}</td><td><b>${(dem.customers_per_day || {}).mid ?? '—'}</b></td><td>${(dem.customers_per_day || {}).strong ?? '—'}</td></tr>
-      <tr><td>Praní / den</td><td>${(dem.washes_per_day || {}).weak ?? '—'}</td><td><b>${(dem.washes_per_day || {}).mid ?? '—'}</b></td><td>${(dem.washes_per_day || {}).strong ?? '—'}</td></tr>
       <tr><td>Tržba / měsíc s DPH</td><td>${kc((dem.monthly_revenue_czk_incl_vat || {}).weak)}</td><td><b>${kc((dem.monthly_revenue_czk_incl_vat || {}).mid)}</b></td><td>${kc((dem.monthly_revenue_czk_incl_vat || {}).strong)}</td></tr></tbody></table></div>
     <p class="small" style="margin:8px 0 0;color:var(--text2)"><b>Sezónnost:</b> ${esc(dem.seasonality || '—')}</p><p class="small muted" style="margin:6px 0 0">${esc(dem.reasoning || '')}</p>
     <p class="small muted" style="margin:10px 0 0">${st._applied_washes ? 'Scénáře v ekonomické kalkulaci níže jsou nastavené podle tohoto odhadu (' + esc(st._applied_washes.weak) + ' / ' + esc(st._applied_washes.mid) + ' / ' + esc(st._applied_washes.strong) + ' zákazníků za den; 1 zákazník = 1 praní vč. sušení).' : ''}</p></div>
