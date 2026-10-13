@@ -17,6 +17,7 @@ const { q, migrate } = require('./db');
 const V = require('./views');
 const LOC = require('./location');
 const LAPP = require('./location-app');
+const LADM = require('./location-admin');
 const LSTUDY = require('./location-study');
 const { importSupporters, prepareImport, writeImport } = require('./import');
 const AI = require('./ai');
@@ -366,7 +367,9 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 
 // ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
 // Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
-app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage()); });
+app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS)); });
+// Ceník online produktů z app_settings (přepisuje výchozí ceny/limity za běhu)
+async function loadPricing() { try { const r = await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY]); const p = JSON.parse((r.rows[0] || {}).value || 'null'); LADM.applyPricing(p || {}); return p; } catch (e) { console.warn('[bs2] ceník:', e.message); LADM.applyPricing({}); return null; } }
 app.get('/location/vop', (req, res) => res.send(V.locVopPage()));
 app.get('/location/gdpr', (req, res) => res.send(V.locGdprPage()));
 const LT = require('./location-terms');
@@ -813,11 +816,64 @@ app.get('/lokalita/:id(\\d+)/studie/tisk', wrap(requireLocation), wrap(async (re
   const c = LAPP.calc(d), ev = LAPP.evaluate(d, c); res.send(LSTUDY.studyPrintPage(req.user, site, site.study, LAPP.reportSections(site, d, c, ev), (d.lat && d.lng) ? { lat: +d.lat, lng: +d.lng } : null, d)); }));
 app.post('/lokalita/:id(\\d+)/delete', wrap(requireLocation), wrap(async (req, res) => { await q('DELETE FROM location_sites WHERE id=$1 AND supporter_id=$2', [parseInt(req.params.id, 10), req.user.id]); res.redirect('/lokalita?msg=' + encodeURIComponent('Lokalita smazána.')); }));
 // Admin: objednávky balíčků
+// ── Online produkty (admin): přehled, objednávky, zákazníci, ceník ──
+app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
+  const tab = String(req.query.tab || ''), msg = String(req.query.msg || '');
+  if (tab === 'orders') return res.redirect('/admin/location' + (req.query.status ? '?status=' + encodeURIComponent(req.query.status) : ''));
+  if (tab === 'customers') {
+    const qq = String(req.query.q || '').trim().slice(0, 80);
+    const rows = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.phone, s.status, s.location_package, s.location_expires_at, s.location_extra_evals, s.location_extra_searches,
+        (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=s.id) AS sites_count,
+        (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=s.id AND ls.evaluated_at IS NOT NULL) AS evals_used,
+        (SELECT count(*)::int FROM location_searches x WHERE x.supporter_id=s.id) AS searches_used,
+        (SELECT count(*)::int FROM location_orders o WHERE o.supporter_id=s.id) AS orders_count,
+        (SELECT COALESCE(sum(o.amount_czk),0) FROM location_orders o WHERE o.supporter_id=s.id AND o.status IN ('paid','granted')) AS paid_sum
+      FROM supporters s WHERE s.location_package IS NOT NULL ${qq ? "AND (s.email ILIKE $1 OR s.nick ILIKE $1 OR s.first_name ILIKE $1 OR s.last_name ILIKE $1)" : ''} ORDER BY s.location_expires_at DESC NULLS LAST, s.id DESC LIMIT 500`, qq ? ['%' + qq + '%'] : [])).rows;
+    return res.send(LADM.customers({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, rows, q: qq }));
+  }
+  if (tab === 'pricing') {
+    const r = (await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY + '_saved_at'])).rows[0];
+    return res.send(LADM.pricing({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, saved: r && r.value }));
+  }
+  const one = async (sql, p) => (await q(sql, p || [])).rows[0] || {};
+  const st = {
+    revenue_total: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted')")).v || 0),
+    revenue_30: Number((await one("SELECT COALESCE(sum(amount_czk),0) AS v FROM location_orders WHERE status IN ('paid','granted') AND COALESCE(paid_at, created_at) > now() - interval '30 days'")).v || 0),
+    customers: Number((await one('SELECT count(*)::int AS v FROM supporters WHERE location_package IS NOT NULL')).v || 0),
+    active: Number((await one("SELECT count(*)::int AS v FROM supporters WHERE location_package IS NOT NULL AND status='active' AND (location_expires_at IS NULL OR location_expires_at > now())")).v || 0),
+    pending: Number((await one("SELECT count(*)::int AS v FROM location_orders WHERE status IN ('pending','request')")).v || 0),
+    sites_eval: Number((await one('SELECT count(*)::int AS v FROM location_sites WHERE evaluated_at IS NOT NULL')).v || 0),
+    searches: Number((await one('SELECT count(*)::int AS v FROM location_searches')).v || 0),
+    premium_pending: Number((await one("SELECT count(*)::int AS v FROM location_orders WHERE package IN ('premium','up_premium') AND status='granted' AND (survey_date IS NULL OR survey_date='')")).v || 0),
+    by_item: (await q("SELECT package, count(*)::int AS n, COALESCE(sum(amount_czk),0) AS sum FROM location_orders WHERE status IN ('paid','granted') GROUP BY package ORDER BY sum DESC")).rows.map((r) => ({ label: (LOC.PACKAGES[r.package] || LOC.EVAL_PACKS[r.package] || LOC.UPGRADE_PACKS[r.package] || { label: r.package }).label, n: r.n, sum: Number(r.sum) })),
+  };
+  res.send(LADM.overview({ adminLayout: V.adminLayout, admin: req.admin, holyosUrl: HOLYOS_URL, msg, stats: st, stripeOn: !!process.env.STRIPE_SECRET_KEY, termsVersion: LT.TERMS_VERSION }));
+}));
+app.post('/admin/online/pricing', requireAdmin, wrap(async (req, res) => {
+  const p = req.body.reset ? {} : LADM.parsePricing(req.body || {});
+  await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY, JSON.stringify(p)]);
+  await q('INSERT INTO app_settings (key, value) VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [LADM.PRICING_KEY + '_saved_at', new Date().toISOString()]);
+  LADM.applyPricing(p);
+  res.redirect('/admin/online?tab=pricing&msg=' + encodeURIComponent(req.body.reset ? 'Ceník vrácen na výchozí hodnoty.' : 'Ceník uložen.'));
+}));
+app.post('/admin/online/customer/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const id = parseInt(req.params.id, 10); const u = (await q('SELECT * FROM supporters WHERE id=$1', [id])).rows[0]; if (!u) return res.redirect('/admin/online?tab=customers');
+  const b = req.body || {}; const changes = [];
+  if (b.package && LOC.PACKAGES[b.package] && b.package !== u.location_package) { await q('UPDATE supporters SET location_package=$2, updated_at=now() WHERE id=$1', [id, b.package]); changes.push('balíček ' + LOC.PACKAGES[b.package].label); }
+  const ae = parseInt(b.add_evals, 10), as = parseInt(b.add_searches, 10);
+  if (Number.isFinite(ae) && ae) { await q('UPDATE supporters SET location_extra_evals=GREATEST(0, COALESCE(location_extra_evals,0)+$2), updated_at=now() WHERE id=$1', [id, ae]); changes.push((ae > 0 ? '+' : '') + ae + ' vyhodnocení'); }
+  if (Number.isFinite(as) && as) { await q('UPDATE supporters SET location_extra_searches=GREATEST(0, COALESCE(location_extra_searches,0)+$2), updated_at=now() WHERE id=$1', [id, as]); changes.push((as > 0 ? '+' : '') + as + ' vyhledání'); }
+  if (b.extend === 'expire') { await q('UPDATE supporters SET location_expires_at=now(), updated_at=now() WHERE id=$1', [id]); changes.push('přístup ukončen'); }
+  else if (['1', '3', '12'].includes(String(b.extend))) { await q("UPDATE supporters SET location_expires_at=GREATEST(COALESCE(location_expires_at, now()), now()) + ($2 || ' months')::interval, updated_at=now() WHERE id=$1", [id, String(b.extend)]); changes.push('platnost +' + b.extend + ' měs.'); }
+  try { await q('INSERT INTO admin_log (admin_pid, admin_name, action, detail) VALUES ($1,$2,$3,$4)', [req.admin.pid || null, req.admin.name || '', 'online_customer_update', JSON.stringify({ supporter_id: id, changes })]); } catch (e) { /* log není kritický */ }
+  res.redirect('/admin/online?tab=customers&msg=' + encodeURIComponent(changes.length ? 'Uloženo: ' + changes.join(', ') + '.' : 'Beze změny.'));
+}));
 app.get('/admin/location', requireAdmin, wrap(async (req, res) => {
   const status = Object.keys(LOC.STATUS).includes(req.query.status) ? req.query.status : '';
   const rows = (await q('SELECT o.*, (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=o.supporter_id) AS sites_count FROM location_orders o ' + (status ? 'WHERE o.status=$1 ' : '') + "ORDER BY (o.status='paid') DESC, o.created_at DESC LIMIT 500", status ? [status] : [])).rows;
   const counts = {}; (await q('SELECT status, count(*)::int AS c FROM location_orders GROUP BY status')).rows.forEach((r) => { counts[r.status] = r.c; });
-  res.send(LOC.adminLocationOrders({ adminLayout: V.adminLayout, admin: req.admin, rows, counts, status, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, stripeOn: !!process.env.STRIPE_SECRET_KEY }));
+  const wrapLayout = (title, active, admin, body, h) => LADM.shell(V.adminLayout, admin, h, 'orders', '', body.replace(/<h1[\s\S]*?<\/h1>\s*<p class="muted"[\s\S]*?<\/p>/, ''));
+  res.send(LOC.adminLocationOrders({ adminLayout: wrapLayout, admin: req.admin, rows, counts, status, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, stripeOn: !!process.env.STRIPE_SECRET_KEY }));
 }));
 app.post('/admin/location/:id(\\d+)/status', requireAdmin, wrap(async (req, res) => {
   const st = String(req.body.status || ''); if (!Object.keys(LOC.STATUS).includes(st)) return res.redirect('/admin/location');
@@ -1690,5 +1746,5 @@ app.post('/admin/import', requireAdmin, upload.single('file'), wrap(async (req, 
 app.use((req, res) => res.status(404).send(V.errorPage('Stránka nenalezena', 'Tahle adresa neexistuje.', '/')));
 app.use((err, req, res, next) => { console.error('[bs2]', err); res.status(500).send(V.errorPage('Chyba serveru', process.env.NODE_ENV === 'production' ? 'Něco se pokazilo, zkus to znovu.' : err.message, '/')); });
 
-migrate().then(() => BUILD.init().then(b => V.setBuild(b)).catch(e => console.warn('[bs2] verze:', e.message))).then(() => app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT}`)))
+migrate().then(() => loadPricing()).then(() => BUILD.init().then(b => V.setBuild(b)).catch(e => console.warn('[bs2] verze:', e.message))).then(() => app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT}`)))
   .catch((e) => { console.error('[bs2] DB migrace selhala:', e.message); app.listen(PORT, () => console.log(`[bs2] běží na portu ${PORT} (BEZ DB — nastav DATABASE_URL)`)); });

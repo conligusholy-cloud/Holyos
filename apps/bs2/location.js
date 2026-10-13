@@ -597,7 +597,20 @@ const PAGE = `<!DOCTYPE html>
 </body>
 </html>
 `;
-function locationPage() { return PAGE; }
+// Prodejní stránka: výchozí čísla v HTML se nahradí aktuálním ceníkem/limity (admin → Online produkty → Ceník)
+const PAGE_DEFAULTS = { basic: '4 900', plus: '9 900', premium: '15 900' };
+function locationPage(limits, searchLimits) {
+  let h = PAGE; const fmt = (a) => Math.round(a / 100).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ');
+  Object.keys(PAGE_DEFAULTS).forEach((k) => { const cur = fmt(PACKAGES[k].amount); if (cur !== PAGE_DEFAULTS[k]) h = h.split(PAGE_DEFAULTS[k] + ' ').join(cur + ' ').split(PAGE_DEFAULTS[k] + '<').join(cur + '<'); });
+  const L = limits || {}, S = searchLimits || {};
+  if (L.basic && L.basic !== 3) { h = h.split('(3 lokality)').join('(' + L.basic + ' lokalit)').split('Vyhodnocení 3 různých adres').join('Vyhodnocení ' + L.basic + ' různých adres'); }
+  if (L.plus && L.plus !== 10) { h = h.split('(10 lokalit + hovor)').join('(' + L.plus + ' lokalit + hovor)').split('Celkem 10 různých adres').join('Celkem ' + L.plus + ' různých adres'); }
+  if (S.basic != null && S.basic !== 1) h = h.split('Vyhledávač míst – 1 vyhledání</li>').join('Vyhledávač míst – ' + S.basic + ' vyhledání</li>');
+  if (S.plus != null && S.plus !== 2) h = h.split('Vyhledávač míst – 2 vyhledání</li>').join('Vyhledávač míst – ' + S.plus + ' vyhledání</li>');
+  if (S.premium != null && S.premium !== 3) h = h.split('Vyhledávač míst – 3 vyhledání</li>').join('Vyhledávač míst – ' + S.premium + ' vyhledání</li>');
+  const s1 = fmt(EVAL_PACKS.search1.amount); if (s1 !== '499') h = h.split('další od 499 Kč').join('další od ' + s1 + ' Kč');
+  return h;
+}
 
 function fmtDT(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('cs-CZ', { timeZone: 'Europe/Prague', day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return '—'; } }
 const kc = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';

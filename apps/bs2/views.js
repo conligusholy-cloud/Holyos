@@ -1442,7 +1442,7 @@ const ADMIN_NAV = [
   { id: 'sup', href: '/admin/supporters', label: 'Uživatelé', icon: 'users' },
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
-  { id: 'loc', href: '/admin/location', label: 'Prověření lokality', icon: 'box' },
+  { id: 'loc', href: '/admin/online', label: 'Online produkty', icon: 'box' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
   { id: 'stat', href: '/admin/stats', label: 'Statistiky', icon: 'chart' },
   { id: 'sug', href: '/admin/suggestions', label: 'Podněty', icon: 'bolt' },
