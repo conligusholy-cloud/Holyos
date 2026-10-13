@@ -525,4 +525,4 @@ async function potentialReport(facts) {
   } catch (e) { return null; }
 }
 
-module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea, analyzeArea, analyzePotential };
+module.exports = { DEFAULT_CONFIG, mergeConfig, searchArea, analyzePoint, geocodeArea, analyzeArea, analyzePotential, shopLabel };

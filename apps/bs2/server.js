@@ -541,7 +541,7 @@ app.get('/lokalita/analyza', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.analyzerPage(u, String(req.query.q || '').slice(0, 80), credits, msg));
 }));
 // Proxy na veřejné API HolyOS (spádová oblast, provozované prádlomaty) — jen pro přihlášené zákazníky aplikace
-async function holyosPublic(path) { try { const r = await fetch(HOLYOS_URL + path, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; } catch (e) { return { ok: false, status: 502, j: { error: 'Analýza momentálně není dostupná, zkuste to prosím později.' } }; } }
+async function holyosPublic(path) { try { const r = await fetch(HOLYOS_URL + path, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(60000) }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; } catch (e) { return { ok: false, status: 502, j: { error: 'Analýza momentálně není dostupná, zkuste to prosím později.' } }; } }
 app.get('/api/location/area', wrap(requireLocation), wrap(async (req, res) => {
   const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
   if (rateLimited('area:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho analýz, zkuste to za chvíli.' });
@@ -583,6 +583,15 @@ app.get('/api/location/geocode', wrap(requireLocation), wrap(async (req, res) =>
   for (const [level, params] of tries) { const x = await nom(params); if (x) return res.json({ lat: parseFloat(x.lat), lon: parseFloat(x.lon), display_name: x.display_name, level, source: 'OSM' }); await new Promise((r) => setTimeout(r, 1100)); }
   res.json({ error: 'Adresa nenalezena – přibližte mapu a klikněte na místo ručně.' });
 }));
+// Místa, kde by prádlomat mohl stát (HolyOS finder). Nestojí další kredit – jen pro město, které už bylo analyzováno.
+app.get('/api/location/candidates', wrap(requireLocation), wrap(async (req, res) => {
+  const area = String(req.query.area || '').trim().slice(0, 80); if (area.length < 2) return res.status(400).json({ error: 'Zadejte město.' });
+  const seen = (await q('SELECT 1 FROM location_searches WHERE supporter_id=$1 AND area_norm=$2', [req.user.id, locAreaNorm(area)])).rows.length > 0;
+  if (!seen) return res.status(402).json({ error: 'Nejdřív spusťte analýzu města.' });
+  if (rateLimited('cand:' + req.user.id, 40, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho dotazů, zkuste to za chvíli.' });
+  const r = await holyosPublic('/api/pradlomat-spots/public/candidates?area=' + encodeURIComponent(area));
+  res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
+}));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));
@@ -590,7 +599,9 @@ app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
   res.send(LAPP.studiesPage(req.user, studies));
 }));
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
-  res.send(LAPP.siteForm(req.user, null, { city: String(req.query.city || '').slice(0, 120) }, '', false, false, await locProducts()));
+  const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
+  if (isFinite(+req.query.lat) && isFinite(+req.query.lng) && +req.query.lat) { pre.lat = String(+req.query.lat); pre.lng = String(+req.query.lng); if (pre.address) pre.name = pre.address; } // předvyplnění z Vyhledávače míst
+  res.send(LAPP.siteForm(req.user, null, pre, '', false, false, await locProducts()));
 }));
 // Nabídka prádlomatů pro výběr v lokalitě = stroje nabízené v BS2 (Produkty → nabízet), cena bez DPH
 async function locProducts() {

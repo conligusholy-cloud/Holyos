@@ -284,6 +284,29 @@ router.get('/public/area-analysis', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/pradlomat-spots/public/candidates?area=… — veřejný (rate-limited) seznam míst,
+// kde by prádlomat mohl stát (supermarkety, benzínky, myčky… z OSM) se skóre. Pro BS2 Vyhledávač míst.
+router.get('/public/candidates', async (req, res, next) => {
+  try {
+    const area = String(req.query.area || '').trim();
+    if (area.length < 2) return res.status(400).json({ error: 'Zadej město nebo oblast.' });
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+    if (!pubAreaRateOk(ip)) return res.status(429).json({ error: 'Příliš mnoho dotazů. Zkus to prosím za chvíli.' });
+    const row = await prisma.appSetting.findUnique({ where: { key: FINDER_CONFIG_KEY } });
+    let cfg = {}; if (row && row.value) { try { cfg = JSON.parse(row.value); } catch (_) {} }
+    const r = await finder.searchArea(area, cfg);
+    if (r && r.error) return res.status(404).json(r);
+    const cands = (r.candidates || []).map((c) => ({
+      lat: c.lat, lon: c.lon, name: c.name, shop: c.shop, shop_label: c.shop ? finder.shopLabel(c.shop) : 'Místo',
+      score: c.score, verdict: c.verdict, suitable: !!c.suitable,
+      parking: c.metrics && c.metrics.parking ? { count: c.metrics.parking.count, nearest_m: c.metrics.parking.nearest_m != null ? Math.round(c.metrics.parking.nearest_m) : null } : null,
+      competition: c.metrics && c.metrics.competition ? { count: c.metrics.competition.count, nearest_m: c.metrics.competition.nearest_m != null ? Math.round(c.metrics.competition.nearest_m) : null } : null,
+      anchors: c.metrics && c.metrics.anchors ? c.metrics.anchors.count : 0,
+    }));
+    res.json({ area: r.area, population: r.population, counts: r.counts, note: r.note || null, candidates: cands });
+  } catch (err) { next(err); }
+});
+
 // GET /api/pradlomat-spots/public/existing-laundromats — NAŠE stávající lokality.
 // Zdroj pravdy = SIS kiosk-values (tab Compounding, 69 lokalit). SIS nevrací GPS,
 // takže adresy (kiosk.label) geokódujeme přes Nominatim a výsledek trvale cachujeme
