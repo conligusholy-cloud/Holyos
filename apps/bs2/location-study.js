@@ -260,6 +260,7 @@ function studyPage(s, site, st, nav, R, siteCoords, d) {
 }
 // Tisková verze: samostatný A4 dokument ve stylu Best Series 2.0 (světlý papír, tmavá hlavička, modrý akcent), bez prvků webu.
 function studyPrintPage(s, site, st, R, siteCoords, d) {
+  R = Object.assign({}, R || {}, { scenarios: (R && R.scenTable) || (R && R.scenarios) || '' });
   const { body, meta } = studyBody(s, site, st, [], R, siteCoords, d);
   const dateS = meta.at ? new Date(meta.at).toLocaleDateString('cs-CZ') : '';
   const { logoSvg } = require('./logo');
@@ -299,6 +300,7 @@ function studyPrintPage(s, site, st, R, siteCoords, d) {
   #rep-map,#st-map{height:300px!important;border:1px solid var(--border);border-radius:8px;break-inside:avoid} .leaflet-control-zoom{display:none!important} .leaflet-control-attribution{font-size:8px}
   .no-print,.helpbtn{display:none!important}
   .mapcard{break-inside:avoid}
+  .scen-tbl td,.scen-tbl th{padding:5px 8px} .scen-tbl tr.t td{background:#eef5fc;border-top:1px solid #bcd6f0;border-bottom:1px solid #bcd6f0}
   a{color:inherit;text-decoration:none}
   @media print{.toolbar{display:none}.doc{padding:0;max-width:none}.card{break-inside:auto}.card.mapcard,.stat,.sc .c,.rep-box{break-inside:avoid}}
 </style></head><body>
@@ -306,6 +308,7 @@ function studyPrintPage(s, site, st, R, siteCoords, d) {
 <div class="doc">
   <div class="ph"><div class="brand">${logoSvg(34, 'p')}Best Series&nbsp;<span class="v">2.0</span> · Prověření lokality</div><div class="meta"><b>Studie lokality ${esc(site.name || '')}</b>${esc(site.address || '')}${site.city ? ', ' + esc(site.city) : ''} · ${dateS}</div></div>
   ${body.replace(/<div class="card" style="padding:10px"><div id="rep-map"/g, '<div class="card mapcard" style="padding:10px"><div id="rep-map"').replace(/<div class="card" style="padding:10px"><div id="st-map"/g, '<div class="card mapcard" style="padding:10px"><div id="st-map"')}
+  <style>.cas div{background:#fff!important;border-color:var(--border)!important;color:var(--text)!important} .cas div span{color:var(--text2)!important} .sc .c{background:var(--card2)!important;border-color:var(--border)!important} .rep ul,.rep li{color:var(--text2)!important} .stat,.an-box{color:var(--text)!important}</style>
   <div class="pf"><span>Best Series s.r.o. · IČO 05643724 · www.bestseries2.cz</span><span>Orientační studie – odhady z dostupných podkladů, nikoli odborné schválení investice ani předpověď výdělku.</span></div>
 </div>
 <script>window.addEventListener('load',function(){ setTimeout(function(){ try{ document.querySelectorAll('.leaflet-container').forEach(function(el){ var m=el._leaflet_map; }); }catch(e){} },300); });</script>
