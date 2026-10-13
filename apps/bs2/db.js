@@ -169,6 +169,8 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS user_events_created_idx ON user_events (created_at);
     CREATE INDEX IF NOT EXISTS user_events_sup_idx ON user_events (supporter_id, created_at);
     CREATE INDEX IF NOT EXISTS user_events_type_idx ON user_events (type, created_at);
+    -- Doklady (faktury z HolyOS), které už uživatel v aplikaci viděl — pro zelenou tečku „nové"
+    CREATE TABLE IF NOT EXISTS doc_seen (supporter_id INT NOT NULL REFERENCES supporters(id) ON DELETE CASCADE, invoice_id INT NOT NULL, seen_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (supporter_id, invoice_id));
     -- Evidence odeslaných e-mailů ze systému (součást časové osy aktivity uživatele)
     CREATE TABLE IF NOT EXISTS mail_log (
       id SERIAL PRIMARY KEY, supporter_id INT REFERENCES supporters(id) ON DELETE SET NULL, to_email TEXT NOT NULL, subject TEXT,

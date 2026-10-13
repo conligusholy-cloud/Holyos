@@ -110,7 +110,35 @@ async function requireUser(req, res, next, skipConsent) {
   try { const cfg = await AI.loadConfig(); u.ai_chat_on = !!cfg.enabled && !!process.env.ANTHROPIC_API_KEY; } catch (e) { u.ai_chat_on = false; }
   // Kdo ještě nepotvrdil VOP a souhlas se zpracováním osobních údajů (např. přenesený ze starého systému), musí je nejdřív odsouhlasit
   if (!skipConsent && (!u.vop_consent_at || !u.gdpr_consent_at)) return res.redirect('/souhlas');
+  try { const dd = await userDocs(u); u.new_docs = dd.filter(d => !d.seen).length; u.unpaid_docs = dd.filter(d => d.unpaid).length; } catch (e) { u.new_docs = 0; u.unpaid_docs = 0; }
   req.user = u; next();
+}
+// Doklady (odeslané faktury z HolyOS) k objednávkám uživatele; cache 60 s, aby se HolyOS nevolal při každém zobrazení stránky
+const _docCache = new Map();
+async function userDocs(u, fresh) {
+  const c = _docCache.get(u.id);
+  if (!fresh && c && Date.now() - c.t < 60e3) return c.docs;
+  const ordRows = (await q('SELECT id, status FROM orders WHERE supporter_id=$1 ORDER BY id DESC LIMIT 100', [u.id])).rows;
+  const ids = ordRows.map(r => r.id); const cancelled = new Set(ordRows.filter(r => r.status === 'cancelled').map(r => r.id));
+  let docs = [];
+  if (ids.length) {
+    const r = await holyosFetch('GET', '/api/auth/bs2/invoices?refs=' + ids.join(','), null, 3500);
+    if (r.ok) {
+      const m = await r.json();
+      Object.keys(m).forEach(ref => ['proforma', 'final'].forEach(w => {
+        const i = m[ref][w];
+        if (i && i.delivery_status === 'sent') {
+          // Záloha čeká na zaplacení: není zaplacená, nemá finální fakturu a objednávka není zrušená
+          const paid = i.status === 'paid' || Number(i.paid_amount || 0) + 0.01 >= Number(i.total) || !!m[ref].final;
+          docs.push({ ref: Number(ref), which: w, id: i.id, number: i.invoice_number, total: i.total, currency: i.currency, sent_at: i.sent_at, due: i.date_due, unpaid: w === 'proforma' && !paid && !cancelled.has(Number(ref)) });
+        }
+      }));
+    } else if (c) return c.docs;
+  }
+  const seen = new Set((await q('SELECT invoice_id FROM doc_seen WHERE supporter_id=$1', [u.id])).rows.map(r => r.invoice_id));
+  docs.forEach(d => { d.seen = seen.has(d.id); });
+  _docCache.set(u.id, { t: Date.now(), docs });
+  return docs;
 }
 const requireUserNoConsent = (req, res, next) => requireUser(req, res, next, true);
 // Obecný rate-limit v paměti: key (např. 'support:'+id), max pokusů za okno
@@ -209,10 +237,10 @@ async function sendBs2MailRaw({ to, subject, body, link, linkLabel }) {
   if (!r.ok) throw new Error('HolyOS send-mail ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 200));
 }
 // Fakturace přes HolyOS (zálohová faktura k objednávce produktu / faktura po platbě online produktu). Fire-and-forget, selhání se jen zaloguje.
-async function holyosFetch(method, path, body) {
+async function holyosFetch(method, path, body, timeoutMs) {
   const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET');
   const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
-  return fetch(HOLYOS_URL + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(25000) });
+  return fetch(HOLYOS_URL + path, { method, headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(timeoutMs || 25000) });
 }
 function holyosInvoice(kind, payload) {
   try {
@@ -1107,7 +1135,23 @@ app.get('/moje-pradlomaty', wrap(requireUser), wrap(async (req, res) => {
   let byId = new Map(); try { byId = new Map(((await loadProducts()).items || []).map(p => [p.id, p])); } catch (e) { /* bez parametrů stroje */ }
   rows.forEach(r => { r.machine = byId.get(r.holyos_item_id) || null; });
   const orders = (await q('SELECT * FROM orders WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100', [req.user.id])).rows;
+  // Doklady k objednávkám; po zobrazení stránky se označí jako viděné (zelená tečka v menu zmizí)
+  let docs = []; try { docs = await userDocs(req.user, true); } catch (e) { docs = []; }
+  orders.forEach(o => { o.docs = {}; docs.filter(d => d.ref === o.id).forEach(d => { o.docs[d.which] = d; }); });
+  const unseen = docs.filter(d => !d.seen);
+  if (unseen.length) { for (const d of unseen) await q('INSERT INTO doc_seen (supporter_id, invoice_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [req.user.id, d.id]).catch(() => {}); _docCache.delete(req.user.id); req.user.new_docs = 0; }
+  req.user.unpaid_docs = docs.filter(d => d.unpaid).length;
   res.send(V.supporterMine(req.user, { rows, orders, msg: req.query.ordered ? 'Objednávka odeslána. Ozveme se s potvrzením.' : '' }));
+}));
+// Stažení dokladu (faktury) uživatelem — jen doklady k jeho vlastním objednávkám, které už byly odeslány
+app.get('/moje-pradlomaty/doklad/:id(\\d+)/pdf', wrap(requireUser), wrap(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const docs = await userDocs(req.user);
+  if (!docs.some(d => d.id === id)) return res.status(404).send(V.errorPage('Doklad', 'Doklad nenalezen.', '/moje-pradlomaty'));
+  const r = await holyosFetch('GET', '/api/auth/bs2/invoice/' + id + '/pdf');
+  if (!r.ok) return res.status(502).send(V.errorPage('Doklad', 'Doklad se teď nepodařilo načíst. Zkuste to prosím za chvíli.', '/moje-pradlomaty'));
+  const d = docs.find(x => x.id === id);
+  res.set({ 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="' + String(d.number || 'doklad').replace(/[^\w.-]/g, '_') + '.pdf"' }).send(Buffer.from(await r.arrayBuffer()));
 }));
 app.get('/discount-credit', wrap(requireUser), wrap(async (req, res) => {
   const rows = (await q('SELECT * FROM credits WHERE supporter_id=$1 ORDER BY created_at DESC, id DESC LIMIT 500', [req.user.id])).rows;
