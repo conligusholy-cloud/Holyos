@@ -18,6 +18,8 @@ const { z } = require('zod');
 const { prisma } = require('../config/database');
 const { requireAuth } = require('../middleware/auth');
 const finder = require('../services/spots/finder');
+const { getSetting } = require('../services/settings');
+const sisHistory = require('../services/bank-plan/sis-history');
 
 const FINDER_CONFIG_KEY = 'pradlomat.finder_config';
 const SPOT_STATUSES = ['draft', 'published', 'reserved', 'taken', 'archived'];
@@ -337,6 +339,82 @@ router.get('/public/contact', async (req, res, next) => {
     _contactCache.set(key, { at: Date.now(), data });
     res.json(data);
   } catch (err) { next(err); }
+});
+
+// ─── Případové studie pro BS2 Prověření lokality: 3 anonymizované lokality s ŽIVÝMI daty ze SIS ─────
+// GET /api/pradlomat-spots/public/case-studies
+// Výběr: AppSetting 'location.case_studies' { items:[{code:'auto-best'|'<kód>', label, desc}] }.
+// 'auto-best' = nejvýkonnější lokalita Best Series v ČR podle avgTop3. Výstup bez kódů/adres.
+// Měsíční tržby z transakcí SIS (12 měsíců), zákazníci/den ≈ úspěšné platby/den, náklady dle Compounding nastavení.
+const CASE_STUDIES_KEY = 'location.case_studies';
+const CASE_STUDIES_DEFAULT = { items: [
+  { code: 'auto-best', label: 'Lokalita A – nejvýkonnější místo sítě', desc: 'Frekventované parkoviště u supermarketu ve větším městě. Ukazuje, co umí špičková lokalita.' },
+  { code: '00015CZ', label: 'Lokalita B – okresní město (cca 25 tis. obyvatel)', desc: 'Parkoviště u obchodní zóny na kraji města, dobrá viditelnost z hlavní silnice.' },
+  { code: '00003CZ', label: 'Lokalita C – menší město (cca 17 tis. obyvatel)', desc: 'Parkoviště u sportovního areálu, spádovost z okolních obcí.' },
+] };
+let _caseCache = { at: 0, data: null, running: null };
+async function buildCaseStudies() {
+  const cfgRaw = await getSetting(CASE_STUDIES_KEY, { type: 'json', defaultValue: CASE_STUDIES_DEFAULT });
+  const items = (cfgRaw && Array.isArray(cfgRaw.items) && cfgRaw.items.length) ? cfgRaw.items : CASE_STUDIES_DEFAULT.items;
+  const kiosks = await fetchSisKiosks();
+  if (!kiosks.length) throw new Error('SIS data nejsou k dispozici');
+  const num = (v) => (typeof v === 'number' && isFinite(v)) ? v : 0;
+  const cs = await getSetting('compounding.settings', { type: 'json', defaultValue: {} }) || {};
+  const kcfg = await getSetting('compounding.kiosks', { type: 'json', defaultValue: {} }) || {};
+  const svcPct = Number.isFinite(cs.servicePct) ? cs.servicePct : 15, enPct = Number.isFinite(cs.energyPct) ? cs.energyPct : 9.5;
+  const fxEur = Number(process.env.BANK_PLAN_EUR_CZK) || 25;
+  const machineCzk = (ver) => { const p = cs.pricelist && cs.pricelist[ver] && cs.pricelist[ver].eur; return p != null ? Math.round(Number(p) * fxEur) : null; };
+  const czBest = kiosks.filter((k) => /CZ$/i.test(String(k.code || '')) && /best series/i.test(String(k.companyName || '')) && !k.inIncubator && (k.currency || 'CZK') === 'CZK')
+    .sort((a, b) => num(b.avgTop3) - num(a.avgTop3));
+  const fetchTx = sisHistory.makeSisFetchTx();
+  const now = new Date(); const ymKeys = []; for (let i = 12; i >= 1; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); ymKeys.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+  const out = [];
+  for (const it of items) {
+    let k = null;
+    if (it.code === 'auto-best') k = czBest[0]; else k = kiosks.find((x) => String(x.code).toUpperCase() === String(it.code).toUpperCase());
+    if (!k) continue;
+    const agg = await sisHistory.aggregateKiosk(String(k.code), fetchTx, { limit: 500, maxPages: 400 });
+    const months = ymKeys.map((ym) => ({ ym, revenue: Math.round(num(agg.monthly[ym])) }));
+    const withData = months.filter((m) => m.revenue > 0);
+    const avg12 = withData.length ? Math.round(withData.reduce((a, m) => a + m.revenue, 0) / withData.length) : Math.round(num(k.avgTop3));
+    const best = withData.length ? Math.max(...withData.map((m) => m.revenue)) : 0;
+    const cfg = kcfg[String(k.code)] || {};
+    const ver = String(cfg.version || (String(k.code).startsWith('0') ? 'v2' : 'v3')).toLowerCase();
+    const machine = machineCzk(ver);
+    const rent = Number.isFinite(cfg.rentMonthlyCzk) ? cfg.rentMonthlyCzk : 0;
+    const gross = avg12, net = gross / 1.21, service = gross * svcPct / 100, energy = net * enPct / 100, operating = net - service - rent - energy;
+    const firstTs = agg.first || null; const daysOp = firstTs ? Math.max(30, (Date.now() - firstTs) / 86400000) : null;
+    const yearStart = Date.now() - 365 * 86400000;
+    // zákazníci/den za posledních 12 měsíců ≈ úspěšné platby / dny (každá platba = jedna návštěva)
+    const txPerDay = daysOp ? agg.successCount / Math.min(daysOp, 365) : null;
+    out.push({
+      key: String.fromCharCode(65 + out.length), label: it.label, desc: it.desc, machine_version: ver.toUpperCase(),
+      months_in_operation: firstTs ? Math.round((Date.now() - firstTs) / (30.44 * 86400000)) : null,
+      months, avg_month_gross: avg12, best_month_gross: best, top3_avg_gross: Math.round(num(k.avgTop3)),
+      customers_per_day: txPerDay != null ? Math.round(txPerDay * 10) / 10 : null,
+      transactions_total: agg.successCount,
+      costs: { service: Math.round(service), rent: Math.round(rent), energy: Math.round(energy), service_pct: svcPct, energy_pct: enPct },
+      net_month: Math.round(net), operating_month: Math.round(operating),
+      machine_price_czk: machine, payback_years: (machine && operating > 0) ? Math.round(machine / (operating * 12) * 10) / 10 : null,
+      roi_pct: (machine && operating > 0) ? Math.round(operating * 12 / machine * 1000) / 10 : null,
+    });
+  }
+  return { generatedAt: new Date().toISOString(), note: 'Živá data ze sítě prádlomatů Best Series (anonymizováno). Tržby vč. DPH, náklady orientační dle interní metodiky.', studies: out };
+}
+// Předpočítat po startu a obnovovat každých 6 h (první sestavení prochází všechny transakce ze SIS)
+if (process.env.SIS_KIOSK_API_KEY) {
+  const warm = () => buildCaseStudies().then((d) => { _caseCache = { at: Date.now(), data: d, running: null }; }).catch((e) => console.warn('[case-studies]', e.message));
+  setTimeout(warm, 45000); setInterval(warm, 6 * 3600e3);
+}
+router.get('/public/case-studies', async (req, res, next) => {
+  try {
+    const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || (req.socket && req.socket.remoteAddress) || '?';
+    if (!pubAreaRateOk(ip)) return res.status(429).json({ error: 'Příliš mnoho dotazů.' });
+    if (_caseCache.data && Date.now() - _caseCache.at < 6 * 3600e3) return res.json({ ..._caseCache.data, cached: true });
+    if (!_caseCache.running) _caseCache.running = buildCaseStudies().then((d) => { _caseCache = { at: Date.now(), data: d, running: null }; return d; }).catch((e) => { _caseCache.running = null; throw e; });
+    const d = await _caseCache.running;
+    res.json(d);
+  } catch (err) { if (_caseCache.data) return res.json({ ..._caseCache.data, cached: true, stale: true }); next(err); }
 });
 
 // GET /api/pradlomat-spots/public/existing-laundromats — NAŠE stávající lokality.

@@ -630,10 +630,14 @@ app.get('/api/location/contact', wrap(requireLocation), wrap(async (req, res) =>
   res.status(r.ok ? 200 : (r.status || 502)).json(r.j);
 }));
 app.get('/api/location/existing', wrap(requireLocation), wrap(async (req, res) => { const r = await holyosPublic('/api/pradlomat-spots/public/existing-laundromats'); res.json(r.ok && Array.isArray(r.j) ? r.j : []); }));
+// Případové studie: 3 anonymizované lokality s živými daty ze SIS (přes HolyOS public API), cache 1 h
+let _caseStudies = { at: 0, data: null };
 app.get('/lokalita/studie', wrap(requireLocation), wrap(async (req, res) => {
-  const r = await q("SELECT value FROM app_settings WHERE key='location_case_studies'").catch(() => ({ rows: [] }));
-  let studies = []; try { studies = JSON.parse((r.rows[0] || {}).value || '[]'); } catch (e) { studies = []; }
-  res.send(LAPP.studiesPage(req.user, studies));
+  if (!_caseStudies.data || Date.now() - _caseStudies.at > 3600e3) {
+    const r = await holyosPublic('/api/pradlomat-spots/public/case-studies');
+    if (r.ok && r.j && Array.isArray(r.j.studies)) _caseStudies = { at: Date.now(), data: r.j };
+  }
+  res.send(LAPP.studiesPage(req.user, _caseStudies.data));
 }));
 app.get('/lokalita/new', wrap(requireLocation), wrap(async (req, res) => {
   const pre = { city: String(req.query.city || '').slice(0, 120), address: String(req.query.address || '').slice(0, 300) };
