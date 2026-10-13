@@ -131,7 +131,7 @@ const PAGE = `<!DOCTYPE html>
   form label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--text2);letter-spacing:.02em}
   form .full{grid-column:1/-1}
   form .chk{flex-direction:row;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--text2)}
-  form .chk input{width:auto;margin-top:3px;accent-color:var(--accent2)}
+  form .chk input{width:18px;height:18px;min-width:18px;flex:none;margin:2px 0 0;padding:0;appearance:auto;-webkit-appearance:checkbox;accent-color:var(--accent2);border:1px solid var(--border2);border-radius:4px;background:rgba(4,8,16,.6)}
   .msg{grid-column:1/-1;font-size:14px;padding:10px 12px;border-radius:10px;display:none}
   .msg.ok{display:block;background:rgba(47,227,160,.1);border:1px solid rgba(47,227,160,.4);color:#a9f5d9}
   .msg.err{display:block;background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.4);color:#ffb3bb}
@@ -506,8 +506,8 @@ fit();addEventListener('resize',fit);addEventListener('orientationchange',functi
       <label>Telefon<input name="phone" maxlength="40" autocomplete="tel" /></label>
       <label>Balíček *<select name="variant" id="variant"><option value="basic">Základ – 4 900 Kč s DPH (3 lokality)</option><option value="plus">Plus – 9 900 Kč s DPH (10 lokalit + hovor)</option><option value="premium">Premium – 15 900 Kč s DPH (Plus + místní šetření technikem)</option></select></label>
       <label class="full">Firma / IČO (nepovinné, pro fakturu)<input name="company" maxlength="255" /></label>
-      <label class="chk full"><input type="checkbox" name="terms" value="1" required /><span>Souhlasím s <a href="/location/vop" target="_blank" rel="noopener">obchodními podmínkami</a> aplikací Prověření lokality a Vyhledávač míst a výslovně žádám o zpřístupnění digitálního obsahu ihned po zaplacení; beru na vědomí, že tím ztrácím právo na odstoupení od smlouvy v rozsahu zpřístupněného obsahu. *</span></label>
-      <label class="chk full"><input type="checkbox" name="consent" value="1" required /><span>Seznámil(a) jsem se s <a href="/location/gdpr" target="_blank" rel="noopener">informacemi o zpracování osobních údajů</a> společností Best Series s.r.o. (IČO 05643724) pro vyřízení objednávky a zpřístupnění aplikace. *</span></label>
+      <label class="chk full"><input type="checkbox" name="terms" value="1" required /><span>Souhlasím s <a href="/location/vop" target="_blank" rel="noopener">obchodními podmínkami</a> a žádám o zpřístupnění aplikace ihned po zaplacení (tím zaniká právo na odstoupení v rozsahu zpřístupněného obsahu). Informace o <a href="/location/gdpr" target="_blank" rel="noopener">zpracování osobních údajů</a>. *</span></label>
+      <input type="hidden" name="consent" value="1">
       <label class="chk full"><input type="checkbox" name="marketing" value="1" /><span>Chci dostávat informace o prádlomatech a novinkách Best Series e-mailem (dobrovolné, kdykoli odvolatelné).</span></label>
       <div class="msg" id="msg"></div>
       <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
@@ -581,7 +581,7 @@ fit();addEventListener('resize',fit);addEventListener('orientationchange',functi
     msg.className='msg';
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
-    body.consent = !!fd.get('consent'); body.terms = !!fd.get('terms'); body.marketing = !!fd.get('marketing'); body.sid=SID;
+    body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = !!fd.get('marketing'); body.sid=SID;
     if(!body.terms){ setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
     if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
