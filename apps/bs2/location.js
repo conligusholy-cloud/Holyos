@@ -147,6 +147,8 @@ const PAGE = `<!DOCTYPE html>
   .sc-k{font-size:12px;color:var(--text2);margin-bottom:4px} .sc-v{font-size:13.5px;font-variant-numeric:tabular-nums} .sc-v.pos{color:var(--ok);font-weight:700} .sc-v.neg{color:var(--err);font-weight:700}
   .sim .how{margin:4px 0 22px;padding:14px;border-radius:18px;border:1px solid var(--border);background:radial-gradient(ellipse at 50% 100%,rgba(79,209,255,.12),transparent 60%),rgba(4,8,16,.45)}
   .sim .how-stage{position:relative;width:min(100%,440px);margin:0 auto;aspect-ratio:1000/820;overflow:visible;min-height:560px}
+  /* Telefon: stejné rozložení jako na počítači, celé zmenšené podle šířky (zoom nastaví skript) */
+  @media(max-width:700px){.sim .how{overflow:hidden} .sim .how-stage{width:440px;max-width:none;min-height:560px}}
   .sim .how.fit{overflow:visible} .sim .how.fit .how-stage{width:440px;min-height:560px;height:560px;aspect-ratio:auto;margin:0;transform-origin:0 0}
   .sim .how-mach{position:absolute;inset:0}
   .sim .how-img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 24px 40px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(79,209,255,.25))}
@@ -302,6 +304,7 @@ const PAGE = `<!DOCTYPE html>
         </div>
         </div>
         <div class="how-foot"><span>🕐 <b id="how-clock">00:00</b> · prádlomat běží 24/7</span><span>📡 vše vidíte v telefonu</span><span>🔧 servis = Best Series</span></div>
+        <script>(function(){var how=document.querySelector('.sim .how'),st=document.querySelector('.sim .how-stage');if(!how||!st)return;var FULL=820,LEFT=150;function fit(){if(window.innerWidth>700){st.style.zoom='';st.style.marginLeft='';st.style.marginRight='';return;}var w=how.clientWidth-8;var s=Math.min(1,w/FULL);st.style.zoom=s;st.style.marginLeft=Math.max(0,(w/s-FULL)/2+LEFT)+'px';st.style.marginRight='0';}fit();addEventListener('resize',fit);addEventListener('orientationchange',function(){setTimeout(fit,200);});})();</script>
       </div>
       <script>(function(){
         var $=function(id){return document.getElementById(id);};
