@@ -117,7 +117,8 @@ function evaluate(d, c) {
   if (!own && d.rent_known === 'no') risks.push('Nájem zatím není známý – výsledek se změní podle skutečné výše');
   const cm = (k, l) => { if (d[k] !== 'no') return; const m = num(d[k + '_m']); if (!m) { missing.push('Délka trasy přípojky – ' + l); risks.push('Chybí ' + l + ' – délka trasy není uvedena'); } else { given.push('Přípojka ' + l + ': nutno vybudovat, trasa ' + m + ' m'); risks.push('Nutno vybudovat přípojku: ' + l + ' (' + m + ' m) – náklady zahrňte do „Příprava místa / přípojky"'); } };
   cm('conn_water', 'voda'); cm('conn_sewer', 'odpad'); cm('conn_power', 'elektřina');
-  if (['conn_water', 'conn_sewer', 'conn_power'].some((k) => d[k] === 'no') && !num(d.site_prep)) steps.push('Nacenit vybudování přípojek a doplnit do investice (Příprava místa / přípojky)');
+  if (d.surface === 'yes') given.push('Zpevněná plocha: už vybudovaná'); else if (d.surface === 'no') { given.push('Zpevněná plocha: bude se budovat'); risks.push('Nutno vybudovat zpevněnou plochu pod prádlomat – náklady zahrňte do „Příprava místa / přípojky"'); } else missing.push('Zpevněná plocha pod prádlomat (vybudovaná / bude se budovat)');
+  if ((['conn_water', 'conn_sewer', 'conn_power'].some((k) => d[k] === 'no') || d.surface === 'no') && !num(d.site_prep)) steps.push('Nacenit vybudování přípojek / zpevněné plochy a doplnit do investice (Příprava místa / přípojky)');
   const compN = pois.filter((p) => p.type === 'competition').length;
   if (compN >= 2) risks.push(`Konkurence v okolí: ${compN} provozoven zakreslených v mapě`);
   if (!pois.some((p) => p.type === 'housing')) missing.push('Bytové domy v okolí zakreslené v mapě');
@@ -153,7 +154,7 @@ const POI_TYPES = [
   { key: 'other', label: 'Jiné', icon: '📌', color: '#9db6cd' },
 ];
 // ── Formulář ─────────────────────────────────────────────────────────────────
-const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
+const FIELDS = ['name', 'address', 'city', 'lat', 'lng', 'heading', 'pois', 'ownership', 'rent_known', 'rent_vat', 'invest_vat', 'notice_known', 'contract_years', 'building', 'area', 'rent', 'rent_src', 'deposit', 'notice', 'exclusive', 'conn_water', 'conn_sewer', 'conn_power', 'conn_water_m', 'conn_sewer_m', 'conn_power_m', 'surface', 'visibility', 'parking', 'transit', 'households', 'households_src', 'competition', 'foot_traffic', 'foot_src',
   'price_wash', 'price_dry', 'dry_share', 'dry_cycles', 'washes_weak', 'washes_mid', 'washes_strong', 'vat_payer', 'energy_mode', 'energy_pct', 'kwh_wash', 'kwh_dry', 'kwh_price', 'water_wash', 'water_price', 'service_pct', 'software', 'fee_pct', 'insurance', 'marketing', 'reserve_pct', 'other',
   'machine_price', 'delivery', 'site_prep', 'financing', 'down_payment', 'interest', 'months', 'notes'];
 const DEFAULTS = { price_wash: 300, price_dry: 50, dry_share: 60, dry_cycles: 2, washes_weak: 5, washes_mid: 8, washes_strong: 12, vat_payer: 'yes', energy_mode: 'percent', energy_pct: 9.5, kwh_wash: 1.5, kwh_dry: 2.5, kwh_price: 6, water_wash: 90, water_price: 110, service_pct: 13, fee_pct: 1.5, reserve_pct: 5, financing: 'no', interest: 9, months: 60, rent_vat: 'excl', invest_vat: 'excl', conn_water: 'unknown', conn_sewer: 'unknown', conn_power: 'unknown', visibility: 'unknown', parking: 'unknown', transit: 'unknown', exclusive: 'unknown' };
@@ -205,6 +206,7 @@ function siteForm(s, site, d, error, saved, noeval) {
     <label>Voda${sel('conn_water', YNU)}</label>${inp('conn_water_m', 'Délka trasy přípojky vody (m)', 'inputmode="decimal" data-conn="conn_water"', 'Od nejbližšího místa napojení k prádlomatu.')}
     <label>Odpad${sel('conn_sewer', YNU)}</label>${inp('conn_sewer_m', 'Délka trasy odpadu (m)', 'inputmode="decimal" data-conn="conn_sewer"')}
     <label>Elektřina${sel('conn_power', YNU)}</label>${inp('conn_power_m', 'Délka trasy el. přípojky (m)', 'inputmode="decimal" data-conn="conn_power"')}
+    <label>Zpevněná plocha pod prádlomat${sel('surface', [['unknown', 'nevím / neověřeno'], ['yes', 'už je vybudovaná'], ['no', 'bude se budovat']])}</label>
     <script>(function(){ document.querySelectorAll('input[data-conn]').forEach(function(inp){ var sel=document.querySelector('select[name='+inp.getAttribute('data-conn')+']'); function u(){ inp.parentNode.style.display=sel.value==='no'?'':'none'; if(sel.value!=='no') inp.value=''; } sel.addEventListener('change',u); u(); }); })();</script>
     <h3>Investice a financování</h3>
     <label>Částky investice jsou${sel('invest_vat', [['excl', 'bez DPH'], ['incl', 's DPH (21 %)']])}</label>
