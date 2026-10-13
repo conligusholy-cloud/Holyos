@@ -6,7 +6,7 @@
 const { esc, layout } = require('./views');
 
 const LIMITS = { basic: 3, plus: 10, premium: 10 };
-const SEARCH_LIMITS = { basic: 1, plus: 1, premium: 1 }; // Vyhledávač míst: 1 vyhledání zdarma ke každému balíčku, další se dokupují
+const SEARCH_LIMITS = { basic: 1, plus: 2, premium: 3 }; // Vyhledávač míst: vyhledání v ceně balíčku, další se dokupují
 const PKG_LABEL = { basic: 'Základ', plus: 'Plus', premium: 'Premium' };
 
 const NAV = (s) => [
@@ -16,6 +16,13 @@ const NAV = (s) => [
 ];
 function page(s, title, active, body, head) {
   let html = layout({ title, user: s.nick, nav: NAV(s), active, fx: true, help: null, body: `<style>${CSS}</style>${body}` });
+  // Odznak zakoupeného balíčku v horní liště (vlevo od Nápad): barva podle balíčku + platnost přístupu
+  if (s && s.location_package) {
+    const pk = s.location_package, col = pk === 'premium' ? '#ffd866' : pk === 'plus' ? '#a78bfa' : '#4fd1ff';
+    const exp = s.location_expires_at ? new Date(s.location_expires_at) : null;
+    const badge = `<a href="/lokalita" class="pkg-badge" title="Váš balíček Prověření lokality${exp ? ' · přístup do ' + exp.toLocaleDateString('cs-CZ') : ''}" style="display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:999px;border:1px solid ${col}66;background:${col}14;color:${col};font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap"><span style="width:7px;height:7px;border-radius:50%;background:${col};box-shadow:0 0 8px ${col}"></span>Balíček ${esc(PKG_LABEL[pk] || pk)}${exp ? `<span style="font-weight:500;text-transform:none;letter-spacing:0;opacity:.85">· do ${exp.toLocaleDateString('cs-CZ')}</span>` : ''}</a>`;
+    html = html.replace('<!--BS2-SWITCH-->', '<!--BS2-SWITCH-->' + badge);
+  }
   if (head) html = html.replace('</head>', head + '</head>');
   return html;
 }
