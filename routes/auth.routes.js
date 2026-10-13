@@ -328,7 +328,7 @@ router.get('/bs2/invoices', async (req, res, next) => {
     if (refs.length) {
       const rows = await prisma.invoice.findMany({
         where: { source: 'bs2_products', external_number: { in: refs.map((r) => 'BS2-O' + r) }, type: { in: ['proforma_issued', 'issued'] } },
-        select: { id: true, invoice_number: true, type: true, external_number: true, status: true, delivery_status: true, sent_at: true, sent_to: true, send_error: true, total: true, currency: true },
+        select: { id: true, invoice_number: true, type: true, external_number: true, status: true, delivery_status: true, sent_at: true, sent_to: true, send_error: true, total: true, paid_amount: true, currency: true, date_due: true },
         orderBy: { id: 'asc' },
       });
       rows.forEach((r) => {
