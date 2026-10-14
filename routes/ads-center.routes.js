@@ -151,6 +151,8 @@ router.post('/test-lead', async (req, res, next) => { try {
   res.json({ ok: true, id: out.id, owner: ownerName });
 } catch (err) { next(err); } });
 router.get('/funnels/:id/positions', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const positions = await require('../services/ads/funnel-events').positions(String(req.params.id || ''), sinceDate(days)); res.json({ positions }); } catch (err) { next(err); } });
+// Ruční spuštění automatu pro lead zastavený ve funelu (např. doplněný telefon)
+router.post('/leads/:id/autosend', async (req, res, next) => { try { const r = await require('./compounder.routes').rerunAutosend(parseInt(req.params.id, 10)); res.json(r); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
@@ -327,7 +329,7 @@ router.post('/meta/leads-sync/repair', async (req, res, next) => {
       const dupOr = []; if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } }); if (phone) dupOr.push({ phone });
       const older = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr, id: { not: r.id } }, orderBy: { created_at: 'asc' }, select: { id: true, activity_log: true } }) : null;
       if (older) { const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Nová reakce z FB reklamy (napřímo, lead ' + r.meta_lead_id + ') — kontakt už v systému.'; await prisma.compounderLead.update({ where: { id: older.id }, data: { activity_log: line + (older.activity_log ? '\n' + older.activity_log : '') } }).catch(() => {}); await prisma.compounderLead.delete({ where: { id: r.id } }); removed++; continue; }
-      await prisma.compounderLead.update({ where: { id: r.id }, data: { name: (name || r.name || 'FB lead').slice(0, 255), first_name: first ? first.slice(0, 120) : undefined, last_name: last ? last.slice(0, 120) : undefined, email: email ? email.slice(0, 255) : undefined, phone: phone ? phone.slice(0, 40) : undefined, company: f.company ? String(f.company).slice(0, 200) : undefined, city: f.city ? String(f.city).slice(0, 120) : undefined } }); fixed++; }
+      await prisma.compounderLead.update({ where: { id: r.id }, data: { name: (name || r.name || 'FB lead').slice(0, 255), first_name: first ? first.slice(0, 120) : undefined, last_name: last ? last.slice(0, 120) : undefined, email: email ? email.slice(0, 255) : undefined, phone: phone ? phone.slice(0, 40) : undefined, company: f.company ? String(f.company).slice(0, 200) : undefined, city: f.city ? String(f.city).slice(0, 120) : undefined } }); fixed++; try { await cmp.rerunAutosend(r.id); } catch (e) { /* automat best-effort */ } } // po doplnění kontaktů znovu spustit automat (SMS / e-mail)
     res.json({ ok: true, checked: rows.length, fixed, removed, skipped }); } catch (err) { next(err); } });
 router.post('/meta/leads-sync/run', express.json({ limit: '10kb' }), async (req, res) => { try { const b = req.body || {}; const r = await leadsSync.sync({ since: b.since || undefined }); res.json(r); } catch (err) { res.status(400).json({ error: err.message }); } });
 
