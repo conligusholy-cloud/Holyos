@@ -65,7 +65,8 @@ const PAGE = `<!DOCTYPE html>
   .pm3d{flex:none;width:min(40%,440px);height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
   .vid{flex:none;width:min(46%,500px);position:relative;aspect-ratio:460/350;border:0;padding:0;background:none;cursor:pointer;display:block}
   .vid img{width:100%;height:100%;object-fit:contain;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
-  .vid .play{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;background:linear-gradient(135deg,#4fd1ff,#6f5cff);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(79,140,255,.55);transition:transform .2s}
+  .vid .play{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;background:#e11d2e;border:3px solid #fff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 0 rgba(225,29,46,.6),0 8px 30px rgba(0,0,0,.6);animation:playpulse 1.8s infinite;transition:transform .2s}
+  @keyframes playpulse{0%{box-shadow:0 0 0 0 rgba(225,29,46,.6),0 8px 30px rgba(0,0,0,.6)}70%{box-shadow:0 0 0 22px rgba(225,29,46,0),0 8px 30px rgba(0,0,0,.6)}100%{box-shadow:0 0 0 0 rgba(225,29,46,0),0 8px 30px rgba(0,0,0,.6)}}
   .vid:hover .play{transform:scale(1.1)}
   .vid .play:before{content:"";border-left:22px solid #fff;border-top:13px solid transparent;border-bottom:13px solid transparent;margin-left:6px}
   .vid .cap{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);font-size:12px;color:#fff;background:rgba(5,10,25,.7);border:1px solid var(--border);border-radius:999px;padding:4px 12px;white-space:nowrap}
