@@ -132,6 +132,21 @@ router.get('/funnels/:id/stats', async (req, res, next) => { try { const days = 
 router.get('/funnels/:id/edge-leads', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const ef = await require('../services/ads/funnel-events').edgeFlows(String(req.params.id || ''), sinceDate(days), true); const k = String(req.query.from || '') + '>' + String(req.query.to || '') + (parseInt(req.query.port, 10) > 0 ? '#' + parseInt(req.query.port, 10) : ''); const e = ef[k] || { leads: 0, list: [] }; const ids = (e.list || []).map((x) => x.lead_id); const leads = ids.length ? await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, phone: true, status: true, owner_person_id: true } }) : []; const byId = {}; leads.forEach((l) => { byId[l.id] = l; }); res.json({ leads: e.leads, list: (e.list || []).map((x) => Object.assign({}, x, byId[x.lead_id] || {})).sort((a, b) => new Date(b.tB) - new Date(a.tB)) }); } catch (err) { next(err); } });
 // Log odeslání uzlu (SMS / e-mail): seznam zpráv s textem, adresátem, doručením a reakcí – pro kontrolu z editoru funelu
 router.get('/funnels/:id/node-log', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const list = await require('../services/ads/funnel-events').nodeLog(String(req.params.id || ''), String(req.query.node || ''), sinceDate(days)); res.json({ list }); } catch (err) { next(err); } });
+// Testovací lead z editoru funelu: založí se jako lead z rychlého formuláře (stejná cesta jako napřímo z FB) → rozdělení, autosend, vlákna
+router.post('/test-lead', async (req, res, next) => { try {
+  const b = req.body || {}; const formId = String(b.form_id || '').trim(); if (!formId) return res.status(400).json({ error: 'Chybí formulář' });
+  const first = String(b.first_name || '').trim(), last = String(b.last_name || '').trim(); const phone = String(b.phone || '').trim(), email = String(b.email || '').trim();
+  if (!first || (!phone && !email)) return res.status(400).json({ error: 'Vyplň jméno a telefon nebo e-mail' });
+  const cmp = require('./compounder.routes'); const forms = await cmp._fbLoadForms(); const fcfg = forms.find((f) => String(f.form_id) === formId) || null;
+  const owner = await cmp._fbResolveOwner(fcfg || { form_id: formId });
+  const fields = { first_name: first, last_name: last, full_name: (first + ' ' + last).trim(), phone, email, city: String(b.city || '').trim() };
+  const tid = 'test-' + Date.now();
+  const out = await cmp._fbCreateLead(fields, { leadId: tid, formId, pageId: null, adId: b.ad_id ? String(b.ad_id) : null, raw: { test: true, form_name: b.form_name || '', created_time: new Date().toISOString(), by: req.user && (req.user.username || req.user.id) }, source: 'facebook_ads', srcLabel: 'TEST z funelu', channelName: 'FB reklamy' }, Object.assign({ form_id: formId, form_name: b.form_name || '' }, fcfg || {}, owner));
+  if (!out || !out.created) return res.status(400).json({ error: 'Lead se nezaložil' + (out && out.skipped ? ' (' + out.skipped + ')' : '') });
+  try { const L = await prisma.compounderLead.findUnique({ where: { id: out.id }, select: { notes: true } }); await prisma.compounderLead.update({ where: { id: out.id }, data: { notes: 'TEST z funelu – ' + new Date().toLocaleString('cs-CZ') + (L && L.notes ? '\n' + L.notes : '') } }); } catch (e) { /* poznámka je nepovinná */ }
+  let ownerName = null; try { if (owner && owner.owner_person_id) { const p = await prisma.person.findUnique({ where: { id: owner.owner_person_id }, select: { first_name: true, last_name: true } }); if (p) ownerName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); } } catch (e) { /* bez jména */ }
+  res.json({ ok: true, id: out.id, owner: ownerName });
+} catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
