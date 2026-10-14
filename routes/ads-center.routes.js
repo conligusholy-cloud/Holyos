@@ -204,6 +204,54 @@ router.get('/funnels/:id/positions', async (req, res, next) => { try { const day
 router.post('/leads/:id/autosend', async (req, res, next) => { try { const r = await require('./compounder.routes').rerunAutosend(parseInt(req.params.id, 10)); res.json(r); } catch (err) { next(err); } });
 // Dodatečné odeslání z vlákna: { ids:[lead_id], channel:'sms'|'email', force:bool } → pošle po jednom, vrátí výsledky
 router.post('/leads/resend', async (req, res, next) => { try { const b = req.body || {}; const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => parseInt(x, 10)).filter((x) => x > 0).slice(0, 200); const ch = b.channel === 'email' ? 'email' : 'sms'; const cmp = require('./compounder.routes'); const out = []; for (const id of ids) { try { const r = await cmp.forceSend(id, ch, !!b.force); out.push({ id, sent: !!(r && r.sent), error: r && (r.error || (!r.sent ? r.reason : '')) }); } catch (e) { out.push({ id, sent: false, error: e.message }); } } res.json({ ok: true, results: out, sent: out.filter((x) => x.sent).length }); } catch (err) { next(err); } });
+// ── Kompletní statistika funelu (pro marketing): reklama → formulář → rozdělení → SMS/e-mail → stránka → objednávky,
+//    s konverzemi mezi kroky, porovnáním s předchozím obdobím, rozpadem po obchodnících a denní řadou. GET /funnels/:id/report?days&shift
+async function funnelReport(req, days, shift, funnel) {
+  const since = sinceDate(days); const until = since.until || new Date(); const span = Math.max(1, days);
+  const nodes = funnel.nodes || [], edges = funnel.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
+  const FE = require('../services/ads/funnel-events');
+  const [stats, flows] = await Promise.all([FE.stats(funnel.id, since).catch(() => ({})), FE.edgeFlows(funnel.id, since, false).catch(() => ({}))]);
+  // 1) reklama: Meta insights kampaní napojených na start (přesný časový rozsah)
+  const ads = { impressions: 0, reach: 0, clicks: 0, link_clicks: 0, spend: 0, campaigns: [] }; let adsOk = false;
+  try { const c = await metaCfg(req); const starts = nodes.filter((nd) => nd.kind === 'start' && nd.meta && nd.meta.campaign && nd.meta.campaign.id);
+    if (c.token && starts.length) { const d1 = new Date(until.getTime() - 1); const tr = JSON.stringify({ since: dayKey(since), until: dayKey(d1) });
+      for (const nd of starts) { try { const j = await graph(String(nd.meta.campaign.id).replace(/[^0-9]/g, '') + '/insights', { fields: 'impressions,reach,clicks,spend,actions', time_range: tr }, c.token); const ins = (j.data && j.data[0]) || {}; const act = (t) => { const a = (ins.actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
+        const row = { id: nd.meta.campaign.id, name: nd.meta.campaign.name, impressions: Number(ins.impressions || 0), reach: Number(ins.reach || 0), clicks: Number(ins.clicks || 0), link_clicks: act('link_click'), spend: Number(ins.spend || 0), meta_leads: act('lead') || act('onsite_conversion.lead_grouped') };
+        ads.campaigns.push(row); ads.impressions += row.impressions; ads.reach += row.reach; ads.clicks += row.clicks; ads.link_clicks += row.link_clicks; ads.spend += row.spend; adsOk = true; } catch (e) { ads.campaigns.push({ id: nd.meta.campaign.id, name: nd.meta.campaign.name, error: e.message }); } } } } catch (e) { /* bez Mety */ }
+  // 2) formuláře: leady v HolyOS (+ denně, + po obchodnících, + zdroj napřímo/Make)
+  const forms = nodes.filter((nd) => nd.kind === 'leadform' && nd.form && nd.form.form_id); let leads = []; const formRows = [];
+  for (const nd of forms) { const adIds = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = adIds.length ? [{ meta_ad_id: { in: adIds } }] : [{ meta_form_id: String(nd.form.form_id) }];
+    const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true, status: true, phone: true, email: true, activity_log: true } }).catch(() => []);
+    formRows.push({ node: nd.id, name: nd.form.name || nd.form.form_id, leads: L.length, direct: L.filter((r) => /napřímo/.test(String(r.activity_log || '').split('\n')[0])).length, no_phone: L.filter((r) => !r.phone).length, no_email: L.filter((r) => !r.email).length }); leads = leads.concat(L); }
+  const leadIds = new Set(leads.map((l) => l.id));
+  // 3) rozdělení po obchodnících
+  const byOwner = {}; leads.forEach((l) => { const k = l.owner_person_id ? 'i:' + l.owner_person_id : (l.external_rep_id ? 'e:' + l.external_rep_id : 'none'); byOwner[k] = (byOwner[k] || 0) + 1; });
+  const pids = Object.keys(byOwner).filter((k) => k.startsWith('i:')).map((k) => Number(k.slice(2))); const persons = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : [];
+  const nameOf = (k) => { if (k === 'none') return 'nepřiřazeno'; if (k.startsWith('i:')) { const p = persons.find((x) => x.id === Number(k.slice(2))); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : k; } return 'externí ' + k.slice(2); };
+  // 4) kanály a stránky z uzlů (stats = per uzel)
+  const chan = (kind) => nodes.filter((nd) => nd.kind === kind && nd.enabled !== false).map((nd) => { const st = stats[nd.id] || {}; return { node: nd.id, variant: nd.variant, sent: st.leads || 0, delivered: st.delivered, opened: st.opened, clicked: st.clicked || 0, noreact: st.noreact }; });
+  const sms = chan('sms'), email = chan('email');
+  const landing = nodes.filter((nd) => nd.kind === 'landing').map((nd) => { const st = stats[nd.id] || {}; const pg = PAGES.find((p) => p.key === nd.page); return { node: nd.id, name: pg ? pg.name : (nd.variant === 'schuzka' ? 'Cesta k rozhodnutí' : 'AI specialista'), key: nd.page || null, opened: st.leads || 0 }; });
+  // 5) objednávky / tržby na záchytných stránkách (BS2 za období) + po dnech
+  let orders = null; const lkeys = landing.map((x) => x.key).filter(Boolean);
+  if (lkeys.includes('bs2_location')) { try { const b = await bs2Stats(Math.max(1, days + 1), since.until ? since : null); if (b) orders = { total: Number(b.orders.total || 0), paid: Number(b.orders.paid || 0), revenue: Number(b.orders.revenue || 0), byDay: b.ordersByDay || [], revenueByDay: b.revenueByDay || [], byPackage: b.ordersByPackage || [] }; } catch (e) { orders = null; } }
+  // 6) denní řada: leady, SMS, e-maily, kliky, objednávky
+  const ev = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnel.id + '/' }, created_at: rng(since) }, select: { event: true, props: true, created_at: true } }).catch(() => []);
+  const keys = dayKeys(days); const D = {}; keys.forEach((k) => { D[k] = { d: k, leads: 0, sms: 0, email: 0, clicks: 0, orders: 0, revenue: 0 }; });
+  leads.forEach((l) => { const k = dayKey(l.created_at); if (D[k]) D[k].leads++; });
+  const seenClick = new Set(); ev.forEach((r) => { const k = dayKey(r.created_at); if (!D[k]) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_sms') D[k].sms++; else if (r.event === 'funnel_email') D[k].email++; else if (r.event === 'funnel_landing' && lid && !seenClick.has(lid + k)) { seenClick.add(lid + k); D[k].clicks++; } });
+  if (orders) { orders.byDay.forEach((o) => { if (D[o.d]) D[o.d].orders += Number(o.paid || 0); }); orders.revenueByDay.forEach((o) => { if (D[o.d]) D[o.d].revenue += Number(o.revenue || 0); }); }
+  // 7) kliky celkem (unikátní leady, které otevřely odkaz) + podle kanálu
+  const clickers = { sms: new Set(), email: new Set() }; ev.forEach((r) => { if (r.event !== 'funnel_landing') return; const lid = r.props && r.props.lead_id; if (!lid) return; clickers[r.props.channel === 'email' ? 'email' : 'sms'].add(lid); });
+  const clicked = new Set([...clickers.sms, ...clickers.email]).size;
+  const totalSent = new Set(ev.filter((r) => r.event === 'funnel_sms' || r.event === 'funnel_email').map((r) => r.props && r.props.lead_id)).size;
+  const pct = (a, b) => (b > 0 ? Math.round(a / b * 1000) / 10 : null);
+  const kpi = { impressions: adsOk ? ads.impressions : null, reach: adsOk ? ads.reach : null, link_clicks: adsOk ? ads.link_clicks : null, spend: adsOk ? Math.round(ads.spend) : null, leads: leads.length, cpl: adsOk && leads.length ? Math.round(ads.spend / leads.length) : null, contacted: totalSent, contact_rate: pct(totalSent, leads.length), clicked, click_rate: pct(clicked, totalSent), orders: orders ? orders.paid : null, order_rate: orders ? pct(orders.paid, clicked) : null, revenue: orders ? orders.revenue : null, cpo: adsOk && orders && orders.paid ? Math.round(ads.spend / orders.paid) : null, roas: adsOk && orders && ads.spend > 0 ? Math.round(orders.revenue / ads.spend * 100) / 100 : null };
+  return { period: { days, shift, since: since.toISOString(), until: until.toISOString() }, kpi, ads: adsOk ? ads : null, forms: formRows, owners: Object.keys(byOwner).map((k) => ({ key: k, name: nameOf(k), leads: byOwner[k] })).sort((a, b) => b.leads - a.leads), sms, email, clickers: { sms: clickers.sms.size, email: clickers.email.size }, landing, orders: orders ? { total: orders.total, paid: orders.paid, revenue: orders.revenue, byPackage: orders.byPackage } : null, daily: keys.map((k) => D[k]), flows };
+}
+router.get('/funnels/:id/report', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const shift = parseShift(req.query.shift); const f = (await loadFunnels()).find((x) => x.id === String(req.params.id || '')); if (!f) return res.status(404).json({ error: 'Funel nenalezen' });
+  const now = await funnelReport(req, days, shift, f); let prev = null; try { prev = await SHIFT_ALS.run({ shift: shift + Math.max(1, days) }, () => funnelReport(req, days, shift + Math.max(1, days), f)); } catch (e) { prev = null; }
+  res.json({ funnel: { id: f.id, name: f.name }, now, prev: prev ? { kpi: prev.kpi, period: prev.period } : null }); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
