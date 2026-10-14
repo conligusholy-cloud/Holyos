@@ -59,10 +59,8 @@ async function bs2Stats(days, since) {
 }
 
 // GET /api/ads-center/overview?days=30
-router.get('/overview', async (req, res, next) => {
-  try {
-    let days = parseDays(req.query.days, 30); let sinceExact = null;
-    if (req.query.since && !isNaN(new Date(req.query.since))) { sinceExact = new Date(req.query.since); const s0 = new Date(sinceExact); s0.setHours(0, 0, 0, 0); const t0 = new Date(); t0.setHours(0, 0, 0, 0); days = Math.max(0, Math.round((t0 - s0) / 86400000)); } // ?since= → období od přesného času
+// Sestavení přehledu stránek za období (sdílí overview i detailní statistika stránky)
+async function buildOverview(days, sinceExact, onlyKey) {
     const since = sinceExact || sinceDate(days);
     let bs2 = null, bs2Err = null; try { bs2 = await bs2Stats(Math.max(1, days + 1), sinceExact || (since.until ? since : null)); } catch (e) { bs2Err = e.message; }
     const leadsBySource = await prisma.compounderLead.groupBy({ by: ['source'], where: { created_at: rng(since) }, _count: { _all: true } }).catch(() => []);
@@ -92,7 +90,50 @@ router.get('/overview', async (req, res, next) => {
       if (item.visits != null && item.leads != null && item.visits > 0) item.conv_rate = Math.round(item.leads / Math.max(1, item.uniques || item.visits) * 1000) / 10;
       out.push(item);
     }
-    res.json({ days, generatedAt: new Date().toISOString(), pages: out });
+    return { pages: out, bs2 };
+}
+router.get('/overview', async (req, res, next) => {
+  try {
+    let days = parseDays(req.query.days, 30); let sinceExact = null;
+    if (req.query.since && !isNaN(new Date(req.query.since))) { sinceExact = new Date(req.query.since); const s0 = new Date(sinceExact); s0.setHours(0, 0, 0, 0); const t0 = new Date(); t0.setHours(0, 0, 0, 0); days = Math.max(0, Math.round((t0 - s0) / 86400000)); } // ?since= → období od přesného času
+    const o = await buildOverview(days, sinceExact);
+    res.json({ days, generatedAt: new Date().toISOString(), pages: o.pages });
+  } catch (err) { next(err); }
+});
+
+// ── Detailní statistika záchytné stránky (pro marketing): období vs. předchozí období, denní řady, hodiny/dny v týdnu,
+//    zařízení, zdroje (utm / kanál funelu), balíčky (BS2), cíle. GET /pages/:key/stats?days&shift
+router.get('/pages/:key/stats', async (req, res, next) => {
+  try {
+    const key = String(req.params.key || ''); const p = PAGES.find((x) => x.key === key); if (!p) return res.status(404).json({ error: 'Stránka nenalezena' });
+    const days = parseDays(req.query.days, 30); const shift = parseShift(req.query.shift); const span = Math.max(1, days);
+    const since = sinceDate(days); const until = since.until || new Date();
+    const curO = await buildOverview(days, null); const cur = curO.pages.find((x) => x.key === key); if (!cur) return res.status(404).json({ error: 'Stránka nenalezena' });
+    const prevO = await SHIFT_ALS.run({ shift: shift + span }, () => buildOverview(days, null)); const prev = prevO.pages.find((x) => x.key === key);
+    // denní řada: návštěvy, leady (+ BS2: zaplaceno, tržba po dnech)
+    const keys = dayKeys(days); const vm = {}; (cur.series || []).forEach((x) => { vm[x.d] = x.n; }); const lm = {}; (cur.leadsSeries || []).forEach((x) => { lm[x.d] = x.n; });
+    const pm = {}, rm = {}; const bs2 = curO.bs2;
+    if (p.key === 'bs2_location' && bs2) { (bs2.ordersByDay || []).forEach((o) => { pm[o.d] = o.paid; }); (bs2.revenueByDay || []).forEach((o) => { rm[o.d] = Number(o.revenue) || 0; }); }
+    const daily = keys.map((d) => ({ d, visits: vm[d] || 0, leads: lm[d] || 0, paid: pm[d] || 0, revenue: rm[d] || 0 }));
+    // události stránky (HolyOS tracking): hodiny, dny v týdnu, zařízení, zdroje
+    const hours = new Array(24).fill(0), weekdays = new Array(7).fill(0); const devices = { mobile: 0, desktop: 0, other: 0 }; const sources = {};
+    if (p.visits) {
+      const where = { event: p.visits.event, created_at: rng(since) }; if (p.visits.pathIn) where.OR = p.visits.pathIn.map((x) => ({ path: { startsWith: x } }));
+      const rows = await prisma.compounderEvent.findMany({ where, select: { sid: true, path: true, props: true, ua: true, created_at: true } });
+      const seen = new Set();
+      rows.forEach((r) => { if (p.visits.pathNot && p.visits.pathNot.some((x) => String(r.path || '').startsWith(x))) return; const t = new Date(r.created_at); hours[t.getHours()]++; weekdays[(t.getDay() + 6) % 7]++;
+        if (!seen.has(r.sid)) { seen.add(r.sid); const ua = String(r.ua || ''); devices[/Mobi|Android|iPhone|iPad/i.test(ua) ? 'mobile' : (ua ? 'desktop' : 'other')]++; const pr = r.props || {}; const src = pr.utm_source || pr.source || pr.ref || pr.referrer || (pr.url && /[?&]utm_source=([^&]+)/.exec(pr.url) ? decodeURIComponent(/[?&]utm_source=([^&]+)/.exec(pr.url)[1]) : null) || 'přímo / neznámé'; sources[src] = (sources[src] || 0) + 1; } });
+    }
+    // příchody z funelů (klik ze SMS / e-mailu na tuto stránku) + lead_id → kolik leadů
+    const fl = await prisma.compounderEvent.findMany({ where: { event: 'funnel_landing', created_at: rng(since), path: { startsWith: '/funnel/' } }, select: { props: true, created_at: true } }).catch(() => []);
+    const channel = { sms: new Set(), email: new Set() }; fl.forEach((r) => { const pr = r.props || {}; if (pr.pageKey !== key) return; const ch = pr.channel === 'email' ? 'email' : 'sms'; channel[ch].add(pr.lead_id); });
+    // BS2: balíčky, hodiny objednávek
+    let packages = null, orderHours = null; if (p.key === 'bs2_location' && bs2) { packages = bs2.ordersByPackage || null; orderHours = bs2.orderHours || null; }
+    // cíle stránky s čísly (z uložených cílů; počty tam, kde je umíme spočítat)
+    let goals = null; try { const G = (await loadGoals())[key]; if (G && G.goals) goals = G.goals.map((g) => ({ label: g.label, type: g.type, primary: !!g.primary, count: g.type === 'purchase' && cur.conversions != null ? cur.conversions : (g.type === 'lead' && cur.leads != null ? cur.leads : null) })); } catch (e) { goals = null; }
+    const pct = (a, b) => (b > 0 ? Math.round(a / b * 1000) / 10 : null);
+    const sum = (x) => ({ visits: x.visits, uniques: x.uniques, leads: x.leads, conversions: x.conversions, revenue: x.revenue, conv_rate: x.conv_rate != null ? x.conv_rate : pct(x.leads || 0, x.uniques || x.visits || 0), paid_rate: pct(x.conversions || 0, x.leads || 0), rev_per_visitor: x.revenue != null && (x.uniques || x.visits) ? Math.round(x.revenue / (x.uniques || x.visits)) : null });
+    res.json({ page: { key: p.key, name: p.name, url: p.url, color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno', currency: cur.currency || 'CZK' }, period: { days, shift, since: since.toISOString(), until: until.toISOString() }, now: sum(cur), prev: prev ? sum(prev) : null, daily, hours, weekdays, devices, sources: Object.keys(sources).map((k) => ({ name: k, n: sources[k] })).sort((a, b) => b.n - a.n).slice(0, 12), funnel: { sms: channel.sms.size, email: channel.email.size }, packages, orderHours, goals, note: cur.note || null });
   } catch (err) { next(err); }
 });
 
@@ -140,7 +181,7 @@ router.get('/funnels/:id/edge-leads', async (req, res, next) => { try { const da
   // kde ve funelu lead právě je (nejzazší uzel s událostí) – „Stav" v seznamu = poloha ve funelu, CRM stav jen v tooltipu
   let pos = {}; try { pos = await require('../services/ads/funnel-events').positions(String(req.params.id || ''), sinceDate(days)); } catch (e2) { pos = {}; }
   const byIdN = {}; try { const fAll = await loadFunnels(); const f0 = fAll.find((x) => x.id === String(req.params.id || '')); ((f0 && f0.nodes) || []).forEach((nd) => { byIdN[nd.id] = nd; }); } catch (e3) { /* bez uzlů */ }
-  res.json({ leads: e.leads, list: (e.list || []).map((x) => Object.assign({}, x, byId[x.lead_id] || {}, (function () { const B = byIdN[String(req.query.to || '')]; const ch = B && (B.kind === 'sms' || B.kind === 'email') ? B.kind : (B && B.kind === 'landing' ? (String(req.query.port || '') ? null : null) : null); const pk = ch ? pos[x.lead_id + '|' + ch] : (pos[x.lead_id] || pos[x.lead_id + '|sms'] || pos[x.lead_id + '|email']); const pp = pk || pos[x.lead_id] || null; return { reason: reason[x.lead_id] || '', pos_node: pp ? pp.node : null, pos_t: pp ? pp.t : null }; })())).sort((a, b) => new Date(b.tB) - new Date(a.tB)) }); } catch (err) { next(err); } });
+  res.json({ leads: e.leads, list: (e.list || []).map((x) => Object.assign({}, x, byId[x.lead_id] || {}, (function () { const B = byIdN[String(req.query.to || '')]; const ch = B && (B.kind === 'sms' || B.kind === 'email') ? B.kind : (B && B.kind === 'landing' ? (String(req.query.port || '') ? null : null) : null); const pk = ch ? pos[x.lead_id + '|' + ch] : (pos[x.lead_id] || pos[x.lead_id + '|sms'] || pos[x.lead_id + '|email']); const pp = pk || pos[x.lead_id] || null; const stuck = !!pos[x.lead_id] && !pos[x.lead_id + '|sms'] && !pos[x.lead_id + '|email']; return { reason: stuck ? (reason[x.lead_id] || '') : '', pos_node: pp ? pp.node : null, pos_t: pp ? pp.t : null }; })())).sort((a, b) => new Date(b.tB) - new Date(a.tB)) }); } catch (err) { next(err); } });
 // Log odeslání uzlu (SMS / e-mail): seznam zpráv s textem, adresátem, doručením a reakcí – pro kontrolu z editoru funelu
 router.get('/funnels/:id/node-log', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const list = await require('../services/ads/funnel-events').nodeLog(String(req.params.id || ''), String(req.query.node || ''), sinceDate(days)); res.json({ list }); } catch (err) { next(err); } });
 // Testovací lead z editoru funelu: založí se jako lead z rychlého formuláře (stejná cesta jako napřímo z FB) → rozdělení, autosend, vlákna
