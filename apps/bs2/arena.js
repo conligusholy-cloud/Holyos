@@ -184,8 +184,7 @@ ${presence}
       <div class="cards-msg" id="cmsg">Karta může kapitál zvýšit i snížit. Je to o náhodě.</div>
     </div>
     <div class="cta-row hidden" id="rcta-row" style="justify-content:center">
-      <button class="btn gold" id="toAuc">Hrát o slevový kupon</button>
-      <a class="btn sec" href="/location?utm_source=arena" id="rcta">Prověřit si místo</a>
+      <button class="btn gold" id="toAuc" style="width:min(100%,360px);min-height:52px;font-size:16px">Za slevovým kuponem</button>
     </div>
     <p class="small" style="margin-top:14px;color:var(--text3)">Kapitál je virtuální – ale prádlomat je skutečný.</p>
   </section>
@@ -246,7 +245,7 @@ ${netScript}
   $('next').addEventListener('click', function(){ i++; if(i < Q.length) show(); else finish(); });
   function finish(){ $('quiz').classList.add('hidden'); var r = $('result'); r.classList.remove('hidden'); var okN = answers.filter(function(a){ return a.ok; }).length;
     $('rbig').textContent = fmt(bank); $('rtitle').textContent = name + ', ' + (okN === Q.length ? 'bez chyby – to je výkon!' : okN >= 3 ? 'solidní základ.' : 'začátek je za vámi.');
-    $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'Teď ještě bonusová karta – a pak aukce o slevový kupon.' : 'Bonusová karta může ještě leccos změnit – a pak aukce o slevový kupon.');
+    $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'Teď ještě bonusová karta.' : 'Bonusová karta může ještě leccos změnit.');
     bonusShow(); r.scrollIntoView({ behavior:'smooth', block:'center' });
     try { fetch('/api/arena/result', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, score: okN, bank: bank, answers: answers, ms: Date.now() - startedAt }) }); } catch(e){} }
   // ── Aukce o kupony: lobby s odpočtem (server kolo 30 s), pódium, kupon + kontakt ──
