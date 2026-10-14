@@ -88,4 +88,24 @@ router.get('/overview', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Funely: uživatelsky definované posloupnosti kroků (stránka + metrika), uloženo v AppSetting ──
+const FUNNELS_KEY = 'ads_center.funnels';
+const METRICS = ['uniques', 'leads', 'conversions'];
+async function loadFunnels() { const { getSetting } = require('../services/settings'); const v = await getSetting(FUNNELS_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v : []; }
+function cleanFunnel(f) {
+  const keys = new Set(PAGES.map((p) => p.key));
+  return { id: String(f.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40), name: String(f.name || 'Funel').slice(0, 80), note: String(f.note || '').slice(0, 300),
+    steps: (Array.isArray(f.steps) ? f.steps : []).slice(0, 12).map((st) => ({ label: String(st.label || '').slice(0, 60), page: keys.has(st.page) ? st.page : null, metric: METRICS.includes(st.metric) ? st.metric : 'uniques', manual: st.manual != null && st.manual !== '' ? Number(st.manual) : null })) };
+}
+router.get('/funnels', async (req, res, next) => { try { res.json(await loadFunnels()); } catch (err) { next(err); } });
+router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) => {
+  try {
+    const { setSetting } = require('../services/settings');
+    const list = (Array.isArray(req.body) ? req.body : []).slice(0, 50).map(cleanFunnel);
+    await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id });
+    res.json(list);
+  } catch (err) { next(err); }
+});
+router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
+
 module.exports = router;
