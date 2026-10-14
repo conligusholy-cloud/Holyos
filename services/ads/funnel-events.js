@@ -35,6 +35,7 @@ async function matchNodes(type, opts) {
 }
 
 // Zapíše událost pro všechny odpovídající uzly (jedna událost na uzel). Best-effort, nikdy nehází.
+function rng(since) { return since && since.until ? { gte: since, lt: since.until } : { gte: since }; } // okno období: od since do since.until (když je nastaveno)
 async function record(type, leadId, opts) {
   try {
     const nodes = await matchNodes(type, opts || {});
@@ -48,7 +49,7 @@ async function record(type, leadId, opts) {
 // Statistika funelu: per uzel { leads (unikátní), events } jen od aktivace uzlu a v období (since).
 async function stats(funnelId, since) {
   try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
-  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
   const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); kinds[nd.id] = nd.kind; }); // od aktivace i od 'pocitat statistiky od'
   const per = {}; const opened = {}; const landingByLead = {}; // landingByLead[lead] = [{t, channel}]
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_landing' && lid) (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
@@ -57,7 +58,7 @@ async function stats(funnelId, since) {
     const p = per[nodeId] || (per[nodeId] = { events: 0, leads: new Map(), type: r.event.replace('funnel_', '') }); p.events++; if (lid && !p.leads.has(lid)) p.leads.set(lid, r.created_at.getTime()); });
   // doručení SMS (SmsLog.delivered) pro leady akčních SMS uzlů
   const smsLeads = new Set(); Object.keys(per).forEach((k) => { if (kinds[k] === 'sms') per[k].leads.forEach((t, lid) => smsLeads.add(lid)); });
-  let delivered = new Set(); if (smsLeads.size && prisma.smsLog) { try { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: [...smsLeads] }, delivered: true, created_at: { gte: since } }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } catch (e) { /* bez logu */ } }
+  let delivered = new Set(); if (smsLeads.size && prisma.smsLog) { try { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: [...smsLeads] }, delivered: true, created_at: rng(since) }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } catch (e) { /* bez logu */ } }
   const out = {}; Object.keys(per).forEach((k) => { const p = per[k]; const o = { events: p.events, leads: p.leads.size, type: p.type };
     if (kinds[k] === 'sms' || kinds[k] === 'email') { const ch = kinds[k]; let clicked = 0, deliv = 0, op = 0, react = 0; p.leads.forEach((t, lid) => { const cl = (landingByLead[lid] || []).some((x) => x.t >= t - 60000 && (!x.channel || x.channel === ch)); const o2 = !!(opened[k] && opened[k].has(lid)); if (cl) clicked++; if (delivered.has(lid)) deliv++; if (o2) op++; if (cl || (ch === 'email' && o2)) react++; }); o.clicked = clicked; o.delivered = kinds[k] === 'sms' ? deliv : undefined; o.opened = kinds[k] === 'email' ? op : undefined; o.noreact = p.leads.size - react; } // bez reakce: e-mail = neotevřel ani neklikl, SMS = neklikl
     out[k] = o; });
@@ -72,7 +73,7 @@ async function edgeFlows(funnelId, since, withList) {
   const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
   const act = {}; nodes.forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); });
   // 1) události → first[nodeId][leadId] = čas
-  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
   const first = {}; const firstAll = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead); firstAll = bez ohledu na aktivaci uzlu
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return;
     if (r.event === 'funnel_landing') (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
@@ -81,7 +82,7 @@ async function edgeFlows(funnelId, since, withList) {
     if (r.event === 'funnel_open') { (openedBy[nodeId] || (openedBy[nodeId] = new Set())).add(Number(lid)); return; }
     (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
   // doručení SMS (SmsLog.delivered) pro leady SMS uzlů
-  let delivered = new Set(); try { const smsIds = []; nodes.forEach((nd) => { if (nd.kind === 'sms') Object.keys(first[nd.id] || {}).forEach((lid) => smsIds.push(Number(lid))); }); if (smsIds.length && prisma.smsLog) { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: smsIds }, delivered: true, created_at: { gte: since } }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } } catch (e) { /* bez logu */ }
+  let delivered = new Set(); try { const smsIds = []; nodes.forEach((nd) => { if (nd.kind === 'sms') Object.keys(first[nd.id] || {}).forEach((lid) => smsIds.push(Number(lid))); }); if (smsIds.length && prisma.smsLog) { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: smsIds }, delivered: true, created_at: rng(since) }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } } catch (e) { /* bez logu */ }
   // filtr podle tečky (cíle) SMS / e-mailového uzlu: 1 = odesláno, 2 = doručeno (SMS) / otevřel (e-mail), 3 = klikl na odkaz, 4 = bez reakce. Vrací { ok, tB }.
   function goalPass(A, port, lid, tA) { const t0 = new Date(tA).getTime(); const ch = A.kind; const click = (landingByLead[lid] || []).filter((x) => x.t >= t0 - 60000 && (!x.channel || x.channel === ch)).sort((x, y) => x.t - y.t)[0];
     if (!port || port === 1) return { ok: true, tB: null };
@@ -91,7 +92,7 @@ async function edgeFlows(funnelId, since, withList) {
     return { ok: true, tB: null }; }
   // 2) leady formulářů (DB) – cache per form
   const formCache = {};
-  async function formLeads(nd) { const fid = nd.form && nd.form.form_id; if (!fid) return []; if (formCache[fid]) return formCache[fid]; const ads = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fid) }]; const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: since } }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true } }); formCache[fid] = L; return L; }
+  async function formLeads(nd) { const fid = nd.form && nd.form.form_id; if (!fid) return []; if (formCache[fid]) return formCache[fid]; const ads = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fid) }]; const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true } }); formCache[fid] = L; return L; }
   function upstreamFormNode(nd, depth) { if (!nd || depth > 10) return null; if (nd.kind === 'leadform') return nd; const e = edges.find((x) => x.to === nd.id); return e ? upstreamFormNode(byId[e.from], (depth || 0) + 1) : null; }
   // množina leadů uzlu (+ port u rozdělení): Map lead_id → čas
   async function setOf(nd, port) {
@@ -155,14 +156,14 @@ async function backfill(funnelId) {
 // Log odeslání uzlu SMS/e-mail: co, komu, kdy odešlo + doručeno / otevřeno / kliknuto (pro kontrolu přímo z uzlu).
 async function nodeLog(funnelId, nodeId, since) {
   const path = '/funnel/' + funnelId + '/' + nodeId;
-  const sent = await prisma.compounderEvent.findMany({ where: { path, event: { in: ['funnel_sms', 'funnel_email'] }, created_at: { gte: since } }, orderBy: { created_at: 'desc' }, take: 500 });
+  const sent = await prisma.compounderEvent.findMany({ where: { path, event: { in: ['funnel_sms', 'funnel_email'] }, created_at: rng(since) }, orderBy: { created_at: 'desc' }, take: 500 });
   const ids = Array.from(new Set(sent.map((r) => Number(r.props && r.props.lead_id)).filter(Boolean)));
   if (!ids.length) return [];
   const leads = await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, phone: true, status: true } });
   const byId = {}; leads.forEach((l) => { byId[l.id] = l; });
   const sids = ids.map((x) => 'lead:' + x);
-  const after = await prisma.compounderEvent.findMany({ where: { sid: { in: sids }, event: { in: ['funnel_open', 'funnel_landing'] }, created_at: { gte: since } }, select: { sid: true, event: true, created_at: true, props: true } });
-  const smsLogs = await prisma.smsLog.findMany({ where: { lead_id: { in: ids }, created_at: { gte: new Date(since.getTime() - 86400000) } }, select: { lead_id: true, status: true, delivered: true, error: true, message_id: true, created_at: true } });
+  const after = await prisma.compounderEvent.findMany({ where: { sid: { in: sids }, event: { in: ['funnel_open', 'funnel_landing'] }, created_at: rng(since) }, select: { sid: true, event: true, created_at: true, props: true } });
+  const smsLogs = await prisma.smsLog.findMany({ where: { lead_id: { in: ids }, created_at: { gte: new Date(since.getTime() - 86400000), ...(since.until ? { lt: since.until } : {}) } }, select: { lead_id: true, status: true, delivered: true, error: true, message_id: true, created_at: true } });
   return sent.map((r) => {
     const lid = Number(r.props && r.props.lead_id); const L = byId[lid] || {}; const ch = r.event === 'funnel_sms' ? 'sms' : 'email'; const t = r.created_at.getTime();
     const opened = after.filter((x) => x.sid === 'lead:' + lid && x.event === 'funnel_open' && x.created_at.getTime() >= t).map((x) => x.created_at).sort()[0] || null;
@@ -180,12 +181,12 @@ async function positions(funnelId, since) {
   const base = {}; // base[lid] = { node, t, name } – poloha před akcí (formulář / rozdělení)
   for (const fn of forms) {
     const ads = (fn.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fn.form.form_id) }];
-    const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: since } }, select: { id: true, name: true, created_at: true } });
+    const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, name: true, created_at: true } });
     const splitE = edges.find((e) => e.from === fn.id && byId[e.to] && byId[e.to].kind === 'split');
     L.forEach((l) => { base[l.id] = { node: splitE ? splitE.to : fn.id, t: l.created_at, name: l.name || '' }; });
   }
   const ids = Object.keys(base).map(Number); if (!ids.length) return {};
-  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, event: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { path: true, event: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
   // Paralelní větve: lead po odeslání čeká v uzlu SMS i v uzlu e-mailu zároveň; klik z daného kanálu ho posune na stránku. Klíče: 'lid' (před akcí), 'lid|sms', 'lid|email'.
   const out = {}; const br = {}; // br[lid][channel] = { node, t }
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = Number(r.props && r.props.lead_id); if (!nodeId || !byId[nodeId] || !base[lid]) return; const nd = byId[nodeId]; const lim = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); if (lim && r.created_at.getTime() < lim) return;

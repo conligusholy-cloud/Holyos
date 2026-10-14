@@ -10,6 +10,7 @@ const { requireAuth } = require('../middleware/auth');
 const { bs2Allowed } = require('./auth.routes');
 
 router.use(requireAuth);
+router.use((req, res, next) => { SHIFT_ALS.run({ shift: parseShift(req.query.shift) }, next); });
 router.use(async (req, res, next) => { try { if (!(await bs2Allowed(req.user))) return res.status(403).json({ error: 'Do této sekce nemáš přístup.' }); next(); } catch (e) { next(e); } });
 
 // Definice záchytných stránek. visits = jak se počítají unikátní návštěvníci (událost + cesta),
@@ -25,7 +26,11 @@ const PAGES = [
   { key: 'spare', name: 'Spare Parts Shop', url: 'https://bestseries.cash/spare-parts', desc: 'E-shop náhradních dílů (EUR).', admin: '/modules/eshop/index.html', color: '#22d3ee', visits: { event: 'shop_view' }, shop: true, leadLabel: 'objednávky' },
 ];
 
-function sinceDate(days) { const d = new Date(); d.setHours(0, 0, 0, 0); if (days > 0) d.setDate(d.getDate() - days + 1); return d; } // days=0 → dnes od půlnoci
+// days=0 → dnes od půlnoci; shift = posun o N dní zpět (včera = days 1, shift 1) → Date nese i .until (konec okna)
+const { AsyncLocalStorage } = require('async_hooks'); const SHIFT_ALS = new AsyncLocalStorage(); // posun období per požadavek (bez sdílené proměnné)
+function sinceDate(days, shift) { const sh = shift != null ? shift : ((SHIFT_ALS.getStore() || {}).shift || 0); const d = new Date(); d.setHours(0, 0, 0, 0); if (days > 0) d.setDate(d.getDate() - days + 1); if (sh > 0) { d.setDate(d.getDate() - sh); const u = new Date(d); u.setDate(u.getDate() + Math.max(1, days)); d.until = u; } return d; }
+function rng(since) { return since && since.until ? { gte: since, lt: since.until } : { gte: since }; }
+function parseShift(q) { const v = parseInt(q, 10); return isNaN(v) ? 0 : Math.min(3650, Math.max(0, v)); }
 function parseDays(q, def) { const v = parseInt(q, 10); return isNaN(v) ? def : Math.min(3650, Math.max(0, v)); }
 function dayKey(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 function dayKeys(days) { const out = []; const s = sinceDate(days); for (let i = 0; i < days; i++) { const d = new Date(s); d.setDate(s.getDate() + i); out.push(dayKey(d)); } return out; }
@@ -33,7 +38,7 @@ function dayKeys(days) { const out = []; const s = sinceDate(days); for (let i =
 // Unikátní návštěvníci (sid) po dnech podle definice události/cesty
 async function visitSeries(def, days) {
   const since = sinceDate(days);
-  const where = { event: def.event, created_at: { gte: since } };
+  const where = { event: def.event, created_at: rng(since) };
   if (def.pathIn) where.OR = def.pathIn.map((p) => ({ path: { startsWith: p } }));
   const rows = await prisma.compounderEvent.findMany({ where, select: { sid: true, path: true, created_at: true } });
   const perDay = {}; const all = new Set();
@@ -48,7 +53,7 @@ async function bs2Stats(days, since) {
   const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
   if (!secret) return null;
   const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' });
-  const r = await fetch(base + '/api/holyos/ads-stats?days=' + days + (since ? '&since=' + encodeURIComponent(since.toISOString()) : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+  const r = await fetch(base + '/api/holyos/ads-stats?days=' + days + (since ? '&since=' + encodeURIComponent(since.toISOString()) : '') + (since && since.until ? '&until=' + encodeURIComponent(since.until.toISOString()) : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('BS2 ' + r.status);
   return r.json();
 }
@@ -59,11 +64,11 @@ router.get('/overview', async (req, res, next) => {
     let days = parseDays(req.query.days, 30); let sinceExact = null;
     if (req.query.since && !isNaN(new Date(req.query.since))) { sinceExact = new Date(req.query.since); const s0 = new Date(sinceExact); s0.setHours(0, 0, 0, 0); const t0 = new Date(); t0.setHours(0, 0, 0, 0); days = Math.max(0, Math.round((t0 - s0) / 86400000)); } // ?since= → období od přesného času
     const since = sinceExact || sinceDate(days);
-    let bs2 = null, bs2Err = null; try { bs2 = await bs2Stats(Math.max(1, days + 1), sinceExact); } catch (e) { bs2Err = e.message; }
-    const leadsBySource = await prisma.compounderLead.groupBy({ by: ['source'], where: { created_at: { gte: since } }, _count: { _all: true } }).catch(() => []);
-    const leadsByDay = await prisma.compounderLead.findMany({ where: { created_at: { gte: since } }, select: { source: true, created_at: true } }).catch(() => []);
-    const inquiries = await prisma.pradlomatSpotInquiry.findMany({ where: { created_at: { gte: since } }, select: { created_at: true } }).catch(() => []);
-    const shop = await prisma.shopOrder.findMany({ where: { created_at: { gte: since } }, select: { created_at: true, total_incl_vat: true, status: true } }).catch(() => []);
+    let bs2 = null, bs2Err = null; try { bs2 = await bs2Stats(Math.max(1, days + 1), sinceExact || (since.until ? since : null)); } catch (e) { bs2Err = e.message; }
+    const leadsBySource = await prisma.compounderLead.groupBy({ by: ['source'], where: { created_at: rng(since) }, _count: { _all: true } }).catch(() => []);
+    const leadsByDay = await prisma.compounderLead.findMany({ where: { created_at: rng(since) }, select: { source: true, created_at: true } }).catch(() => []);
+    const inquiries = await prisma.pradlomatSpotInquiry.findMany({ where: { created_at: rng(since) }, select: { created_at: true } }).catch(() => []);
+    const shop = await prisma.shopOrder.findMany({ where: { created_at: rng(since) }, select: { created_at: true, total_incl_vat: true, status: true } }).catch(() => []);
     const out = [];
     for (const p of PAGES) {
       const item = { key: p.key, name: p.name, url: p.url, desc: p.desc, admin: p.admin, color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || null, visits: null, uniques: null, series: dayKeys(days).map((d) => ({ d, n: 0 })), leads: null, leadsSeries: null, conversions: null, revenue: null, note: null };
@@ -131,7 +136,7 @@ router.get('/funnels/:id/stats', async (req, res, next) => { try { const days = 
 // Seznam leadů, které prošly spojkou from>to (jména + časy) – pro klik na štítek spojky.
 router.get('/funnels/:id/edge-leads', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const ef = await require('../services/ads/funnel-events').edgeFlows(String(req.params.id || ''), sinceDate(days), true); const k = String(req.query.from || '') + '>' + String(req.query.to || '') + (parseInt(req.query.port, 10) > 0 ? '#' + parseInt(req.query.port, 10) : ''); const e = ef[k] || { leads: 0, list: [] }; const ids = (e.list || []).map((x) => x.lead_id); const leads = ids.length ? await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, phone: true, status: true, owner_person_id: true } }) : []; const byId = {}; leads.forEach((l) => { byId[l.id] = l; });
   // proč lead neprošel dál: poslední záznam automatu (outreach_skip / outreach_error) k leadovi
-  const reason = {}; try { const ev = await prisma.compounderEvent.findMany({ where: { event: { in: ['outreach_skip', 'outreach_error'] }, path: '/autosend', created_at: { gte: sinceDate(days) } }, orderBy: { created_at: 'desc' }, take: 2000, select: { event: true, props: true } }); ev.forEach((r) => { const lid = Number(r.props && r.props.lead_id); if (lid && ids.includes(lid) && !reason[lid]) reason[lid] = (r.event === 'outreach_error' ? '⚠ ' : '') + (r.props.variant || '') + ': ' + (r.props.reason || ''); }); } catch (e) { /* bez důvodů */ }
+  const reason = {}; try { const ev = await prisma.compounderEvent.findMany({ where: { event: { in: ['outreach_skip', 'outreach_error'] }, path: '/autosend', created_at: rng(sinceDate(days)) }, orderBy: { created_at: 'desc' }, take: 2000, select: { event: true, props: true } }); ev.forEach((r) => { const lid = Number(r.props && r.props.lead_id); if (lid && ids.includes(lid) && !reason[lid]) reason[lid] = (r.event === 'outreach_error' ? '⚠ ' : '') + (r.props.variant || '') + ': ' + (r.props.reason || ''); }); } catch (e) { /* bez důvodů */ }
   // kde ve funelu lead právě je (nejzazší uzel s událostí) – „Stav" v seznamu = poloha ve funelu, CRM stav jen v tooltipu
   let pos = {}; try { pos = await require('../services/ads/funnel-events').positions(String(req.params.id || ''), sinceDate(days)); } catch (e2) { pos = {}; }
   const byIdN = {}; try { const fAll = await loadFunnels(); const f0 = fAll.find((x) => x.id === String(req.params.id || '')); ((f0 && f0.nodes) || []).forEach((nd) => { byIdN[nd.id] = nd; }); } catch (e3) { /* bez uzlů */ }
@@ -231,7 +236,7 @@ router.get('/meta/accounts', async (req, res, next) => { try { const c = await m
 router.get('/meta/campaigns', async (req, res, next) => {
   try { const c = await metaCfg(req); if (!c.token) return res.status(400).json({ error: 'Meta Ads nejsou napojené – nastav token v Centru reklamy → Nastavení.' }); if (!c.account) return res.status(400).json({ error: 'Vyber reklamní účet.' });
     const days = parseDays(req.query.days, 30);
-    const j = await graph('act_' + c.account + '/campaigns', { fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,start_time,stop_time,insights.date_preset(' + (days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d')) + '){impressions,reach,clicks,spend,cpc,cpm,ctr,actions,cost_per_action_type}', limit: 100 }, c.token);
+    const j = await graph('act_' + c.account + '/campaigns', { fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget,start_time,stop_time,insights.date_preset(' + (parseShift(req.query.shift) === 1 && days <= 1 ? 'yesterday' : days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d')) + '){impressions,reach,clicks,spend,cpc,cpm,ctr,actions,cost_per_action_type}', limit: 100 }, c.token);
     const out = (j.data || []).map((k) => { const ins = (k.insights && k.insights.data && k.insights.data[0]) || {}; const act = (t) => { const a = (ins.actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
       return { id: k.id, name: k.name, status: k.effective_status || k.status, objective: k.objective, daily_budget: k.daily_budget ? Number(k.daily_budget) / 100 : null, lifetime_budget: k.lifetime_budget ? Number(k.lifetime_budget) / 100 : null, start: k.start_time, stop: k.stop_time,
         impressions: Number(ins.impressions || 0), reach: Number(ins.reach || 0), clicks: Number(ins.clicks || 0), spend: Number(ins.spend || 0), cpc: ins.cpc != null ? Number(ins.cpc) : null, cpm: ins.cpm != null ? Number(ins.cpm) : null, ctr: ins.ctr != null ? Number(ins.ctr) : null, link_clicks: act('link_click'), leads: act('lead') || act('onsite_conversion.lead_grouped'), landing_views: act('landing_page_view') }; });
@@ -240,7 +245,7 @@ router.get('/meta/campaigns', async (req, res, next) => {
 // Detail kampaně: sady + reklamy s koncovým bodem (odkaz na stránku / lead formulář) a statistikami
 router.get('/meta/campaigns/:id', async (req, res, next) => {
   try { const c = await metaCfg(req); if (!c.token || !c.account) return res.status(400).json({ error: 'Meta Ads nejsou napojené.' });
-    const days = parseDays(req.query.days, 30); const preset = days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d');
+    const days = parseDays(req.query.days, 30); const preset = parseShift(req.query.shift) === 1 && days <= 1 ? 'yesterday' : days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d');
     const id = String(req.params.id).replace(/[^0-9]/g, '');
     const camp = await graph(id, { fields: 'id,name,status,effective_status,objective,buying_type,daily_budget,lifetime_budget,start_time,stop_time,special_ad_categories' }, c.token);
     const sets = await graph(id + '/adsets', { fields: 'id,name,status,effective_status,optimization_goal,billing_event,daily_budget,lifetime_budget,targeting{geo_locations,age_min,age_max,genders,interests},promoted_object,destination_type', limit: 50 }, c.token);
@@ -267,7 +272,7 @@ const CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Vol
 router.get('/meta/forms/:formId/count', async (req, res, next) => {
   try { const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = parseDays(req.query.days, 30); const ads = String(req.query.ads || '').split(',').map((x) => x.replace(/[^0-9]/g, '')).filter(Boolean);
     const or = []; if (ads.length && req.query.scope !== 'form') or.push({ meta_ad_id: { in: ads } }); if (formId) or.push({ meta_form_id: formId }); if (!or.length) return res.json({ total: 0, direct: 0, today: 0 });
-    const since = sinceDate(days); const where = { OR: or, created_at: { gte: since } }; const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    const since = sinceDate(days); const where = { OR: or, created_at: rng(since) }; const day0 = new Date(); day0.setHours(0, 0, 0, 0);
     const [total, today, rows] = await Promise.all([prisma.compounderLead.count({ where }), prisma.compounderLead.count({ where: { OR: or, created_at: { gte: day0 } } }), prisma.compounderLead.findMany({ where, select: { activity_log: true } })]);
     const direct = rows.filter((r) => /napřímo/.test(String(r.activity_log || '').split('\n')[0])).length;
     res.json({ total, direct, today, days }); } catch (err) { next(err); } });
@@ -275,7 +280,7 @@ router.get('/meta/forms/:formId/count', async (req, res, next) => {
 router.get('/meta/forms/:formId/split-stats', async (req, res, next) => {
   try { const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = parseDays(req.query.days, 30); const ads = String(req.query.ads || '').split(',').map((x) => x.replace(/[^0-9]/g, '')).filter(Boolean);
     const or = []; if (ads.length && req.query.scope !== 'form') or.push({ meta_ad_id: { in: ads } }); if (formId) or.push({ meta_form_id: formId }); if (!or.length) return res.json({ counts: {}, unassigned: 0 });
-    const rows = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: sinceDate(days) } }, select: { owner_person_id: true, external_rep_id: true } });
+    const rows = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(sinceDate(days)) }, select: { owner_person_id: true, external_rep_id: true } });
     const counts = {}; let unassigned = 0; rows.forEach((r) => { const k = r.owner_person_id ? 'i:' + r.owner_person_id : (r.external_rep_id ? 'e:' + r.external_rep_id : null); if (!k) { unassigned++; return; } counts[k] = (counts[k] || 0) + 1; });
     res.json({ counts, unassigned, total: rows.length, days }); } catch (err) { next(err); } });
 // Kdo je na řadě: stejná logika jako přiřazování (_fbResolveOwner) – cyklus podle počtů, pozice = leady od split_since.
@@ -312,7 +317,7 @@ router.get('/meta/leads-sync', async (req, res) => {
 router.put('/meta/leads-sync', express.json({ limit: '20kb' }), async (req, res, next) => {
   try { const c = await leadsSync.cfg(); const b = req.body || {}; if (b.enabled != null) c.enabled = !!b.enabled; if (b.interval_min != null) c.interval_min = Math.max(1, Math.min(1440, parseInt(b.interval_min, 10) || 1)); if (b.since !== undefined) c.since = b.since ? new Date(b.since).toISOString() : null; if (Array.isArray(b.pages)) c.pages = b.pages.map(String).filter(Boolean); if (Array.isArray(b.forms)) c.forms = b.forms.map(String).filter(Boolean); if (b.form_names && typeof b.form_names === 'object') c.form_names = b.form_names; await leadsSync.saveCfg(c, req.user && req.user.id); res.json({ ok: true }); } catch (err) { next(err); } });
 // Pracovní sada pro editor funelu: vybrané stránky + formuláře (s počtem leadů v HolyOS za období) – bez volání Mety.
-router.get('/meta/working-set', async (req, res, next) => { try { const c = await leadsSync.cfg(); const { getSetting } = require('../services/settings'); const m = (await getSetting('ads_center.meta', { type: 'json', defaultValue: {} })) || {}; const days = parseDays(req.query.days, 30); const since = sinceDate(days); const formIds = (c.forms || []).map(String); const names = c.form_names || {}; const counts = {}; if (formIds.length) { const g = await prisma.compounderLead.groupBy({ by: ['meta_form_id'], where: { meta_form_id: { in: formIds }, created_at: { gte: since } }, _count: { _all: true } }); g.forEach((x) => { counts[x.meta_form_id] = x._count._all; }); } res.json({ pages: (m.pages || []).filter((p) => !(c.pages || []).length || (c.pages || []).map(String).includes(String(p.id))).map((p) => ({ id: p.id, name: p.name })), forms: formIds.map((id) => ({ id, name: (names[id] && names[id].name) || ('formulář ' + id), page: (names[id] && names[id].page) || '', leads: counts[id] || 0 })), days }); } catch (err) { next(err); } });
+router.get('/meta/working-set', async (req, res, next) => { try { const c = await leadsSync.cfg(); const { getSetting } = require('../services/settings'); const m = (await getSetting('ads_center.meta', { type: 'json', defaultValue: {} })) || {}; const days = parseDays(req.query.days, 30); const since = sinceDate(days); const formIds = (c.forms || []).map(String); const names = c.form_names || {}; const counts = {}; if (formIds.length) { const g = await prisma.compounderLead.groupBy({ by: ['meta_form_id'], where: { meta_form_id: { in: formIds }, created_at: rng(since) }, _count: { _all: true } }); g.forEach((x) => { counts[x.meta_form_id] = x._count._all; }); } res.json({ pages: (m.pages || []).filter((p) => !(c.pages || []).length || (c.pages || []).map(String).includes(String(p.id))).map((p) => ({ id: p.id, name: p.name })), forms: formIds.map((id) => ({ id, name: (names[id] && names[id].name) || ('formulář ' + id), page: (names[id] && names[id].page) || '', leads: counts[id] || 0 })), days }); } catch (err) { next(err); } });
 // OAuth osobního FB účtu – start (redirect na Facebook) a návrat (uložení tokenů). Stav se podepisuje JWT (BS2_SSO_SECRET / JWT_SECRET).
 const OAUTH_REDIRECT = () => (process.env.APP_URL || 'https://app.holyos.cz').replace(/\/$/, '') + '/api/ads-center/meta/oauth/callback';
 // Stav (CSRF) = náhodný řetězec uložený v AppSetting s časem; callback je navíc chráněn requireAuth + bs2Allowed.
@@ -383,7 +388,7 @@ async function channelsView() {
 router.get('/autosend/stats', async (req, res, next) => {
   try {
     const formId = String(req.query.form || '').trim(); const days = parseDays(req.query.days, 30);
-    const where = { created_at: { gte: sinceDate(days) } }; if (formId) where.meta_form_id = formId; // days=0 → dnes od půlnoci (stejně jako ostatní čísla ve funelu)
+    const where = { created_at: rng(sinceDate(days)) }; if (formId) where.meta_form_id = formId; // days=0 → dnes od půlnoci (stejně jako ostatní čísla ve funelu)
     const c = (extra) => prisma.compounderLead.count({ where: Object.assign({}, where, extra) });
     const [leads, spSms, spMail, spOpen, scSms, scMail, scOpen, spReach, scReach] = await Promise.all([
       c({}), c({ ai_specialist_sms_sent_at: { not: null } }), c({ ai_specialist_email_sent_at: { not: null } }), c({ ai_specialist_opened_at: { not: null } }),
