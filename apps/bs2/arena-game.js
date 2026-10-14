@@ -43,7 +43,7 @@ function newRound(presence) {
   const bots = []; for (let i = 0; i < nBots; i++) bots.push({ id: 'b' + id + '_' + i, name: botName(used), bank: pick([100000, 100000, 150000, 150000, 200000, 250000, 300000]), ammo: AMMO + Math.floor(Math.random() * 4), bot: true, joinAt: now + (i < 2 ? 0 : Math.random() * lobbyMs * 0.95), nextAt: now + lobbyMs + 10000 + Math.random() * 20000 });
   // Pojistka: kam až smí v této aukci dojít živý hráč (rozhodne se dopředu)
   const x = Math.random(); const humanMax = x < P30 ? 1 : (x < P30 + P20 ? 2 : 3);
-  const r = { id, phase: 'lobby', lobbyEndsAt: now + lobbyMs, startedAt: now + lobbyMs, endsAt: now + lobbyMs + START_MS, top: 0, last: null, bids: [], players: new Map(), bots, humanMax, ended: false, result: null, usedNames: used };
+  const r = { id, phase: 'lobby', lobbyMs, lobbyEndsAt: now + lobbyMs, startedAt: now + lobbyMs, endsAt: now + lobbyMs + START_MS, top: 0, last: null, bids: [], players: new Map(), bots, humanMax, ended: false, result: null, usedNames: used };
   rounds.set(id, r); return r;
 }
 
@@ -122,7 +122,7 @@ function finish(r) {
 function state(sid) {
   const r = roundOf(sid); if (!r) return { phase: 'idle' }; tick(r);
   const me = sid ? r.players.get(sid) : null; const now = Date.now();
-  const base = { round: r.id, phase: r.ended ? 'result' : r.phase, lobby_in: r.phase === 'lobby' ? Math.max(0, r.lobbyEndsAt - now) : 0, ends_in: r.phase === 'lobby' ? START_MS : Math.max(0, r.endsAt - now), max_ms: MAX_MS, top: r.top, last: r.last ? { name: r.last.name, bot: r.last.bot, amount: r.last.amount } : null, bids: r.bids.slice(-10).reverse(), players: [...r.players.values()].map((p) => ({ name: p.name, bot: false })).concat(r.bots.filter((b) => b.joinAt <= now).map((b) => ({ name: b.name, bot: true }))), joined: !!me, me: me ? { name: me.name, bank: me.bank, ammo: me.ammo, leading: !!(r.last && r.last.id === me.sid) } : null, server_now: now };
+  const base = { round: r.id, phase: r.ended ? 'result' : r.phase, lobby_in: r.phase === 'lobby' ? Math.max(0, r.lobbyEndsAt - now) : 0, lobby_total: r.lobbyMs || LOBBY_MAX, ends_in: r.phase === 'lobby' ? START_MS : Math.max(0, r.endsAt - now), max_ms: MAX_MS, top: r.top, last: r.last ? { name: r.last.name, bot: r.last.bot, amount: r.last.amount } : null, bids: r.bids.slice(-10).reverse(), players: [...r.players.values()].map((p) => ({ name: p.name, bot: false })).concat(r.bots.filter((b) => b.joinAt <= now).map((b) => ({ name: b.name, bot: true }))), joined: !!me, me: me ? { name: me.name, bank: me.bank, ammo: me.ammo, leading: !!(r.last && r.last.id === me.sid) } : null, server_now: now };
   if (r.ended) { base.result = { podium: r.result.podium, list: r.result.list, mine: sid ? (r.result.coupons[sid] || null) : null, top: r.result.top }; base.next_in = Math.max(0, RESULT_HOLD_MS - (now - r.endedAt)); }
   return base;
 }
