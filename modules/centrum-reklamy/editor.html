@@ -126,6 +126,7 @@
   <div class="wrap">
     <div class="tools" id="tools">
       <div class="tool" data-tool="start" title="Startovací bod – odkud zájemce přichází (reklama, vyhledávání, doporučení…)">🚀<small>Start</small></div>
+      <div class="tool qland" data-kind="landing" title="Záchytná stránka – přetáhni na plochu (nebo klikni) a v uzlu vyber, co lead uvidí">🌐<small>Stránka</small></div>
       <div class="tool" id="addmenu" title="Přidat krok"><span id="add-btn">＋</span><small>Krok</small><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Rychlé formuláře (pracovní sada)</h4><div id="pal-forms"><div class="pal" style="opacity:.6">načítám…</div></div><h4>Ostatní</h4><div class="pal" data-kind="split"><i style="background:#a78bfa"></i>⑂ Rozdělení leadů (podmínky → výstupy)</div><div class="pal" data-kind="sms"><i style="background:#2dd4bf"></i>💬 Odeslat SMS (akce)</div><div class="pal" data-kind="email"><i style="background:#60a5fa"></i>📧 Odeslat e-mail (akce)</div><div class="pal" data-kind="landing"><i style="background:#f472b6"></i>🌐 Záchytná stránka (cíl SMS / e-mailu)</div><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
       <div class="tool" data-tool="link" title="Spojit: klikni na první uzel a pak na druhý">🔗<small>Spojit</small></div>
       <div class="tool" data-tool="note" title="Přidat poznámku">📝<small>Pozn.</small></div>
@@ -363,6 +364,13 @@
       if (d.kind === 'leadform') nd.form = { form_id: p.dataset.form, name: p.dataset.name, status: 'ACTIVE', questions: [], leads: Number(p.dataset.leads) || 0, clicks: 0, spend: 0, campaign_id: '', campaign_name: p.dataset.pg || '', ad_ids: [] };
       if (nd.kind === 'split') nd.branches = []; nd.activated_at = new Date().toISOString(); F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform' || nd.kind === 'split' || nd.kind === 'goals' || nd.kind === 'sms' || nd.kind === 'email' || nd.kind === 'landing') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id, port: 0 }); if (nd.kind === 'split') seedBranches(nd); if (nd.kind === 'goals') { loadGoalsFor(nd, false).then(function () { render(); }); } render(); if (!drop) focusX(nx);
     }
+    // Rychlá ikona „Stránka" v liště: klik = přidat za poslední krok, tažení = položit kamkoli na plochu
+    (function () { var q = document.querySelector('.tool.qland'); if (!q) return; var dragged = false;
+      q.addEventListener('click', function () { if (dragged) { dragged = false; return; } addFromPal(q, null); });
+      q.addEventListener('mousedown', function (e) { if (e.button !== 0) return; var sx = e.clientX, sy = e.clientY, ghost = null;
+        function mv(ev) { if (!ghost && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) { ghost = document.createElement('div'); ghost.className = 'ghost'; ghost.textContent = '🌐 Záchytná stránka'; document.body.appendChild(ghost); dragged = true; cw.classList.add('dropping'); } if (ghost) { ghost.style.left = (ev.clientX + 12) + 'px'; ghost.style.top = (ev.clientY + 8) + 'px'; } }
+        function up(ev) { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); if (ghost) { ghost.remove(); cw.classList.remove('dropping'); var r = cw.getBoundingClientRect(); if (ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom) addFromPal(q, { x: (ev.clientX - r.left - V.x) / V.z - 115, y: (ev.clientY - r.top - V.y) / V.z - 24 }); setTimeout(function () { dragged = false; }, 0); } }
+        addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); }); })();
     var palDragged = false;
     am.addEventListener('click', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p) return; if (palDragged) { palDragged = false; return; } am.classList.remove('open'); addFromPal(p, null); });
     am.addEventListener('mousedown', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p || e.button !== 0) return; var sx = e.clientX, sy = e.clientY, ghost = null;
