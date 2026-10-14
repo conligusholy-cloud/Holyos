@@ -113,10 +113,12 @@ router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) 
   try {
     const { setSetting } = require('../services/settings');
     const list = (Array.isArray(req.body) ? req.body : []).slice(0, 50).map(cleanFunnel);
-    await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id });
+    await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id }); try { require('../services/ads/funnel-events').invalidate(); } catch (_) { /* cache */ }
     res.json(list);
   } catch (err) { next(err); }
 });
+// Statistika běhu funelu per uzel (jen z událostí funelu, od aktivace uzlu, za období). days=0 → dnes.
+router.get('/funnels/:id/stats', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const st = await require('../services/ads/funnel-events').stats(String(req.params.id || ''), sinceDate(days)); res.json({ days, nodes: st }); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Meta (Facebook) Ads: napojení na reklamní účet, seznam kampaní, statistiky a nastavení (cíl = URL / lead formulář) ──
@@ -304,3 +306,4 @@ router.post('/channels/test-sms', express.json({ limit: '10kb' }), async (req, r
     const id = await require('../services/voice/sms').sendSms(to, 'HolyOS – test SMS brány z Centra reklamy.', { source: 'ads_center_test' }); res.json({ ok: true, id }); } catch (err) { res.status(400).json({ error: err.message }); } });
 
 module.exports = router;
+module.exports.PAGES = PAGES;

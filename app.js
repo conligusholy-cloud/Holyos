@@ -920,6 +920,11 @@ app.use((req, res, next) => {
     if (url) return res.redirect(302, url);
     return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
   }
+  // Sledovaný odkaz na záchytnou stránku z funelu: /r/<kód>/<varianta> → zaloguje otevření leadem a přesměruje.
+  if (req.path.startsWith('/r/')) {
+    const parts = req.path.slice(3).split('/'); const code = decodeURIComponent(parts[0] || ''), variant = parts[1] || 'specialist';
+    return compounderRoutes.trackedLandingRedirect(code, variant, req.query && req.query.c, req).then((url) => { if (url) return res.redirect(302, url); return res.status(404).send('Odkaz je neplatný nebo expirovaný.'); }).catch(() => res.status(404).send('Odkaz je neplatný.'));
+  }
   // Zkrácený odkaz na „cestu k rozhodnutí" (rezervace termínu): /c/<kód> → /home?t=<token>.
   if (req.path.startsWith('/c/')) {
     const url = compounderRoutes.shortCodeToCestaUrl(decodeURIComponent(req.path.slice(3)), req.query && req.query.c);
@@ -934,6 +939,9 @@ app.get('/s/:code', (req, res) => {
   const url = compounderRoutes.shortCodeToAiUrl(String(req.params.code || ''), req.query && req.query.c);
   if (url) return res.redirect(302, url);
   return res.status(404).send('Odkaz je neplatný nebo expirovaný.');
+});
+app.get('/r/:code/:variant?', (req, res) => {
+  compounderRoutes.trackedLandingRedirect(String(req.params.code || ''), req.params.variant || 'specialist', req.query && req.query.c, req).then((url) => { if (url) return res.redirect(302, url); return res.status(404).send('Odkaz je neplatný nebo expirovaný.'); }).catch(() => res.status(404).send('Odkaz je neplatný.'));
 });
 app.get('/c/:code', (req, res) => {
   const url = compounderRoutes.shortCodeToCestaUrl(String(req.params.code || ''), req.query && req.query.c);
