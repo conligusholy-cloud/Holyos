@@ -1854,6 +1854,72 @@ mobile.post('/chat/channels/:id/read', async (req, res, next) => {
   }
 });
 
+// =============================================================================
+// Podpora BS2 ve Velínu — proxy na servisní API BS2 (jen Tomáš a Jan Holý)
+// =============================================================================
+//   GET  /api/velin/support/me                  — { allowed }
+//   GET  /api/velin/support/threads             — vlákna + stav online
+//   GET  /api/velin/support/threads/:id         — zprávy (označí jako přečtené)
+//   POST /api/velin/support/threads/:id/send    — { body } odpověď uživateli
+//   POST /api/velin/support/online              — { online, agent? }
+//   GET  /api/velin/support/file/:id            — příloha zprávy
+const _bsJwt = require('jsonwebtoken');
+function _bsNorm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim(); }
+function supportAllowed(person) {
+  return !!person && _bsNorm(person.last_name) === 'holy' && ['tomas', 'jan'].includes(_bsNorm(person.first_name));
+}
+async function bs2Support(person, method, path, body, raw) {
+  const secret = process.env.BS2_SSO_SECRET;
+  if (!secret) { const e = new Error('Chybí BS2_SSO_SECRET'); e.status = 503; throw e; }
+  const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+  const token = _bsJwt.sign({ aud: 'bs2-api', iss: 'holyos', name: [person.first_name, person.last_name].filter(Boolean).join(' ') }, secret, { expiresIn: '1m' });
+  const r = await fetch(base + '/api/svc/support' + path, {
+    method,
+    headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}),
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(20000),
+  });
+  if (raw) return r;
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(data.error || ('BS2 ' + r.status)); e.status = r.status === 404 ? 404 : 502; throw e; }
+  return data;
+}
+function supportGuard(req, res, next) {
+  if (!supportAllowed(req.velin.person)) return res.status(403).json({ error: 'Podpora je dostupná jen Tomáši a Janu Holému.' });
+  next();
+}
+mobile.get('/support/me', (req, res) => res.json({ allowed: supportAllowed(req.velin.person) }));
+mobile.get('/support/threads', supportGuard, async (req, res, next) => {
+  try { res.json(await bs2Support(req.velin.person, 'GET', '/threads')); } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+mobile.get('/support/threads/:id(\\d+)', supportGuard, async (req, res, next) => {
+  try {
+    const after = parseInt(req.query.after, 10);
+    res.json(await bs2Support(req.velin.person, 'GET', '/threads/' + req.params.id + (Number.isFinite(after) ? '?after=' + after : '')));
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+mobile.post('/support/threads/:id(\\d+)/send', supportGuard, express.json({ limit: '50kb' }), async (req, res, next) => {
+  try {
+    const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+    if (!body) return res.status(400).json({ error: 'Napiš zprávu.' });
+    res.json(await bs2Support(req.velin.person, 'POST', '/threads/' + req.params.id + '/send', { body }));
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+mobile.post('/support/online', supportGuard, express.json({ limit: '5kb' }), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    res.json(await bs2Support(req.velin.person, 'POST', '/online', { online: !!b.online, agent: b.agent }));
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+mobile.get('/support/file/:id(\\d+)', supportGuard, async (req, res, next) => {
+  try {
+    const r = await bs2Support(req.velin.person, 'GET', '/file/' + req.params.id, null, true);
+    if (!r.ok) return res.status(r.status === 404 ? 404 : 502).end();
+    res.set('Content-Type', r.headers.get('content-type') || 'application/octet-stream').set('Cache-Control', 'private, max-age=3600');
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (err) { next(err); }
+});
+
 router.use('/', mobile);
 
 // ─── Helpers (geo) ───────────────────────────────────────────────────────

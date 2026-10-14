@@ -44,6 +44,8 @@ import Attendance from './screens/Attendance';
 import NewGeoFence from './screens/NewGeoFence';
 import SignContract from './screens/SignContract';
 import AssistantSettings from './screens/AssistantSettings';
+import SupportList from './screens/SupportList';
+import SupportThread from './screens/SupportThread';
 import { colors } from './lib/theme';
 
 // =============================================================================
@@ -74,6 +76,8 @@ export type RootStackParamList = {
   Attendance: undefined;
   NewGeoFence: undefined;
   SignContract: { contractId: number };
+  SupportList: undefined;
+  SupportThread: { supporterId: number; title?: string };
 };
 
 export type TabsParamList = {
@@ -118,6 +122,10 @@ function handleNotificationTap(data: any) {
     target = { name: 'EveningReflection' };
   } else if (data.type === 'compounder_contract' && data.contract_id != null) {
     target = { name: 'SignContract', params: { contractId: Number(data.contract_id) } };
+  } else if (typeof data.link === 'string' && /\/admin\/podpora\?u=(\d+)/.test(data.link)) {
+    // Zpráva od zákazníka BS2 do chatu podpory → konkrétní vlákno
+    const m = /\/admin\/podpora\?u=(\d+)/.exec(data.link)!;
+    target = { name: 'SupportThread', params: { supporterId: Number(m[1]), title: typeof data.title === 'string' ? data.title : undefined } };
   } else if (typeof data.channel_id === 'string' && data.channel_id) {
     target = {
       name: 'ChatThread',
@@ -283,6 +291,16 @@ export default function App() {
           <Stack.Screen
             name="SignContract"
             component={SignContract}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="SupportList"
+            component={SupportList}
+            options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="SupportThread"
+            component={SupportThread}
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen

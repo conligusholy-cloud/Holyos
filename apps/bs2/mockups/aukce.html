@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Best Series 2.0 – Aukce (vizualizace)</title>
+<style>
+:root{--bg:#050a14;--card:rgba(10,18,32,.72);--border:rgba(120,160,220,.16);--border2:rgba(120,160,220,.28);--text:#eaf1ff;--text2:#9db0cf;--text3:#6b7fa3;--accent:#4fd1ff;--accent2:#7c8cff;--ok:#2fe3a0;--err:#ff5d73;--warn:#f59e0b}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,Segoe UI,sans-serif;color:var(--text);background:radial-gradient(1200px 600px at 20% -10%,rgba(79,209,255,.12),transparent 60%),radial-gradient(900px 500px at 100% 0,rgba(124,140,255,.14),transparent 60%),var(--bg);min-height:100vh}
+.top{display:flex;align-items:center;gap:14px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(4,8,16,.6);backdrop-filter:blur(10px)}
+.logo{width:34px;height:34px;border-radius:10px;border:1px solid var(--border2);display:grid;place-items:center;font-weight:800;color:var(--accent)}
+.top b{font-size:17px}.top b span{color:var(--accent2);margin-left:4px}
+.pill{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);padding:6px 12px;border-radius:999px}
+.live{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);border:1px solid rgba(47,227,160,.4);background:rgba(47,227,160,.08);padding:6px 12px;border-radius:999px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.35}}
+.wrap{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:22px;max-width:1220px;margin:26px auto;padding:0 22px}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px;backdrop-filter:blur(8px);box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.k{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);font-weight:700}
+h1{font-size:28px;margin:6px 0 4px;letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--text2);font-size:14px;line-height:1.5;margin:0 0 18px}
+.coupon{display:flex;align-items:center;gap:18px;padding:18px;border-radius:16px;border:1px dashed rgba(79,209,255,.5);background:linear-gradient(135deg,rgba(79,209,255,.12),rgba(124,140,255,.1));margin-bottom:20px}
+.coupon .pct{font-size:46px;font-weight:900;letter-spacing:-.03em;background:linear-gradient(180deg,#fff,var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
+.coupon small{display:block;color:var(--text2);font-size:13px}
+.timer{display:grid;place-items:center;position:relative;width:230px;height:230px;margin:0 auto 8px}
+.timer svg{position:absolute;inset:0;transform:rotate(-90deg)}
+.timer .t{font-size:56px;font-weight:900;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.timer .l{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text3);text-align:center}
+.timer.low .t{color:var(--err);animation:pulse .6s infinite}
+.bonus{position:absolute;right:6px;top:8px;font-weight:800;color:var(--ok);font-size:22px;opacity:0;text-shadow:0 0 14px var(--ok)}
+.bonus.go{animation:bonus 1.1s ease-out}
+@keyframes bonus{0%{opacity:0;transform:translateY(14px)}20%{opacity:1}100%{opacity:0;transform:translateY(-26px)}}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.st{padding:12px 14px;border-radius:14px;border:1px solid var(--border2);background:rgba(4,8,16,.6)}
+.st b{display:block;font-size:26px;letter-spacing:-.02em;margin-top:2px}
+.st.lead{border-color:rgba(47,227,160,.55);background:rgba(47,227,160,.1)}.st.lead b{color:var(--ok)}
+.st.min{border-color:rgba(245,158,11,.5)}.st.min b{color:var(--warn)}
+.rule{font-size:13px;color:var(--text2);padding:10px 14px;border-radius:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);margin-bottom:14px}
+.btns{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+button{font:inherit;cursor:pointer;color:#fff;border:1px solid var(--border2);background:rgba(20,32,56,.8);border-radius:14px;padding:14px 10px;font-weight:700;transition:transform .12s,border-color .2s}
+button:hover:not(:disabled){transform:translateY(-2px);border-color:var(--accent)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.main{grid-column:1/-1;background:linear-gradient(90deg,#1f8bff,#6b6bff);border:0;font-size:17px;padding:16px;box-shadow:0 10px 30px rgba(79,120,255,.4)}
+.custom{grid-column:1/-1;display:flex;gap:10px}
+.custom input{flex:1;font:inherit;color:#fff;background:rgba(4,8,16,.7);border:1px solid var(--border2);border-radius:14px;padding:12px 14px;min-width:0}
+.start{width:100%;margin-top:6px;background:linear-gradient(90deg,#14b87f,#2fe3a0);color:#032;border:0;font-size:17px;padding:16px}
+/* pravý panel */
+.right h2{font-size:17px;margin:0 0 4px}
+.chart{position:relative;height:210px;margin:10px 0 16px;border-radius:14px;border:1px solid var(--border);background:rgba(4,8,16,.55);overflow:hidden}
+.chart canvas{width:100%;height:100%;display:block}
+.feed{display:flex;flex-direction:column;gap:8px;max-height:262px;overflow:hidden}
+.bid{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:rgba(4,8,16,.55);animation:in .35s ease-out}
+@keyframes in{from{opacity:0;transform:translateX(18px)}}
+.av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;color:#031}
+.bid .n{font-weight:700;font-size:14px}.bid .s{font-size:12px;color:var(--text3)}
+.bid .a{margin-left:auto;text-align:right;font-weight:800}.bid .a small{display:block;color:var(--ok);font-weight:700;font-size:12px}
+.bid.me{border-color:rgba(79,209,255,.6);background:rgba(79,209,255,.1)}
+.people{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.people span{font-size:12px;padding:5px 10px;border-radius:999px;border:1px solid var(--border2);color:var(--text2)}
+.people span.top{border-color:rgba(47,227,160,.6);color:var(--ok);background:rgba(47,227,160,.1)}
+.win{position:fixed;inset:0;background:rgba(2,5,12,.78);backdrop-filter:blur(6px);display:none;place-items:center;z-index:9}
+.win.on{display:grid}
+.win .box{text-align:center;padding:36px 44px;border-radius:24px;border:1px solid rgba(47,227,160,.5);background:var(--card);box-shadow:0 0 80px rgba(47,227,160,.25);max-width:420px}
+.win h2{font-size:30px;margin:8px 0}.win p{color:var(--text2)}
+/* === SEXY VRSTVA === */
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background-image:linear-gradient(rgba(79,209,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(79,209,255,.05) 1px,transparent 1px);background-size:46px 46px;mask-image:radial-gradient(ellipse at 50% 20%,#000 20%,transparent 75%);-webkit-mask-image:radial-gradient(ellipse at 50% 20%,#000 20%,transparent 75%)}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;opacity:.55;animation:float 14s ease-in-out infinite}
+.orb.a{width:420px;height:420px;left:-120px;top:120px;background:#1f6bff}.orb.b{width:380px;height:380px;right:-100px;top:380px;background:#8b3dff;animation-delay:-6s}
+@keyframes float{50%{transform:translate(40px,-50px) scale(1.1)}}
+.wrap,.top,.note{position:relative;z-index:1}
+.card{position:relative;background:linear-gradient(160deg,rgba(18,30,54,.78),rgba(8,14,28,.8));border:1px solid transparent;background-clip:padding-box;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.card::before{content:"";position:absolute;inset:-1px;border-radius:21px;z-index:-1;background:linear-gradient(135deg,rgba(79,209,255,.7),rgba(124,140,255,.15) 40%,rgba(139,61,255,.6));}
+h1{font-size:34px}
+h1 em{background:linear-gradient(90deg,#4fd1ff,#a78bfa,#ff7ad9,#4fd1ff);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;animation:shine 5s linear infinite;filter:drop-shadow(0 0 18px rgba(124,140,255,.5))}
+@keyframes shine{to{background-position:250% 0}}
+.coupon{position:relative;overflow:hidden;border:1px solid rgba(79,209,255,.55);box-shadow:0 0 40px rgba(79,209,255,.2),inset 0 0 30px rgba(124,140,255,.12)}
+.coupon::after{content:"";position:absolute;top:0;bottom:0;width:70px;left:-100px;background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-20deg);animation:sweep 3.6s ease-in-out infinite}
+@keyframes sweep{60%,100%{left:120%}}
+.coupon .pct{font-size:60px;filter:drop-shadow(0 0 20px rgba(79,209,255,.6))}
+.timer{width:260px;height:260px;filter:drop-shadow(0 0 26px rgba(79,209,255,.35))}
+.timer svg{width:260px;height:260px}
+.timer .t{font-size:66px;text-shadow:0 0 30px rgba(79,209,255,.55)}
+.timer.low{filter:drop-shadow(0 0 34px rgba(255,93,115,.7))}
+.timer.low #ring{stroke:#ff5d73}
+.timer::after{content:"";position:absolute;inset:26px;border-radius:50%;border:1px dashed rgba(120,160,220,.22);animation:spin 30s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.st{background:linear-gradient(160deg,rgba(20,34,60,.7),rgba(6,10,22,.8));box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.st b{font-size:30px}.st.lead{box-shadow:0 0 30px rgba(47,227,160,.22),inset 0 1px 0 rgba(255,255,255,.08)}
+.st.flash{animation:flash .6s}
+@keyframes flash{30%{transform:scale(1.05);box-shadow:0 0 40px rgba(79,209,255,.6)}}
+button.main,.start{position:relative;overflow:hidden;box-shadow:0 12px 36px rgba(79,120,255,.55),0 0 0 1px rgba(255,255,255,.14) inset}
+button.main::after,.start::after{content:"";position:absolute;top:0;bottom:0;width:60px;left:-90px;background:linear-gradient(100deg,transparent,rgba(255,255,255,.4),transparent);transform:skewX(-20deg);animation:sweep 2.8s ease-in-out infinite}
+.start{box-shadow:0 12px 40px rgba(47,227,160,.5)}
+.start:not(:disabled){animation:glow 2s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 12px 60px rgba(47,227,160,.85)}}
+.bid{background:linear-gradient(90deg,rgba(18,30,54,.8),rgba(8,14,28,.6))}
+.bid.me{box-shadow:0 0 26px rgba(124,140,255,.35)}
+.av{box-shadow:0 0 16px currentColor}
+.chart{box-shadow:inset 0 0 40px rgba(79,209,255,.08)}
+.confetti{position:fixed;top:-12px;width:9px;height:14px;z-index:20;pointer-events:none;animation:fall linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(720deg);opacity:.9}}
+.win .box{box-shadow:0 0 120px rgba(47,227,160,.35),0 0 40px rgba(124,140,255,.25)}
+.win h2{background:linear-gradient(90deg,#2fe3a0,#4fd1ff,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:36px}
+.note{max-width:1220px;margin:0 auto 30px;padding:0 22px;color:var(--text3);font-size:12px}
+</style>
+</head>
+<body>
+<div class="orb a"></div><div class="orb b"></div>
+<div class="top"><div class="logo">B</div><b>Best Series <span>2.0</span></b><span class="pill">Aukce</span><div class="live"><i></i><span id="viewers">právě se účastní 7</span></div></div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="k">Živá aukce · vizualizace</div>
+    <h1>Slevový kupon <em>30 %</em> na Prádlomat</h1>
+    <p class="sub">Přihazuje se v DC bodech. Vyhrává ten, kdo přihodí jako poslední, než doběhne čas.</p>
+    <div class="coupon"><div class="pct">−30 %</div><div><b>Kupon na nákup prádlomatu Best Series</b><small>Výherce dostane kód e-mailem a do sekce Doklady.</small></div></div>
+
+    <div class="timer" id="timer">
+      <svg viewBox="0 0 230 230"><circle cx="115" cy="115" r="104" fill="none" stroke="rgba(120,160,220,.15)" stroke-width="10"/><circle id="ring" cx="115" cy="115" r="104" fill="none" stroke="url(#g)" stroke-width="10" stroke-linecap="round" stroke-dasharray="653.5" stroke-dashoffset="0"/><defs><linearGradient id="g"><stop offset="0" stop-color="#4fd1ff"/><stop offset="1" stop-color="#7c8cff"/></linearGradient></defs></svg>
+      <div><div class="t" id="t">1:00</div><div class="l" id="tl">čeká na start</div></div>
+      <div class="bonus" id="bonus">+15 s</div>
+    </div>
+
+    <div class="stats">
+      <div class="st lead"><span class="k">Vede</span><b id="leader">—</b></div>
+      <div class="st"><span class="k">Aktuální cena</span><b id="price">0 DC</b></div>
+      <div class="st min"><span class="k">Minimální příhoz</span><b id="min">1 DC</b></div>
+      <div class="st"><span class="k">Příhozů</span><b id="cnt">0</b></div>
+    </div>
+    <div class="rule">Pravidla: každý příhoz prodlouží čas o <b>5 s</b>, ale nejvýše na <b>1 minutu</b>. Když někdo přihodí např. 10 DC, musí všichni další přihazovat <b>alespoň 10 DC</b> – nikdy méně.</div>
+
+    <div class="btns" id="btns" style="display:none">
+      <button class="main" id="bMin">Přihodit minimum</button>
+      <button data-add="5">+5 DC</button><button data-add="10">+10 DC</button><button data-add="25">+25 DC</button>
+      <div class="custom"><input id="cust" type="number" min="1" placeholder="Vlastní částka v DC"><button id="bCust">Přihodit</button></div>
+    </div>
+    <button class="start" id="start">▶ Spustit aukci a rozeslat pozvánku</button>
+  </div>
+
+  <div class="card right">
+    <div class="k">Vývoj aukce</div>
+    <h2>Cena v čase</h2>
+    <div class="chart"><canvas id="cv" width="640" height="420"></canvas></div>
+    <div class="k" style="margin-bottom:8px">Poslední příhozy</div>
+    <div class="feed" id="feed"><div class="sub" style="margin:0">Zatím nikdo nepřihodil. Po spuštění se zde ukážou příhozy živě.</div></div>
+    <div class="people" id="people"></div>
+  </div>
+</div>
+<div class="note">Vizualizace (ukázková data a simulovaní účastníci) – bez napojení na DC účty a databázi.</div>
+
+<div class="win" id="win"><div class="box"><div style="font-size:54px">🏆</div><div class="k">Aukce skončila</div><h2 id="wn">—</h2><p id="wt"></p><button onclick="location.reload()">Spustit znovu</button></div></div>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i);};
+var BASE=60,ADD=5,ME='Vy';
+var names=['Petr N.','Jana K.','Martin S.','Eva T.','Luboš H.','Alena P.'],cols=['#4fd1ff','#2fe3a0','#f59e0b','#ff8aa0','#a78bfa','#7dd3fc','#fde68a'];
+var st={on:false,left:BASE,price:0,min:1,leader:null,cnt:0,hist:[],t0:0,part:{}};
+function col(n){return n===ME?'#7c8cff':cols[(names.indexOf(n)+1)%cols.length];}
+function fmt(s){s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+('0'+s%60).slice(-2);}
+function ui(){
+  $('t').textContent=fmt(st.left);$('price').textContent=st.price+' DC';$('min').textContent=st.min+' DC';$('cnt').textContent=st.cnt;
+  $('leader').textContent=st.leader||'—';$('bMin').textContent='Přihodit minimum (+'+st.min+' DC)';
+  $('cust').min=st.min;$('cust').placeholder='Vlastní částka (min. '+st.min+' DC)';
+  var mx=Math.max(BASE+ADD*st.cnt,BASE);$('ring').style.strokeDashoffset=653.5*(1-Math.min(1,st.left/Math.max(BASE,Math.min(st.left+0.001,mx))));
+  $('ring').style.strokeDashoffset=653.5*(1-Math.min(1,st.left/BASE));
+  $('timer').classList.toggle('low',st.on&&st.left<=10);
+  document.querySelectorAll('[data-add]').forEach(function(b){b.disabled=+b.dataset.add<st.min;});
+  var p=Object.keys(st.part).sort(function(a,b){return st.part[b]-st.part[a];});
+  $('people').innerHTML=p.map(function(n,i){return '<span class="'+(n===st.leader?'top':'')+'">'+n+' · '+st.part[n]+' DC</span>';}).join('');
+}
+function chart(){
+  var c=$('cv'),x=c.getContext('2d'),W=c.width,H=c.height;x.clearRect(0,0,W,H);
+  x.strokeStyle='rgba(120,160,220,.12)';x.lineWidth=1;for(var i=1;i<5;i++){x.beginPath();x.moveTo(0,H*i/5);x.lineTo(W,H*i/5);x.stroke();}
+  var h=st.hist;if(h.length<1)return;var mx=Math.max(10,st.price*1.15),T=Math.max(BASE,(Date.now()-st.t0)/1000+5);
+  function X(t){return 20+(W-40)*t/T;}function Y(v){return H-20-(H-50)*v/mx;}
+  var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'rgba(79,209,255,.35)');g.addColorStop(1,'rgba(79,209,255,0)');
+  x.beginPath();x.moveTo(X(0),Y(0));var lx=0,ly=0;h.forEach(function(p){x.lineTo(X(p.t),Y(ly));x.lineTo(X(p.t),Y(p.v));lx=p.t;ly=p.v;});x.lineTo(X((Date.now()-st.t0)/1000),Y(ly));
+  x.strokeStyle='#4fd1ff';x.lineWidth=3;x.stroke();x.lineTo(X((Date.now()-st.t0)/1000),Y(0));x.closePath();x.fillStyle=g;x.fill();
+  h.forEach(function(p){x.beginPath();x.arc(X(p.t),Y(p.v),p.me?7:5,0,7);x.fillStyle=p.col;x.fill();});
+  x.fillStyle='#9db0cf';x.font='20px Inter,sans-serif';x.fillText(st.price+' DC',W-100,Y(st.price)-10);
+}
+function bid(who,add){
+  if(!st.on||add<st.min||st.left<=0)return false;
+  var gain=Math.round(Math.min(BASE,st.left+ADD)-st.left);
+  st.price+=add;st.cnt++;st.min=Math.max(st.min,add);st.leader=who;st.left=Math.min(BASE,st.left+ADD);st.part[who]=(st.part[who]||0)+add;
+  st.hist.push({t:(Date.now()-st.t0)/1000,v:st.price,col:col(who),me:who===ME});
+  var f=$('feed');if(st.cnt===1)f.innerHTML='';
+  var d=document.createElement('div');d.className='bid'+(who===ME?' me':'');
+  d.innerHTML='<div class="av" style="background:'+col(who)+'">'+who[0]+'</div><div><div class="n">'+who+'</div><div class="s">přihodil '+add+' DC · čas +'+gain+' s</div></div><div class="a">'+st.price+' DC<small>minimum → '+st.min+' DC</small></div>';
+  f.insertBefore(d,f.firstChild);while(f.children.length>5)f.removeChild(f.lastChild);
+  var b=$('bonus');b.textContent=gain>0?'+'+gain+' s':'max 1:00';b.classList.remove('go');void b.offsetWidth;b.classList.add('go');
+  document.querySelectorAll('.st').forEach(function(s){s.classList.remove('flash');void s.offsetWidth;s.classList.add('flash');});
+  ui();chart();return true;
+}
+function confetti(){var c=['#4fd1ff','#2fe3a0','#a78bfa','#ff7ad9','#fde68a'];for(var i=0;i<90;i++){var e=document.createElement('i');e.className='confetti';e.style.left=Math.random()*100+'vw';e.style.background=c[i%5];e.style.animationDuration=(2+Math.random()*2.5)+'s';e.style.animationDelay=Math.random()*.8+'s';document.body.appendChild(e);setTimeout(function(x){x.remove();},6000,e);}}
+function bots(){
+  if(!st.on)return;
+  var w=names[Math.floor(Math.random()*names.length)];
+  if(w!==st.leader){var add=st.min+(Math.random()<.3?Math.ceil(Math.random()*st.min):0);if(Math.random()<.18)add=st.min*2+Math.floor(Math.random()*8);bid(w,add);}
+  setTimeout(bots,1100+Math.random()*3200);
+}
+var last=0;
+function tick(ts){
+  if(st.on){var dt=(ts-last)/1000;last=ts;st.left-=dt;if(st.left<=0){st.left=0;end();}ui();chart();}
+  requestAnimationFrame(tick);
+}
+function end(){
+  st.on=false;$('btns').style.display='none';$('tl').textContent='konec aukce';
+  $('wn').textContent=st.leader?(st.leader===ME?'Vyhráli jste!':st.leader+' vyhrává'):'Nikdo nepřihodil';
+  $('wt').textContent=st.leader?'Kupon −30 % na prádlomat za '+st.price+' DC. Kód byl odeslán e-mailem.':'';
+  setTimeout(function(){$('win').classList.add('on');if(st.leader)confetti();},500);
+}
+$('start').onclick=function(){
+  $('start').style.display='none';$('btns').style.display='grid';$('tl').textContent='do konce';
+  st.on=true;st.t0=Date.now();last=performance.now();st.left=BASE;ui();setTimeout(bots,1500);
+};
+$('bMin').onclick=function(){bid(ME,st.min);};
+document.querySelectorAll('[data-add]').forEach(function(b){b.onclick=function(){bid(ME,+b.dataset.add);};});
+$('bCust').onclick=function(){var v=Math.floor(+$('cust').value);if(v<st.min){$('cust').style.borderColor='#ff5d73';return;}$('cust').style.borderColor='';if(bid(ME,v))$('cust').value='';};
+ui();requestAnimationFrame(tick);
+setInterval(function(){$('viewers').textContent='právě se účastní '+(6+Math.floor(Math.random()*4));},4000);
+})();
+</script>
+</body>
+</html>

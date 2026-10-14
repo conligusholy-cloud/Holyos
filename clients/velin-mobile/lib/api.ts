@@ -34,6 +34,54 @@ export type LoginResponse = {
   };
 };
 
+export type SupportMessage = {
+  id: number;
+  supporter_id: number;
+  sender: 'user' | 'agent';
+  agent_name: string | null;
+  body: string;
+  created_at: string;
+  file_name: string | null;
+  file_type: string | null;
+  file_size: number | null;
+  order_id: number | null;
+};
+
+export type SupportThread = {
+  id: number;
+  nick: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  unread: number;
+  last_at: string | null;
+  last_body: string | null;
+  last_sender: 'user' | 'agent' | null;
+};
+
+export type SupportThreadsResponse = {
+  online: boolean;
+  agent: string;
+  agents: { name: string }[];
+  threads: SupportThread[];
+};
+
+export type SupportThreadResponse = {
+  who: {
+    id: number;
+    nick: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  msgs: SupportMessage[];
+  orders: number;
+  online: boolean;
+  supportOnline: boolean;
+  agent: string;
+};
+
 const DEFAULT_TIMEOUT_MS = 15000;
 // /me, /my-day, chat endpointy kvůli Railway cold startu — server po nečinnosti
 // spí a první request po probuzení může trvat 15–25 s. 30 s má rezervu.
@@ -349,6 +397,38 @@ export const api = {
     const qs = q ? `?q=${encodeURIComponent(q)}` : '';
     return request<SearchableUser[]>('GET', `/api/velin/chat/users/searchable${qs}`, { jwt });
   },
+
+  // ─── Podpora BS2 (jen Tomáš a Jan Holý; proxy HolyOS → BS2) ───────────────
+  supportMe: (jwt: string) =>
+    request<{ allowed: boolean }>('GET', '/api/velin/support/me', { jwt }),
+
+  supportThreads: (jwt: string) =>
+    request<SupportThreadsResponse>('GET', '/api/velin/support/threads', {
+      jwt,
+      timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
+    }),
+
+  supportThread: (jwt: string, id: number, after?: number) =>
+    request<SupportThreadResponse>(
+      'GET',
+      `/api/velin/support/threads/${id}${after != null ? `?after=${after}` : ''}`,
+      { jwt, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
+    ),
+
+  supportSend: (jwt: string, id: number, body: string) =>
+    request<{ ok: boolean; msg: SupportMessage | null }>(
+      'POST',
+      `/api/velin/support/threads/${id}/send`,
+      { jwt, body: { body }, timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS }
+    ),
+
+  supportSetOnline: (jwt: string, online: boolean, agent?: string) =>
+    request<{ ok: boolean; online: boolean }>('POST', '/api/velin/support/online', {
+      jwt,
+      body: { online, agent },
+    }),
+
+  supportFileUrl: (id: number) => `${API_BASE}/api/velin/support/file/${id}`,
 
   // ─── Večerní reflexe (Fáze 2) ────────────────────────────────────────────
   getEveningReflection: (jwt: string, date?: string) => {
