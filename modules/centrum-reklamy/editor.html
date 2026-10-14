@@ -177,7 +177,9 @@
       return { inn: inn, inLbl: inLbl, out: out, outLbl: outLbl };
     }
     function flowBadges(nd) {
-      if (nd.kind === 'note' || nd.kind === 'landing') return ''; var f = flowCounts(nd); var h = ''; // u záchytné stránky štítky vstup/výstup nejsou (čísla jsou v uzlu a na spojkách)
+      return ''; // štítky vstup/výstup u uzlů vypnuty – průchody se počítají na spojkách (štítek uprostřed vlákna)
+      // eslint-disable-next-line no-unreachable
+      var f = flowCounts(nd); var h = '';
       if (f.inn != null && nd.kind !== 'start') h += '<div class="pc in" title="Vstup: kolik leadů do kroku přišlo">' + n(f.inn) + (f.inLbl ? '<small>' + f.inLbl + '</small>' : '') + '</div>';
       if (f.out != null && nd.kind !== 'split') { var pct = f.inn > 0 && f.out != null ? ' (' + Math.round(f.out / f.inn * 100) + ' %)' : ''; h += '<div class="pc out" title="Výstup: kolik leadů krokem prošlo dál' + pct + '">' + n(f.out) + (f.outLbl ? '<small>' + f.outLbl + '</small>' : '') + '</div>'; }
       return h;
