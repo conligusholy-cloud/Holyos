@@ -5,7 +5,7 @@
 // Fiktivní hráči přihazují realisticky (častěji ke konci). Pojistky pro živé: 30 % jen ve 2 % aukcí,
 // 20 % jen v 10 % aukcí, jinak 10 %; velký kupon (20/30) může jeden živý (sid) vyhrát jen jednou.
 const START_MS = 60000, BUMP_MS = 5000, MAX_MS = 60000, AMMO = 5, RESULT_HOLD_MS = 25000, MAX_ROUND_MS = 105000;
-const LOBBY_MIN = 15000, LOBBY_MAX = 23000; // čekání na ostatní hráče před startem
+const LOBBY_MIN = 60000, LOBBY_MAX = 60000; // čekání na ostatní hráče před startem: celá minuta (čas na čtení informací)
 const P30 = 0.02, P20 = 0.10;
 const BOT_SHARE = 0.2, BOT_MIN = 3, BOT_MAX = 12;
 const FIRST = ['Petr', 'Jana', 'Martin', 'Lucie', 'Tomáš', 'Eva', 'Jiří', 'Hana', 'Pavel', 'Marie', 'Jan', 'Lenka', 'Michal', 'Kateřina', 'David', 'Tereza', 'Ondřej', 'Veronika', 'Jakub', 'Monika', 'Lukáš', 'Markéta', 'Roman', 'Barbora', 'Radek', 'Zuzana', 'Karel', 'Alena', 'Milan', 'Simona', 'Aleš', 'Nikola', 'Vojtěch', 'Klára', 'Filip', 'Dana', 'Josef', 'Ivana', 'Marek', 'Petra', 'Zdeněk', 'Kristýna', 'Daniel', 'Adéla', 'Patrik', 'Michaela'];
@@ -54,7 +54,10 @@ function ensureRound() { /* instance vznikají při připojení */ }
 function cleanup() { const now = Date.now(); for (const [id, r] of rounds) { if (r.ended && now - r.endedAt > RESULT_HOLD_MS + 60000) { rounds.delete(id); for (const [sid, rid] of bySid) if (rid === id) bySid.delete(sid); } } }
 
 function join({ sid, name, bank, presence }) {
-  if (!sid || !name) return null; cleanup(); let r = roundOf(sid); if (!r || r.ended) { r = lobbyRound(presence); bySid.set(sid, r.id); }
+  if (!sid || !name) return null; cleanup(); let r = roundOf(sid);
+  // Nové připojení (po kvízu / obnovení stránky): pokud hráč v běžící aukci ještě nepřihodil, opustí ji a jde znovu do čekárny
+  if (r && !r.ended && r.phase === 'open' && !r.bids.some((b) => !b.bot && r.players.get(sid) && b.name === r.players.get(sid).name)) { r.players.delete(sid); r = null; }
+  if (!r || r.ended) { r = lobbyRound(presence); bySid.set(sid, r.id); }
   if (!r.players.has(sid)) { let nm = String(name).slice(0, 40); if (r.usedNames.has(nm.toLowerCase())) nm = nm + ' ' + (r.players.size + 1); r.usedNames.add(nm.toLowerCase()); r.players.set(sid, { sid, name: nm, bank: Math.max(0, Number(bank) || 0), ammo: AMMO, bot: false, joined: Date.now() }); }
   return state(sid);
 }
