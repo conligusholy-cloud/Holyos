@@ -291,6 +291,8 @@
       var fb = flowBadges(nd); if (fb) el.insertAdjacentHTML('beforeend', fb);
       el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
       el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
+      // Puštění taženého vlákna kdekoli na uzlu = připojit na jeho vstup (nejen na malou tečku)
+      el.addEventListener('mouseup', function (e) { if (!linking || linking.from === nd.id || nd.kind === 'note' || nd.kind === 'start') return; e.stopPropagation(); connect(linking.from, linking.port || 0, nd.id); linking = null; render(); });
       var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var ox = nd.x, oy = nd.y, cx0 = e.clientX, cy0 = e.clientY; function mv(ev) { nd.x = Math.round(ox + (ev.clientX - cx0) / V.z); nd.y = Math.round(oy + (ev.clientY - cy0) / V.z); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
       return el;
     }
