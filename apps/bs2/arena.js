@@ -107,7 +107,7 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .prize.p1{border-color:rgba(79,209,255,.6);box-shadow:0 0 24px rgba(79,209,255,.15)}
   .clock{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;margin:6px 0 12px}
   .ring{position:relative;width:132px;height:132px;flex:none}
-  .ring svg{width:100%;height:100%;transform:rotate(-90deg)} .ring circle{fill:none;stroke-width:8}
+  .ring svg{width:100%;height:100%;transform:rotate(-90deg) scaleX(-1)} .ring circle{fill:none;stroke-width:8}
   .ring .bg{stroke:rgba(120,160,255,.14)} .ring .fg{stroke:var(--accent2);stroke-linecap:round;transition:stroke-dashoffset .9s linear,stroke .3s;filter:drop-shadow(0 0 8px rgba(79,209,255,.6))}
   .ring.hot .fg{stroke:var(--err);filter:drop-shadow(0 0 10px rgba(255,93,108,.7))} .ring.hot b{color:var(--err)}
   .ring b{position:absolute;left:0;right:0;top:36px;text-align:center;font-size:44px;font-weight:900;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
@@ -144,6 +144,7 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .coupon .code{display:inline-block;margin:8px 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;letter-spacing:.12em;padding:6px 12px;border-radius:10px;background:rgba(4,8,16,.8);border:1px solid var(--border2)}
   .coupon form{display:flex;flex-direction:column;gap:8px;margin-top:10px;background:none;border:0;padding:0;box-shadow:none}
   .coupon form .row{display:flex;gap:8px;flex-wrap:wrap} .coupon form .row input{flex:1;min-width:160px}
+  input[type=tel]{width:100%;font:inherit;font-size:16px;color:var(--text);background:rgba(4,8,16,.8);border:1px solid rgba(120,160,255,.18);border-radius:11px;padding:12px 13px;outline:none} input[type=tel]:focus{border-color:var(--accent2);box-shadow:0 0 0 4px rgba(79,209,255,.12)}
   .coupon .ok{color:var(--ok);font-weight:700}
   @media (max-width:600px){.auc{padding:16px 12px}.bidrow{grid-template-columns:1fr 1fr}.podium{gap:6px}.pd .pc{font-size:24px}.pd .nm{font-size:12.5px}.ring{width:118px;height:118px}.ring b{font-size:38px;top:32px}.ring small{top:76px}}
   /* ── Bonusové karty ── */
@@ -208,7 +209,7 @@ ${presence}
   <section class="auc hidden" id="auc">
     <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · kdo přihodí poslední, vyhrává</span>
     <h2>Aukce o slevové kupony na první prádlomat</h2>
-    <p class="sub">Odpočet běží od 60 s. Každý příhoz ho vrátí o 5 s zpět (nejvýš na minutu). Přihazujete svým kapitálem – stejnou nebo vyšší částkou. Až čas vyprší, vyhrává poslední přihazující.</p>
+    <p class="sub">Odpočet běží od 60 s. Každý příhoz ho vrátí o 5 s zpět (nejvýš na minutu). Přihazujete svým kapitálem – stejnou nebo vyšší částkou. Až čas vyprší, vyhrává poslední přihazující; kupon dostanou jen první tři.</p>
     <div class="prizes"><div class="prize p1"><b>30 %</b><span>poslední příhoz</span></div><div class="prize"><b>20 %</b><span>2. místo</span></div><div class="prize"><b>10 %</b><span>3. místo</span></div></div>
     <div id="aucOpen">
       <div class="clock"><div class="ring"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="clkFg" cx="60" cy="60" r="52"/></svg><b id="clkSec">60</b><small>sekund</small></div>
@@ -292,8 +293,8 @@ ${netScript}
   function aucResult(st, waitingOnly){ var r = st.result || {}; var pod = r.podium || []; var mine = r.mine; $('aucOpen').classList.add('hidden'); $('aucRes').classList.remove('hidden');
     $('podium').innerHTML = pod.map(function(p, i){ var isMe = !p.bot && st.me && p.name === st.me.name; return '<div class="pd p' + (i+1) + (isMe ? ' me' : '') + '"><div class="pl">' + (i === 0 ? 'poslední příhoz' : (i+1) + '. místo') + '</div><div class="pc">' + p.pct + ' %</div><div class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</div><div class="am">' + fmt(p.amount || 0) + '</div></div>'; }).join('') || '<div class="pd p1"><div class="pl">bez příhozu</div><div class="pc">—</div></div>';
     $('reslist').innerHTML = (r.list || []).map(function(p){ var isMe = !p.bot && st.me && p.name === st.me.name; return '<div class="rl' + (isMe ? ' me' : '') + '"><span class="pl">' + (p.place ? p.place + '.' : '·') + '</span><span class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</span><span class="pc' + (p.pct ? '' : ' zero') + '">' + (p.pct ? 'kupon ' + p.pct + ' %' : 'bez kuponu') + '</span></div>'; }).join('');
-    var c = $('coupon'); if (waitingOnly || !mine) { c.innerHTML = '<p class="sub" style="margin:0">' + (waitingOnly ? 'Právě skončila aukce – další začíná za chvíli, připojíme vás automaticky.' : 'Toto kolo proběhlo bez vás – zkuste další.') + '</p>'; return; }
-    var head = mine.place === 1 ? name + ', poslední příhoz byl váš – hlavní cena!' : mine.place === 2 ? name + ', skvělé druhé místo!' : (mine.place === 3 ? name + ', třetí místo!' : name + ', účastnický kupon je váš.');
+    var c = $('coupon'); if (waitingOnly || !mine || !mine.pct) { c.innerHTML = '<p class="sub" style="margin:0">' + (waitingOnly ? 'Právě skončila aukce – další začíná za chvíli, připojíme vás automaticky.' : (mine ? name + ', tentokrát bez kuponu – vyhrávají jen poslední tři přihazující. Zkuste další aukci.' : 'Toto kolo proběhlo bez vás – zkuste další.')) + '</p>'; return; }
+    var head = mine.place === 1 ? name + ', poslední příhoz byl váš – hlavní cena!' : mine.place === 2 ? name + ', skvělé druhé místo!' : (mine.place === 3 ? name + ', třetí místo!' : name + ', kupon je váš.');
     c.innerHTML = '<div class="eyebrow" style="display:inline-flex"><i></i>' + esc(head) + '</div><div class="pc" style="margin-top:8px">' + mine.pct + ' %</div><div>sleva na první prádlomat</div><div class="code">' + esc(mine.code) + '</div>'
       + '<form id="claim"><p class="sub" style="margin:0">Kam vám máme kupon poslat? Platí při objednávce prádlomatu, pošleme ho i s podmínkami.</p><div class="row"><input type="email" id="cEmail" placeholder="váš e-mail" required inputmode="email" autocomplete="email"><input type="tel" id="cPhone" placeholder="telefon (nepovinné)" inputmode="tel" autocomplete="tel"></div><button class="btn gold" type="submit">Poslat kupon</button><p class="small" style="color:var(--text3);margin:0">Odesláním souhlasíte, že vás kvůli kuponu kontaktujeme. Žádný spam.</p></form>';
     $('claim').addEventListener('submit', function(e){ e.preventDefault(); var b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'Odesílám…'; fetch('/api/arena/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, round: st.round, name: name, email: $('cEmail').value.trim(), phone: $('cPhone').value.trim() }) }).then(function(r){ return r.json(); }).then(function(j){ if(j && j.ok){ $('claim').innerHTML = '<p class="ok">✓ Hotovo – kupon ' + esc(j.code) + ' na ' + j.pct + ' % jsme vám odeslali.</p><a class="btn" href="/location?utm_source=arena&c=' + encodeURIComponent(j.code) + '" style="margin-top:8px">Prověřit si místo pro prádlomat</a>'; } else { b.disabled = false; b.textContent = 'Poslat kupon'; alert((j && j.error) || 'Nepodařilo se odeslat.'); } }).catch(function(){ b.disabled = false; b.textContent = 'Poslat kupon'; }); });

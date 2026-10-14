@@ -103,8 +103,8 @@ function finish(r) {
   const order = []; const seen = new Set(); for (let i = r.bids.length - 1; i >= 0 && order.length < 3; i--) { const b = r.bids[i]; const key = b.name; if (seen.has(key)) continue; seen.add(key); order.push({ name: b.name, bot: b.bot, amount: b.amount }); }
   const pct = [30, 20, 10]; const podium = order.map((o, i) => ({ name: o.name, bot: o.bot, pct: pct[i], amount: o.amount }));
   const coupons = {}; const list = [];
-  for (const p of r.players.values()) { const i = podium.findIndex((x) => !x.bot && x.name === p.name); const pc = i >= 0 ? pct[i] : 10; coupons[p.sid] = { pct: pc, place: i >= 0 ? i + 1 : 0, code: code(pc) }; if (i >= 0 && pc >= 20) wonBig.set(p.sid, Math.max(wonBig.get(p.sid) || 0, pc)); list.push({ name: p.name, bot: false, pct: pc, place: i >= 0 ? i + 1 : 0 }); }
-  for (const b of r.bots) { const i = podium.findIndex((x) => x.bot && x.name === b.name); list.push({ name: b.name, bot: true, pct: i >= 0 ? pct[i] : (b.ammo < AMMO ? 10 : 0), place: i >= 0 ? i + 1 : 0 }); }
+  for (const p of r.players.values()) { const i = podium.findIndex((x) => !x.bot && x.name === p.name); const pc = i >= 0 ? pct[i] : 0; coupons[p.sid] = { pct: pc, place: i >= 0 ? i + 1 : 0, code: pc ? code(pc) : null }; if (i >= 0 && pc >= 20) wonBig.set(p.sid, Math.max(wonBig.get(p.sid) || 0, pc)); list.push({ name: p.name, bot: false, pct: pc, place: i >= 0 ? i + 1 : 0 }); }
+  for (const b of r.bots) { const i = podium.findIndex((x) => x.bot && x.name === b.name); list.push({ name: b.name, bot: true, pct: i >= 0 ? pct[i] : 0, place: i >= 0 ? i + 1 : 0 }); }
   list.sort((a, b) => (a.place || 9) - (b.place || 9) || b.pct - a.pct);
   r.result = { podium, list, coupons, top: r.top };
   history.unshift(r); if (history.length > 10) history.pop();
