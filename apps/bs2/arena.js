@@ -13,6 +13,7 @@ const QUESTIONS = [
 ];
 const PRIZE = 50000;      // Kč za správnou odpověď
 const SECONDS = 15;       // čas na otázku
+const PRESENCE_MULT = 8;  // nasobek pocitadla 'prave si prohlizi' jen na teto strance
 
 const PAGE = (shellHead, netScript, presence) => `${shellHead}
 <style>
@@ -181,7 +182,9 @@ function arenaPage() {
   const netScript = ni >= 0 ? src.slice(ni, ne) : '';
   const hi = src.indexOf('<header'); const he = src.indexOf('</header>') + '</header>'.length;
   let header = src.slice(hi, he).replace('Prověření lokality</span>', 'Aréna</span>').replace('<!--PRESENCE-->', '<span style="margin-left:auto"></span>' + V.PRESENCE_HTML);
-  return PAGE(head + '<style>' + V.PRESENCE_CSS + '</style>', netScript, header).replace('</body>', '<script>' + V.PRESENCE_JS + '</script></body>');
+  // Pocitadlo 'prave si prohlizi' se na Arene zobrazuje vynasobene (PRESENCE_MULT), zdrojova data se nemeni.
+  const presenceJs = V.PRESENCE_JS.replace('var v=(j.total!=null?j.total:j.hour);', 'var v=(j.total!=null?j.total:j.hour);v=Math.round(Number(v||0)*' + PRESENCE_MULT + ');');
+  return PAGE(head + '<style>' + V.PRESENCE_CSS + '</style>', netScript, header).replace('</body>', '<script>' + presenceJs + '</script></body>');
 }
 
 module.exports = { arenaPage, QUESTIONS, PRIZE, SECONDS };
