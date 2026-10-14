@@ -238,6 +238,18 @@ async function migrate() {
       created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS location_orders_status_idx ON location_orders (status, created_at);
+    -- Aréna (/arena): výsledky kvízu – jméno/přezdívka, skóre, virtuální kapitál, odpovědi
+    CREATE TABLE IF NOT EXISTS arena_runs (
+      id          SERIAL PRIMARY KEY,
+      sid         TEXT,
+      name        TEXT NOT NULL,
+      score       INT NOT NULL DEFAULT 0,
+      bank        INT NOT NULL DEFAULT 0,
+      answers     JSONB,
+      ms          INT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS arena_runs_created_idx ON arena_runs (created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS terms_version TEXT; -- verze obchodních podmínek odsouhlasená před platbou

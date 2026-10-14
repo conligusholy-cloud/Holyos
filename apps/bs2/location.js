@@ -674,4 +674,4 @@ function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, statu
   </tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
 }
 
-module.exports = { PACKAGES, EVAL_PACKS, UPGRADE_PACKS, PKG_RANK, locationPage, adminLocationOrders, STATUS };
+module.exports = { PACKAGES, EVAL_PACKS, UPGRADE_PACKS, PKG_RANK, locationPage, adminLocationOrders, STATUS, PAGE };

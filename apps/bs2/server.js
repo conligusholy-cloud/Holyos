@@ -438,7 +438,7 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
 // Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
-const PUBLIC_HIT_PATHS = ['/location', '/login', '/activate', '/home', '/location/vop', '/location/gdpr'];
+const PUBLIC_HIT_PATHS = ['/location', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
 app.post('/api/presence/ping', (req, res) => {
   const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
@@ -489,6 +489,15 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 // ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
 // Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS)); });
+// Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
+app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage()); });
+app.post('/api/arena/result', wrap(async (req, res) => {
+  const b = req.body || {}; if (rateLimited('arena:' + req.ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů' });
+  const name = String(b.name || '').trim().slice(0, 40); if (!name) return res.status(400).json({ error: 'Chybí jméno' });
+  const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || null;
+  await q('INSERT INTO arena_runs (sid, name, score, bank, answers, ms) VALUES ($1,$2,$3,$4,$5,$6)', [sid, name, Math.max(0, Math.min(20, parseInt(b.score, 10) || 0)), Math.max(0, parseInt(b.bank, 10) || 0), JSON.stringify(Array.isArray(b.answers) ? b.answers.slice(0, 20) : []), Math.max(0, parseInt(b.ms, 10) || 0)]);
+  res.json({ ok: true });
+}));
 // Ceník online produktů z app_settings (přepisuje výchozí ceny/limity za běhu)
 async function loadPricing() { try { const r = await q('SELECT value FROM app_settings WHERE key=$1', [LADM.PRICING_KEY]); const p = JSON.parse((r.rows[0] || {}).value || 'null'); LADM.applyPricing(p || {}); return p; } catch (e) { console.warn('[bs2] ceník:', e.message); LADM.applyPricing({}); return null; } }
 app.get('/location/vop', (req, res) => res.send(V.locVopPage()));
