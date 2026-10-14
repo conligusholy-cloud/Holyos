@@ -311,8 +311,8 @@
     document.getElementById('meta-clear').addEventListener('click', async function () { if (!confirm('Smazat uložený token?')) return; await fetch('/api/ads-center/meta/config', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear: true, account: '' }) }); metaLoad(); });
     metaLoad();
     loadFunnels();
-    if (location.hash === '#settings') { var stt = document.querySelector('.module-tab[data-tab="settings"]'); if (stt) stt.click(); }
-    if (location.hash === '#funnel') { var ft = document.querySelector('.module-tab[data-tab="funnel"]'); if (ft) ft.click(); }
+    if (location.hash.indexOf('#settings') === 0) { var stt = document.querySelector('.module-tab[data-tab="settings"]'); if (stt) stt.click(); }
+    if (location.hash.indexOf('#funnel') === 0) { var ft = document.querySelector('.module-tab[data-tab="funnel"]'); if (ft) ft.click(); }
     document.querySelectorAll('.module-tab').forEach(function (t) { t.addEventListener('click', function () { document.querySelectorAll('.module-tab').forEach(function (x) { x.classList.toggle('active', x === t); }); document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.toggle('active', p.id === 'panel-' + t.getAttribute('data-tab')); }); }); });
     load();
   })();
