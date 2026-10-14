@@ -438,7 +438,30 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
 // Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
-app.post('/api/presence/ping', (req, res) => { const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) ST.anonTouch(sid); res.json({ ok: true }); });
+const PUBLIC_HIT_PATHS = ['/location', '/login', '/activate', '/home', '/location/vop', '/location/gdpr'];
+app.post('/api/presence/ping', (req, res) => {
+  const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+  if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
+    ST.anonTouch(sid);
+    const path = String((req.body || {}).path || '').split('?')[0].replace(/\/+$/, '') || '/';
+    if (PUBLIC_HIT_PATHS.includes(path)) q('INSERT INTO page_hits (d, path, sid) VALUES (CURRENT_DATE, $1, $2) ON CONFLICT DO NOTHING', [path, sid]).catch(() => {});
+  }
+  res.json({ ok: true });
+});
+// Statistiky pro HolyOS Centrum reklamy (JWT iss=holyos, aud=bs2-api, sdílený BS2_SSO_SECRET)
+app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
+  const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+  try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const visits = (await q("SELECT path, to_char(d,'YYYY-MM-DD') AS d, count(*)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path, d ORDER BY d", [days])).rows;
+  const uniques = (await q("SELECT path, count(DISTINCT sid)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path", [days])).rows;
+  const orders = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue, count(*) FILTER (WHERE status IN ('pending','request'))::int AS pending FROM location_orders WHERE created_at > now() - ($1::int || ' days')::interval", [days])).rows[0];
+  const ordersByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, count(*)::int AS n, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid FROM location_orders WHERE created_at > now() - ($1::int || ' days')::interval GROUP BY 1 ORDER BY 1", [days])).rows;
+  const customers = Number(((await q('SELECT count(*)::int AS n FROM supporters WHERE location_package IS NOT NULL')).rows[0] || {}).n || 0);
+  const logins = (await q("SELECT count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND created_at > now() - ($1::int || ' days')::interval", [days])).rows[0];
+  res.json({ days, visits, uniques, orders, ordersByDay, customers, logins: Number(logins.n || 0) });
+}));
 app.get('/api/presence', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (!_presCache.data || Date.now() - _presCache.at > 10e3) {

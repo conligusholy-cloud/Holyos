@@ -181,5 +181,6 @@
     <div class="empty"><div class="icon">⏳</div>Načítám…</div>
   </div>
   <script src="/spare-parts/app.js?v=2026-05-18-1"></script>
+<script>(function(){try{var K='bs_shop_sid',sid=localStorage.getItem(K);if(!sid){sid=Date.now().toString(36)+Math.random().toString(36).slice(2,10);localStorage.setItem(K,sid);}fetch('/api/compounder/track',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,body:JSON.stringify({sid:sid,event:'shop_view',path:location.pathname,lang:(navigator.language||'').slice(0,10),props:{ref:(document.referrer||'').slice(0,200)}})}).catch(function(){});}catch(e){}})();</script>
 </body>
 </html>

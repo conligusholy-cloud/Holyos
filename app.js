@@ -738,7 +738,8 @@ app.use('/api/shop', shopRoutes); // Spare Parts Shop — partner-facing API (be
 app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na dopravu (interní login)
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
-app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes')); // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
+app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
+app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
 app.use('/api/bank-plan', require('./routes/bank-plan.routes')); // Bankovní Business Plan — track record, unit economics, DSCR, crossover (data ze SIS snapshotu)

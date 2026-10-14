@@ -157,11 +157,12 @@ function renderSidebar(activeModule) {
       // Soukromé sekce — samostatné aplikace mimo HolyOS (vlastní doména/server);
       // server je vrátí jen oprávněným lidem, přihlášení se předá přes SSO odkaz.
       var ext = data.external_sections || [];
-      ext.forEach(function (s) {
-        navHtml += '<div class="sidebar-label" style="margin-top:8px; color:' + s.color + '; padding:12px 10px 6px;">Soukromé</div>' +
-          '<a class="sidebar-item" href="' + s.href + '" title="Otevře se samostatná aplikace na vlastní doméně">' +
-            '<div class="sidebar-icon" style="background:' + s.color + '22; color:' + s.color + ';">' + s.icon + '</div>' +
-            '<div class="sidebar-item-info"><div class="sidebar-item-name">' + s.name + ' <span style="font-size:10px;opacity:.6;">&#8599;</span></div></div>' +
+      ext.forEach(function (s, i) {
+        if (i === 0) navHtml += '<div class="sidebar-label" style="margin-top:8px; color:' + s.color + '; padding:12px 10px 6px;">Soukromé</div>';
+        var isInt = !!s.internal, act = isInt && location.pathname.indexOf(s.href.replace(/index\.html$/, '')) === 0;
+        navHtml += '<a class="sidebar-item' + (act ? ' active' : '') + '" href="' + s.href + '"' + (isInt ? '' : ' title="Otevře se samostatná aplikace na vlastní doméně"') + '>' +
+          '<div class="sidebar-icon" style="background:' + s.color + '22; color:' + s.color + ';">' + s.icon + '</div>' +
+          '<div class="sidebar-item-info"><div class="sidebar-item-name">' + s.name + (isInt ? '' : ' <span style="font-size:10px;opacity:.6;">&#8599;</span>') + '</div></div>' +
           '</a>';
       });
       navEl.innerHTML = navHtml;

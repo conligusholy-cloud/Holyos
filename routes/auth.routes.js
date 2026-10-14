@@ -208,7 +208,10 @@ async function bs2Allowed(user) {
 async function externalSectionsFor(user) {
   const out = [];
   try {
-    if (await bs2Allowed(user)) out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Best Series 2.0', icon: '&#128101;', color: '#1e86e0', href: '/api/auth/sso/bs2' });
+    if (await bs2Allowed(user)) {
+      out.push({ id: 'bs2', name: process.env.BS2_NAME || 'Best Series 2.0', icon: '&#128101;', color: '#1e86e0', href: '/api/auth/sso/bs2' });
+      out.push({ id: 'ads', name: 'Centrum reklamy', icon: '&#128227;', color: '#f59e0b', href: '/modules/centrum-reklamy/index.html', internal: true });
+    }
   } catch (e) { /* bez sekce */ }
   return out;
 }
@@ -548,3 +551,4 @@ router.delete('/users/:id', requireAuth, requireAdmin, async (req, res, next) =>
 });
 
 module.exports = router;
+module.exports.bs2Allowed = bs2Allowed;

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Centrum reklamy | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
+    .page-header { display:flex; align-items:center; gap:12px; padding:20px 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+    .page-header h1 { font-size:18px; font-weight:700; margin:0; }
+    .page-header .sub { font-size:12.5px; color:var(--text2); }
+    .content { padding:0 24px 32px; }
+    .toolbar { display:flex; gap:10px; margin:16px 0; align-items:center; flex-wrap:wrap; }
+    .btn { padding:7px 14px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; background:var(--surface2); color:var(--text); display:inline-flex; align-items:center; gap:6px; text-decoration:none; }
+    .btn:hover { background:var(--border); }
+    .btn.on { background:#f59e0b; color:#1a1200; border-color:#f59e0b; font-weight:700; }
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:6px 0 18px; }
+    .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
+    .kpi .v { font-size:24px; font-weight:800; letter-spacing:-.01em; }
+    .kpi .l { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:14px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:10px; }
+    .card .hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+    .card h2 { margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .card h2 i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+    .card .url { font-size:12px; color:var(--text2); word-break:break-all; }
+    .card .url a { color:#60a5fa; text-decoration:none; }
+    .card .desc { font-size:12.5px; color:var(--text2); margin:0; }
+    .nums { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+    .nums div { background:var(--surface2); border-radius:9px; padding:8px 10px; }
+    .nums b { display:block; font-size:18px; font-weight:800; }
+    .nums span { font-size:10.5px; color:var(--text2); text-transform:uppercase; letter-spacing:.05em; }
+    .chart { width:100%; height:auto; display:block; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn-sm { padding:5px 10px; font-size:12px; }
+    .note { font-size:11.5px; color:var(--text2); }
+    .warn { color:#f59e0b; }
+    .legend { font-size:11px; color:var(--text2); display:flex; gap:12px; }
+    .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+    @media(max-width:768px){ .main-wrapper{margin-left:0;} .nums{grid-template-columns:repeat(2,1fr);} .grid{grid-template-columns:1fr;} }
+  </style>
+</head>
+<body>
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main-wrapper">
+      <div class="page-header">
+        <div>
+          <h1>📣 Centrum reklamy</h1>
+          <div class="sub">Všechny veřejné záchytné stránky na jednom místě – návštěvy, leady, objednávky a platby. Jen pro Tomáše a Jana Holého.</div>
+        </div>
+        <div style="margin-left:auto" class="toolbar">
+          <span class="note">Období:</span>
+          <button class="btn btn-sm" data-days="7">7 dní</button>
+          <button class="btn btn-sm on" data-days="30">30 dní</button>
+          <button class="btn btn-sm" data-days="90">90 dní</button>
+          <button class="btn btn-sm" id="reload">↻ Obnovit</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="kpis" id="kpis"></div>
+        <div class="grid" id="grid"><div class="note">Načítám…</div></div>
+        <p class="note" style="margin-top:16px">Návštěvy = unikátní prohlížeče za den (anonymní identifikátor, bez osobních údajů). Leady/objednávky z databáze HolyOS a Best Series 2.0. Zelený sloupec = leady/objednávky daného dne. Stav k <span id="gen">—</span>.</p>
+      </div>
+  </div>
+
+  <script src="js/sidebar.js?v=2026-10-14-1"></script>
+  <script>renderSidebar('centrum-reklamy');</script>
+  <script>
+  (function () {
+    var days = 30;
+    var grid = document.getElementById('grid'), kpis = document.getElementById('kpis');
+    function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function n(v) { return v == null ? '—' : Number(v).toLocaleString('cs-CZ'); }
+    function kc(v, cur) { return v == null ? '—' : Math.round(Number(v)).toLocaleString('cs-CZ') + ' ' + (cur || 'Kč'); }
+    function chart(p) {
+      var S = p.series || [], L = p.leadsSeries || [], W = 600, H = 110, pad = 4; if (!S.length) return '';
+      var mx = Math.max(1, Math.max.apply(null, S.map(function (x) { return x.n; }))); var ml = Math.max(1, Math.max.apply(null, L.map(function (x) { return x.n; }).concat([0])));
+      var bw = (W - pad * 2) / S.length; var bars = '';
+      S.forEach(function (x, i) { var h = x.n / mx * (H - 18); bars += '<rect x="' + (pad + i * bw + bw * 0.12).toFixed(1) + '" y="' + (H - 14 - h).toFixed(1) + '" width="' + (bw * 0.76).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="2" fill="' + p.color + '" opacity=".75"><title>' + x.d + ': ' + x.n + ' návštěvníků' + (L[i] ? ' · ' + L[i].n + ' ' + p.leadLabel : '') + '</title></rect>';
+        if (L[i] && L[i].n) { var lh = L[i].n / ml * (H - 18) * 0.6; bars += '<rect x="' + (pad + i * bw + bw * 0.3).toFixed(1) + '" y="' + (H - 14 - lh).toFixed(1) + '" width="' + (bw * 0.4).toFixed(1) + '" height="' + lh.toFixed(1) + '" rx="2" fill="#22c55e"><title>' + x.d + ': ' + L[i].n + ' ' + p.leadLabel + '</title></rect>'; } });
+      var lab = ''; [0, Math.floor(S.length / 2), S.length - 1].forEach(function (i) { if (S[i]) { var d = S[i].d.split('-'); lab += '<text x="' + (pad + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="9" fill="#8ea2c2">' + (+d[2]) + '.' + (+d[1]) + '.</text>'; } });
+      return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg"><line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + (H - 14) + '" y2="' + (H - 14) + '" stroke="rgba(255,255,255,.12)"/>' + bars + lab + '<text x="' + (W - pad) + '" y="10" text-anchor="end" font-size="9" fill="#8ea2c2">max ' + mx + '/den</text></svg>';
+    }
+    function card(p) {
+      var conv = p.conversions != null ? p.conversions : null;
+      return '<div class="card"><div class="hd"><div><h2><i style="background:' + p.color + '"></i>' + esc(p.name) + '</h2><div class="url"><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.url) + ' ↗</a></div></div>' +
+        '<div class="actions">' + (p.admin ? '<a class="btn btn-sm" href="' + esc(p.admin) + '"' + (/^https?:/.test(p.admin) ? ' target="_blank" rel="noopener"' : '') + '>Správa</a>' : '') + '</div></div>' +
+        '<p class="desc">' + esc(p.desc) + '</p>' +
+        '<div class="nums"><div><b>' + n(p.uniques != null ? p.uniques : p.visits) + '</b><span>návštěvníků</span></div><div><b>' + n(p.leads) + '</b><span>' + esc(p.leadLabel) + '</span></div><div><b>' + (conv != null ? n(conv) : (p.conv_rate != null ? p.conv_rate.toLocaleString('cs-CZ') + ' %' : '—')) + '</b><span>' + (conv != null ? esc(p.convLabel || 'dokončeno') : 'konverze') + '</span></div><div><b>' + (p.revenue != null ? kc(p.revenue, p.currency === 'EUR' ? '€' : 'Kč') : '—') + '</b><span>tržba</span></div></div>' +
+        chart(p) + (p.note ? '<div class="note' + (/nedostupn/.test(p.note) ? ' warn' : '') + '">' + esc(p.note) + '</div>' : '') + '</div>';
+    }
+    async function load() {
+      grid.innerHTML = '<div class="note">Načítám…</div>';
+      try {
+        var r = await fetch('/api/ads-center/overview?days=' + days, { credentials: 'same-origin' });
+        if (r.status === 403) { grid.innerHTML = '<div class="note warn">Do této sekce nemáš přístup.</div>'; return; }
+        var j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        var P = j.pages || [];
+        var tv = P.reduce(function (a, p) { return a + (p.uniques || 0); }, 0), tl = P.reduce(function (a, p) { return a + (p.leads || 0); }, 0), tc = P.reduce(function (a, p) { return a + (p.conversions || 0); }, 0), tr = P.filter(function (p) { return p.currency !== 'EUR'; }).reduce(function (a, p) { return a + (p.revenue || 0); }, 0);
+        kpis.innerHTML = '<div class="kpi"><div class="v">' + n(P.length) + '</div><div class="l">záchytných stránek</div></div><div class="kpi"><div class="v" style="color:#60a5fa">' + n(tv) + '</div><div class="l">návštěvníků za ' + days + ' dní</div></div><div class="kpi"><div class="v" style="color:#f59e0b">' + n(tl) + '</div><div class="l">leadů / objednávek</div></div><div class="kpi"><div class="v" style="color:#22c55e">' + n(tc) + '</div><div class="l">dokončeno / zaplaceno</div></div><div class="kpi"><div class="v" style="color:#22c55e">' + kc(tr) + '</div><div class="l">tržba online (CZK)</div></div>';
+        grid.innerHTML = P.map(card).join('');
+        document.getElementById('gen').textContent = new Date(j.generatedAt).toLocaleString('cs-CZ');
+      } catch (e) { grid.innerHTML = '<div class="note warn">Nepodařilo se načíst: ' + esc(e.message) + '</div>'; }
+    }
+    document.querySelectorAll('[data-days]').forEach(function (b) { b.addEventListener('click', function () { days = +b.getAttribute('data-days'); document.querySelectorAll('[data-days]').forEach(function (x) { x.classList.toggle('on', x === b); }); load(); }); });
+    document.getElementById('reload').addEventListener('click', load);
+    load();
+  })();
+  </script>
+</body>
+</html>

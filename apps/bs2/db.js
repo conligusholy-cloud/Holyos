@@ -263,6 +263,9 @@ async function migrate() {
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS contacts JSONB NOT NULL DEFAULT '{}'::jsonb; -- dohledané kontakty (klíč = GPS)
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS label TEXT; -- čitelný název (u špendlíku v mapě = reverzně geokódovaná adresa)
+    -- Návštěvy veřejných stránek (anonymní): unikátní prohlížeč (sid) za den a cestu – pro Centrum reklamy v HolyOS
+    CREATE TABLE IF NOT EXISTS page_hits (d DATE NOT NULL, path TEXT NOT NULL, sid TEXT NOT NULL, PRIMARY KEY (d, path, sid));
+    CREATE INDEX IF NOT EXISTS page_hits_path_idx ON page_hits (path, d);
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (
       id           SERIAL PRIMARY KEY,
