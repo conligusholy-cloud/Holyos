@@ -200,6 +200,18 @@ router.get('/meta/oauth/callback', async (req, res) => {
     const r = await leadsSync.oauthFinish(String(req.query.code || ''), OAUTH_REDIRECT(), req.user && req.user.id);
     res.redirect(back + '&fb=ok&pages=' + encodeURIComponent(r.pages.length)); } catch (err) { res.redirect(back + '&fb=err&msg=' + encodeURIComponent(err.message)); } });
 router.post('/meta/oauth/disconnect', async (req, res, next) => { try { await leadsSync.oauthDisconnect(req.user && req.user.id); res.json({ ok: true }); } catch (err) { next(err); } });
+// Oprava leadů stažených napřímo před opravou mapování polí (name 'FB lead', bez kontaktu): doplní jméno/e-mail/telefon z meta_raw;
+// pokud po doplnění jde o duplicitu staršího kontaktu (stejný e-mail/telefon), chybně založený záznam se smaže.
+router.post('/meta/leads-sync/repair', async (req, res, next) => {
+  try { const cmp = require('./compounder.routes'); const rows = await prisma.compounderLead.findMany({ where: { OR: [{ name: 'FB lead' }, { AND: [{ email: null }, { phone: null }] }], meta_lead_id: { not: null }, meta_raw: { not: null } }, select: { id: true, name: true, email: true, phone: true, meta_raw: true, meta_lead_id: true, created_at: true, activity_log: true } });
+    let fixed = 0, removed = 0, skipped = 0;
+    for (const r of rows) { const raw = r.meta_raw || {}; const f = cmp._fbExtractFields(raw); let first = String(f.first_name || '').trim(), last = String(f.last_name || '').trim(); const full = String(f.full_name || f.name || '').trim(); if (!first && full) { const p = full.split(/\s+/); first = p[0] || ''; last = p.slice(1).join(' '); } const email = String(f.email || '').trim().toLowerCase() || null; const phone = String(f.phone || f.phone_number || '').trim() || null; const name = ([first, last].filter(Boolean).join(' ') || String(f.company || '').trim() || email || phone || null);
+      if (!email && !phone && !name) { skipped++; continue; }
+      const dupOr = []; if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } }); if (phone) dupOr.push({ phone });
+      const older = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr, id: { not: r.id } }, orderBy: { created_at: 'asc' }, select: { id: true, activity_log: true } }) : null;
+      if (older) { const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Nová reakce z FB reklamy (napřímo, lead ' + r.meta_lead_id + ') — kontakt už v systému.'; await prisma.compounderLead.update({ where: { id: older.id }, data: { activity_log: line + (older.activity_log ? '\n' + older.activity_log : '') } }).catch(() => {}); await prisma.compounderLead.delete({ where: { id: r.id } }); removed++; continue; }
+      await prisma.compounderLead.update({ where: { id: r.id }, data: { name: (name || r.name || 'FB lead').slice(0, 255), first_name: first ? first.slice(0, 120) : undefined, last_name: last ? last.slice(0, 120) : undefined, email: email ? email.slice(0, 255) : undefined, phone: phone ? phone.slice(0, 40) : undefined, company: f.company ? String(f.company).slice(0, 200) : undefined, city: f.city ? String(f.city).slice(0, 120) : undefined } }); fixed++; }
+    res.json({ ok: true, checked: rows.length, fixed, removed, skipped }); } catch (err) { next(err); } });
 router.post('/meta/leads-sync/run', express.json({ limit: '10kb' }), async (req, res) => { try { const b = req.body || {}; const r = await leadsSync.sync({ since: b.since || undefined }); res.json(r); } catch (err) { res.status(400).json({ error: err.message }); } });
 
 // ── Komunikační kanály pro akční prvky funelu (e-mail, SMS) ──

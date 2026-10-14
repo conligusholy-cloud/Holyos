@@ -6120,6 +6120,15 @@ function _fbExtractFields(src) {
   // Generické/ploché klíče přebijí (pokud přišly napřímo)
   const flat = ['first_name','last_name','full_name','name','email','phone','phone_number','company','city','country','lang','locale'];
   for (const k of flat) { if (src[k] != null && src[k] !== '') f[k] = src[k]; }
+  // Meta field_data mívá lokalizované / vlastní názvy polí (celé_jméno, telefonní_číslo, e-mail, firma, město…) → namapovat na standardní klíče.
+  const alias = (targets, test) => { if (targets.some((t) => f[t] != null && f[t] !== '')) return; for (const k of Object.keys(f)) { if (test(k) && f[k] != null && f[k] !== '') { f[targets[0]] = f[k]; return; } } };
+  alias(['email'], (k) => /^(e-?mail|email_address|e_mail)/.test(k));
+  alias(['phone', 'phone_number'], (k) => /telefon|phone|mobil|tel\b|^tel_/.test(k));
+  alias(['full_name', 'name'], (k) => /cel[eé]_?jm[eé]no|full_?name|^jm[eé]no$|^name$|jm[eé]no_a_p/.test(k));
+  alias(['first_name'], (k) => /^(k[rř]estn[ií]_?jm[eé]no|first_?name)$/.test(k));
+  alias(['last_name'], (k) => /^(p[rř][ií]jmen[ií]|last_?name)$/.test(k));
+  alias(['company'], (k) => /firma|spole[cč]nost|company|n[aá]zev_firmy/.test(k));
+  alias(['city'], (k) => /m[eě]sto|^city$|obec/.test(k));
   return f;
 }
 
