@@ -1455,7 +1455,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, preheader: m.preheader, brand: 'pradlomaty' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
@@ -1488,7 +1488,7 @@ async function autosendAiSpecialistEmail(lead) {
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const subject = 'Prádlomat — váš specialista odpoví na vše';
     const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist') });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
@@ -1723,7 +1723,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     if (b.body) ov.schuzkaEmailBody = String(b.body);
     if (b.linkLabel) ov.schuzkaEmailLinkLabel = String(b.linkLabel);
     const m = buildSchuzkaEmail(lead, cfg, ov);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, preheader: m.preheader, brand: 'pradlomaty' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty' });
     if (!r || !r.sent) return res.status(400).json({ ok: false, error: 'E-mail se neodeslal: ' + ((r && (r.error || r.skipped)) || 'neznámá chyba') });
     const sentAt = new Date();
     await prisma.compounderLead.update({
@@ -1760,7 +1760,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     const link = specialistShortLink(id, 'email');
     const subject = 'Prádlomat — váš specialista odpoví na vše';
     const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist') });
     const sentAt = new Date();
     await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });
@@ -4754,6 +4754,14 @@ router.post('/leads/:id/send-loss-email', requireAuth, async (req, res, next) =>
 // GET /api/compounder/loss-open — sledovací pixel otevření e-mailu se ztrátou.
 // VEŘEJNÉ (e-mailový klient si ho stáhne). Podepsané l+t; nic neuděluje, jen loguje
 // event loss_email_open. Vždy vrací 1×1 průhledný GIF.
+// Sledovací pixel automatických e-mailů (specialista / schůzka) → událost funelu 'open' (Otevřel e-mail). Podepsaný, nic neuděluje.
+function mailOpenPixel(leadId, variant) { const ts = Date.now(); return `${portalBase()}/api/compounder/mail-open?l=${leadId}&v=${variant}&t=${ts}&s=${hmacSig('mail-open:' + leadId + ':' + variant + ':' + ts)}`; }
+router.get('/mail-open', async (req, res) => {
+  try { const id = Number(req.query.l); const v = String(req.query.v || 'specialist') === 'schuzka' ? 'schuzka' : 'specialist'; const ts = String(req.query.t || ''); const sig = String(req.query.s || '');
+    if (Number.isInteger(id) && id > 0 && ts && safeEqStr(sig, hmacSig('mail-open:' + id + ':' + v + ':' + ts))) { require('../services/ads/funnel-events').record('open', id, { variant: v, channel: 'email' }); prisma.compounderEvent.create({ data: { sid: 'mail-open-' + id, event: 'autosend_email_open', props: { lead_id: id, variant: v }, path: '/email' } }).catch(() => {}); }
+  } catch (e) { /* i při chybě vrať pixel */ }
+  const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'); res.set('Content-Type', 'image/gif'); res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private'); res.end(gif);
+});
 router.get('/loss-open', async (req, res) => {
   try {
     const id = Number(req.query.l);

@@ -22,6 +22,7 @@ async function matchNodes(type, opts) {
       if (nd.activated_at && new Date(nd.activated_at).getTime() > now + 60000) continue;
       if (type === 'sms' && nd.kind === 'sms' && (nd.variant || 'specialist') === opts.variant) out.push({ funnel_id: f.id, node_id: nd.id });
       else if (type === 'email' && nd.kind === 'email' && (nd.variant || 'specialist') === opts.variant) out.push({ funnel_id: f.id, node_id: nd.id });
+      else if (type === 'open' && nd.kind === 'email' && (nd.variant || 'specialist') === opts.variant) out.push({ funnel_id: f.id, node_id: nd.id });
       else if (type === 'landing' && nd.kind === 'landing') {
         // stránka z Centra reklamy (nd.page) nebo výchozí stránka varianty (nd.variant)
         const byVariant = !nd.page && (nd.variant || 'specialist') === opts.variant;
@@ -47,11 +48,19 @@ async function record(type, leadId, opts) {
 // Statistika funelu: per uzel { leads (unikátní), events } jen od aktivace uzlu a v období (since).
 async function stats(funnelId, since) {
   try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
-  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { event: true, path: true, props: true, created_at: true } });
-  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
-  const per = {};
-  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return; const p = per[nodeId] || (per[nodeId] = { events: 0, leads: new Set(), type: r.event.replace('funnel_', '') }); p.events++; if (r.props && r.props.lead_id) p.leads.add(r.props.lead_id); });
-  const out = {}; Object.keys(per).forEach((k) => { out[k] = { events: per[k].events, leads: per[k].leads.size, type: per[k].type }; });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; kinds[nd.id] = nd.kind; });
+  const per = {}; const opened = {}; const landingByLead = {}; // landingByLead[lead] = [{t, channel}]
+  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_landing' && lid) (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
+    if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;
+    if (r.event === 'funnel_open') { (opened[nodeId] || (opened[nodeId] = new Set())).add(lid); return; }
+    const p = per[nodeId] || (per[nodeId] = { events: 0, leads: new Map(), type: r.event.replace('funnel_', '') }); p.events++; if (lid && !p.leads.has(lid)) p.leads.set(lid, r.created_at.getTime()); });
+  // doručení SMS (SmsLog.delivered) pro leady akčních SMS uzlů
+  const smsLeads = new Set(); Object.keys(per).forEach((k) => { if (kinds[k] === 'sms') per[k].leads.forEach((t, lid) => smsLeads.add(lid)); });
+  let delivered = new Set(); if (smsLeads.size && prisma.smsLog) { try { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: [...smsLeads] }, delivered: true, created_at: { gte: since } }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } catch (e) { /* bez logu */ } }
+  const out = {}; Object.keys(per).forEach((k) => { const p = per[k]; const o = { events: p.events, leads: p.leads.size, type: p.type };
+    if (kinds[k] === 'sms' || kinds[k] === 'email') { const ch = kinds[k]; let clicked = 0, deliv = 0, op = 0; p.leads.forEach((t, lid) => { if ((landingByLead[lid] || []).some((x) => x.t >= t - 60000 && (!x.channel || x.channel === ch))) clicked++; if (delivered.has(lid)) deliv++; if (opened[k] && opened[k].has(lid)) op++; }); o.clicked = clicked; o.delivered = kinds[k] === 'sms' ? deliv : undefined; o.opened = kinds[k] === 'email' ? op : undefined; o.noreact = p.leads.size - clicked; }
+    out[k] = o; });
   return out;
 }
 
