@@ -59,7 +59,7 @@ async function stats(funnelId, since) {
   const smsLeads = new Set(); Object.keys(per).forEach((k) => { if (kinds[k] === 'sms') per[k].leads.forEach((t, lid) => smsLeads.add(lid)); });
   let delivered = new Set(); if (smsLeads.size && prisma.smsLog) { try { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: [...smsLeads] }, delivered: true, created_at: { gte: since } }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } catch (e) { /* bez logu */ } }
   const out = {}; Object.keys(per).forEach((k) => { const p = per[k]; const o = { events: p.events, leads: p.leads.size, type: p.type };
-    if (kinds[k] === 'sms' || kinds[k] === 'email') { const ch = kinds[k]; let clicked = 0, deliv = 0, op = 0; p.leads.forEach((t, lid) => { if ((landingByLead[lid] || []).some((x) => x.t >= t - 60000 && (!x.channel || x.channel === ch))) clicked++; if (delivered.has(lid)) deliv++; if (opened[k] && opened[k].has(lid)) op++; }); o.clicked = clicked; o.delivered = kinds[k] === 'sms' ? deliv : undefined; o.opened = kinds[k] === 'email' ? op : undefined; o.noreact = p.leads.size - clicked; }
+    if (kinds[k] === 'sms' || kinds[k] === 'email') { const ch = kinds[k]; let clicked = 0, deliv = 0, op = 0, react = 0; p.leads.forEach((t, lid) => { const cl = (landingByLead[lid] || []).some((x) => x.t >= t - 60000 && (!x.channel || x.channel === ch)); const o2 = !!(opened[k] && opened[k].has(lid)); if (cl) clicked++; if (delivered.has(lid)) deliv++; if (o2) op++; if (cl || (ch === 'email' && o2)) react++; }); o.clicked = clicked; o.delivered = kinds[k] === 'sms' ? deliv : undefined; o.opened = kinds[k] === 'email' ? op : undefined; o.noreact = p.leads.size - react; } // bez reakce: e-mail = neotevřel ani neklikl, SMS = neklikl
     out[k] = o; });
   return out;
 }
@@ -87,7 +87,7 @@ async function edgeFlows(funnelId, since, withList) {
     if (!port || port === 1) return { ok: true, tB: null };
     if (port === 2) return ch === 'sms' ? { ok: delivered.has(lid), tB: null } : { ok: !!(openedBy[A.id] && openedBy[A.id].has(lid)), tB: null };
     if (port === 3) return { ok: !!click, tB: click ? new Date(click.t) : null };
-    if (port === 4) return { ok: !click, tB: null };
+    if (port === 4) return { ok: !click && !(ch === 'email' && openedBy[A.id] && openedBy[A.id].has(lid)), tB: null };
     return { ok: true, tB: null }; }
   // 2) leady formulářů (DB) – cache per form
   const formCache = {};
