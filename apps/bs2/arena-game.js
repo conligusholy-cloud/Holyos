@@ -67,7 +67,7 @@ function placeBid(r, p, amount, now) {
   amount = Math.round(amount); if (!(amount > 0) || amount < r.top || amount > p.bank || p.ammo <= 0) return false;
   // stejný hráč po sobě nepřihazuje (nemá smysl) – jen když ho někdo přehodil
   if (r.last && r.last.id === (p.sid || p.id)) return false;
-  p.ammo--; r.top = amount; r.last = { id: p.sid || p.id, name: p.name, bot: !!p.bot, t: now, amount };
+  p.ammo--; p.spent = (p.spent || 0) + amount; r.top = amount; r.last = { id: p.sid || p.id, name: p.name, bot: !!p.bot, t: now, amount };
   r.bids.push({ name: p.name, amount, bot: !!p.bot, t: now }); if (r.bids.length > 60) r.bids.shift();
   r.endsAt = Math.min(now + MAX_MS, r.endsAt + BUMP_MS); if (r.endsAt - now < BUMP_MS) r.endsAt = now + BUMP_MS;
   return true;
@@ -116,7 +116,7 @@ function finish(r) {
   const order = []; const seen = new Set(); for (let i = r.bids.length - 1; i >= 0 && order.length < 3; i--) { const b = r.bids[i]; const key = b.name; if (seen.has(key)) continue; seen.add(key); order.push({ name: b.name, bot: b.bot, amount: b.amount }); }
   const pct = [30, 20, 10]; const podium = order.map((o, i) => ({ name: o.name, bot: o.bot, pct: pct[i], amount: o.amount }));
   const coupons = {}; const list = [];
-  for (const p of r.players.values()) { const i = podium.findIndex((x) => !x.bot && x.name === p.name); const pc = i >= 0 ? pct[i] : 0; coupons[p.sid] = { pct: pc, place: i >= 0 ? i + 1 : 0, code: pc ? code(pc) : null }; if (i >= 0 && pc >= 20) wonBig.set(p.sid, Math.max(wonBig.get(p.sid) || 0, pc)); list.push({ name: p.name, bot: false, pct: pc, place: i >= 0 ? i + 1 : 0 }); }
+  for (const p of r.players.values()) { const i = podium.findIndex((x) => !x.bot && x.name === p.name); const pc = i >= 0 ? pct[i] : 0; coupons[p.sid] = { pct: pc, place: i >= 0 ? i + 1 : 0, code: pc ? code(pc) : null, spent: p.spent || 0, bank_after: Math.max(0, p.bank - (p.spent || 0)) }; if (i >= 0 && pc >= 20) wonBig.set(p.sid, Math.max(wonBig.get(p.sid) || 0, pc)); list.push({ name: p.name, bot: false, pct: pc, place: i >= 0 ? i + 1 : 0 }); }
   for (const b of r.bots) { const i = podium.findIndex((x) => x.bot && x.name === b.name); list.push({ name: b.name, bot: true, pct: i >= 0 ? pct[i] : 0, place: i >= 0 ? i + 1 : 0 }); }
   list.sort((a, b) => (a.place || 9) - (b.place || 9) || b.pct - a.pct);
   r.result = { podium, list, coupons, top: r.top };
