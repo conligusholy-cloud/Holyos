@@ -451,6 +451,9 @@
       var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); var list = await b.json(); F = list.find(function (f) { return f.id === id; });
       if (!F) { document.getElementById('msg').textContent = 'Funel nenalezen.'; F = { id: id || uid(), name: 'Funel', note: '', steps: [], nodes: [], edges: [] }; }
       F.nodes = F.nodes || []; F.edges = F.edges || [];
+      // Úklid: prázdné „Ruční číslo“ uzly (vznikly ze starších akčních uzlů uložených před opravou ukládání) se odstraní
+      var emptyIds = F.nodes.filter(function (x) { return x.kind === 'step' && !x.page && (x.manual == null || x.manual === '') && !x.label && !x.text; }).map(function (x) { return x.id; });
+      if (emptyIds.length) { F.nodes = F.nodes.filter(function (x) { return emptyIds.indexOf(x.id) < 0; }); F.edges = F.edges.filter(function (ed) { return emptyIds.indexOf(ed.from) < 0 && emptyIds.indexOf(ed.to) < 0; }); document.getElementById('msg').textContent = 'Odstraněno ' + emptyIds.length + ' prázdných uzlů – ulož funel (💾) a případně znovu ✨ Dokreslit.'; }
       // starší funel jen s kroky → převést na uzly v řadě
       if (!F.nodes.length && F.steps && F.steps.length) { F.steps.forEach(function (st, i) { F.nodes.push(Object.assign({ id: uid(), kind: 'step', x: 40 + i * 290, y: 60, text: '' }, st)); }); for (var i = 1; i < F.nodes.length; i++) F.edges.push({ from: F.nodes[i - 1].id, to: F.nodes[i].id }); }
       document.getElementById('name').value = F.name || ''; document.getElementById('note').value = F.note || ''; document.title = 'Funel: ' + (F.name || '') + ' | HOLYOS';
