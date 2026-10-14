@@ -80,8 +80,13 @@ async function edgeFlows(funnelId, since, withList) {
   const out = {};
   for (const e of edges) {
     const A = byId[e.from], B = byId[e.to]; if (!A || !B) continue; if (['start', 'note', 'result', 'goals', 'step'].includes(A.kind) || ['note', 'result', 'goals', 'step'].includes(B.kind)) continue;
-    const sa = await setOf(A, e.port || 0), sb = await setOf(B, 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventB = ['sms', 'email', 'landing'].includes(B.kind);
-    const list = []; sa.forEach((tA, lid) => { const tB = sb.get(lid); if (!tB) return; if (eventB) { if (new Date(tB).getTime() < new Date(tA).getTime() - 60000) return; if (ec && new Date(tB).getTime() < ec) return; } list.push({ lead_id: lid, tA, tB }); });
+    // Význam čísla na spojce = ke kolika leadům touto cestou informace prošla:
+    //  - do SMS / e-mailu: leady z větve, kterým TENTO uzel zprávu poslal (průnik A ∩ B)
+    //  - z SMS / e-mailu dál (na stránku apod.): kolika leadům zpráva z A odešla (od vytvoření spojky) – otevření je číslo v uzlu stránky
+    //  - z formuláře / rozdělení: leady dané větve
+    const sa = await setOf(A, e.port || 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventA = ['sms', 'email', 'landing'].includes(A.kind); const actionB = ['sms', 'email'].includes(B.kind);
+    const sb = actionB ? await setOf(B, 0) : null; const list = [];
+    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; if (actionB) { const tB = sb.get(lid); if (!tB) return; list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: null }); });
     out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length, list: withList ? list : undefined };
   }
   return out;
