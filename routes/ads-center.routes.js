@@ -248,6 +248,13 @@ const MAIL_SENDERS = [
   { env: 'SMTP_FROM', use: 'Systémový (SMTP záloha)' },
 ];
 function parseAddr(s) { const m = String(s || '').match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/); return m ? { name: m[1].trim(), address: m[2].trim() } : { name: '', address: String(s || '').trim() }; }
+// Odkud a kam chodí automatické oslovení nových leadů (Compounder): odesílatel e-mailu + cílové stránky odkazů v SMS / e-mailu.
+function autosendView() {
+  let links = { specialist: '', schuzka: '' };
+  try { const cmp = require('./compounder.routes'); links = { specialist: String(cmp.specialistShortLink(0, 'sms')).replace(/\/s\/[^?]*/, '/s/…'), schuzka: String(cmp.schuzkaShortLink(0)).replace(/\/c\/.*$/, '/c/… → rezervace termínu') }; } catch (_) { /* bez Compounderu */ }
+  const raw = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || process.env.COMPOUNDER_MAIL_FROM || '';
+  return { email_from: raw, links };
+}
 async function channelsView() {
   const { getSetting } = require('../services/settings');
   const saved = (await getSetting(CHANNELS_KEY, { type: 'json', defaultValue: {} })) || {};
@@ -263,9 +270,23 @@ async function channelsView() {
   const smsFrom = sms.provider === 'gosms' ? (sms.gosms_channel ? 'GoSMS kanál #' + sms.gosms_channel : '') : sms.twilio_sms_from;
   return {
     email: { graph_ready: graphReady, smtp_ready: smtpReady, senders, default_from: saved.email_from || (senders[0] && senders[0].address) || '' },
+    autosend: autosendView(),
     sms: { provider: sms.provider, ready: sms.provider === 'gosms' ? sms.gosms_ready : sms.twilio_ready, from: smsFrom, from_detail: sms.provider === 'gosms' ? 'GoSMS.cz – odesílatel je nastaven jako kanál v portálu GoSMS (typicky „Pradlomaty").' : (String(sms.twilio_sms_from || '').startsWith('MG') ? 'Twilio Messaging Service (' + sms.twilio_sms_from + ')' : 'Twilio číslo / alfanumerický odesílatel'), voice_default_from: process.env.VOICE_DEFAULT_FROM || '', line_numbers: Object.entries(lineNumbers).map(([num, line]) => ({ number: num, line })), settings_url: '/modules/servis/index.html#infolinka' },
   };
 }
+// Statistika automatického oslovení pro uzly SMS / e-mail ve funelu: kolik leadů z formuláře dostalo SMS / e-mail a kolik otevřelo odkaz.
+router.get('/autosend/stats', async (req, res, next) => {
+  try {
+    const formId = String(req.query.form || '').trim(); const days = Math.max(0, parseInt(req.query.days, 10) || 0);
+    const where = {}; if (formId) where.meta_form_id = formId; if (days) where.created_at = { gte: new Date(Date.now() - days * 86400000) };
+    const c = (extra) => prisma.compounderLead.count({ where: Object.assign({}, where, extra) });
+    const [leads, spSms, spMail, spOpen, scSms, scMail, scOpen] = await Promise.all([
+      c({}), c({ ai_specialist_sms_sent_at: { not: null } }), c({ ai_specialist_email_sent_at: { not: null } }), c({ ai_specialist_opened_at: { not: null } }),
+      c({ schuzka_sms_sent_at: { not: null } }), c({ schuzka_email_sent_at: { not: null } }), c({ schuzka_opened_at: { not: null } }),
+    ]);
+    res.json({ leads, specialist: { sms: spSms, email: spMail, opened: spOpen }, schuzka: { sms: scSms, email: scMail, opened: scOpen } });
+  } catch (err) { next(err); }
+});
 router.get('/channels', async (req, res, next) => { try { res.json(await channelsView()); } catch (err) { next(err); } });
 router.put('/channels', express.json({ limit: '20kb' }), async (req, res, next) => {
   try { const { getSetting, setSetting } = require('../services/settings'); const cur = (await getSetting(CHANNELS_KEY, { type: 'json', defaultValue: {} })) || {}; const b = req.body || {};
