@@ -17,7 +17,7 @@
     .tool .dd { display:none; position:absolute; left:56px; top:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px; width:300px; box-shadow:0 14px 40px rgba(0,0,0,.5); text-align:left; cursor:default; }
     .tool.open .dd { display:block; }
     .tool .dd h4 { margin:6px 4px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); }
-    .node.start { width:170px; border-color:#22c55e; } .node.start .hd { background:rgba(34,197,94,.12); }
+    .node.start { width:250px; border-color:#22c55e; } .node.start .hd { background:rgba(34,197,94,.12); }
     .addmenu { position:relative; }
     .node .gear { margin-left:auto; width:22px; height:22px; border-radius:50%; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--text2); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0; flex:none; transition:all .15s; } .node .gear svg { width:13px; height:13px; fill:currentColor; } .node .gear:hover { color:#f59e0b; border-color:#f59e0b; background:rgba(245,158,11,.12); transform:rotate(30deg); } .node .hd .gear + .x { margin-left:4px; }
     .node.lf { width:230px; border-color:#4fd1ff; } .node.lf .hd { background:rgba(79,209,255,.12); }
@@ -93,7 +93,7 @@
     svg.links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; } svg.links g.eflow { pointer-events:all; } svg.links g.eflow:hover rect { fill:#16331f; }
     .node { position:absolute; width:230px; background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.45); user-select:none; }
     .node.sel { border-color:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,.35), 0 10px 30px rgba(0,0,0,.45); }
-    .node .hd { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); cursor:move; font-size:12.5px; font-weight:700; border-radius:12px 12px 0 0; }
+    .node .hd { display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border); cursor:move; font-size:12.5px; font-weight:700; border-radius:12px 12px 0 0; overflow:hidden; } .node .hd .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .node .hd .gear, .node .hd .x, .node .hd .sw { flex:none; }
     .node .hd i { width:9px; height:9px; border-radius:50%; flex:none; }
     .node .hd .x { margin-left:auto; background:none; border:0; color:var(--text2); cursor:pointer; font-size:14px; }
     .node .bd { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
@@ -303,7 +303,7 @@
       return el;
     }
     // Střed portu = skutečný rozměr uzlu v DOM (porty jsou na 50 % výšky), ne pevná konstanta.
-    function center(nd, side, port) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (el) { var pe = el.querySelector('.port.' + side + (side === 'out' && port != null && (nd.kind === 'split' || nd.kind === 'goals' || port > 0) ? '[data-port="' + port + '"]' : '')); if (pe && pe.getBoundingClientRect().width === 0) pe = null; if (!pe && side === 'out') { var gt = el.querySelector('.gtab'); if (gt) { var cr0 = canvas.getBoundingClientRect(), gr0 = gt.getBoundingClientRect(); return { x: (gr0.right - cr0.left) / V.z, y: (gr0.top - cr0.top + gr0.height / 2) / V.z }; } } if (pe) { var cr = canvas.getBoundingClientRect(), pr = pe.getBoundingClientRect(); return { x: (pr.left - cr.left + pr.width / 2) / V.z, y: (pr.top - cr.top + pr.height / 2) / V.z }; } } var w = el ? el.offsetWidth : (nd.kind === 'start' ? 170 : 230), hgt = el ? el.offsetHeight : 48; return { x: nd.x + (side === 'out' ? w : 0), y: nd.y + hgt / 2 }; }
+    function center(nd, side, port) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (el) { var pe = el.querySelector('.port.' + side + (side === 'out' && port != null && (nd.kind === 'split' || nd.kind === 'goals' || port > 0) ? '[data-port="' + port + '"]' : '')); if (pe && pe.getBoundingClientRect().width === 0) pe = null; if (!pe && side === 'out') { var gt = el.querySelector('.gtab'); if (gt) { var cr0 = canvas.getBoundingClientRect(), gr0 = gt.getBoundingClientRect(); return { x: (gr0.right - cr0.left) / V.z, y: (gr0.top - cr0.top + gr0.height / 2) / V.z }; } } if (pe) { var cr = canvas.getBoundingClientRect(), pr = pe.getBoundingClientRect(); return { x: (pr.left - cr.left + pr.width / 2) / V.z, y: (pr.top - cr.top + pr.height / 2) / V.z }; } } var w = el ? el.offsetWidth : (nd.kind === 'start' ? 250 : 230), hgt = el ? el.offsetHeight : 48; return { x: nd.x + (side === 'out' ? w : 0), y: nd.y + hgt / 2 }; }
     function drawLinks(tmp) {
       var h = '';
       // Sloučení: více vláken ze stejného uzlu do stejného cíle (např. dvě větve Rozdělení → jeden e-mail) se kreslí jako jedno vlákno se součtem.
