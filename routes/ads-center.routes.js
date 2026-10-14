@@ -128,8 +128,11 @@ const GOALS_KEY = 'ads_center.page_goals';
 const GOAL_TYPES = ['purchase', 'lead', 'download', 'booking', 'signup', 'browse', 'exit'];
 async function loadGoals() { const { getSetting } = require('../services/settings'); const v = await getSetting(GOALS_KEY, { type: 'json', defaultValue: {} }); return v && typeof v === 'object' ? v : {}; }
 function cleanGoals(g) {
-  const goals = (Array.isArray(g && g.goals) ? g.goals : []).slice(0, 12).map((x) => ({ type: GOAL_TYPES.includes(x.type) ? x.type : 'browse', label: String(x.label || '').slice(0, 80), desc: String(x.desc || '').slice(0, 300), primary: !!x.primary })).filter((x) => x.label);
-  return { goals, summary: String((g && g.summary) || '').slice(0, 500), analyzed_at: g && g.analyzed_at ? String(g.analyzed_at) : null, source: g && g.source === 'manual' ? 'manual' : 'ai' };
+  const one = (x) => ({ type: GOAL_TYPES.includes(x.type) ? x.type : 'browse', label: String(x.label || '').slice(0, 80), desc: String(x.desc || '').slice(0, 300), primary: !!x.primary, members: Array.isArray(x.members) ? x.members.slice(0, 12).map((m) => String(m).slice(0, 80)) : undefined });
+  const goals = (Array.isArray(g && g.goals) ? g.goals : []).slice(0, 12).map(one).filter((x) => x.label);
+  // raw_goals = původní výstup analýzy (aby šlo po ručním sloučení/skrytí obnovit nebo znovu upravit)
+  const raw = (Array.isArray(g && g.raw_goals) ? g.raw_goals : []).slice(0, 12).map(one).filter((x) => x.label);
+  return { goals, raw_goals: raw.length ? raw : undefined, summary: String((g && g.summary) || '').slice(0, 500), analyzed_at: g && g.analyzed_at ? String(g.analyzed_at) : null, source: g && g.source === 'manual' ? 'manual' : 'ai' };
 }
 // Text stránky pro AI: titulek, viditelný text, tlačítka, odkazy, formuláře a volané /api/ cesty ze skriptů
 function pageDigest(html) {
@@ -146,7 +149,7 @@ function pageDigest(html) {
 router.get('/pages/goals', async (req, res, next) => { try { res.json(await loadGoals()); } catch (err) { next(err); } });
 router.put('/pages/:key/goals', express.json({ limit: '20kb' }), async (req, res, next) => {
   try { const key = String(req.params.key || ''); if (!PAGES.some((p) => p.key === key)) return res.status(404).json({ error: 'Stránka neexistuje.' });
-    const all = await loadGoals(); const c = cleanGoals(req.body || {}); c.source = 'manual'; c.analyzed_at = new Date().toISOString(); all[key] = c;
+    const all = await loadGoals(); const prev = all[key] || {}; const c = cleanGoals(Object.assign({}, req.body || {}, { raw_goals: (req.body && req.body.raw_goals) || prev.raw_goals || prev.goals, summary: (req.body && req.body.summary) || prev.summary })); c.source = 'manual'; c.analyzed_at = prev.analyzed_at || new Date().toISOString(); all[key] = c;
     await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id }); res.json(c); } catch (err) { next(err); }
 });
 router.post('/pages/:key/analyze-goals', async (req, res, next) => {
@@ -165,7 +168,7 @@ router.post('/pages/:key/analyze-goals', async (req, res, next) => {
     const txt = (resp.content || []).map((b) => b.text || '').join('');
     const m = txt.match(/\{[\s\S]*\}/); if (!m) return res.status(502).json({ error: 'AI nevrátila použitelnou odpověď.' });
     let parsed; try { parsed = JSON.parse(m[0]); } catch (e) { return res.status(502).json({ error: 'AI vrátila neplatný JSON.' }); }
-    const c = cleanGoals(parsed); c.source = 'ai'; c.analyzed_at = new Date().toISOString();
+    const c = cleanGoals(Object.assign({}, parsed, { raw_goals: parsed.goals })); c.source = 'ai'; c.analyzed_at = new Date().toISOString();
     const all = await loadGoals(); all[pg.key] = c; await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id });
     res.json(c);
   } catch (err) { next(err); }
