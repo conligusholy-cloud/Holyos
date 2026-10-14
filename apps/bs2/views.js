@@ -1480,7 +1480,7 @@ function adminLayout(title, active, admin, body, holyosUrl) {
   return layout({ title, active, nav: ADMIN_NAV, user: admin.name || admin.username, holyosUrl, body,
     banner: { icon: 'users', title: 'Uživatelé', subtitle: 'Správa uživatelů Best Series 2.0, jejich přístupů a dalších agend na jednom místě' } });
 }
-function adminDash({ admin, stats, recent, holyosUrl }) {
+function adminDash({ admin, stats, recent, history = [], holyosUrl }) {
   return adminLayout('Přehled', 'dash', admin, `
   <p class="muted" style="margin-top:0">Přihlášen přes HolyOS jako <b>${esc(admin.name)}</b>.</p>
   <div class="grid">
@@ -1491,6 +1491,15 @@ function adminDash({ admin, stats, recent, holyosUrl }) {
     <div class="stat" title="Uživatelé, kteří se do Best Series 2.0 alespoň jednou sami přihlásili"><div class="v" style="color:#ffd866">${stats.logged != null ? stats.logged : '—'}</div><div class="l">Aktivní – aspoň 1× přihlášeni${stats.logged30 != null ? ` · <span style="color:var(--ok)">${stats.logged30}</span> za 30 dní` : ''}</div></div>
   </div>
 
+  ${history && history.length ? (() => { const H = history, mx = Math.max(1, ...H.map((x) => x.logins)), mc = Math.max(1, ...H.map((x) => x.cumulative)); const W = 900, Hh = 170, L = 36, B = 26, T = 10, pw = W - L - 40, ph = Hh - T - B, bw = pw / H.length;
+    const y = (v, m) => T + ph - v / m * ph; const d = (s) => { const [yy, m, dd] = s.split('-'); return +dd + '.' + +m + '.'; };
+    const bars = H.map((x, i) => `<rect x="${(L + i * bw + bw * 0.15).toFixed(1)}" y="${y(x.logins, mx).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(ph - (y(x.logins, mx) - T)).toFixed(1)}" rx="2" fill="#4fd1ff" opacity=".8"><title>${d(x.d)}: ${x.logins} přihlášených · ${x.new_users} nových · celkem ${x.cumulative}</title></rect>${x.new_users ? `<rect x="${(L + i * bw + bw * 0.15).toFixed(1)}" y="${y(x.new_users, mx).toFixed(1)}" width="${(bw * 0.7).toFixed(1)}" height="${(ph - (y(x.new_users, mx) - T)).toFixed(1)}" rx="2" fill="#ffd866" opacity=".9"><title>${d(x.d)}: ${x.new_users} nových (první přihlášení)</title></rect>` : ''}`).join('');
+    const line = H.map((x, i) => `${(L + i * bw + bw / 2).toFixed(1)},${y(x.cumulative, mc).toFixed(1)}`).join(' ');
+    const labels = H.map((x, i) => (i % 7 === H.length % 7 ? `<text x="${(L + i * bw + bw / 2).toFixed(1)}" y="${Hh - 8}" text-anchor="middle" font-size="10" fill="#8ea2c2">${d(x.d)}</text>` : '')).join('');
+    const last = H[H.length - 1];
+    return `<div class="card"><div class="row" style="justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px"><h2 style="margin:0">Aktivní uživatelé – historie (60 dní)</h2><span class="small muted"><span style="color:#4fd1ff">■</span> přihlášení za den · <span style="color:#ffd866">■</span> noví (první přihlášení) · <span style="color:var(--ok)">—</span> celkem aspoň 1× přihlášeni: <b style="color:var(--ok)">${last.cumulative}</b></span></div>
+    <svg viewBox="0 0 ${W} ${Hh}" style="width:100%;height:auto;display:block;margin-top:8px" xmlns="http://www.w3.org/2000/svg"><text x="${L - 6}" y="${T + 10}" text-anchor="end" font-size="10" fill="#8ea2c2">${mx}</text><text x="${L - 6}" y="${T + ph}" text-anchor="end" font-size="10" fill="#8ea2c2">0</text><text x="${W - 4}" y="${T + 10}" text-anchor="end" font-size="10" fill="#2fe3a0">${mc}</text>${bars}<polyline points="${line}" fill="none" stroke="#2fe3a0" stroke-width="2" stroke-linejoin="round"/>${labels}</svg>
+    <div class="small muted" style="margin-top:6px">Počítá se z událostí přihlášení (od spuštění Best Series 2.0 24. 9. 2026). Najetím na sloupec zobrazíte čísla dne.</div></div>`; })() : ''}
   <div class="card"><h2 style="margin-top:0">Poslední přihlášení</h2>
   ${recent.length ? recent.map(r => `<div class="list-item"><span><b>${esc(r.nick || '—')}</b> <span class="muted">${esc(r.email)}</span></span><span class="muted small">${fmtDT(r.last_login_at)}</span></div>`).join('') : '<p class="muted">Zatím se nikdo nepřihlásil.</p>'}</div>
   <p class="muted small">Přihlašovací stránka pro uživatele: <code>${esc(process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz')}/login</code> — první přihlášení přes <code>/activate</code> (e-mail musí být v seznamu).</p>`, holyosUrl);

@@ -1279,7 +1279,16 @@ app.post('/password', wrap(requireUser), wrap(async (req, res) => {
 app.get('/admin', requireAdmin, wrap(async (req, res) => {
   const st = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status='active')::int AS active, count(*) FILTER (WHERE status='invited')::int AS invited, count(*) FILTER (WHERE status='blocked')::int AS blocked, count(*) FILTER (WHERE last_login_at IS NOT NULL)::int AS logged, count(*) FILTER (WHERE last_login_at > now() - interval '30 days')::int AS logged30 FROM supporters")).rows[0];
   const recent = (await q('SELECT nick, email, last_login_at FROM supporters WHERE last_login_at IS NOT NULL ORDER BY last_login_at DESC LIMIT 8')).rows;
-  res.send(V.adminDash({ admin: req.admin, stats: st, recent, holyosUrl: HOLYOS_URL }));
+  // Historie aktivních uživatelů po dnech: noví (první přihlášení ten den), přihlášení ten den (unikátní) a kumulativně celkem
+  let history = [];
+  try {
+    history = (await q(`WITH days AS (SELECT generate_series(date_trunc('day', now()) - interval '59 days', date_trunc('day', now()), interval '1 day')::date AS d),
+      first AS (SELECT supporter_id, min(created_at)::date AS d FROM user_events WHERE type='login' AND supporter_id IS NOT NULL GROUP BY supporter_id),
+      daily AS (SELECT created_at::date AS d, count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND supporter_id IS NOT NULL AND created_at > now() - interval '60 days' GROUP BY 1)
+      SELECT to_char(days.d,'YYYY-MM-DD') AS d, COALESCE((SELECT count(*)::int FROM first WHERE first.d=days.d),0) AS new_users, COALESCE(daily.n,0) AS logins,
+        (SELECT count(*)::int FROM first WHERE first.d<=days.d) AS cumulative FROM days LEFT JOIN daily ON daily.d=days.d ORDER BY days.d`)).rows;
+  } catch (e) { history = []; }
+  res.send(V.adminDash({ admin: req.admin, stats: st, recent, history, holyosUrl: HOLYOS_URL }));
 }));
 // Volba sloupců seznamu (cookie, 1 rok). Klíče údajů z importu se načítají z DB (cache 5 min).
 const COLS_COOKIE = 'bs2_cols';
