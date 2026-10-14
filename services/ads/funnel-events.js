@@ -55,6 +55,23 @@ async function stats(funnelId, since) {
   return out;
 }
 
+// Průchody spojkami: pro hranu A→B (oba uzly sledované) = leady, které mají událost v A a poté v B
+// (a po vytvoření spojky, pokud má created_at). Vrací { 'A>B': { leads, list:[{lead_id, tA, tB}] } }.
+async function edgeFlows(funnelId, since, withList) {
+  const f = (await funnels()).find((x) => x.id === funnelId); if (!f) return {};
+  const tracked = new Set((f.nodes || []).filter((nd) => ['sms', 'email', 'landing'].includes(nd.kind)).map((nd) => nd.id));
+  const edges = (f.edges || []).filter((e) => tracked.has(e.from) && tracked.has(e.to)); if (!edges.length) return {};
+  const act = {}; (f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const first = {}; // first[nodeId][leadId] = první čas události
+  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return; if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return; (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
+  const out = {};
+  edges.forEach((e) => { const A = first[e.from] || {}, B = first[e.to] || {}; const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const list = []; Object.keys(A).forEach((lid) => { const tA = A[lid], tB = B[lid]; if (!tB) return; if (tB.getTime() < tA.getTime() - 60000) return; if (ec && tB.getTime() < ec) return; list.push({ lead_id: Number(lid), tA, tB }); }); out[e.from + '>' + e.to] = { leads: list.length, list: withList ? list : undefined }; });
+  return out;
+}
+
+module.exports.edgeFlows = edgeFlows;
+
 // Zpětné dopočítání historie pro uzly, které existovaly před zavedením událostí: z polí leadu
 // (ai_specialist_sms_sent_at, schuzka_sms_sent_at, *_email_sent_at, *_opened_at) vytvoří události
 // s původním časem. Uzel s activated_at dostane jen události po aktivaci; bez activated_at celou historii.
