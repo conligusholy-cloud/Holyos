@@ -134,4 +134,24 @@ async function backfill(funnelId) {
   return { created: rows.length };
 }
 
-module.exports = { record, stats, invalidate, matchNodes, backfill, edgeFlows };
+// Log odeslání uzlu SMS/e-mail: co, komu, kdy odešlo + doručeno / otevřeno / kliknuto (pro kontrolu přímo z uzlu).
+async function nodeLog(funnelId, nodeId, since) {
+  const path = '/funnel/' + funnelId + '/' + nodeId;
+  const sent = await prisma.compounderEvent.findMany({ where: { path, event: { in: ['funnel_sms', 'funnel_email'] }, created_at: { gte: since } }, orderBy: { created_at: 'desc' }, take: 500 });
+  const ids = Array.from(new Set(sent.map((r) => Number(r.props && r.props.lead_id)).filter(Boolean)));
+  if (!ids.length) return [];
+  const leads = await prisma.compounderLead.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true, phone: true, status: true } });
+  const byId = {}; leads.forEach((l) => { byId[l.id] = l; });
+  const sids = ids.map((x) => 'lead:' + x);
+  const after = await prisma.compounderEvent.findMany({ where: { sid: { in: sids }, event: { in: ['funnel_open', 'funnel_landing'] }, created_at: { gte: since } }, select: { sid: true, event: true, created_at: true, props: true } });
+  const smsLogs = await prisma.smsLog.findMany({ where: { lead_id: { in: ids }, created_at: { gte: new Date(since.getTime() - 86400000) } }, select: { lead_id: true, status: true, delivered: true, error: true, message_id: true, created_at: true } });
+  return sent.map((r) => {
+    const lid = Number(r.props && r.props.lead_id); const L = byId[lid] || {}; const ch = r.event === 'funnel_sms' ? 'sms' : 'email'; const t = r.created_at.getTime();
+    const opened = after.filter((x) => x.sid === 'lead:' + lid && x.event === 'funnel_open' && x.created_at.getTime() >= t).map((x) => x.created_at).sort()[0] || null;
+    const clicked = after.filter((x) => x.sid === 'lead:' + lid && x.event === 'funnel_landing' && (x.props && x.props.channel) === ch && x.created_at.getTime() >= t).map((x) => x.created_at).sort()[0] || null;
+    let sl = null; if (ch === 'sms') { const cands = smsLogs.filter((x) => x.lead_id === lid && ((r.props.msg_id && x.message_id === r.props.msg_id) || Math.abs(x.created_at.getTime() - t) < 300000)); sl = cands[0] || null; }
+    return { lead_id: lid, name: L.name, email: L.email, phone: L.phone, lead_status: L.status, channel: ch, sent_at: r.created_at, to: r.props.to || (ch === 'sms' ? L.phone : L.email) || '', subject: r.props.subject || '', text: r.props.text || '', from: r.props.from || '', backfill: !!r.props.backfill, delivery: sl ? (sl.delivered ? 'doručeno' : (sl.status || 'odesláno')) : (ch === 'sms' ? '—' : 'odesláno'), delivery_error: sl && sl.error ? sl.error : '', opened_at: ch === 'email' ? opened : null, clicked_at: clicked };
+  });
+}
+
+module.exports = { nodeLog, record, stats, invalidate, matchNodes, backfill, edgeFlows };

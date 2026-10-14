@@ -1411,7 +1411,7 @@ async function autosendAiSpecialistSms(lead) {
       },
     }).catch(() => {});
     console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
-    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'specialist', channel: 'sms' });
+    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'specialist', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || '') });
   } catch (e) { logOutreach(lead && lead.id, 'specialist', 'error', 'SMS brána: ' + e.message); }
 }
 
@@ -1440,7 +1440,7 @@ async function sendSchuzkaSmsAuto(lead, cfg) {
       },
     }).catch(() => {});
     console.log('[schuzka-autosend] SMS „cesta k rozhodnutí" odeslána na lead', lead.id);
-    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'schuzka', channel: 'sms' });
+    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'schuzka', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || '') });
   } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'SMS brána: ' + e.message); }
 }
 
@@ -1461,7 +1461,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
     }).catch(() => {});
     if (!r || !r.sent) logOutreach(lead.id, 'schuzka', 'error', 'e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
-    else { console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id); require('../services/ads/funnel-events').record('email', lead.id, { variant: 'schuzka', channel: 'email' }); }
+    else { console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id); require('../services/ads/funnel-events').record('email', lead.id, { variant: 'schuzka', channel: 'email', to: lead.email, subject: String(m.subject || '').slice(0, 200), text: String(m.body || '').slice(0, 1500), from }); }
   } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'e-mail: ' + e.message); }
 }
 
@@ -1494,7 +1494,7 @@ async function autosendAiSpecialistEmail(lead) {
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
     }).catch(() => {});
     console.log('[aispec-autosend-email] e-mail specialisty odeslán na lead', lead.id);
-    require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email' });
+    require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email', to: lead.email, subject: String(subject || '').slice(0, 200), text: String(body || '').slice(0, 1500), from });
   } catch (e) { console.warn('[aispec-autosend-email] selhalo:', e.message); }
 }
 
