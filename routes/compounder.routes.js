@@ -1003,6 +1003,11 @@ async function trackedLandingRedirect(code, variant, channel, req) {
   if (/^https:\/\//.test(u)) { try { const x = new URL(u); x.searchParams.set('utm_source', channel === 'email' ? 'email' : 'sms'); x.searchParams.set('utm_medium', 'autosend'); x.searchParams.set('l', code); target = x.toString(); } catch (e) { target = null; } }
   if (!target) target = vr === 'schuzka' ? schuzkaShortLink(id, channel === 'email' ? 'email' : undefined) : specialistShortLink(id, channel === 'email' ? 'email' : 'sms');
   const ch = channel === 'email' ? 'email' : 'sms';
+  // Falešné kliky: náhledy odkazů (SMS/chat aplikace, antiviry, crawlery) a otevření do 5 s od odeslání se do funelu nepočítají (přesměrování proběhne normálně).
+  const ua = req && req.headers ? String(req.headers['user-agent'] || '') : '';
+  let bot = (req && req.query && req.query.test === '1') || !ua || /bot|crawl|spider|preview|fetch|scan|facebookexternalhit|whatsapp|telegram|slack|twitter|skype|viber|discord|curl|wget|python|java\/|go-http|okhttp|headless|phantom|lighthouse|google-safety|symantec|avast|avg|kaspersky|eset|bitdefender|trend|mcafee|proofpoint|mimecast|barracuda|safelinks/i.test(ua) || (req && req.method === 'HEAD');
+  if (!bot) { try { const L0 = await prisma.compounderLead.findUnique({ where: { id }, select: { schuzka_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_sms_sent_at: true, ai_specialist_email_sent_at: true } }); const sentAt = L0 ? (vr === 'schuzka' ? (ch === 'email' ? L0.schuzka_email_sent_at : L0.schuzka_sms_sent_at) : (ch === 'email' ? L0.ai_specialist_email_sent_at : L0.ai_specialist_sms_sent_at)) : null; if (sentAt && Date.now() - new Date(sentAt).getTime() < 5000) bot = true; } catch (e) { /* bez kontroly */ } }
+  if (bot) { try { await prisma.compounderEvent.create({ data: { sid: 'lead:' + id, event: 'landing_prefetch', path: '/r/' + vr, props: { lead_id: id, variant: vr, channel: ch, url: target.split('?')[0], ua: ua.slice(0, 200) } } }); } catch (e) { /* best-effort */ } return target; }
   try { const pageKey = (() => { try { const PAGES = require('./ads-center.routes').PAGES || []; const host = new URL(target).origin + new URL(target).pathname; const pg = PAGES.find((p) => p.url && target.split('?')[0].replace(/\/$/, '') === String(p.url).replace(/\/$/, '')); return pg ? pg.key : null; } catch (e) { return null; } })(); require('../services/ads/funnel-events').record('landing', id, { variant: vr, channel: ch, pageKey, url: target.split('?')[0] }); } catch (e) { /* ignore */ }
   try { await prisma.compounderEvent.create({ data: { sid: 'lead:' + id, event: 'landing_open', path: '/r/' + vr, props: { lead_id: id, variant: vr, channel: ch, url: target.split('?')[0] }, ua: req && req.headers ? String(req.headers['user-agent'] || '').slice(0, 500) : null, ip: req ? String(req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim().slice(0, 64) : null } }); } catch (e) { /* log nesmí blokovat redirect */ }
   try { const now = new Date(); const line = now.toISOString().replace('T', ' ').slice(0, 16) + ' · Otevřel odkaz z ' + (ch === 'email' ? 'e-mailu' : 'SMS') + ' (' + (vr === 'schuzka' ? 'schůzka' : 'specialista') + ') → ' + target.split('?')[0];
@@ -1411,7 +1416,7 @@ async function autosendAiSpecialistSms(lead) {
       },
     }).catch(() => {});
     console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
-    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'specialist', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || '') });
+    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'specialist', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || ''), link });
   } catch (e) { logOutreach(lead && lead.id, 'specialist', 'error', 'SMS brána: ' + e.message); }
 }
 
@@ -1440,7 +1445,7 @@ async function sendSchuzkaSmsAuto(lead, cfg) {
       },
     }).catch(() => {});
     console.log('[schuzka-autosend] SMS „cesta k rozhodnutí" odeslána na lead', lead.id);
-    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'schuzka', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || '') });
+    require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'schuzka', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || ''), link });
   } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'SMS brána: ' + e.message); }
 }
 
@@ -1461,7 +1466,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
     }).catch(() => {});
     if (!r || !r.sent) logOutreach(lead.id, 'schuzka', 'error', 'e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
-    else { console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id); require('../services/ads/funnel-events').record('email', lead.id, { variant: 'schuzka', channel: 'email', to: lead.email, subject: String(m.subject || '').slice(0, 200), text: String(m.body || '').slice(0, 1500), from }); }
+    else { console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id); require('../services/ads/funnel-events').record('email', lead.id, { variant: 'schuzka', channel: 'email', to: lead.email, subject: String(m.subject || '').slice(0, 200), text: String(m.body || '').slice(0, 1500), from, link: m.link }); }
   } catch (e) { logOutreach(lead && lead.id, 'schuzka', 'error', 'e-mail: ' + e.message); }
 }
 
@@ -1494,7 +1499,7 @@ async function autosendAiSpecialistEmail(lead) {
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
     }).catch(() => {});
     console.log('[aispec-autosend-email] e-mail specialisty odeslán na lead', lead.id);
-    require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email', to: lead.email, subject: String(subject || '').slice(0, 200), text: String(body || '').slice(0, 1500), from });
+    require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email', to: lead.email, subject: String(subject || '').slice(0, 200), text: String(body || '').slice(0, 1500), from, link });
   } catch (e) { console.warn('[aispec-autosend-email] selhalo:', e.message); }
 }
 

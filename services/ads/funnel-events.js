@@ -165,7 +165,7 @@ async function nodeLog(funnelId, nodeId, since) {
     const opened = after.filter((x) => x.sid === 'lead:' + lid && x.event === 'funnel_open' && x.created_at.getTime() >= t).map((x) => x.created_at).sort()[0] || null;
     const clicked = after.filter((x) => x.sid === 'lead:' + lid && x.event === 'funnel_landing' && (x.props && x.props.channel) === ch && x.created_at.getTime() >= t).map((x) => x.created_at).sort()[0] || null;
     let sl = null; if (ch === 'sms') { const cands = smsLogs.filter((x) => x.lead_id === lid && ((r.props.msg_id && x.message_id === r.props.msg_id) || Math.abs(x.created_at.getTime() - t) < 300000)); sl = cands[0] || null; }
-    return { lead_id: lid, name: L.name, email: L.email, phone: L.phone, lead_status: L.status, channel: ch, sent_at: r.created_at, to: r.props.to || (ch === 'sms' ? L.phone : L.email) || '', subject: r.props.subject || '', text: r.props.text || '', from: r.props.from || '', backfill: !!r.props.backfill, delivery: sl ? (sl.delivered ? 'doručeno' : (sl.status || 'odesláno')) : (ch === 'sms' ? '—' : 'odesláno'), delivery_error: sl && sl.error ? sl.error : '', opened_at: ch === 'email' ? opened : null, clicked_at: clicked };
+    return { lead_id: lid, name: L.name, email: L.email, phone: L.phone, lead_status: L.status, channel: ch, sent_at: r.created_at, to: r.props.to || (ch === 'sms' ? L.phone : L.email) || '', subject: r.props.subject || '', text: r.props.text || '', from: r.props.from || '', link: r.props.link || '', backfill: !!r.props.backfill, delivery: sl ? (sl.delivered ? 'doručeno' : (sl.status || 'odesláno')) : (ch === 'sms' ? '—' : 'odesláno'), delivery_error: sl && sl.error ? sl.error : '', opened_at: ch === 'email' ? opened : null, clicked_at: clicked };
   });
 }
 
