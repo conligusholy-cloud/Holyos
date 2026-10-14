@@ -168,6 +168,24 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .cards-msg{text-align:center;margin-top:12px;font-size:15px;min-height:22px}
   .cards-msg b{font-size:clamp(22px,6vw,32px);font-weight:900;letter-spacing:-.02em}
   .cards-msg b.up{color:var(--ok)} .cards-msg b.down{color:var(--err)}
+  /* ── Hlavička aukce + střídající se informace ── */
+  body.aucmode .arena-hero > :not(.bank){display:none} body.aucmode .arena-hero{padding:0}
+  .auchead{text-align:center;padding:6px 0 0}
+  .auchead h1{font-size:clamp(28px,6.5vw,46px);line-height:1.06;margin:12px auto 14px;max-width:820px;letter-spacing:-.03em}
+  .fact{max-width:720px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:92px;opacity:0;transform:translateY(6px)}
+  .fact.in{animation:factin .5s ease forwards}
+  @keyframes factin{to{opacity:1;transform:none}}
+  .fact b{font-size:16px;letter-spacing:-.01em;background:linear-gradient(90deg,#fff,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .fact span{font-size:14px;color:var(--text2);line-height:1.45}
+  .fact .fdots{display:flex;gap:5px;margin-top:6px} .fact .fdots i{width:14px;height:3px;border-radius:2px;background:rgba(120,160,255,.18)} .fact .fdots i.on{background:var(--accent2)}
+  .lobby{text-align:center;padding:6px 0 8px}
+  .lobby .big{font-size:clamp(30px,8vw,46px);font-weight:900;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  .lobby p{color:var(--text2);font-size:14px;margin:6px 0 10px}
+  .lobby .pl{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+  .lobby .pl span{display:inline-flex;align-items:center;gap:6px;background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;font-size:13px;animation:fadein .4s ease}
+  .lobby .pl span i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .lobby .pl span.me{border-color:var(--accent2);font-weight:700}
+  @media (max-width:600px){.fact{padding:12px 14px;min-height:0}.fact b{font-size:15px}.fact span{font-size:13.5px}}
   .hidden{display:none !important}
   @media (max-width:600px){.quiz{padding:16px 14px;border-radius:18px}.opt{font-size:15px}.ov{align-items:flex-end;padding:0}.ov .box{width:100%;border-radius:24px 24px 0 0;border-bottom:0;padding-bottom:calc(22px + env(safe-area-inset-bottom))}}
 </style>
@@ -206,11 +224,17 @@ ${presence}
     </div>
     <p class="small" style="margin-top:14px;color:var(--text3)">Kapitál je virtuální – ale prádlomat je skutečný.</p>
   </section>
+  <section class="auchead hidden" id="auchead">
+    <span class="eyebrow"><i></i>Aréna Best Series · živá aukce</span>
+    <h1>Kdo přihodí <span class="g">poslední</span>, bere slevu na prádlomat</h1>
+    <div class="fact" id="fact"></div>
+  </section>
   <section class="auc hidden" id="auc">
     <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · kdo přihodí poslední, vyhrává</span>
     <h2>Aukce o slevové kupony na první prádlomat</h2>
     <p class="sub">Odpočet běží od 60 s. Každý příhoz ho vrátí o 5 s zpět (nejvýš na minutu). Přihazujete svým kapitálem – stejnou nebo vyšší částkou. Až čas vyprší, vyhrává poslední přihazující; kupon dostanou jen první tři.</p>
     <div class="prizes"><div class="prize p1"><b>30 %</b><span>poslední příhoz</span></div><div class="prize"><b>20 %</b><span>2. místo</span></div><div class="prize"><b>10 %</b><span>3. místo</span></div></div>
+    <div id="aucLobby" class="lobby hidden"><div class="big" id="lobbySec">20</div><p>Čekáme na ostatní hráče – aukce začne za chvíli. Zatím se připojili:</p><div class="pl" id="lobbyPl"></div></div>
     <div id="aucOpen">
       <div class="clock"><div class="ring"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="clkFg" cx="60" cy="60" r="52"/></svg><b id="clkSec">60</b><small>sekund</small></div>
         <div class="topbid"><span>Nejvyšší příhoz</span><b id="topAmt">—</b><em id="topWho">zatím nikdo</em></div></div>
@@ -271,17 +295,34 @@ ${netScript}
     $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'Teď ještě bonusová karta.' : 'Bonusová karta může ještě leccos změnit.');
     bonusShow(); r.scrollIntoView({ behavior:'smooth', block:'center' });
     try { fetch('/api/arena/result', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, score: okN, bank: bank, answers: answers, ms: Date.now() - startedAt }) }); } catch(e){} }
+  // ── Klíčové informace, které se střídají nad aukcí (během čekání a odpočtu si je člověk čte) ──
+  var FACTS = [
+    { t: 'Prádlomat pracuje 24/7 bez obsluhy', d: 'Zákazník si vypere i vysuší sám, zaplatí kartou nebo mincemi. Žádné mzdy, žádná otevírací doba.' },
+    { t: 'Praní i sušení za hodinu', d: 'Cyklus praní 30–40 minut, sušení dalších 30–40. Zákazník mezitím nakoupí nebo si dá kávu.' },
+    { t: 'Peřiny, deky, spacáky i boty', d: 'Velkokapacitní buben (až 18 kg) zvládne věci, které se do domácí pračky nevejdou.' },
+    { t: 'Lokalita rozhoduje o výdělku', d: 'Nejlépe fungují místa u supermarketů, sídlišť, kempů a studentských kolejí. Proto si ji před investicí prověřujeme.' },
+    { t: 'Vzdálený dohled a servis výrobce', d: 'Stroj hlásí stav online, servisní síť Best Series řeší údržbu i poruchy. Majitel sleduje tržby v mobilu.' },
+    { t: 'Desítky prádlomatů po celé ČR', d: 'Síť Best Series roste od roku 2019 – od Aše po Ostravu, od Tesca po kempy.' },
+    { t: 'Prověření lokality za pár minut', d: 'Webová aplikace spočítá ekonomiku vašeho místa – tři scénáře, bod zvratu, financování, export do PDF.' },
+    { t: 'Kupon z aukce platí na první prádlomat', d: 'Sleva 30 / 20 / 10 % se uplatní při objednávce. Pošleme ho e-mailem i s podmínkami.' }
+  ];
+  var FI = 0, FT = null;
+  function factShow(){ var f = FACTS[FI % FACTS.length]; FI++; var el = $('fact'); if (!el) return; el.classList.remove('in'); void el.offsetWidth; el.innerHTML = '<b>' + esc(f.t) + '</b><span>' + esc(f.d) + '</span><div class="fdots">' + FACTS.map(function(_, i){ return '<i' + ((FI - 1) % FACTS.length === i ? ' class="on"' : '') + '></i>'; }).join('') + '</div>'; el.classList.add('in'); }
+  function factsStart(){ clearInterval(FT); factShow(); FT = setInterval(factShow, 7000); }
   // ── Živá aukce: odpočet 60 s, příhoz +5 s, poslední přihazující vyhrává ──
   var AUC = { round: null, poll: null, st: null, lastTop: null, waiting: false, feedKey: null, onlineKey: null };
   var CIRC2 = 2 * Math.PI * 52; $('clkFg').style.strokeDasharray = CIRC2;
-  function aucStart(){ $('result').classList.add('hidden'); var a = $('auc'); a.classList.remove('hidden'); $('aucRes').classList.add('hidden'); $('aucOpen').classList.remove('hidden'); $('feed').innerHTML = ''; $('bidmsg').textContent = ''; AUC.waiting = false;
+  function aucStart(){ $('result').classList.add('hidden'); document.body.classList.add('aucmode'); $('auchead').classList.remove('hidden'); factsStart(); var a = $('auc'); a.classList.remove('hidden'); $('aucRes').classList.add('hidden'); $('aucOpen').classList.remove('hidden'); $('aucLobby').classList.add('hidden'); $('feed').innerHTML = ''; $('bidmsg').textContent = ''; AUC.waiting = false;
     fetch('/api/arena/join', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, bank: bank }) }).then(function(r){ return r.json(); }).then(function(st){ if(!st || st.error){ $('bidmsg').textContent = (st && st.error) || 'Aukce není dostupná.'; return; } if (st.phase === 'result' && !st.joined) { AUC.waiting = true; $('aucOpen').classList.add('hidden'); $('aucRes').classList.remove('hidden'); aucResult(st, true); } else { AUC.round = st.round; aucRender(st); } aucLoop(); }).catch(function(){ $('bidmsg').textContent = 'Aukce není dostupná.'; });
-    setTimeout(function(){ a.scrollIntoView({ behavior:'smooth', block:'start' }); }, 60); }
+    setTimeout(function(){ window.scrollTo({ top: 0, behavior:'smooth' }); }, 60); }
   function aucLoop(){ clearInterval(AUC.poll); AUC.poll = setInterval(function(){ fetch('/api/arena/round?sid=' + encodeURIComponent(SID), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(st){
-      if (AUC.waiting) { if (st.phase === 'open') { AUC.waiting = false; clearInterval(AUC.poll); aucStart(); } else { var ni = $('nextIn'); if (ni) ni.textContent = '(' + Math.ceil((st.next_in || 0) / 1000) + ' s)'; } return; }
-      if (st.round !== AUC.round) { if (st.phase === 'open' && !st.joined) { clearInterval(AUC.poll); aucStart(); } return; }
+      if (AUC.waiting) { if (st.phase === 'open' || st.phase === 'lobby') { AUC.waiting = false; clearInterval(AUC.poll); aucStart(); } else { var ni = $('nextIn'); if (ni) ni.textContent = '(' + Math.ceil((st.next_in || 0) / 1000) + ' s)'; } return; }
+      if (st.round !== AUC.round) { if ((st.phase === 'open' || st.phase === 'lobby') && !st.joined) { clearInterval(AUC.poll); aucStart(); } return; }
       aucRender(st); if (st.phase === 'result') { clearInterval(AUC.poll); aucResult(st, false); } }).catch(function(){}); }, 1000); }
-  function aucRender(st){ AUC.st = st; var s = Math.ceil((st.ends_in || 0) / 1000); var ring = $('clkFg').parentNode.parentNode; $('clkSec').textContent = s; $('clkFg').style.strokeDashoffset = CIRC2 * (1 - Math.min(1, (st.ends_in || 0) / (st.max_ms || 60000))); ring.classList.toggle('hot', s <= 10);
+  function aucRender(st){ AUC.st = st;
+    var lobby = st.phase === 'lobby'; $('aucLobby').classList.toggle('hidden', !lobby); $('aucOpen').classList.toggle('hidden', lobby);
+    if (lobby) { $('lobbySec').textContent = Math.ceil((st.lobby_in || 0) / 1000); var pk = (st.players || []).map(function(p){ return p.name; }).join('|'); if (pk !== AUC.onlineKey) { AUC.onlineKey = pk; $('lobbyPl').innerHTML = (st.players || []).map(function(p){ var isMe = !p.bot && st.me && p.name === st.me.name; return '<span' + (isMe ? ' class="me"' : '') + '><i></i>' + esc(p.name) + (isMe ? ' (vy)' : '') + '</span>'; }).join(''); } return; }
+    var s = Math.ceil((st.ends_in || 0) / 1000); var ring = $('clkFg').parentNode.parentNode; $('clkSec').textContent = s; $('clkFg').style.strokeDashoffset = CIRC2 * (1 - Math.min(1, (st.ends_in || 0) / (st.max_ms || 60000))); ring.classList.toggle('hot', s <= 10);
     if (AUC.lastTop != null && st.top !== AUC.lastTop) { ring.classList.remove('bump'); void ring.offsetWidth; ring.classList.add('bump'); } AUC.lastTop = st.top;
     $('topAmt').textContent = st.top ? fmt(st.top) : '—'; var w = $('topWho'); if (st.last) { var meLead = st.me && st.me.leading; w.textContent = meLead ? 'vedete vy' : st.last.name; w.className = meLead ? 'me' : ''; } else { w.textContent = 'zatím nikdo'; w.className = ''; }
     if (st.me) { $('ammo').textContent = 'Příhozů: ' + st.me.ammo; $('mybank').textContent = 'Kapitál: ' + fmt(st.me.bank); }
