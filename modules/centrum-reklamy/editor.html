@@ -10,6 +10,14 @@
   <style>
     html, body { height:100%; margin:0; overflow:hidden; background:#0b0e17; color:var(--text); display:block; }
     .app { display:flex; flex-direction:column; height:100vh; width:100vw; }
+    .tools { width:64px; border-right:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:6px; }
+    .tool { width:48px; height:48px; border-radius:12px; border:1px solid var(--border); background:var(--surface2); color:var(--text); display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; font-size:18px; position:relative; }
+    .tool small { font-size:8.5px; color:var(--text2); margin-top:1px; letter-spacing:.02em; }
+    .tool:hover { border-color:#f59e0b; } .tool.on { background:#f59e0b; color:#1a1200; border-color:#f59e0b; } .tool.on small { color:#1a1200; }
+    .tool .dd { display:none; position:absolute; left:56px; top:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px; width:300px; box-shadow:0 14px 40px rgba(0,0,0,.5); text-align:left; cursor:default; }
+    .tool.open .dd { display:block; }
+    .tool .dd h4 { margin:6px 4px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); }
+    .node.start { width:170px; border-color:#22c55e; } .node.start .hd { background:rgba(34,197,94,.12); }
     .addmenu { position:relative; }
     .addmenu .dd { display:none; position:absolute; top:38px; left:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px; width:300px; box-shadow:0 14px 40px rgba(0,0,0,.5); }
     .addmenu.open .dd { display:block; }
@@ -57,12 +65,18 @@
     <input class="name" id="name" placeholder="Název funelu">
     <span class="note" style="font-size:12px;color:var(--text2)">Období:</span>
     <button class="btn btn-sm" data-days="7">7 dní</button><button class="btn btn-sm on" data-days="30">30 dní</button><button class="btn btn-sm" data-days="90">90 dní</button>
-    <div class="addmenu" id="addmenu"><button class="btn btn-sm" id="add-btn">＋ Přidat krok ▾</button><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Ostatní</h4><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
     <span class="msg" id="msg"></span>
-    <button class="btn btn-sm" id="auto">⇅ Srovnat</button>
     <button class="btn on" id="save">💾 Uložit</button>
   </div>
   <div class="wrap">
+    <div class="tools" id="tools">
+      <div class="tool" data-tool="start" title="Startovací bod – odkud zájemce přichází (reklama, vyhledávání, doporučení…)">🚀<small>Start</small></div>
+      <div class="tool" id="addmenu" title="Přidat krok"><span id="add-btn">＋</span><small>Krok</small><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Ostatní</h4><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
+      <div class="tool" data-tool="link" title="Spojit: klikni na první uzel a pak na druhý">🔗<small>Spojit</small></div>
+      <div class="tool" data-tool="note" title="Přidat poznámku">📝<small>Pozn.</small></div>
+      <div class="tool" data-tool="auto" title="Srovnat uzly do řady">⇅<small>Srovnat</small></div>
+      <div class="tool" data-tool="del" title="Smazat vybraný uzel (Delete)">🗑<small>Smazat</small></div>
+    </div>
     <div class="canvas-wrap" id="cw">
       <div class="canvas" id="canvas"><svg class="links" id="links"></svg></div>
       </div>
@@ -79,8 +93,8 @@
     function n(v) { return v == null ? '—' : Number(v).toLocaleString('cs-CZ'); }
     function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
     function page(k) { return PAGES.find(function (p) { return p.key === k; }); }
-    function val(nd) { if (nd.kind === 'note') return null; if (nd.manual != null && nd.manual !== '') return Number(nd.manual); var p = DATA.find(function (x) { return x.key === nd.page; }); if (!p) return null; var v = p[nd.metric]; if (nd.metric === 'uniques' && v == null) v = p.visits; return v == null ? null : Number(v); }
-    function label(nd) { if (nd.label) return nd.label; var p = page(nd.page); return p ? p.name : 'Ruční číslo'; }
+    function val(nd) { if (nd.kind === 'note') return null; if (nd.kind === 'start') return nd.manual != null && nd.manual !== '' ? Number(nd.manual) : null; if (nd.manual != null && nd.manual !== '') return Number(nd.manual); var p = DATA.find(function (x) { return x.key === nd.page; }); if (!p) return null; var v = p[nd.metric]; if (nd.metric === 'uniques' && v == null) v = p.visits; return v == null ? null : Number(v); }
+    function label(nd) { if (nd.label) return nd.label; if (nd.kind === 'start') return 'Facebook reklama'; var p = page(nd.page); return p ? p.name : 'Ruční číslo'; }
     function metricLabel(nd) { var p = page(nd.page); return nd.metric === 'leads' && p ? p.leadLabel : nd.metric === 'conversions' && p ? p.convLabel : ML[nd.metric]; }
 
     function nodeEl(nd) {
@@ -89,6 +103,14 @@
       if (nd.kind === 'note') {
         el.innerHTML = '<div class="hd"><i style="background:' + col + '"></i>Poznámka<button class="x" title="Smazat">✕</button></div><div class="bd"><textarea rows="3" placeholder="text poznámky">' + esc(nd.text || '') + '</textarea></div>';
         el.querySelector('textarea').addEventListener('input', function (e) { nd.text = e.target.value; });
+      } else if (nd.kind === 'start') {
+        el.classList.add('start'); var sv = val(nd);
+        var SRC = ['Facebook reklama', 'Instagram reklama', 'Google Ads', 'Google vyhledávání', 'Doporučení', 'E-mail kampaň', 'Jiné'];
+        var so = SRC.map(function (x) { return '<option' + ((nd.label || 'Facebook reklama') === x ? ' selected' : '') + '>' + x + '</option>'; }).join('');
+        el.innerHTML = '<div class="port out" title="výstup – táhni na první krok"></div><div class="hd"><i style="background:#22c55e"></i>🚀 <span class="t">' + esc(label(nd)) + '</span><button class="x" title="Smazat">✕</button></div><div class="bd"><select class="src">' + so + '</select><input class="man" type="number" placeholder="zobrazení / dosah reklamy" value="' + (nd.manual != null ? nd.manual : '') + '"><div class="val">' + n(sv) + '<small>startovací bod · ' + esc(nd.label || 'Facebook reklama') + '</small></div></div>';
+        el.querySelector('.src').addEventListener('change', function (e) { nd.label = e.target.value; el.querySelector('.t').textContent = label(nd); refreshSteps(); render(); });
+        el.querySelector('.man').addEventListener('input', function (e) { nd.manual = e.target.value === '' ? null : Number(e.target.value); refreshSteps(); el.querySelector('.val').firstChild.textContent = n(val(nd)); });
+        el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
       } else {
         var opts = '<option value="">— ruční číslo —</option>' + PAGES.map(function (x) { return '<option value="' + x.key + '"' + (nd.page === x.key ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('');
         var ms = Object.keys(ML).map(function (k) { return '<option value="' + k + '"' + (nd.metric === k ? ' selected' : '') + '>' + ML[k] + '</option>'; }).join('');
@@ -106,7 +128,7 @@
       var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var sx = e.clientX - nd.x, sy = e.clientY - nd.y; function mv(ev) { nd.x = Math.max(0, ev.clientX - sx); nd.y = Math.max(0, ev.clientY - sy); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
       return el;
     }
-    function center(nd, side) { return { x: nd.x + (side === 'out' ? 230 : 0), y: nd.y + 24 }; }
+    function center(nd, side) { return { x: nd.x + (side === 'out' ? (nd.kind === 'start' ? 170 : 230) : 0), y: nd.y + 24 }; }
     function drawLinks(tmp) {
       var h = '';
       F.edges.forEach(function (ed, i) { var a = F.nodes.find(function (x) { return x.id === ed.from; }), b = F.nodes.find(function (x) { return x.id === ed.to; }); if (!a || !b) return; var p = center(a, 'out'), q = center(b, 'in'); var dx = Math.max(40, Math.abs(q.x - p.x) / 2);
@@ -115,7 +137,7 @@
       links.innerHTML = h;
       links.querySelectorAll('path[data-i]').forEach(function (pth) { pth.addEventListener('click', function () { F.edges.splice(+pth.getAttribute('data-i'), 1); render(); }); });
     }
-    function chain() { var hasIn = {}; F.edges.forEach(function (e) { hasIn[e.to] = 1; }); var steps = F.nodes.filter(function (x) { return x.kind !== 'note'; }); var cur = steps.find(function (x) { return !hasIn[x.id]; }); var out = [], seen = {}; while (cur && !seen[cur.id] && out.length < 12) { seen[cur.id] = 1; out.push(cur); var e = F.edges.find(function (ed) { return ed.from === cur.id; }); cur = e ? F.nodes.find(function (x) { return x.id === e.to && x.kind !== 'note'; }) : null; } return out; }
+    function chain() { var hasIn = {}; F.edges.forEach(function (e) { hasIn[e.to] = 1; }); var steps = F.nodes.filter(function (x) { return x.kind !== 'note'; }); var cur = steps.find(function (x) { return x.kind === 'start'; }) || steps.find(function (x) { return !hasIn[x.id]; }); var out = [], seen = {}; while (cur && !seen[cur.id] && out.length < 12) { seen[cur.id] = 1; out.push(cur); var e = F.edges.find(function (ed) { return ed.from === cur.id; }); cur = e ? F.nodes.find(function (x) { return x.id === e.to && x.kind !== 'note'; }) : null; } return out; }
     function refreshSteps() {
       var st = chain(), vals = st.map(val); var box = document.getElementById('steps');
       box.innerHTML = st.length ? st.map(function (nd, i) { var v = vals[i], pv = i ? vals[i - 1] : null; return '<div class="fstep"><span>' + (i + 1) + '. ' + esc(label(nd)) + '</span><span><b>' + n(v) + '</b>' + (i && pv > 0 && v != null ? '<div class="drop">−' + Math.round((1 - v / pv) * 100) + ' %</div>' : '') + '</span></div>'; }).join('') : '<div style="font-size:12px;color:var(--text2)">Přetáhni stránky na plátno a propoj je – zde se ukáže pořadí kroků.</div>';
@@ -126,7 +148,7 @@
 
     // přidání uzlu z menu: umístí se za poslední krok řetězce a rovnou se k němu připojí
     var am = document.getElementById('addmenu');
-    document.getElementById('add-btn').addEventListener('click', function (e) { e.stopPropagation(); am.classList.toggle('open'); });
+    am.addEventListener('click', function (e) { if (e.target.closest('.dd')) return; e.stopPropagation(); am.classList.toggle('open'); });
     document.addEventListener('click', function (e) { if (!am.contains(e.target)) am.classList.remove('open'); });
     am.addEventListener('click', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p) return; am.classList.remove('open');
       var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note') { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; }
@@ -135,6 +157,18 @@
     addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out'); drawLinks({ x1: p.x, y1: p.y, x2: e.clientX - r.left, y2: e.clientY - r.top }); });
     addEventListener('mouseup', function () { if (linking) { linking = null; drawLinks(); } });
     addEventListener('keydown', function (e) { if (e.key === 'Delete' && sel && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); } });
+    var linkFirst = null;
+    document.querySelectorAll('.tool[data-tool]').forEach(function (t) { t.addEventListener('click', function (e) { var k = t.dataset.tool;
+      if (k === 'start') { if (F.nodes.some(function (x) { return x.kind === 'start'; })) { document.getElementById('msg').textContent = 'Startovací bod už na plátně je.'; return; } var first = chain()[0]; var nd = { id: uid(), kind: 'start', x: 40, y: 60, page: null, metric: 'uniques', manual: null, label: 'Facebook reklama', text: '' }; if (first) { F.nodes.forEach(function (x) { if (x.kind !== 'note') x.x += 230; }); F.edges.push({ from: nd.id, to: first.id }); } F.nodes.push(nd); render(); }
+      if (k === 'note') { F.nodes.push({ id: uid(), kind: 'note', x: 40, y: 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160, page: null, metric: 'uniques', manual: null, label: '', text: '' }); render(); }
+      if (k === 'del') { if (!sel) return; F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); }
+      if (k === 'link') { t.classList.toggle('on'); linkFirst = null; document.getElementById('msg').textContent = t.classList.contains('on') ? 'Spojit: klikni na první uzel, pak na druhý.' : ''; }
+      if (k === 'auto') document.getElementById('auto').click();
+    }); });
+    canvas.addEventListener('click', function (e) { var lt = document.querySelector('.tool[data-tool="link"]'); if (!lt || !lt.classList.contains('on')) return; var el = e.target.closest && e.target.closest('.node'); if (!el) return; var idn = el.dataset.id; var nd = F.nodes.find(function (x) { return x.id === idn; }); if (!nd || nd.kind === 'note') return;
+      if (!linkFirst) { linkFirst = idn; document.getElementById('msg').textContent = 'Teď klikni na uzel, kam má spojení vést.'; return; }
+      if (linkFirst !== idn) { F.edges = F.edges.filter(function (ed) { return ed.from !== linkFirst; }); F.edges.push({ from: linkFirst, to: idn }); } linkFirst = null; lt.classList.remove('on'); document.getElementById('msg').textContent = ''; render(); });
+    var autoBtn = document.createElement('button'); autoBtn.id = 'auto'; autoBtn.style.display = 'none'; document.body.appendChild(autoBtn);
     document.getElementById('auto').addEventListener('click', function () { var st = chain(); st.forEach(function (nd, i) { nd.x = 40 + i * 290; nd.y = 60; }); var k = 0; F.nodes.forEach(function (nd) { if (st.indexOf(nd) < 0) { nd.x = 40 + (k % 5) * 290; nd.y = 300 + Math.floor(k / 5) * 220; k++; } }); render(); });
     document.querySelectorAll('[data-days]').forEach(function (b) { b.addEventListener('click', function () { days = +b.getAttribute('data-days'); document.querySelectorAll('[data-days]').forEach(function (x) { x.classList.toggle('on', x === b); }); loadData(); }); });
     document.getElementById('save').addEventListener('click', async function () {
