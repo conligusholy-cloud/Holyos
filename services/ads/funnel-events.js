@@ -93,7 +93,7 @@ async function edgeFlows(funnelId, since, withList) {
   // 2) leady formulářů (DB) – cache per form
   const formCache = {};
   async function formLeads(nd) { const fid = nd.form && nd.form.form_id; if (!fid) return []; if (formCache[fid]) return formCache[fid]; const ads = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fid) }]; const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true } }); formCache[fid] = L; return L; }
-  function upstreamFormNode(nd, depth) { if (!nd || depth > 10) return null; if (nd.kind === 'leadform') return nd; const e = edges.find((x) => x.to === nd.id); return e ? upstreamFormNode(byId[e.from], (depth || 0) + 1) : null; }
+  function upstreamFormNode(nd, depth) { if (!nd || depth > 10) return null; if (nd.kind === 'leadform') return nd; const ins = edges.filter((x) => x.to === nd.id); for (const e of ins) { const r = upstreamFormNode(byId[e.from], (depth || 0) + 1); if (r) return r; } return null; }
   // množina leadů uzlu (+ port u rozdělení): Map lead_id → čas
   async function setOf(nd, port) {
     const m = new Map(); if (!nd) return m;
@@ -102,6 +102,7 @@ async function edgeFlows(funnelId, since, withList) {
       const P = port || 0; let keys = null; if (P >= 10) { const mg = (nd.merges || [])[P - 10]; keys = new Set((mg && mg.ports ? mg.ports : []).map((pi) => ((nd.branches || [])[pi] || {}).key).filter(Boolean)); } else { const br = (nd.branches || [])[P]; if (br && br.key) keys = new Set([br.key]); }
       const L = await formLeads(fn); L.forEach((x) => { if (keys) { const k = x.owner_person_id ? 'i:' + x.owner_person_id : (x.external_rep_id ? 'e:' + x.external_rep_id : ''); if (!keys.has(k)) return; } m.set(x.id, x.created_at); }); return m; }
     if (['sms', 'email', 'landing'].includes(nd.kind)) { Object.keys(first[nd.id] || {}).forEach((lid) => m.set(Number(lid), first[nd.id][lid])); return m; }
+    if (nd.kind === 'db') { const fn = upstreamFormNode(nd, 0); const L = await require('./segments').leadsFor(nd, port || 0, fn ? fn.form : null); L.forEach((x) => m.set(x.id, x.created_at)); return m; }
     return m;
   }
   const out = {};
@@ -182,8 +183,9 @@ async function positions(funnelId, since) {
   for (const fn of forms) {
     const ads = (fn.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fn.form.form_id) }];
     const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, name: true, created_at: true } });
-    const splitE = edges.find((e) => e.from === fn.id && byId[e.to] && byId[e.to].kind === 'split');
-    L.forEach((l) => { base[l.id] = { node: splitE ? splitE.to : fn.id, t: l.created_at, name: l.name || '' }; });
+    // poloha před akcí: formulář → (databáze) → rozdělení – nejzazší z nich
+    let baseNode = fn.id; const e1 = edges.find((e) => e.from === fn.id && byId[e.to] && (byId[e.to].kind === 'split' || byId[e.to].kind === 'db')); if (e1) { baseNode = e1.to; if (byId[e1.to].kind === 'db') { const e2 = edges.find((e) => e.from === e1.to && byId[e.to] && byId[e.to].kind === 'split'); if (e2) baseNode = e2.to; } }
+    L.forEach((l) => { base[l.id] = { node: baseNode, t: l.created_at, name: l.name || '' }; });
   }
   const ids = Object.keys(base).map(Number); if (!ids.length) return {};
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { path: true, event: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
