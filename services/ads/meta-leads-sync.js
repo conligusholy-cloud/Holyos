@@ -82,8 +82,8 @@ async function sync(opts = {}) {
   finally { running = false; }
 }
 
-async function tick() { try { const c = await cfg(); if (c.enabled === false) return; /* automat je výchozí zapnutý */ const iv = Math.max(2, Number(c.interval_min) || 5) * 60000; if (c.last_run && Date.now() - new Date(c.last_run).getTime() < iv - 30000) return; await sync(); } catch (e) { console.error('[meta-leads] tick:', e.message); } }
-function start() { if (timer) return; timer = setInterval(tick, 60000); setTimeout(tick, 20000); console.log('[meta-leads] worker spuštěn (kontrola každou minutu, interval dle nastavení)'); }
+async function tick() { try { const c = await cfg(); if (c.enabled === false) return; /* automat je výchozí zapnutý */ const iv = Math.max(1, Number(c.interval_min) || 1) * 60000; if (c.last_run && Date.now() - new Date(c.last_run).getTime() < iv - 15000) return; await sync(); } catch (e) { console.error('[meta-leads] tick:', e.message); } }
+function start() { if (timer) return; timer = setInterval(tick, 30000); setTimeout(tick, 20000); console.log('[meta-leads] worker spuštěn (kontrola každých 30 s, interval výchozí 1 min)'); }
 function stop() { if (timer) clearInterval(timer); timer = null; }
 
 // Page access token konkrétní stránky (pro webhook bez env META_PAGE_ACCESS_TOKEN). Cache 10 min.

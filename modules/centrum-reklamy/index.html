@@ -122,7 +122,7 @@
           <div id="ls-oauth" style="margin-bottom:10px"></div>
           <div id="ls-state" class="note" style="margin-bottom:8px">Načítám…</div>
           <div class="tbl-wrap"><table class="data-table"><thead><tr><th style="width:34px" title="Stahovat leady z této stránky">⬇</th><th>Stránka</th><th>Formuláře</th><th class="num">Leadů celkem (Meta)</th><th></th></tr></thead><tbody id="ls-grid"><tr><td colspan="5" class="note">Načítám…</td></tr></tbody></table></div>
-          <p class="note" style="margin:6px 0 0"><b>Pracovní sada:</b> zaškrtni stránky a (po rozbalení ▸) formuláře, se kterými pracuješ. Leady se stahují automaticky každých 5 minut jen z vybraných stránek/formulářů a stejné formuláře se nabízejí na plátně funelu v ＋ Krok. Nic nevybráno = všechny stránky.</p>
+          <p class="note" style="margin:6px 0 0"><b>Pracovní sada:</b> zaškrtni stránky a (po rozbalení ▸) formuláře, se kterými pracuješ. Leady se stahují automaticky každou minutu jen z vybraných stránek/formulářů a stejné formuláře se nabízejí na plátně funelu v ＋ Krok. Nic nevybráno = všechny stránky.</p>
           <div class="toolbar" style="margin-top:10px"><button class="btn on" id="ls-save">Uložit pracovní sadu</button><button class="btn" id="ls-run">Stáhnout teď</button><button class="btn" id="ls-repair" title="Doplní jméno a kontakt u leadů stažených před opravou mapování polí; duplicity starších kontaktů odstraní">Opravit stažené leady</button><span class="note" id="ls-msg"></span></div>
           <p class="note" id="ls-wh" style="margin:8px 0 0"></p>
         </div>
@@ -277,7 +277,7 @@
         if (c.error) ps.push('<span class="warn">' + esc(c.error) + '</span>');
         if (p && p.ok) ps.push(p.leads ? '<span style="color:#22c55e">leads_retrieval ✓</span>' : '<span class="warn">chybí oprávnění leads_retrieval – leady nepůjde číst</span>', p.pages ? '<span style="color:#22c55e">pages_show_list ✓</span>' : '<span class="warn">chybí pages_show_list</span>', p.manage_ads ? '<span style="color:#22c55e">pages_manage_ads ✓</span>' : '<span class="warn">chybí pages_manage_ads</span>');
         var np = (c.pages || []).length; ps.push(np ? np + ' stránek dostupných' : '<span class="warn">systémový uživatel nemá přiřazenou žádnou stránku</span>');
-        ps.push('<span style="color:#22c55e">automat každých ' + (c.interval_min || 5) + ' min</span>' + ((c.pages_filter || []).length ? ' · ' + (c.pages_filter || []).length + ' stránek, ' + (c.forms_filter || []).length + ' formulářů v pracovní sadě' : ' · <span class="warn">pracovní sada prázdná – stahuje se ze všech stránek</span>'));
+        ps.push('<span style="color:#22c55e">automat každou ' + (c.interval_min || 1) + ' min</span>' + ((c.pages_filter || []).length ? ' · ' + (c.pages_filter || []).length + ' stránek, ' + (c.forms_filter || []).length + ' formulářů v pracovní sadě' : ' · <span class="warn">pracovní sada prázdná – stahuje se ze všech stránek</span>'));
         if (c.last_result) ps.push('poslední běh ' + fdt(c.last_result.at) + ': ' + (c.last_result.error ? '<span class="warn">' + esc(c.last_result.error) + '</span>' : c.last_result.fetched + ' načteno, <b>' + c.last_result.created + ' nových</b>, ' + c.last_result.duplicates + ' už existovalo' + (c.last_result.errors && c.last_result.errors.length ? ', <span class="warn">' + c.last_result.errors.length + ' chyb</span>' : '')));
         st.innerHTML = ps.join(' · ');
         var pf = c.pages_filter || []; var rows = [];
