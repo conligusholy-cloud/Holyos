@@ -1227,6 +1227,12 @@ server.listen(PORT, async () => {
     console.error('[app] slot-reservation-worker nelze spustit:', err.message);
   }
   try {
+    const metaLeadsSync = require('./services/ads/meta-leads-sync');
+    metaLeadsSync.start();
+  } catch (err) {
+    console.error('[app] meta-leads-sync nelze spustit:', err.message);
+  }
+  try {
     const velinScheduler = require('./services/workers/velin-scheduler');
     velinScheduler.start();
   } catch (err) {

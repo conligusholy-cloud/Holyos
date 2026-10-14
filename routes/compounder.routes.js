@@ -6373,7 +6373,9 @@ router.post('/fb-webhook', async (req, res, next) => {
           return res.status(401).send('bad signature');
         }
       }
-      const PAGE_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
+      // Page token: env, jinak centrálně z Centra reklamy (System User token → me/accounts).
+      let PAGE_TOKEN = process.env.META_PAGE_ACCESS_TOKEN;
+      if (!PAGE_TOKEN) { try { const pid = body.entry[0] && body.entry[0].id; PAGE_TOKEN = await require('../services/ads/meta-leads-sync').pageToken(pid); } catch (e) { /* bez centrálního tokenu */ } }
       for (const entry of body.entry) {
         for (const change of (entry.changes || [])) {
           if (change.field !== 'leadgen') continue;
@@ -10451,3 +10453,5 @@ router.get('/ares/:ico(\\d{6,8})', async (req, res, next) => {
 });
 
 module.exports = router;
+// Interní API pro přímé stahování leadů z FB (services/ads/meta-leads-sync.js) – stejná cesta založení jako webhook.
+module.exports._fbCreateLead = _fbCreateLead; module.exports._fbExtractFields = _fbExtractFields; module.exports._fbLoadForms = _fbLoadForms; module.exports._fbResolveOwner = _fbResolveOwner;
