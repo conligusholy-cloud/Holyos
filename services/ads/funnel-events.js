@@ -49,7 +49,7 @@ async function record(type, leadId, opts) {
 async function stats(funnelId, since) {
   try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
-  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; kinds[nd.id] = nd.kind; });
+  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); kinds[nd.id] = nd.kind; }); // od aktivace i od 'pocitat statistiky od'
   const per = {}; const opened = {}; const landingByLead = {}; // landingByLead[lead] = [{t, channel}]
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_landing' && lid) (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
     if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;
@@ -70,7 +70,7 @@ async function stats(funnelId, since) {
 async function edgeFlows(funnelId, since, withList) {
   const f = (await funnels()).find((x) => x.id === funnelId); if (!f) return {};
   const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
-  const act = {}; nodes.forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
+  const act = {}; nodes.forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); });
   // 1) události → first[nodeId][leadId] = čas
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
   const first = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead)

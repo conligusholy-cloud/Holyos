@@ -178,8 +178,7 @@
       return { inn: inn, inLbl: inLbl, out: out, outLbl: outLbl };
     }
     function flowBadges(nd) {
-      return ''; // štítky vstup/výstup u uzlů vypnuty – průchody se počítají na spojkách (štítek uprostřed vlákna)
-      // eslint-disable-next-line no-unreachable
+      if (nd.kind !== 'start' && nd.kind !== 'leadform') return ''; // štítky jen u reklamy a formuláře (zobrazení / kliky z Mety); dál se průchody počítají na vláknech
       var f = flowCounts(nd); var h = '';
       if (f.inn != null && nd.kind !== 'start') h += '<div class="pc in" title="Vstup: kolik leadů do kroku přišlo">' + n(f.inn) + (f.inLbl ? '<small>' + f.inLbl + '</small>' : '') + '</div>';
       if (f.out != null && nd.kind !== 'split') { var pct = f.inn > 0 && f.out != null ? ' (' + Math.round(f.out / f.inn * 100) + ' %)' : ''; h += '<div class="pc out" title="Výstup: kolik leadů krokem prošlo dál' + pct + '">' + n(f.out) + (f.outLbl ? '<small>' + f.outLbl + '</small>' : '') + '</div>'; }
@@ -236,7 +235,9 @@
         el.querySelector('.gear').addEventListener('mousedown', function (e) { e.stopPropagation(); }); el.querySelector('.gear').addEventListener('click', function (e) { e.stopPropagation(); openActionEditor(nd); });
         el.querySelector('.nlog').addEventListener('mousedown', function (e) { e.stopPropagation(); }); el.querySelector('.nlog').addEventListener('click', function (e) { e.stopPropagation(); openNodeLog(nd); });
         if (nd.goals_on) { F.edges.forEach(function (ed) { if (ed.from === nd.id && !(ed.port > 0)) ed.port = 1; }); } // stará vlákna z okraje → tečka 1 (odesláno)
-        buildGoalTab(el, nd, { title: isSms ? 'Cíle SMS' : 'Cíle e-mailu', goals: nd.goals_on ? actionGoals(nd) : [], count: function (g) { return actionGoalCount(nd, g); }, analyzeLabel: nd.goals_on ? '↻ Obnovit' : '🎯 Nastavit cíle', onAnalyze: function () { nd.goals_on = true; nd.goals = actionGoals(nd); nd.goals_open = true; render(); }, onConfig: null, onResults: function () { ensureResults(nd); nd.goals_open = true; render(); } });
+        var agAll = actionGoals(nd), agShown = nd.goals_on ? agAll.filter(function (g) { return !(nd.goals_hide || []).length || (nd.goals_hide || []).indexOf(g.type) < 0; }) : [];
+        buildGoalTab(el, nd, { title: isSms ? 'Cíle SMS' : 'Cíle e-mailu', goals: agShown, portOf: function (i) { return agAll.indexOf(agShown[i]) + 1; }, count: function (g) { return actionGoalCount(nd, g); }, analyzeLabel: nd.goals_on ? '↻ Obnovit' : '🎯 Nastavit cíle', onAnalyze: function () { nd.goals_on = true; nd.goals = actionGoals(nd); nd.goals_open = true; render(); }, onConfig: nd.goals_on ? function () { openActionGoalsConfig(nd); } : null, onResults: function () { ensureResults(nd); nd.goals_open = true; render(); } });
+        if (nd.stats_from) { var sfEl = el.querySelector('.gtab .gth span'); if (sfEl) sfEl.title = 'Statistiky od ' + fdt(nd.stats_from); }
         el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       } else if (nd.kind === 'landing') {
@@ -478,6 +479,25 @@
       }
       draw();
     }
+    // ⚙ Cíle SMS / e-mailu: které výstupy zobrazit, vlastní názvy a od kdy počítat statistiky (vyloučení testů)
+    function openActionGoalsConfig(nd) {
+      var base = actionGoalsBase(nd.kind === 'sms'); var hide = (nd.goals_hide || []).slice(); var names = Object.assign({}, nd.goal_names || {}); var sf = nd.stats_from || '';
+      ov.classList.add('open'); dlg.classList.remove('full');
+      dlg.innerHTML = '<h2>⚙ ' + (nd.kind === 'sms' ? 'Cíle SMS' : 'Cíle e-mailu') + '</h2><div class="note" style="margin-bottom:10px">Zaškrtni výstupy, které chceš v oušku vidět, případně je přejmenuj. Čísla teček se nemění (1 odesláno, 2 ' + (nd.kind === 'sms' ? 'doručeno' : 'otevřel') + ', 3 klikl, 4 bez reakce), skryté tečky se jen nezobrazí.</div>'
+        + '<table class="leads-tb"><thead><tr><th style="width:36px">Zobr.</th><th style="width:40px">#</th><th>Výstup</th><th>Vlastní název</th></tr></thead><tbody>' + base.map(function (g, i) { return '<tr><td><input type="checkbox" class="ag-on" data-t="' + g.type + '"' + (hide.indexOf(g.type) < 0 ? ' checked' : '') + '></td><td>' + (i + 1) + '</td><td><span class="gchip ' + esc(g.type) + '">' + esc(goalIcon(g.type)) + ' ' + esc(g.label) + '</span><div class="note" style="font-size:11px">' + esc(g.desc) + '</div></td><td><input class="ag-name" data-t="' + g.type + '" value="' + esc(names[g.type] || '') + '" placeholder="' + esc(g.label) + '" style="width:100%"></td></tr>'; }).join('') + '</tbody></table>'
+        + '<div class="form-row" style="margin-top:12px"><div><label>Počítat statistiky od (datum a čas)</label><input type="datetime-local" class="ag-from" value="' + esc(sf ? (function (d) { var x = new Date(d); return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 16); })(sf) : '') + '"></div><div class="note" style="align-self:end;padding-bottom:6px">Starší odeslání (např. tvoje testy) se do čísel tohoto uzlu ani jeho vláken nepočítají. Prázdné = od aktivace uzlu.</div></div>'
+        + '<div class="toolbar" style="margin-top:14px"><button class="btn on ag-save">Použít</button><button class="btn ag-x">Zavřít</button></div>';
+      dlg.querySelector('.ag-x').addEventListener('click', function () { ov.classList.remove('open'); });
+      dlg.querySelector('.ag-save').addEventListener('click', function () {
+        hide = []; dlg.querySelectorAll('.ag-on').forEach(function (c) { if (!c.checked) hide.push(c.getAttribute('data-t')); });
+        names = {}; dlg.querySelectorAll('.ag-name').forEach(function (c) { var v = c.value.trim(); if (v) names[c.getAttribute('data-t')] = v.slice(0, 60); });
+        var fv = dlg.querySelector('.ag-from').value; nd.stats_from = fv ? new Date(fv).toISOString() : null; nd.goals_hide = hide; nd.goal_names = names; nd.goals = actionGoals(nd);
+        var hidPorts = hide.map(function (t) { return base.findIndex(function (g) { return g.type === t; }) + 1; }); var lost = F.edges.filter(function (ed) { return ed.from === nd.id && hidPorts.indexOf(ed.port || 0) >= 0; });
+        if (lost.length && !confirm('Ze skrytých výstupů vede ' + lost.length + ' vlákno/vlákna – smazat je?')) { return; } F.edges = F.edges.filter(function (ed) { return lost.indexOf(ed) < 0; });
+        ov.classList.remove('open'); nd.goals_open = true; document.getElementById('msg').textContent = 'Nastavení cílů se projeví ve statistikách po uložení funelu.'; render();
+      });
+    }
+
     function openActionEditor(nd) {
       var isSms = nd.kind === 'sms'; ov.classList.add('open'); dlg.classList.remove('full');
       function draw() {
@@ -587,7 +607,8 @@
       var hd0 = el.querySelector('.hd'); if (opts.quick !== false && hd0 && !hd0.querySelector('.gquick')) { var qb = document.createElement('button'); qb.className = 'gear gquick'; qb.title = gl.length ? 'Cíle – vysunout' : 'Analyzovat cíle'; qb.innerHTML = '🎯'; var xb = hd0.querySelector('.x'); hd0.insertBefore(qb, hd0.querySelector('.sw') || xb); qb.addEventListener('mousedown', function (e) { e.stopPropagation(); }); qb.addEventListener('click', function (e) { e.stopPropagation(); if (!gl.length) opts.onAnalyze(qb); else { nd.goals_open = true; el.classList.add('gopen'); drawLinks(); } }); }
     }
     // Pevné cíle akčních uzlů (SMS / e-mail) – měří se z událostí funelu
-    function actionGoals(nd) { var sms = nd.kind === 'sms'; return [{ type: 'sent', label: sms ? 'SMS odeslána' : 'E-mail odeslán', desc: 'Zpráva z tohoto kroku odešla leadovi.' }, sms ? { type: 'delivered', label: 'SMS doručena', desc: 'Brána potvrdila doručení (GoSMS / Twilio).' } : { type: 'opened', label: 'Otevřel e-mail', desc: 'Sledovací pixel zaznamenal otevření e-mailu.' }, { type: 'clicked', label: 'Klikl na odkaz', desc: 'Lead otevřel odkaz ze zprávy (záchytná stránka).', primary: true }, { type: 'noreact', label: 'Bez reakce', desc: 'Zpráva odešla, ale lead na odkaz neklikl.' }]; }
+    function actionGoals(nd) { var sms = nd.kind === 'sms'; var nm = nd.goal_names || {}; return actionGoalsBase(sms).map(function (g) { return nm[g.type] ? Object.assign({}, g, { label: nm[g.type] }) : g; }); }
+    function actionGoalsBase(sms) { return [{ type: 'sent', label: sms ? 'SMS odeslána' : 'E-mail odeslán', desc: 'Zpráva z tohoto kroku odešla leadovi.' }, sms ? { type: 'delivered', label: 'SMS doručena', desc: 'Brána potvrdila doručení (GoSMS / Twilio).' } : { type: 'opened', label: 'Otevřel e-mail', desc: 'Sledovací pixel zaznamenal otevření e-mailu.' }, { type: 'clicked', label: 'Klikl na odkaz', desc: 'Lead otevřel odkaz ze zprávy (záchytná stránka).', primary: true }, { type: 'noreact', label: 'Bez reakce', desc: 'Zpráva odešla, ale lead na odkaz neklikl.' }]; }
     function actionGoalCount(nd, g) { var st = NS_READY ? NS[nd.id] : null; if (!st) return { n: null, src: 'zatím bez událostí' }; var m = { sent: st.leads, delivered: st.delivered, opened: st.opened, clicked: st.clicked, noreact: st.noreact }; return { n: m[g.type] != null ? Number(m[g.type]) : null, src: 'z událostí tohoto kroku · ' + perLabel() }; }
     // ── Cíle stránky + výsledky ──
     var GOALS = {}; // GOALS[page_key] = { goals:[{type,label,desc,primary}], summary, analyzed_at }
