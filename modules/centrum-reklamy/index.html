@@ -95,12 +95,21 @@
       <div class="module-tabs">
         <button class="module-tab active" data-tab="pages">📄 Záchytné stránky</button>
         <button class="module-tab" data-tab="funnel">🔻 Funel</button>
+        <button class="module-tab" data-tab="settings">⚙ Nastavení</button>
       </div>
       <div class="content">
       <div class="module-panel active" id="panel-pages">
         <div class="kpis" id="kpis"></div>
         <div class="tbl-wrap"><table class="data-table"><thead><tr><th>Stránka</th><th class="num">Návštěvníci</th><th class="num">Leady / objednávky</th><th class="num">Dokončeno / konverze</th><th class="num">Tržba</th><th>Trend (návštěvy · <span style="color:#22c55e">leady</span>)</th><th></th></tr></thead><tbody id="grid"><tr><td colspan="7" class="note">Načítám…</td></tr></tbody></table></div>
         <p class="note" style="margin-top:16px">Návštěvy = unikátní prohlížeče za den (anonymní identifikátor, bez osobních údajů). Leady/objednávky z databáze HolyOS a Best Series 2.0. Zelený sloupec = leady/objednávky daného dne. Stav k <span id="gen">—</span>.</p>
+      </div>
+      <div class="module-panel" id="panel-settings">
+        <div class="fn-card" style="max-width:820px"><h3 style="margin:0 0 6px">Facebook / Meta Ads – centrální napojení</h3>
+          <p class="note" style="line-height:1.6;margin:0 0 10px">Jeden přístupový token pro všechny funely a startovací body. Potřebuješ <b>System User token</b> z Meta Business Manageru (Nastavení firmy → Uživatelé → Systémoví uživatelé → Vygenerovat token, oprávnění <code>ads_read</code> + <code>read_insights</code>, přiřazené reklamní účty). Token se ukládá jen na serveru. V editoru funelu pak u startovacího bodu jen vybereš reklamní účet a kampaň.</p>
+          <div id="meta-state" class="note" style="margin-bottom:8px">Načítám…</div>
+          <div class="form-row"><div style="flex:2"><label>Přístupový token</label><input id="meta-token" type="password" placeholder="vlož nový token (prázdné = ponechat uložený)"></div><div><label>Výchozí reklamní účet</label><select id="meta-acc"><option value="">— vyber po uložení tokenu —</option></select></div></div>
+          <div class="toolbar"><button class="btn on" id="meta-save">Uložit a ověřit</button><button class="btn" id="meta-clear" style="color:#ef4444">Odpojit (smazat token)</button><span class="note" id="meta-msg"></span></div>
+        </div>
       </div>
       <div class="module-panel" id="panel-funnel">
         <div class="toolbar"><button class="btn" id="fn-new">+ Založit funel</button><span class="note">Funel = posloupnost kroků (stránka + metrika). Čísla se berou z vybraného období nahoře, mezi kroky se ukáže propad.</span></div>
@@ -222,7 +231,13 @@
       try { await saveFunnels(list); document.getElementById('fn-editor').style.display = 'none'; var created = isNew ? FUNNELS[FUNNELS.length - 1] : null; editing = null; renderFunnels(); if (created) location.href = 'modules/centrum-reklamy/editor.html?id=' + encodeURIComponent(created.id); } catch (e) { document.getElementById('fn-msg').textContent = e.message; } });
     document.getElementById('fn-delete').addEventListener('click', async function () { if (!editing || !editing.id || !confirm('Smazat funel „' + editing.name + '“?')) return; try { await saveFunnels(FUNNELS.filter(function (f) { return f.id !== editing.id; })); document.getElementById('fn-editor').style.display = 'none'; editing = null; renderFunnels(); } catch (e) { document.getElementById('fn-msg').textContent = e.message; } });
     async function loadFunnels() { try { var a = await fetch('/api/ads-center/pages', { credentials: 'same-origin' }); PAGESDEF = await a.json(); var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); FUNNELS = await b.json(); renderFunnels(); } catch (e) { document.getElementById('fn-list').innerHTML = '<div class="note warn">Funely se nepodařilo načíst.</div>'; } }
+    // ── Nastavení Meta ──
+    async function metaLoad() { try { var c = await (await fetch('/api/ads-center/meta/config', { credentials: 'same-origin' })).json(); var st = document.getElementById('meta-state'); if (!c.hasToken) { st.innerHTML = '<span class="warn">Nenapojeno – vlož token.</span>'; return; } st.innerHTML = 'Token je uložený' + (c.source === 'env' ? ' (z prostředí serveru)' : '') + (c.account ? ' · výchozí účet act_' + esc(c.account) : ''); var accs = await (await fetch('/api/ads-center/meta/accounts', { credentials: 'same-origin' })).json(); var sel = document.getElementById('meta-acc'); if (Array.isArray(accs)) { sel.innerHTML = '<option value="">— žádný —</option>' + accs.map(function (a) { return '<option value="' + esc(a.id) + '"' + (a.id === c.account ? ' selected' : '') + '>' + esc(a.name) + ' (act_' + esc(a.id) + ', ' + esc(a.currency) + ')</option>'; }).join(''); st.innerHTML += ' · <span style="color:#22c55e">připojeno, ' + accs.length + ' reklamních účtů</span>'; } else st.innerHTML += ' · <span class="warn">' + esc(accs.error || 'účty se nepodařilo načíst') + '</span>'; } catch (e) { document.getElementById('meta-state').textContent = 'Chyba načtení.'; } }
+    document.getElementById('meta-save').addEventListener('click', async function () { var m = document.getElementById('meta-msg'); m.textContent = 'Ukládám…'; var body = { account: document.getElementById('meta-acc').value }; var t = document.getElementById('meta-token').value.trim(); if (t) body.token = t; var r = await fetch('/api/ads-center/meta/config', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); if (!r.ok) { m.textContent = 'Uložení selhalo.'; return; } var tst = await (await fetch('/api/ads-center/meta/test', { credentials: 'same-origin' })).json(); m.innerHTML = tst.error ? '<span class="warn">Ověření selhalo: ' + esc(tst.error) + '</span>' : '<span style="color:#22c55e">Připojeno jako ' + esc(tst.me && tst.me.name) + '</span>'; document.getElementById('meta-token').value = ''; metaLoad(); });
+    document.getElementById('meta-clear').addEventListener('click', async function () { if (!confirm('Smazat uložený token?')) return; await fetch('/api/ads-center/meta/config', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clear: true, account: '' }) }); metaLoad(); });
+    metaLoad();
     loadFunnels();
+    if (location.hash === '#settings') { var stt = document.querySelector('.module-tab[data-tab="settings"]'); if (stt) stt.click(); }
     if (location.hash === '#funnel') { var ft = document.querySelector('.module-tab[data-tab="funnel"]'); if (ft) ft.click(); }
     document.querySelectorAll('.module-tab').forEach(function (t) { t.addEventListener('click', function () { document.querySelectorAll('.module-tab').forEach(function (x) { x.classList.toggle('active', x === t); }); document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.toggle('active', p.id === 'panel-' + t.getAttribute('data-tab')); }); }); });
     load();
