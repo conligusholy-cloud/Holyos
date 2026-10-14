@@ -116,6 +116,13 @@ router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) 
     const { setSetting } = require('../services/settings');
     const list = (Array.isArray(req.body) ? req.body : []).slice(0, 50).map(cleanFunnel);
     await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id }); try { require('../services/ads/funnel-events').invalidate(); } catch (_) { /* cache */ }
+    // Cílové stránky variant (specialista / schůzka) pro automatické SMS a e-maily se odvozují z plátna: zapnutý uzel SMS/e-mail → spojka → Záchytná stránka
+    // se stránkou z Centra reklamy. Uloží se do compounder.aispec_autosend.landing, aby odkaz {link} ve zprávách vedl tam, kam ukazuje funel (bez nutnosti „Uložit nastavení“).
+    try { const { getSetting } = require('../services/settings'); const landing = { specialist: '', schuzka: '' };
+      list.forEach((f) => { const byId = {}; (f.nodes || []).forEach((nd) => { byId[nd.id] = nd; }); (f.nodes || []).forEach((nd) => { if (!['sms', 'email'].includes(nd.kind) || nd.enabled === false) return; const vr = nd.variant === 'schuzka' ? 'schuzka' : 'specialist'; if (landing[vr]) return; (f.edges || []).forEach((e) => { if (e.from !== nd.id) return; const t = byId[e.to]; if (t && t.kind === 'landing' && t.enabled !== false && t.page) { const pg = PAGES.find((p) => p.key === t.page); if (pg && /^https:\/\//.test(pg.url) && !landing[vr]) landing[vr] = pg.url; } }); }); });
+      const cur = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}; const prevL = Object.assign({ specialist: '', schuzka: '' }, cur.landing || {});
+      if (prevL.specialist !== landing.specialist || prevL.schuzka !== landing.schuzka) { await setSetting('compounder.aispec_autosend', Object.assign({}, cur, { landing }), { type: 'json', description: 'Compounder – automatické oslovení (SMS/e-mail) – pravidla', scope: 'compounder', userId: req.user && req.user.id }); console.log('[ads-center] landing variant z funelu:', JSON.stringify(landing)); }
+    } catch (e) { console.warn('[ads-center] landing sync', e.message); }
     res.json(list);
   } catch (err) { next(err); }
 });
