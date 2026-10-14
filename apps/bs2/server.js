@@ -1283,7 +1283,7 @@ app.get('/admin', requireAdmin, wrap(async (req, res) => {
   let history = [];
   try {
     history = (await q(`WITH days AS (SELECT generate_series(date_trunc('day', now()) - interval '59 days', date_trunc('day', now()), interval '1 day')::date AS d),
-      first AS (SELECT supporter_id, min(created_at)::date AS d FROM user_events WHERE type='login' AND supporter_id IS NOT NULL GROUP BY supporter_id),
+      first AS (SELECT s.id AS supporter_id, LEAST(COALESCE((SELECT min(e.created_at) FROM user_events e WHERE e.type='login' AND e.supporter_id=s.id), s.last_login_at), COALESCE(s.activated_at, s.last_login_at))::date AS d FROM supporters s WHERE s.last_login_at IS NOT NULL),
       daily AS (SELECT created_at::date AS d, count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND supporter_id IS NOT NULL AND created_at > now() - interval '60 days' GROUP BY 1)
       SELECT to_char(days.d,'YYYY-MM-DD') AS d, COALESCE((SELECT count(*)::int FROM first WHERE first.d=days.d),0) AS new_users, COALESCE(daily.n,0) AS logins,
         (SELECT count(*)::int FROM first WHERE first.d<=days.d) AS cumulative FROM days LEFT JOIN daily ON daily.d=days.d ORDER BY days.d`)).rows;
@@ -1501,15 +1501,14 @@ app.post('/admin/podpora/online', requireAdmin, wrap(async (req, res) => {
   await log(req.admin, 'support_online', { online: on });
   res.redirect('/admin/podpora?msg=' + encodeURIComponent(on ? 'Podpora je ONLINE — uživatelé mohou psát.' : 'Podpora je OFFLINE.'));
 }));
-app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file'), wrap(async (req, res) => {
-  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
-  const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
+// Odeslání zprávy podpory uživateli (společné pro web admin i Velín): uloží zprávu + e-mail, když uživatel není online
+async function agentSend(sid, body, oidIn, f, fallbackName) {
   let row = null;
   // Zpráva k objednávce (tlačítko Chat v Objednávkách): ověř, že objednávka patří uživateli, a předřaď číslo objednávky
-  let ord = null; const oidIn = parseInt((req.body || {}).order_id, 10);
+  let ord = null;
   if (Number.isFinite(oidIn)) ord = (await q('SELECT id, product_name FROM orders WHERE id=$1 AND supporter_id=$2', [oidIn, sid])).rows[0] || null;
   const bodyOut = ord && body ? 'K objednávce č. ' + ord.id + ' (' + ord.product_name + '): ' + body : body;
-  if (bodyOut || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data, order_id) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8,$9) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || req.admin.name || 'Podpora', bodyOut || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null, ord ? ord.id : null])).rows[0];
+  if (bodyOut || f) row = (await q('INSERT INTO support_messages (supporter_id, sender, agent_name, body, read_by_agent, file_name, file_type, file_size, file_data, order_id) VALUES ($1,$2,$3,$4,true,$5,$6,$7,$8,$9) RETURNING ' + SUP_COLS, [sid, 'agent', (await supportAgent()) || fallbackName || 'Podpora', bodyOut || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null, ord ? ord.id : null])).rows[0];
   // E-mail uživateli o nové zprávě v chatu — vždy, když není právě online na webu (nejvýš 1× za 10 min na uživatele, ať se nespamuje)
   if (row) {
     try {
@@ -1524,8 +1523,59 @@ app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file')
       }
     } catch (e) { console.warn('[bs2] chat mail:', e.message); }
   }
+  return row;
+}
+app.post('/admin/podpora/:id(\\d+)/send', requireAdmin, supUpload.single('file'), wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+  const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
+  const row = await agentSend(sid, body, parseInt((req.body || {}).order_id, 10), f, req.admin.name);
   if ((req.headers.accept || '').includes('application/json')) return res.json({ ok: true, msg: row });
   res.redirect('/admin/podpora?u=' + sid);
+}));
+
+// ── Servisní API podpory pro Velín (volá jen HolyOS; Bearer JWT podepsaný BS2_SSO_SECRET, aud 'bs2-api', iss 'holyos') ──
+function requireSvc(req, res, next) {
+  const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!SSO_SECRET || !m) return res.status(401).json({ error: 'Neautorizováno' });
+  try { req.svc = jwt.verify(m[1], SSO_SECRET, { audience: 'bs2-api', issuer: 'holyos' }); next(); } catch (e) { res.status(401).json({ error: 'Neplatný token' }); }
+}
+app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
+  const threads = (await q(`SELECT s.id, s.nick, s.first_name, s.last_name, s.email,
+      (SELECT count(*)::int FROM support_messages m WHERE m.supporter_id=s.id AND m.sender='user' AND m.read_by_agent=false) AS unread,
+      (SELECT max(created_at) FROM support_messages m WHERE m.supporter_id=s.id) AS last_at,
+      (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body,
+      (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender
+    FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
+  res.set('Cache-Control', 'no-store').json({ online: await supportOnline(), agent: await supportAgent(), agents: await supportAgents(), threads });
+}));
+app.get('/api/svc/support/threads/:id(\\d+)', requireSvc, wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const after = parseInt(req.query.after, 10);
+  const who = (await q('SELECT id, nick, first_name, last_name, email, phone, created_at FROM supporters WHERE id=$1', [sid])).rows[0];
+  if (!who) return res.status(404).json({ error: 'Uživatel neexistuje' });
+  const msgs = Number.isFinite(after)
+    ? (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [sid, after])).rows
+    : (await q('SELECT ' + SUP_COLS + ' FROM (SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY id DESC LIMIT 200) t ORDER BY id', [sid])).rows;
+  await q("UPDATE support_messages SET read_by_agent=true WHERE supporter_id=$1 AND sender='user' AND read_by_agent=false", [sid]);
+  const orders = Number(((await q('SELECT count(*)::int AS c FROM orders WHERE supporter_id=$1', [sid])).rows[0] || {}).c || 0);
+  res.set('Cache-Control', 'no-store').json({ who, msgs, orders, online: ST.isOnline(sid), supportOnline: await supportOnline(), agent: await supportAgent() });
+}));
+app.post('/api/svc/support/threads/:id(\\d+)/send', requireSvc, wrap(async (req, res) => {
+  const sid = parseInt(req.params.id, 10); const body = String((req.body || {}).body || '').trim().slice(0, 4000);
+  if (!body) return res.status(400).json({ error: 'Prázdná zpráva' });
+  const row = await agentSend(sid, body, parseInt((req.body || {}).order_id, 10), null, req.svc.name);
+  res.json({ ok: true, msg: row });
+}));
+app.post('/api/svc/support/online', requireSvc, wrap(async (req, res) => {
+  const on = !!(req.body || {}).online;
+  if (on && (req.body || {}).agent !== undefined) await q("INSERT INTO app_settings (key,value) VALUES ('support_agent',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [String(req.body.agent || '').slice(0, 60)]);
+  await q("INSERT INTO app_settings (key,value) VALUES ('support_online',$1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", [on ? '1' : '0']);
+  await log({ pid: null, name: req.svc.name || 'Velín' }, 'support_online', { online: on, via: 'velin' });
+  res.json({ ok: true, online: on });
+}));
+app.get('/api/svc/support/file/:id(\\d+)', requireSvc, wrap(async (req, res) => {
+  const r = (await q('SELECT file_name, file_type, file_data FROM support_messages WHERE id=$1', [parseInt(req.params.id, 10)])).rows[0];
+  if (!r || !r.file_data) return res.status(404).end();
+  res.set('Content-Type', r.file_type || 'application/octet-stream').set('Cache-Control', 'private, max-age=3600').send(r.file_data);
 }));
 app.get('/admin/podpora/poll', requireAdmin, wrap(async (req, res) => {
   const unread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false")).rows[0] || {}).c || 0);
