@@ -169,6 +169,14 @@ router.get('/meta/campaigns/:id', async (req, res, next) => {
 // ── Leady z rychlého formuláře: seznam kontaktů, které přes formulář přišly do HolyOS (CompounderLead.meta_form_id,
 //    plní je webhook FB Lead Ads). ?days= období (0 = celá historie), ?campaign= záložní párování podle názvu kampaně.
 const CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', odeslan_specialista: 'Odeslán odkaz na specialistu', psal_chatovi: 'Psal s chatem', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', slibeny_krok: 'Slíbený krok', smlouva_odeslat: 'Odeslat dokumentaci', smlouva_odeslana: 'Dokumentace odeslána', poptavka_financovani: 'Poptávka financování', odeslana_schuzka: 'Odeslána schůzka', prodano: 'Prodáno', converted: 'Převeden', nezajem: 'Nemá zájem', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
+// Rychlý počet leadů formuláře v HolyOS za období (pro uzel na plátně): celkem + z toho napřímo + dnes.
+router.get('/meta/forms/:formId/count', async (req, res, next) => {
+  try { const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = Math.max(1, Math.min(3650, parseInt(req.query.days, 10) || 30)); const ads = String(req.query.ads || '').split(',').map((x) => x.replace(/[^0-9]/g, '')).filter(Boolean);
+    const or = []; if (ads.length && req.query.scope !== 'form') or.push({ meta_ad_id: { in: ads } }); if (formId) or.push({ meta_form_id: formId }); if (!or.length) return res.json({ total: 0, direct: 0, today: 0 });
+    const since = new Date(Date.now() - days * 86400000); const where = { OR: or, created_at: { gte: since } }; const day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    const [total, today, rows] = await Promise.all([prisma.compounderLead.count({ where }), prisma.compounderLead.count({ where: { OR: or, created_at: { gte: day0 } } }), prisma.compounderLead.findMany({ where, select: { activity_log: true } })]);
+    const direct = rows.filter((r) => /napřímo/.test(String(r.activity_log || '').split('\n')[0])).length;
+    res.json({ total, direct, today, days }); } catch (err) { next(err); } });
 router.get('/meta/forms/:formId/leads', async (req, res, next) => {
   try {
     const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = Math.max(0, Math.min(3650, parseInt(req.query.days, 10) || 0)); const campaign = String(req.query.campaign || '').trim();
