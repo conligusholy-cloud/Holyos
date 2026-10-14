@@ -129,6 +129,27 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .coupon form .row{display:flex;gap:8px;flex-wrap:wrap} .coupon form .row input{flex:1;min-width:160px}
   .coupon .ok{color:var(--ok);font-weight:700}
   @media (max-width:600px){.auc{padding:16px 14px}.podium{gap:6px}.pd .pc{font-size:24px}.pd .nm{font-size:12.5px}}
+  /* ── Bonusové karty ── */
+  .cards-t{margin:16px 0 8px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);text-align:center}
+  .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-width:560px;margin:0 auto;perspective:900px}
+  .cardb{position:relative;aspect-ratio:2/3;cursor:pointer;transform-style:preserve-3d;transition:transform .7s cubic-bezier(.2,.8,.2,1);-webkit-tap-highlight-color:transparent}
+  .cardb .f,.cardb .b{position:absolute;inset:0;border-radius:12px;backface-visibility:hidden;-webkit-backface-visibility:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid var(--border2)}
+  .cardb .b{background:linear-gradient(160deg,#1a2b55,#0b1430 60%,#121d36);box-shadow:0 10px 30px rgba(0,0,0,.5),inset 0 0 0 1px rgba(79,209,255,.15)}
+  .cardb .b::before{content:'B';font-size:clamp(22px,6vw,34px);font-weight:900;background:linear-gradient(90deg,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.9}
+  .cardb .b::after{content:'';position:absolute;inset:6px;border-radius:9px;border:1px dashed rgba(79,209,255,.35)}
+  .cardb .f{transform:rotateY(180deg);background:linear-gradient(160deg,rgba(14,22,40,.98),rgba(8,13,26,.98));font-weight:900;font-size:clamp(14px,4vw,22px);letter-spacing:-.02em;text-align:center;padding:4px}
+  .cardb .f small{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--text2);font-weight:600;margin-top:4px}
+  .cardb .f.up{color:var(--ok);border-color:rgba(47,227,160,.6)} .cardb .f.down{color:var(--err);border-color:rgba(255,93,108,.6)}
+  .cardb.open{transform:rotateY(180deg)} .cardb.pick{transform:rotateY(180deg) scale(1.08);z-index:2}
+  .cardb.pick .f{box-shadow:0 0 0 3px rgba(79,209,255,.35),0 0 40px rgba(79,209,255,.35)}
+  .cardb:not(.open):hover{transform:translateY(-6px) rotateZ(-2deg)}
+  .cards.lock .cardb{cursor:default}
+  .cards.lock .cardb:not(.open):hover{transform:none}
+  .cardb.idle{animation:cardidle 2.4s ease-in-out infinite} .cardb:nth-child(2).idle{animation-delay:.3s} .cardb:nth-child(3).idle{animation-delay:.6s} .cardb:nth-child(4).idle{animation-delay:.9s} .cardb:nth-child(5).idle{animation-delay:1.2s}
+  @keyframes cardidle{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+  .cards-msg{text-align:center;margin-top:12px;font-size:15px;min-height:22px}
+  .cards-msg b{font-size:clamp(22px,6vw,32px);font-weight:900;letter-spacing:-.02em}
+  .cards-msg b.up{color:var(--ok)} .cards-msg b.down{color:var(--err)}
   .hidden{display:none !important}
   @media (max-width:600px){.quiz{padding:16px 14px;border-radius:18px}.opt{font-size:15px}.ov{align-items:flex-end;padding:0}.ov .box{width:100%;border-radius:24px 24px 0 0;border-bottom:0;padding-bottom:calc(22px + env(safe-area-inset-bottom))}}
 </style>
@@ -157,7 +178,12 @@ ${presence}
     <div class="big" id="rbig"></div>
     <h2 id="rtitle"></h2>
     <p id="rtext"></p>
-    <div class="cta-row" style="justify-content:center">
+    <div id="bonus">
+      <div class="cards-t">Bonusová karta · vyberte jednu z pěti</div>
+      <div class="cards" id="cards"></div>
+      <div class="cards-msg" id="cmsg">Karta může kapitál zvýšit i snížit. Je to o náhodě.</div>
+    </div>
+    <div class="cta-row hidden" id="rcta-row" style="justify-content:center">
       <button class="btn gold" id="toAuc">Hrát o slevový kupon</button>
       <a class="btn sec" href="/location?utm_source=arena" id="rcta">Prověřit si místo</a>
     </div>
@@ -220,8 +246,8 @@ ${netScript}
   $('next').addEventListener('click', function(){ i++; if(i < Q.length) show(); else finish(); });
   function finish(){ $('quiz').classList.add('hidden'); var r = $('result'); r.classList.remove('hidden'); var okN = answers.filter(function(a){ return a.ok; }).length;
     $('rbig').textContent = fmt(bank); $('rtitle').textContent = name + ', ' + (okN === Q.length ? 'bez chyby – to je výkon!' : okN >= 3 ? 'solidní základ.' : 'začátek je za vámi.');
-    $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'S takovým přehledem je škoda nechat kapitál jen virtuální – vsaďte ho v aukci o slevový kupon.' : 'Vsaďte kapitál v aukci o slevový kupon na první prádlomat.');
-    r.scrollIntoView({ behavior:'smooth', block:'center' });
+    $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'Teď ještě bonusová karta – a pak aukce o slevový kupon.' : 'Bonusová karta může ještě leccos změnit – a pak aukce o slevový kupon.');
+    bonusShow(); r.scrollIntoView({ behavior:'smooth', block:'center' });
     try { fetch('/api/arena/result', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, score: okN, bank: bank, answers: answers, ms: Date.now() - startedAt }) }); } catch(e){} }
   // ── Aukce o kupony: lobby s odpočtem (server kolo 30 s), pódium, kupon + kontakt ──
   var AUC = { round: null, poll: null, tick: null, claimed: {} };
@@ -242,6 +268,22 @@ ${netScript}
     c.scrollIntoView({ behavior:'smooth', block:'center' }); }
   $('aucAgain').addEventListener('click', function(){ AUC.round = null; aucStart(); });
   $('toAuc').addEventListener('click', aucStart);
+  // ── Bonusové karty: 5 karet, jedna se vybere; může kapitál zvýšit i snížit. Pojistka: při plném počtu správných
+  //    odpovědí (maximální kapitál) nejde vytáhnout maximální navýšení – strop výsledku je BONUS_CAP.
+  var BONUS_CAP = PRIZE * Q.length + 100000;
+  var CARDS = [ { k:'x2', t:'×2', s:'zdvojnásobení', f:function(v){ return v * 2; } }, { k:'p100', t:'+100 000', s:'bonus', f:function(v){ return v + 100000; } }, { k:'p50', t:'+50 000', s:'bonus', f:function(v){ return v + 50000; } }, { k:'m50', t:'−50 000', s:'ztráta', f:function(v){ return Math.max(0, v - 50000); } }, { k:'half', t:'÷2', s:'polovina', f:function(v){ return Math.round(v / 2); } } ];
+  function bonusShow(){ var box = $('cards'); box.className = 'cards'; box.innerHTML = CARDS.map(function(c, i){ return '<div class="cardb idle" data-i="' + i + '"><div class="b"></div><div class="f"></div></div>'; }).join(''); $('cmsg').innerHTML = 'Karta může kapitál zvýšit i snížit. Je to o náhodě.'; $('bonus').classList.remove('hidden'); $('rcta-row').classList.add('hidden');
+    Array.prototype.forEach.call(box.children, function(el){ el.addEventListener('click', function(){ bonusPick(+el.getAttribute('data-i')); }); }); }
+  function bonusPick(idx){ var box = $('cards'); if(box.classList.contains('lock')) return; box.classList.add('lock');
+    // Povolené karty: nikdy nad strop (plný kvíz = žádné ×2 ani +100 000); z povolených se losuje, vybraná karta dostane los, ostatní zbytek
+    var maxOK = bank >= PRIZE * Q.length; var allowed = CARDS.filter(function(c){ var v = c.f(bank); if (v > BONUS_CAP) return false; if (maxOK && (c.k === 'x2' || c.k === 'p100')) return false; return true; });
+    var chosen = allowed[Math.floor(Math.random() * allowed.length)]; var rest = CARDS.filter(function(c){ return c !== chosen; }).sort(function(){ return Math.random() - .5; });
+    var map = {}; map[idx] = chosen; var ri = 0; for (var i = 0; i < CARDS.length; i++) if (i !== idx) map[i] = rest[ri++];
+    Array.prototype.forEach.call(box.children, function(el, i){ var c = map[i]; var f = el.querySelector('.f'); var nv = c.f(bank); f.innerHTML = esc(c.t) + '<small>' + esc(c.s) + '</small>'; f.classList.add(nv > bank ? 'up' : (nv < bank ? 'down' : '')); el.classList.remove('idle'); });
+    var el = box.children[idx]; el.classList.add('pick', 'open'); var before = bank; var after = chosen.f(bank);
+    setTimeout(function(){ bank = after; $('bankv').textContent = fmt(bank); $('rbig').textContent = fmt(bank); $('bank').classList.remove('pop'); void $('bank').offsetWidth; $('bank').classList.add('pop'); var d = after - before; $('cmsg').innerHTML = (d >= 0 ? '<b class="up">+' : '<b class="down">−') + fmt(Math.abs(d)) + '</b><br>' + (d > 0 ? 'Karta přidala. Váš kapitál: ' : d < 0 ? 'Karta ubrala. Váš kapitál: ' : 'Beze změny. Váš kapitál: ') + '<b>' + fmt(bank) + '</b>'; if (d !== 0) { var fl = document.createElement('div'); fl.className = 'fly'; fl.textContent = (d > 0 ? '+' : '−') + fmt(Math.abs(d)); if (d < 0) fl.style.color = '#ff5d6c'; document.body.appendChild(fl); setTimeout(function(){ fl.remove(); }, 1400); }
+      setTimeout(function(){ Array.prototype.forEach.call(box.children, function(x){ x.classList.add('open'); }); }, 500);
+      setTimeout(function(){ $('rcta-row').classList.remove('hidden'); $('rcta-row').scrollIntoView({ behavior:'smooth', block:'center' }); }, 1400); }, 750); }
 
   // ping návštěvy (stejný beacon jako ostatní veřejné stránky)
   try { fetch('/api/presence/ping', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, path: '/arena' }) }); } catch(e){}
