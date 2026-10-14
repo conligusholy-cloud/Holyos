@@ -235,6 +235,18 @@ router.get('/meta/forms/:formId/split-stats', async (req, res, next) => {
     const rows = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: sinceDate(days) } }, select: { owner_person_id: true, external_rep_id: true } });
     const counts = {}; let unassigned = 0; rows.forEach((r) => { const k = r.owner_person_id ? 'i:' + r.owner_person_id : (r.external_rep_id ? 'e:' + r.external_rep_id : null); if (!k) { unassigned++; return; } counts[k] = (counts[k] || 0) + 1; });
     res.json({ counts, unassigned, total: rows.length, days }); } catch (err) { next(err); } });
+// Kdo je na řadě: stejná logika jako přiřazování (_fbResolveOwner) – cyklus podle počtů, pozice = leady od split_since.
+router.get('/meta/forms/:formId/next', async (req, res, next) => {
+  try { const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const cmp = require('./compounder.routes'); const forms = await cmp._fbLoadForms(); const cfg = forms.find((f) => String(f.form_id) === formId); if (!cfg) return res.json({ mode: 'none' });
+    const cyc = (cfg.split || []).filter((s) => s && (s.owner_person_id || s.external_rep_id) && Number(s.count) > 0);
+    if (cyc.length) { const seq = []; cyc.forEach((s) => { const k = s.owner_person_id ? 'i:' + s.owner_person_id : 'e:' + s.external_rep_id; const n = Math.min(999, Math.max(0, Math.round(Number(s.count) || 0))); for (let i = 0; i < n; i++) seq.push(k); });
+      const where = { meta_form_id: formId }; if (cfg.split_since) where.created_at = { gte: new Date(cfg.split_since) }; const pos = await prisma.compounderLead.count({ where }); const idx = seq.length ? pos % seq.length : 0; const cur = seq[idx]; let remain = 0; for (let i = idx; i < seq.length && seq[i] === cur; i++) remain++;
+      const order = []; for (let i = 0; i < seq.length; i++) order.push(seq[(idx + i) % seq.length]);
+      return res.json({ mode: 'cycle', next: cur, remaining: remain, position: idx + 1, cycle_len: seq.length, since: cfg.split_since || null, assigned_since: pos, order: order.slice(0, 12) }); }
+    const split = (cfg.split || []).filter((s) => s && (s.owner_person_id || s.external_rep_id) && Number(s.percent) > 0);
+    if (split.length > 1) return res.json({ mode: 'percent' });
+    const k = cfg.owner_person_id ? 'i:' + cfg.owner_person_id : (cfg.external_rep_id ? 'e:' + cfg.external_rep_id : null); return res.json({ mode: k ? 'single' : 'none', next: k });
+  } catch (err) { next(err); } });
 router.get('/meta/forms/:formId/leads', async (req, res, next) => {
   try {
     const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = Math.max(0, Math.min(3650, parseInt(req.query.days, 10) || 0)); const campaign = String(req.query.campaign || '').trim();
