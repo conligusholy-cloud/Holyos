@@ -55,18 +55,35 @@ async function stats(funnelId, since) {
   return out;
 }
 
-// Průchody spojkami: pro hranu A→B (oba uzly sledované) = leady, které mají událost v A a poté v B
-// (a po vytvoření spojky, pokud má created_at). Vrací { 'A>B': { leads, list:[{lead_id, tA, tB}] } }.
+// Průchody spojkami – pro KAŽDOU hranu A→B: leady, které jsou v množině A (u Rozdělení jen daná větev) i v množině B.
+// Množiny: formulář = leady z formuláře (DB), rozdělení = leady formuláře podle obchodníka větve, SMS/e-mail/stránka = události funelu.
+// U cílové události se hlídá pořadí (B po A) a čas vytvoření spojky. Vrací { 'A>B': { leads, list:[{lead_id,tA,tB}] } }.
 async function edgeFlows(funnelId, since, withList) {
   const f = (await funnels()).find((x) => x.id === funnelId); if (!f) return {};
-  const tracked = new Set((f.nodes || []).filter((nd) => ['sms', 'email', 'landing'].includes(nd.kind)).map((nd) => nd.id));
-  const edges = (f.edges || []).filter((e) => tracked.has(e.from) && tracked.has(e.to)); if (!edges.length) return {};
-  const act = {}; (f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
+  const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
+  const act = {}; nodes.forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
+  // 1) události → first[nodeId][leadId] = čas
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
-  const first = {}; // first[nodeId][leadId] = první čas události
-  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return; if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return; (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
+  const first = {}; rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return; if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return; (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
+  // 2) leady formulářů (DB) – cache per form
+  const formCache = {};
+  async function formLeads(nd) { const fid = nd.form && nd.form.form_id; if (!fid) return []; if (formCache[fid]) return formCache[fid]; const ads = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fid) }]; const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: since } }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true } }); formCache[fid] = L; return L; }
+  function upstreamFormNode(nd, depth) { if (!nd || depth > 10) return null; if (nd.kind === 'leadform') return nd; const e = edges.find((x) => x.to === nd.id); return e ? upstreamFormNode(byId[e.from], (depth || 0) + 1) : null; }
+  // množina leadů uzlu (+ port u rozdělení): Map lead_id → čas
+  async function setOf(nd, port) {
+    const m = new Map(); if (!nd) return m;
+    if (nd.kind === 'leadform') { (await formLeads(nd)).forEach((L) => m.set(L.id, L.created_at)); return m; }
+    if (nd.kind === 'split') { const fn = upstreamFormNode(nd, 0); if (!fn) return m; const br = (nd.branches || [])[port || 0]; const L = await formLeads(fn); L.forEach((x) => { if (br && br.key) { const k = x.owner_person_id ? 'i:' + x.owner_person_id : (x.external_rep_id ? 'e:' + x.external_rep_id : ''); if (k !== br.key) return; } m.set(x.id, x.created_at); }); return m; }
+    if (['sms', 'email', 'landing'].includes(nd.kind)) { Object.keys(first[nd.id] || {}).forEach((lid) => m.set(Number(lid), first[nd.id][lid])); return m; }
+    return m;
+  }
   const out = {};
-  edges.forEach((e) => { const A = first[e.from] || {}, B = first[e.to] || {}; const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const list = []; Object.keys(A).forEach((lid) => { const tA = A[lid], tB = B[lid]; if (!tB) return; if (tB.getTime() < tA.getTime() - 60000) return; if (ec && tB.getTime() < ec) return; list.push({ lead_id: Number(lid), tA, tB }); }); out[e.from + '>' + e.to] = { leads: list.length, list: withList ? list : undefined }; });
+  for (const e of edges) {
+    const A = byId[e.from], B = byId[e.to]; if (!A || !B) continue; if (['start', 'note', 'result', 'goals', 'step'].includes(A.kind) || ['note', 'result', 'goals', 'step'].includes(B.kind)) continue;
+    const sa = await setOf(A, e.port || 0), sb = await setOf(B, 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventB = ['sms', 'email', 'landing'].includes(B.kind);
+    const list = []; sa.forEach((tA, lid) => { const tB = sb.get(lid); if (!tB) return; if (eventB) { if (new Date(tB).getTime() < new Date(tA).getTime() - 60000) return; if (ec && new Date(tB).getTime() < ec) return; } list.push({ lead_id: lid, tA, tB }); });
+    out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length, list: withList ? list : undefined };
+  }
   return out;
 }
 
