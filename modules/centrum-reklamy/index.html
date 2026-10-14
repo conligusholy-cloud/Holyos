@@ -17,6 +17,11 @@
     .btn { padding:7px 14px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; background:var(--surface2); color:var(--text); display:inline-flex; align-items:center; gap:6px; text-decoration:none; }
     .btn:hover { background:var(--border); }
     .btn.on { background:#f59e0b; color:#1a1200; border-color:#f59e0b; font-weight:700; }
+    .module-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); padding:0 24px; overflow-x:auto; }
+    .module-tab { padding:12px 18px; background:transparent; border:none; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-1px; white-space:nowrap; }
+    .module-tab:hover { color:var(--text); }
+    .module-tab.active { color:#f59e0b; border-bottom-color:#f59e0b; }
+    .module-panel { display:none; } .module-panel.active { display:block; }
     .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:10px; margin:6px 0 18px; }
     .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
     .kpi .v { font-size:24px; font-weight:800; letter-spacing:-.01em; }
@@ -71,10 +76,19 @@
           <button class="btn btn-sm" id="reload">↻ Obnovit</button>
         </div>
       </div>
+      <div class="module-tabs">
+        <button class="module-tab active" data-tab="pages">📄 Záchytné stránky</button>
+        <button class="module-tab" data-tab="funnel">🔻 Funel</button>
+      </div>
       <div class="content">
+      <div class="module-panel active" id="panel-pages">
         <div class="kpis" id="kpis"></div>
         <div class="tbl-wrap"><table class="data-table"><thead><tr><th>Stránka</th><th class="num">Návštěvníci</th><th class="num">Leady / objednávky</th><th class="num">Dokončeno / konverze</th><th class="num">Tržba</th><th>Trend (návštěvy · <span style="color:#22c55e">leady</span>)</th><th></th></tr></thead><tbody id="grid"><tr><td colspan="7" class="note">Načítám…</td></tr></tbody></table></div>
         <p class="note" style="margin-top:16px">Návštěvy = unikátní prohlížeče za den (anonymní identifikátor, bez osobních údajů). Leady/objednávky z databáze HolyOS a Best Series 2.0. Zelený sloupec = leady/objednávky daného dne. Stav k <span id="gen">—</span>.</p>
+      </div>
+      <div class="module-panel" id="panel-funnel">
+        <div class="note" style="padding:24px 0">Funel – připravuje se. Sem přijde cesta zájemce: návštěva záchytné stránky → lead / registrace → objednávka → platba, s počty a propady mezi kroky.</div>
+      </div>
       </div>
   </div>
 
@@ -137,6 +151,7 @@
     }
     document.querySelectorAll('[data-days]').forEach(function (b) { b.addEventListener('click', function () { days = +b.getAttribute('data-days'); document.querySelectorAll('[data-days]').forEach(function (x) { x.classList.toggle('on', x === b); }); load(); }); });
     document.getElementById('reload').addEventListener('click', load);
+    document.querySelectorAll('.module-tab').forEach(function (t) { t.addEventListener('click', function () { document.querySelectorAll('.module-tab').forEach(function (x) { x.classList.toggle('active', x === t); }); document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.toggle('active', p.id === 'panel-' + t.getAttribute('data-tab')); }); }); });
     load();
   })();
   </script>
