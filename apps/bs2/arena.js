@@ -95,40 +95,57 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .cd small{position:absolute;bottom:8%;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2)}
   @keyframes cdpop{0%{opacity:0;transform:scale(1.8)}35%{opacity:1;transform:scale(.95)}100%{opacity:1;transform:scale(1)}}
   .machine.dim img{filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) brightness(.55) blur(1px);transition:filter .3s}
-  /* ── Aukce o kupony ── */
+  /* ── Aukce ── */
   .auc{max-width:720px;margin:14px auto 0;position:relative;background:linear-gradient(180deg,rgba(14,22,40,.9),rgba(8,13,26,.92));border:1px solid rgba(124,92,255,.35);border-radius:22px;padding:20px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 30px 80px rgba(0,0,0,.55)}
   .auc::before{content:'';position:absolute;inset:-1px;border-radius:23px;padding:1px;background:linear-gradient(135deg,rgba(124,92,255,.7),rgba(79,209,255,.35) 50%,rgba(30,134,224,.6));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
   .auc h2{text-align:center;margin:10px 0 4px}
-  .auc .sub{text-align:center;color:var(--text2);font-size:14.5px;margin-bottom:14px}
+  .auc .sub{text-align:center;color:var(--text2);font-size:14px;margin-bottom:14px}
   .prizes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 14px}
   .prize{display:inline-flex;flex-direction:column;align-items:center;min-width:96px;padding:10px 14px;border-radius:14px;background:var(--card2);border:1px solid var(--border)}
   .prize b{font-size:24px;letter-spacing:-.02em;background:linear-gradient(90deg,#fff,var(--accent2) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
   .prize span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2)}
   .prize.p1{border-color:rgba(79,209,255,.6);box-shadow:0 0 24px rgba(79,209,255,.15)}
-  .auc .cdbar{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:10px 14px;margin-bottom:12px}
-  .auc .cdbar b{font-size:22px;font-variant-numeric:tabular-nums;color:var(--accent2)}
-  .auc .cdbar .bar{flex:1;height:6px;border-radius:3px;background:rgba(120,160,255,.15);overflow:hidden}
-  .auc .cdbar .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--vio));transition:width 1s linear}
-  .lobby{display:flex;flex-direction:column;gap:6px;max-height:260px;overflow:auto;padding-right:2px}
-  .lp{display:flex;align-items:center;gap:10px;background:rgba(4,8,16,.6);border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-size:14px;animation:fadein .35s ease}
-  .lp .av{width:28px;height:28px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;background:linear-gradient(135deg,rgba(30,134,224,.45),rgba(124,92,255,.45));border:1px solid var(--border2)}
-  .lp .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lp .st{font-variant-numeric:tabular-nums;color:var(--text2);font-size:13px}
-  .lp.me{border-color:var(--accent2);background:rgba(79,209,255,.08)} .lp.me .nm{font-weight:700}
-  .lp .live{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .clock{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;margin:6px 0 12px}
+  .ring{position:relative;width:132px;height:132px;flex:none}
+  .ring svg{width:100%;height:100%;transform:rotate(-90deg)} .ring circle{fill:none;stroke-width:8}
+  .ring .bg{stroke:rgba(120,160,255,.14)} .ring .fg{stroke:var(--accent2);stroke-linecap:round;transition:stroke-dashoffset .9s linear,stroke .3s;filter:drop-shadow(0 0 8px rgba(79,209,255,.6))}
+  .ring.hot .fg{stroke:var(--err);filter:drop-shadow(0 0 10px rgba(255,93,108,.7))} .ring.hot b{color:var(--err)}
+  .ring b{position:absolute;left:0;right:0;top:36px;text-align:center;font-size:44px;font-weight:900;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+  .ring small{position:absolute;left:0;right:0;top:84px;text-align:center;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--text2)}
+  .ring.bump b{animation:pop .5s ease}
+  .topbid{display:flex;flex-direction:column;align-items:center;min-width:200px;padding:12px 18px;border-radius:16px;background:var(--card2);border:1px solid var(--border2)}
+  .topbid span{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text2)}
+  .topbid b{font-size:clamp(26px,7vw,34px);font-weight:900;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+  .topbid em{font-style:normal;font-size:13px;color:var(--text)} .topbid em.me{color:var(--ok);font-weight:700}
+  .bidrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+  .bidrow .btn{padding:12px 6px;font-size:14px;min-height:50px;white-space:nowrap}
+  .bidrow .btn:disabled{opacity:.4}
+  .bidinfo{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--text2);margin:8px 2px 10px}
+  .bidinfo #bidmsg{color:var(--err);font-weight:600}
+  .feed{display:flex;flex-direction:column;gap:5px;max-height:220px;overflow:auto}
+  .fb{display:flex;align-items:center;gap:10px;background:rgba(4,8,16,.6);border:1px solid var(--border);border-radius:11px;padding:7px 12px;font-size:13.5px;animation:fadein .3s ease}
+  .fb .av{width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;background:linear-gradient(135deg,rgba(30,134,224,.45),rgba(124,92,255,.45));border:1px solid var(--border2)}
+  .fb .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .fb .am{font-variant-numeric:tabular-nums;font-weight:700}
+  .fb.me{border-color:var(--accent2);background:rgba(79,209,255,.08)} .fb.top{border-color:rgba(47,227,160,.5)} .fb.top .am{color:var(--ok)}
+  .online{margin-top:10px;font-size:12px;color:var(--text3);text-align:center;line-height:1.6}
+  .online i{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin:0 6px 1px 0}
   .podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:end;margin:8px 0 14px}
   .pd{text-align:center;border-radius:16px;padding:14px 8px;background:var(--card2);border:1px solid var(--border);animation:rise .6s cubic-bezier(.2,.9,.3,1.2) both}
-  .pd .pl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text2)} .pd .pc{font-size:30px;font-weight:900;letter-spacing:-.03em;margin:4px 0} .pd .nm{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pd .pl{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text2)} .pd .pc{font-size:30px;font-weight:900;letter-spacing:-.03em;margin:4px 0} .pd .nm{font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .pd .am{font-size:11.5px;color:var(--text2)}
   .pd.p1{order:2;border-color:rgba(79,209,255,.7);box-shadow:0 0 30px rgba(79,209,255,.2);padding-top:22px;animation-delay:.5s} .pd.p1 .pc{background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
   .pd.p2{order:1;animation-delay:.3s} .pd.p3{order:3;animation-delay:.1s}
   .pd.me{outline:2px solid var(--ok);outline-offset:2px}
+  .reslist{display:flex;flex-direction:column;gap:5px;max-height:300px;overflow:auto}
+  .rl{display:flex;align-items:center;gap:10px;background:rgba(4,8,16,.6);border:1px solid var(--border);border-radius:11px;padding:7px 12px;font-size:13.5px}
+  .rl .pl{width:26px;text-align:center;font-weight:800;color:var(--text2)} .rl .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .rl .pc{font-weight:800;color:var(--accent2)} .rl .pc.zero{color:var(--text3);font-weight:500}
+  .rl.me{border-color:var(--ok);background:rgba(47,227,160,.08)}
   .coupon{margin-top:8px;border:1px dashed rgba(79,209,255,.6);border-radius:16px;padding:16px;text-align:center;background:rgba(79,209,255,.06)}
   .coupon .pc{font-size:clamp(34px,9vw,54px);font-weight:900;letter-spacing:-.03em;line-height:1;background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
   .coupon .code{display:inline-block;margin:8px 0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;letter-spacing:.12em;padding:6px 12px;border-radius:10px;background:rgba(4,8,16,.8);border:1px solid var(--border2)}
   .coupon form{display:flex;flex-direction:column;gap:8px;margin-top:10px;background:none;border:0;padding:0;box-shadow:none}
   .coupon form .row{display:flex;gap:8px;flex-wrap:wrap} .coupon form .row input{flex:1;min-width:160px}
   .coupon .ok{color:var(--ok);font-weight:700}
-  @media (max-width:600px){.auc{padding:16px 14px}.podium{gap:6px}.pd .pc{font-size:24px}.pd .nm{font-size:12.5px}}
+  @media (max-width:600px){.auc{padding:16px 12px}.bidrow{grid-template-columns:1fr 1fr}.podium{gap:6px}.pd .pc{font-size:24px}.pd .nm{font-size:12.5px}.ring{width:118px;height:118px}.ring b{font-size:38px;top:32px}.ring small{top:76px}}
   /* ── Bonusové karty ── */
   .cards-t{margin:16px 0 8px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent2);text-align:center}
   .cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;max-width:560px;margin:0 auto;perspective:900px}
@@ -189,19 +206,24 @@ ${presence}
     <p class="small" style="margin-top:14px;color:var(--text3)">Kapitál je virtuální – ale prádlomat je skutečný.</p>
   </section>
   <section class="auc hidden" id="auc">
-    <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · nové kolo každých 30 s</span>
-    <h2>Hrajeme o slevové kupony na první prádlomat</h2>
-    <p class="sub">Do kola se připojí každý, kdo je právě online. Tři nejlepší sázky vyhrávají kupon – a každý účastník si odnáší aspoň 10 %.</p>
-    <div class="prizes"><div class="prize p1"><b>30 %</b><span>1. místo</span></div><div class="prize"><b>20 %</b><span>2. místo</span></div><div class="prize"><b>10 %</b><span>3. místo</span></div></div>
+    <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · kdo přihodí poslední, vyhrává</span>
+    <h2>Aukce o slevové kupony na první prádlomat</h2>
+    <p class="sub">Odpočet běží od 60 s. Každý příhoz ho vrátí o 5 s zpět (nejvýš na minutu). Přihazujete svým kapitálem – stejnou nebo vyšší částkou. Až čas vyprší, vyhrává poslední přihazující.</p>
+    <div class="prizes"><div class="prize p1"><b>30 %</b><span>poslední příhoz</span></div><div class="prize"><b>20 %</b><span>2. místo</span></div><div class="prize"><b>10 %</b><span>3. místo</span></div></div>
     <div id="aucOpen">
-      <div class="cdbar"><span>Kolo začíná za</span><div class="bar"><i id="aucBar" style="width:100%"></i></div><b id="aucCd">30</b></div>
-      <div class="lobby" id="lobby"></div>
-      <p class="small" style="margin-top:10px;color:var(--text3);text-align:center" id="aucNote">Vaše sázka: celý startovní kapitál z kvízu.</p>
+      <div class="clock"><div class="ring"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="clkFg" cx="60" cy="60" r="52"/></svg><b id="clkSec">60</b><small>sekund</small></div>
+        <div class="topbid"><span>Nejvyšší příhoz</span><b id="topAmt">—</b><em id="topWho">zatím nikdo</em></div></div>
+      <div class="bidrow" id="bidrow"><button class="btn gold bidbtn" data-add="0">Dorovnat</button><button class="btn sec bidbtn" data-add="10000">+10 000</button><button class="btn sec bidbtn" data-add="25000">+25 000</button><button class="btn sec bidbtn" data-add="50000">+50 000</button></div>
+      <div class="bidinfo"><span id="ammo">Příhozů: 8</span><span id="mybank">Kapitál: —</span><span id="bidmsg"></span></div>
+      <div class="feed" id="feed"></div>
+      <div class="online" id="online"></div>
     </div>
     <div id="aucRes" class="hidden">
       <div class="podium" id="podium"></div>
       <div class="coupon" id="coupon"></div>
-      <div class="cta-row" style="justify-content:center;margin-top:14px"><button class="btn sec" id="aucAgain">Další kolo</button></div>
+      <div class="cards-t" style="margin-top:18px">Výsledky aukce</div>
+      <div class="reslist" id="reslist"></div>
+      <div class="cta-row" style="justify-content:center;margin-top:14px"><button class="btn sec" id="aucAgain">Další aukce <span id="nextIn"></span></button></div>
     </div>
   </section>
 </main>
@@ -248,24 +270,35 @@ ${netScript}
     $('rtext').textContent = 'Správně ' + okN + ' z ' + Q.length + '. ' + (okN === Q.length ? 'Teď ještě bonusová karta.' : 'Bonusová karta může ještě leccos změnit.');
     bonusShow(); r.scrollIntoView({ behavior:'smooth', block:'center' });
     try { fetch('/api/arena/result', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, score: okN, bank: bank, answers: answers, ms: Date.now() - startedAt }) }); } catch(e){} }
-  // ── Aukce o kupony: lobby s odpočtem (server kolo 30 s), pódium, kupon + kontakt ──
-  var AUC = { round: null, poll: null, tick: null, claimed: {} };
-  function aucStart(){ $('result').classList.add('hidden'); var a = $('auc'); a.classList.remove('hidden'); $('aucRes').classList.add('hidden'); $('aucOpen').classList.remove('hidden'); $('lobby').innerHTML = '';
-    fetch('/api/arena/join', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, bank: bank }) }).then(function(r){ return r.json(); }).then(function(st){ if(!st || st.error){ $('aucNote').textContent = (st && st.error) || 'Aukce není dostupná.'; return; } AUC.round = st.round; aucRender(st); aucLoop(); }).catch(function(){ $('aucNote').textContent = 'Aukce není dostupná.'; });
+  // ── Živá aukce: odpočet 60 s, příhoz +5 s, poslední přihazující vyhrává ──
+  var AUC = { round: null, poll: null, st: null, lastTop: null, waiting: false };
+  var CIRC2 = 2 * Math.PI * 52; $('clkFg').style.strokeDasharray = CIRC2;
+  function aucStart(){ $('result').classList.add('hidden'); var a = $('auc'); a.classList.remove('hidden'); $('aucRes').classList.add('hidden'); $('aucOpen').classList.remove('hidden'); $('feed').innerHTML = ''; $('bidmsg').textContent = ''; AUC.waiting = false;
+    fetch('/api/arena/join', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, name: name, bank: bank }) }).then(function(r){ return r.json(); }).then(function(st){ if(!st || st.error){ $('bidmsg').textContent = (st && st.error) || 'Aukce není dostupná.'; return; } if (st.phase === 'result' && !st.joined) { AUC.waiting = true; $('aucOpen').classList.add('hidden'); $('aucRes').classList.remove('hidden'); aucResult(st, true); } else { AUC.round = st.round; aucRender(st); } aucLoop(); }).catch(function(){ $('bidmsg').textContent = 'Aukce není dostupná.'; });
     setTimeout(function(){ a.scrollIntoView({ behavior:'smooth', block:'start' }); }, 60); }
-  function aucLoop(){ clearInterval(AUC.poll); AUC.poll = setInterval(function(){ if(AUC.round == null) return; fetch('/api/arena/round?sid=' + encodeURIComponent(SID) + '&round=' + AUC.round, { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(st){ aucRender(st); if(st.phase === 'result'){ clearInterval(AUC.poll); aucResult(st); } }).catch(function(){}); }, 1500); }
-  function aucRender(st){ var s = Math.ceil((st.ends_in || 0) / 1000); $('aucCd').textContent = s; $('aucBar').style.width = Math.max(0, Math.min(100, (st.ends_in || 0) / 30000 * 100)) + '%';
-    var me = name; var html = (st.players || []).map(function(p){ var isMe = !p.bot && p.name === me; return '<div class="lp' + (isMe ? ' me' : '') + '"><span class="av">' + esc((p.name || '?').slice(0,1).toUpperCase()) + '</span><span class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</span><span class="st">' + fmt(p.bank || 0) + '</span><i class="live" title="online"></i></div>'; }).join('');
-    if (html !== $('lobby').innerHTML) $('lobby').innerHTML = html; }
-  function aucResult(st){ var r = st.result || {}; var pod = r.podium || []; var mine = r.mine; $('aucOpen').classList.add('hidden'); $('aucRes').classList.remove('hidden');
-    $('podium').innerHTML = pod.map(function(p, i){ var isMe = !p.bot && p.name === name && mine && mine.place === i + 1; return '<div class="pd p' + (i+1) + (isMe ? ' me' : '') + '"><div class="pl">' + (i+1) + '. místo</div><div class="pc">' + p.pct + ' %</div><div class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</div></div>'; }).join('');
-    var c = $('coupon'); if(!mine){ c.innerHTML = '<p class="sub">Toto kolo proběhlo bez vás – zkuste další.</p>'; return; }
-    var head = mine.place === 1 ? name + ', vyhráváte hlavní cenu!' : mine.place === 2 ? name + ', skvělé druhé místo!' : (mine.place === 3 ? name + ', třetí místo!' : name + ', účastnický kupon je váš.');
-    c.innerHTML = '<div class="eyebrow" style="display:inline-flex"><i></i>Váš kupon</div><div class="pc" style="margin-top:8px">' + mine.pct + ' %</div><div>sleva na první prádlomat</div><div class="code">' + esc(mine.code) + '</div>'
+  function aucLoop(){ clearInterval(AUC.poll); AUC.poll = setInterval(function(){ fetch('/api/arena/round?sid=' + encodeURIComponent(SID), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(st){
+      if (AUC.waiting) { if (st.phase === 'open') { AUC.waiting = false; clearInterval(AUC.poll); aucStart(); } else { var ni = $('nextIn'); if (ni) ni.textContent = '(' + Math.ceil((st.next_in || 0) / 1000) + ' s)'; } return; }
+      if (st.round !== AUC.round) { if (st.phase === 'open' && !st.joined) { clearInterval(AUC.poll); aucStart(); } return; }
+      aucRender(st); if (st.phase === 'result') { clearInterval(AUC.poll); aucResult(st, false); } }).catch(function(){}); }, 1000); }
+  function aucRender(st){ AUC.st = st; var s = Math.ceil((st.ends_in || 0) / 1000); var ring = $('clkFg').parentNode.parentNode; $('clkSec').textContent = s; $('clkFg').style.strokeDashoffset = CIRC2 * (1 - Math.min(1, (st.ends_in || 0) / (st.max_ms || 60000))); ring.classList.toggle('hot', s <= 10);
+    if (AUC.lastTop != null && st.top !== AUC.lastTop) { ring.classList.remove('bump'); void ring.offsetWidth; ring.classList.add('bump'); } AUC.lastTop = st.top;
+    $('topAmt').textContent = st.top ? fmt(st.top) : '—'; var w = $('topWho'); if (st.last) { var meLead = st.me && st.me.leading; w.textContent = meLead ? 'vedete vy' : st.last.name; w.className = meLead ? 'me' : ''; } else { w.textContent = 'zatím nikdo'; w.className = ''; }
+    if (st.me) { $('ammo').textContent = 'Příhozů: ' + st.me.ammo; $('mybank').textContent = 'Kapitál: ' + fmt(st.me.bank); }
+    var can = st.me && st.me.ammo > 0 && !st.me.leading && st.phase === 'open'; Array.prototype.forEach.call(document.querySelectorAll('.bidbtn'), function(b){ var add = +b.getAttribute('data-add'); var amt = Math.max(st.top || 0, 0) + add; if (!st.top && add === 0) amt = Math.min(st.me ? st.me.bank : 0, 10000); b.disabled = !can || (st.me && amt > st.me.bank) || amt <= 0; b.setAttribute('data-amt', amt); b.textContent = add === 0 ? ((st.top ? 'Dorovnat ' : 'Přihodit ') + fmt(amt)) : '+' + add.toLocaleString('cs-CZ'); });
+    var html = (st.bids || []).map(function(b, i){ var isMe = !b.bot && st.me && b.name === st.me.name; return '<div class="fb' + (isMe ? ' me' : '') + (i === 0 ? ' top' : '') + '"><span class="av">' + esc((b.name || '?').slice(0,1).toUpperCase()) + '</span><span class="nm">' + esc(b.name) + (isMe ? ' (vy)' : '') + '</span><span class="am">' + fmt(b.amount) + '</span></div>'; }).join('');
+    if (html !== $('feed').innerHTML) $('feed').innerHTML = html || '<div class="fb"><span class="nm" style="color:var(--text2)">Zatím nikdo nepřihodil – buďte první.</span></div>';
+    $('online').innerHTML = '<i></i>V aukci: ' + (st.players || []).map(function(p){ return esc(p.name); }).join(' · '); }
+  Array.prototype.forEach.call(document.querySelectorAll('.bidbtn'), function(b){ b.addEventListener('click', function(){ var amt = +b.getAttribute('data-amt'); if (!amt) return; $('bidmsg').textContent = ''; fetch('/api/arena/bid', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, amount: amt }) }).then(function(r){ return r.json(); }).then(function(j){ if (j && j.ok) { aucRender(j.state); var f = document.createElement('div'); f.className = 'fly'; f.style.fontSize = '34px'; f.textContent = '+5 s'; document.body.appendChild(f); setTimeout(function(){ f.remove(); }, 1200); } else $('bidmsg').textContent = (j && j.error) || 'Příhoz neprošel'; }).catch(function(){ $('bidmsg').textContent = 'Příhoz neprošel'; }); }); });
+  function aucResult(st, waitingOnly){ var r = st.result || {}; var pod = r.podium || []; var mine = r.mine; $('aucOpen').classList.add('hidden'); $('aucRes').classList.remove('hidden');
+    $('podium').innerHTML = pod.map(function(p, i){ var isMe = !p.bot && st.me && p.name === st.me.name; return '<div class="pd p' + (i+1) + (isMe ? ' me' : '') + '"><div class="pl">' + (i === 0 ? 'poslední příhoz' : (i+1) + '. místo') + '</div><div class="pc">' + p.pct + ' %</div><div class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</div><div class="am">' + fmt(p.amount || 0) + '</div></div>'; }).join('') || '<div class="pd p1"><div class="pl">bez příhozu</div><div class="pc">—</div></div>';
+    $('reslist').innerHTML = (r.list || []).map(function(p){ var isMe = !p.bot && st.me && p.name === st.me.name; return '<div class="rl' + (isMe ? ' me' : '') + '"><span class="pl">' + (p.place ? p.place + '.' : '·') + '</span><span class="nm">' + esc(p.name) + (isMe ? ' (vy)' : '') + '</span><span class="pc' + (p.pct ? '' : ' zero') + '">' + (p.pct ? 'kupon ' + p.pct + ' %' : 'bez kuponu') + '</span></div>'; }).join('');
+    var c = $('coupon'); if (waitingOnly || !mine) { c.innerHTML = '<p class="sub" style="margin:0">' + (waitingOnly ? 'Právě skončila aukce – další začíná za chvíli, připojíme vás automaticky.' : 'Toto kolo proběhlo bez vás – zkuste další.') + '</p>'; return; }
+    var head = mine.place === 1 ? name + ', poslední příhoz byl váš – hlavní cena!' : mine.place === 2 ? name + ', skvělé druhé místo!' : (mine.place === 3 ? name + ', třetí místo!' : name + ', účastnický kupon je váš.');
+    c.innerHTML = '<div class="eyebrow" style="display:inline-flex"><i></i>' + esc(head) + '</div><div class="pc" style="margin-top:8px">' + mine.pct + ' %</div><div>sleva na první prádlomat</div><div class="code">' + esc(mine.code) + '</div>'
       + '<form id="claim"><p class="sub" style="margin:0">Kam vám máme kupon poslat? Platí při objednávce prádlomatu, pošleme ho i s podmínkami.</p><div class="row"><input type="email" id="cEmail" placeholder="váš e-mail" required inputmode="email" autocomplete="email"><input type="tel" id="cPhone" placeholder="telefon (nepovinné)" inputmode="tel" autocomplete="tel"></div><button class="btn gold" type="submit">Poslat kupon</button><p class="small" style="color:var(--text3);margin:0">Odesláním souhlasíte, že vás kvůli kuponu kontaktujeme. Žádný spam.</p></form>';
-    $('claim').addEventListener('submit', function(e){ e.preventDefault(); var b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'Odesílám…'; fetch('/api/arena/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, round: AUC.round, name: name, email: $('cEmail').value.trim(), phone: $('cPhone').value.trim() }) }).then(function(r){ return r.json(); }).then(function(j){ if(j && j.ok){ $('claim').innerHTML = '<p class="ok">✓ Hotovo – kupon ' + esc(j.code) + ' na ' + j.pct + ' % jsme vám odeslali.</p><a class="btn" href="/location?utm_source=arena&c=' + encodeURIComponent(j.code) + '" style="margin-top:8px">Prověřit si místo pro prádlomat</a>'; } else { b.disabled = false; b.textContent = 'Poslat kupon'; alert((j && j.error) || 'Nepodařilo se odeslat.'); } }).catch(function(){ b.disabled = false; b.textContent = 'Poslat kupon'; }); });
+    $('claim').addEventListener('submit', function(e){ e.preventDefault(); var b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'Odesílám…'; fetch('/api/arena/claim', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, round: st.round, name: name, email: $('cEmail').value.trim(), phone: $('cPhone').value.trim() }) }).then(function(r){ return r.json(); }).then(function(j){ if(j && j.ok){ $('claim').innerHTML = '<p class="ok">✓ Hotovo – kupon ' + esc(j.code) + ' na ' + j.pct + ' % jsme vám odeslali.</p><a class="btn" href="/location?utm_source=arena&c=' + encodeURIComponent(j.code) + '" style="margin-top:8px">Prověřit si místo pro prádlomat</a>'; } else { b.disabled = false; b.textContent = 'Poslat kupon'; alert((j && j.error) || 'Nepodařilo se odeslat.'); } }).catch(function(){ b.disabled = false; b.textContent = 'Poslat kupon'; }); });
     c.scrollIntoView({ behavior:'smooth', block:'center' }); }
-  $('aucAgain').addEventListener('click', function(){ AUC.round = null; aucStart(); });
+  $('aucAgain').addEventListener('click', function(){ AUC.round = null; AUC.lastTop = null; aucStart(); });
   $('toAuc').addEventListener('click', aucStart);
   // ── Bonusové karty: 5 karet, jedna se vybere; může kapitál zvýšit i snížit. Pojistka: při plném počtu správných
   //    odpovědí (maximální kapitál) nejde vytáhnout maximální navýšení – strop výsledku je BONUS_CAP.
