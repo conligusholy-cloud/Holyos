@@ -500,7 +500,7 @@ app.post('/api/arena/bid', (req, res) => { const b = req.body || {}; const sid =
 app.post('/api/arena/claim', wrap(async (req, res) => {
   const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const rid = parseInt(b.round, 10); if (!sid || !rid) return res.status(400).json({ error: 'Chybí kolo' });
   const c = ARENA.couponFor(sid, rid); if (!c || !c.pct || !c.code) return res.status(400).json({ error: 'Kupon pro toto kolo nenalezen' });
-  const email = String(b.email || '').trim().toLowerCase().slice(0, 160); const phone = String(b.phone || '').trim().slice(0, 40); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Zadejte platný e-mail' });
+  const email = String(b.email || '').trim().toLowerCase().slice(0, 160); const phone = String(b.phone || '').trim().slice(0, 40); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Zadejte platný e-mail' }); const digits = phone.replace(/\D/g, ''); if (digits.length < 9) return res.status(400).json({ error: 'Zadejte platný telefon' });
   const name = String(b.name || '').trim().slice(0, 40) || 'Hráč';
   await q('INSERT INTO arena_coupons (sid, round, name, pct, code, email, phone) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone', [sid, rid, name, c.pct, c.code, email, phone || null]);
   try { notifyVelin('Aréna: kupon ' + c.pct + ' %', name + ' · ' + email + (phone ? ' · ' + phone : '') + ' · ' + c.code, '/arena', 'arena'); } catch (e) { /* best-effort */ }
