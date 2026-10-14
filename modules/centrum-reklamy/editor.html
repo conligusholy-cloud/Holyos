@@ -45,6 +45,7 @@
     .node .act { font-size:10.5px; color:var(--text2); border-top:1px dashed var(--border); padding:4px 10px; } .node .act b { color:var(--text); font-weight:600; }
     .node .hd .sw { margin-left:auto; width:30px; height:16px; border-radius:999px; background:#3b4260; position:relative; cursor:pointer; flex:none; transition:background .2s; } .node .hd .sw::after { content:''; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%; background:#fff; transition:left .2s; } .node .hd .sw.on { background:#22c55e; } .node .hd .sw.on::after { left:16px; }
     .node.off { opacity:.55; filter:grayscale(.4); } .node.off .act { color:#f59e0b; }
+    .node.act .prev { font-size:11.5px; color:var(--text); background:rgba(255,255,255,.04); border-radius:8px; padding:6px 8px; line-height:1.35; }
     .node .camp { font-size:11px; color:#8ea2c2; border-top:1px dashed var(--border); padding-top:6px; line-height:1.4; }
     .node .camp b { color:var(--text); }
     .ov { position:fixed; inset:0; background:rgba(4,6,12,.7); display:none; align-items:center; justify-content:center; z-index:50; }
@@ -201,37 +202,18 @@
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       } else if (nd.kind === 'sms' || nd.kind === 'email') {
         var isSms = nd.kind === 'sms'; el.classList.add('act', isSms ? 'actsms' : 'actmail'); if (!nd.variant) nd.variant = 'specialist';
-        var C = CFG || {}, vr = nd.variant, spv = vr === 'specialist';
-        var onv = isSms ? !!C.enabled : (spv ? !!C.emailEnabled : !!C.schuzkaEmailEnabled);
-        var upa = upstreamForm(nd), sta = upa && AST[upa.form.form_id], vs = sta ? (spv ? sta.specialist : sta.schuzka) : null;
-        var ownIds = (spv ? C.ownerPersonIds : C.schuzkaOwnerPersonIds) || [], othIds = (spv ? C.schuzkaOwnerPersonIds : C.ownerPersonIds) || [];
-        var ownHtml = (SELLERS || []).map(function (pp) { var nm = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || '#' + pp.id; return '<label class="ow"><input type="checkbox" class="owc" data-pid="' + pp.id + '"' + (ownIds.indexOf(pp.id) >= 0 ? ' checked' : '') + '> ' + esc(nm) + (othIds.indexOf(pp.id) >= 0 ? ' <small>(má ' + (spv ? 'schůzku' : 'specialistu') + ')</small>' : '') + '</label>'; }).join('');
-        var linkTxt = CHAN && CHAN.autosend && CHAN.autosend.links ? (spv ? CHAN.autosend.links.specialist : CHAN.autosend.links.schuzka) : '';
-        var lnn = downLanding(nd), lpg = lnn && lnn.page ? page(lnn.page) : null;
-        var linkShown = lpg ? lpg.url : (linkTxt || (spv ? 'AI specialista' : 'rezervace termínu')) + (lnn ? '' : '  (výchozí – záchytná stránka není připojená)');
-        var linkWarn = lnn && !lpg && (lnn.variant || 'specialist') !== vr ? 'Připojená stránka je jiná varianta – odkaz zůstane výchozí pro tuto variantu.' : '';
-        var fromTxt = isSms ? (CHAN && CHAN.sms ? ((CHAN.sms.provider === 'gosms' ? 'GoSMS' : 'Twilio') + (CHAN.sms.from ? ' · ' + CHAN.sms.from : ' · odesílatel není nastaven') + (CHAN.sms.ready ? '' : ' ⚠ brána není připravená')) : '—') : (CHAN && CHAN.autosend && CHAN.autosend.email_from ? CHAN.autosend.email_from : 'není nastavený (COMPOUNDER_MAIL_FROM)');
-        var fields = '';
-        if (isSms) fields = '<textarea class="atx" rows="2" placeholder="text SMS – {link} = odkaz">' + esc((spv ? C.text : C.schuzkaText) || '') + '</textarea>';
-        else if (!spv) fields = '<input class="asu" placeholder="předmět" value="' + esc(C.schuzkaEmailSubject || '') + '"><textarea class="atx" rows="4" placeholder="text e-mailu – {link}, {name}">' + esc(C.schuzkaEmailBody || '') + '</textarea>';
-        else fields = '<div class="row2"><span>text e-mailu</span><b>pevný: „Prádlomat — váš specialista odpoví na vše“</b></div>';
-        el.innerHTML = '<div class="port in" title="vstup"></div><div class="port out" title="výstup"></div><div class="hd"><i style="background:' + (isSms ? '#2dd4bf' : '#60a5fa') + '"></i>' + (isSms ? '💬 Odeslat SMS' : '📧 Odeslat e-mail') + ' <span class="tag ' + (onv ? 'on' : 'off') + '">' + (onv ? 'zapnuto' : 'vypnuto') + '</span><button class="x" title="Smazat">✕</button></div><div class="bd">'
-          + '<select class="avr"><option value="specialist"' + (spv ? ' selected' : '') + '>Varianta: AI specialista</option><option value="schuzka"' + (!spv ? ' selected' : '') + '>Varianta: Schůzka (cesta k rozhodnutí)</option></select>'
-          + '<label class="sw"><input type="checkbox" class="aon"' + (onv ? ' checked' : '') + '> ' + (isSms ? 'Automatické SMS (hlavní vypínač, platí pro obě varianty)' : 'Automatický e-mail této varianty') + '</label>'
-          + fields
-          + '<div class="row2"><span>' + (isSms ? 'Odesílatel / brána' : 'Odesílatel') + '</span><b>' + esc(fromTxt) + '</b></div>'
-          + '<div class="row2" title="{link} v textu míří na záchytnou stránku, která je za tímto krokem"><span>{link} →</span><b>' + esc(linkShown) + '</b></div>' + (linkWarn ? '<div style="font-size:11px;color:#f59e0b">' + esc(linkWarn) + '</div>' : '')
-          + '<details><summary>Komu se posílá (' + (ownIds.length ? ownIds.length + ' obchodníci' : 'všichni obchodníci') + ')</summary>' + ownHtml + '<div style="opacity:.7;margin-top:2px">' + (spv ? 'Nic nezaškrtnuté = všem (kromě těch s variantou Schůzka).' : 'Leady zaškrtnutých obchodníků dostanou místo specialisty odkaz na rezervaci.') + '</div></details>'
-          + '<div class="st"><span class="big">' + (vs ? n(isSms ? vs.sms : vs.email) : '—') + '</span><span style="font-size:11px;color:#8ea2c2">' + (isSms ? 'odeslaných SMS' : 'odeslaných e-mailů') + (vs ? ' · otevřelo ' + n(vs.opened) : '') + ' · ' + perLabel() + '</span></div>'
-          + '<div class="toolbar" style="gap:6px"><button class="btn on asave" style="padding:2px 8px">Uložit nastavení</button><span class="note amsg"></span></div></div>';
-        var stopm = function (q) { q.addEventListener('mousedown', function (e) { e.stopPropagation(); }); };
-        el.querySelectorAll('select,input,textarea,button.asave').forEach(stopm);
-        el.querySelector('.avr').addEventListener('change', function (e) { nd.variant = e.target.value; render(); });
-        el.querySelector('.aon').addEventListener('change', function (e) { var v2 = e.target.checked; if (isSms) CFG.enabled = v2; else if (spv) CFG.emailEnabled = v2; else CFG.schuzkaEmailEnabled = v2; render(); });
-        var atx = el.querySelector('.atx'); if (atx) atx.addEventListener('input', function (e) { if (isSms) { if (spv) CFG.text = e.target.value; else CFG.schuzkaText = e.target.value; } else CFG.schuzkaEmailBody = e.target.value; });
-        var asu = el.querySelector('.asu'); if (asu) asu.addEventListener('input', function (e) { CFG.schuzkaEmailSubject = e.target.value; });
-        el.querySelectorAll('.owc').forEach(function (cb) { cb.addEventListener('change', function () { var pid = +cb.getAttribute('data-pid'); var mine = spv ? 'ownerPersonIds' : 'schuzkaOwnerPersonIds', oth = spv ? 'schuzkaOwnerPersonIds' : 'ownerPersonIds'; CFG[mine] = (CFG[mine] || []).filter(function (x) { return x !== pid; }); if (cb.checked) { CFG[mine].push(pid); CFG[oth] = (CFG[oth] || []).filter(function (x) { return x !== pid; }); } render(); }); });
-        el.querySelector('.asave').addEventListener('click', async function (e) { e.stopPropagation(); var m = el.querySelector('.amsg'); m.textContent = 'Ukládám…'; try { var body = { enabled: !!CFG.enabled, text: CFG.text, emailEnabled: !!CFG.emailEnabled, schuzkaEmailEnabled: !!CFG.schuzkaEmailEnabled, ownerPersonIds: CFG.ownerPersonIds || [], schuzkaOwnerPersonIds: CFG.schuzkaOwnerPersonIds || [], schuzkaText: CFG.schuzkaText, schuzkaEmailSubject: CFG.schuzkaEmailSubject, schuzkaEmailBody: CFG.schuzkaEmailBody, landing: computeLanding() }; var r = await fetch('/api/compounder/ai-specialist-autosend', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); var j = await r.json().catch(function () { return {}; }); if (!r.ok || j.ok === false) { m.innerHTML = '<span class="warn">' + esc(j.error || ('HTTP ' + r.status)) + '</span>'; return; } CFG = Object.assign({}, CFG, j.config || {}); render(); } catch (err) { m.innerHTML = '<span class="warn">' + esc(err.message) + '</span>'; } });
+        var A = actionInfo(nd); var vs = A.vs;
+        // Náhled: co, komu, odkud, kam vede odkaz + čísla. Úpravy přes ⚙ (větší okno).
+        var txtPrev = A.text ? A.text.replace(/\s+/g, ' ').trim() : ''; if (txtPrev.length > 110) txtPrev = txtPrev.slice(0, 110) + '…';
+        el.innerHTML = '<div class="port in" title="vstup"></div><div class="port out" title="výstup"></div><div class="hd"><i style="background:' + (isSms ? '#2dd4bf' : '#60a5fa') + '"></i>' + (isSms ? '💬 Odeslat SMS' : '📧 Odeslat e-mail') + ' <span class="tag ' + (A.on ? 'on' : 'off') + '">' + (A.on ? 'zapnuto' : 'vypnuto') + '</span><button class="gear" title="Nastavení: text, varianta, komu se posílá">⚙</button><button class="x" title="Smazat">✕</button></div><div class="bd">'
+          + '<div class="row2"><span>Varianta</span><b>' + esc(A.spv ? 'AI specialista' : 'Schůzka (cesta k rozhodnutí)') + '</b></div>'
+          + (A.subject ? '<div class="row2"><span>Předmět</span><b>' + esc(A.subject) + '</b></div>' : '')
+          + '<div class="prev" title="' + esc(A.text || '') + '">' + (txtPrev ? esc(txtPrev) : '<span style="opacity:.6">' + (A.fixedText ? 'pevný text e-mailu' : 'text není nastaven') + '</span>') + '</div>'
+          + '<div class="row2"><span>' + (isSms ? 'Odesílatel / brána' : 'Odesílatel') + '</span><b>' + esc(A.fromTxt) + '</b></div>'
+          + '<div class="row2" title="{link} v textu míří na záchytnou stránku za tímto krokem"><span>{link} →</span><b>' + esc(A.linkShown) + '</b></div>' + (A.linkWarn ? '<div style="font-size:11px;color:#f59e0b">' + esc(A.linkWarn) + '</div>' : '')
+          + '<div class="row2"><span>Komu</span><b>' + esc(A.ownIds.length ? A.ownNames.join(', ') : 'všichni obchodníci') + '</b></div>'
+          + '<div class="st"><span class="big">' + (vs ? n(isSms ? vs.sms : vs.email) : '—') + '</span><span style="font-size:11px;color:#8ea2c2">' + (isSms ? 'odeslaných SMS' : 'odeslaných e-mailů') + (vs ? ' · otevřelo ' + n(vs.opened) : '') + ' · ' + perLabel() + '</span></div></div>';
+        el.querySelector('.gear').addEventListener('mousedown', function (e) { e.stopPropagation(); }); el.querySelector('.gear').addEventListener('click', function (e) { e.stopPropagation(); openActionEditor(nd); });
         el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       } else if (nd.kind === 'landing') {
@@ -266,8 +248,8 @@
         el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       }
-      if (nd.kind !== 'note') { if (nd.enabled === false) el.classList.add('off'); el.insertAdjacentHTML('beforeend', '<div class="act">' + (nd.enabled === false ? '⏸ vypnuto' + (nd.deactivated_at ? ' od <b>' + esc(fdt(nd.deactivated_at)) + '</b>' : '') : '⏻ zapnuto · aktivováno <b>' + esc(nd.activated_at ? fdt(nd.activated_at) : '—') + '</b>') + '</div>');
-        var hd0 = el.querySelector('.hd'); var xb = hd0 && hd0.querySelector('.x'); if (hd0) { var sw = document.createElement('span'); sw.className = 'sw' + (nd.enabled === false ? '' : ' on'); sw.title = nd.enabled === false ? 'Vypnuto – klikni pro zapnutí' : 'Zapnuto – klikni pro vypnutí (čísla se zastaví, leady tudy nepůjdou)'; var gear = hd0.querySelector('.gear'); hd0.insertBefore(sw, gear || xb || null); sw.addEventListener('mousedown', function (e) { e.stopPropagation(); }); sw.addEventListener('click', function (e) { e.stopPropagation(); if (nd.enabled === false) { nd.enabled = true; nd.activated_at = new Date().toISOString(); delete nd.deactivated_at; } else { nd.enabled = false; nd.deactivated_at = new Date().toISOString(); } render(); }); if (gear) gear.style.marginLeft = '6px'; if (xb) xb.style.marginLeft = '6px'; } }
+      if (nd.kind !== 'note') { if (nd.enabled === false) el.classList.add('off');
+        var hd0 = el.querySelector('.hd'); var xb = hd0 && hd0.querySelector('.x'); if (hd0) { var sw = document.createElement('span'); sw.className = 'sw' + (nd.enabled === false ? '' : ' on'); sw.title = nd.enabled === false ? 'Vypnuto' + (nd.deactivated_at ? ' od ' + fdt(nd.deactivated_at) : '') + ' – klikni pro zapnutí' : 'Zapnuto · aktivováno ' + (nd.activated_at ? fdt(nd.activated_at) : '—') + ' – klikni pro vypnutí'; var gear = hd0.querySelector('.gear'); hd0.insertBefore(sw, gear || xb || null); sw.addEventListener('mousedown', function (e) { e.stopPropagation(); }); sw.addEventListener('click', function (e) { e.stopPropagation(); if (nd.enabled === false) { nd.enabled = true; nd.activated_at = new Date().toISOString(); delete nd.deactivated_at; } else { nd.enabled = false; nd.deactivated_at = new Date().toISOString(); } render(); }); if (gear) gear.style.marginLeft = '6px'; if (xb) xb.style.marginLeft = '6px'; } }
       var fb = flowBadges(nd); if (fb) el.insertAdjacentHTML('beforeend', fb);
       el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
       el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
@@ -408,6 +390,46 @@
         F.edges.push({ from: s0.node.id, to: made[vr].sms.id, port: s0.port }, { from: s0.node.id, to: made[vr].email.id, port: s0.port }); });
       if (none.length) F.nodes.push({ id: uid(), kind: 'note', x: base.x, y: base.y + row * 760, text: 'Bez automatického oslovení: ' + none.length + ' větev/e (externí zástupce, nebo obchodník mimo výběr ve specialistovi).', label: '', page: null, metric: 'uniques', manual: null });
       msg.textContent = 'Akce dokresleny podle nastavení – zkontroluj a ulož funel.'; render(); focusX(base.x - 100);
+    }
+    // ── Akční uzly SMS / e-mail: společné info (náhled) + editor v okně ──
+    function actionInfo(nd) {
+      var isSms = nd.kind === 'sms'; var C = CFG || {}, vr = nd.variant || 'specialist', spv = vr === 'specialist';
+      var on = isSms ? !!C.enabled : (spv ? !!C.emailEnabled : !!C.schuzkaEmailEnabled);
+      var upa = upstreamForm(nd), sta = upa && AST[upa.form.form_id], vs = sta ? (spv ? sta.specialist : sta.schuzka) : null;
+      var ownIds = (spv ? C.ownerPersonIds : C.schuzkaOwnerPersonIds) || [], othIds = (spv ? C.schuzkaOwnerPersonIds : C.ownerPersonIds) || [];
+      var ownNames = ownIds.map(function (id) { var pp = (SELLERS || []).find(function (q) { return q.id === id; }); return pp ? (((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || '#' + id) : '#' + id; });
+      var linkTxt = CHAN && CHAN.autosend && CHAN.autosend.links ? (spv ? CHAN.autosend.links.specialist : CHAN.autosend.links.schuzka) : '';
+      var lnn = downLanding(nd), lpg = lnn && lnn.page ? page(lnn.page) : null;
+      var linkShown = lpg ? lpg.url : (linkTxt || (spv ? 'AI specialista' : 'rezervace termínu')) + (lnn ? '' : '  (výchozí – záchytná stránka není připojená)');
+      var linkWarn = lnn && !lpg && (lnn.variant || 'specialist') !== vr ? 'Připojená stránka je jiná varianta – odkaz zůstane výchozí pro tuto variantu.' : '';
+      var fromTxt = isSms ? (CHAN && CHAN.sms ? ((CHAN.sms.provider === 'gosms' ? 'GoSMS' : 'Twilio') + (CHAN.sms.from ? ' · ' + CHAN.sms.from : ' · odesílatel není nastaven') + (CHAN.sms.ready ? '' : ' ⚠ brána není připravená')) : '—') : (CHAN && CHAN.autosend && CHAN.autosend.email_from ? CHAN.autosend.email_from : 'není nastavený (COMPOUNDER_MAIL_FROM)');
+      var text = isSms ? ((spv ? C.text : C.schuzkaText) || '') : (spv ? '' : (C.schuzkaEmailBody || '')); var subject = (!isSms && !spv) ? (C.schuzkaEmailSubject || '') : '';
+      return { isSms: isSms, spv: spv, on: on, vs: vs, ownIds: ownIds, othIds: othIds, ownNames: ownNames, linkShown: linkShown, linkWarn: linkWarn, fromTxt: fromTxt, text: text, subject: subject, fixedText: !isSms && spv };
+    }
+    function openActionEditor(nd) {
+      var isSms = nd.kind === 'sms'; ov.classList.add('open'); dlg.classList.remove('full');
+      function draw() {
+        var A = actionInfo(nd); var C = CFG || {}; var spv = A.spv;
+        var ownHtml = (SELLERS || []).map(function (pp) { var nm = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim() || '#' + pp.id; return '<label class="ow" style="display:flex;gap:6px;align-items:center;padding:3px 0"><input type="checkbox" class="owc" data-pid="' + pp.id + '"' + (A.ownIds.indexOf(pp.id) >= 0 ? ' checked' : '') + '> ' + esc(nm) + (A.othIds.indexOf(pp.id) >= 0 ? ' <small style="opacity:.7">(má ' + (spv ? 'schůzku' : 'specialistu') + ')</small>' : '') + '</label>'; }).join('');
+        var fields = '';
+        if (isSms) fields = '<label>Text SMS <span class="note">({link} = odkaz)</span></label><textarea class="atx" rows="4" style="width:100%">' + esc(A.text) + '</textarea>';
+        else if (!spv) fields = '<label>Předmět</label><input class="asu" style="width:100%" value="' + esc(A.subject) + '"><label style="margin-top:8px">Text e-mailu <span class="note">({link}, {name})</span></label><textarea class="atx" rows="10" style="width:100%">' + esc(A.text) + '</textarea>';
+        else fields = '<div class="note">Text e-mailu je pevný: „Prádlomat — váš specialista odpoví na vše“ (šablona HolyOS).</div>';
+        dlg.innerHTML = '<h2>' + (isSms ? '💬 Odeslat SMS' : '📧 Odeslat e-mail') + ' – nastavení</h2>'
+          + '<div class="form-row"><div><label>Varianta</label><select class="avr"><option value="specialist"' + (spv ? ' selected' : '') + '>AI specialista</option><option value="schuzka"' + (!spv ? ' selected' : '') + '>Schůzka (cesta k rozhodnutí)</option></select></div><div><label>Automatické odesílání</label><label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:6px"><input type="checkbox" class="aon"' + (A.on ? ' checked' : '') + '> ' + (isSms ? 'Automatické SMS (hlavní vypínač, platí pro obě varianty)' : 'Automatický e-mail této varianty') + '</label></div></div>'
+          + '<div style="margin-top:10px">' + fields + '</div>'
+          + '<div class="form-row" style="margin-top:10px"><div><label>' + (isSms ? 'Odesílatel / brána' : 'Odesílatel') + '</label><div style="font-size:13px">' + esc(A.fromTxt) + '</div></div><div><label>{link} →</label><div style="font-size:13px;word-break:break-all">' + esc(A.linkShown) + '</div>' + (A.linkWarn ? '<div style="font-size:11px;color:#f59e0b">' + esc(A.linkWarn) + '</div>' : '') + '</div></div>'
+          + '<div style="margin-top:10px"><label>Komu se posílá</label><div style="columns:2;font-size:13px">' + ownHtml + '</div><div class="note" style="margin-top:4px">' + (spv ? 'Nic nezaškrtnuté = všem (kromě těch s variantou Schůzka).' : 'Leady zaškrtnutých obchodníků dostanou místo specialisty odkaz na rezervaci.') + '</div></div>'
+          + '<div class="toolbar" style="margin-top:14px"><button class="btn on asave">Uložit nastavení</button><button class="btn ax">Zavřít</button><span class="note amsg"></span></div>';
+        dlg.querySelector('.avr').addEventListener('change', function (e) { nd.variant = e.target.value; draw(); });
+        dlg.querySelector('.aon').addEventListener('change', function (e) { var v2 = e.target.checked; if (isSms) CFG.enabled = v2; else if (spv) CFG.emailEnabled = v2; else CFG.schuzkaEmailEnabled = v2; });
+        var atx = dlg.querySelector('.atx'); if (atx) atx.addEventListener('input', function (e) { if (isSms) { if (spv) CFG.text = e.target.value; else CFG.schuzkaText = e.target.value; } else CFG.schuzkaEmailBody = e.target.value; });
+        var asu = dlg.querySelector('.asu'); if (asu) asu.addEventListener('input', function (e) { CFG.schuzkaEmailSubject = e.target.value; });
+        dlg.querySelectorAll('.owc').forEach(function (cb) { cb.addEventListener('change', function () { var pid = +cb.getAttribute('data-pid'); var mine = spv ? 'ownerPersonIds' : 'schuzkaOwnerPersonIds', oth = spv ? 'schuzkaOwnerPersonIds' : 'ownerPersonIds'; CFG[mine] = (CFG[mine] || []).filter(function (x) { return x !== pid; }); if (cb.checked) { CFG[mine].push(pid); CFG[oth] = (CFG[oth] || []).filter(function (x) { return x !== pid; }); } }); });
+        dlg.querySelector('.ax').addEventListener('click', function () { ov.classList.remove('open'); render(); });
+        dlg.querySelector('.asave').addEventListener('click', async function () { var m = dlg.querySelector('.amsg'); m.textContent = 'Ukládám…'; try { var body = { enabled: !!CFG.enabled, text: CFG.text, emailEnabled: !!CFG.emailEnabled, schuzkaEmailEnabled: !!CFG.schuzkaEmailEnabled, ownerPersonIds: CFG.ownerPersonIds || [], schuzkaOwnerPersonIds: CFG.schuzkaOwnerPersonIds || [], schuzkaText: CFG.schuzkaText, schuzkaEmailSubject: CFG.schuzkaEmailSubject, schuzkaEmailBody: CFG.schuzkaEmailBody, landing: computeLanding() }; var r = await fetch('/api/compounder/ai-specialist-autosend', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); var j = await r.json().catch(function () { return {}; }); if (!r.ok || j.ok === false) { m.innerHTML = '<span class="warn">' + esc(j.error || ('HTTP ' + r.status)) + '</span>'; return; } CFG = Object.assign({}, CFG, j.config || {}); m.innerHTML = '<span style="color:#22c55e">Uloženo</span>'; render(); setTimeout(function () { ov.classList.remove('open'); }, 500); } catch (err) { m.innerHTML = '<span class="warn">' + esc(err.message) + '</span>'; } });
+      }
+      draw();
     }
     // ── Uzel Rozdělení: pomocné funkce ──
     var SPLIT = {}; // SPLIT[form_id] = { counts: { 'i:5': n, 'e:2': n } } – leady přiřazené obchodníkům za období
