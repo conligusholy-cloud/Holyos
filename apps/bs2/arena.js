@@ -127,10 +127,9 @@ ${presence}
   <form class="box" id="nameForm">
     <span class="eyebrow"><i></i>Než začneme</span>
     <h2>Jak vám máme <span class="g">říkat?</span></h2>
-    <p>Jen křestní jméno nebo přezdívka – ať víme, komu připisovat kapitál.</p>
+    <p>Jen křestní jméno nebo přezdívka.</p>
     <input type="text" id="nm" maxlength="40" placeholder="např. Tomáš" autocomplete="given-name" enterkeyhint="go" required>
     <button class="btn gold" type="submit">Říkejte mi takto →</button>
-    <p class="tiny">5 otázek · 15 vteřin na každou · +50 000 Kč za správnou odpověď</p>
   </form>
 </div>
 
