@@ -159,7 +159,8 @@
       var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var sx = e.clientX - nd.x, sy = e.clientY - nd.y; function mv(ev) { nd.x = Math.max(0, ev.clientX - sx); nd.y = Math.max(0, ev.clientY - sy); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
       return el;
     }
-    function center(nd, side) { return { x: nd.x + (side === 'out' ? (nd.kind === 'start' ? 170 : 230) : 0), y: nd.y + 24 }; }
+    // Střed portu = skutečný rozměr uzlu v DOM (porty jsou na 50 % výšky), ne pevná konstanta.
+    function center(nd, side) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); var w = el ? el.offsetWidth : (nd.kind === 'start' ? 170 : 230), hgt = el ? el.offsetHeight : 48; return { x: nd.x + (side === 'out' ? w : 0), y: nd.y + hgt / 2 }; }
     function drawLinks(tmp) {
       var h = '';
       F.edges.forEach(function (ed, i) { var a = F.nodes.find(function (x) { return x.id === ed.from; }), b = F.nodes.find(function (x) { return x.id === ed.to; }); if (!a || !b) return; var p = center(a, 'out'), q = center(b, 'in'); var dx = Math.max(40, Math.abs(q.x - p.x) / 2);
