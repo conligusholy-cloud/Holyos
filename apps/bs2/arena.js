@@ -129,7 +129,7 @@ ${presence}
     <h2>Jak vám máme <span class="g">říkat?</span></h2>
     <p>Jen křestní jméno nebo přezdívka.</p>
     <input type="text" id="nm" maxlength="40" placeholder="např. Tomáš" autocomplete="given-name" enterkeyhint="go" required>
-    <button class="btn gold" type="submit">Říkejte mi takto →</button>
+    <button class="btn gold" type="submit">Říkejte mi takto</button>
   </form>
 </div>
 
