@@ -87,7 +87,6 @@ async function edgeFlows(funnelId, since, withList) {
   return out;
 }
 
-module.exports.edgeFlows = edgeFlows;
 
 // Zpětné dopočítání historie pro uzly, které existovaly před zavedením událostí: z polí leadu
 // (ai_specialist_sms_sent_at, schuzka_sms_sent_at, *_email_sent_at, *_opened_at) vytvoří události
@@ -119,4 +118,4 @@ async function backfill(funnelId) {
   return { created: rows.length };
 }
 
-module.exports = { record, stats, invalidate, matchNodes, backfill };
+module.exports = { record, stats, invalidate, matchNodes, backfill, edgeFlows };
