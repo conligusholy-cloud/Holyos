@@ -270,12 +270,13 @@ ${netScript}
   // ── Bonusové karty: 5 karet, jedna se vybere; může kapitál zvýšit i snížit. Pojistka: při plném počtu správných
   //    odpovědí (maximální kapitál) nejde vytáhnout maximální navýšení – strop výsledku je BONUS_CAP.
   var BONUS_CAP = PRIZE * Q.length + 100000;
+  var BONUS_MIN = PRIZE; // po kartě má každý aspoň 50 000 – ať může hrát dál (při nule vyjde jen kladná karta)
   var CARDS = [ { k:'x2', t:'×2', s:'zdvojnásobení', f:function(v){ return v * 2; } }, { k:'p100', t:'+100 000', s:'bonus', f:function(v){ return v + 100000; } }, { k:'p50', t:'+50 000', s:'bonus', f:function(v){ return v + 50000; } }, { k:'m50', t:'−50 000', s:'ztráta', f:function(v){ return Math.max(0, v - 50000); } }, { k:'half', t:'÷2', s:'polovina', f:function(v){ return Math.round(v / 2); } } ];
   function bonusShow(){ var box = $('cards'); box.className = 'cards'; box.innerHTML = CARDS.map(function(c, i){ return '<div class="cardb idle" data-i="' + i + '"><div class="b"></div><div class="f"></div></div>'; }).join(''); $('cmsg').innerHTML = 'Karta může kapitál zvýšit i snížit. Je to o náhodě.'; $('bonus').classList.remove('hidden'); $('rcta-row').classList.add('hidden');
     Array.prototype.forEach.call(box.children, function(el){ el.addEventListener('click', function(){ bonusPick(+el.getAttribute('data-i')); }); }); }
   function bonusPick(idx){ var box = $('cards'); if(box.classList.contains('lock')) return; box.classList.add('lock');
     // Povolené karty: nikdy nad strop (plný kvíz = žádné ×2 ani +100 000); z povolených se losuje, vybraná karta dostane los, ostatní zbytek
-    var maxOK = bank >= PRIZE * Q.length; var allowed = CARDS.filter(function(c){ var v = c.f(bank); if (v > BONUS_CAP) return false; if (maxOK && (c.k === 'x2' || c.k === 'p100')) return false; return true; });
+    var maxOK = bank >= PRIZE * Q.length; var allowed = CARDS.filter(function(c){ var v = c.f(bank); if (v > BONUS_CAP) return false; if (v < BONUS_MIN) return false; if (maxOK && (c.k === 'x2' || c.k === 'p100')) return false; return true; }); if (!allowed.length) allowed = CARDS.filter(function(c){ return c.f(bank) >= BONUS_MIN; });
     var chosen = allowed[Math.floor(Math.random() * allowed.length)]; var rest = CARDS.filter(function(c){ return c !== chosen; }).sort(function(){ return Math.random() - .5; });
     var map = {}; map[idx] = chosen; var ri = 0; for (var i = 0; i < CARDS.length; i++) if (i !== idx) map[i] = rest[ri++];
     Array.prototype.forEach.call(box.children, function(el, i){ var c = map[i]; var f = el.querySelector('.f'); var nv = c.f(bank); f.innerHTML = esc(c.t) + '<small>' + esc(c.s) + '</small>'; f.classList.add(nv > bank ? 'up' : (nv < bank ? 'down' : '')); el.classList.remove('idle'); });
