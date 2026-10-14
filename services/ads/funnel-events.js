@@ -46,6 +46,7 @@ async function record(type, leadId, opts) {
 
 // Statistika funelu: per uzel { leads (unikátní), events } jen od aktivace uzlu a v období (since).
 async function stats(funnelId, since) {
+  try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { event: true, path: true, props: true, created_at: true } });
   const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
   const per = {};
@@ -54,4 +55,34 @@ async function stats(funnelId, since) {
   return out;
 }
 
-module.exports = { record, stats, invalidate, matchNodes };
+// Zpětné dopočítání historie pro uzly, které existovaly před zavedením událostí: z polí leadu
+// (ai_specialist_sms_sent_at, schuzka_sms_sent_at, *_email_sent_at, *_opened_at) vytvoří události
+// s původním časem. Uzel s activated_at dostane jen události po aktivaci; bez activated_at celou historii.
+// Spouští se jednou per funel (příznak backfilled_at ve funelu); duplicitám brání kontrola existujících událostí.
+async function backfill(funnelId) {
+  const { setSetting } = require('../settings');
+  const list = await funnels(); const f = list.find((x) => x.id === funnelId); if (!f || f.backfilled_at) return { skipped: true };
+  const nodes = (f.nodes || []).filter((nd) => ['sms', 'email', 'landing'].includes(nd.kind));
+  if (!nodes.length) { f.backfilled_at = new Date().toISOString(); await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing' }); invalidate(); return { created: 0 }; }
+  const leads = await prisma.compounderLead.findMany({ where: { OR: [{ ai_specialist_sms_sent_at: { not: null } }, { schuzka_sms_sent_at: { not: null } }, { ai_specialist_email_sent_at: { not: null } }, { schuzka_email_sent_at: { not: null } }, { ai_specialist_opened_at: { not: null } }, { schuzka_opened_at: { not: null } }] }, select: { id: true, ai_specialist_sms_sent_at: true, schuzka_sms_sent_at: true, ai_specialist_email_sent_at: true, schuzka_email_sent_at: true, ai_specialist_opened_at: true, schuzka_opened_at: true, ai_specialist_sms_channel: true } });
+  const existing = new Set((await prisma.compounderEvent.findMany({ where: { path: { startsWith: '/funnel/' + funnelId + '/' } }, select: { path: true, props: true } })).map((e) => e.path + '#' + (e.props && e.props.lead_id)));
+  const rows = [];
+  for (const nd of nodes) {
+    const act = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; const vr = nd.variant || 'specialist';
+    for (const L of leads) {
+      let ts = null, type = null, channel = null;
+      if (nd.kind === 'sms') { ts = vr === 'schuzka' ? L.schuzka_sms_sent_at : L.ai_specialist_sms_sent_at; type = 'sms'; channel = 'sms'; }
+      else if (nd.kind === 'email') { ts = vr === 'schuzka' ? L.schuzka_email_sent_at : L.ai_specialist_email_sent_at; type = 'email'; channel = 'email'; }
+      else if (nd.kind === 'landing' && !nd.page) { ts = vr === 'schuzka' ? L.schuzka_opened_at : L.ai_specialist_opened_at; type = 'landing'; }
+      if (!ts) continue; if (act && new Date(ts).getTime() < act) continue;
+      const path = '/funnel/' + funnelId + '/' + nd.id; if (existing.has(path + '#' + L.id)) continue;
+      rows.push({ sid: 'lead:' + L.id, event: 'funnel_' + type, path, props: { lead_id: L.id, funnel_id: funnelId, node_id: nd.id, variant: vr, channel, backfill: true }, created_at: new Date(ts) });
+    }
+  }
+  for (let i = 0; i < rows.length; i += 500) await prisma.compounderEvent.createMany({ data: rows.slice(i, i + 500) });
+  f.backfilled_at = new Date().toISOString(); await setSetting(FUNNELS_KEY, list, { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing' }); invalidate();
+  console.log('[funnel-events] backfill funel', funnelId, rows.length, 'událostí');
+  return { created: rows.length };
+}
+
+module.exports = { record, stats, invalidate, matchNodes, backfill };

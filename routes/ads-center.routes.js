@@ -106,7 +106,7 @@ function cleanFunnel(f) {
     let cur = stepNodes.find((x) => x.kind === 'start') || stepNodes.find((x) => !hasIn.has(x.id)); const seen = new Set(); steps = [];
     while (cur && !seen.has(cur.id) && steps.length < 12) { seen.add(cur.id); steps.push(Object.assign(cleanStep(cur), cur.kind === 'start' ? { label: cur.label || 'Facebook reklama', page: null } : {})); const e = edges.find((ed) => ed.from === cur.id); cur = e ? nodes.find((x) => x.id === e.to && x.kind !== 'note' && !['sms', 'email', 'landing'].includes(x.kind)) : null; }
   }
-  return { id: String(f.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40), name: String(f.name || 'Funel').slice(0, 80), note: String(f.note || '').slice(0, 300), steps, nodes, edges };
+  return { id: String(f.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40), name: String(f.name || 'Funel').slice(0, 80), note: String(f.note || '').slice(0, 300), steps, nodes, edges, backfilled_at: f.backfilled_at ? String(f.backfilled_at).slice(0, 40) : undefined };
 }
 router.get('/funnels', async (req, res, next) => { try { res.json(await loadFunnels()); } catch (err) { next(err); } });
 router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) => {
