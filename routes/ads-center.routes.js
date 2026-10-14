@@ -117,7 +117,7 @@ router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) 
     res.json(list);
   } catch (err) { next(err); }
 });
-router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
+router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Meta (Facebook) Ads: napojení na reklamní účet, seznam kampaní, statistiky a nastavení (cíl = URL / lead formulář) ──
 // Přístupový token s právem ads_read (System User token v Business Manageru) + ID reklamního účtu se ukládají v AppSetting
