@@ -157,4 +157,52 @@ router.get('/meta/campaigns/:id', async (req, res, next) => {
       ads: (ads.data || []).map((a) => { const ins = (a.insights && a.insights.data && a.insights.data[0]) || {}; const ep = endpoint(a.creative); if (ep.type === 'lead_form') ep.form = formNames[ep.form_id]; return { id: a.id, name: a.name, status: a.effective_status || a.status, adset_id: a.adset_id, endpoint: ep, impressions: Number(ins.impressions || 0), clicks: Number(ins.clicks || 0), spend: Number(ins.spend || 0), ctr: ins.ctr != null ? Number(ins.ctr) : null, leads: ((ins.actions || []).find((x) => x.action_type === 'lead' || x.action_type === 'onsite_conversion.lead_grouped') || {}).value || 0 }; }) });
   } catch (err) { res.status(400).json({ error: err.message }); } });
 
+// ── Komunikační kanály pro akční prvky funelu (e-mail, SMS) ──
+// Přehled: ze kterých schránek umí HolyOS odesílat (Graph send-as / SMTP) a z jakého čísla / brány chodí SMS.
+// Tajné hodnoty (hesla, tokeny) se nikdy nevrací. Výchozí odesílatel pro funely se ukládá v AppSetting ads_center.channels.
+const CHANNELS_KEY = 'ads_center.channels';
+const MAIL_SENDERS = [
+  { env: 'COMPOUNDER_MAIL_FROM', nameEnv: 'COMPOUNDER_MAIL_FROM_NAME', use: 'Compounder (leady, model, rezervace)' },
+  { env: 'COMPOUNDER_SPECIALIST_MAIL_FROM', use: 'AI specialista Compounder' },
+  { env: 'BS2_MAIL_FROM', nameEnv: 'BS2_MAIL_FROM_NAME', use: 'Best Series 2.0 (účty, objednávky, Prověření lokality)', fallback: 'info@pradlomaty.info' },
+  { env: 'VYBERY_MAIL_FROM', nameEnv: 'VYBERY_MAIL_FROM_NAME', use: 'Výběry / pokladna' },
+  { env: 'SERVICE_BILLING_MAIL_FROM', nameEnv: 'SERVICE_BILLING_MAIL_FROM_NAME', use: 'Servisní fakturace' },
+  { env: 'LEASING_MAIL_FROM', use: 'Leasing' },
+  { env: 'INFOLINKA_MAIL_FROM', use: 'Infolinka (shrnutí hovorů)' },
+  { env: 'SMTP_FROM', use: 'Systémový (SMTP záloha)' },
+];
+function parseAddr(s) { const m = String(s || '').match(/^\s*"?([^"<]*)"?\s*<([^>]+)>\s*$/); return m ? { name: m[1].trim(), address: m[2].trim() } : { name: '', address: String(s || '').trim() }; }
+async function channelsView() {
+  const { getSetting } = require('../services/settings');
+  const saved = (await getSetting(CHANNELS_KEY, { type: 'json', defaultValue: {} })) || {};
+  let graphReady = false; try { const g = require('../services/ms-graph-client'); graphReady = !!(g.isConfigured && g.isConfigured()); } catch (_) { /* bez Graphu */ }
+  const smtpReady = !!process.env.SMTP_HOST;
+  const seen = new Set(); const senders = [];
+  MAIL_SENDERS.forEach((d) => { const raw = process.env[d.env] || d.fallback || ''; if (!raw) return; const p = parseAddr(raw); if (!p.address || seen.has(p.address.toLowerCase())) { if (p.address) { const ex = senders.find((x) => x.address.toLowerCase() === p.address.toLowerCase()); if (ex) ex.use += ', ' + d.use; } return; } seen.add(p.address.toLowerCase()); senders.push({ address: p.address, name: (d.nameEnv && process.env[d.nameEnv]) || p.name || '', use: d.use, env: d.env, via: graphReady ? 'graph' : (smtpReady ? 'smtp' : 'none') }); });
+  (Array.isArray(saved.extra_senders) ? saved.extra_senders : []).forEach((a) => { const p = parseAddr(a); if (p.address && !seen.has(p.address.toLowerCase())) { seen.add(p.address.toLowerCase()); senders.push({ address: p.address, name: p.name, use: 'vlastní (přidáno v nastavení)', env: '', custom: true, via: graphReady ? 'graph' : (smtpReady ? 'smtp' : 'none') }); } });
+  let sms = { provider: 'twilio', gosms_channel: '', twilio_sms_from: '', gosms_ready: false, twilio_ready: false };
+  try { sms = await require('../services/voice/sms').getSmsConfigView(); } catch (_) { /* bez SMS služby */ }
+  // Twilio čísla linek (volané číslo → linka) + výchozí odchozí číslo hlasového agenta
+  let lineNumbers = {}; try { let m = await getSetting('voice.line_numbers'); if (typeof m === 'string') m = JSON.parse(m); if (m && typeof m === 'object') lineNumbers = m; } catch (_) { /* není */ }
+  const smsFrom = sms.provider === 'gosms' ? (sms.gosms_channel ? 'GoSMS kanál #' + sms.gosms_channel : '') : sms.twilio_sms_from;
+  return {
+    email: { graph_ready: graphReady, smtp_ready: smtpReady, senders, default_from: saved.email_from || (senders[0] && senders[0].address) || '' },
+    sms: { provider: sms.provider, ready: sms.provider === 'gosms' ? sms.gosms_ready : sms.twilio_ready, from: smsFrom, from_detail: sms.provider === 'gosms' ? 'GoSMS.cz – odesílatel je nastaven jako kanál v portálu GoSMS (typicky „Pradlomaty").' : (String(sms.twilio_sms_from || '').startsWith('MG') ? 'Twilio Messaging Service (' + sms.twilio_sms_from + ')' : 'Twilio číslo / alfanumerický odesílatel'), voice_default_from: process.env.VOICE_DEFAULT_FROM || '', line_numbers: Object.entries(lineNumbers).map(([num, line]) => ({ number: num, line })), settings_url: '/modules/servis/index.html#infolinka' },
+  };
+}
+router.get('/channels', async (req, res, next) => { try { res.json(await channelsView()); } catch (err) { next(err); } });
+router.put('/channels', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try { const { getSetting, setSetting } = require('../services/settings'); const cur = (await getSetting(CHANNELS_KEY, { type: 'json', defaultValue: {} })) || {}; const b = req.body || {};
+    const v = { email_from: b.email_from != null ? String(b.email_from).trim() : (cur.email_from || ''), extra_senders: Array.isArray(b.extra_senders) ? b.extra_senders.map((s) => String(s).trim()).filter((s) => /@/.test(s)).slice(0, 20) : (cur.extra_senders || []) };
+    await setSetting(CHANNELS_KEY, v, { type: 'json', description: 'Centrum reklamy – komunikační kanály (výchozí e-mailový odesílatel, vlastní schránky)', scope: 'marketing', userId: req.user && req.user.id });
+    res.json({ ok: true }); } catch (err) { next(err); } });
+// Testovací odeslání – ověří, že Graph/SMTP schránku skutečně pustí (odešle krátký e-mail / SMS na zadanou adresu / číslo).
+router.post('/channels/test-email', express.json({ limit: '10kb' }), async (req, res) => {
+  try { const b = req.body || {}; const to = String(b.to || (req.user && req.user.email) || '').trim(); if (!to) return res.status(400).json({ error: 'Chybí adresa příjemce' });
+    const r = await require('../services/email').sendMail({ to, from: String(b.from || '').trim() || undefined, subject: 'HolyOS – test odesílatele', body: 'Testovací e-mail z Centra reklamy. Odesílatel: ' + (b.from || 'výchozí') + '.', link: 'https://app.holyos.cz/modules/centrum-reklamy/index.html#settings', linkLabel: 'Centrum reklamy' });
+    if (!r.sent) return res.status(400).json({ error: r.error || r.skipped || 'neodesláno' }); res.json({ ok: true, via: r.via, from: r.from || b.from || '' }); } catch (err) { res.status(400).json({ error: err.message }); } });
+router.post('/channels/test-sms', express.json({ limit: '10kb' }), async (req, res) => {
+  try { const to = String((req.body || {}).to || '').trim(); if (!to) return res.status(400).json({ error: 'Chybí číslo příjemce' });
+    const id = await require('../services/voice/sms').sendSms(to, 'HolyOS – test SMS brány z Centra reklamy.', { source: 'ads_center_test' }); res.json({ ok: true, id }); } catch (err) { res.status(400).json({ error: err.message }); } });
+
 module.exports = router;
