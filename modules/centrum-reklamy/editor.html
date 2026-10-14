@@ -8,7 +8,12 @@
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
   <style>
-    html, body { height:100%; margin:0; overflow:hidden; background:#0b0e17; color:var(--text); }
+    html, body { height:100%; margin:0; overflow:hidden; background:#0b0e17; color:var(--text); display:block; }
+    .app { display:flex; flex-direction:column; height:100vh; width:100vw; }
+    .addmenu { position:relative; }
+    .addmenu .dd { display:none; position:absolute; top:38px; left:0; z-index:20; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px; width:300px; box-shadow:0 14px 40px rgba(0,0,0,.5); }
+    .addmenu.open .dd { display:block; }
+    .addmenu h4 { margin:6px 4px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); }
     .top { height:52px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--border); background:var(--surface); }
     .top input.name { font-size:15px; font-weight:700; background:transparent; border:1px solid transparent; color:var(--text); padding:6px 8px; border-radius:7px; min-width:320px; }
     .top input.name:focus { border-color:var(--border); outline:none; background:var(--surface2); }
@@ -46,27 +51,21 @@
   </style>
 </head>
 <body>
+  <div class="app">
   <div class="top">
     <a class="btn btn-sm" href="modules/centrum-reklamy/index.html#funnel">← Centrum reklamy</a>
     <input class="name" id="name" placeholder="Název funelu">
     <span class="note" style="font-size:12px;color:var(--text2)">Období:</span>
     <button class="btn btn-sm" data-days="7">7 dní</button><button class="btn btn-sm on" data-days="30">30 dní</button><button class="btn btn-sm" data-days="90">90 dní</button>
+    <div class="addmenu" id="addmenu"><button class="btn btn-sm" id="add-btn">＋ Přidat krok ▾</button><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Ostatní</h4><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
     <span class="msg" id="msg"></span>
     <button class="btn btn-sm" id="auto">⇅ Srovnat</button>
     <button class="btn on" id="save">💾 Uložit</button>
   </div>
   <div class="wrap">
-    <div class="palette">
-      <h4>Záchytné stránky</h4>
-      <div id="pal-pages"></div>
-      <h4>Ostatní</h4>
-      <div class="pal" draggable="true" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div>
-      <div class="pal" draggable="true" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div>
-      <p style="font-size:11.5px;color:var(--text2);line-height:1.5">Přetáhni kartu na plátno. Uzly spoj tažením z oranžového bodu (výstup) na modrý bod (vstup) dalšího uzlu. Klik na spojnici ji smaže.</p>
-    </div>
     <div class="canvas-wrap" id="cw">
       <div class="canvas" id="canvas"><svg class="links" id="links"></svg></div>
-      <div class="hint">Tažením za hlavičku uzel přesuneš · Delete smaže vybraný uzel</div>
+      <div class="hint">＋ Přidat krok nahoře · tažením za hlavičku uzel přesuneš · spojuj tažením z oranžového bodu na modrý · klik na spojnici ji smaže · Delete smaže vybraný uzel</div>
     </div>
     <div class="side">
       <h4>Funel – kroky podle spojení</h4>
@@ -75,6 +74,7 @@
       <h4 style="margin-top:16px">Poznámka</h4>
       <textarea id="note" rows="3" style="width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit"></textarea>
     </div>
+  </div>
   </div>
   <script>
   (function () {
@@ -131,11 +131,14 @@
     }
     function render() { canvas.querySelectorAll('.node').forEach(function (x) { x.remove(); }); F.nodes.forEach(function (nd) { canvas.appendChild(nodeEl(nd)); }); drawLinks(); refreshSteps(); }
 
-    // drag z palety
-    document.addEventListener('dragstart', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (p) e.dataTransfer.setData('text/plain', JSON.stringify({ kind: p.dataset.kind, page: p.dataset.page || null })); });
-    cw.addEventListener('dragover', function (e) { e.preventDefault(); });
-    cw.addEventListener('drop', function (e) { e.preventDefault(); var d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (x) { return; } var r = canvas.getBoundingClientRect(); var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : 'step', x: Math.max(0, e.clientX - r.left - 115), y: Math.max(0, e.clientY - r.top - 20), page: d.kind === 'page' ? d.page : null, metric: 'uniques', manual: null, label: '', text: '' };
-      var last = chain().slice(-1)[0]; F.nodes.push(nd); if (nd.kind === 'step' && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id }); render(); });
+    // přidání uzlu z menu: umístí se za poslední krok řetězce a rovnou se k němu připojí
+    var am = document.getElementById('addmenu');
+    document.getElementById('add-btn').addEventListener('click', function (e) { e.stopPropagation(); am.classList.toggle('open'); });
+    document.addEventListener('click', function (e) { if (!am.contains(e.target)) am.classList.remove('open'); });
+    am.addEventListener('click', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p) return; am.classList.remove('open');
+      var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note') { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; }
+      var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : 'step', x: nx, y: ny, page: d.kind === 'page' ? d.page : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
+      F.nodes.push(nd); if (nd.kind === 'step' && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id }); render(); cw.scrollTo({ left: Math.max(0, nx - 300), behavior: 'smooth' }); });
     addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out'); drawLinks({ x1: p.x, y1: p.y, x2: e.clientX - r.left, y2: e.clientY - r.top }); });
     addEventListener('mouseup', function () { if (linking) { linking = null; drawLinks(); } });
     addEventListener('keydown', function (e) { if (e.key === 'Delete' && sel && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); } });
@@ -149,7 +152,7 @@
     async function loadData() { try { var r = await fetch('/api/ads-center/overview?days=' + days, { credentials: 'same-origin' }); var j = await r.json(); DATA = j.pages || []; render(); } catch (e) { } }
     (async function init() {
       var a = await fetch('/api/ads-center/pages', { credentials: 'same-origin' }); PAGES = await a.json();
-      document.getElementById('pal-pages').innerHTML = PAGES.map(function (p) { return '<div class="pal" draggable="true" data-kind="page" data-page="' + p.key + '"><i style="background:' + p.color + '"></i>' + esc(p.name) + '</div>'; }).join('');
+      document.getElementById('pal-pages').innerHTML = PAGES.map(function (p) { return '<div class="pal" data-kind="page" data-page="' + p.key + '"><i style="background:' + p.color + '"></i>' + esc(p.name) + '</div>'; }).join('');
       var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); var list = await b.json(); F = list.find(function (f) { return f.id === id; });
       if (!F) { document.getElementById('msg').textContent = 'Funel nenalezen.'; F = { id: id || uid(), name: 'Funel', note: '', steps: [], nodes: [], edges: [] }; }
       F.nodes = F.nodes || []; F.edges = F.edges || [];
