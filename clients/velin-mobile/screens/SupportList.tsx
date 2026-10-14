@@ -118,14 +118,10 @@ export default function SupportList() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={[]}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={12}>
-          <Text style={styles.back}>‹</Text>
-        </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.header}>Podpora</Text>
-          <Text style={styles.sub}>Best Series 2.0{agent ? ` · jako ${agent}` : ''}</Text>
+          <Text style={styles.sub}>Best Series 2.0{agent ? ` · odpovídáš jako ${agent}` : ''}</Text>
         </View>
         <TouchableOpacity
           style={[styles.statusPill, online ? styles.pillOn : styles.pillOff]}

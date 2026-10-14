@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text } from 'react-native';
+import { Text, TouchableOpacity } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -47,6 +47,7 @@ import AssistantSettings from './screens/AssistantSettings';
 import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
 import { colors } from './lib/theme';
+import { useSupportAllowed } from './lib/support';
 
 // =============================================================================
 // OTA Updates — tichá kontrola při startu
@@ -76,7 +77,7 @@ export type RootStackParamList = {
   Attendance: undefined;
   NewGeoFence: undefined;
   SignContract: { contractId: number };
-  SupportList: undefined;
+  MeProfile: undefined;
   SupportThread: { supporterId: number; title?: string };
 };
 
@@ -85,6 +86,7 @@ export type TabsParamList = {
   Chat: undefined;
   Alerts: undefined;
   Me: undefined;
+  Support: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -168,10 +170,28 @@ const navTheme = {
 };
 
 function TabsRoot() {
+  // Tomáš a Jan Holý: místo záložky „Já" mají „Podpora" (chat BS2) a profil je nahoře vpravo.
+  const supportAllowed = useSupportAllowed();
   return (
     <Tabs.Navigator
       screenOptions={{
-        headerShown: false,
+        headerShown: supportAllowed,
+        headerStyle: { backgroundColor: colors.surface },
+        headerTitleStyle: { color: colors.text, fontWeight: '700', fontSize: 17 },
+        headerShadowVisible: false,
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={() => navigationRef.isReady() && navigationRef.navigate('MeProfile')}
+            hitSlop={10}
+            style={{
+              width: 34, height: 34, borderRadius: 17, marginRight: 14,
+              backgroundColor: colors.surface2, alignItems: 'center', justifyContent: 'center',
+            }}
+            accessibilityLabel="Můj účet"
+          >
+            <Text style={{ fontSize: 17 }}>👤</Text>
+          </TouchableOpacity>
+        ),
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
@@ -208,14 +228,25 @@ function TabsRoot() {
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🔔</Text>,
         }}
       />
-      <Tabs.Screen
-        name="Me"
-        component={Me}
-        options={{
-          title: 'Já',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>👤</Text>,
-        }}
-      />
+      {supportAllowed ? (
+        <Tabs.Screen
+          name="Support"
+          component={SupportList}
+          options={{
+            title: 'Podpora',
+            tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🎧</Text>,
+          }}
+        />
+      ) : (
+        <Tabs.Screen
+          name="Me"
+          component={Me}
+          options={{
+            title: 'Já',
+            tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>👤</Text>,
+          }}
+        />
+      )}
     </Tabs.Navigator>
   );
 }
@@ -294,9 +325,16 @@ export default function App() {
             options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen
-            name="SupportList"
-            component={SupportList}
-            options={{ animation: 'slide_from_right' }}
+            name="MeProfile"
+            component={Me}
+            options={{
+              animation: 'slide_from_right',
+              headerShown: true,
+              title: 'Můj účet',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+              headerShadowVisible: false,
+            }}
           />
           <Stack.Screen
             name="SupportThread"

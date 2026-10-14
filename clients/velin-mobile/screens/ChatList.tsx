@@ -152,23 +152,6 @@ export default function ChatList() {
 
   useFocusEffect(useCallback(() => { load('refresh'); }, [load]));
 
-  // Podpora BS2 — řádek nahoře jen pro Tomáše a Jana Holého (server vrátí allowed)
-  const [support, setSupport] = useState<{ unread: number; online: boolean } | null>(null);
-  useFocusEffect(useCallback(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const auth = await loadAuth();
-        if (!auth.jwt) return;
-        const me = await api.supportMe(auth.jwt);
-        if (!me.allowed) { if (alive) setSupport(null); return; }
-        const t = await api.supportThreads(auth.jwt);
-        if (alive) setSupport({ unread: t.threads.reduce((s, x) => s + (x.unread || 0), 0), online: t.online });
-      } catch { /* podpora je volitelná — chyba se nezobrazuje */ }
-    })();
-    return () => { alive = false; };
-  }, []));
-
   function openChannel(ch: ChatChannelSummary) {
     navigation.navigate('ChatThread', {
       channelId: ch.id,
@@ -231,26 +214,6 @@ export default function ChatList() {
             <Text style={styles.newChatBtnText}>✏️  Nová</Text>
           </TouchableOpacity>
         </View>
-
-        {support && (
-          <TouchableOpacity
-            style={styles.supportRow}
-            onPress={() => navigation.navigate('SupportList')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.supportIcon}><Text style={{ fontSize: 20 }}>🎧</Text></View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.supportTitle}>Podpora Best Series 2.0</Text>
-              <Text style={styles.supportSub}>
-                {support.online ? '● Online' : 'Offline'} · {support.unread > 0 ? `${support.unread} nepřečtených` : 'vše vyřízeno'}
-              </Text>
-            </View>
-            {support.unread > 0 && (
-              <View style={styles.unreadBadgeInline}><Text style={styles.unreadBadgeText}>{support.unread > 99 ? '99+' : support.unread}</Text></View>
-            )}
-            <Text style={styles.supportChevron}>›</Text>
-          </TouchableOpacity>
-        )}
 
         {hasStale && (
           <TouchableOpacity onPress={handleRetry} style={styles.staleBanner} activeOpacity={0.7}>
