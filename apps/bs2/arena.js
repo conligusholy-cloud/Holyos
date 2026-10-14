@@ -160,9 +160,8 @@ ${presence}
     <div class="cta-row" style="justify-content:center">
       <button class="btn gold" id="toAuc">Hrát o slevový kupon</button>
       <a class="btn sec" href="/location?utm_source=arena" id="rcta">Prověřit si místo</a>
-      <button class="btn sec" id="again">Hrát kvíz znovu</button>
     </div>
-    <p class="small" style="margin-top:14px;color:var(--text3)">Kapitál je virtuální – ale prádlomat je skutečný. Aplikace Prověření lokality vám spočítá, kolik by vydělal právě u vás.</p>
+    <p class="small" style="margin-top:14px;color:var(--text3)">Kapitál je virtuální – ale prádlomat je skutečný.</p>
   </section>
   <section class="auc hidden" id="auc">
     <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · nové kolo každých 30 s</span>
@@ -243,7 +242,7 @@ ${netScript}
     c.scrollIntoView({ behavior:'smooth', block:'center' }); }
   $('aucAgain').addEventListener('click', function(){ AUC.round = null; aucStart(); });
   $('toAuc').addEventListener('click', aucStart);
-  $('again').addEventListener('click', start);
+
   // ping návštěvy (stejný beacon jako ostatní veřejné stránky)
   try { fetch('/api/presence/ping', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ sid: SID, path: '/arena' }) }); } catch(e){}
 })();
