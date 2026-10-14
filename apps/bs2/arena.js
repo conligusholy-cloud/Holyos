@@ -180,7 +180,7 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .fact .fdots{display:flex;gap:5px;margin-top:6px} .fact .fdots i{width:14px;height:3px;border-radius:2px;background:rgba(120,160,255,.18)} .fact .fdots i.on{background:var(--accent2)}
   .lobbybox{max-width:720px;margin:16px auto 0;display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap}
   .ring.sm{width:96px;height:96px} .ring.sm b{font-size:32px;top:26px} .ring.sm small{font-size:9px;top:62px}
-  .lobbybox .lt{font-size:16px;color:var(--text2)}
+  .lobbybox .lt{font-size:16px;color:var(--text2);display:flex;flex-direction:column;gap:4px} .lobbybox .lt small{font-size:13px;color:var(--text3)} .lobbybox .lt small b{color:var(--accent2)}
   /* v čekárně jsou dominantní informace: bez nadpisu aukce, velká karta */
   body.lobbymode .auchead h1,body.lobbymode .auchead .eyebrow{display:none}
   body.lobbymode .fact{min-height:min(46vh,340px);justify-content:center;text-align:center;padding:28px 26px;border-color:rgba(79,209,255,.35);box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 40px rgba(79,209,255,.08)}
@@ -231,7 +231,7 @@ ${presence}
     <h1>Kdo přihodí <span class="g">poslední</span>, bere slevu na prádlomat</h1>
     <div class="fact" id="fact"></div>
   </section>
-  <section class="lobbybox hidden" id="aucLobby"><div class="ring sm"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="lobbyFg" cx="60" cy="60" r="52"/></svg><b id="lobbySec">20</b><small>sekund</small></div><div class="lt">Čekáme na další hráče…</div></section>
+  <section class="lobbybox hidden" id="aucLobby"><div class="ring sm"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="lobbyFg" cx="60" cy="60" r="52"/></svg><b id="lobbySec">20</b><small>sekund</small></div><div class="lt">Čekáme na další hráče…<small>Kdo přihodí poslední, má slevu <b>30 %</b> na první prádlomat · 2. místo 20 % · 3. místo 10 %</small></div></section>
   <section class="auc hidden" id="auc">
     <span class="eyebrow" style="display:flex;width:max-content;margin:0 auto"><i></i>Živá aukce · kdo přihodí poslední, vyhrává</span>
     <h2>Aukce o slevové kupony na první prádlomat</h2>
