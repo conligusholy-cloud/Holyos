@@ -82,7 +82,9 @@ async function edgeFlows(funnelId, since, withList) {
   async function setOf(nd, port) {
     const m = new Map(); if (!nd) return m;
     if (nd.kind === 'leadform') { (await formLeads(nd)).forEach((L) => m.set(L.id, L.created_at)); return m; }
-    if (nd.kind === 'split') { const fn = upstreamFormNode(nd, 0); if (!fn) return m; const br = (nd.branches || [])[port || 0]; const L = await formLeads(fn); L.forEach((x) => { if (br && br.key) { const k = x.owner_person_id ? 'i:' + x.owner_person_id : (x.external_rep_id ? 'e:' + x.external_rep_id : ''); if (k !== br.key) return; } m.set(x.id, x.created_at); }); return m; }
+    if (nd.kind === 'split') { const fn = upstreamFormNode(nd, 0); if (!fn) return m; // port < 10 = jedna větev; port 10+j = sloučený výstup (sjednocení větví) → klíče všech sloučených větví
+      const P = port || 0; let keys = null; if (P >= 10) { const mg = (nd.merges || [])[P - 10]; keys = new Set((mg && mg.ports ? mg.ports : []).map((pi) => ((nd.branches || [])[pi] || {}).key).filter(Boolean)); } else { const br = (nd.branches || [])[P]; if (br && br.key) keys = new Set([br.key]); }
+      const L = await formLeads(fn); L.forEach((x) => { if (keys) { const k = x.owner_person_id ? 'i:' + x.owner_person_id : (x.external_rep_id ? 'e:' + x.external_rep_id : ''); if (!keys.has(k)) return; } m.set(x.id, x.created_at); }); return m; }
     if (['sms', 'email', 'landing'].includes(nd.kind)) { Object.keys(first[nd.id] || {}).forEach((lid) => m.set(Number(lid), first[nd.id][lid])); return m; }
     return m;
   }
