@@ -47,7 +47,7 @@ import AssistantSettings from './screens/AssistantSettings';
 import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
 import { colors } from './lib/theme';
-import { useSupportAllowed } from './lib/support';
+import { useSupportAllowed, useSupportUnread } from './lib/support';
 
 // =============================================================================
 // OTA Updates — tichá kontrola při startu
@@ -172,6 +172,7 @@ const navTheme = {
 function TabsRoot() {
   // Tomáš a Jan Holý: místo záložky „Já" mají „Podpora" (chat BS2) a profil je nahoře vpravo.
   const supportAllowed = useSupportAllowed();
+  const supportUnread = useSupportUnread(supportAllowed);
   return (
     <Tabs.Navigator
       screenOptions={{
@@ -234,6 +235,8 @@ function TabsRoot() {
           component={SupportList}
           options={{
             title: 'Podpora',
+            tabBarBadge: supportUnread > 0 ? (supportUnread > 99 ? '99+' : supportUnread) : undefined,
+            tabBarBadgeStyle: { backgroundColor: colors.accent, color: '#fff', fontSize: 11 },
             tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🎧</Text>,
           }}
         />
