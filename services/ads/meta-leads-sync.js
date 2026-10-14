@@ -50,12 +50,13 @@ async function sync(opts = {}) {
     const sinceRaw = opts.since || (c.last_run ? new Date(new Date(c.last_run).getTime() - 3600000).toISOString() : null) || c.since || new Date(Date.now() - 86400000).toISOString();
     const sinceUnix = Math.floor(new Date(sinceRaw).getTime() / 1000);
     const only = Array.isArray(c.pages) && c.pages.length ? new Set(c.pages.map(String)) : null;
+    const onlyForms = Array.isArray(c.forms) && c.forms.length ? new Set(c.forms.map(String)) : null; // pracovní sada formulářů
     const pg = { data: await pageList() }; if (!pg.data.length) throw new Error('Žádná stránka – připoj Facebook účet v Centru reklamy');
     for (const p of pg.data || []) {
       if (only && !only.has(String(p.id))) continue; if (!p.access_token) continue; res.pages++;
       let fl; try { fl = await graph(p.id + '/leadgen_forms', { fields: 'id,name,status', limit: 200 }, p.access_token); } catch (e) { res.errors.push(p.name + ': ' + e.message); continue; }
       for (const f of fl.data || []) {
-        const fcfg = formById[String(f.id)]; if (fcfg && fcfg.active === false) continue; res.forms++;
+        const fcfg = formById[String(f.id)]; if (fcfg && fcfg.active === false) continue; if (onlyForms && !onlyForms.has(String(f.id))) continue; res.forms++;
         let url = f.id + '/leads'; let params = { fields: 'id,created_time,ad_id,adset_id,campaign_id,campaign_name,ad_name,form_id,field_data,platform,is_organic', limit: 100, filtering: JSON.stringify([{ field: 'time_created', operator: 'GREATER_THAN', value: sinceUnix }]) };
         let guard = 0;
         while (url && guard++ < 50) {
@@ -81,7 +82,7 @@ async function sync(opts = {}) {
   finally { running = false; }
 }
 
-async function tick() { try { const c = await cfg(); if (!c.enabled) return; const iv = Math.max(2, Number(c.interval_min) || 5) * 60000; if (c.last_run && Date.now() - new Date(c.last_run).getTime() < iv - 30000) return; await sync(); } catch (e) { console.error('[meta-leads] tick:', e.message); } }
+async function tick() { try { const c = await cfg(); if (c.enabled === false) return; /* automat je výchozí zapnutý */ const iv = Math.max(2, Number(c.interval_min) || 5) * 60000; if (c.last_run && Date.now() - new Date(c.last_run).getTime() < iv - 30000) return; await sync(); } catch (e) { console.error('[meta-leads] tick:', e.message); } }
 function start() { if (timer) return; timer = setInterval(tick, 60000); setTimeout(tick, 20000); console.log('[meta-leads] worker spuštěn (kontrola každou minutu, interval dle nastavení)'); }
 function stop() { if (timer) clearInterval(timer); timer = null; }
 

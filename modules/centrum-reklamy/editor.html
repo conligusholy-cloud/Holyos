@@ -93,7 +93,7 @@
   <div class="wrap">
     <div class="tools" id="tools">
       <div class="tool" data-tool="start" title="Startovací bod – odkud zájemce přichází (reklama, vyhledávání, doporučení…)">🚀<small>Start</small></div>
-      <div class="tool" id="addmenu" title="Přidat krok"><span id="add-btn">＋</span><small>Krok</small><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Ostatní</h4><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
+      <div class="tool" id="addmenu" title="Přidat krok"><span id="add-btn">＋</span><small>Krok</small><div class="dd"><h4>Záchytné stránky</h4><div id="pal-pages"></div><h4>Rychlé formuláře (pracovní sada)</h4><div id="pal-forms"><div class="pal" style="opacity:.6">načítám…</div></div><h4>Ostatní</h4><div class="pal" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div><div class="pal" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div></div></div>
       <div class="tool" data-tool="link" title="Spojit: klikni na první uzel a pak na druhý">🔗<small>Spojit</small></div>
       <div class="tool" data-tool="note" title="Přidat poznámku">📝<small>Pozn.</small></div>
       <div class="tool" data-tool="auto" title="Srovnat uzly do řady">⇅<small>Srovnat</small></div>
@@ -184,8 +184,9 @@
     document.addEventListener('click', function (e) { if (!am.contains(e.target)) am.classList.remove('open'); });
     am.addEventListener('click', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p) return; am.classList.remove('open');
       var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note') { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; }
-      var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : 'step', x: nx, y: ny, page: d.kind === 'page' ? d.page : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
-      F.nodes.push(nd); if (nd.kind === 'step' && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id }); render(); cw.scrollTo({ left: Math.max(0, nx - 300), behavior: 'smooth' }); });
+      var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : (d.kind === 'leadform' ? 'leadform' : 'step'), x: nx, y: ny, page: d.kind === 'page' ? d.page : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
+      if (d.kind === 'leadform') nd.form = { form_id: p.dataset.form, name: p.dataset.name, status: 'ACTIVE', questions: [], leads: Number(p.dataset.leads) || 0, clicks: 0, spend: 0, campaign_id: '', campaign_name: p.dataset.pg || '', ad_ids: [] };
+      F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id }); render(); cw.scrollTo({ left: Math.max(0, nx - 300), behavior: 'smooth' }); });
     addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out'); drawLinks({ x1: p.x, y1: p.y, x2: e.clientX - r.left, y2: e.clientY - r.top }); });
     addEventListener('mouseup', function () { if (linking) { linking = null; drawLinks(); } });
     addEventListener('keydown', function (e) { if (e.key === 'Delete' && sel && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); } });
@@ -275,6 +276,7 @@
     async function loadData() { try { var r = await fetch('/api/ads-center/overview?days=' + days, { credentials: 'same-origin' }); var j = await r.json(); DATA = j.pages || []; render(); } catch (e) { } }
     (async function init() {
       var a = await fetch('/api/ads-center/pages', { credentials: 'same-origin' }); PAGES = await a.json();
+      try { var ws = await (await fetch('/api/ads-center/meta/working-set?days=' + days, { credentials: 'same-origin' })).json(); document.getElementById('pal-forms').innerHTML = (ws.forms || []).length ? ws.forms.map(function (f) { return '<div class="pal" data-kind="leadform" data-form="' + esc(f.id) + '" data-name="' + esc(f.name) + '" data-pg="' + esc(f.page) + '" data-leads="' + f.leads + '"><i style="background:#4fd1ff"></i>📋 ' + esc(f.name) + ' <small style="opacity:.6">' + esc(f.page) + ' · ' + f.leads + ' leadů</small></div>'; }).join('') : '<div class="pal" style="opacity:.6">Nic – zaškrtni formuláře v Centru reklamy → ⚙ Nastavení</div>'; } catch (e) { document.getElementById('pal-forms').innerHTML = ''; }
       document.getElementById('pal-pages').innerHTML = PAGES.map(function (p) { return '<div class="pal" data-kind="page" data-page="' + p.key + '"><i style="background:' + p.color + '"></i>' + esc(p.name) + '</div>'; }).join('');
       var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); var list = await b.json(); F = list.find(function (f) { return f.id === id; });
       if (!F) { document.getElementById('msg').textContent = 'Funel nenalezen.'; F = { id: id || uid(), name: 'Funel', note: '', steps: [], nodes: [], edges: [] }; }
