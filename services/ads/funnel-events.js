@@ -112,7 +112,9 @@ async function edgeFlows(funnelId, since, withList) {
     const sa = await setOf(A, e.port || 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventA = ['sms', 'email', 'landing'].includes(A.kind); const actionB = ['sms', 'email'].includes(B.kind);
     const sb = actionB ? await setOf(B, 0) : null; const list = []; let missN = 0;
     const actionA = ['sms', 'email'].includes(A.kind);
-    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
+    // Vlákno z tečky cíle (port ≥ 2: doručeno / klikl / bez reakce) odpovídá číslu v oušku – filtr „od vytvoření spojky" se uplatní jen u obecného / „odesláno" vlákna.
+    const skipEc = actionA && (e.port || 0) >= 2;
+    sa.forEach((tA, lid) => { if (eventA && ec && !skipEc && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
     out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length - missN, missing: missN, list: withList ? list : undefined }; // missing = leady větve, kterým tento uzel zprávu NEposlal (přeskočeno automatem)
   }
   return out;
