@@ -5,13 +5,15 @@
 // Fiktivní hráči přihazují realisticky (častěji ke konci). Pojistky pro živé: 30 % jen ve 2 % aukcí,
 // 20 % jen v 10 % aukcí, jinak 10 %; velký kupon (20/30) může jeden živý (sid) vyhrát jen jednou.
 const START_MS = 60000, BUMP_MS = 5000, MAX_MS = 60000, AMMO = 5, RESULT_HOLD_MS = 25000, MAX_ROUND_MS = 105000;
+const LOBBY_MIN = 15000, LOBBY_MAX = 23000; // čekání na ostatní hráče před startem
 const P30 = 0.02, P20 = 0.10;
 const BOT_SHARE = 0.2, BOT_MIN = 3, BOT_MAX = 12;
 const FIRST = ['Petr', 'Jana', 'Martin', 'Lucie', 'Tomáš', 'Eva', 'Jiří', 'Hana', 'Pavel', 'Marie', 'Jan', 'Lenka', 'Michal', 'Kateřina', 'David', 'Tereza', 'Ondřej', 'Veronika', 'Jakub', 'Monika', 'Lukáš', 'Markéta', 'Roman', 'Barbora', 'Radek', 'Zuzana', 'Karel', 'Alena', 'Milan', 'Simona', 'Aleš', 'Nikola', 'Vojtěch', 'Klára', 'Filip', 'Dana', 'Josef', 'Ivana', 'Marek', 'Petra', 'Zdeněk', 'Kristýna', 'Daniel', 'Adéla', 'Patrik', 'Michaela'];
 const LAST = 'BCDHJKLMNPRSTVZ';
 const STEPS = [5000, 5000, 10000, 10000, 10000, 25000];
 
-let active = null;            // aktuální aukce
+const rounds = new Map();     // běžící instance aukcí (id → aukce); nový hráč jde do aukce v čekárně, jinak vznikne nová
+const bySid = new Map();      // sid → id aukce, ve které hráč je
 const history = [];           // poslední ukončené (pro výsledky)
 const wonBig = new Map();     // sid → nejvyšší vyhraný kupon 20/30
 let seq = 0;
@@ -37,18 +39,22 @@ function code(pct) { return 'ARENA' + pct + '-' + Math.random().toString(36).sli
 function newRound(presence) {
   const id = Date.now(); const used = new Set();
   const nBots = Math.max(BOT_MIN, Math.min(BOT_MAX, Math.round((Number(presence) || 0) * BOT_SHARE)));
-  const bots = []; for (let i = 0; i < nBots; i++) bots.push({ id: 'b' + id + '_' + i, name: botName(used), bank: pick([100000, 100000, 150000, 150000, 200000, 250000, 300000]), ammo: AMMO + Math.floor(Math.random() * 4), bot: true, nextAt: Date.now() + 10000 + Math.random() * 20000 });
+  const lobbyMs = LOBBY_MIN + Math.random() * (LOBBY_MAX - LOBBY_MIN); const now = Date.now();
+  const bots = []; for (let i = 0; i < nBots; i++) bots.push({ id: 'b' + id + '_' + i, name: botName(used), bank: pick([100000, 100000, 150000, 150000, 200000, 250000, 300000]), ammo: AMMO + Math.floor(Math.random() * 4), bot: true, joinAt: now + (i < 2 ? 0 : Math.random() * lobbyMs * 0.95), nextAt: now + lobbyMs + 10000 + Math.random() * 20000 });
   // Pojistka: kam až smí v této aukci dojít živý hráč (rozhodne se dopředu)
   const x = Math.random(); const humanMax = x < P30 ? 1 : (x < P30 + P20 ? 2 : 3);
-  active = { id, startedAt: Date.now(), endsAt: Date.now() + START_MS, top: 0, last: null, bids: [], players: new Map(), bots, humanMax, ended: false, result: null, usedNames: used };
-  return active;
+  const r = { id, phase: 'lobby', lobbyEndsAt: now + lobbyMs, startedAt: now + lobbyMs, endsAt: now + lobbyMs + START_MS, top: 0, last: null, bids: [], players: new Map(), bots, humanMax, ended: false, result: null, usedNames: used };
+  rounds.set(id, r); return r;
 }
 
-function ensureRound(presence) { if (!active || (active.ended && Date.now() - active.endedAt > RESULT_HOLD_MS)) newRound(presence); return active; }
+// Aukce pro nového hráče: ta, která je právě v čekárně (přidá se k ní), jinak nová
+function lobbyRound(presence) { for (const r of rounds.values()) if (r.phase === 'lobby' && !r.ended) return r; return newRound(presence); }
+function roundOf(sid) { const id = bySid.get(sid); return id ? rounds.get(id) : null; }
+function ensureRound() { /* instance vznikají při připojení */ }
+function cleanup() { const now = Date.now(); for (const [id, r] of rounds) { if (r.ended && now - r.endedAt > RESULT_HOLD_MS + 60000) { rounds.delete(id); for (const [sid, rid] of bySid) if (rid === id) bySid.delete(sid); } } }
 
 function join({ sid, name, bank, presence }) {
-  if (!sid || !name) return null; const r = ensureRound(presence);
-  if (r.ended) return state(sid); // výsledky ještě běží – klient počká na další aukci
+  if (!sid || !name) return null; cleanup(); let r = roundOf(sid); if (!r || r.ended) { r = lobbyRound(presence); bySid.set(sid, r.id); }
   if (!r.players.has(sid)) { let nm = String(name).slice(0, 40); if (r.usedNames.has(nm.toLowerCase())) nm = nm + ' ' + (r.players.size + 1); r.usedNames.add(nm.toLowerCase()); r.players.set(sid, { sid, name: nm, bank: Math.max(0, Number(bank) || 0), ammo: AMMO, bot: false, joined: Date.now() }); }
   return state(sid);
 }
@@ -64,15 +70,18 @@ function placeBid(r, p, amount, now) {
 }
 
 function bid({ sid, amount }) {
-  const r = active; if (!r || r.ended) return { ok: false, error: 'Aukce neběží' }; const p = r.players.get(sid); if (!p) return { ok: false, error: 'Nejste v aukci' };
+  const r = roundOf(sid); if (!r || r.ended) return { ok: false, error: 'Aukce neběží' }; if (r.phase === 'lobby') return { ok: false, error: 'Aukce ještě nezačala' }; const p = r.players.get(sid); if (!p) return { ok: false, error: 'Nejste v aukci' };
   const ok = placeBid(r, p, Number(amount), Date.now());
   if (!ok) return { ok: false, error: r.last && r.last.id === sid ? 'Vedete – počkejte, až vás někdo přehodí' : (p.ammo <= 0 ? 'Příhozy jsou vyčerpané' : (amount > p.bank ? 'Nad váš kapitál' : 'Příhoz musí být aspoň ' + r.top.toLocaleString('cs-CZ') + ' Kč')) };
   return { ok: true, state: state(sid) };
 }
 
 // Chování botů + konec aukce; volá se při každém čtení stavu a z tiku
-function tick() {
-  const r = active; if (!r || r.ended) return; const now = Date.now(); const left = r.endsAt - now; const age = now - r.startedAt;
+function tickAll() { for (const r of rounds.values()) { try { tick(r); } catch (e) { /* tichý tik */ } } }
+function tick(r) {
+  if (!r || r.ended) return; const now = Date.now();
+  if (r.phase === 'lobby') { if (now >= r.lobbyEndsAt) { r.phase = 'open'; r.startedAt = now; r.endsAt = now + START_MS; } else return; }
+  const left = r.endsAt - now; const age = now - r.startedAt;
   const lastHuman = r.last && !r.last.bot; const humans = [...r.players.values()];
   // kolik botů smí přihodit po posledním příhozu živého, aby živý skončil na povoleném místě
 
@@ -111,13 +120,13 @@ function finish(r) {
 }
 
 function state(sid) {
-  tick(); const r = active; if (!r) return { phase: 'idle' };
+  const r = roundOf(sid); if (!r) return { phase: 'idle' }; tick(r);
   const me = sid ? r.players.get(sid) : null; const now = Date.now();
-  const base = { round: r.id, phase: r.ended ? 'result' : 'open', ends_in: Math.max(0, r.endsAt - now), max_ms: MAX_MS, top: r.top, last: r.last ? { name: r.last.name, bot: r.last.bot, amount: r.last.amount } : null, bids: r.bids.slice(-10).reverse(), players: [...r.players.values()].map((p) => ({ name: p.name, bot: false })).concat(r.bots.map((b) => ({ name: b.name, bot: true }))), joined: !!me, me: me ? { name: me.name, bank: me.bank, ammo: me.ammo, leading: !!(r.last && r.last.id === me.sid) } : null, server_now: now };
+  const base = { round: r.id, phase: r.ended ? 'result' : r.phase, lobby_in: r.phase === 'lobby' ? Math.max(0, r.lobbyEndsAt - now) : 0, ends_in: r.phase === 'lobby' ? START_MS : Math.max(0, r.endsAt - now), max_ms: MAX_MS, top: r.top, last: r.last ? { name: r.last.name, bot: r.last.bot, amount: r.last.amount } : null, bids: r.bids.slice(-10).reverse(), players: [...r.players.values()].map((p) => ({ name: p.name, bot: false })).concat(r.bots.filter((b) => b.joinAt <= now).map((b) => ({ name: b.name, bot: true }))), joined: !!me, me: me ? { name: me.name, bank: me.bank, ammo: me.ammo, leading: !!(r.last && r.last.id === me.sid) } : null, server_now: now };
   if (r.ended) { base.result = { podium: r.result.podium, list: r.result.list, mine: sid ? (r.result.coupons[sid] || null) : null, top: r.result.top }; base.next_in = Math.max(0, RESULT_HOLD_MS - (now - r.endedAt)); }
   return base;
 }
-function couponFor(sid, roundId) { const r = (active && active.id === Number(roundId)) ? active : history.find((x) => x.id === Number(roundId)); return r && r.result ? (r.result.coupons[sid] || null) : null; }
+function couponFor(sid, roundId) { const r = rounds.get(Number(roundId)) || history.find((x) => x.id === Number(roundId)); return r && r.result ? (r.result.coupons[sid] || null) : null; }
 
-setInterval(() => { try { tick(); } catch (e) { /* tichý tik */ } }, 1000);
+setInterval(tickAll, 1000);
 module.exports = { join, bid, state, couponFor, ensureRound };

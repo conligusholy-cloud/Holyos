@@ -317,6 +317,7 @@ ${netScript}
     setTimeout(function(){ window.scrollTo({ top: 0, behavior:'smooth' }); }, 60); }
   function aucLoop(){ clearInterval(AUC.poll); AUC.poll = setInterval(function(){ fetch('/api/arena/round?sid=' + encodeURIComponent(SID), { cache:'no-store' }).then(function(r){ return r.json(); }).then(function(st){
       if (AUC.waiting) { if (st.phase === 'open' || st.phase === 'lobby') { AUC.waiting = false; clearInterval(AUC.poll); aucStart(); } else { var ni = $('nextIn'); if (ni) ni.textContent = '(' + Math.ceil((st.next_in || 0) / 1000) + ' s)'; } return; }
+      if (st.phase === 'idle') { clearInterval(AUC.poll); AUC.round = null; aucStart(); return; }
       if (st.round !== AUC.round) { if ((st.phase === 'open' || st.phase === 'lobby') && !st.joined) { clearInterval(AUC.poll); aucStart(); } return; }
       aucRender(st); if (st.phase === 'result') { clearInterval(AUC.poll); aucResult(st, false); } }).catch(function(){}); }, 1000); }
   function aucRender(st){ AUC.st = st;
