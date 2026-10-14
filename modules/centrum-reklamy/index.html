@@ -21,7 +21,19 @@
     .kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
     .kpi .v { font-size:24px; font-weight:800; letter-spacing:-.01em; }
     .kpi .l { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:.06em; margin-top:4px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(380px,1fr)); gap:14px; }
+    .tbl-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:auto; }
+    .data-table { width:100%; border-collapse:separate; border-spacing:0; }
+    .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); white-space:nowrap; }
+    .data-table td { padding:11px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.05); vertical-align:middle; }
+    .data-table tr:last-child td { border-bottom:0; }
+    .data-table tr:hover td { background:rgba(245,158,11,0.05); }
+    .data-table .num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; font-weight:700; }
+    .data-table .num small { display:block; font-weight:500; color:var(--text2); font-size:11px; }
+    .pg b { display:flex; align-items:center; gap:8px; font-size:13.5px; }
+    .pg b i { width:9px; height:9px; border-radius:50%; display:inline-block; flex:none; }
+    .pg a { color:#60a5fa; text-decoration:none; font-size:12px; }
+    .pg .desc { font-size:11.5px; color:var(--text2); margin-top:2px; max-width:420px; }
+    .spark { width:160px; height:36px; display:block; }
     .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px 18px; display:flex; flex-direction:column; gap:10px; }
     .card .hd { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
     .card h2 { margin:0; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
@@ -61,7 +73,7 @@
       </div>
       <div class="content">
         <div class="kpis" id="kpis"></div>
-        <div class="grid" id="grid"><div class="note">Načítám…</div></div>
+        <div class="tbl-wrap"><table class="data-table"><thead><tr><th>Stránka</th><th class="num">Návštěvníci</th><th class="num">Leady / objednávky</th><th class="num">Dokončeno / konverze</th><th class="num">Tržba</th><th>Trend (návštěvy · <span style="color:#22c55e">leady</span>)</th><th></th></tr></thead><tbody id="grid"><tr><td colspan="7" class="note">Načítám…</td></tr></tbody></table></div>
         <p class="note" style="margin-top:16px">Návštěvy = unikátní prohlížeče za den (anonymní identifikátor, bez osobních údajů). Leady/objednávky z databáze HolyOS a Best Series 2.0. Zelený sloupec = leady/objednávky daného dne. Stav k <span id="gen">—</span>.</p>
       </div>
   </div>
@@ -84,6 +96,24 @@
       var lab = ''; [0, Math.floor(S.length / 2), S.length - 1].forEach(function (i) { if (S[i]) { var d = S[i].d.split('-'); lab += '<text x="' + (pad + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 2) + '" text-anchor="middle" font-size="9" fill="#8ea2c2">' + (+d[2]) + '.' + (+d[1]) + '.</text>'; } });
       return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg"><line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + (H - 14) + '" y2="' + (H - 14) + '" stroke="rgba(255,255,255,.12)"/>' + bars + lab + '<text x="' + (W - pad) + '" y="10" text-anchor="end" font-size="9" fill="#8ea2c2">max ' + mx + '/den</text></svg>';
     }
+    function spark(p) {
+      var S = p.series || [], L = p.leadsSeries || [], W = 160, H = 36; if (!S.length) return '';
+      var mx = Math.max(1, Math.max.apply(null, S.map(function (x) { return x.n; }))), ml = Math.max(1, Math.max.apply(null, L.map(function (x) { return x.n; }).concat([0])));
+      var bw = W / S.length, b = '';
+      S.forEach(function (x, i) { var h = x.n / mx * (H - 4); b += '<rect x="' + (i * bw).toFixed(1) + '" y="' + (H - h).toFixed(1) + '" width="' + Math.max(1, bw * 0.7).toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + p.color + '" opacity=".8"><title>' + x.d + ': ' + x.n + ' návštěvníků' + (L[i] ? ' · ' + L[i].n + ' ' + p.leadLabel : '') + '</title></rect>';
+        if (L[i] && L[i].n) { var lh = L[i].n / ml * (H - 4) * 0.7; b += '<rect x="' + (i * bw + bw * 0.15).toFixed(1) + '" y="' + (H - lh).toFixed(1) + '" width="' + Math.max(1, bw * 0.4).toFixed(1) + '" height="' + lh.toFixed(1) + '" fill="#22c55e"><title>' + x.d + ': ' + L[i].n + ' ' + p.leadLabel + '</title></rect>'; } });
+      return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" xmlns="http://www.w3.org/2000/svg">' + b + '</svg>';
+    }
+    function row(p) {
+      var conv = p.conversions != null ? n(p.conversions) + '<small>' + esc(p.convLabel || 'dokončeno') + '</small>' : (p.conv_rate != null ? p.conv_rate.toLocaleString('cs-CZ') + ' %<small>konverze</small>' : '—');
+      return '<tr><td class="pg"><b><i style="background:' + p.color + '"></i>' + esc(p.name) + '</b><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.url) + ' ↗</a><div class="desc">' + esc(p.desc) + (p.note ? ' · <span class="' + (/nedostupn/.test(p.note) ? 'warn' : '') + '">' + esc(p.note) + '</span>' : '') + '</div></td>' +
+        '<td class="num">' + n(p.uniques != null ? p.uniques : p.visits) + '</td>' +
+        '<td class="num">' + n(p.leads) + '<small>' + esc(p.leadLabel) + '</small></td>' +
+        '<td class="num">' + conv + '</td>' +
+        '<td class="num">' + (p.revenue != null ? kc(p.revenue, p.currency === 'EUR' ? '€' : 'Kč') : '—') + '</td>' +
+        '<td>' + spark(p) + '</td>' +
+        '<td>' + (p.admin ? '<a class="btn btn-sm" href="' + esc(p.admin) + '"' + (/^https?:/.test(p.admin) ? ' target="_blank" rel="noopener"' : '') + '>Správa</a>' : '') + '</td></tr>';
+    }
     function card(p) {
       var conv = p.conversions != null ? p.conversions : null;
       return '<div class="card"><div class="hd"><div><h2><i style="background:' + p.color + '"></i>' + esc(p.name) + '</h2><div class="url"><a href="' + esc(p.url) + '" target="_blank" rel="noopener">' + esc(p.url) + ' ↗</a></div></div>' +
@@ -93,17 +123,17 @@
         chart(p) + (p.note ? '<div class="note' + (/nedostupn/.test(p.note) ? ' warn' : '') + '">' + esc(p.note) + '</div>' : '') + '</div>';
     }
     async function load() {
-      grid.innerHTML = '<div class="note">Načítám…</div>';
+      grid.innerHTML = '<tr><td colspan="7" class="note">Načítám…</td></tr>';
       try {
         var r = await fetch('/api/ads-center/overview?days=' + days, { credentials: 'same-origin' });
-        if (r.status === 403) { grid.innerHTML = '<div class="note warn">Do této sekce nemáš přístup.</div>'; return; }
+        if (r.status === 403) { grid.innerHTML = '<tr><td colspan="7" class="note warn">Do této sekce nemáš přístup.</td></tr>'; return; }
         var j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
         var P = j.pages || [];
         var tv = P.reduce(function (a, p) { return a + (p.uniques || 0); }, 0), tl = P.reduce(function (a, p) { return a + (p.leads || 0); }, 0), tc = P.reduce(function (a, p) { return a + (p.conversions || 0); }, 0), tr = P.filter(function (p) { return p.currency !== 'EUR'; }).reduce(function (a, p) { return a + (p.revenue || 0); }, 0);
         kpis.innerHTML = '<div class="kpi"><div class="v">' + n(P.length) + '</div><div class="l">záchytných stránek</div></div><div class="kpi"><div class="v" style="color:#60a5fa">' + n(tv) + '</div><div class="l">návštěvníků za ' + days + ' dní</div></div><div class="kpi"><div class="v" style="color:#f59e0b">' + n(tl) + '</div><div class="l">leadů / objednávek</div></div><div class="kpi"><div class="v" style="color:#22c55e">' + n(tc) + '</div><div class="l">dokončeno / zaplaceno</div></div><div class="kpi"><div class="v" style="color:#22c55e">' + kc(tr) + '</div><div class="l">tržba online (CZK)</div></div>';
-        grid.innerHTML = P.map(card).join('');
+        grid.innerHTML = P.map(row).join('');
         document.getElementById('gen').textContent = new Date(j.generatedAt).toLocaleString('cs-CZ');
-      } catch (e) { grid.innerHTML = '<div class="note warn">Nepodařilo se načíst: ' + esc(e.message) + '</div>'; }
+      } catch (e) { grid.innerHTML = '<tr><td colspan="7" class="note warn">Nepodařilo se načíst: ' + esc(e.message) + '</td></tr>'; }
     }
     document.querySelectorAll('[data-days]').forEach(function (b) { b.addEventListener('click', function () { days = +b.getAttribute('data-days'); document.querySelectorAll('[data-days]').forEach(function (x) { x.classList.toggle('on', x === b); }); load(); }); });
     document.getElementById('reload').addEventListener('click', load);
