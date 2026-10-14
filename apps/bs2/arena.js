@@ -88,6 +88,13 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .ov input:focus{border-color:var(--gold);box-shadow:0 0 0 4px rgba(79,209,255,.14),0 0 24px rgba(79,209,255,.18)}
   .ov .btn{width:100%;margin-top:12px;min-height:52px;font-size:16px;border-radius:14px}
   .ov .tiny{font-size:11.5px;color:var(--text3);margin:12px 0 0}
+  /* odpočet před startem – velké číslo uprostřed pračky */
+  .cd{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;display:none;align-items:center;justify-content:center;width:min(42vw,200px);aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,rgba(4,6,12,.92),rgba(4,6,12,.72) 60%,transparent 72%);pointer-events:none}
+  .cd.on{display:flex}
+  .cd b{font-size:clamp(72px,22vw,150px);font-weight:900;line-height:1;letter-spacing:-.05em;background:linear-gradient(95deg,#fff,var(--accent2) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 28px rgba(79,209,255,.55));animation:cdpop .95s cubic-bezier(.2,1.2,.3,1) both}
+  .cd small{position:absolute;bottom:8%;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2)}
+  @keyframes cdpop{0%{opacity:0;transform:scale(1.8)}35%{opacity:1;transform:scale(.95)}100%{opacity:1;transform:scale(1)}}
+  .machine.dim img{filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) brightness(.55) blur(1px);transition:filter .3s}
   .hidden{display:none !important}
   @media (max-width:600px){.quiz{padding:16px 14px;border-radius:18px}.opt{font-size:15px}.ov{align-items:flex-end;padding:0}.ov .box{width:100%;border-radius:24px 24px 0 0;border-bottom:0;padding-bottom:calc(22px + env(safe-area-inset-bottom))}}
 </style>
@@ -99,7 +106,7 @@ ${presence}
     <span class="eyebrow"><i></i>Aréna Best Series · 5 otázek · 15 vteřin na každou</span>
     <h1>Vydělejte si <span class="g">startovní kapitál</span> na vlastní prádlomat</h1>
     <p class="lead">Za každou správnou odpověď získáte <mark>+${PRIZE.toLocaleString('cs-CZ')} Kč</mark> virtuálního kapitálu. Zvládnete všech pět?</p>
-    <div class="machine"><img src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async"></div>
+    <div class="machine" id="machine"><img src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async"><div class="cd" id="cd"><b id="cdn">5</b><small>start za</small></div></div>
     <div class="bank"><span class="chip who" id="who" style="display:none">🙋 <span id="whon"></span></span><span class="chip" id="bank">💰 <b id="bankv">0 Kč</b></span></div>
   </section>
 
@@ -145,7 +152,10 @@ ${netScript}
   function fmt(v){ return v.toLocaleString('cs-CZ') + ' Kč'; }
   function voc(n){ return n; }
   $('nameForm').addEventListener('submit', function(e){ e.preventDefault(); name = $('nm').value.trim().slice(0,40); if(!name) return; $('ov').classList.add('hidden'); $('who').style.display=''; $('whon').textContent = name; try { $('nm').blur(); } catch(e2){} start(); });
-  function start(){ i = 0; bank = 0; answers = []; startedAt = Date.now(); $('bankv').textContent = fmt(0); $('result').classList.add('hidden'); $('quiz').classList.remove('hidden'); show(); setTimeout(function(){ $('quiz').scrollIntoView({ behavior:'smooth', block:'center' }); }, 50); }
+  // Po zadání jména: 5s odpočet uprostřed pračky, teprve pak se zobrazí otázky
+  function start(){ i = 0; bank = 0; answers = []; $('bankv').textContent = fmt(0); $('result').classList.add('hidden'); $('quiz').classList.add('hidden');
+    var m = $('machine'), cd = $('cd'), cn = $('cdn'); m.classList.add('dim'); cd.classList.add('on'); try { m.scrollIntoView({ behavior:'smooth', block:'center' }); } catch(e){}
+    var n = 5; cn.textContent = n; var iv = setInterval(function(){ n--; if(n <= 0){ clearInterval(iv); cd.classList.remove('on'); m.classList.remove('dim'); startedAt = Date.now(); $('quiz').classList.remove('hidden'); show(); setTimeout(function(){ $('quiz').scrollIntoView({ behavior:'smooth', block:'center' }); }, 50); return; } cn.style.animation = 'none'; void cn.offsetWidth; cn.style.animation = ''; cn.textContent = n; }, 1000); }
   function setTimer(s){ $('tsec').textContent = s; $('tfg').style.strokeDashoffset = CIRC * (1 - s / SEC); $('timer').classList.toggle('hot', s <= 5); }
   function show(){ var q = Q[i]; $('step').textContent = 'Otázka ' + (i+1) + ' z ' + Q.length; Array.prototype.forEach.call($('dots').children, function(d, k){ d.className = k < i ? (answers[k] && answers[k].ok ? 'ok' : 'bad') : (k === i ? 'on' : ''); }); $('qtext').textContent = q.q; $('why').className = 'why'; $('next').classList.add('hidden');
     $('opts').innerHTML = q.a.map(function(t, k){ return '<button class="opt" data-k="' + k + '"><span class="k">' + 'ABC'[k] + '</span><span>' + esc(t) + '</span></button>'; }).join('');
