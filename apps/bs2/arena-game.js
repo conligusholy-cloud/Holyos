@@ -58,6 +58,7 @@ function join({ sid, name, bank, presence }) {
   // Nové připojení (po kvízu / obnovení stránky): pokud hráč v běžící aukci ještě nepřihodil, opustí ji a jde znovu do čekárny
   if (r && !r.ended && r.phase === 'open' && !r.bids.some((b) => !b.bot && r.players.get(sid) && b.name === r.players.get(sid).name)) { r.players.delete(sid); r = null; }
   if (!r || r.ended) { r = lobbyRound(presence); bySid.set(sid, r.id); }
+  const ex = r.players.get(sid); if (ex && !r.bids.some((b) => !b.bot && b.name === ex.name)) ex.bank = Math.max(0, Number(bank) || 0); // kapitál se bere z aktuální hry (po bonusové kartě), dokud hráč nepřihodil
   if (!r.players.has(sid)) { let nm = String(name).slice(0, 40); if (r.usedNames.has(nm.toLowerCase())) nm = nm + ' ' + (r.players.size + 1); r.usedNames.add(nm.toLowerCase()); r.players.set(sid, { sid, name: nm, bank: Math.max(0, Number(bank) || 0), ammo: AMMO, bot: false, joined: Date.now() }); }
   return state(sid);
 }
