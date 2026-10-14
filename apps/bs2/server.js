@@ -454,12 +454,15 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
   try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
   const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
-  const visits = (await q("SELECT path, to_char(d,'YYYY-MM-DD') AS d, count(*)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path, d ORDER BY d", [days])).rows;
-  const uniques = (await q("SELECT path, count(DISTINCT sid)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path", [days])).rows;
-  const orders = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue, count(*) FILTER (WHERE status IN ('pending','request'))::int AS pending FROM location_orders WHERE created_at > now() - ($1::int || ' days')::interval", [days])).rows[0];
-  const ordersByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, count(*)::int AS n, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid FROM location_orders WHERE created_at > now() - ($1::int || ' days')::interval GROUP BY 1 ORDER BY 1", [days])).rows;
+  // ?since=ISO → přesný čas začátku (objednávky, přihlášení); návštěvy jsou jen po dnech (page_hits má datum).
+  const since = req.query.since && !isNaN(new Date(req.query.since)) ? new Date(req.query.since) : null;
+  const sinceTs = since ? since.toISOString() : new Date(Date.now() - days * 86400000).toISOString();
+  const visits = since ? (await q("SELECT path, to_char(d,'YYYY-MM-DD') AS d, count(*)::int AS n FROM page_hits WHERE d >= $1::date GROUP BY path, d ORDER BY d", [sinceTs])).rows : (await q("SELECT path, to_char(d,'YYYY-MM-DD') AS d, count(*)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path, d ORDER BY d", [days])).rows;
+  const uniques = since ? (await q("SELECT path, count(DISTINCT sid)::int AS n FROM page_hits WHERE d >= $1::date GROUP BY path", [sinceTs])).rows : (await q("SELECT path, count(DISTINCT sid)::int AS n FROM page_hits WHERE d > CURRENT_DATE - $1::int GROUP BY path", [days])).rows;
+  const orders = (await q("SELECT count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue, count(*) FILTER (WHERE status IN ('pending','request'))::int AS pending FROM location_orders WHERE created_at > $1::timestamptz", [sinceTs])).rows[0];
+  const ordersByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, count(*)::int AS n, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid FROM location_orders WHERE created_at > $1::timestamptz GROUP BY 1 ORDER BY 1", [sinceTs])).rows;
   const customers = Number(((await q('SELECT count(*)::int AS n FROM supporters WHERE location_package IS NOT NULL')).rows[0] || {}).n || 0);
-  const logins = (await q("SELECT count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND created_at > now() - ($1::int || ' days')::interval", [days])).rows[0];
+  const logins = (await q("SELECT count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND created_at > $1::timestamptz", [sinceTs])).rows[0];
   res.json({ days, visits, uniques, orders, ordersByDay, customers, logins: Number(logins.n || 0) });
 }));
 app.get('/api/presence', wrap(async (req, res) => {

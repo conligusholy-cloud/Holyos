@@ -44,11 +44,11 @@ async function visitSeries(def, days) {
   return { series: dayKeys(days).map((k) => ({ d: k, n: perDay[k] ? perDay[k].size : 0 })), uniques: all.size };
 }
 
-async function bs2Stats(days) {
+async function bs2Stats(days, since) {
   const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
   if (!secret) return null;
   const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' });
-  const r = await fetch(base + '/api/holyos/ads-stats?days=' + days, { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
+  const r = await fetch(base + '/api/holyos/ads-stats?days=' + days + (since ? '&since=' + encodeURIComponent(since.toISOString()) : ''), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(15000) });
   if (!r.ok) throw new Error('BS2 ' + r.status);
   return r.json();
 }
@@ -56,10 +56,10 @@ async function bs2Stats(days) {
 // GET /api/ads-center/overview?days=30
 router.get('/overview', async (req, res, next) => {
   try {
-    let days = parseDays(req.query.days, 30);
-    if (req.query.since && !isNaN(new Date(req.query.since))) { const s0 = new Date(req.query.since); s0.setHours(0, 0, 0, 0); const t0 = new Date(); t0.setHours(0, 0, 0, 0); days = Math.max(0, Math.round((t0 - s0) / 86400000)); } // ?since= → období od daného dne
-    const since = sinceDate(days);
-    let bs2 = null, bs2Err = null; try { bs2 = await bs2Stats(days); } catch (e) { bs2Err = e.message; }
+    let days = parseDays(req.query.days, 30); let sinceExact = null;
+    if (req.query.since && !isNaN(new Date(req.query.since))) { sinceExact = new Date(req.query.since); const s0 = new Date(sinceExact); s0.setHours(0, 0, 0, 0); const t0 = new Date(); t0.setHours(0, 0, 0, 0); days = Math.max(0, Math.round((t0 - s0) / 86400000)); } // ?since= → období od přesného času
+    const since = sinceExact || sinceDate(days);
+    let bs2 = null, bs2Err = null; try { bs2 = await bs2Stats(Math.max(1, days + 1), sinceExact); } catch (e) { bs2Err = e.message; }
     const leadsBySource = await prisma.compounderLead.groupBy({ by: ['source'], where: { created_at: { gte: since } }, _count: { _all: true } }).catch(() => []);
     const leadsByDay = await prisma.compounderLead.findMany({ where: { created_at: { gte: since } }, select: { source: true, created_at: true } }).catch(() => []);
     const inquiries = await prisma.pradlomatSpotInquiry.findMany({ where: { created_at: { gte: since } }, select: { created_at: true } }).catch(() => []);
