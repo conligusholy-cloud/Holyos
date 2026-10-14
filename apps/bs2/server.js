@@ -464,7 +464,26 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   const ordersByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, count(*)::int AS n, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1 ORDER BY 1", [sinceTs, untilTs])).rows;
   const customers = Number(((await q('SELECT count(*)::int AS n FROM supporters WHERE location_package IS NOT NULL')).rows[0] || {}).n || 0);
   const logins = (await q("SELECT count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND created_at > $1::timestamptz AND created_at < $2::timestamptz", [sinceTs, untilTs])).rows[0];
-  res.json({ days, visits, uniques, orders, ordersByDay, customers, logins: Number(logins.n || 0) });
+  // detail pro marketing: tržba po dnech, balíčky (zaplacené), hodiny objednávek
+  const revenueByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1 ORDER BY 1", [sinceTs, untilTs])).rows;
+  const ordersByPackage = (await q("SELECT package, count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY package ORDER BY paid DESC", [sinceTs, untilTs])).rows;
+  const oh = (await q("SELECT extract(hour from created_at AT TIME ZONE 'Europe/Prague')::int AS h, count(*)::int AS n FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1", [sinceTs, untilTs])).rows; const orderHours = new Array(24).fill(0); oh.forEach((r) => { if (r.h >= 0 && r.h < 24) orderHours[r.h] = r.n; });
+  // chování na stránce (?path=) – jen když si HolyOS vyžádá detail
+  let behavior = null; const bp = String(req.query.path || '').slice(0, 120);
+  if (bp) { const ev = (await q("SELECT sid, kind, label, meta, t_ms FROM page_events WHERE path = $1 AND created_at > $2::timestamptz AND created_at < $3::timestamptz ORDER BY created_at", [bp, sinceTs, untilTs])).rows;
+    const sess = new Set(), scroll = { 25: new Set(), 50: new Set(), 75: new Set(), 100: new Set() }, sections = {}, dwell = {}, clicks = {}, exits = {}, grid = {}, time = {}, dev = { m: 0, d: 0 }, refs = {};
+    ev.forEach((r) => { sess.add(r.sid); const m = r.meta || {};
+      if (r.kind === 'view') { dev[m.ua === 'm' ? 'm' : 'd']++; const ref = (m.ref || '').replace(/^https?:\/\//, '').split('/')[0] || 'přímo'; refs[ref] = (refs[ref] || 0) + 1; }
+      else if (r.kind === 'scroll' && scroll[r.label]) scroll[r.label].add(r.sid);
+      else if (r.kind === 'section' && r.label) (sections[r.label] = sections[r.label] || new Set()).add(r.sid);
+      else if (r.kind === 'dwell' && Array.isArray(m.secs)) m.secs.forEach((d) => { if (!d || !d.l) return; const o = dwell[d.l] = dwell[d.l] || { s: 0, sids: new Set() }; o.s += Number(d.s) || 0; o.sids.add(r.sid); });
+      else if (r.kind === 'click' && r.label) { const k = r.label + (m.sec ? ' @ ' + m.sec : ''); (clicks[k] = clicks[k] || new Set()).add(r.sid); }
+      else if (r.kind === 'exit') exits[r.label || '(nahoře)'] = (exits[r.label || '(nahoře)'] || 0) + 1;
+      else if (r.kind === 'mouse' && m.g) Object.keys(m.g).forEach((k) => { grid[k] = (grid[k] || 0) + Number(m.g[k] || 0); });
+      else if (r.kind === 'time') time[r.sid] = (time[r.sid] || 0) + (Number(m.s) || 0); });
+    const n = sess.size; const sec = Object.keys(sections).map((k) => ({ name: k, seen: sections[k].size, avg_secs: dwell[k] ? Math.round(dwell[k].s / Math.max(1, dwell[k].sids.size)) : 0 })).sort((a, b) => b.seen - a.seen);
+    behavior = { sessions: n, scroll: { 25: scroll[25].size, 50: scroll[50].size, 75: scroll[75].size, 100: scroll[100].size }, sections: sec, clicks: Object.keys(clicks).map((k) => ({ name: k, n: clicks[k].size })).sort((a, b) => b.n - a.n).slice(0, 25), exits: Object.keys(exits).map((k) => ({ name: k, n: exits[k] })).sort((a, b) => b.n - a.n), avg_time: Object.keys(time).length ? Math.round(Object.values(time).reduce((a, b) => a + b, 0) / Object.keys(time).length) : null, devices: dev, referrers: Object.keys(refs).map((k) => ({ name: k, n: refs[k] })).sort((a, b) => b.n - a.n).slice(0, 10), mouse: grid }; }
+  res.json({ days, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
 }));
 app.get('/api/presence', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -475,6 +494,15 @@ app.get('/api/presence', wrap(async (req, res) => {
     _presCache = { at: Date.now(), data: { now, hour: hr, total: now + hr } };
   }
   res.json(_presCache.data);
+}));
+// Veřejné sledování chování na záchytných stránkách (bez přihlášení) – dávka událostí z PUB_TRACK_JS
+const PUB_EV = ['view', 'scroll', 'section', 'dwell', 'click', 'mouse', 'time', 'exit', 'custom'];
+app.post('/api/public/track', wrap(async (req, res) => {
+  res.status(204); const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const path = String(b.path || '').split('?')[0].replace(/\/+$/, '').slice(0, 120) || '/';
+  if (!sid || !PUBLIC_HIT_PATHS.includes(path) || !Array.isArray(b.ev) || rateLimited('ptk:' + req.ip, 600, 3600e3)) return res.end();
+  const rows = b.ev.slice(0, 40).filter((e) => e && PUB_EV.includes(e.k)).map((e) => [sid, path, e.k, e.l != null ? String(e.l).slice(0, 80) : null, e.m && typeof e.m === 'object' && JSON.stringify(e.m).length <= 4000 ? JSON.stringify(e.m) : null, Number.isFinite(e.t) ? Math.round(e.t) : null]);
+  if (rows.length) { const vals = []; const ph = rows.map((r, i) => { vals.push(...r); const o = i * 6; return '($' + (o + 1) + ',$' + (o + 2) + ',$' + (o + 3) + ',$' + (o + 4) + ',$' + (o + 5) + '::jsonb,$' + (o + 6) + ')'; }).join(','); await q('INSERT INTO page_events (sid, path, kind, label, meta, t_ms) VALUES ' + ph, vals).catch(() => {}); }
+  res.end();
 }));
 app.post('/api/track', (req, res) => {
   try {
@@ -489,9 +517,10 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 
 // ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
 // Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
-app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS)); });
+const PUBT = '<script>' + require('./stats-track').PUB_TRACK_JS + '</script></body>';
+app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
-app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage()); });
+app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
 // Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu
 const ARENA = require('./arena-game');
 function arenaPresence() { try { const d = _presCache && _presCache.data; return d ? Math.round(Number(d.total != null ? d.total : d.hour || 0) * 8) : 0; } catch (e) { return 0; } }

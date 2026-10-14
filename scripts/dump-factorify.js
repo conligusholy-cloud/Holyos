@@ -383,10 +383,16 @@ async function main() {
   console.log('  FACTORIFY → PostgreSQL — jednorázový dump');
   console.log('═══════════════════════════════════════════');
 
+  // --only=goods[,stages,operations]  → pustí jen vybrané části (výchozí: vše)
+  const onlyArg = process.argv.slice(2).find(a => a.startsWith('--only='));
+  const ONLY = onlyArg ? onlyArg.slice(7).split(',').map(s => s.trim()).filter(Boolean) : ['goods', 'stages', 'operations'];
+  const want = (k) => ONLY.includes(k) || ONLY.includes('all');
+  console.log(`  Sekce: ${ONLY.join(', ')}`);
+
   try {
-    await dumpGoods();
-    await dumpStages();
-    await dumpOperations();
+    if (want('goods')) await dumpGoods();
+    if (want('stages')) await dumpStages();
+    if (want('operations')) await dumpOperations();
 
     // Statistika
     const [materials, products, workstations, operations] = await Promise.all([

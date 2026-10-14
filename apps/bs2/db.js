@@ -263,6 +263,19 @@ async function migrate() {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS arena_coupons_created_idx ON arena_coupons (created_at);
+    -- Chování návštěvníků na veřejných záchytných stránkách (anonymní sid): scroll, sekce, čas na sekci, kliky, pohyb myši, odchod
+    CREATE TABLE IF NOT EXISTS page_events (
+      id          BIGSERIAL PRIMARY KEY,
+      sid         TEXT NOT NULL,
+      path        TEXT NOT NULL,
+      kind        TEXT NOT NULL,             -- view | scroll | section | dwell | click | mouse | time | exit | custom
+      label       TEXT,
+      meta        JSONB,
+      t_ms        INTEGER,                   -- čas od načtení stránky
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS page_events_path_created_idx ON page_events (path, created_at);
+    CREATE INDEX IF NOT EXISTS page_events_sid_idx ON page_events (sid);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS terms_version TEXT; -- verze obchodních podmínek odsouhlasená před platbou

@@ -57,12 +57,34 @@ function baseWhere(nd, form) {
   if (seg.base === 'form' && form && form.form_id) { const ads = (form.ad_ids || []).map(String).filter(Boolean); return { OR: ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(form.form_id) }] }; }
   return {};
 }
-// Leady seznamu (port = index seznamu + 1; port 0 / null = celá základní množina)
+// Black list (neoslovovat): normalizované e-maily a posledních 9 číslic telefonu – stejně jako _isBlocked v Compounderu
+async function blocklist() { let rows = []; try { rows = await prisma.compounderBlocklist.findMany({ select: { email: true, phone: true } }); } catch (e) { rows = []; } const em = new Set(), ph = new Set(); rows.forEach((r) => { const e = String(r.email || '').trim().toLowerCase(); if (e) em.add(e); const p = String(r.phone || '').replace(/\D/g, '').slice(-9); if (p && p.length >= 6) ph.add(p); }); return { em, ph }; }
+function isBlocked(l, bl) { const e = String(l.email || '').trim().toLowerCase(); if (e && bl.em.has(e)) return true; const p = String(l.phone || '').replace(/\D/g, '').slice(-9); return !!(p && p.length >= 6 && bl.ph.has(p)); }
+// Leady seznamu (port = index seznamu + 1; port 0 / null = celá základní množina). Kontakty z black listu se VŽDY vyřadí.
 async function leadsFor(nd, port, form, limit) {
   const seg = nd.seg || {}; const lists = Array.isArray(seg.lists) ? seg.lists : []; const bw = baseWhere(nd, form);
   const list = port > 0 ? lists[port - 1] : null; const cond = list ? list.cond : {};
-  const rows = await prisma.compounderLead.findMany({ where: whereOf(cond, bw), select: SEL, orderBy: { created_at: 'desc' }, take: limit || 5000 });
-  return rows.filter((l) => passMem(l, cond));
+  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: whereOf(cond, bw), select: SEL, orderBy: { created_at: 'desc' }, take: limit || 5000 }), blocklist()]);
+  return rows.filter((l) => passMem(l, cond) && !isBlocked(l, bl));
+}
+// Podmínky vyhodnocené čistě v paměti (pro řetězení uzlů Seznam → Seznam = AND)
+function passAll(l, cond) {
+  const c = cond || {};
+  if (Array.isArray(c.sources) && c.sources.length && !c.sources.includes(l.source)) return false;
+  if (Array.isArray(c.statuses) && c.statuses.length && !c.statuses.includes(l.status)) return false;
+  if (c.created_min_days != null && c.created_min_days !== '' && new Date(l.created_at) > daysAgo(c.created_min_days)) return false;
+  if (c.created_max_days != null && c.created_max_days !== '' && new Date(l.created_at) < daysAgo(c.created_max_days)) return false;
+  if (c.phone === 'yes' && !l.phone) return false; if (c.phone === 'no' && l.phone) return false;
+  if (c.email === 'yes' && !l.email) return false; if (c.email === 'no' && l.email) return false;
+  if (c.city_contains && !String(l.city || '').toLowerCase().includes(String(c.city_contains).toLowerCase())) return false;
+  if ((c.variant === 'specialist' || c.variant === 'schuzka') && l.outreach_variant !== c.variant) return false;
+  return passMem(l, c);
+}
+// Uzel „Seznam": základ (vše v HolyOS / formulář) + řetězec podmínek z předchozích uzlů Seznam (AND); black list vždy pryč
+async function leadsForChain(conds, form, base, limit) {
+  const bw = base === 'form' && form && form.form_id ? baseWhere({ seg: { base: 'form' } }, form) : {};
+  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: bw, select: SEL, orderBy: { created_at: 'desc' }, take: limit || 5000 }), blocklist()]);
+  return rows.filter((l) => !isBlocked(l, bl) && (conds || []).every((c) => passAll(l, c)));
 }
 async function counts(nd, form) {
   const seg = nd.seg || {}; const lists = Array.isArray(seg.lists) ? seg.lists : [];
@@ -70,4 +92,4 @@ async function counts(nd, form) {
   for (let i = 0; i < lists.length; i++) out.push((await leadsFor(nd, i + 1, form)).length);
   return { total, lists: out };
 }
-module.exports = { FIELDS, leadsFor, counts, whereOf, passMem };
+module.exports = { FIELDS, leadsFor, leadsForChain, counts, whereOf, passMem, passAll };

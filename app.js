@@ -1241,6 +1241,12 @@ server.listen(PORT, async () => {
     console.error('[app] meta-leads-sync nelze spustit:', err.message);
   }
   try {
+    // Hlídač verzí záchytných stránek (Centrum reklamy): loguje každou změnu textu / obrázků / vzhledu
+    require('./services/ads/page-watch').start(() => require('./routes/ads-center.routes').PAGES || []);
+  } catch (err) {
+    console.error('[app] page-watch nelze spustit:', err.message);
+  }
+  try {
     const velinScheduler = require('./services/workers/velin-scheduler');
     velinScheduler.start();
   } catch (err) {

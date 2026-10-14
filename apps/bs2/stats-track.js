@@ -22,4 +22,35 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 try{if('IntersectionObserver' in window){var seen={},n=0;var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting&&en.intersectionRatio>=.6){var el=en.target;var s=(el.innerText||'').replace(/\\s+/g,' ').trim().slice(0,70);if(s&&!seen[s]&&n<40){seen[s]=1;n++;setTimeout(function(){if(seen[s]===1){seen[s]=2;send({type:'section',label:s});}},1500);}}});},{threshold:[.6]});document.querySelectorAll('main h1,main h2,main h3,.vh-step b,.card>h2,.card>h3').forEach(function(h){io.observe(h);});}}catch(e){}
 })();`;
 
-module.exports = { TRACK_JS };
+
+// ── Veřejný sledovací skript pro záchytné stránky (bez přihlášení). Anonymní sid, žádný obsah polí.
+//    Sbírá: zobrazení, scroll hloubku, viděné sekce + čas strávený na sekci (co čtou), kliky (text prvku),
+//    pohyb myši jako teplotní mřížku 20×N (kde se zdržuje kurzor), celkový čas a sekci, u které odešel.
+const PUB_TRACK_JS = `(function(){
+if(window.__bs2pt)return;window.__bs2pt=1;
+var sid;try{sid=sessionStorage.getItem('misto_sid');if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);sessionStorage.setItem('misto_sid',sid);}}catch(e){sid='x'+Date.now();}
+var path=location.pathname.replace(/\\/+$/,'')||'/';var Q=[];var t0=Date.now();
+function push(o){o.t=Date.now()-t0;Q.push(o);if(Q.length>=25)flush();}
+function flush(){if(!Q.length)return;var b=JSON.stringify({sid:sid,path:path,ev:Q.splice(0,Q.length),w:innerWidth,h:innerHeight});try{if(navigator.sendBeacon){navigator.sendBeacon('/api/public/track',new Blob([b],{type:'application/json'}));}else{fetch('/api/public/track',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true});}}catch(e){}}
+function secName(el){var s=el.closest&&el.closest('section,[data-sec],header,footer');if(!s)return '';return s.getAttribute('data-sec')||s.id||(s.querySelector('h1,h2,h3')?(s.querySelector('h1,h2,h3').textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):s.tagName.toLowerCase());}
+push({k:'view',m:{ref:document.referrer?document.referrer.slice(0,120):'',q:location.search.slice(0,120),ua:/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'m':'d'}});
+/* scroll hloubka po 25 % */
+var maxS=0,mark={};addEventListener('scroll',function(){var h=document.documentElement;var p=Math.round((h.scrollTop+innerHeight)/Math.max(h.scrollHeight,1)*100);if(p>maxS)maxS=Math.min(p,100);[25,50,75,100].forEach(function(m){if(maxS>=m&&!mark[m]){mark[m]=1;push({k:'scroll',l:String(m)});}});},{passive:true});
+/* sekce: viděná (60 % + 1 s) a čas, po který je ve viewportu (co čtou) */
+var secs=[];document.querySelectorAll('section,[data-sec]').forEach(function(s){var nm=s.getAttribute('data-sec')||s.id||(s.querySelector('h1,h2,h3')?(s.querySelector('h1,h2,h3').textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):'');if(nm)secs.push({el:s,nm:nm,vis:false,since:0,acc:0,seen:false});});
+var cur='';
+if('IntersectionObserver' in window){var io=new IntersectionObserver(function(es){var now=Date.now();es.forEach(function(en){var o=null;for(var i=0;i<secs.length;i++)if(secs[i].el===en.target)o=secs[i];if(!o)return;if(en.isIntersecting&&en.intersectionRatio>=.4){if(!o.vis){o.vis=true;o.since=now;}cur=o.nm;if(!o.seen){o.seen=true;setTimeout(function(){if(o.vis)push({k:'section',l:o.nm});},1000);}}else if(o.vis){o.vis=false;o.acc+=now-o.since;}});},{threshold:[.4,.6]});secs.forEach(function(o){io.observe(o.el);});}
+/* kliky */
+document.addEventListener('click',function(e){var el=e.target&&e.target.closest?e.target.closest('a,button,summary,[role=button],[data-cta],input[type=submit]'):null;if(!el)return;var s=(el.getAttribute('data-cta')||el.getAttribute('aria-label')||el.innerText||el.textContent||el.value||'').replace(/\\s+/g,' ').trim().slice(0,60);push({k:'click',l:s||el.tagName.toLowerCase(),m:{sec:secName(el),href:(el.getAttribute('href')||'').slice(0,80)}});},true);
+/* pohyb myši: mřížka 20 sloupců × řádky po 5 % výšky dokumentu, vzorek každých 400 ms */
+var grid={},lastMv=0;addEventListener('mousemove',function(e){var now=Date.now();if(now-lastMv<400)return;lastMv=now;var dh=Math.max(document.documentElement.scrollHeight,1);var cx=Math.min(19,Math.floor(e.clientX/Math.max(innerWidth,1)*20)),cy=Math.min(99,Math.floor((e.pageY||0)/dh*100/5)*5);var k=cx+','+cy;grid[k]=(grid[k]||0)+1;},{passive:true});
+/* aktivita (čas) */
+var lastAct=Date.now(),active=0;['mousemove','keydown','touchstart','scroll','click'].forEach(function(n){addEventListener(n,function(){lastAct=Date.now();},{passive:true});});
+setInterval(function(){if(document.visibilityState==='visible'&&Date.now()-lastAct<30000)active+=5;},5000);
+function dump(final){var now=Date.now();var d=[];secs.forEach(function(o){var a=o.acc+(o.vis?now-o.since:0);if(a>=1500){d.push({l:o.nm,s:Math.round(a/1000)});o.acc=0;o.since=now;}});if(d.length)push({k:'dwell',m:{secs:d}});var g=Object.keys(grid);if(g.length){push({k:'mouse',m:{g:grid}});grid={};}if(active>0){push({k:'time',m:{s:active}});active=0;}if(final)push({k:'exit',l:cur,m:{scroll:maxS}});flush();}
+setInterval(function(){dump(false);},10000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')dump(true);});addEventListener('pagehide',function(){dump(true);});
+window.__bs2track=function(l,m){push({k:'custom',l:String(l||'').slice(0,60),m:m||null});};
+})();`;
+
+module.exports = { TRACK_JS, PUB_TRACK_JS };
