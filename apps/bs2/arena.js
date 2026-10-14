@@ -96,8 +96,9 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   @keyframes cdpop{0%{opacity:0;transform:scale(1.8)}35%{opacity:1;transform:scale(.95)}100%{opacity:1;transform:scale(1)}}
   .machine.dim img{filter:drop-shadow(0 30px 50px rgba(0,0,0,.6)) brightness(.55) blur(1px);transition:filter .3s}
   /* ── Aukce ── */
-  .auc{max-width:720px;margin:14px auto 0;position:relative;background:linear-gradient(180deg,rgba(14,22,40,.9),rgba(8,13,26,.92));border:1px solid rgba(124,92,255,.35);border-radius:22px;padding:20px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 30px 80px rgba(0,0,0,.55)}
+  .auc{max-width:720px;margin:12px auto 0;position:relative;background:linear-gradient(180deg,rgba(14,22,40,.9),rgba(8,13,26,.92));border:1px solid rgba(124,92,255,.35);border-radius:22px;padding:20px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 30px 80px rgba(0,0,0,.55)}
   .auc::before{content:'';position:absolute;inset:-1px;border-radius:23px;padding:1px;background:linear-gradient(135deg,rgba(124,92,255,.7),rgba(79,209,255,.35) 50%,rgba(30,134,224,.6));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+  .auc > .eyebrow,.auc h2,.auc .sub,.auc .prizes{display:none}
   .auc h2{text-align:center;margin:10px 0 4px}
   .auc .sub{text-align:center;color:var(--text2);font-size:14px;margin-bottom:14px}
   .prizes{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 14px}
@@ -105,24 +106,24 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .prize b{font-size:24px;letter-spacing:-.02em;background:linear-gradient(90deg,#fff,var(--accent2) 60%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
   .prize span{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--text2)}
   .prize.p1{border-color:rgba(79,209,255,.6);box-shadow:0 0 24px rgba(79,209,255,.15)}
-  .clock{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;margin:6px 0 12px}
-  .ring{position:relative;width:132px;height:132px;flex:none}
+  .clock{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin:0 0 10px}
+  .ring{position:relative;width:104px;height:104px;flex:none}
   .ring svg{width:100%;height:100%;transform:rotate(90deg) scaleX(-1)} /* start ve 12 h, ubývá po směru ručiček */ .ring circle{fill:none;stroke-width:8}
   .ring .bg{stroke:rgba(120,160,255,.14)} .ring .fg{stroke:var(--accent2);stroke-linecap:round;transition:stroke-dashoffset .9s linear,stroke .3s;filter:drop-shadow(0 0 8px rgba(79,209,255,.6))}
   .ring.hot .fg{stroke:var(--err);filter:drop-shadow(0 0 10px rgba(255,93,108,.7))} .ring.hot b{color:var(--err)}
-  .ring b{position:absolute;left:0;right:0;top:36px;text-align:center;font-size:44px;font-weight:900;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
-  .ring small{position:absolute;left:0;right:0;top:84px;text-align:center;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--text2)}
+  .ring b{position:absolute;left:0;right:0;top:28px;text-align:center;font-size:36px;font-weight:900;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+  .ring small{position:absolute;left:0;right:0;top:68px;text-align:center;font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--text2)}
   .ring.bump b{animation:pop .5s ease}
-  .topbid{display:flex;flex-direction:column;align-items:center;min-width:200px;padding:12px 18px;border-radius:16px;background:var(--card2);border:1px solid var(--border2)}
+  .topbid{display:flex;flex-direction:column;align-items:center;min-width:180px;padding:8px 16px;border-radius:16px;background:var(--card2);border:1px solid var(--border2)}
   .topbid span{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--text2)}
-  .topbid b{font-size:clamp(26px,7vw,34px);font-weight:900;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+  .topbid b{font-size:clamp(22px,6vw,28px);font-weight:900;letter-spacing:-.03em;background:linear-gradient(90deg,#fff,var(--accent2),var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
   .topbid em{font-style:normal;font-size:13px;color:var(--text)} .topbid em.me{color:var(--ok);font-weight:700}
   .bidrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
-  .bidrow .btn{padding:12px 6px;font-size:14px;min-height:50px;white-space:nowrap}
+  .bidrow .btn{padding:8px 6px;font-size:13px;min-height:40px;white-space:nowrap;border-radius:10px}
   .bidrow .btn:disabled{opacity:.4}
   .bidinfo{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--text2);margin:8px 2px 10px}
   .bidinfo #bidmsg{color:var(--err);font-weight:600}
-  .feed{display:flex;flex-direction:column;gap:5px;max-height:220px;overflow:auto}
+  .feed{display:flex;flex-direction:column;gap:5px;max-height:150px;overflow:auto}
   .fb{display:flex;align-items:center;gap:10px;background:rgba(4,8,16,.6);border:1px solid var(--border);border-radius:11px;padding:7px 12px;font-size:13.5px} .fb:first-child{animation:fadein .3s ease}
   .fb .av{width:26px;height:26px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;background:linear-gradient(135deg,rgba(30,134,224,.45),rgba(124,92,255,.45));border:1px solid var(--border2)}
   .fb .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .fb .am{font-variant-numeric:tabular-nums;font-weight:700}
@@ -171,7 +172,8 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   /* ── Hlavička aukce + střídající se informace ── */
   body.aucmode .arena-hero > :not(.bank){display:none} body.aucmode .arena-hero{padding:0}
   .auchead{text-align:center;padding:6px 0 0}
-  .auchead h1{font-size:clamp(28px,6.5vw,46px);line-height:1.06;margin:12px auto 14px;max-width:820px;letter-spacing:-.03em}
+  .auchead h1{font-size:clamp(18px,3.6vw,26px);line-height:1.2;margin:10px auto 12px;max-width:820px;letter-spacing:-.02em;font-weight:700}
+  .auchead .eyebrow{display:none}
   .fact{max-width:720px;margin:0 auto;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 18px;text-align:left;display:flex;flex-direction:column;gap:4px;min-height:92px;opacity:0;transform:translateY(6px)}
   .fact.in{animation:factin .5s ease forwards}
   @keyframes factin{to{opacity:1;transform:none}}
@@ -179,15 +181,15 @@ const PAGE = (shellHead, netScript, presence) => `${shellHead}
   .fact span{font-size:14px;color:var(--text2);line-height:1.45}
   .fact .fdots{display:flex;gap:5px;margin-top:6px} .fact .fdots i{width:14px;height:3px;border-radius:2px;background:rgba(120,160,255,.18)} .fact .fdots i.on{background:var(--accent2)}
   .lobbybox{max-width:720px;margin:16px auto 0;display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap}
-  .ring.sm{width:96px;height:96px} .ring.sm b{font-size:32px;top:26px} .ring.sm small{font-size:9px;top:62px}
+  .ring.sm{width:96px;height:96px} .ring.sm b{font-size:30px;top:26px} .ring.sm small{font-size:9px;top:60px}
   .lobbybox .lt{font-size:16px;color:var(--text2);display:flex;flex-direction:column;gap:4px} .lobbybox .lt small{font-size:13px;color:var(--text3)} .lobbybox .lt small b{color:var(--accent2)}
   /* v čekárně jsou dominantní informace: bez nadpisu aukce, velká karta */
-  body.lobbymode .auchead h1,body.lobbymode .auchead .eyebrow{display:none}
-  body.lobbymode .fact{min-height:min(46vh,340px);justify-content:center;text-align:center;padding:28px 26px;border-color:rgba(79,209,255,.35);box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 40px rgba(79,209,255,.08)}
-  body.lobbymode .fact b{font-size:clamp(24px,5.6vw,36px);line-height:1.15;letter-spacing:-.02em}
-  body.lobbymode .fact span{font-size:clamp(15px,3.8vw,19px);max-width:560px;margin:8px auto 0}
-  body.lobbymode .fact .fdots{justify-content:center;margin-top:14px}
-  @media (max-width:600px){.fact{padding:12px 14px;min-height:0}.fact b{font-size:15px}.fact span{font-size:13.5px}body.lobbymode .fact{min-height:38vh;padding:22px 16px}}
+  body.lobbymode .auchead h1{display:none}
+  body.aucmode .fact{min-height:min(40vh,300px);justify-content:center;text-align:center;padding:28px 26px;border-color:rgba(79,209,255,.35);box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 40px rgba(79,209,255,.08)}
+  body.aucmode .fact b{font-size:clamp(24px,5.6vw,36px);line-height:1.15;letter-spacing:-.02em}
+  body.aucmode .fact span{font-size:clamp(15px,3.8vw,19px);max-width:560px;margin:8px auto 0}
+  body.aucmode .fact .fdots{justify-content:center;margin-top:14px}
+  @media (max-width:600px){.fact{padding:12px 14px;min-height:0}.fact b{font-size:15px}.fact span{font-size:13.5px}body.aucmode .fact{min-height:34vh;padding:22px 16px}}
   .hidden{display:none !important}
   @media (max-width:600px){.quiz{padding:16px 14px;border-radius:18px}.opt{font-size:15px}.ov{align-items:flex-end;padding:0}.ov .box{width:100%;border-radius:24px 24px 0 0;border-bottom:0;padding-bottom:calc(22px + env(safe-area-inset-bottom))}}
 </style>
@@ -228,7 +230,7 @@ ${presence}
   </section>
   <section class="auchead hidden" id="auchead">
     <span class="eyebrow"><i></i>Aréna Best Series · živá aukce</span>
-    <h1>Kdo přihodí <span class="g">poslední</span>, bere slevu na prádlomat</h1>
+    <h1>Kdo přihodí poslední, bere slevu <span class="g">30 %</span> na prádlomat</h1>
     <div class="fact" id="fact"></div>
   </section>
   <section class="lobbybox hidden" id="aucLobby"><div class="ring sm"><svg viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="lobbyFg" cx="60" cy="60" r="52"/></svg><b id="lobbySec">20</b><small>sekund</small></div><div class="lt">Čekáme na další hráče…<small>Kdo přihodí poslední, má slevu <b>30 %</b> na první prádlomat · 2. místo 20 % · 3. místo 10 %</small></div></section>
