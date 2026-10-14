@@ -42,6 +42,8 @@
     .live { display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text2); margin-left:10px; } .live i { width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 0 0 rgba(34,197,94,.6); animation:lp 2s infinite; } .live b { color:var(--text); } .live.flash { color:#22c55e; } .live.flash b { color:#22c55e; transform:scale(1.25); display:inline-block; transition:transform .3s; }
     @keyframes lp { 0% { box-shadow:0 0 0 0 rgba(34,197,94,.6); } 70% { box-shadow:0 0 0 8px rgba(34,197,94,0); } 100% { box-shadow:0 0 0 0 rgba(34,197,94,0); } }
     .node .val.bump { color:#22c55e; transition:color .4s; }
+    .node .act { display:flex; align-items:center; justify-content:space-between; gap:6px; font-size:10.5px; color:var(--text2); border-top:1px dashed var(--border); padding:4px 10px; } .node .act b { color:var(--text); font-weight:600; } .node .act button { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2); cursor:pointer; font-size:10.5px; padding:1px 6px; } .node .act button:hover { color:var(--text); }
+    .node.off { opacity:.55; filter:grayscale(.4); } .node.off .act { color:#f59e0b; }
     .node .camp { font-size:11px; color:#8ea2c2; border-top:1px dashed var(--border); padding-top:6px; line-height:1.4; }
     .node .camp b { color:var(--text); }
     .ov { position:fixed; inset:0; background:rgba(4,6,12,.7); display:none; align-items:center; justify-content:center; z-index:50; }
@@ -136,6 +138,7 @@
     var ML = { uniques: 'návštěvníci', leads: 'leady / objednávky', conversions: 'dokončeno / zaplaceno' };
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function n(v) { return v == null ? '—' : Number(v).toLocaleString('cs-CZ'); }
+    function fdt(d) { if (!d) return '—'; var x = new Date(d); return x.toLocaleDateString('cs-CZ') + ' ' + x.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }); }
     function perLabel() { return days === 0 ? 'dnes' : days + ' dní'; }
     function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
     function page(k) { return PAGES.find(function (p) { return p.key === k; }); }
@@ -262,6 +265,8 @@
         el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       }
+      if (nd.kind !== 'note') { if (nd.enabled === false) el.classList.add('off'); el.insertAdjacentHTML('beforeend', '<div class="act">' + (nd.enabled === false ? '<span>⏸ vypnuto' + (nd.deactivated_at ? ' od <b>' + esc(fdt(nd.deactivated_at)) + '</b>' : '') + '</span><button class="tg" title="Zapnout uzel">zapnout</button>' : '<span>⏻ aktivováno <b>' + esc(nd.activated_at ? fdt(nd.activated_at) : '—') + '</b></span><button class="tg" title="Vypnout uzel – čísla se zastaví, leady tudy nepůjdou">vypnout</button>') + '</div>');
+        el.querySelector('.tg').addEventListener('mousedown', function (e) { e.stopPropagation(); }); el.querySelector('.tg').addEventListener('click', function (e) { e.stopPropagation(); if (nd.enabled === false) { nd.enabled = true; nd.activated_at = new Date().toISOString(); delete nd.deactivated_at; } else { nd.enabled = false; nd.deactivated_at = new Date().toISOString(); } render(); }); }
       var fb = flowBadges(nd); if (fb) el.insertAdjacentHTML('beforeend', fb);
       el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
       el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
@@ -313,7 +318,7 @@
       var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = drop ? null : chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note' && !drop) { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; } if (drop) { nx = Math.round(drop.x); ny = Math.round(drop.y); }
       var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : (d.kind === 'leadform' ? 'leadform' : (d.kind === 'split' ? 'split' : (d.kind === 'sms' ? 'sms' : (d.kind === 'email' ? 'email' : ((d.kind === 'landing' || d.kind === 'page') ? 'landing' : 'step'))))), variant: 'specialist', x: nx, y: ny, page: (d.kind === 'page' || d.kind === 'landing') ? (d.page || null) : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
       if (d.kind === 'leadform') nd.form = { form_id: p.dataset.form, name: p.dataset.name, status: 'ACTIVE', questions: [], leads: Number(p.dataset.leads) || 0, clicks: 0, spend: 0, campaign_id: '', campaign_name: p.dataset.pg || '', ad_ids: [] };
-      if (nd.kind === 'split') nd.branches = []; F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform' || nd.kind === 'split' || nd.kind === 'sms' || nd.kind === 'email' || nd.kind === 'landing') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id, port: 0 }); if (nd.kind === 'split') seedBranches(nd); render(); if (!drop) focusX(nx);
+      if (nd.kind === 'split') nd.branches = []; nd.activated_at = new Date().toISOString(); F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform' || nd.kind === 'split' || nd.kind === 'sms' || nd.kind === 'email' || nd.kind === 'landing') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id, port: 0 }); if (nd.kind === 'split') seedBranches(nd); render(); if (!drop) focusX(nx);
     }
     var palDragged = false;
     am.addEventListener('click', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (!p) return; if (palDragged) { palDragged = false; return; } am.classList.remove('open'); addFromPal(p, null); });
@@ -407,7 +412,7 @@
     var SPLIT = {}; // SPLIT[form_id] = { counts: { 'i:5': n, 'e:2': n } } – leady přiřazené obchodníkům za období
     function upstreamForm(nd) { var e = F.edges.find(function (ed) { return ed.to === nd.id; }); if (!e) return null; var src = F.nodes.find(function (x) { return x.id === e.from; }); if (!src) return null; if (src.kind === 'leadform' && src.form && src.form.form_id) return src; if (src.kind === 'split' || src.kind === 'sms' || src.kind === 'email' || src.kind === 'landing') return upstreamForm(src); return null; }
     function sellerOpts(cur) { var h = '<option value="">— obchodník —</option>'; var ints = (SELLERS || []).map(function (p) { var v = 'i:' + p.id; return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + esc(((p.first_name || '') + ' ' + (p.last_name || '')).trim() || '#' + p.id) + '</option>'; }).join(''); if (ints) h += '<optgroup label="Interní">' + ints + '</optgroup>'; var exts = (EXTREPS || []).filter(function (r) { return (r.stav || 'aktivni') !== 'neaktivni'; }).map(function (r) { var v = 'e:' + r.id; return '<option value="' + v + '"' + (cur === v ? ' selected' : '') + '>' + esc(r.jmeno || '#' + r.id) + '</option>'; }).join(''); if (exts) h += '<optgroup label="Externí">' + exts + '</optgroup>'; return h; }
-    function connect(from, port, to) { F.edges = F.edges.filter(function (ed) { return !(ed.from === from && (ed.port || 0) === (port || 0)); }); F.edges.push({ from: from, to: to, port: port || 0 }); }
+    function connect(from, port, to) { F.edges = F.edges.filter(function (ed) { return !(ed.from === from && (ed.port || 0) === (port || 0)); }); F.edges.push({ from: from, to: to, port: port || 0 }); var tn = F.nodes.find(function (x) { return x.id === to; }); if (tn && !tn.activated_at) tn.activated_at = new Date().toISOString(); }
     async function saveFormRules(form, branches) {
       try { var forms = await loadRules(); var fid = String(form.form_id); var cfg = forms.find(function (x) { return String(x.form_id) === fid; }) || {};
         var mine = { form_id: fid, form_name: cfg.form_name || form.name || null, split: branches.map(function (b) { return { key: b.key, count: Number(b.count) || 0, percent: 0 }; }), campaign: cfg.campaign || null, role: cfg.role || 'compounder', lang: cfg.lang || null, active: cfg.active !== false };
