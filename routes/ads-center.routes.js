@@ -153,6 +153,8 @@ router.post('/test-lead', async (req, res, next) => { try {
 router.get('/funnels/:id/positions', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const positions = await require('../services/ads/funnel-events').positions(String(req.params.id || ''), sinceDate(days)); res.json({ positions }); } catch (err) { next(err); } });
 // Ruční spuštění automatu pro lead zastavený ve funelu (např. doplněný telefon)
 router.post('/leads/:id/autosend', async (req, res, next) => { try { const r = await require('./compounder.routes').rerunAutosend(parseInt(req.params.id, 10)); res.json(r); } catch (err) { next(err); } });
+// Dodatečné odeslání z vlákna: { ids:[lead_id], channel:'sms'|'email', force:bool } → pošle po jednom, vrátí výsledky
+router.post('/leads/resend', async (req, res, next) => { try { const b = req.body || {}; const ids = (Array.isArray(b.ids) ? b.ids : []).map((x) => parseInt(x, 10)).filter((x) => x > 0).slice(0, 200); const ch = b.channel === 'email' ? 'email' : 'sms'; const cmp = require('./compounder.routes'); const out = []; for (const id of ids) { try { const r = await cmp.forceSend(id, ch, !!b.force); out.push({ id, sent: !!(r && r.sent), error: r && r.error }); } catch (e) { out.push({ id, sent: false, error: e.message }); } } res.json({ ok: true, results: out, sent: out.filter((x) => x.sent).length }); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──

@@ -1377,9 +1377,9 @@ function logOutreach(leadId, variant, kind, reason) {
 }
 
 // Automatické odeslání SMS specialisty na nový lead dle pravidel (volá se po vzniku leada z reklamy).
-async function autosendAiSpecialistSms(lead) {
+async function autosendAiSpecialistSms(lead, opts) {
   try {
-    if (!lead || !lead.id) return;
+    opts = opts || {}; if (!lead || !lead.id) return;
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
     if (!cfg || !cfg.enabled) return logOutreach(lead.id, 'specialist', 'skip', 'automat je vypnutý');
     const skip = (why) => logOutreach(lead.id, 'specialist', 'skip', why);
@@ -1390,10 +1390,11 @@ async function autosendAiSpecialistSms(lead) {
     // Routing per obchodník: leadům vybraných obchodníků jde varianta „schůzka" (SMS + e-mail).
     // Kontroluje se PŘED telefonem, aby e-mail odešel i leadovi bez čísla.
     if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) {
-      await sendSchuzkaSmsAuto(lead, cfg);
-      await sendSchuzkaEmailAuto(lead, cfg);
+      if (opts.only !== 'email') await sendSchuzkaSmsAuto(lead, cfg);
+      if (opts.only !== 'sms') await sendSchuzkaEmailAuto(lead, cfg);
       return;
     }
+    if (opts.only === 'email') return;
     if (!lead.phone) return skip('chybí telefon');
     if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
     if (lead.ai_specialist_sms_sent_at) return skip('SMS už odeslána');
@@ -10519,4 +10520,8 @@ module.exports = router;
 // Interní API pro přímé stahování leadů z FB (services/ads/meta-leads-sync.js) – stejná cesta založení jako webhook.
 // Ruční / opravné spuštění automatu (SMS + e-mail) pro lead – čte čerstvý stav z DB
 module.exports.rerunAutosend = async function (leadId) { const lead = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!lead) return { ok: false, error: 'lead nenalezen' }; await autosendAiSpecialistSms(lead); const lead2 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (lead2 && !lead2.schuzka_email_sent_at && !lead2.ai_specialist_email_sent_at) await autosendAiSpecialistEmail(lead2); const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); return { ok: true, lead: l3 }; };
+// Dodatečné / opakované odeslání z funelu: kanál sms|email; force = ignoruje pojistku „už odesláno" (lead se tváří jako čerstvý)
+module.exports.forceSend = async function (leadId, channel, force) { const L = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) } }); if (!L) return { ok: false, error: 'lead nenalezen' }; const lead = Object.assign({}, L); if (force) { lead.outreach_variant = null; lead.schuzka_sms_sent_at = null; lead.schuzka_email_sent_at = null; lead.ai_specialist_sms_sent_at = null; lead.ai_specialist_email_sent_at = null; if (['odeslana_schuzka', 'odeslan_specialista'].includes(lead.status)) lead.status = 'new'; }
+  if (channel === 'email') { const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}); if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) await sendSchuzkaEmailAuto(lead, cfg); else await autosendAiSpecialistEmail(lead); } else await autosendAiSpecialistSms(lead, { only: 'sms' });
+  const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); const after = channel === 'email' ? (l3.schuzka_email_sent_at || l3.ai_specialist_email_sent_at) : (l3.schuzka_sms_sent_at || l3.ai_specialist_sms_sent_at); const sent = !!after && (!force || new Date(after).getTime() > Date.now() - 120000); return { ok: true, sent, lead: l3 }; };
 module.exports._fbCreateLead = _fbCreateLead; module.exports._fbExtractFields = _fbExtractFields; module.exports._fbLoadForms = _fbLoadForms; module.exports._fbResolveOwner = _fbResolveOwner;
