@@ -6248,7 +6248,7 @@ async function _fbCreateLead(fields, meta, formCfg) {
   // jen mu doplníme řádek do aktivit (a nezakládáme duplikát).
   const dupOr = [];
   if (email) dupOr.push({ email: { equals: email, mode: 'insensitive' } });
-  if (phone) dupOr.push({ phone: phone });
+  if (phone) { const pn = phone.replace(/\s+/g, ''); const vars = Array.from(new Set([phone, pn, pn.replace(/^\+420/, '+420 '), pn.replace(/^\+420/, '')])); dupOr.push({ phone: { in: vars } }); } // stejné číslo s mezerou / bez předvolby = stejný kontakt
   const existing = dupOr.length ? await prisma.compounderLead.findFirst({ where: { OR: dupOr }, select: { id: true, activity_log: true } }) : null;
 
   const role = (formCfg && formCfg.role === 'distributor') ? 'distributor' : 'compounder';
