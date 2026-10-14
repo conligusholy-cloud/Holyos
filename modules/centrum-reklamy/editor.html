@@ -236,7 +236,8 @@
         el.querySelectorAll('select').forEach(function (q) { q.addEventListener('mousedown', function (e) { e.stopPropagation(); }); });
         el.querySelector('.avr').addEventListener('change', function (e) { var v = e.target.value; if (v.indexOf('p:') === 0) nd.page = v.slice(2); else { nd.page = null; nd.variant = v.slice(2); } render(); });
         // Cíle stránky (z analýzy v Centru reklamy) – rozbalovací panel, každý cíl má vlastní výstup (port i+1) → oblak Výsledek
-        if (pgSel) { var gi = GOALS[pgSel.key]; if (gi && gi.goals && gi.goals.length) nd.goals = gi.goals.map(function (g) { return { type: g.type, label: g.label, desc: g.desc || '', primary: !!g.primary }; }); else if (!Array.isArray(nd.goals)) nd.goals = [];
+        var gpg = pgSel || page(spl2 ? 'specialist' : 'cesta'); // stránka pro cíle: vybraná z Centra reklamy, jinak výchozí stránka varianty
+        if (gpg) { pgSel = gpg; var gi = GOALS[pgSel.key]; if (gi && gi.goals && gi.goals.length) nd.goals = gi.goals.map(function (g) { return { type: g.type, label: g.label, desc: g.desc || '', primary: !!g.primary }; }); else if (!Array.isArray(nd.goals)) nd.goals = [];
           var gl = nd.goals || [];
           if (nd.goals_open) el.classList.add('gopen'); if (gl.length) el.classList.add('hasgoals');
           el.insertAdjacentHTML('beforeend', '<div class="gtab" title="Cíle stránky – klikni pro vysunutí názvů"><div class="gth"><span>🎯 Cíle stránky (' + gl.length + ')</span><button class="gear gcfg" title="Nastavit cíle: vybrat, přejmenovat, sloučit">' + GEAR + '</button><button class="x gclose" title="Zasunout">✕</button></div>'
@@ -523,7 +524,8 @@
     // Měřitelné hodnoty cílů: z přehledu stránky (DATA – za období, stránka celkem) a z událostí vlákna (otevření stránky).
     var DATA_FROM = {}; // DATA_FROM[since] = přehled stránek načtený od daného data (pro stránky se stats_from)
     function pageData(key) { var gi = GOALS[key]; var sf = gi && gi.stats_from ? String(gi.stats_from).slice(0, 10) : null; if (sf) { var periodStart = new Date(); periodStart.setHours(0, 0, 0, 0); if (days > 0) periodStart.setDate(periodStart.getDate() - days + 1); if (new Date(sf) > periodStart) { if (!DATA_FROM[sf]) { DATA_FROM[sf] = []; fetch('/api/ads-center/overview?since=' + sf, { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (j) { DATA_FROM[sf] = j.pages || []; render(); }).catch(function () {}); } var d = DATA_FROM[sf].find(function (x) { return x.key === key; }); if (d) return d; if (!DATA_FROM[sf].length) return null; } } return DATA.find(function (x) { return x.key === key; }); }
-    function goalCount(gnd, g) { var ln = gnd.kind === 'landing' ? gnd : upLanding(gnd); var pg = ln && ln.page ? pageData(ln.page) : null; var opened = ln && NS_READY && NS[ln.id] ? Number(NS[ln.id].leads) : null;
+    function landingPageKey(ln) { return ln ? (ln.page || ((ln.variant || 'specialist') === 'schuzka' ? 'cesta' : 'specialist')) : null; }
+    function goalCount(gnd, g) { var ln = gnd.kind === 'landing' ? gnd : upLanding(gnd); var pg = ln ? pageData(landingPageKey(ln)) : null; var opened = ln && NS_READY && NS[ln.id] ? Number(NS[ln.id].leads) : null;
       if (g.type === 'browse') return { n: opened != null ? opened : (pg && pg.uniques != null ? Number(pg.uniques) : null), src: opened != null ? 'otevřelo z tohoto vlákna' : 'návštěvníků stránky celkem' };
       if (g.type === 'exit') { var u = pg && pg.uniques != null ? Number(pg.uniques) : null, l = pg && pg.leads != null ? Number(pg.leads) : 0; return { n: u != null ? Math.max(0, u - l) : null, src: 'návštěvníci bez akce (stránka celkem)' }; }
       if (g.type === 'lead' || g.type === 'download' || g.type === 'signup') return { n: pg && pg.leads != null ? Number(pg.leads) : null, src: (pg && pg.leadLabel ? pg.leadLabel : 'leady') + ' (stránka celkem)' };
