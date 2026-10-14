@@ -108,9 +108,9 @@
         <div id="fn-editor" style="display:none" class="fn-card">
           <h3 id="fn-ed-title" style="margin:0 0 10px;font-size:15px">Nový funel</h3>
           <div class="form-row"><div><label>Název funelu</label><input id="fn-name" placeholder="např. Prověření lokality – od návštěvy k platbě"></div><div><label>Poznámka</label><input id="fn-note" placeholder="volitelné"></div></div>
-          <label style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Kroky (shora dolů)</label>
+          <div id="fn-steps-wrap"><label style="font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px">Kroky (shora dolů)</label>
           <div id="fn-steps"></div>
-          <div class="toolbar"><button class="btn btn-sm" id="fn-add-step">+ Přidat krok</button></div>
+          <div class="toolbar"><button class="btn btn-sm" id="fn-add-step">+ Přidat krok</button></div></div>
           <div class="toolbar"><button class="btn on" id="fn-save">Uložit funel</button><button class="btn" id="fn-cancel">Zrušit</button><button class="btn" id="fn-delete" style="display:none;color:#ef4444">Smazat funel</button><span class="note" id="fn-msg"></span></div>
         </div>
       </div>
@@ -186,13 +186,14 @@
     function renderFunnels() {
       var box = document.getElementById('fn-list');
       if (!FUNNELS.length) { box.innerHTML = '<div class="note" style="padding:12px 0">Zatím žádný funel. Založ první tlačítkem nahoře.</div>'; return; }
+      // bez kroků = jen založený funel (kroky se přidají přes Upravit)
       box.innerHTML = FUNNELS.map(function (f) {
         var vals = f.steps.map(stepValue); var mx = Math.max(1, Math.max.apply(null, vals.map(function (v) { return v || 0; })));
         var rows = f.steps.map(function (st, i) { var v = vals[i], prev = i ? vals[i - 1] : null; var w = v == null ? 0 : Math.max(8, v / mx * 100);
           var drop = (i && prev > 0 && v != null) ? '<b>−' + Math.round((1 - v / prev) * 100) + ' %</b> · ' + (Math.round(v / prev * 1000) / 10).toLocaleString('cs-CZ') + ' % z předchozího' : (i ? '—' : '100 %');
           return '<div class="fn-step"><div class="n">' + (i + 1) + '</div><div><div class="lbl">' + esc(stepLabel(st)) + '</div><div class="bar" style="width:' + w + '%">' + (v == null ? '—' : n(v)) + '</div></div><div class="drop">' + drop + '</div><div></div></div>'; }).join('');
         var first = vals[0], last = vals[vals.length - 1]; var total = (first > 0 && last != null) ? (Math.round(last / first * 1000) / 10).toLocaleString('cs-CZ') + ' %' : '—';
-        return '<div class="fn-card"><div class="hd"><div><h3>🔻 ' + esc(f.name) + '</h3>' + (f.note ? '<div class="note">' + esc(f.note) + '</div>' : '') + '</div><div class="toolbar" style="margin:0"><span class="note">celková konverze <b style="color:#22c55e">' + total + '</b> · za ' + days + ' dní</span><button class="btn btn-sm" data-edit="' + esc(f.id) + '">Upravit</button></div></div><div class="fn-steps">' + rows + '</div></div>';
+        return '<div class="fn-card"><div class="hd"><div><h3>🔻 ' + esc(f.name) + '</h3>' + (f.note ? '<div class="note">' + esc(f.note) + '</div>' : '') + '</div><div class="toolbar" style="margin:0">' + (f.steps.length ? '<span class="note">celková konverze <b style="color:#22c55e">' + total + '</b> · za ' + days + ' dní</span>' : '<span class="note">zatím bez kroků</span>') + '<a class="btn btn-sm on" href="modules/centrum-reklamy/editor.html?id=' + encodeURIComponent(f.id) + '">✎ Editovat</a><button class="btn btn-sm" data-edit="' + esc(f.id) + '" title="Název, poznámka, smazání">⋯</button></div></div>' + (f.steps.length ? '<div class="fn-steps">' + rows + '</div>' : '') + '</div>';
       }).join('');
       box.querySelectorAll('[data-edit]').forEach(function (b) { b.addEventListener('click', function () { openEditor(FUNNELS.find(function (f) { return f.id === b.getAttribute('data-edit'); })); }); });
     }
@@ -202,7 +203,8 @@
       return '<div class="ed-step" data-i="' + i + '"><div class="n">' + (i + 1) + '</div><input class="s-label" placeholder="popisek kroku (volitelné)" value="' + esc(st.label || '') + '"><select class="s-page">' + pages + '</select><select class="s-metric">' + metrics + '</select><input class="s-manual" type="number" placeholder="ručně" value="' + (st.manual != null ? st.manual : '') + '"><button type="button" class="x" title="Odebrat krok">✕</button></div>';
     }
     function openEditor(f) {
-      editing = f ? JSON.parse(JSON.stringify(f)) : { id: null, name: '', note: '', steps: [{ label: '', page: PAGESDEF[0] ? PAGESDEF[0].key : null, metric: 'uniques', manual: null }, { label: '', page: PAGESDEF[0] ? PAGESDEF[0].key : null, metric: 'leads', manual: null }, { label: '', page: PAGESDEF[0] ? PAGESDEF[0].key : null, metric: 'conversions', manual: null }] };
+      editing = f ? JSON.parse(JSON.stringify(f)) : { id: null, name: '', note: '', steps: [] };
+      document.getElementById('fn-steps-wrap').style.display = 'none';
       document.getElementById('fn-ed-title').textContent = f ? 'Upravit funel' : 'Nový funel';
       document.getElementById('fn-name').value = editing.name; document.getElementById('fn-note').value = editing.note || '';
       document.getElementById('fn-delete').style.display = f ? '' : 'none'; document.getElementById('fn-msg').textContent = '';
@@ -214,12 +216,14 @@
     document.getElementById('fn-new').addEventListener('click', function () { openEditor(null); });
     document.getElementById('fn-add-step').addEventListener('click', function () { collectSteps(); editing.steps.push({ label: '', page: PAGESDEF[0] ? PAGESDEF[0].key : null, metric: 'leads', manual: null }); renderSteps(); });
     document.getElementById('fn-cancel').addEventListener('click', function () { document.getElementById('fn-editor').style.display = 'none'; editing = null; });
-    document.getElementById('fn-save').addEventListener('click', async function () { collectSteps(); editing.name = document.getElementById('fn-name').value.trim() || 'Funel'; editing.note = document.getElementById('fn-note').value.trim(); if (!editing.steps.length) { document.getElementById('fn-msg').textContent = 'Přidej aspoň jeden krok.'; return; }
+    document.getElementById('fn-save').addEventListener('click', async function () { collectSteps(); editing.name = document.getElementById('fn-name').value.trim() || 'Funel'; editing.note = document.getElementById('fn-note').value.trim(); if (!editing.name) { document.getElementById('fn-msg').textContent = 'Zadej název funelu.'; return; }
       var list = FUNNELS.slice(); if (editing.id) { var i = list.findIndex(function (f) { return f.id === editing.id; }); if (i >= 0) list[i] = editing; else list.push(editing); } else list.push(editing);
-      try { await saveFunnels(list); document.getElementById('fn-editor').style.display = 'none'; editing = null; renderFunnels(); } catch (e) { document.getElementById('fn-msg').textContent = e.message; } });
+      var isNew = !editing.id;
+      try { await saveFunnels(list); document.getElementById('fn-editor').style.display = 'none'; var created = isNew ? FUNNELS[FUNNELS.length - 1] : null; editing = null; renderFunnels(); if (created) location.href = 'modules/centrum-reklamy/editor.html?id=' + encodeURIComponent(created.id); } catch (e) { document.getElementById('fn-msg').textContent = e.message; } });
     document.getElementById('fn-delete').addEventListener('click', async function () { if (!editing || !editing.id || !confirm('Smazat funel „' + editing.name + '“?')) return; try { await saveFunnels(FUNNELS.filter(function (f) { return f.id !== editing.id; })); document.getElementById('fn-editor').style.display = 'none'; editing = null; renderFunnels(); } catch (e) { document.getElementById('fn-msg').textContent = e.message; } });
     async function loadFunnels() { try { var a = await fetch('/api/ads-center/pages', { credentials: 'same-origin' }); PAGESDEF = await a.json(); var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); FUNNELS = await b.json(); renderFunnels(); } catch (e) { document.getElementById('fn-list').innerHTML = '<div class="note warn">Funely se nepodařilo načíst.</div>'; } }
     loadFunnels();
+    if (location.hash === '#funnel') { var ft = document.querySelector('.module-tab[data-tab="funnel"]'); if (ft) ft.click(); }
     document.querySelectorAll('.module-tab').forEach(function (t) { t.addEventListener('click', function () { document.querySelectorAll('.module-tab').forEach(function (x) { x.classList.toggle('active', x === t); }); document.querySelectorAll('.module-panel').forEach(function (p) { p.classList.toggle('active', p.id === 'panel-' + t.getAttribute('data-tab')); }); }); });
     load();
   })();

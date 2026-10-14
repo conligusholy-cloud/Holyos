@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Editor funelu | HOLYOS</title>
+  <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
+  <base href="../../">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <style>
+    html, body { height:100%; margin:0; overflow:hidden; background:#0b0e17; color:var(--text); }
+    .top { height:52px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--border); background:var(--surface); }
+    .top input.name { font-size:15px; font-weight:700; background:transparent; border:1px solid transparent; color:var(--text); padding:6px 8px; border-radius:7px; min-width:320px; }
+    .top input.name:focus { border-color:var(--border); outline:none; background:var(--surface2); }
+    .btn { padding:7px 14px; border-radius:8px; border:1px solid var(--border); font-size:13px; font-weight:500; cursor:pointer; background:var(--surface2); color:var(--text); text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+    .btn:hover { background:var(--border); } .btn.on { background:#f59e0b; color:#1a1200; border-color:#f59e0b; font-weight:700; }
+    .btn-sm { padding:5px 10px; font-size:12px; }
+    .wrap { display:flex; height:calc(100% - 52px); }
+    .palette { width:250px; border-right:1px solid var(--border); background:var(--surface); overflow:auto; padding:12px; }
+    .palette h4 { margin:8px 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); }
+    .pal { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface2); margin-bottom:6px; cursor:grab; font-size:12.5px; user-select:none; }
+    .pal i { width:9px; height:9px; border-radius:50%; flex:none; }
+    .pal:active { cursor:grabbing; }
+    .canvas-wrap { flex:1; position:relative; overflow:auto; background:#0b0e17; background-image:radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size:24px 24px; }
+    .canvas { position:relative; width:3000px; height:2000px; }
+    svg.links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    .node { position:absolute; width:230px; background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.45); user-select:none; }
+    .node.sel { border-color:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,.35), 0 10px 30px rgba(0,0,0,.45); }
+    .node .hd { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); cursor:move; font-size:12.5px; font-weight:700; border-radius:12px 12px 0 0; }
+    .node .hd i { width:9px; height:9px; border-radius:50%; flex:none; }
+    .node .hd .x { margin-left:auto; background:none; border:0; color:var(--text2); cursor:pointer; font-size:14px; }
+    .node .bd { padding:8px 10px; display:flex; flex-direction:column; gap:6px; }
+    .node select, .node input, .node textarea { width:100%; padding:6px 8px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:12px; box-sizing:border-box; font-family:inherit; }
+    .node .val { font-size:22px; font-weight:800; text-align:right; }
+    .node .val small { display:block; font-size:10.5px; color:var(--text2); font-weight:500; }
+    .port { position:absolute; width:14px; height:14px; border-radius:50%; background:#f59e0b; border:2px solid #0b0e17; top:50%; transform:translateY(-50%); cursor:crosshair; }
+    .port.in { left:-8px; background:#60a5fa; } .port.out { right:-8px; }
+    .node.note { width:220px; border-style:dashed; background:rgba(245,158,11,.06); }
+    .hint { position:absolute; left:14px; bottom:12px; font-size:11.5px; color:var(--text2); background:rgba(11,14,23,.85); padding:6px 10px; border-radius:8px; border:1px solid var(--border); }
+    .side { width:270px; border-left:1px solid var(--border); background:var(--surface); overflow:auto; padding:12px; }
+    .side h4 { margin:8px 0 6px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); }
+    .fstep { display:flex; justify-content:space-between; gap:8px; font-size:12.5px; padding:6px 0; border-bottom:1px solid rgba(255,255,255,.05); }
+    .fstep b { font-variant-numeric:tabular-nums; }
+    .drop { font-size:11px; color:#ef4444; text-align:right; }
+    .msg { font-size:12px; color:var(--text2); margin-left:auto; }
+  </style>
+</head>
+<body>
+  <div class="top">
+    <a class="btn btn-sm" href="modules/centrum-reklamy/index.html#funnel">← Centrum reklamy</a>
+    <input class="name" id="name" placeholder="Název funelu">
+    <span class="note" style="font-size:12px;color:var(--text2)">Období:</span>
+    <button class="btn btn-sm" data-days="7">7 dní</button><button class="btn btn-sm on" data-days="30">30 dní</button><button class="btn btn-sm" data-days="90">90 dní</button>
+    <span class="msg" id="msg"></span>
+    <button class="btn btn-sm" id="auto">⇅ Srovnat</button>
+    <button class="btn on" id="save">💾 Uložit</button>
+  </div>
+  <div class="wrap">
+    <div class="palette">
+      <h4>Záchytné stránky</h4>
+      <div id="pal-pages"></div>
+      <h4>Ostatní</h4>
+      <div class="pal" draggable="true" data-kind="manual"><i style="background:#8ea2c2"></i>Ruční číslo (např. zobrazení reklamy)</div>
+      <div class="pal" draggable="true" data-kind="note"><i style="background:#f59e0b"></i>Poznámka</div>
+      <p style="font-size:11.5px;color:var(--text2);line-height:1.5">Přetáhni kartu na plátno. Uzly spoj tažením z oranžového bodu (výstup) na modrý bod (vstup) dalšího uzlu. Klik na spojnici ji smaže.</p>
+    </div>
+    <div class="canvas-wrap" id="cw">
+      <div class="canvas" id="canvas"><svg class="links" id="links"></svg></div>
+      <div class="hint">Tažením za hlavičku uzel přesuneš · Delete smaže vybraný uzel</div>
+    </div>
+    <div class="side">
+      <h4>Funel – kroky podle spojení</h4>
+      <div id="steps"></div>
+      <div id="total" style="margin-top:10px;font-size:13px"></div>
+      <h4 style="margin-top:16px">Poznámka</h4>
+      <textarea id="note" rows="3" style="width:100%;box-sizing:border-box;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:6px 8px;font-size:12px;font-family:inherit"></textarea>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var id = new URLSearchParams(location.search).get('id'); var days = 30;
+    var PAGES = [], DATA = [], F = null, sel = null, linking = null;
+    var canvas = document.getElementById('canvas'), links = document.getElementById('links'), cw = document.getElementById('cw');
+    var ML = { uniques: 'návštěvníci', leads: 'leady / objednávky', conversions: 'dokončeno / zaplaceno' };
+    function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function n(v) { return v == null ? '—' : Number(v).toLocaleString('cs-CZ'); }
+    function uid() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+    function page(k) { return PAGES.find(function (p) { return p.key === k; }); }
+    function val(nd) { if (nd.kind === 'note') return null; if (nd.manual != null && nd.manual !== '') return Number(nd.manual); var p = DATA.find(function (x) { return x.key === nd.page; }); if (!p) return null; var v = p[nd.metric]; if (nd.metric === 'uniques' && v == null) v = p.visits; return v == null ? null : Number(v); }
+    function label(nd) { if (nd.label) return nd.label; var p = page(nd.page); return p ? p.name : 'Ruční číslo'; }
+    function metricLabel(nd) { var p = page(nd.page); return nd.metric === 'leads' && p ? p.leadLabel : nd.metric === 'conversions' && p ? p.convLabel : ML[nd.metric]; }
+
+    function nodeEl(nd) {
+      var p = page(nd.page); var col = nd.kind === 'note' ? '#f59e0b' : (p ? p.color : '#8ea2c2');
+      var el = document.createElement('div'); el.className = 'node' + (nd.kind === 'note' ? ' note' : '') + (sel === nd.id ? ' sel' : ''); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; el.dataset.id = nd.id;
+      if (nd.kind === 'note') {
+        el.innerHTML = '<div class="hd"><i style="background:' + col + '"></i>Poznámka<button class="x" title="Smazat">✕</button></div><div class="bd"><textarea rows="3" placeholder="text poznámky">' + esc(nd.text || '') + '</textarea></div>';
+        el.querySelector('textarea').addEventListener('input', function (e) { nd.text = e.target.value; });
+      } else {
+        var opts = '<option value="">— ruční číslo —</option>' + PAGES.map(function (x) { return '<option value="' + x.key + '"' + (nd.page === x.key ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('');
+        var ms = Object.keys(ML).map(function (k) { return '<option value="' + k + '"' + (nd.metric === k ? ' selected' : '') + '>' + ML[k] + '</option>'; }).join('');
+        var v = val(nd);
+        el.innerHTML = '<div class="port in" title="vstup"></div><div class="port out" title="výstup – táhni na další uzel"></div><div class="hd"><i style="background:' + col + '"></i><span class="t">' + esc(label(nd)) + '</span><button class="x" title="Smazat">✕</button></div><div class="bd"><input class="lbl" placeholder="popisek kroku" value="' + esc(nd.label || '') + '"><select class="pg">' + opts + '</select>' + (nd.page ? '<select class="mt">' + ms + '</select>' : '<input class="man" type="number" placeholder="číslo" value="' + (nd.manual != null ? nd.manual : '') + '">') + '<div class="val">' + n(v) + '<small>' + (nd.page ? esc(metricLabel(nd)) : 'ručně zadáno') + ' · ' + days + ' dní</small></div></div>';
+        el.querySelector('.lbl').addEventListener('input', function (e) { nd.label = e.target.value; el.querySelector('.t').textContent = label(nd); refreshSteps(); });
+        el.querySelector('.pg').addEventListener('change', function (e) { nd.page = e.target.value || null; if (nd.page) nd.manual = null; render(); });
+        var mt = el.querySelector('.mt'); if (mt) mt.addEventListener('change', function (e) { nd.metric = e.target.value; render(); });
+        var man = el.querySelector('.man'); if (man) man.addEventListener('input', function (e) { nd.manual = e.target.value === '' ? null : Number(e.target.value); refreshSteps(); el.querySelector('.val').firstChild.textContent = n(val(nd)); });
+        el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
+        el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { F.edges = F.edges.filter(function (ed) { return ed.from !== linking.from; }); F.edges.push({ from: linking.from, to: nd.id }); } linking = null; render(); });
+      }
+      el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
+      el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
+      var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var sx = e.clientX - nd.x, sy = e.clientY - nd.y; function mv(ev) { nd.x = Math.max(0, ev.clientX - sx); nd.y = Math.max(0, ev.clientY - sy); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
+      return el;
+    }
+    function center(nd, side) { return { x: nd.x + (side === 'out' ? 230 : 0), y: nd.y + 24 }; }
+    function drawLinks(tmp) {
+      var h = '';
+      F.edges.forEach(function (ed, i) { var a = F.nodes.find(function (x) { return x.id === ed.from; }), b = F.nodes.find(function (x) { return x.id === ed.to; }); if (!a || !b) return; var p = center(a, 'out'), q = center(b, 'in'); var dx = Math.max(40, Math.abs(q.x - p.x) / 2);
+        h += '<path d="M' + p.x + ',' + p.y + ' C' + (p.x + dx) + ',' + p.y + ' ' + (q.x - dx) + ',' + q.y + ' ' + q.x + ',' + q.y + '" fill="none" stroke="#f59e0b" stroke-width="2.5" style="pointer-events:stroke;cursor:pointer" data-i="' + i + '"><title>Klikem smažeš spojení</title></path><circle cx="' + q.x + '" cy="' + q.y + '" r="4" fill="#f59e0b"/>'; });
+      if (tmp) h += '<path d="M' + tmp.x1 + ',' + tmp.y1 + ' L' + tmp.x2 + ',' + tmp.y2 + '" stroke="#f59e0b" stroke-dasharray="5 4" stroke-width="2" fill="none"/>';
+      links.innerHTML = h;
+      links.querySelectorAll('path[data-i]').forEach(function (pth) { pth.addEventListener('click', function () { F.edges.splice(+pth.getAttribute('data-i'), 1); render(); }); });
+    }
+    function chain() { var hasIn = {}; F.edges.forEach(function (e) { hasIn[e.to] = 1; }); var steps = F.nodes.filter(function (x) { return x.kind !== 'note'; }); var cur = steps.find(function (x) { return !hasIn[x.id]; }); var out = [], seen = {}; while (cur && !seen[cur.id] && out.length < 12) { seen[cur.id] = 1; out.push(cur); var e = F.edges.find(function (ed) { return ed.from === cur.id; }); cur = e ? F.nodes.find(function (x) { return x.id === e.to && x.kind !== 'note'; }) : null; } return out; }
+    function refreshSteps() {
+      var st = chain(), vals = st.map(val); var box = document.getElementById('steps');
+      box.innerHTML = st.length ? st.map(function (nd, i) { var v = vals[i], pv = i ? vals[i - 1] : null; return '<div class="fstep"><span>' + (i + 1) + '. ' + esc(label(nd)) + '</span><span><b>' + n(v) + '</b>' + (i && pv > 0 && v != null ? '<div class="drop">−' + Math.round((1 - v / pv) * 100) + ' %</div>' : '') + '</span></div>'; }).join('') : '<div style="font-size:12px;color:var(--text2)">Přetáhni stránky na plátno a propoj je – zde se ukáže pořadí kroků.</div>';
+      var f = vals[0], l = vals[vals.length - 1]; document.getElementById('total').innerHTML = (st.length > 1 && f > 0 && l != null) ? 'Celková konverze: <b style="color:#22c55e">' + (Math.round(l / f * 1000) / 10).toLocaleString('cs-CZ') + ' %</b>' : '';
+      var loose = F.nodes.filter(function (x) { return x.kind !== 'note' && st.indexOf(x) < 0; }).length; if (loose) document.getElementById('total').innerHTML += '<div style="font-size:11.5px;color:#f59e0b;margin-top:6px">' + loose + ' uzel/uzly nejsou v řetězci – propoj je, jinak se do funelu nepočítají.</div>';
+    }
+    function render() { canvas.querySelectorAll('.node').forEach(function (x) { x.remove(); }); F.nodes.forEach(function (nd) { canvas.appendChild(nodeEl(nd)); }); drawLinks(); refreshSteps(); }
+
+    // drag z palety
+    document.addEventListener('dragstart', function (e) { var p = e.target.closest && e.target.closest('.pal'); if (p) e.dataTransfer.setData('text/plain', JSON.stringify({ kind: p.dataset.kind, page: p.dataset.page || null })); });
+    cw.addEventListener('dragover', function (e) { e.preventDefault(); });
+    cw.addEventListener('drop', function (e) { e.preventDefault(); var d; try { d = JSON.parse(e.dataTransfer.getData('text/plain')); } catch (x) { return; } var r = canvas.getBoundingClientRect(); var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : 'step', x: Math.max(0, e.clientX - r.left - 115), y: Math.max(0, e.clientY - r.top - 20), page: d.kind === 'page' ? d.page : null, metric: 'uniques', manual: null, label: '', text: '' };
+      var last = chain().slice(-1)[0]; F.nodes.push(nd); if (nd.kind === 'step' && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id }); render(); });
+    addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out'); drawLinks({ x1: p.x, y1: p.y, x2: e.clientX - r.left, y2: e.clientY - r.top }); });
+    addEventListener('mouseup', function () { if (linking) { linking = null; drawLinks(); } });
+    addEventListener('keydown', function (e) { if (e.key === 'Delete' && sel && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); } });
+    document.getElementById('auto').addEventListener('click', function () { var st = chain(); st.forEach(function (nd, i) { nd.x = 40 + i * 290; nd.y = 60; }); var k = 0; F.nodes.forEach(function (nd) { if (st.indexOf(nd) < 0) { nd.x = 40 + (k % 5) * 290; nd.y = 300 + Math.floor(k / 5) * 220; k++; } }); render(); });
+    document.querySelectorAll('[data-days]').forEach(function (b) { b.addEventListener('click', function () { days = +b.getAttribute('data-days'); document.querySelectorAll('[data-days]').forEach(function (x) { x.classList.toggle('on', x === b); }); loadData(); }); });
+    document.getElementById('save').addEventListener('click', async function () {
+      F.name = document.getElementById('name').value.trim() || 'Funel'; F.note = document.getElementById('note').value.trim();
+      var msg = document.getElementById('msg'); msg.textContent = 'Ukládám…';
+      try { var r = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); var list = await r.json(); var i = list.findIndex(function (f) { return f.id === F.id; }); if (i >= 0) list[i] = F; else list.push(F);
+        var w = await fetch('/api/ads-center/funnels', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(list) }); if (!w.ok) throw new Error('HTTP ' + w.status); msg.textContent = 'Uloženo ' + new Date().toLocaleTimeString('cs-CZ'); } catch (e) { msg.textContent = 'Uložení selhalo: ' + e.message; } });
+    async function loadData() { try { var r = await fetch('/api/ads-center/overview?days=' + days, { credentials: 'same-origin' }); var j = await r.json(); DATA = j.pages || []; render(); } catch (e) { } }
+    (async function init() {
+      var a = await fetch('/api/ads-center/pages', { credentials: 'same-origin' }); PAGES = await a.json();
+      document.getElementById('pal-pages').innerHTML = PAGES.map(function (p) { return '<div class="pal" draggable="true" data-kind="page" data-page="' + p.key + '"><i style="background:' + p.color + '"></i>' + esc(p.name) + '</div>'; }).join('');
+      var b = await fetch('/api/ads-center/funnels', { credentials: 'same-origin' }); var list = await b.json(); F = list.find(function (f) { return f.id === id; });
+      if (!F) { document.getElementById('msg').textContent = 'Funel nenalezen.'; F = { id: id || uid(), name: 'Funel', note: '', steps: [], nodes: [], edges: [] }; }
+      F.nodes = F.nodes || []; F.edges = F.edges || [];
+      // starší funel jen s kroky → převést na uzly v řadě
+      if (!F.nodes.length && F.steps && F.steps.length) { F.steps.forEach(function (st, i) { F.nodes.push(Object.assign({ id: uid(), kind: 'step', x: 40 + i * 290, y: 60, text: '' }, st)); }); for (var i = 1; i < F.nodes.length; i++) F.edges.push({ from: F.nodes[i - 1].id, to: F.nodes[i].id }); }
+      document.getElementById('name').value = F.name || ''; document.getElementById('note').value = F.note || ''; document.title = 'Funel: ' + (F.name || '') + ' | HOLYOS';
+      await loadData();
+    })();
+  })();
+  </script>
+</body>
+</html>

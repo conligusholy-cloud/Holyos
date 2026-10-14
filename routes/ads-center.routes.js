@@ -94,8 +94,18 @@ const METRICS = ['uniques', 'leads', 'conversions'];
 async function loadFunnels() { const { getSetting } = require('../services/settings'); const v = await getSetting(FUNNELS_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v : []; }
 function cleanFunnel(f) {
   const keys = new Set(PAGES.map((p) => p.key));
-  return { id: String(f.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40), name: String(f.name || 'Funel').slice(0, 80), note: String(f.note || '').slice(0, 300),
-    steps: (Array.isArray(f.steps) ? f.steps : []).slice(0, 12).map((st) => ({ label: String(st.label || '').slice(0, 60), page: keys.has(st.page) ? st.page : null, metric: METRICS.includes(st.metric) ? st.metric : 'uniques', manual: st.manual != null && st.manual !== '' ? Number(st.manual) : null })) };
+  const cleanStep = (st) => ({ label: String(st.label || '').slice(0, 60), page: keys.has(st.page) ? st.page : null, metric: METRICS.includes(st.metric) ? st.metric : 'uniques', manual: st.manual != null && st.manual !== '' ? Number(st.manual) : null });
+  // Vizuální editor: nodes (uzly s pozicí) + edges (spojnice). Kroky funelu se odvodí průchodem řetězce od uzlu bez vstupu.
+  const nodes = (Array.isArray(f.nodes) ? f.nodes : []).slice(0, 60).map((nd) => Object.assign(cleanStep(nd), { id: String(nd.id || '').slice(0, 24), x: Math.round(Number(nd.x) || 0), y: Math.round(Number(nd.y) || 0), kind: nd.kind === 'note' ? 'note' : 'step', text: String(nd.text || '').slice(0, 300) }));
+  const ids = new Set(nodes.map((x) => x.id));
+  const edges = (Array.isArray(f.edges) ? f.edges : []).slice(0, 120).map((e) => ({ from: String(e.from || ''), to: String(e.to || '') })).filter((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to);
+  let steps = (Array.isArray(f.steps) ? f.steps : []).slice(0, 12).map(cleanStep);
+  if (nodes.length) {
+    const hasIn = new Set(edges.map((e) => e.to)); const stepNodes = nodes.filter((x) => x.kind !== 'note');
+    let cur = stepNodes.find((x) => !hasIn.has(x.id)); const seen = new Set(); steps = [];
+    while (cur && !seen.has(cur.id) && steps.length < 12) { seen.add(cur.id); steps.push(cleanStep(cur)); const e = edges.find((ed) => ed.from === cur.id); cur = e ? nodes.find((x) => x.id === e.to && x.kind !== 'note') : null; }
+  }
+  return { id: String(f.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)).slice(0, 40), name: String(f.name || 'Funel').slice(0, 80), note: String(f.note || '').slice(0, 300), steps, nodes, edges };
 }
 router.get('/funnels', async (req, res, next) => { try { res.json(await loadFunnels()); } catch (err) { next(err); } });
 router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) => {
