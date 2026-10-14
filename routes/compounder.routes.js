@@ -7656,6 +7656,7 @@ router.shortCodeToAiUrl = shortCodeToAiUrl;
 router.shortCodeToCestaUrl = shortCodeToCestaUrl;
 router.makeShortCode = makeShortCode;
 router.specialistShortLink = specialistShortLink;
+router.schuzkaShortLink = schuzkaShortLink;
 // Časově omezený přihlašovací token — formát: id.exp.sig (exp = ms epoch). Default 24 h.
 function makeLoginToken(leadId, ttlMs) {
   const exp = Date.now() + (ttlMs || 10 * 24 * 3600 * 1000); // přístupový odkaz platí 10 dní
