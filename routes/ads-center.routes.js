@@ -121,6 +121,54 @@ router.put('/funnels', express.json({ limit: '200kb' }), async (req, res, next) 
 router.get('/funnels/:id/stats', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const st = await require('../services/ads/funnel-events').stats(String(req.params.id || ''), sinceDate(days)); res.json({ days, nodes: st }); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
+// ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
+const GOALS_KEY = 'ads_center.page_goals';
+const GOAL_TYPES = ['purchase', 'lead', 'download', 'booking', 'signup', 'browse', 'exit'];
+async function loadGoals() { const { getSetting } = require('../services/settings'); const v = await getSetting(GOALS_KEY, { type: 'json', defaultValue: {} }); return v && typeof v === 'object' ? v : {}; }
+function cleanGoals(g) {
+  const goals = (Array.isArray(g && g.goals) ? g.goals : []).slice(0, 12).map((x) => ({ type: GOAL_TYPES.includes(x.type) ? x.type : 'browse', label: String(x.label || '').slice(0, 80), desc: String(x.desc || '').slice(0, 300), primary: !!x.primary })).filter((x) => x.label);
+  return { goals, summary: String((g && g.summary) || '').slice(0, 500), analyzed_at: g && g.analyzed_at ? String(g.analyzed_at) : null, source: g && g.source === 'manual' ? 'manual' : 'ai' };
+}
+// Text stránky pro AI: titulek, viditelný text, tlačítka, odkazy, formuláře a volané /api/ cesty ze skriptů
+function pageDigest(html) {
+  const apis = Array.from(new Set((html.match(/['"`]\/api\/[A-Za-z0-9_\-\/.:]+/g) || []).map((x) => x.slice(1)))).slice(0, 40);
+  const pick = (re, n) => Array.from(html.matchAll(re)).map((m) => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, n);
+  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '';
+  const buttons = pick(/<button[^>]*>([\s\S]*?)<\/button>/gi, 40);
+  const links = pick(/<a\s[^>]*href=["'][^"']*["'][^>]*>([\s\S]*?)<\/a>/gi, 40);
+  const inputs = Array.from(html.matchAll(/<(?:input|select|textarea)[^>]*?(?:name|id|placeholder|type)=["']([^"']+)["'][^>]*>/gi)).map((m) => m[1]).slice(0, 40);
+  const text = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 6000);
+  const inlineJs = (html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) || []).join('\n').replace(/<\/?script[^>]*>/gi, '').replace(/\s+/g, ' ').slice(0, 5000);
+  return { title: title.trim(), text, buttons, links, inputs, apis, inlineJs };
+}
+router.get('/pages/goals', async (req, res, next) => { try { res.json(await loadGoals()); } catch (err) { next(err); } });
+router.put('/pages/:key/goals', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try { const key = String(req.params.key || ''); if (!PAGES.some((p) => p.key === key)) return res.status(404).json({ error: 'Stránka neexistuje.' });
+    const all = await loadGoals(); const c = cleanGoals(req.body || {}); c.source = 'manual'; c.analyzed_at = new Date().toISOString(); all[key] = c;
+    await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id }); res.json(c); } catch (err) { next(err); }
+});
+router.post('/pages/:key/analyze-goals', async (req, res, next) => {
+  try {
+    const pg = PAGES.find((p) => p.key === String(req.params.key || '')); if (!pg) return res.status(404).json({ error: 'Stránka neexistuje.' });
+    if (!process.env.ANTHROPIC_API_KEY) return res.status(400).json({ error: 'Chybí ANTHROPIC_API_KEY na serveru.' });
+    let html = '';
+    try { const r = await fetch(pg.url, { headers: { 'User-Agent': 'HolyOS-PageAnalyzer/1.0', 'Accept-Language': 'cs' }, signal: AbortSignal.timeout(15000), redirect: 'follow' }); if (!r.ok) throw new Error('HTTP ' + r.status); html = (await r.text()).slice(0, 600000); }
+    catch (e) { return res.status(502).json({ error: 'Stránku se nepodařilo stáhnout: ' + e.message }); }
+    const dg = pageDigest(html);
+    const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const prompt = 'Analyzuješ veřejnou záchytnou (landing) stránku pro marketingový funel. Urči, jaké CÍLE (akce) tam může návštěvník udělat: jen přijde a odejde, nákup (různé balíčky/varianty), zanechání kontaktu/poptávka/rezervace, stažení obsahu, registrace atd. Vycházej jen z podkladů, nic si nevymýšlej. U každého cíle dej typ, krátký název (česky), popis co přesně se stane a zda je to hlavní cíl.\n\n' +
+      'Stránka: ' + pg.name + ' (' + pg.url + ')\nPopis z interní evidence: ' + (pg.desc || '') + '\n\nPODKLADY:\n' + JSON.stringify(dg).slice(0, 18000) +
+      '\n\nOdpověz POUZE JSON: {"summary":"1–2 věty o účelu stránky","goals":[{"type":"purchase|lead|download|booking|signup|browse|exit","label":"…","desc":"…","primary":true|false}]}. Vždy zahrň i cíl typu "exit" (návštěvník jen prohlédne a odejde). Max 8 cílů.';
+    const resp = await client.messages.create({ model: process.env.ADS_GOALS_MODEL || 'claude-sonnet-4-6', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] });
+    const txt = (resp.content || []).map((b) => b.text || '').join('');
+    const m = txt.match(/\{[\s\S]*\}/); if (!m) return res.status(502).json({ error: 'AI nevrátila použitelnou odpověď.' });
+    let parsed; try { parsed = JSON.parse(m[0]); } catch (e) { return res.status(502).json({ error: 'AI vrátila neplatný JSON.' }); }
+    const c = cleanGoals(parsed); c.source = 'ai'; c.analyzed_at = new Date().toISOString();
+    const all = await loadGoals(); all[pg.key] = c; await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id });
+    res.json(c);
+  } catch (err) { next(err); }
+});
+
 // ── Meta (Facebook) Ads: napojení na reklamní účet, seznam kampaní, statistiky a nastavení (cíl = URL / lead formulář) ──
 // Přístupový token s právem ads_read (System User token v Business Manageru) + ID reklamního účtu se ukládají v AppSetting
 // (nebo env META_ADS_ACCESS_TOKEN / META_AD_ACCOUNT_ID). Token se nikdy nevrací do prohlížeče.
