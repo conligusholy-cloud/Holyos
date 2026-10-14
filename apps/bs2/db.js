@@ -250,6 +250,19 @@ async function migrate() {
       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS arena_runs_created_idx ON arena_runs (created_at);
+    -- Aréna: vyhrané slevové kupony (po vyplnění kontaktu)
+    CREATE TABLE IF NOT EXISTS arena_coupons (
+      id          SERIAL PRIMARY KEY,
+      sid         TEXT,
+      round       BIGINT,
+      name        TEXT NOT NULL,
+      pct         INT NOT NULL,
+      code        TEXT NOT NULL UNIQUE,
+      email       TEXT,
+      phone       TEXT,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS arena_coupons_created_idx ON arena_coupons (created_at);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS terms_version TEXT; -- verze obchodních podmínek odsouhlasená před platbou

@@ -491,6 +491,20 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS)); });
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage()); });
+// Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu
+const ARENA = require('./arena-game');
+function arenaPresence() { try { const d = _presCache && _presCache.data; return d ? Math.round(Number(d.total != null ? d.total : d.hour || 0) * 8) : 0; } catch (e) { return 0; } }
+app.post('/api/arena/join', (req, res) => { const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const name = String(b.name || '').trim().slice(0, 40); if (!sid || !name) return res.status(400).json({ error: 'Chybí jméno' }); if (rateLimited('aj:' + req.ip, 120, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů' }); res.set('Cache-Control', 'no-store'); res.json(ARENA.join({ sid, name, bank: b.bank, presence: arenaPresence() })); });
+app.get('/api/arena/round', (req, res) => { const sid = String(req.query.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); res.set('Cache-Control', 'no-store'); res.json(ARENA.stateFor(sid, req.query.round != null ? parseInt(req.query.round, 10) : null)); });
+app.post('/api/arena/claim', wrap(async (req, res) => {
+  const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const rid = parseInt(b.round, 10); if (!sid || !rid) return res.status(400).json({ error: 'Chybí kolo' });
+  const st = ARENA.stateFor(sid, rid); const c = st && st.result && st.result.mine; if (!c) return res.status(400).json({ error: 'Kupon pro toto kolo nenalezen' });
+  const email = String(b.email || '').trim().toLowerCase().slice(0, 160); const phone = String(b.phone || '').trim().slice(0, 40); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ error: 'Zadejte platný e-mail' });
+  const name = String(b.name || '').trim().slice(0, 40) || 'Hráč';
+  await q('INSERT INTO arena_coupons (sid, round, name, pct, code, email, phone) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO UPDATE SET email = EXCLUDED.email, phone = EXCLUDED.phone', [sid, rid, name, c.pct, c.code, email, phone || null]);
+  try { notifyVelin('Aréna: kupon ' + c.pct + ' %', name + ' · ' + email + (phone ? ' · ' + phone : '') + ' · ' + c.code, '/arena', 'arena'); } catch (e) { /* best-effort */ }
+  res.json({ ok: true, code: c.code, pct: c.pct });
+}));
 app.post('/api/arena/result', wrap(async (req, res) => {
   const b = req.body || {}; if (rateLimited('arena:' + req.ip, 30, 3600e3)) return res.status(429).json({ error: 'Příliš mnoho pokusů' });
   const name = String(b.name || '').trim().slice(0, 40); if (!name) return res.status(400).json({ error: 'Chybí jméno' });
