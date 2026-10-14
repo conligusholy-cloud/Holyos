@@ -214,7 +214,8 @@ app.get('/sso', (req, res) => {
 let _members = { n: null, at: 0 };
 async function memberCount() {
   if (Date.now() - _members.at < 600000) return _members.n;
-  try { const r = await q("SELECT count(*)::int AS n FROM supporters WHERE status='active'"); _members = { n: r.rows[0].n, at: Date.now() }; } catch (e) { _members = { n: null, at: Date.now() }; }
+  // Číslo na přihlašovací stránce = lidé, kteří se do Best Series 2.0 aspoň jednou sami přihlásili (stejně jako admin → Přehled)
+  try { const r = await q("SELECT count(*)::int AS n FROM supporters WHERE last_login_at IS NOT NULL"); _members = { n: r.rows[0].n, at: Date.now() }; } catch (e) { _members = { n: null, at: Date.now() }; }
   return _members.n;
 }
 // Favicon / logo (SVG, cache 1 den)
