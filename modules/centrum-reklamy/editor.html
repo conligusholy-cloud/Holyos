@@ -69,9 +69,11 @@
     .pal { display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; background:var(--surface2); margin-bottom:6px; cursor:grab; font-size:12.5px; user-select:none; }
     .pal i { width:9px; height:9px; border-radius:50%; flex:none; }
     .pal:active { cursor:grabbing; }
-    .canvas-wrap { flex:1; position:relative; overflow:auto; background:#0b0e17; background-image:radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size:24px 24px; }
-    .canvas { position:relative; width:3000px; height:2000px; }
-    svg.links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+    .canvas-wrap { flex:1; position:relative; overflow:hidden; cursor:grab; touch-action:none; background:#0b0e17; background-image:radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px); background-size:24px 24px; }
+    .canvas { position:relative; width:3000px; height:2000px; transform-origin:0 0; will-change:transform; }
+    .canvas-wrap.panning { cursor:grabbing; } .canvas-wrap.panning * { user-select:none; }
+    .zoomctl { display:inline-flex; gap:4px; align-items:center; margin-left:8px; } .zoomctl .btn { min-width:30px; justify-content:center; }
+    svg.links { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; overflow:visible; }
     .node { position:absolute; width:230px; background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,.45); user-select:none; }
     .node.sel { border-color:#f59e0b; box-shadow:0 0 0 2px rgba(245,158,11,.35), 0 10px 30px rgba(0,0,0,.45); }
     .node .hd { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:1px solid var(--border); cursor:move; font-size:12.5px; font-weight:700; border-radius:12px 12px 0 0; }
@@ -100,6 +102,7 @@
     <input class="name" id="name" placeholder="Název funelu">
     <span class="note" style="font-size:12px;color:var(--text2)">Období:</span>
     <button class="btn btn-sm" data-days="0">Dnes</button><button class="btn btn-sm" data-days="7">7 dní</button><button class="btn btn-sm on" data-days="30">30 dní</button><button class="btn btn-sm" data-days="90">90 dní</button>
+    <span class="zoomctl" title="Kolečko myši = přiblížit / oddálit, tažení pozadí = posun plátna"><button class="btn btn-sm" id="zout" title="Oddálit">−</button><button class="btn btn-sm" id="zpct" title="Vrátit na 100 %">100 %</button><button class="btn btn-sm" id="zin" title="Přiblížit">+</button><button class="btn btn-sm" id="zfit" title="Zobrazit celý funel">⤢</button></span>
     <span class="live" id="live" title="Živý počet kontaktů v HolyOS z formulářů na plátně (obnovuje se každých 15 s)"></span><span class="msg" id="msg"></span>
     <button class="btn on" id="save">💾 Uložit</button>
   </div>
@@ -124,6 +127,7 @@
   (function () {
     var id = new URLSearchParams(location.search).get('id'); var days = 30;
     var PAGES = [], DATA = [], F = null, sel = null, linking = null;
+    var V = { x: 20, y: 20, z: 1 };
     var canvas = document.getElementById('canvas'), links = document.getElementById('links'), cw = document.getElementById('cw');
     var ML = { uniques: 'návštěvníci', leads: 'leady / objednávky', conversions: 'dokončeno / zaplaceno' };
     function esc(t) { return String(t == null ? '' : t).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -227,11 +231,11 @@
       }
       el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
       el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
-      var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var sx = e.clientX - nd.x, sy = e.clientY - nd.y; function mv(ev) { nd.x = Math.max(0, ev.clientX - sx); nd.y = Math.max(0, ev.clientY - sy); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
+      var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var ox = nd.x, oy = nd.y, cx0 = e.clientX, cy0 = e.clientY; function mv(ev) { nd.x = Math.max(0, ox + (ev.clientX - cx0) / V.z); nd.y = Math.max(0, oy + (ev.clientY - cy0) / V.z); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
       return el;
     }
     // Střed portu = skutečný rozměr uzlu v DOM (porty jsou na 50 % výšky), ne pevná konstanta.
-    function center(nd, side, port) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (el) { var pe = el.querySelector('.port.' + side + (side === 'out' && port != null && nd.kind === 'split' ? '[data-port="' + port + '"]' : '')); if (pe) { var cr = canvas.getBoundingClientRect(), pr = pe.getBoundingClientRect(); return { x: pr.left - cr.left + pr.width / 2, y: pr.top - cr.top + pr.height / 2 }; } } var w = el ? el.offsetWidth : (nd.kind === 'start' ? 170 : 230), hgt = el ? el.offsetHeight : 48; return { x: nd.x + (side === 'out' ? w : 0), y: nd.y + hgt / 2 }; }
+    function center(nd, side, port) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (el) { var pe = el.querySelector('.port.' + side + (side === 'out' && port != null && nd.kind === 'split' ? '[data-port="' + port + '"]' : '')); if (pe) { var cr = canvas.getBoundingClientRect(), pr = pe.getBoundingClientRect(); return { x: (pr.left - cr.left + pr.width / 2) / V.z, y: (pr.top - cr.top + pr.height / 2) / V.z }; } } var w = el ? el.offsetWidth : (nd.kind === 'start' ? 170 : 230), hgt = el ? el.offsetHeight : 48; return { x: nd.x + (side === 'out' ? w : 0), y: nd.y + hgt / 2 }; }
     function drawLinks(tmp) {
       var h = '';
       F.edges.forEach(function (ed, i) { var a = F.nodes.find(function (x) { return x.id === ed.from; }), b = F.nodes.find(function (x) { return x.id === ed.to; }); if (!a || !b) return; var p = center(a, 'out', ed.port || 0), q = center(b, 'in'); var dx = Math.max(40, Math.abs(q.x - p.x) / 2);
@@ -251,6 +255,21 @@
     function render() { canvas.querySelectorAll('.node').forEach(function (x) { x.remove(); }); F.nodes.forEach(function (nd) { try { canvas.appendChild(nodeEl(nd)); } catch (e) { console.error('[funel] uzel', nd.id, nd.kind, e); var m = document.getElementById('msg'); if (m) m.textContent = 'Chyba uzlu ' + (nd.kind || '') + ': ' + e.message; var ph = document.createElement('div'); ph.className = 'node'; ph.dataset.id = nd.id; ph.style.left = nd.x + 'px'; ph.style.top = nd.y + 'px'; ph.innerHTML = '<div class="hd"><i style="background:#ef4444"></i>⚠ ' + esc(nd.kind || 'uzel') + '<button class="x" title="Smazat">✕</button></div><div class="bd"><div class="note">' + esc(e.message) + '</div></div>'; ph.querySelector('.x').addEventListener('click', function () { F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); }); canvas.appendChild(ph); } }); try { drawLinks(); } catch (e) { console.error('[funel] spoje', e); } try { refreshSteps(); } catch (e) { console.error('[funel] kroky', e); } }
     window.addEventListener('error', function (ev) { var m = document.getElementById('msg'); if (m && ev && ev.message) m.textContent = 'Chyba: ' + ev.message; });
 
+
+    // ── Pohyb a zoom plátna: tažení pozadí = posun do všech směrů, kolečko = zoom kolem kurzoru ──
+    function applyView() { canvas.style.transform = 'translate(' + V.x + 'px,' + V.y + 'px) scale(' + V.z + ')'; cw.style.backgroundSize = (24 * V.z) + 'px ' + (24 * V.z) + 'px'; cw.style.backgroundPosition = V.x + 'px ' + V.y + 'px'; var zp = document.getElementById('zpct'); if (zp) zp.textContent = Math.round(V.z * 100) + ' %'; try { localStorage.setItem('adsfv-' + id, JSON.stringify(V)); } catch (e) { /* bez uložení */ } }
+    function zoomAt(mx, my, nz) { nz = Math.min(2.5, Math.max(0.2, nz)); V.x = mx - (mx - V.x) * (nz / V.z); V.y = my - (my - V.y) * (nz / V.z); V.z = nz; applyView(); }
+    function focusX(x) { V.x = 80 - x * V.z; applyView(); }
+    function fitView() { var els = canvas.querySelectorAll('.node'); if (!els.length) { V = { x: 20, y: 20, z: 1 }; applyView(); return; } var x0 = 1e9, y0 = 1e9, x1 = 0, y1 = 0; els.forEach(function (el) { var nx0 = parseFloat(el.style.left) || 0, ny0 = parseFloat(el.style.top) || 0; x0 = Math.min(x0, nx0); y0 = Math.min(y0, ny0); x1 = Math.max(x1, nx0 + el.offsetWidth + 20); y1 = Math.max(y1, ny0 + el.offsetHeight); }); var w = cw.clientWidth, h = cw.clientHeight; var z = Math.min(1.2, Math.max(0.2, Math.min((w - 80) / (x1 - x0), (h - 80) / (y1 - y0)))); V.z = z; V.x = (w - (x1 - x0) * z) / 2 - x0 * z; V.y = (h - (y1 - y0) * z) / 2 - y0 * z; applyView(); }
+    cw.addEventListener('wheel', function (e) { var t = e.target; if (t && t.tagName === 'TEXTAREA' && t.scrollHeight > t.clientHeight + 2) return; e.preventDefault(); var r = cw.getBoundingClientRect(); zoomAt(e.clientX - r.left, e.clientY - r.top, V.z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015))); }, { passive: false });
+    cw.addEventListener('mousedown', function (e) { if (e.button !== 0 && e.button !== 1) return; var t = e.target; if (t.closest && (t.closest('.node') || t.tagName === 'path' || t.tagName === 'circle')) return; var sx0 = e.clientX, sy0 = e.clientY, vx = V.x, vy = V.y; cw.classList.add('panning');
+      function mv(ev) { V.x = vx + ev.clientX - sx0; V.y = vy + ev.clientY - sy0; applyView(); } function up() { cw.classList.remove('panning'); removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });
+    document.getElementById('zin').addEventListener('click', function () { zoomAt(cw.clientWidth / 2, cw.clientHeight / 2, V.z * 1.2); });
+    document.getElementById('zout').addEventListener('click', function () { zoomAt(cw.clientWidth / 2, cw.clientHeight / 2, V.z / 1.2); });
+    document.getElementById('zpct').addEventListener('click', function () { zoomAt(cw.clientWidth / 2, cw.clientHeight / 2, 1); });
+    document.getElementById('zfit').addEventListener('click', fitView);
+    try { var sv0 = JSON.parse(localStorage.getItem('adsfv-' + id) || 'null'); if (sv0 && isFinite(sv0.z) && isFinite(sv0.x) && isFinite(sv0.y)) V = sv0; } catch (e) { /* výchozí pohled */ }
+    applyView();
     // přidání uzlu z menu: umístí se za poslední krok řetězce a rovnou se k němu připojí
     var am = document.getElementById('addmenu');
     am.addEventListener('click', function (e) { if (e.target.closest('.dd')) return; e.stopPropagation(); am.classList.toggle('open'); });
@@ -259,8 +278,8 @@
       var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note') { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; }
       var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : (d.kind === 'leadform' ? 'leadform' : (d.kind === 'split' ? 'split' : (d.kind === 'sms' ? 'sms' : (d.kind === 'email' ? 'email' : (d.kind === 'landing' ? 'landing' : 'step'))))), variant: 'specialist', x: nx, y: ny, page: d.kind === 'page' ? d.page : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
       if (d.kind === 'leadform') nd.form = { form_id: p.dataset.form, name: p.dataset.name, status: 'ACTIVE', questions: [], leads: Number(p.dataset.leads) || 0, clicks: 0, spend: 0, campaign_id: '', campaign_name: p.dataset.pg || '', ad_ids: [] };
-      if (nd.kind === 'split') nd.branches = []; F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform' || nd.kind === 'split' || nd.kind === 'sms' || nd.kind === 'email' || nd.kind === 'landing') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id, port: 0 }); if (nd.kind === 'split') seedBranches(nd); render(); cw.scrollTo({ left: Math.max(0, nx - 300), behavior: 'smooth' }); });
-    addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out', linking.port || 0); drawLinks({ x1: p.x, y1: p.y, x2: e.clientX - r.left, y2: e.clientY - r.top }); });
+      if (nd.kind === 'split') nd.branches = []; F.nodes.push(nd); if ((nd.kind === 'step' || nd.kind === 'leadform' || nd.kind === 'split' || nd.kind === 'sms' || nd.kind === 'email' || nd.kind === 'landing') && last && !F.edges.some(function (ed) { return ed.from === last.id; })) F.edges.push({ from: last.id, to: nd.id, port: 0 }); if (nd.kind === 'split') seedBranches(nd); render(); focusX(nx); });
+    addEventListener('mousemove', function (e) { if (!linking) return; var a = F.nodes.find(function (x) { return x.id === linking.from; }); var r = canvas.getBoundingClientRect(); var p = center(a, 'out', linking.port || 0); drawLinks({ x1: p.x, y1: p.y, x2: (e.clientX - r.left) / V.z, y2: (e.clientY - r.top) / V.z }); });
     addEventListener('mouseup', function () { if (linking) { linking = null; drawLinks(); } });
     addEventListener('keydown', function (e) { if (e.key === 'Delete' && sel && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { F.nodes = F.nodes.filter(function (x) { return x.id !== sel; }); F.edges = F.edges.filter(function (ed) { return ed.from !== sel && ed.to !== sel; }); sel = null; render(); } });
     var linkFirst = null;
@@ -340,7 +359,7 @@
           F.nodes.push(a, b, c); F.edges.push({ from: a.id, to: c.id, port: 0 }, { from: b.id, to: c.id, port: 0 }); made[vr] = { sms: a, email: b }; }
         F.edges.push({ from: s0.node.id, to: made[vr].sms.id, port: s0.port }, { from: s0.node.id, to: made[vr].email.id, port: s0.port }); });
       if (none.length) F.nodes.push({ id: uid(), kind: 'note', x: base.x, y: base.y + row * 760, text: 'Bez automatického oslovení: ' + none.length + ' větev/e (externí zástupce, nebo obchodník mimo výběr ve specialistovi).', label: '', page: null, metric: 'uniques', manual: null });
-      msg.textContent = 'Akce dokresleny podle nastavení – zkontroluj a ulož funel.'; render(); cw.scrollTo({ left: Math.max(0, base.x - 400), behavior: 'smooth' });
+      msg.textContent = 'Akce dokresleny podle nastavení – zkontroluj a ulož funel.'; render(); focusX(base.x - 100);
     }
     // ── Uzel Rozdělení: pomocné funkce ──
     var SPLIT = {}; // SPLIT[form_id] = { counts: { 'i:5': n, 'e:2': n } } – leady přiřazené obchodníkům za období
