@@ -110,10 +110,10 @@ async function edgeFlows(funnelId, since, withList) {
     //  - z SMS / e-mailu dál (na stránku apod.): kolika leadům zpráva z A odešla (od vytvoření spojky) – otevření je číslo v uzlu stránky
     //  - z formuláře / rozdělení: leady dané větve
     const sa = await setOf(A, e.port || 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventA = ['sms', 'email', 'landing'].includes(A.kind); const actionB = ['sms', 'email'].includes(B.kind);
-    const sb = actionB ? await setOf(B, 0) : null; const list = [];
+    const sb = actionB ? await setOf(B, 0) : null; const list = []; let missN = 0;
     const actionA = ['sms', 'email'].includes(A.kind);
-    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) return; list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
-    out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length, list: withList ? list : undefined };
+    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
+    out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length - missN, missing: missN, list: withList ? list : undefined }; // missing = leady větve, kterým tento uzel zprávu NEposlal (přeskočeno automatem)
   }
   return out;
 }
