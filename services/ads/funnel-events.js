@@ -72,8 +72,22 @@ async function edgeFlows(funnelId, since, withList) {
   const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
   const act = {}; nodes.forEach((nd) => { act[nd.id] = nd.activated_at ? new Date(nd.activated_at).getTime() : 0; });
   // 1) události → first[nodeId][leadId] = čas
-  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
-  const first = {}; rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return; if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return; (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  const first = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead)
+  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return;
+    if (r.event === 'funnel_landing') (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
+    if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;
+    if (r.event === 'funnel_open') { (openedBy[nodeId] || (openedBy[nodeId] = new Set())).add(Number(lid)); return; }
+    (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
+  // doručení SMS (SmsLog.delivered) pro leady SMS uzlů
+  let delivered = new Set(); try { const smsIds = []; nodes.forEach((nd) => { if (nd.kind === 'sms') Object.keys(first[nd.id] || {}).forEach((lid) => smsIds.push(Number(lid))); }); if (smsIds.length && prisma.smsLog) { const dl = await prisma.smsLog.findMany({ where: { lead_id: { in: smsIds }, delivered: true, created_at: { gte: since } }, select: { lead_id: true } }); delivered = new Set(dl.map((x) => x.lead_id)); } } catch (e) { /* bez logu */ }
+  // filtr podle tečky (cíle) SMS / e-mailového uzlu: 1 = odesláno, 2 = doručeno (SMS) / otevřel (e-mail), 3 = klikl na odkaz, 4 = bez reakce. Vrací { ok, tB }.
+  function goalPass(A, port, lid, tA) { const t0 = new Date(tA).getTime(); const ch = A.kind; const click = (landingByLead[lid] || []).filter((x) => x.t >= t0 - 60000 && (!x.channel || x.channel === ch)).sort((x, y) => x.t - y.t)[0];
+    if (!port || port === 1) return { ok: true, tB: null };
+    if (port === 2) return ch === 'sms' ? { ok: delivered.has(lid), tB: null } : { ok: !!(openedBy[A.id] && openedBy[A.id].has(lid)), tB: null };
+    if (port === 3) return { ok: !!click, tB: click ? new Date(click.t) : null };
+    if (port === 4) return { ok: !click, tB: null };
+    return { ok: true, tB: null }; }
   // 2) leady formulářů (DB) – cache per form
   const formCache = {};
   async function formLeads(nd) { const fid = nd.form && nd.form.form_id; if (!fid) return []; if (formCache[fid]) return formCache[fid]; const ads = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fid) }]; const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: since } }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true } }); formCache[fid] = L; return L; }
@@ -97,7 +111,8 @@ async function edgeFlows(funnelId, since, withList) {
     //  - z formuláře / rozdělení: leady dané větve
     const sa = await setOf(A, e.port || 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventA = ['sms', 'email', 'landing'].includes(A.kind); const actionB = ['sms', 'email'].includes(B.kind);
     const sb = actionB ? await setOf(B, 0) : null; const list = [];
-    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; if (actionB) { const tB = sb.get(lid); if (!tB) return; list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: null }); });
+    const actionA = ['sms', 'email'].includes(A.kind);
+    sa.forEach((tA, lid) => { if (eventA && ec && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) return; list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
     out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length, list: withList ? list : undefined };
   }
   return out;
