@@ -73,9 +73,10 @@ async function edgeFlows(funnelId, since, withList) {
   const act = {}; nodes.forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); });
   // 1) události → first[nodeId][leadId] = čas
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
-  const first = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead)
+  const first = {}; const firstAll = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead); firstAll = bez ohledu na aktivaci uzlu
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return;
     if (r.event === 'funnel_landing') (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
+    if (r.event !== 'funnel_open') (firstAll[nodeId] || (firstAll[nodeId] = {}))[lid] = firstAll[nodeId][lid] || r.created_at;
     if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;
     if (r.event === 'funnel_open') { (openedBy[nodeId] || (openedBy[nodeId] = new Set())).add(Number(lid)); return; }
     (first[nodeId] || (first[nodeId] = {}))[lid] = first[nodeId][lid] || r.created_at; });
@@ -110,12 +111,12 @@ async function edgeFlows(funnelId, since, withList) {
     //  - z SMS / e-mailu dál (na stránku apod.): kolika leadům zpráva z A odešla (od vytvoření spojky) – otevření je číslo v uzlu stránky
     //  - z formuláře / rozdělení: leady dané větve
     const sa = await setOf(A, e.port || 0); const ec = e.created_at ? new Date(e.created_at).getTime() : 0; const eventA = ['sms', 'email', 'landing'].includes(A.kind); const actionB = ['sms', 'email'].includes(B.kind);
-    const sb = actionB ? await setOf(B, 0) : null; const list = []; let missN = 0;
+    const sb = actionB ? await setOf(B, 0) : null; const list = []; let missN = 0, okN = 0;
     const actionA = ['sms', 'email'].includes(A.kind);
     // Vlákno z tečky cíle (port ≥ 2: doručeno / klikl / bez reakce) odpovídá číslu v oušku – filtr „od vytvoření spojky" se uplatní jen u obecného / „odesláno" vlákna.
     const skipEc = actionA && (e.port || 0) >= 2;
-    sa.forEach((tA, lid) => { if (eventA && ec && !skipEc && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } list.push({ lead_id: lid, tA, tB }); } else list.push({ lead_id: lid, tA, tB: tG }); });
-    out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: list.length - missN, missing: missN, list: withList ? list : undefined }; // missing = leady větve, kterým tento uzel zprávu NEposlal (přeskočeno automatem)
+    sa.forEach((tA, lid) => { if (eventA && ec && !skipEc && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { const tOld = firstAll[B.id] && firstAll[B.id][lid]; if (tOld) { if (withList) list.push({ lead_id: lid, tA, tB: null, before: tOld }); return; } missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } okN++; list.push({ lead_id: lid, tA, tB }); } else { okN++; list.push({ lead_id: lid, tA, tB: tG }); } });
+    out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: okN, missing: missN, list: withList ? list : undefined }; // missing = leady větve, kterým tento uzel zprávu NEposlal (přeskočeno automatem)
   }
   return out;
 }
