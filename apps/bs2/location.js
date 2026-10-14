@@ -63,8 +63,16 @@ const PAGE = `<!DOCTYPE html>
   .hero{padding:26px 0 30px;display:flex;align-items:center;justify-content:space-between;gap:28px}
   .hero .txt{flex:1;min-width:0}
   .pm3d{flex:none;width:min(40%,440px);height:auto;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
+  .vid{flex:none;width:min(46%,500px);position:relative;aspect-ratio:460/350;border:0;padding:0;background:none;cursor:pointer;display:block}
+  .vid img{width:100%;height:100%;object-fit:contain;animation:pmfloat 5s ease-in-out infinite;filter:drop-shadow(0 24px 48px rgba(30,134,224,.45)) drop-shadow(0 0 30px rgba(79,209,255,.18))}
+  .vid .play{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;background:linear-gradient(135deg,#4fd1ff,#6f5cff);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 30px rgba(79,140,255,.55);transition:transform .2s}
+  .vid:hover .play{transform:scale(1.1)}
+  .vid .play:before{content:"";border-left:22px solid #fff;border-top:13px solid transparent;border-bottom:13px solid transparent;margin-left:6px}
+  .vid .cap{position:absolute;left:50%;bottom:2%;transform:translateX(-50%);font-size:12px;color:#fff;background:rgba(5,10,25,.7);border:1px solid var(--border);border-radius:999px;padding:4px 12px;white-space:nowrap}
+  .vid.on{aspect-ratio:16/9;cursor:default;border-radius:14px;overflow:hidden;box-shadow:0 20px 50px rgba(30,134,224,.35)}
+  .vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
   @keyframes pmfloat{0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-10px) rotate(1deg)}}
-  @media (max-width:860px){.hero{flex-direction:column;align-items:flex-start;padding:14px 0 18px}.pm3d{width:min(100%,320px);align-self:center}h1{font-size:clamp(26px,8vw,34px)}.lead{font-size:15px}}
+  @media (max-width:860px){.vid{width:min(100%,360px);align-self:center}.hero{flex-direction:column;align-items:flex-start;padding:14px 0 18px}.pm3d{width:min(100%,320px);align-self:center}h1{font-size:clamp(26px,8vw,34px)}.lead{font-size:15px}}
   .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--text2);border:1px solid var(--border);border-radius:999px;padding:5px 11px;background:rgba(255,255,255,.02)}
   .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.7);animation:pulse 2s infinite}
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,227,160,.7)}70%{box-shadow:0 0 0 9px rgba(47,227,160,0)}100%{box-shadow:0 0 0 0 rgba(47,227,160,0)}}
@@ -280,7 +288,7 @@ const PAGE = `<!DOCTYPE html>
     </div>
     <p class="small" style="margin-top:14px;color:var(--text3)">Aplikaci připravuje Best Series s.r.o., výrobce a provozovatel prádlomatů. Výsledky jsou orientační podklad pro vaše rozhodnutí, ne předpověď výdělku.</p>
    </div>
-   <img class="pm3d" src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async">
+   <button type="button" class="vid" id="heroVid" aria-label="Přehrát video o prádlomatu"><img src="/img/pradlomat.webp?v=2" alt="Prádlomat FLEX" width="460" height="350" loading="eager" decoding="async"><span class="play"></span><span class="cap">▶ Přehrát video</span></button>
   </section>
   <section class="sec sim" id="ukazka">
     <h2>Takto prádlomat vydělává</h2>
@@ -527,6 +535,7 @@ const PAGE = `<!DOCTYPE html>
   var SID = (function(){ try { var k='misto_sid', v=sessionStorage.getItem(k); if(!v){ v=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem(k,v);} return v; } catch(e){ return 'anon'; } })();
   function track(ev, props){ /* BS2: bez veřejné analytiky */ }
   track('misto_view');
+  (function(){ var v = document.getElementById('heroVid'); if (!v) return; v.addEventListener('click', function(){ if (v.classList.contains('on')) return; v.classList.add('on'); v.removeAttribute('aria-label'); v.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/36uy8Hip0FM?autoplay=1&rel=0&modestbranding=1&playsinline=1" title="Video – prádlomat" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>'; try { track('misto_cta', { cta: 'hero_video' }); } catch (e) {} }); })();
   document.querySelectorAll('[data-cta]').forEach(function(a){ a.addEventListener('click', function(){ track('misto_cta', { cta: a.getAttribute('data-cta') }); }); });
 
 
