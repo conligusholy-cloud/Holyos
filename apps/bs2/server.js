@@ -223,9 +223,12 @@ app.get('/favicon.svg', (req, res) => { res.set('Content-Type', 'image/svg+xml')
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat.webp')));
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat-mini.webp')));
+// Chyby přihlášení se předávají přes redirect (?e=kód), aby obnovení stránky nenabízelo „odeslat formulář znovu"
+const LOGIN_ERRORS = { bad: 'Nesprávný nick/e-mail nebo heslo.', inactive: 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.', many: 'Příliš mnoho pokusů. Zkus to za 15 minut.', locked: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za chvíli.' };
 app.get('/login', wrap(async (req, res) => {
   if (readCookie(req, USER_COOKIE)) return res.redirect('/');
-  res.send(V.loginPage({ members: await memberCount(), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.reset ? 'Heslo je změněné, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
+  const e = String(req.query.e || ''); const error = LOGIN_ERRORS[e] ? LOGIN_ERRORS[e] + (e === 'locked' && req.query.min ? ' (' + parseInt(req.query.min, 10) + ' min)' : '') : '';
+  res.send(V.loginPage({ members: await memberCount(), error, login: String(req.query.login || '').slice(0, 120), info: req.query.activated ? 'Účet je aktivní, můžeš se přihlásit.' : req.query.reset ? 'Heslo je změněné, můžeš se přihlásit.' : req.query.out ? 'Byl jsi odhlášen.' : '' }));
 }));
 // Zapomenuté heslo — zatím bez automatického e-mailu: žádost se zapíše do admin_log, Tomáš/Jan ji vyřídí ručně (reset v adminu)
 app.get('/forgot', (req, res) => res.send(V.forgotPage()));
@@ -338,17 +341,16 @@ app.post('/reset/:token', wrap(async (req, res) => {
 }));
 app.post('/login', wrap(async (req, res) => {
   const ip = req.ip;
-  if (tooMany(ip)) return res.status(429).send(V.loginPage({ error: 'Příliš mnoho pokusů. Zkus to za 15 minut.' }));
+  if (tooMany(ip)) return res.redirect('/login?e=many');
   const login = String(req.body.login || '').trim(), password = String(req.body.password || '');
   const r = await q('SELECT * FROM supporters WHERE lower(email)=lower($1) OR lower(nick)=lower($1) LIMIT 1', [login]);
   const u = r.rows[0];
-  if (u && u.locked_until && new Date(u.locked_until) > new Date()) return res.status(429).send(V.loginPage({ error: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za ' + Math.ceil((new Date(u.locked_until) - Date.now()) / 60000) + ' min.', login }));
+  if (u && u.locked_until && new Date(u.locked_until) > new Date()) return res.redirect('/login?e=locked&min=' + Math.ceil((new Date(u.locked_until) - Date.now()) / 60000) + '&login=' + encodeURIComponent(login));
   if (!u || !u.password_hash || !(await bcrypt.compare(password, u.password_hash))) {
     noteFail(ip);
     ST.track(req, u && u.id, 'login_fail', { meta: { known: !!u, activated: !!(u && u.password_hash) } });
     if (u) await q("UPDATE supporters SET failed_logins=COALESCE(failed_logins,0)+1, locked_until=CASE WHEN COALESCE(failed_logins,0)+1>=10 THEN now()+interval '15 minutes' ELSE locked_until END WHERE id=$1", [u.id]).catch(() => {});
-    const hint = u && !u.password_hash ? 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.' : 'Nesprávný nick/e-mail nebo heslo.';
-    return res.status(401).send(V.loginPage({ error: hint, login, members: await memberCount() }));
+    return res.redirect('/login?e=' + (u && !u.password_hash ? 'inactive' : 'bad') + '&login=' + encodeURIComponent(login));
   }
   if (u.status === 'blocked') return res.status(403).send(V.loginPage({ error: 'Účet je zablokovaný. Ozvi se nám.', login }));
   await q('UPDATE supporters SET last_login_at=now(), failed_logins=0, locked_until=NULL WHERE id=$1', [u.id]);
