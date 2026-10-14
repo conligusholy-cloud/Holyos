@@ -169,4 +169,22 @@ async function nodeLog(funnelId, nodeId, since) {
   });
 }
 
-module.exports = { nodeLog, record, stats, invalidate, matchNodes, backfill, edgeFlows };
+// Pozice leadů ve funelu (pro živé kuličky): nejzazší uzel, kde lead má událost; bez události = rozdělení (je-li) nebo formulář.
+async function positions(funnelId, since) {
+  const f = (await funnels()).find((x) => x.id === funnelId); if (!f) return {};
+  const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
+  const forms = nodes.filter((nd) => nd.kind === 'leadform' && nd.form && nd.form.form_id);
+  const out = {};
+  for (const fn of forms) {
+    const ads = (fn.form.ad_ids || []).map(String).filter(Boolean); const or = ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(fn.form.form_id) }];
+    const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: { gte: since } }, select: { id: true, name: true, created_at: true } });
+    const splitE = edges.find((e) => e.from === fn.id && byId[e.to] && byId[e.to].kind === 'split');
+    L.forEach((l) => { out[l.id] = { node: splitE ? splitE.to : fn.id, t: l.created_at, name: l.name || '' }; });
+  }
+  const ids = Object.keys(out).map(Number); if (!ids.length) return out;
+  const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: { gte: since } }, select: { path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
+  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = Number(r.props && r.props.lead_id); if (!nodeId || !byId[nodeId] || !out[lid]) return; const nd = byId[nodeId]; const lim = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); if (lim && r.created_at.getTime() < lim) return; if (r.created_at >= out[lid].t) out[lid] = { node: nodeId, t: r.created_at, name: out[lid].name }; });
+  return out;
+}
+
+module.exports = { positions, nodeLog, record, stats, invalidate, matchNodes, backfill, edgeFlows };

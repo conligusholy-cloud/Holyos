@@ -147,6 +147,7 @@ router.post('/test-lead', async (req, res, next) => { try {
   let ownerName = null; try { if (owner && owner.owner_person_id) { const p = await prisma.person.findUnique({ where: { id: owner.owner_person_id }, select: { first_name: true, last_name: true } }); if (p) ownerName = ((p.first_name || '') + ' ' + (p.last_name || '')).trim(); } } catch (e) { /* bez jména */ }
   res.json({ ok: true, id: out.id, owner: ownerName });
 } catch (err) { next(err); } });
+router.get('/funnels/:id/positions', async (req, res, next) => { try { const days = parseDays(req.query.days, 30); const positions = await require('../services/ads/funnel-events').positions(String(req.params.id || ''), sinceDate(days)); res.json({ positions }); } catch (err) { next(err); } });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
