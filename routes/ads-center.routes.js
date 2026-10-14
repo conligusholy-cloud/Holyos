@@ -277,8 +277,8 @@ async function channelsView() {
 // Statistika automatického oslovení pro uzly SMS / e-mail ve funelu: kolik leadů z formuláře dostalo SMS / e-mail a kolik otevřelo odkaz.
 router.get('/autosend/stats', async (req, res, next) => {
   try {
-    const formId = String(req.query.form || '').trim(); const days = Math.max(0, parseInt(req.query.days, 10) || 0);
-    const where = {}; if (formId) where.meta_form_id = formId; if (days) where.created_at = { gte: new Date(Date.now() - days * 86400000) };
+    const formId = String(req.query.form || '').trim(); const days = parseDays(req.query.days, 30);
+    const where = { created_at: { gte: sinceDate(days) } }; if (formId) where.meta_form_id = formId; // days=0 → dnes od půlnoci (stejně jako ostatní čísla ve funelu)
     const c = (extra) => prisma.compounderLead.count({ where: Object.assign({}, where, extra) });
     const [leads, spSms, spMail, spOpen, scSms, scMail, scOpen] = await Promise.all([
       c({}), c({ ai_specialist_sms_sent_at: { not: null } }), c({ ai_specialist_email_sent_at: { not: null } }), c({ ai_specialist_opened_at: { not: null } }),
