@@ -32,6 +32,8 @@
     .node.split .br .port.out { position:absolute; right:-18px; top:50%; transform:translateY(-50%); background:#a78bfa; }
     .node.act { width:300px; } .node.actsms { border-color:#2dd4bf; } .node.actsms .hd { background:rgba(45,212,191,.12); } .node.actmail { border-color:#60a5fa; } .node.actmail .hd { background:rgba(96,165,250,.12); }
     .node.actland { border-color:#f472b6; width:260px; } .node.actland .hd { background:rgba(244,114,182,.12); }
+    .node .pc { position:absolute; top:calc(50% - 30px); z-index:3; padding:1px 7px; border-radius:999px; background:#0b0e17; border:1px solid var(--border); font-size:11px; font-weight:800; color:#e5e7eb; white-space:nowrap; pointer-events:none; line-height:1.5; }
+    .node .pc small { font-weight:500; color:#8ea2c2; margin-left:3px; } .node .pc.in { right:100%; margin-right:6px; border-color:#60a5fa; } .node .pc.out { left:100%; margin-left:6px; border-color:#f59e0b; }
     .node.act .row2 { display:flex; justify-content:space-between; gap:8px; font-size:11px; color:#8ea2c2; } .node.act .row2 b { color:var(--text); text-align:right; word-break:break-all; }
     .node.act label.sw { display:flex; gap:6px; align-items:center; font-size:12px; cursor:pointer; } .node.act label.sw input { width:auto; }
     .node.act details { font-size:11.5px; color:#8ea2c2; } .node.act details summary { cursor:pointer; } .node.act .ow { display:flex; gap:6px; align-items:center; padding:2px 0; } .node.act .ow input { width:auto; }
@@ -140,6 +142,26 @@
     function label(nd) { if (nd.label) return nd.label; if (nd.kind === 'start') return 'Facebook reklama'; if (nd.kind === 'split') return nd.label || 'Rozdělení leadů'; if (nd.kind === 'leadform') return (nd.form && nd.form.name && !/^formulář \d+$/.test(nd.form.name)) ? nd.form.name : 'Rychlý formulář'; var p = page(nd.page); return p ? p.name : 'Ruční číslo'; }
     function metricLabel(nd) { var p = page(nd.page); return nd.metric === 'leads' && p ? p.leadLabel : nd.metric === 'conversions' && p ? p.convLabel : ML[nd.metric]; }
 
+
+    // ── Průtok leadů: číslo u vstupu a výstupu každého uzlu (kolik leadů do uzlu přišlo a kolik odešlo dál) ──
+    function flowCounts(nd) {
+      var out = null, inn = null, inLbl = '', outLbl = '';
+      if (nd.kind === 'start') { out = val(nd); outLbl = 'zobr.'; }
+      else if (nd.kind === 'leadform') { inn = nd.form && nd.form.clicks != null ? Number(nd.form.clicks) : null; inLbl = 'kliků'; out = val(nd); outLbl = 'leadů'; }
+      else if (nd.kind === 'split') { var up = upstreamForm(nd); inn = up ? val(up) : null; inLbl = 'leadů'; var st = up && SPLIT[up.form.form_id]; if (st && st.counts) { out = 0; (nd.branches || []).forEach(function (b) { out += Number(st.counts[b.key] || 0); }); outLbl = 'rozděleno'; } }
+      else if (nd.kind === 'sms' || nd.kind === 'email') { var upf = upstreamForm(nd), stt = upf && SPLIT[upf.form.form_id]; var tot = 0, ok = false;
+        F.edges.forEach(function (ed) { if (ed.to !== nd.id) return; var src = F.nodes.find(function (x) { return x.id === ed.from; }); if (!src) return; if (src.kind === 'split') { var s2 = SPLIT[(upstreamForm(src) || { form: {} }).form.form_id]; var br = src.branches && src.branches[ed.port || 0]; if (s2 && s2.counts && br) { tot += Number(s2.counts[br.key] || 0); ok = true; } } else { var uv = val(src); if (uv != null) { tot += uv; ok = true; } } });
+        inn = ok ? tot : null; inLbl = 'leadů'; out = val(nd); outLbl = nd.kind === 'sms' ? 'SMS' : 'e-mailů'; }
+      else if (nd.kind === 'landing') { var ul = upstreamForm(nd), sl = ul && AST[ul.form.form_id]; var vv = sl ? (nd.variant === 'schuzka' ? sl.schuzka : sl.specialist) : null; inn = vv ? vv.reached : null; inLbl = 'osloveno'; out = val(nd); outLbl = 'otevřelo'; }
+      else if (nd.kind !== 'note') { out = val(nd); }
+      return { inn: inn, inLbl: inLbl, out: out, outLbl: outLbl };
+    }
+    function flowBadges(nd) {
+      if (nd.kind === 'note') return ''; var f = flowCounts(nd); var h = '';
+      if (f.inn != null && nd.kind !== 'start') h += '<div class="pc in" title="Vstup: kolik leadů do kroku přišlo">' + n(f.inn) + (f.inLbl ? '<small>' + f.inLbl + '</small>' : '') + '</div>';
+      if (f.out != null && nd.kind !== 'split') { var pct = f.inn > 0 && f.out != null ? ' (' + Math.round(f.out / f.inn * 100) + ' %)' : ''; h += '<div class="pc out" title="Výstup: kolik leadů krokem prošlo dál' + pct + '">' + n(f.out) + (f.outLbl ? '<small>' + f.outLbl + '</small>' : '') + '</div>'; }
+      return h;
+    }
     function nodeEl(nd) {
       var p = page(nd.page); var col = nd.kind === 'note' ? '#f59e0b' : (p ? p.color : '#8ea2c2');
       var el = document.createElement('div'); el.className = 'node' + (nd.kind === 'note' ? ' note' : '') + (sel === nd.id ? ' sel' : ''); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; el.dataset.id = nd.id;
@@ -231,6 +253,7 @@
         el.querySelector('.port.out').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
       }
+      var fb = flowBadges(nd); if (fb) el.insertAdjacentHTML('beforeend', fb);
       el.querySelector('.x').addEventListener('click', function (e) { e.stopPropagation(); F.nodes = F.nodes.filter(function (x) { return x.id !== nd.id; }); F.edges = F.edges.filter(function (ed) { return ed.from !== nd.id && ed.to !== nd.id; }); render(); });
       el.addEventListener('mousedown', function (e) { sel = nd.id; document.querySelectorAll('.node').forEach(function (x) { x.classList.toggle('sel', x.dataset.id === nd.id); }); });
       var hd = el.querySelector('.hd'); hd.addEventListener('mousedown', function (e) { if (e.target.classList.contains('x')) return; var ox = nd.x, oy = nd.y, cx0 = e.clientX, cy0 = e.clientY; function mv(ev) { nd.x = Math.max(0, ox + (ev.clientX - cx0) / V.z); nd.y = Math.max(0, oy + (ev.clientY - cy0) / V.z); el.style.left = nd.x + 'px'; el.style.top = nd.y + 'px'; drawLinks(); } function up() { removeEventListener('mousemove', mv); removeEventListener('mouseup', up); } addEventListener('mousemove', mv); addEventListener('mouseup', up); e.preventDefault(); });

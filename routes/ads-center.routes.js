@@ -280,11 +280,12 @@ router.get('/autosend/stats', async (req, res, next) => {
     const formId = String(req.query.form || '').trim(); const days = parseDays(req.query.days, 30);
     const where = { created_at: { gte: sinceDate(days) } }; if (formId) where.meta_form_id = formId; // days=0 → dnes od půlnoci (stejně jako ostatní čísla ve funelu)
     const c = (extra) => prisma.compounderLead.count({ where: Object.assign({}, where, extra) });
-    const [leads, spSms, spMail, spOpen, scSms, scMail, scOpen] = await Promise.all([
+    const [leads, spSms, spMail, spOpen, scSms, scMail, scOpen, spReach, scReach] = await Promise.all([
       c({}), c({ ai_specialist_sms_sent_at: { not: null } }), c({ ai_specialist_email_sent_at: { not: null } }), c({ ai_specialist_opened_at: { not: null } }),
       c({ schuzka_sms_sent_at: { not: null } }), c({ schuzka_email_sent_at: { not: null } }), c({ schuzka_opened_at: { not: null } }),
+      c({ OR: [{ ai_specialist_sms_sent_at: { not: null } }, { ai_specialist_email_sent_at: { not: null } }] }), c({ OR: [{ schuzka_sms_sent_at: { not: null } }, { schuzka_email_sent_at: { not: null } }] }),
     ]);
-    res.json({ leads, specialist: { sms: spSms, email: spMail, opened: spOpen }, schuzka: { sms: scSms, email: scMail, opened: scOpen } });
+    res.json({ leads, specialist: { sms: spSms, email: spMail, opened: spOpen, reached: spReach }, schuzka: { sms: scSms, email: scMail, opened: scOpen, reached: scReach } });
   } catch (err) { next(err); }
 });
 router.get('/channels', async (req, res, next) => { try { res.json(await channelsView()); } catch (err) { next(err); } });
