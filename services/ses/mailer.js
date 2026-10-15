@@ -97,6 +97,8 @@ function textToHtml(text, preheader, opts = {}) {
     .replace(/\*\*([^\n*][^*]*?)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(])\*([^\s*][^*\n]*?)\*(?=[\s.,!?):]|$)/g, '$1<em>$2</em>')
     .replace(/(^|\n)\s*[-*]\s+/g, '$1• ')
+    // holé URL → <a> odkaz (SES sleduje prokliky jen u <a href>, ne u textu, který si prolinkuje klient)
+    .replace(/(^|[\s(>])(https?:\/\/[^\s<]+?)(?=[.,!?):]*(?:\s|<|$))/g, '$1<a href="$2" style="color:#1e86e0;font-weight:600">$2</a>')
     .replace(/\n/g, '<br>');
   const cids = Array.isArray(opts.imageCids) ? opts.imageCids.filter(Boolean) : [];
   const imgHtml = cids.map((c) => `<div style="margin-top:16px"><img src="cid:${escAttr(c)}" alt="" style="width:100%;max-width:544px;border-radius:10px;display:block"></div>`).join('');

@@ -1437,6 +1437,7 @@
       document.getElementById('c-cur-label-2').textContent = ev.target.value;
       document.getElementById('c-cur-label-3').textContent = ev.target.value;
       renderCreateItems();
+      autoPickBankAccount();
     };
 
     // Režim DPH: u přenesené daně / mimo EU se sazba řádků nastaví na 0 %
@@ -1474,6 +1475,20 @@
       if (!wrap || !cur) return;
       wrap.innerHTML = '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">' + escapeHtml(cur.textContent) + '</b>' +
         '<button type="button" id="c-docnum-edit" onclick="editCreateDocNumber()" title="Přepsat číslo dokladu (např. starý doklad)" style="background:transparent;border:0;cursor:pointer;color:var(--text2);font-size:1.05em;padding:2px 4px;border-radius:6px;">✎</button>';
+    };
+
+    // Účet pro příchozí platbu: jen u vydaných dokladů; výchozí = jediný aktivní účet v měně faktury
+    window.updateCreateBankRow = function() {
+      const type = (document.getElementById('c-type') || {}).value || '';
+      const row = document.getElementById('c-bank-row');
+      if (row) row.style.display = ['issued', 'proforma_issued', 'credit_note_issued'].includes(type) ? '' : 'none';
+    };
+    window.autoPickBankAccount = function() {
+      if (window.cState.bankTouched) return;
+      const sel = document.getElementById('c-bank-account');
+      if (!sel) return;
+      const same = (window.cState.bankAccounts || []).filter(a => a.currency === window.cState.currency);
+      sel.value = same.length === 1 ? String(same[0].id) : '';
     };
 
     // Číslo dokladu (náhled; přidělí se definitivně až při založení)
@@ -1532,6 +1547,9 @@
       const r = await api('GET', '/api/wh/companies');
       const companies = r.status === 200 ? r.data : [];
       window.cState.companies = companies;
+      const ba = await api('GET', '/api/banking/accounts?active=true');
+      window.cState.bankAccounts = (ba.status === 200 && Array.isArray(ba.data) ? ba.data : []).filter(a => a.active !== false);
+      window.cState.bankTouched = false;
       // Režim úpravy rozpracované faktury: předvyplň stav
       const E = editInv || null;
       window.cState.editId = E ? E.id : null;
@@ -1578,7 +1596,7 @@
 
             // Hlavička
             '<div class="modal-grid3">' +
-              '<div class="modal-row"><label>Typ</label><select id="c-type" onchange="loadCreateAdvances(); loadCreateDocNumber()">' +
+              '<div class="modal-row"><label>Typ</label><select id="c-type" onchange="loadCreateAdvances(); loadCreateDocNumber(); updateCreateBankRow()">' +
                 '<option value="received"' + (defaultType==='received'?' selected':'') + '>Faktura přijatá</option>' +
                 '<option value="issued"' + (defaultType==='issued'?' selected':'') + '>Faktura vydaná</option>' +
                 '<option value="credit_note_received">Dobropis přijatý</option>' +
@@ -1613,6 +1631,11 @@
                   '<option value="' + k + '"' + (k === 'bank_transfer' ? ' selected' : '') + '>' + v.icon + ' ' + v.full + '</option>'
                 ).join('') +
               '</select></div>' +
+              '<div class="modal-row" id="c-bank-row" style="grid-column: span 2;"><label>Účet pro příchozí platbu (z agendy Banka)</label>' +
+                '<select id="c-bank-account" onchange="window.cState.bankTouched=true">' +
+                  '<option value="">— žádný / neuvádět —</option>' +
+                  (window.cState.bankAccounts || []).map(a => '<option value="' + a.id + '">' + escapeHtml(a.name) + ' — ' + escapeHtml(a.account_number + '/' + a.bank_code) + ' (' + escapeHtml(a.currency) + ')</option>').join('') +
+                '</select></div>' +
             '</div>' +
 
             // Položky — karty
@@ -1653,6 +1676,7 @@
         '</div>'
       );
       renderCreateItems();
+      updateCreateBankRow();
       if (E) {
         const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
         document.querySelector('#modal-root h2').textContent = 'Upravit fakturu';
@@ -1669,7 +1693,12 @@
         set('c-payment-method', E.payment_method || 'bank_transfer'); set('c-note', E.note);
         const sv = document.getElementById('c-is-service'); if (sv) sv.checked = Array.isArray(E.tags) && E.tags.includes('service');
         const dn = document.getElementById('c-docnum'); if (dn) dn.textContent = E.invoice_number;
+        // účet z agendy Banka podle uloženého čísla účtu / IBAN
+        const numOf = a => a.account_number + '/' + a.bank_code;
+        const hit = (window.cState.bankAccounts || []).find(a => (E.partner_bank_account && numOf(a) === E.partner_bank_account) || (E.partner_iban && a.iban && a.iban === E.partner_iban));
+        if (hit) { set('c-bank-account', hit.id); window.cState.bankTouched = true; }
       } else {
+        autoPickBankAccount();
         loadCreateDocNumber();
       }
     };
@@ -1706,6 +1735,13 @@
         type, company_id,
         currency: window.cState.currency,
         language: document.getElementById('c-language')?.value || 'cs',
+        ...(() => {
+          const row = document.getElementById('c-bank-row');
+          if (!row || row.style.display === 'none') return {};
+          const a = (window.cState.bankAccounts || []).find(x => String(x.id) === document.getElementById('c-bank-account').value);
+          return a ? { partner_bank_account: a.account_number + '/' + a.bank_code, partner_iban: a.iban || null, partner_bic: a.bic || null }
+                   : { partner_bank_account: null, partner_iban: null, partner_bic: null };
+        })(),
         invoice_number: (() => { const v = (document.getElementById('c-docnum-input')?.value || '').trim(); const auto = (document.getElementById('c-docnum')?.textContent || '').trim(); return v && v !== auto ? v : undefined; })(),
         vat_regime: document.getElementById('c-vat-regime')?.value || 'standard',
         external_number: document.getElementById('c-external').value || null,
