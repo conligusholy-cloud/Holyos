@@ -465,7 +465,8 @@
       if (body.enabled && !body.number) { msg.style.color = '#ef4444'; msg.textContent = 'Zadej Twilio číslo asistenta.'; return; }
       if (body.transfer_enabled && !body.transfer_number) { msg.style.color = '#ef4444'; msg.textContent = 'Zapnul jsi přepojení — zadej číslo pro přepojení.'; return; }
       const btn = document.getElementById('pa-save'); btn.disabled = true; msg.style.color = 'var(--text2)'; msg.textContent = 'Ukládám…';
-      try { await apiSend('PUT', '/admin/personal-assistant/' + personId, body); msg.style.color = '#22c55e'; msg.textContent = '✓ Uloženo'; btn.disabled = false; }
+      if (!body.enabled && body.number && !confirm('Služba není zapnutá — asistent nebude hovory na ' + body.number + ' brát. Uložit i tak?')) return;
+      try { await apiSend('PUT', '/admin/personal-assistant/' + personId, body); msg.style.color = '#22c55e'; msg.textContent = '✓ Uloženo'; btn.disabled = false; setTimeout(() => openAssistantModal(personId, name), 600); }
       catch (e) { msg.style.color = '#ef4444'; msg.textContent = 'Chyba: ' + e.message; btn.disabled = false; }
     });
     // Přehled hovorů
