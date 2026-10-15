@@ -93,7 +93,7 @@ function what() {
 }
 
 function prices(limits, searchLimits) {
-  const P = LOC.PACKAGES, L = limits || {}, S = searchLimits || {};
+  const P = { basic: { amount: LOC.FINDER_PRICES.basic }, plus: { amount: LOC.FINDER_PRICES.plus }, premium: { amount: LOC.FINDER_PRICES.premium } }, L = limits || {}, S = searchLimits || {};
   const s1 = fmt(LOC.EVAL_PACKS.search1.amount);
   const card = (key, title, hi, extra) => `<div class="price${hi ? ' hi' : ''}">
         <div class="tag">${title}</div>
@@ -140,8 +140,11 @@ function findLocationPage(limits, searchLimits) {
   // ceník + FAQ
   h = swap(h, /<section class="sec" id="cena">/, /<section class="sec" id="objednat">/, prices(limits, searchLimits));
   // objednávka: návrat ze Stripe na /findlocation, upravený nadpis
+  const FP = LOC.FINDER_PRICES, S = searchLimits || {};
+  const opt = (k, t) => `<option value="${k}">${t} – ${fmt(FP[k])} Kč s DPH (${S[k] != null ? S[k] : 1} vyhledání)</option>`;
   h = h.replace('<h2>Získat aplikaci</h2>', '<h2>Získat Vyhledávač míst</h2>')
-    .replace('<input type="hidden" name="consent" value="1">', '<input type="hidden" name="consent" value="1"><input type="hidden" name="ret" value="/findlocation">');
+    .replace(/<select name="variant" id="variant">[\s\S]*?<\/select>/, `<select name="variant" id="variant">${opt('basic', 'Základ')}${opt('plus', 'Plus')}${opt('premium', 'Premium')}</select>`)
+    .replace('<input type="hidden" name="consent" value="1">', '<input type="hidden" name="consent" value="1"><input type="hidden" name="ret" value="/findlocation"><input type="hidden" name="product" value="finder">');
   // FAQ až za objednávkový formulář (platba hned za balíčky)
   const o = h.indexOf('<section class="sec" id="objednat">'), oe = o < 0 ? -1 : h.indexOf('</section>', o);
   if (oe > 0) {

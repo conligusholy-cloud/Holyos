@@ -8,6 +8,8 @@ const PACKAGES = {
   plus:    { name: 'Prověření lokality – Plus',    desc: 'Přístup do aplikace na 12 měsíců, 10 lokalit, porovnání, 30min konzultace', amount: 990000, label: 'Plus' },
   premium: { name: 'Prověření lokality – Premium', desc: 'Vše z Plus + místní šetření technikem Best Series na jedné lokalitě', amount: 1590000, label: 'Premium' },
 };
+// Ceny balíčků prodávaných přes /findlocation (Vyhledávač míst) – nezávislé na cenách Prověření lokality (nastavuje admin → Online produkty)
+const FINDER_PRICES = { basic: PACKAGES.basic.amount, plus: PACKAGES.plus.amount, premium: PACKAGES.premium.amount };
 // Přechod na vyšší balíček: zákazník doplatí rozdíl cen (počítá se při checkoutu z aktuálního balíčku)
 const UPGRADE_PACKS = {
   up_plus:    { to: 'plus',    name: 'Prověření lokality – přechod na Plus',    desc: 'Doplatek rozdílu ceny ze stávajícího balíčku na Plus',    label: 'Přechod → Plus' },
@@ -725,4 +727,4 @@ function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, statu
   </tbody></table>` : '<p class="muted" style="margin:0">Zatím žádné objednávky.</p>'}</div>`, holyosUrl);
 }
 
-module.exports = { PACKAGES, EVAL_PACKS, UPGRADE_PACKS, PKG_RANK, locationPage, adminLocationOrders, STATUS, PAGE };
+module.exports = { PACKAGES, FINDER_PRICES, EVAL_PACKS, UPGRADE_PACKS, PKG_RANK, locationPage, adminLocationOrders, STATUS, PAGE };

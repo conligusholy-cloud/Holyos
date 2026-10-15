@@ -625,11 +625,12 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   if (!process.env.STRIPE_SECRET_KEY) return res.status(503).json({ ok: false, error: 'Online platba není dostupná.' });
   if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
   const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
-  const pkg = LOC.PACKAGES[d.pkg];
+  const isFinder = (req.body || {}).product === 'finder'; // objednávka z /findlocation má vlastní ceny
+  const pkg = isFinder ? Object.assign({}, LOC.PACKAGES[d.pkg], { amount: LOC.FINDER_PRICES[d.pkg], name: 'Vyhledávač míst – ' + LOC.PACKAGES[d.pkg].label, desc: 'Přístup do aplikace Vyhledávač míst na 12 měsíců' }) : LOC.PACKAGES[d.pkg];
   const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   const oid = ins.rows[0].id; saveAttribution(oid, req.body).catch(() => {}); const base = locBase(req);
-  const retPath = (req.body || {}).ret === '/findlocation' ? '/findlocation' : '/location'; // návrat ze Stripe na správnou záchytnou stránku
+  const retPath = isFinder || (req.body || {}).ret === '/findlocation' ? '/findlocation' : '/location'; // návrat ze Stripe na správnou záchytnou stránku
   notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
@@ -647,7 +648,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
 app.post('/api/location/interest', wrap(async (req, res) => {
   if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
   const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
-  const pkg = LOC.PACKAGES[d.pkg];
+  const pkg = (req.body || {}).product === 'finder' ? Object.assign({}, LOC.PACKAGES[d.pkg], { amount: LOC.FINDER_PRICES[d.pkg] }) : LOC.PACKAGES[d.pkg];
   const insReq = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   saveAttribution(insReq.rows[0].id, req.body).catch(() => {});

@@ -13,6 +13,7 @@ const kc = (n) => Number(n || 0).toLocaleString('cs-CZ') + ' Kč';
 // Výchozí ceník (haléře) + limity – zdroj pravdy pro reset
 const DEFAULTS = {
   packages: { basic: 490000, plus: 990000, premium: 1590000 },
+  finder_packages: { basic: 490000, plus: 990000, premium: 1590000 }, // ceny balíčků na /findlocation
   evals: { eval1: 99900, eval3: 199900, eval10: 499900 },
   searches: { search1: 49900, search3: 99900, search10: 299900 },
   limits: { basic: 3, plus: 10, premium: 10 },
@@ -27,24 +28,27 @@ function applyPricing(p) {
   p = p || {};
   _testLoc = !!(p.test_loc || p.test_mode); _testFind = !!(p.test_find || p.test_mode); // starý společný příznak test_mode zapíná oba
   Object.keys(DEFAULTS.packages).forEach((k) => { LOC.PACKAGES[k].amount = Number((p.packages || {})[k]) > 0 ? Number(p.packages[k]) : DEFAULTS.packages[k]; });
+  Object.keys(DEFAULTS.finder_packages).forEach((k) => { LOC.FINDER_PRICES[k] = Number((p.finder_packages || {})[k]) > 0 ? Number(p.finder_packages[k]) : DEFAULTS.finder_packages[k]; });
   Object.keys(DEFAULTS.evals).forEach((k) => { LOC.EVAL_PACKS[k].amount = Number((p.evals || {})[k]) > 0 ? Number(p.evals[k]) : DEFAULTS.evals[k]; });
   Object.keys(DEFAULTS.searches).forEach((k) => { LOC.EVAL_PACKS[k].amount = Number((p.searches || {})[k]) > 0 ? Number(p.searches[k]) : DEFAULTS.searches[k]; });
   Object.keys(DEFAULTS.limits).forEach((k) => { LAPP.LIMITS[k] = Number((p.limits || {})[k]) > 0 ? Number(p.limits[k]) : DEFAULTS.limits[k]; });
   Object.keys(DEFAULTS.search_limits).forEach((k) => { LAPP.SEARCH_LIMITS[k] = Number((p.search_limits || {})[k]) >= 0 && (p.search_limits || {})[k] !== undefined ? Number(p.search_limits[k]) : DEFAULTS.search_limits[k]; });
   if (_testLoc) { Object.keys(LOC.PACKAGES).forEach((k) => { LOC.PACKAGES[k].amount = TEST_AMOUNT; }); ['eval1', 'eval3', 'eval10'].forEach((k) => { if (LOC.EVAL_PACKS[k]) LOC.EVAL_PACKS[k].amount = TEST_AMOUNT; }); }
-  if (_testFind) { ['search1', 'search3', 'search10'].forEach((k) => { if (LOC.EVAL_PACKS[k]) LOC.EVAL_PACKS[k].amount = TEST_AMOUNT; }); }
+  if (_testFind) { Object.keys(LOC.FINDER_PRICES).forEach((k) => { LOC.FINDER_PRICES[k] = TEST_AMOUNT; }); ['search1', 'search3', 'search10'].forEach((k) => { if (LOC.EVAL_PACKS[k]) LOC.EVAL_PACKS[k].amount = TEST_AMOUNT; }); }
 }
 // Z formuláře ceníku → objekt (Kč → haléře)
 function parsePricing(b) {
   const n = (v) => { const x = Math.round(Number(String(v || '').replace(/\s/g, '').replace(',', '.')) * 100); return Number.isFinite(x) && x > 0 ? x : null; };
   const i = (v) => { const x = parseInt(v, 10); return Number.isFinite(x) && x >= 0 ? x : null; };
-  const out = { packages: {}, evals: {}, searches: {}, limits: {}, search_limits: {}, test_loc: b.test_loc_present !== undefined ? !!b.test_loc : _testLoc, test_find: b.test_find_present !== undefined ? !!b.test_find : _testFind };
+  const out = { packages: {}, finder_packages: {}, evals: {}, searches: {}, limits: {}, search_limits: {}, test_loc: b.test_loc_present !== undefined ? !!b.test_loc : _testLoc, test_find: b.test_find_present !== undefined ? !!b.test_find : _testFind };
   // v testovacím režimu běží konstanty na 15 Kč → chybějící pole doplnit z uloženého ceníku (cur), ne z konstant
   const cur = b._current || {};
   const curPkg = (k) => (cur.packages || {})[k] || (_testLoc ? DEFAULTS.packages[k] : LOC.PACKAGES[k].amount);
   const curEv = (k) => (cur.evals || {})[k] || (_testLoc ? DEFAULTS.evals[k] : LOC.EVAL_PACKS[k].amount);
   const curSe = (k) => (cur.searches || {})[k] || (_testFind ? DEFAULTS.searches[k] : LOC.EVAL_PACKS[k].amount);
   Object.keys(DEFAULTS.packages).forEach((k) => { out.packages[k] = b['pkg_' + k] !== undefined ? (n(b['pkg_' + k]) || DEFAULTS.packages[k]) : curPkg(k); });
+  const curFp = (k) => (cur.finder_packages || {})[k] || (_testFind ? DEFAULTS.finder_packages[k] : LOC.FINDER_PRICES[k]);
+  Object.keys(DEFAULTS.finder_packages).forEach((k) => { out.finder_packages[k] = b['fpkg_' + k] !== undefined ? (n(b['fpkg_' + k]) || DEFAULTS.finder_packages[k]) : curFp(k); });
   Object.keys(DEFAULTS.evals).forEach((k) => { out.evals[k] = b['ev_' + k] !== undefined ? (n(b['ev_' + k]) || DEFAULTS.evals[k]) : curEv(k); });
   Object.keys(DEFAULTS.searches).forEach((k) => { out.searches[k] = b['se_' + k] !== undefined ? (n(b['se_' + k]) || DEFAULTS.searches[k]) : curSe(k); });
   Object.keys(DEFAULTS.limits).forEach((k) => { out.limits[k] = b['lim_' + k] !== undefined ? (i(b['lim_' + k]) || DEFAULTS.limits[k]) : LAPP.LIMITS[k]; });
@@ -152,10 +156,10 @@ function productFinder({ adminLayout, admin, holyosUrl, msg, saved, stats, saved
   <div class="card" style="margin:0 0 12px"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px"><div><h2 style="margin:0 0 4px">🔎 Vyhledávač míst${testBadge('find')}</h2><p class="muted" style="margin:0">Zákazník zadá město nebo špendlík v mapě; aplikace ukáže spádovost 5/10/15 km, kapacitu, fungující prádlomaty, místa, kde by prádlomat mohl stát, a kontakty na provozovatele. Jedno město = jedno vyhledání, výsledky se ukládají. Vyhledání jsou součástí balíčků Prověření lokality a dokupují se zvlášť.</p></div><div class="row" style="gap:6px"><a class="btn sm" href="/findlocation" target="_blank">Záchytná stránka ↗</a><a class="btn sec sm" href="/lokalita/analyza" target="_blank">Aplikace ↗</a><a class="btn sec sm" href="/admin/location">Objednávky</a></div></div></div>
   <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:12px">${box(stats.searches, 'vyhledání celkem')}${box(stats.searches_30, 'vyhledání za 30 dnů')}${box(stats.with_cands, 's načtenými místy')}${box(stats.contacts, 'dohledaných kontaktů')}${box(kc(stats.revenue), 'tržby z dokoupených vyhledání')}</div>
   <form method="post" action="/admin/online/pricing?back=product:finder">
-  <div style="margin:0 0 12px"><label class="row" style="gap:8px;align-items:center;padding:8px 12px;border:1px solid ${_testFind ? 'rgba(255,93,108,.6)' : 'var(--border)'};border-radius:12px;background:${_testFind ? 'rgba(255,93,108,.1)' : 'rgba(4,8,16,.4)'};cursor:pointer;white-space:nowrap"><input type="hidden" name="test_find_present" value="1"><input type="checkbox" name="test_find" value="1"${_testFind ? ' checked' : ''} style="width:auto;margin:0"><span><b>Testovací ceny</b> <span class="small muted">– dokup vyhledání za ${TEST_AMOUNT / 100} Kč pro test platební brány</span></span></label></div>
+  <div style="margin:0 0 12px"><label class="row" style="gap:8px;align-items:center;padding:8px 12px;border:1px solid ${_testFind ? 'rgba(255,93,108,.6)' : 'var(--border)'};border-radius:12px;background:${_testFind ? 'rgba(255,93,108,.1)' : 'rgba(4,8,16,.4)'};cursor:pointer;white-space:nowrap"><input type="hidden" name="test_find_present" value="1"><input type="checkbox" name="test_find" value="1"${_testFind ? ' checked' : ''} style="width:auto;margin:0"><span><b>Testovací ceny</b> <span class="small muted">– balíčky a dokup vyhledání za ${TEST_AMOUNT / 100} Kč pro test platební brány</span></span></label></div>
   <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;align-items:start">
-    <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Vyhledání v balíčcích</h2><p class="small muted" style="margin:0 0 10px">Kolik vyhledání dostane zákazník v ceně balíčku Prověření lokality.</p>
-      <table class="cards"><thead><tr><th>Balíček</th><th>Vyhledání v ceně</th></tr></thead><tbody>${['basic', 'plus', 'premium'].map((k) => `<tr><td>${LOC.PACKAGES[k].label} <span class="muted small">(${kc(LOC.PACKAGES[k].amount / 100)})</span></td><td><input name="slim_${k}" type="number" min="0" max="999" value="${LAPP.SEARCH_LIMITS[k]}" style="width:80px;text-align:right"></td></tr>`).join('')}</tbody></table></div>
+    <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Balíčky na /findlocation</h2><p class="small muted" style="margin:0 0 10px">Cena balíčku prodávaného přes záchytnou stránku Vyhledávače míst (Kč s DPH) a kolik vyhledání v ceně. Ceny Prověření lokality se nastavují zvlášť u něj.</p>
+      <table class="cards"><thead><tr><th>Balíček</th><th>Cena</th><th>Vyhledání v ceně</th></tr></thead><tbody>${['basic', 'plus', 'premium'].map((k) => `<tr><td>${LOC.PACKAGES[k].label}</td><td>${inp('fpkg_' + k, _testFind ? (saved_prices.finder_packages || {})[k] || DEFAULTS.finder_packages[k] : LOC.FINDER_PRICES[k], 96)}</td><td><input name="slim_${k}" type="number" min="0" max="999" value="${LAPP.SEARCH_LIMITS[k]}" style="width:80px;text-align:right"></td></tr>`).join('')}</tbody></table></div>
     <div class="card" style="margin:0"><h2 style="margin:0 0 4px">Dokoupení vyhledání</h2><p class="small muted" style="margin:0 0 10px">Ceny s DPH v Kč za 1 / 3 / 10 ks.</p>
       <table class="cards"><thead><tr><th>1 ks</th><th>3 ks</th><th>10 ks</th></tr></thead><tbody><tr><td>${inp('se_search1', seVal('search1'), 96)}</td><td>${inp('se_search3', seVal('search3'), 96)}</td><td>${inp('se_search10', seVal('search10'), 96)}</td></tr></tbody></table>
       <div class="small muted" style="margin-top:10px">Na kus nyní: ${(LOC.EVAL_PACKS.search1.amount / 100).toFixed(0)} / ${(LOC.EVAL_PACKS.search3.amount / 300).toFixed(0)} / ${(LOC.EVAL_PACKS.search10.amount / 1000).toFixed(0)} Kč</div></div>
