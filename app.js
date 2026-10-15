@@ -119,7 +119,7 @@ app.post('/webhooks/ses', (req, res) => {
       return res.json({ ok: true });                 // appka sama potvrdí odběr
     }
     if ((p.Type || p.type) === 'Notification') {
-      try { await require('./src/email-log').applySesEvent(JSON.parse(p.Message || '{}')); } catch (e) { console.warn('[ses]', e.message); }
+      try { await require('./services/ses/email-log').applySesEvent(JSON.parse(p.Message || '{}')); } catch (e) { console.warn('[ses]', e.message); }
       return res.json({ ok: true });
     }
     res.json({ ok: true });
@@ -128,7 +128,7 @@ app.post('/webhooks/ses', (req, res) => {
 });
 // Odhlášení z e-mailů (odkaz v patičce): token = HMAC e-mailu → black list
 app.get('/u/:token', async (req, res) => {
-  const EL = require('./src/email-log'); const em = EL.parseUnsubscribeToken(req.params.token);
+  const EL = require('./services/ses/email-log'); const em = EL.parseUnsubscribeToken(req.params.token);
   if (!em) return res.status(400).send('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif;padding:40px">Neplatný odkaz.</p>');
   await EL.autoUnsubscribe(em, 'odhlášení odkazem');
   res.send('<!doctype html><meta charset="utf-8"><title>Odhlášeno</title><div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:60px auto;padding:28px;border:1px solid #e3e9f5;border-radius:12px;color:#0b1220"><h2 style="margin:0 0 8px">Odhlášeno</h2><p>Adresa <b>' + em.replace(/[<>&]/g, '') + '</b> už od nás nedostane žádné další e-maily.</p><p style="color:#58698a;font-size:13px">Best Series s.r.o.</p></div>');
@@ -771,7 +771,7 @@ app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web co
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
 app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
 // Statistiky e-mailové brány SES (dle zadání: /api/stats?range=today|7d|30d|90d) – vyžaduje přihlášení
-app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./src/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
+app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./services/ses/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)

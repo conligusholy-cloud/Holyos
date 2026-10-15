@@ -1,6 +1,6 @@
 // HolyOS — Log odeslaných e-mailů (EmailMessage) + zpracování událostí Amazon SES (SNS webhook) + auto-odhlášení.
 const crypto = require('crypto');
-const { prisma } = require('../config/database');
+const { prisma } = require('../../config/database');
 
 // Záznam po každém odeslání (r = výsledek mailer.sendEmail)
 async function logMessage(r, { to, subject, campaignId, leadId }) {
