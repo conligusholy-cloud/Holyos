@@ -1214,7 +1214,8 @@
     window.cState = { items: [], pricesWithVat: false, currency: 'CZK' };
 
     function makeEmptyItem() {
-      return { description: '', quantity: 1, unit: 'ks', input_price: 0, vat_rate: 21, note: '' };
+      const zero = window.cState && window.cState.vatRegime && window.cState.vatRegime !== 'standard';
+      return { description: '', quantity: 1, unit: 'ks', input_price: 0, vat_rate: zero ? 0 : 21, note: '' };
     }
 
     // Přepočet jednoho řádku: vrací { subtotal, vat, total, unit_price_netto, unit_price_brutto }
@@ -1333,12 +1334,30 @@
       document.getElementById('c-cur-label-3').textContent = ev.target.value;
     };
 
+    // Režim DPH: u přenesené daně / mimo EU se sazba řádků nastaví na 0 %
+    window.setCreateVatRegime = function(ev) {
+      window.cState.vatRegime = ev.target.value;
+      const rate = window.cState.vatRegime === 'standard' ? 21 : 0;
+      window.cState.items.forEach(it => { it.vat_rate = rate; });
+      renderCreateItems();
+    };
+    // Příjemce: při výběru firmy předvyplň její uloženého příjemce
+    window.onCreateCompanyChange = function() {
+      const id = parseInt(document.getElementById('c-company').value, 10);
+      const c = (window.cState.companies || []).find(x => x.id === id);
+      const sel = document.getElementById('c-consignee');
+      if (sel) sel.value = c && c.consignee_id ? String(c.consignee_id) : '';
+    };
+
     window.openCreateModal = async function(defaultType) {
       defaultType = defaultType || 'received';
-      window.cState = { items: [makeEmptyItem()], pricesWithVat: false, currency: 'CZK' };
+      window.cState = { items: [makeEmptyItem()], pricesWithVat: false, currency: 'CZK', vatRegime: 'standard' };
 
       const r = await api('GET', '/api/wh/companies');
       const companies = r.status === 200 ? r.data : [];
+      window.cState.companies = companies;
+      const consigneeOpts = '<option value="">Žádný</option>' +
+        companies.map(c => '<option value="' + c.id + '">' + escapeHtml(c.name) + (c.ico ? ' (' + escapeHtml(c.ico) + ')' : '') + '</option>').join('');
       const companyOpts = '<option value="">— vyber firmu —</option>' +
         companies.map(c => '<option value="' + c.id + '">' +
           escapeHtml(c.name) + (c.ico ? ' (' + escapeHtml(c.ico) + ')' : '') + '</option>').join('');
@@ -1364,7 +1383,16 @@
                 '<option value="proforma_received">Záloha přijatá</option>' +
                 '<option value="proforma_issued">Záloha vydaná</option>' +
               '</select></div>' +
-              '<div class="modal-row" style="grid-column: span 2;"><label>Firma</label><select id="c-company">' + companyOpts + '</select></div>' +
+              '<div class="modal-row" style="grid-column: span 2;"><label>Firma</label><select id="c-company" onchange="onCreateCompanyChange()">' + companyOpts + '</select></div>' +
+            '</div>' +
+            '<div class="modal-grid3">' +
+              '<div class="modal-row"><label>Jazyk dokladu</label><select id="c-language"><option value="cs">Česky</option><option value="en">English</option></select></div>' +
+              '<div class="modal-row"><label>Režim DPH</label><select id="c-vat-regime" onchange="setCreateVatRegime(event)">' +
+                '<option value="standard">Tuzemsko — DPH 21 %</option>' +
+                '<option value="reverse_charge">EU — přenesená daňová povinnost</option>' +
+                '<option value="outside_scope">Mimo EU — bez DPH</option>' +
+              '</select></div>' +
+              '<div class="modal-row"><label>Příjemce (dodací adresa)</label><select id="c-consignee">' + consigneeOpts + '</select></div>' +
             '</div>' +
             '<div class="modal-grid3">' +
               '<div class="modal-row"><label>Externí číslo</label><input type="text" id="c-external" placeholder="Číslo od dodavatele"></div>' +
@@ -1462,6 +1490,8 @@
       const body = {
         type, company_id,
         currency: window.cState.currency,
+        language: document.getElementById('c-language')?.value || 'cs',
+        vat_regime: document.getElementById('c-vat-regime')?.value || 'standard',
         external_number: document.getElementById('c-external').value || null,
         variable_symbol: document.getElementById('c-vs').value || null,
         date_issued: document.getElementById('c-issued').value,
@@ -1473,6 +1503,13 @@
         tags: isService ? ['service'] : [],
         items,
       };
+      // Příjemce je vlastnost firmy (PDF ho bere z ní) — ulož, pokud se změnil
+      const co = (window.cState.companies || []).find(x => x.id === company_id);
+      const newCons = parseInt(document.getElementById('c-consignee')?.value, 10) || null;
+      if (co && (co.consignee_id || null) !== newCons) {
+        const pr = await api('PUT', '/api/wh/companies/' + company_id, { consignee_id: newCons });
+        if (pr.status !== 200) return alert('Nepodařilo se uložit příjemce: ' + (pr.data?.error || pr.status));
+      }
       const r = await api('POST', '/api/accounting/invoices', body);
       if (r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status) + '\n' + JSON.stringify(r.data?.details || ''));
       closeModal(); loadInvoices(); loadSummary();

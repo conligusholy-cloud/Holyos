@@ -297,6 +297,7 @@ const invoiceCreateSchema = z.object({
   partner_iban: z.string().max(34).optional().nullable(),
   partner_bic: z.string().max(11).optional().nullable(),
   vat_regime: z.string().default('standard'),
+  language: z.enum(['cs', 'en']).default('cs'),
   note: z.string().optional().nullable(),
   internal_note: z.string().optional().nullable(),
   source: z.string().default('manual'),
@@ -371,6 +372,7 @@ router.post('/invoices', async (req, res, next) => {
         vat_amount: vat_amount.toFixed(2),
         total: total.toFixed(2),
         vat_regime: data.vat_regime,
+        language: data.language,
         date_issued: new Date(data.date_issued),
         date_taxable: data.date_taxable ? new Date(data.date_taxable) : null,
         date_due: new Date(data.date_due),
@@ -439,7 +441,7 @@ router.put('/invoices/:id', async (req, res, next) => {
       'date_issued', 'date_taxable', 'date_due', 'payment_method',
       'variable_symbol', 'constant_symbol', 'specific_symbol',
       'partner_bank_account', 'partner_iban', 'partner_bic',
-      'vat_regime', 'note', 'internal_note',
+      'vat_regime', 'language', 'note', 'internal_note',
     ];
     const updateData = {};
     for (const k of allowed) {
