@@ -48,6 +48,15 @@ function outboundSystem(script) {
   );
 }
 
+// Vícejazyčnost: AI pozná jazyk volajícího a na začátek odpovědi dá značku [[lang:xx]] → relay přepne
+// řeč i přepis Twilio ConversationRelay (zpráva type:'language'). Hlas ElevenLabs je vícejazyčný.
+const LANGS = { cs: 'cs-CZ', en: 'en-US', de: 'de-DE', sk: 'sk-SK', pl: 'pl-PL', uk: 'uk-UA', ru: 'ru-RU', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', hu: 'hu-HU' };
+const MULTILANG_RULE =
+  '=== JAZYK HOVORU === Výchozí jazyk je čeština. Když volající mluví jiným jazykem (nebo o něj požádá), odpovídej plynule v JEHO jazyce ' +
+  'a na ÚPLNÝ ZAČÁTEK té odpovědi napiš značku [[lang:xx]], kde xx je kód jazyka: ' + Object.keys(LANGS).join(', ') + '. ' +
+  'Značku napiš JEN při změně jazyka (ne v každé odpovědi). Přepis řeči je nastavený na aktuální jazyk, takže cizí řeč může přijít zkomolená ' +
+  '(např. anglická slova zapsaná česky foneticky: „helou“, „aj em“, „spík ingliš“) — pokud to tak vypadá, přepni na odhadnutý jazyk. ' +
+  'Všechna pravidla, zákazy a úkoly platí stejně v každém jazyce. Když se volající vrátí k češtině, přepni zpět značkou [[lang:cs]].';
 // Připomenutí na konci instrukcí: scénář má vždy přednost před podklady i obecným stylem.
 const SCENARIO_REMINDER =
   '=== ZÁVAZNÉ PŘIPOMENUTÍ (platí nad vším výše) === ' +
@@ -315,6 +324,10 @@ function attach(server) {
       state.system = await aic.augmentSystem(state.system, { voice: true, scope, knowledge });
       // Znalostní podklady jsou na konci dlouhé → zopakuj prioritu scénáře úplně nakonec (nejblíže odpovědi).
       state.system += '\n\n' + SCENARIO_REMINDER;
+      // Vícejazyčnost linky (voice.<linka>.multilang)
+      state.lang = 'cs';
+      if (mode === 'inbound' && getSetting) { try { const ml = await getSetting(lineKey('multilang')); state.multilang = ml === true || ml === 'true'; } catch (_) { state.multilang = false; } }
+      if (state.multilang) state.system += '\n\n' + MULTILANG_RULE;
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
       if (mode === 'outbound' && state.target) {
         let first = null, last = null, full = state.target.name || null;
@@ -435,8 +448,15 @@ function attach(server) {
             temperature: 0.2, // přesnější dodržování scénáře (méně improvizace)
           });
           state.history = messages;
-          state.transcript.push({ role: 'agent', text, ts: Date.now() });
-          send(ws, { type: 'text', token: text, last: true });
+          // Značka jazyka [[lang:xx]] → přepnout řeč + přepis, značku z textu odstranit
+          let outText = String(text || '');
+          if (state.multilang) {
+            const lm = outText.match(/\[\[lang:([a-z]{2})\]\]/i);
+            if (lm) { const code = lm[1].toLowerCase(); if (LANGS[code] && code !== state.lang) { state.lang = code; send(ws, { type: 'language', ttsLanguage: LANGS[code], transcriptionLanguage: LANGS[code] }); console.log('[voice] jazyk hovoru → ' + LANGS[code]); } }
+          }
+          outText = outText.replace(/\[\[lang:[a-z]{2}\]\]\s*/gi, '').trim();
+          state.transcript.push({ role: 'agent', text: outText, ts: Date.now() });
+          send(ws, { type: 'text', token: outText, last: true });
           // 2) Pojistka: když AI sama v odpovědi slíbí přepojení, spusť ho po doříkání.
           if (!state.handedOff && transferAllowed && aiPromisesTransfer(text)) {
             console.log('[voice] AI slíbila přepojení → handoff po doříkání.');

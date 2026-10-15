@@ -734,7 +734,7 @@ function paProfile(p) {
 function paCompile(p) {
   const f = p.gender === 'male'; const ja = f ? 'asistent' : 'asistentka'; const owner = p.owner_name || 'kolega';
   const L = [];
-  L.push('ROLE: Jsi osobní telefonní ' + ja + (p.assistant_name ? ' jménem ' + p.assistant_name : '') + '. MAJITEL LINKY (za koho mluvíš): ' + owner + (p.owner_role ? ', ' + p.owner_role : '') + (p.company ? ', firma ' + p.company.replace(/\.$/, '') : '') + '. Majitel teď nemůže hovor přijmout; přijímáš hovor místo něj. Jméno majitele skloňuj česky správně. Mluvíš česky' + (p.english ? ' (když volající mluví anglicky, přepni do angličtiny)' : '') + '.');
+  L.push('ROLE: Jsi osobní telefonní ' + ja + (p.assistant_name ? ' jménem ' + p.assistant_name : '') + '. MAJITEL LINKY (za koho mluvíš): ' + owner + (p.owner_role ? ', ' + p.owner_role : '') + (p.company ? ', firma ' + p.company.replace(/\.$/, '') : '') + '. Majitel teď nemůže hovor přijmout; přijímáš hovor místo něj. Jméno majitele skloňuj česky správně. Mluvíš česky' + (p.english ? '; když volající mluví jiným jazykem (angličtina, němčina, slovenština, polština, ukrajinština, ruština, …), mluv jeho jazykem' : ' a jen česky') + '.');
   L.push('TÓN: ' + (p.tone === 'friendly' ? 'přátelský, vstřícný, ale profesionální; vykáš.' : 'formální, zdvořilý a věcný; vždy vykáš.') + ' Mluv krátce — jedna věta nebo jedna otázka najednou, nech volajícího domluvit.');
   L.push('AI: ' + (p.ai_disclose === 'start' ? 'Hned na začátku hovoru jasně řekni, že jsi AI ' + ja + '.' : 'Neříkej sám od sebe, že jsi AI; když se volající zeptá, pravdivě přiznej, že jsi AI ' + ja + '. Nikdy netvrď, že jsi člověk.'));
   const C = { name: 'jméno a příjmení volajícího', company: 'firmu, za kterou volá', phone: 'telefon pro zpětné volání (zeptej se, jestli platí číslo, ze kterého volá)', email: 'e-mail', reason: 'důvod hovoru — co přesně potřebuje', urgency: 'jak je to naléhavé', callback_time: 'kdy se mu hodí zpětné zavolání' };
@@ -806,6 +806,7 @@ admin.put('/personal-assistant/:personId', async (req, res, next) => {
       await s('voice.' + line + '.pa_profile', prof, { type: 'json' });
       await s('voice.' + line + '.inbound_prompt', paCompile(prof).slice(0, 8000), { type: 'string' });
       await s('voice.' + line + '.use_knowledge', !!prof.share.products, { type: 'boolean' });
+      await s('voice.' + line + '.multilang', !!prof.english, { type: 'boolean' });
     } else {
       await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
     }

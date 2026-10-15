@@ -407,7 +407,7 @@
         + '<div class="form-group"><label>Naléhavé věci</label>' + sel('pa-urgent', [['mark', 'Předat jako naléhavé (nepřepojovat)'], ['transfer', 'Nabídnout přepojení']], p.urgent) + '</div>'
         + '<div class="form-group"><label>Obchodní nabídky / reklama</label>' + sel('pa-offers', [['decline', 'Zdvořile odmítnout a ukončit'], ['take_message', 'Vzít kontakt a popis']], p.offers) + '</div>'
         + '<div class="form-group"><label>Max. délka hovoru (min)</label><input id="pa-max" type="number" min="1" max="15" value="' + (p.max_minutes || 3) + '"></div>'
-        + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> Umí přepnout do angličtiny</label></div></div>')
+        + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> 🌍 Mluví jazykem volajícího (EN, DE, SK, PL, UK, RU…)</label></div></div>')
       + sec('📝 Co má zjistit', paChecks('collect', PA_COLLECT, p.collect))
       + sec('✅ Co smí sdělit (nic jiného neřekne)', paChecks('share', PA_SHARE, p.share)
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"><div class="form-group"><label>„Ozve se…"</label>' + inp('pa-cbtext', p.callback_text, 'co nejdříve, obvykle ještě týž den') + '</div><div class="form-group"><label>Web</label>' + inp('pa-web', p.web, 'www.bestseries.cz') + '</div>'
