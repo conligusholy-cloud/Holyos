@@ -713,7 +713,7 @@ function adminLocationOrders({ adminLayout, admin, rows = [], counts = {}, statu
     ${rows.map((o) => `<tr>
       <td data-l="Datum" class="small muted">${fmtDT(o.created_at)}${o.paid_at ? `<div>zapl. ${fmtDT(o.paid_at)}</div>` : ''}${o.access_granted_at ? `<div>předáno ${fmtDT(o.access_granted_at)}</div>` : ''}</td>
       <td data-l="Zákazník"><b>${esc(o.name)}</b>${o.supporter_id ? ` <a class="small" href="/admin/supporters/${o.supporter_id}">účet #${o.supporter_id}</a>` : ''}${o.sites_count != null ? `<div class="small muted">lokalit v aplikaci: ${o.sites_count}</div>` : ''}<div class="small"><a href="mailto:${esc(o.email)}">${esc(o.email)}</a></div>${o.phone ? `<div class="small muted">${esc(o.phone)}</div>` : ''}${o.company ? `<div class="small muted">${esc(o.company)}</div>` : ''}${o.marketing ? '<div class="small muted">✓ marketing</div>' : ''}</td>
-      <td data-l="Balíček"><b>${esc((PACKAGES[o.package] || EVAL_PACKS[o.package] || UPGRADE_PACKS[o.package] || {}).label || o.package)}</b></td>
+      <td data-l="Balíček"><b>${esc((PACKAGES[o.package] || EVAL_PACKS[o.package] || UPGRADE_PACKS[o.package] || {}).label || o.package)}</b>${o.product === 'finder' ? '<div class="small muted">🔎 Vyhledávač míst</div>' : ''}</td>
       <td data-l="Částka">${kc(o.amount_czk)} <span class="small muted">s DPH</span></td>
       <td data-l="Stav">${badge(o)}</td>
       <td data-l="Stripe" class="small">${o.stripe_payment_intent ? `<a href="https://dashboard.stripe.com/payments/${esc(o.stripe_payment_intent)}" target="_blank" rel="noopener">platba ↗</a>` : (o.stripe_session ? `<span class="muted">session</span>` : '<span class="muted">—</span>')}</td>

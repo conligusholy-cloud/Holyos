@@ -683,6 +683,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   const oid = ins.rows[0].id; saveAttribution(oid, req.body).catch(() => {}); const base = locBase(req);
+  if (isFinder) await q("UPDATE location_orders SET product='finder' WHERE id=$1", [oid]);
   const retPath = isFinder || (req.body || {}).ret === '/findlocation' ? '/findlocation' : '/location'; // návrat ze Stripe na správnou záchytnou stránku
   notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const session = await stripePost('checkout/sessions', {
@@ -705,6 +706,7 @@ app.post('/api/location/interest', wrap(async (req, res) => {
   const insReq = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   saveAttribution(insReq.rows[0].id, req.body).catch(() => {});
+  if ((req.body || {}).product === 'finder') await q("UPDATE location_orders SET product='finder' WHERE id=$1", [insReq.rows[0].id]);
   locNotify('Nová žádost o balíček ' + pkg.label + ' – ' + d.name, 'Žádost (bez online platby): ' + d.name + ', ' + d.email + (d.phone ? ', ' + d.phone : '') + '. Pošlete platební údaje a po úhradě předejte přístup.').catch(() => {});
   res.json({ ok: true });
 }));
@@ -784,10 +786,11 @@ async function locGrantAccess(o, req) {
   await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
   const base = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
   const activated = !!u.password_hash;
-  const body = 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč za balíček ' + pkg.label + '.\n\n'
-    + (activated ? 'Aplikace Prověření lokality je zpřístupněna ve vašem účtu Best Series 2.0 – po přihlášení ji najdete v záložce Moje lokality.' : 'Váš přístup je připraven. Aktivujte si účet: na stránce Aktivace zadejte tento e-mail (' + o.email + '), zvolte si nick a heslo.')
+  const fnd = o.product === 'finder'; const appName = fnd ? 'Vyhledávač míst' : 'Prověření lokality'; const appPath = fnd ? '/lokalita/analyza' : '/lokalita';
+  const body = 'Dobrý den, děkujeme za platbu ' + Number(o.amount_czk).toLocaleString('cs-CZ') + ' Kč za ' + (fnd ? 'balíček Vyhledávače míst ' : 'balíček ') + pkg.label + '.\n\n'
+    + (activated ? 'Aplikace ' + appName + ' je zpřístupněna ve vašem účtu Best Series 2.0 – po přihlášení ji najdete v nabídce' + (fnd ? ' Vyhledávač míst.' : ' Moje lokality.') : 'Váš přístup je připraven. Aktivujte si účet: na stránce Aktivace zadejte tento e-mail (' + o.email + '), zvolte si nick a heslo. Pak se přihlásíte a aplikace ' + appName + ' bude hned k dispozici.')
     + '\n\nPřístup platí 12 měsíců. Doklad o platbě přijde samostatně ze Stripe.\n\nBest Series s.r.o.';
-  await sendBs2Mail({ to: o.email, subject: 'Přístup do aplikace Prověření lokality (' + pkg.label + ')', body, link: activated ? base + '/lokalita' : base + '/activate', linkLabel: activated ? 'Otevřít aplikaci' : 'Aktivovat účet' });
+  await sendBs2Mail({ to: o.email, subject: 'Přístup do aplikace ' + appName + ' (' + pkg.label + ')', body, link: activated ? base + appPath : base + '/activate', linkLabel: activated ? 'Otevřít aplikaci' : 'Aktivovat účet' });
   console.log('[bs2] /location přístup předán: účet #' + u.id + ' ' + o.email);
 }
 async function requireLocation(req, res, next) {

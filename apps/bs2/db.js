@@ -279,6 +279,7 @@ async function migrate() {
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS sid TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS product TEXT; -- z které záchytné stránky přišla objednávka: 'finder' = /findlocation, jinak /location
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_source TEXT;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_medium TEXT;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_campaign TEXT;
