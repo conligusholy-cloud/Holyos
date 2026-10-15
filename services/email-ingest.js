@@ -466,9 +466,18 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
 // Vytvořit Invoice z výsledku pipeline
 // ────────────────────────────────────────────────────────────────────────────
 
+// Typ dokladu musí odpovídat směru: OCR občas vrátí „issued“ i u přijaté faktury (a naopak).
+function typeForDirection(type, direction) {
+  const t = String(type || '');
+  const base = t.startsWith('credit_note') ? 'credit_note' : t.startsWith('proforma') ? 'proforma' : '';
+  const suffix = direction === 'ap' ? 'received' : 'issued';
+  return base ? `${base}_${suffix}` : suffix;
+}
+
 async function createInvoiceFromResult(result, ingest) {
-  const h = result.header || {};
+  const h = Object.assign({}, result.header || {});
   const direction = result.direction;
+  h.type = typeForDirection(h.type, direction);
   const needsReview = result.recommendation === 'needs_review';
 
   const year = new Date().getFullYear();
@@ -505,7 +514,7 @@ async function createInvoiceFromResult(result, ingest) {
     data: {
       invoice_number,
       external_number: h.external_number || null,
-      type: h.type || (direction === 'ap' ? 'received' : 'issued'),
+      type: h.type,
       direction,
       company_id: result.matched_company_id || await getPlaceholderCompanyId(),
       currency: h.currency || 'CZK',
