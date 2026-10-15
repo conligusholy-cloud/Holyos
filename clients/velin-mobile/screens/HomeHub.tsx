@@ -49,11 +49,10 @@ export default function HomeHub() {
       const auth = await loadAuth();
       setName(String((auth as any).displayName || '').split(' ')[0] || '');
       if (!auth.jwt) return;
-      // Odznak u „Vzkazy" = počet vzkazů za posledních 24 h
+      // Odznak u „Vzkazy" = počet nepřečtených vzkazů
       try {
         const r = await api.myAssistantCalls(auth.jwt);
-        const since = Date.now() - 24 * 3600 * 1000;
-        const n = (r.calls || []).filter((c) => new Date(c.started_at).getTime() >= since).length;
+        const n = typeof r.unread === 'number' ? r.unread : (r.calls || []).filter((c) => !c.read).length; // nepřečtené vzkazy
         setBadges((b) => ({ ...b, assistant: n }));
       } catch (_) { /* bez odznaku */ }
     } catch (_) { /* nic */ }

@@ -277,6 +277,7 @@ export type AssistantCall = {
   duration_sec: number | null;
   handoff: boolean;
   audio_url: string | null;
+  read?: boolean; // vzkaz už jsem si otevřel
   audio_play_url?: string | null; // podepsaný odkaz přes HolyOS (hraje bez přihlášení k Twiliu)
   transcript: Array<{ role?: string; text?: string }> | null;
   full_transcript: string | null;
@@ -320,10 +321,12 @@ export const api = {
 
   // Vzkazy/hovory osobního asistenta (s nahrávkou + přepisem)
   myAssistantCalls: (jwt: string) =>
-    request<{ calls: AssistantCall[] }>('GET', '/api/velin/me/assistant/calls', {
+    request<{ calls: AssistantCall[]; unread?: number }>('GET', '/api/velin/me/assistant/calls', {
       jwt,
       timeoutMs: SLOW_ENDPOINT_TIMEOUT_MS,
     }),
+  markAssistantCallRead: (jwt: string, id: string, read = true) =>
+    request<{ ok: boolean; read: boolean }>('POST', `/api/velin/me/assistant/calls/${encodeURIComponent(id)}/read`, { jwt, body: { read } }),
 
   myDay: (jwt: string) =>
     request<{ date: string; plan: any; overdue: any[] }>('GET', '/api/velin/my-day', {

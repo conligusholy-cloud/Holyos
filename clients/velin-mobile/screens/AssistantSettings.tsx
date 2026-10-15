@@ -83,10 +83,24 @@ export default function AssistantSettings() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-  // Otevření z notifikace: rozbal daný hovor a odscrolluj na něj
+
+  // Přečtení: otevřením vzkazu se označí jako přečtený (lokálně hned + na serveru); lze vrátit na nepřečtený
+  const setRead = useCallback(async (id: string, read: boolean) => {
+    setCalls((cs) => cs.map((x) => (x.id === id ? { ...x, read } : x)));
+    try { const auth = await loadAuth(); if (auth.jwt) await api.markAssistantCallRead(auth.jwt, id, read); } catch { /* zkusí se příště */ }
+  }, []);
+  const toggleOpen = (c: AssistantCall) => {
+    const willOpen = openId !== c.id;
+    setOpenId(willOpen ? c.id : null);
+    if (willOpen && !c.read) setRead(c.id, true);
+  };
+  const unreadCount = calls.filter((c) => !c.read).length;
+
+  // Otevření z notifikace: rozbal daný hovor, označ jako přečtený a odscrolluj na něj
   useEffect(() => {
     if (!focusId) return;
     setOpenId(focusId);
+    const fc = calls.find((x) => x.id === focusId); if (fc && !fc.read) setRead(focusId, true);
     const t = setTimeout(() => {
       const y = cardY.current[focusId];
       if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
@@ -101,7 +115,7 @@ export default function AssistantSettings() {
           <Text style={styles.backTxt}>‹ Zpět</Text>
         </TouchableOpacity>
         <Text style={styles.h1}>📩 Vzkazy asistenta</Text>
-        <Text style={styles.sub}>Hovory, které jsi nezvedl a vzal je tvůj AI asistent.</Text>
+        <Text style={styles.sub}>Hovory, které jsi nezvedl a vzal je tvůj AI asistent.{unreadCount ? '  ·  ' : ''}{unreadCount ? <Text style={styles.subNew}>{unreadCount} nepřečten{unreadCount === 1 ? 'ý' : unreadCount < 5 ? 'é' : 'ých'}</Text> : null}</Text>
 
         {loading && calls.length === 0 ? (
           <View style={styles.center}><ActivityIndicator color={colors.accent} /></View>
@@ -116,23 +130,31 @@ export default function AssistantSettings() {
             const src = c.audio_play_url ? apiBase.replace(/\/+$/, '') + c.audio_play_url : null;
             const showFull = fullFor === c.id;
             return (
-              <View key={c.id} style={[styles.msgCard, open && styles.msgCardOpen]} onLayout={(e) => { cardY.current[c.id] = e.nativeEvent.layout.y; }}>
-                <TouchableOpacity onPress={() => setOpenId(open ? null : c.id)} activeOpacity={0.8}>
+              <View key={c.id} style={[styles.msgCard, !c.read && styles.msgCardNew, c.read && !open && styles.msgCardRead, open && styles.msgCardOpen]} onLayout={(e) => { cardY.current[c.id] = e.nativeEvent.layout.y; }}>
+                <TouchableOpacity onPress={() => toggleOpen(c)} activeOpacity={0.8}>
                   <View style={styles.rowBetween}>
-                    <Text style={styles.msgWho} numberOfLines={1}>{c.caller_name || c.from_number || 'Neznámý volající'}</Text>
-                    <Text style={styles.msgWhen}>{fmtWhen(c.started_at)}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 8 }}>
+                      {!c.read ? <View style={styles.newDot} /> : null}
+                      <Text style={[styles.msgWho, c.read && styles.msgWhoRead]} numberOfLines={1}>{c.caller_name || c.from_number || 'Neznámý volající'}</Text>
+                    </View>
+                    {!c.read ? <Text style={styles.newPill}>NOVÉ</Text> : <Text style={styles.msgWhen}>{fmtWhen(c.started_at)}</Text>}
                   </View>
-                  <Text style={styles.msgIntent} numberOfLines={open ? undefined : 2}>{c.caller_intent || c.summary || '—'}</Text>
+                  {!c.read ? <Text style={styles.msgWhenNew}>{fmtWhen(c.started_at)}</Text> : null}
+                  <Text style={[styles.msgIntent, c.read && !open && styles.msgIntentRead]} numberOfLines={open ? undefined : 2}>{c.caller_intent || c.summary || '—'}</Text>
                   <Text style={styles.msgTag}>
                     {c.handoff ? '📞 Přepojeno' : '📩 Vzkaz'}
                     {c.duration_sec ? ' · ' + fmtDur(c.duration_sec) : ''}
                     {src ? ' · 🎧 nahrávka' : ''}
+                    {c.read ? ' · ✓ přečteno' : ''}
                     {'  '}{open ? '▲' : '▼'}
                   </Text>
                 </TouchableOpacity>
 
                 {open && (
                   <View style={styles.detail}>
+                    <TouchableOpacity onPress={() => { setRead(c.id, false); setOpenId(null); }} style={{ alignSelf: 'flex-end', marginBottom: spacing.sm }}>
+                      <Text style={styles.link}>○ Označit jako nepřečtené</Text>
+                    </TouchableOpacity>
                     {c.from_number ? (
                       <TouchableOpacity style={styles.callBack} onPress={() => Linking.openURL('tel:' + c.from_number)}>
                         <Text style={styles.callBackTxt}>📞 Zavolat zpět {c.from_number}</Text>
@@ -201,7 +223,15 @@ const styles = StyleSheet.create({
   sub: { color: colors.text2, fontSize: 13, marginTop: 2, marginBottom: spacing.md },
   empty: { color: colors.text2, fontSize: 14, textAlign: 'center', paddingVertical: spacing.lg },
   msgCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm },
-  msgCardOpen: { borderColor: colors.accent },
+  msgCardOpen: { borderColor: colors.accent, opacity: 1 },
+  msgCardNew: { borderColor: '#4fd1ff', borderLeftWidth: 4, backgroundColor: 'rgba(79,209,255,0.07)' },
+  msgCardRead: { opacity: 0.6 },
+  newDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#4fd1ff' },
+  newPill: { color: '#04060c', backgroundColor: '#4fd1ff', fontSize: 10.5, fontWeight: '800', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden', letterSpacing: 0.6 },
+  msgWhoRead: { fontWeight: '500', color: colors.text2 },
+  msgWhenNew: { color: '#4fd1ff', fontSize: 12, marginTop: 2 },
+  msgIntentRead: { color: colors.text2 },
+  subNew: { color: '#4fd1ff', fontWeight: '700' },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   msgWho: { color: colors.text, fontSize: 15, fontWeight: '700', flex: 1 },
   msgWhen: { color: colors.text2, fontSize: 12 },
