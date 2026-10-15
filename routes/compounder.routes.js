@@ -1590,11 +1590,11 @@ async function autosendAiSpecialistEmail(lead, opts) {
     const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'outreach_skip', path: '/autosend', props: { lead_id: lead.id, reason: why, channel: 'email' } } }).catch(() => {}); };
     if (!lead.email) return skip('chybí e-mail');
     // Pojistka: lead obchodníka s variantou „schůzka" nedostane specialistu (ani e-mailem).
-    if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) return skip('obchodník má variantu schůzka');
+    // Skryté filtry podle obchodníka (z doby před funelem) se u e-mailu už NEuplatňují – o tom, kdo e-mail dostane, rozhoduje cesta ve funelu
+    // (Rozdělení leadů → Seznam → E-mail). Dřív právě ony tiše zastavovaly nové leady (zejména Tomáše a Jana).
     if (lead.outreach_variant === 'schuzka' || lead.schuzka_sms_sent_at || lead.schuzka_email_sent_at) return skip('už osloveno variantou schůzka');
     if (!manual && Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
     if (!manual && cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('stav není Nový');
-    if (!manual && Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
