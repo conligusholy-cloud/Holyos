@@ -472,7 +472,7 @@ router.put('/invoices/:id', async (req, res, next) => {
       'date_issued', 'date_taxable', 'date_due', 'payment_method',
       'variable_symbol', 'constant_symbol', 'specific_symbol',
       'partner_bank_account', 'partner_iban', 'partner_bic',
-      'vat_regime', 'language', 'note', 'internal_note',
+      'vat_regime', 'language', 'note', 'internal_note', 'company_id', 'tags',
     ];
     const updateData = {};
     for (const k of allowed) {
@@ -485,7 +485,48 @@ router.put('/invoices/:id', async (req, res, next) => {
       }
     }
 
-    const invoice = await prisma.invoice.update({ where: { id }, data: updateData });
+    // Ruční změna čísla dokladu — jen admin, jen u rozpracované faktury, bez duplicit
+    if (req.body.invoice_number && String(req.body.invoice_number).trim() !== before.invoice_number) {
+      if (req.user?.role !== 'admin' && !req.user?.isSuperAdmin) return res.status(403).json({ error: 'Číslo dokladu může změnit jen admin' });
+      if (before.status !== 'draft') return res.status(400).json({ error: 'Číslo lze měnit jen u rozpracované faktury' });
+      const no = String(req.body.invoice_number).trim().slice(0, 50);
+      const dup = await prisma.invoice.findUnique({ where: { invoice_number: no }, select: { id: true } });
+      if (dup) return res.status(409).json({ error: 'Doklad s číslem ' + no + ' už existuje' });
+      updateData.invoice_number = no;
+    }
+    if (updateData.company_id != null) updateData.company_id = parseInt(updateData.company_id, 10);
+
+    // Položky: pokud přijdou, nahradí se celé (jen u rozpracované faktury)
+    let newItems = null;
+    if (Array.isArray(req.body.items)) {
+      if (before.status !== 'draft') return res.status(400).json({ error: 'Položky lze přepsat jen u rozpracované faktury' });
+      const parsedItems = z.array(itemSchema).safeParse(req.body.items);
+      if (!parsedItems.success) return res.status(400).json({ error: 'Validace položek selhala', details: parsedItems.error.issues });
+      newItems = parsedItems.data.map((it, idx) => {
+        const am = calcItemAmounts(it.quantity, it.unit_price, it.vat_rate);
+        return {
+          invoice_id: id, line_order: idx + 1, description: it.description, quantity: it.quantity,
+          unit: it.unit || 'ks', unit_price: it.unit_price, vat_rate: it.vat_rate,
+          subtotal: am.subtotal.toFixed(2), vat_amount: am.vat_amount.toFixed(2), total: am.total.toFixed(2),
+          cost_center_id: it.cost_center_id || null, material_id: it.material_id || null, product_id: it.product_id || null,
+          vehicle_id: it.vehicle_id || null, person_id: it.person_id || null, order_item_id: it.order_item_id || null,
+          note: it.note || null,
+        };
+      });
+    }
+
+    let invoice;
+    if (newItems) {
+      invoice = await prisma.$transaction(async (tx) => {
+        await tx.invoiceItem.deleteMany({ where: { invoice_id: id } });
+        if (newItems.length) await tx.invoiceItem.createMany({ data: newItems });
+        return tx.invoice.update({ where: { id }, data: updateData });
+      });
+      await recalculateInvoiceTotals(id);
+      invoice = await prisma.invoice.findUnique({ where: { id } });
+    } else {
+      invoice = await prisma.invoice.update({ where: { id }, data: updateData });
+    }
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: `Upravena faktura ${invoice.invoice_number}`,

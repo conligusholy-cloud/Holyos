@@ -983,6 +983,7 @@
               (window.currentUser?.isSuperAdmin
                 ? '<button class="btn btn-danger" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Super admin: trvalé smazání">🗑️ Trvale smazat</button>'
                 : '') +
+              (inv.status === 'draft' ? '<button class="btn btn-secondary" onclick="editInvoice(' + inv.id + ')">✏️ Upravit</button>' : '') +
               (canEdit && inv.status !== 'cancelled' ? '<button class="btn btn-danger" onclick="cancelInvoice(' + inv.id + ')">Zrušit</button>' : '') +
               (canSubmitForApproval && inv.status !== 'awaiting_approval' ? '<button class="btn btn-secondary" onclick="submitForApproval(' + inv.id + ')">Poslat ke schválení</button>' : '') +
               (inv.status === 'awaiting_approval' ? '<button class="btn btn-primary" onclick="approveInvoice(' + inv.id + ')">✅ Schválit</button><button class="btn btn-danger" onclick="rejectInvoice(' + inv.id + ')">❌ Zamítnout</button>' : '') +
@@ -1469,13 +1470,27 @@
       renderCreateItems();
     };
 
-    window.openCreateModal = async function(defaultType) {
+    window.openCreateModal = async function(defaultType, editInv) {
       defaultType = defaultType || 'received';
       window.cState = { items: [makeEmptyItem()], pricesWithVat: false, currency: 'CZK', vatRegime: 'standard' };
 
       const r = await api('GET', '/api/wh/companies');
       const companies = r.status === 200 ? r.data : [];
       window.cState.companies = companies;
+      // Režim úpravy rozpracované faktury: předvyplň stav
+      const E = editInv || null;
+      window.cState.editId = E ? E.id : null;
+      if (E) {
+        window.cState.vatRegime = E.vat_regime || 'standard';
+        window.cState.currency = E.currency || 'CZK';
+        window.cState.items = (E.items || []).map(it => ({
+          description: it.description || '', quantity: Number(it.quantity), unit: it.unit || 'ks',
+          input_price: Number(it.unit_price), vat_rate: Number(it.vat_rate), note: it.note || '',
+          _x: { cost_center_id: it.cost_center_id || null, material_id: it.material_id || null, product_id: it.product_id || null,
+                vehicle_id: it.vehicle_id || null, person_id: it.person_id || null, order_item_id: it.order_item_id || null },
+        }));
+        if (!window.cState.items.length) window.cState.items = [makeEmptyItem()];
+      }
       const consigneeOpts = '<option value="">Žádný</option>' +
         companies.map(c => '<option value="' + c.id + '">' + escapeHtml(c.name) + (c.ico ? ' (' + escapeHtml(c.ico) + ')' : '') + '</option>').join('');
       const companyOpts = '<option value="">— vyber firmu —</option>' +
@@ -1485,8 +1500,10 @@
       const today = new Date().toISOString().split('T')[0];
       const due14 = new Date(Date.now() + 14*86400000).toISOString().split('T')[0];
 
-      const currencyOpts = ['CZK', 'EUR', 'USD', 'GBP', 'PLN'].map(c =>
-        '<option value="' + c + '"' + (c === 'CZK' ? ' selected' : '') + '>' + c + '</option>').join('');
+      const curList = ['CZK', 'EUR', 'USD', 'GBP', 'PLN'];
+      if (!curList.includes(window.cState.currency)) curList.push(window.cState.currency);
+      const currencyOpts = curList.map(c =>
+        '<option value="' + c + '"' + (c === window.cState.currency ? ' selected' : '') + '>' + c + '</option>').join('');
 
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay">' +
@@ -1581,7 +1598,31 @@
         '</div>'
       );
       renderCreateItems();
-      loadCreateDocNumber();
+      if (E) {
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v == null ? '' : v; };
+        document.querySelector('#modal-root h2').textContent = 'Upravit fakturu';
+        const saveBtn = document.querySelector('#modal-root .modal-actions .btn-primary');
+        if (saveBtn) saveBtn.textContent = 'Uložit změny';
+        set('c-type', E.type); document.getElementById('c-type').disabled = true;
+        set('c-company', E.company_id);
+        set('c-language', E.language || 'cs'); set('c-vat-regime', E.vat_regime || 'standard');
+        const co = companies.find(x => x.id === E.company_id);
+        set('c-consignee', co && co.consignee_id ? co.consignee_id : '');
+        set('c-external', E.external_number); set('c-vs', E.variable_symbol);
+        set('c-issued', String(E.date_issued || '').slice(0, 10)); set('c-taxable', String(E.date_taxable || '').slice(0, 10));
+        set('c-due', String(E.date_due || '').slice(0, 10));
+        set('c-payment-method', E.payment_method || 'bank_transfer'); set('c-note', E.note);
+        const sv = document.getElementById('c-is-service'); if (sv) sv.checked = Array.isArray(E.tags) && E.tags.includes('service');
+        const dn = document.getElementById('c-docnum'); if (dn) dn.textContent = E.invoice_number;
+      } else {
+        loadCreateDocNumber();
+      }
+    };
+
+    window.editInvoice = async function(id) {
+      const r = await api('GET', '/api/accounting/invoices/' + id);
+      if (r.status !== 200) return alert('Nelze načíst fakturu');
+      await openCreateModal(r.data.type, r.data);
     };
 
     window.submitCreate = async function() {
@@ -1599,6 +1640,7 @@
             unit_price: c.unit_netto, // backend vždy očekává cenu bez DPH
             vat_rate: Number(it.vat_rate),
             note: it.note || null,
+            ...(it._x || {}),
           };
         });
 
@@ -1629,8 +1671,9 @@
         const pr = await api('PUT', '/api/wh/companies/' + company_id, { consignee_id: newCons });
         if (pr.status !== 200) return alert('Nepodařilo se uložit příjemce: ' + (pr.data?.error || pr.status));
       }
-      const r = await api('POST', '/api/accounting/invoices', body);
-      if (r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status) + '\n' + JSON.stringify(r.data?.details || ''));
+      const editing = window.cState.editId;
+      const r = editing ? await api('PUT', '/api/accounting/invoices/' + editing, body) : await api('POST', '/api/accounting/invoices', body);
+      if (r.status !== (editing ? 200 : 201)) return alert('Chyba: ' + (r.data?.error || r.status) + '\n' + JSON.stringify(r.data?.details || ''));
       closeModal(); loadInvoices(); loadSummary();
       setTimeout(() => openDetail(r.data.id), 100);
     };
