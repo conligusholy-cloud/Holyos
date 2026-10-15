@@ -619,8 +619,9 @@ function attach(server) {
         } catch (e) {
           console.warn('[voice] update cíle kampaně selhal:', e.message);
         }
-      } else {
-        // Inbound: push do Velína (obecné zmeškání/odbavení)
+      } else if (!/^osobni-\d+$/.test(String(line || ''))) {
+        // Inbound: push do Velína (obecné zmeškání/odbavení). Osobní asistent (osobni-<id>) sem NEpatří —
+        // jeho vzkazy dostává výhradně majitel linky (blok „Osobní asistent" výše), nikdo jiný.
         try {
           const notify = require('./notify');
           await notify.notifyCall({

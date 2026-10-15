@@ -1026,6 +1026,10 @@ router.get('/calls', requireAuth, async (req, res, next) => {
         ? { line: 'infolinka' }
         : { OR: [{ line: 'obchod' }, { line: null }] };
     }
+    // Hovory osobních asistentů (linka osobni-<id>) vidí jen jejich majitel — ne ostatní v přehledu hovorů.
+    let myPid = null; try { const u = req.user && req.user.id ? await prisma.user.findUnique({ where: { id: req.user.id }, select: { person: { select: { id: true } } } }) : null; myPid = u && u.person ? u.person.id : null; } catch (_) { myPid = null; }
+    const privacy = { OR: [{ line: null }, { NOT: { line: { startsWith: 'osobni-' } } }].concat(myPid ? [{ line: 'osobni-' + myPid }] : []) };
+    where = where ? { AND: [where, privacy] } : privacy;
     const calls = await prisma.voiceCall.findMany({
       where,
       orderBy: { started_at: 'desc' },
