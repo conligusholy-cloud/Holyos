@@ -54,7 +54,7 @@ export default function SupportList() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'unread' | 'waiting'>('all');
+  const [filter, setFilter] = useState<'all' | 'unread' | 'waiting' | 'online'>('all');
   const [toggling, setToggling] = useState(false);
   const mounted = useRef(true);
   useEffect(() => () => { mounted.current = false; }, []);
@@ -112,8 +112,10 @@ export default function SupportList() {
   // Čeká na odpověď = zákazník psal naposled a už jsme ji otevřeli (nepřečtená není), ale neodpověděli jsme
   const isWaiting = (t: SupportThread) => t.unread === 0 && t.last_sender === 'user';
   const waitingCount = threads.filter(isWaiting).length;
+  const onlineCount = threads.filter((t) => t.online).length;
   const shown = filter === 'unread' ? threads.filter((t) => t.unread > 0)
-    : filter === 'waiting' ? threads.filter(isWaiting) : threads;
+    : filter === 'waiting' ? threads.filter(isWaiting)
+    : filter === 'online' ? threads.filter((t) => t.online) : threads.filter((t) => t.last_at); // „Vše" = jen ti, kdo už psali
 
   if (loading && threads.length === 0) {
     return (
@@ -166,6 +168,15 @@ export default function SupportList() {
             Čeká na odpověď{waitingCount > 0 ? ` ${waitingCount}` : ''}
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.chip, filter === 'online' && styles.chipOn]}
+          onPress={() => setFilter('online')}
+        >
+          <View style={[styles.chipDot, { backgroundColor: '#22c55e' }]} />
+          <Text style={[styles.chipText, filter === 'online' && styles.chipTextOn]}>
+            Online{onlineCount > 0 ? ` ${onlineCount}` : ''}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {!online && (
@@ -194,7 +205,7 @@ export default function SupportList() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyText}>{filter === 'unread' ? 'Žádné nepřečtené zprávy.' : filter === 'waiting' ? 'Na všechny je odpovězeno.' : 'Zatím nikdo nepsal.'}</Text>
+            <Text style={styles.emptyText}>{filter === 'unread' ? 'Žádné nepřečtené zprávy.' : filter === 'waiting' ? 'Na všechny je odpovězeno.' : filter === 'online' ? 'Právě není nikdo na webu.' : 'Zatím nikdo nepsal.'}</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -208,7 +219,7 @@ export default function SupportList() {
             >
               <View style={styles.avWrap}>
                 <View style={styles.av}><Text style={styles.avText}>{initials(name)}</Text></View>
-                {item.online ? <View style={styles.onDot} /> : null}
+                <View style={[styles.onDot, !item.online && styles.offDot]} />
                 {item.unread === 0 && isWaiting(item) && <View style={styles.waitDot} />}
                 {item.unread > 0 && (
                   <View style={styles.badge}><Text style={styles.badgeText}>{item.unread > 99 ? '99+' : item.unread}</Text></View>
@@ -243,10 +254,11 @@ const styles = StyleSheet.create({
   pillOff: { borderColor: colors.border, backgroundColor: colors.surface },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 13, fontWeight: '700' },
-  filters: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.border },
   chipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#f59e0b', marginRight: 6 },
   onDot: { position: 'absolute', bottom: -2, right: -2, width: 15, height: 15, borderRadius: 8, backgroundColor: '#22c55e', borderWidth: 2.5, borderColor: colors.bg },
+  offDot: { backgroundColor: '#64748b' },
   waitDot: { position: 'absolute', top: -3, right: -3, width: 16, height: 16, borderRadius: 8, backgroundColor: '#f59e0b', borderWidth: 2, borderColor: colors.bg },
   chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.text2, fontSize: 13, fontWeight: '600' },

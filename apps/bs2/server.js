@@ -1751,6 +1751,11 @@ app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
       (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender
     FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
   threads.forEach((t) => { t.online = ST.isOnline(t.id); }); // je zákazník právě na webu (ping do 90 s)
+  // Právě přihlášení na webu, kteří ještě nikdy nepsali – aby jim šlo napsat první (filtr „Online" ve Velínu)
+  try {
+    const have = new Set(threads.map((t) => t.id)); const ids = ST.onlineIds().map(Number).filter((n) => Number.isInteger(n) && !have.has(n));
+    if (ids.length) (await q('SELECT id, nick, first_name, last_name, email FROM supporters WHERE id = ANY($1::int[])', [ids])).rows.forEach((u) => threads.push({ id: u.id, nick: u.nick, first_name: u.first_name, last_name: u.last_name, email: u.email, unread: 0, last_at: null, last_body: null, last_sender: null, online: true }));
+  } catch (e) { /* online bez vlákna je jen bonus */ }
   res.set('Cache-Control', 'no-store').json({ online: await supportOnline(), agent: await supportAgent(), agents: await supportAgents(), threads });
 }));
 app.get('/api/svc/support/threads/:id(\\d+)', requireSvc, wrap(async (req, res) => {
