@@ -449,6 +449,12 @@ app.post('/api/presence/ping', (req, res) => {
   res.json({ ok: true });
 });
 // Statistiky pro HolyOS Centrum reklamy (JWT iss=holyos, aud=bs2-api, sdílený BS2_SSO_SECRET)
+// Atribuce objednávky: první dotyk (UTM, ID reklamy, click id) z prohlížeče – jen texty, žádné osobní údaje
+async function saveAttribution(orderId, body) {
+  const b = body || {}; const t = b.attr && typeof b.attr === 'object' ? b.attr : {}; const c = (v) => (v == null || v === '' ? null : String(v).slice(0, 160));
+  const ft = t.ft && !isNaN(new Date(t.ft)) ? new Date(t.ft) : null;
+  await q('UPDATE location_orders SET sid=$2, utm_source=$3, utm_medium=$4, utm_campaign=$5, utm_content=$6, utm_term=$7, ad_id=$8, click_id=$9, first_touch_at=$10 WHERE id=$1', [orderId, c(b.sid), c(t.utm_source), c(t.utm_medium), c(t.utm_campaign), c(t.utm_content), c(t.utm_term), c(t.ad_id), c(t.fbclid || t.gclid), ft]);
+}
 // Rozšířená data o chování pro redesign: zdroje/kampaně, formulář po polích, balíčky, frustrace, interakce, video, výkon, technika, odpovědi z ankety, denní řada
 function behaviorExtras(ev) {
   const med = (a) => { const x = a.filter((v) => Number.isFinite(v)).sort((p, q2) => p - q2); return x.length ? x[Math.floor(x.length / 2)] : null; };
@@ -501,6 +507,7 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   const ordersByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, count(*)::int AS n, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1 ORDER BY 1", [sinceTs, untilTs])).rows;
   const customers = Number(((await q('SELECT count(*)::int AS n FROM supporters WHERE location_package IS NOT NULL')).rows[0] || {}).n || 0);
   const logins = (await q("SELECT count(DISTINCT supporter_id)::int AS n FROM user_events WHERE type='login' AND created_at > $1::timestamptz AND created_at < $2::timestamptz", [sinceTs, untilTs])).rows[0];
+  const ordersByAttr = (await q("SELECT COALESCE(NULLIF(utm_source,''),'(bez značky)') AS source, COALESCE(NULLIF(utm_campaign,''),'(bez značky)') AS campaign, COALESCE(NULLIF(utm_content,''),'') AS content, COALESCE(ad_id,'') AS ad_id, count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1,2,3,4 ORDER BY revenue DESC", [sinceTs, untilTs]).catch(() => ({ rows: [] }))).rows;
   // detail pro marketing: tržba po dnech, balíčky (zaplacené), hodiny objednávek
   const revenueByDay = (await q("SELECT to_char(created_at,'YYYY-MM-DD') AS d, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1 ORDER BY 1", [sinceTs, untilTs])).rows;
   const ordersByPackage = (await q("SELECT package, count(*)::int AS total, count(*) FILTER (WHERE status IN ('paid','granted'))::int AS paid, COALESCE(sum(amount_czk) FILTER (WHERE status IN ('paid','granted')),0) AS revenue FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY package ORDER BY paid DESC", [sinceTs, untilTs])).rows;
@@ -522,7 +529,7 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
     const n = sess.size; const sec = Object.keys(sections).map((k) => ({ name: k, seen: sections[k].size, avg_secs: dwell[k] ? Math.round(dwell[k].s / Math.max(1, dwell[k].sids.size)) : 0 })).sort((a, b) => b.seen - a.seen);
     behavior = { sessions: n, scroll: { 25: scroll[25].size, 50: scroll[50].size, 75: scroll[75].size, 100: scroll[100].size }, sections: sec, clicks: Object.keys(clicks).map((k) => ({ name: k, n: clicks[k].size })).sort((a, b) => b.n - a.n).slice(0, 25), exits: Object.keys(exits).map((k) => ({ name: k, n: exits[k] })).sort((a, b) => b.n - a.n), avg_time: Object.keys(time).length ? Math.round(Object.values(time).reduce((a, b) => a + b, 0) / Object.keys(time).length) : null, devices: dev, device_sessions: { m: devSids.m.size, d: devSids.d.size }, events: Object.keys(evs).map((k) => ({ name: k, sessions: evs[k].sids.size, total: evs[k].total })).sort((a, b) => b.sessions - a.sessions), referrers: Object.keys(refs).map((k) => ({ name: k, n: refs[k] })).sort((a, b) => b.n - a.n).slice(0, 10), mouse: grid }; }
   if (behavior) { try { Object.assign(behavior, behaviorExtras(ev)); } catch (e) { /* rozšířená data jsou nepovinná */ } }
-  res.json({ days, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
+  res.json({ days, ordersByAttr, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
 }));
 app.get('/api/presence', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -619,7 +626,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   const pkg = LOC.PACKAGES[d.pkg];
   const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
-  const oid = ins.rows[0].id; const base = locBase(req);
+  const oid = ins.rows[0].id; saveAttribution(oid, req.body).catch(() => {}); const base = locBase(req);
   notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
@@ -638,8 +645,9 @@ app.post('/api/location/interest', wrap(async (req, res) => {
   if (rateLimited('loc:' + req.ip, 10, 10 * 60e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho požadavků. Zkuste to prosím za chvíli.' });
   const d = locParse(req.body || {}); if (d.error) return res.status(400).json({ ok: false, error: d.error });
   const pkg = LOC.PACKAGES[d.pkg];
-  await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10)',
+  const insReq = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
+  saveAttribution(insReq.rows[0].id, req.body).catch(() => {});
   locNotify('Nová žádost o balíček ' + pkg.label + ' – ' + d.name, 'Žádost (bez online platby): ' + d.name + ', ' + d.email + (d.phone ? ', ' + d.phone : '') + '. Pošlete platební údaje a po úhradě předejte přístup.').catch(() => {});
   res.json({ ok: true });
 }));

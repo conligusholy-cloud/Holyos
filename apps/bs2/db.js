@@ -278,6 +278,15 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS page_events_sid_idx ON page_events (sid);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS sid TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_source TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_medium TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_campaign TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_content TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS utm_term TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS ad_id TEXT;
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS click_id TEXT; -- fbclid / gclid (první dotyk)
+    ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS first_touch_at TIMESTAMPTZ;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS terms_version TEXT; -- verze obchodních podmínek odsouhlasená před platbou
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_date TEXT;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_tech TEXT;

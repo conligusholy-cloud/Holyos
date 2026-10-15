@@ -1241,6 +1241,11 @@ server.listen(PORT, async () => {
     console.error('[app] meta-leads-sync nelze spustit:', err.message);
   }
   try {
+    require('./services/ads/lead-quality').start();
+  } catch (err) {
+    console.error('[app] lead-quality nelze spustit:', err.message);
+  }
+  try {
     // Hlídač verzí záchytných stránek (Centrum reklamy): loguje každou změnu textu / obrázků / vzhledu
     require('./services/ads/page-watch').start(() => require('./routes/ads-center.routes').PAGES || []);
   } catch (err) {

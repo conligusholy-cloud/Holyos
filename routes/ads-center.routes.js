@@ -351,6 +351,71 @@ router.post('/pages/:key/analyze-goals', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Ziskovost marketingu: útrata po reklamách (Meta) → leady → kvalifikované → prodeje → zisk; kvalita leadů; demografie; časy ──
+const ECON_KEY = 'ads_center.economics';
+const ECON_DEF = { margin_pct: 90, stripe_fee_pct: 1.5, stripe_fee_fixed: 0, sms_cost: 0.9, email_cost: 0.05, machine_price: 0, machine_margin_pct: 0, call_cost_per_lead: 0 };
+async function loadEcon() { const { getSetting } = require('../services/settings'); const v = (await getSetting(ECON_KEY, { type: 'json', defaultValue: {} })) || {}; return Object.assign({}, ECON_DEF, v); }
+router.get('/economics', async (req, res, next) => { try { res.json(await loadEcon()); } catch (err) { next(err); } });
+router.put('/economics', express.json({ limit: '10kb' }), async (req, res, next) => {
+  try { const b = req.body || {}; const out = {}; Object.keys(ECON_DEF).forEach((k) => { const v = Number(b[k]); out[k] = isFinite(v) && v >= 0 ? v : ECON_DEF[k]; });
+    await require('../services/settings').setSetting(ECON_KEY, out, { type: 'json', description: 'Centrum reklamy – ekonomika (marže, poplatky, ceny zpráv)', scope: 'marketing', userId: req.user && req.user.id }); res.json(out); } catch (err) { next(err); }
+});
+const QUAL = new Set(['qualified', 'won', 'prodano', 'converted']), WON = new Set(['won', 'prodano', 'converted']);
+const firstSent = (l) => { const t = [l.ai_specialist_sms_sent_at, l.schuzka_sms_sent_at, l.ai_specialist_email_sent_at, l.schuzka_email_sent_at].filter(Boolean).map((x) => new Date(x).getTime()); return t.length ? Math.min(...t) : null; };
+const medianOf = (a) => { const x = a.filter((v) => isFinite(v)).sort((p, q) => p - q); return x.length ? x[Math.floor(x.length / 2)] : null; };
+function metaRange(days) { const since = sinceDate(days); const until = since.until || new Date(); return { since, until, tr: JSON.stringify({ since: dayKey(since), until: dayKey(new Date(until.getTime() - 1)) }) }; }
+const actOf = (row, t) => { const a = (row.actions || []).find((x) => x.action_type === t); return a ? Number(a.value) : 0; };
+router.get('/profit', async (req, res, next) => {
+  try {
+    const days = parseDays(req.query.days, 30); const { since, until, tr } = metaRange(days); const econ = await loadEcon(); const c = await metaCfg(req);
+    // 1) Meta: útrata a výkon po reklamách
+    let ads = [], metaErr = null, currency = 'CZK';
+    if (c.token && c.account) { try { const j = await graph('act_' + c.account + '/insights', { level: 'ad', fields: 'ad_id,ad_name,adset_name,campaign_id,campaign_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpm,frequency,actions,account_currency', time_range: tr, limit: 500 }, c.token);
+      ads = (j.data || []).map((r) => { currency = r.account_currency || currency; return { ad_id: String(r.ad_id), ad_name: r.ad_name, adset: r.adset_name, campaign_id: String(r.campaign_id), campaign: r.campaign_name, spend: Number(r.spend || 0), impressions: Number(r.impressions || 0), reach: Number(r.reach || 0), clicks: Number(r.inline_link_clicks || actOf(r, 'link_click') || r.clicks || 0), ctr: r.ctr != null ? Number(r.ctr) : null, cpm: r.cpm != null ? Number(r.cpm) : null, frequency: r.frequency != null ? Number(r.frequency) : null, meta_leads: actOf(r, 'lead') || actOf(r, 'onsite_conversion.lead_grouped') }; }); } catch (e) { metaErr = e.message; } } else metaErr = 'Meta není napojená';
+    // 2) leady z HolyOS v období
+    const leads = await prisma.compounderLead.findMany({ where: { created_at: rng(since) }, select: { id: true, status: true, source: true, created_at: true, owner_person_id: true, external_rep_id: true, meta_ad_id: true, ai_specialist_sms_sent_at: true, schuzka_sms_sent_at: true, ai_specialist_email_sent_at: true, schuzka_email_sent_at: true } });
+    const adById = {}; ads.forEach((a) => { a.leads = 0; a.qualified = 0; a.won = 0; adById[a.ad_id] = a; });
+    const mk = () => ({ leads: 0, contacted: 0, qualified: 0, won: 0, nedovolano: 0, nezajem: 0, ttf: [] });
+    const bySource = {}, byOwner = {}; let smsN = 0, emailN = 0; const heat = Array.from({ length: 7 }, () => new Array(24).fill(0));
+    leads.forEach((l) => { const q = QUAL.has(l.status), w = WON.has(l.status); const a = l.meta_ad_id && adById[String(l.meta_ad_id)]; if (a) { a.leads++; if (q) a.qualified++; if (w) a.won++; }
+      const fs = firstSent(l); if (l.ai_specialist_sms_sent_at || l.schuzka_sms_sent_at) smsN++; if (l.ai_specialist_email_sent_at || l.schuzka_email_sent_at) emailN++;
+      const own = l.owner_person_id ? 'i:' + l.owner_person_id : (l.external_rep_id ? 'e:' + l.external_rep_id : 'none');
+      [[bySource, l.source || '(prázdné)'], [byOwner, own]].forEach(([o, k]) => { const s = o[k] = o[k] || mk(); s.leads++; if (fs || (l.status && l.status !== 'new')) s.contacted++; if (q) s.qualified++; if (w) s.won++; if (l.status === 'nedovolano') s.nedovolano++; if (l.status === 'nezajem') s.nezajem++; if (fs) s.ttf.push((fs - new Date(l.created_at).getTime()) / 3600000); });
+      const d = new Date(l.created_at); const cz = new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Prague' })); heat[(cz.getDay() + 6) % 7][cz.getHours()]++; });
+    const pids = Object.keys(byOwner).filter((k) => k.startsWith('i:')).map((k) => Number(k.slice(2))); const persons = pids.length ? await prisma.person.findMany({ where: { id: { in: pids } }, select: { id: true, first_name: true, last_name: true } }).catch(() => []) : [];
+    const ownerName = (k) => { if (k === 'none') return 'nepřiřazeno'; if (k.startsWith('i:')) { const p = persons.find((x) => x.id === Number(k.slice(2))); return p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : k; } return 'externí ' + k.slice(2); };
+    const fin = (o, nameFn) => Object.keys(o).map((k) => { const s = o[k]; return { name: nameFn ? nameFn(k) : k, leads: s.leads, contacted: s.contacted, qualified: s.qualified, won: s.won, nedovolano: s.nedovolano, nezajem: s.nezajem, median_hours_to_contact: s.ttf.length ? Math.round(medianOf(s.ttf) * 10) / 10 : null }; }).sort((a, b) => b.leads - a.leads);
+    // 3) BS2: online objednávky podle UTM + chování (relace z Facebooku)
+    let bs2 = null, fbSessions = null; try { bs2 = await bs2Stats(Math.max(1, days + 1), since.until || days === 0 ? since : null, '/location'); } catch (e) { bs2 = null; }
+    const attr = (bs2 && bs2.ordersByAttr) || []; const isAdSrc = (s) => /^(fb|facebook|meta|ig|instagram|google|gads|adwords)/i.test(String(s || ''));
+    const onlineAll = { paid: attr.reduce((t, x) => t + x.paid, 0), revenue: attr.reduce((t, x) => t + Number(x.revenue || 0), 0) };
+    const onlineAds = attr.filter((x) => isAdSrc(x.source)).reduce((t, x) => ({ paid: t.paid + x.paid, revenue: t.revenue + Number(x.revenue || 0) }), { paid: 0, revenue: 0 });
+    attr.forEach((x) => { const a = (x.ad_id && adById[x.ad_id]) || ads.find((y) => x.content && y.ad_name === x.content); if (a) { a.online_paid = (a.online_paid || 0) + x.paid; a.online_revenue = (a.online_revenue || 0) + Number(x.revenue || 0); } });
+    if (bs2 && bs2.behavior && bs2.behavior.campaigns) fbSessions = bs2.behavior.campaigns.filter((x) => /facebook|^fb|instagram|fbclid/i.test(x.name)).reduce((t, x) => t + x.sessions, 0);
+    // 4) ekonomika
+    const spend = ads.reduce((t, a) => t + a.spend, 0), impressions = ads.reduce((t, a) => t + a.impressions, 0), clicks = ads.reduce((t, a) => t + a.clicks, 0);
+    const qualified = leads.filter((l) => QUAL.has(l.status)).length, won = leads.filter((l) => WON.has(l.status)).length;
+    const fee = (rev, n) => rev * econ.stripe_fee_pct / 100 + n * econ.stripe_fee_fixed;
+    const profitOf = (spendX, onlineRev, onlineN, wonN, leadsN) => Math.round(onlineRev * econ.margin_pct / 100 - fee(onlineRev, onlineN) + wonN * econ.machine_price * econ.machine_margin_pct / 100 - spendX - leadsN * econ.call_cost_per_lead);
+    ads.forEach((a) => { a.cpl = a.leads > 0 ? a.spend / a.leads : null; a.cpql = a.qualified > 0 ? a.spend / a.qualified : null; a.revenue = (a.online_revenue || 0) + a.won * econ.machine_price; a.profit = profitOf(a.spend, a.online_revenue || 0, a.online_paid || 0, a.won, a.leads); a.roas = a.spend > 0 ? a.revenue / a.spend : null; });
+    const msgCost = smsN * econ.sms_cost + emailN * econ.email_cost;
+    const revenue = onlineAds.revenue + won * econ.machine_price;
+    const profit = profitOf(spend, onlineAds.revenue, onlineAds.paid, won, leads.length) - Math.round(msgCost);
+    const orders = onlineAds.paid + won;
+    res.json({ period: { days, since: since.toISOString(), until: until.toISOString() }, currency, econ, meta_error: metaErr,
+      kpi: { spend, impressions, clicks, ctr: impressions ? clicks / impressions * 100 : null, cpm: impressions ? spend / impressions * 1000 : null, leads: leads.length, cpl: leads.length ? spend / leads.length : null, qualified, cpql: qualified ? spend / qualified : null, won, online_paid_ads: onlineAds.paid, online_revenue_ads: onlineAds.revenue, online_paid_all: onlineAll.paid, online_revenue_all: onlineAll.revenue, revenue, orders, cac: orders ? spend / orders : null, roas: spend ? revenue / spend : null, messages_cost: Math.round(msgCost), sms: smsN, emails: emailN, profit, fb_link_clicks: clicks, fb_sessions: fbSessions },
+      ads: ads.sort((a, b) => b.spend - a.spend), bySource: fin(bySource), byOwner: fin(byOwner, ownerName), heat, orderHours: (bs2 && bs2.orderHours) || null, attr });
+  } catch (err) { next(err); }
+});
+// Demografie a umístění z Mety: ?by=age_gender | region | placement | device
+router.get('/profit/breakdown', async (req, res, next) => {
+  try { const days = parseDays(req.query.days, 30); const { tr } = metaRange(days); const c = await metaCfg(req); if (!c.token || !c.account) return res.status(400).json({ error: 'Meta není napojená' });
+    const by = String(req.query.by || 'age_gender'); const bd = { age_gender: 'age,gender', region: 'region', placement: 'publisher_platform,platform_position', device: 'impression_device' }[by]; if (!bd) return res.status(400).json({ error: 'Neznámý rozpad' });
+    const j = await graph('act_' + c.account + '/insights', { level: 'account', breakdowns: bd, fields: 'spend,impressions,inline_link_clicks,clicks,ctr,cpm,actions', time_range: tr, limit: 300 }, c.token);
+    const rows = (j.data || []).map((r) => { const leads = actOf(r, 'lead') || actOf(r, 'onsite_conversion.lead_grouped'); const spend = Number(r.spend || 0); return { label: bd.split(',').map((k) => r[k]).filter(Boolean).join(' · ') || '—', spend, impressions: Number(r.impressions || 0), clicks: Number(r.inline_link_clicks || r.clicks || 0), ctr: r.ctr != null ? Number(r.ctr) : null, cpm: r.cpm != null ? Number(r.cpm) : null, leads, cpl: leads ? spend / leads : null }; }).sort((a, b) => b.spend - a.spend);
+    res.json({ by, rows }); } catch (err) { next(err); }
+});
+
 // ── Meta (Facebook) Ads: napojení na reklamní účet, seznam kampaní, statistiky a nastavení (cíl = URL / lead formulář) ──
 // Přístupový token s právem ads_read (System User token v Business Manageru) + ID reklamního účtu se ukládají v AppSetting
 // (nebo env META_ADS_ACCESS_TOKEN / META_AD_ACCOUNT_ID). Token se nikdy nevrací do prohlížeče.

@@ -583,6 +583,12 @@ const PAGE = `<!DOCTYPE html>
   var pkgN=0, lastPkg='';
   window.pickVariant=function(v){ $('variant').value=v; pkgN++; track('pkg_pick',{ v:v, n:pkgN, from:lastPkg }); lastPkg=v; };
   try { $('variant').addEventListener('change', function(){ pkgN++; track('pkg_pick',{ v:$('variant').value, n:pkgN, from:lastPkg }); lastPkg=$('variant').value; }); } catch(e){}
+  // První dotyk: UTM / ID reklamy / click id se uloží při první návštěvě (30 dní) a posílá se s objednávkou
+  function firstTouch(){ try { var k='misto_ft', v=JSON.parse(localStorage.getItem(k)||'null'); var u=new URLSearchParams(location.search); var cur={}; ['utm_source','utm_medium','utm_campaign','utm_content','utm_term','ad_id','fbclid','gclid'].forEach(function(n){ if(u.get(n)) cur[n]=u.get(n).slice(0,160); });
+      if(v && Date.now()-v.t < 30*864e5 && Object.keys(v.a||{}).length) return Object.assign({ ft:new Date(v.t).toISOString() }, v.a);
+      if(Object.keys(cur).length){ localStorage.setItem(k, JSON.stringify({ t:Date.now(), a:cur })); return Object.assign({ ft:new Date().toISOString() }, cur); }
+      if(!v) localStorage.setItem(k, JSON.stringify({ t:Date.now(), a:{} })); } catch(e){} return {}; }
+  try { firstTouch(); } catch(e){}
   var f=$('f'), msg=$('msg'), sub=$('sub'), STRIPE=false;
   var BTN_REQ='Odeslat žádost o objednávku', BTN_PAY='Zaplatit kartou a získat přístup';
   function setMsg(cls,t){ msg.className='msg '+cls; msg.textContent=t; }
@@ -639,6 +645,7 @@ const PAGE = `<!DOCTYPE html>
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
     body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = body.terms; body.sid=SID;
+    body.attr = firstTouch();
     if(!body.terms){ track('form_invalid',{ why:'terms' }); setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
     if(!body.name||!body.email){ track('form_invalid',{ why:'name_email' }); setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
