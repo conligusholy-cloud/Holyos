@@ -97,6 +97,7 @@ function normalizeCompanyBody(body, selfId) {
     const n = parseInt(data.consignee_id, 10);
     data.consignee_id = Number.isFinite(n) && n !== selfId ? n : null;
   }
+  ['vat_id_gb', 'eori_gb', 'eori', 'customs_note'].forEach((k) => { if (k in data) data[k] = String(data[k] || '').trim() || null; });
   ['branch_address', 'branch_city', 'branch_zip'].forEach((k) => { if (k in data && data[k] === '') data[k] = null; });
   return data;
 }

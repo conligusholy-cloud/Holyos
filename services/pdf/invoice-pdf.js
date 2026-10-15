@@ -130,6 +130,16 @@ function joinDelivery(c) {
   return joinAddress(c);
 }
 
+// Řádek s celními údaji firmy (VAT ID GB, EORI GB, EORI) — prázdný, když nic není vyplněno
+function customsLine(c) {
+  if (!c) return '';
+  const p = [];
+  if (c.vat_id_gb) p.push('VAT ID GB: ' + c.vat_id_gb);
+  if (c.eori_gb) p.push('EORI GB: ' + c.eori_gb);
+  if (c.eori) p.push('EORI: ' + c.eori);
+  return p.join(' · ');
+}
+
 function joinAddress(c) {
   if (!c) return '';
   const parts = [];
@@ -324,6 +334,9 @@ function buildTemplateData(invoice, ourCompany) {
     consignee_name: partner.consignee ? ((partner.consignee.name || '') + (partner.consignee.ico ? ` (${L.ico}: ${partner.consignee.ico})` : '')) : '',
     customer_ico: partner.ico || '',
     customer_dic: partner.dic || '',
+    // Celní řízení (export mimo EU) — odběratel a příjemce
+    customer_customs: customsLine(partner),
+    consignee_customs: customsLine(partner.consignee),
 
     // Platba
     bank_account: bankAccount,

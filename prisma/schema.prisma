@@ -537,6 +537,11 @@ model Company {
   branch_address         String? @db.VarChar(255)
   branch_city            String? @db.VarChar(100)
   branch_zip             String? @db.VarChar(10)
+  // Celní řízení (export do UK / mimo EU)
+  vat_id_gb              String? @db.VarChar(30) // VAT ID GB
+  eori_gb                String? @db.VarChar(30) // EORI NR GB
+  eori                   String? @db.VarChar(30) // EORI (EU / jiné)
+  customs_note           String? @db.Text
   // Příjemce zboží — jiná společnost z adresáře, které se zboží dodává (na faktuře blok „Příjemce"; dodací adresa = jeho adresa)
   consignee_id           Int?
   consignee              Company?  @relation("CompanyConsignee", fields: [consignee_id], references: [id], onDelete: SetNull)
