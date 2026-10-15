@@ -381,7 +381,13 @@ function buildTemplateData(invoice, ourCompany) {
     note: invoice.note || '',
 
     // QR
-    qr_url: buildQrLocal(spayd) || '',
+    // Faktura zaplacená kartou / hotově (např. online platba přes Stripe): bez platebních údajů a QR, jen potvrzení úhrady
+    is_paid: invoice.payment_method === 'card' || invoice.payment_method === 'cash',
+    l_paid: lang === 'en' ? 'Paid' : 'Uhrazeno',
+    paid_text: invoice.payment_method === 'cash'
+      ? (lang === 'en' ? 'This invoice has been paid in cash. No further payment is required.' : 'Faktura je uhrazena v hotovosti. Nic dalšího neplaťte.')
+      : (lang === 'en' ? 'This invoice has been paid by card. No further payment is required.' : 'Faktura je uhrazena platební kartou. Nic dalšího neplaťte.'),
+    qr_url: (invoice.payment_method === 'card' || invoice.payment_method === 'cash') ? '' : (buildQrLocal(spayd) || ''),
 
     // Design Best Series 2.0 (jednotný vzhled dokladů)
     doc_css: bs2style.CSS + '\ntable.items td.d{width:100%;max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}table.items td.d .cs{font-weight:400;font-size:6.8pt;color:#8a94a8;margin-top:2px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}table.items td.d .cs:empty{display:none}table.items td.d .sn{font-weight:400}',

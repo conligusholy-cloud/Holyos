@@ -33,7 +33,7 @@
       <div class="row">{{customer_address}}</div>
       {{#if customer_ico}}<div class="row">{{l_ico}}: {{customer_ico}}</div>{{/if}}{{#if customer_dic}}<div class="row">{{l_dic}}: {{customer_dic}}</div>{{/if}}
       {{#if customer_customs}}<div class="row">{{customer_customs}}</div>{{/if}}
-      <div class="row delivery"><b>{{l_delivery}}:</b> {{customer_delivery}}</div>
+      {{#if customer_delivery}}<div class="row delivery"><b>{{l_delivery}}:</b> {{customer_delivery}}</div>{{/if}}
       {{#if consignee_customs}}<div class="row">{{consignee_customs}}</div>{{/if}}
     </div>
   </div>
@@ -84,6 +84,9 @@
     <div class="row total"><span>{{l_grand}}</span><span>{{total}}</span></div>
   </div>
 
+  {{#if is_paid}}
+  <div class="box" style="border-color:#2fa56b;background:#eefaf3"><h3 style="color:#1f8a55">✔ {{l_paid}}</h3><div class="row">{{paid_text}}</div></div>
+  {{else}}
   <div class="payment">
     <div class="box">
       <h3>{{l_paydetails}}</h3>
@@ -98,6 +101,7 @@
     <div class="qr"><img src="{{qr_url}}" alt="QR"><div class="ql">{{l_qr}}</div></div>
     {{/if}}
   </div>
+  {{/if}}
 
   {{#if reverse_charge}}
   <div class="note">{{{reverse_charge_text}}}</div>
