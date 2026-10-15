@@ -307,21 +307,40 @@ router.post('/funnels/:id/nodes/:nodeId/run', async (req, res, next) => { try {
   if (!ids.size) return res.json({ ok: true, total: 0, sent: 0, results: [] });
   // Odesílání běží NA POZADÍ pro všechny leady (bez limitu): už odeslaným se přeskočí, mezi odesláními krátká pauza (limit SES).
   // Stav: GET /funnels/:id/nodes/:nodeId/run-status. Při restartu serveru stačí spustit znovu – odeslaní se přeskočí.
-  const key = f.id + ':' + nd.id; const cur = RUN_JOBS[key]; if (cur && cur.running) return res.json({ ok: true, background: true, already_running: true, ...cur });
-  const cmp = require('./compounder.routes'); const list = [...ids];
-  const job = RUN_JOBS[key] = { running: true, total: list.length, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {}, started_at: new Date().toISOString(), finished_at: null };
-  (async () => {
-    for (const id of list) {
-      try { const r = await cmp.forceSend(id, nd.kind, force); if (r && r.sent) job.sent++; else { job.skipped++; const why = String((r && (r.reason || r.error)) || 'přeskočeno').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; } }
-      catch (e2) { job.failed++; const why = String(e2.message || 'chyba').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; }
-      job.done++; await new Promise((ok) => setTimeout(ok, 150));
-    }
-    job.running = false; job.finished_at = new Date().toISOString();
-  })().catch((e3) => { job.running = false; job.error = e3.message; });
-  res.json({ ok: true, background: true, ...job });
+  const key = f.id + ':' + nd.id; const cur = RUN_JOBS[key]; if (cur && cur.running) return res.json({ ok: true, background: true, already_running: true, ...pubJob(cur) });
+  const job = RUN_JOBS[key] = { running: true, kind: nd.kind, force, pending: [...ids], total: ids.size, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {}, started_at: new Date().toISOString(), finished_at: null };
+  await persistJobs(); runJob(key);
+  res.json({ ok: true, background: true, ...pubJob(job) });
 } catch (err) { next(err); } });
 const RUN_JOBS = {};
-router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { res.json(RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')] || { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
+const RUN_JOBS_KEY = 'ads_center.run_jobs';
+function pubJob(j) { const o = Object.assign({}, j); delete o.pending; return o; }
+// Stav kampaní se ukládá do DB (každých pár odeslání), takže přežije restart serveru / nasazení i zavření stránky
+async function persistJobs() { try { const out = {}; Object.keys(RUN_JOBS).forEach((k) => { out[k] = RUN_JOBS[k]; }); await require('../services/settings').setSetting(RUN_JOBS_KEY, out, { type: 'json', description: 'Centrum reklamy – běžící hromadná odesílání z funelu', scope: 'marketing' }); } catch (e) { console.warn('[ads-center] persist run jobs:', e.message); } }
+async function runJob(key) {
+  const job = RUN_JOBS[key]; if (!job || job._active) return; job._active = true;
+  const [funnelId, nodeId] = key.split(':'); const cmp = require('./compounder.routes'); let n = 0;
+  try {
+    while (job.pending.length) {
+      const id = job.pending[0];
+      try { const r = await cmp.forceSend(id, job.kind, job.force); if (r && r.sent) job.sent++; else { job.skipped++; const why = String((r && (r.reason || r.error)) || 'přeskočeno').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; } }
+      catch (e2) { job.failed++; const why = String(e2.message || 'chyba').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; }
+      job.pending.shift(); job.done++; n++;
+      if (n % 10 === 0) await persistJobs();
+      await new Promise((ok) => setTimeout(ok, 150));
+    }
+    job.running = false; job.finished_at = new Date().toISOString();
+  } catch (e3) { job.error = e3.message; job.running = false; }
+  delete job._active; await persistJobs();
+}
+// Po startu serveru (nasazení, restart) rozběhnuté kampaně pokračují tam, kde skončily
+setTimeout(async () => {
+  try {
+    const saved = (await require('../services/settings').getSetting(RUN_JOBS_KEY, { type: 'json', defaultValue: null })) || {};
+    Object.keys(saved).forEach((k) => { const j = saved[k]; if (!j) return; delete j._active; RUN_JOBS[k] = j; if (j.running && Array.isArray(j.pending) && j.pending.length) { console.log('[ads-center] obnovuji hromadné odesílání', k, '— zbývá', j.pending.length); runJob(k); } else if (j.running) { j.running = false; } });
+  } catch (e) { console.warn('[ads-center] obnova kampaní:', e.message); }
+}, 25000);
+router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { const j = RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')]; res.json(j ? pubJob(j) : { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
