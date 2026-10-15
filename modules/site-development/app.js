@@ -348,7 +348,7 @@ function renderSiteModal() {
         <button class="site-tab" data-tab="photos" onclick="switchTab('photos')">Fotky &amp; mapa (${(s.photos||[]).length})</button>
         <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>d.doc_type!=='construction'&&d.doc_type!=='building'&&!isDataDoc(d)).length})</button>
         <button class="site-tab" data-tab="data" onclick="switchTab('data')">📁 DATA (${(s.documents||[]).filter(d=>isDataDoc(d)&&d.doc_type!=='data_root').length})</button>
-        <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Místní šetření (${(s.documents||[]).filter(d=>d.doc_type==='construction'||d.doc_type==='building').length})</button>
+        <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Výstavba (${(s.documents||[]).filter(d=>d.doc_type==='construction'||d.doc_type==='building').length})</button>
       `}
     </div>
 
@@ -539,7 +539,7 @@ function renderPhotosTab(s){
     </div>`;
 }
 function renderDocsTab(s){
-  // Stavební dokumenty (construction/building) mají vlastní záložku Místní šetření.
+  // Stavební dokumenty (construction/building) mají vlastní záložku Výstavba.
   const docs = (s.documents||[]).filter(d => d.doc_type!=='construction' && d.doc_type!=='building' && !isDataDoc(d)).map(d => `
     <div class="contact-card">
       <div class="info">
@@ -578,7 +578,9 @@ function renderDocsTab(s){
     <button class="btn btn-secondary btn-sm" onclick="addDoc()" style="margin-top:10px;">+ Přidat</button>`;
 }
 
-// ─── Záložka Místní šetření — stavební dokumenty ve dvou kategoriích ──────
+// ─── Záložka Výstavba — stavební dokumenty ve dvou kategoriích ────────────
+// POZN.: vnitřní id záložky zůstává 'survey' (data-tab, switchTab, doc_type
+// filtry) — přejmenoval se jen popisek pro uživatele.
 const SURVEY_DOC_CATS = [
   { key:'construction', icon:'🏗️', label:'Výstavba',            hint:'Projekt, situace, harmonogram, fotky z místa…' },
   { key:'building',     icon:'📑', label:'Dokumenty stavební',  hint:'Stavební povolení, ohlášení, vyjádření úřadů, Portál stavebníka…' },

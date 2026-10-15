@@ -20,7 +20,7 @@ const { requireAuth } = require('../middleware/auth');
 const SITE_TYPES   = ['rent', 'purchase', 'other'];
 const SITE_STATUSES = ['lead', 'researching', 'negotiating', 'contract', 'operational', 'rejected', 'lost'];
 const COMM_CHANNELS = ['call', 'email', 'meeting', 'sms', 'note'];
-// construction = Výstavba, building = Dokumenty stavební (záložka Místní šetření)
+// construction = Výstavba, building = Dokumenty stavební (záložka Výstavba)
 // data_* = složka DATA v detailu lokality (data_root = značka vytvořené složky, ostatní = podsložky)
 const DATA_FOLDERS  = ['data_najemni', 'data_foto', 'data_koordinace', 'data_vizualizace', 'data_sit'];
 const DOC_TYPES     = ['contract', 'offer', 'cadastre', 'technical', 'construction', 'building', 'other', 'data_root', ...DATA_FOLDERS];
