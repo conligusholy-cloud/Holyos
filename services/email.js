@@ -116,11 +116,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
             <div style="font-size:12px;color:#6f6f78;margin-top:14px;word-break:break-all;">${escapeHtml(cLink)}</div>` : ''}
           ${flyerHtml('#2a2a30', cLink)}
         </td></tr>
-        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;margin-top:18px;font-size:11.5px;color:#6f6f78;text-align:center;line-height:1.7;">
-          You are receiving this e-mail because you expressed interest in Compounding at compounder.world.<br><br>
-          COMPOUNDER · <b style="color:#8a8a92;">Best Series s.r.o.</b> · IČO 05643724 · Czech Republic<br>
-          <a href="${site}" style="color:#c9a24b;text-decoration:none;">compounder.world</a>
-        </td></tr>
+        <tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
@@ -164,10 +160,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
             <div style="font-size:12px;color:#5f6f8f;margin-top:10px;word-break:break-all;">${escapeHtml(bLink)}</div>` : ''}
           ${flyerHtml('#1e2a44', bLink)}
         </td></tr>
-        <tr><td style="padding:22px 34px 28px;border-top:1px solid #1e2a44;font-size:11.5px;color:#5f6f8f;text-align:center;line-height:1.7;">
-          <b style="color:#8ea2c2;">Best Series s.r.o.</b> · IČO 05643724 · Zámostní 1155/27, 710 00 Ostrava<br>
-          <a href="https://www.bestseries2.cz" style="color:#4fd1ff;text-decoration:none;">www.bestseries2.cz</a>
-        </td></tr>
+        <tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
@@ -205,10 +198,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
             <div style="font-size:12px;color:#6b7d99;margin-top:14px;word-break:break-all;">${escapeHtml(pLink)}</div>` : ''}
           ${flyerHtml('#cfe0fb', pLink)}
         </td></tr>
-        <tr><td style="padding:24px 34px 30px;border-top:1px solid #e3ecfb;font-size:11.5px;color:#6b7d99;text-align:center;line-height:1.7;">
-          Tento e-mail vám zaslaly <b style="color:#425774;">Prádlomaty</b> — Best Series s.r.o. · IČO 05643724 · Česká republika<br>
-          <a href="${site}" style="color:#2563eb;text-decoration:none;">pradlomaty.info</a>
-        </td></tr>
+        <tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
@@ -245,9 +235,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
             </div>
             <div style="font-size:12px;color:#6f6f78;margin-top:14px;word-break:break-all;">${escapeHtml(bLink)}</div>` : ''}
         </td></tr>
-        <tr><td style="padding:24px 34px 30px;border-top:1px solid #222228;font-size:11.5px;color:#6f6f78;text-align:center;line-height:1.7;">
-          Tento e-mail vám zaslala společnost <b style="color:#8a8a92;">Best Series s.r.o.</b> · IČO 05643724 · Česká republika
-        </td></tr>
+        <tr><td style="height:18px;line-height:18px;font-size:0;">&nbsp;</td></tr>
       </table>
     </td></tr>
   </table>
