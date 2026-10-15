@@ -1458,7 +1458,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     if (!lead.email) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí e-mail (e-mail)');
     if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'e-mail už odeslán / osloven specialistou');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
-    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    const from = await funnelMailFrom();
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
     const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty' });
@@ -1489,7 +1489,7 @@ async function autosendAiSpecialistEmail(lead) {
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
-    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    const from = await funnelMailFrom();
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const subject = 'Prádlomat — váš specialista odpoví na vše';
@@ -1720,7 +1720,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     const force = !!(req.body && req.body.force);
     if (!force && lead.outreach_variant === 'specialist') return res.status(409).json({ ok: false, error: 'Tomuto leadovi už byl odeslán specialista — nelze poslat i schůzku (pojistka). Pro test zaškrtni „Ignorovat pojistku".' });
     if (!force && lead.schuzka_email_sent_at) return res.status(409).json({ ok: false, error: 'E-mail se schůzkou už byl odeslán ' + new Date(lead.schuzka_email_sent_at).toLocaleString('cs-CZ') + '. Pro opakování zaškrtni „Ignorovat pojistku".' });
-    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    const from = await funnelMailFrom();
     if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }).catch(() => null);
     const b = req.body || {};
@@ -1760,7 +1760,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, email: true, name: true, show_ai_specialist: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     if (!lead.email) return res.status(400).json({ ok: false, error: 'Lead nemá e-mail' });
-    const from = process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom();
+    const from = await funnelMailFrom();
     if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
@@ -7749,6 +7749,8 @@ function compounderMailFromName() {
 function compounderMailFrom() {
   return process.env.COMPOUNDER_MAIL_FROM || null;
 }
+// Odesílatel pro e-maily z funelu (Centrum reklamy → Nastavení → výchozí odesílatel); jinak env
+async function funnelMailFrom() { try { const v = await getSetting('ads_center.channels', { type: 'json', defaultValue: null }); if (v && v.email_from) return String(v.email_from); } catch (e) { /* env */ } return process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom(); }
 async function sendPortalInvite(d, portalUrl) {
   const from = compounderMailFrom();
   // E-mail v jazyce, který zájemce zvolil na webu (d.lang); fallback angličtina.
