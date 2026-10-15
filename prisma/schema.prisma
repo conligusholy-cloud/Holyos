@@ -4095,6 +4095,8 @@ model ProductionBatch {
   // Výrobní kód = kód výrobku + kódy zvolených provedení po operacích (BS-M-5021-V04-V03-V07) — jednoznačně říká, co se vyrábí
   config_code     String? @db.VarChar(160)
   output_variant_id Int? // zvolená varianta konce (co se naskladní)
+  // Barva dílů dávky (např. „Červená"): díly s barevnými variantami se pro tuto dávku zamění za variantu dané barvy (kód + přípona)
+  part_color String? @db.VarChar(60)
 
   note String? @db.Text
 

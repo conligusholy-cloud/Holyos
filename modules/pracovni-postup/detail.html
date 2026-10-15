@@ -1021,6 +1021,7 @@
         workstationGroups = wsGroups || [];
         try { productOutputs = await api('/api/production/products/' + id + '/outputs'); } catch (e) { productOutputs = []; }
         try { productEquipment = await api('/api/production/products/' + id + '/equipment'); } catch (e) { productEquipment = []; }
+        try { partColors = await api('/api/production/products/' + id + '/part-colors'); } catch (e) { partColors = { colors: [], parts: [] }; }
         try { productOutputVariants = await api('/api/production/products/' + id + '/output-variants'); } catch (e) { productOutputVariants = []; }
         try {
           const pr = await api('/api/hr/people?active=true');
@@ -1225,6 +1226,7 @@
           const cfgCode = ((maxVariants || productOutputVariants.length) && Object.keys(eqSelected).length) ? eqConfigCode() : null;
           html += '<div class="start-box">▶ START VÝROBY<span class="start-sub">' + esc(product.code || '') + '</span>' + (cfgCode ? '<span class="start-cfg" title="Výrobní kód = kód výrobku + kódy zvolených provedení. Jednoznačně říká, co se vyrábí; dostane ho každá dávka.">' + esc(cfgCode) + '</span>' : '') + '</div>';
           if (maxVariants || productOutputVariants.length) html += renderEquipmentBox();
+          html += renderPartColorBox();
           mainOps.forEach((op, i) => {
             html += nodeHtml(i > 0 ? mainOps[i - 1].step_number : null, op.step_number, i);
             // Varianty operace — plnohodnotné karty VEDLE základu v jednom řádku (náhrada základní větve; vybírá se při zadání do výroby)
@@ -1760,6 +1762,33 @@
     let outMode = 'single'; // 'single' = jeden výrobek (výrobek sám ×1) | 'set' = sada dílů
     // ── Výbava výrobku: „Barva – Červená" = sada variant operací; vybírá se při zadání do výroby ──
     let productEquipment = [];
+    // ── Barva dílů: díly s barevnými variantami (přípona kódu). V postupu je díl jako základ, barva se volí u dávky.
+    //    Kliknutím na barvu se simuluje záměna — u dílů se ukáže kód s příponou zvolené barvy.
+    let partColors = { colors: [], parts: [] };
+    let partColorSel = null;
+    function pcPick(key) { partColorSel = partColorSel === key ? null : key; renderTab(); }
+    function pcSim(materialId) {
+      if (!partColorSel) return null;
+      const p = (partColors.parts || []).find(x => x.material_id === materialId); if (!p) return null;
+      const v = p.variants[partColorSel];
+      return v ? { variant: v, from: p } : { missing: true, from: p };
+    }
+    function renderPartColorBox() {
+      const pc = partColors || { colors: [], parts: [] };
+      if (!(pc.parts || []).length) return '';
+      const chips = pc.colors.map(c => '<span class="eq-item' + (partColorSel === c.key ? ' on' : '') + '" onclick="pcPick(\'' + c.key + '\')" title="' + c.count + ' z ' + pc.parts.length + ' barevných dílů má tuto barvu' + (c.missing ? ' — ' + c.missing + ' ji nemá (zůstanou beze změny)' : '') + '">' +
+        '<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (c.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);margin-right:5px;vertical-align:middle;"></i>' + esc(c.name) + ' <small>' + c.count + (c.missing ? '/' + pc.parts.length : '') + '</small></span>').join(' ');
+      let list = '';
+      if (partColorSel) {
+        list = '<table class="eq-table" style="margin-top:6px;font-size:12px;">' + pc.parts.map(p => {
+          const v = p.variants[partColorSel];
+          return '<tr><td style="font-family:monospace;color:var(--text2);">' + esc(p.code) + '</td><td>→</td><td style="font-family:monospace;font-weight:700;' + (v ? 'color:#86efac;' : 'color:#fca5a5;') + '">' + (v ? esc(v.code) : '⚠ tuto barvu nemá – zůstane ' + esc(p.code)) + '</td><td style="color:var(--text2);">' + esc(p.operations.join(', ')) + '</td></tr>';
+        }).join('') + '</table>';
+      }
+      return '<div class="eq-box pc-box" style="position:static;width:680px;max-width:100%;margin:0 0 18px 0;border-color:rgba(167,139,250,.55);">' +
+        '<div class="eq-head"><span>🎨 Barva dílů</span><span class="muted">' + (partColorSel ? '<b style="color:#86efac;">simulace: díly s příponou zvolené barvy</b> · <a href="#" onclick="pcPick(partColorSel);return false;" style="color:var(--text2);">zrušit</a>' : pc.parts.length + ' dílů má barevné varianty — klikni na barvu a uvidíš záměnu přípon (volí se u dávky)') + '</span></div>' +
+        '<div>' + chips + '</div>' + list + '</div>';
+    }
     let eqDraft = [];
     // Vyklikaná výbava na plátně (skupina → id položky) → zelená cesta postupu
     let eqSelected = {};
@@ -2048,7 +2077,9 @@
               '<tbody>';
         // #83: vždy vzestupně podle označení dílu (kódu)
         mats.slice().sort(matCmp).forEach(m => {
-          const mat = m.material || {};
+          const pcs = pcSim(m.material_id || (m.material && m.material.id));
+          const mat = pcs && pcs.variant ? Object.assign({}, m.material || {}, { code: pcs.variant.code, name: pcs.variant.name }) : (m.material || {});
+          const pcBadge = pcs ? (pcs.variant ? ' <span title="Simulace barvy dílů — v postupu je ' + esc(pcs.from.code) + '" style="font-size:10px;color:#86efac;background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.45);border-radius:4px;padding:0 5px;">🎨 ' + esc(pcs.variant.color_name || '') + ' · místo ' + esc(pcs.from.code) + '</span>' : ' <span style="font-size:10px;color:#fca5a5;">🎨 tuto barvu nemá</span>') : ((partColors.parts || []).some(x => x.material_id === (m.material_id || (m.material && m.material.id))) ? ' <span title="Díl má barevné varianty — barva se volí u dávky" style="font-size:10px;color:#a78bfa;">🎨</span>' : '');
           const lp = m.linked_product;
           const matType = (mat.type || 'material').toLowerCase();
 
@@ -2102,7 +2133,7 @@
           const pendingBadge = m._pending ? ' <span style="display:inline-block;background:#eab308;color:#000;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:0.5px;margin-left:6px;" title="Neuložená změna — klikni Uložit pracovní postup">📝 NEULOŽENO</span>' : '';
           html += '<tr class="mat-row' + (m._pending ? ' mat-row-pending' : '') + '" draggable="true" data-om-id="' + m.id + '" data-source-op-id="' + op.id + '" ondragstart="omDragStart(event,' + m.id + ',' + op.id + ')" ondragend="omDragEnd(event)" title="Přetáhni řádek na jinou operaci pro přesun materiálu" style="' + pendingStyle + '">' +
             '<td style="font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
-            '<td>' + nameCell + pendingBadge + '</td>' +
+            '<td>' + nameCell + pcBadge + pendingBadge + '</td>' +
             '<td style="color:var(--text2);">' + esc(mat.code || '') + '</td>' +
             '<td>' + typeBadge + '</td>' +
             '<td>' + normCell + '</td>' +
@@ -2728,7 +2759,7 @@
         if (m.has_color_variants) {
           // Základ s barevnými variantami: nelze vybrat přímo — rozbalí seznam barev
           return '<div class="ss-item" data-base="' + m.id + '" onmousedown="event.preventDefault();showColorVariants(this)" style="border-left:3px solid #a78bfa;">' +
-            '<span class="ss-name">' + esc(m.name) + ' <span style="color:#a78bfa;font-size:11px;font-weight:700;">🎨 vyber barvu ▸</span></span>' +
+            '<span class="ss-name">' + esc(m.name) + ' <span style="color:#a78bfa;font-size:11px;font-weight:700;">🎨 barevný díl ▸</span></span>' +
             '<span class="ss-code">' + esc(m.code) + '</span><span class="ss-type ' + typeCls + '">' + typeLabel + '</span></div>';
         }
         const colorDot = m.parent_material_id ? '<i style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + (m.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);margin-right:6px;vertical-align:middle;"></i>' : '';
@@ -2747,7 +2778,10 @@
       const base = allMaterials.find(m => m.id === baseId);
       const dd = el.closest('.ss-dropdown');
       const vars = allMaterials.filter(m => m.parent_material_id === baseId);
-      dd.innerHTML = '<div class="ss-item" style="color:#a78bfa;font-weight:700;cursor:default;">🎨 ' + esc(base ? base.code + ' ' + base.name : '') + ' — zvol barvu:</div>' +
+      dd.innerHTML = '<div class="ss-item" style="color:#a78bfa;font-weight:700;cursor:default;">🎨 ' + esc(base ? base.code + ' ' + base.name : '') + ':</div>' +
+        (base ? '<div class="ss-item" data-id="' + base.id + '" data-name="' + attr(base.name) + '" data-code="' + attr(base.code) + '" data-unit="' + attr(base.unit || 'ks') + '" data-lp="' + attr(base.linked_product_id || '') + '" onmousedown="selectSearchItemEl(this)" style="padding-left:22px;border-left:3px solid #22c55e;">' +
+          '<span class="ss-name">⭐ Základ – barva podle dávky (doporučeno)</span><span class="ss-code">' + esc(base.code) + '</span></div>' : '') +
+        '<div class="ss-item" style="color:var(--text2);font-size:11px;cursor:default;padding-left:22px;">nebo napevno konkrétní barva:</div>' +
         (vars.length ? vars.map(m => '<div class="ss-item" data-id="' + m.id + '" data-name="' + attr(m.name) + '" data-code="' + attr(m.code) + '" data-unit="' + attr(m.unit || 'ks') + '" data-lp="' + attr(m.linked_product_id || '') + '" onmousedown="selectSearchItemEl(this)" style="padding-left:22px;">' +
           '<span class="ss-name"><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:' + (m.color || '#a78bfa') + ';border:1px solid rgba(255,255,255,.35);margin-right:8px;vertical-align:middle;"></i>' + esc(m.color_name || m.name) + '</span>' +
           '<span class="ss-code">' + esc(m.code) + '</span></div>').join('')
@@ -2832,10 +2866,7 @@
           return;
         }
         const baseMat = allMaterials.find(mm => mm.id === materialId);
-        if (baseMat && baseMat.has_color_variants) {
-          incomplete.push({ idx: idx + 1, reason: 'Díl „' + (baseMat.code || '') + ' ' + (baseMat.name || '') + '" má barevné varianty — vyber konkrétní barvu (řádek ' + (idx + 1) + ').', row });
-          return;
-        }
+        // základ s barevnými variantami je povolen — barva dílů se volí až u dávky
         if (Number.isNaN(qty) || qty <= 0) {
           incomplete.push({
             idx: idx + 1,
@@ -2949,6 +2980,7 @@
 
         // Reload product
         product = splitVariants(await api('/api/production/products/' + product.id));
+        try { partColors = await api('/api/production/products/' + product.id + '/part-colors'); } catch (e) { /* ponech */ }
         closeModal();
         updateMeta();
         renderTab();

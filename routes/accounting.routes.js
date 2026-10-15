@@ -1137,7 +1137,7 @@ router.post('/email/fetch-now', async (req, res, next) => {
 //   archive   — zpracované e-maily, kde Invoice vznikly (linked_to_invoice, processed)
 //   all       — všechno (default pokud nic nezadáno)
 const ACTIVE_STATUSES = ['received', 'parsing', 'extracting', 'awaiting_review', 'unreadable'];
-const ARCHIVE_STATUSES = ['linked_to_invoice', 'processed', 'archived'];
+const ARCHIVE_STATUSES = ['linked_to_invoice', 'processed', 'archived', 'ignored'];
 const DUPLICATE_STATUSES = ['duplicate'];
 
 router.get('/email/ingests', async (req, res, next) => {
@@ -1182,6 +1182,122 @@ router.get('/email/logs', async (req, res, next) => {
       take: Math.min(parseInt(limit, 10) || 200, 500),
     });
     res.json(logs);
+  } catch (err) { next(err); }
+});
+
+// ── Denní statistika e-mailového příjmu dokladů + log problémů + AI návrh pravidel ──
+const INGEST_RULES_KEY = 'accounting.email_ingest.rules';
+const INGEST_AI_KEY = 'accounting.email_ingest.ai_last';
+function ingestBucket(st) {
+  if (st === 'linked_to_invoice' || st === 'processed') return 'ok';
+  if (st === 'duplicate') return 'duplicate';
+  if (st === 'awaiting_review') return 'review';
+  if (st === 'unreadable') return 'unreadable';
+  if (st === 'ignored' || st === 'spam') return 'ignored';
+  if (st === 'archived') return 'archived';
+  return 'pending'; // received / parsing / extracting
+}
+function ingestReason(i) {
+  return i.sender_notify_reason || i.note || ({ unreadable: 'Doklad se nepodařilo přečíst', awaiting_review: 'Čeká na ruční ověření', duplicate: 'Duplikát existující faktury', ignored: 'Ignorováno pravidlem' }[i.status]) || '';
+}
+function dayRange(dateStr) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateStr || ''));
+  const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date();
+  d.setHours(0, 0, 0, 0); const to = new Date(d); to.setDate(to.getDate() + 1);
+  return { from: d, to };
+}
+const dayKey = (x) => { const d = new Date(x); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+// GET /api/accounting/email/daily-stats?date=YYYY-MM-DD — jednodenní statistika + log problémových e-mailů + trend 14 dní
+router.get('/email/daily-stats', async (req, res, next) => {
+  try {
+    const { from, to } = dayRange(req.query.date);
+    const rows = await prisma.emailIngest.findMany({
+      where: { received_at: { gte: from, lt: to } },
+      select: { id: true, received_at: true, from_email: true, from_name: true, subject: true, status: true, note: true, sender_notify_reason: true, confidence: true,
+        attachments: { select: { filename: true, content_type: true, is_invoice_candidate: true, source: true } },
+        invoices: { select: { id: true, invoice_number: true } } },
+      orderBy: { received_at: 'desc' },
+    });
+    const k = { emails: rows.length, ok: 0, duplicate: 0, review: 0, unreadable: 0, ignored: 0, archived: 0, pending: 0, documents: 0, with_attachment: 0 };
+    rows.forEach((r) => { k[ingestBucket(r.status)]++; k.documents += r.invoices.length; if (r.attachments.some((a) => a.is_invoice_candidate)) k.with_attachment++; });
+    const handled = k.ok + k.duplicate + k.ignored + k.archived;
+    k.success_rate = rows.length ? Math.round(handled / rows.length * 100) : null;
+    const log = rows.map((r) => ({
+      id: r.id, received_at: r.received_at, from: r.from_email, from_name: r.from_name, subject: r.subject, status: r.status, bucket: ingestBucket(r.status),
+      reason: ingestReason(r), confidence: r.confidence != null ? Number(r.confidence) : null,
+      attachments: r.attachments.map((a) => ({ name: a.filename, type: a.content_type, candidate: a.is_invoice_candidate, source: a.source })),
+      invoices: r.invoices,
+    }));
+    // trend 14 dní do vybraného dne
+    const tFrom = new Date(from); tFrom.setDate(tFrom.getDate() - 13);
+    const tr = await prisma.emailIngest.findMany({ where: { received_at: { gte: tFrom, lt: to } }, select: { received_at: true, status: true } });
+    const trend = {}; for (let i = 0; i < 14; i++) { const d = new Date(tFrom); d.setDate(tFrom.getDate() + i); trend[dayKey(d)] = { date: dayKey(d), emails: 0, ok: 0, problem: 0 }; }
+    tr.forEach((r) => { const o = trend[dayKey(r.received_at)]; if (!o) return; o.emails++; const b = ingestBucket(r.status); if (b === 'ok' || b === 'duplicate' || b === 'ignored' || b === 'archived') o.ok++; else if (b !== 'pending') o.problem++; });
+    const worker = (() => { try { return emailWorker.status(); } catch (e) { return null; } })();
+    res.json({ date: dayKey(from), kpi: k, log, trend: Object.values(trend), worker });
+  } catch (err) { next(err); }
+});
+
+// GET/PUT /api/accounting/email/ingest-rules — pravidla příjmu (ignorovaní odesílatelé / klíčová slova v předmětu)
+router.get('/email/ingest-rules', async (req, res, next) => {
+  try {
+    const rules = (await getSetting(INGEST_RULES_KEY, { type: 'json', defaultValue: {} })) || {};
+    const ai = (await getSetting(INGEST_AI_KEY, { type: 'json', defaultValue: null })) || null;
+    res.json({ rules: { ignore_senders: rules.ignore_senders || [], ignore_subject_keywords: rules.ignore_subject_keywords || [] }, ai_last: ai });
+  } catch (err) { next(err); }
+});
+router.put('/email/ingest-rules', async (req, res, next) => {
+  try {
+    const clean = (a) => [...new Set((Array.isArray(a) ? a : []).map((s) => String(s || '').trim().toLowerCase()).filter(Boolean))].slice(0, 300);
+    const v = { ignore_senders: clean(req.body && req.body.ignore_senders), ignore_subject_keywords: clean(req.body && req.body.ignore_subject_keywords), updated_at: new Date().toISOString() };
+    await setSetting(INGEST_RULES_KEY, v, { type: 'json', description: 'Účetní doklady – pravidla příjmu faktur e-mailem (ignorovat odesílatele / předměty)', scope: 'accounting', userId: req.user && req.user.id });
+    await logAudit({ action: 'update', entity: 'email_ingest', entity_id: 0, description: `Pravidla příjmu e-mailů: ${v.ignore_senders.length} ignorovaných odesílatelů, ${v.ignore_subject_keywords.length} klíčových slov`, user: req.user }).catch(() => {});
+    res.json({ ok: true, rules: v });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/email/ai-analyze { days } — AI rozbor problémových e-mailů → návrh nastavení
+router.post('/email/ai-analyze', async (req, res, next) => {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY není nastavený' });
+    const days = Math.min(Math.max(parseInt((req.body && req.body.days) || 14, 10) || 14, 1), 90);
+    const since = new Date(); since.setHours(0, 0, 0, 0); since.setDate(since.getDate() - days + 1);
+    const all = await prisma.emailIngest.findMany({
+      where: { received_at: { gte: since } },
+      select: { id: true, received_at: true, from_email: true, subject: true, status: true, note: true, sender_notify_reason: true, body_text: true, body_html: true,
+        attachments: { select: { filename: true, content_type: true, is_invoice_candidate: true, source: true } } },
+      orderBy: { received_at: 'desc' }, take: 2000,
+    });
+    const problems = all.filter((r) => ['unreadable', 'review', 'pending'].includes(ingestBucket(r.status)));
+    if (!problems.length) return res.json({ ok: true, empty: true, summary: 'Za ' + days + ' dní žádné problémové e-maily – není co navrhovat.' });
+    const strip = (h) => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+    const sample = problems.slice(0, 80).map((r) => ({
+      od: r.from_email, predmet: String(r.subject || '').slice(0, 160), stav: r.status, duvod: ingestReason(r).slice(0, 200),
+      prilohy: r.attachments.map((a) => a.filename + ' [' + a.content_type + (a.is_invoice_candidate ? ', kandidát' : '') + (a.source === 'link_download' ? ', z odkazu' : '') + ']').slice(0, 6),
+      text: strip(r.body_text || r.body_html).slice(0, 350),
+    }));
+    const rules = (await getSetting(INGEST_RULES_KEY, { type: 'json', defaultValue: {} })) || {};
+    const cnt = {}; all.forEach((r) => { const b = ingestBucket(r.status); cnt[b] = (cnt[b] || 0) + 1; });
+    const prompt = 'Jsi expert na automatické zpracování přijatých faktur z e-mailové schránky (OCR) v české firmě Best Series s.r.o.\n' +
+      'Systém HolyOS stahuje e-maily ze schránky pro faktury, hledá PDF/obrázkové přílohy a odkazy na faktury v těle, spustí OCR a vytvoří přijatou fakturu.\n' +
+      'Za posledních ' + days + ' dní: ' + all.length + ' e-mailů, rozložení: ' + JSON.stringify(cnt) + ' (ok = vytvořena faktura, unreadable = nepodařilo se, review = čeká na ruční ověření, pending = rozpracováno).\n' +
+      'Aktuální pravidla: ' + JSON.stringify({ ignore_senders: rules.ignore_senders || [], ignore_subject_keywords: rules.ignore_subject_keywords || [] }) + '\n' +
+      'Log problémových e-mailů (JSON):\n' + JSON.stringify(sample) + '\n\n' +
+      'Úkol: najdi opakující se příčiny, proč se doklady nepodařilo zpracovat, a navrhni nastavení. Rozliš:\n' +
+      '- e-maily, které vůbec nejsou faktury (newslettery, notifikace, reklama, upomínky bez dokladu) → navrhni je ignorovat (adresa odesílatele nebo @doména, případně klíčové slovo v předmětu, malými písmeny),\n' +
+      '- skutečné faktury, které selhaly (faktura jen v odkazu za přihlášením, nečitelný sken, faktura v těle e-mailu, ZIP, XML/ISDOC apod.) → doporuč konkrétní opatření (co nastavit u dodavatele, co doplnit do systému).\n' +
+      'Do ignore pravidel NIKDY nedávej odesílatele, kteří posílají skutečné faktury.\n' +
+      'Odpověz POUZE validním JSON bez markdownu ve tvaru:\n' +
+      '{"summary":"2-4 věty česky","problems":[{"title":"krátký název","count":0,"senders":["..."],"cause":"příčina","fix":"konkrétní doporučení"}],' +
+      '"rules":{"ignore_senders":["adresa nebo @domena"],"ignore_subject_keywords":["slovo"]},"other_suggestions":["doporučení pro nastavení / dodavatele / vývoj"]}';
+    const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+    const resp = await client.messages.create({ model: process.env.INGEST_AI_MODEL || 'claude-sonnet-4-6', max_tokens: 3000, messages: [{ role: 'user', content: prompt }] });
+    const txt = (resp.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+    let out; try { out = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) { out = { summary: txt.slice(0, 2000), problems: [], rules: {}, other_suggestions: [] }; }
+    out.generated_at = new Date().toISOString(); out.days = days; out.analyzed = problems.length; out.total = all.length;
+    await setSetting(INGEST_AI_KEY, out, { type: 'json', description: 'Účetní doklady – poslední AI rozbor příjmu e-mailů', scope: 'accounting', userId: req.user && req.user.id }).catch(() => {});
+    res.json({ ok: true, ...out });
   } catch (err) { next(err); }
 });
 

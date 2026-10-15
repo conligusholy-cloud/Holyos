@@ -30,7 +30,7 @@ async function computePrePickForBatch(batchId, opts = {}) {
   const batch = await tx.productionBatch.findUnique({
     where: { id },
     select: {
-      id: true, batch_number: true, quantity: true, status: true,
+      id: true, batch_number: true, quantity: true, status: true, part_color: true,
       product: { select: { id: true, code: true, name: true } },
     },
   });
@@ -58,9 +58,12 @@ async function computePrePickForBatch(batchId, opts = {}) {
   // Konsolidace: per (workstation_id, material_id) → součet potřeby napříč operacemi
   // Klíč: `${workstation_id || 'null'}:${material_id}`
   const map = new Map();
+  // Barva dílů dávky → záměna za barevnou variantu (kód s příponou)
+  const PC = require('../production/part-colors');
+  const swap = await PC.batchSwapMap(batch, ops.flatMap(o => (o.operation?.materials || []).map(m => m.material_id)), tx);
   for (const op of ops) {
     const wsId = op.workstation_id || null;
-    for (const om of op.operation.materials) {
+    for (const om of PC.applySwap(op.operation.materials, swap)) {
       const key = `${wsId || 'null'}:${om.material_id}`;
       const cur = map.get(key) || {
         workstation_id: wsId,

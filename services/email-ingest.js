@@ -217,6 +217,20 @@ async function processMessage(userPrincipalName, msg) {
     },
   });
 
+  // Pravidla příjmu (Účetní doklady → Statistika e-mailů): ignorovaný odesílatel / klíčové slovo v předmětu
+  // → zapíše se jako „ignored" (zůstane v logu), bez OCR a bez upozornění odesílateli.
+  try {
+    const { getSetting } = require('./settings');
+    const rules = (await getSetting('accounting.email_ingest.rules', { type: 'json', defaultValue: {} })) || {};
+    const from = String(fromAddr || '').toLowerCase(); const subj = String(msg.subject || '').toLowerCase();
+    const hitSender = (rules.ignore_senders || []).find((s) => s && (s.startsWith('@') ? from.endsWith(s) : from === s));
+    const hitSubj = !hitSender && (rules.ignore_subject_keywords || []).find((w) => w && subj.includes(w));
+    if (hitSender || hitSubj) {
+      await prisma.emailIngest.update({ where: { id: ingest.id }, data: { status: 'ignored', confidence: 0, note: 'Ignorováno pravidlem: ' + (hitSender ? 'odesílatel ' + hitSender : 'předmět obsahuje „' + hitSubj + '"') } });
+      return ingest;
+    }
+  } catch (e) { console.warn('[email-ingest] pravidla příjmu:', e.message); }
+
   // Stáhnout a uložit přílohy
   const targetDir = ensureIngestDir();
   const savedAttachments = [];

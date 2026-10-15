@@ -41,7 +41,7 @@ async function simulateProduction(p) {
       let materialStart = start;
 
       const variantChoices = p.variant_choices && typeof p.variant_choices === 'object' ? p.variant_choices : null;
-      const batch = await tx.productionBatch.create({ data: { batch_number: 'SIM-' + Date.now(), product_id: productId, quantity: qty, status: 'planned', priority: p.priority != null ? parseInt(p.priority, 10) : 100, planned_start: start, note: 'simulace', is_test: true, ignore_stock: ignoreStock, variant_choices: variantChoices || undefined } });
+      const batch = await tx.productionBatch.create({ data: { batch_number: 'SIM-' + Date.now(), product_id: productId, quantity: qty, status: 'planned', priority: p.priority != null ? parseInt(p.priority, 10) : 100, planned_start: start, note: 'simulace', is_test: true, ignore_stock: ignoreStock, variant_choices: variantChoices || undefined, part_color: p.part_color ? String(p.part_color).slice(0, 60) : null } });
 
       // Operace dávky dřív než MRP, aby MRP počítalo díly podle zvolených variant
       await generateBatchOperationsForBatch(batch.id, { tx });

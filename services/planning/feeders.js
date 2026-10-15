@@ -33,7 +33,7 @@ async function createFeederBatches(batchId, opts = {}) {
   const id = parseInt(batchId, 10);
   const batch = await tx.productionBatch.findUnique({
     where: { id },
-    select: { id: true, batch_number: true, product_id: true, quantity: true, is_test: true, ignore_stock: true, priority: true, status: true,
+    select: { id: true, batch_number: true, product_id: true, quantity: true, is_test: true, ignore_stock: true, priority: true, status: true, part_color: true,
       batch_operations: { where: { status: { not: 'cancelled' } }, select: { operation: { select: { id: true, step_number: true, name: true, materials: { select: { material_id: true, product_id: true, quantity: true, unit: true, material: { select: { id: true, code: true, name: true } } } } } } } },
       feeder_batches: { select: { id: true, product_id: true, quantity: true, status: true } } },
   });
@@ -41,8 +41,11 @@ async function createFeederBatches(batchId, opts = {}) {
 
   // Potřeba per díl (materiál) napříč operacemi dávky
   const need = new Map(); // material_id → { qty, product_id, material }
+  // Barva dílů dávky → díly s barevnými variantami se zamění za variantu zvolené barvy
+  const PC = require('../production/part-colors');
+  const swap = await PC.batchSwapMap(batch, batch.batch_operations.flatMap(bo => (bo.operation?.materials || []).map(m => m.material_id)), tx);
   for (const bo of batch.batch_operations) {
-    for (const m of (bo.operation?.materials || [])) {
+    for (const m of PC.applySwap(bo.operation?.materials || [], swap).map(m => m._color_swapped_from ? { ...m, product_id: null } : m)) {
       const q = Number(m.quantity) * Number(batch.quantity);
       const cur = need.get(m.material_id) || { qty: 0, product_id: m.product_id || null, material: m.material };
       cur.qty += q; if (!cur.product_id && m.product_id) cur.product_id = m.product_id;
@@ -74,7 +77,7 @@ async function createFeederBatches(batchId, opts = {}) {
     if (needsChoice) { out.skipped.push({ product: { id: prod.id, code: prod.code, name: prod.name }, quantity: qty, reason: 'Polotovar má varianty/výbavu — zadej ho do výroby ručně s volbou provedení.' }); continue; }
     const number = await nextFeederNumber(tx, batch.batch_number);
     const child = await tx.productionBatch.create({
-      data: { batch_number: number, product_id: prod.id, quantity: qty, status: 'planned', batch_type: 'feeder', priority: batch.priority, parent_batch_id: batch.id, is_test: batch.is_test, ignore_stock: batch.ignore_stock,
+      data: { batch_number: number, product_id: prod.id, quantity: qty, status: 'planned', batch_type: 'feeder', priority: batch.priority, parent_batch_id: batch.id, part_color: batch.part_color || null, is_test: batch.is_test, ignore_stock: batch.ignore_stock,
         note: 'Dílčí dávka pro ' + batch.batch_number + ' — ' + (n.material ? (n.material.code + ' ' + n.material.name) : 'díl') + ' (potřeba ' + n.qty + ', skladem ' + Math.max(0, avail.get(matId) || 0) + ')' },
       select: { id: true, batch_number: true, quantity: true },
     });

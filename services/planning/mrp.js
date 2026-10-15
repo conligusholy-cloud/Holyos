@@ -38,7 +38,7 @@ async function computeMrpForBatch(batchId, opts = {}) {
     where: { id },
     select: {
       id: true, batch_number: true, product_id: true, quantity: true, status: true,
-      bom_snapshot_id: true,
+      bom_snapshot_id: true, part_color: true,
       product: { select: { id: true, code: true, name: true } },
     },
   });
@@ -85,6 +85,20 @@ async function computeMrpForBatch(batchId, opts = {}) {
       source_operation_id: v.source_operation_id,
     }));
     bomSource = 'fallback_operation_materials';
+  }
+
+  // Barva dílů dávky: díly s barevnými variantami → varianta zvolené barvy (kód s příponou); sloučit duplicity
+  if (batch.part_color && bomItems.length) {
+    const PC = require('../production/part-colors');
+    const swap = await PC.batchSwapMap(batch, bomItems.map(b => b.material_id), tx);
+    if (swap.size) {
+      const merged = new Map();
+      for (const it of PC.applySwap(bomItems, swap)) {
+        const cur = merged.get(it.material_id);
+        if (cur) cur.qty_per_ks += it.qty_per_ks; else merged.set(it.material_id, { material_id: it.material_id, qty_per_ks: it.qty_per_ks, unit: it.unit, source_operation_id: it.source_operation_id });
+      }
+      bomItems = [...merged.values()];
+    }
   }
 
   if (bomItems.length === 0) {

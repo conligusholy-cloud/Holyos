@@ -25,7 +25,7 @@ async function computeMaterialTasks(opts = {}) {
     where: { planned_start: { not: null, lte: to }, planned_end: { gte: from }, status: { notIn: ['done', 'cancelled'] }, batch: { status: { in: ['planned', 'released', 'in_progress', 'paused'] }, ignore_stock: false } },
     select: {
       id: true, sequence: true, status: true, planned_start: true, planned_end: true,
-      batch: { select: { id: true, batch_number: true, quantity: true, is_test: true, product: { select: { id: true, code: true, name: true } } } },
+      batch: { select: { id: true, batch_number: true, quantity: true, is_test: true, part_color: true, product: { select: { id: true, code: true, name: true } } } },
       operation: { select: { id: true, name: true, step_number: true, is_parallel: true, materials: { select: { quantity: true, unit: true, material: { select: { id: true, code: true, name: true, unit: true } } } } } },
       workstation: { select: { id: true, name: true, code: true, input_warehouse_id: true, input_location_id: true, output_warehouse_id: true, output_location_id: true,
         input_warehouse: { select: { id: true, name: true, code: true } }, input_location: { select: { id: true, label: true } },
@@ -33,6 +33,17 @@ async function computeMaterialTasks(opts = {}) {
     },
     orderBy: [{ batch_id: 'asc' }, { sequence: 'asc' }],
   });
+
+  // Barva dílů dávky → díly s barevnými variantami zaměnit za variantu zvolené barvy (kód s příponou)
+  {
+    const PC = require('../production/part-colors');
+    const byB = new Map(); ops.forEach(o => { if (o.batch.part_color) { if (!byB.has(o.batch.id)) byB.set(o.batch.id, []); byB.get(o.batch.id).push(o); } });
+    for (const list of byB.values()) {
+      const swap = await PC.batchSwapMap(list[0].batch, list.flatMap(o => (o.operation.materials || []).map(m => m.material.id)), tx);
+      if (!swap.size) continue;
+      list.forEach(o => { o.operation = { ...o.operation, materials: (o.operation.materials || []).map(m => { const v = swap.get(m.material.id); return v ? { ...m, material: { id: v.id, code: v.code, name: v.name, unit: v.unit || m.material.unit } } : m; }) }; });
+    }
+  }
 
   // Zásoby pro všechny potřebné materiály najednou
   const matIds = [...new Set(ops.flatMap(o => (o.operation.materials || []).map(m => m.material.id)))];

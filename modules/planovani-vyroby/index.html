@@ -187,6 +187,7 @@
               <input id="pf-product" placeholder="Hledat podle názvu / kódu… (klikni pro seznam)" autocomplete="off" oninput="pfSearch(this.value)" onfocus="pfSearch(this.value)">
               <div id="pf-sug" class="pf-sug" style="display:none;"></div>
               <div id="pf-product-info" class="pf-info"></div>
+              <div id="pf-part-color" style="display:none;margin-top:8px;border:1px solid rgba(167,139,250,.55);background:rgba(167,139,250,.07);border-radius:10px;padding:10px 12px;"></div>
               <div id="pf-variants" style="display:none;margin-top:8px;border:1px solid rgba(251,146,60,.5);background:rgba(251,146,60,.07);border-radius:10px;padding:10px 12px;">
                 <div style="font-size:12px;color:#fb923c;font-weight:700;margin-bottom:6px;">Výbava — vyber provedení pro tuto dávku</div>
                 <div id="pf-equipment-rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;margin-bottom:6px;"></div>
@@ -1740,6 +1741,31 @@
     var ops = (pfSelected.operations || []).length;
     document.getElementById('pf-product-info').innerHTML = ops ? '✓ pracovní postup: ' + ops + ' operací' : '<span style="color:#ef4444;">⚠️ Výrobek nemá pracovní postup — nejdřív ho vytvoř v záložce Pracovní postup.</span>';
     pfRenderVariants();
+    pfLoadPartColors();
+    pfSimulate();
+  };
+  // Barva dílů: díly s barevnými variantami (přípona kódu) se pro dávku zamění za variantu zvolené barvy
+  var pfPartColors = null;
+  async function pfLoadPartColors() {
+    var box = document.getElementById('pf-part-color'); pfPartColors = null; if (!box) return;
+    box.style.display = 'none'; box.innerHTML = '';
+    if (!pfSelected) return;
+    var pid = pfSelected.id;
+    try { var r = await fetch('/api/production/products/' + pid + '/part-colors', { headers: authHeaders(), credentials: 'include' }); var j = await r.json(); if (!r.ok || !pfSelected || pfSelected.id !== pid) return; pfPartColors = j; } catch (e) { return; }
+    if (!(pfPartColors.parts || []).length) return;
+    var needs = pfPartColors.parts.some(function (p) { return !p.current_color; });
+    box.style.display = '';
+    box.innerHTML = '<label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text2);"><span><b style="color:var(--text);">🎨 Barva dílů</b> ' + (needs ? '<span style="color:#f59e0b;">povinné</span>' : '') + ' — ' + pfPartColors.parts.length + ' dílů má barevné varianty, kód dílu dostane příponu barvy</span>' +
+      '<select id="pf-part-color-sel" onchange="pfPartColorChanged()" style="font-size:13px;"><option value="">— vyber barvu —</option>' +
+      pfPartColors.colors.map(function (c) { return '<option value="' + pv2Esc(c.name) + '">' + pv2Esc(c.name) + ' (' + c.count + '/' + pfPartColors.parts.length + ' dílů)' + '</option>'; }).join('') + '</select></label><div id="pf-part-color-list" style="margin-top:6px;font-size:11.5px;"></div>';
+  }
+  function pfPartColor() { var el = document.getElementById('pf-part-color-sel'); return el && el.value ? el.value : null; }
+  window.pfPartColorChanged = function () {
+    var list = document.getElementById('pf-part-color-list'), name = pfPartColor();
+    if (list) {
+      var c = name && pfPartColors ? pfPartColors.colors.find(function (x) { return x.name === name; }) : null;
+      list.innerHTML = c ? pfPartColors.parts.map(function (p) { var v = p.variants[c.key]; return '<div><span style="font-family:ui-monospace,Consolas,monospace;color:var(--text2);">' + pv2Esc(p.code) + '</span> → ' + (v ? '<b style="font-family:ui-monospace,Consolas,monospace;color:#86efac;">' + pv2Esc(v.code) + '</b>' : '<span style="color:#fca5a5;">⚠ barvu nemá – zůstane</span>') + '</div>'; }).join('') : '';
+    }
     pfSimulate();
   };
   // Operace s variantami: pro každou výběr Základ / varianta → variant_choices { základ_id: varianta_id }
@@ -1789,6 +1815,7 @@
       var hasOv = (pfEquipmentIds() || []).some(function (id) { var e = (pfSelected.equipment || []).find(function (x) { return x.id === id; }); return e && e.output_variant_id; });
       if (!hasOv) miss.push('Konec (hotové výrobky)');
     }
+    if (pfPartColors && (pfPartColors.parts || []).some(function (p) { return !p.current_color; }) && !pfPartColor()) miss.push('Barva dílů');
     return miss;
   }
   function pfEquipmentIds() {
@@ -1816,7 +1843,7 @@
     var seq = ++pfSimSeq; box.style.display = ''; box.className = 'pf-sim'; box.innerHTML = '⏳ Počítám nejbližší reálný termín (kapacity lidí, pracoviště, materiál)…';
     var due = document.getElementById('pf-due').value;
     try {
-      var r = await fetch('/api/planning/simulate', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), quantity: parseInt(document.getElementById('pf-qty').value) || 1, due_date: due ? new Date(due).toISOString() : null, priority: parseInt(document.getElementById('pf-priority').value) || 100, ignore_stock: document.getElementById('pf-ignore-stock').checked }) });
+      var r = await fetch('/api/planning/simulate', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), part_color: pfPartColor(), quantity: parseInt(document.getElementById('pf-qty').value) || 1, due_date: due ? new Date(due).toISOString() : null, priority: parseInt(document.getElementById('pf-priority').value) || 100, ignore_stock: document.getElementById('pf-ignore-stock').checked }) });
       var d = await r.json(); if (seq !== pfSimSeq) return; if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
       pfLastSim = d;
       var cls = d.meets_due === false ? 'late' : (d.feasible ? 'ok' : 'err');
@@ -1851,7 +1878,7 @@
     if (missingOps.length) { res.className = 'pf-result err'; res.style.display = ''; res.innerHTML = '⚠️ Výbava neurčuje provedení u operací: <b>' + pv2Esc(missingOps.join(', ')) + '</b>. Vyber všechny skupiny výbavy; pokud výbava tyto operace nepokrývá, doplň položky výbavy v pracovním postupu (⚙ Výbava).'; return; }
     btn.disabled = true; btn.textContent = 'Plánuji…'; res.style.display = ''; res.className = 'pf-result'; res.textContent = 'Vytvářím dávku…';
     try {
-      var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), quantity: qty, planned_start: new Date(start).toISOString(), due_date: due ? new Date(due).toISOString() : null, is_test: isTest, ignore_stock: ignoreStock, priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
+      var r = await fetch('/api/production/batches', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ product_id: pfSelected.id, variant_choices: pfVariantChoices(), equipment_ids: pfEquipmentIds(), part_color: pfPartColor(), quantity: qty, planned_start: new Date(start).toISOString(), due_date: due ? new Date(due).toISOString() : null, is_test: isTest, ignore_stock: ignoreStock, priority: parseInt(document.getElementById('pf-priority').value) || 100, note: document.getElementById('pf-note').value || null }) });
       var b = await r.json(); if (!r.ok) throw new Error(b.error || 'HTTP ' + r.status);
       res.textContent = 'Dávka ' + b.batch_number + ' vytvořena, plánuji operace…';
       var sr = await fetch('/api/planning/batches/' + b.id + '/schedule', { method: 'POST', headers: authHeaders(), credentials: 'include', body: JSON.stringify({ syncVelin: false }) });

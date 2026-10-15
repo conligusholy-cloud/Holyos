@@ -32,7 +32,17 @@ async function computeOpMaterialStatus(ops, opts = {}) {
   }) : [];
   const matsByOp = new Map();
   for (const om of opMats) { if (!matsByOp.has(om.operation_id)) matsByOp.set(om.operation_id, []); matsByOp.get(om.operation_id).push(om); }
-  const materialIds = [...new Set(opMats.map(m => m.material_id))];
+  // Barva dílů dávky → díly s barevnými variantami se počítají jako varianta zvolené barvy (kód s příponou)
+  const PC = require('../production/part-colors');
+  const bIds0 = [...new Set(ops.map(o => o.batch && o.batch.id).filter(Boolean))];
+  const colorBatches = bIds0.length ? await tx.productionBatch.findMany({ where: { id: { in: bIds0 }, part_color: { not: null } }, select: { id: true, part_color: true } }).catch(() => []) : [];
+  const swapByBatch = new Map();
+  for (const b of colorBatches) {
+    const ids = ops.filter(o => o.batch && o.batch.id === b.id).flatMap(o => ((o.operation && matsByOp.get(o.operation.id)) || []).map(m => m.material_id));
+    swapByBatch.set(b.id, await PC.batchSwapMap(b, ids, tx));
+  }
+  const matsFor = (o) => { const list = (o.operation && matsByOp.get(o.operation.id)) || []; const sw = o.batch && swapByBatch.get(o.batch.id); return sw && sw.size ? PC.applySwap(list, sw) : list; };
+  const materialIds = [...new Set(ops.flatMap(o => matsFor(o).map(m => m.material_id)).concat(opMats.map(m => m.material_id)))];
 
   // Sklad per materiál + per sklad (kvůli „už na pracovišti")
   const stockRows = materialIds.length ? await tx.stock.findMany({
@@ -99,7 +109,7 @@ async function computeOpMaterialStatus(ops, opts = {}) {
   const doneSet = new Set(doneRows.map(d => d.batch_operation_id + '|' + d.material_id));
 
   for (const o of ops) {
-    const mats = (o.operation && matsByOp.get(o.operation.id)) || [];
+    const mats = matsFor(o);
     const qty = Number((o.batch && o.batch.quantity) || 1);
     const whId = o.workstation ? o.workstation.input_warehouse_id : null;
     let worst = 'none';

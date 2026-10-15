@@ -270,7 +270,7 @@ async function nextHolyosCode(prefix /*, model (ignorováno — kontrolujeme ob�
   }
   return prefix + String(max + 1).padStart(4, '0');
 }
-// Barevné varianty: základní díl, který má varianty, nesmí být v kusovníku přímo — musí se zvolit konkrétní barva.
+// Barevné varianty: u VÝSTUPŮ postupu musí být konkrétní barva (operace smí mít základ — barva se volí u dávky).
 // Vrací text chyby, nebo null.
 async function baseWithVariantsError(materialIds, tx = prisma) {
   const ids = [...new Set((materialIds || []).map(Number).filter(Boolean))];
@@ -907,6 +907,13 @@ const OUTPUT_INCLUDE = { out_product: { select: { id: true, code: true, name: tr
 // GET /api/production/products/:id/outputs
 // ── Výbava výrobku (Barva – Červená = sada variant operací) ───────────────────
 // GET /api/production/products/:id/equipment
+// GET /api/production/products/:id/part-colors — díly postupu s barevnými variantami + nabídka barev
+// (barva dílů se volí u dávky; v postupu je díl jako základ bez přípony)
+router.get('/products/:id/part-colors', async (req, res, next) => {
+  try { res.json(await require('../services/production/part-colors').productPartColors(parseInt(req.params.id, 10))); }
+  catch (err) { next(err); }
+});
+
 router.get('/products/:id/equipment', async (req, res, next) => {
   try {
     const rows = await prisma.productEquipment.findMany({ where: { product_id: parseInt(req.params.id, 10) }, orderBy: [{ group_name: 'asc' }, { sort: 'asc' }, { name: 'asc' }] });
@@ -1551,7 +1558,7 @@ router.post('/operations', async (req, res, next) => {
       // Hromadně vlož materiály (pokud přišly) — s automatickým napojením na Product
       if (Array.isArray(materials) && materials.length > 0) {
         const matIds = materials.map(m => m.material_id).filter(Boolean);
-        const bErr = await baseWithVariantsError(matIds, tx); if (bErr) { const e = new Error(bErr); e.status = 400; throw e; }
+        /* základ s barevnými variantami je v operaci povolen — barva se volí u dávky (part_color) */
         const linkedProds = matIds.length > 0
           ? await tx.product.findMany({ where: { material_id: { in: matIds } }, select: { id: true, material_id: true } })
           : [];
@@ -1700,7 +1707,7 @@ router.put('/operations/:id', async (req, res, next) => {
         await tx.operationMaterial.deleteMany({ where: { operation_id: opId } });
         if (materials.length > 0) {
           const matIds = materials.map(m => m.material_id).filter(Boolean);
-          const bErr = await baseWithVariantsError(matIds, tx); if (bErr) { const e = new Error(bErr); e.status = 400; throw e; }
+          /* základ s barevnými variantami je v operaci povolen — barva se volí u dávky (part_color) */
           const linkedProds = matIds.length > 0
             ? await tx.product.findMany({ where: { material_id: { in: matIds } }, select: { id: true, material_id: true } })
             : [];
@@ -1755,7 +1762,7 @@ router.get('/operations/:id/materials', async (req, res, next) => {
 router.post('/operations/:id/materials', async (req, res, next) => {
   try {
     const { material_id, quantity, unit } = req.body;
-    const bErr = await baseWithVariantsError([material_id]); if (bErr) return res.status(400).json({ error: bErr });
+    // základ s barevnými variantami je v operaci povolen — barva dílů se volí až u dávky (part_color)
     const mat = await prisma.operationMaterial.create({
       data: {
         operation_id: parseInt(req.params.id),
@@ -2890,6 +2897,26 @@ router.post('/batches', async (req, res, next) => {
       } else outputVariantId = null;
     }
 
+    // Barva dílů: díly s barevnými variantami se pro dávku zamění za variantu zvolené barvy (přípona kódu).
+    // Je-li v postupu základní díl bez barvy (má varianty), barva je povinná — základ se nedá skladovat ani vydat.
+    let partColor = String(req.body?.part_color || '').trim() || null;
+    {
+      const PC = require('../services/production/part-colors');
+      const pc = await PC.productPartColors(productId);
+      if (pc.parts.length) {
+        const needs = pc.parts.some(p => !p.current_color);
+        if (partColor) {
+          const c = pc.colors.find(x => x.key === PC.colorKey(partColor));
+          if (!c) return res.status(400).json({ error: 'Barva „' + partColor + '" není u barevných dílů tohoto výrobku k dispozici (možnosti: ' + pc.colors.map(x => x.name).join(', ') + ').' });
+          partColor = c.name;
+          configCode = (configCode || '') + '-' + c.key.toUpperCase();
+          variantLabel = ((variantLabel ? variantLabel + ' · ' : '') + 'Barva dílů: ' + c.name + (c.missing ? ' (' + c.missing + ' dílů tuto barvu nemá – zůstanou beze změny)' : '')).slice(0, 255);
+        } else if (needs) {
+          return res.status(400).json({ error: 'Vyber barvu dílů – výrobek má díly s barevnými variantami (' + pc.colors.map(x => x.name).join(', ') + ').', part_colors: pc.colors });
+        }
+      } else partColor = null;
+    }
+
     let batch_number = await generateBatchNumber(planned_start, !!is_test);
     // Pojistka proti souběhu: když číslo mezitím někdo obsadil, vygeneruj další a zkus znovu.
     const createBatch = async (bn) => prisma.productionBatch.create({
@@ -2913,6 +2940,7 @@ router.post('/batches', async (req, res, next) => {
         variant_label: variantLabel,
         config_code: configCode ? configCode.slice(0, 160) : null,
         output_variant_id: outputVariantId || null,
+        part_color: partColor,
       },
       include: { product: { select: { id: true, code: true, name: true } } },
     });
