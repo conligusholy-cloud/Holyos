@@ -305,10 +305,23 @@ router.post('/funnels/:id/nodes/:nodeId/run', async (req, res, next) => { try {
   const SEG = require('../services/ads/segments'); const ids = new Set(); const force = !!(req.body && req.body.force);
   for (const e of (f.edges || []).filter((x) => x.to === nd.id)) { const A = (f.nodes || []).find((x) => x.id === e.from); if (!A) continue; if (A.kind === 'list') { const byId = {}; (f.nodes || []).forEach((x) => { byId[x.id] = x; }); const conds = []; let cur = A, base = 'all', form = null, g = 0; while (cur && g++ < 12) { if (cur.kind === 'list') conds.unshift(cur.cond || {}); const e2 = (f.edges || []).find((x) => x.to === cur.id); const up = e2 ? byId[e2.from] : null; if (!up) break; if (up.kind === 'db') { if (e2.port > 0 && up.seg && up.seg.lists && up.seg.lists[e2.port - 1]) conds.unshift(up.seg.lists[e2.port - 1].cond || {}); break; } if (up.kind === 'leadform') { base = 'form'; form = up.form; if (e2.port > 0 && up.groups && up.groups[e2.port - 1]) conds.unshift({ ad_ids: up.groups[e2.port - 1].ad_ids || [] }); break; } if (up.kind === 'list' && e2.port > 0 && up.seg && up.seg.lists && up.seg.lists[e2.port - 1]) conds.unshift(up.seg.lists[e2.port - 1].cond || {}); cur = up; } if ((e.port || 0) > 0 && A.seg && A.seg.lists && A.seg.lists[e.port - 1]) conds.push(A.seg.lists[e.port - 1].cond || {}); (await SEG.leadsForChain(conds, form, base)).forEach((l) => ids.add(l.id)); continue; } if (A.kind !== 'db') continue; const fe = (f.edges || []).find((x) => x.to === A.id); const fn = fe ? (f.nodes || []).find((x) => x.id === fe.from && x.kind === 'leadform') : null; (await SEG.leadsFor(A, e.port || 0, fn ? fn.form : null)).forEach((l) => ids.add(l.id)); }
   if (!ids.size) return res.json({ ok: true, total: 0, sent: 0, results: [] });
-  const cmp = require('./compounder.routes'); const out = []; let sent = 0; const limit = Math.min(ids.size, 300);
-  for (const id of [...ids].slice(0, limit)) { try { const r = await cmp.forceSend(id, nd.kind, force); if (r && r.sent) sent++; out.push({ id, sent: !!(r && r.sent), reason: r && !r.sent ? (r.reason || r.error || '') : '' }); } catch (e2) { out.push({ id, sent: false, reason: e2.message }); } }
-  res.json({ ok: true, total: ids.size, sent, results: out.slice(0, 300) });
+  // Odesílání běží NA POZADÍ pro všechny leady (bez limitu): už odeslaným se přeskočí, mezi odesláními krátká pauza (limit SES).
+  // Stav: GET /funnels/:id/nodes/:nodeId/run-status. Při restartu serveru stačí spustit znovu – odeslaní se přeskočí.
+  const key = f.id + ':' + nd.id; const cur = RUN_JOBS[key]; if (cur && cur.running) return res.json({ ok: true, background: true, already_running: true, ...cur });
+  const cmp = require('./compounder.routes'); const list = [...ids];
+  const job = RUN_JOBS[key] = { running: true, total: list.length, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {}, started_at: new Date().toISOString(), finished_at: null };
+  (async () => {
+    for (const id of list) {
+      try { const r = await cmp.forceSend(id, nd.kind, force); if (r && r.sent) job.sent++; else { job.skipped++; const why = String((r && (r.reason || r.error)) || 'přeskočeno').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; } }
+      catch (e2) { job.failed++; const why = String(e2.message || 'chyba').slice(0, 60); job.reasons[why] = (job.reasons[why] || 0) + 1; }
+      job.done++; await new Promise((ok) => setTimeout(ok, 150));
+    }
+    job.running = false; job.finished_at = new Date().toISOString();
+  })().catch((e3) => { job.running = false; job.error = e3.message; });
+  res.json({ ok: true, background: true, ...job });
 } catch (err) { next(err); } });
+const RUN_JOBS = {};
+router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { res.json(RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')] || { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
 // ── Cíle záchytných stránek: AI analýza stránky → co může návštěvník udělat (nákup, kontakt, stažení, odchod…) ──
