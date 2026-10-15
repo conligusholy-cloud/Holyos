@@ -5,6 +5,13 @@
 
 // Pořadí je důležité: delší / specifičtější výrazy dřív.
 const GLOSSARY = [
+  [/Odpočet zálohy/gi, 'Advance payment deduction'],
+  [/Odpočet zálohových faktur/gi, 'Deduction of advance invoices'],
+  [/Odpočet/gi, 'Deduction'],
+  [/Vydaná zálohová faktura/gi, 'Issued proforma invoice'],
+  [/Daňový doklad k přijaté platbě/gi, 'Tax document for received payment'],
+  [/Vyúčtování/gi, 'Settlement'],
+  [/Kiosek/gi, 'Kiosk'],
   [/Přijatá záloha/gi, 'Advance payment received'],
   [/Zálohová faktura/gi, 'Proforma invoice'],
   [/Záloha/gi, 'Advance payment'],
@@ -43,7 +50,7 @@ const GLOSSARY = [
   [/\bzákazník\b/gi, 'customer'],
 ];
 const MONTHS = { ledna: 'January', února: 'February', března: 'March', dubna: 'April', května: 'May', června: 'June', července: 'July', srpna: 'August', září: 'September', října: 'October', listopadu: 'November', prosince: 'December' };
-const UNITS = { ks: 'pcs', 'ks.': 'pcs', hod: 'h', 'hod.': 'h', měs: 'month', 'měs.': 'month', kg: 'kg', m: 'm', sada: 'set', služba: 'service', paušál: 'flat fee' };
+const UNITS = { j: 'unit', 'j.': 'unit', 'jedn.': 'unit', den: 'day', dny: 'days', 'm²': 'm²', l: 'l', bal: 'pack', 'bal.': 'pack', ks: 'pcs', 'ks.': 'pcs', hod: 'h', 'hod.': 'h', měs: 'month', 'měs.': 'month', kg: 'kg', m: 'm', sada: 'set', služba: 'service', paušál: 'flat fee' };
 
 function translateItem(cs) {
   let s = String(cs || '');
