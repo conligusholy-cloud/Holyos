@@ -102,6 +102,20 @@ router.get('/overview', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Živě: kdo je právě na stránce a co dělá (jen BS2 stránky). GET /pages/:key/live
+router.get('/pages/:key/live', async (req, res, next) => {
+  try {
+    const pg = PAGES.find((x) => x.key === String(req.params.key || '')); if (!pg) return res.status(404).json({ error: 'Stránka neexistuje.' });
+    if (!pg.bs2 || !pg.bs2.path) return res.json({ supported: false });
+    const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+    if (!secret) return res.json({ supported: false });
+    const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' });
+    const r = await fetch(base + '/api/holyos/ads-live?path=' + encodeURIComponent(pg.bs2.path), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return res.status(502).json({ error: 'BS2 ' + r.status });
+    res.json(Object.assign({ supported: true }, await r.json()));
+  } catch (err) { next(err); }
+});
+
 // ── Detailní statistika záchytné stránky (pro marketing): období vs. předchozí období, denní řady, hodiny/dny v týdnu,
 //    zařízení, zdroje (utm / kanál funelu), balíčky (BS2), cíle. GET /pages/:key/stats?days&shift
 router.get('/pages/:key/stats', async (req, res, next) => {

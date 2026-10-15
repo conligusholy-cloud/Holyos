@@ -532,6 +532,59 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   if (behavior) { try { Object.assign(behavior, behaviorExtras(ev)); } catch (e) { /* rozšířená data jsou nepovinná */ } }
   res.json({ days, ordersByAttr, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
 }));
+// Živý přehled návštěvníků záchytné stránky pro HolyOS Centrum reklamy: kdo je teď na stránce a co dělá (anonymně, bez obsahu polí)
+const LIVE_LBL = { misto_cta: 'klik na CTA', misto_checkout: 'vstoupil do platby', misto_checkout_fail: 'platba selhala', misto_paid_return: 'vrátil se po zaplacení ✔', misto_pay_canceled: 'zrušil platbu', form_submit: 'odeslal formulář', form_abandon: 'opustil rozepsaný formulář' };
+function liveAction(r) {
+  const m = r.meta || {};
+  if (r.kind === 'view') return 'otevřel stránku';
+  if (r.kind === 'click') return 'klik: ' + (r.label || '?');
+  if (r.kind === 'section') return 'čte: ' + (r.label || '?');
+  if (r.kind === 'scroll') return 'doscrolloval na ' + r.label + ' %';
+  if (r.kind !== 'custom') return null;
+  const l = r.label || '';
+  if (l === 'pkg_pick') return 'vybral balíček ' + (m.v || '?');
+  if (l === 'field_focus') return 'vyplňuje pole „' + (m.f || '?') + '"';
+  if (l === 'rage_click') return 'opakovaně klikal (' + (m.sec || '–') + ')';
+  if (l === 'dead_click') return 'klik mimo tlačítko (' + (m.sec || '–') + ')';
+  if (l === 'interact') return 'ovládá prvek „' + (m.f || '?') + '"';
+  if (l === 'misto_checkout') return 'vstoupil do platby' + (m.variant ? ' (' + m.variant + ')' : '');
+  if (LIVE_LBL[l]) return LIVE_LBL[l];
+  if (/^(perf|survey)$/.test(l) || /^video_/.test(l)) return null;
+  return l;
+}
+app.get('/api/holyos/ads-live', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+  try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+  const bp = String(req.query.path || '').slice(0, 120); if (!bp) return res.json({ now: 0, visitors: [], feed: [] });
+  const ev = (await q("SELECT sid, kind, label, meta, t_ms, created_at FROM page_events WHERE path = $1 AND created_at > now() - interval '60 minutes' ORDER BY created_at", [bp])).rows;
+  const now = Date.now(); const by = {};
+  ev.forEach((r) => { (by[r.sid] = by[r.sid] || []).push(r); });
+  const visitors = [], feed = []; let last5 = 0, last30 = 0;
+  Object.keys(by).forEach((sid) => {
+    const list = by[sid]; const lastR = list[list.length - 1]; const ago = (now - new Date(lastR.created_at).getTime()) / 1000;
+    const hidden = lastR.kind === 'exit'; const id = '#' + require('crypto').createHash('md5').update(sid).digest('hex').slice(0, 4);
+    const view = list.find((r) => r.kind === 'view'); const vm = (view && view.meta) || {};
+    const acts = list.map((r) => ({ at: new Date(r.created_at).getTime(), text: liveAction(r), r })).filter((a) => a.text);
+    acts.slice(-12).forEach((a) => feed.push({ id, at: a.at, text: a.text }));
+    if (ago <= 300 && !hidden) last5++; if (ago <= 1800) last30++;
+    if (ago > 60 && !(ago <= 300 && !hidden)) return;
+    const pings = list.filter((r) => r.kind === 'ping'); const lp = pings[pings.length - 1]; const secEv = list.filter((r) => r.kind === 'section'); const section = (lp && lp.label) || (secEv.length ? secEv[secEv.length - 1].label : '');
+    const scroll = Math.max(0, ...list.filter((r) => r.kind === 'scroll').map((r) => Number(r.label) || 0), lp && lp.meta ? Number(lp.meta.s) || 0 : 0);
+    const lastCustom = [...list].reverse().find((r) => r.kind === 'custom' && !/^(perf|survey)$/.test(r.label || '') && !/^video_/.test(r.label || ''));
+    const recent = (r) => r && (now - new Date(r.created_at).getTime()) < 120e3;
+    let status = section ? 'čte: ' + section : 'prohlíží stránku';
+    if (lastCustom && recent(lastCustom)) { const l = lastCustom.label; if (l === 'misto_checkout') status = '💳 v platební bráně'; else if (l === 'field_focus' || l === 'form_submit') status = '✍️ vyplňuje formulář'; else if (l === 'pkg_pick') status = '📦 vybírá balíček'; else if (l === 'misto_paid_return') status = '✅ zaplatil'; }
+    const lastAct = acts.length ? acts[acts.length - 1] : null;
+    const first = new Date(list[0].created_at).getTime();
+    const camp = (() => { try { const u = new URLSearchParams(String(vm.q || '').replace(/^\?/, '')); const s = u.get('utm_source'), c = u.get('utm_campaign'); if (s || c) return (s || '–') + (c ? ' / ' + c : ''); if (u.get('fbclid')) return 'Facebook'; if (u.get('gclid')) return 'Google'; } catch (e) { /* bez zdroje */ } const rf = String(vm.ref || '').replace(/^https?:\/\//, '').split('/')[0]; return rf || 'přímo'; })();
+    visitors.push({ id, device: vm.ua === 'm' ? 'mobil' : vm.ua === 'd' ? 'počítač' : '?', browser: vm.br || '', source: camp, secs: Math.round((now - first) / 1000), scroll, section, status, active: !hidden && ago <= 60, hidden, last_ago: Math.round(ago), last_action: lastAct ? lastAct.text : '', actions: acts.slice(-6).reverse().map((a) => ({ ago: Math.round((now - a.at) / 1000), text: a.text })) });
+  });
+  feed.sort((a, b) => b.at - a.at);
+  const nowCount = visitors.filter((v) => v.active).length;
+  res.json({ at: new Date().toISOString(), now: nowCount, last5, last30, visitors: visitors.sort((a, b) => (b.active - a.active) || a.last_ago - b.last_ago).slice(0, 40), feed: feed.slice(0, 25).map((f) => ({ id: f.id, ago: Math.round((now - f.at) / 1000), text: f.text })) });
+}));
 app.get('/api/presence', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (!_presCache.data || Date.now() - _presCache.at > 10e3) {
@@ -543,10 +596,10 @@ app.get('/api/presence', wrap(async (req, res) => {
   res.json(_presCache.data);
 }));
 // Veřejné sledování chování na záchytných stránkách (bez přihlášení) – dávka událostí z PUB_TRACK_JS
-const PUB_EV = ['view', 'scroll', 'section', 'dwell', 'click', 'mouse', 'time', 'exit', 'custom'];
+const PUB_EV = ['view', 'scroll', 'section', 'dwell', 'click', 'mouse', 'time', 'exit', 'custom', 'ping'];
 app.post('/api/public/track', wrap(async (req, res) => {
   res.status(204); const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const path = String(b.path || '').split('?')[0].replace(/\/+$/, '').slice(0, 120) || '/';
-  if (!sid || !PUBLIC_HIT_PATHS.includes(path) || !Array.isArray(b.ev) || rateLimited('ptk:' + req.ip, 600, 3600e3)) return res.end();
+  if (!sid || !PUBLIC_HIT_PATHS.includes(path) || !Array.isArray(b.ev) || rateLimited('ptk:' + req.ip, 3000, 3600e3)) return res.end();
   const rows = b.ev.slice(0, 40).filter((e) => e && PUB_EV.includes(e.k)).map((e) => [sid, path, e.k, e.l != null ? String(e.l).slice(0, 80) : null, e.m && typeof e.m === 'object' && JSON.stringify(e.m).length <= 4000 ? JSON.stringify(e.m) : null, Number.isFinite(e.t) ? Math.round(e.t) : null]);
   if (rows.length) { const vals = []; const ph = rows.map((r, i) => { vals.push(...r); const o = i * 6; return '($' + (o + 1) + ',$' + (o + 2) + ',$' + (o + 3) + ',$' + (o + 4) + ',$' + (o + 5) + '::jsonb,$' + (o + 6) + ')'; }).join(','); await q('INSERT INTO page_events (sid, path, kind, label, meta, t_ms) VALUES ' + ph, vals).catch(() => {}); }
   res.end();

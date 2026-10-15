@@ -50,6 +50,8 @@ var lastAct=Date.now(),active=0;['mousemove','keydown','touchstart','scroll','cl
 setInterval(function(){if(document.visibilityState==='visible'&&Date.now()-lastAct<30000)active+=5;},5000);
 function dump(final){var now=Date.now();var d=[];secs.forEach(function(o){var a=o.acc+(o.vis?now-o.since:0);if(a>=1500){d.push({l:o.nm,s:Math.round(a/1000)});o.acc=0;o.since=now;}});if(d.length)push({k:'dwell',m:{secs:d}});var g=Object.keys(grid);if(g.length){push({k:'mouse',m:{g:grid}});grid={};}if(active>0){push({k:'time',m:{s:active}});active=0;}if(final)push({k:'exit',l:cur,m:{scroll:maxS}});flush();}
 setInterval(function(){dump(false);},10000);
+/* heartbeat pro živý přehled: stránka je otevřená a viditelná (aktuální sekce + scroll) */
+setInterval(function(){if(document.visibilityState==='visible')push({k:'ping',l:cur,m:{s:maxS}});},15000);
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')dump(true);});addEventListener('pagehide',function(){dump(true);});
 /* výkon stránky: načtení, FCP, LCP, CLS */
 var lcp=0,cls=0;try{new PerformanceObserver(function(l){var e=l.getEntries();var x=e[e.length-1];if(x)lcp=Math.round(x.startTime);}).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver(function(l){l.getEntries().forEach(function(e){if(!e.hadRecentInput)cls+=e.value;});}).observe({type:'layout-shift',buffered:true});}catch(e){}
