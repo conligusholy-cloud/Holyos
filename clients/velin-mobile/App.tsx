@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, Text, TouchableOpacity } from 'react-native';
+import { Platform, Text, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -44,6 +44,7 @@ import Attendance from './screens/Attendance';
 import NewGeoFence from './screens/NewGeoFence';
 import SignContract from './screens/SignContract';
 import AssistantSettings from './screens/AssistantSettings';
+import HomeHub from './screens/HomeHub';
 import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
 import SupportSound from './screens/SupportSound';
@@ -86,6 +87,7 @@ export type RootStackParamList = {
 export type TabsParamList = {
   MyDay: undefined;
   Chat: undefined;
+  Home: undefined;
   Alerts: undefined;
   Me: undefined;
   Support: undefined;
@@ -233,6 +235,20 @@ function TabsRoot() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>💬</Text>,
+        }}
+      />
+      <Tabs.Screen
+        name="Home"
+        component={HomeHub}
+        options={{
+          title: 'Home',
+          headerTitle: 'Moderní HOME',
+          // Výrazné kulaté tlačítko uprostřed lišty
+          tabBarIcon: ({ focused }) => (
+            <View style={{ width: 46, height: 46, borderRadius: 23, marginTop: -14, backgroundColor: focused ? colors.accent : colors.surface2, alignItems: 'center', justifyContent: 'center', borderWidth: 3, borderColor: colors.surface, shadowColor: colors.accent, shadowOpacity: focused ? 0.6 : 0, shadowRadius: 10, elevation: focused ? 6 : 0 }}>
+              <Text style={{ fontSize: 22 }}>🏠</Text>
+            </View>
+          ),
         }}
       />
       <Tabs.Screen
