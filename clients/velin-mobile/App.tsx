@@ -26,7 +26,7 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, TouchableOpacity } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
@@ -173,6 +173,7 @@ function TabsRoot() {
   // Tomáš a Jan Holý: místo záložky „Já" mají „Podpora" (chat BS2) a profil je nahoře vpravo.
   const supportAllowed = useSupportAllowed();
   const supportUnread = useSupportUnread(supportAllowed);
+  const insets = useSafeAreaInsets();
   return (
     <Tabs.Navigator
       screenOptions={{
@@ -196,9 +197,10 @@ function TabsRoot() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 64,
+          // Spodní lišta nad systémovými tlačítky Androidu (edge-to-edge) — přičti spodní inset
+          height: 56 + Math.max(insets.bottom, 8),
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: Math.max(insets.bottom, 8),
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.text2,
