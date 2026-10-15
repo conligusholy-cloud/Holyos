@@ -1489,9 +1489,10 @@
         '<option value="' + c + '"' + (c === 'CZK' ? ' selected' : '') + '>' + c + '</option>').join('');
 
       document.getElementById('modal-root').innerHTML = (
-        '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-          '<div class="modal wide">' +
-            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">' +
+        '<div class="modal-overlay">' +
+          '<div class="modal wide" style="position:relative;">' +
+            '<button type="button" onclick="closeModal()" title="Zavřít" style="position:absolute;top:10px;right:12px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--text2);font-size:1.2em;cursor:pointer;z-index:2;" onmouseover="this.style.background=\'rgba(239,68,68,.18)\';this.style.color=\'#f87171\'" onmouseout="this.style.background=\'transparent\';this.style.color=\'\'">✕</button>' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-right:34px;">' +
               '<h2 style="margin:0;">Nová faktura</h2>' +
               '<div style="text-align:right;"><span style="color:var(--text2);font-size:.8em;">Číslo dokladu</span><br>' +
                 (window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
