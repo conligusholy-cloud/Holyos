@@ -715,6 +715,50 @@ function paE164(s) {
   return v;
 }
 
+// Strukturovaný profil osobního asistenta → instrukce pro AI (voice.<line>.inbound_prompt).
+const PA_DEFAULT = {
+  owner_name: '', owner_role: '', company: 'Best Series s.r.o.', assistant_name: '', gender: 'female',
+  ai_disclose: 'start', tone: 'formal', english: true,
+  collect: { name: true, company: true, phone: true, email: false, reason: true, urgency: true, callback_time: true },
+  share: { busy: true, callback_promise: true, company_info: true, products: false, sales_contact: false, web: true },
+  callback_text: 'co nejdříve, obvykle ještě týž den', sales_contact: '', web: 'www.bestseries.cz',
+  forbid: { location: true, private_contacts: true, calendar: true, prices: true, promises: true, customers: true, internal: true, confirm_relationship: true },
+  urgent: 'mark', offers: 'decline', max_minutes: 3,
+  closing: 'Děkuji, všechno předám. Hezký den, na shledanou.', custom: '',
+};
+function paProfile(p) {
+  const d = JSON.parse(JSON.stringify(PA_DEFAULT)); const x = (p && typeof p === 'object') ? p : {};
+  Object.keys(d).forEach((k) => { if (x[k] === undefined) return; if (d[k] && typeof d[k] === 'object') { Object.keys(d[k]).forEach((kk) => { if (x[k] && x[k][kk] !== undefined) d[k][kk] = !!x[k][kk]; }); } else if (typeof d[k] === 'number') { const n = Number(x[k]); if (Number.isFinite(n)) d[k] = Math.max(1, Math.min(15, n)); } else if (typeof d[k] === 'boolean') d[k] = !!x[k]; else d[k] = String(x[k] || '').slice(0, k === 'custom' ? 4000 : 300); });
+  return d;
+}
+function paCompile(p) {
+  const f = p.gender === 'male'; const ja = f ? 'asistent' : 'asistentka'; const owner = p.owner_name || 'kolega';
+  const L = [];
+  L.push('ROLE: Jsi osobní telefonní ' + ja + (p.assistant_name ? ' jménem ' + p.assistant_name : '') + '. MAJITEL LINKY (za koho mluvíš): ' + owner + (p.owner_role ? ', ' + p.owner_role : '') + (p.company ? ', firma ' + p.company.replace(/\.$/, '') : '') + '. Majitel teď nemůže hovor přijmout; přijímáš hovor místo něj. Jméno majitele skloňuj česky správně. Mluvíš česky' + (p.english ? ' (když volající mluví anglicky, přepni do angličtiny)' : '') + '.');
+  L.push('TÓN: ' + (p.tone === 'friendly' ? 'přátelský, vstřícný, ale profesionální; vykáš.' : 'formální, zdvořilý a věcný; vždy vykáš.') + ' Mluv krátce — jedna věta nebo jedna otázka najednou, nech volajícího domluvit.');
+  L.push('AI: ' + (p.ai_disclose === 'start' ? 'Hned na začátku hovoru jasně řekni, že jsi AI ' + ja + '.' : 'Neříkej sám od sebe, že jsi AI; když se volající zeptá, pravdivě přiznej, že jsi AI ' + ja + '. Nikdy netvrď, že jsi člověk.'));
+  const C = { name: 'jméno a příjmení volajícího', company: 'firmu, za kterou volá', phone: 'telefon pro zpětné volání (zeptej se, jestli platí číslo, ze kterého volá)', email: 'e-mail', reason: 'důvod hovoru — co přesně potřebuje', urgency: 'jak je to naléhavé', callback_time: 'kdy se mu hodí zpětné zavolání' };
+  const coll = Object.keys(C).filter((k) => p.collect[k]).map((k) => C[k]);
+  L.push('ÚKOL: Postupně (jednu otázku po druhé) zjisti: ' + (coll.length ? coll.join('; ') : 'kdo volá a co potřebuje') + '. Co už volající řekl, znovu se neptej. Na konci krátce zopakuj, co předáš, a nech si to potvrdit.');
+  const S = [];
+  if (p.share.busy) S.push('že majitel teď nemůže hovor přijmout (bez udání důvodu)');
+  if (p.share.callback_promise) S.push('že se majitel ozve ' + (p.callback_text || 'co nejdříve'));
+  if (p.share.company_info) S.push('základní údaje o firmě' + (p.company ? ' ' + p.company.replace(/\.$/, '') : '') + ' (čím se zabývá)');
+  if (p.share.web && p.web) S.push('web ' + p.web);
+  if (p.share.products) S.push('obecné informace o produktech podle firemních podkladů');
+  if (p.share.sales_contact && p.sales_contact) S.push('kontakt na obchod: ' + p.sales_contact);
+  L.push('SMÍŠ SDĚLIT POUZE: ' + (S.length ? S.join('; ') : 'nic kromě toho, že vzkaz předáš') + '. Cokoli jiného nesděluj — řekni, že to nevíš a že to majitel upřesní, až se ozve.');
+  const F = { location: 'kde majitel je, co právě dělá, s kým je nebo kdy bude k zastižení', private_contacts: 'soukromé ani pracovní telefonní číslo či e-mail majitele', calendar: 'domlouvat, potvrzovat nebo rušit schůzky a termíny', prices: 'ceny, slevy, nabídky, platební podmínky', promises: 'cokoli slibovat nebo závazně potvrzovat jménem majitele nebo firmy', customers: 'informace o zákaznících, zakázkách a obchodních partnerech', internal: 'interní informace firmy (lidé, čísla, plány, problémy)', confirm_relationship: 'potvrzovat, zda majitel volajícího zná nebo s ním něco řeší' };
+  const forb = Object.keys(F).filter((k) => p.forbid[k]).map((k) => F[k]);
+  if (forb.length) L.push('NIKDY NESDĚLUJ A NEDĚLEJ: ' + forb.join('; ') + '. Když na to volající naléhá, zdvořile odmítni a nabídni předání vzkazu.');
+  L.push('NALÉHAVÉ: ' + (p.urgent === 'transfer' ? 'Když volající řekne, že je věc velmi naléhavá, nabídni přepojení na majitele (systém přepojení zajistí).' : 'Když je věc naléhavá, řekni, že vzkaz předáš jako naléhavý okamžitě. Nepřepojuj.'));
+  L.push('NABÍDKY A REKLAMA: ' + (p.offers === 'decline' ? 'Obchodní nabídky, průzkumy a reklamu zdvořile odmítni, poděkuj a rozluč se (stačí jméno firmy).' : 'U obchodních nabídek si jen vezmi kontakt a stručný popis nabídky.'));
+  L.push('DÉLKA: Hovor drž krátký, nejvýš asi ' + p.max_minutes + ' minuty. Nevymýšlej si žádné informace.');
+  if (p.closing) L.push('ZÁVĚR: Rozluč se touto větou nebo velmi podobně: „' + p.closing + '"');
+  if (p.custom) L.push('DALŠÍ POKYNY: ' + p.custom);
+  return L.join('\n');
+}
+
 // GET /api/velin/admin/personal-assistant/:personId — načte konfiguraci.
 admin.get('/personal-assistant/:personId', async (req, res, next) => {
   try {
@@ -731,6 +775,11 @@ admin.get('/personal-assistant/:personId', async (req, res, next) => {
       transfer_number: (await g('voice.' + line + '.transfer_inbound_number')) || '',
       tts_voice: (await g('voice.' + line + '.tts_voice')) || 'female',
     };
+    let prof = await g('voice.' + line + '.pa_profile'); if (typeof prof === 'string') { try { prof = JSON.parse(prof); } catch (_) { prof = null; } }
+    cfg.profile_saved = !!prof;
+    cfg.profile = paProfile(prof);
+    if (!prof) { try { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true, role: { select: { name: true } } } }); if (pp) { cfg.profile.owner_name = ((pp.first_name || '') + ' ' + (pp.last_name || '')).trim(); cfg.profile.owner_role = (pp.role && pp.role.name) || ''; } } catch (_) { /* bez jména */ } }
+    cfg.compiled = paCompile(cfg.profile);
     res.json({ config: cfg });
   } catch (err) { next(err); }
 });
@@ -751,7 +800,15 @@ admin.put('/personal-assistant/:personId', async (req, res, next) => {
     await s('voice.' + line + '.enabled', !!b.enabled, { type: 'boolean' });
     await s('voice.' + line + '.number', number, { type: 'string' });
     await s('voice.' + line + '.inbound_greeting', String(b.inbound_greeting || '').slice(0, 2000), { type: 'string' });
-    await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
+    // Strukturovaný profil → instrukce pro AI (+ vlastní doplněk). Bez profilu = volný text jako dřív.
+    if (b.profile && typeof b.profile === 'object') {
+      const prof = paProfile(b.profile);
+      await s('voice.' + line + '.pa_profile', prof, { type: 'json' });
+      await s('voice.' + line + '.inbound_prompt', paCompile(prof).slice(0, 8000), { type: 'string' });
+      await s('voice.' + line + '.use_knowledge', !!prof.share.products, { type: 'boolean' });
+    } else {
+      await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
+    }
     await s('voice.' + line + '.transfer_enabled', !!b.transfer_enabled, { type: 'boolean' });
     await s('voice.' + line + '.transfer_inbound_number', transferNumber, { type: 'string' });
     await s('voice.' + line + '.tts_voice', (b.tts_voice === 'male' ? 'male' : 'female'), { type: 'string' });
@@ -768,6 +825,8 @@ admin.put('/personal-assistant/:personId', async (req, res, next) => {
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
+// POST /api/velin/admin/personal-assistant/:personId/preview { profile } — náhled instrukcí pro AI (nic neukládá)
+admin.post('/personal-assistant/:personId/preview', async (req, res) => { try { res.json({ prompt: paCompile(paProfile((req.body || {}).profile)) }); } catch (err) { res.status(400).json({ error: err.message }); } });
 
 // GET /api/velin/admin/personal-assistant/:personId/calls — přehled hovorů asistenta.
 admin.get('/personal-assistant/:personId/calls', async (req, res, next) => {

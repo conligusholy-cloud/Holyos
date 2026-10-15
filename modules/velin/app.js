@@ -386,9 +386,55 @@
       if (btn) { const o = btn.textContent; btn.textContent = '✓ Zkopírováno'; setTimeout(() => { btn.textContent = o; }, 1500); }
     } catch (e) { alert('Zkopíruj ručně: ' + text); }
   };
+  // ── Profil osobního asistenta: co zjišťuje, co smí / nesmí sdělit, chování (server z toho složí instrukce pro AI) ──
+  const PA_COLLECT = [['name', 'Jméno a příjmení'], ['company', 'Firma volajícího'], ['phone', 'Telefon pro zpětné volání'], ['email', 'E-mail'], ['reason', 'Důvod hovoru'], ['urgency', 'Naléhavost'], ['callback_time', 'Kdy se hodí zavolat zpět']];
+  const PA_SHARE = [['busy', 'Že teď nemůže hovor přijmout (bez důvodu)'], ['callback_promise', 'Kdy se ozve (text níže)'], ['company_info', 'Základní info o firmě'], ['web', 'Web firmy'], ['products', 'Info o produktech z firemních podkladů (prádlomaty)'], ['sales_contact', 'Kontakt na obchod (níže)']];
+  const PA_FORBID = [['location', 'Kde je, co dělá, kdy bude k zastižení'], ['private_contacts', 'Jeho telefon a e-mail'], ['calendar', 'Domlouvat / potvrzovat schůzky a termíny'], ['prices', 'Ceny, slevy, nabídky, platby'], ['promises', 'Cokoli slibovat jeho jménem'], ['customers', 'Info o zákaznících a zakázkách'], ['internal', 'Interní info firmy'], ['confirm_relationship', 'Potvrzovat, zda volajícího zná']];
+  function paChecks(group, list, vals) {
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-top:4px">' + list.map(([k, l]) => '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer"><input type="checkbox" class="pa-' + group + '" data-k="' + k + '"' + (vals && vals[k] ? ' checked' : '') + '> ' + escapeHtml(l) + '</label>').join('') + '</div>';
+  }
+  function paProfileHtml(p) {
+    const sec = (t, inner) => '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px"><div style="font-weight:700;font-size:13.5px;margin-bottom:4px">' + t + '</div>' + inner + '</div>';
+    const sel = (id, opts, v) => '<select id="' + id + '">' + opts.map(([k, l]) => '<option value="' + k + '"' + (v === k ? ' selected' : '') + '>' + escapeHtml(l) + '</option>').join('') + '</select>';
+    const inp = (id, v, ph) => '<input id="' + id + '" value="' + escapeHtml(v || '') + '" placeholder="' + escapeHtml(ph || '') + '">';
+    return sec('👤 Za koho asistent mluví',
+        '<div class="form-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="form-group"><label>Jméno majitele</label>' + inp('pa-owner', p.owner_name, 'Jan Holý') + '</div><div class="form-group"><label>Funkce</label>' + inp('pa-role', p.owner_role, 'jednatel') + '</div>'
+        + '<div class="form-group"><label>Firma</label>' + inp('pa-company', p.company, 'Best Series s.r.o.') + '</div><div class="form-group"><label>Jméno asistenta (nepovinné)</label>' + inp('pa-aname', p.assistant_name, 'např. Eva') + '</div></div>')
+      + sec('🗣 Chování',
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="form-group"><label>Že je AI</label>' + sel('pa-ai', [['start', 'Řekne hned na začátku'], ['asked', 'Přizná jen když se zeptá']], p.ai_disclose) + '</div>'
+        + '<div class="form-group"><label>Tón</label>' + sel('pa-tone', [['formal', 'Formální, věcný'], ['friendly', 'Přátelský, profesionální']], p.tone) + '</div>'
+        + '<div class="form-group"><label>Naléhavé věci</label>' + sel('pa-urgent', [['mark', 'Předat jako naléhavé (nepřepojovat)'], ['transfer', 'Nabídnout přepojení']], p.urgent) + '</div>'
+        + '<div class="form-group"><label>Obchodní nabídky / reklama</label>' + sel('pa-offers', [['decline', 'Zdvořile odmítnout a ukončit'], ['take_message', 'Vzít kontakt a popis']], p.offers) + '</div>'
+        + '<div class="form-group"><label>Max. délka hovoru (min)</label><input id="pa-max" type="number" min="1" max="15" value="' + (p.max_minutes || 3) + '"></div>'
+        + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> Umí přepnout do angličtiny</label></div></div>')
+      + sec('📝 Co má zjistit', paChecks('collect', PA_COLLECT, p.collect))
+      + sec('✅ Co smí sdělit (nic jiného neřekne)', paChecks('share', PA_SHARE, p.share)
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"><div class="form-group"><label>„Ozve se…"</label>' + inp('pa-cbtext', p.callback_text, 'co nejdříve, obvykle ještě týž den') + '</div><div class="form-group"><label>Web</label>' + inp('pa-web', p.web, 'www.bestseries.cz') + '</div>'
+        + '<div class="form-group" style="grid-column:1/-1"><label>Kontakt na obchod (sdělí jen když je zaškrtnuto)</label>' + inp('pa-sales', p.sales_contact, '+420 … / obchod@…') + '</div></div>')
+      + sec('⛔ Co NIKDY nesdělí a nedělá', paChecks('forbid', PA_FORBID, p.forbid))
+      + sec('👋 Závěr a další pokyny',
+        '<div class="form-group"><label>Rozloučení</label>' + inp('pa-closing', p.closing, 'Děkuji, všechno předám. Na shledanou.') + '</div>'
+        + '<div class="form-group"><label>Další vlastní pokyny (nepovinné)</label><textarea id="pa-custom" rows="3" placeholder="Např. Když volá banka nebo účetní, poznač to jako prioritu.">' + escapeHtml(p.custom || '') + '</textarea></div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-sm btn-secondary" id="pa-gen-greet">✨ Vygenerovat uvítání z profilu</button><button type="button" class="btn btn-sm btn-secondary" id="pa-preview">👁 Náhled instrukcí pro AI</button></div><pre id="pa-preview-box" style="display:none;white-space:pre-wrap;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px;max-height:260px;overflow:auto"></pre>');
+  }
+  function paReadProfile() {
+    const v = (id) => (document.getElementById(id) || {}).value || '';
+    const grp = (g) => { const o = {}; document.querySelectorAll('.pa-' + g).forEach((c) => { o[c.getAttribute('data-k')] = c.checked; }); return o; };
+    return { owner_name: v('pa-owner').trim(), owner_role: v('pa-role').trim(), company: v('pa-company').trim(), assistant_name: v('pa-aname').trim(), gender: v('pa-voice') === 'male' ? 'male' : 'female',
+      ai_disclose: v('pa-ai'), tone: v('pa-tone'), urgent: v('pa-urgent'), offers: v('pa-offers'), max_minutes: parseInt(v('pa-max'), 10) || 3, english: !!(document.getElementById('pa-en') || {}).checked,
+      collect: grp('collect'), share: grp('share'), forbid: grp('forbid'), callback_text: v('pa-cbtext').trim(), web: v('pa-web').trim(), sales_contact: v('pa-sales').trim(), closing: v('pa-closing').trim(), custom: v('pa-custom').trim() };
+  }
+  function paGreeting(p) {
+    const f = p.gender === 'male'; const who = (p.owner_name || '').trim(); const last = who.split(/\s+/).pop() || '';
+    const fem = /(ová|á)$/i.test(last); const mr = who ? (fem ? 'Paní ' : 'Pan ') + last : 'Kolega';
+    return 'Dobrý den, ' + (p.assistant_name ? 'tady ' + p.assistant_name + ', ' : '') + 'dovolali jste se na linku: ' + (who || 'osobní asistent') + (p.company ? ', ' + p.company.replace(/\.$/, '') : '') + '.'
+      + (p.ai_disclose === 'start' ? ' Jsem ' + (fem ? 'její' : 'jeho') + ' ' + (f ? 'AI asistent' : 'AI asistentka') + '.' : '')
+      + ' ' + mr + ' teď nemůže hovor přijmout. Řekněte mi prosím, kdo volá a co potřebujete, a já ' + (fem ? 'jí' : 'mu') + ' to hned předám.';
+  }
   async function openAssistantModal(personId, name) {
     let cfg = {};
     try { const r = await apiGet('/admin/personal-assistant/' + personId); cfg = r.config || {}; } catch (_) {}
+    const prof = cfg.profile || {}; if (!cfg.profile_saved && cfg.inbound_prompt) prof.custom = cfg.inbound_prompt;
     const g = (cfg.inbound_greeting) || 'Dobrý den, dovolali jste se na osobního asistenta. Kolega teď nemůže hovor přijmout. Řekněte mi prosím, kdo volá a co potřebujete — předám mu to.';
     openModal(`
       <h2>⚙️ Doplňkové služby — ${escapeHtml(name)}</h2>
@@ -416,10 +462,7 @@
           <label>Co AI řekne na začátku (uvítání)</label>
           <textarea id="pa-greeting" rows="3">${escapeHtml(g)}</textarea>
         </div>
-        <div class="form-group full">
-          <label>Instrukce pro AI (nepovinné — jak se má chovat, co zjišťovat)</label>
-          <textarea id="pa-prompt" rows="3" placeholder="Např. Zjisti jméno, telefon a důvod hovoru. Buď stručný a milý.">${escapeHtml(cfg.inbound_prompt || '')}</textarea>
-        </div>
+        ${paProfileHtml(prof)}
         <label class="pa-chk" style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px">
           <input type="checkbox" id="pa-transfer-enabled" ${cfg.transfer_enabled ? 'checked' : ''}> Nejdřív zkusit přepojit na mé číslo
         </label>
@@ -451,21 +494,23 @@
       <h3 style="margin:20px 0 8px;font-size:15px">📋 Poslední hovory asistenta</h3>
       <div id="pa-calls"><div class="empty-state">Načítám…</div></div>
     `);
+    document.getElementById('pa-gen-greet').addEventListener('click', () => { const t = document.getElementById('pa-greeting'); const ng = paGreeting(paReadProfile()); if (t.value.trim() && !confirm('Přepsat uvítání textem z profilu?\n\n' + ng)) return; t.value = ng; });
+    document.getElementById('pa-preview').addEventListener('click', async () => { const box = document.getElementById('pa-preview-box'); box.style.display = ''; box.textContent = 'Načítám…'; try { const r = await apiSend('POST', '/admin/personal-assistant/' + personId + '/preview', { profile: paReadProfile() }); box.textContent = r.prompt || ''; } catch (e) { box.textContent = 'Chyba: ' + e.message; } });
     document.getElementById('pa-save').addEventListener('click', async () => {
       const body = {
         enabled: document.getElementById('pa-enabled').checked,
         number: document.getElementById('pa-number').value.trim(),
         tts_voice: document.getElementById('pa-voice').value,
         inbound_greeting: document.getElementById('pa-greeting').value.trim(),
-        inbound_prompt: document.getElementById('pa-prompt').value.trim(),
+        profile: paReadProfile(),
         transfer_enabled: document.getElementById('pa-transfer-enabled').checked,
         transfer_number: document.getElementById('pa-transfer-number').value.trim(),
       };
       const msg = document.getElementById('pa-msg');
       if (body.enabled && !body.number) { msg.style.color = '#ef4444'; msg.textContent = 'Zadej Twilio číslo asistenta.'; return; }
       if (body.transfer_enabled && !body.transfer_number) { msg.style.color = '#ef4444'; msg.textContent = 'Zapnul jsi přepojení — zadej číslo pro přepojení.'; return; }
-      const btn = document.getElementById('pa-save'); btn.disabled = true; msg.style.color = 'var(--text2)'; msg.textContent = 'Ukládám…';
       if (!body.enabled && body.number && !confirm('Služba není zapnutá — asistent nebude hovory na ' + body.number + ' brát. Uložit i tak?')) return;
+      const btn = document.getElementById('pa-save'); btn.disabled = true; msg.style.color = 'var(--text2)'; msg.textContent = 'Ukládám…';
       try { await apiSend('PUT', '/admin/personal-assistant/' + personId, body); msg.style.color = '#22c55e'; msg.textContent = '✓ Uloženo'; btn.disabled = false; setTimeout(() => openAssistantModal(personId, name), 600); }
       catch (e) { msg.style.color = '#ef4444'; msg.textContent = 'Chyba: ' + e.message; btn.disabled = false; }
     });

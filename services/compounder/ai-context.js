@@ -109,8 +109,8 @@ async function loadKnowledgeBlock(scope) {
 }
 
 // Sestaví doplněk k libovolnému scénáři: guardrails + matematika + (volitelně hlasový styl) + podklady.
-async function augmentSystem(baseSystem, { voice = false, scope = 'specialist' } = {}) {
-  const kb = await loadKnowledgeBlock(scope);
+async function augmentSystem(baseSystem, { voice = false, scope = 'specialist', knowledge = true } = {}) {
+  const kb = knowledge ? await loadKnowledgeBlock(scope) : ''; // knowledge=false: bez firemních podkladů (např. osobní asistent, který o firmě mluvit nemá)
   const parts = [String(baseSystem || ''), GUARDRAILS, MATH_RULE];
   if (voice) parts.push(VOICE_STYLE);
   return parts.join('\n\n') + kb;

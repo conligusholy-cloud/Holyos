@@ -310,7 +310,9 @@ function attach(server) {
       const scope = (mode === 'outbound')
         ? (state.campaign && state.campaign.id ? ('outbound:' + state.campaign.id) : 'outbound')
         : (line === 'obchod' ? 'inbound' : ('inbound:' + line));
-      state.system = await aic.augmentSystem(state.system, { voice: true, scope });
+      let knowledge = true;
+      if (/^osobni-/.test(String(line || '')) && getSetting) { try { const v = await getSetting(lineKey('use_knowledge')); if (v === false || v === 'false') knowledge = false; } catch (_) { /* default */ } }
+      state.system = await aic.augmentSystem(state.system, { voice: true, scope, knowledge });
       // Znalostní podklady jsou na konci dlouhé → zopakuj prioritu scénáře úplně nakonec (nejblíže odpovědi).
       state.system += '\n\n' + SCENARIO_REMINDER;
       // Rod komunikace podle jména leada (muž/žena) — u odchozích hovorů známe cíl.
