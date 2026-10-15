@@ -224,7 +224,7 @@ async function funnelReport(req, days, shift, funnel) {
         ads.campaigns.push(row); ads.impressions += row.impressions; ads.reach += row.reach; ads.clicks += row.clicks; ads.link_clicks += row.link_clicks; ads.spend += row.spend; adsOk = true; } catch (e) { ads.campaigns.push({ id: nd.meta.campaign.id, name: nd.meta.campaign.name, error: e.message }); } } } } catch (e) { /* bez Mety */ }
   // 2) formuláře: leady v HolyOS (+ denně, + po obchodnících, + zdroj napřímo/Make)
   const forms = nodes.filter((nd) => nd.kind === 'leadform' && nd.form && nd.form.form_id); let leads = []; const formRows = [];
-  for (const nd of forms) { const adIds = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = adIds.length ? [{ meta_ad_id: { in: adIds } }] : [{ meta_form_id: String(nd.form.form_id) }];
+  for (const nd of forms) { const adIds = (nd.form.ad_ids || []).map(String).filter(Boolean); const or = [{ meta_form_id: String(nd.form.form_id) }].concat(adIds.length ? [{ meta_ad_id: { in: adIds } }] : []);
     const L = await prisma.compounderLead.findMany({ where: { OR: or, created_at: rng(since) }, select: { id: true, created_at: true, owner_person_id: true, external_rep_id: true, status: true, phone: true, email: true, activity_log: true } }).catch(() => []);
     formRows.push({ node: nd.id, name: nd.form.name || nd.form.form_id, leads: L.length, direct: L.filter((r) => /napřímo/.test(String(r.activity_log || '').split('\n')[0])).length, no_phone: L.filter((r) => !r.phone).length, no_email: L.filter((r) => !r.email).length }); leads = leads.concat(L); }
   const leadIds = new Set(leads.map((l) => l.id));
@@ -504,7 +504,7 @@ async function adNamesOf(ids) {
 router.get('/meta/forms/:formId/ad-counts', async (req, res, next) => {
   try { const formId = String(req.params.formId || '').replace(/[^0-9]/g, ''); const days = parseDays(req.query.days, 30); const since = sinceDate(days);
     const ads = String(req.query.ads || '').split(',').map((x) => x.replace(/[^0-9]/g, '')).filter(Boolean).slice(0, 200);
-    const where = { created_at: rng(since), OR: ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: formId }] };
+    const where = { created_at: rng(since), OR: (formId ? [{ meta_form_id: formId }] : []).concat(ads.length ? [{ meta_ad_id: { in: ads } }] : []) }; if (!where.OR.length) return res.json({ counts: {}, names: {} });
     const g = await prisma.compounderLead.groupBy({ by: ['meta_ad_id'], where, _count: { _all: true } }); const counts = {}; g.forEach((r) => { if (r.meta_ad_id) counts[r.meta_ad_id] = r._count._all; });
     const names = await adNamesOf([...new Set(ads.concat(Object.keys(counts)))].slice(0, 80)); res.json({ counts, names }); } catch (err) { next(err); } });
 router.get('/meta/forms/:formId/leads', async (req, res, next) => {

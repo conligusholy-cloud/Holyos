@@ -55,7 +55,7 @@ const SEL = { id: true, name: true, email: true, phone: true, status: true, sour
 // Základní množina uzlu: všechny kontakty v HolyOS, nebo jen z formuláře (form = { form_id, ad_ids })
 function baseWhere(nd, form) {
   const seg = nd.seg || {};
-  if (seg.base === 'form' && form && form.form_id) { const ads = (form.ad_ids || []).map(String).filter(Boolean); return { OR: ads.length ? [{ meta_ad_id: { in: ads } }] : [{ meta_form_id: String(form.form_id) }] }; }
+  if (seg.base === 'form' && form && form.form_id) { const ads = (form.ad_ids || []).map(String).filter(Boolean); return { OR: [{ meta_form_id: String(form.form_id) }].concat(ads.length ? [{ meta_ad_id: { in: ads } }] : []) }; }
   return {};
 }
 // Black list (neoslovovat): normalizované e-maily a posledních 9 číslic telefonu – stejně jako _isBlocked v Compounderu
