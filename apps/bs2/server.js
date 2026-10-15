@@ -17,6 +17,7 @@ const { q, migrate } = require('./db');
 const V = require('./views');
 const LOC = require('./location');
 const LAPP = require('./location-app');
+const FL = require('./findlocation');
 const LADM = require('./location-admin');
 const LSTUDY = require('./location-study');
 const { importSupporters, prepareImport, writeImport } = require('./import');
@@ -184,7 +185,7 @@ async function log(admin, action, detail) { try { velinForLog(admin || {}, actio
 // Zákazník aplikace vidí jen /lokalita*; ostatní uživatelé do /lokalita nesmí.
 app.use((req, res, next) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return next();
-  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|api\/presence|location)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
+  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|api\/presence|location|findlocation)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
     return q('SELECT user_type FROM supporters WHERE id=$1', [s.sid]).then((r) => { const u = r.rows[0]; if (u && u.user_type === 'location') return res.redirect('/lokalita'); next(); }).catch(() => next());
   }
   next();
@@ -438,7 +439,7 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
 // Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
-const PUBLIC_HIT_PATHS = ['/location', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
+const PUBLIC_HIT_PATHS = ['/location', '/findlocation', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
 app.post('/api/presence/ping', (req, res) => {
   const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
@@ -564,6 +565,7 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 // ── Prověření lokality (/location): veřejná prodejní stránka, Stripe Checkout, webhook, admin ──
 // Stripe bez SDK (REST přes fetch). Env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, BS2_LOCATION_NOTIFY_EMAIL.
 const PUBT = '<script>' + require('./stats-track').PUB_TRACK_JS + '</script></body>';
+app.get('/findlocation', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(FL.findLocationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
@@ -627,10 +629,11 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   const ins = await q('INSERT INTO location_orders (name,email,phone,company,package,amount_czk,status,consent,marketing,ip,terms_version) VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10) RETURNING id',
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'pending', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   const oid = ins.rows[0].id; saveAttribution(oid, req.body).catch(() => {}); const base = locBase(req);
+  const retPath = (req.body || {}).ret === '/findlocation' ? '/findlocation' : '/location'; // návrat ze Stripe na správnou záchytnou stránku
   notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
-    success_url: base + '/location?paid=1&s={CHECKOUT_SESSION_ID}#objednat', cancel_url: base + '/location?canceled=1#objednat',
+    success_url: base + retPath + '?paid=1&s={CHECKOUT_SESSION_ID}#objednat', cancel_url: base + retPath + '?canceled=1#objednat',
     line_items: [{ quantity: 1, price_data: { currency: 'czk', unit_amount: pkg.amount, product_data: { name: pkg.name, description: pkg.desc } } }],
     metadata: { order_id: String(oid), package: d.pkg, source: 'bs2-location' },
     payment_intent_data: { description: pkg.name + ' – ' + d.name, metadata: { order_id: String(oid), package: d.pkg } },
