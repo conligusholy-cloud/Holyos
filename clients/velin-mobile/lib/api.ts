@@ -429,6 +429,11 @@ export const api = {
       body: { online, agent },
     }),
 
+  supportSoundGet: (jwt: string) =>
+    request<{ sound: string; sounds: string[] }>('GET', '/api/velin/support/sound', { jwt }),
+  supportSoundSet: (jwt: string, sound: string) =>
+    request<{ ok: boolean; sound: string }>('PUT', '/api/velin/support/sound', { jwt, body: { sound } }),
+
   supportFileUrl: (id: number) => `${API_BASE}/api/velin/support/file/${id}`,
 
   // ─── Večerní reflexe (Fáze 2) ────────────────────────────────────────────

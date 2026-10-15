@@ -263,11 +263,11 @@ function orderInvItems(name, net, disc) {
   return it;
 }
 // Push do Velína (Tomáš + Jan Holý) přes HolyOS. Fire-and-forget; selhání nikdy neshodí požadavek.
-function notifyVelin(title, body, path, type) {
+function notifyVelin(title, body, path, type, extra) {
   try {
     const secret = process.env.BS2_SSO_SECRET; if (!secret || !HOLYOS_URL) return;
     const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
-    fetch(HOLYOS_URL + '/api/auth/bs2/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body, path, type }) })
+    fetch(HOLYOS_URL + '/api/auth/bs2/notify', { method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ title, body, path, type }, extra || {})) })
       .then(async (r) => { const t = await r.text().catch(() => ''); if (!r.ok) console.warn('[bs2] velín notify ' + r.status + ' ' + t.slice(0, 120)); else console.log('[bs2] velín notify OK: ' + title + ' → ' + t.slice(0, 80)); })
       .catch((e) => console.warn('[bs2] velín notify:', e.message));
   } catch (e) { console.warn('[bs2] velín notify:', e.message); }
@@ -1443,7 +1443,9 @@ app.post('/api/support/send', wrap(requireUser), supUpload.single('file'), wrap(
   const chk = checkedFile(req.file || null); if (!chk.ok) return res.status(400).json({ error: chk.error }); const f = chk.f;
   if (!body && !f) return res.status(400).json({ error: 'Prázdná zpráva.' });
   const r = await q('INSERT INTO support_messages (supporter_id, sender, body, file_name, file_type, file_size, file_data) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING ' + SUP_COLS, [req.user.id, 'user', body || (f ? '📎 ' + f.originalname : ''), f ? f.originalname.slice(0, 200) : null, f ? f.mimetype : null, f ? f.size : null, f ? f.buffer : null]);
-  notifyVelin('💬 Nová zpráva v podpoře', (req.user.nick || req.user.email) + ': ' + (body || 'příloha').slice(0, 120), '/admin/podpora?u=' + req.user.id, 'support');
+  // Odznak na ikoně Velínu = počet všech nepřečtených zpráv podpory (včetně této)
+  const _supUnread = Number(((await q("SELECT count(*)::int AS c FROM support_messages WHERE sender='user' AND read_by_agent=false").catch(() => ({ rows: [{ c: 0 }] }))).rows[0] || {}).c || 0);
+  notifyVelin('💬 Nová zpráva v podpoře', (req.user.nick || req.user.email) + ': ' + (body || 'příloha').slice(0, 120), '/admin/podpora?u=' + req.user.id, 'support', { badge: _supUnread });
   res.json({ ok: true, msg: r.rows[0] });
 }));
 // Stažení přílohy — uživatel jen své, admin vše

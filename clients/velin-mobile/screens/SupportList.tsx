@@ -132,6 +132,14 @@ export default function SupportList() {
           <Text style={styles.sub}>Best Series 2.0{agent ? ` · odpovídáš jako ${agent}` : ''}</Text>
         </View>
         <TouchableOpacity
+          style={[styles.statusPill, styles.pillOff, { marginRight: spacing.sm }]}
+          onPress={() => navigation.navigate('SupportSound')}
+          activeOpacity={0.7}
+          accessibilityLabel="Zvuk notifikace"
+        >
+          <Text style={{ fontSize: 15 }}>🔔</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.statusPill, online ? styles.pillOn : styles.pillOff]}
           onPress={toggleOnline}
           activeOpacity={0.7}

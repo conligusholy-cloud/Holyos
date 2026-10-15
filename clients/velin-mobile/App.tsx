@@ -46,6 +46,7 @@ import SignContract from './screens/SignContract';
 import AssistantSettings from './screens/AssistantSettings';
 import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
+import SupportSound from './screens/SupportSound';
 import { colors } from './lib/theme';
 import { useSupportAllowed, useSupportUnread } from './lib/support';
 
@@ -79,6 +80,7 @@ export type RootStackParamList = {
   SignContract: { contractId: number };
   MeProfile: undefined;
   SupportThread: { supporterId: number; title?: string };
+  SupportSound: undefined;
 };
 
 export type TabsParamList = {
@@ -173,6 +175,10 @@ function TabsRoot() {
   // Tomáš a Jan Holý: místo záložky „Já" mají „Podpora" (chat BS2) a profil je nahoře vpravo.
   const supportAllowed = useSupportAllowed();
   const supportUnread = useSupportUnread(supportAllowed);
+  // Červený odznak s číslem na ikoně aplikace = počet nepřečtených zpráv podpory (po přečtení zmizí)
+  useEffect(() => {
+    Notifications.setBadgeCountAsync(supportAllowed ? supportUnread : 0).catch(() => {});
+  }, [supportAllowed, supportUnread]);
   const insets = useSafeAreaInsets();
   // Spodní okraj nad systémovými tlačítky. Když by telefon hlásil 0 (některé Samsungy se 3 tlačítky),
   // na Androidu dej jistotu 48 dp, ať lišta nikdy nezůstane pod tlačítky.
@@ -348,6 +354,18 @@ export default function App() {
             name="SupportThread"
             component={SupportThread}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="SupportSound"
+            component={SupportSound}
+            options={{
+              animation: 'slide_from_right',
+              headerShown: true,
+              title: 'Zvuk notifikace',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+              headerShadowVisible: false,
+            }}
           />
           <Stack.Screen
             name="AssistantSettings"

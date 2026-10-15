@@ -1920,6 +1920,29 @@ mobile.get('/support/file/:id(\\d+)', supportGuard, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ── Zvuk notifikace Podpory (10 zvuků zabalených v aplikaci; volba je per osoba) ──
+const SUPPORT_SOUNDS = ['ding', 'chime', 'bell', 'marimba', 'pop', 'drop', 'harp', 'sonar', 'alert', 'fanfare'];
+async function supportSoundFor(personId) {
+  const v = await _paSettings.getSetting('velin.support_sound.' + personId, { type: 'string', defaultValue: '' }).catch(() => '');
+  if (!v || !SUPPORT_SOUNDS.includes(String(v))) return { sound: 'default', channelId: 'default' };
+  return { sound: v + '.wav', channelId: 'support_' + v };
+}
+router.supportSoundFor = supportSoundFor;
+mobile.get('/support/sound', supportGuard, async (req, res, next) => {
+  try {
+    const v = await _paSettings.getSetting('velin.support_sound.' + req.velin.person.id, { type: 'string', defaultValue: '' }).catch(() => '');
+    res.json({ sound: SUPPORT_SOUNDS.includes(String(v)) ? v : 'default', sounds: SUPPORT_SOUNDS });
+  } catch (err) { next(err); }
+});
+mobile.put('/support/sound', supportGuard, express.json({ limit: '2kb' }), async (req, res, next) => {
+  try {
+    const s = String((req.body || {}).sound || 'default');
+    if (s !== 'default' && !SUPPORT_SOUNDS.includes(s)) return res.status(400).json({ error: 'Neznámý zvuk.' });
+    await _paSettings.setSetting('velin.support_sound.' + req.velin.person.id, s === 'default' ? '' : s, { type: 'string', description: 'Velín – zvuk notifikace Podpory', scope: 'velin' });
+    res.json({ ok: true, sound: s });
+  } catch (err) { next(err); }
+});
+
 router.use('/', mobile);
 
 // ─── Helpers (geo) ───────────────────────────────────────────────────────

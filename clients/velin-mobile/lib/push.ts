@@ -29,6 +29,28 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Zvuky notifikací Podpory (soubory v assets/sounds jsou zabalené v aplikaci – vyžaduje nový build)
+export const SUPPORT_SOUNDS: { id: string; label: string }[] = [
+  { id: 'ding', label: 'Ding' },
+  { id: 'chime', label: 'Zvonkohra' },
+  { id: 'bell', label: 'Zvon' },
+  { id: 'marimba', label: 'Marimba' },
+  { id: 'pop', label: 'Pop' },
+  { id: 'drop', label: 'Kapka' },
+  { id: 'harp', label: 'Harfa' },
+  { id: 'sonar', label: 'Sonar' },
+  { id: 'alert', label: 'Poplach' },
+  { id: 'fanfare', label: 'Fanfára' },
+];
+
+// Přehraje zvuk jako okamžitou lokální notifikaci (ukázka při výběru)
+export async function previewSupportSound(id: string): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    content: { title: 'Ukázka zvuku', body: id === 'default' ? 'Výchozí zvuk' : (SUPPORT_SOUNDS.find((s) => s.id === id)?.label || id), sound: id === 'default' ? 'default' : id + '.wav' },
+    trigger: Platform.OS === 'android' && id !== 'default' ? ({ channelId: 'support_' + id, seconds: 1 } as any) : null,
+  });
+}
+
 export type DeviceMeta = {
   expo_push_token: string;
   platform: 'ios' | 'android';
@@ -55,6 +77,17 @@ export async function registerForPushNotifications(): Promise<DeviceMeta | null>
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#6366F1',
     });
+    // Zvuky Podpory: na Androidu se zvuk váže na kanál, proto jeden kanál na každý zvuk
+    for (const s of SUPPORT_SOUNDS) {
+      try {
+        await Notifications.setNotificationChannelAsync('support_' + s.id, {
+          name: 'Podpora – ' + s.label,
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          sound: s.id + '.wav',
+        });
+      } catch { /* starší build bez zvuků – kanál se jen nevytvoří */ }
+    }
   }
 
   // Permission

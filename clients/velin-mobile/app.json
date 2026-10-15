@@ -57,7 +57,23 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "sounds": [
+            "./assets/sounds/ding.wav",
+            "./assets/sounds/chime.wav",
+            "./assets/sounds/bell.wav",
+            "./assets/sounds/marimba.wav",
+            "./assets/sounds/pop.wav",
+            "./assets/sounds/drop.wav",
+            "./assets/sounds/harp.wav",
+            "./assets/sounds/sonar.wav",
+            "./assets/sounds/alert.wav",
+            "./assets/sounds/fanfare.wav"
+          ]
+        }
+      ],
       [
         "expo-image-picker",
         {

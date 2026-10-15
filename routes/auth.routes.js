@@ -419,8 +419,12 @@ router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, nex
     const { createNotification } = require('./notifications.routes');
     const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
     const link = b.path ? base + String(b.path).slice(0, 200) : base + '/admin';
+    const badge = Number.isFinite(Number(b.badge)) ? Math.max(0, Math.min(999, Math.floor(Number(b.badge)))) : undefined; // odznak na ikoně = počet nepřečtených
+    const { supportSoundFor } = require('./velin.routes');
     for (const p of persons) {
-      notifyPerson(prisma, p.id, { title, body, data: { type: 'bs2_' + type, link }, sound: 'default' }).catch((e) => console.warn('[bs2 notify] push', p.id, e.message));
+      let snd = { sound: 'default', channelId: 'default' };
+      if (type === 'support' && typeof supportSoundFor === 'function') { try { snd = await supportSoundFor(p.id); } catch (e) { /* výchozí zvuk */ } }
+      notifyPerson(prisma, p.id, { title, body, data: { type: 'bs2_' + type, link }, sound: snd.sound, channelId: snd.channelId, badge }).catch((e) => console.warn('[bs2 notify] push', p.id, e.message));
       if (p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body, link }).catch((e) => console.warn('[bs2 notify] zvonek', p.user_id, e.message));
     }
     res.json({ ok: true, recipients: persons.length });
