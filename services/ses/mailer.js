@@ -20,7 +20,8 @@ function smtpConf() {
 function apiConf() {
   const env = process.env;
   const m = String(env.SMTP_HOST || '').match(/email-smtp\.([a-z0-9-]+)\.amazonaws/);
-  return { id: env.SES_ACCESS_KEY_ID || '', secret: env.SES_SECRET_ACCESS_KEY || '', region: env.SES_REGION || (m && m[1]) || 'eu-central-1' };
+  const clean = (v) => String(v || '').trim().replace(/^['"]|['"]$/g, '');   // mezery / uvozovky z kopírování
+  return { id: clean(env.SES_ACCESS_KEY_ID), secret: clean(env.SES_SECRET_ACCESS_KEY), region: env.SES_REGION || (m && m[1]) || 'eu-central-1' };
 }
 function useApi() { const a = apiConf(); return !!(a.id && a.secret); }
 function mode() { return useApi() ? 'api' : 'smtp'; }
