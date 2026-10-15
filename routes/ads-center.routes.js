@@ -342,6 +342,37 @@ setTimeout(async () => {
     Object.keys(saved).forEach((k) => { const j = saved[k]; if (!j) return; delete j._active; RUN_JOBS[k] = j; if (j.running && Array.isArray(j.pending) && j.pending.length) { console.log('[ads-center] obnovuji hromadné odesílání', k, '— zbývá', j.pending.length); runJob(k); } else if (j.running) { j.running = false; } });
   } catch (e) { console.warn('[ads-center] obnova kampaní:', e.message); }
 }, 25000);
+// ── Diagnostika: proč e-mail neodešel všem leadům před uzlem. Každý lead zařadí do JEDNÉ příčiny (z reálných dat: SES log, black list, pole leada, události přeskočení). ──
+router.get('/funnels/:id/nodes/:nodeId/gap-report', async (req, res, next) => { try {
+  const f = (await loadFunnels()).find((x) => x.id === String(req.params.id || '')); if (!f) return res.status(404).json({ error: 'Funel nenalezen' });
+  const nd = (f.nodes || []).find((x) => x.id === String(req.params.nodeId || '')); if (!nd || nd.kind !== 'email') return res.status(400).json({ error: 'Uzel není e-mail' });
+  const SEG = require('../services/ads/segments'); const byId = {}; (f.nodes || []).forEach((x) => { byId[x.id] = x; }); const ids = new Set();
+  for (const e of (f.edges || []).filter((x) => x.to === nd.id)) { const A = byId[e.from]; if (!A) continue;
+    if (A.kind === 'list') { const conds = []; let cur = A, base = 'all', form = null, g = 0; while (cur && g++ < 12) { if (cur.kind === 'list') conds.unshift(cur.cond || {}); const e2 = (f.edges || []).find((x) => x.to === cur.id); const up = e2 ? byId[e2.from] : null; if (!up) break; if (up.kind === 'db') { if (e2.port > 0 && up.seg && up.seg.lists && up.seg.lists[e2.port - 1]) conds.unshift(up.seg.lists[e2.port - 1].cond || {}); break; } if (up.kind === 'leadform') { base = 'form'; form = up.form; if (e2.port > 0 && up.groups && up.groups[e2.port - 1]) conds.unshift({ ad_ids: up.groups[e2.port - 1].ad_ids || [] }); break; } if (up.kind === 'list' && e2.port > 0 && up.seg && up.seg.lists && up.seg.lists[e2.port - 1]) conds.unshift(up.seg.lists[e2.port - 1].cond || {}); cur = up; } if ((e.port || 0) > 0 && A.seg && A.seg.lists && A.seg.lists[e.port - 1]) conds.push(A.seg.lists[e.port - 1].cond || {}); (await SEG.leadsForChain(conds, form, base)).forEach((l) => ids.add(l.id)); continue; }
+    if (A.kind !== 'db') continue; const fe = (f.edges || []).find((x) => x.to === A.id); const fn = fe ? byId[fe.from] : null; (await SEG.leadsFor(A, e.port || 0, fn && fn.kind === 'leadform' ? fn.form : null)).forEach((l) => ids.add(l.id)); }
+  const all = [...ids]; const camp = 'funnel-' + (nd.variant || 'specialist');
+  const sesBy = new Map(); // lead_id → { ok, err }
+  const emails = []; const leads = [];
+  for (let i = 0; i < all.length; i += 1000) { const part = all.slice(i, i + 1000);
+    leads.push(...await prisma.compounderLead.findMany({ where: { id: { in: part } }, select: { id: true, name: true, email: true, status: true, source: true, outreach_variant: true, ai_specialist_email_sent_at: true, schuzka_email_sent_at: true, schuzka_sms_sent_at: true } }));
+    emails.push(...await prisma.emailMessage.findMany({ where: { leadId: { in: part }, campaignId: camp }, select: { leadId: true, status: true, note: true, bounced: true } })); }
+  emails.forEach((m) => { const c = sesBy.get(m.leadId) || { ok: false, err: null, bounced: false }; if (/^odesláno/.test(m.status || '') && !/simulace/.test(m.status || '')) c.ok = true; else if (m.status === 'chyba') c.err = (m.note || 'chyba odeslání').slice(0, 140); if (m.bounced) c.bounced = true; sesBy.set(m.leadId, c); });
+  // poslední důvod přeskočení (události outreach_skip) a černá listina
+  const skipBy = new Map(); for (let i = 0; i < all.length; i += 1000) { const rows = await prisma.compounderEvent.findMany({ where: { event: 'outreach_skip', sid: { in: all.slice(i, i + 1000).map((x) => 'lead:' + x) } }, select: { props: true, created_at: true }, orderBy: { created_at: 'asc' } }); rows.forEach((r) => { const lid = r.props && r.props.lead_id; if (lid && (!r.props.channel || r.props.channel === 'email')) skipBy.set(lid, String(r.props.reason || '')); }); }
+  const bl = await prisma.compounderBlocklist.findMany({ select: { email: true } }).catch(() => []); const blSet = new Set(bl.map((x) => String(x.email || '').trim().toLowerCase()).filter(Boolean));
+  const groups = {}; const add = (key, l, extra) => { const g = groups[key] || (groups[key] = { reason: key, count: 0, sample: [] }); g.count++; if (g.sample.length < 12) g.sample.push({ id: l.id, name: l.name, email: l.email, status: l.status, note: extra || undefined }); };
+  leads.forEach((l) => { const s = sesBy.get(l.id);
+    if (s && s.ok) return add('✅ E-mail odešel (potvrzeno v Amazon SES logu)', l);
+    if (s && s.err) return add('❌ Odeslání selhalo: ' + s.err, l);
+    if (!l.email) return add('Lead nemá e-mail', l);
+    if (blSet.has(String(l.email).trim().toLowerCase())) return add('Black list (neoslovovat)', l);
+    if (l.outreach_variant === 'schuzka' || l.schuzka_sms_sent_at || l.schuzka_email_sent_at) return add('Už osloven variantou „schůzka"', l);
+    if (l.ai_specialist_email_sent_at) return add('E-mail označen jako odeslaný (' + new Date(l.ai_specialist_email_sent_at).toLocaleDateString('cs-CZ') + '), ale v SES logu o něm není záznam (odeslán dřívější cestou před zavedením logu)', l);
+    const sk = skipBy.get(l.id); if (sk) return add('Přeskočeno automatem: ' + sk, l);
+    return add('Zatím nezpracováno (kampaň je nespustila / neproběhla do konce)', l); });
+  const out = Object.values(groups).sort((a, b) => b.count - a.count);
+  res.json({ ok: true, total: all.length, sent_confirmed: (groups['✅ E-mail odešel (potvrzeno v Amazon SES logu)'] || { count: 0 }).count, groups: out });
+} catch (err) { next(err); } });
 router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { const j = RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')]; res.json(j ? pubJob(j) : { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
