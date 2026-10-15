@@ -58,7 +58,7 @@ function baseWhere(nd, form) {
   return {};
 }
 // Black list (neoslovovat): normalizované e-maily a posledních 9 číslic telefonu – stejně jako _isBlocked v Compounderu
-async function blocklist() { let rows = []; try { rows = await prisma.compounderBlocklist.findMany({ select: { email: true, phone: true } }); } catch (e) { rows = []; } const em = new Set(), ph = new Set(); rows.forEach((r) => { const e = String(r.email || '').trim().toLowerCase(); if (e) em.add(e); const p = String(r.phone || '').replace(/\D/g, '').slice(-9); if (p && p.length >= 6) ph.add(p); }); return { em, ph }; }
+async function blocklist() { const rows = await prisma.compounderBlocklist.findMany({ select: { email: true, phone: true } }); /* chyba čtení black listu NESMÍ projít potichu – radši výjimka než kontakty navíc */ const em = new Set(), ph = new Set(); rows.forEach((r) => { const e = String(r.email || '').trim().toLowerCase(); if (e) em.add(e); const p = String(r.phone || '').replace(/\D/g, '').slice(-9); if (p && p.length >= 6) ph.add(p); }); return { em, ph }; }
 function isBlocked(l, bl) { const e = String(l.email || '').trim().toLowerCase(); if (e && bl.em.has(e)) return true; const p = String(l.phone || '').replace(/\D/g, '').slice(-9); return !!(p && p.length >= 6 && bl.ph.has(p)); }
 // Leady seznamu (port = index seznamu + 1; port 0 / null = celá základní množina). Kontakty z black listu se VŽDY vyřadí.
 async function leadsFor(nd, port, form, limit) {
@@ -88,8 +88,8 @@ async function leadsForChain(conds, form, base, limit) {
 }
 async function counts(nd, form) {
   const seg = nd.seg || {}; const lists = Array.isArray(seg.lists) ? seg.lists : [];
-  const total = (await leadsFor(nd, 0, form)).length; const out = [];
+  const total = (await leadsFor(nd, 0, form)).length; const out = []; let blocked = null; try { blocked = Math.max(0, (await prisma.compounderLead.count({ where: baseWhere(nd, form) })) - total); } catch (e) { blocked = null; }
   for (let i = 0; i < lists.length; i++) out.push((await leadsFor(nd, i + 1, form)).length);
-  return { total, lists: out };
+  return { total, lists: out, blocked };
 }
 module.exports = { FIELDS, leadsFor, leadsForChain, counts, whereOf, passMem, passAll };
