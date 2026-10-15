@@ -29,7 +29,7 @@
     },
     "android": {
       "distribution": "internal",
-      "channel": "preview",
+      "channel": "production",
       "autoIncrement": true,
       "android": {
         "buildType": "apk"
