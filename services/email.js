@@ -73,6 +73,11 @@ function escapeHtml(s) {
 }
 
 function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', preheader, brand, trackingPixel, flyerUrl, rawHtml }) {
+  // Odkaz je v HTML e-mailu jen pod tlačítkem (jednou, malým písmem) – z textu zprávy se vyjme (i s dvojtečkou před ním)
+  if (link && body && !rawHtml) {
+    const esc = String(link).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    body = String(body).replace(new RegExp('[ \\t]*:?[ \\t]*' + esc, 'g'), '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
   const pixelImg = trackingPixel ? `<img src="${escapeHtml(trackingPixel)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden;">` : '';
   const appUrl = process.env.APP_URL || '';
   const fullLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + link : link);
