@@ -11,6 +11,7 @@ import Constants from 'expo-constants';
 
 const API_BASE: string =
   (Constants.expoConfig?.extra as any)?.apiBase || 'https://app.holyos.cz';
+export const apiBase = API_BASE;
 
 export class ApiError extends Error {
   status: number;
@@ -273,6 +274,7 @@ export type AssistantCall = {
   duration_sec: number | null;
   handoff: boolean;
   audio_url: string | null;
+  audio_play_url?: string | null; // podepsaný odkaz přes HolyOS (hraje bez přihlášení k Twiliu)
   transcript: Array<{ role?: string; text?: string }> | null;
   full_transcript: string | null;
 };

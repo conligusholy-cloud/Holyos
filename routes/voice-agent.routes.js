@@ -954,7 +954,25 @@ async function maybeTranscribeCall(callId) {
 // GET /api/voice/recording/:callId — nahrávku stáhneme jednou na disk a servírujeme
 // s RUČNÍ obsluhou HTTP Range (206) → plynulé přehrávání i převíjení. (res.sendFile
 // za některými proxy/kompresí neposlal Content-Length/Range a přehrávač se sekal.)
-router.get('/recording/:callId', requireAuth, async (req, res, next) => {
+// Podepsaný odkaz na nahrávku (bez hlavičky Authorization — pro přehrávač v aplikaci Velín):
+// /api/voice/recording-signed/<callId>?exp=<unix>&sig=<hmac>. Platnost omezená (výchozí 6 h).
+function recordingSecret() { return process.env.JWT_SECRET || process.env.SESSION_SECRET || 'holyos-rec'; }
+function signRecording(callId, ttlSec) {
+  const exp = Math.floor(Date.now() / 1000) + (ttlSec || 6 * 3600);
+  const sig = require('crypto').createHmac('sha256', recordingSecret()).update(String(callId) + '.' + exp).digest('base64url').slice(0, 32);
+  return '/api/voice/recording-signed/' + encodeURIComponent(callId) + '?exp=' + exp + '&sig=' + sig;
+}
+function verifyRecordingSig(callId, exp, sig) {
+  if (!exp || !sig || Number(exp) < Math.floor(Date.now() / 1000)) return false;
+  const good = require('crypto').createHmac('sha256', recordingSecret()).update(String(callId) + '.' + exp).digest('base64url').slice(0, 32);
+  return good.length === String(sig).length && require('crypto').timingSafeEqual(Buffer.from(good), Buffer.from(String(sig)));
+}
+router.get('/recording-signed/:callId', async (req, res, next) => {
+  if (!verifyRecordingSig(req.params.callId, req.query.exp, req.query.sig)) return res.status(403).send('Odkaz vypršel');
+  return serveRecording(req, res);
+});
+router.get('/recording/:callId', requireAuth, (req, res) => serveRecording(req, res));
+async function serveRecording(req, res) {
   try {
     if (!prisma.voiceCall) return res.status(404).send('Bez nahrávky');
     const call = await prisma.voiceCall.findUnique({
@@ -991,7 +1009,7 @@ router.get('/recording/:callId', requireAuth, async (req, res, next) => {
     console.warn('[voice] recording serve:', err.message);
     if (!res.headersSent) return res.status(502).send('Nahrávku nelze načíst');
   }
-});
+}
 
 // GET /api/voice/calls — seznam odbavených hovorů (pro obrazovku Hovory ve Velíně).
 // Chráněno HolyOS JWT (requireAuth). Volá se s Bearer/cookie tokenem.
@@ -2262,3 +2280,4 @@ router.delete('/campaigns/:id', requireAuth, async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.signRecording = signRecording;

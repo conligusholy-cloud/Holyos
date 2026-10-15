@@ -71,7 +71,7 @@ export type RootStackParamList = {
   Login: undefined;
   Tabs: undefined;
   TaskDetail: { taskId: number };
-  AssistantSettings: undefined;
+  AssistantSettings: { callId?: string } | undefined;
   ChatThread: { channelId: string; channelTitle?: string };
   NewChat: undefined;
   EveningReflection: undefined;
@@ -124,6 +124,9 @@ function handleNotificationTap(data: any) {
 
   if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
     target = { name: 'EveningReflection' };
+  } else if (data.type === 'assistant_call') {
+    // Zmeškaný hovor osobního asistenta → vzkazy s otevřeným konkrétním hovorem
+    target = { name: 'AssistantSettings', params: data.call_id != null ? { callId: String(data.call_id) } : undefined };
   } else if (data.type === 'compounder_contract' && data.contract_id != null) {
     target = { name: 'SignContract', params: { contractId: Number(data.contract_id) } };
   } else if (typeof data.link === 'string' && /\/admin\/podpora\?u=(\d+)/.test(data.link)) {

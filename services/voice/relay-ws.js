@@ -572,7 +572,7 @@ function attach(server) {
           let notifyPerson = null, createNotification = null;
           try { notifyPerson = require('../push/expo-push').notifyPerson; } catch (_) {}
           try { createNotification = require('../../routes/notifications.routes').createNotification; } catch (_) {}
-          if (notifyPerson) Promise.resolve(notifyPerson(prisma, saved.owner_person_id, { title, body: bodyTxt, data: { link: '/modules/velin/index.html' }, sound: 'default' })).catch(() => {});
+          if (notifyPerson) Promise.resolve(notifyPerson(prisma, saved.owner_person_id, { title, body: bodyTxt, data: { type: 'assistant_call', call_id: String(saved.id), link: '/modules/velin/index.html' }, sound: 'default' })).catch(() => {});
           if (createNotification) {
             const p = await prisma.person.findUnique({ where: { id: saved.owner_person_id }, select: { user_id: true } }).catch(() => null);
             if (p && p.user_id) createNotification({ userId: p.user_id, type: 'system', title, body: bodyTxt, link: '/modules/velin/index.html' }).catch(() => {});

@@ -1139,7 +1139,9 @@ mobile.get('/me/assistant/calls', async (req, res, next) => {
         transcript: true, full_transcript: true,
       },
     });
-    res.json({ calls });
+    // Podepsaný odkaz na nahrávku přes HolyOS (Twilio URL vyžaduje přihlášení → v aplikaci by nehrála)
+    let sign = null; try { sign = require('./voice-agent.routes').signRecording; } catch (_) { sign = null; }
+    res.json({ calls: calls.map((c) => Object.assign({}, c, { audio_play_url: c.audio_url && sign ? sign(c.id) : null })) });
   } catch (err) { next(err); }
 });
 
