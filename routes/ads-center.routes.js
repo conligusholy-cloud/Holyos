@@ -373,8 +373,9 @@ router.post('/pages/:key/analyze-goals', async (req, res, next) => {
     const txt = (resp.content || []).map((b) => b.text || '').join('');
     const m = txt.match(/\{[\s\S]*\}/); if (!m) return res.status(502).json({ error: 'AI nevrátila použitelnou odpověď.' });
     let parsed; try { parsed = JSON.parse(m[0]); } catch (e) { return res.status(502).json({ error: 'AI vrátila neplatný JSON.' }); }
+    const all = await loadGoals();
     const c = cleanGoals(Object.assign({}, parsed, { raw_goals: parsed.goals, stats_from: (all[pg.key] || {}).stats_from })); c.source = 'ai'; c.analyzed_at = new Date().toISOString();
-    const all = await loadGoals(); all[pg.key] = c; await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id });
+    all[pg.key] = c; await require('../services/settings').setSetting(GOALS_KEY, all, { type: 'json', description: 'Centrum reklamy – cíle záchytných stránek', scope: 'marketing', userId: req.user && req.user.id });
     res.json(c);
   } catch (err) { next(err); }
 });

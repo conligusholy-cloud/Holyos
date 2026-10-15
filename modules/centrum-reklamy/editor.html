@@ -273,7 +273,7 @@
         var gpg = pgSel || page(spl2 ? 'specialist' : 'cesta'); // stránka pro cíle: vybraná z Centra reklamy, jinak výchozí stránka varianty
         if (gpg) { pgSel = gpg; var gi = GOALS[pgSel.key]; if (gi && gi.goals && gi.goals.length) nd.goals = gi.goals.map(function (g) { return { type: g.type, label: g.label, desc: g.desc || '', primary: !!g.primary }; }); else if (!Array.isArray(nd.goals)) nd.goals = [];
           buildGoalTab(el, nd, { title: 'Cíle stránky', goals: nd.goals || [], count: function (g) { return goalCount(nd, g); }, onConfig: function () { openGoalsConfig(nd, pgSel); }, onResults: function () { ensureResults(nd); nd.goals_open = true; render(); },
-            onAnalyze: async function (b) { b.textContent = 'Analyzuji…'; try { var r = await (await fetch('/api/ads-center/pages/' + encodeURIComponent(pgSel.key) + '/analyze-goals', { method: 'POST', credentials: 'same-origin' })).json(); if (r && r.goals) GOALS[pgSel.key] = r; else await loadGoalsAll(); } catch (err) { /* bez analýzy */ } nd.goals_open = true; render(); } });
+            onAnalyze: async function (b) { b.textContent = 'Analyzuji…'; try { var r = await (await fetch('/api/ads-center/pages/' + encodeURIComponent(pgSel.key) + '/analyze-goals', { method: 'POST', credentials: 'same-origin' })).json(); if (r && r.goals) GOALS[pgSel.key] = r; else { await loadGoalsAll(); if (r && r.error) alert('Analýza cílů se nezdařila: ' + r.error); } } catch (err) { alert('Analýza cílů se nezdařila: ' + err.message); } nd.goals_open = true; render(); } });
         }
         el.querySelector('.port.out:not(.gp)').addEventListener('mousedown', function (e) { e.stopPropagation(); linking = { from: nd.id, port: 0, x: e.clientX, y: e.clientY }; });
         el.querySelector('.port.in').addEventListener('mouseup', function (e) { if (linking && linking.from !== nd.id) { connect(linking.from, linking.port || 0, nd.id); } linking = null; render(); });
@@ -533,6 +533,31 @@
       function hop() { var pth = edgePath(hops[hi]); if (!pth) { hi++; if (hi >= hops.length) { ball.remove(); if (onDone) onDone(); } else hop(); return; } var L = pth.getTotalLength(); var dur = Math.min(2600, Math.max(900, L * 2.2)); var t0 = performance.now();
         (function fr(now) { var k = Math.min(1, (now - t0) / dur); var e = k < .5 ? 2 * k * k : -1 + (4 - 2 * k) * k; var p = pth.getPointAtLength(L * e); ball.setAttribute('cx', p.x); ball.setAttribute('cy', p.y); if (k < 1) requestAnimationFrame(fr); else { hi++; if (hi >= hops.length) { ball.remove(); if (onDone) onDone(); } else hop(); } })(t0); }
       hop(); }
+    // ── Hromadné odesílání (kampaň na pozadí): zelené kuličky plynule běží k uzlu, dokud se odesílá, a na uzlu je ukazatel průběhu ──
+    var RUNS = {};
+    async function pollRuns() {
+      if (!F || !F.id || !F.nodes) return;
+      var sendNodes = F.nodes.filter(function (x) { return x.kind === 'email' || x.kind === 'sms'; });
+      for (var i = 0; i < sendNodes.length; i++) {
+        var nd = sendNodes[i]; var s; try { s = await (await fetch('/api/ads-center/funnels/' + encodeURIComponent(F.id) + '/nodes/' + encodeURIComponent(nd.id) + '/run-status', { credentials: 'same-origin', cache: 'no-store' })).json(); } catch (e) { continue; }
+        var prev = RUNS[nd.id]; RUNS[nd.id] = s;
+        var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (!el) continue;
+        var bar = el.querySelector('.sendprog');
+        if (s && s.running) {
+          if (!bar) { bar = document.createElement('div'); bar.className = 'sendprog'; bar.style.cssText = 'position:absolute;left:10px;right:10px;bottom:-26px;font-size:11px;font-weight:700;color:#22c55e;background:#111523;border:1px solid #22c55e;border-radius:10px;padding:3px 8px;z-index:3;box-shadow:0 0 14px rgba(34,197,94,.45)'; el.appendChild(bar); }
+          var pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+          bar.innerHTML = '<div style="display:flex;justify-content:space-between"><span>⏳ odesílá se…</span><span>' + n(s.sent) + ' odesláno · ' + pct + ' %</span></div><div style="height:4px;border-radius:3px;background:#1f2a44;margin-top:3px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:linear-gradient(90deg,#22c55e,#4ade80);transition:width .6s"></div></div>';
+          el.classList.add('arrive');
+          // kuličky podle rychlosti odesílání (max. 7 za cyklus), rozložené v čase
+          var delta = prev && prev.running ? Math.max(0, s.done - prev.done) : 3; var cnt = Math.max(2, Math.min(7, Math.ceil(delta / 3)));
+          var inc = F.edges.filter(function (ed) { return ed.to === nd.id; });
+          inc.forEach(function (ed) { for (var k = 0; k < cnt; k++) (function (kk) { setTimeout(function () { animateBall([ed]); }, kk * Math.floor(2600 / cnt)); })(k); });
+        } else {
+          if (bar) { if (prev && prev.running) { bar.innerHTML = '<span>✓ hotovo: odesláno ' + n(s.sent) + ' z ' + n(s.total) + '</span>'; setTimeout(function () { var b2 = el.querySelector('.sendprog'); if (b2) b2.remove(); }, 15000); } }
+          el.classList.remove('arrive');
+        }
+      }
+    }
     function arriveAt(nodeId) { var el = canvas.querySelector('.node[data-id="' + nodeId + '"]'); if (!el) return; el.classList.add('arrive'); setTimeout(function () { el.classList.remove('arrive'); }, 1800); paintWaiting(); }
     function paintWaiting() { if (!LIVEPOS) return; var cnt = {}; var names = {}; Object.keys(LIVEPOS).forEach(function (key) { var p = LIVEPOS[key]; if (!p || !p.node) return; cnt[p.node] = (cnt[p.node] || 0) + 1; (names[p.node] || (names[p.node] = [])).push(p.name || ('#' + String(key).split('|')[0])); });
       F.nodes.forEach(function (nd) { var el = canvas.querySelector('.node[data-id="' + nd.id + '"]'); if (!el) return; var w = el.querySelector('.wait'); if (nd.kind === 'start' || nd.kind === 'note' || nd.kind === 'result' || nd.kind === 'goals' || !cnt[nd.id]) { if (w) w.remove(); return; } if (!w) { w = document.createElement('div'); w.className = 'wait'; el.appendChild(w); } w.innerHTML = '<i></i>' + cnt[nd.id] + ' čeká'; w.title = 'Leady, které jsou právě tady a čekají na další krok:\n' + names[nd.id].slice(0, 20).join('\n') + (names[nd.id].length > 20 ? '\n…' : ''); }); }
@@ -1014,7 +1039,7 @@
       await loadData();
       try { CFG = (await (await fetch('/api/compounder/ai-specialist-autosend', { credentials: 'same-origin' })).json()).config || null; } catch (e) { CFG = null; } try { CHAN = await (await fetch('/api/ads-center/channels', { credentials: 'same-origin' })).json(); } catch (e) { CHAN = null; }
       try { await loadGoalsAll(); await loadRules(); await loadCounts(); await loadDbCounts(); await loadListCounts(); await loadNodeStats(); render(); } catch (e) { /* pravidla a počty jsou doplněk */ }
-      updateLive(false); liveMove(); setInterval(liveTick, 15000);
+      updateLive(false); liveMove(); setInterval(liveTick, 15000); pollRuns(); setInterval(pollRuns, 3000);
     } catch (e) { console.error('[funel] init', e); var m0 = document.getElementById('msg'); if (m0) m0.textContent = 'Chyba při načítání: ' + e.message + ' – obnov stránku (F5), případně se znovu přihlas.'; } })();
   })();
   </script>
