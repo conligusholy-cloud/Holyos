@@ -61,8 +61,8 @@ async function confirmedLanding(f) {
       const pg = PAGES.find((p) => p.key === nd.page); if (!pg || !pg.bs2 || !pg.bs2.path) continue;
       const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' });
       const r = await fetch(base + '/api/holyos/ads-landing-codes?days=120&path=' + encodeURIComponent(pg.bs2.path), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(10000) });
-      if (!r.ok) return null; const j = await r.json(); const s = new Set();
-      (j.codes || []).forEach((c) => { const id = cmp.verifyShortCode(c.code); if (id) s.add(Number(id)); }); sets[nd.id] = s;
+      if (!r.ok) { console.warn('[funnel-events] BS2 ads-landing-codes HTTP ' + r.status + ' – BS2 asi není nasazená s novým endpointem, filtr se nepoužije'); return null; } const j = await r.json(); const s = new Set();
+      (j.codes || []).forEach((c) => { const id = cmp.verifyShortCode(c.code); if (id) s.add(Number(id)); }); sets[nd.id] = s; console.log('[funnel-events] potvrzené návštěvy stránky ' + nd.page + ': ' + s.size + ' leadů (kódů z BS2: ' + (j.codes || []).length + ')');
     }
     const fn = (nodeId, leadId) => !sets[nodeId] || sets[nodeId].has(Number(leadId));
     _confCache = { at: Date.now(), v: fn }; return fn;
