@@ -1004,6 +1004,7 @@ router.post('/orders/:id/payment', async (req, res, next) => {
         data: { reservation_status: 'confirmed', reservation_confirmed_at: new Date() },
       });
       reservationsConfirmed = confirmRes.count;
+      if (confirmRes.count > 0) require('../services/orders/slot-paid-notify').notifySlotPaid(prisma, orderId); // ředitel výroby
     }
 
     let releaseResult = null;

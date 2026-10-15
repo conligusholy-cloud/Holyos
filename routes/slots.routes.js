@@ -342,6 +342,7 @@ router.post('/assignments/:id/confirm', async (req, res, next) => {
         where: { id },
         data: { reservation_status: 'confirmed', reservation_confirmed_at: new Date() },
       });
+      if (updated.order_id) require('../services/orders/slot-paid-notify').notifySlotPaid(prisma, updated.order_id, [updated.id]); // ředitel výroby
       return res.json(updated);
     }
     res.json(current);

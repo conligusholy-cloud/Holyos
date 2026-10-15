@@ -288,7 +288,8 @@ async function setPaid(paymentId, paid, opts = {}) {
       const data = { deposit_paid: true, deposit_paid_at: new Date() };
       if (['new', 'quoted', 'ordered'].includes(p.order.status)) data.status = 'confirmed';
       await db.order.update({ where: { id: p.order_id }, data });
-      await db.slotAssignment.updateMany({ where: { order_id: p.order_id, reservation_status: 'reserved' }, data: { reservation_status: 'confirmed', reservation_confirmed_at: new Date() } }).catch(() => {});
+      const slotRes = await db.slotAssignment.updateMany({ where: { order_id: p.order_id, reservation_status: 'reserved' }, data: { reservation_status: 'confirmed', reservation_confirmed_at: new Date() } }).catch(() => ({ count: 0 }));
+      if (slotRes.count > 0) require('./slot-paid-notify').notifySlotPaid(db, p.order_id); // ředitel výroby: slot zaplacen
       try { const { releaseOrderToProduction } = require('./release-to-production'); release = await releaseOrderToProduction(p.order_id, { createdById: opts.createdById || null }); } catch (e) { console.error('[payment-plan] release selhal:', e.message); }
     }
     const allPaid = all.length && all.every((x) => x.id === p.id ? true : x.paid);
