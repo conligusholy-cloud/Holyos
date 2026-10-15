@@ -223,6 +223,16 @@ async function memberCount() {
 app.get('/favicon.svg', (req, res) => { res.set('Content-Type', 'image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(require('./logo').logoSvg(64, 'f')); });
 app.get('/favicon.ico', (req, res) => res.redirect(301, '/favicon.svg'));
 app.get('/img/pradlomat.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat.webp')));
+// Profilové fotky živé podpory: soubor agents/<jmeno-prijmeni>.jpg (bez diakritiky) – přiřadí se podle jména agenta
+const AGENT_DIR = require('path').join(__dirname, 'agents');
+function agentSlug(n) { return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+function agentPhoto(name) {
+  const sl = agentSlug(name); if (!sl) return '';
+  try { const files = require('fs').readdirSync(AGENT_DIR).filter((f) => /\.(jpe?g|png|webp)$/i.test(f)); const stem = (f) => f.replace(/\.[^.]+$/, '').toLowerCase();
+    const f = files.find((x) => stem(x) === sl) || files.find((x) => stem(x).startsWith(sl + '-')) || files.find((x) => sl.startsWith(stem(x) + '-')); return f ? '/img/agent/' + encodeURIComponent(f) : ''; } catch (e) { return ''; }
+}
+function agentPhotos(names) { const m = {}; (names || []).forEach((n) => { if (n && !(n in m)) { const u = agentPhoto(n); if (u) m[n] = u; } }); return m; }
+app.get('/img/agent/:f', (req, res) => { const f = String(req.params.f || ''); if (!/^[a-z0-9-]+\.(jpe?g|png|webp)$/i.test(f)) return res.status(404).end(); res.set('Cache-Control', 'public, max-age=86400').sendFile(require('path').join(AGENT_DIR, f), (err) => { if (err && !res.headersSent) res.status(404).end(); }); });
 app.get('/img/pradlomat-mini.webp', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'pradlomat-mini.webp')));
 // Chyby přihlášení se předávají přes redirect (?e=kód), aby obnovení stránky nenabízelo „odeslat formulář znovu"
 const LOGIN_ERRORS = { bad: 'Nesprávný nick/e-mail nebo heslo.', inactive: 'Účet ještě není aktivovaný. Otevři bestseries2.cz/activate a nastav si heslo.', many: 'Příliš mnoho pokusů. Zkus to za 15 minut.', locked: 'Účet je dočasně zamčený po opakovaných neúspěšných pokusech. Zkus to za chvíli.' };
@@ -1402,7 +1412,8 @@ app.get('/podpora', wrap(requireUser), wrap(async (req, res) => {
   const online = await supportOnline();
   const msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 ORDER BY created_at, id', [req.user.id])).rows;
   await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2 AND read_by_user=false', [req.user.id, 'agent']);
-  res.send(V.supportPage(req.user, { online, msgs, agent: await supportAgent() }));
+  const agent = await supportAgent(); const photos = agentPhotos(msgs.filter((m) => m.sender === 'agent').map((m) => m.agent_name).concat([agent], (await supportAgents()).map((a) => a.name)));
+  res.send(V.supportPage(req.user, { online, msgs, agent, photos }));
 }));
 app.get('/api/support/state', wrap(async (req, res) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return res.status(401).json({});
@@ -1411,7 +1422,8 @@ app.get('/api/support/state', wrap(async (req, res) => {
   const after = parseInt(req.query.after, 10);
   let msgs = [];
   if (Number.isFinite(after)) { msgs = (await q('SELECT ' + SUP_COLS + ' FROM support_messages WHERE supporter_id=$1 AND id>$2 ORDER BY id', [s.sid, after])).rows; if (msgs.length) await q('UPDATE support_messages SET read_by_user=true WHERE supporter_id=$1 AND sender=$2', [s.sid, 'agent']); }
-  res.set('Cache-Control', 'no-store').json({ online, unread, msgs, agent: await supportAgent() });
+  const agent = await supportAgent();
+  res.set('Cache-Control', 'no-store').json({ online, unread, msgs, agent, photos: agentPhotos(msgs.filter((m) => m.sender === 'agent').map((m) => m.agent_name).concat([agent])) });
 }));
 const SUP_COLS = 'id, supporter_id, sender, agent_name, body, read_by_agent, read_by_user, created_at, file_name, file_type, file_size, order_id';
 const supUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
