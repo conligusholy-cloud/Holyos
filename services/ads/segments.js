@@ -28,6 +28,7 @@ function whereOf(cond, baseWhere) {
   const w = Object.assign({}, baseWhere || {}); const c = cond || {};
   if (Array.isArray(c.sources) && c.sources.length) w.source = { in: c.sources };
   if (Array.isArray(c.statuses) && c.statuses.length) w.status = { in: c.statuses };
+  if (Array.isArray(c.ad_ids) && c.ad_ids.length) w.meta_ad_id = { in: c.ad_ids.map(String) };
   if (c.created_min_days != null && c.created_min_days !== '') w.created_at = Object.assign({}, w.created_at || {}, { lte: daysAgo(c.created_min_days) });
   if (c.created_max_days != null && c.created_max_days !== '') w.created_at = Object.assign({}, w.created_at || {}, { gte: daysAgo(c.created_max_days) });
   if (c.phone === 'yes') w.phone = { not: null }; if (c.phone === 'no') w.phone = null;
@@ -49,7 +50,7 @@ function passMem(l, cond) {
   if (c.noreact_days != null && c.noreact_days !== '') { const t = [sentSms(l), sentEmail(l)].filter(Boolean).map((x) => new Date(x).getTime()); if (!t.length) return false; if (Math.max(...t) > daysAgo(c.noreact_days).getTime()) return false; if (clickedAny(l)) return false; }
   return true;
 }
-const SEL = { id: true, name: true, email: true, phone: true, status: true, source: true, city: true, created_at: true, owner_person_id: true, external_rep_id: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true, schuzka_opened_at: true, ai_specialist_opened_at: true };
+const SEL = { id: true, name: true, email: true, phone: true, status: true, source: true, city: true, created_at: true, owner_person_id: true, external_rep_id: true, outreach_variant: true, meta_ad_id: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true, schuzka_opened_at: true, ai_specialist_opened_at: true };
 
 // Základní množina uzlu: všechny kontakty v HolyOS, nebo jen z formuláře (form = { form_id, ad_ids })
 function baseWhere(nd, form) {
@@ -72,6 +73,7 @@ function passAll(l, cond) {
   const c = cond || {};
   if (Array.isArray(c.sources) && c.sources.length && !c.sources.includes(l.source)) return false;
   if (Array.isArray(c.statuses) && c.statuses.length && !c.statuses.includes(l.status)) return false;
+  if (Array.isArray(c.ad_ids) && c.ad_ids.length && !c.ad_ids.map(String).includes(String(l.meta_ad_id))) return false;
   if (c.created_min_days != null && c.created_min_days !== '' && new Date(l.created_at) > daysAgo(c.created_min_days)) return false;
   if (c.created_max_days != null && c.created_max_days !== '' && new Date(l.created_at) < daysAgo(c.created_max_days)) return false;
   if (c.phone === 'yes' && !l.phone) return false; if (c.phone === 'no' && l.phone) return false;
