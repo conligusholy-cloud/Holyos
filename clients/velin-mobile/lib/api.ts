@@ -57,6 +57,7 @@ export type SupportThread = {
   last_at: string | null;
   last_body: string | null;
   last_sender: 'user' | 'agent' | null;
+  online?: boolean; // zákazník je právě na webu BS2
 };
 
 export type SupportThreadsResponse = {

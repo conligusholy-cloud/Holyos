@@ -208,6 +208,7 @@ export default function SupportList() {
             >
               <View style={styles.avWrap}>
                 <View style={styles.av}><Text style={styles.avText}>{initials(name)}</Text></View>
+                {item.online ? <View style={styles.onDot} /> : null}
                 {item.unread === 0 && isWaiting(item) && <View style={styles.waitDot} />}
                 {item.unread > 0 && (
                   <View style={styles.badge}><Text style={styles.badgeText}>{item.unread > 99 ? '99+' : item.unread}</Text></View>
@@ -245,6 +246,7 @@ const styles = StyleSheet.create({
   filters: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   chip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: colors.border },
   chipDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#f59e0b', marginRight: 6 },
+  onDot: { position: 'absolute', bottom: -2, right: -2, width: 15, height: 15, borderRadius: 8, backgroundColor: '#22c55e', borderWidth: 2.5, borderColor: colors.bg },
   waitDot: { position: 'absolute', top: -3, right: -3, width: 16, height: 16, borderRadius: 8, backgroundColor: '#f59e0b', borderWidth: 2, borderColor: colors.bg },
   chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { color: colors.text2, fontSize: 13, fontWeight: '600' },

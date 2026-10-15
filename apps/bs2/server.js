@@ -1750,6 +1750,7 @@ app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
       (SELECT body FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_body,
       (SELECT sender FROM support_messages m WHERE m.supporter_id=s.id ORDER BY created_at DESC, id DESC LIMIT 1) AS last_sender
     FROM supporters s WHERE EXISTS (SELECT 1 FROM support_messages m WHERE m.supporter_id=s.id) ORDER BY unread DESC, last_at DESC LIMIT 200`)).rows;
+  threads.forEach((t) => { t.online = ST.isOnline(t.id); }); // je zákazník právě na webu (ping do 90 s)
   res.set('Cache-Control', 'no-store').json({ online: await supportOnline(), agent: await supportAgent(), agents: await supportAgents(), threads });
 }));
 app.get('/api/svc/support/threads/:id(\\d+)', requireSvc, wrap(async (req, res) => {
