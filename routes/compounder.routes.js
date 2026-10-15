@@ -7816,6 +7816,7 @@ router.shortCodeToAiUrl = shortCodeToAiUrl;
 router.shortCodeToCestaUrl = shortCodeToCestaUrl;
 router.trackedLandingRedirect = trackedLandingRedirect;
 router.makeShortCode = makeShortCode;
+router.verifyShortCode = verifyShortCode;
 router.specialistShortLink = specialistShortLink;
 router.schuzkaShortLink = schuzkaShortLink;
 // Časově omezený přihlašovací token — formát: id.exp.sig (exp = ms epoch). Default 24 h.

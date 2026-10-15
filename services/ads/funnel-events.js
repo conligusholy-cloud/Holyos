@@ -46,13 +46,37 @@ async function record(type, leadId, opts) {
   } catch (e) { console.warn('[funnel-events] record', e.message); return 0; }
 }
 
+// Potvrzená otevření záchytné stránky: u uzlů „Záchytná stránka" napojených na BS2 stránku se otevření odkazu počítá jen tehdy,
+// když na stránku skutečně dorazil prohlížeč s kódem leada (?l=…). Automatická otevření odkazu (poštovní skenery, náhledy) se tím nezapočítají.
+// Vrací funkci allow(nodeId, leadId) – nebo null, když potvrzení nejde zjistit (pak se nefiltruje).
+let _confCache = { at: 0, v: null };
+async function confirmedLanding(f) {
+  try {
+    const nodes = (f.nodes || []).filter((nd) => nd.kind === 'landing' && nd.page); if (!nodes.length) return null;
+    if (Date.now() - _confCache.at < 20000 && _confCache.v) return _confCache.v;
+    const PAGES = require('../../routes/ads-center.routes').PAGES || []; const cmp = require('../../routes/compounder.routes'); const jwt = require('jsonwebtoken');
+    const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, ''); if (!secret || !cmp.verifyShortCode) return null;
+    const sets = {};
+    for (const nd of nodes) {
+      const pg = PAGES.find((p) => p.key === nd.page); if (!pg || !pg.bs2 || !pg.bs2.path) continue;
+      const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' });
+      const r = await fetch(base + '/api/holyos/ads-landing-codes?days=120&path=' + encodeURIComponent(pg.bs2.path), { headers: { Authorization: 'Bearer ' + token }, signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return null; const j = await r.json(); const s = new Set();
+      (j.codes || []).forEach((c) => { const id = cmp.verifyShortCode(c.code); if (id) s.add(Number(id)); }); sets[nd.id] = s;
+    }
+    const fn = (nodeId, leadId) => !sets[nodeId] || sets[nodeId].has(Number(leadId));
+    _confCache = { at: Date.now(), v: fn }; return fn;
+  } catch (e) { console.warn('[funnel-events] confirmedLanding', e.message); return null; }
+}
+
 // Statistika funelu: per uzel { leads (unikátní), events } jen od aktivace uzlu a v období (since).
 async function stats(funnelId, since) {
   try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
   const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); kinds[nd.id] = nd.kind; }); // od aktivace i od 'pocitat statistiky od'
   const per = {}; const opened = {}; const landingByLead = {}; // landingByLead[lead] = [{t, channel}]
-  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_landing' && lid) (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
+  const allowL = f ? await confirmedLanding(f) : null;
+  rows.forEach((r) => { const nodeId = r.path.split('/')[3]; if (!nodeId) return; const lid = r.props && r.props.lead_id; if (r.event === 'funnel_landing' && allowL && !allowL(nodeId, lid)) return; if (r.event === 'funnel_landing' && lid) (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
     if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;
     if (r.event === 'funnel_open') { (opened[nodeId] || (opened[nodeId] = new Set())).add(lid); return; }
     const p = per[nodeId] || (per[nodeId] = { events: 0, leads: new Map(), type: r.event.replace('funnel_', '') }); p.events++; if (lid && !p.leads.has(lid)) p.leads.set(lid, r.created_at.getTime()); });
@@ -75,7 +99,9 @@ async function edgeFlows(funnelId, since, withList) {
   // 1) události → first[nodeId][leadId] = čas
   const rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
   const first = {}; const firstAll = {}; const landingByLead = {}; const openedBy = {}; // landingByLead[lead] = [{t, channel}], openedBy[nodeId] = Set(lead); firstAll = bez ohledu na aktivaci uzlu
+  const allowL = await confirmedLanding(f);
   rows.forEach((r) => { const nodeId = r.path.split('/')[3]; const lid = r.props && r.props.lead_id; if (!nodeId || !lid) return;
+    if (r.event === 'funnel_landing' && allowL && !allowL(nodeId, lid)) return;
     if (r.event === 'funnel_landing') (landingByLead[lid] || (landingByLead[lid] = [])).push({ t: r.created_at.getTime(), channel: r.props.channel || '' });
     if (r.event !== 'funnel_open') (firstAll[nodeId] || (firstAll[nodeId] = {}))[lid] = firstAll[nodeId][lid] || r.created_at;
     if (act[nodeId] && r.created_at.getTime() < act[nodeId]) return;

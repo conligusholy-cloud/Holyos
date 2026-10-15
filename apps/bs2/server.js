@@ -585,6 +585,20 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
   const nowCount = visitors.filter((v) => v.active).length;
   res.json({ at: new Date().toISOString(), now: nowCount, last5, last30, visitors: visitors.sort((a, b) => (b.active - a.active) || a.last_ago - b.last_ago).slice(0, 40), feed: feed.slice(0, 25).map((f) => ({ id: f.id, ago: Math.round((now - f.at) / 1000), text: f.text })) });
 }));
+// Skutečné návštěvy záchytné stránky z odkazů v oslovení: kódy leadů (?l=<kód>) z OPRAVDOVÉHO zobrazení stránky v prohlížeči (JS sledování),
+// ne z automatických otevření odkazu (poštovní skenery, náhledy). HolyOS podle toho počítá „otevřel odkaz" ve funelu.
+app.get('/api/holyos/ads-landing-codes', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+  try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+  const bp = String(req.query.path || '').slice(0, 120); if (!bp) return res.json({ codes: [] });
+  const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 90));
+  const rows = (await q("SELECT meta, created_at, sid FROM page_events WHERE path = $1 AND kind = 'view' AND created_at > now() - ($2::int * interval '1 day') ORDER BY created_at", [bp, days])).rows;
+  const seen = {};
+  rows.forEach((r) => { const qs = String((r.meta || {}).q || '').replace(/^\?/, ''); let code = null; try { code = new URLSearchParams(qs).get('l'); } catch (e) { code = null; } if (!code || code.length > 40) return; if (!seen[code]) seen[code] = { code, first_at: r.created_at, n: 0, ua: (r.meta || {}).ua || '' }; seen[code].n++; });
+  res.json({ codes: Object.values(seen) });
+}));
 app.get('/api/presence', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   if (!_presCache.data || Date.now() - _presCache.at > 10e3) {
