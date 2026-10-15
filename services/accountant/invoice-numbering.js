@@ -81,4 +81,23 @@ async function generateInvoiceNumber(type, opts = {}) {
   return `${series}-${String(seq).padStart(5, '0')}`;
 }
 
-module.exports = { generateInvoiceNumber, PREFIX_MAP };
+// Náhled dalšího čísla BEZ přidělení (jen pro zobrazení ve formuláři; skutečné číslo
+// se přidělí až při založení, takže se při souběhu může lišit).
+async function peekInvoiceNumber(type, opts = {}) {
+  const db = opts.prisma || defaultPrisma;
+  const year = new Date().getFullYear();
+  const prefix = PREFIX_MAP[type] || 'FP';
+  const series = `${prefix}-${year}`;
+  const likePattern = `${series}-%`;
+  const rows = await db.$queryRaw`
+    SELECT GREATEST(
+      COALESCE((SELECT last_seq FROM document_counters WHERE series = ${series}), 0),
+      COALESCE((SELECT MAX(CAST(substring(invoice_number FROM '(\\d+)$') AS INTEGER))
+                  FROM invoices WHERE invoice_number LIKE ${likePattern}), 0)
+    ) AS cur;
+  `;
+  const seq = (rows && rows[0] ? Number(rows[0].cur) : 0) + 1;
+  return `${series}-${String(seq).padStart(5, '0')}`;
+}
+
+module.exports = { generateInvoiceNumber, peekInvoiceNumber, PREFIX_MAP };

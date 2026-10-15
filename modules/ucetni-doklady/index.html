@@ -1399,6 +1399,15 @@
       loadCreateAdvances();
     };
 
+    // Číslo dokladu (náhled; přidělí se definitivně až při založení)
+    window.loadCreateDocNumber = async function() {
+      const el = document.getElementById('c-docnum');
+      if (!el) return;
+      const type = document.getElementById('c-type').value;
+      const r = await api('GET', '/api/accounting/invoices/next-number?type=' + encodeURIComponent(type));
+      el.textContent = r.status === 200 && r.data && r.data.number ? r.data.number : '—';
+    };
+
     // Odpočet již vystavených / uhrazených záloh (zálohové faktury a DPPP téže firmy)
     window.loadCreateAdvances = async function() {
       const box = document.getElementById('c-advances');
@@ -1411,14 +1420,14 @@
       window.cState.advances = [];
       if (type !== 'issued' || !cid) { box.innerHTML = ''; return; }
       const r = await api('GET', '/api/accounting/invoices?direction=ar&company_id=' + cid + '&limit=500');
-      const list = (r.status === 200 ? r.data : []).filter(i => ['proforma_issued', 'tax_receipt'].includes(i.type) && i.status !== 'cancelled');
+      const list = (r.status === 200 ? r.data : []).filter(i => (['proforma_issued', 'tax_receipt'].includes(i.type) || ['deposit', 'deposit_tax'].includes(i.invoice_role)) && i.status !== 'cancelled');
       window.cState.advances = list;
-      if (!list.length) { box.innerHTML = ''; return; }
+      if (!list.length) { box.innerHTML = '<div class="ci-adv"><div class="ci-adv-h">💳 Zálohy k odečtení <span>— tato firma nemá v systému žádnou zálohovou fakturu ani DPPP. Zálohu lze odečíst i ručně: přidej položku se záporným množstvím (−1) a cenou zálohy.</span></div></div>'; return; }
       box.innerHTML = '<div class="ci-adv"><div class="ci-adv-h">💳 Odečíst již vystavené zálohy <span>— zaškrtnutím se přidá záporná položka; při plném pokrytí vyjde faktura na 0</span></div>' +
         list.map(i => {
           const paid = i.status === 'paid';
           return '<label class="ci-adv-row"><input type="checkbox" onchange="toggleCreateAdvance(' + i.id + ', this.checked)">' +
-            '<span><b>' + escapeHtml(i.invoice_number) + '</b> · ' + (i.type === 'tax_receipt' ? 'DPPP' : 'zálohová faktura') + ' · ' + String(i.date_issued || '').slice(0, 10) + '</span>' +
+            '<span><b>' + escapeHtml(i.invoice_number) + '</b> · ' + (i.type === 'tax_receipt' ? 'DPPP' : (i.type === 'proforma_issued' ? 'zálohová faktura' : 'záloha')) + ' · ' + String(i.date_issued || '').slice(0, 10) + '</span>' +
             '<span class="ci-adv-amt">' + fmtAmount(Number(i.total)) + ' ' + escapeHtml(i.currency) + '</span>' +
             '<span class="ci-adv-st' + (paid ? ' ok' : '') + '">' + (paid ? 'uhrazená' : 'neuhrazená') + '</span></label>';
         }).join('') + '</div>';
@@ -1461,11 +1470,15 @@
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
           '<div class="modal wide">' +
-            '<h2>Nová faktura</h2>' +
+            '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">' +
+              '<h2 style="margin:0;">Nová faktura</h2>' +
+              '<div style="text-align:right;"><span style="color:var(--text2);font-size:.8em;">Číslo dokladu</span><br>' +
+                '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">…</b></div>' +
+            '</div>' +
 
             // Hlavička
             '<div class="modal-grid3">' +
-              '<div class="modal-row"><label>Typ</label><select id="c-type" onchange="loadCreateAdvances()">' +
+              '<div class="modal-row"><label>Typ</label><select id="c-type" onchange="loadCreateAdvances(); loadCreateDocNumber()">' +
                 '<option value="received"' + (defaultType==='received'?' selected':'') + '>Faktura přijatá</option>' +
                 '<option value="issued"' + (defaultType==='issued'?' selected':'') + '>Faktura vydaná</option>' +
                 '<option value="credit_note_received">Dobropis přijatý</option>' +
@@ -1540,6 +1553,7 @@
         '</div>'
       );
       renderCreateItems();
+      loadCreateDocNumber();
     };
 
     window.submitCreate = async function() {

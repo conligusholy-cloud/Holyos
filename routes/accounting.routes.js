@@ -118,6 +118,14 @@ function calcItemAmounts(quantity, unit_price, vat_rate) {
 // ────────────────────────────────────────────────────────────────────────────
 
 // GET /api/accounting/invoices — seznam s filtry
+// GET /api/accounting/invoices/next-number?type=issued — náhled příštího čísla (nepřiděluje)
+router.get('/invoices/next-number', async (req, res, next) => {
+  try {
+    const { peekInvoiceNumber } = require('../services/accountant/invoice-numbering');
+    res.json({ number: await peekInvoiceNumber(String(req.query.type || 'received')) });
+  } catch (err) { next(err); }
+});
+
 router.get('/invoices', async (req, res, next) => {
   try {
     const {
