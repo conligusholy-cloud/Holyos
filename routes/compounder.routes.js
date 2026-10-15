@@ -995,7 +995,9 @@ function autosendLink(cfg, variant, leadId, channel) {
 // Přesměrování sledovaného odkazu /r/<kód>/<varianta>: ověří kód → lead, zaloguje otevření (jen 1× za lead+variantu
 // do stavu leadu, každé kliknutí do událostí) a vrátí cílovou URL záchytné stránky s ?l=<kód>&utm_*. null = neplatný.
 async function trackedLandingRedirect(code, variant, channel, req) {
-  const id = verifyShortCode(code); if (!id) return null;
+  // Testovací e-mail z editoru funelu používá fiktivního leada s ID 0 → odkaz funguje (přesměruje), ale nic se nelogují
+  const isTest = String(code || '') === makeShortCode(0);
+  const id = isTest ? 0 : verifyShortCode(code); if (id == null || (!isTest && !id)) return null;
   const vr = variant === 'schuzka' ? 'schuzka' : 'specialist';
   const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
   const u = cfg.landing && cfg.landing[vr] ? String(cfg.landing[vr]) : '';
@@ -1003,6 +1005,7 @@ async function trackedLandingRedirect(code, variant, channel, req) {
   if (/^https:\/\//.test(u)) { try { const x = new URL(u); x.searchParams.set('utm_source', channel === 'email' ? 'email' : 'sms'); x.searchParams.set('utm_medium', 'autosend'); x.searchParams.set('l', code); target = x.toString(); } catch (e) { target = null; } }
   if (!target) target = vr === 'schuzka' ? schuzkaShortLink(id, channel === 'email' ? 'email' : undefined) : specialistShortLink(id, channel === 'email' ? 'email' : 'sms');
   const ch = channel === 'email' ? 'email' : 'sms';
+  if (isTest) return target;
   // Falešné kliky: náhledy odkazů (SMS/chat aplikace, antiviry, crawlery) a otevření do 5 s od odeslání se do funelu nepočítají (přesměrování proběhne normálně).
   const ua = req && req.headers ? String(req.headers['user-agent'] || '') : '';
   let bot = (req && req.query && req.query.test === '1') || !ua || /bot|crawl|spider|preview|fetch|scan|facebookexternalhit|whatsapp|telegram|slack|twitter|skype|viber|discord|curl|wget|python|java\/|go-http|okhttp|headless|phantom|lighthouse|google-safety|symantec|avast|avg|kaspersky|eset|bitdefender|trend|mcafee|proofpoint|mimecast|barracuda|safelinks/i.test(ua) || (req && req.method === 'HEAD');
@@ -7775,6 +7778,7 @@ function verifyShortCode(code) {
 // Z krátkého kódu vyrobí cílovou adresu AI specialisty (pro přesměrování /s/<kód>).
 // channel (sms|email) se předá dál, ať /ai stránka zaznamená otevření dle kanálu.
 function shortCodeToAiUrl(code, channel) {
+  if (String(code || '') === makeShortCode(0)) return specialistBase() + '/ai?test=1'; // testovací e-mail z editoru funelu (bez leada)
   const id = verifyShortCode(code);
   if (!id) return null;
   try { require('../services/ads/funnel-events').record('landing', id, { variant: 'specialist', channel: channel === 'email' ? 'email' : 'sms' }); } catch (e) { /* best-effort */ }
