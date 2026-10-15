@@ -314,12 +314,20 @@ async function isCustomerMailPaused() {
   try { const { getSetting } = require('./settings'); return (await getSetting(CUSTOMER_MAIL_PAUSE_KEY, { type: 'boolean', defaultValue: false })) === true; } catch (e) { return false; }
 }
 
-async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience }) {
+async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, deliveryReceipt, audience, leadId, campaignId, unsubscribe }) {
   if (!to) return { sent: false, skipped: 'no-recipient' };
   if (audience === 'customer' && await isCustomerMailPaused()) {
     console.warn(`[Email] POZASTAVENO (customer_emails_paused) — neodesláno → ${to}: ${subject}`);
     return { sent: false, skipped: 'customer-emails-paused', error: 'E-maily zákazníkům jsou pozastaveny (přepínač v Prodejních objednávkách)' };
   }
+
+  // 00) Amazon SES brána (env SMTP_* + SES_CONFIGURATION_SET, src/mailer.js): jen e-maily od adresy SMTP_FROM
+  try { const M = require('../src/mailer'); if (M.isConfigured()) { const sf = M.smtpConf().from; const useSes = !!(from && sameAddr(from, sf)); // SES jen pro e-maily od adresy SMTP_FROM – ostatní cesty (M365 Graph) beze změny
+    if (useSes) { const EL = require('../src/email-log'); const unsubUrl = unsubscribe === false ? null : EL.unsubscribeUrl(to); let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }); if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">Odhlásit odběr</a></div></body>');
+      const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
+      const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [] }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });
+      if (r.ok) { console.log('[Email] odesláno přes Amazon SES → ' + to + (r.simulated ? ' (simulace)' : '')); return { sent: true, via: 'ses', from: fa.address, messageId: r.messageId, sesMessageId: r.sesMessageId, simulated: !!r.simulated }; }
+      console.error('[Email] SES odeslání selhalo, zkouším další cestu:', r.error); } } } catch (e) { console.error('[Email] SES:', e.message); }
 
   // 0) SMTP brána z Centra reklamy (Brevo / Amazon SES / M365 SMTP) – pokud je `from` její adresa (nebo from chybí a brána je výchozí)
   try { const gw = await getGateway(); if (gw && gw.host && gw.from && (!from || sameAddr(from, gw.from) || (gw.default_for_all && !from))) { const r = await sendViaGateway(gw, { to, cc, subject, body, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }); if (r.sent) return r; console.error('[Email] SMTP brána selhala, zkouším další cestu:', r.error); } } catch (e) { console.error('[Email] SMTP brána:', e.message); }

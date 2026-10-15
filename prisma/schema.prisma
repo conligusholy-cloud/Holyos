@@ -6823,6 +6823,33 @@ model VoiceCampaignTarget {
 
 // Log všech odeslaných SMS (napříč kanály: specialista, nedovolání, ruční…) —
 // jednotný přehled se stavem doručení (u GoSMS se dotahuje z jejich API).
+// Odeslané e-maily přes bránu Amazon SES (Centrum reklamy / funely) + události ze SNS webhooku
+model EmailMessage {
+  id            String   @id @default(uuid())
+  to            String   @db.VarChar(255)
+  subject       String   @db.VarChar(500)
+  status        String   @db.VarChar(40)   // "odesláno" | "odesláno (simulace)" | "chyba" | "odhlášeno"
+  messageId     String?  @db.VarChar(255)  // Message-ID hlavička
+  sesMessageId  String?  @unique @db.VarChar(120) // SES ID pro párování událostí
+  campaignId    String?  @db.VarChar(80)
+  leadId        Int?
+  opened        Boolean  @default(false)
+  clicked       Boolean  @default(false)
+  delivered     Boolean  @default(false)
+  bounced       Boolean  @default(false)
+  unsubscribed  Boolean  @default(false)
+  note          String?  @db.VarChar(500)
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([sesMessageId])
+  @@index([to])
+  @@index([createdAt])
+  @@index([leadId])
+  @@map("email_messages")
+}
+
 model SmsLog {
   id                Int       @id @default(autoincrement())
   provider          String    @db.VarChar(20)   // gosms | twilio

@@ -100,7 +100,38 @@ app.use((req, res, next) => {
   if (req.path === '/api/ai/transcribe') return next();
   // Stripe webhook (/misto) potřebuje raw body kvůli ověření podpisu.
   if (req.path === '/api/compounder/misto/stripe-webhook') return next();
+  // SNS (Amazon SES události) posílá text/plain – čteme surový stream ve vlastním handleru
+  if (req.path === '/webhooks/ses') return next();
   express.json({ limit: '50mb' })(req, res, next);
+});
+
+// ── Amazon SES → SNS → webhook: potvrzení odběru + události (open/click/delivery/bounce/complaint). Veřejné, bez auth. ──
+app.post('/webhooks/ses', (req, res) => {
+  let body = '';
+  req.setEncoding('utf8');
+  req.on('data', (c) => { body += c; if (body.length > 2e6) req.destroy(); });
+  req.on('end', async () => {
+    let p; try { p = JSON.parse(body || '{}'); } catch (e) { return res.status(200).end(); }
+    if ((p.Type || p.type) === 'SubscriptionConfirmation' && p.SubscribeURL) {
+      // potvrzovací URL jen z domény SNS (ochrana proti podvrženému odkazu)
+      try { const u = new URL(p.SubscribeURL); if (u.protocol === 'https:' && /^sns\.[a-z0-9-]+\.amazonaws\.com$/.test(u.hostname)) require('https').get(p.SubscribeURL, () => {}).on('error', () => {}); else console.warn('[ses] odmítnuta potvrzovací URL mimo SNS:', u.hostname); } catch (e) { /* ignoruj */ }
+      console.log('[ses] potvrzuji SNS odběr');
+      return res.json({ ok: true });                 // appka sama potvrdí odběr
+    }
+    if ((p.Type || p.type) === 'Notification') {
+      try { await require('./src/email-log').applySesEvent(JSON.parse(p.Message || '{}')); } catch (e) { console.warn('[ses]', e.message); }
+      return res.json({ ok: true });
+    }
+    res.json({ ok: true });
+  });
+  req.on('error', () => res.status(200).end());
+});
+// Odhlášení z e-mailů (odkaz v patičce): token = HMAC e-mailu → black list
+app.get('/u/:token', async (req, res) => {
+  const EL = require('./src/email-log'); const em = EL.parseUnsubscribeToken(req.params.token);
+  if (!em) return res.status(400).send('<!doctype html><meta charset="utf-8"><p style="font-family:sans-serif;padding:40px">Neplatný odkaz.</p>');
+  await EL.autoUnsubscribe(em, 'odhlášení odkazem');
+  res.send('<!doctype html><meta charset="utf-8"><title>Odhlášeno</title><div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:520px;margin:60px auto;padding:28px;border:1px solid #e3e9f5;border-radius:12px;color:#0b1220"><h2 style="margin:0 0 8px">Odhlášeno</h2><p>Adresa <b>' + em.replace(/[<>&]/g, '') + '</b> už od nás nedostane žádné další e-maily.</p><p style="color:#58698a;font-size:13px">Best Series s.r.o.</p></div>');
 });
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -739,6 +770,8 @@ app.use('/api/shipping', shippingRoutes); // Doprava — agenda požadavků na d
 app.use('/api/compounder', compounderRoutes); // Compounder — veřejný web compounder.world (registrace leadů, analytika, push)
 app.use('/api/lokality', require('./routes/lokality-public.routes')); // Lokality — veřejný web bestseries.global (nabídka místa pro prádlomat)
 app.use('/api/pradlomat-spots', require('./routes/pradlomat-spots.routes'));
+// Statistiky e-mailové brány SES (dle zadání: /api/stats?range=today|7d|30d|90d) – vyžaduje přihlášení
+app.get('/api/stats', require('./middleware/auth').requireAuth, async (req, res, next) => { try { res.json(await require('./src/email-log').stats(String(req.query.range || '30d'))); } catch (err) { next(err); } });
 app.use('/api/ads-center', require('./routes/ads-center.routes')); // Centrum reklamy (Soukromé) — přehled záchytných stránek a jejich výsledků // Předjednaná místa — veřejný přehled pradlomaty.info/location + interní správa
 app.use('/api/leasing', require('./routes/leasing.routes')); // Leasing/financující společnosti (financování prádlomatu)
 app.use('/api/vybery', require('./routes/vybery.routes')); // Výběry — veřejná stránka bestseries.cash/vybery (ověření black list + magic link + admin)
