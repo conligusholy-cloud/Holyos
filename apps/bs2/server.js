@@ -449,6 +449,43 @@ app.post('/api/presence/ping', (req, res) => {
   res.json({ ok: true });
 });
 // Statistiky pro HolyOS Centrum reklamy (JWT iss=holyos, aud=bs2-api, sdílený BS2_SSO_SECRET)
+// Rozšířená data o chování pro redesign: zdroje/kampaně, formulář po polích, balíčky, frustrace, interakce, video, výkon, technika, odpovědi z ankety, denní řada
+function behaviorExtras(ev) {
+  const med = (a) => { const x = a.filter((v) => Number.isFinite(v)).sort((p, q2) => p - q2); return x.length ? x[Math.floor(x.length / 2)] : null; };
+  const dayK = (d) => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  const sidInfo = {}; const info = (sid) => (sidInfo[sid] = sidInfo[sid] || { m: null, camp: null, day: null, ev: new Set(), scroll100: false });
+  const byLabel = {}, pkg = { pick: {}, switches: [], checkout: {}, fail: 0 }, field = { focus: {}, error: {}, last: {}, submit: new Set(), abandon: new Set(), order: {} };
+  const frus = { rage: {}, dead: {} }, inter = {}, perf = { m: { load: [], lcp: [], cls: [], fcp: [], ttfb: [] }, d: { load: [], lcp: [], cls: [], fcp: [], ttfb: [] } };
+  const tech = { widths: {}, langs: {}, browsers: {}, conn: {} }, survey = [], videoEv = {}, ttc = [];
+  const bump = (o, k, sid) => { const e = o[k] = o[k] || { sids: new Set(), total: 0 }; if (sid) e.sids.add(sid); e.total++; };
+  const sz = (o) => Object.keys(o).map((k) => ({ name: k, sessions: o[k].sids.size, total: o[k].total })).sort((a, b) => b.sessions - a.sessions);
+  ev.forEach((r) => { const m = r.meta || {}; const I = info(r.sid); if (!I.day) I.day = dayK(r.created_at);
+    if (r.kind === 'view') { I.m = m.ua === 'm'; const qs = String(m.q || '').replace(/^\?/, ''); let camp = null; try { const u = new URLSearchParams(qs); const src = u.get('utm_source'), cmp = u.get('utm_campaign'); if (src || cmp) camp = [src || '–', cmp || '–', u.get('utm_content') || ''].join(' / '); else if (u.get('fbclid')) camp = 'Facebook (fbclid bez UTM)'; else if (u.get('gclid')) camp = 'Google (gclid bez UTM)'; } catch (e) { camp = null; } I.camp = camp || ((m.ref || '').replace(/^https?:\/\//, '').split('/')[0] ? 'odkaz: ' + (m.ref || '').replace(/^https?:\/\//, '').split('/')[0] : 'přímo / neznámé');
+      const w = Number(m.w) || 0; const wb = w ? (w < 400 ? '<400 px' : w < 600 ? '400–599' : w < 800 ? '600–799' : w < 1100 ? '800–1099' : w < 1500 ? '1100–1499' : '1500+') : null; if (wb) bump(tech.widths, wb, r.sid); if (m.lang) bump(tech.langs, String(m.lang).slice(0, 2).toLowerCase(), r.sid); if (m.br) bump(tech.browsers, m.br, r.sid); if (m.conn) bump(tech.conn, m.conn, r.sid); }
+    if (r.kind === 'scroll' && r.label === '100') I.scroll100 = true;
+    if (r.kind !== 'custom' || !r.label) return;
+    const l = r.label; I.ev.add(l); bump(byLabel, l, r.sid);
+    if (l === 'pkg_pick') { bump(pkg.pick, String(m.v || '?'), r.sid); if (Number(m.n) > 1) pkg.switches.push(Number(m.n)); }
+    else if (l === 'misto_checkout') { bump(pkg.checkout, String(m.variant || '?'), r.sid); if (Number.isFinite(r.t_ms)) ttc.push(r.t_ms / 1000); }
+    else if (l === 'misto_checkout_fail') pkg.fail++;
+    else if (l === 'field_focus') { const k = String(m.f || '?'); bump(field.focus, k, r.sid); if (Number.isFinite(r.t_ms)) (field.order[k] = field.order[k] || []).push(r.t_ms); }
+    else if (l === 'field_error') bump(field.error, String(m.f || '?'), r.sid);
+    else if (l === 'form_submit') field.submit.add(r.sid);
+    else if (l === 'form_abandon') { field.abandon.add(r.sid); bump(field.last, String(m.last || '?'), r.sid); }
+    else if (l === 'rage_click') bump(frus.rage, (m.sec || '–') + ' · ' + (m.el || '') + (m.txt ? ' „' + m.txt + '“' : ''), r.sid);
+    else if (l === 'dead_click') bump(frus.dead, (m.sec || '–') + ' · ' + (m.el || '') + (m.txt ? ' „' + m.txt + '“' : ''), r.sid);
+    else if (l === 'interact') bump(inter, String(m.f || '?') + (m.sec ? ' @ ' + m.sec : ''), r.sid);
+    else if (l === 'perf') { const o = I.m ? perf.m : perf.d; ['load', 'lcp', 'cls', 'fcp', 'ttfb'].forEach((k) => { if (m[k] != null) o[k].push(Number(m[k])); }); }
+    else if (l === 'survey') survey.push({ a: String(m.a || '').slice(0, 60), t: String(m.t || '').slice(0, 200), ua: m.ua === 'm' ? 'm' : 'd', at: r.created_at });
+    else if (/^video_/.test(l)) bump(videoEv, l, r.sid); });
+  // kampaně: relace, klik na CTA, vstup do platby, zaplaceno
+  const camps = {}; Object.keys(sidInfo).forEach((sid) => { const I = sidInfo[sid]; if (!I.camp) return; const c = camps[I.camp] = camps[I.camp] || { name: I.camp, sessions: 0, scroll100: 0, cta: 0, checkout: 0, paid: 0, mobile: 0 }; c.sessions++; if (I.scroll100) c.scroll100++; if (I.ev.has('misto_cta')) c.cta++; if (I.ev.has('misto_checkout')) c.checkout++; if (I.ev.has('misto_paid_return')) c.paid++; if (I.m) c.mobile++; });
+  // po dnech (kvůli porovnání s úpravami stránky)
+  const days = {}; Object.keys(sidInfo).forEach((sid) => { const I = sidInfo[sid]; if (!I.day) return; const d = days[I.day] = days[I.day] || { d: I.day, sessions: 0, scroll100: 0, cta: 0, checkout: 0, paid: 0, mobile: 0 }; d.sessions++; if (I.scroll100) d.scroll100++; if (I.ev.has('misto_cta')) d.cta++; if (I.ev.has('misto_checkout')) d.checkout++; if (I.ev.has('misto_paid_return')) d.paid++; if (I.m) d.mobile++; });
+  const fieldRows = Object.keys(field.focus).map((k) => ({ name: k, focus: field.focus[k].sids.size, error: field.error[k] ? field.error[k].sids.size : 0, last: field.last[k] ? field.last[k].sids.size : 0, first_ms: med(field.order[k] || []) })).sort((a, b) => (a.first_ms == null ? 1e12 : a.first_ms) - (b.first_ms == null ? 1e12 : b.first_ms));
+  const pm = (o) => ({ n: o.load.length, load: med(o.load), lcp: med(o.lcp), fcp: med(o.fcp), ttfb: med(o.ttfb), cls: med(o.cls) });
+  return { events: sz(byLabel).map((e) => ({ name: e.name, sessions: e.sessions, total: e.total })), campaigns: Object.values(camps).sort((a, b) => b.sessions - a.sessions).slice(0, 25), daily: Object.values(days).sort((a, b) => a.d < b.d ? -1 : 1), packages: { picked: sz(pkg.pick), checkout: sz(pkg.checkout), avg_switches: pkg.switches.length ? Math.round(pkg.switches.reduce((a, b) => a + b, 0) / pkg.switches.length * 10) / 10 : 0, checkout_fail: pkg.fail, median_secs_to_checkout: med(ttc) != null ? Math.round(med(ttc)) : null }, form: { fields: fieldRows, submitted: field.submit.size, abandoned: field.abandon.size }, frustration: { rage: sz(frus.rage).slice(0, 12), dead: sz(frus.dead).slice(0, 12) }, interactions: sz(inter).slice(0, 15), video: sz(videoEv), perf: { mobile: pm(perf.m), desktop: pm(perf.d) }, tech: { widths: sz(tech.widths), langs: sz(tech.langs).slice(0, 6), browsers: sz(tech.browsers), conn: sz(tech.conn) }, survey: survey.sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 60) };
+}
 app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
   if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
@@ -470,7 +507,7 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   const oh = (await q("SELECT extract(hour from created_at AT TIME ZONE 'Europe/Prague')::int AS h, count(*)::int AS n FROM location_orders WHERE created_at > $1::timestamptz AND created_at < $2::timestamptz GROUP BY 1", [sinceTs, untilTs])).rows; const orderHours = new Array(24).fill(0); oh.forEach((r) => { if (r.h >= 0 && r.h < 24) orderHours[r.h] = r.n; });
   // chování na stránce (?path=) – jen když si HolyOS vyžádá detail
   let behavior = null; const bp = String(req.query.path || '').slice(0, 120);
-  if (bp) { const ev = (await q("SELECT sid, kind, label, meta, t_ms FROM page_events WHERE path = $1 AND created_at > $2::timestamptz AND created_at < $3::timestamptz ORDER BY created_at", [bp, sinceTs, untilTs])).rows;
+  if (bp) { const ev = (await q("SELECT sid, kind, label, meta, t_ms, created_at FROM page_events WHERE path = $1 AND created_at > $2::timestamptz AND created_at < $3::timestamptz ORDER BY created_at", [bp, sinceTs, untilTs])).rows;
     const sess = new Set(), scroll = { 25: new Set(), 50: new Set(), 75: new Set(), 100: new Set() }, sections = {}, dwell = {}, clicks = {}, exits = {}, grid = {}, time = {}, dev = { m: 0, d: 0 }, refs = {}; const evs = {}, devSids = { m: new Set(), d: new Set() };
     ev.forEach((r) => { sess.add(r.sid); const m = r.meta || {};
       if (r.kind === 'view') { dev[m.ua === 'm' ? 'm' : 'd']++; devSids[m.ua === 'm' ? 'm' : 'd'].add(r.sid); const ref = (m.ref || '').replace(/^https?:\/\//, '').split('/')[0] || 'přímo'; refs[ref] = (refs[ref] || 0) + 1; }
@@ -484,6 +521,7 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
       else if (r.kind === 'time') time[r.sid] = (time[r.sid] || 0) + (Number(m.s) || 0); });
     const n = sess.size; const sec = Object.keys(sections).map((k) => ({ name: k, seen: sections[k].size, avg_secs: dwell[k] ? Math.round(dwell[k].s / Math.max(1, dwell[k].sids.size)) : 0 })).sort((a, b) => b.seen - a.seen);
     behavior = { sessions: n, scroll: { 25: scroll[25].size, 50: scroll[50].size, 75: scroll[75].size, 100: scroll[100].size }, sections: sec, clicks: Object.keys(clicks).map((k) => ({ name: k, n: clicks[k].size })).sort((a, b) => b.n - a.n).slice(0, 25), exits: Object.keys(exits).map((k) => ({ name: k, n: exits[k] })).sort((a, b) => b.n - a.n), avg_time: Object.keys(time).length ? Math.round(Object.values(time).reduce((a, b) => a + b, 0) / Object.keys(time).length) : null, devices: dev, device_sessions: { m: devSids.m.size, d: devSids.d.size }, events: Object.keys(evs).map((k) => ({ name: k, sessions: evs[k].sids.size, total: evs[k].total })).sort((a, b) => b.sessions - a.sessions), referrers: Object.keys(refs).map((k) => ({ name: k, n: refs[k] })).sort((a, b) => b.n - a.n).slice(0, 10), mouse: grid }; }
+  if (behavior) { try { Object.assign(behavior, behaviorExtras(ev)); } catch (e) { /* rozšířená data jsou nepovinná */ } }
   res.json({ days, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
 }));
 app.get('/api/presence', wrap(async (req, res) => {

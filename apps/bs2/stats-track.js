@@ -33,7 +33,8 @@ var path=location.pathname.replace(/\\/+$/,'')||'/';var Q=[];var t0=Date.now();
 function push(o){o.t=Date.now()-t0;Q.push(o);if(Q.length>=25)flush();}
 function flush(){if(!Q.length)return;var b=JSON.stringify({sid:sid,path:path,ev:Q.splice(0,Q.length),w:innerWidth,h:innerHeight});try{if(navigator.sendBeacon){navigator.sendBeacon('/api/public/track',new Blob([b],{type:'application/json'}));}else{fetch('/api/public/track',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true});}}catch(e){}}
 function secName(el){var s=el.closest&&el.closest('section,[data-sec],header,footer');if(!s)return '';return s.getAttribute('data-sec')||s.id||(s.querySelector('h1,h2,h3')?(s.querySelector('h1,h2,h3').textContent||'').replace(/\\s+/g,' ').trim().slice(0,50):s.tagName.toLowerCase());}
-push({k:'view',m:{ref:document.referrer?document.referrer.slice(0,120):'',q:location.search.slice(0,120),ua:/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)?'m':'d'}});
+var UA=navigator.userAgent;var BR=/Edg\\//.test(UA)?'edge':/OPR\\//.test(UA)?'opera':/Chrome\\//.test(UA)?'chrome':/Firefox\\//.test(UA)?'firefox':/Safari\\//.test(UA)?'safari':'jiny';
+push({k:'view',m:{ref:document.referrer?document.referrer.slice(0,120):'',q:location.search.slice(0,240),ua:/Mobi|Android|iPhone|iPad/i.test(UA)?'m':'d',w:innerWidth,h:innerHeight,dpr:Math.round((window.devicePixelRatio||1)*10)/10,lang:(navigator.language||'').slice(0,8),conn:(navigator.connection&&navigator.connection.effectiveType)||'',br:BR}});
 /* scroll hloubka po 25 % */
 var maxS=0,mark={};addEventListener('scroll',function(){var h=document.documentElement;var p=Math.round((h.scrollTop+innerHeight)/Math.max(h.scrollHeight,1)*100);if(p>maxS)maxS=Math.min(p,100);[25,50,75,100].forEach(function(m){if(maxS>=m&&!mark[m]){mark[m]=1;push({k:'scroll',l:String(m)});}});},{passive:true});
 /* sekce: viděná (60 % + 1 s) a čas, po který je ve viewportu (co čtou) */
@@ -50,6 +51,23 @@ setInterval(function(){if(document.visibilityState==='visible'&&Date.now()-lastA
 function dump(final){var now=Date.now();var d=[];secs.forEach(function(o){var a=o.acc+(o.vis?now-o.since:0);if(a>=1500){d.push({l:o.nm,s:Math.round(a/1000)});o.acc=0;o.since=now;}});if(d.length)push({k:'dwell',m:{secs:d}});var g=Object.keys(grid);if(g.length){push({k:'mouse',m:{g:grid}});grid={};}if(active>0){push({k:'time',m:{s:active}});active=0;}if(final)push({k:'exit',l:cur,m:{scroll:maxS}});flush();}
 setInterval(function(){dump(false);},10000);
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')dump(true);});addEventListener('pagehide',function(){dump(true);});
+/* výkon stránky: načtení, FCP, LCP, CLS */
+var lcp=0,cls=0;try{new PerformanceObserver(function(l){var e=l.getEntries();var x=e[e.length-1];if(x)lcp=Math.round(x.startTime);}).observe({type:'largest-contentful-paint',buffered:true});new PerformanceObserver(function(l){l.getEntries().forEach(function(e){if(!e.hadRecentInput)cls+=e.value;});}).observe({type:'layout-shift',buffered:true});}catch(e){}
+addEventListener('load',function(){setTimeout(function(){var m={};try{var n=performance.getEntriesByType('navigation')[0];if(n){m.ttfb=Math.round(n.responseStart);m.load=Math.round(n.loadEventEnd||performance.now());}var f=performance.getEntriesByName('first-contentful-paint')[0];if(f)m.fcp=Math.round(f.startTime);}catch(e){}m.lcp=lcp;m.cls=Math.round(cls*1000)/1000;push({k:'custom',l:'perf',m:m});},3500);});
+/* zmatené chování: opakované klikání (rage) a klik na prvek, který není klikací (dead) */
+var rc=[],rageT=0,deadN=0;document.addEventListener('click',function(e){var el=e.target;if(!el||!el.closest||el.closest('[data-nt]'))return;var now=Date.now();rc.push({t:now,x:e.clientX,y:e.clientY});rc=rc.filter(function(r){return now-r.t<1500;});
+var near=rc.filter(function(r){return Math.abs(r.x-e.clientX)<40&&Math.abs(r.y-e.clientY)<40;});var txt=(el.innerText||el.alt||'').replace(/\\s+/g,' ').trim().slice(0,40);
+if(near.length>=3&&now-rageT>3000){rageT=now;push({k:'custom',l:'rage_click',m:{sec:secName(el),el:(el.tagName||'').toLowerCase(),txt:txt}});}
+var inter=el.closest('a,button,summary,input,select,textarea,label,[role=button],[data-cta],[onclick],video,iframe');if(!inter&&deadN<12){deadN++;push({k:'custom',l:'dead_click',m:{sec:secName(el),el:(el.tagName||'').toLowerCase(),txt:txt}});}},true);
+/* formuláře po polích – jen název pole, nikdy obsah */
+var fstart={},flast='',fsub=false,ferr={},fabd=false;
+function fname(el){return String(el.getAttribute('name')||el.id||el.getAttribute('aria-label')||el.type||el.tagName).slice(0,40);}
+document.addEventListener('focusin',function(e){var el=e.target;if(!el||!el.tagName||!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)||el.type==='password'||el.type==='hidden'||(el.closest&&el.closest('[data-nt]')))return;var n=fname(el);flast=n;if(!fstart[n]){fstart[n]=1;push({k:'custom',l:'field_focus',m:{f:n,sec:secName(el)}});}},true);
+document.addEventListener('invalid',function(e){var el=e.target;if(!el||!el.tagName)return;var n=fname(el);if(ferr[n])return;ferr[n]=1;push({k:'custom',l:'field_error',m:{f:n}});},true);
+document.addEventListener('submit',function(e){if(e.target&&e.target.closest&&e.target.closest('[data-nt]'))return;fsub=true;push({k:'custom',l:'form_submit'});},true);
+addEventListener('pagehide',function(){if(!fsub&&!fabd&&Object.keys(fstart).length){fabd=true;push({k:'custom',l:'form_abandon',m:{last:flast,n:Object.keys(fstart).length}});}});
+/* interakce s prvky mimo formulář (posuvníky, volby u kalkulačky / animace) */
+var itc={};document.addEventListener('input',function(e){var el=e.target;if(!el||!el.tagName||!/^(INPUT|SELECT)$/.test(el.tagName)||(el.closest&&(el.closest('form')||el.closest('[data-nt]'))))return;var n=fname(el);itc[n]=(itc[n]||0)+1;if(itc[n]===1)push({k:'custom',l:'interact',m:{f:n,sec:secName(el)}});},true);
 window.__bs2track=function(l,m){push({k:'custom',l:String(l||'').slice(0,60),m:m||null});};
 })();`;
 

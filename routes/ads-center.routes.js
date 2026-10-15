@@ -320,6 +320,9 @@ function pageDigest(html) {
   const inlineJs = (html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi) || []).join('\n').replace(/<\/?script[^>]*>/gi, '').replace(/\s+/g, ' ').slice(0, 5000);
   return { title: title.trim(), text, buttons, links, inputs, apis, inlineJs };
 }
+router.get('/pages/:key/digest', async (req, res, next) => { try { const pg = PAGES.find((x) => x.key === String(req.params.key || '')); if (!pg) return res.status(404).json({ error: 'Stránka neexistuje.' });
+  const r = await fetch(pg.url, { headers: { 'User-Agent': 'HolyOS-PageAnalyzer/1.0', 'Accept-Language': 'cs' }, signal: AbortSignal.timeout(15000), redirect: 'follow' }); if (!r.ok) return res.status(502).json({ error: 'Stránku se nepodařilo stáhnout (HTTP ' + r.status + ').' });
+  const dg = pageDigest((await r.text()).slice(0, 600000)); delete dg.inlineJs; delete dg.apis; res.json(dg); } catch (err) { next(err); } });
 router.get('/pages/goals', async (req, res, next) => { try { res.json(await loadGoals()); } catch (err) { next(err); } });
 router.put('/pages/:key/goals', express.json({ limit: '20kb' }), async (req, res, next) => {
   try { const key = String(req.params.key || ''); if (!PAGES.some((p) => p.key === key)) return res.status(404).json({ error: 'Stránka neexistuje.' });

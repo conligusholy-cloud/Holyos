@@ -535,7 +535,14 @@ const PAGE = `<!DOCTYPE html>
   // ── Analytika (best-effort, stejný beacon jako ostatní stránky) ──
   var SID = (function(){ try { var k='misto_sid', v=sessionStorage.getItem(k); if(!v){ v=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem(k,v);} return v; } catch(e){ return 'anon'; } })();
   function track(ev, props){ try { if (window.__bs2track) window.__bs2track(ev, props || null); } catch(e) {} } /* události cílů (CTA, vstup do platby, dokončení platby) → sběr PUB_TRACK_JS → HolyOS Centrum reklamy */
-  (function(){ var v = document.getElementById('heroVid'); if (!v) return; v.addEventListener('click', function(){ if (v.classList.contains('on')) return; v.classList.add('on'); v.removeAttribute('aria-label'); v.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/36uy8Hip0FM?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0&disablekb=1&iv_load_policy=3&cc_load_policy=0&hl=cs&loop=1&playlist=36uy8Hip0FM" title="Video – prádlomat" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>'; try { track('misto_cta', { cta: 'hero_video' }); } catch (e) {} }); })();
+  (function(){ var v = document.getElementById('heroVid'); if (!v) return; v.addEventListener('click', function(){ if (v.classList.contains('on')) return; v.classList.add('on'); v.removeAttribute('aria-label'); v.innerHTML = '<iframe id="heroYt" src="https://www.youtube-nocookie.com/embed/36uy8Hip0FM?enablejsapi=1&autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0&disablekb=1&iv_load_policy=3&cc_load_policy=0&hl=cs&loop=1&playlist=36uy8Hip0FM" title="Video – prádlomat" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>'; try { track('misto_cta', { cta: 'hero_video' }); } catch (e) {}
+      // průběh sledování videa (YouTube posílá stav přes postMessage; žádný externí skript)
+      var yt = document.getElementById('heroYt'), vs = -1, vdur = 0, vmark = {}, vmax = 0;
+      yt.addEventListener('load', function(){ try { yt.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 1, channel: 'widget' }), '*'); } catch(e){} });
+      window.addEventListener('message', function(e){ if (!yt || e.source !== yt.contentWindow) return; var d; try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch(x){ return; } if (!d || d.event !== 'infoDelivery' || !d.info) return; var i = d.info;
+        if (i.playerState != null && i.playerState !== vs) { vs = i.playerState; if (vs === 1 && !vmark.play) { vmark.play = 1; track('video_play'); } else if (vs === 2) track('video_pause', { t: Math.round(i.currentTime || 0) }); else if (vs === 0) track('video_end'); }
+        if (i.duration) vdur = i.duration; if (i.currentTime != null && vdur) { if (i.currentTime > vmax) vmax = i.currentTime; var pct = Math.floor(vmax / vdur * 100); [25, 50, 75, 100].forEach(function(m){ if (pct >= m && !vmark[m]) { vmark[m] = 1; track('video_' + m); } }); } });
+    }); })();
   document.querySelectorAll('[data-cta]').forEach(function(a){ a.addEventListener('click', function(){ track('misto_cta', { cta: a.getAttribute('data-cta') }); }); });
 
 
@@ -573,7 +580,9 @@ const PAGE = `<!DOCTYPE html>
       else setTimeout(tick,1100); })();
   })();
   var $ = function(id){ return document.getElementById(id); };
-  window.pickVariant=function(v){ $('variant').value=v; };
+  var pkgN=0, lastPkg='';
+  window.pickVariant=function(v){ $('variant').value=v; pkgN++; track('pkg_pick',{ v:v, n:pkgN, from:lastPkg }); lastPkg=v; };
+  try { $('variant').addEventListener('change', function(){ pkgN++; track('pkg_pick',{ v:$('variant').value, n:pkgN, from:lastPkg }); lastPkg=$('variant').value; }); } catch(e){}
   var f=$('f'), msg=$('msg'), sub=$('sub'), STRIPE=false;
   var BTN_REQ='Odeslat žádost o objednávku', BTN_PAY='Zaplatit kartou a získat přístup';
   function setMsg(cls,t){ msg.className='msg '+cls; msg.textContent=t; }
@@ -600,14 +609,38 @@ const PAGE = `<!DOCTYPE html>
     else if(q.get('canceled')==='1'){ track('misto_pay_canceled'); setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
     if(q.get('paid')||q.get('canceled')) history.replaceState(null,'',location.pathname+'#objednat');
   } catch(e){}
+  // Krátká otázka při odchodu: „Co vám tu chybělo?“ (jednou za návštěvu, jen pokud nezačal platit)
+  (function(){
+    try { if (sessionStorage.getItem('misto_survey')) return; } catch(e){}
+    var shown = false, t0 = Date.now(), started = false, maxScroll = 0;
+    f.addEventListener('input', function(){ started = true; }); f.addEventListener('submit', function(){ started = true; });
+    addEventListener('scroll', function(){ var h = document.documentElement; var p = (h.scrollTop + innerHeight) / Math.max(h.scrollHeight, 1); if (p > maxScroll) maxScroll = p; }, { passive: true });
+    function open(){
+      if (shown) return; shown = true; try { sessionStorage.setItem('misto_survey', '1'); } catch(e){}
+      var st = document.createElement('style');
+      st.textContent = '.xs{position:fixed;right:18px;bottom:18px;z-index:9998;width:min(360px,calc(100vw - 28px));padding:18px;border-radius:16px;border:1px solid rgba(79,209,255,.35);background:linear-gradient(160deg,#0e1a3a,#0a1228);box-shadow:0 20px 60px rgba(0,0,0,.6);color:#e8eefc;font-size:14px}.xs h3{margin:0 0 4px;font-size:16px}.xs p{margin:0 0 10px;color:#9fb0d0;font-size:12.5px}.xs .o{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}.xs .o button{padding:7px 11px;border-radius:999px;border:1px solid rgba(120,160,255,.3);background:rgba(255,255,255,.04);color:#e8eefc;font-size:12.5px;cursor:pointer}.xs .o button.on{background:#3a6cf5;border-color:#3a6cf5}.xs textarea{width:100%;box-sizing:border-box;min-height:54px;border-radius:10px;border:1px solid rgba(120,160,255,.3);background:rgba(255,255,255,.04);color:#e8eefc;padding:8px;font:inherit;font-size:13px;resize:vertical}.xs .a{display:flex;justify-content:space-between;align-items:center;margin-top:10px}.xs .send{padding:8px 16px;border-radius:10px;border:0;background:linear-gradient(135deg,#4fd1ff,#6f5cff);color:#fff;font-weight:600;cursor:pointer}.xs .x{position:absolute;right:10px;top:8px;background:none;border:0;color:#9fb0d0;font-size:18px;cursor:pointer}';
+      document.head.appendChild(st);
+      var d = document.createElement('div'); d.className = 'xs'; d.setAttribute('data-nt', '1'); d.setAttribute('role', 'dialog');
+      var opts = ['Cena – kolik to stojí', 'Nejasné, co přesně dostanu', 'Chci to vidět na ukázce', 'Chybí mi důvěra / reference', 'Jen jsem se rozhlížel(a)', 'Něco jiného'];
+      d.innerHTML = '<button class="x" aria-label="Zavřít">&times;</button><h3>Než odejdete – co vám tu chybělo?</h3><p>Jedno kliknutí nám pomůže stránku zlepšit. Prosím nepište osobní údaje.</p><div class="o">' + opts.map(function(o){ return '<button type="button" data-a="' + o + '">' + o + '</button>'; }).join('') + '</div><textarea maxlength="200" placeholder="Chcete dodat víc? (nepovinné)"></textarea><div class="a"><span style="font-size:11px;color:#6f819f">anonymně</span><button type="button" class="send">Odeslat</button></div>';
+      document.body.appendChild(d); track('survey_shown');
+      var sel = ''; d.querySelectorAll('.o button').forEach(function(b){ b.addEventListener('click', function(){ sel = b.getAttribute('data-a'); d.querySelectorAll('.o button').forEach(function(x){ x.classList.toggle('on', x === b); }); }); });
+      d.querySelector('.x').addEventListener('click', function(){ track('survey_dismiss'); d.remove(); });
+      d.querySelector('.send').addEventListener('click', function(){ var t = d.querySelector('textarea').value.trim().slice(0, 200); if (!sel && !t) { d.remove(); return; } track('survey', { a: sel, t: t, ua: /Mobi|Android|iPhone/i.test(navigator.userAgent) ? 'm' : 'd' }); d.innerHTML = '<h3>Děkujeme!</h3><p>Vaše odpověď nám pomůže.</p>'; setTimeout(function(){ d.remove(); }, 2200); });
+    }
+    function ok(){ return !started && Date.now() - t0 > 12000; }
+    document.addEventListener('mouseout', function(e){ if (!e.relatedTarget && e.clientY <= 0 && ok()) open(); });
+    // mobil: po minutě, pokud prošel aspoň polovinu stránky a nezačal vyplňovat objednávku
+    setTimeout(function(){ if (/Mobi|Android|iPhone/i.test(navigator.userAgent) && !started && maxScroll >= 0.5 && !/[?&]paid=1/.test(location.search)) open(); }, 60000);
+  })();
   f.addEventListener('submit', async function(e){
     e.preventDefault();
     msg.className='msg';
     var fd=new FormData(f), body={};
     fd.forEach(function(v,k){ body[k]=v; });
     body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = body.terms; body.sid=SID;
-    if(!body.terms){ setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
-    if(!body.name||!body.email){ setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
+    if(!body.terms){ track('form_invalid',{ why:'terms' }); setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
+    if(!body.name||!body.email){ track('form_invalid',{ why:'name_email' }); setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
     sub.disabled=true; sub.textContent=STRIPE?'Přesměrování na platbu…':'Odesílám…';
     try {
@@ -617,7 +650,7 @@ const PAGE = `<!DOCTYPE html>
       if(STRIPE && r.ok && j.ok && j.url){ track('misto_checkout',{ variant: body.variant }); location.href=j.url; return; }
       if(STRIPE && r.status===503){ STRIPE=false; sub.textContent=BTN_REQ; r=await fetch('/api/location/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); j=await r.json().catch(function(){ return {}; }); }
       if(r.ok && j.ok){ setMsg('ok','Děkujeme! Žádost jsme přijali. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace.'); f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
-      else { setMsg('err',(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'); }
+      else { track('misto_checkout_fail',{ s:r.status, variant: body.variant }); setMsg('err',(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'); }
     } catch(err){ setMsg('err','Odeslání se nepodařilo, zkuste to prosím znovu.'); }
     sub.disabled=false; sub.textContent=STRIPE?BTN_PAY:BTN_REQ;
   });
