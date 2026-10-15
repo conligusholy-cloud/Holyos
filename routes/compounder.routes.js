@@ -1212,7 +1212,7 @@ router.post('/ai-specialist-autosend/test-email', requireAuth, async (req, res) 
       link = autosendLink(cfg, 'specialist', 0, 'email'); linkLabel = 'Zeptat se specialisty';
       { const se = await specialistEmail(lead.name, link, { subject: b.subject, body: b.body, linkLabel: b.linkLabel }); subject = se.subject; body = se.body; linkLabel = se.linkLabel; }
     }
-    const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: 'Prádlomaty', link, linkLabel, preheader, brand: 'pradlomaty', campaignId: 'test-' + variant });
+    const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel, preheader, brand: 'pradlomaty', campaignId: 'test-' + variant });
     if (!r || r.sent === false) return res.status(400).json({ ok: false, error: (r && (r.error || r.skipped)) || 'neodesláno' });
     res.json({ ok: true, to, from, via: r.via || null });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
@@ -1567,7 +1567,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     const from = await funnelMailFrom('schuzka');
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: '💧 PRÁDLOMATY 💧', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
@@ -1599,7 +1599,7 @@ async function autosendAiSpecialistEmail(lead) {
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
@@ -1834,7 +1834,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     if (b.body) ov.schuzkaEmailBody = String(b.body);
     if (b.linkLabel) ov.schuzkaEmailLinkLabel = String(b.linkLabel);
     const m = buildSchuzkaEmail(lead, cfg, ov);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: '💧 PRÁDLOMATY 💧', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
     if (!r || !r.sent) return res.status(400).json({ ok: false, error: 'E-mail se neodeslal: ' + ((r && (r.error || r.skipped)) || 'neznámá chyba') });
     const sentAt = new Date();
     await prisma.compounderLead.update({
@@ -1869,7 +1869,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     const sentAt = new Date();
     await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });

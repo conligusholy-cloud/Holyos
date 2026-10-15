@@ -78,6 +78,11 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     const esc = String(link).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     body = String(body).replace(new RegExp('[ \\t]*:?[ \\t]*' + esc, 'g'), '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
   }
+  // Náhled v seznamu e-mailů (preheader): když není zadaný, vezme se první věta zprávy – ať se v příchozí poště neukazuje hlavička šablony
+  if (!preheader && body && !rawHtml) {
+    const first = String(body).split('\n').map((s) => s.trim()).filter((s) => s && !/^(dobrý den|dobrý večer|ahoj|dobrý den,)\b[^.!?]{0,40}[,.!]?$/i.test(s) && !/^\{?name\}?,?$/i.test(s))[0] || '';
+    preheader = first.replace(/\s+/g, ' ').slice(0, 110);
+  }
   const pixelImg = trackingPixel ? `<img src="${escapeHtml(trackingPixel)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden;">` : '';
   const appUrl = process.env.APP_URL || '';
   const fullLink = link && link.startsWith('http') ? link : (appUrl ? appUrl.replace(/\/$/, '') + link : link);
@@ -99,7 +104,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
 <body style="margin:0;padding:0;background:#08080a;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ec;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08080a;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#141418;border:1px solid #26262c;border-radius:18px;overflow:hidden;">
@@ -137,7 +142,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
 <body style="margin:0;padding:0;background:#04060c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#eaf2ff;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#04060c" style="background:#04060c;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" bgcolor="#0b1222" style="max-width:560px;width:100%;background:#0b1222;border:1px solid #1e2a44;border-radius:18px;overflow:hidden;">
@@ -181,7 +186,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
 <body style="margin:0;padding:0;background:#eaf2ff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#0f2444;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eaf2ff;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#ffffff;border:1px solid #cfe0fb;border-radius:18px;overflow:hidden;">
@@ -220,7 +225,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
     return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="dark"><meta name="supported-color-schemes" content="dark"></head>
 <body style="margin:0;padding:0;background:#08080a;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ec;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#08080a;padding:32px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#141418;border:1px solid #26262c;border-radius:18px;overflow:hidden;">
@@ -251,7 +256,7 @@ function renderEmailHtml({ title, body, link, linkLabel = 'Otevřít v HolyOS', 
   return `<!DOCTYPE html>
 <html lang="cs"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#333;">
-  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(preheader)}</div>` : ''}
+  ${preheader ? `<div style="display:none;max-height:0;overflow:hidden;">${escapeHtml(preheader)}${"&zwnj;&nbsp;".repeat(70)}</div>` : ''}
   <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f4f7;padding:24px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.05);">
