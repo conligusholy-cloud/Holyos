@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, TouchableOpacity } from 'react-native';
+import { Platform, Text, TouchableOpacity } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -174,6 +174,9 @@ function TabsRoot() {
   const supportAllowed = useSupportAllowed();
   const supportUnread = useSupportUnread(supportAllowed);
   const insets = useSafeAreaInsets();
+  // Spodní okraj nad systémovými tlačítky. Když by telefon hlásil 0 (některé Samsungy se 3 tlačítky),
+  // na Androidu dej jistotu 48 dp, ať lišta nikdy nezůstane pod tlačítky.
+  const bottomPad = Platform.OS === 'android' ? Math.max(insets.bottom, 48) : Math.max(insets.bottom, 8);
   return (
     <Tabs.Navigator
       screenOptions={{
@@ -198,9 +201,9 @@ function TabsRoot() {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           // Spodní lišta nad systémovými tlačítky Androidu (edge-to-edge) — přičti spodní inset
-          height: 56 + Math.max(insets.bottom, 8),
+          height: 56 + bottomPad,
           paddingTop: 6,
-          paddingBottom: Math.max(insets.bottom, 8),
+          paddingBottom: bottomPad,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.text2,

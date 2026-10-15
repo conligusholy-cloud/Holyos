@@ -12,6 +12,7 @@ import { API_BASE, api, MyAssistantConfig } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
 import type { RootStackParamList } from '../App';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 
 export default function Me() {
   const [auth, setAuth] = useState<AuthSnapshot | null>(null);
@@ -102,6 +103,7 @@ export default function Me() {
           <Row label="Person ID" value={auth?.personId ? String(auth.personId) : '—'} />
           <Row label="HolyOS" value={API_BASE} />
           <Row label="Verze aplikace" value={appVersion} />
+          <Row label="Aktualizace" value={Updates.updateId ? Updates.updateId.slice(0, 8) : 'vestavěná'} />
         </View>
 
         {assistant && (
