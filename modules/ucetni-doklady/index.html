@@ -1399,6 +1399,27 @@
       loadCreateAdvances();
     };
 
+    // Admin: přepsání čísla dokladu (tužka → pole; prázdné / Esc = zpět na automatické)
+    window.editCreateDocNumber = function() {
+      const wrap = document.getElementById('c-docnum-wrap');
+      const cur = document.getElementById('c-docnum');
+      if (!wrap || !cur) return;
+      wrap.innerHTML = '<input type="text" id="c-docnum-input" value="' + escapeHtml(cur.textContent) + '" maxlength="50" ' +
+        'style="width:200px;text-align:right;font-weight:600;font-size:1.1em;" title="Enter = potvrdit, Esc = zpět na automatické číslo">' +
+        '<b id="c-docnum" style="display:none;">' + escapeHtml(cur.textContent) + '</b>' +
+        '<button type="button" onclick="resetCreateDocNumber()" title="Vrátit automatické číslo" style="background:transparent;border:0;cursor:pointer;color:var(--text2);">↺</button>';
+      const inp = document.getElementById('c-docnum-input');
+      inp.focus(); inp.select();
+      inp.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); resetCreateDocNumber(); } });
+    };
+    window.resetCreateDocNumber = function() {
+      const wrap = document.getElementById('c-docnum-wrap');
+      const cur = document.getElementById('c-docnum');
+      if (!wrap || !cur) return;
+      wrap.innerHTML = '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">' + escapeHtml(cur.textContent) + '</b>' +
+        '<button type="button" id="c-docnum-edit" onclick="editCreateDocNumber()" title="Přepsat číslo dokladu (např. starý doklad)" style="background:transparent;border:0;cursor:pointer;color:var(--text2);font-size:1.05em;padding:2px 4px;border-radius:6px;">✎</button>';
+    };
+
     // Číslo dokladu (náhled; přidělí se definitivně až při založení)
     window.loadCreateDocNumber = async function() {
       const el = document.getElementById('c-docnum');
@@ -1474,8 +1495,10 @@
               '<h2 style="margin:0;">Nová faktura</h2>' +
               '<div style="text-align:right;"><span style="color:var(--text2);font-size:.8em;">Číslo dokladu</span><br>' +
                 (window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
-                  ? '<input type="text" id="c-docnum-input" placeholder="přepsat číslo (volitelné)" title="Admin: nech prázdné pro automatické číslo, nebo zadej číslo starého dokladu" style="margin-top:4px;width:210px;text-align:right;font-weight:600;">' +
-                    '<div style="color:var(--text2);font-size:.75em;margin-top:2px;">Automaticky: <b id="c-docnum">…</b></div>'
+                  ? '<span id="c-docnum-wrap" style="display:inline-flex;align-items:center;gap:8px;">' +
+                      '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">…</b>' +
+                      '<button type="button" id="c-docnum-edit" onclick="editCreateDocNumber()" title="Přepsat číslo dokladu (např. starý doklad)" style="background:transparent;border:0;cursor:pointer;color:var(--text2);font-size:1.05em;padding:2px 4px;border-radius:6px;">✎</button>' +
+                    '</span>'
                   : '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">…</b>') +
               '</div>' +
             '</div>' +
@@ -1585,7 +1608,7 @@
         type, company_id,
         currency: window.cState.currency,
         language: document.getElementById('c-language')?.value || 'cs',
-        invoice_number: (document.getElementById('c-docnum-input')?.value || '').trim() || undefined,
+        invoice_number: (() => { const v = (document.getElementById('c-docnum-input')?.value || '').trim(); const auto = (document.getElementById('c-docnum')?.textContent || '').trim(); return v && v !== auto ? v : undefined; })(),
         vat_regime: document.getElementById('c-vat-regime')?.value || 'standard',
         external_number: document.getElementById('c-external').value || null,
         variable_symbol: document.getElementById('c-vs').value || null,
