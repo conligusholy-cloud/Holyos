@@ -367,6 +367,26 @@ function attach(server) {
         state.to = msg.to || null;
         if (state.callSid) calls.set(state.callSid, state);
 
+        // Časový limit hovoru (příchozí linky, voice.<linka>.max_call_sec): po uplynutí se asistent omluví a hovor ukončí.
+        if (mode === 'inbound' && getSetting && !state.limitTimer) {
+          try {
+            const lim = Number(await getSetting(lineKey('max_call_sec')));
+            if (Number.isFinite(lim) && lim >= 30) {
+              const bye = String((await getSetting(lineKey('timeout_message'))) || '').trim() || 'Omlouvám se, ale hovor teď musím ukončit. Všechno jsem si poznamenala a předám to. Na shledanou.';
+              state.limitTimer = setTimeout(() => {
+                if (state.handedOff || state.ended) return;
+                state.ended = true;
+                const line2 = state.lang && state.lang !== 'cs' ? "I'm sorry, I have to end the call now. I have noted everything and will pass it on. Goodbye." : bye;
+                state.transcript.push({ role: 'agent', text: line2, ts: Date.now() });
+                send(ws, { type: 'text', token: line2, last: true });
+                console.log('[voice] časový limit ' + lim + ' s → ukončuji hovor ' + state.callSid);
+                const delay = Math.min(12000, Math.max(3500, line2.length * 75));
+                setTimeout(() => { try { send(ws, { type: 'end', handoffData: JSON.stringify({ reason: 'time_limit' }) }); } catch (_) { /* spojení už zavřené */ } }, delay);
+              }, lim * 1000);
+            }
+          } catch (e) { console.warn('[voice] časový limit:', e.message); }
+        }
+
         if (mode === 'outbound') {
           const fixedGreeting =
             state.campaign && state.campaign.greeting && String(state.campaign.greeting).trim();
@@ -501,6 +521,7 @@ function attach(server) {
     });
 
     ws.on('close', async () => {
+      if (state.limitTimer) { clearTimeout(state.limitTimer); state.limitTimer = null; }
       try { clearInterval(pingTimer); } catch (_) { /* noop */ }
       if (!state.callSid && mode !== 'outbound') return;
       const endedAt = new Date();

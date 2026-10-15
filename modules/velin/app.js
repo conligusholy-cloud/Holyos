@@ -406,7 +406,7 @@
         + '<div class="form-group"><label>Tón</label>' + sel('pa-tone', [['formal', 'Formální, věcný'], ['friendly', 'Přátelský, profesionální']], p.tone) + '</div>'
         + '<div class="form-group"><label>Naléhavé věci</label>' + sel('pa-urgent', [['mark', 'Předat jako naléhavé (nepřepojovat)'], ['transfer', 'Nabídnout přepojení']], p.urgent) + '</div>'
         + '<div class="form-group"><label>Obchodní nabídky / reklama</label>' + sel('pa-offers', [['decline', 'Zdvořile odmítnout a ukončit'], ['take_message', 'Vzít kontakt a popis']], p.offers) + '</div>'
-        + '<div class="form-group"><label>Max. délka hovoru (min)</label><input id="pa-max" type="number" min="1" max="15" value="' + (p.max_minutes || 3) + '"></div>'
+        + '<div class="form-group"><label>⏱ Limit hovoru (min) — pak se omluví a zavěsí</label><input id="pa-max" type="number" min="1" max="15" value="' + (p.max_minutes || 2) + '"></div>'
         + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> 🌍 Mluví jazykem volajícího (všechny světové jazyky)</label></div></div>')
       + sec('📝 Co má zjistit', paChecks('collect', PA_COLLECT, p.collect))
       + sec('✅ Co smí sdělit (nic jiného neřekne)', paChecks('share', PA_SHARE, p.share)
@@ -415,6 +415,7 @@
       + sec('⛔ Co NIKDY nesdělí a nedělá', paChecks('forbid', PA_FORBID, p.forbid))
       + sec('👋 Závěr a další pokyny',
         '<div class="form-group"><label>Rozloučení</label>' + inp('pa-closing', p.closing, 'Děkuji, všechno předám. Na shledanou.') + '</div>'
+        + '<div class="form-group"><label>Omluva při ukončení po limitu</label>' + inp('pa-timeout', p.timeout_message, 'Omlouvám se, ale hovor teď musím ukončit. Všechno jsem si poznamenala a předám to. Na shledanou.') + '</div>'
         + '<div class="form-group"><label>Další vlastní pokyny (nepovinné)</label><textarea id="pa-custom" rows="3" placeholder="Např. Když volá banka nebo účetní, poznač to jako prioritu.">' + escapeHtml(p.custom || '') + '</textarea></div>'
         + '<button type="button" class="btn btn-sm btn-secondary" id="pa-preview">👁 Náhled instrukcí pro AI</button><pre id="pa-preview-box" style="display:none;white-space:pre-wrap;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px;max-height:260px;overflow:auto"></pre>');
   }
@@ -423,7 +424,7 @@
     const grp = (g) => { const o = {}; document.querySelectorAll('.pa-' + g).forEach((c) => { o[c.getAttribute('data-k')] = c.checked; }); return o; };
     return { owner_name: v('pa-owner').trim(), owner_role: v('pa-role').trim(), company: v('pa-company').trim(), assistant_name: v('pa-aname').trim(), gender: v('pa-voice') === 'male' ? 'male' : 'female',
       ai_disclose: v('pa-ai'), tone: v('pa-tone'), urgent: v('pa-urgent'), offers: v('pa-offers'), max_minutes: parseInt(v('pa-max'), 10) || 3, english: !!(document.getElementById('pa-en') || {}).checked,
-      collect: grp('collect'), share: grp('share'), forbid: grp('forbid'), callback_text: v('pa-cbtext').trim(), web: v('pa-web').trim(), sales_contact: v('pa-sales').trim(), closing: v('pa-closing').trim(), custom: v('pa-custom').trim() };
+      collect: grp('collect'), share: grp('share'), forbid: grp('forbid'), callback_text: v('pa-cbtext').trim(), web: v('pa-web').trim(), sales_contact: v('pa-sales').trim(), closing: v('pa-closing').trim(), timeout_message: v('pa-timeout').trim(), custom: v('pa-custom').trim() };
   }
   function paGreeting(p) {
     const f = p.gender === 'male'; const hideN = p.forbid && p.forbid.owner_identity, hideC = p.forbid && p.forbid.company_name;

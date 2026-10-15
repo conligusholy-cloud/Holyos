@@ -723,7 +723,7 @@ const PA_DEFAULT = {
   share: { busy: true, callback_promise: true, company_info: true, products: false, sales_contact: false, web: true },
   callback_text: 'co nejdříve, obvykle ještě týž den', sales_contact: '', web: 'www.bestseries.cz',
   forbid: { owner_identity: false, company_name: false, owner_role: false, location: true, private_contacts: true, calendar: true, prices: true, promises: true, customers: true, internal: true, confirm_relationship: true },
-  urgent: 'mark', offers: 'decline', max_minutes: 3,
+  urgent: 'mark', offers: 'decline', max_minutes: 2, timeout_message: '',
   closing: 'Děkuji, všechno předám. Hezký den, na shledanou.', custom: '',
 };
 function paProfile(p) {
@@ -760,7 +760,7 @@ function paCompile(p) {
   if (forb.length) L.push('NIKDY NESDĚLUJ A NEDĚLEJ: ' + forb.join('; ') + '. Když na to volající naléhá, zdvořile odmítni a nabídni předání vzkazu.');
   L.push('NALÉHAVÉ: ' + (p.urgent === 'transfer' ? 'Když volající řekne, že je věc velmi naléhavá, nabídni přepojení na majitele (systém přepojení zajistí).' : 'Když je věc naléhavá, řekni, že vzkaz předáš jako naléhavý okamžitě. Nepřepojuj.'));
   L.push('NABÍDKY A REKLAMA: ' + (p.offers === 'decline' ? 'Obchodní nabídky, průzkumy a reklamu zdvořile odmítni, poděkuj a rozluč se (stačí jméno firmy).' : 'U obchodních nabídek si jen vezmi kontakt a stručný popis nabídky.'));
-  L.push('DÉLKA: Hovor drž krátký, nejvýš asi ' + p.max_minutes + ' minuty. Nevymýšlej si žádné informace.');
+  L.push('DÉLKA: Hovor drž krátký — po ' + p.max_minutes + ' min ho systém sám ukončí, takže se ptej rychle a k věci a hlavní údaje (jméno, telefon, důvod) zjisti hned na začátku. Nevymýšlej si žádné informace.');
   if (p.closing) L.push('ZÁVĚR: Rozluč se touto větou nebo velmi podobně: „' + p.closing + '"');
   if (p.custom) L.push('DALŠÍ POKYNY: ' + p.custom);
   return L.join('\n');
@@ -814,6 +814,9 @@ admin.put('/personal-assistant/:personId', async (req, res, next) => {
       await s('voice.' + line + '.inbound_prompt', paCompile(prof).slice(0, 8000), { type: 'string' });
       await s('voice.' + line + '.use_knowledge', !!prof.share.products, { type: 'boolean' });
       await s('voice.' + line + '.multilang', !!prof.english, { type: 'boolean' });
+      // Tvrdý časový limit: po max_minutes se asistent omluví a zavěsí (relay-ws)
+      await s('voice.' + line + '.max_call_sec', Math.round(prof.max_minutes * 60), { type: 'number' });
+      await s('voice.' + line + '.timeout_message', prof.timeout_message || ('Omlouvám se, ale hovor teď musím ukončit. Všechno jsem si poznamenal' + (prof.gender === 'male' ? '' : 'a') + ' a předám to. Na shledanou.'), { type: 'string' });
     } else {
       await s('voice.' + line + '.inbound_prompt', String(b.inbound_prompt || '').slice(0, 6000), { type: 'string' });
     }
