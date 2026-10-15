@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { loadAuth } from '../lib/auth';
 import { api, apiBase, AssistantCall } from '../lib/api';
 import { colors, radius, spacing } from '../lib/theme';
@@ -55,6 +55,9 @@ function turnsOf(c: AssistantCall): Turn[] {
 
 export default function AssistantSettings() {
   const route = useRoute<any>();
+  const navigation = useNavigation<any>();
+  // Zpět: do předchozí obrazovky, a když žádná není (otevřeno z notifikace), na hlavní obrazovku Velína
+  const goBack = () => { if (navigation.canGoBack()) navigation.goBack(); else navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] }); };
   const focusId: string | undefined = route?.params?.callId ? String(route.params.callId) : undefined;
   const [calls, setCalls] = useState<AssistantCall[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +97,9 @@ export default function AssistantSettings() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.accent} />}>
+        <TouchableOpacity onPress={goBack} style={styles.back} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Text style={styles.backTxt}>‹ Zpět</Text>
+        </TouchableOpacity>
         <Text style={styles.h1}>📩 Vzkazy asistenta</Text>
         <Text style={styles.sub}>Hovory, které jsi nezvedl a vzal je tvůj AI asistent.</Text>
 
@@ -190,6 +196,8 @@ const styles = StyleSheet.create({
   center: { paddingVertical: spacing.xl, alignItems: 'center' },
   scroll: { padding: spacing.lg, paddingBottom: 60 },
   h1: { color: colors.text, fontSize: 22, fontWeight: '700' },
+  back: { alignSelf: 'flex-start', paddingVertical: 6, paddingRight: 12, marginBottom: 4 },
+  backTxt: { color: colors.accent2, fontSize: 17, fontWeight: '600' },
   sub: { color: colors.text2, fontSize: 13, marginTop: 2, marginBottom: spacing.md },
   empty: { color: colors.text2, fontSize: 14, textAlign: 'center', paddingVertical: spacing.lg },
   msgCard: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, padding: spacing.md, marginBottom: spacing.sm },
