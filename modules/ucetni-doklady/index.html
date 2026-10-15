@@ -1473,7 +1473,11 @@
             '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">' +
               '<h2 style="margin:0;">Nová faktura</h2>' +
               '<div style="text-align:right;"><span style="color:var(--text2);font-size:.8em;">Číslo dokladu</span><br>' +
-                '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">…</b></div>' +
+                (window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
+                  ? '<input type="text" id="c-docnum-input" placeholder="přepsat číslo (volitelné)" title="Admin: nech prázdné pro automatické číslo, nebo zadej číslo starého dokladu" style="margin-top:4px;width:210px;text-align:right;font-weight:600;">' +
+                    '<div style="color:var(--text2);font-size:.75em;margin-top:2px;">Automaticky: <b id="c-docnum">…</b></div>'
+                  : '<b id="c-docnum" style="font-size:1.25em;letter-spacing:.5px;">…</b>') +
+              '</div>' +
             '</div>' +
 
             // Hlavička
@@ -1581,6 +1585,7 @@
         type, company_id,
         currency: window.cState.currency,
         language: document.getElementById('c-language')?.value || 'cs',
+        invoice_number: (document.getElementById('c-docnum-input')?.value || '').trim() || undefined,
         vat_regime: document.getElementById('c-vat-regime')?.value || 'standard',
         external_number: document.getElementById('c-external').value || null,
         variable_symbol: document.getElementById('c-vs').value || null,

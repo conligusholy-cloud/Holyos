@@ -306,6 +306,7 @@ const invoiceCreateSchema = z.object({
   partner_bic: z.string().max(11).optional().nullable(),
   vat_regime: z.string().default('standard'),
   language: z.enum(['cs', 'en']).default('cs'),
+  invoice_number: z.string().trim().min(1).max(50).optional().nullable(), // jen admin: ruční číslo (staré doklady)
   note: z.string().optional().nullable(),
   internal_note: z.string().optional().nullable(),
   source: z.string().default('manual'),
@@ -336,7 +337,19 @@ router.post('/invoices', async (req, res, next) => {
     const data = parsed.data;
 
     // Vygeneruj interní číslo + urči direction
-    const invoice_number = await generateInvoiceNumber(data.type);
+    // Ruční číslo dokladu smí zadat jen admin (zápis starých dokladů mimo číselnou řadu)
+    let invoice_number;
+    const manualNo = data.invoice_number ? String(data.invoice_number).trim() : '';
+    if (manualNo) {
+      if (req.user?.role !== 'admin' && !req.user?.isSuperAdmin) {
+        return res.status(403).json({ error: 'Ruční číslo dokladu může zadat jen admin' });
+      }
+      const dup = await prisma.invoice.findUnique({ where: { invoice_number: manualNo }, select: { id: true } });
+      if (dup) return res.status(409).json({ error: 'Doklad s číslem ' + manualNo + ' už existuje' });
+      invoice_number = manualNo;
+    } else {
+      invoice_number = await generateInvoiceNumber(data.type);
+    }
     const direction = directionFromType(data.type);
 
     // Counterpart kontrola — pokud je order_id, musí být typ objednávky kompatibilní
@@ -364,6 +377,16 @@ router.post('/invoices', async (req, res, next) => {
     let status = 'draft';
     if (direction === 'ap' && data.order_id) status = 'po_matched';
     if (direction === 'ar') status = 'draft';
+
+    // Ručně zadané číslo ve tvaru PREFIX-ROK-NNNNN posune číselnou řadu, aby další přidělené číslo nekolidovalo
+    if (manualNo) {
+      const m = manualNo.match(/^(.*)-(\d+)$/);
+      if (m) {
+        try {
+          await prisma.$executeRaw`UPDATE document_counters SET last_seq = GREATEST(last_seq, ${parseInt(m[2], 10)}), updated_at = now() WHERE series = ${m[1]}`;
+        } catch (e) { console.warn('[invoice] posun řady selhal:', e.message); }
+      }
+    }
 
     const invoice = await prisma.invoice.create({
       data: {
