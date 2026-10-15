@@ -180,6 +180,29 @@
     .ci-adv-row:hover{background:rgba(255,255,255,.04)}
     .ci-adv-row>span:nth-child(2){flex:1}.ci-adv-amt{font-weight:600}
     .ci-adv-st{font-size:.78em;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.2);color:#fbbf24}.ci-adv-st.ok{background:rgba(52,211,153,.2);color:#34d399}
+    .dv-x{position:absolute;top:10px;right:12px;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--text2);font-size:1.2em;cursor:pointer}
+    .dv-x:hover{background:rgba(239,68,68,.18);color:#f87171}
+    .dv-title{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:1.3em;margin:0 36px 12px 0}
+    .dv-banner{background:rgba(108,123,255,.12);border:1px solid rgba(108,123,255,.35);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+    .dv-summary{display:grid;grid-template-columns:1.3fr 1fr 1.2fr;gap:12px;margin-bottom:14px}
+    .dv-box{background:var(--surface2);border-radius:10px;padding:12px 14px}
+    .dv-lbl{font-size:.72em;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px}
+    .dv-big{font-size:1.1em;font-weight:600}
+    .dv-sub{color:var(--text2);font-size:.82em;margin-top:2px}
+    .dv-dates{display:flex;justify-content:space-between;gap:10px;padding:2px 0}
+    .dv-dates span{color:var(--text2)}
+    .dv-money{text-align:right}
+    .dv-total{font-size:1.6em;font-weight:700}
+    .dv-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:14px}
+    .dv-match{background:var(--surface2);border-radius:10px;padding:10px 14px;margin-bottom:6px}
+    .dv-h{font-size:1.02em;font-weight:600;margin:18px 0 8px}
+    .dv-items th,.dv-items td{padding:8px 10px}
+    .dv-note{margin-top:16px;background:var(--surface2);border-radius:10px;padding:10px 14px}
+    .dv-note summary{cursor:pointer;font-weight:600}
+    .dv-note div{margin-top:8px;max-height:260px;overflow:auto;line-height:1.5}
+    .dv-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:20px;padding-top:14px;border-top:1px solid var(--border,#3a3a55)}
+    .dv-actions-l,.dv-actions-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    @media(max-width:800px){.dv-summary{grid-template-columns:1fr}.dv-money{text-align:left}}
 </style>
 </head>
 <body>
@@ -888,112 +911,144 @@
       const canSubmitForApproval = inv.direction === 'ap' && inv.status !== 'cancelled' && inv.status !== 'paid';
       const canMarkReadyToPay = inv.direction === 'ap' && ['approved', 'goods_received'].includes(inv.status);
 
+      const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+      const overdue = !['paid', 'cancelled', 'written_off', 'archived'].includes(inv.status) && inv.date_due && new Date(inv.date_due) < today0;
+      const remaining = Number(inv.total) - Number(inv.paid_amount || 0);
+      const cur = escapeHtml(inv.currency);
+      const bankVer = (() => {
+        const ver = inv.bank_account_verification;
+        if (!ver || ver.status === 'no_account') return '';
+        const styles = {
+          verified: 'background:#10b98122;color:#10b981;border:1px solid #10b98155;',
+          mismatch: 'background:#ef444422;color:#ef4444;border:1px solid #ef444555;',
+          unknown:  'background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;',
+        };
+        const icons = { verified: '✓ Známý účet', mismatch: '🚫 POZOR — neznámý účet!', unknown: '⚠️ Neověřeno' };
+        return '<div style="margin-top:6px;font-size:0.85em;display:inline-block;padding:3px 8px;border-radius:4px;' + (styles[ver.status] || '') + '">' +
+          (icons[ver.status] || '?') + '</div>' +
+          '<div style="font-size:0.78em;color:var(--text2);margin-top:4px;">' + escapeHtml(ver.message || '') + '</div>' +
+          (ver.status !== 'verified' && (inv.partner_bank_account || inv.partner_iban) && inv.company_id
+            ? '<button class="btn btn-secondary btn-sm" onclick="verifyAccount(' + inv.id + ', ' + (ver.status === 'mismatch' ? 'true' : 'false') + ')" style="margin-top:6px;">' +
+              (ver.status === 'mismatch' ? '⚠️ Přidat i přes nesoulad (override)' : '✓ Potvrdit účet') + '</button>'
+            : '');
+      })();
+      const draftBanner = inv.status === 'draft'
+        ? '<div class="dv-banner">📝 <b>Rozpracovaná faktura</b> — zatím nebyla odeslána. Zkontroluj údaje (tlačítko <b>Upravit</b>), pak ji <b>pošli zákazníkovi</b>.</div>'
+        : '';
+      const itemRows = (inv.items || []).map(it => (
+        '<tr><td>' + escapeHtml(it.description) +
+          (it.material ? ' <span class="inline-code">' + escapeHtml(it.material.code) + '</span>' : '') +
+          (it.vehicle ? ' 🚗 ' + escapeHtml(it.vehicle.license_plate || it.vehicle.model) : '') +
+          (it.person ? ' 👤 ' + escapeHtml(it.person.first_name + ' ' + it.person.last_name) : '') +
+          (it.cost_center ? '<div class="dv-sub">Středisko: ' + escapeHtml(it.cost_center.name) + '</div>' : '') +
+        '</td>' +
+        '<td class="num">' + Number(it.quantity) + ' ' + escapeHtml(it.unit) + '</td>' +
+        '<td class="num">' + fmtAmount(it.unit_price) + '</td>' +
+        '<td class="num">' + Number(it.vat_rate) + ' %</td>' +
+        '<td class="num"><b>' + fmtAmount(it.total) + '</b></td></tr>'
+      )).join('');
+      const noteLines = inv.note ? String(inv.note).split('\n').length : 0;
+      const sendBtn = inv.direction === 'ar'
+        ? '<button class="btn btn-primary" onclick="sendInvoiceToCustomer(' + inv.id + ', \'' + escapeHtml(inv.company?.email || '') + '\', \'' + escapeHtml(inv.invoice_number) + '\')">📧 Odeslat zákazníkovi</button>'
+        : '';
+
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-          '<div class="modal wide">' +
-            '<h2><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
-              ' <span class="dir-badge ' + inv.direction + '">' + (inv.direction === 'ap' ? 'Přijatá (AP)' : 'Vydaná (AR)') + '</span>' +
-              ' <span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span></h2>' +
-            '<div class="detail-header">' +
-              '<div class="detail-col"><label>Stav</label><div><span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></div></div>' +
-              '<div class="detail-col"><label>Firma</label><div>' + escapeHtml(inv.company?.name || '—') +
-                (inv.company?.ico ? '<br><small style="color:var(--text2);">IČO: ' + escapeHtml(inv.company.ico) + '</small>' : '') + '</div></div>' +
-              '<div class="detail-col"><label>Externí číslo</label><div>' + escapeHtml(inv.external_number || '—') + '</div></div>' +
-              '<div class="detail-col"><label>Var. symbol</label><div>' + escapeHtml(inv.variable_symbol || '—') + '</div></div>' +
-              '<div class="detail-col"><label>Vystaveno</label><div>' + fmtDate(inv.date_issued) + '</div></div>' +
-              '<div class="detail-col"><label>DUZP</label><div>' + fmtDate(inv.date_taxable) + '</div></div>' +
-              '<div class="detail-col"><label>Splatnost</label><div>' + fmtDate(inv.date_due) + '</div></div>' +
-              '<div class="detail-col"><label>Celkem s DPH</label><div style="font-weight:700;font-size:1.1em;">' + fmtAmount(inv.total) + ' ' + escapeHtml(inv.currency) + '</div></div>' +
-              '<div class="detail-col"><label>Zaplaceno</label><div>' + fmtAmount(inv.paid_amount) + ' ' + escapeHtml(inv.currency) + '</div></div>' +
-              '<div class="detail-col"><label>Bankovní účet protistrany</label><div>' +
-                escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') +
-                (() => {
-                  const ver = inv.bank_account_verification;
-                  if (!ver || ver.status === 'no_account') return '';
-                  const styles = {
-                    verified: 'background:#10b98122;color:#10b981;border:1px solid #10b98155;',
-                    mismatch: 'background:#ef444422;color:#ef4444;border:1px solid #ef444555;',
-                    unknown:  'background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b55;',
-                  };
-                  const icons = { verified: '✓ Známý účet', mismatch: '🚫 POZOR — neznámý účet!', unknown: '⚠️ Neověřeno' };
-                  return '<div style="margin-top:6px;font-size:0.85em;display:inline-block;padding:3px 8px;border-radius:4px;' + (styles[ver.status] || '') + '">' +
-                    (icons[ver.status] || '?') +
-                    '</div>' +
-                    '<div style="font-size:0.78em;color:var(--text2);margin-top:4px;">' + escapeHtml(ver.message || '') + '</div>' +
-                    (ver.status !== 'verified' && (inv.partner_bank_account || inv.partner_iban) && inv.company_id
-                      ? '<button class="btn btn-secondary btn-sm" onclick="verifyAccount(' + inv.id + ', ' + (ver.status === 'mismatch' ? 'true' : 'false') + ')" style="margin-top:6px;">' +
-                        (ver.status === 'mismatch' ? '⚠️ Přidat i přes nesoulad (override)' : '✓ Potvrdit účet') +
-                        '</button>'
-                      : '');
-                })() +
-              '</div></div>' +
-              '<div class="detail-col"><label>Způsob úhrady</label><div>' +
+          '<div class="modal wide" style="position:relative;">' +
+            '<button type="button" onclick="closeModal()" title="Zavřít" class="dv-x">✕</button>' +
+            '<div class="dv-title"><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
+              ' <span class="dir-badge ' + inv.direction + '">' + (inv.direction === 'ap' ? 'Přijatá' : 'Vydaná') + '</span>' +
+              ' <span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span>' +
+              ' <span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></div>' +
+            draftBanner +
+
+            // Souhrn: odběratel | termíny | částka
+            '<div class="dv-summary">' +
+              '<div class="dv-box"><div class="dv-lbl">' + (inv.direction === 'ap' ? 'Dodavatel' : 'Odběratel') + '</div>' +
+                '<div class="dv-big">' + escapeHtml(inv.company?.name || '—') + '</div>' +
+                (inv.company?.ico ? '<div class="dv-sub">IČO: ' + escapeHtml(inv.company.ico) + '</div>' : '') + '</div>' +
+              '<div class="dv-box"><div class="dv-lbl">Termíny</div>' +
+                '<div class="dv-dates"><span>Vystaveno</span><b>' + fmtDate(inv.date_issued) + '</b></div>' +
+                '<div class="dv-dates"><span>DUZP</span><b>' + fmtDate(inv.date_taxable) + '</b></div>' +
+                '<div class="dv-dates"><span>Splatnost</span><b style="' + (overdue ? 'color:#f87171;' : '') + '">' + fmtDate(inv.date_due) + (overdue ? ' ⚠ po splatnosti' : '') + '</b></div></div>' +
+              '<div class="dv-box dv-money"><div class="dv-lbl">Celkem k úhradě</div>' +
+                '<div class="dv-total">' + fmtAmount(inv.total) + ' ' + cur + '</div>' +
+                '<div class="dv-sub">Zaplaceno ' + fmtAmount(inv.paid_amount) + ' ' + cur + (remaining > 0.004 && Number(inv.paid_amount) > 0 ? ' · zbývá ' + fmtAmount(remaining) + ' ' + cur : '') + '</div></div>' +
+            '</div>' +
+
+            // Platební údaje
+            '<div class="dv-grid">' +
+              '<div><div class="dv-lbl">Variabilní symbol</div><div>' + escapeHtml(inv.variable_symbol || '—') + '</div></div>' +
+              '<div><div class="dv-lbl">Externí číslo</div><div>' + escapeHtml(inv.external_number || '—') + '</div></div>' +
+              '<div><div class="dv-lbl">Způsob úhrady</div><div>' +
                 (canEdit
                   ? '<select id="d-payment-method" onchange="updatePaymentMethod(' + inv.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:0.95em;">' +
                       Object.entries(PAYMENT_METHOD).map(([k, v]) =>
                         '<option value="' + k + '"' + ((inv.payment_method || 'bank_transfer') === k ? ' selected' : '') + '>' + v.icon + ' ' + v.full + '</option>'
-                      ).join('') +
-                    '</select>'
-                  : fmtPayment(inv.payment_method, 'full')
-                ) +
+                      ).join('') + '</select>'
+                  : fmtPayment(inv.payment_method, 'full')) +
               '</div></div>' +
+              ((inv.partner_bank_account || inv.partner_iban || inv.direction === 'ap')
+                ? '<div><div class="dv-lbl">Bankovní účet protistrany</div><div>' + escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') + bankVer + '</div></div>'
+                : '') +
             '</div>' +
 
-            // 3-way match section
-            '<div style="margin:14px 0; padding:10px 14px; background:var(--surface2); border-radius:6px;">' +
-              '<div class="workflow-step">🔗 <b>3-way match:</b></div>' +
-              '<div>Objednávka: ' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
-              ' &nbsp;|&nbsp; ' +
-              'Příjemka: ' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
-              (inv.direction === 'ap' && canEdit ? ' <button class="btn btn-secondary btn-sm" onclick="openMatchModal(' + inv.id + ')" style="margin-left:10px;">Navázat / změnit</button>' : '') +
-              '</div>' +
-            '</div>' +
+            // 3-way match jen u přijatých faktur
+            (inv.direction === 'ap'
+              ? '<div class="dv-match"><b>🔗 3-way match:</b> Objednávka: ' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
+                ' &nbsp;|&nbsp; Příjemka: ' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
+                (canEdit ? ' <button class="btn btn-secondary btn-sm" onclick="openMatchModal(' + inv.id + ')" style="margin-left:10px;">Navázat / změnit</button>' : '') + '</div>'
+              : (inv.order ? '<div class="dv-match">🔗 Objednávka: <span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span></div>' : '')) +
 
-            // Items
-            '<h3 style="margin-top:18px;">Položky (' + (inv.items?.length || 0) + ')</h3>' +
+            // Položky
+            '<div class="dv-h">Položky (' + (inv.items?.length || 0) + ')</div>' +
             (inv.items?.length
-              ? '<table class="items-table"><thead><tr>' +
-                '<th>#</th><th>Popis</th><th class="num">Množství</th><th class="num">J. cena</th>' +
-                '<th class="num">DPH</th><th class="num">Základ</th><th class="num">DPH Kč</th><th class="num">Celkem</th>' +
-                '<th>Středisko</th></tr></thead><tbody>' + itemsHtml + '</tbody></table>'
+              ? '<table class="items-table dv-items"><thead><tr><th>Popis</th><th class="num">Množství</th><th class="num">Cena / ks</th><th class="num">DPH</th><th class="num">Celkem</th></tr></thead><tbody>' + itemRows + '</tbody></table>' +
+                '<div class="ci-totals" style="margin-top:10px;">' +
+                  '<div><span>Základ</span><b>' + fmtAmount(inv.subtotal) + ' ' + cur + '</b></div>' +
+                  '<div><span>DPH</span><b>' + fmtAmount(inv.vat_amount) + ' ' + cur + '</b></div>' +
+                  '<div class="grand"><span>Celkem</span><b>' + fmtAmount(inv.total) + ' ' + cur + '</b></div></div>'
               : '<div class="empty-hint" style="padding:20px;">Žádné položky</div>') +
 
             // Schvalování (AP)
             (inv.direction === 'ap' && (inv.approval_steps?.length || canSubmitForApproval) ?
-              '<h3 style="margin-top:18px;">Schvalování</h3>' +
-              (inv.approval_steps?.length
-                ? '<div class="approval-list">' + approvalsHtml + '</div>'
-                : '<div style="color:var(--text2);">Nejsou přiřazení schvalovatelé</div>')
+              '<div class="dv-h">Schvalování</div>' +
+              (inv.approval_steps?.length ? '<div class="approval-list">' + approvalsHtml + '</div>' : '<div style="color:var(--text2);">Nejsou přiřazení schvalovatelé</div>')
               : '') +
 
             // Upomínky (AR)
             (inv.direction === 'ar' && inv.reminders?.length ?
-              '<h3 style="margin-top:18px;">Upomínky</h3>' +
-              '<div>' + inv.reminders.map(r =>
+              '<div class="dv-h">Upomínky</div><div>' + inv.reminders.map(r =>
                 '#' + r.level + ' — ' + (r.status === 'sent' ? '✅ Odesláno ' + fmtDate(r.sent_at) : '⏳ Naplánováno na ' + fmtDate(r.scheduled_at))
               ).join('<br>') + '</div>'
               : '') +
 
-            (inv.note ? '<h3 style="margin-top:18px;">Poznámka</h3><div style="white-space:pre-wrap;">' + escapeHtml(inv.note) + '</div>' : '') +
+            // Poznámka — sbalená, pokud je dlouhá
+            (inv.note
+              ? '<details class="dv-note"' + (noteLines <= 4 ? ' open' : '') + '><summary>📝 Poznámka na dokladu' + (noteLines > 4 ? ' <span class="dv-sub">(' + noteLines + ' řádků — klikni pro zobrazení)</span>' : '') + '</summary>' +
+                '<div style="white-space:pre-wrap;">' + escapeHtml(inv.note) + '</div></details>'
+              : '') +
 
             (inv.order_id ? '<div id="order-history-panel" style="margin-top:18px;"><div style="color:#6b7280;font-size:12px;">Načítám historii objednávky…</div></div>' : '') +
 
-            '<div class="modal-actions">' +
-              '<button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>' +
-              (window.currentUser?.isSuperAdmin
-                ? '<button class="btn btn-danger" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Super admin: trvalé smazání">🗑️ Trvale smazat</button>'
-                : '') +
-              (inv.status === 'draft' ? '<button class="btn btn-secondary" onclick="editInvoice(' + inv.id + ')">✏️ Upravit</button>' : '') +
-              (canEdit && inv.status !== 'cancelled' ? '<button class="btn btn-danger" onclick="cancelInvoice(' + inv.id + ')">Zrušit</button>' : '') +
-              (canSubmitForApproval && inv.status !== 'awaiting_approval' ? '<button class="btn btn-secondary" onclick="submitForApproval(' + inv.id + ')">Poslat ke schválení</button>' : '') +
-              (inv.status === 'awaiting_approval' ? '<button class="btn btn-primary" onclick="approveInvoice(' + inv.id + ')">✅ Schválit</button><button class="btn btn-danger" onclick="rejectInvoice(' + inv.id + ')">❌ Zamítnout</button>' : '') +
-              (canMarkReadyToPay ? '<button class="btn btn-primary" onclick="markReadyToPay(' + inv.id + ')">Označit jako k platbě</button>' : '') +
-              // AR — Fáze 6: PDF + odeslat zákazníkovi
-              (inv.direction === 'ar'
-                ? '<button class="btn btn-secondary" onclick="viewInvoicePdf(' + inv.id + ')">👁️ Zobrazit fakturu</button>' +
-                  '<button class="btn btn-secondary" onclick="downloadInvoicePdf(' + inv.id + ')">📄 Stáhnout PDF</button>' +
-                  '<button class="btn btn-primary" onclick="sendInvoiceToCustomer(' + inv.id + ', \'' + escapeHtml(inv.company?.email || '') + '\', \'' + escapeHtml(inv.invoice_number) + '\')">📧 Odeslat zákazníkovi</button>'
-                : '') +
+            // Akce: vlevo méně časté / nebezpečné, vpravo hlavní
+            '<div class="dv-actions">' +
+              '<div class="dv-actions-l">' +
+                (canEdit && inv.status !== 'cancelled' ? '<button class="btn btn-danger btn-sm" onclick="cancelInvoice(' + inv.id + ')">Zrušit fakturu</button>' : '') +
+                (window.currentUser?.isSuperAdmin
+                  ? '<button class="btn btn-danger btn-sm" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Super admin: trvalé smazání">🗑️ Trvale smazat</button>'
+                  : '') +
+              '</div>' +
+              '<div class="dv-actions-r">' +
+                (inv.status === 'draft' ? '<button class="btn btn-secondary" onclick="editInvoice(' + inv.id + ')">✏️ Upravit</button>' : '') +
+                (canSubmitForApproval && inv.status !== 'awaiting_approval' ? '<button class="btn btn-secondary" onclick="submitForApproval(' + inv.id + ')">Poslat ke schválení</button>' : '') +
+                (inv.status === 'awaiting_approval' ? '<button class="btn btn-primary" onclick="approveInvoice(' + inv.id + ')">✅ Schválit</button><button class="btn btn-danger" onclick="rejectInvoice(' + inv.id + ')">❌ Zamítnout</button>' : '') +
+                (canMarkReadyToPay ? '<button class="btn btn-primary" onclick="markReadyToPay(' + inv.id + ')">Označit jako k platbě</button>' : '') +
+                (inv.direction === 'ar'
+                  ? '<button class="btn btn-secondary" onclick="viewInvoicePdf(' + inv.id + ')">👁️ Náhled</button>' +
+                    '<button class="btn btn-secondary" onclick="downloadInvoicePdf(' + inv.id + ')">📄 PDF</button>' + sendBtn
+                  : '') +
+              '</div>' +
             '</div>' +
           '</div>' +
         '</div>'
