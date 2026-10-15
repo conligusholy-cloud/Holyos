@@ -142,7 +142,9 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
       const raw = await node.build();
       const params = { Action: 'SendRawEmail', 'RawMessage.Data': raw.toString('base64') };
       if (cfgSet) params.ConfigurationSetName = cfgSet;
-      const r = await sesCall(params);
+      let r = await sesCall(params);
+      // limit odesílání (14/s): při Throttling chvíli počkat a zkusit znovu
+      for (let i = 0; i < 3 && !r.ok && /Throttl|MaxSendRate/i.test(r.code + ' ' + r.error); i++) { await new Promise((ok) => setTimeout(ok, 1000 * (i + 1))); r = await sesCall(params); }
       if (!r.ok) return { ok: false, error: r.error + (/not verified/i.test(r.error) ? ' – účet SES je v sandboxu: posílat jde jen na ověřené adresy, dokud AWS neschválí Production access (nebo adresu ověř v SES → Identities).' : '') };
       const sesId = (r.text.match(/<MessageId>([^<]+)<\/MessageId>/) || [])[1] || '';
       return { ok: true, simulated: false, messageId: node.messageId() || '', sesMessageId: sesId };
