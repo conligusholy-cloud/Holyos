@@ -270,10 +270,16 @@ function buildTemplateData(invoice, ourCompany) {
     if (cfg) configNotes.push({ name: shortName, cfg });
     // Doklad v angličtině: anglický název (vlastní description_en, jinak překlad glosářem) + pod ním malým písmem česky
     const enName = lang === 'en' ? (it.description_en ? String(it.description_en) : itemI18n.translateItem(shortName)) : '';
+    const descMain = lang === 'en' ? enName : shortName;
+    const descCs = lang === 'en' && enName && enName !== shortName ? shortName : '';
+    // Název vždy na jednom řádku: písmo se zmenšuje podle délky (dlouhé názvy se zúží, ne zalomí)
+    const fitPt = (len, base, chars, min) => Math.max(min, Math.min(base, +(base * chars / Math.max(len, 1)).toFixed(2)));
     return {
       line_order: it.line_order,
-      description: lang === 'en' ? enName : shortName,
-      desc_cs: lang === 'en' && enName && enName !== shortName ? shortName : '',
+      description: descMain,
+      desc_cs: descCs,
+      desc_style: `font-size:${fitPt(descMain.length, 8.6, 46, 6.2)}pt`,
+      cs_style: `font-size:${fitPt(descCs.length, 6.8, 62, 5.2)}pt`,
       quantity: fmtAmountPlain(it.quantity, loc),
       unit: lang === 'en' ? itemI18n.translateUnit(it.unit) : (it.unit || 'ks'),
       unit_price: fmtAmountPlain(it.unit_price, loc),
@@ -378,7 +384,7 @@ function buildTemplateData(invoice, ourCompany) {
     qr_url: buildQrLocal(spayd) || '',
 
     // Design Best Series 2.0 (jednotný vzhled dokladů)
-    doc_css: bs2style.CSS + '\ntable.items td.d .cs{font-weight:400;font-size:6.8pt;color:#8a94a8;margin-top:2px;line-height:1.25}table.items td.d .cs:empty{display:none}table.items td.d .sn{font-weight:400}',
+    doc_css: bs2style.CSS + '\ntable.items td.d{width:100%;max-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}table.items td.d .cs{font-weight:400;font-size:6.8pt;color:#8a94a8;margin-top:2px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}table.items td.d .cs:empty{display:none}table.items td.d .sn{font-weight:400}',
     logo_svg: bs2style.logoSvg(54),
     footer_text: bs2style.FOOTER_TEXT,
   };
