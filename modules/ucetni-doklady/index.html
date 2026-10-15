@@ -1573,10 +1573,10 @@
             '<button type="button" class="ci-add" onclick="addCreateItem(true)">＋ Přidat další položku</button>' +
             '<div id="c-advances"></div>' +
             '<div class="ci-totals">' +
-              '<div><span>Základ celkem</span><b><span id="c-sum-subtotal">0,00</span> <span id="c-cur-label-1">CZK</span></b></div>' +
-              '<div><span>DPH celkem</span><b><span id="c-sum-vat">0,00</span> <span id="c-cur-label-2">CZK</span></b></div>' +
+              '<div><span>Základ celkem</span><b><span id="c-sum-subtotal">0,00</span> <span id="c-cur-label-1">' + escapeHtml(window.cState.currency) + '</span></b></div>' +
+              '<div><span>DPH celkem</span><b><span id="c-sum-vat">0,00</span> <span id="c-cur-label-2">' + escapeHtml(window.cState.currency) + '</span></b></div>' +
               '<div id="c-zero-note" class="ci-zero" style="display:none">Faktura je na 0 — vše je pokryto odečtenými zálohami.</div>' +
-              '<div class="grand"><span>Celkem k úhradě</span><b><span id="c-sum-total">0,00</span> <span id="c-cur-label-3">CZK</span></b></div>' +
+              '<div class="grand"><span>Celkem k úhradě</span><b><span id="c-sum-total">0,00</span> <span id="c-cur-label-3">' + escapeHtml(window.cState.currency) + '</span></b></div>' +
             '</div>' +
 
             // Service flag (přeskočí 3-way match guard)
@@ -1588,7 +1588,7 @@
             '</div>' +
 
             // Poznámka
-            '<div class="modal-row" style="margin-top:16px;"><label>Poznámka</label><textarea id="c-note" rows="2"></textarea></div>' +
+            '<div class="modal-row" style="margin-top:16px;"><label>Poznámka</label><textarea id="c-note" rows="' + (E ? 10 : 3) + '" style="font-family:inherit;line-height:1.5;resize:vertical;min-height:70px;"></textarea></div>' +
 
             '<div class="modal-actions">' +
               '<button class="btn btn-secondary" onclick="closeModal()">Zrušit</button>' +
