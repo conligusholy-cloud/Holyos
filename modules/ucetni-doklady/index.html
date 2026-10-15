@@ -957,8 +957,9 @@
           '<div class="modal wide" style="position:relative;">' +
             '<button type="button" onclick="closeModal()" title="Zavřít" class="dv-x">✕</button>' +
             '<div class="dv-title"><span class="invoice-num">' + escapeHtml(inv.invoice_number) + '</span>' +
-              ' <span class="dir-badge ' + inv.direction + '">' + (inv.direction === 'ap' ? 'Přijatá' : 'Vydaná') + '</span>' +
               ' <span class="type-badge ' + inv.type + '">' + (TYPE_LABEL[inv.type] || inv.type) + '</span>' +
+              (((String(inv.type || '').endsWith('_received') || inv.type === 'received') ? 'ap' : 'ar') !== inv.direction
+                ? ' <span title="Typ dokladu a směr (přijatá/vydaná) si neodpovídají — oprav typ v databázi nebo založ doklad znovu." style="background:rgba(239,68,68,.18);color:#f87171;border-radius:10px;padding:2px 10px;font-size:.7em;">⚠ typ ≠ směr (' + (inv.direction === 'ap' ? 'přijatá' : 'vydaná') + ')</span>' : '') +
               ' <span class="status-badge ' + inv.status + '">' + (STATUS_LABEL[inv.status] || inv.status) + '</span></div>' +
             draftBanner +
 
