@@ -330,8 +330,9 @@ function buildTemplateData(invoice, ourCompany) {
     // Odběratel
     customer_name: partner.name || '',
     customer_address: joinAddress(partner),
-    customer_delivery: joinDelivery(partner),
-    consignee_name: partner.consignee ? ((partner.consignee.name || '') + (partner.consignee.ico ? ` (${L.ico}: ${partner.consignee.ico})` : '')) : '',
+    // Příjemce se na dokladu neuvádí jako samostatný blok — jeho název je na začátku dodací adresy
+    customer_delivery: (partner.consignee && partner.consignee.name ? partner.consignee.name + ', ' : '') + joinDelivery(partner),
+    consignee_name: '',
     customer_ico: partner.ico || '',
     customer_dic: partner.dic || '',
     // Celní řízení (export mimo EU) — odběratel a příjemce
