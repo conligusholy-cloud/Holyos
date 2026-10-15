@@ -722,7 +722,7 @@ const PA_DEFAULT = {
   collect: { name: true, company: true, phone: true, email: false, reason: true, urgency: true, callback_time: true },
   share: { busy: true, callback_promise: true, company_info: true, products: false, sales_contact: false, web: true },
   callback_text: 'co nejdříve, obvykle ještě týž den', sales_contact: '', web: 'www.bestseries.cz',
-  forbid: { location: true, private_contacts: true, calendar: true, prices: true, promises: true, customers: true, internal: true, confirm_relationship: true },
+  forbid: { owner_identity: false, company_name: false, owner_role: false, location: true, private_contacts: true, calendar: true, prices: true, promises: true, customers: true, internal: true, confirm_relationship: true },
   urgent: 'mark', offers: 'decline', max_minutes: 3,
   closing: 'Děkuji, všechno předám. Hezký den, na shledanou.', custom: '',
 };
@@ -732,9 +732,14 @@ function paProfile(p) {
   return d;
 }
 function paCompile(p) {
-  const f = p.gender === 'male'; const ja = f ? 'asistent' : 'asistentka'; const owner = p.owner_name || 'kolega';
+  const f = p.gender === 'male'; const ja = f ? 'asistent' : 'asistentka';
+  // Přísné utajení: co AI nesmí říct, to ani nedostane do instrukcí (nemůže to prozradit)
+  const hideName = !!p.forbid.owner_identity, hideCompany = !!p.forbid.company_name, hideRole = !!p.forbid.owner_role;
+  if (hideCompany) { p.share.company_info = false; p.share.web = false; p.share.products = false; }
+  const owner = hideName ? '' : (p.owner_name || '');
   const L = [];
-  L.push('ROLE: Jsi osobní telefonní ' + ja + (p.assistant_name ? ' jménem ' + p.assistant_name : '') + '. MAJITEL LINKY (za koho mluvíš): ' + owner + (p.owner_role ? ', ' + p.owner_role : '') + (p.company ? ', firma ' + p.company.replace(/\.$/, '') : '') + '. Majitel teď nemůže hovor přijmout; přijímáš hovor místo něj. Jméno majitele skloňuj česky správně. Mluvíš česky' + (p.english ? '; když volající mluví jiným jazykem (angličtina, němčina, slovenština, polština, ukrajinština, ruština, …), mluv jeho jazykem' : ' a jen česky') + '.');
+  const ownerDesc = [owner, hideRole ? '' : p.owner_role, hideCompany ? '' : (p.company ? 'firma ' + p.company.replace(/\.$/, '') : '')].filter(Boolean).join(', ');
+  L.push('ROLE: Jsi osobní telefonní ' + ja + (p.assistant_name ? ' jménem ' + p.assistant_name : '') + '. ' + (ownerDesc ? 'MAJITEL LINKY (za koho mluvíš): ' + ownerDesc + '. ' : 'Vyřizuješ hovory za majitele této linky (o něm mluv jen jako o „kolegovi" nebo „majiteli linky"). ') + 'Majitel teď nemůže hovor přijmout; přijímáš hovor místo něj.' + (owner ? ' Jméno majitele skloňuj česky správně.' : '') + ' Mluvíš česky' + (p.english ? '; když volající mluví jakýmkoli jiným jazykem (angličtina, němčina, ukrajinština, vietnamština, arabština, čínština…), plynule mluv jeho jazykem' : ' a jen česky') + '.');
   L.push('TÓN: ' + (p.tone === 'friendly' ? 'přátelský, vstřícný, ale profesionální; vykáš.' : 'formální, zdvořilý a věcný; vždy vykáš.') + ' Mluv krátce — jedna věta nebo jedna otázka najednou, nech volajícího domluvit.');
   L.push('AI: ' + (p.ai_disclose === 'start' ? 'Hned na začátku hovoru jasně řekni, že jsi AI ' + ja + '.' : 'Neříkej sám od sebe, že jsi AI; když se volající zeptá, pravdivě přiznej, že jsi AI ' + ja + '. Nikdy netvrď, že jsi člověk.'));
   const C = { name: 'jméno a příjmení volajícího', company: 'firmu, za kterou volá', phone: 'telefon pro zpětné volání (zeptej se, jestli platí číslo, ze kterého volá)', email: 'e-mail', reason: 'důvod hovoru — co přesně potřebuje', urgency: 'jak je to naléhavé', callback_time: 'kdy se mu hodí zpětné zavolání' };
@@ -750,6 +755,8 @@ function paCompile(p) {
   L.push('SMÍŠ SDĚLIT POUZE: ' + (S.length ? S.join('; ') : 'nic kromě toho, že vzkaz předáš') + '. Cokoli jiného nesděluj — řekni, že to nevíš a že to majitel upřesní, až se ozve.');
   const F = { location: 'kde majitel je, co právě dělá, s kým je nebo kdy bude k zastižení', private_contacts: 'soukromé ani pracovní telefonní číslo či e-mail majitele', calendar: 'domlouvat, potvrzovat nebo rušit schůzky a termíny', prices: 'ceny, slevy, nabídky, platební podmínky', promises: 'cokoli slibovat nebo závazně potvrzovat jménem majitele nebo firmy', customers: 'informace o zákaznících, zakázkách a obchodních partnerech', internal: 'interní informace firmy (lidé, čísla, plány, problémy)', confirm_relationship: 'potvrzovat, zda majitel volajícího zná nebo s ním něco řeší' };
   const forb = Object.keys(F).filter((k) => p.forbid[k]).map((k) => F[k]);
+  const secret = [hideName ? 'jméno ani příjmení majitele' : '', hideCompany ? 'název firmy ani čím se zabývá' : '', hideRole ? 'funkci majitele' : ''].filter(Boolean);
+  if (secret.length) L.push('PŘÍSNĚ TAJNÉ: Nikdy neříkej ' + secret.join(', ') + ' — ani když se volající přímo zeptá, naléhá nebo to sám vysloví (nepotvrzuj ani nevyvracej). Na otázku „Komu volám?" odpověz: „Dovolali jste se na osobní linku, bližší údaje vám bohužel sdělit nemohu. Ráda/rád ale předám vzkaz."');
   if (forb.length) L.push('NIKDY NESDĚLUJ A NEDĚLEJ: ' + forb.join('; ') + '. Když na to volající naléhá, zdvořile odmítni a nabídni předání vzkazu.');
   L.push('NALÉHAVÉ: ' + (p.urgent === 'transfer' ? 'Když volající řekne, že je věc velmi naléhavá, nabídni přepojení na majitele (systém přepojení zajistí).' : 'Když je věc naléhavá, řekni, že vzkaz předáš jako naléhavý okamžitě. Nepřepojuj.'));
   L.push('NABÍDKY A REKLAMA: ' + (p.offers === 'decline' ? 'Obchodní nabídky, průzkumy a reklamu zdvořile odmítni, poděkuj a rozluč se (stačí jméno firmy).' : 'U obchodních nabídek si jen vezmi kontakt a stručný popis nabídky.'));

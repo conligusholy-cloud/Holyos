@@ -390,7 +390,7 @@
   // ── Profil osobního asistenta: co zjišťuje, co smí / nesmí sdělit, chování (server z toho složí instrukce pro AI) ──
   const PA_COLLECT = [['name', 'Jméno a příjmení'], ['company', 'Firma volajícího'], ['phone', 'Telefon pro zpětné volání'], ['email', 'E-mail'], ['reason', 'Důvod hovoru'], ['urgency', 'Naléhavost'], ['callback_time', 'Kdy se hodí zavolat zpět']];
   const PA_SHARE = [['busy', 'Že teď nemůže hovor přijmout (bez důvodu)'], ['callback_promise', 'Kdy se ozve (text níže)'], ['company_info', 'Základní info o firmě'], ['web', 'Web firmy'], ['products', 'Info o produktech z firemních podkladů (prádlomaty)'], ['sales_contact', 'Kontakt na obchod (níže)']];
-  const PA_FORBID = [['location', 'Kde je, co dělá, kdy bude k zastižení'], ['private_contacts', 'Jeho telefon a e-mail'], ['calendar', 'Domlouvat / potvrzovat schůzky a termíny'], ['prices', 'Ceny, slevy, nabídky, platby'], ['promises', 'Cokoli slibovat jeho jménem'], ['customers', 'Info o zákaznících a zakázkách'], ['internal', 'Interní info firmy'], ['confirm_relationship', 'Potvrzovat, zda volajícího zná']];
+  const PA_FORBID = [['owner_identity', '🔒 Jméno a příjmení majitele'], ['company_name', '🔒 Název firmy (vypne i info o firmě a web)'], ['owner_role', '🔒 Funkci majitele'], ['location', 'Kde je, co dělá, kdy bude k zastižení'], ['private_contacts', 'Jeho telefon a e-mail'], ['calendar', 'Domlouvat / potvrzovat schůzky a termíny'], ['prices', 'Ceny, slevy, nabídky, platby'], ['promises', 'Cokoli slibovat jeho jménem'], ['customers', 'Info o zákaznících a zakázkách'], ['internal', 'Interní info firmy'], ['confirm_relationship', 'Potvrzovat, zda volajícího zná']];
   function paChecks(group, list, vals) {
     return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;margin-top:4px">' + list.map(([k, l]) => '<label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer"><input type="checkbox" class="pa-' + group + '" data-k="' + k + '"' + (vals && vals[k] ? ' checked' : '') + '> ' + escapeHtml(l) + '</label>').join('') + '</div>';
   }
@@ -407,7 +407,7 @@
         + '<div class="form-group"><label>Naléhavé věci</label>' + sel('pa-urgent', [['mark', 'Předat jako naléhavé (nepřepojovat)'], ['transfer', 'Nabídnout přepojení']], p.urgent) + '</div>'
         + '<div class="form-group"><label>Obchodní nabídky / reklama</label>' + sel('pa-offers', [['decline', 'Zdvořile odmítnout a ukončit'], ['take_message', 'Vzít kontakt a popis']], p.offers) + '</div>'
         + '<div class="form-group"><label>Max. délka hovoru (min)</label><input id="pa-max" type="number" min="1" max="15" value="' + (p.max_minutes || 3) + '"></div>'
-        + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> 🌍 Mluví jazykem volajícího (EN, DE, SK, PL, UK, RU…)</label></div></div>')
+        + '<div class="form-group" style="align-self:end"><label style="display:flex;align-items:center;gap:7px;font-size:13px"><input type="checkbox" id="pa-en"' + (p.english ? ' checked' : '') + '> 🌍 Mluví jazykem volajícího (všechny světové jazyky)</label></div></div>')
       + sec('📝 Co má zjistit', paChecks('collect', PA_COLLECT, p.collect))
       + sec('✅ Co smí sdělit (nic jiného neřekne)', paChecks('share', PA_SHARE, p.share)
         + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"><div class="form-group"><label>„Ozve se…"</label>' + inp('pa-cbtext', p.callback_text, 'co nejdříve, obvykle ještě týž den') + '</div><div class="form-group"><label>Web</label>' + inp('pa-web', p.web, 'www.bestseries.cz') + '</div>'
@@ -426,7 +426,10 @@
       collect: grp('collect'), share: grp('share'), forbid: grp('forbid'), callback_text: v('pa-cbtext').trim(), web: v('pa-web').trim(), sales_contact: v('pa-sales').trim(), closing: v('pa-closing').trim(), custom: v('pa-custom').trim() };
   }
   function paGreeting(p) {
-    const f = p.gender === 'male'; const who = (p.owner_name || '').trim(); const last = who.split(/\s+/).pop() || '';
+    const f = p.gender === 'male'; const hideN = p.forbid && p.forbid.owner_identity, hideC = p.forbid && p.forbid.company_name;
+    if (hideN) return 'Dobrý den, ' + (p.assistant_name ? 'tady ' + p.assistant_name + ', ' : '') + 'dovolali jste se na osobní linku.' + (p.ai_disclose === 'start' ? ' Jsem ' + (f ? 'AI asistent' : 'AI asistentka') + '.' : '') + ' Majitel linky teď nemůže hovor přijmout. Řekněte mi prosím, kdo volá a co potřebujete, a já to hned předám.';
+    if (hideC) p = Object.assign({}, p, { company: '' });
+    const who = (p.owner_name || '').trim(); const last = who.split(/\s+/).pop() || '';
     const fem = /(ová|á)$/i.test(last); const mr = who ? (fem ? 'Paní ' : 'Pan ') + last : 'Kolega';
     return 'Dobrý den, ' + (p.assistant_name ? 'tady ' + p.assistant_name + ', ' : '') + 'dovolali jste se na linku: ' + (who || 'osobní asistent') + (p.company ? ', ' + p.company.replace(/\.$/, '') : '') + '.'
       + (p.ai_disclose === 'start' ? ' Jsem ' + (fem ? 'její' : 'jeho') + ' ' + (f ? 'AI asistent' : 'AI asistentka') + '.' : '')

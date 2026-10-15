@@ -50,10 +50,13 @@ function outboundSystem(script) {
 
 // Vícejazyčnost: AI pozná jazyk volajícího a na začátek odpovědi dá značku [[lang:xx]] → relay přepne
 // řeč i přepis Twilio ConversationRelay (zpráva type:'language'). Hlas ElevenLabs je vícejazyčný.
-const LANGS = { cs: 'cs-CZ', en: 'en-US', de: 'de-DE', sk: 'sk-SK', pl: 'pl-PL', uk: 'uk-UA', ru: 'ru-RU', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', hu: 'hu-HU' };
+const LANGS = { cs: 'cs-CZ', sk: 'sk-SK', en: 'en-US', de: 'de-DE', pl: 'pl-PL', uk: 'uk-UA', ru: 'ru-RU', es: 'es-ES', fr: 'fr-FR', it: 'it-IT', hu: 'hu-HU',
+  pt: 'pt-PT', nl: 'nl-NL', sv: 'sv-SE', da: 'da-DK', no: 'nb-NO', fi: 'fi-FI', ro: 'ro-RO', bg: 'bg-BG', hr: 'hr-HR', sr: 'sr-RS', sl: 'sl-SI', el: 'el-GR',
+  tr: 'tr-TR', ar: 'ar-SA', he: 'he-IL', hi: 'hi-IN', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR', vi: 'vi-VN', th: 'th-TH', id: 'id-ID', ms: 'ms-MY', tl: 'fil-PH',
+  lt: 'lt-LT', lv: 'lv-LV', et: 'et-EE', fa: 'fa-IR', ur: 'ur-PK', bn: 'bn-IN', ta: 'ta-IN', mn: 'mn-MN', kk: 'kk-KZ', be: 'be-BY', ka: 'ka-GE', hy: 'hy-AM', sq: 'sq-AL', mk: 'mk-MK', bs: 'bs-BA' };
 const MULTILANG_RULE =
   '=== JAZYK HOVORU === Výchozí jazyk je čeština. Když volající mluví jiným jazykem (nebo o něj požádá), odpovídej plynule v JEHO jazyce ' +
-  'a na ÚPLNÝ ZAČÁTEK té odpovědi napiš značku [[lang:xx]], kde xx je kód jazyka: ' + Object.keys(LANGS).join(', ') + '. ' +
+  'a na ÚPLNÝ ZAČÁTEK té odpovědi napiš značku [[lang:xx]], kde xx je dvoupísmenný kód jazyka ISO 639-1 (např. en, de, sk, pl, uk, ru, es, fr, it, vi, zh, ar, tr…). Mluvíš JAKÝMKOLI světovým jazykem. ' +
   'Značku napiš JEN při změně jazyka (ne v každé odpovědi). Přepis řeči je nastavený na aktuální jazyk, takže cizí řeč může přijít zkomolená ' +
   '(např. anglická slova zapsaná česky foneticky: „helou“, „aj em“, „spík ingliš“) — pokud to tak vypadá, přepni na odhadnutý jazyk. ' +
   'Všechna pravidla, zákazy a úkoly platí stejně v každém jazyce. Když se volající vrátí k češtině, přepni zpět značkou [[lang:cs]].';
@@ -451,10 +454,10 @@ function attach(server) {
           // Značka jazyka [[lang:xx]] → přepnout řeč + přepis, značku z textu odstranit
           let outText = String(text || '');
           if (state.multilang) {
-            const lm = outText.match(/\[\[lang:([a-z]{2})\]\]/i);
-            if (lm) { const code = lm[1].toLowerCase(); if (LANGS[code] && code !== state.lang) { state.lang = code; send(ws, { type: 'language', ttsLanguage: LANGS[code], transcriptionLanguage: LANGS[code] }); console.log('[voice] jazyk hovoru → ' + LANGS[code]); } }
+            const lm = outText.match(/\[\[lang:([a-z]{2,3})\]\]/i);
+            if (lm) { const code = lm[1].toLowerCase(); if (code !== state.lang) state.langName = code; if (LANGS[code] && code !== state.lang) { state.lang = code; send(ws, { type: 'language', ttsLanguage: LANGS[code], transcriptionLanguage: LANGS[code] }); console.log('[voice] jazyk hovoru → ' + LANGS[code]); } }
           }
-          outText = outText.replace(/\[\[lang:[a-z]{2}\]\]\s*/gi, '').trim();
+          outText = outText.replace(/\[\[lang:[a-z]{2,3}\]\]\s*/gi, '').trim();
           state.transcript.push({ role: 'agent', text: outText, ts: Date.now() });
           send(ws, { type: 'text', token: outText, last: true });
           // 2) Pojistka: když AI sama v odpovědi slíbí přepojení, spusť ho po doříkání.
