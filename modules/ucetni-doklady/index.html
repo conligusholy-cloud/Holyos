@@ -143,7 +143,36 @@
     .batch-status.submitted_to_bank { background: #a78bfa22; color: #a78bfa; }
     .batch-status.processed { background: #22c55e22; color: #22c55e; }
     .batch-status.cancelled, .batch-status.rejected { background: #ef444422; color: #ef4444; }
-  </style>
+  
+    .ci-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0 10px;font-size:1.05em}
+    .ci-mode{display:flex;align-items:center;gap:6px;color:var(--text2);font-size:.88em}
+    .ci-mode button{background:var(--surface2);border:1px solid var(--border,#3a3a55);color:var(--text);padding:5px 12px;border-radius:6px;cursor:pointer}
+    .ci-mode button.on{background:var(--primary,#6c7bff);border-color:var(--primary,#6c7bff);color:#fff}
+    .ci-card{background:var(--surface2);border:1px solid var(--border,#3a3a55);border-radius:10px;padding:12px;margin-bottom:10px}
+    .ci-top{display:flex;gap:10px;align-items:center}
+    .ci-num{flex:0 0 26px;height:26px;border-radius:50%;background:rgba(108,123,255,.2);color:var(--primary,#8c97ff);display:flex;align-items:center;justify-content:center;font-size:.85em;font-weight:600}
+    .ci-card input,.ci-card select{background:var(--bg,#1b1b2b);color:var(--text);border:1px solid var(--border,#3a3a55);border-radius:6px;padding:8px 10px;font:inherit;width:100%;box-sizing:border-box}
+    .ci-card input:focus,.ci-card select:focus{outline:none;border-color:var(--primary,#6c7bff)}
+    .ci-desc{font-size:1.02em}
+    .ci-del{flex:0 0 auto;background:transparent;border:0;color:var(--text2);cursor:pointer;font-size:1em;padding:6px 8px;border-radius:6px}
+    .ci-del:hover{background:rgba(239,68,68,.18);color:#f87171}
+    .ci-fields{display:grid;grid-template-columns:90px 110px 1.4fr 100px 1.3fr;gap:10px;margin-top:10px;align-items:end}
+    .ci-fields label{display:flex;flex-direction:column;gap:4px;font-size:.78em;color:var(--text2)}
+    .ci-money{position:relative;display:block}
+    .ci-money input{padding-right:46px;text-align:right}
+    .ci-money i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;color:var(--text2);font-size:.9em}
+    .ci-sum{display:flex;flex-direction:column;align-items:flex-end;text-align:right}
+    .ci-sum span{font-size:.78em;color:var(--text2)}
+    .ci-sum b{font-size:1.15em}
+    .ci-sum small{color:var(--text2);font-size:.75em}
+    .ci-add{width:100%;background:transparent;border:1.5px dashed var(--border,#3a3a55);color:var(--primary,#8c97ff);padding:11px;border-radius:10px;cursor:pointer;font:inherit;margin-bottom:12px}
+    .ci-add:hover{background:rgba(108,123,255,.08)}
+    .ci-totals{margin-left:auto;max-width:340px;background:var(--surface2);border-radius:10px;padding:12px 16px}
+    .ci-totals>div{display:flex;justify-content:space-between;padding:3px 0;color:var(--text2)}
+    .ci-totals b{color:var(--text)}
+    .ci-totals .grand{border-top:1px solid var(--border,#3a3a55);margin-top:6px;padding-top:8px;font-size:1.15em;color:var(--text)}
+    @media(max-width:800px){.ci-fields{grid-template-columns:1fr 1fr}.ci-sum{grid-column:1/-1;align-items:flex-start;text-align:left}}
+</style>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -1238,46 +1267,67 @@
       return { subtotal, vat, total, unit_netto, unit_brutto };
     }
 
-    function renderCreateItems() {
+    // ── Položky faktury: přehledné karty (bez přerenderování při psaní) ──
+    const ITEM_UNITS = ['ks', 'hod', 'den', 'měs', 'm', 'm²', 'kg', 'l', 'bal', 'sada', 'služba'];
+
+    function itemCardHtml(it, idx) {
       const withVat = window.cState.pricesWithVat;
-      const items = window.cState.items;
-      let sumSubtotal = 0, sumVat = 0, sumTotal = 0;
+      const noVat = window.cState.vatRegime && window.cState.vatRegime !== 'standard';
+      const cur = window.cState.currency || 'CZK';
+      return (
+        '<div class="ci-card" data-card="' + idx + '">' +
+          '<div class="ci-top">' +
+            '<span class="ci-num">' + (idx + 1) + '</span>' +
+            '<input type="text" class="ci-desc" data-idx="' + idx + '" value="' + escapeHtml(it.description) + '" placeholder="Co fakturuješ? (např. Servisní zásah, Prádlomat 750 …)">' +
+            '<button type="button" class="ci-del" onclick="removeCreateItem(' + idx + ')" title="Odebrat položku">✕</button>' +
+          '</div>' +
+          '<div class="ci-fields">' +
+            '<label>Množství<input type="number" step="0.001" min="0" class="ci-qty" data-idx="' + idx + '" value="' + it.quantity + '"></label>' +
+            '<label>Jednotka<input type="text" list="ci-units" class="ci-unit" data-idx="' + idx + '" value="' + escapeHtml(it.unit) + '"></label>' +
+            '<label>Cena za jednotku ' + (withVat ? '<b>s DPH</b>' : '<b>bez DPH</b>') +
+              '<span class="ci-money"><input type="number" step="0.01" class="ci-price" data-idx="' + idx + '" value="' + it.input_price + '"><i>' + escapeHtml(cur) + '</i></span></label>' +
+            '<label>Sazba DPH<select class="ci-vat" data-idx="' + idx + '"' + (noVat ? ' disabled title="U tohoto režimu DPH se neúčtuje"' : '') + '>' +
+              [0, 12, 15, 21].map(r => '<option value="' + r + '"' + (Number(it.vat_rate) === r ? ' selected' : '') + '>' + r + ' %</option>').join('') +
+            '</select></label>' +
+            '<div class="ci-sum"><span>Celkem za položku</span><b data-row-total="' + idx + '"></b><small data-row-detail="' + idx + '"></small></div>' +
+          '</div>' +
+        '</div>'
+      );
+    }
 
-      const rowsHtml = items.map((it, idx) => {
+    // Přepočet součtů a částek u karet — bez přerenderování, takže se neztrácí kurzor
+    function updateCreateTotals() {
+      const withVat = window.cState.pricesWithVat;
+      const cur = window.cState.currency || 'CZK';
+      let sSub = 0, sVat = 0, sTot = 0;
+      window.cState.items.forEach((it, idx) => {
         const c = calcRow(it, withVat);
-        sumSubtotal += c.subtotal; sumVat += c.vat; sumTotal += c.total;
-        return (
-          '<tr>' +
-            '<td style="width:36%;"><input type="text" class="ci-desc" data-idx="' + idx + '" value="' + escapeHtml(it.description) + '" placeholder="Popis položky" style="width:100%;"></td>' +
-            '<td style="width:9%;"><input type="number" step="0.001" class="ci-qty" data-idx="' + idx + '" value="' + it.quantity + '" style="width:100%;"></td>' +
-            '<td style="width:7%;"><input type="text" class="ci-unit" data-idx="' + idx + '" value="' + escapeHtml(it.unit) + '" style="width:100%;"></td>' +
-            '<td style="width:14%;"><input type="number" step="0.01" class="ci-price" data-idx="' + idx + '" value="' + it.input_price + '" style="width:100%;text-align:right;"></td>' +
-            '<td style="width:8%;"><select class="ci-vat" data-idx="' + idx + '">' +
-              [0, 12, 15, 21].map(r =>
-                '<option value="' + r + '"' + (Number(it.vat_rate) === r ? ' selected' : '') + '>' + r + '%</option>'
-              ).join('') +
-            '</select></td>' +
-            '<td class="num">' + fmtAmount(c.subtotal) + '</td>' +
-            '<td class="num">' + fmtAmount(c.vat) + '</td>' +
-            '<td class="num"><b>' + fmtAmount(c.total) + '</b></td>' +
-            '<td><button type="button" class="btn btn-danger btn-sm" onclick="removeCreateItem(' + idx + ')" title="Smazat řádek">×</button></td>' +
-          '</tr>'
-        );
-      }).join('');
+        sSub += c.subtotal; sVat += c.vat; sTot += c.total;
+        const t = document.querySelector('[data-row-total="' + idx + '"]');
+        const d = document.querySelector('[data-row-detail="' + idx + '"]');
+        if (t) t.textContent = fmtAmount(c.total) + ' ' + cur;
+        if (d) d.textContent = 'základ ' + fmtAmount(c.subtotal) + ' + DPH ' + fmtAmount(c.vat);
+      });
+      document.getElementById('c-sum-subtotal').textContent = fmtAmount(sSub);
+      document.getElementById('c-sum-vat').textContent = fmtAmount(sVat);
+      document.getElementById('c-sum-total').textContent = fmtAmount(sTot);
+    }
 
-      const priceHeaderLabel = withVat ? 'Cena / ks s DPH' : 'Cena / ks bez DPH';
-
-      document.getElementById('c-items-body').innerHTML = rowsHtml || '<tr><td colspan="9" class="empty-hint" style="padding:18px;">Žádné položky — přidej řádek tlačítkem níže.</td></tr>';
-      document.getElementById('c-price-header').textContent = priceHeaderLabel;
-      document.getElementById('c-sum-subtotal').textContent = fmtAmount(sumSubtotal);
-      document.getElementById('c-sum-vat').textContent = fmtAmount(sumVat);
-      document.getElementById('c-sum-total').textContent = fmtAmount(sumTotal);
-
-      // Napojit event handlery na inputy (event delegation by bylo lepší, ale tohle je jednodušší)
-      document.querySelectorAll('#c-items-body input, #c-items-body select').forEach(el => {
+    function renderCreateItems() {
+      const items = window.cState.items;
+      const box = document.getElementById('c-items-body');
+      box.innerHTML = items.length
+        ? items.map(itemCardHtml).join('')
+        : '<div class="empty-hint" style="padding:18px;text-align:center;">Zatím žádná položka — přidej ji tlačítkem níže.</div>';
+      box.querySelectorAll('input, select').forEach(el => {
         el.addEventListener('input', handleItemInputChange);
         el.addEventListener('change', handleItemInputChange);
+        if (el.classList.contains('ci-desc')) el.addEventListener('keydown', e => {
+          // Enter v popisu poslední položky = nová položka
+          if (e.key === 'Enter') { e.preventDefault(); if (Number(el.dataset.idx) === items.length - 1) { addCreateItem(true); } }
+        });
       });
+      updateCreateTotals();
     }
 
     function handleItemInputChange(e) {
@@ -1290,41 +1340,29 @@
       else if (cls.includes('ci-unit')) it.unit = e.target.value;
       else if (cls.includes('ci-price')) it.input_price = parseFloat(e.target.value) || 0;
       else if (cls.includes('ci-vat')) it.vat_rate = parseFloat(e.target.value) || 0;
-      renderCreateItems(); // re-render kvůli součtům — inputy ztratí focus, ale je to v pořádku pro většinu případů
-      // preserve focus na stejném indexu + třídě
-      setTimeout(() => {
-        const same = document.querySelector('.' + cls.split(' ').find(c => c.startsWith('ci-')) + '[data-idx="' + idx + '"]');
-        if (same) {
-          same.focus();
-          if (same.setSelectionRange && typeof same.value === 'string') {
-            const len = same.value.length;
-            try { same.setSelectionRange(len, len); } catch {}
-          }
-        }
-      }, 0);
+      updateCreateTotals();
     }
 
-    window.addCreateItem = function() {
+    window.addCreateItem = function(focus) {
       window.cState.items.push(makeEmptyItem());
       renderCreateItems();
+      if (focus) { const all = document.querySelectorAll('.ci-desc'); if (all.length) all[all.length - 1].focus(); }
     };
     window.removeCreateItem = function(idx) {
       window.cState.items.splice(idx, 1);
       renderCreateItems();
     };
-    window.toggleCreatePricesWithVat = function(ev) {
-      window.cState.pricesWithVat = ev.target.checked;
-      // Přepočítat input_price tak, aby zobrazené sumy zůstaly stejné
+    // Přepínač „ceny zadávám bez DPH / s DPH“ — přepočte zadané ceny, aby součty zůstaly stejné
+    window.setCreatePriceMode = function(withVat) {
+      if (window.cState.pricesWithVat === withVat) return;
+      window.cState.pricesWithVat = withVat;
       window.cState.items.forEach(it => {
         const vr = Number(it.vat_rate) || 0;
-        if (ev.target.checked) {
-          // Bylo bez DPH, teď s DPH — napočítej cenu s DPH
-          it.input_price = +(Number(it.input_price) * (1 + vr / 100)).toFixed(2);
-        } else {
-          // Bylo s DPH, teď bez DPH
-          it.input_price = +(Number(it.input_price) / (1 + vr / 100)).toFixed(2);
-        }
+        it.input_price = withVat
+          ? +(Number(it.input_price) * (1 + vr / 100)).toFixed(2)
+          : +(Number(it.input_price) / (1 + vr / 100)).toFixed(2);
       });
+      document.querySelectorAll('.ci-mode button').forEach(b => b.classList.toggle('on', (b.dataset.m === 'with') === withVat));
       renderCreateItems();
     };
     window.setCreateCurrency = function(ev) {
@@ -1332,6 +1370,7 @@
       document.getElementById('c-cur-label-1').textContent = ev.target.value;
       document.getElementById('c-cur-label-2').textContent = ev.target.value;
       document.getElementById('c-cur-label-3').textContent = ev.target.value;
+      renderCreateItems();
     };
 
     // Režim DPH: u přenesené daně / mimo EU se sazba řádků nastaví na 0 %
@@ -1412,38 +1451,22 @@
               '</select></div>' +
             '</div>' +
 
-            // Toggle s/bez DPH
-            '<div style="margin:14px 0 6px 0; padding:10px 14px; background:var(--surface2); border-radius:6px; display:flex; justify-content:space-between; align-items:center;">' +
-              '<div><b>Položky</b> <span style="color:var(--text2); font-size:0.85em;">— ceny jsou počítané podle přepínače vpravo, součty se aktualizují živě</span></div>' +
-              '<label style="display:flex; align-items:center; gap:8px; cursor:pointer;">' +
-                '<input type="checkbox" id="c-prices-with-vat" onchange="toggleCreatePricesWithVat(event)">' +
-                '<span>Zadávám ceny <b>s DPH</b></span>' +
-              '</label>' +
+            // Položky — karty
+            '<datalist id="ci-units">' + ITEM_UNITS.map(u => '<option value="' + u + '">').join('') + '</datalist>' +
+            '<div class="ci-head">' +
+              '<div><b>Položky faktury</b></div>' +
+              '<div class="ci-mode"><span>Ceny zadávám:</span>' +
+                '<button type="button" class="on" data-m="without" onclick="setCreatePriceMode(false)">bez DPH</button>' +
+                '<button type="button" data-m="with" onclick="setCreatePriceMode(true)">s DPH</button>' +
+              '</div>' +
             '</div>' +
-
-            // Tabulka položek
-            '<div style="overflow-x:auto;">' +
-              '<table class="items-table" style="min-width:900px;">' +
-                '<thead><tr>' +
-                  '<th>Popis</th>' +
-                  '<th>Množství</th>' +
-                  '<th>Jedn.</th>' +
-                  '<th id="c-price-header" class="num">Cena / ks bez DPH</th>' +
-                  '<th>DPH</th>' +
-                  '<th class="num">Základ</th>' +
-                  '<th class="num">DPH Kč</th>' +
-                  '<th class="num">Celkem</th>' +
-                  '<th></th>' +
-                '</tr></thead>' +
-                '<tbody id="c-items-body"></tbody>' +
-                '<tfoot>' +
-                  '<tr><td colspan="5" style="text-align:right;color:var(--text2);">Základ celkem:</td><td class="num" colspan="3"><b id="c-sum-subtotal">0,00</b> <span id="c-cur-label-1">CZK</span></td><td></td></tr>' +
-                  '<tr><td colspan="5" style="text-align:right;color:var(--text2);">DPH celkem:</td><td class="num" colspan="3"><b id="c-sum-vat">0,00</b> <span id="c-cur-label-2">CZK</span></td><td></td></tr>' +
-                  '<tr><td colspan="5" style="text-align:right;font-size:1.05em;">Celkem k úhradě:</td><td class="num" colspan="3" style="font-size:1.2em;"><b id="c-sum-total">0,00</b> <span id="c-cur-label-3">CZK</span></td><td></td></tr>' +
-                '</tfoot>' +
-              '</table>' +
+            '<div id="c-items-body"></div>' +
+            '<button type="button" class="ci-add" onclick="addCreateItem(true)">＋ Přidat další položku</button>' +
+            '<div class="ci-totals">' +
+              '<div><span>Základ celkem</span><b><span id="c-sum-subtotal">0,00</span> <span id="c-cur-label-1">CZK</span></b></div>' +
+              '<div><span>DPH celkem</span><b><span id="c-sum-vat">0,00</span> <span id="c-cur-label-2">CZK</span></b></div>' +
+              '<div class="grand"><span>Celkem k úhradě</span><b><span id="c-sum-total">0,00</span> <span id="c-cur-label-3">CZK</span></b></div>' +
             '</div>' +
-            '<div style="margin-top:10px;"><button type="button" class="btn btn-secondary btn-sm" onclick="addCreateItem()">+ Přidat položku</button></div>' +
 
             // Service flag (přeskočí 3-way match guard)
             '<div style="margin-top:16px; padding:10px 14px; background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:6px;">' +

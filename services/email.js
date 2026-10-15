@@ -51,6 +51,21 @@ function getTransporter() {
   }
 }
 
+// ── SMTP brána nastavitelná v Centru reklamy (AppSetting ads_center.smtp): { host, port, user, pass, from, from_name, secure } ──
+const GATEWAY_KEY = 'ads_center.smtp';
+let _gw = { at: 0, cfg: null };
+function parseAddrLite(s) { const m = /^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/.exec(String(s || '')); return m ? { name: (m[1] || '').trim(), address: m[2].trim() } : { name: '', address: String(s || '').trim() }; }
+function sameAddr(a, b) { return parseAddrLite(a).address.toLowerCase() === parseAddrLite(b).address.toLowerCase(); }
+async function getGateway(force) { if (!force && _gw.cfg !== null && Date.now() - _gw.at < 60000) return _gw.cfg; try { const { getSetting } = require('./settings'); const v = await getSetting(GATEWAY_KEY, { type: 'json', defaultValue: null }); _gw = { at: Date.now(), cfg: v && typeof v === 'object' && v.host ? v : false }; } catch (e) { _gw = { at: Date.now(), cfg: false }; } return _gw.cfg; }
+function gatewayTransport(cfg) { const nodemailer = require('nodemailer'); const port = parseInt(cfg.port, 10) || 587; return nodemailer.createTransport({ host: String(cfg.host).trim(), port, secure: !!cfg.secure || port === 465, auth: cfg.user ? { user: String(cfg.user).trim(), pass: String(cfg.pass || '') } : undefined, tls: { rejectUnauthorized: false }, connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000 }); }
+async function sendViaGateway(cfg, { to, cc, subject, body, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }) {
+  try { const tx = gatewayTransport(cfg); const fa = parseAddrLite(cfg.from); const name = fromName || fa.name || cfg.from_name || ''; const fromHeader = name ? '"' + name.replace(/"/g, '') + '" <' + fa.address + '>' : fa.address;
+    const info = await tx.sendMail({ from: fromHeader, to, cc: cc || undefined, replyTo: replyTo || undefined, subject: subject || 'Zpráva', text: body ? body + (link ? `\n\n${link}` : '') : '', html: renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }), attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined });
+    console.log(`[Email] odesláno přes SMTP bránu (${cfg.host}) → ${to} (from ${fa.address})`); return { sent: true, via: 'smtp-gateway', from: fa.address, messageId: info.messageId };
+  } catch (e) { return { sent: false, error: e.message }; }
+}
+async function testGateway(cfg, to) { try { const tx = gatewayTransport(cfg); await tx.verify(); } catch (e) { return { ok: false, error: 'Připojení k SMTP selhalo: ' + e.message }; } const r = await sendViaGateway(cfg, { to, subject: 'Test e-mailové brány – HolyOS Centrum reklamy', body: 'Testovací e-mail z brány ' + cfg.host + '. Odesílatel: ' + cfg.from + '.', brand: 'bestseries2' }); return r.sent ? { ok: true, messageId: r.messageId } : { ok: false, error: r.error }; }
+
 function escapeHtml(s) {
   return String(s == null ? '' : s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
@@ -306,6 +321,9 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
     return { sent: false, skipped: 'customer-emails-paused', error: 'E-maily zákazníkům jsou pozastaveny (přepínač v Prodejních objednávkách)' };
   }
 
+  // 0) SMTP brána z Centra reklamy (Brevo / Amazon SES / M365 SMTP) – pokud je `from` její adresa (nebo from chybí a brána je výchozí)
+  try { const gw = await getGateway(); if (gw && gw.host && gw.from && (!from || sameAddr(from, gw.from) || (gw.default_for_all && !from))) { const r = await sendViaGateway(gw, { to, cc, subject, body, link, linkLabel, preheader, attachments, brand, replyTo, trackingPixel, flyerUrl, rawHtml, fromName }); if (r.sent) return r; console.error('[Email] SMTP brána selhala, zkouším další cestu:', r.error); } } catch (e) { console.error('[Email] SMTP brána:', e.message); }
+
   // 1) Microsoft Graph send-as (preferovaná cesta pokud je `from` zadán a Graph
   //    je nakonfigurovaný — tedy Azure App z Fáze 3 s Mail.Send permission)
   let graphError = null;
@@ -374,4 +392,4 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   }
 }
 
-module.exports = { sendMail, renderEmailHtml, isCustomerMailPaused, CUSTOMER_MAIL_PAUSE_KEY };
+module.exports = { sendMail, renderEmailHtml, isCustomerMailPaused, CUSTOMER_MAIL_PAUSE_KEY, getGateway, testGateway, GATEWAY_KEY };
