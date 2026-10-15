@@ -527,6 +527,15 @@ router.put('/invoices/:id', async (req, res, next) => {
     } else {
       invoice = await prisma.invoice.update({ where: { id }, data: updateData });
     }
+    // Změna čísla dokladu → přepiš starý odkaz i v ostatních dokladech (např. „Odpočet zálohy ZA-…“ na konečné faktuře)
+    if (updateData.invoice_number && updateData.invoice_number !== before.invoice_number && String(before.invoice_number).length >= 6) {
+      const oldNo = before.invoice_number, newNo = updateData.invoice_number, like = '%' + oldNo + '%';
+      try {
+        await prisma.$executeRaw`UPDATE invoice_items SET description = REPLACE(description, ${oldNo}, ${newNo}) WHERE description LIKE ${like}`;
+        await prisma.$executeRaw`UPDATE invoice_items SET note = REPLACE(note, ${oldNo}, ${newNo}) WHERE note LIKE ${like}`;
+        await prisma.$executeRaw`UPDATE invoices SET note = REPLACE(note, ${oldNo}, ${newNo}) WHERE id <> ${id} AND note LIKE ${like}`;
+      } catch (e) { console.warn('[invoice] přepis odkazů na číslo dokladu selhal:', e.message); }
+    }
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: `Upravena faktura ${invoice.invoice_number}`,
