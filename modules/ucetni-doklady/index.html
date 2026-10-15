@@ -212,6 +212,10 @@
     <div class="main-header">
       <h1>💲 Účetní doklady</h1>
       <p>Faktury přijaté i vydané, schvalování, 3-way match s objednávkou a příjemkou, platby</p>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-secondary" style="text-decoration:none;display:inline-block;" href="/modules/nakup-sklad/index.html#companies" target="_blank" rel="noopener" title="Adresář společností (Nákup a sklad)">🏢 Společnosti</a>
+        <a class="btn btn-primary" style="text-decoration:none;display:inline-block;" href="/modules/nakup-sklad/index.html#company-new" target="_blank" rel="noopener" title="Rovnou otevře formulář nové společnosti">＋ Nová společnost</a>
+      </div>
     </div>
 
     <div class="main-content">
@@ -1605,7 +1609,7 @@
                 '<option value="proforma_received">Záloha přijatá</option>' +
                 '<option value="proforma_issued">Záloha vydaná</option>' +
               '</select></div>' +
-              '<div class="modal-row" style="grid-column: span 2;"><label>Firma</label><select id="c-company" onchange="onCreateCompanyChange()">' + companyOpts + '</select></div>' +
+              '<div class="modal-row" style="grid-column: span 2;"><label>Firma <a href="/modules/nakup-sklad/index.html#company-new" target="_blank" rel="noopener" style="font-size:.85em;margin-left:8px;color:var(--primary,#8c97ff);">＋ nová společnost</a></label><select id="c-company" onchange="onCreateCompanyChange()">' + companyOpts + '</select></div>' +
             '</div>' +
             '<div class="modal-grid3">' +
               '<div class="modal-row"><label>Jazyk dokladu</label><select id="c-language"><option value="cs">Česky</option><option value="en">English</option></select></div>' +

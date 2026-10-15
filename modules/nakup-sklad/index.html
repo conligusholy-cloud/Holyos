@@ -2855,6 +2855,16 @@
       }
     })();
 
+    // Deep link — #companies (záložka Společnosti) / #company-new (rovnou formulář nové společnosti)
+    (function handleCompanyDeepLink() {
+      var h = window.location.hash || '';
+      if (h !== '#companies' && h !== '#company-new') return;
+      setTimeout(function () {
+        if (typeof switchTab === 'function') switchTab('companies');
+        if (h === '#company-new') setTimeout(function () { if (typeof openCompanyModal === 'function') openCompanyModal(); }, 350);
+      }, 200);
+    })();
+
     // Deep link — ?material=<id> (z protokolu CAD importu) → otevři kartu zboží.
     (function handleMaterialDeepLink() {
       try {
