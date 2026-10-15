@@ -1,30 +1,36 @@
 // =============================================================================
-// HomeHub — „Moderní HOME" Velína: rozcestník pod-aplikací (dlaždice)
+// HomeHub — „Moderní HOME" Velína: plocha s ikonami pod-aplikací (styl Best Series 2.0)
 // =============================================================================
-// Prázdná domovská plocha, na kterou se postupně přidávají jednotlivé sekce Velína
-// jako aplikace (dlaždice). Novou aplikaci přidáš do pole APPS níže:
-//   { key, title, subtitle, icon, color, screen, params? }  → screen = název obrazovky ve Stacku.
+// Domovská plocha jako na telefonu: malé ikony aplikací v mřížce (4 v řadě) s popiskem.
+// Vizuál = Best Series 2.0 (tmavé pozadí #04060c, azurová #4fd1ff, modrá #1e86e0, fialová #7c5cff).
+// Novou aplikaci přidáš do pole APPS: { key, title, icon, tint, screen, params? }.
 
 import React, { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { loadAuth } from '../lib/auth';
 import { api } from '../lib/api';
-import { colors, spacing } from '../lib/theme';
 
-type HubApp = {
-  key: string;
-  title: string;
-  subtitle: string;
-  icon: string;
-  color: string; // barva dlaždice (pozadí ikony + jemný nádech karty)
-  screen: string;
-  params?: any;
+// Paleta Best Series 2.0 (shodná s webem bestseries2.cz)
+const BS = {
+  bg: '#04060c',
+  card: 'rgba(14,22,40,0.72)',
+  border: 'rgba(120,160,255,0.14)',
+  border2: 'rgba(120,160,255,0.28)',
+  text: '#eaf2ff',
+  text2: '#8ea2c2',
+  text3: '#58698a',
+  accent: '#1e86e0',
+  accent2: '#4fd1ff',
+  vio: '#7c5cff',
+  err: '#ff5d6c',
 };
 
-// ── Seznam aplikací na HOME (pořadí = pořadí na ploše) ──
+type HubApp = { key: string; title: string; icon: string; tint: string; screen: string; params?: any };
+
+// ── Aplikace na ploše (pořadí = pořadí v mřížce) ──
 const APPS: HubApp[] = [
-  { key: 'assistant', title: 'Vzkazy z hovorů', subtitle: 'AI asistent · nahrávky a přepisy', icon: '📞', color: '#6366f1', screen: 'AssistantSettings' },
+  { key: 'assistant', title: 'Vzkazy', icon: '📞', tint: BS.accent, screen: 'AssistantSettings' },
 ];
 
 function greeting(): string {
@@ -43,7 +49,7 @@ export default function HomeHub() {
       const auth = await loadAuth();
       setName(String((auth as any).displayName || '').split(' ')[0] || '');
       if (!auth.jwt) return;
-      // Odznak u „Vzkazy z hovorů" = počet vzkazů za posledních 24 h
+      // Odznak u „Vzkazy" = počet vzkazů za posledních 24 h
       try {
         const r = await api.myAssistantCalls(auth.jwt);
         const since = Date.now() - 24 * 3600 * 1000;
@@ -54,55 +60,57 @@ export default function HomeHub() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
-
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}>
-      <Text style={styles.hello}>{greeting()}{name ? ', ' + name : ''}</Text>
-      <Text style={styles.sub}>Tvoje aplikace ve Velínu</Text>
+    <View style={styles.root}>
 
-      <View style={styles.grid}>
-        {APPS.map((a) => {
-          const n = badges[a.key] || 0;
-          return (
-            <TouchableOpacity
-              key={a.key}
-              activeOpacity={0.85}
-              style={[styles.tile, { borderColor: a.color + '66', backgroundColor: a.color + '1f' }]}
-              onPress={() => navigation.navigate(a.screen, a.params)}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: a.color }]}>
-                <Text style={styles.icon}>{a.icon}</Text>
-              </View>
-              {n > 0 ? (
-                <View style={styles.badge}><Text style={styles.badgeTxt}>{n > 99 ? '99+' : n}</Text></View>
-              ) : null}
-              <Text style={styles.tileTitle} numberOfLines={2}>{a.title}</Text>
-              <Text style={styles.tileSub} numberOfLines={2}>{a.subtitle}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BS.accent2} />}>
+        <View style={styles.brandRow}>
+          <Text style={styles.brand}>BEST SERIES <Text style={styles.brandV}>2.0</Text></Text>
+          <View style={styles.tag}><Text style={styles.tagTxt}>VELÍN</Text></View>
+        </View>
+        <Text style={styles.hello}>{greeting()}{name ? ', ' : ''}<Text style={styles.helloName}>{name}</Text></Text>
+        <View style={styles.line} />
 
-    </ScrollView>
+        <View style={styles.grid}>
+          {APPS.map((a) => {
+            const n = badges[a.key] || 0;
+            return (
+              <TouchableOpacity key={a.key} activeOpacity={0.75} style={styles.app} onPress={() => navigation.navigate(a.screen, a.params)}>
+                <View style={[styles.icon, { backgroundColor: a.tint + '33', borderColor: a.tint + '88', shadowColor: a.tint }]}>
+                  <Text style={styles.iconTxt}>{a.icon}</Text>
+                  {n > 0 ? <View style={styles.badge}><Text style={styles.badgeTxt}>{n > 99 ? '99+' : n}</Text></View> : null}
+                </View>
+                <Text style={styles.label} numberOfLines={1}>{a.title}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: spacing.lg, paddingTop: spacing.xl, paddingBottom: 60 },
-  hello: { color: colors.text, fontSize: 28, fontWeight: '800', letterSpacing: -0.3 },
-  sub: { color: colors.text2, fontSize: 14, marginTop: 4, marginBottom: spacing.xl },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 14 },
-  tile: {
-    width: '48%', minHeight: 150, borderRadius: 22, borderWidth: 1, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4,
+  root: { flex: 1, backgroundColor: BS.bg, overflow: 'hidden' },
+  scroll: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 60 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brand: { color: BS.text, fontSize: 15, fontWeight: '900', letterSpacing: 1.2 },
+  brandV: { color: BS.accent2 },
+  tag: { borderWidth: 1, borderColor: BS.border2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3, backgroundColor: 'rgba(255,255,255,0.02)' },
+  tagTxt: { color: BS.text2, fontSize: 10, fontWeight: '700', letterSpacing: 1.6 },
+  hello: { color: BS.text, fontSize: 22, fontWeight: '800', marginTop: 14, letterSpacing: -0.3 },
+  helloName: { color: BS.accent2 },
+  line: { height: 2, width: 56, borderRadius: 1, backgroundColor: BS.accent2, marginTop: 10, marginBottom: 26, opacity: 0.8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  app: { width: '25%', alignItems: 'center', marginBottom: 22 },
+  icon: {
+    width: 60, height: 60, borderRadius: 18, borderWidth: 1, alignItems: 'center', justifyContent: 'center',
+    shadowOpacity: 0.55, shadowRadius: 12, shadowOffset: { width: 0, height: 0 }, elevation: 6,
   },
-  iconWrap: { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
-  icon: { fontSize: 26 },
-  badge: { position: 'absolute', top: 12, right: 12, minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
-  badgeTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  tileTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  tileSub: { color: colors.text2, fontSize: 12, marginTop: 4, lineHeight: 16 },
+  iconTxt: { fontSize: 27 },
+  badge: { position: 'absolute', top: -6, right: -6, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: BS.err, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BS.bg },
+  badgeTxt: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  label: { color: BS.text, fontSize: 12, fontWeight: '600', marginTop: 7 },
 });
