@@ -49,9 +49,10 @@
   }
 
   // ─── Modal helpers ────────────────────────────────────────────────────
-  function openModal(html) {
-    const root = $('#modal-root');
-    root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)this.remove()"><div class="modal">${html}</div></div>`;
+  function openModal(html, opts) {
+    const root = $('#modal-root'); const o = opts || {};
+    // o.wide = širší okno; o.xOnly = zavírá se jen křížkem / tlačítkem (ne klikem mimo)
+    root.innerHTML = `<div class="modal-overlay"${o.xOnly ? '' : ' onclick="if(event.target===this)this.remove()"'}><div class="modal"${o.wide ? ' style="width:' + (o.wide === true ? 1180 : o.wide) + 'px;max-width:96vw;max-height:94vh;padding:0;position:relative"' : ''}>${html}</div></div>`;
   }
   function closeModal() { $('#modal-root').innerHTML = ''; }
   window.__velinCloseModal = closeModal;
@@ -415,7 +416,7 @@
       + sec('👋 Závěr a další pokyny',
         '<div class="form-group"><label>Rozloučení</label>' + inp('pa-closing', p.closing, 'Děkuji, všechno předám. Na shledanou.') + '</div>'
         + '<div class="form-group"><label>Další vlastní pokyny (nepovinné)</label><textarea id="pa-custom" rows="3" placeholder="Např. Když volá banka nebo účetní, poznač to jako prioritu.">' + escapeHtml(p.custom || '') + '</textarea></div>'
-        + '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-sm btn-secondary" id="pa-gen-greet">✨ Vygenerovat uvítání z profilu</button><button type="button" class="btn btn-sm btn-secondary" id="pa-preview">👁 Náhled instrukcí pro AI</button></div><pre id="pa-preview-box" style="display:none;white-space:pre-wrap;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px;max-height:260px;overflow:auto"></pre>');
+        + '<button type="button" class="btn btn-sm btn-secondary" id="pa-preview">👁 Náhled instrukcí pro AI</button><pre id="pa-preview-box" style="display:none;white-space:pre-wrap;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:8px;max-height:260px;overflow:auto"></pre>');
   }
   function paReadProfile() {
     const v = (id) => (document.getElementById(id) || {}).value || '';
@@ -436,64 +437,46 @@
     try { const r = await apiGet('/admin/personal-assistant/' + personId); cfg = r.config || {}; } catch (_) {}
     const prof = cfg.profile || {}; if (!cfg.profile_saved && cfg.inbound_prompt) prof.custom = cfg.inbound_prompt;
     const g = (cfg.inbound_greeting) || 'Dobrý den, dovolali jste se na osobního asistenta. Kolega teď nemůže hovor přijmout. Řekněte mi prosím, kdo volá a co potřebujete — předám mu to.';
+    const card = (t, inner) => `<div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px"><div style="font-weight:700;margin-bottom:8px">${t}</div>${inner}</div>`;
     openModal(`
-      <h2>⚙️ Doplňkové služby — ${escapeHtml(name)}</h2>
-      <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:8px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-          <span style="font-size:20px">📞</span>
-          <div><div style="font-weight:700">Osobní asistent na zmeškané hovory</div>
-          <div style="color:var(--text2);font-size:12px">Přesměruj nezvednuté/odmítnuté hovory na Twilio číslo asistenta. AI zvedne, řekne tvůj text, zjistí kdo volá a co potřebuje, a zapíše ti to.</div></div>
-        </div>
-        <label class="pa-chk" style="display:flex;align-items:center;gap:8px;margin:12px 0 4px;font-size:14px">
-          <input type="checkbox" id="pa-enabled" ${cfg.enabled ? 'checked' : ''}> <b>Služba zapnutá</b>
-        </label>
-        <div class="form-group full" style="margin-top:8px">
-          <label>Twilio číslo asistenta (koupené v Twilio)</label>
-          <input id="pa-number" value="${escapeHtml(cfg.number || '')}" placeholder="+420…">
-        </div>
-        <div class="form-group full">
-          <label>Hlas asistenta</label>
-          <select id="pa-voice">
-            <option value="female"${cfg.tts_voice !== 'male' ? ' selected' : ''}>👩 Ženský hlas (asistentka)</option>
-            <option value="male"${cfg.tts_voice === 'male' ? ' selected' : ''}>👨 Mužský hlas (asistent)</option>
-          </select>
-        </div>
-        <div class="form-group full">
-          <label>Co AI řekne na začátku (uvítání)</label>
-          <textarea id="pa-greeting" rows="3">${escapeHtml(g)}</textarea>
-        </div>
-        ${paProfileHtml(prof)}
-        <label class="pa-chk" style="display:flex;align-items:center;gap:8px;margin:6px 0;font-size:14px">
-          <input type="checkbox" id="pa-transfer-enabled" ${cfg.transfer_enabled ? 'checked' : ''}> Nejdřív zkusit přepojit na mé číslo
-        </label>
-        <div class="form-group full">
-          <label>Číslo pro přepojení (tvůj telefon)</label>
-          <input id="pa-transfer-number" value="${escapeHtml(cfg.transfer_number || '')}" placeholder="+420…">
-        </div>
+      <div style="position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--border);padding:16px 22px;display:flex;align-items:center;gap:12px">
+        <h2 style="margin:0;font-size:18px;flex:1">⚙️ Doplňkové služby — ${escapeHtml(name)} <span style="font-weight:400;color:var(--text2);font-size:13px">· 📞 Osobní asistent na zmeškané hovory</span></h2>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;padding:6px 12px;border-radius:999px;border:1px solid ${cfg.enabled ? 'rgba(34,197,94,.6)' : 'var(--border)'};background:${cfg.enabled ? 'rgba(34,197,94,.12)' : 'transparent'}"><input type="checkbox" id="pa-enabled" ${cfg.enabled ? 'checked' : ''}> <b>Služba zapnutá</b></label>
+        <button type="button" onclick="__velinCloseModal()" title="Zavřít" style="background:var(--bg);border:1px solid var(--border);color:inherit;border-radius:8px;width:36px;height:36px;font-size:18px;cursor:pointer">✕</button>
       </div>
-      <div style="border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
-        <div style="font-weight:700;margin-bottom:4px">📲 Přesměrování hovorů na asistenta</div>
-        <div style="color:var(--text2);font-size:12px;margin-bottom:10px">Zadej tyhle kódy na svém <b>telefonu</b> (napiš do vytáčení a stiskni volat). Asistent pak bere hovory, které nestihneš vzít. ${cfg.number ? '' : '<b style="color:#f2d675">Nejdřív ulož Twilio číslo výše.</b>'}</div>
-        ${cfg.number ? [
-          ['Když nezvednu', '**61*' + cfg.number + '#'],
-          ['Když mám obsazeno', '**67*' + cfg.number + '#'],
-          ['Když jsem nedostupný', '**62*' + cfg.number + '#'],
-          ['Zrušit přesměrování', '##002#'],
-        ].map((r) => `<div style="display:flex;align-items:center;gap:10px;margin:6px 0;flex-wrap:wrap">
-            <span style="font-size:12.5px;color:var(--text2);min-width:150px">${r[0]}</span>
-            <code style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px">${escapeHtml(r[1])}</code>
-            <button class="btn btn-sm btn-secondary" onclick="__paCopy('${r[1].replace(/'/g, '')}', this)">Kopírovat</button>
-          </div>`).join('') : ''}
-        <div style="color:var(--text2);font-size:11.5px;margin-top:8px">Pozor: nastav jen podmíněné přesměrování (nezvednuto/obsazeno/nedostupný), NE „přesměrovat vše" — jinak by ti telefon nikdy nezvonil.</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;padding:16px 22px">
+        <div>
+          ${card('📞 Linka a hlas', `
+            <div style="color:var(--text2);font-size:12px;margin-bottom:10px">Nezvednuté hovory se přesměrují na Twilio číslo asistenta. AI zvedne, řekne uvítání, zjistí co je potřeba a zapíše to.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="form-group"><label>Twilio číslo asistenta</label><input id="pa-number" value="${escapeHtml(cfg.number || '')}" placeholder="+420…"></div>
+              <div class="form-group"><label>Hlas</label><select id="pa-voice"><option value="female"${cfg.tts_voice !== 'male' ? ' selected' : ''}>👩 Ženský (asistentka)</option><option value="male"${cfg.tts_voice === 'male' ? ' selected' : ''}>👨 Mužský (asistent)</option></select></div>
+            </div>`)}
+          ${card('💬 Uvítání', `
+            <textarea id="pa-greeting" rows="4" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;resize:vertical">${escapeHtml(g)}</textarea>
+            <button type="button" class="btn btn-sm btn-secondary" id="pa-gen-greet" style="margin-top:6px">✨ Vygenerovat z profilu</button>`)}
+          ${card('🔀 Přepojení', `
+            <label style="display:flex;align-items:center;gap:8px;font-size:13.5px;margin-bottom:6px"><input type="checkbox" id="pa-transfer-enabled" ${cfg.transfer_enabled ? 'checked' : ''}> Nejdřív zkusit přepojit na číslo</label>
+            <div class="form-group"><input id="pa-transfer-number" value="${escapeHtml(cfg.transfer_number || '')}" placeholder="+420… (jiné než číslo s přesměrováním, jinak smyčka)"></div>`)}
+          ${card('📲 Přesměrování v telefonu', `
+            <div style="color:var(--text2);font-size:12px;margin-bottom:8px">Zadej kód na telefonu majitele (vytočit + volat). ${cfg.number ? '' : '<b style="color:#f2d675">Nejdřív ulož Twilio číslo.</b>'}</div>
+            ${cfg.number ? [
+              ['Když nezvednu', '**61*' + cfg.number + '#'],
+              ['Když mám obsazeno', '**67*' + cfg.number + '#'],
+              ['Když jsem nedostupný', '**62*' + cfg.number + '#'],
+              ['Zrušit přesměrování', '##002#'],
+            ].map((r) => `<div style="display:flex;align-items:center;gap:8px;margin:5px 0;flex-wrap:wrap"><span style="font-size:12.5px;color:var(--text2);min-width:130px">${r[0]}</span><code style="font-size:13px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 8px">${escapeHtml(r[1])}</code><button class="btn btn-sm btn-secondary" onclick="__paCopy('${r[1].replace(/'/g, '')}', this)">Kopírovat</button></div>`).join('') : ''}
+            <div style="color:var(--text2);font-size:11.5px;margin-top:6px">Jen podmíněné přesměrování — ne „přesměrovat vše".</div>`)}
+        </div>
+        <div style="border:1px solid var(--border);border-radius:12px;padding:4px 16px 14px">${paProfileHtml(prof)}</div>
       </div>
-      <div id="pa-msg" style="min-height:18px;font-size:13px;margin-top:8px"></div>
-      <div class="modal-actions">
+      <div style="padding:0 22px 8px"><h3 style="margin:4px 0 8px;font-size:15px">📋 Poslední hovory asistenta</h3><div id="pa-calls"><div class="empty-state">Načítám…</div></div></div>
+      <div style="position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:12px 22px;display:flex;align-items:center;gap:10px">
+        <div id="pa-msg" style="flex:1;font-size:13px"></div>
         <button class="btn btn-secondary" onclick="__velinCloseModal()">Zavřít</button>
         <button class="btn btn-primary" id="pa-save">Uložit</button>
       </div>
-      <h3 style="margin:20px 0 8px;font-size:15px">📋 Poslední hovory asistenta</h3>
-      <div id="pa-calls"><div class="empty-state">Načítám…</div></div>
-    `);
+    `, { wide: 1180, xOnly: true });
     document.getElementById('pa-gen-greet').addEventListener('click', () => { const t = document.getElementById('pa-greeting'); const ng = paGreeting(paReadProfile()); if (t.value.trim() && !confirm('Přepsat uvítání textem z profilu?\n\n' + ng)) return; t.value = ng; });
     document.getElementById('pa-preview').addEventListener('click', async () => { const box = document.getElementById('pa-preview-box'); box.style.display = ''; box.textContent = 'Načítám…'; try { const r = await apiSend('POST', '/admin/personal-assistant/' + personId + '/preview', { profile: paReadProfile() }); box.textContent = r.prompt || ''; } catch (e) { box.textContent = 'Chyba: ' + e.message; } });
     document.getElementById('pa-save').addEventListener('click', async () => {
