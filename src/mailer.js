@@ -16,12 +16,45 @@ function smtpConf() {
   };
 }
 
+// Režim API (HTTPS 443): Railway Hobby blokuje odchozí SMTP porty → s klíči SES_ACCESS_KEY_ID + SES_SECRET_ACCESS_KEY jde odeslání přes SES API (SendRawEmail)
+function apiConf() {
+  const env = process.env;
+  const m = String(env.SMTP_HOST || '').match(/email-smtp\.([a-z0-9-]+)\.amazonaws/);
+  return { id: env.SES_ACCESS_KEY_ID || '', secret: env.SES_SECRET_ACCESS_KEY || '', region: env.SES_REGION || (m && m[1]) || 'eu-central-1' };
+}
+function useApi() { const a = apiConf(); return !!(a.id && a.secret); }
+function mode() { return useApi() ? 'api' : 'smtp'; }
+
 function isConfigured() {
+  if (useApi()) return true;
   const s = smtpConf();
   return !!(s.host && s.user && s.pass);
 }
 
 function configSet() { return process.env.SES_CONFIGURATION_SET || ''; }
+
+// Podepsané volání SES Query API (SigV4, bez AWS SDK)
+async function sesCall(params) {
+  const crypto = require('crypto');
+  const a = apiConf();
+  const host = 'email.' + a.region + '.amazonaws.com';
+  const body = new URLSearchParams(Object.assign({ Version: '2010-12-01' }, params)).toString();
+  const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
+  const day = amzDate.slice(0, 8);
+  const hash = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
+  const hmac = (k, s) => crypto.createHmac('sha256', k).update(s, 'utf8').digest();
+  const ct = 'application/x-www-form-urlencoded; charset=utf-8';
+  const canon = ['POST', '/', '', 'content-type:' + ct, 'host:' + host, 'x-amz-date:' + amzDate, '', 'content-type;host;x-amz-date', hash(body)].join('\n');
+  const scope = day + '/' + a.region + '/ses/aws4_request';
+  const sts = ['AWS4-HMAC-SHA256', amzDate, scope, hash(canon)].join('\n');
+  const kSign = hmac(hmac(hmac(hmac('AWS4' + a.secret, day), a.region), 'ses'), 'aws4_request');
+  const sig = crypto.createHmac('sha256', kSign).update(sts, 'utf8').digest('hex');
+  const r = await fetch('https://' + host + '/', { method: 'POST', body, signal: AbortSignal.timeout(20000), headers: { 'Content-Type': ct, 'X-Amz-Date': amzDate, Authorization: 'AWS4-HMAC-SHA256 Credential=' + a.id + '/' + scope + ', SignedHeaders=content-type;host;x-amz-date, Signature=' + sig } });
+  const text = await r.text();
+  const code = (text.match(/<Code>([^<]+)<\/Code>/) || [])[1] || '';
+  const msg = (text.match(/<Message>([^<]+)<\/Message>/) || [])[1] || '';
+  return { ok: r.ok, status: r.status, text, code, error: r.ok ? '' : ((code ? code + ': ' : '') + (msg || ('HTTP ' + r.status))) };
+}
 
 function getTransport() {
   const s = smtpConf();
@@ -32,13 +65,23 @@ function getTransport() {
     requireTLS: !s.secure,
     auth: s.user ? { user: s.user, pass: s.pass } : undefined,
     tls: { minVersion: 'TLSv1.2' },
+    connectionTimeout: 15000, greetingTimeout: 10000, socketTimeout: 30000,   // ať to nevisí minuty
   });
 }
 
 async function verify() {
-  if (!isConfigured()) return { ok: false, error: 'SMTP není nastaveno' };
-  try { await getTransport().verify(); return { ok: true }; }
-  catch (e) { return { ok: false, error: e.message }; }
+  if (!isConfigured()) return { ok: false, error: 'SES není nastaveno' };
+  if (useApi()) {
+    try {
+      const r = await sesCall({ Action: 'GetSendQuota' });
+      if (r.ok) { const max = (r.text.match(/<Max24HourSend>([^<]+)</) || [])[1]; return { ok: true, mode: 'api', max24h: max ? Number(max) : null }; }
+      // Skupina AWSSESSendingGroupDoNotRename smí jen odesílat → AccessDenied znamená, že klíč i podpis jsou platné
+      if (/AccessDenied/i.test(r.code)) return { ok: true, mode: 'api', note: 'klíč platný (oprávnění jen k odesílání)' };
+      return { ok: false, mode: 'api', error: r.error };
+    } catch (e) { return { ok: false, mode: 'api', error: e.message }; }
+  }
+  try { await getTransport().verify(); return { ok: true, mode: 'smtp' }; }
+  catch (e) { return { ok: false, mode: 'smtp', error: e.message + (/timeout|ETIMEDOUT|Greeting/i.test(e.message) ? ' – server se k SMTP nepřipojí (Railway Hobby blokuje SMTP porty → použij SES_ACCESS_KEY_ID + SES_SECRET_ACCESS_KEY)' : '') }; }
 }
 
 // Prostý text / markdown → čisté HTML (preheader skryje sledovací pixel, inline CID obrázky).
@@ -88,10 +131,21 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
     const cfgSet = configSet();
     const mailOpts = { from: from || s.from, to, subject, html: htmlBody, attachments, replyTo: replyTo || undefined };
     if (cfgSet) mailOpts.headers = { 'X-SES-CONFIGURATION-SET': cfgSet };   // DŮLEŽITÉ pro tracking
+    if (useApi()) {
+      const MailComposer = require('nodemailer/lib/mail-composer');
+      const node = new MailComposer(mailOpts).compile();
+      const raw = await node.build();
+      const params = { Action: 'SendRawEmail', 'RawMessage.Data': raw.toString('base64') };
+      if (cfgSet) params.ConfigurationSetName = cfgSet;
+      const r = await sesCall(params);
+      if (!r.ok) return { ok: false, error: r.error };
+      const sesId = (r.text.match(/<MessageId>([^<]+)<\/MessageId>/) || [])[1] || '';
+      return { ok: true, simulated: false, messageId: node.messageId() || '', sesMessageId: sesId };
+    }
     const info = await transport.sendMail(mailOpts);
     const sesId = (info && info.response && (String(info.response).match(/\bOk\s+([0-9a-fA-F-]{10,})/) || [])[1]) || '';
     return { ok: true, simulated: false, messageId: (info && info.messageId) || '', sesMessageId: sesId };
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
-module.exports = { sendEmail, isConfigured, verify, textToHtml, smtpConf, configSet };
+module.exports = { sendEmail, isConfigured, verify, textToHtml, smtpConf, configSet, mode, apiConf };
