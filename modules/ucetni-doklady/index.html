@@ -282,6 +282,7 @@
         <div style="display:flex; gap:8px;">
           <button class="btn btn-secondary" id="btn-fetch-mails" onclick="fetchEmailsNow()" title="Stáhne nové faktury z IMAP schránky a spustí OCR">📧 Zkontrolovat maily</button>
           <button class="btn btn-secondary" onclick="openIngestList()" title="Přehled přijatých e-mailů a jejich OCR stav">📥 Příchozí e-maily</button>
+          <button class="btn btn-secondary" id="btn-ingest-stats" onclick="openIngestStats()" title="Jednodenní statistika příjmu faktur e-mailem, log problémů a AI návrh nastavení">📊 Dnes: …</button>
           <button class="btn btn-primary" onclick="openCreateModal('received')">+ Přijatá</button>
           <button class="btn btn-primary" onclick="openCreateModal('issued')">+ Vydaná</button>
         </div>
@@ -879,10 +880,54 @@
       }
     };
 
+    // ── Bankovní účty v detailu faktury: co je napsané na dokladu (OCR) + co u firmy známe ──
+    const accNorm = (s) => String(s || '').replace(/\s+/g, '').replace(/^0+(?=\d)/, '').toUpperCase();
+    function invOcrAccount(inv) {
+      const ex = (inv.ocr_extractions || []).slice().reverse();
+      for (const e of ex) { const d = e.extracted_data || {}; const h = d.header || d;
+        const acc = h.partner_bank_account || d.partner_bank_account, iban = h.partner_iban || d.partner_iban;
+        if (acc || iban) return { account: acc || null, iban: iban || null, pass: e.pass_type, at: e.executed_at }; }
+      return null;
+    }
+    function invBankDocHtml(inv) {
+      const o = invOcrAccount(inv);
+      if (!o) return '<b>📄 Účet na dokladu:</b> ' + (inv.ocr_extractions && inv.ocr_extractions.length ? '<span style="color:var(--text2);">OCR na dokladu žádné číslo účtu nenašlo.</span>' : '<span style="color:var(--text2);">' + (inv.direction === 'ap' ? 'Doklad nebyl čten OCR (zadán ručně).' : 'Vydaná faktura – účet je náš (viz výše).') + '</span>');
+      const same = accNorm(o.account) === accNorm(inv.partner_bank_account) || (o.iban && accNorm(o.iban) === accNorm(inv.partner_iban));
+      return '<b>📄 Účet přečtený z dokladu:</b> <span class="inline-code" style="font-size:1em;">' + escapeHtml(o.account || '—') + '</span>' + (o.iban ? ' · IBAN <span class="inline-code">' + escapeHtml(o.iban) + '</span>' : '') +
+        ((inv.partner_bank_account || inv.partner_iban)
+          ? (same ? ' <span style="color:#10b981;">✓ shodný s účtem na faktuře</span>' : ' <span style="color:#ef4444;font-weight:700;">⚠ liší se od účtu na faktuře (' + escapeHtml(inv.partner_bank_account || inv.partner_iban) + ')</span>')
+          : ' <span style="color:#f59e0b;">– na faktuře účet vyplněný není</span>');
+    }
+    async function loadInvoiceKnownAccounts(inv) {
+      if (!inv.company_id) return; let box = document.getElementById('dv-bank-known-list');
+      for (let i = 0; !box && i < 20; i++) { await new Promise((r) => setTimeout(r, 100)); box = document.getElementById('dv-bank-known-list'); }
+      if (!box) return;
+      const r = await api('GET', '/api/wh/companies/' + inv.company_id + '/bank-accounts');
+      if (r.status !== 200 || !r.data) { box.textContent = 'Účty firmy se nepodařilo načíst.'; return; }
+      const d = r.data, cur = [accNorm(inv.partner_bank_account), accNorm(inv.partner_iban)].filter(Boolean);
+      const o = invOcrAccount(inv); const docAcc = o ? [accNorm(o.account), accNorm(o.iban)].filter(Boolean) : [];
+      const map = new Map();
+      const add = (acc, iban, tag) => { const k = accNorm(acc || iban); if (!k) return; const e = map.get(k) || { acc, iban, tags: [], count: 0, last: null }; if (!e.tags.includes(tag)) e.tags.push(tag); if (iban && !e.iban) e.iban = iban; map.set(k, e); return e; };
+      if (d.bank_account) add(d.bank_account, null, 'hlavní');
+      (d.verified || []).forEach((v) => add(v.account, v.iban, 'ověřený'));
+      (d.from_invoices || []).forEach((x) => { const e = add(x.account, x.iban, 'z faktur'); if (e) { e.count = x.count; e.last = x.last_invoice; } });
+      if (!map.size) { box.innerHTML = '<b style="color:var(--text);">🏦 Známé účty firmy:</b> žádné – firma zatím nemá hlavní ani ověřený účet a nepřišla od ní faktura s účtem.'; return; }
+      const tagStyle = { 'ověřený': 'background:#10b98122;color:#10b981;', 'hlavní': 'background:#6366f122;color:#818cf8;', 'z faktur': 'background:#f59e0b22;color:#f59e0b;' };
+      box.innerHTML = '<b style="color:var(--text);">🏦 Známé účty firmy ' + escapeHtml(inv.company?.name || '') + ' (' + map.size + '):</b>' +
+        '<table class="items-table" style="width:100%;margin-top:4px;font-size:0.95em;"><tbody>' + [...map.entries()].map(([k, e]) => {
+          const onInv = cur.includes(k) || (e.iban && cur.includes(accNorm(e.iban))), onDoc = docAcc.includes(k) || (e.iban && docAcc.includes(accNorm(e.iban)));
+          return '<tr' + (onInv || onDoc ? ' style="background:#60a5fa14;"' : '') + '><td><span class="inline-code" style="font-size:1em;">' + escapeHtml(e.acc || '—') + '</span>' + (e.iban ? ' <span style="color:var(--text2);">' + escapeHtml(e.iban) + '</span>' : '') + '</td>' +
+            '<td>' + e.tags.map((t) => '<span style="' + (tagStyle[t] || '') + 'border-radius:4px;padding:1px 6px;margin-right:4px;font-size:0.85em;">' + t + '</span>').join('') + '</td>' +
+            '<td>' + (e.count ? e.count + '× na fakturách' + (e.last ? ' (posl. ' + escapeHtml(e.last) + ')' : '') : '') + '</td>' +
+            '<td style="white-space:nowrap;">' + (onDoc ? '📄 na dokladu ' : '') + (onInv ? '🧾 na faktuře' : '') + '</td></tr>';
+        }).join('') + '</tbody></table>';
+    }
+
     window.openDetail = async function(id) {
       const r = await api('GET', '/api/accounting/invoices/' + id);
       if (r.status !== 200) return alert('Nelze načíst fakturu');
       const inv = r.data;
+      setTimeout(() => loadInvoiceKnownAccounts(inv), 0);
 
       const itemsHtml = (inv.items || []).map(it => (
         '<tr>' +
@@ -994,9 +1039,14 @@
                   : fmtPayment(inv.payment_method, 'full')) +
               '</div></div>' +
               ((inv.partner_bank_account || inv.partner_iban || inv.direction === 'ap')
-                ? '<div><div class="dv-lbl">Bankovní účet protistrany</div><div>' + escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') + bankVer + '</div></div>'
+                ? (inv.direction === 'ap'
+                    ? '<div><div class="dv-lbl">Bankovní účet protistrany</div><div>' + escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') + bankVer + '</div></div>'
+                    // vydaná: na faktuře je NÁŠ účet → kontrola proti podvodu nedává smysl
+                    : '<div><div class="dv-lbl">Náš účet na faktuře</div><div>' + escapeHtml(inv.partner_bank_account || inv.partner_iban || '—') + '<div style="font-size:0.78em;color:var(--text2);margin-top:4px;">Vydaná faktura – zákazník platí na tento náš účet.</div></div></div>')
                 : '') +
             '</div>' +
+            // Účet přečtený z dokladu (OCR) + všechny účty, které u firmy známe
+            '<div id="dv-bank-known" class="dv-match" style="display:block;">' + invBankDocHtml(inv) + '<div id="dv-bank-known-list" style="margin-top:6px;font-size:0.88em;color:var(--text2);">' + (inv.company_id ? 'Načítám účty známé u firmy…' : 'Faktura nemá napojenou firmu.') + '</div></div>' +
 
             // 3-way match jen u přijatých faktur
             (inv.direction === 'ap'
@@ -1894,6 +1944,144 @@
         '</div>'
       );
     };
+
+    // ─── Statistika příjmu faktur e-mailem (den) + log problémů + AI návrh pravidel ───
+    const ING_BUCKET = {
+      ok: { l: 'Zpracováno', c: '#22c55e', i: '✅' }, duplicate: { l: 'Duplicita', c: '#60a5fa', i: '🔁' },
+      review: { l: 'K ověření', c: '#f59e0b', i: '👀' }, unreadable: { l: 'Nezpracováno', c: '#ef4444', i: '❌' },
+      ignored: { l: 'Ignorováno', c: '#94a3b8', i: '🚫' }, archived: { l: 'Archiv', c: '#94a3b8', i: '📚' }, pending: { l: 'Rozpracováno', c: '#a78bfa', i: '⏳' },
+    };
+    window.ingestStatsDate = null;
+    window.ingestStatsFilter = 'problem';
+    function ingDayStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+    async function refreshIngestStatsBtn() {
+      const b = document.getElementById('btn-ingest-stats'); if (!b) return;
+      const r = await api('GET', '/api/accounting/email/daily-stats');
+      if (r.status !== 200 || !r.data) { b.textContent = '📊 Statistika e-mailů'; return; }
+      const k = r.data.kpi, bad = k.unreadable + k.review;
+      b.innerHTML = '📊 Dnes: ' + k.emails + ' ✉ · ' + k.documents + ' 📄' + (bad ? ' · <span style="color:#ef4444;font-weight:700">' + bad + ' ⚠</span>' : '');
+    }
+
+    window.openIngestStats = async function(date) {
+      if (date !== undefined) window.ingestStatsDate = date;
+      const q = window.ingestStatsDate ? '?date=' + window.ingestStatsDate : '';
+      const [r, rr] = await Promise.all([api('GET', '/api/accounting/email/daily-stats' + q), api('GET', '/api/accounting/email/ingest-rules')]);
+      if (r.status !== 200) return alert('Chyba: ' + r.status);
+      const d = r.data, k = d.kpi, rules = (rr.data && rr.data.rules) || { ignore_senders: [], ignore_subject_keywords: [] };
+      window.ingestRules = rules;
+      const cur = new Date(d.date + 'T12:00:00'); const prev = new Date(cur); prev.setDate(cur.getDate() - 1); const nxt = new Date(cur); nxt.setDate(cur.getDate() + 1);
+      const isToday = d.date === ingDayStr(new Date());
+      const kpi = (v, l, c, sub) => '<div style="flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;"><div style="font-size:1.6em;font-weight:800;' + (c ? 'color:' + c : '') + '">' + v + '</div><div style="font-size:.78em;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;">' + l + '</div>' + (sub ? '<div style="font-size:.75em;color:var(--text2);">' + sub + '</div>' : '') + '</div>';
+      const maxT = Math.max(1, ...d.trend.map((t) => t.emails));
+      const trend = '<div style="display:flex;align-items:flex-end;gap:4px;height:70px;margin:6px 0 2px;">' + d.trend.map((t) => {
+        const h = Math.round(t.emails / maxT * 60), hp = t.emails ? Math.round(t.problem / t.emails * h) : 0;
+        return '<div title="' + t.date + ': ' + t.emails + ' e-mailů, ' + t.ok + ' ok, ' + t.problem + ' problém" onclick="openIngestStats(\'' + t.date + '\')" style="flex:1;cursor:pointer;display:flex;flex-direction:column;justify-content:flex-end;height:64px;' + (t.date === d.date ? 'outline:2px solid #60a5fa;outline-offset:1px;border-radius:3px;' : '') + '">' +
+          '<div style="height:' + hp + 'px;background:#ef4444;border-radius:3px 3px 0 0;"></div><div style="height:' + (h - hp) + 'px;background:#22c55e;' + (hp ? '' : 'border-radius:3px 3px 0 0;') + '"></div></div>';
+      }).join('') + '</div><div style="display:flex;justify-content:space-between;font-size:.72em;color:var(--text2);"><span>' + d.trend[0].date.slice(5) + '</span><span>14 dní · <span style="color:#22c55e">■</span> zpracováno <span style="color:#ef4444">■</span> problém</span><span>' + d.trend[d.trend.length - 1].date.slice(5) + '</span></div>';
+      const f = window.ingestStatsFilter;
+      const list = d.log.filter((x) => f === 'all' ? true : f === 'problem' ? (x.bucket === 'unreadable' || x.bucket === 'review' || x.bucket === 'pending') : x.bucket === f);
+      const fBtn = (key, label) => '<button class="btn btn-sm ' + (f === key ? 'btn-primary' : 'btn-secondary') + '" onclick="window.ingestStatsFilter=\'' + key + '\';openIngestStats()">' + label + '</button>';
+      const rows = list.map((x) => {
+        const b = ING_BUCKET[x.bucket] || ING_BUCKET.pending;
+        const att = x.attachments.length ? x.attachments.map((a) => '<span class="inline-code" title="' + escapeHtml(a.type || '') + '" style="' + (a.candidate ? '' : 'opacity:.55;') + '">' + (a.source === 'link_download' ? '🔗 ' : '📎 ') + escapeHtml(a.name) + '</span>').join(' ') : '<span style="color:var(--text2)">bez příloh</span>';
+        const inv = x.invoices.length ? x.invoices.map((i) => '<a href="javascript:void(0)" onclick="closeModal();openDetail(' + i.id + ')">' + escapeHtml(i.invoice_number) + '</a>').join(', ') : '';
+        const dom = String(x.from || '').split('@')[1] || '';
+        return '<tr>' +
+          '<td style="white-space:nowrap;color:var(--text2);font-size:.85em;">' + fmtDateTime(x.received_at).split(' ').pop() + '</td>' +
+          '<td style="font-size:.88em;">' + escapeHtml(x.from_name || '') + '<div style="color:var(--text2);font-size:.85em;">' + escapeHtml(x.from) + '</div></td>' +
+          '<td style="font-size:.88em;">' + escapeHtml(x.subject) + '<div style="margin-top:3px;font-size:.85em;">' + att + '</div></td>' +
+          '<td><span style="color:' + b.c + ';font-weight:700;white-space:nowrap;">' + b.i + ' ' + b.l + '</span>' + (x.confidence != null && x.bucket !== 'ignored' ? '<div style="font-size:.75em;color:var(--text2);">jistota ' + Math.round(x.confidence * 100) + ' %</div>' : '') + '</td>' +
+          '<td style="font-size:.85em;">' + escapeHtml(x.reason || '') + (inv ? '<div>📄 ' + inv + '</div>' : '') + '</td>' +
+          '<td style="white-space:nowrap;">' + (x.bucket !== 'ok' && x.bucket !== 'ignored' ? '<button class="btn btn-secondary btn-sm" title="Ignorovat tohoto odesílatele" onclick="ingestAddRule(\'ignore_senders\',\'' + escapeHtml(x.from).toLowerCase() + '\')">🚫</button> ' + (dom ? '<button class="btn btn-secondary btn-sm" title="Ignorovat celou doménu @' + escapeHtml(dom) + '" onclick="ingestAddRule(\'ignore_senders\',\'@' + escapeHtml(dom).toLowerCase() + '\')">@</button> ' : '') + '<button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + x.id + ')">↻</button>' : '') + '</td>' +
+        '</tr>';
+      }).join('');
+      const rulesHtml = '<div style="font-size:.85em;color:var(--text2);margin-top:6px;">Pravidla příjmu: ignorovat odesílatele ' +
+        (rules.ignore_senders.length ? rules.ignore_senders.map((s) => '<span class="inline-code">' + escapeHtml(s) + ' <a href="javascript:void(0)" onclick="ingestRemoveRule(\'ignore_senders\',\'' + escapeHtml(s) + '\')" title="Odebrat">✕</a></span>').join(' ') : '—') +
+        ' · předmět obsahuje ' + (rules.ignore_subject_keywords.length ? rules.ignore_subject_keywords.map((s) => '<span class="inline-code">' + escapeHtml(s) + ' <a href="javascript:void(0)" onclick="ingestRemoveRule(\'ignore_subject_keywords\',\'' + escapeHtml(s) + '\')" title="Odebrat">✕</a></span>').join(' ') : '—') + '</div>';
+      const w = d.worker || {};
+      document.getElementById('modal-root').innerHTML =
+        '<div class="modal-overlay"><div class="modal wide" style="max-width:1300px;position:relative;">' +
+          '<button class="btn btn-secondary btn-sm" onclick="closeModal()" style="position:absolute;top:14px;right:16px;" title="Zavřít">✕</button>' +
+          '<h2>📊 Příjem faktur e-mailem – ' + (isToday ? 'dnes' : new Date(d.date + 'T12:00:00').toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'numeric', year: 'numeric' })) + '</h2>' +
+          '<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">' +
+            '<button class="btn btn-secondary btn-sm" onclick="openIngestStats(\'' + ingDayStr(prev) + '\')">◀ Předchozí den</button>' +
+            '<input type="date" value="' + d.date + '" onchange="openIngestStats(this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;">' +
+            (isToday ? '' : '<button class="btn btn-secondary btn-sm" onclick="openIngestStats(\'' + ingDayStr(nxt) + '\')">Další den ▶</button><button class="btn btn-secondary btn-sm" onclick="openIngestStats(null)">Dnes</button>') +
+            '<span style="margin-left:auto;font-size:.82em;color:var(--text2);">' + (w.last_run ? 'Poslední kontrola schránky: ' + fmtDateTime(w.last_run) : '') + '</span>' +
+          '</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">' +
+            kpi(k.emails, 'Přišlo e-mailů', '', k.with_attachment + ' s přílohou') +
+            kpi(k.documents, 'Zpracovaných dokladů', '#22c55e', k.ok + ' e-mailů → faktura') +
+            kpi(k.unreadable, 'Nezvládl zpracovat', k.unreadable ? '#ef4444' : '') +
+            kpi(k.review, 'Čeká na ověření', k.review ? '#f59e0b' : '') +
+            kpi(k.duplicate, 'Duplicity', '#60a5fa') +
+            kpi(k.ignored, 'Ignorováno', '#94a3b8') +
+            kpi(k.success_rate != null ? k.success_rate + ' %' : '—', 'Úspěšnost', k.success_rate != null ? (k.success_rate >= 80 ? '#22c55e' : k.success_rate >= 50 ? '#f59e0b' : '#ef4444') : '') +
+          '</div>' + trend +
+          '<div style="display:flex;gap:6px;align-items:center;margin:14px 0 8px;flex-wrap:wrap;"><b style="margin-right:6px;">📋 Log e-mailů</b>' +
+            fBtn('problem', '⚠ Problémové (' + (k.unreadable + k.review + k.pending) + ')') + fBtn('ok', '✅ Zpracované (' + k.ok + ')') + fBtn('duplicate', '🔁 Duplicity (' + k.duplicate + ')') + fBtn('ignored', '🚫 Ignorované (' + k.ignored + ')') + fBtn('all', 'Vše (' + k.emails + ')') +
+            '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="runIngestAi()">🤖 AI: navrhnout nastavení</button>' +
+          '</div>' +
+          '<div style="max-height:42vh;overflow-y:auto;"><table class="items-table" style="width:100%;"><thead><tr><th>Čas</th><th>Od</th><th>Předmět / přílohy</th><th>Výsledek</th><th>Důvod / doklad</th><th></th></tr></thead><tbody>' +
+            (rows || '<tr><td colspan="6" class="empty-hint" style="padding:18px;">Žádné e-maily v tomto filtru.</td></tr>') + '</tbody></table></div>' +
+          rulesHtml +
+          '<div id="ingest-ai-box" style="margin-top:12px;"></div>' +
+        '</div></div>';
+      if (rr.data && rr.data.ai_last) renderIngestAi(rr.data.ai_last, true);
+    };
+
+    async function saveIngestRules(rules) {
+      const r = await api('PUT', '/api/accounting/email/ingest-rules', rules);
+      if (r.status !== 200) { alert('Uložení pravidel selhalo: ' + ((r.data && r.data.error) || r.status)); return false; }
+      return true;
+    }
+    window.ingestAddRule = async function(kind, value) {
+      const rules = window.ingestRules || { ignore_senders: [], ignore_subject_keywords: [] };
+      if (!confirm('Ignorovat ' + (kind === 'ignore_senders' ? 'odesílatele ' : 'předmět obsahující ') + value + '?\nNové e-maily od něj se už nebudou zpracovávat (zůstanou jen v logu jako Ignorováno).')) return;
+      rules[kind] = [...new Set([...(rules[kind] || []), value])];
+      if (await saveIngestRules(rules)) openIngestStats();
+    };
+    window.ingestRemoveRule = async function(kind, value) {
+      const rules = window.ingestRules || { ignore_senders: [], ignore_subject_keywords: [] };
+      rules[kind] = (rules[kind] || []).filter((s) => s !== value);
+      if (await saveIngestRules(rules)) openIngestStats();
+    };
+    window.runIngestAi = async function() {
+      const box = document.getElementById('ingest-ai-box'); if (!box) return;
+      box.innerHTML = '<div style="padding:12px;border:1px dashed var(--border);border-radius:10px;color:var(--text2);">🤖 AI prochází log problémových e-mailů za posledních 14 dní…</div>';
+      const r = await api('POST', '/api/accounting/email/ai-analyze', { days: 14 });
+      if (r.status !== 200) { box.innerHTML = '<div style="color:#ef4444;">AI rozbor selhal: ' + escapeHtml((r.data && r.data.error) || String(r.status)) + '</div>'; return; }
+      renderIngestAi(r.data, false);
+    };
+    function renderIngestAi(a, old) {
+      const box = document.getElementById('ingest-ai-box'); if (!box || !a) return;
+      window.ingestAiLast = a;
+      const cur = window.ingestRules || { ignore_senders: [], ignore_subject_keywords: [] };
+      const newS = ((a.rules && a.rules.ignore_senders) || []).filter((s) => !cur.ignore_senders.includes(String(s).toLowerCase()));
+      const newK = ((a.rules && a.rules.ignore_subject_keywords) || []).filter((s) => !cur.ignore_subject_keywords.includes(String(s).toLowerCase()));
+      const probs = (a.problems || []).map((p) => '<tr><td><b>' + escapeHtml(p.title || '') + '</b>' + (p.senders && p.senders.length ? '<div style="font-size:.8em;color:var(--text2);">' + escapeHtml(p.senders.slice(0, 5).join(', ')) + '</div>' : '') + '</td><td style="text-align:center;">' + (p.count || '') + '</td><td style="font-size:.88em;">' + escapeHtml(p.cause || '') + '</td><td style="font-size:.88em;">' + escapeHtml(p.fix || '') + '</td></tr>').join('');
+      const chk = (kind, list) => list.map((s) => '<label style="display:inline-flex;gap:4px;align-items:center;margin:2px 10px 2px 0;font-size:.88em;"><input type="checkbox" class="ai-rule" data-kind="' + kind + '" value="' + escapeHtml(String(s).toLowerCase()) + '" checked> <span class="inline-code">' + escapeHtml(s) + '</span></label>').join('');
+      box.innerHTML = '<div style="border:1px solid #6366f155;background:#6366f10f;border-radius:12px;padding:14px 16px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;"><b>🤖 Návrh AI</b><span style="font-size:.8em;color:var(--text2);">' + (a.generated_at ? fmtDateTime(a.generated_at) : '') + (a.analyzed != null ? ' · rozebráno ' + a.analyzed + ' problémových z ' + a.total + ' e-mailů za ' + a.days + ' dní' : '') + (old ? ' · poslední uložený rozbor' : '') + '</span>' +
+        (old ? '<button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="runIngestAi()">↻ Nový rozbor</button>' : '') + '</div>' +
+        '<p style="margin:8px 0;">' + escapeHtml(a.summary || '') + '</p>' +
+        (probs ? '<table class="items-table" style="width:100%;margin-bottom:8px;"><thead><tr><th>Problém</th><th>Počet</th><th>Příčina</th><th>Doporučení</th></tr></thead><tbody>' + probs + '</tbody></table>' : '') +
+        ((newS.length || newK.length) ? '<div style="margin-top:6px;"><b style="font-size:.9em;">Navržená pravidla (odškrtni, co nechceš):</b><div style="margin-top:4px;">' + (newS.length ? '<div style="font-size:.82em;color:var(--text2);">Ignorovat odesílatele:</div>' + chk('ignore_senders', newS) : '') + (newK.length ? '<div style="font-size:.82em;color:var(--text2);margin-top:4px;">Ignorovat předmět obsahující:</div>' + chk('ignore_subject_keywords', newK) : '') + '</div>' +
+          '<button class="btn btn-primary btn-sm" style="margin-top:8px;" onclick="applyIngestAiRules()">✔ Použít vybraná pravidla</button></div>' : '<div style="font-size:.85em;color:var(--text2);">Žádná nová pravidla k ignorování.</div>') +
+        ((a.other_suggestions || []).length ? '<div style="margin-top:10px;"><b style="font-size:.9em;">Další doporučení:</b><ul style="margin:4px 0 0 18px;font-size:.88em;">' + a.other_suggestions.map((s) => '<li>' + escapeHtml(s) + '</li>').join('') + '</ul></div>' : '') +
+      '</div>';
+    }
+    window.applyIngestAiRules = async function() {
+      const rules = window.ingestRules || { ignore_senders: [], ignore_subject_keywords: [] };
+      const picked = [...document.querySelectorAll('#ingest-ai-box .ai-rule:checked')];
+      if (!picked.length) return alert('Nic není vybráno.');
+      if (!confirm('Uložit ' + picked.length + ' pravidel? Nové e-maily, které jim odpovídají, se přestanou zpracovávat (zůstanou v logu jako Ignorováno).')) return;
+      picked.forEach((c) => { const k = c.getAttribute('data-kind'); rules[k] = [...new Set([...(rules[k] || []), c.value])]; });
+      if (await saveIngestRules(rules)) openIngestStats();
+    };
+    setTimeout(refreshIngestStatsBtn, 800);
+    setInterval(refreshIngestStatsBtn, 5 * 60 * 1000);
 
     window.openIngestLogs = async function() {
       const r = await api('GET', '/api/accounting/email/logs?limit=300');
