@@ -1579,19 +1579,22 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
 
 // Automatické odeslání E-MAILU se specialistou novému reklamnímu leadovi
 // (stejná pravidla jako SMS: zdroj z reklamy, vybraní obchodníci, jen nové).
-async function autosendAiSpecialistEmail(lead) {
+// opts.manual = ruční / kampaňové odeslání z funelu (tlačítko Spustit kampaň): pravidla automatu (zdroj, jen nové, obchodníci, vypínač) se neuplatní,
+// platí jen pojistky (e-mail existuje, už neodesláno, black list). Důvod přeskočení se zapíše jako událost outreach_skip.
+async function autosendAiSpecialistEmail(lead, opts) {
   try {
     if (!lead || !lead.id) return;
-    const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null });
-    if (!cfg || !cfg.emailEnabled) return;
-    const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); };
+    const manual = !!(opts && opts.manual);
+    const cfg = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || (manual ? {} : null);
+    if (!cfg || (!cfg.emailEnabled && !manual)) return;
+    const skip = (why) => { console.log('[aispec-autosend-email] lead', lead.id, '— přeskočeno:', why); prisma.compounderEvent.create({ data: { sid: 'lead:' + lead.id, event: 'outreach_skip', path: '/autosend', props: { lead_id: lead.id, reason: why, channel: 'email' } } }).catch(() => {}); };
     if (!lead.email) return skip('chybí e-mail');
     // Pojistka: lead obchodníka s variantou „schůzka" nedostane specialistu (ani e-mailem).
     if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) return skip('obchodník má variantu schůzka');
     if (lead.outreach_variant === 'schuzka' || lead.schuzka_sms_sent_at || lead.schuzka_email_sent_at) return skip('už osloveno variantou schůzka');
-    if (Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
-    if (cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('stav není Nový');
-    if (Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
+    if (!manual && Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
+    if (!manual && cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('stav není Nový');
+    if (!manual && Array.isArray(cfg.ownerPersonIds) && cfg.ownerPersonIds.length && cfg.ownerPersonIds.indexOf(lead.owner_person_id) === -1) return skip('obchodník není ve výběru');
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
@@ -10632,6 +10635,6 @@ module.exports.forceSend = async function (leadId, channel, force) { const L = a
   lead.outreach_variant = null; if (['odeslana_schuzka', 'odeslan_specialista'].includes(lead.status)) lead.status = 'new';
   if (channel === 'email') { lead.schuzka_sms_sent_at = null; lead.ai_specialist_sms_sent_at = null; if (force) { lead.schuzka_email_sent_at = null; lead.ai_specialist_email_sent_at = null; } } else { lead.schuzka_email_sent_at = null; lead.ai_specialist_email_sent_at = null; if (force) { lead.schuzka_sms_sent_at = null; lead.ai_specialist_sms_sent_at = null; } }
   const t0 = new Date(Date.now() - 2000);
-  if (channel === 'email') { const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}); if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) await sendSchuzkaEmailAuto(lead, cfg); else await autosendAiSpecialistEmail(lead); } else await autosendAiSpecialistSms(lead, { only: 'sms' });
+  if (channel === 'email') { const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}); if (Array.isArray(cfg.schuzkaOwnerPersonIds) && cfg.schuzkaOwnerPersonIds.indexOf(lead.owner_person_id) !== -1) await sendSchuzkaEmailAuto(lead, cfg); else await autosendAiSpecialistEmail(lead, { manual: true }); } else await autosendAiSpecialistSms(lead, { only: 'sms' });
   const l3 = await prisma.compounderLead.findUnique({ where: { id: Number(leadId) }, select: { status: true, outreach_variant: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true } }); const after = channel === 'email' ? (l3.schuzka_email_sent_at || l3.ai_specialist_email_sent_at) : (l3.schuzka_sms_sent_at || l3.ai_specialist_sms_sent_at); const sent = !!after && new Date(after).getTime() >= t0.getTime(); let reason = ''; if (!sent) { try { const ev = await prisma.compounderEvent.findFirst({ where: { event: { in: ['outreach_skip', 'outreach_error'] }, path: '/autosend', created_at: { gte: t0 } }, orderBy: { created_at: 'desc' } }); if (ev && Number(ev.props && ev.props.lead_id) === Number(leadId)) reason = (ev.event === 'outreach_error' ? '⚠ ' : '') + (ev.props.reason || ''); } catch (e) { /* bez důvodu */ } if (!reason) reason = after ? 'zpráva už byla odeslána ' + new Date(after).toLocaleString('cs-CZ') + ' (použij „znovu“)' : 'automat zprávu neodeslal (zkontroluj kontakt / nastavení uzlu)'; } return { ok: true, sent, reason, lead: l3 }; };
 module.exports._fbCreateLead = _fbCreateLead; module.exports._fbExtractFields = _fbExtractFields; module.exports._fbLoadForms = _fbLoadForms; module.exports._fbResolveOwner = _fbResolveOwner;
