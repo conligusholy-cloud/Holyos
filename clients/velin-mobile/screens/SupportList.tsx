@@ -30,6 +30,10 @@ export function supportName(t: { nick?: string | null; first_name?: string | nul
   return full || t.nick || t.email || 'Uživatel';
 }
 
+// Čitelný název stránky BS2 podle cesty
+const PAGES: Record<string, string> = { '/': 'Úvod', '/pradlomaty': 'Prádlomaty', '/discount-credit': 'Slevový kredit', '/team': 'Tým', '/network': 'Síť', '/mine': 'Moje', '/credit': 'Kredit', '/podpora': 'Podpora (chat)', '/compounder': 'Compounder', '/location': 'Lokalita', '/findlocation': 'Najít lokalitu', '/arena': 'Aréna', '/lokalita': 'Lokalita' };
+function pageLabel(p?: string | null): string { if (!p) return 'na webu'; const k = p.split('?')[0]; return PAGES[k] || k; }
+function sinceLabel(iso: string): string { const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000)); return m < 1 ? 'právě přišel' : m < 60 ? 'na webu ' + m + ' min' : 'na webu ' + Math.floor(m / 60) + ' h ' + (m % 60) + ' min'; }
 function initials(name: string): string {
   const p = name.split(/\s+/).filter(Boolean);
   return ((p[0]?.[0] || '?') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase();
@@ -180,9 +184,8 @@ export default function SupportList() {
           style={[styles.chip, filter === 'online' && styles.chipOn]}
           onPress={() => setFilter('online')}
         >
-          <View style={[styles.chipDot, { backgroundColor: '#22c55e' }]} />
           <Text style={[styles.chipText, filter === 'online' && styles.chipTextOn]}>
-            Online{onlineCount > 0 ? ` ${onlineCount}` : ''}
+            👀 Na stránce{onlineCount > 0 ? ` ${onlineCount}` : ''}
           </Text>
         </TouchableOpacity>
       </View>
@@ -238,9 +241,16 @@ export default function SupportList() {
                   <Text style={[styles.name, item.unread > 0 && styles.nameUnread]} numberOfLines={1}>{name}</Text>
                   <Text style={styles.time}>{fmtTime(item.last_at)}</Text>
                 </View>
-                <Text style={[styles.preview, item.unread > 0 && styles.previewUnread]} numberOfLines={1}>
-                  {mine ? 'Vy: ' : ''}{item.last_body || ''}
-                </Text>
+                {filter === 'online' && item.online ? (
+                  <>
+                    <Text style={styles.pageLine} numberOfLines={1}>📍 {pageLabel(item.page_path)}{item.page_since ? ' · ' + sinceLabel(item.page_since) : ''}{item.device ? ' · ' + item.device : ''}</Text>
+                    <Text style={styles.startChat} numberOfLines={1}>{item.last_at ? (mine ? 'Vy: ' : '') + (item.last_body || '') : '💬 Zahájit chat →'}</Text>
+                  </>
+                ) : (
+                  <Text style={[styles.preview, item.unread > 0 && styles.previewUnread]} numberOfLines={1}>
+                    {mine ? 'Vy: ' : ''}{item.last_body || ''}
+                  </Text>
+                )}
               </View>
             </TouchableOpacity>
           );
@@ -287,6 +297,8 @@ const styles = StyleSheet.create({
   nameUnread: { fontWeight: '700' },
   time: { color: colors.text2, fontSize: 11 },
   preview: { color: colors.text2, fontSize: 13 },
+  pageLine: { color: '#4fd1ff', fontSize: 12, marginBottom: 1 },
+  startChat: { color: colors.accent2, fontSize: 13, fontWeight: '600' },
   previewUnread: { color: colors.text, fontWeight: '500' },
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { color: colors.text2, fontSize: 14 },

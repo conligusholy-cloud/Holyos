@@ -26,6 +26,7 @@ function anonTouch(sid) { if (!sid) return; anon.set(String(sid).slice(0, 64), D
 function presenceCounts() { const now = Date.now(); let n2 = 0, n60 = 0, a2 = 0, a60 = 0; for (const p of presence.values()) { if (now - p.last < 120e3) n2++; if (now - p.last < 3600e3) n60++; } for (const t of anon.values()) { if (now - t < 120e3) a2++; if (now - t < 3600e3) a60++; } return { now: n2, hour: n60, anon_now: a2, anon_hour: a60 }; }
 // Je uživatel právě na webu s viditelnou záložkou? (ping každých 30 s)
 function isOnline(id, ms = 90e3) { const p = presence.get(id); return !!p && Date.now() - p.last < ms; }
+function presenceOf(id) { const p = presence.get(id); return p ? { path: p.path || null, since: p.since || null, last: p.last || null, device: p.device || null } : null; }
 function onlineIds(ms = 90e3) { const now = Date.now(); const out = []; for (const [id, p] of presence) if (now - p.last < ms) out.push(id); return out; }
 function ping(req, supporterId, o = {}) { touch(supporterId, { path: o.path, sid: o.sid, device: deviceOf(req.get('user-agent')), ip: req.ip }); }
 
@@ -148,4 +149,4 @@ async function loadLive(sinceId) {
   return { now: new Date().toISOString(), online, feed, counters: Object.assign({}, counters[0], { logins_today: logins[0].n }), minutes, pending: pend[0] };
 }
 
-module.exports = { onlineIds, isOnline, loadLive, leave, ping, touch, presenceCounts, anonTouch, TRACK_JS, track, deviceOf, loadOverview, loadUser };
+module.exports = { presenceOf, onlineIds, isOnline, loadLive, leave, ping, touch, presenceCounts, anonTouch, TRACK_JS, track, deviceOf, loadOverview, loadUser };

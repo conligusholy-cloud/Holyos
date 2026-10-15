@@ -1770,6 +1770,8 @@ app.get('/api/svc/support/threads', requireSvc, wrap(async (req, res) => {
     const have = new Set(threads.map((t) => t.id)); const ids = ST.onlineIds().map(Number).filter((n) => Number.isInteger(n) && !have.has(n));
     if (ids.length) (await q('SELECT id, nick, first_name, last_name, email FROM supporters WHERE id = ANY($1::int[])', [ids])).rows.forEach((u) => threads.push({ id: u.id, nick: u.nick, first_name: u.first_name, last_name: u.last_name, email: u.email, unread: 0, last_at: null, last_body: null, last_sender: null, online: true }));
   } catch (e) { /* online bez vlákna je jen bonus */ }
+  // Kde právě je (stránka, od kdy, zařízení) – pro „Na stránce" ve Velínu
+  threads.forEach((t) => { if (t.online) { const p = ST.presenceOf(t.id); if (p) { t.page_path = p.path; t.page_since = p.since ? new Date(p.since).toISOString() : null; t.device = p.device; } } });
   res.set('Cache-Control', 'no-store').json({ online: await supportOnline(), agent: await supportAgent(), agents: await supportAgents(), threads });
 }));
 app.get('/api/svc/support/threads/:id(\\d+)', requireSvc, wrap(async (req, res) => {
