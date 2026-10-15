@@ -78,7 +78,9 @@ async function verify() {
       if (r.ok) { const max = (r.text.match(/<Max24HourSend>([^<]+)</) || [])[1]; return { ok: true, mode: 'api', max24h: max ? Number(max) : null }; }
       // Skupina AWSSESSendingGroupDoNotRename smí jen odesílat → AccessDenied znamená, že klíč i podpis jsou platné
       if (/AccessDenied/i.test(r.code)) return { ok: true, mode: 'api', note: 'klíč platný (oprávnění jen k odesílání)' };
-      return { ok: false, mode: 'api', error: r.error };
+      const a = apiConf(); let hint = '';
+      if (/SignatureDoesNotMatch/i.test(r.code)) hint = ' [kontrola: SES_SECRET_ACCESS_KEY má ' + a.secret.length + ' znaků (správně 40)' + (/^BD/.test(a.secret) && a.secret.length === 44 ? ', vypadá jako SMTP heslo – patří sem Secret access key' : '') + (/^SECRET_Z_CSV$/i.test(a.secret) ? ', je tam ještě zástupný text' : '') + ']';
+      return { ok: false, mode: 'api', error: r.error + hint };
     } catch (e) { return { ok: false, mode: 'api', error: e.message }; }
   }
   try { await getTransport().verify(); return { ok: true, mode: 'smtp' }; }
