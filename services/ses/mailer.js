@@ -145,7 +145,17 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
       let r = await sesCall(params);
       // limit odesílání (14/s): při Throttling chvíli počkat a zkusit znovu
       for (let i = 0; i < 3 && !r.ok && /Throttl|MaxSendRate/i.test(r.code + ' ' + r.error); i++) { await new Promise((ok) => setTimeout(ok, 1000 * (i + 1))); r = await sesCall(params); }
-      if (!r.ok) return { ok: false, error: r.error + (/not verified/i.test(r.error) ? ' – účet SES je v sandboxu: posílat jde jen na ověřené adresy, dokud AWS neschválí Production access (nebo adresu ověř v SES → Identities).' : '') };
+      if (!r.ok) {
+        let hint = '';
+        if (/not verified/i.test(r.error)) {
+          const fromAddr = parseAddr(mailOpts.from).address.toLowerCase();
+          const failed = ((r.error.split(':').pop()) || '').toLowerCase();
+          hint = fromAddr && failed.includes(fromAddr)
+            ? ' – odesílatel ' + fromAddr + ' (doména ' + fromAddr.split('@')[1] + ') není ověřený v AWS SES: SES → Identities → Create identity → Domain, DKIM záznamy do DNS.'
+            : ' – příjemce není ověřený: účet SES je v sandboxu (posílat jde jen na ověřené adresy, dokud AWS neschválí Production access).';
+        }
+        return { ok: false, error: r.error + hint };
+      }
       const sesId = (r.text.match(/<MessageId>([^<]+)<\/MessageId>/) || [])[1] || '';
       return { ok: true, simulated: false, messageId: node.messageId() || '', sesMessageId: sesId };
     }
