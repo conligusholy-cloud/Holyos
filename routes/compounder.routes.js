@@ -1082,6 +1082,9 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
       schuzkaEmailBody: has('schuzkaEmailBody') ? String(b.schuzkaEmailBody || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailBody).slice(0, 4000) : prev.schuzkaEmailBody,
       landing: has('landing') ? { specialist: cleanLandingUrl(b.landing && b.landing.specialist), schuzka: cleanLandingUrl(b.landing && b.landing.schuzka) } : Object.assign({ specialist: '', schuzka: '' }, prev.landing || {}),
       schuzkaEmailLinkLabel: has('schuzkaEmailLinkLabel') ? String(b.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel).slice(0, 80) : prev.schuzkaEmailLinkLabel,
+      // Odesílatel e-mailu per varianta (prázdné = výchozí odesílatel funelů z Centra reklamy). Adresa SES odesílatele → jde přes Amazon SES.
+      specialistEmailFrom: has('specialistEmailFrom') ? String(b.specialistEmailFrom || '').trim().slice(0, 200) : (prev.specialistEmailFrom || ''),
+      schuzkaEmailFrom: has('schuzkaEmailFrom') ? String(b.schuzkaEmailFrom || '').trim().slice(0, 200) : (prev.schuzkaEmailFrom || ''),
     };
     const overlap = cfg.ownerPersonIds.filter((id) => cfg.schuzkaOwnerPersonIds.indexOf(id) !== -1);
     if (overlap.length) {
@@ -1094,7 +1097,7 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
     try {
       const LABEL = { enabled: 'SMS specialista automat', emailEnabled: 'E-mail specialista automat', schuzkaEmailEnabled: 'E-mail schůzka automat',
         ownerPersonIds: 'Obchodníci specialista', schuzkaOwnerPersonIds: 'Obchodníci schůzka', text: 'Text SMS specialista', schuzkaText: 'Text SMS schůzka',
-        schuzkaEmailSubject: 'Předmět e-mailu schůzka', schuzkaEmailBody: 'Text e-mailu schůzka', schuzkaEmailLinkLabel: 'Tlačítko e-mailu schůzka',
+        schuzkaEmailSubject: 'Předmět e-mailu schůzka', schuzkaEmailBody: 'Text e-mailu schůzka', schuzkaEmailLinkLabel: 'Tlačítko e-mailu schůzka', specialistEmailFrom: 'Odesílatel e-mailu specialista', schuzkaEmailFrom: 'Odesílatel e-mailu schůzka',
         sources: 'Zdroje', onlyNew: 'Jen nové', skipBlacklist: 'Přeskočit black list' };
       const changes = [];
       Object.keys(LABEL).forEach((k) => {
@@ -1110,6 +1113,32 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
     } catch (e) { console.warn('[autosend-log]', e.message); }
     res.json({ ok: true, config: cfg });
   } catch (err) { next(err); }
+});
+// POST /api/compounder/ai-specialist-autosend/test-email { variant, to, from?, subject?, body? }
+// Testovací e-mail varianty (specialista / schůzka) tak, jak ho dostane lead – i s neuloženým textem a zvoleným odesílatelem.
+router.post('/ai-specialist-autosend/test-email', requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const to = String(b.to || (req.user && req.user.email) || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ ok: false, error: 'Zadej platnou adresu pro test' });
+    const variant = b.variant === 'schuzka' ? 'schuzka' : 'specialist';
+    const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
+    const from = String(b.from || '').trim() || await funnelMailFrom(variant);
+    if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel' });
+    const lead = { id: 0, name: String(b.name || 'Jan Novák') };
+    let subject, body, link, linkLabel, preheader = null;
+    if (variant === 'schuzka') {
+      const ov = {}; if (b.subject) ov.schuzkaEmailSubject = String(b.subject); if (b.body) ov.schuzkaEmailBody = String(b.body);
+      const m = buildSchuzkaEmail(lead, cfg, ov); subject = m.subject; body = m.body; link = m.link; linkLabel = m.linkLabel; preheader = m.preheader;
+    } else {
+      link = autosendLink(cfg, 'specialist', 0, 'email'); linkLabel = 'Zeptat se specialisty';
+      subject = 'Prádlomat — váš specialista odpoví na vše';
+      body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+    }
+    const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: 'Prádlomaty', link, linkLabel, preheader, brand: 'pradlomaty', campaignId: 'test-' + variant });
+    if (!r || r.sent === false) return res.status(400).json({ ok: false, error: (r && (r.error || r.skipped)) || 'neodesláno' });
+    res.json({ ok: true, to, from, via: r.via || null });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 
 // GET /api/compounder/schuzka-sms-stats — odeslané SMS „schůzka" + otevření + rezervace.
@@ -1458,7 +1487,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     if (!lead.email) return logOutreach(lead.id, 'schuzka', 'skip', 'chybí e-mail (e-mail)');
     if (lead.outreach_variant === 'specialist' || lead.schuzka_email_sent_at) return logOutreach(lead.id, 'schuzka', 'skip', 'e-mail už odeslán / osloven specialistou');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return logOutreach(lead.id, 'schuzka', 'skip', 'black list (e-mail)'); }
-    const from = await funnelMailFrom();
+    const from = await funnelMailFrom('schuzka');
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
     const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
@@ -1489,7 +1518,7 @@ async function autosendAiSpecialistEmail(lead) {
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
-    const from = await funnelMailFrom();
+    const from = await funnelMailFrom('specialist');
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const subject = 'Prádlomat — váš specialista odpoví na vše';
@@ -1720,7 +1749,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     const force = !!(req.body && req.body.force);
     if (!force && lead.outreach_variant === 'specialist') return res.status(409).json({ ok: false, error: 'Tomuto leadovi už byl odeslán specialista — nelze poslat i schůzku (pojistka). Pro test zaškrtni „Ignorovat pojistku".' });
     if (!force && lead.schuzka_email_sent_at) return res.status(409).json({ ok: false, error: 'E-mail se schůzkou už byl odeslán ' + new Date(lead.schuzka_email_sent_at).toLocaleString('cs-CZ') + '. Pro opakování zaškrtni „Ignorovat pojistku".' });
-    const from = await funnelMailFrom();
+    const from = await funnelMailFrom('schuzka');
     if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
     const cfg = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }).catch(() => null);
     const b = req.body || {};
@@ -1760,7 +1789,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     const lead = await prisma.compounderLead.findUnique({ where: { id }, select: { id: true, email: true, name: true, show_ai_specialist: true } });
     if (!lead) return res.status(404).json({ ok: false, error: 'Lead nenalezen' });
     if (!lead.email) return res.status(400).json({ ok: false, error: 'Lead nemá e-mail' });
-    const from = await funnelMailFrom();
+    const from = await funnelMailFrom('specialist');
     if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
@@ -7750,7 +7779,7 @@ function compounderMailFrom() {
   return process.env.COMPOUNDER_MAIL_FROM || null;
 }
 // Odesílatel pro e-maily z funelu (Centrum reklamy → Nastavení → výchozí odesílatel); jinak env
-async function funnelMailFrom() { try { const v = await getSetting('ads_center.channels', { type: 'json', defaultValue: null }); if (v && v.email_from) return String(v.email_from); } catch (e) { /* env */ } return process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom(); }
+async function funnelMailFrom(variant) { try { if (variant) { const c = await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null }); const f = c && (variant === 'schuzka' ? c.schuzkaEmailFrom : c.specialistEmailFrom); if (f) return String(f); } } catch (e) { /* výchozí */ } try { const v = await getSetting('ads_center.channels', { type: 'json', defaultValue: null }); if (v && v.email_from) return String(v.email_from); } catch (e) { /* env */ } return process.env.COMPOUNDER_SPECIALIST_MAIL_FROM || compounderMailFrom(); }
 async function sendPortalInvite(d, portalUrl) {
   const from = compounderMailFrom();
   // E-mail v jazyce, který zájemce zvolil na webu (d.lang); fallback angličtina.
