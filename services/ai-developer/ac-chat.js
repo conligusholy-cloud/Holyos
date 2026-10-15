@@ -38,6 +38,85 @@ function stripToolUses(content) {
   return textOnly;
 }
 
+
+// ─── Obrázky (vision) ────────────────────────────────────────────────────────
+// Claude umí číst obrázky, ale jen jako `image` bloky v obsahu zprávy. Frontend
+// posílá screenshoty a výstřižky jako base64 (nebo celé data URL) a tyhle
+// helpery je převedou do podoby, kterou Anthropic API přijme.
+//
+// POZOR na velikost: obrázek se do history NEUKLÁDÁ (viz stripImagesForHistory).
+// Historie cestuje tam a zpět mezi prohlížečem a serverem při každé zprávě —
+// stovky kB base64 by ji nafoukly. Místo toho zůstává v history jen textová
+// stopa a Alan má v promptu pokyn, aby si podstatné z obrázku rovnou zapsal.
+
+const SUPPORTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+const MAX_IMAGES_PER_TURN = 4;
+const MAX_IMAGE_BASE64_LEN = 4 * 1024 * 1024; // Anthropic limit je 5 MB na obrázek
+
+// Převede { media_type, data } (nebo celé data URL) na Anthropic image blok.
+// Vrátí null, když je formát nepodporovaný nebo obrázek příliš velký —
+// raději zprávu pošleme bez něj než aby celé volání spadlo na 400.
+function toImageBlock(img) {
+  if (!img) return null;
+  let mediaType = String(img.media_type || img.mediaType || '').toLowerCase().trim();
+  let data = String(img.data || img.data_url || img.dataUrl || '');
+  if (!data) return null;
+
+  if (data.slice(0, 5) === 'data:') {
+    const comma = data.indexOf(',');
+    if (comma < 0) return null;
+    const header = data.slice(5, comma); // "image/png;base64"
+    if (!mediaType) mediaType = header.split(';')[0].toLowerCase().trim();
+    data = data.slice(comma + 1);
+  }
+
+  data = data.replace(/\s/g, '');
+  if (!data) return null;
+  if (mediaType === 'image/jpg') mediaType = 'image/jpeg';
+  if (!SUPPORTED_IMAGE_TYPES.includes(mediaType)) return null;
+  if (data.length > MAX_IMAGE_BASE64_LEN) return null;
+
+  return { type: 'image', source: { type: 'base64', media_type: mediaType, data } };
+}
+
+// Složí obsah user zprávy. Bez obrázků vrací prostý string (zpětná kompatibilita),
+// s obrázky pole bloků. Obrázky dáváme PŘED text — Claude pak text čte jako
+// komentář k obrázku, což dává o dost lepší odpovědi.
+function buildUserContent(userMessage, images) {
+  const blocks = (Array.isArray(images) ? images : [])
+    .slice(0, MAX_IMAGES_PER_TURN)
+    .map(toImageBlock)
+    .filter(Boolean);
+  const text = String(userMessage || '').trim();
+  if (!blocks.length) return text;
+  return [...blocks, { type: 'text', text: text || '(bez textu — viz přiložený obrázek)' }];
+}
+
+// Kolik obrázků v obsahu reálně je (po validaci).
+function countImages(content) {
+  if (!Array.isArray(content)) return 0;
+  return content.filter((b) => b && b.type === 'image').length;
+}
+
+// Verze obsahu pro history — base64 ven, místo něj poznámka.
+function stripImagesForHistory(content) {
+  if (!Array.isArray(content)) return content;
+  const textBlock = content.find((b) => b && b.type === 'text');
+  const text = (textBlock && textBlock.text) || '';
+  const n = countImages(content);
+  if (!n) return text;
+  const label = n === 1 ? 'obrázek' : (n < 5 ? 'obrázky' : 'obrázků');
+  return '[uživatel přiložil ' + n + ' ' + label + ' — popis výše v odpovědi]\n' + text;
+}
+
+// Pokyn pro Alana, jak s obrázky zacházet. Vkládá se do obou system promptů.
+const IMAGE_INSTRUCTIONS = `PRÁCE S OBRÁZKY:
+- Uživatel ti může přiložit screenshot nebo výstřižek obrazovky. Vidíš ho a můžeš z něj číst.
+- Když obrázek dostaneš, nejdřív krátce (1-2 věty) popiš co na něm vidíš, ať má uživatel jistotu, že se díváš na to správné.
+- Co je na obrázku podstatné pro zadání (názvy tlačítek, sloupců, chybová hláška, čísla), rovnou zapiš do description / acceptance_criteria. V dalších zprávách už obrázek nemusíš mít k dispozici.
+- Když je obrázek nečitelný nebo z něj nepoznáš, co se má změnit, řekni to a popros o ostřejší výřez.
+- Nikdy netvrď, že obrázky číst neumíš.`;
+
 const TOOLS = [
   {
     name: 'update_basic_fields',
@@ -178,7 +257,9 @@ PŘÍKLADY ŠPATNÝCH OTÁZEK (NIKDY):
 - "Které soubory chceš upravit?" / "Jaká je current implementace?"
 - "Endpoint?" / "Schema?" / "Routing?" / "State management?"
 
-Pravidlo: pokud otázka má technické slovo, PŘEPIŠ ji do laického jazyka. Pokud to nejde, nesměj ji vůbec.`;
+Pravidlo: pokud otázka má technické slovo, PŘEPIŠ ji do laického jazyka. Pokud to nejde, nesměj ji vůbec.
+
+${IMAGE_INSTRUCTIONS}`;
 }
 
 /**
@@ -198,16 +279,24 @@ Pravidlo: pokud otázka má technické slovo, PŘEPIŠ ji do laického jazyka. P
  *   newHistory: Array
  * }>}
  */
-async function chat({ task, history = [], userMessage }) {
+async function chat({ task, history = [], userMessage, images = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — AC chat nelze spustit');
   }
   const client = new Anthropic({ apiKey });
 
+  // Obrázky: co přišlo z frontendu + screenshot uložený u úkolu. Ten přikládáme
+  // automaticky, aby se Alan nemusel ptát na to, co už u požadavku leží.
+  const turnImages = Array.isArray(images) ? images.slice() : [];
+  if (!turnImages.length && task && task.screenshot) {
+    turnImages.push({ data: task.screenshot });
+  }
+  const userContent = buildUserContent(userMessage, turnImages);
+
   const messages = [
     ...history,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: userContent },
   ];
 
   const response = await messagesCreate(client, {
@@ -260,7 +349,7 @@ async function chat({ task, history = [], userMessage }) {
   // ('tool_use ids were found without tool_result blocks') v dalším volání.
   const newHistory = [
     ...history,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: stripImagesForHistory(userContent) },
     { role: 'assistant', content: stripToolUses(response.content) },
   ];
 
@@ -291,16 +380,19 @@ async function chat({ task, history = [], userMessage }) {
  * @param {string} opts.userMessage - aktuální user input
  * @param {object} opts.pageContext - { path, title } z frontendu (kde uživatel klikl AI)
  */
-async function chatDraft({ draft = {}, history = [], userMessage, pageContext = {} }) {
+async function chatDraft({ draft = {}, history = [], userMessage, pageContext = {}, images = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error('ANTHROPIC_API_KEY chybí — AC chat (draft) nelze spustit');
   }
   const client = new Anthropic({ apiKey });
 
+  // Screenshoty a výstřižky přiložené k aktuální zprávě (viz buildUserContent).
+  const userContent = buildUserContent(userMessage, images);
+
   const messages = [
     ...history,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: userContent },
   ];
 
   const systemPrompt = `Jsi "Alan, AI Vývojář" v HolyOS. Aktuálně pomáháš uživateli vytvořit NOVÝ požadavek (úkol pro AI Vývojáře). Tvoje role: doptat se na povinná pole a postupně vyplnit:
@@ -343,6 +435,8 @@ STYL:
 - Žádné "děkuji", "skvělé" — drž to věcné.
 - Pokud uživatel chat začíná otázkou (ne popisem), nejdřív se zeptej "Co potřebuješ?"
 - Pokud to vypadá na UI změnu, popros o screenshot.
+
+${IMAGE_INSTRUCTIONS}
 
 KOMU PÍŠEŠ: zaměstnancům HolyOSu (skladnice, HR-istka, mistr), kteří neznají IT termíny. Ptej se na CO chtějí a KDE v HolyOSu, ne na technické detaily (které soubory, jaké selectory, atd.) — ty si zjistí coding agent přes list_files / read_file.`;
 
@@ -393,7 +487,7 @@ KOMU PÍŠEŠ: zaměstnancům HolyOSu (skladnice, HR-istka, mistr), kteří nezn
   // ('tool_use ids were found without tool_result blocks') v dalším volání.
   const newHistory = [
     ...history,
-    { role: 'user', content: userMessage },
+    { role: 'user', content: stripImagesForHistory(userContent) },
     { role: 'assistant', content: stripToolUses(response.content) },
   ];
 
@@ -417,4 +511,11 @@ module.exports = {
   chat,
   chatDraft,
   AC_CHAT_MODEL,
+  // Exportováno kvůli testům a kontrole vstupu v routách
+  buildUserContent,
+  toImageBlock,
+  stripImagesForHistory,
+  SUPPORTED_IMAGE_TYPES,
+  MAX_IMAGES_PER_TURN,
+  MAX_IMAGE_BASE64_LEN,
 };

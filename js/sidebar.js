@@ -826,7 +826,7 @@ function openAiChat() {
     : 'Ahoj! 👋 Vidím, že jste na stránce <strong>' + page.title + '</strong>.';
   _aiChatState.messages.push({
     role: 'bot',
-    text: introHead + '\n\nPopište, co byste chtěli upravit nebo přidat. Můžete také nahrát screenshot pro přesnější vyjádření.'
+    text: introHead + '\n\nPopište, co byste chtěli upravit nebo přidat. Můžete taky vložit screenshot nebo výstřižek (📎, Ctrl+V nebo přetažením) — přečtu si ho.'
   });
 
   renderAiChat();
@@ -1070,6 +1070,15 @@ function _addAiAttachmentsFromFiles(fileList) {
     _aiChatState.attachments.push(item);
     renderAiChat();
 
+    // U obrázků si navíc necháme data URL v paměti — posílá se Alanovi, aby
+    // obrázek viděl. Do localStorage se attachments neukládají, takže to
+    // neohrozí quotu (viz _persistAiChatState).
+    if (isImage) {
+      var imgReader = new FileReader();
+      imgReader.onload = function (ev) { item.dataUrl = ev.target.result; };
+      imgReader.readAsDataURL(file);
+    }
+
     _uploadFileToStorage(file).then(function (saved) {
       item.url = saved.url;
       item.status = 'ready';
@@ -1181,13 +1190,99 @@ document.addEventListener('paste', function(e) {
   }
 });
 
+// ─── Obrázky pro Alana (vision) ──────────────────────────────────────────────
+// Co má uživatel právě přiložené (hlavní screenshot + obrázkové přílohy),
+// se posílá s KAŽDOU zprávou, dokud přílohu neodebere. Díky tomu Alan vidí
+// obrázek i při doptávání. Do historie se base64 neukládá — to řeší server.
+var AI_IMG_MAX_EDGE = 1568;              // doporučení Anthropic, nad tím se obrázek stejně zmenšuje
+var AI_IMG_MAX_DATAURL = 3 * 1024 * 1024; // cílová velikost po zmenšení
+var AI_IMG_MAX_SEND = 4;                  // víc obrázků v jedné zprávě nemá smysl
+
+// Rozpadne data URL na { media_type, data } (bez zmenšení — fallback).
+function _rawImageForApi(dataUrl) {
+  var s = String(dataUrl || '');
+  if (s.slice(0, 5) !== 'data:') return null;
+  var comma = s.indexOf(',');
+  if (comma < 0) return null;
+  var mediaType = s.slice(5, comma).split(';')[0].toLowerCase();
+  var data = s.slice(comma + 1);
+  if (!data || data.length > 4 * 1024 * 1024) return null; // server by to stejně odmítl
+  return { media_type: mediaType, data: data };
+}
+
+// Zmenší obrázek na canvasu, ať se po síti netahají megabajty a ať se vejde
+// do limitu Anthropic API. Při jakémkoli problému vrátí originál.
+function _downscaleImageForApi(dataUrl) {
+  return new Promise(function (resolve) {
+    try {
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var w = img.naturalWidth || img.width;
+          var h = img.naturalHeight || img.height;
+          if (!w || !h) { resolve(_rawImageForApi(dataUrl)); return; }
+          var scale = Math.min(1, AI_IMG_MAX_EDGE / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * scale));
+          var ch = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = cw;
+          canvas.height = ch;
+          var ctx = canvas.getContext('2d');
+          // Bílé pozadí — průhledné PNG by po převodu do JPEG zčernalo.
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, cw, ch);
+          ctx.drawImage(img, 0, 0, cw, ch);
+          // PNG drží text ve screenshotu ostrý; když je moc velké, jdeme do JPEG.
+          var out = canvas.toDataURL('image/png');
+          if (out.length > AI_IMG_MAX_DATAURL) out = canvas.toDataURL('image/jpeg', 0.9);
+          if (out.length > AI_IMG_MAX_DATAURL) out = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(_rawImageForApi(out));
+        } catch (e) {
+          console.warn('[AI chat] zmenšení obrázku selhalo:', e.message);
+          resolve(_rawImageForApi(dataUrl));
+        }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = dataUrl;
+    } catch (e) {
+      resolve(_rawImageForApi(dataUrl));
+    }
+  });
+}
+
+// Seznam data URL obrázků, které jsou teď v chatu přiložené.
+function _aiAttachedImageSources() {
+  var out = [];
+  if (_aiChatState.screenshot) out.push(_aiChatState.screenshot);
+  (_aiChatState.attachments || []).forEach(function (a) {
+    if (a && a.kind === 'image' && a.dataUrl) out.push(a.dataUrl);
+  });
+  return out.slice(0, AI_IMG_MAX_SEND);
+}
+
+// Připraví obrázky pro API (zmenšené). Vrací Promise s polem bloků.
+function _aiImagesForApi() {
+  var sources = _aiAttachedImageSources();
+  if (!sources.length) return Promise.resolve([]);
+  return Promise.all(sources.map(_downscaleImageForApi)).then(function (list) {
+    return list.filter(Boolean);
+  });
+}
+
 function sendAiMessage() {
   var input = document.getElementById('ai-sidebar-input');
   if (!input) return;
   var text = input.value.trim();
-  if (!text && !_aiChatState.screenshot) return;
+  var attachedImages = _aiAttachedImageSources().length;
+  // Samotný obrázek bez textu je platná zpráva — "koukni na tohle".
+  if (!text && !attachedImages) return;
 
-  _aiChatState.messages.push({ role: 'user', text: text });
+  var bubble = text;
+  if (attachedImages) {
+    var label = attachedImages === 1 ? '1 obrázek' : (attachedImages < 5 ? attachedImages + ' obrázky' : attachedImages + ' obrázků');
+    bubble = (text ? text + '\n' : '') + '<span style="opacity:.65;font-size:11px;">🖼️ posláno Alanovi: ' + label + '</span>';
+  }
+  _aiChatState.messages.push({ role: 'user', text: bubble });
   if (_aiChatState.step === 0) { _aiChatState.description = text; _aiChatState.step = 1; }
 
   // === Robustní fix proti HTTP 500 ===
@@ -1207,18 +1302,8 @@ function sendAiMessage() {
   var tk = sessionStorage.getItem('token');
   if (tk) headers['Authorization'] = 'Bearer ' + tk;
 
-  var requestBody = JSON.stringify({
-    message: text,
-    history: _aiChatState.history || [],
-    draft: _aiChatState.draft || {},
-    page_context: {
-      path: _aiChatState.pagePath,
-      title: _aiChatState.pageTitle,
-      module_id: _aiChatState.moduleId || null,
-      module_name: _aiChatState.moduleName || null,
-      module_parts: _aiChatState.moduleParts || [],
-    },
-  });
+  // Tělo requestu se skládá až po zmenšení obrázků (viz konec funkce).
+  var requestBody = null;
 
   // Auto-retry s exponential backoff (max 4 pokusy, 2/4/8/15 s)
   function attemptDraftChat(attempt) {
@@ -1277,7 +1362,31 @@ function sendAiMessage() {
     });
   }
 
-  attemptDraftChat(1);
+  // Nejdřív zmenšit obrázky (běží na canvasu, je to asynchronní), pak odeslat.
+  _aiImagesForApi().then(function (images) {
+    if (attachedImages && !images.length) {
+      // Obrázek se nepodařilo zpracovat — ať to uživatel ví hned a nečeká,
+      // že se na něj Alan dívá.
+      _aiChatState.messages.push({
+        role: 'bot',
+        text: '⚠️ Přiložený obrázek se nepodařilo zpracovat, posílám jen text. Zkus ho prosím vložit znovu (PNG nebo JPG).',
+      });
+    }
+    requestBody = JSON.stringify({
+      message: text,
+      images: images,
+      history: _aiChatState.history || [],
+      draft: _aiChatState.draft || {},
+      page_context: {
+        path: _aiChatState.pagePath,
+        title: _aiChatState.pageTitle,
+        module_id: _aiChatState.moduleId || null,
+        module_name: _aiChatState.moduleName || null,
+        module_parts: _aiChatState.moduleParts || [],
+      },
+    });
+    return attemptDraftChat(1);
+  });
 }
 
 function analyzeFollowup(newText, allText, pageTitle) {

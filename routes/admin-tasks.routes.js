@@ -3,6 +3,7 @@
 // =============================================================================
 
 const express = require('express');
+const { z } = require('zod');
 const { Prisma } = require('@prisma/client');
 const router = express.Router();
 const { prisma } = require('../config/database');
@@ -26,6 +27,24 @@ const TASK_INCLUDE = {
     select: { id: true, username: true, display_name: true }
   }
 };
+
+// Obrázky přiložené do AI chatu (screenshot / výstřižek). Posílají se jako
+// base64 nebo celé data URL; typ a velikost si dál hlídá ac-chat.js, tady jen
+// odmítneme zjevné nesmysly, ať se do služby nedostane megabajt textu navíc.
+const chatImageSchema = z.object({
+  media_type: z.string().max(60).optional(),
+  data: z.string().min(1).max(6 * 1024 * 1024),
+  name: z.string().max(200).optional(),
+});
+const chatImagesSchema = z.array(chatImageSchema).max(4);
+
+// Vytáhne a ověří images z requestu. Vrací { ok, images } nebo { ok: false }.
+function parseChatImages(body) {
+  const raw = Array.isArray(body && body.images) ? body.images : [];
+  const parsed = chatImagesSchema.safeParse(raw);
+  if (!parsed.success) return { ok: false, images: [] };
+  return { ok: true, images: parsed.data };
+}
 
 // Mapping status → text pro notifikaci
 const STATUS_LABELS = {
@@ -714,8 +733,16 @@ router.put('/:id', async (req, res, next) => {
 // frontend pošle POST / s draftem (existující create endpoint).
 router.post('/draft-chat', async (req, res, next) => {
   try {
+    const imgs = parseChatImages(req.body);
+    if (!imgs.ok) {
+      return res.status(400).json({ error: 'Neplatné obrázky v body (max 4 obrázky, každý max ~6 MB).' });
+    }
+
     const message = String((req.body && req.body.message) || '').trim();
-    if (!message) return res.status(400).json({ error: 'Chybí message v body.' });
+    // Samotný obrázek bez textu je plnohodnotná zpráva — "koukni na tohle".
+    if (!message && !imgs.images.length) {
+      return res.status(400).json({ error: 'Chybí message nebo obrázek v body.' });
+    }
 
     const history = Array.isArray(req.body && req.body.history) ? req.body.history : [];
     const draft = (req.body && req.body.draft && typeof req.body.draft === 'object') ? req.body.draft : {};
@@ -735,7 +762,7 @@ router.post('/draft-chat', async (req, res, next) => {
 
     let result;
     try {
-      result = await acChat.chatDraft({ draft, history, userMessage: message, pageContext });
+      result = await acChat.chatDraft({ draft, history, userMessage: message, pageContext, images: imgs.images });
     } catch (e) {
       // Detailní log pro debug — celá exception trace + Anthropic error code.
       console.error('[ac-chat draft] failed:', {
@@ -783,8 +810,12 @@ router.post('/:id/ac-chat', async (req, res, next) => {
     const id = parseInt(req.params.id);
     const message = String((req.body && req.body.message) || '').trim();
     const reset = !!(req.body && req.body.reset);
-    if (!message && !reset) {
-      return res.status(400).json({ error: 'Chybí message v body.' });
+    const imgs = parseChatImages(req.body);
+    if (!imgs.ok) {
+      return res.status(400).json({ error: 'Neplatné obrázky v body (max 4 obrázky, každý max ~6 MB).' });
+    }
+    if (!message && !reset && !imgs.images.length) {
+      return res.status(400).json({ error: 'Chybí message nebo obrázek v body.' });
     }
 
     const task = await prisma.adminTask.findUnique({
@@ -794,6 +825,9 @@ router.post('/:id/ac-chat', async (req, res, next) => {
         acceptance_criteria: true, affected_module: true,
         change_type: true, autonomy_override: true,
         ai_questions: true,
+        // Screenshot přiložený při zadání — Alan ho dostane k nahlédnutí,
+        // aby se nemusel ptát na to, co je na něm vidět.
+        screenshot: true,
       },
     });
     if (!task) return res.status(404).json({ error: 'Úkol nenalezen' });
@@ -807,7 +841,7 @@ router.post('/:id/ac-chat', async (req, res, next) => {
 
     let result;
     try {
-      result = await acChat.chat({ task, history, userMessage: message });
+      result = await acChat.chat({ task, history, userMessage: message, images: imgs.images });
     } catch (e) {
       console.error('[ac-chat] chat() failed:', e.message);
       return res.status(500).json({ error: 'AC chat selhal: ' + e.message });
