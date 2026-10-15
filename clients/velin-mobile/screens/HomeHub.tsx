@@ -85,9 +85,6 @@ export default function HomeHub() {
         })}
       </View>
 
-      <View style={styles.soon}>
-        <Text style={styles.soonTxt}>✨ Sem budou postupně přibývat další aplikace Velína.</Text>
-      </View>
     </ScrollView>
   );
 }
@@ -108,6 +105,4 @@ const styles = StyleSheet.create({
   badgeTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
   tileTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   tileSub: { color: colors.text2, fontSize: 12, marginTop: 4, lineHeight: 16 },
-  soon: { marginTop: spacing.xl, borderRadius: 16, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, padding: spacing.lg, alignItems: 'center' },
-  soonTxt: { color: colors.text2, fontSize: 13, textAlign: 'center' },
 });
