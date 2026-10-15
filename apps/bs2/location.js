@@ -534,8 +534,7 @@ const PAGE = `<!DOCTYPE html>
 (function(){
   // ── Analytika (best-effort, stejný beacon jako ostatní stránky) ──
   var SID = (function(){ try { var k='misto_sid', v=sessionStorage.getItem(k); if(!v){ v=Math.random().toString(36).slice(2)+Date.now().toString(36); sessionStorage.setItem(k,v);} return v; } catch(e){ return 'anon'; } })();
-  function track(ev, props){ /* BS2: bez veřejné analytiky */ }
-  track('misto_view');
+  function track(ev, props){ try { if (window.__bs2track) window.__bs2track(ev, props || null); } catch(e) {} } /* události cílů (CTA, vstup do platby, dokončení platby) → sběr PUB_TRACK_JS → HolyOS Centrum reklamy */
   (function(){ var v = document.getElementById('heroVid'); if (!v) return; v.addEventListener('click', function(){ if (v.classList.contains('on')) return; v.classList.add('on'); v.removeAttribute('aria-label'); v.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/36uy8Hip0FM?autoplay=1&controls=0&rel=0&modestbranding=1&playsinline=1&fs=0&disablekb=1&iv_load_policy=3&cc_load_policy=0&hl=cs&loop=1&playlist=36uy8Hip0FM" title="Video – prádlomat" allow="autoplay; encrypted-media; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>'; try { track('misto_cta', { cta: 'hero_video' }); } catch (e) {} }); })();
   document.querySelectorAll('[data-cta]').forEach(function(a){ a.addEventListener('click', function(){ track('misto_cta', { cta: a.getAttribute('data-cta') }); }); });
 
@@ -598,7 +597,7 @@ const PAGE = `<!DOCTYPE html>
   // Návrat ze Stripe
   try { var q=new URLSearchParams(location.search);
     if(q.get('paid')==='1'){ track('misto_paid_return'); showThanks(); }
-    else if(q.get('canceled')==='1'){ setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
+    else if(q.get('canceled')==='1'){ track('misto_pay_canceled'); setMsg('err','Platba nebyla dokončena. Můžete to zkusit znovu nebo nás kontaktovat.'); }
     if(q.get('paid')||q.get('canceled')) history.replaceState(null,'',location.pathname+'#objednat');
   } catch(e){}
   f.addEventListener('submit', async function(e){

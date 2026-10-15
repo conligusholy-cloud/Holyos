@@ -471,18 +471,19 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   // chování na stránce (?path=) – jen když si HolyOS vyžádá detail
   let behavior = null; const bp = String(req.query.path || '').slice(0, 120);
   if (bp) { const ev = (await q("SELECT sid, kind, label, meta, t_ms FROM page_events WHERE path = $1 AND created_at > $2::timestamptz AND created_at < $3::timestamptz ORDER BY created_at", [bp, sinceTs, untilTs])).rows;
-    const sess = new Set(), scroll = { 25: new Set(), 50: new Set(), 75: new Set(), 100: new Set() }, sections = {}, dwell = {}, clicks = {}, exits = {}, grid = {}, time = {}, dev = { m: 0, d: 0 }, refs = {};
+    const sess = new Set(), scroll = { 25: new Set(), 50: new Set(), 75: new Set(), 100: new Set() }, sections = {}, dwell = {}, clicks = {}, exits = {}, grid = {}, time = {}, dev = { m: 0, d: 0 }, refs = {}; const evs = {}, devSids = { m: new Set(), d: new Set() };
     ev.forEach((r) => { sess.add(r.sid); const m = r.meta || {};
-      if (r.kind === 'view') { dev[m.ua === 'm' ? 'm' : 'd']++; const ref = (m.ref || '').replace(/^https?:\/\//, '').split('/')[0] || 'přímo'; refs[ref] = (refs[ref] || 0) + 1; }
+      if (r.kind === 'view') { dev[m.ua === 'm' ? 'm' : 'd']++; devSids[m.ua === 'm' ? 'm' : 'd'].add(r.sid); const ref = (m.ref || '').replace(/^https?:\/\//, '').split('/')[0] || 'přímo'; refs[ref] = (refs[ref] || 0) + 1; }
       else if (r.kind === 'scroll' && scroll[r.label]) scroll[r.label].add(r.sid);
       else if (r.kind === 'section' && r.label) (sections[r.label] = sections[r.label] || new Set()).add(r.sid);
       else if (r.kind === 'dwell' && Array.isArray(m.secs)) m.secs.forEach((d) => { if (!d || !d.l) return; const o = dwell[d.l] = dwell[d.l] || { s: 0, sids: new Set() }; o.s += Number(d.s) || 0; o.sids.add(r.sid); });
       else if (r.kind === 'click' && r.label) { const k = r.label + (m.sec ? ' @ ' + m.sec : ''); (clicks[k] = clicks[k] || new Set()).add(r.sid); }
+      else if (r.kind === 'custom' && r.label) { const o = evs[r.label] = evs[r.label] || { sids: new Set(), total: 0 }; o.sids.add(r.sid); o.total++; }
       else if (r.kind === 'exit') exits[r.label || '(nahoře)'] = (exits[r.label || '(nahoře)'] || 0) + 1;
       else if (r.kind === 'mouse' && m.g) Object.keys(m.g).forEach((k) => { grid[k] = (grid[k] || 0) + Number(m.g[k] || 0); });
       else if (r.kind === 'time') time[r.sid] = (time[r.sid] || 0) + (Number(m.s) || 0); });
     const n = sess.size; const sec = Object.keys(sections).map((k) => ({ name: k, seen: sections[k].size, avg_secs: dwell[k] ? Math.round(dwell[k].s / Math.max(1, dwell[k].sids.size)) : 0 })).sort((a, b) => b.seen - a.seen);
-    behavior = { sessions: n, scroll: { 25: scroll[25].size, 50: scroll[50].size, 75: scroll[75].size, 100: scroll[100].size }, sections: sec, clicks: Object.keys(clicks).map((k) => ({ name: k, n: clicks[k].size })).sort((a, b) => b.n - a.n).slice(0, 25), exits: Object.keys(exits).map((k) => ({ name: k, n: exits[k] })).sort((a, b) => b.n - a.n), avg_time: Object.keys(time).length ? Math.round(Object.values(time).reduce((a, b) => a + b, 0) / Object.keys(time).length) : null, devices: dev, referrers: Object.keys(refs).map((k) => ({ name: k, n: refs[k] })).sort((a, b) => b.n - a.n).slice(0, 10), mouse: grid }; }
+    behavior = { sessions: n, scroll: { 25: scroll[25].size, 50: scroll[50].size, 75: scroll[75].size, 100: scroll[100].size }, sections: sec, clicks: Object.keys(clicks).map((k) => ({ name: k, n: clicks[k].size })).sort((a, b) => b.n - a.n).slice(0, 25), exits: Object.keys(exits).map((k) => ({ name: k, n: exits[k] })).sort((a, b) => b.n - a.n), avg_time: Object.keys(time).length ? Math.round(Object.values(time).reduce((a, b) => a + b, 0) / Object.keys(time).length) : null, devices: dev, device_sessions: { m: devSids.m.size, d: devSids.d.size }, events: Object.keys(evs).map((k) => ({ name: k, sessions: evs[k].sids.size, total: evs[k].total })).sort((a, b) => b.sessions - a.sessions), referrers: Object.keys(refs).map((k) => ({ name: k, n: refs[k] })).sort((a, b) => b.n - a.n).slice(0, 10), mouse: grid }; }
   res.json({ days, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior });
 }));
 app.get('/api/presence', wrap(async (req, res) => {
