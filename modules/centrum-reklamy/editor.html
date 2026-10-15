@@ -619,8 +619,10 @@
       var linkShown = lpg ? lpg.url : (linkTxt || (spv ? 'AI specialista' : 'rezervace termínu')) + (lnn ? '' : '  (výchozí – záchytná stránka není připojená)');
       var linkWarn = lnn && !lpg && (lnn.variant || 'specialist') !== vr ? 'Připojená stránka je jiná varianta – odkaz zůstane výchozí pro tuto variantu.' : '';
       var fromTxt = isSms ? (CHAN && CHAN.sms ? ((CHAN.sms.provider === 'gosms' ? 'GoSMS' : 'Twilio') + (CHAN.sms.from ? ' · ' + CHAN.sms.from : ' · odesílatel není nastaven') + (CHAN.sms.ready ? '' : ' ⚠ brána není připravená')) : '—') : (CHAN && CHAN.autosend && CHAN.autosend.email_from ? CHAN.autosend.email_from : 'není nastavený (COMPOUNDER_MAIL_FROM)');
-      var text = isSms ? ((spv ? C.text : C.schuzkaText) || '') : (spv ? '' : (C.schuzkaEmailBody || '')); var subject = (!isSms && !spv) ? (C.schuzkaEmailSubject || '') : '';
-      return { isSms: isSms, spv: spv, on: on, vs: vs, ownIds: ownIds, othIds: othIds, ownNames: ownNames, linkShown: linkShown, linkWarn: linkWarn, fromTxt: fromTxt, text: text, subject: subject, fixedText: !isSms && spv };
+      var epf = spv ? 'specialistEmail' : 'schuzkaEmail';
+      if (!isSms) { var ownFrom = C[epf + 'From']; if (ownFrom) fromTxt = ownFrom; } // odesílatel zvolený v nastavení uzlu má přednost před výchozím
+      var text = isSms ? ((spv ? C.text : C.schuzkaText) || '') : (C[epf + 'Body'] || ''); var subject = isSms ? '' : (C[epf + 'Subject'] || '');
+      return { isSms: isSms, spv: spv, on: on, vs: vs, ownIds: ownIds, othIds: othIds, ownNames: ownNames, linkShown: linkShown, linkWarn: linkWarn, fromTxt: fromTxt, text: text, subject: subject, fixedText: !isSms && !text };
     }
     // Log odeslání uzlu SMS / e-mail: kontrola, co přesně, komu a kdy odešlo + doručení / otevření / klik
     async function openNodeLog(nd) {
