@@ -112,6 +112,32 @@ router.get('/companies/:id(\\d+)', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// GET /api/wh/companies/:id/bank-accounts — evidované účty firmy: ověřené (whitelist) + účty z přijatých faktur
+router.get('/companies/:id(\\d+)/bank-accounts', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const c = await prisma.company.findUnique({ where: { id }, select: { bank_account: true, verified_bank_accounts: true } });
+    if (!c) return res.status(404).json({ error: 'Společnost nenalezena' });
+    const norm = (s) => String(s || '').replace(/\s+/g, '').toUpperCase();
+    const verified = Array.isArray(c.verified_bank_accounts) ? c.verified_bank_accounts : [];
+    const vset = new Set(); verified.forEach((v) => { if (v.account) vset.add(norm(v.account)); if (v.iban) vset.add(norm(v.iban)); });
+    // jen přijaté (AP) – u vydaných je v partner_bank_account náš vlastní účet
+    const invs = await prisma.invoice.findMany({
+      where: { company_id: id, direction: 'ap', OR: [{ partner_bank_account: { not: null } }, { partner_iban: { not: null } }] },
+      select: { invoice_number: true, date_issued: true, partner_bank_account: true, partner_iban: true },
+      orderBy: { date_issued: 'desc' }, take: 500,
+    });
+    const map = new Map();
+    for (const i of invs) {
+      const k = norm(i.partner_bank_account || i.partner_iban); if (!k) continue;
+      const e = map.get(k) || { account: i.partner_bank_account || null, iban: i.partner_iban || null, count: 0, last_date: i.date_issued, last_invoice: i.invoice_number };
+      e.count++; map.set(k, e);
+    }
+    const fromInvoices = [...map.values()].map((e) => ({ ...e, verified: vset.has(norm(e.account)) || vset.has(norm(e.iban)) }));
+    res.json({ bank_account: c.bank_account || null, verified, from_invoices: fromInvoices });
+  } catch (err) { next(err); }
+});
+
 router.post('/companies', async (req, res, next) => {
   try {
     const company = await prisma.company.create({ data: normalizeCompanyBody(req.body) });

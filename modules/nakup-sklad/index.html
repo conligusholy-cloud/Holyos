@@ -564,14 +564,17 @@
       try { allCos = await (await fetch('/api/wh/companies')).json(); } catch(e) {}
       const consOpts = '<option value="">— žádný (dodává se odběrateli) —</option>' + allCos.filter(x => x.id !== id).map(x => '<option value="' + x.id + '"' + (c.consignee_id===x.id?' selected':'') + '>' + String(x.name).replace(/</g,'&lt;') + (x.ico ? ' (' + x.ico + ')' : '') + '</option>').join('');
       const typeOpts = Object.entries(COMPANY_TYPES).map(([k,v]) => '<option value="' + k + '"' + (c.type===k?' selected':'') + '>' + v + '</option>').join('');
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-        '<div class="modal" style="max-width:650px;"><h2>' + (id ? '✏️ Upravit společnost' : '➕ Nová společnost') + '</h2>' +
+      // Okno se zavírá jen křížkem / Zrušit (klik mimo neztratí rozepsaná data)
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay">' +
+        '<div class="modal" style="width:1100px;max-width:95vw;max-height:94vh;position:relative;">' +
+        '<button type="button" onclick="closeModal()" title="Zavřít" style="position:sticky;top:0;float:right;margin:-12px -12px 0 0;background:var(--surface2,#2a2a40);border:1px solid var(--border);color:inherit;border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer;z-index:2;">✕</button>' +
+        '<h2>' + (id ? '✏️ Upravit společnost' : '➕ Nová společnost') + '</h2>' +
         '<form onsubmit="saveCompany(event,' + (id||'null') + ')">' +
           '<div style="margin-bottom:14px;display:flex;gap:8px;align-items:end;">' +
             '<div class="form-group" style="flex:1;"><label>IČO (dohledání z ARES)</label><input type="text" name="ico" value="' + (c.ico||'') + '" placeholder="Zadejte IČO..."></div>' +
             '<button type="button" class="btn btn-secondary" onclick="lookupARES(this.form)" style="margin-bottom:0;">🔍 ARES</button>' +
           '</div>' +
-          '<div class="form-grid">' +
+          '<div class="form-grid mat-grid">' +
             '<div class="form-group full"><label>Název *</label><input type="text" name="name" value="' + (c.name||'') + '" required></div>' +
             '<div class="form-group"><label>Typ</label><select name="type">' + typeOpts + '</select></div>' +
             '<div class="form-group"><label>DIČ</label><input type="text" name="dic" value="' + (c.dic||'') + '"></div>' +
@@ -579,6 +582,10 @@
             '<div class="form-group"><label>Město</label><input type="text" name="city" value="' + (c.city||'') + '"></div>' +
             '<div class="form-group"><label>PSČ</label><input type="text" name="zip" value="' + (c.zip||'') + '"></div>' +
             '<div class="form-group"><label>Země</label><select name="country">' + HolyCountries.renderOptions(c.country || 'CZ') + '</select></div>' +
+            '<div class="form-group full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;"><label style="font-weight:700;">🏦 Bankovní účty</label><div style="font-size:11.5px;opacity:.7;margin-bottom:6px;">Hlavní účet pro platby + všechny účty, které u firmy evidujeme (ověřené a z přijatých faktur).</div></div>' +
+            '<div class="form-group"><label>Hlavní bankovní účet</label><input type="text" name="bank_account" value="' + (c.bank_account||'') + '" placeholder="123456789/0100"></div>' +
+            '<div class="form-group"><label>Splatnost (dní)</label><input type="number" name="payment_terms_days" value="' + (c.payment_terms_days||14) + '" min="0"></div>' +
+            '<div class="form-group full"><div id="co-bank-list" style="font-size:13px;">' + (id ? '<span style="opacity:.6">Načítám evidované účty…</span>' : '<span style="opacity:.6">Evidované účty se zobrazí po uložení společnosti.</span>') + '</div></div>' +
             '<div class="form-group full" style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px;"><label style="font-weight:700;">Dodací adresa (provozovna)</label><div style="font-size:11.5px;opacity:.7;margin-bottom:6px;">Kam se zboží dodává. Prázdné = adresa sídla. Je-li nastaven příjemce, platí jeho adresa.</div></div>' +
             '<div class="form-group full"><label>Adresa provozovny</label><input type="text" name="branch_address" value="' + (c.branch_address||'') + '"></div>' +
             '<div class="form-group"><label>Město</label><input type="text" name="branch_city" value="' + (c.branch_city||'') + '"></div>' +
@@ -593,12 +600,30 @@
             '<div class="form-group"><label>Email</label><input type="text" name="email" value="' + (c.email||'') + '"></div>' +
             '<div class="form-group"><label>Telefon</label><input type="text" name="phone" value="' + (c.phone||'') + '"></div>' +
             '<div class="form-group"><label>Web</label><input type="text" name="web" value="' + (c.web||'') + '"></div>' +
-            '<div class="form-group"><label>Bankovní účet</label><input type="text" name="bank_account" value="' + (c.bank_account||'') + '"></div>' +
-            '<div class="form-group"><label>Splatnost (dní)</label><input type="number" name="payment_terms_days" value="' + (c.payment_terms_days||14) + '" min="0"></div>' +
             '<div class="form-group full"><label>Poznámky</label><textarea name="notes">' + (c.notes||'') + '</textarea></div>' +
           '</div>' +
           '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div>' +
         '</form></div></div>';
+      if (id) loadCompanyBankAccounts(id);
+    }
+
+    // Evidované bankovní účty firmy: ověřené (whitelist proti podvodům) + účty z přijatých faktur
+    async function loadCompanyBankAccounts(id) {
+      const box = document.getElementById('co-bank-list'); if (!box) return;
+      const e = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+      const d = (v) => v ? new Date(v).toLocaleDateString('cs-CZ') : '—';
+      try {
+        const r = await fetch('/api/wh/companies/' + id + '/bank-accounts'); const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        const ver = j.verified || [], inv = j.from_invoices || [];
+        let h = '<table class="data-table" style="font-size:12.5px;"><thead><tr><th>Účet</th><th>IBAN</th><th>Stav</th><th>Zdroj</th><th class="num">Faktur</th><th>Naposledy</th></tr></thead><tbody>';
+        let rows = 0;
+        ver.forEach((v) => { const m = inv.find((x) => x.verified && ((x.account && x.account === v.account) || (x.iban && x.iban === v.iban))); rows++;
+          h += '<tr><td><b>' + e(v.account || '—') + '</b></td><td>' + e(v.iban || '—') + '</td><td><span class="badge" style="background:#10b98122;color:#10b981;">🔐 ověřený</span></td><td>' + e(v.source || '') + (v.note ? ' · ' + e(v.note) : '') + ' · ' + d(v.verified_at) + '</td><td class="num">' + (m ? m.count : 0) + '</td><td>' + (m ? d(m.last_date) + ' · ' + e(m.last_invoice) : '—') + '</td></tr>'; });
+        inv.filter((x) => !x.verified).forEach((x) => { rows++;
+          h += '<tr><td><b>' + e(x.account || '—') + '</b></td><td>' + e(x.iban || '—') + '</td><td><span class="badge" style="background:#f59e0b22;color:#f59e0b;">⚠ neověřený</span></td><td>z přijaté faktury</td><td class="num">' + x.count + '</td><td>' + d(x.last_date) + ' · ' + e(x.last_invoice) + '</td></tr>'; });
+        h += '</tbody></table>';
+        box.innerHTML = rows ? h : '<span style="opacity:.6">Kromě hlavního účtu zatím žádné evidované účty (ověřené ani z přijatých faktur).</span>';
+      } catch (err) { box.innerHTML = '<span style="color:#ef4444">Účty se nepodařilo načíst: ' + e(err.message) + '</span>'; }
     }
 
     async function lookupARES(form) {
