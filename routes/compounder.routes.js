@@ -1038,6 +1038,23 @@ const AISPEC_AUTOSEND_DEFAULT = {
   // Záchytná stránka za SMS / e-mailem (nastavuje se ve funelu v Centru reklamy). Prázdné = výchozí osobní krátký odkaz varianty.
   landing: { specialist: '', schuzka: '' },
 };
+// E-mail varianty SPECIALISTA: vlastní předmět/text z nastavení funelu ({link}, {name}), jinak výchozí šablona.
+const SPECIALIST_EMAIL_DEFAULT = {
+  subject: 'Prádlomat — váš specialista odpoví na vše',
+  body: 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: {link}\n\nPrádlomaty — Best Series',
+  linkLabel: 'Zeptat se specialisty',
+};
+async function specialistEmail(name, link, overrides) {
+  let c = {}; try { c = (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {}; } catch (e) { c = {}; }
+  const o = overrides || {};
+  const nm = String(name || '').trim();
+  const fill = (t) => String(t || '').replace(/\{link\}/g, link).replace(/\{name\}/g, nm);
+  return {
+    subject: fill(o.subject || c.specialistEmailSubject || SPECIALIST_EMAIL_DEFAULT.subject),
+    body: fill(o.body || c.specialistEmailBody || SPECIALIST_EMAIL_DEFAULT.body),
+    linkLabel: String(o.linkLabel || c.specialistEmailLinkLabel || SPECIALIST_EMAIL_DEFAULT.linkLabel),
+  };
+}
 const SCHUZKA_EMAIL_KEYS = ['schuzkaEmailEnabled', 'schuzkaEmailSubject', 'schuzkaEmailBody', 'schuzkaEmailLinkLabel'];
 
 // Sestaví e-mail „schůzka" pro leada z konfigurace (subject/body s {link}, {name}).
@@ -1083,6 +1100,9 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
       landing: has('landing') ? { specialist: cleanLandingUrl(b.landing && b.landing.specialist), schuzka: cleanLandingUrl(b.landing && b.landing.schuzka) } : Object.assign({ specialist: '', schuzka: '' }, prev.landing || {}),
       schuzkaEmailLinkLabel: has('schuzkaEmailLinkLabel') ? String(b.schuzkaEmailLinkLabel || AISPEC_AUTOSEND_DEFAULT.schuzkaEmailLinkLabel).slice(0, 80) : prev.schuzkaEmailLinkLabel,
       // Odesílatel e-mailu per varianta (prázdné = výchozí odesílatel funelů z Centra reklamy). Adresa SES odesílatele → jde přes Amazon SES.
+      specialistEmailSubject: has('specialistEmailSubject') ? String(b.specialistEmailSubject || '').slice(0, 200) : (prev.specialistEmailSubject || ''),
+      specialistEmailBody: has('specialistEmailBody') ? String(b.specialistEmailBody || '').slice(0, 4000) : (prev.specialistEmailBody || ''),
+      specialistEmailLinkLabel: has('specialistEmailLinkLabel') ? String(b.specialistEmailLinkLabel || '').slice(0, 80) : (prev.specialistEmailLinkLabel || ''),
       specialistEmailFrom: has('specialistEmailFrom') ? String(b.specialistEmailFrom || '').trim().slice(0, 200) : (prev.specialistEmailFrom || ''),
       schuzkaEmailFrom: has('schuzkaEmailFrom') ? String(b.schuzkaEmailFrom || '').trim().slice(0, 200) : (prev.schuzkaEmailFrom || ''),
     };
@@ -1097,7 +1117,7 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
     try {
       const LABEL = { enabled: 'SMS specialista automat', emailEnabled: 'E-mail specialista automat', schuzkaEmailEnabled: 'E-mail schůzka automat',
         ownerPersonIds: 'Obchodníci specialista', schuzkaOwnerPersonIds: 'Obchodníci schůzka', text: 'Text SMS specialista', schuzkaText: 'Text SMS schůzka',
-        schuzkaEmailSubject: 'Předmět e-mailu schůzka', schuzkaEmailBody: 'Text e-mailu schůzka', schuzkaEmailLinkLabel: 'Tlačítko e-mailu schůzka', specialistEmailFrom: 'Odesílatel e-mailu specialista', schuzkaEmailFrom: 'Odesílatel e-mailu schůzka',
+        schuzkaEmailSubject: 'Předmět e-mailu schůzka', schuzkaEmailBody: 'Text e-mailu schůzka', schuzkaEmailLinkLabel: 'Tlačítko e-mailu schůzka', specialistEmailFrom: 'Odesílatel e-mailu specialista', specialistEmailSubject: 'Předmět e-mailu specialista', specialistEmailBody: 'Text e-mailu specialista', schuzkaEmailFrom: 'Odesílatel e-mailu schůzka',
         sources: 'Zdroje', onlyNew: 'Jen nové', skipBlacklist: 'Přeskočit black list' };
       const changes = [];
       Object.keys(LABEL).forEach((k) => {
@@ -1114,6 +1134,38 @@ router.put('/ai-specialist-autosend', requireAuth, async (req, res, next) => {
     res.json({ ok: true, config: cfg });
   } catch (err) { next(err); }
 });
+// POST /api/compounder/ai-specialist-autosend/generate-email { variant, url } — AI návrh e-mailu podle cílové stránky
+// (základ k úpravě; nic neukládá). Text obsahuje {link} (odkaz na stránku) a může obsahovat {name}.
+router.post('/ai-specialist-autosend/generate-email', requireAuth, async (req, res) => {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) return res.status(400).json({ ok: false, error: 'ANTHROPIC_API_KEY není nastavený' });
+    const b = req.body || {}; const variant = b.variant === 'schuzka' ? 'schuzka' : 'specialist';
+    const url = String(b.url || '').trim();
+    let pageText = '', title = '';
+    if (/^https:\/\/[^\s]+$/.test(url)) {
+      try {
+        const r = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'HolyOS-email-generator' } });
+        const html = await r.text();
+        title = ((html.match(/<title[^>]*>([^<]*)<\/title>/i) || [])[1] || '').trim();
+        const desc = ((html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)/i) || [])[1] || '').trim();
+        pageText = (desc ? desc + '\n' : '') + html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().slice(0, 7000);
+      } catch (e) { pageText = ''; }
+    }
+    const goal = variant === 'schuzka' ? 'domluvit si schůzku / termín s obchodníkem' : 'zeptat se osobního AI specialisty na prádlomaty a dozvědět se víc';
+    const prompt = 'Jsi copywriter firmy Best Series s.r.o. (samoobslužné prádelny / prádlomaty, značka Prádlomaty). Napiš ČESKY krátký e-mail pro člověka, který právě vyplnil formulář v reklamě na Facebooku a zajímá se o vlastní prádlomat (podnikání, investice, lokalita).\n'
+      + 'Cíl e-mailu: aby klikl na odkaz a otevřel cílovou stránku. Varianta: ' + goal + '.\n'
+      + 'Cílová stránka: ' + (url || '(neznámá)') + (title ? '\nTitulek stránky: ' + title : '') + '\n'
+      + (pageText ? 'Obsah stránky (zkrácený):\n' + pageText + '\n' : 'Obsah stránky není k dispozici – piš obecně podle URL a varianty.\n')
+      + 'Pravidla: vykání, přátelský a věcný tón, max. ~90 slov, žádné vymyšlené ceny ani čísla, která nejsou na stránce. V textu použij přesně jednou zástupný znak {link} (místo odkazu) a oslovení může obsahovat {name} (jméno; když chybí, oslovení „Dobrý den,"). Podpis: „Prádlomaty — Best Series". Předmět max. 60 znaků, bez emoji. linkLabel = text tlačítka max. 30 znaků.\n'
+      + 'Odpověz POUZE validním JSON bez markdownu: {"subject":"…","body":"…","linkLabel":"…"}';
+    const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+    const resp = await client.messages.create({ model: process.env.EMAIL_GEN_MODEL || 'claude-sonnet-4-6', max_tokens: 900, messages: [{ role: 'user', content: prompt }] });
+    const txt = (resp.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+    let out; try { out = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) { return res.status(502).json({ ok: false, error: 'AI nevrátila platný návrh, zkus to znovu' }); }
+    let body = String(out.body || '').slice(0, 4000); if (!/\{link\}/.test(body)) body += '\n\n{link}';
+    res.json({ ok: true, subject: String(out.subject || '').slice(0, 200), body, linkLabel: String(out.linkLabel || '').slice(0, 80), page_title: title, page_read: !!pageText });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
 // POST /api/compounder/ai-specialist-autosend/test-email { variant, to, from?, subject?, body? }
 // Testovací e-mail varianty (specialista / schůzka) tak, jak ho dostane lead – i s neuloženým textem a zvoleným odesílatelem.
 router.post('/ai-specialist-autosend/test-email', requireAuth, async (req, res) => {
@@ -1128,12 +1180,11 @@ router.post('/ai-specialist-autosend/test-email', requireAuth, async (req, res) 
     const lead = { id: 0, name: String(b.name || 'Jan Novák') };
     let subject, body, link, linkLabel, preheader = null;
     if (variant === 'schuzka') {
-      const ov = {}; if (b.subject) ov.schuzkaEmailSubject = String(b.subject); if (b.body) ov.schuzkaEmailBody = String(b.body);
+      const ov = {}; if (b.subject) ov.schuzkaEmailSubject = String(b.subject); if (b.body) ov.schuzkaEmailBody = String(b.body); if (b.linkLabel) ov.schuzkaEmailLinkLabel = String(b.linkLabel);
       const m = buildSchuzkaEmail(lead, cfg, ov); subject = m.subject; body = m.body; link = m.link; linkLabel = m.linkLabel; preheader = m.preheader;
     } else {
       link = autosendLink(cfg, 'specialist', 0, 'email'); linkLabel = 'Zeptat se specialisty';
-      subject = 'Prádlomat — váš specialista odpoví na vše';
-      body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+      { const se = await specialistEmail(lead.name, link, { subject: b.subject, body: b.body, linkLabel: b.linkLabel }); subject = se.subject; body = se.body; linkLabel = se.linkLabel; }
     }
     const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: 'Prádlomaty', link, linkLabel, preheader, brand: 'pradlomaty', campaignId: 'test-' + variant });
     if (!r || r.sent === false) return res.status(400).json({ ok: false, error: (r && (r.error || r.skipped)) || 'neodesláno' });
@@ -1521,9 +1572,8 @@ async function autosendAiSpecialistEmail(lead) {
     const from = await funnelMailFrom('specialist');
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
-    const subject = 'Prádlomat — váš specialista odpoví na vše';
-    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
@@ -1775,10 +1825,9 @@ router.get('/ai-specialist-email-preview', requireAuth, async (req, res) => {
     const id = parseInt(req.query.lead_id, 10);
     const leadId = Number.isInteger(id) && id > 0 ? id : 0;
     const link = specialistShortLink(leadId, 'email');
-    const subject = 'Prádlomat — váš specialista odpoví na vše';
-    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
+    const { subject, body, linkLabel: spLabel } = await specialistEmail('', link);
     const { renderEmailHtml } = require('../services/email');
-    res.set('Content-Type', 'text/html; charset=utf-8').send(renderEmailHtml({ title: subject, body, link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty' }));
+    res.set('Content-Type', 'text/html; charset=utf-8').send(renderEmailHtml({ title: subject, body, link, linkLabel: spLabel, brand: 'pradlomaty' }));
   } catch (err) { res.status(500).send('Chyba náhledu: ' + err.message); }
 });
 
@@ -1793,9 +1842,8 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     if (!from) return res.status(400).json({ ok: false, error: 'Není nastavený odesílatel (COMPOUNDER_SPECIALIST_MAIL_FROM / COMPOUNDER_MAIL_FROM)' });
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
-    const subject = 'Prádlomat — váš specialista odpoví na vše';
-    const body = 'Dobrý den,\n\npřipravili jsme pro Vás osobního specialistu na prádlomaty, který Vám hned odpoví na cokoli — jak to funguje, ekonomika, návratnost, výběr lokality.\n\nStačí kliknout a zeptat se: ' + link + '\n\nPrádlomaty — Best Series';
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: 'Zeptat se specialisty', brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     const sentAt = new Date();
     await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });
