@@ -1159,7 +1159,7 @@ router.post('/ai-specialist-autosend/generate-email', requireAuth, async (req, r
       + 'Cíl e-mailu: aby klikl na odkaz a otevřel cílovou stránku. Varianta: ' + goal + '.\n'
       + 'Cílová stránka: ' + (url || '(neznámá)') + (title ? '\nTitulek stránky: ' + title : '') + '\n'
       + (pageText ? 'Obsah stránky (zkrácený):\n' + pageText + '\n' : 'Obsah stránky není k dispozici – piš obecně podle URL a varianty.\n')
-      + 'Pravidla: vykání, přátelský, energický a zajímavý tón (e-mail má být živý, ne korporátní), max. ~110 slov, žádné vymyšlené ceny ani čísla, která nejsou na stránce. Piš krátké odstavce, začni lákavým háčkem a uprostřed můžeš dát 2–3 krátké odrážky začínající emoji (např. 💧 🧺 📍 💰 🚀 – vyber ta, která sedí k obsahu stránky). Emoji používej střídmě, ale viditelně (celkem 4–6). V textu použij přesně jednou zástupný znak {link} na samostatném řádku těsně před podpisem; v HTML e-mailu se z textu odstraní a nahradí tlačítkem, takže věta před ním musí dávat smysl i bez odkazu (např. „Otevřete stránku a mrkněte, co pro vás máme 👇"), nepiš před něj dvojtečku. Oslovení může obsahovat {name} (jméno; když chybí, oslovení „Dobrý den,"). Podpis: „Prádlomaty — Best Series". Předmět max. 60 znaků, působivý a zvídavý, MUSÍ obsahovat 1–2 vhodná emoji (na začátku nebo na konci). linkLabel = text tlačítka max. 30 znaků, začíná emoji (např. 🚀).\n'
+      + 'Cíl je NEJVYŠŠÍ PROKLIK: e-mail musí být velmi krátký a neodolatelný. Pravidla: vykání, energický, osobní tón; CELKEM max. 50 slov (bez podpisu) – kratší je lepší. Struktura: (1) jedna úderná věta s háčkem, který vzbudí zvědavost nebo zasáhne největší přínos pro čtenáře; (2) maximálně 3 velmi krátké odrážky (každá do 7 slov) začínající emoji, jen konkrétní přínosy ze stránky; (3) jedna věta s výzvou k akci, která snižuje práh kliknutí (např. „Stačí 2 minuty ⏱" jen pokud to stránka podporuje). Žádné vymyšlené ceny, čísla ani sliby (např. „zdarma"), které nejsou na stránce. Žádná omáčka, žádné úvody typu „děkujeme za zájem". Emoji střídmě, ale viditelně (celkem 3–5, vyber ta, která sedí k obsahu: 💧 🧺 📍 💰 🚀). V textu použij přesně jednou zástupný znak {link} na samostatném řádku těsně před podpisem; v HTML e-mailu se z textu odstraní a nahradí tlačítkem, takže věta před ním musí dávat smysl i bez odkazu (např. „Otevřete stránku a mrkněte, co pro vás máme 👇"), nepiš před něj dvojtečku. Oslovení může obsahovat {name} (jméno; když chybí, oslovení „Dobrý den,"). Podpis: „Prádlomaty — Best Series". Předmět max. 60 znaků, působivý a zvídavý, MUSÍ obsahovat 1–2 vhodná emoji (na začátku nebo na konci). linkLabel = text tlačítka max. 30 znaků, začíná emoji (např. 🚀).\n'
       + 'Odpověz POUZE validním JSON bez markdownu: {"subject":"…","body":"…","linkLabel":"…"}';
     const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
     const resp = await client.messages.create({ model: process.env.EMAIL_GEN_MODEL || 'claude-sonnet-4-6', max_tokens: 900, messages: [{ role: 'user', content: prompt }] });
@@ -1167,6 +1167,29 @@ router.post('/ai-specialist-autosend/generate-email', requireAuth, async (req, r
     let out; try { out = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1)); } catch (e) { return res.status(502).json({ ok: false, error: 'AI nevrátila platný návrh, zkus to znovu' }); }
     let body = String(out.body || '').slice(0, 4000); if (!/\{link\}/.test(body)) body += '\n\n{link}';
     res.json({ ok: true, subject: String(out.subject || '').slice(0, 200), body, linkLabel: String(out.linkLabel || '').slice(0, 80), page_title: title, page_read: !!pageText });
+  } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
+});
+// POST /api/compounder/ai-specialist-autosend/check-link { variant } — ověří odkaz, který půjde do e-mailu/SMS:
+// sledovaný odkaz (testovací kód, nic se nelogují) → přesměrování → cílová stránka (HTTP stav, doba odezvy).
+router.post('/ai-specialist-autosend/check-link', requireAuth, async (req, res) => {
+  try {
+    const variant = (req.body || {}).variant === 'schuzka' ? 'schuzka' : 'specialist';
+    const cfg = Object.assign({}, AISPEC_AUTOSEND_DEFAULT, (await getSetting('compounder.aispec_autosend', { type: 'json', defaultValue: null })) || {});
+    const link = autosendLink(cfg, variant, 0, 'email');
+    const out = { link, steps: [], ok: false };
+    const t0 = Date.now();
+    let r1; try { r1 = await fetch(link, { redirect: 'manual', signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'HolyOS-link-check' } }); } catch (e) { out.error = 'Odkaz se nepodařilo otevřít: ' + e.message; return res.json(out); }
+    const loc = r1.headers.get('location') || '';
+    out.steps.push({ url: link, status: r1.status, location: loc });
+    if (r1.status >= 300 && r1.status < 400 && loc) {
+      const target = new URL(loc, link).toString(); out.target = target;
+      let r2; try { r2 = await fetch(target, { redirect: 'follow', signal: AbortSignal.timeout(12000), headers: { 'User-Agent': 'HolyOS-link-check' } }); } catch (e) { out.error = 'Cílová stránka nejde otevřít: ' + e.message; return res.json(out); }
+      out.steps.push({ url: target.split('?')[0], status: r2.status }); out.final_status = r2.status; out.ok = r2.status >= 200 && r2.status < 300;
+      if (!out.ok) out.error = 'Cílová stránka vrací HTTP ' + r2.status;
+    } else if (r1.status >= 200 && r1.status < 300) { out.target = link; out.final_status = r1.status; out.ok = true; }
+    else out.error = 'Odkaz vrací HTTP ' + r1.status + (r1.status === 404 ? ' (neplatný nebo expirovaný odkaz)' : '');
+    out.ms = Date.now() - t0;
+    res.json(out);
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 // POST /api/compounder/ai-specialist-autosend/test-email { variant, to, from?, subject?, body? }
@@ -1189,7 +1212,7 @@ router.post('/ai-specialist-autosend/test-email', requireAuth, async (req, res) 
       link = autosendLink(cfg, 'specialist', 0, 'email'); linkLabel = 'Zeptat se specialisty';
       { const se = await specialistEmail(lead.name, link, { subject: b.subject, body: b.body, linkLabel: b.linkLabel }); subject = se.subject; body = se.body; linkLabel = se.linkLabel; }
     }
-    const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: 'Prádlomaty', link, linkLabel, preheader, brand: 'bs2', campaignId: 'test-' + variant });
+    const r = await sendMail({ to, subject: '[TEST] ' + subject, body, from, fromName: 'Prádlomaty', link, linkLabel, preheader, brand: 'pradlomaty', campaignId: 'test-' + variant });
     if (!r || r.sent === false) return res.status(400).json({ ok: false, error: (r && (r.error || r.skipped)) || 'neodesláno' });
     res.json({ ok: true, to, from, via: r.via || null });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
@@ -1544,7 +1567,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     const from = await funnelMailFrom('schuzka');
     if (!from) return logOutreach(lead.id, 'schuzka', 'error', 'není nastavený odesílatel e-mailu');
     const m = buildSchuzkaEmail(lead, cfg);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'bs2', leadId: lead.id, campaignId: 'funnel-schuzka' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
@@ -1576,7 +1599,7 @@ async function autosendAiSpecialistEmail(lead) {
     if (!from) return skip('není nastavený odesílatel');
     const link = autosendLink(cfg, 'specialist', lead.id, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'bs2', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
       data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
@@ -1786,7 +1809,7 @@ router.get('/schuzka-email-preview', requireAuth, async (req, res) => {
     if (req.query.linkLabel) ov.schuzkaEmailLinkLabel = String(req.query.linkLabel);
     const m = buildSchuzkaEmail(lead, cfg, ov);
     const { renderEmailHtml } = require('../services/email');
-    const html = renderEmailHtml({ title: m.subject, body: m.body, link: m.link, linkLabel: m.linkLabel, preheader: m.preheader, brand: 'bs2' });
+    const html = renderEmailHtml({ title: m.subject, body: m.body, link: m.link, linkLabel: m.linkLabel, preheader: m.preheader, brand: 'pradlomaty' });
     res.set('Content-Type', 'text/html; charset=utf-8').send(html);
   } catch (err) { res.status(500).send('Chyba náhledu: ' + err.message); }
 });
@@ -1811,7 +1834,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     if (b.body) ov.schuzkaEmailBody = String(b.body);
     if (b.linkLabel) ov.schuzkaEmailLinkLabel = String(b.linkLabel);
     const m = buildSchuzkaEmail(lead, cfg, ov);
-    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'bs2', leadId: lead.id, campaignId: 'funnel-schuzka' });
+    const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: 'Prádlomaty', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
     if (!r || !r.sent) return res.status(400).json({ ok: false, error: 'E-mail se neodeslal: ' + ((r && (r.error || r.skipped)) || 'neznámá chyba') });
     const sentAt = new Date();
     await prisma.compounderLead.update({
@@ -1830,7 +1853,7 @@ router.get('/ai-specialist-email-preview', requireAuth, async (req, res) => {
     const link = specialistShortLink(leadId, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail('', link);
     const { renderEmailHtml } = require('../services/email');
-    res.set('Content-Type', 'text/html; charset=utf-8').send(renderEmailHtml({ title: subject, body, link, linkLabel: spLabel, brand: 'bs2' }));
+    res.set('Content-Type', 'text/html; charset=utf-8').send(renderEmailHtml({ title: subject, body, link, linkLabel: spLabel, brand: 'pradlomaty' }));
   } catch (err) { res.status(500).send('Chyba náhledu: ' + err.message); }
 });
 
@@ -1846,7 +1869,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     if (!lead.show_ai_specialist) await prisma.compounderLead.update({ where: { id }, data: { show_ai_specialist: true } }).catch(() => {});
     const link = specialistShortLink(id, 'email');
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
-    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'bs2', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
+    await sendMail({ to: lead.email, subject, body, from, fromName: 'Prádlomaty', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     const sentAt = new Date();
     await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });
