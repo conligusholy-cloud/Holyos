@@ -322,7 +322,7 @@ async function sendMail({ to, cc, subject, body, from, fromName, link, linkLabel
   }
 
   // 00) Amazon SES brána (env SMTP_* + SES_CONFIGURATION_SET, src/mailer.js): jen e-maily od adresy SMTP_FROM
-  try { const M = require('./ses/mailer'); if (M.isConfigured()) { const sf = M.smtpConf().from; const useSes = !!(from && sameAddr(from, sf)); // SES jen pro e-maily od adresy SMTP_FROM – ostatní cesty (M365 Graph) beze změny
+  try { const M = require('./ses/mailer'); if (M.isConfigured()) { const sesS = from ? await M.sesSenderFor(from) : null; const sf = sesS ? sesS.raw : M.smtpConf().from; const useSes = !!sesS; // SES jen pro odesílatele SES (SMTP_FROM + další v Nastavení) – ostatní cesty (M365 Graph) beze změny
     if (useSes) { const EL = require('./ses/email-log'); const unsubUrl = unsubscribe === false ? null : EL.unsubscribeUrl(to); let html = renderEmailHtml({ title: subject, body, link, linkLabel, preheader, brand, trackingPixel, flyerUrl, rawHtml }); if (unsubUrl) html = html.replace(/<\/body>/i, '<div style="text-align:center;font-size:11px;color:#8ea2c2;padding:10px 0 18px"><a href="' + unsubUrl + '" style="color:#8ea2c2;text-decoration:underline">Odhlásit odběr</a></div></body>');
       const fa = parseAddrLite(sf); const fromHeader = fromName ? '"' + String(fromName).replace(/"/g, '') + '" <' + fa.address + '>' : sf;
       const r = await M.sendEmail({ to, subject, html, from: fromHeader, replyTo, inlineImages: [] }); await EL.logMessage(r, { to, subject, campaignId: campaignId || (brand ? 'brand:' + brand : null), leadId });

@@ -155,4 +155,25 @@ async function sendEmail({ to, subject, text, html, preheader, inlineImages, uns
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
-module.exports = { sendEmail, isConfigured, verify, textToHtml, smtpConf, configSet, mode, apiConf };
+// ── Odesílatelé přes SES: SMTP_FROM + další adresy (AppSetting ads_center.ses_senders) ──
+// Každá doména musí být ověřená v AWS SES (Identities → doména, DKIM v DNS), jinak SES odeslání odmítne.
+const SENDERS_KEY = 'ads_center.ses_senders';
+function parseAddr(s) { const m = /^\s*(?:"?([^"<]*)"?\s*)?<([^>]+)>\s*$/.exec(String(s || '')); return m ? { name: (m[1] || '').trim(), address: m[2].trim() } : { name: '', address: String(s || '').trim() }; }
+async function extraSenders() {
+  try { const { getSetting } = require('../settings'); const v = await getSetting(SENDERS_KEY, { type: 'json', defaultValue: [] }); return (Array.isArray(v) ? v : []).map(String).filter(Boolean); }
+  catch (e) { return []; }
+}
+async function sesSenders() {
+  const out = []; const seen = new Set();
+  const add = (raw, extra) => { const p = parseAddr(raw); const a = p.address.toLowerCase(); if (!a || !a.includes('@') || seen.has(a)) return; seen.add(a); out.push({ raw: String(raw).trim(), address: p.address, name: p.name, domain: a.split('@')[1], extra: !!extra }); };
+  if (process.env.SMTP_FROM) add(process.env.SMTP_FROM, false);
+  (await extraSenders()).forEach((s) => add(s, true));
+  return out;
+}
+/** Vrátí odesílatele SES pro danou adresu „From" (nebo null, když adresa přes SES nejde). */
+async function sesSenderFor(from) {
+  const a = parseAddr(from).address.toLowerCase(); if (!a) return null;
+  return (await sesSenders()).find((s) => s.address.toLowerCase() === a) || null;
+}
+
+module.exports = { sendEmail, isConfigured, verify, textToHtml, smtpConf, configSet, mode, apiConf, sesSenders, sesSenderFor, extraSenders, SENDERS_KEY, parseAddr };
