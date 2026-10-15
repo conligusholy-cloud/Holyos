@@ -172,6 +172,14 @@
     .ci-totals b{color:var(--text)}
     .ci-totals .grand{border-top:1px solid var(--border,#3a3a55);margin-top:6px;padding-top:8px;font-size:1.15em;color:var(--text)}
     @media(max-width:800px){.ci-fields{grid-template-columns:1fr 1fr}.ci-sum{grid-column:1/-1;align-items:flex-start;text-align:left}}
+
+    .ci-zero{color:#34d399 !important;font-size:.85em;text-align:right;padding-top:6px}
+    .ci-adv{border:1px solid rgba(52,211,153,.35);background:rgba(52,211,153,.06);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+    .ci-adv-h{font-weight:600;margin-bottom:8px}.ci-adv-h span{font-weight:400;color:var(--text2);font-size:.85em}
+    .ci-adv-row{display:flex;gap:10px;align-items:center;padding:6px 4px;cursor:pointer;border-radius:6px}
+    .ci-adv-row:hover{background:rgba(255,255,255,.04)}
+    .ci-adv-row>span:nth-child(2){flex:1}.ci-adv-amt{font-weight:600}
+    .ci-adv-st{font-size:.78em;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,.2);color:#fbbf24}.ci-adv-st.ok{background:rgba(52,211,153,.2);color:#34d399}
 </style>
 </head>
 <body>
@@ -1282,7 +1290,7 @@
             '<button type="button" class="ci-del" onclick="removeCreateItem(' + idx + ')" title="Odebrat položku">✕</button>' +
           '</div>' +
           '<div class="ci-fields">' +
-            '<label>Množství<input type="number" step="0.001" min="0" class="ci-qty" data-idx="' + idx + '" value="' + it.quantity + '"></label>' +
+            '<label>Množství<input type="number" step="0.001" class="ci-qty" data-idx="' + idx + '" value="' + it.quantity + '"></label>' +
             '<label>Jednotka<input type="text" list="ci-units" class="ci-unit" data-idx="' + idx + '" value="' + escapeHtml(it.unit) + '"></label>' +
             '<label>Cena za jednotku ' + (withVat ? '<b>s DPH</b>' : '<b>bez DPH</b>') +
               '<span class="ci-money"><input type="number" step="0.01" class="ci-price" data-idx="' + idx + '" value="' + it.input_price + '"><i>' + escapeHtml(cur) + '</i></span></label>' +
@@ -1311,6 +1319,8 @@
       document.getElementById('c-sum-subtotal').textContent = fmtAmount(sSub);
       document.getElementById('c-sum-vat').textContent = fmtAmount(sVat);
       document.getElementById('c-sum-total').textContent = fmtAmount(sTot);
+      const zn = document.getElementById('c-zero-note');
+      if (zn) zn.style.display = (window.cState.items.length && Math.abs(sTot) < 0.005 && window.cState.items.some(i => i.advance_id)) ? 'block' : 'none';
     }
 
     function renderCreateItems() {
@@ -1386,6 +1396,47 @@
       const c = (window.cState.companies || []).find(x => x.id === id);
       const sel = document.getElementById('c-consignee');
       if (sel) sel.value = c && c.consignee_id ? String(c.consignee_id) : '';
+      loadCreateAdvances();
+    };
+
+    // Odpočet již vystavených / uhrazených záloh (zálohové faktury a DPPP téže firmy)
+    window.loadCreateAdvances = async function() {
+      const box = document.getElementById('c-advances');
+      if (!box) return;
+      const type = document.getElementById('c-type').value;
+      const cid = parseInt(document.getElementById('c-company').value, 10);
+      // Odebrat už přidané odpočty, když se změnila firma / typ
+      window.cState.items = window.cState.items.filter(i => !i.advance_id);
+      renderCreateItems();
+      window.cState.advances = [];
+      if (type !== 'issued' || !cid) { box.innerHTML = ''; return; }
+      const r = await api('GET', '/api/accounting/invoices?direction=ar&company_id=' + cid + '&limit=500');
+      const list = (r.status === 200 ? r.data : []).filter(i => ['proforma_issued', 'tax_receipt'].includes(i.type) && i.status !== 'cancelled');
+      window.cState.advances = list;
+      if (!list.length) { box.innerHTML = ''; return; }
+      box.innerHTML = '<div class="ci-adv"><div class="ci-adv-h">💳 Odečíst již vystavené zálohy <span>— zaškrtnutím se přidá záporná položka; při plném pokrytí vyjde faktura na 0</span></div>' +
+        list.map(i => {
+          const paid = i.status === 'paid';
+          return '<label class="ci-adv-row"><input type="checkbox" onchange="toggleCreateAdvance(' + i.id + ', this.checked)">' +
+            '<span><b>' + escapeHtml(i.invoice_number) + '</b> · ' + (i.type === 'tax_receipt' ? 'DPPP' : 'zálohová faktura') + ' · ' + String(i.date_issued || '').slice(0, 10) + '</span>' +
+            '<span class="ci-adv-amt">' + fmtAmount(Number(i.total)) + ' ' + escapeHtml(i.currency) + '</span>' +
+            '<span class="ci-adv-st' + (paid ? ' ok' : '') + '">' + (paid ? 'uhrazená' : 'neuhrazená') + '</span></label>';
+        }).join('') + '</div>';
+    };
+    window.toggleCreateAdvance = function(id, on) {
+      const adv = (window.cState.advances || []).find(a => a.id === id);
+      if (!adv) return;
+      if (!on) { window.cState.items = window.cState.items.filter(i => i.advance_id !== id); renderCreateItems(); return; }
+      const sub = Number(adv.subtotal) || 0, vat = Number(adv.vat_amount) || 0;
+      const rate = sub ? Math.round(vat / sub * 100) : 0;
+      // zůstane jen jedna prázdná výchozí řádka? — prázdnou řádku odeber
+      window.cState.items = window.cState.items.filter(i => i.description || i.advance_id);
+      window.cState.items.push({
+        description: 'Odpočet zálohy ' + adv.invoice_number, quantity: -1, unit: 'j',
+        input_price: window.cState.pricesWithVat ? +(Number(adv.total)).toFixed(2) : +sub.toFixed(2),
+        vat_rate: rate, note: '', advance_id: id,
+      });
+      renderCreateItems();
     };
 
     window.openCreateModal = async function(defaultType) {
@@ -1414,7 +1465,7 @@
 
             // Hlavička
             '<div class="modal-grid3">' +
-              '<div class="modal-row"><label>Typ</label><select id="c-type">' +
+              '<div class="modal-row"><label>Typ</label><select id="c-type" onchange="loadCreateAdvances()">' +
                 '<option value="received"' + (defaultType==='received'?' selected':'') + '>Faktura přijatá</option>' +
                 '<option value="issued"' + (defaultType==='issued'?' selected':'') + '>Faktura vydaná</option>' +
                 '<option value="credit_note_received">Dobropis přijatý</option>' +
@@ -1462,9 +1513,11 @@
             '</div>' +
             '<div id="c-items-body"></div>' +
             '<button type="button" class="ci-add" onclick="addCreateItem(true)">＋ Přidat další položku</button>' +
+            '<div id="c-advances"></div>' +
             '<div class="ci-totals">' +
               '<div><span>Základ celkem</span><b><span id="c-sum-subtotal">0,00</span> <span id="c-cur-label-1">CZK</span></b></div>' +
               '<div><span>DPH celkem</span><b><span id="c-sum-vat">0,00</span> <span id="c-cur-label-2">CZK</span></b></div>' +
+              '<div id="c-zero-note" class="ci-zero" style="display:none">Faktura je na 0 — vše je pokryto odečtenými zálohami.</div>' +
               '<div class="grand"><span>Celkem k úhradě</span><b><span id="c-sum-total">0,00</span> <span id="c-cur-label-3">CZK</span></b></div>' +
             '</div>' +
 
@@ -1494,7 +1547,7 @@
       const company_id = parseInt(document.getElementById('c-company').value, 10);
       if (!company_id) return alert('Vyber firmu');
       const items = window.cState.items
-        .filter(it => it.description && Number(it.quantity) > 0)
+        .filter(it => it.description && Number(it.quantity) !== 0)
         .map(it => {
           const c = calcRow(it, window.cState.pricesWithVat);
           return {
