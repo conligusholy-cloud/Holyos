@@ -61,6 +61,13 @@
     .data-table th { background:var(--surface2); padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--text2); border-bottom:1px solid var(--border); }
     .data-table td { padding:10px 12px; font-size:13px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; }
     .data-table tr:hover td { background:rgba(34,211,238,0.06); }
+    /* Filtrovací řádek v záhlaví tabulky hovorů — jedno pole pro každý sloupec. */
+    .data-table thead tr.calls-filter-row th { padding:6px 8px; background:var(--surface2); border-bottom:1px solid var(--border); }
+    .data-table .calls-filter { width:100%; min-width:70px; box-sizing:border-box; background:var(--bg); color:var(--text);
+      border:1px solid var(--border); border-radius:6px; padding:4px 7px; font-size:12px; font-weight:400;
+      text-transform:none; letter-spacing:0; font-family:inherit; }
+    .data-table .calls-filter:focus { outline:none; border-color:#22d3ee; }
+    .data-table .calls-filter::placeholder { color:var(--text2); }
 
     .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:500; }
     .badge-guide      { background:rgba(59,130,246,0.15);  color:#3b82f6; }
@@ -1385,6 +1392,124 @@
       window.infoKnClear = async function(){ if(!confirm('Smazat všechny nahrané podklady Infolinky?')) return; try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:INFO_SCOPE}) }); infoKnLoad(); }catch(e){} };
 
       // ── Záznamy hovorů (jen linka infolinka) ──
+      // Sloupce tabulky. `text` vrací to, v čem filtr hledá — záměrně data,
+      // ne vykreslené HTML buňky (ikonky a tlačítka by hledání jen rušily).
+      var INFO_CALL_COLS = [
+        { label:'Kdy', text:function(c){ return fmtDate(c.started_at); } },
+        { label:'Číslo', text:function(c){ return c.from_number||''; } },
+        { label:'Kredit', title:'Kredit přiřazený tomuto číslu — operátor ho vidí i při dalším hovoru',
+          text:function(c){ return c.credit ? (infoMoney(c.credit.amount,c.credit.currency)+' '+(c.credit.note||'')) : 'nepřiřazen'; } },
+        { label:'Kdo', text:function(c){ return c.caller_name||''; } },
+        { label:'Co chtěl', text:function(c){ return c.caller_intent||c.summary||''; } },
+        { label:'Servis', title:'Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?',
+          text:function(c){ return c.service_created ? 'ano požadavek' : (c.service_needed ? 'chybí' : 'ne'); } },
+        { label:'Místo', text:function(c){ return c.location||''; } },
+        { label:'SMS', text:function(c){
+            var log=Array.isArray(c.sms_log)?c.sms_log:[];
+            if(!log.length) return 'ne';
+            return log.map(function(a){ return ((a.status||'').toLowerCase()==='sent'?'ano odeslána ':'chyba ')+(a.to||''); }).join(' ');
+          } },
+        { label:'Přesměrováno', text:function(c){
+            var log=Array.isArray(c.transfer_log)?c.transfer_log:[];
+            if(!log.length) return c.handoff?'přepojováno':'ne';
+            return log.map(function(a){ return transferWho(a)+' '+(a.number||'')+' '+trStatusLabel(a.status)[0]; }).join(' ');
+          } },
+        { label:'Přepis Twilio', title:'Živý přepis z Twilia (AI ↔ zákazník), zdarma',
+          text:function(c){ return (Array.isArray(c.transcript)?c.transcript:[]).map(function(t){ return t.text||''; }).join(' '); } },
+        { label:'Kompletní přepis', title:'Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)',
+          text:function(c){ return c.full_transcript||''; } },
+        { label:'Nahrávka', text:function(c){ return c.audio_url?'ano':'ne'; } },
+        { label:'Délka', text:function(c){ return fmtDur(c.duration_sec); } },
+      ];
+
+      // Filtry sloupců: { index sloupce: hledaný text }. Prázdné pole = sloupec nefiltruje,
+      // takže po vymazání všech polí je zase vidět celý seznam.
+      var _infoFilters = {};
+      var _infoCallCounts = {};
+
+      // Porovnáváme bez ohledu na velikost písmen a diakritiku ("simunek" najde "Šimůnek").
+      function infoNorm(s){
+        return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      }
+      function infoCallMatches(c){
+        for (var i=0;i<INFO_CALL_COLS.length;i++){
+          var q=infoNorm(_infoFilters[i]||'').trim();
+          if(!q) continue;
+          if(infoNorm(INFO_CALL_COLS[i].text(c)).indexOf(q)<0) return false;
+        }
+        return true;
+      }
+      window.infoFilterCalls = function(inp){
+        _infoFilters[inp.getAttribute('data-col')] = inp.value;
+        infoApplyCallFilters();   // překresluje se jen <tbody>, kurzor zůstává v poli
+      };
+      window.infoClearCallFilters = function(){
+        _infoFilters = {};
+        var inputs=document.querySelectorAll('#info-calls-body .calls-filter');
+        Array.prototype.forEach.call(inputs, function(i){ i.value=''; });
+        infoApplyCallFilters();
+      };
+
+      // Jeden řádek hovoru + skrytý řádek s detailem.
+      function infoCallRow(c){
+        var num=c.from_number;
+        var k=String(num||'').replace(/\D/g,'').slice(-9);
+        var cnt=(k&&_infoCallCounts[k])||1, rep=cnt>1;
+        var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
+        return '<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
+          +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
+          +'<td><a onclick="event.stopPropagation();infoNumHistory(\''+k+'\')" title="Historie tohoto čísla (časová osa)" style="cursor:pointer;text-decoration:underline;'+(rep?'color:#eab308;font-weight:600;':'color:#22d3ee;')+'">'+esc(num||'')+' ('+cnt+'×)</a></td>'
+          +'<td onclick="event.stopPropagation()">'+creditCell(c)+'</td>'
+          +'<td>'+esc(c.caller_name||'—')+'</td>'
+          +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
+          +'<td style="text-align:center;">'+serviceCell(c)+'</td>'
+          +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
+          +'<td style="text-align:center;">'+smsCell(c)+'</td>'
+          +'<td>'+transferCell(c)+'</td>'
+          +'<td style="text-align:center;">'+twilioCell(c)+'</td>'
+          +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Kompletní přepis přes OpenAI Whisper (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
+          +'<td onclick="event.stopPropagation()">'+rec+'</td>'
+          +'<td>'+fmtDur(c.duration_sec)+'</td></tr>'
+          +'<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="'+INFO_CALL_COLS.length+'" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
+      }
+
+      // Kostra tabulky (záhlaví + filtrovací řádek). Staví se jen při načtení dat,
+      // při psaní do filtru se mění pouze <tbody>.
+      function infoRenderCalls(){
+        var body=el('info-calls-body'); if(!body) return;
+        var head='', filt='';
+        INFO_CALL_COLS.forEach(function(col,i){
+          head+='<th'+(col.title?(' title="'+esc(col.title)+'"'):'')+'>'+esc(col.label)+'</th>';
+          filt+='<th><input class="calls-filter" type="search" data-col="'+i+'" oninput="infoFilterCalls(this)"'
+              +' placeholder="'+esc(col.label)+'…" title="Filtrovat podle sloupce '+esc(col.label)+'"'
+              +' value="'+esc(_infoFilters[i]||'')+'"></th>';
+        });
+        body.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
+          +'<span id="info-calls-count" style="font-size:12px;color:var(--text2);"></span>'
+          +'<button class="btn btn-secondary btn-sm" onclick="infoClearCallFilters()" title="Vyprázdní všechna filtrovací pole">✕ Zrušit filtry</button>'
+          +'</div>'
+          +'<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">'
+          +'<table class="data-table"><thead><tr>'+head+'</tr><tr class="calls-filter-row">'+filt+'</tr></thead>'
+          +'<tbody id="info-calls-tbody"></tbody></table></div>';
+        infoApplyCallFilters();
+      }
+
+      function infoApplyCallFilters(){
+        var tb=el('info-calls-tbody'); if(!tb) return;
+        var all=_infoCalls||[];
+        var shown=all.filter(infoCallMatches);
+        var html=shown.map(infoCallRow).join('');
+        if(!shown.length){
+          html='<tr><td colspan="'+INFO_CALL_COLS.length+'" style="color:var(--text2);padding:14px;">'
+             +'Žádný hovor neodpovídá filtru. Vymaž text ve filtrovacích polích a uvidíš zase všechny záznamy.</td></tr>';
+        }
+        tb.innerHTML=html;
+        var cnt=el('info-calls-count');
+        if(cnt) cnt.textContent = (shown.length===all.length)
+          ? ('Zobrazeno všech '+all.length+' hovorů')
+          : ('Zobrazeno '+shown.length+' z '+all.length+' hovorů');
+      }
+
       window.infoLoadCalls = async function(){
         // Odkaz pro operátory (mobilní přehled hovorů) + kopírování
         var hu=el('info-hovory-url');
@@ -1398,31 +1523,9 @@
           _infoCalls=Array.isArray(rows)?rows:[];
           if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
           // Kolikrát každé číslo volalo (z načtené historie).
-          var counts={};
-          rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) counts[k]=(counts[k]||0)+1; });
-          var html='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Číslo</th><th title="Kredit přiřazený tomuto číslu — operátor ho vidí i při dalším hovoru">Kredit</th><th>Kdo</th><th>Co chtěl</th><th title="Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?">Servis</th><th>Místo</th><th>SMS</th><th>Přesměrováno</th><th title="Živý přepis z Twilia (AI ↔ zákazník), zdarma">Přepis Twilio</th><th title="Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)">Kompletní přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
-          rows.forEach(function(c){
-            var num=c.from_number;
-            var k=String(num||'').replace(/\D/g,'').slice(-9); var cnt=(k&&counts[k])||1; var rep=cnt>1;
-            var rec=c.audio_url ? recPlayer(c.id) : '<span style="color:var(--text2);">—</span>';
-            html+='<tr onclick="infoToggleCall(\''+c.id+'\')" style="cursor:pointer;">'
-              +'<td style="border-left:3px solid #ec4899;">'+esc(fmtDate(c.started_at))+'</td>'
-              +'<td><a onclick="event.stopPropagation();infoNumHistory(\''+k+'\')" title="Historie tohoto čísla (časová osa)" style="cursor:pointer;text-decoration:underline;'+(rep?'color:#eab308;font-weight:600;':'color:#22d3ee;')+'">'+esc(num||'')+' ('+cnt+'×)</a></td>'
-              +'<td onclick="event.stopPropagation()">'+creditCell(c)+'</td>'
-              +'<td>'+esc(c.caller_name||'—')+'</td>'
-              +'<td>'+esc(c.caller_intent||c.summary||'—')+'</td>'
-              +'<td style="text-align:center;">'+serviceCell(c)+'</td>'
-              +'<td>'+(c.location?('📍 '+esc(c.location)):'<span style="color:var(--text2);">—</span>')+'</td>'
-              +'<td style="text-align:center;">'+smsCell(c)+'</td>'
-              +'<td>'+transferCell(c)+'</td>'
-              +'<td style="text-align:center;">'+twilioCell(c)+'</td>'
-              +'<td style="text-align:center;"><button class="btn btn-secondary" onclick="event.stopPropagation();infoOpenTranscript(\''+c.id+'\')" title="Kompletní přepis přes OpenAI Whisper (vytvoří se na kliknutí)" style="padding:4px 10px;font-size:14px;">📄</button></td>'
-              +'<td onclick="event.stopPropagation()">'+rec+'</td>'
-              +'<td>'+fmtDur(c.duration_sec)+'</td></tr>';
-            html+='<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="13" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
-          });
-          html+='</tbody></table></div>';
-          body.innerHTML=html;
+          _infoCallCounts={};
+          rows.forEach(function(c){ var k=String(c.from_number||'').replace(/\D/g,'').slice(-9); if(k) _infoCallCounts[k]=(_infoCallCounts[k]||0)+1; });
+          infoRenderCalls();
         }catch(e){ body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+esc(e.message)+'</div>'; }
       };
       // ── Kredit telefonního čísla ────────────────────────────────────────────
