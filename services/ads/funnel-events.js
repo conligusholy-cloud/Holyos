@@ -145,8 +145,10 @@ async function edgeFlows(funnelId, since, withList) {
     const sb = actionB ? await setOf(B, 0) : null; const list = []; let missN = 0, okN = 0;
     const actionA = ['sms', 'email'].includes(A.kind);
     // Vlákno z tečky cíle (port ≥ 2: doručeno / klikl / bez reakce) odpovídá číslu v oušku – filtr „od vytvoření spojky" se uplatní jen u obecného / „odesláno" vlákna.
-    const skipEc = actionA && (e.port || 0) >= 2;
-    sa.forEach((tA, lid) => { if (eventA && ec && !skipEc && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, e.port || 0, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { const tOld = firstAll[B.id] && firstAll[B.id][lid]; if (tOld) { if (withList) list.push({ lead_id: lid, tA, tB: null, before: tOld }); return; } missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } okN++; list.push({ lead_id: lid, tA, tB }); } else { okN++; list.push({ lead_id: lid, tA, tB: tG }); } });
+    // Vlákno z SMS / e-mailu přímo do záchytné stránky = leady, které odkaz SKUTEČNĚ otevřely (potvrzená návštěva), ne všem odeslané zprávy.
+    const effPort = (e.port || 0) || (actionA && B.kind === 'landing' ? 3 : 0);
+    const skipEc = actionA && effPort >= 2;
+    sa.forEach((tA, lid) => { if (eventA && ec && !skipEc && new Date(tA).getTime() < ec) return; let tG = null; if (actionA) { const g = goalPass(A, effPort, Number(lid), tA); if (!g.ok) return; tG = g.tB; } if (actionB) { const tB = sb.get(lid); if (!tB) { const tOld = firstAll[B.id] && firstAll[B.id][lid]; if (tOld) { if (withList) list.push({ lead_id: lid, tA, tB: null, before: tOld }); return; } missN++; if (withList) list.push({ lead_id: lid, tA, tB: null, missing: true }); return; } okN++; list.push({ lead_id: lid, tA, tB }); } else { okN++; list.push({ lead_id: lid, tA, tB: tG }); } });
     out[e.from + '>' + e.to + (e.port ? '#' + e.port : '')] = { leads: okN, missing: missN, list: withList ? list : undefined }; // missing = leady větve, kterým tento uzel zprávu NEposlal (přeskočeno automatem)
   }
   return out;
