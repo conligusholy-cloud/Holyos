@@ -499,16 +499,7 @@ const PAGE = `<!DOCTYPE html>
     </div>
   </section>
 
-  <section class="sec">
-    <h2>Časté otázky</h2>
-    <details><summary>Jak dlouho mám přístup?</summary><p>12 měsíců od aktivace. Platba je jednorázová, přístup se automaticky neobnovuje a nic dalšího vám nestrháváme. Cenu případného prodloužení oznámíme před koncem platnosti.</p></details>
-    <details><summary>Co je „lokalita" a kdy se odečte?</summary><p>Jedna konkrétní adresa. Základ obsahuje 3, Plus a Premium 10. Odečte se až po úspěšném vytvoření prvního reportu dané adresy. Úpravy parametrů stejné adresy jsou neomezené.</p></details>
-    <details><summary>Z jakých dat aplikace vychází?</summary><p>Z podkladů, které zadáte (nájem, prostor, přípojky, vlastní měření frekvence), z modelových předpokladů, které vidíte a můžete změnit, a z ověřených skutečností, u kterých report uvádí zdroj a datum. Údaje, které aplikace nemá z připojeného zdroje (např. počet domácností nebo konkurence), označí jako chybějící a doplníte je ručně. Aplikace neuvádí skóre ani procento pravděpodobnosti úspěchu.</p></details>
-    <details><summary>Je výsledek zárukou, že se místo vyplatí?</summary><p>Ne. Jde o orientační vyhodnocení podle dostupných podkladů a vašich předpokladů, ne o odborné schválení investice ani předpověď výdělku. Slouží jako podklad pro vaše rozhodnutí a jednání s pronajímatelem či bankou.</p></details>
-    <details><summary>Co když má moje místo výsledek „Nevhodné"?</summary><p>Report uvádí, co chybí nebo kde je riziko. Můžete údaje doplnit a vyhodnotit znovu, nebo použít zbývající lokality na jinou adresu. Rozhodnutí Best Series o prodeji stroje je samostatné a na výsledku aplikace nezávisí.</p></details>
-    <details><summary>Jak probíhá objednávka a platba?</summary><p>Vyberete balíček, vyplníte kontakt a zaplatíte kartou přes Stripe (bezpečná platební brána, údaje o kartě k nám nikdy nejdou). Po zaplacení vám do jednoho pracovního dne aktivujeme přístup do aplikace na 12 měsíců a pošleme doklad e-mailem. Pokud online platba není zrovna dostupná, přijmeme žádost a pošleme platební údaje e-mailem.</p></details>
-    <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
-  </section>
+
 
   <section class="sec" id="objednat">
     <h2>Získat aplikaci</h2>
@@ -524,6 +515,17 @@ const PAGE = `<!DOCTYPE html>
       <div class="msg" id="msg"></div>
       <div class="full" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><button class="btn" type="submit" id="sub">Odeslat žádost o objednávku</button><span class="small" id="pay-note" style="color:var(--text3)"></span></div>
     </form>
+  </section>
+
+  <section class="sec">
+    <h2>Časté otázky</h2>
+    <details><summary>Jak dlouho mám přístup?</summary><p>12 měsíců od aktivace. Platba je jednorázová, přístup se automaticky neobnovuje a nic dalšího vám nestrháváme. Cenu případného prodloužení oznámíme před koncem platnosti.</p></details>
+    <details><summary>Co je „lokalita" a kdy se odečte?</summary><p>Jedna konkrétní adresa. Základ obsahuje 3, Plus a Premium 10. Odečte se až po úspěšném vytvoření prvního reportu dané adresy. Úpravy parametrů stejné adresy jsou neomezené.</p></details>
+    <details><summary>Z jakých dat aplikace vychází?</summary><p>Z podkladů, které zadáte (nájem, prostor, přípojky, vlastní měření frekvence), z modelových předpokladů, které vidíte a můžete změnit, a z ověřených skutečností, u kterých report uvádí zdroj a datum. Údaje, které aplikace nemá z připojeného zdroje (např. počet domácností nebo konkurence), označí jako chybějící a doplníte je ručně. Aplikace neuvádí skóre ani procento pravděpodobnosti úspěchu.</p></details>
+    <details><summary>Je výsledek zárukou, že se místo vyplatí?</summary><p>Ne. Jde o orientační vyhodnocení podle dostupných podkladů a vašich předpokladů, ne o odborné schválení investice ani předpověď výdělku. Slouží jako podklad pro vaše rozhodnutí a jednání s pronajímatelem či bankou.</p></details>
+    <details><summary>Co když má moje místo výsledek „Nevhodné"?</summary><p>Report uvádí, co chybí nebo kde je riziko. Můžete údaje doplnit a vyhodnotit znovu, nebo použít zbývající lokality na jinou adresu. Rozhodnutí Best Series o prodeji stroje je samostatné a na výsledku aplikace nezávisí.</p></details>
+    <details><summary>Jak probíhá objednávka a platba?</summary><p>Vyberete balíček, vyplníte kontakt a zaplatíte kartou přes Stripe (bezpečná platební brána, údaje o kartě k nám nikdy nejdou). Po zaplacení vám do jednoho pracovního dne aktivujeme přístup do aplikace na 12 měsíců a pošleme doklad e-mailem. Pokud online platba není zrovna dostupná, přijmeme žádost a pošleme platební údaje e-mailem.</p></details>
+    <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
   </section>
 
   <div class="foot">Provozovatel: Best Series s.r.o. · IČO 05643724 · <a href="/location/vop">Obchodní podmínky</a> · <a href="/location/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení do Best Series 2.0</a></div>

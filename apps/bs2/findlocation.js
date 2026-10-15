@@ -109,9 +109,11 @@ function prices(limits, searchLimits) {
       ${card('premium', 'Premium', false, '<li>Vše z Plus</li><li>Místní šetření naším technikem na jedné lokalitě</li>')}
     </div>
     <p class="small" style="color:var(--text3);margin-top:10px">Další vyhledání měst lze dokoupit v aplikaci, cena od ${s1} Kč s DPH za vyhledání.</p>
-  </section>
+  </section>`;
+}
 
-  <section class="sec">
+function faq() {
+  return `<section class="sec">
     <h2>Časté otázky</h2>
     <details><summary>Co přesně je „vyhledání"?</summary><p>Analýza jednoho města: spádová oblast 15 km, počet obyvatel, odhad kapacity, stávající prádlomaty a seznam kandidátních míst. Odečte se při spuštění analýzy a výsledek se trvale uloží, takže ho kdykoli znovu otevřete bez dalšího odečtu.</p></details>
     <details><summary>Jak dlouho mám přístup?</summary><p>12 měsíců od aktivace. Platba je jednorázová, přístup se automaticky neobnovuje a nic dalšího vám nestrháváme.</p></details>
@@ -119,9 +121,7 @@ function prices(limits, searchLimits) {
     <details><summary>Mohu místo rovnou prověřit a spočítat ekonomiku?</summary><p>Ano. Vybrané místo přenesete jedním klikem do nové lokality a spočítáte ekonomiku prádlomatu včetně scénářů, bodu zvratu a exportu do PDF.</p></details>
     <details><summary>Jak probíhá objednávka a platba?</summary><p>Vyberete balíček, vyplníte kontakt a zaplatíte kartou přes Stripe (bezpečná platební brána, údaje o kartě k nám nikdy nejdou). Po zaplacení vám do jednoho pracovního dne aktivujeme přístup do aplikace a pošleme doklad e-mailem. Pokud online platba není zrovna dostupná, přijmeme žádost a pošleme platební údaje e-mailem.</p></details>
     <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
-  </section>
-
-  `;
+  </section>`;
 }
 
 function findLocationPage(limits, searchLimits) {
@@ -142,6 +142,13 @@ function findLocationPage(limits, searchLimits) {
   // objednávka: návrat ze Stripe na /findlocation, upravený nadpis
   h = h.replace('<h2>Získat aplikaci</h2>', '<h2>Získat Vyhledávač míst</h2>')
     .replace('<input type="hidden" name="consent" value="1">', '<input type="hidden" name="consent" value="1"><input type="hidden" name="ret" value="/findlocation">');
+  // FAQ až za objednávkový formulář (platba hned za balíčky)
+  const o = h.indexOf('<section class="sec" id="objednat">'), oe = o < 0 ? -1 : h.indexOf('</section>', o);
+  if (oe > 0) {
+    // původní FAQ z /location (za objednávkou) nahradit FAQ aplikace
+    const fa = h.indexOf('<section class="sec">', oe), fe = fa < 0 ? -1 : h.indexOf('</section>', fa) + 10;
+    h = fa > 0 && h.slice(fa, fe).includes('Časté otázky') ? h.slice(0, fa) + faq() + h.slice(fe) : h.slice(0, oe + 10) + '\n\n  ' + faq() + h.slice(oe + 10);
+  }
   return h;
 }
 
