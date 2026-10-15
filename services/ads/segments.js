@@ -64,7 +64,7 @@ function isBlocked(l, bl) { const e = String(l.email || '').trim().toLowerCase()
 async function leadsFor(nd, port, form, limit) {
   const seg = nd.seg || {}; const lists = Array.isArray(seg.lists) ? seg.lists : []; const bw = baseWhere(nd, form);
   const list = port > 0 ? lists[port - 1] : null; const cond = list ? list.cond : {};
-  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: whereOf(cond, bw), select: SEL, orderBy: { created_at: 'desc' }, take: limit || 5000 }), blocklist()]);
+  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: whereOf(cond, bw), select: SEL, orderBy: { created_at: 'desc' }, take: limit || 50000 }), blocklist()]);
   return rows.filter((l) => passMem(l, cond) && !isBlocked(l, bl));
 }
 // Podmínky vyhodnocené čistě v paměti (pro řetězení uzlů Seznam → Seznam = AND)
@@ -83,7 +83,7 @@ function passAll(l, cond) {
 // Uzel „Seznam": základ (vše v HolyOS / formulář) + řetězec podmínek z předchozích uzlů Seznam (AND); black list vždy pryč
 async function leadsForChain(conds, form, base, limit) {
   const bw = base === 'form' && form && form.form_id ? baseWhere({ seg: { base: 'form' } }, form) : {};
-  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: bw, select: SEL, orderBy: { created_at: 'desc' }, take: limit || 5000 }), blocklist()]);
+  const [rows, bl] = await Promise.all([prisma.compounderLead.findMany({ where: bw, select: SEL, orderBy: { created_at: 'desc' }, take: limit || 500000 }), blocklist()]);
   return rows.filter((l) => !isBlocked(l, bl) && (conds || []).every((c) => passAll(l, c)));
 }
 async function counts(nd, form) {
