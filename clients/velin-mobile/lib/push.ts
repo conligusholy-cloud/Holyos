@@ -47,7 +47,7 @@ export const SUPPORT_SOUNDS: { id: string; label: string }[] = [
 export async function previewSupportSound(id: string): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: { title: 'Ukázka zvuku', body: id === 'default' ? 'Výchozí zvuk' : (SUPPORT_SOUNDS.find((s) => s.id === id)?.label || id), sound: id === 'default' ? 'default' : id + '.wav' },
-    trigger: Platform.OS === 'android' && id !== 'default' ? ({ channelId: 'support_' + id, seconds: 1 } as any) : null,
+    trigger: Platform.OS === 'android' && id !== 'default' ? ({ channelId: 'supportsnd_' + id, seconds: 1 } as any) : null,
   });
 }
 
@@ -80,7 +80,9 @@ export async function registerForPushNotifications(): Promise<DeviceMeta | null>
     // Zvuky Podpory: na Androidu se zvuk váže na kanál, proto jeden kanál na každý zvuk
     for (const s of SUPPORT_SOUNDS) {
       try {
-        await Notifications.setNotificationChannelAsync('support_' + s.id, {
+        // Kanály supportsnd_* (Android: zvuk kanálu nejde změnit → staré support_* z verze bez zvuků mažeme)
+        try { await Notifications.deleteNotificationChannelAsync('support_' + s.id); } catch { /* neexistuje */ }
+        await Notifications.setNotificationChannelAsync('supportsnd_' + s.id, {
           name: 'Podpora – ' + s.label,
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 250, 250, 250],

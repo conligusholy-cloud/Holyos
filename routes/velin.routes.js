@@ -1128,6 +1128,25 @@ mobile.put('/me/assistant', async (req, res, next) => {
 });
 
 // GET /api/velin/me/assistant/calls — vlastní hovory/vzkazy asistenta (s nahrávkou + přepisem).
+// Přečtené vzkazy asistenta (per osoba, AppSetting velin.assistant_read.<personId> = pole id hovorů)
+async function paReadIds(personId) {
+  let v = await _paSettings.getSetting('velin.assistant_read.' + personId, { type: 'json', defaultValue: [] }).catch(() => []);
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch (_) { v = []; } }
+  return Array.isArray(v) ? v.map(String) : [];
+}
+// POST /api/velin/me/assistant/calls/:id/read  { read?: true|false } — označit vzkaz jako přečtený / nepřečtený
+mobile.post('/me/assistant/calls/:id/read', express.json({ limit: '2kb' }), async (req, res, next) => {
+  try {
+    const personId = req.velin.person.id; const id = String(req.params.id);
+    const own = await prisma.voiceCall.findFirst({ where: { id, OR: [{ line: paLine(personId) }, { owner_person_id: personId, agent_kind: 'personal' }] }, select: { id: true } });
+    if (!own) return res.status(404).json({ error: 'Vzkaz nenalezen' });
+    const read = !(req.body && req.body.read === false);
+    const ids = new Set(await paReadIds(personId)); if (read) ids.add(id); else ids.delete(id);
+    await _paSettings.setSetting('velin.assistant_read.' + personId, [...ids].slice(-1000), { type: 'json', description: 'Velín – přečtené vzkazy asistenta', scope: 'velin' });
+    res.json({ ok: true, read });
+  } catch (err) { next(err); }
+});
+
 mobile.get('/me/assistant/calls', async (req, res, next) => {
   try {
     const personId = req.velin.person.id;
@@ -1144,7 +1163,8 @@ mobile.get('/me/assistant/calls', async (req, res, next) => {
     });
     // Podepsaný odkaz na nahrávku přes HolyOS (Twilio URL vyžaduje přihlášení → v aplikaci by nehrála)
     let sign = null; try { sign = require('./voice-agent.routes').signRecording; } catch (_) { sign = null; }
-    res.json({ calls: calls.map((c) => Object.assign({}, c, { audio_play_url: c.audio_url && sign ? sign(c.id) : null })) });
+    const readSet = new Set(await paReadIds(personId));
+    res.json({ calls: calls.map((c) => Object.assign({}, c, { audio_play_url: c.audio_url && sign ? sign(c.id) : null, read: readSet.has(String(c.id)) })), unread: calls.filter((c) => !readSet.has(String(c.id))).length });
   } catch (err) { next(err); }
 });
 
@@ -1997,7 +2017,7 @@ const SUPPORT_SOUNDS = ['ding', 'chime', 'bell', 'marimba', 'pop', 'drop', 'harp
 async function supportSoundFor(personId) {
   const v = await _paSettings.getSetting('velin.support_sound.' + personId, { type: 'string', defaultValue: '' }).catch(() => '');
   if (!v || !SUPPORT_SOUNDS.includes(String(v))) return { sound: 'default', channelId: 'default' };
-  return { sound: v + '.wav', channelId: 'support_' + v };
+  return { sound: v + '.wav', channelId: 'supportsnd_' + v }; // nové ID kanálů: staré (support_*) mohly vzniknout ve verzi bez zvuků
 }
 router.supportSoundFor = supportSoundFor;
 mobile.get('/support/sound', supportGuard, async (req, res, next) => {
