@@ -135,7 +135,7 @@
   </div>
   <div class="wrap">
     <div class="tools" id="tools">
-      <div class="tool" data-tool="start" title="Startovací bod – odkud zájemce přichází (reklama, vyhledávání, doporučení…)">🚀<small>Start</small></div>
+      <div class="tool quick" data-kind="start" title="Startovací bod – přetáhni na plochu (nebo klikni); odkud zájemce přichází (reklama, vyhledávání, doporučení…). Můžeš jich mít víc.">🚀<small>Start</small></div>
       <div class="tool quick" data-kind="landing" title="Záchytná stránka – přetáhni na plochu (nebo klikni) a v uzlu vyber, co lead uvidí">🌐<small>Stránka</small></div>
       <div class="tool quick" data-kind="sms" title="Odeslat SMS – přetáhni na plochu (nebo klikni); text a variantu nastavíš v uzlu">💬<small>SMS</small></div>
       <div class="tool quick" data-kind="email" title="Odeslat e-mail – přetáhni na plochu (nebo klikni); předmět a text nastavíš v uzlu">📧<small>E-mail</small></div>
@@ -415,7 +415,16 @@
     am.addEventListener('click', function (e) { if (e.target.closest('.dd')) return; e.stopPropagation(); am.classList.toggle('open'); });
     document.addEventListener('click', function (e) { if (!am.contains(e.target)) am.classList.remove('open'); });
     // Vytvoření uzlu z palety: bez pozice se přidá za poslední krok a připojí; při přetažení myší vznikne přesně tam, kam ho pustíš
+    // Startovací bod (vstupní reklama): přetažením na libovolné místo, nebo kliknutím; další starty se napojí na stejný první krok
+    function addStart(drop) {
+      var sts = F.nodes.filter(function (x) { return x.kind === 'start'; }); var s0 = sts[0], e0 = s0 && F.edges.find(function (ed) { return ed.from === s0.id; });
+      if (!sts.length && !drop) { var first = chain()[0]; var nd0 = { id: uid(), kind: 'start', x: 40, y: 60, page: null, metric: 'uniques', manual: null, label: 'Facebook reklama', text: '' }; if (first) { F.nodes.forEach(function (x) { if (x.kind !== 'note') x.x += 230; }); F.edges.push({ from: nd0.id, to: first.id }); } F.nodes.push(nd0); render(); return; }
+      var x0 = drop ? Math.round(drop.x) : (s0 ? s0.x : 40), y0 = drop ? Math.round(drop.y) : (sts.length ? Math.max.apply(null, sts.map(function (x) { return x.y; })) + 300 : 60);
+      var ns = { id: uid(), kind: 'start', x: x0, y: y0, page: null, metric: 'uniques', manual: null, label: sts.length ? 'Facebook reklama ' + (sts.length + 1) : 'Facebook reklama', text: '' }; F.nodes.push(ns);
+      if (e0) F.edges.push({ from: ns.id, to: e0.to, port: 0, created_at: new Date().toISOString() });
+      document.getElementById('msg').textContent = 'Vstupní reklama přidána – klikni na ozubené kolečko a vyber její kampaň.'; render(); }
     function addFromPal(p, drop) {
+      if (p.dataset.kind === 'start') { addStart(drop); return; }
       var d = { kind: p.dataset.kind, page: p.dataset.page || null }; var last = drop ? null : chain().slice(-1)[0]; var nx = last ? last.x + 290 : 40, ny = last ? last.y : 60; if (d.kind === 'note' && !drop) { nx = 40; ny = 320 + F.nodes.filter(function (x) { return x.kind === 'note'; }).length * 160; } if (drop) { nx = Math.round(drop.x); ny = Math.round(drop.y); }
       var nd = { id: uid(), kind: d.kind === 'note' ? 'note' : (d.kind === 'leadform' ? 'leadform' : (d.kind === 'split' ? 'split' : (d.kind === 'goals' ? 'goals' : (d.kind === 'sms' ? 'sms' : (d.kind === 'email' ? 'email' : (d.kind === 'db' ? 'db' : (d.kind === 'list' ? 'list' : ((d.kind === 'landing' || d.kind === 'page') ? 'landing' : 'step')))))))), variant: 'specialist', x: nx, y: ny, page: (d.kind === 'page' || d.kind === 'landing') ? (d.page || null) : null, metric: d.kind === 'page' ? 'uniques' : 'uniques', manual: null, label: '', text: '' };
       if (d.kind === 'leadform') nd.form = { form_id: p.dataset.form, name: p.dataset.name, status: 'ACTIVE', questions: [], leads: Number(p.dataset.leads) || 0, clicks: 0, spend: 0, campaign_id: '', campaign_name: p.dataset.pg || '', ad_ids: [] };
