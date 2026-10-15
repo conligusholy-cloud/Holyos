@@ -346,9 +346,9 @@ function renderSiteModal() {
         <button class="site-tab" data-tab="contacts" onclick="switchTab('contacts')">Kontakty (${(s.contacts||[]).length})</button>
         <button class="site-tab" data-tab="comm" onclick="switchTab('comm')">Komunikace (${(s.communications||[]).length})</button>
         <button class="site-tab" data-tab="photos" onclick="switchTab('photos')">Fotky &amp; mapa (${(s.photos||[]).length})</button>
-        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>d.doc_type!=='construction'&&d.doc_type!=='building'&&!isDataDoc(d)).length})</button>
+        <button class="site-tab" data-tab="docs" onclick="switchTab('docs')">Smlouvy (${(s.documents||[]).filter(d=>!isSurveyDoc(d)&&!isDataDoc(d)).length})</button>
         <button class="site-tab" data-tab="data" onclick="switchTab('data')">📁 DATA (${(s.documents||[]).filter(d=>isDataDoc(d)&&d.doc_type!=='data_root').length})</button>
-        <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Výstavba (${(s.documents||[]).filter(d=>d.doc_type==='construction'||d.doc_type==='building').length})</button>
+        <button class="site-tab" data-tab="survey" onclick="switchTab('survey')">🏗️ Výstavba (${(s.documents||[]).filter(isSurveyDoc).length})</button>
       `}
     </div>
 
@@ -539,8 +539,8 @@ function renderPhotosTab(s){
     </div>`;
 }
 function renderDocsTab(s){
-  // Stavební dokumenty (construction/building) mají vlastní záložku Výstavba.
-  const docs = (s.documents||[]).filter(d => d.doc_type!=='construction' && d.doc_type!=='building' && !isDataDoc(d)).map(d => `
+  // Dokumenty ze složek Výstavby (a ze složky DATA) mají vlastní záložky.
+  const docs = (s.documents||[]).filter(d => !isSurveyDoc(d) && !isDataDoc(d)).map(d => `
     <div class="contact-card">
       <div class="info">
         <div class="name">📄 ${esc(d.title)} <span class="badge badge-type-rent">${esc(d.doc_type)}</span></div>
@@ -578,17 +578,22 @@ function renderDocsTab(s){
     <button class="btn btn-secondary btn-sm" onclick="addDoc()" style="margin-top:10px;">+ Přidat</button>`;
 }
 
-// ─── Záložka Výstavba — stavební dokumenty ve dvou kategoriích ────────────
-// POZN.: vnitřní id záložky zůstává 'survey' (data-tab, switchTab, doc_type
-// filtry) — přejmenoval se jen popisek pro uživatele.
+// ─── Záložka Výstavba — tři složky ────────────────────────────────────────
+// POZN.: vnitřní id záložky zůstává 'survey' a klíče složek (doc_type) se
+// NEPŘEJMENOVÁVAJÍ — jinak by se „ztratily" už nahrané soubory. Mění se jen
+// popisky pro uživatele. Složky jsou pevně dané, takže je má každá lokalita
+// automaticky hned po založení; nic se nevytváří ručně.
 const SURVEY_DOC_CATS = [
-  { key:'construction', icon:'🏗️', label:'Výstavba',            hint:'Projekt, situace, harmonogram, fotky z místa…' },
-  { key:'building',     icon:'📑', label:'Dokumenty stavební',  hint:'Stavební povolení, ohlášení, vyjádření úřadů, Portál stavebníka…' },
+  { key:'construction',  icon:'📷', label:'Foto místní šetření', hint:'Fotky a podklady z místního šetření na lokalitě…' },
+  { key:'building',      icon:'📑', label:'Stavební dokumenty',  hint:'Stavební povolení, ohlášení, vyjádření úřadů, Portál stavebníka…' },
+  { key:'visualization', icon:'🎨', label:'Vizualizace',         hint:'Vizualizace a náhledy umístění — soubory i obrázky.' },
 ];
+// Patří dokument do záložky Výstavba? (jedno místo pro všechny filtry)
+function isSurveyDoc(d){ return SURVEY_DOC_CATS.some(c => c.key === ((d && d.doc_type) || '')); }
 function renderSurveyDocsTab(s){
   const all = s.documents || [];
   const fmtSize = b => b==null ? '' : (b<1024 ? b+' B' : b<1048576 ? Math.round(b/1024)+' kB' : (b/1048576).toFixed(1)+' MB');
-  return `<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Dokumenty k místnímu šetření a výstavbě lokality, rozdělené do dvou kategorií. Nahrávej PDF, Word, Excel nebo fotky (max 25 MB).</div>`
+  return `<div style="color:var(--text2);font-size:12px;margin-bottom:12px;">Podklady k výstavbě lokality ve třech složkách. Nahrávej PDF, Word, Excel nebo obrázky (max 25 MB na soubor).</div>`
     + SURVEY_DOC_CATS.map(c => {
       const items = all.filter(d => d.doc_type === c.key);
       const list = items.length ? items.map(d => `
@@ -610,7 +615,7 @@ function renderSurveyDocsTab(s){
         <div class="form-grid" style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border);">
           ${inp('Název (nebo se vezme z názvu souboru)','sdoc_title_'+c.key,'')}
           ${inp('Datum dokumentu','sdoc_date_'+c.key,'','date')}
-          <div class="form-row span2"><label>Soubor</label><input type="file" id="sdoc_file_${c.key}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.heic"></div>
+          <div class="form-row span2"><label>Soubor</label><input type="file" id="sdoc_file_${c.key}" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.gif,.heic"></div>
           ${inp('Poznámka','sdoc_note_'+c.key,'')}
           <div class="form-row" style="justify-content:flex-end;"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="addSurveyDoc('${c.key}')">＋ Přidat do „${esc(c.label)}"</button></div>
         </div>

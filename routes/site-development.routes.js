@@ -20,10 +20,14 @@ const { requireAuth } = require('../middleware/auth');
 const SITE_TYPES   = ['rent', 'purchase', 'other'];
 const SITE_STATUSES = ['lead', 'researching', 'negotiating', 'contract', 'operational', 'rejected', 'lost'];
 const COMM_CHANNELS = ['call', 'email', 'meeting', 'sms', 'note'];
-// construction = Výstavba, building = Dokumenty stavební (záložka Výstavba)
+// Záložka Výstavba má tři složky (klíče zůstávají kvůli už nahraným souborům):
+//   construction  = Foto místní šetření (dřív „Výstavba")
+//   building      = Stavební dokumenty
+//   visualization = Vizualizace (soubory i obrázky)
 // data_* = složka DATA v detailu lokality (data_root = značka vytvořené složky, ostatní = podsložky)
+const SURVEY_FOLDERS = ['construction', 'building', 'visualization'];
 const DATA_FOLDERS  = ['data_najemni', 'data_foto', 'data_koordinace', 'data_vizualizace', 'data_sit'];
-const DOC_TYPES     = ['contract', 'offer', 'cadastre', 'technical', 'construction', 'building', 'other', 'data_root', ...DATA_FOLDERS];
+const DOC_TYPES     = ['contract', 'offer', 'cadastre', 'technical', 'other', 'data_root', ...SURVEY_FOLDERS, ...DATA_FOLDERS];
 
 // Úložiště pro fotky a dokumenty (Railway persistent volume)
 const DATA_ROOT = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
