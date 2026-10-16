@@ -892,17 +892,23 @@
         if (acc || iban) return { account: acc || null, iban: iban || null, pass: e.pass_type, at: e.executed_at }; }
       return null;
     }
+    // Srovnání účtů vedle sebe: na faktuře (zadáno) | přečteno z dokladu (OCR) | shoda | známý u firmy
     function invBankDocHtml(inv) {
-      const o = invOcrAccount(inv);
-      if (!o) return '<b>📄 Účet na dokladu:</b> ' + (inv.ocr_extractions && inv.ocr_extractions.length ? '<span style="color:var(--text2);">OCR na dokladu žádné číslo účtu nenašlo.</span>' : '<span style="color:var(--text2);">' + (inv.direction === 'ap' ? 'Doklad nebyl čten OCR (zadán ručně).' : 'Vydaná faktura – účet je náš (viz výše).') + '</span>');
-      const same = accNorm(o.account) === accNorm(inv.partner_bank_account) || (o.iban && accNorm(o.iban) === accNorm(inv.partner_iban));
-      return '<b>📄 Účet přečtený z dokladu:</b> <span class="inline-code" style="font-size:1em;">' + escapeHtml(o.account || '—') + '</span>' + (o.iban ? ' · IBAN <span class="inline-code">' + escapeHtml(o.iban) + '</span>' : '') +
-        ((inv.partner_bank_account || inv.partner_iban)
-          ? (same ? ' <span style="color:#10b981;">✓ shodný s účtem na faktuře</span>' : ' <span style="color:#ef4444;font-weight:700;">⚠ liší se od účtu na faktuře (' + escapeHtml(inv.partner_bank_account || inv.partner_iban) + ')</span>')
-          : ' <span style="color:#f59e0b;">– na faktuře účet vyplněný není</span>');
+      const o = invOcrAccount(inv) || {};
+      const mono = (v) => v ? '<span style="font-family:Consolas,monospace;font-size:1.02em;letter-spacing:.02em;">' + escapeHtml(v) + '</span>' : '<span style="color:var(--text2);">—</span>';
+      const cmp = (a, b) => (!a && !b) ? '<span style="color:var(--text2);">—</span>' : (!a || !b) ? '<span style="color:#f59e0b;">⚠ chybí</span>' : accNorm(a) === accNorm(b) ? '<span style="color:#10b981;font-weight:700;">✓ shoda</span>' : '<span style="color:#ef4444;font-weight:700;">✗ LIŠÍ SE</span>';
+      const th = 'style="text-align:left;font-size:.78em;color:var(--text2);font-weight:600;padding:4px 10px;text-transform:uppercase;letter-spacing:.04em;"';
+      const td = 'style="padding:6px 10px;border-top:1px solid var(--border);"';
+      const noOcr = !(inv.ocr_extractions && inv.ocr_extractions.length);
+      const row = (lbl, a, b, key) => '<tr><td ' + td + '><b>' + lbl + '</b></td><td ' + td + '>' + mono(a) + '</td><td ' + td + '>' + (noOcr ? '<span style="color:var(--text2);">nečteno OCR</span>' : mono(b)) + '</td><td ' + td + '>' + (noOcr ? '<span style="color:var(--text2);">—</span>' : cmp(a, b)) + '</td><td ' + td + ' id="dv-known-' + key + '"><span style="color:var(--text2);">…</span></td></tr>';
+      return '<div style="font-weight:700;margin-bottom:6px;">🏦 Kontrola bankovního účtu</div>'
+        + '<table style="width:100%;border-collapse:collapse;background:var(--surface2);border-radius:8px;overflow:hidden;">'
+        + '<thead><tr><th ' + th + '></th><th ' + th + '>🧾 Na faktuře</th><th ' + th + '>📄 Přečteno z dokladu</th><th ' + th + '>Shoda</th><th ' + th + '>🏢 Známý u firmy</th></tr></thead><tbody>'
+        + row('Účet', inv.partner_bank_account, o.account, 'acc') + row('IBAN', inv.partner_iban, o.iban, 'iban')
+        + '</tbody></table>';
     }
     async function loadInvoiceKnownAccounts(inv) {
-      if (!inv.company_id) return; let box = document.getElementById('dv-bank-known-list');
+      if (!inv.company_id) { setTimeout(() => { ['dv-known-acc', 'dv-known-iban'].forEach((id) => { const el = document.getElementById(id); if (el) el.innerHTML = '<span style="color:var(--text2);">bez firmy</span>'; }); }, 300); return; } let box = document.getElementById('dv-bank-known-list');
       for (let i = 0; !box && i < 20; i++) { await new Promise((r) => setTimeout(r, 100)); box = document.getElementById('dv-bank-known-list'); }
       if (!box) return;
       const r = await api('GET', '/api/wh/companies/' + inv.company_id + '/bank-accounts');
@@ -914,6 +920,10 @@
       if (d.bank_account) add(d.bank_account, null, 'hlavní');
       (d.verified || []).forEach((v) => add(v.account, v.iban, 'ověřený'));
       (d.from_invoices || []).forEach((x) => { const e = add(x.account, x.iban, 'z faktur'); if (e) { e.count = x.count; e.last = x.last_invoice; } });
+      // Buňky „Známý u firmy" v tabulce srovnání
+      const knownCell = (v) => { if (!v) return '<span style="color:var(--text2);">—</span>'; const e = map.get(accNorm(v)) || [...map.values()].find((x) => x.iban && accNorm(x.iban) === accNorm(v)); if (!e) return '<span style="color:#ef4444;font-weight:700;">✗ neznámý</span>'; return e.tags.includes('ověřený') ? '<span style="color:#10b981;font-weight:700;">✓ ověřený</span>' : '<span style="color:#f59e0b;">' + (e.count ? e.count + '× na fakturách' : e.tags.join(', ')) + '</span>'; };
+      const ka = document.getElementById('dv-known-acc'), ki = document.getElementById('dv-known-iban');
+      if (ka) ka.innerHTML = knownCell(inv.partner_bank_account); if (ki) ki.innerHTML = knownCell(inv.partner_iban);
       if (!map.size) { box.innerHTML = '<b style="color:var(--text);">🏦 Známé účty firmy:</b> žádné – firma zatím nemá hlavní ani ověřený účet a nepřišla od ní faktura s účtem.'; return; }
       const tagStyle = { 'ověřený': 'background:#10b98122;color:#10b981;', 'hlavní': 'background:#6366f122;color:#818cf8;', 'z faktur': 'background:#f59e0b22;color:#f59e0b;' };
       box.innerHTML = '<b style="color:var(--text);">🏦 Známé účty firmy ' + escapeHtml(inv.company?.name || '') + ' (' + map.size + '):</b>' +
