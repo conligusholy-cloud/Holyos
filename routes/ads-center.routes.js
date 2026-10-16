@@ -374,7 +374,10 @@ router.get('/funnels/:id/nodes/:nodeId/gap-report', async (req, res, next) => { 
   res.json({ ok: true, total: all.length, sent_confirmed: (groups['✅ E-mail odešel (potvrzeno v Amazon SES logu)'] || { count: 0 }).count, groups: out });
 } catch (err) { next(err); } });
 // ── AI Marketingový ředitel (services/ads/director.js): sám zjišťuje, co v Centru reklamy je, a reaguje na nové / upravené věci ──
-const DIRECTOR = require('../services/ads/director'); DIRECTOR.init({ loadFunnels, funnelReport, PAGES }); DIRECTOR.start();
+const DIRECTOR = require('../services/ads/director'); DIRECTOR.init({ loadFunnels, funnelReport, PAGES, loadGoals }); DIRECTOR.start();
+// Živé zdroje čísel pro ředitele (nový zdroj = jedno DIRECTOR.register). Nastavení (ads_center.*) se sledují automaticky.
+DIRECTOR.register('stranky_navstevnost_a_objednavky', async (days) => { const out = {}; for (const p of PAGES) { if (!p.bs2 || !p.bs2.path) { out[p.key] = { poznamka: 'stránka bez sledování BS2' }; continue; } try { const b = await bs2Stats(Math.max(1, days), null, p.bs2.path); out[p.key] = b ? JSON.parse(JSON.stringify(b, (k, v) => (Array.isArray(v) && v.length > 40 ? v.slice(-40) : v))) : null; } catch (e) { out[p.key] = { error: e.message }; } } return out; });
+DIRECTOR.register('ekonomika_nastaveni', async () => loadEcon());
 router.get('/director/status', async (req, res, next) => { try { res.json(await DIRECTOR.status()); } catch (err) { next(err); } });
 router.get('/director/reports', async (req, res, next) => { try { res.json({ reports: await DIRECTOR.reports() }); } catch (err) { next(err); } });
 router.post('/director/run', async (req, res, next) => { try { const b = req.body || {}; res.json({ ok: true, report: await DIRECTOR.run({ mode: b.mode === 'changes' ? 'changes' : 'audit', days: b.days }) }); } catch (err) { next(err); } });
