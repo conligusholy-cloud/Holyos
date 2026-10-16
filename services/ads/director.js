@@ -140,6 +140,27 @@ async function run(opts) {
   return rep;
 }
 
+// ── Strategie: celá marketingová strategie jako graf (plátno) s očekávanými výsledky ──
+const KEY_STRATEGY = 'ads_director.strategy';
+async function getStrategy() { const s = await getJ(KEY_STRATEGY, null); return s ? scrub(s) : null; }
+async function strategy(opts) {
+  if (!deps) throw new Error('Ředitel není inicializovaný');
+  const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
+  const days = Math.min(90, Math.max(7, parseInt((opts || {}).days, 10) || 30));
+  const inv = await inventory(); const fp = fingerprint(inv); const m = await metrics(days);
+  const reports = scrub(await getJ(KEY_REPORTS, [])); const memory = scrub(await getJ(KEY_MEMORY, []));
+  const last = reports[0] && reports[0].report ? { headline: reports[0].report.headline, leak: reports[0].report.leak, data_quality: reports[0].report.data_quality, actions: (reports[0].report.actions || []).map((a) => ({ title: a.title, kind: a.kind, impact: a.impact })) } : null;
+  const prompt = 'Sestav KOMPLETNÍ MARKETINGOVOU STRATEGII prádlomatů jako graf (plátno), aby majitel měl 100% reálnou představu, jak je celý online marketing vymyšlený a co od něj čekat. Vycházej z aktuálního stavu (INVENTÁŘ, ČÍSLA, poslední audit) – co už existuje označ „existuje", co navrhuješ nově „navrženo", co je rozbité nebo chybí „problém". Očekávané výsledky ODVOZUJ z naměřených konverzí a cílených zlepšení (u každého přechodu uveď současnou a cílovou konverzi); nevymýšlej čísla bez opory a u nejistých to řekni. Strategie musí tvořit jeden navazující celek: cíl → zdroje návštěvnosti → oslovení → záchytné stránky → platba → péče / upsell, včetně měření.\n\nOBDOBÍ DAT: ' + days + ' dní.\n\nINVENTÁŘ:\n' + JSON.stringify(inv).slice(0, 22000) + '\n\nČÍSLA:\n' + JSON.stringify(m).slice(0, 20000) + '\n\nPOSLEDNÍ AUDIT:\n' + JSON.stringify(last).slice(0, 4000) + '\n\nPAMĚŤ:\n' + JSON.stringify(memory.slice(-10)).slice(0, 3000) +
+    '\n\nVÝSTUP: pouze jeden JSON objekt (bez Markdownu):\n{"goal":{"title":"hlavní cíl","target":"měřitelný cíl, např. 20 plateb / měsíc","horizon":"např. 90 dní"},"positioning":"1–2 věty: komu, co a čím se lišíme","audiences":[{"name":"…","need":"…"}],"nodes":[{"id":"n1","stage":0,"kind":"goal|source|outreach|page|conversion|retention|measure","title":"krátký název","desc":"1–2 věty co se tam děje a proč","status":"existuje|navrženo|problém","owner":"Facebook ručně|Centrum reklamy|Záchytná stránka|Ručně","expected":{"metric":"např. kliky","current":"dnes","target":"cíl","note":"na čem je odhad postaven"}}],"edges":[{"from":"n1","to":"n2","label":"např. lead → klik","current_rate":"např. 4,4 %","target_rate":"např. 8 %"}],"results":{"horizon":"…","scenarios":[{"name":"konzervativní|realistický|optimistický","leads":0,"clicks":0,"orders":0,"revenue_czk":0,"spend_czk":0,"roas":0,"note":"předpoklady"}],"assumptions":["…"],"risks":["…"]},"timeline":[{"when":"týden 1","what":"…","owner":"…"}],"data_quality_note":"jak moc se dá odhadům věřit (1 věta)"}\nPravidla: stage = sloupec zleva doprava (0 cíl/zdroje, 1 oslovení, 2 stránky, 3 konverze/platba, 4 péče, 5 měření); 10–18 uzlů, hrany tvoří souvislý graf; čísla v results jsou čísla (ne texty); ve scénářích vycházej z reálných dnešních hodnot a zlepšení rozumně odstupňuj; vše česky a stručně.';
+  const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+  const r = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 9000, system: SYSTEM, messages: [{ role: 'user', content: prompt }] });
+  const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n'); let S = null;
+  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); S = scrub(JSON.parse(raw.slice(a, b + 1))); } catch (e) { throw new Error('Strategie se nepodařila sestavit (neplatná odpověď AI), zkus to znovu.'); }
+  S.generated_at = new Date().toISOString(); S.days = days; S.fp = h(fp);
+  await setJ(KEY_STRATEGY, S, 'Marketingový ředitel – strategie');
+  return S;
+}
+
 async function reports() { return scrub(await getJ(KEY_REPORTS, [])); }
 // Stav pro UI: kolik nových / upravených věcí ředitel ještě nezhodnotil
 async function status() {
@@ -166,4 +187,4 @@ async function tick() {
 }
 function start() { if (start._on) return; start._on = true; setTimeout(tick, 90 * 1000); setInterval(tick, 20 * 60 * 1000); }
 
-module.exports = { init, register, run, reports, status, start, inventory, fingerprint, diff };
+module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff };
