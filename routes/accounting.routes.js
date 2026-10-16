@@ -180,7 +180,7 @@ router.get('/invoices', async (req, res, next) => {
     const { normalizeAccount } = require('../services/banking/account-verification');
     const result = invoices.map(inv => {
       let verification = null;
-      if (inv.partner_bank_account || inv.partner_iban) {
+      if (inv.direction !== 'ar' && (inv.partner_bank_account || inv.partner_iban)) { // vydané: náš účet, neověřujeme
         if (!inv.company) {
           verification = { status: 'unknown', message: 'Faktura nemá napojenou firmu.' };
         } else {

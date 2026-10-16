@@ -820,7 +820,10 @@
         const ver = inv.bank_account_verification || { status: 'no_account' };
         const accDisplay = inv.partner_bank_account || inv.partner_iban || '';
         let accCell;
-        if (ver.status === 'no_account') {
+        if (inv.direction === 'ar') {
+          // Vydaná faktura: na ní je NÁŠ účet — žádné ověřování, jen číslo
+          accCell = accDisplay ? '<td style="white-space:nowrap;font-family:monospace;font-size:0.82em;color:var(--text2);" title="Náš účet na faktuře">' + escapeHtml(accDisplay) + '</td>' : '<td style="color:var(--text2);">—</td>';
+        } else if (ver.status === 'no_account') {
           accCell = '<td style="color:var(--text2);">—</td>';
         } else {
           const verStyle = {
