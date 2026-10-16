@@ -373,6 +373,11 @@ router.get('/funnels/:id/nodes/:nodeId/gap-report', async (req, res, next) => { 
   const out = Object.values(groups).sort((a, b) => b.count - a.count);
   res.json({ ok: true, total: all.length, sent_confirmed: (groups['✅ E-mail odešel (potvrzeno v Amazon SES logu)'] || { count: 0 }).count, groups: out });
 } catch (err) { next(err); } });
+// ── AI Marketingový ředitel (services/ads/director.js): sám zjišťuje, co v Centru reklamy je, a reaguje na nové / upravené věci ──
+const DIRECTOR = require('../services/ads/director'); DIRECTOR.init({ loadFunnels, funnelReport, PAGES }); DIRECTOR.start();
+router.get('/director/status', async (req, res, next) => { try { res.json(await DIRECTOR.status()); } catch (err) { next(err); } });
+router.get('/director/reports', async (req, res, next) => { try { res.json({ reports: await DIRECTOR.reports() }); } catch (err) { next(err); } });
+router.post('/director/run', async (req, res, next) => { try { const b = req.body || {}; res.json({ ok: true, report: await DIRECTOR.run({ mode: b.mode === 'changes' ? 'changes' : 'audit', days: b.days }) }); } catch (err) { next(err); } });
 router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { const j = RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')]; res.json(j ? pubJob(j) : { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
 router.get('/pages', (req, res) => res.json(PAGES.map((p) => ({ key: p.key, name: p.name, url: p.url || '', desc: p.desc || '', color: p.color, leadLabel: p.leadLabel || 'leady', convLabel: p.convLabel || 'dokončeno' }))));
 
