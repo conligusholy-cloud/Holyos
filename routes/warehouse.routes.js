@@ -123,7 +123,7 @@ router.get('/companies/:id(\\d+)/bank-accounts', async (req, res, next) => {
     const vset = new Set(); verified.forEach((v) => { if (v.account) vset.add(norm(v.account)); if (v.iban) vset.add(norm(v.iban)); });
     // jen přijaté (AP) – u vydaných je v partner_bank_account náš vlastní účet
     const invs = await prisma.invoice.findMany({
-      where: { company_id: id, direction: 'ap', OR: [{ partner_bank_account: { not: null } }, { partner_iban: { not: null } }] },
+      where: Object.assign({ company_id: id, direction: 'ap', OR: [{ partner_bank_account: { not: null } }, { partner_iban: { not: null } }] }, parseInt(req.query.exclude_invoice, 10) ? { NOT: { id: parseInt(req.query.exclude_invoice, 10) } } : {}), // bez právě otevřené faktury (nepočítat ji samu sebe)
       select: { invoice_number: true, date_issued: true, partner_bank_account: true, partner_iban: true },
       orderBy: { date_issued: 'desc' }, take: 500,
     });

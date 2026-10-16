@@ -903,15 +903,16 @@
       const row = (lbl, a, b, key) => '<tr><td ' + td + '><b>' + lbl + '</b></td><td ' + td + '>' + mono(a) + '</td><td ' + td + '>' + (noOcr ? '<span style="color:var(--text2);">nečteno OCR</span>' : mono(b)) + '</td><td ' + td + '>' + (noOcr ? '<span style="color:var(--text2);">—</span>' : cmp(a, b)) + '</td><td ' + td + ' id="dv-known-' + key + '"><span style="color:var(--text2);">…</span></td></tr>';
       return '<div style="font-weight:700;margin-bottom:6px;">🏦 Kontrola bankovního účtu</div>'
         + '<table style="width:100%;border-collapse:collapse;background:var(--surface2);border-radius:8px;overflow:hidden;">'
-        + '<thead><tr><th ' + th + '></th><th ' + th + '>🧾 Na faktuře</th><th ' + th + '>📄 Přečteno z dokladu</th><th ' + th + '>Shoda</th><th ' + th + '>🏢 Známý u firmy</th></tr></thead><tbody>'
+        + '<thead><tr><th ' + th + '></th><th ' + th + ' title="Účet uložený v této faktuře v HolyOS (u faktur z e-mailu ho při založení doplnilo OCR, jde ručně upravit)">🧾 Uloženo ve faktuře</th><th ' + th + '>📄 Přečteno z dokladu</th><th ' + th + '>Shoda</th><th ' + th + '>🏢 Známý u firmy</th></tr></thead><tbody>'
         + row('Účet', inv.partner_bank_account, o.account, 'acc') + row('IBAN', inv.partner_iban, o.iban, 'iban')
-        + '</tbody></table>';
+        + '</tbody></table>'
+        + '<div style="font-size:.78em;color:var(--text2);margin-top:6px;">' + (inv.email_ingest ? '📧 Fakturu založil příjem e-mailů: účet doplnilo OCR z PDF v e-mailu od <b>' + escapeHtml(inv.email_ingest.from_email || '') + '</b>' + (inv.email_ingest.received_at ? ' (' + fmtDateTime(inv.email_ingest.received_at) + ')' : '') + '. Shoda s dokladem proto hlavně hlídá ruční přepis — proti podvodu rozhoduje sloupec <b>Známý u firmy</b> (jiné faktury / ověřené účty).' : 'Účet zadán ručně ve faktuře.') + '</div>';
     }
     async function loadInvoiceKnownAccounts(inv) {
       if (!inv.company_id) { setTimeout(() => { ['dv-known-acc', 'dv-known-iban'].forEach((id) => { const el = document.getElementById(id); if (el) el.innerHTML = '<span style="color:var(--text2);">bez firmy</span>'; }); }, 300); return; } let box = document.getElementById('dv-bank-known-list');
       for (let i = 0; !box && i < 20; i++) { await new Promise((r) => setTimeout(r, 100)); box = document.getElementById('dv-bank-known-list'); }
       if (!box) return;
-      const r = await api('GET', '/api/wh/companies/' + inv.company_id + '/bank-accounts');
+      const r = await api('GET', '/api/wh/companies/' + inv.company_id + '/bank-accounts?exclude_invoice=' + inv.id);
       if (r.status !== 200 || !r.data) { box.textContent = 'Účty firmy se nepodařilo načíst.'; return; }
       const d = r.data, cur = [accNorm(inv.partner_bank_account), accNorm(inv.partner_iban)].filter(Boolean);
       const o = invOcrAccount(inv); const docAcc = o ? [accNorm(o.account), accNorm(o.iban)].filter(Boolean) : [];
