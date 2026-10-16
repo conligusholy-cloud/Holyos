@@ -8,6 +8,8 @@
 import React, { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as Updates from 'expo-updates';
+import * as Application from 'expo-application';
 import { loadAuth } from '../lib/auth';
 import { api } from '../lib/api';
 
@@ -38,7 +40,36 @@ function greeting(): string {
   return h < 5 ? 'Dobrou noc' : h < 10 ? 'Dobré ráno' : h < 18 ? 'Dobrý den' : 'Dobrý večer';
 }
 
+// Verze aplikace: build (instalace) + OTA aktualizace, která právě běží
+function versionInfo(): { line1: string; line2: string } {
+  const app = (Application.nativeApplicationVersion || '?') + ' (' + (Application.nativeBuildVersion || '?') + ')';
+  const rt = (Updates as any).runtimeVersion || '?';
+  const ch = (Updates as any).channel || '—';
+  const embedded = (Updates as any).isEmbeddedLaunch;
+  const id = (Updates as any).updateId ? String((Updates as any).updateId).slice(0, 8) : '';
+  const at = (Updates as any).createdAt ? new Date((Updates as any).createdAt) : null;
+  const when = at && !isNaN(at.getTime()) ? at.toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  return {
+    line1: 'Verze ' + app + ' · runtime ' + rt + ' · kanál ' + ch,
+    line2: embedded || !id ? 'Běží verze z instalace (bez aktualizace)' : 'Aktualizace ' + id + (when ? ' z ' + when : ''),
+  };
+}
+
 export default function HomeHub() {
+  const [upd, setUpd] = useState<string>('');
+  const checkUpdate = async () => {
+    if (!Updates.isEnabled) { setUpd('Aktualizace jsou v této instalaci vypnuté.'); return; }
+    try {
+      setUpd('Hledám aktualizaci…');
+      const r = await Updates.checkForUpdateAsync();
+      if (!r.isAvailable) { setUpd('Máš nejnovější verzi ✓'); return; }
+      setUpd('Stahuji aktualizaci…');
+      await Updates.fetchUpdateAsync();
+      setUpd('Restartuji…');
+      await Updates.reloadAsync();
+    } catch (e: any) { setUpd('Aktualizace selhala: ' + (e?.message || e)); }
+  };
+  const vi = versionInfo();
   const navigation = useNavigation<any>();
   const [name, setName] = useState<string>('');
   const [badges, setBadges] = useState<Record<string, number>>({});
@@ -86,6 +117,15 @@ export default function HomeHub() {
             );
           })}
         </View>
+
+        <View style={styles.ver}>
+          <Text style={styles.verTxt}>{vi.line1}</Text>
+          <Text style={styles.verTxt}>{vi.line2}</Text>
+          <TouchableOpacity onPress={checkUpdate} style={styles.verBtn} activeOpacity={0.7}>
+            <Text style={styles.verBtnTxt}>↻ Zkontrolovat aktualizaci</Text>
+          </TouchableOpacity>
+          {upd ? <Text style={styles.verMsg}>{upd}</Text> : null}
+        </View>
       </ScrollView>
     </View>
   );
@@ -112,4 +152,9 @@ const styles = StyleSheet.create({
   badge: { position: 'absolute', top: -6, right: -6, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 5, backgroundColor: BS.err, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: BS.bg },
   badgeTxt: { color: '#fff', fontSize: 11, fontWeight: '800' },
   label: { color: BS.text, fontSize: 12, fontWeight: '600', marginTop: 7 },
+  ver: { marginTop: 40, alignItems: 'center', gap: 2 },
+  verTxt: { color: BS.text3, fontSize: 11 },
+  verBtn: { marginTop: 10, borderWidth: 1, borderColor: BS.border2, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  verBtnTxt: { color: BS.accent2, fontSize: 12.5, fontWeight: '700' },
+  verMsg: { color: BS.text2, fontSize: 12, marginTop: 6, textAlign: 'center' },
 });

@@ -27,7 +27,7 @@ import {
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Platform, Text, TouchableOpacity, View } from 'react-native';
+import { AppState, Platform, Text, TouchableOpacity, View } from 'react-native';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import Gate from './screens/Gate';
@@ -288,6 +288,13 @@ export default function App() {
   // OTA check při startu
   useEffect(() => {
     checkForOtaUpdate();
+    // Samsung/Android nechává aplikaci v paměti → „zavřít a otevřít" ji často nerestartuje.
+    // Proto kontrola aktualizace i při každém návratu do popředí (max 1× za 10 min).
+    let lastCheck = Date.now();
+    const appStateSub = AppState.addEventListener('change', (st) => {
+      if (st === 'active' && Date.now() - lastCheck > 10 * 60 * 1000) { lastCheck = Date.now(); checkForOtaUpdate(); }
+    });
+    return () => appStateSub.remove();
   }, []);
 
   // Push tap handler — registrujeme jednou při mountu App.
