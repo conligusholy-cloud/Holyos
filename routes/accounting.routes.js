@@ -1019,6 +1019,12 @@ router.post('/invoices/:id/mark-ready-to-pay', async (req, res, next) => {
       invoice.approval_steps.filter(s => s.required).every(s => s.status === 'approved');
     if (!allApproved) hardChecks.push('faktura není schválena všemi schvalovateli');
 
+    // Anti-podvod: převodem jen na ověřený účet (firma / registr DPH / fyzické ověření)
+    if ((invoice.payment_method || 'bank_transfer') === 'bank_transfer' && (invoice.partner_bank_account || invoice.partner_iban)) {
+      const v = await verifyAccount({ companyId: invoice.company_id, partnerBankAccount: invoice.partner_bank_account, partnerIban: invoice.partner_iban });
+      if (v.needs_physical) hardChecks.push('bankovní účet protistrany není ověřený — v detailu faktury ho fyzicky ověř („🔐 Fyzicky ověřit účet“)');
+    }
+
     if (hardChecks.length > 0) {
       return res.status(400).json({
         error: 'Faktura ještě není připravena k platbě',
@@ -2531,9 +2537,21 @@ const { addToWhitelist, verifyAccount } = require('../services/banking/account-v
 // POST /api/accounting/invoices/:id/verify-bank-account — přidá účet z faktury
 // do whitelistu firmy (Company.verified_bank_accounts). Volat z UI tlačítkem
 // "Potvrdit účet" v detailu faktury, kde verification.status je 'unknown' nebo 'mismatch'.
+const PHYSICAL_METHODS = {
+  phone_known: 'telefonicky na známý kontakt (ne z faktury/e-mailu)',
+  in_person: 'osobně',
+  signed_letter: 'podepsaným dopisem / smlouvou',
+  bank_confirm: 'potvrzením banky / výpisem',
+};
 const verifyAccountSchema = z.object({
-  note: z.string().max(500).optional().nullable(), // prázdná poznámka z promptu = null
-  override_mismatch: z.boolean().optional(), // pokud je status mismatch, super admin může přepsat
+  note: z.string().max(500).optional().nullable(), // prázdná poznámka = null
+  override_mismatch: z.boolean().optional(), // legacy — fyzické ověření nesoulad přebíjí
+  // Fyzické ověření (povinné, když účet nesedí s firmou ani s registrem DPH)
+  physical: z.object({
+    method: z.enum(Object.keys(PHYSICAL_METHODS)),
+    contact: z.string().min(2).max(200), // s kým / na jaké číslo
+    confirmed: z.literal(true),
+  }).optional().nullable(),
 });
 
 router.post('/invoices/:id/verify-bank-account', async (req, res, next) => {
@@ -2554,33 +2572,31 @@ router.post('/invoices/:id/verify-bank-account', async (req, res, next) => {
       return res.status(400).json({ error: 'Faktura nemá vyplněný účet protistrany.' });
     }
 
-    // Sanity check: pokud má firma jiné účty a tenhle nesedí, vyžaduj override flag
-    const whitelist = Array.isArray(invoice.company.verified_bank_accounts)
-      ? invoice.company.verified_bank_accounts : [];
-    if (whitelist.length > 0 && !parsed.data.override_mismatch) {
-      // Zkus rychlou shodu
-      const verification = await verifyAccount({
-        companyId: invoice.company_id,
-        partnerBankAccount: invoice.partner_bank_account,
-        partnerIban: invoice.partner_iban,
-      });
-      if (verification.status === 'mismatch') {
-        return res.status(409).json({
-          error: 'Firma má v whitelistu jiné účty. Pokud opravdu chceš přidat tento účet, pošli `override_mismatch: true` (vyžaduje vědomé rozhodnutí).',
-          verification,
-          existing_whitelist_count: whitelist.length,
-        });
-      }
+    // Účet, který nesedí s firmou ani s registrem DPH, jde zapsat JEN po fyzickém ověření
+    const verification = await verifyAccount({
+      companyId: invoice.company_id,
+      partnerBankAccount: invoice.partner_bank_account,
+      partnerIban: invoice.partner_iban,
+    });
+    if (verification.status === 'verified' || verification.status === 'mfcr_ok') {
+      return res.json({ ok: true, message: 'Účet už je ověřený (' + verification.message + ')', verification });
     }
+    const ph = parsed.data.physical;
+    if (!ph) {
+      return res.status(409).json({ error: 'Účet nesedí s účty firmy ani s registrem DPH — vyžaduje fyzické ověření (způsob + kontakt + potvrzení).', verification });
+    }
+    const whitelist = Array.isArray(invoice.company.verified_bank_accounts) ? invoice.company.verified_bank_accounts : [];
+    const physNote = `Fyzicky ověřeno ${PHYSICAL_METHODS[ph.method]} — ${ph.contact}; faktura ${invoice.invoice_number}` + (parsed.data.note ? ` — ${parsed.data.note}` : '');
 
     const result = await addToWhitelist({
       companyId: invoice.company_id,
       account: invoice.partner_bank_account,
       iban: invoice.partner_iban,
       verifiedByUserId: req.user?.id,
-      source: 'manual',
-      note: parsed.data.note || `Potvrzeno z faktury ${invoice.invoice_number}`,
+      source: 'physical',
+      note: physNote,
     });
+    parsed.data.override_mismatch = whitelist.length > 0;
 
     if (!result.added) {
       return res.json({ ok: true, message: 'Účet už ve whitelistu byl.', entry: result.entry });
@@ -2588,12 +2604,12 @@ router.post('/invoices/:id/verify-bank-account', async (req, res, next) => {
 
     await logAudit({
       action: 'update', entity: 'company', entity_id: invoice.company_id,
-      description: `🔐 Účet ${invoice.partner_bank_account || invoice.partner_iban} přidán do whitelistu (${invoice.company.name}) z faktury ${invoice.invoice_number}${parsed.data.override_mismatch ? ' [OVERRIDE]' : ''}`,
+      description: `🔐 Účet ${invoice.partner_bank_account || invoice.partner_iban} fyzicky ověřen a zapsán k firmě ${invoice.company.name} (faktura ${invoice.invoice_number})${parsed.data.override_mismatch ? ' [firma měla jiné účty]' : ''}: ${physNote}`,
       snapshot: { entry: result.entry },
       user: req.user,
     }).catch(() => {});
 
-    res.json({ ok: true, message: 'Účet přidán do whitelistu firmy.', entry: result.entry, total: result.total });
+    res.json({ ok: true, message: 'Účet fyzicky ověřen a zapsán k firmě — příště se zkontroluje automaticky.', entry: result.entry, total: result.total });
   } catch (err) { next(err); }
 });
 

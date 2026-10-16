@@ -430,10 +430,12 @@
     async function scLoad(regen) {
       var body = document.getElementById('sc-body'); var btn = document.getElementById('sc-regen');
       if (regen) { btn.disabled = true; document.getElementById('sc-detail').style.display = 'none'; body.innerHTML = '<div class="dirwork" style="max-width:640px;margin:60px auto"><span class="cmp">🧭</span><div style="flex:1"><div style="font-weight:800">Ředitel vymýšlí celou strategii…</div><div class="bar"><i></i></div><div class="note" style="font-size:11.5px;margin-top:6px">Skládám cíl, zdroje, oslovení, stránky, konverze, péči i očekávané výsledky. Běží na pozadí, obvykle 2–4 min.</div></div></div>'; }
-      var GET = function () { return fetch('/api/ads-center/director/strategy', { credentials: 'same-origin', cache: 'no-store' }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }); };
+      // Restart serveru (deploy) vrací chvíli 502/503/504 nebo výpadek spojení → zkus znovu (až ~60 s)
+      var tryFetch = async function (url, opt) { for (var k = 0; ; k++) { try { var r = await fetch(url, opt); if ([502, 503, 504].indexOf(r.status) >= 0 && k < 12) throw new Error('retry'); var j = await r.json().catch(function () { return {}; }); if (!r.ok) throw Object.assign(new Error(j.error || ('HTTP ' + r.status)), { fatal: true }); return j; } catch (e) { if (e.fatal || k >= 12) throw e; await new Promise(function (res) { setTimeout(res, 5000); }); } } };
+      var GET = function () { return tryFetch('/api/ads-center/director/strategy', { credentials: 'same-origin', cache: 'no-store' }); };
       try {
         var j;
-        if (regen) { var r = await fetch('/api/ads-center/director/strategy', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' }); var jj = await r.json().catch(function () { return {}; }); if (!r.ok) throw new Error(jj.error || r.status); }
+        if (regen) await tryFetch('/api/ads-center/director/strategy', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}' });
         j = await GET();
         // Generování běží na serveru na pozadí → dotazuj se, dokud neskončí (max ~8 min); výpadek spojení jen přečká
         if (j.job && j.job.running) {
