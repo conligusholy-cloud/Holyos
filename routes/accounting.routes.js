@@ -2532,7 +2532,7 @@ const { addToWhitelist, verifyAccount } = require('../services/banking/account-v
 // do whitelistu firmy (Company.verified_bank_accounts). Volat z UI tlačítkem
 // "Potvrdit účet" v detailu faktury, kde verification.status je 'unknown' nebo 'mismatch'.
 const verifyAccountSchema = z.object({
-  note: z.string().optional(),
+  note: z.string().max(500).optional().nullable(), // prázdná poznámka z promptu = null
   override_mismatch: z.boolean().optional(), // pokud je status mismatch, super admin může přepsat
 });
 

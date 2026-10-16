@@ -1172,7 +1172,7 @@
           : 'Potvrzuješ, že tenhle účet patří firmě a faktura není podvod?\n\nVolitelná poznámka:'
       );
       if (note === null) return; // Cancel
-      const body = { note: note || null };
+      const body = {}; if (note && note.trim()) body.note = note.trim();
       if (isOverride) body.override_mismatch = true;
       const r = await api('POST', '/api/accounting/invoices/' + invoiceId + '/verify-bank-account', body);
       if (r.status !== 200) {
