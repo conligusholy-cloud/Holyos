@@ -116,7 +116,12 @@
           <h1>📣 Centrum reklamy</h1>
           <div class="sub">Všechny veřejné záchytné stránky na jednom místě – návštěvy, leady, objednávky a platby. Jen pro Tomáše a Jana Holého.</div>
         </div>
-        <div style="margin-left:auto" class="toolbar">
+        <div id="dir-pill" role="button" tabindex="0" title="Otevřít marketingového ředitele" style="margin-left:auto;margin-right:18px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;border:1px solid rgba(245,158,11,.55);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(99,102,241,.12));max-width:520px">
+          <span style="font-size:22px">🧭</span>
+          <div style="min-width:0"><div style="font-weight:800;font-size:13px">Marketingový ředitel <span id="dir-badge" style="display:none;background:#ef4444;color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;margin-left:4px"></span></div><div id="dir-pill-sub" class="note" style="font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Načítám…</div></div>
+          <span class="btn btn-sm on" style="pointer-events:none">Otevřít</span>
+        </div>
+        <div style="margin-left:0" class="toolbar">
           <span class="note">Období:</span>
           <button class="btn btn-sm" data-days="7">7 dní</button>
           <button class="btn btn-sm on" data-days="30">30 dní</button>
@@ -128,9 +133,7 @@
         <button class="module-tab active" data-tab="pages">📄 Záchytné stránky</button>
         <button class="module-tab" data-tab="funnel">🔻 Funel</button>
         <button class="module-tab" data-tab="profit">💰 Ziskovost</button>
-        <button class="module-tab" data-tab="settings">⚙ Nastavení</button>
-        <button class="module-tab" data-tab="director" id="tab-director">🧭 Ředitel</button>
-      </div>
+        <button class="module-tab" data-tab="settings">⚙ Nastavení</button>      </div>
       <div class="content">
       <div class="module-panel active" id="panel-pages">
         <div class="kpis" id="kpis"></div>
@@ -189,9 +192,9 @@
           <div class="toolbar"><button class="btn" id="sms-test">Poslat testovací SMS</button><a class="btn" href="/modules/prodejni-objednavky/index.html#ai-asistent">Otevřít nastavení brány ↗</a><span class="note" id="sms-msg"></span></div>
         </div>
       </div>
-      <div class="module-panel" id="panel-director">
-        <div class="fn-card" id="dir-card">
-          <div class="toolbar" style="margin:0 0 6px"><b style="font-size:15px">🧭 Marketingový ředitel</b><span class="note" id="dir-status">Načítám…</span><button class="btn on" id="dir-run" style="margin-left:auto">▶ Spustit audit</button><button class="btn" id="dir-changes" title="Zhodnotí jen nové / upravené věci">Revize změn</button></div>
+      <div id="dir-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(5,8,18,.72);overflow:auto;padding:40px 20px" onclick="if(event.target===this)this.style.display='none'">
+        <div class="fn-card" id="dir-card" style="max-width:1100px;margin:0 auto;background:var(--surface,#1b2036)">
+          <div class="toolbar" style="margin:0 0 6px"><b style="font-size:16px">🧭 Marketingový ředitel</b><span class="note" id="dir-status">Načítám…</span><button class="btn on" id="dir-run" style="margin-left:auto">▶ Spustit audit</button><button class="btn" id="dir-changes" title="Zhodnotí jen nové / upravené věci">Revize změn</button><button class="btn" id="dir-close">Zavřít</button></div>
           <div class="note" style="font-size:12px">Řídí celé Centrum reklamy – záchytné stránky (cíle, verze, návštěvnost, objednávky), funely, e-maily a SMS, kampaně, ziskovost i nastavení. Sám sleduje, co přibude nebo se upraví, a nemusíš mu nic doplňovat: po ustálení změny udělá revizi, jednou týdně celkový audit. Nic sám neodesílá ani nemění – jen navrhuje.</div>
           <div id="dir-out"></div>
         </div>
@@ -350,11 +353,13 @@
     document.getElementById('fn-new').addEventListener('click', function () { openEditor(null); });
     // ── Marketingový ředitel: stav, poslední zpráva, ruční spuštění ──
     function dirShow(rep) { var out = document.getElementById('dir-out'); if (!rep) { out.innerHTML = ''; return; } var acts = (rep.actions || []).map(function (a) { return '<tr><td><b>' + esc(a.title) + '</b><div class="note" style="font-size:11.5px">' + esc(a.why || '') + '</div></td><td class="note">' + esc(a.area || '') + '</td><td class="note">' + esc(a.impact || '') + ' / ' + esc(a.effort || '') + '</td></tr>'; }).join(''); out.innerHTML = '<div class="stbox wide rec" style="margin-top:10px"><h4>' + (rep.mode === 'changes' ? '🔄 Revize změn' : '📊 Audit') + ' · ' + esc(new Date(rep.at).toLocaleString('cs-CZ')) + '</h4>' + (rep.changes && rep.changes.length ? '<div class="note" style="font-size:12px;margin-bottom:6px">Zhodnocené změny: ' + rep.changes.map(esc).join(' · ') + '</div>' : '') + '<div class="md">' + mdLite(rep.text) + '</div>' + (acts ? '<h4 style="margin-top:12px">Navržené kroky</h4><div class="tbl-wrap"><table class="data-table"><thead><tr><th>Krok</th><th>Oblast</th><th>Dopad / náročnost</th></tr></thead><tbody>' + acts + '</tbody></table></div>' : '') + '</div>'; }
-    async function dirLoad() { try { var s = await (await fetch('/api/ads-center/director/status', { credentials: 'same-origin', cache: 'no-store' })).json(); var r = await (await fetch('/api/ads-center/director/reports', { credentials: 'same-origin', cache: 'no-store' })).json(); var n = (s.pending_changes || []).length; var tb = document.getElementById('tab-director'); if (tb) tb.textContent = '🧭 Ředitel' + (n ? ' (' + n + ')' : ''); document.getElementById('dir-status').innerHTML = (n ? '<span class="warn">Nové / upravené věci čekají na zhodnocení: ' + n + '</span>' : 'Vše zhodnoceno') + (s.last_run_at ? ' · poslední běh ' + esc(new Date(s.last_run_at).toLocaleString('cs-CZ')) : ' · zatím neběžel') + (n ? '<div style="font-size:11.5px;opacity:.85">' + s.pending_changes.slice(0, 6).map(esc).join(' · ') + '</div>' : ''); dirShow((r.reports || [])[0]); } catch (e) { document.getElementById('dir-status').textContent = 'Stav nelze načíst: ' + e.message; } }
+    async function dirLoad() { try { var s = await (await fetch('/api/ads-center/director/status', { credentials: 'same-origin', cache: 'no-store' })).json(); var r = await (await fetch('/api/ads-center/director/reports', { credentials: 'same-origin', cache: 'no-store' })).json(); var n = (s.pending_changes || []).length; var bd = document.getElementById('dir-badge'); if (bd) { bd.style.display = n ? 'inline-block' : 'none'; bd.textContent = n; } var top0 = ((r.reports || [])[0] || {}).actions; var ps = document.getElementById('dir-pill-sub'); if (ps) ps.textContent = n ? 'Čeká na zhodnocení: ' + s.pending_changes[0] + (n > 1 ? ' (+' + (n - 1) + ')' : '') : (top0 && top0[0] ? 'Priorita: ' + top0[0].title : (s.last_run_at ? 'Vše zhodnoceno' : 'Zatím neběžel – klikni a spusť audit')); document.getElementById('dir-status').innerHTML = (n ? '<span class="warn">Nové / upravené věci čekají na zhodnocení: ' + n + '</span>' : 'Vše zhodnoceno') + (s.last_run_at ? ' · poslední běh ' + esc(new Date(s.last_run_at).toLocaleString('cs-CZ')) : ' · zatím neběžel') + (n ? '<div style="font-size:11.5px;opacity:.85">' + s.pending_changes.slice(0, 6).map(esc).join(' · ') + '</div>' : ''); dirShow((r.reports || [])[0]); } catch (e) { document.getElementById('dir-status').textContent = 'Stav nelze načíst: ' + e.message; } }
     async function dirRun(mode, btn) { var old = btn.textContent; btn.disabled = true; btn.textContent = '🧭 Analyzuji… (30–90 s)'; try { var r = await fetch('/api/ads-center/director/run', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode, days: 30 }) }); var j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); await dirLoad(); } catch (e) { document.getElementById('dir-out').innerHTML = '<div class="note warn">Ředitel selhal: ' + esc(e.message) + '</div>'; } btn.disabled = false; btn.textContent = old; }
     document.getElementById('dir-run').addEventListener('click', function (e) { dirRun('audit', e.currentTarget); });
     document.getElementById('dir-changes').addEventListener('click', function (e) { dirRun('changes', e.currentTarget); });
-    dirLoad();
+    document.getElementById('dir-pill').addEventListener('click', function () { document.getElementById('dir-modal').style.display = 'block'; dirLoad(); });
+    document.getElementById('dir-close').addEventListener('click', function () { document.getElementById('dir-modal').style.display = 'none'; });
+    dirLoad(); setInterval(dirLoad, 5 * 60 * 1000);
     document.getElementById('fn-add-step').addEventListener('click', function () { collectSteps(); editing.steps.push({ label: '', page: PAGESDEF[0] ? PAGESDEF[0].key : null, metric: 'leads', manual: null }); renderSteps(); });
     document.getElementById('fn-cancel').addEventListener('click', function () { document.getElementById('fn-editor').style.display = 'none'; editing = null; });
     document.getElementById('fn-save').addEventListener('click', async function () { collectSteps(); editing.name = document.getElementById('fn-name').value.trim() || 'Funel'; editing.note = document.getElementById('fn-note').value.trim(); if (!editing.name) { document.getElementById('fn-msg').textContent = 'Zadej název funelu.'; return; }
