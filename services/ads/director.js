@@ -26,6 +26,17 @@ const DEBOUNCE_MS = 30 * 60 * 1000;           // změna se musí „ustálit"
 const MIN_AUTO_GAP_MS = 6 * 3600 * 1000;      // automaticky nejvýš jednou za 6 h
 const WEEKLY_MS = 7 * 24 * 3600 * 1000;
 
+// ── Rozsah: ŘEDITEL ŘEŠÍ JEN PRÁDLOMATY (Best Series). Projekt Špagetka (Špageta) pro něj neexistuje – 100% se vyřazuje ze všech vstupů i výstupů. ──
+const OUT_OF_SCOPE = /[sš]pagett?k|[sš]pagett?a\b/i;
+const TAINT = Symbol('taint');
+function _scrub(v) {
+  if (v == null || typeof v === 'number' || typeof v === 'boolean') return v;
+  if (typeof v === 'string') return OUT_OF_SCOPE.test(v) ? TAINT : v;
+  if (Array.isArray(v)) return v.map(_scrub).filter((x) => x !== TAINT);
+  if (typeof v === 'object') { const o = {}; for (const k of Object.keys(v)) { if (OUT_OF_SCOPE.test(k)) return TAINT; const x = _scrub(v[k]); if (x === TAINT) { if (typeof v[k] === 'string') return TAINT; continue; } o[k] = x; } return o; } // objekt s mimo-rozsahovým textem přímo v hodnotě se vyřadí celý z nadřazeného pole / mapy
+  return v;
+}
+function scrub(v) { if (v && typeof v === 'object' && !Array.isArray(v)) { const o = {}; Object.keys(v).forEach((k) => { if (OUT_OF_SCOPE.test(k)) return; const x = _scrub(v[k]); if (x !== TAINT) o[k] = x; }); return o; } const r = _scrub(v); return r === TAINT ? [] : r; } // kořen: vyřadí jen mimo-rozsahové větve, ne celý objekt
 let deps = null; // { loadFunnels, funnelReport, PAGES, loadGoals }
 function init(d) { deps = d; }
 // Registr živých zdrojů dat: register('nazev', async () => data). Ředitel je při každém běhu načte a předá AI (nesledují se jako změna – jde o čísla).
@@ -60,7 +71,7 @@ async function inventory() {
   const outreach = await getJ('compounder.aispec_autosend', {});
   const messages = { email_specialist: { subject: outreach.specialistEmailSubject || null, body: outreach.specialistEmailBody || null, link_label: outreach.specialistEmailLinkLabel || null, from: outreach.specialistEmailFrom || null, enabled: !!outreach.emailEnabled }, email_schuzka: { subject: outreach.schuzkaEmailSubject || null, body: outreach.schuzkaEmailBody || null, enabled: !!outreach.schuzkaEmailEnabled }, sms: { text: outreach.text || null, enabled: !!outreach.enabled } };
   const settings = await autoSettings();
-  return { funnels, pages, messages, settings };
+  return scrub({ funnels, pages, messages, settings });
 }
 // Kompaktní otisk pro porovnání (per uzel / stránka / zpráva)
 function fingerprint(inv) {
@@ -96,19 +107,20 @@ async function metrics(days) {
   }
   let ses = null; try { ses = await require('../ses/email-log').stats(days >= 90 ? '90d' : days >= 30 ? '30d' : days >= 7 ? '7d' : 'today'); delete ses.byDay; } catch (e) { ses = null; }
   const extra = {}; for (const name of Object.keys(sources)) { try { extra[name] = await sources[name](days); } catch (e) { extra[name] = { error: e.message }; } }
-  return { funnels: out, ses_email: ses, extra };
+  return scrub({ funnels: out, ses_email: ses, extra });
 }
 
 // ── 3) Ředitel ──
-const SYSTEM = 'Jsi marketingový ředitel (CMO) a zároveň špičkový performance marketér, CRO specialista a direct-response copywriter firmy Best Series (prádlomaty – samoobslužné prádelny, prodej strojů, aplikace Prověření lokality a Vyhledávač míst; web compounder.world, bestseries2.cz). Řídíš CELÉ Centrum reklamy, ne jen funel: záchytné stránky (jejich cíle, verze, texty, návštěvnost, objednávky), funely, oslovení (e-mail, SMS), reklamní kampaně, ziskovost a ekonomiku, nastavení kanálů a vše ostatní, co je v inventáři a nastaveních. Tvoje práce: aby online marketing tvořil JEDEN koordinovaný systém (reklama → lead → e-mail / SMS → záchytná stránka → platba → další péče), každý krok navazoval na předchozí slibem i tónem a celek vedl k prodeji. Pravidla: (1) opírej se jen o dodaná data, každé tvrzení doplň číslem; chybí-li data, řekni to a navrhni, co měřit; (2) u malých vzorků mluv o „signálu", ne o jistotě; (3) hlídej soulad slibu v e-mailu / SMS / reklamě s tím, co člověk vidí na stránce; (4) hledej největší únik v celém řetězci, ne jen v jednom kroku; (5) navrhuj konkrétní kroky s dopadem, náročností a metrikou – nic nepředstírej, že jsi sám provedl; (6) vše, co je v inventáři nové nebo změněné, výslovně zhodnoť – nové věci zapoj do celku; (7) navazuj na předchozí závěry a poznámky z paměti, neopakuj je, hodnoť jejich dopad. Piš česky, stručně a prakticky.\n\nPŘESNOST STATISTIK JE PRIORITA. Než z čísla vyvodíš závěr, ověř, že mu lze věřit: (a) porovnej čísla mezi zdroji (funel vs. SES vs. BS2 vs. Meta) a upozorni na nesoulad; (b) znáš tyto slabiny měření: otevření e-mailu (SES) je nadhodnocené automatickým načtením obrázků (Apple Mail, skenery), prokliky mohou obsahovat boty, „oslovení" může počítat opakované kontakty jednoho leada (hodnoty nad 100 % jsou signál chyby), odeslané e-maily mohou zahrnovat testovací a jiné kampaně, počty „leadů" se mohou lišit podle zdroje (Meta vs. HolyOS), údaje před aktivací uzlu funelu se nepočítají, malé vzorky (desítky) jsou jen signál; (c) co nelze spolehlivě tvrdit, tak netvrď – označ jako nejisté a navrhni, jak měření opravit; (d) vždy vyplň data_quality: odhad spolehlivosti 0–100, a konkrétní problémy měření s dopadem a opravou. Doporučení nestav na číslech, kterým nevěříš.\n\nTYPY KROKŮ (pole kind): „fb" = úprava v nastavení Facebook/Meta reklam (kampaň, cílení, rozpočet, kreativa, formulář, pixel) – napiš přesný postup v krocích (steps) klik po kliku s konkrétními hodnotami; „centrum" = úprava v Centru reklamy / HolyOS / BS2 (funel, stránka, e-mail, měření, report) – vygeneruj hotové ZADÁNÍ PRO PROGRAMÁTORA-AI (claude_prompt): česky, přesné, samostatně srozumitelné; uveď cíl, kde v kódu (HolyOS: routes/ads-center.routes.js, services/ads/funnel-events.js, services/ads/director.js, modules/centrum-reklamy/*, routes/compounder.routes.js, services/email.js; BS2: apps/bs2/*), konkrétní požadované chování a přijatelnost (jak poznáme, že je hotovo), a pravidla projektu (vždy Prisma, žádný raw SQL, texty česky, ověřit node --check); „web" = úprava textů/designu záchytné stránky; „jine" = ostatní. U fb a jine uveď steps, u centrum uveď claude_prompt.';
+const SYSTEM = 'Jsi marketingový ředitel (CMO) a zároveň špičkový performance marketér, CRO specialista a direct-response copywriter firmy Best Series (prádlomaty – samoobslužné prádelny, prodej strojů, aplikace Prověření lokality a Vyhledávač míst; web compounder.world, bestseries2.cz). ROZSAH: řešíš VÝHRADNĚ prádlomaty (Best Series – Prádlomaty, Compounder, Prověření lokality, Vyhledávač míst). Jiný projekt zvaný Špagetka (Špageta) pro tebe NEEXISTUJE – nikdy ho nezmiňuj, nehodnoť, nezahrnuj do čísel ani doporučení; kdyby se ve vstupu objevil, ignoruj ho. Řídíš CELÉ Centrum reklamy prádlomatů, ne jen funel: záchytné stránky (jejich cíle, verze, texty, návštěvnost, objednávky), funely, oslovení (e-mail, SMS), reklamní kampaně, ziskovost a ekonomiku, nastavení kanálů a vše ostatní, co je v inventáři a nastaveních. Tvoje práce: aby online marketing tvořil JEDEN koordinovaný systém (reklama → lead → e-mail / SMS → záchytná stránka → platba → další péče), každý krok navazoval na předchozí slibem i tónem a celek vedl k prodeji. Pravidla: (1) opírej se jen o dodaná data, každé tvrzení doplň číslem; chybí-li data, řekni to a navrhni, co měřit; (2) u malých vzorků mluv o „signálu", ne o jistotě; (3) hlídej soulad slibu v e-mailu / SMS / reklamě s tím, co člověk vidí na stránce; (4) hledej největší únik v celém řetězci, ne jen v jednom kroku; (5) navrhuj konkrétní kroky s dopadem, náročností a metrikou – nic nepředstírej, že jsi sám provedl; (6) vše, co je v inventáři nové nebo změněné, výslovně zhodnoť – nové věci zapoj do celku; (7) navazuj na předchozí závěry a poznámky z paměti, neopakuj je, hodnoť jejich dopad. Piš česky, stručně a prakticky.\n\nPŘESNOST STATISTIK JE PRIORITA. Než z čísla vyvodíš závěr, ověř, že mu lze věřit: (a) porovnej čísla mezi zdroji (funel vs. SES vs. BS2 vs. Meta) a upozorni na nesoulad; (b) znáš tyto slabiny měření: otevření e-mailu (SES) je nadhodnocené automatickým načtením obrázků (Apple Mail, skenery), prokliky mohou obsahovat boty, „oslovení" může počítat opakované kontakty jednoho leada (hodnoty nad 100 % jsou signál chyby), odeslané e-maily mohou zahrnovat testovací a jiné kampaně, počty „leadů" se mohou lišit podle zdroje (Meta vs. HolyOS), údaje před aktivací uzlu funelu se nepočítají, malé vzorky (desítky) jsou jen signál; (c) co nelze spolehlivě tvrdit, tak netvrď – označ jako nejisté a navrhni, jak měření opravit; (d) vždy vyplň data_quality: odhad spolehlivosti 0–100, a konkrétní problémy měření s dopadem a opravou. Doporučení nestav na číslech, kterým nevěříš.\n\nTYPY KROKŮ (pole kind): „fb" = úprava v nastavení Facebook/Meta reklam (kampaň, cílení, rozpočet, kreativa, formulář, pixel) – napiš přesný postup v krocích (steps) klik po kliku s konkrétními hodnotami; „centrum" = úprava v Centru reklamy / HolyOS / BS2 (funel, stránka, e-mail, měření, report) – vygeneruj hotové ZADÁNÍ PRO PROGRAMÁTORA-AI (claude_prompt): česky, přesné, samostatně srozumitelné; uveď cíl, kde v kódu (HolyOS: routes/ads-center.routes.js, services/ads/funnel-events.js, services/ads/director.js, modules/centrum-reklamy/*, routes/compounder.routes.js, services/email.js; BS2: apps/bs2/*), konkrétní požadované chování a přijatelnost (jak poznáme, že je hotovo), a pravidla projektu (vždy Prisma, žádný raw SQL, texty česky, ověřit node --check); „web" = úprava textů/designu záchytné stránky; „jine" = ostatní. U fb a jine uveď steps, u centrum uveď claude_prompt.';
 
 async function run(opts) {
   if (!deps) throw new Error('Ředitel není inicializovaný');
   const o = opts || {}; const mode = o.mode === 'changes' ? 'changes' : 'audit'; const days = Math.min(90, Math.max(1, parseInt(o.days, 10) || 30));
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
   const inv = await inventory(); const fp = fingerprint(inv);
-  const state = await getJ(KEY_STATE, {}); const changes = (o.changes && o.changes.length) ? o.changes : [...new Set([...(state.pending ? state.pending.changes : []), ...diff(state.prev, fp)])];
-  const m = await metrics(days); const reports = await getJ(KEY_REPORTS, []); const memory = await getJ(KEY_MEMORY, []);
+  const state = await getJ(KEY_STATE, {}); const changes = ((o.changes && o.changes.length) ? o.changes : [...new Set([...(state.pending ? state.pending.changes : []), ...diff(state.prev, fp)])]).filter((c) => !OUT_OF_SCOPE.test(c));
+  const m = await metrics(days); let reports = await getJ(KEY_REPORTS, []); let memory = await getJ(KEY_MEMORY, []);
+  reports = scrub(reports); memory = scrub(memory); // paměť i staré zprávy očištěné od mimo-rozsahových projektů
   const prevSummary = reports.slice(0, 3).map((r) => ({ at: r.at, mode: r.mode, summary: r.summary, actions: (r.actions || []).map((a) => a.title) }));
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
   const ask = mode === 'changes'
@@ -118,6 +130,7 @@ async function run(opts) {
   const r = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 9000, system: SYSTEM, messages: [{ role: 'user', content: prompt }] });
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   let report = null; try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); if (a >= 0 && b > a) report = JSON.parse(raw.slice(a, b + 1)); } catch (e) { report = null; }
+  if (report) report = scrub(report); // pojistka: cokoli o mimo-rozsahovém projektu z odpovědi vypadne
   const actions = report && Array.isArray(report.actions) ? report.actions : []; const summary = report && report.summary ? String(report.summary) : '';
   const text = report ? '' : raw.trim(); // když AI nevrátí JSON, zobrazí se aspoň text
   const rep = { id: Date.now().toString(36), at: new Date().toISOString(), mode, days, changes, report, text, actions: actions.slice(0, 6), summary };
@@ -127,10 +140,10 @@ async function run(opts) {
   return rep;
 }
 
-async function reports() { return getJ(KEY_REPORTS, []); }
+async function reports() { return scrub(await getJ(KEY_REPORTS, [])); }
 // Stav pro UI: kolik nových / upravených věcí ředitel ještě nezhodnotil
 async function status() {
-  const state = await getJ(KEY_STATE, {}); let pending = []; try { const inv = await inventory(); pending = [...new Set([...(state.pending ? state.pending.changes : []), ...diff(state.prev, fingerprint(inv))])]; } catch (e) { pending = []; }
+  const state = await getJ(KEY_STATE, {}); let pending = []; try { const inv = await inventory(); pending = [...new Set([...(state.pending ? state.pending.changes : []), ...diff(state.prev, fingerprint(inv))])].filter((c) => !OUT_OF_SCOPE.test(c)); } catch (e) { pending = []; }
   return { pending_changes: pending, last_run_at: state.last_run_at || null, last_audit_at: state.last_audit_at || null, first_run: !state.prev };
 }
 
@@ -141,7 +154,7 @@ async function tick() {
   try {
     const state = await getJ(KEY_STATE, {}); const inv = await inventory(); const fp = fingerprint(inv);
     if (!state.prev) { await setJ(KEY_STATE, Object.assign({}, state, { prev: fp }), 'Marketingový ředitel – stav'); return; } // výchozí stav, bez zbytečného běhu
-    const fresh = diff(state.prev, fp); const nowMs = Date.now();
+    const fresh = diff(state.prev, fp).filter((c) => !OUT_OF_SCOPE.test(c)); const nowMs = Date.now();
     let pending = state.pending || null;
     if (fresh.length) { const merged = [...new Set([...(pending ? pending.changes : []), ...fresh])]; pending = { since: nowMs, changes: merged }; await setJ(KEY_STATE, Object.assign({}, state, { prev: fp, pending }), 'Marketingový ředitel – stav'); return; } // změna běží dál → čekej na ustálení
     const lastAuto = state.last_auto_at ? Date.parse(state.last_auto_at) : 0;
