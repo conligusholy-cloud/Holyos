@@ -379,8 +379,20 @@ const DIRECTOR = require('../services/ads/director'); DIRECTOR.init({ loadFunnel
 DIRECTOR.register('stranky_navstevnost_a_objednavky', async (days) => { const out = {}; for (const p of PAGES) { if (!p.bs2 || !p.bs2.path) { out[p.key] = { poznamka: 'stránka bez sledování BS2' }; continue; } try { const b = await bs2Stats(Math.max(1, days), null, p.bs2.path); out[p.key] = b ? JSON.parse(JSON.stringify(b, (k, v) => (Array.isArray(v) && v.length > 40 ? v.slice(-40) : v))) : null; } catch (e) { out[p.key] = { error: e.message }; } } return out; });
 DIRECTOR.register('ekonomika_nastaveni', async () => loadEcon());
 router.get('/director/status', async (req, res, next) => { try { res.json(await DIRECTOR.status()); } catch (err) { next(err); } });
-router.get('/director/strategy', async (req, res, next) => { try { res.json({ strategy: await DIRECTOR.getStrategy() }); } catch (err) { next(err); } });
-router.post('/director/strategy', async (req, res, next) => { try { res.json({ ok: true, strategy: await DIRECTOR.strategy({ days: (req.body || {}).days }) }); } catch (err) { next(err); } });
+// Strategie se generuje 2–4 min → běží na pozadí (proxy by dlouhý požadavek utnula), UI se dotazuje GETem
+let _stratJob = null; // { running, started_at, finished_at, error }
+router.get('/director/strategy', async (req, res, next) => { try { res.json({ strategy: await DIRECTOR.getStrategy(), job: _stratJob }); } catch (err) { next(err); } });
+router.post('/director/strategy', async (req, res, next) => {
+  try {
+    if (_stratJob && _stratJob.running) return res.status(202).json({ ok: true, job: _stratJob });
+    _stratJob = { running: true, started_at: new Date().toISOString(), finished_at: null, error: null };
+    const job = _stratJob;
+    DIRECTOR.strategy({ days: (req.body || {}).days })
+      .then(() => { job.running = false; job.finished_at = new Date().toISOString(); })
+      .catch((e) => { job.running = false; job.finished_at = new Date().toISOString(); job.error = e.message; console.warn('[ads-director] strategie:', e.message); });
+    res.status(202).json({ ok: true, job });
+  } catch (err) { next(err); }
+});
 router.get('/director/reports', async (req, res, next) => { try { res.json({ reports: await DIRECTOR.reports() }); } catch (err) { next(err); } });
 router.post('/director/run', async (req, res, next) => { try { const b = req.body || {}; res.json({ ok: true, report: await DIRECTOR.run({ mode: b.mode === 'changes' ? 'changes' : 'audit', days: b.days }) }); } catch (err) { next(err); } });
 router.get('/funnels/:id/nodes/:nodeId/run-status', (req, res) => { const j = RUN_JOBS[String(req.params.id || '') + ':' + String(req.params.nodeId || '')]; res.json(j ? pubJob(j) : { running: false, total: 0, done: 0, sent: 0, skipped: 0, failed: 0, reasons: {} }); });
