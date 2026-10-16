@@ -40,6 +40,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import { useKeyboardPad } from '../lib/useKeyboardPad';
 import { api, ApiError, type ChatMessage, type ChatAttachment } from '../lib/api';
 import { loadAuth, clearAuth } from '../lib/auth';
 import { colors, radius, spacing } from '../lib/theme';
@@ -54,6 +55,7 @@ type LocalMessage = ChatMessage & {
 const PAGE_LIMIT = 50;
 
 export default function ChatThread({ route }: Props) {
+  const kbPad = useKeyboardPad(); // Android: pole pro psaní nad klávesnicí
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { channelId, channelTitle } = route.params;
 
@@ -304,11 +306,11 @@ export default function ChatThread({ route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
+      style={{ flex: 1, backgroundColor: colors.bg, paddingBottom: kbPad }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <SafeAreaView style={{ flex: 1 }} edges={['bottom']}>
+      <SafeAreaView style={{ flex: 1 }} edges={kbPad > 0 ? [] : ['bottom']}>
         <FlatList
           ref={flatListRef}
           data={messages}

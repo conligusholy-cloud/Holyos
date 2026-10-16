@@ -27,6 +27,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useKeyboardPad } from '../lib/useKeyboardPad';
 import { api, ApiError, type SupportMessage, type SupportThreadResponse } from '../lib/api';
 import { loadAuth, clearAuth } from '../lib/auth';
 import { colors, radius, spacing } from '../lib/theme';
@@ -45,6 +46,7 @@ function fmt(iso: string): string {
 }
 
 export default function SupportThread({ route }: Props) {
+  const kbPad = useKeyboardPad(); // Android: pole pro psaní nad klávesnicí
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { supporterId, title } = route.params;
 
@@ -185,7 +187,7 @@ export default function SupportThread({ route }: Props) {
         </View>
       )}
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1, paddingBottom: kbPad }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <FlatList
           ref={list}
           data={msgs}
