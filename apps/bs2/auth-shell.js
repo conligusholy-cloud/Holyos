@@ -97,7 +97,7 @@ function authShell({ title, card, members = null, esc, wide = false }) {
     <div class="brand" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap"><div class="mark">${logoSvg(44, 'a')}</div><b>Best Series <span>2.0</span></b><span class="presence" id="presence" title="Právě online + aktivní lidé za posledních 60 minut"><i></i>právě si prohlíží <b id="pr-hour">–</b></span></div>
     <div class="eyebrow"><i></i>Platforma nové generace · online</div>
     <h1><span class="g">Vítej zpět</span><br>v Best Series 2.0</h1>
-    <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem jako dřív — zbytek je nový.</p>
+    <p class="lead">Jeden účet, všechny výhody. Přihlas se svým nickem nebo e-mailem.</p>
     <div class="chips"><span>Přístup z mobilu i počítače</span><span>Výhody pro členy</span></div>
     ${members != null ? `<div class="stats"><div><b>${fmtN(members)}</b><small>aktivních uživatelů</small></div></div>` : ''}
   </section>
