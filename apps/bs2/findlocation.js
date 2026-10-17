@@ -20,6 +20,10 @@ const CSS = `
   .radar .sweep{transform-origin:200px 200px;animation:fl-spin 5s linear infinite}
   .radar .dot{fill:#4fd1ff;opacity:.15;animation:fl-dot 5s linear infinite}
   .radar .dot.ok{fill:#2fe3a0}
+  .radar .pop{position:absolute;width:17%;height:auto;transform:translate(-50%,-100%) scale(.2);transform-origin:50% 100%;opacity:0;pointer-events:none;filter:drop-shadow(0 8px 14px rgba(0,0,0,.6)) drop-shadow(0 0 10px rgba(47,227,160,.45));animation:fl-pop 11s ease-in-out infinite}
+  .radar .pop::after{content:""}
+  @keyframes fl-pop{0%,56%{opacity:0;transform:translate(-50%,-70%) scale(.2)}62%{opacity:1;transform:translate(-50%,-112%) scale(1.12)}67%{transform:translate(-50%,-100%) scale(1)}86%{opacity:1;transform:translate(-50%,-100%) scale(1)}93%,100%{opacity:0;transform:translate(-50%,-90%) scale(.7)}}
+  @media(prefers-reduced-motion:reduce){.radar .pop{display:none}}
   .radar .me{fill:#fff}
   .radar .pulse{fill:none;stroke:#fff;stroke-width:1.5;transform-origin:200px 200px;animation:fl-pulse 2.4s ease-out infinite}
   @keyframes fl-spin{to{transform:rotate(360deg)}}
@@ -38,7 +42,7 @@ const CSS = `
 function radarSvg() {
   const pts = [[260, 120, 0], [120, 150, 1], [290, 230, 0], [150, 280, 0], [230, 300, 1], [100, 220, 0], [220, 90, 0], [310, 170, 0], [180, 330, 0]];
   const dots = pts.map((p, i) => `<circle class="dot${p[2] ? ' ok' : ''}" cx="${p[0]}" cy="${p[1]}" r="5" style="animation-delay:${(i * 0.55).toFixed(2)}s;transform-origin:${p[0]}px ${p[1]}px"/>`).join('');
-  return `<div class="radar" aria-hidden="true"><svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="flbg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0d1c3a"/><stop offset="1" stop-color="#050912"/></radialGradient><linearGradient id="flsw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4fd1ff" stop-opacity="0"/><stop offset="1" stop-color="#4fd1ff" stop-opacity=".55"/></linearGradient></defs><circle cx="200" cy="200" r="190" fill="url(#flbg)" stroke="rgba(120,160,255,.35)"/><circle class="ring" cx="200" cy="200" r="140"/><circle class="ring" cx="200" cy="200" r="90"/><circle class="ring" cx="200" cy="200" r="40"/><path d="M10 200h380M200 10v380" stroke="rgba(120,160,255,.12)"/><g class="sweep"><path d="M200 200 L390 200 A190 190 0 0 0 330 66 Z" fill="url(#flsw)"/></g>${dots}<circle class="pulse" cx="200" cy="200" r="14"/><circle class="me" cx="200" cy="200" r="6"/></svg><span class="cap">Spádová oblast 15 km · kandidátní místa</span></div>`;
+  return `<div class="radar" aria-hidden="true"><svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="flbg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0d1c3a"/><stop offset="1" stop-color="#050912"/></radialGradient><linearGradient id="flsw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#4fd1ff" stop-opacity="0"/><stop offset="1" stop-color="#4fd1ff" stop-opacity=".55"/></linearGradient></defs><circle cx="200" cy="200" r="190" fill="url(#flbg)" stroke="rgba(120,160,255,.35)"/><circle class="ring" cx="200" cy="200" r="140"/><circle class="ring" cx="200" cy="200" r="90"/><circle class="ring" cx="200" cy="200" r="40"/><path d="M10 200h380M200 10v380" stroke="rgba(120,160,255,.12)"/><g class="sweep"><path d="M200 200 L390 200 A190 190 0 0 0 330 66 Z" fill="url(#flsw)"/></g>${dots}<circle class="pulse" cx="200" cy="200" r="14"/><circle class="me" cx="200" cy="200" r="6"/></svg><img class="pop" src="/img/pradlomat-mini.webp" alt="" style="left:30%;top:36%;animation-delay:2s"><img class="pop" src="/img/pradlomat-mini.webp" alt="" style="left:57.5%;top:74%;animation-delay:7.5s"><span class="cap">Spádová oblast 15 km · kandidátní místa</span></div>`;
 }
 
 function hero() {
