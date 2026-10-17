@@ -230,8 +230,8 @@
           <li><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>Proč poptávka roste</b> rychleji, než stíháme otevírat nové provozy — a jak toho využít.</span></li>
           <li><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>Jak ho pořídit i bez vlastního kapitálu</b> — konkrétní možnosti financování.</span></li>
         </ul>
-        <a class="btn btn-hero" id="infoBtn" href="/login?from=cesta">Vytvořit účet a vidět, jak to funguje →</a>
-        <p class="cta-foot">Účet je zdarma · Bez závazku · Počet partnerů je omezený</p>
+        <a class="btn btn-hero" id="infoBtn" href="/cesta/info">Ukažte mi, jak to funguje →</a>
+        <p class="cta-foot">Nezávazně a zdarma · 3 minuty čtení · Počet partnerů je omezený</p>
       </div>
     </div>
   </div>
@@ -242,9 +242,9 @@
   var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, {threshold:.12});
   document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
 
-  // Parametry z reklamy (utm_*, fbclid, t, c…) předáme do registrace, ať se zdroj neztratí.
+  // Parametry z SMS/reklamy (t, utm_*, fbclid…) předáme dál, ať se rezervace spáruje s leadem.
   var infoBtn = document.getElementById('infoBtn');
-  if (infoBtn && location.search) infoBtn.href = '/login?from=cesta&' + location.search.slice(1);
+  if (infoBtn && location.search) infoBtn.href = '/cesta/info' + location.search;
 })();
 </script>
 <script>(function(){var c=document.getElementById('net');if(!c)return;var x=c.getContext('2d'),w,h,P=[],N=70,R=150,dpr=Math.min(2,window.devicePixelRatio||1),mx=-1e4,my=-1e4;function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);N=Math.max(34,Math.min(90,Math.round(w*h/16000)));P=[];for(var i=0;i<N;i++)P.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35,r:Math.random()*1.6+.6})}window.addEventListener('resize',size);size();window.addEventListener('pointermove',function(e){mx=e.clientX;my=e.clientY},{passive:true});var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;function step(){x.clearRect(0,0,w,h);for(var i=0;i<P.length;i++){var p=P[i];if(!reduce){p.x+=p.vx;p.y+=p.vy;var dx=p.x-mx,dy=p.y-my,d=Math.hypot(dx,dy);if(d<140){p.x+=dx/d*.6;p.y+=dy/d*.6}}if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}for(var i=0;i<P.length;i++){for(var j=i+1;j<P.length;j++){var a=P[i],b=P[j],dd=Math.hypot(a.x-b.x,a.y-b.y);if(dd<R){x.globalAlpha=(1-dd/R)*.35;x.strokeStyle='#4fa3ff';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}x.globalAlpha=1;for(var i=0;i<P.length;i++){var p=P[i];x.fillStyle='#8fd0ff';x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill()}if(!reduce)requestAnimationFrame(step)}step();})();</script>

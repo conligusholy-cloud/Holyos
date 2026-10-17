@@ -185,7 +185,7 @@ async function log(admin, action, detail) { try { velinForLog(admin || {}, actio
 // Zákazník aplikace vidí jen /lokalita*; ostatní uživatelé do /lokalita nesmí.
 app.use((req, res, next) => {
   const s = readCookie(req, USER_COOKIE); if (!s || s.kind !== 'user') return next();
-  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|api\/presence|location|findlocation|lp\/)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
+  if (!/^\/(lokalita|password|podpora|api\/support|support\/file|logout|souhlas|api\/track|api\/presence|location|findlocation|lp\/|cesta|api\/cesta)/.test(req.path) && !req.path.startsWith('/admin') && !req.path.startsWith('/api/health') && !req.path.startsWith('/img') && !req.path.startsWith('/api/location')) {
     return q('SELECT user_type FROM supporters WHERE id=$1', [s.sid]).then((r) => { const u = r.rows[0]; if (u && u.user_type === 'location') return res.redirect('/lokalita'); next(); }).catch(() => next());
   }
   next();
@@ -449,7 +449,7 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
 // Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
-const PUBLIC_HIT_PATHS = ['/cesta', '/location', '/findlocation', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
+const PUBLIC_HIT_PATHS = ['/cesta', '/cesta/info', '/cesta/vlastni-kapital', '/cesta/financovani', '/cesta/schuzka','/location', '/findlocation', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
 app.post('/api/presence/ping', (req, res) => {
   const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
@@ -689,11 +689,29 @@ const PUBT = '<script>' + require('./stats-track').PUB_TRACK_JS + '</script></bo
 app.get('/findlocation', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(FL.findLocationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 // Cesta k rozhodnutí (záchytná stránka funelu, značka Best Series 2.0): 3 kroky k prádlomatu → CTA na vytvoření účtu
+// Společný obal stránek cesty: logo, počítadlo „právě si prohlíží", měření návštěv
+const cestaShell = (html) => html.replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('@@FOOTER@@', '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px">' + require('./footer').siteFooter() + '</div>').replace('</style>', require('./footer').FOOTER_CSS + V.PRESENCE_CSS + '</style>').replace('<!--PRESENCE-->', V.PRESENCE_HTML).replace('</body>', '<script>' + V.PRESENCE_JS + '</script>' + PUBT);
 app.get('/cesta', wrap(async (req, res) => {
   const fs = require('fs'), path = require('path');
-  const html = fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8').replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('@@FOOTER@@', '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px">' + require('./footer').siteFooter() + '</div>').replace('</style>', require('./footer').FOOTER_CSS + V.PRESENCE_CSS + '</style>').replace('<!--PRESENCE-->', V.PRESENCE_HTML).replace('</body>', '<script>' + V.PRESENCE_JS + '</script>' + PUBT);
-  res.set('Cache-Control', 'no-cache').type('html').send(html);
+  res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8')));
 }));
+// Navazující stránky cesty (dříve pradlomaty.info/info, /vlastni-kapital, /financovani, /schuzka) – stejný obsah v designu BS2
+const CP = require('./cesta-pages');
+app.get('/cesta/info', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.infoPage())));
+app.get('/cesta/vlastni-kapital', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.vlastniPage())));
+app.get('/cesta/financovani', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.financovaniPage())));
+app.get('/cesta/schuzka', (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(cestaShell(CP.schuzkaPage())));
+app.get('/cesta/booking.js', (req, res) => res.set('Cache-Control', 'no-cache').type('application/javascript').send(CP.bookingJs()));
+// Rezervace schůzky: proxy na HolyOS /api/compounder/* (termíny a rezervace žijí v HolyOS, lead se páruje tokenem t z SMS)
+async function holyosMeeting(req, res, method, sub) {
+  try {
+    const r = await fetch(HOLYOS_URL + '/api/compounder/' + sub, { method, headers: method === 'POST' ? { 'Content-Type': 'application/json' } : {}, body: method === 'POST' ? JSON.stringify(req.body || {}) : undefined, signal: AbortSignal.timeout(15000) });
+    const txt = await r.text(); res.status(r.status).type('application/json').send(txt);
+  } catch (e) { console.warn('[bs2] cesta meeting proxy:', e.message); res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
+}
+app.get('/api/cesta/meeting-slots', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-slots?days=' + (parseInt(req.query.days, 10) || 15)));
+app.get('/api/cesta/meeting-reservation', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-reservation?t=' + encodeURIComponent(String(req.query.t || ''))));
+app.post('/api/cesta/meeting-reservation', (req, res) => { if (rateLimited('cmr:' + req.ip, 20, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho pokusů. Zkuste to prosím později.' }); holyosMeeting(req, res, 'POST', 'meeting-reservation'); });
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
 // Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu
