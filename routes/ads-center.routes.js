@@ -500,6 +500,27 @@ router.delete('/director/invent/pages/:pid/publish', async (req, res) => {
     res.json({ ok: true });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
+// 📤 Vlastní HTML stránky (např. ručně vyladěná verze) → uloží se jako vizualizace stránky ve strategii + převezmou se z něj texty
+router.put('/director/invent/pages/:pid/html', express.json({ limit: '4mb' }), async (req, res) => {
+  try {
+    const { getSetting, setSetting } = require('../services/settings');
+    let html = String((req.body || {}).html || '').replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    if (!/<html[\s>]/i.test(html)) return res.status(400).json({ error: 'Soubor neobsahuje HTML stránku.' });
+    const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));
+    if (!p) return res.status(404).json({ error: 'Stránka nenalezena' });
+    const txt = (h) => String(h || '').replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<svg[\s\S]*?<\/svg>/gi, '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+    const h1 = (html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1];
+    const secs = []; const re = /<section\b[^>]*>([\s\S]*?)<\/section>/gi; let m;
+    while ((m = re.exec(html)) && secs.length < 20) { const body = m[1]; const h2 = (body.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i) || [])[1]; const t = txt(body); if (!t) continue; secs.push({ name: txt(h2 || (body.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || [])[1] || 'Sekce').slice(0, 120), copy: t.slice(0, 1500) }); }
+    p.html = html; p.html_at = new Date().toISOString(); p.html_source = 'manual';
+    if (h1) p.headline = txt(h1).slice(0, 300);
+    if (secs.length) p.sections = secs;
+    const note = String((req.body || {}).note || '').trim(); p.design_notes = (p.design_notes || []).concat([note || 'Ručně nahraná verze stránky (' + new Date().toLocaleDateString('cs-CZ') + ') – při úpravách z ní vycházej.']).slice(-10);
+    F.revisions = (F.revisions || []).concat([{ at: p.html_at, section: 'stránka: ' + (p.name || p.id), comment: note || 'Nahrána vlastní verze stránky (HTML).', answer: 'Stránka nahrazena nahranou verzí; texty převzaty z HTML (' + secs.length + ' sekcí).', changed: ['pages'] }]).slice(-50);
+    await setSetting(DIRECTOR.KEY_INVENT, F, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id });
+    res.json({ ok: true, html_at: p.html_at, sections: secs.length });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
 router.get('/director/invent/pages/:pid/live', (req, res) => { const pid = String(req.params.pid || ''); const j = _jobs['page:' + pid]; const L = DIRECTOR.pvLive(pid); res.set('Cache-Control', 'no-store'); res.json({ running: !!(j && j.running), started_at: j && j.started_at, error: j && j.error, chars: L ? L.chars : 0, html: L ? L.html : '' }); });
 router.get('/director/invent/pages/:pid/html', async (req, res, next) => {
   try {
