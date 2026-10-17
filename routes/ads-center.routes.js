@@ -379,6 +379,65 @@ const DIRECTOR = require('../services/ads/director'); DIRECTOR.init({ loadFunnel
 DIRECTOR.register('stranky_navstevnost_a_objednavky', async (days) => { const out = {}; for (const p of PAGES) { if (!p.bs2 || !p.bs2.path) { out[p.key] = { poznamka: 'stránka bez sledování BS2' }; continue; } try { const b = await bs2Stats(Math.max(1, days), null, p.bs2.path); out[p.key] = b ? JSON.parse(JSON.stringify(b, (k, v) => (Array.isArray(v) && v.length > 40 ? v.slice(-40) : v))) : null; } catch (e) { out[p.key] = { error: e.message }; } } return out; });
 DIRECTOR.register('ekonomika_nastaveni', async () => loadEcon());
 router.get('/director/status', async (req, res, next) => { try { res.json(await DIRECTOR.status()); } catch (err) { next(err); } });
+// ── Vymyslet nový funnel (kreativní ředitel) – běží na pozadí, UI se dotazuje ──
+const _jobs = {}; // key → { running, started_at, finished_at, error }
+function runJob(key, fn) {
+  if (_jobs[key] && _jobs[key].running) return _jobs[key];
+  const job = _jobs[key] = { running: true, started_at: new Date().toISOString(), finished_at: null, error: null };
+  Promise.resolve().then(fn).then(() => { job.running = false; job.finished_at = new Date().toISOString(); })
+    .catch((e) => { job.running = false; job.finished_at = new Date().toISOString(); job.error = e.message; console.warn('[ads-director] ' + key + ':', e.message); });
+  return job;
+}
+router.get('/director/goals', async (req, res, next) => { try { res.json(await DIRECTOR.getGoals()); } catch (err) { next(err); } });
+router.put('/director/goals', async (req, res, next) => { try { res.json(await DIRECTOR.setGoals(req.body || {})); } catch (err) { next(err); } });
+router.get('/director/invent', async (req, res, next) => {
+  try {
+    const F = await DIRECTOR.getInvent();
+    if (F && Array.isArray(F.pages)) F.pages = F.pages.map((p) => { const { html, ...rest } = p; return Object.assign(rest, { has_html: !!html, job: _jobs['page:' + p.id] || null }); });
+    res.json({ funnel: F, job: _jobs.invent || null, goals: await DIRECTOR.getGoals() });
+  } catch (err) { next(err); }
+});
+router.post('/director/invent', async (req, res, next) => {
+  try {
+    const b = req.body || {}; if (b.goals) await DIRECTOR.setGoals(b.goals);
+    res.status(202).json({ ok: true, job: runJob('invent', () => DIRECTOR.invent({ brief: b.brief })) });
+  } catch (err) { next(err); }
+});
+router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
+  try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
+});
+router.get('/director/invent/pages/:pid/html', async (req, res, next) => {
+  try {
+    const F = await DIRECTOR.getInvent(); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));
+    if (!p || !p.html) return res.status(404).send('<p style="font-family:sans-serif">Náhled stránky ještě není vygenerovaný.</p>');
+    res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data: https:; script-src 'unsafe-inline'");
+    res.type('html').send(p.html);
+  } catch (err) { next(err); }
+});
+// Převod vymyšleného funnelu do Centra reklamy jako KONCEPT (SMS/e-maily vypnuté – nic se neodešle bez zapnutí)
+router.post('/director/invent/to-funnel', async (req, res, next) => {
+  try {
+    const F = await DIRECTOR.getInvent(); if (!F) return res.status(404).json({ error: 'Funnel ještě není vymyšlený' });
+    const nodes = [], edges = []; const id = (p) => (p + Math.random().toString(36).slice(2, 8));
+    const pageNode = {}; const ads = F.ads || [], pages = F.pages || [], seq = F.sequence || [];
+    ads.forEach((a, i) => { const n = { id: id('a'), kind: 'start', label: ('📣 ' + (a.name || 'Reklama')).slice(0, 60), text: [a.headline, a.primary_text].filter(Boolean).join(' — ').slice(0, 300), x: 40, y: 40 + i * 170 }; nodes.push(n); a.__n = n.id; });
+    if (F.leadform && F.leadform.use) { const n = { id: id('f'), kind: 'note', label: '📝 Rychlý formulář', text: ('Otázky: ' + (F.leadform.questions || []).join(' | ') + ' — ' + (F.leadform.why || '')).slice(0, 300), x: 360, y: 40 }; nodes.push(n); pageNode.leadform = n.id; }
+    pages.forEach((p, i) => { const n = { id: id('p'), kind: 'landing', label: ('📄 ' + (p.name || p.headline || p.id)).slice(0, 60), text: ((p.slug || '') + ' · ' + (p.purpose || '') + ' · ' + (p.headline || '')).slice(0, 300), x: 360 + Math.floor(i / 3) * 320, y: (pageNode.leadform ? 210 : 40) + (i % 3) * 170 }; nodes.push(n); pageNode[p.id] = n.id; });
+    const seqX = 360 + (Math.ceil(pages.length / 3) + 1) * 320;
+    seq.forEach((mm, i) => { const ch = String(mm.channel || '').toLowerCase() === 'sms' ? 'sms' : 'email'; const n = { id: id('m'), kind: ch, enabled: false, label: ((ch === 'sms' ? '📱 ' : '✉️ ') + (mm.day || '') + ' ' + (mm.subject || mm.goal || '')).slice(0, 60), text: ((mm.condition ? '[' + mm.condition + '] ' : '') + (mm.text || '')).slice(0, 300), x: seqX + Math.floor(i / 6) * 320, y: 40 + (i % 6) * 150 }; nodes.push(n); mm.__n = n.id; });
+    ads.forEach((a) => { const t = pageNode[a.destination] || (String(a.destination || '').toLowerCase().includes('form') ? pageNode.leadform : null) || pageNode[(pages[0] || {}).id]; if (t) edges.push({ from: a.__n, to: t }); });
+    pages.forEach((p) => { if (p.next && pageNode[p.next] && pageNode[p.id] !== pageNode[p.next]) edges.push({ from: pageNode[p.id], to: pageNode[p.next] }); });
+    const firstPage = pageNode.leadform || pageNode[(pages[0] || {}).id]; let prev = firstPage;
+    seq.forEach((mm) => { if (prev) edges.push({ from: prev, to: mm.__n }); if (mm.link_page && pageNode[mm.link_page]) edges.push({ from: mm.__n, to: pageNode[mm.link_page] }); prev = mm.__n; });
+    const list = await loadFunnels();
+    const fn = cleanFunnel({ name: ('🧠 Koncept: ' + (F.name || 'Nový funnel')).slice(0, 80), note: ('Vymyslel AI ředitel ' + String(F.generated_at || '').slice(0, 10) + '. SMS/e-maily jsou VYPNUTÉ – před zapnutím doplň stránky a texty.').slice(0, 300), nodes, edges });
+    list.push(fn);
+    const { setSetting } = require('../services/settings');
+    await setSetting(FUNNELS_KEY, list.slice(0, 50).map(cleanFunnel), { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id });
+    try { require('../services/ads/funnel-events').invalidate(); } catch (_) { /* cache */ }
+    res.json({ ok: true, funnel_id: fn.id, name: fn.name, nodes: fn.nodes.length });
+  } catch (err) { next(err); }
+});
 // Strategie se generuje 2–4 min → běží na pozadí (proxy by dlouhý požadavek utnula), UI se dotazuje GETem
 let _stratJob = null; // { running, started_at, finished_at, error }
 router.get('/director/strategy', async (req, res, next) => { try { res.json({ strategy: await DIRECTOR.getStrategy(), job: _stratJob }); } catch (err) { next(err); } });

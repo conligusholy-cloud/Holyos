@@ -198,4 +198,55 @@ async function tick() {
 }
 function start() { if (start._on) return; start._on = true; setTimeout(tick, 90 * 1000); setInterval(tick, 20 * 60 * 1000); }
 
-module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff };
+
+// ── 5) VYMYSLET NOVÝ FUNNEL: kreativní ředitel navrhne celý systém od nuly podle cílů majitele ──
+const KEY_GOALS = 'ads_director.goals';
+const KEY_INVENT = 'ads_director.invent';
+const GOALS_DEFAULT = { machines_per_week: 3, online_net_czk: 5000000, online_days: 14, budget_czk_day: 0, note: '' };
+async function getGoals() { return Object.assign({}, GOALS_DEFAULT, await getJ(KEY_GOALS, {})); }
+async function setGoals(g) {
+  const v = { machines_per_week: Math.max(0, Number(g.machines_per_week) || 0), online_net_czk: Math.max(0, Number(g.online_net_czk) || 0), online_days: Math.max(1, parseInt(g.online_days, 10) || 14), budget_czk_day: Math.max(0, Number(g.budget_czk_day) || 0), note: String(g.note || '').slice(0, 1500) };
+  await setJ(KEY_GOALS, v, 'Marketingový ředitel – cíle majitele'); return v;
+}
+async function getInvent() { return scrub(await getJ(KEY_INVENT, null)); }
+
+const INVENT_SYSTEM = 'Jsi kreativní marketingový ředitel a špičkový direct-response marketér (úroveň Russell Brunson / Alex Hormozi / Dan Kennedy, ale na český trh). Stavíš FUNNELY, které prodávají: silná velká myšlenka (big idea), neodolatelná nabídka (value stack, bonusy, garance, omezení), háčky do reklam, copywriting, který zastaví palec, a následné sekvence, které dovedou člověka k nákupu. Nejsi úředník, který popisuje stav – jsi stratég, který VYMÝŠLÍ a ROZHODUJE. Píšeš hotové texty (reklamy, stránky, SMS, e-maily) připravené k použití, ne osnovy. Firma: Best Series – prádlomaty (samoobslužné prádelny v kontejneru / v prostoru; prodej strojů, financování/leasing, servis, díly) a online aplikace Prověření lokality a Vyhledávač míst; weby bestseries2.cz, pradlomaty.info, compounder.world. Jiný projekt Špagetka/Špageta pro tebe neexistuje. Buď ale POCTIVÝ v číslech: kreativní v nabídce, realistický v matematice. Když je cíl v daném čase nereálný, řekni to rovnou, spočítej proč a navrhni, co by ho reálně splnilo (jiná cena, jiný produkt, jiné publikum, jiný čas). Vše česky.';
+
+async function invent(opts) {
+  if (!deps) throw new Error('Ředitel není inicializovaný');
+  const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
+  const goals = await getGoals(); const brief = String((opts || {}).brief || '').slice(0, 2000);
+  const inv = await inventory(); const m = await metrics(30);
+  const prompt = 'CÍLE MAJITELE (závazné):\n- prodávat stabilně ' + goals.machines_per_week + ' prádlomaty TÝDNĚ (90 % prodejů se uzavírá na osobní schůzce nebo prohlídce výroby),\n- během ' + goals.online_days + ' dní vydělat na doplňkovém prodeji ONLINE produktů ' + Number(goals.online_net_czk).toLocaleString('cs-CZ') + ' Kč ČISTÉHO (po odečtení reklamy),\n' + (goals.budget_czk_day ? '- rozpočet na reklamu: ' + goals.budget_czk_day + ' Kč/den,\n' : '- rozpočet na reklamu navrhni sám (dnes ~5 800 Kč/den),\n') + (goals.note ? '- poznámka majitele: ' + goals.note + '\n' : '') + (brief ? '- doplňující zadání: ' + brief + '\n' : '')
+    + '\nDNEŠNÍ STAV (jen pro poučení – NEKOPÍRUJ ho; dnešní cesta „FB reklama → rychlý formulář → e-mail/SMS s odkazem" je prodělečná): \nINVENTÁŘ: ' + JSON.stringify(inv).slice(0, 14000) + '\nČÍSLA ZA 30 DNÍ: ' + JSON.stringify(m).slice(0, 12000)
+    + '\n\nÚKOL: VYMYSLI NOVÝ FUNNEL OD NULY, který oba cíle splní (nebo se jim maximálně přiblíží). Musí obsahovat:\n'
+    + '1) VELKOU MYŠLENKU kampaně a hlavní háček.\n2) NABÍDKOVÝ ŽEBŘÍK online produktů s cenami tak, aby se dal cíl čistého zisku z online prodeje reálně spočítat (vstupní produkt, order bump, upsell, prémiový produkt/služba za vyšší cenu, případně předprodej / rezervace prádlomatu se zálohou, VIP prohlídka výroby…). Buď kreativní – navrhni i produkty, které dnes neexistují, pokud dávají smysl.\n3) FB REKLAMY (3–5) s HOTOVÝM textem (primární text, nadpis, popis, tlačítko), popisem kreativy scénu po scéně, cílením a denním rozpočtem; u každé rozhodni, jestli vede na rychlý formulář nebo na záchytnou stránku, a proč.\n4) STRÁNKY (3–6): hlavní záchytná stránka (přesně jak má vypadat – hotové texty všech sekcí shora dolů, formulář, CTA, vizuální styl), prodejní stránka(y) produktů, stránka budující důvěru (výroba, reference, čísla provozovatelů), děkovací stránka s okamžitou nabídkou, rezervace prohlídky výroby/schůzky.\n5) SEKVENCI SMS a e-mailů (12–18 zpráv) s HOTOVÝMI texty, podmínkami (komu) a odkazem na konkrétní stránku funnelu.\n6) REMARKETING na FB (3–4 okruhy) s texty.\n7) PRODEJNÍ PROCES na schůzce/prohlídce výroby, aby z nich byly 3 prádlomaty týdně.\n8) PROJEKCI čísel na ' + goals.online_days + ' dní a na týden (s výpočtem) + poctivé posouzení proveditelnosti.\n9) PLÁN SPUŠTĚNÍ po dnech.\n\n'
+    + 'VÝSTUP: pouze jeden JSON objekt bez Markdownu:\n{"name":"krátký název funnelu","big_idea":"velká myšlenka 1–2 věty","hook":"hlavní háček / slib","feasibility":{"verdict":"realné|náročné|nereálné v daném čase","math":"výpočet slovy s čísly","what_it_takes":["co musí platit"],"adjusted_goal":"realistická verze cíle"},"offer_stack":[{"name":"","type":"vstupní|bump|upsell|prémiový|rezervace|schůzka|prádlomat","price_czk":0,"promise":"co slibuje","contents":["co obsahuje"],"why_buy":"proč koupí hned","expected_take_rate":"% kupujících z předchozího kroku"}],"ads":[{"id":"ad1","name":"","angle":"úhel / háček","audience":"cílení","format":"video|obrázek|carousel","creative_brief":"scéna po scéně / co je na obrázku","primary_text":"plný text","headline":"","description":"","cta_button":"","destination":"id stránky (p1…) nebo leadform","why_destination":"proč sem","budget_czk_day":0}],"leadform":{"use":false,"why":"","questions":[]},"pages":[{"id":"p1","type":"záchytná|prodejní|důvěra|děkovací|rezervace","slug":"/navrh-url","name":"","purpose":"","headline":"","subheadline":"","sections":[{"name":"","copy":"hotový text sekce"}],"form_fields":[],"cta":"","offer":"co se na stránce prodává / získává","design":"vizuální styl, barvy, fotky, prvky","next":"kam vede (id stránky)","success_metric":""}],"sequence":[{"id":"m1","day":"D0 +5 min","channel":"sms|email","condition":"komu (např. jen kdo nekoupil)","subject":"předmět (u SMS prázdné)","text":"hotový text (SMS max 300 znaků)","link_page":"p2","goal":""}],"remarketing":[{"audience":"","window":"","angle":"","text":"","link_page":"p1","budget_czk_day":0}],"sales_process":{"meeting":"jak vypadá schůzka / prohlídka výroby","closing":"jak uzavřít","follow_up":"co po schůzce","capacity":"kolik schůzek týdně je potřeba na 3 prádlomaty"},"projection":{"days":' + goals.online_days + ',"spend_czk":0,"visitors":0,"leads":0,"online_orders":0,"online_revenue_czk":0,"online_net_czk":0,"meetings_per_week":0,"machines_per_week":0,"calc":"výpočet krok za krokem","assumptions":[""]},"kpis":[{"metric":"","target":"","why":""}],"launch_plan":[{"when":"den 1","what":""}],"risks":[""]}\nČísla jsou čísla. Texty piš naplno a prodejně, česky, s diakritikou.';
+  const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+  const r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: 30000, system: INVENT_SYSTEM, messages: [{ role: 'user', content: prompt }] }).finalMessage();
+  const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n'); let F = null;
+  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); F = scrub(JSON.parse(raw.slice(a, b + 1))); } catch (e) { throw new Error(r.stop_reason === 'max_tokens' ? 'Odpověď AI byla příliš dlouhá a usekla se – zkus to znovu.' : 'Funnel se nepodařilo sestavit (neplatná odpověď AI), zkus to znovu.'); }
+  F.generated_at = new Date().toISOString(); F.goals = goals; F.brief = brief || null;
+  await setJ(KEY_INVENT, F, 'Marketingový ředitel – vymyšlený funnel');
+  return F;
+}
+
+// Náhled stránky funnelu: AI napíše kompletní HTML podle návrhu (uloží se k funnelu)
+async function pagePreview(pageId) {
+  const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
+  const F = await getJ(KEY_INVENT, null); if (!F) throw new Error('Funnel ještě není vymyšlený');
+  const p = (F.pages || []).find((x) => x.id === pageId); if (!p) throw new Error('Stránka nenalezena');
+  const offers = (F.offer_stack || []).map((o) => ({ name: o.name, price_czk: o.price_czk, promise: o.promise, contents: o.contents }));
+  const prompt = 'Vytvoř KOMPLETNÍ, produkčně vypadající HTML stránku (jeden soubor, inline CSS, žádné externí skripty ani obrázky z cizích URL – fotky nahraď stylovými placeholdery s popisem, co na fotce má být; může být Google Fonts link). Mobile-first, rychlá, konverzní (jasná hierarchie, kontrast CTA, sociální důkaz, odrážky, FAQ, garance, sticky CTA na mobilu). Česky. Formuláře jen vizuálně (action="#").\n\nFUNNEL: ' + F.name + ' — ' + (F.big_idea || '') + '\nHÁČEK: ' + (F.hook || '') + '\nNABÍDKY: ' + JSON.stringify(offers).slice(0, 4000) + '\n\nSTRÁNKA: ' + JSON.stringify(p).slice(0, 12000) + '\n\nVrať POUZE HTML od <!DOCTYPE html> po </html>.';
+  const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+  const r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: 16000, messages: [{ role: 'user', content: prompt }] }).finalMessage();
+  let html = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+  const a = html.indexOf('<!DOCTYPE'), b = html.lastIndexOf('</html>'); if (a >= 0 && b > a) html = html.slice(a, b + 7);
+  if (!/<html/i.test(html)) throw new Error('AI nevrátila HTML');
+  const F2 = await getJ(KEY_INVENT, null); const p2 = F2 && (F2.pages || []).find((x) => x.id === pageId); if (!p2) throw new Error('Funnel se mezitím změnil');
+  p2.html = html; p2.html_at = new Date().toISOString();
+  await setJ(KEY_INVENT, F2, 'Marketingový ředitel – vymyšlený funnel');
+  return { ok: true, html_at: p2.html_at };
+}
+
+module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, KEY_INVENT };
