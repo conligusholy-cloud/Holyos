@@ -262,19 +262,20 @@ const BS2_HUB = 'BEST SERIES 2.0 (www.bestseries2.cz) JE STŘEDOBOD: každý zá
 // Každá hotová část se hned uloží (status 'generating') → UI ukazuje průběžný výsledek a po restartu serveru se pozná přerušení.
 // Které klíče MUSÍ být pole / objekt (podle části) – model pak nevrací seznam jako jeden řetězec
 const AI_SHAPES = {
-  'Jádro': { arr: ['offer_stack', 'new_products', 'page_plan', 'kpis', 'risks'], obj: ['feasibility', 'projection'] },
+  'Jádro': { arr: ['offer_stack', 'new_products', 'page_plan', 'kpis', 'risks'], obj: ['feasibility', 'projection'], str: ['name', 'big_idea', 'hook', 'channel_decision'] },
   'Reklamy': { arr: ['ads', 'remarketing'], obj: ['leadform'] },
   'SMS a e-maily': { arr: ['sequence', 'launch_plan'], obj: ['sales_process'] },
   'Úkoly': { arr: ['tasks', 'owner_questions'], obj: [] },
-  'Stránka': { arr: ['sections', 'form_fields'], obj: [] },
-  'Úprava': { arr: ['changed_sections'], obj: ['patch'] },
+  'Stránka': { arr: ['sections', 'form_fields'], obj: [], str: ['name', 'headline', 'subheadline', 'cta'] },
+  'Úprava': { arr: ['changed_sections'], obj: ['patch'], str: ['answer'] },
 };
 function shapeFor(label) { const k = Object.keys(AI_SHAPES).find((x) => String(label).indexOf(x) === 0); return k ? AI_SHAPES[k] : null; }
 function toolFor(label) {
   const sh = shapeFor(label); if (!sh) return OUT_TOOL;
   const props = {}; sh.arr.forEach((k) => { props[k] = { type: 'array', items: { type: 'object', additionalProperties: true } }; }); sh.obj.forEach((k) => { props[k] = { type: 'object', additionalProperties: true }; });
   ['risks', 'form_fields', 'changed_sections'].forEach((k) => { if (props[k]) props[k] = { type: 'array', items: {} }; }); // pole textů
-  return Object.assign({}, OUT_TOOL, { input_schema: { type: 'object', properties: props, required: sh.arr.concat(sh.obj).filter((k) => !['leadform', 'form_fields', 'changed_sections'].includes(k)), additionalProperties: true } });
+  (sh.str || []).forEach((k) => { props[k] = { type: 'string' }; });
+  return Object.assign({}, OUT_TOOL, { input_schema: { type: 'object', properties: props, required: sh.arr.concat(sh.obj).concat(sh.str || []).filter((k) => !['leadform', 'form_fields', 'changed_sections', 'subheadline', 'channel_decision'].includes(k)), additionalProperties: true } });
 }
 // Oprava JSONu od AI: neescapovaná uvozovka uvnitř textu (za ní nenásleduje , : } ]) se escapuje; holé konce řádků v textu → \n
 function repairJson(txt) {
@@ -304,6 +305,7 @@ function salvageArray(txt) {
 // Kontrola tvaru: pole musí být pole (řetězec s platným JSONem se rozparsuje, jinak = chyba → nový pokus)
 function checkShape(out, label) {
   const sh = shapeFor(label); if (!sh || !out) return out;
+  if (label === 'Jádro' && !String(out.big_idea || '').trim()) throw Object.assign(new Error('Jádro: chybí velká myšlenka'), { parse: true });
   sh.arr.concat(sh.obj).forEach((k) => {
     let v = out[k]; if (typeof v === 'string') { try { v = parseLoose(v); out[k] = v; } catch (e) { const sv = sh.arr.includes(k) ? salvageArray(v) : []; if (sv.length) { v = sv; out[k] = sv; out.__salvaged = (out.__salvaged || []).concat([k]); } else throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
     if (v != null && sh.arr.includes(k) && !Array.isArray(v)) out[k] = typeof v === 'object' ? Object.values(v) : [v];
@@ -379,7 +381,13 @@ async function invent(opts) {
   F.pages = (F.pages || []).map((p) => { const { pending, ...rest } = p; return rest; });
   if (plan.length && !plan.some((pp) => F.part_errors['page_' + pp.id])) F.parts.pages = true;
   F.status = Object.keys(F.part_errors).length ? 'partial' : 'done'; F.generated_at = new Date().toISOString();
+  const leaks = findPriceLeaks(F); F.price_leaks = leaks.length;
   await save();
+  // Automatická oprava: cena stroje ve veřejných textech → ředitel ji odstraní (zapíše se do historie úprav)
+  if (leaks.length) {
+    try { await revise({ section: 'kontrola', auto: true, comment: 'AUTOMATICKÁ KONTROLA – ve veřejných textech je CENA PRÁDLOMATU, která se zákazníkovi smí říct až na osobní schůzce. Nalezeno:\n' + leaks.map((l) => '- [' + l.where + '] …' + l.snippet + '…').join('\n') + '\n\nOdstraň z reklam, stránek, SMS, e-mailů a remarketingu VŠECHNY ceny prádlomatů – i rozmezí, i v příkladech, kalkulačkách a referencích (např. „investice do prádlomatu“, „cenu a financování připravíme na osobní schůzce“). Ceny online produktů ponech. Interní projekci a offer_stack neměň. Nic jiného neměň.' }); }
+    catch (e) { console.warn('[ads-director] autokontrola cen:', e.message); }
+  }
   if (F.status === 'partial') throw new Error('Část se nepovedla: ' + Object.values(F.part_errors).join('; ') + ' – zbytek je uložený, zkus „Vymyslet" znovu.');
   return F;
   } catch (e) {
@@ -388,8 +396,25 @@ async function invent(opts) {
   } finally { clearInterval(beat); }
 }
 
+// Kontrola: cena prádlomatu nesmí být ve veřejných textech (reklamy, stránky, SMS/e-maily, remarketing)
+function findPriceLeaks(F) {
+  const prices = [...new Set(((F.catalog || {}).machines || []).map((m) => Number(m.price_czk_bez_dph)).filter((n) => n > 50000))];
+  if (!prices.length) return [];
+  const sep = '[\\s.\\u00a0]?';
+  const pats = prices.map((n) => { const d = String(Math.round(n)); const g = d.replace(/\B(?=(\d{3})+(?!\d))/g, ','); return g.split(',').join(sep); });
+  pats.push('\\d+(?:[,.]\\d+)?\\s*mil(?:\\.|ion[ůuy]?)?\\s*(?:Kč|korun)'); // „1,25 mil. Kč“
+  const re = new RegExp('(' + pats.join('|') + ')', 'gi');
+  const out = [];
+  const scan = (where, v) => { const t = typeof v === 'string' ? v : JSON.stringify(v || ''); let m; re.lastIndex = 0; while ((m = re.exec(t)) && out.length < 25) out.push({ where, snippet: t.slice(Math.max(0, m.index - 70), m.index + m[0].length + 30).replace(/\s+/g, ' ') }); };
+  (F.ads || []).forEach((a) => scan('reklama ' + (a.name || a.id), [a.primary_text, a.headline, a.description, a.media_brief]));
+  (F.pages || []).forEach((p) => scan('stránka ' + (p.name || p.id), [p.headline, p.subheadline, p.sections, p.offer, p.cta]));
+  (F.sequence || []).forEach((m) => scan((m.channel || 'zpráva') + ' ' + (m.day || ''), [m.subject, m.text]));
+  (F.remarketing || []).forEach((r) => scan('remarketing ' + (r.window || ''), [r.text, r.angle]));
+  return out;
+}
+
 // ── Připomínka majitele k sekci → ředitel ji zapracuje a upraví i navazující sekce (vrací jen změněné klíče) ──
-const SECTION_KEYS = { celek: 'celý funnel', jadro: 'big_idea, hook, feasibility', projekce: 'projection', nabidka: 'offer_stack', nove: 'new_products', ukoly: 'tasks, owner_questions', reklamy: 'ads, leadform', media: 'ads[].media_brief', stranky: 'pages', sekvence: 'sequence', remarketing: 'remarketing', prodej: 'sales_process', plan: 'launch_plan, kpis, risks', diagram: 'celý tok (ads → pages → sequence → schůzka)' };
+const SECTION_KEYS = { kontrola: 'reklamy, stránky, SMS/e-maily, remarketing (veřejné texty)', celek: 'celý funnel', jadro: 'big_idea, hook, feasibility', projekce: 'projection', nabidka: 'offer_stack', nove: 'new_products', ukoly: 'tasks, owner_questions', reklamy: 'ads, leadform', media: 'ads[].media_brief', stranky: 'pages', sekvence: 'sequence', remarketing: 'remarketing', prodej: 'sales_process', plan: 'launch_plan, kpis, risks', diagram: 'celý tok (ads → pages → sequence → schůzka)' };
 const REVISABLE = ['name', 'big_idea', 'hook', 'feasibility', 'offer_stack', 'new_products', 'page_plan', 'channel_decision', 'projection', 'kpis', 'risks', 'ads', 'leadform', 'remarketing', 'pages', 'sequence', 'sales_process', 'launch_plan', 'tasks', 'owner_questions'];
 async function revise(opts) {
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
@@ -411,7 +436,8 @@ async function revise(opts) {
     else if (k === 'ads' && Array.isArray(patch.ads)) { const old = {}; (F2.ads || []).forEach((a) => { old[a.id] = a; }); F2.ads = patch.ads.map((a) => Object.assign({}, a, old[a.id] && old[a.id].media ? { media: old[a.id].media } : {})); }
     else F2[k] = patch[k];
     changed.push(k); });
-  F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section, comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
+  F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section, comment: (opts && opts.auto) ? '🤖 Automatická kontrola: cena prádlomatu ve veřejných textech' : comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
+  if (opts && opts.auto) F2.price_leaks_after = findPriceLeaks(F2).length;
   F2.revised_at = new Date().toISOString();
   await setJ(KEY_INVENT, F2, 'Marketingový ředitel – vymyšlený funnel');
   return { answer: out.answer, changed };
