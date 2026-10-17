@@ -297,6 +297,7 @@ async function migrate() {
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_expires_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_evals INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhodnocení navíc
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_searches INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhledání (Vyhledávač míst)
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_finder_only BOOLEAN NOT NULL DEFAULT false; -- balíček jen z /findlocation: bez vyhodnocení adres v ceně (jen dokoupená)
     -- Vyhledávač míst: každé nové město odečte 1 vyhledání; opakované hledání stejného města je zdarma
     CREATE TABLE IF NOT EXISTS location_searches (
       id           SERIAL PRIMARY KEY,

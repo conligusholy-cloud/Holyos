@@ -84,9 +84,8 @@ function what() {
     <div class="list">
       <div class="item"><div class="n">1</div><div><b>Přístup do webové aplikace na 12 měsíců</b><span>Jednorázová platba, přístup se automaticky placeně neobnovuje. Funguje v mobilu i na počítači.</span></div></div>
       <div class="item"><div class="n">2</div><div><b>Vyhledávač míst</b><span>Analýza spádové oblasti města a seznam míst, kde by prádlomat mohl stát. Počet vyhledání se liší podle balíčku, další můžete kdykoli dokoupit.</span></div></div>
-      <div class="item"><div class="n">3</div><div><b>Kalkulačka ekonomiky a vyhodnocení lokality</b><span>Vybrané místo prověříte: investice, nájem, energie, servis, scénáře slabý / střední / silný, bod zvratu a návratnost. Report si stáhnete do PDF pro banku, společníka nebo pronajímatele.</span></div></div>
     </div>
-    <p class="small" style="color:var(--text3);margin-top:10px">Výstup je automatický orientační podklad, nikoli odborné schválení investice. Rozhodnutí Best Series o prodeji stroje na konkrétní místo je samostatný krok nezávislý na výsledku aplikace.</p>
+    <p class="small" style="color:var(--text3);margin-top:10px">Výstup je automatický orientační podklad, nikoli odborné schválení investice. Rozhodnutí Best Series o prodeji prádlomatu na konkrétní místo je samostatný krok nezávislý na výsledku aplikace.</p>
   </section>`;
 }
 
@@ -96,7 +95,7 @@ function prices(limits, searchLimits) {
   const card = (key, title, hi, extra) => `<div class="price${hi ? ' hi' : ''}">
         <div class="tag">${title}</div>
         <div class="amt">${fmt(P[key].amount)} <small>Kč s DPH · jednorázově</small></div>
-        <ul><li>Přístup do aplikace na 12 měsíců</li><li>Vyhledávač míst – ${S[key] != null ? S[key] : 1} ${(S[key] || 1) === 1 ? 'vyhledání města' : (S[key] || 1) < 5 ? 'vyhledání měst' : 'vyhledání měst'}</li><li>Vyhodnocení ${L[key] || (key === 'basic' ? 3 : 10)} různých adres</li>${extra}<li>Export výsledků do PDF</li></ul>
+        <ul><li>Přístup do aplikace na 12 měsíců</li><li>Vyhledávač míst – ${S[key] != null ? S[key] : 1} ${(S[key] || 1) === 1 ? 'vyhledání města' : (S[key] || 1) < 5 ? 'vyhledání měst' : 'vyhledání měst'}</li>${extra}<li>Export výsledků do PDF</li></ul>
         <a class="btn${hi ? '' : ' sec'}" href="#objednat" data-cta="${key}" onclick="pickVariant('${key}')">Vybrat ${title}</a>
       </div>`;
   return `<section class="sec" id="cena">

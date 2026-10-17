@@ -530,7 +530,7 @@ const PAGE = `<!DOCTYPE html>
     <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
   </section>
 
-  <div class="foot">Provozovatel: Best Series s.r.o. · IČO 05643724 · <a href="/location/vop">Obchodní podmínky</a> · <a href="/location/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení do Best Series 2.0</a></div>
+  <div class="foot"><a href="/location/vop">Obchodní podmínky</a> · <a href="/location/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení</a></div>
 </main>
 
 <script>

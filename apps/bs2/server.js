@@ -694,7 +694,6 @@ app.get('/cesta', wrap(async (req, res) => {
   const html = fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8').replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('</body>', PUBT);
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }));
-app.get('/img/kiosk.jpg', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'kiosk.jpg')));
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
 // Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu
@@ -852,12 +851,18 @@ async function locGrantAccess(o, req) {
   const pkg = LOC.PACKAGES[o.package] || LOC.PACKAGES.basic;
   const parts = String(o.name || '').trim().split(/\s+/); const first = parts.shift() || null, last = parts.join(' ') || null;
   let u = (await q('SELECT * FROM supporters WHERE email=$1', [o.email])).rows[0];
+  const prev = u ? Object.assign({}, u) : null; // stav účtu před tímto nákupem (pro location_finder_only)
   if (!u) {
     u = (await q("INSERT INTO supporters (email, first_name, last_name, phone, status, user_type, source, location_package, location_expires_at) VALUES ($1,$2,$3,$4,'invited','location','location',$5, now() + interval '12 months') RETURNING *", [o.email, first, last, o.phone || null, o.package])).rows[0];
   } else {
     // existující účet (např. starý uživatel): typ ponechat, jen přidat balíček a platnost; typ 'new' povýšit na location
     u = (await q("UPDATE supporters SET location_package=$2, location_expires_at=GREATEST(COALESCE(location_expires_at, now()), now()) + interval '12 months', user_type=CASE WHEN user_type IN ('new') THEN 'location' ELSE user_type END, phone=COALESCE(phone,$3), updated_at=now() WHERE id=$1 RETURNING *", [u.id, o.package, o.phone || null])).rows[0];
   }
+  // Vyhledávač míst (/findlocation) = bez vyhodnocení adres v ceně; nákup Prověření lokality (/location) je vždy zahrnuje.
+  // Účet, který už měl plný balíček (finder_only=false s balíčkem), o vyhodnocení nepřijde.
+  const prevFull = !!(prev && prev.location_package && !prev.location_finder_only && (!prev.location_expires_at || new Date(prev.location_expires_at) > new Date()));
+  const finderOnly = o.product === 'finder' && !prevFull;
+  if (!!u.location_finder_only !== finderOnly) u = (await q('UPDATE supporters SET location_finder_only=$2, updated_at=now() WHERE id=$1 RETURNING *', [u.id, finderOnly])).rows[0];
   await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
   const base = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
   const activated = !!u.password_hash;
@@ -877,7 +882,8 @@ async function requireLocation(req, res, next) {
   });
 }
 // Limit vyhodnocení = balíček + dokoupená vyhodnocení (supporters.location_extra_evals)
-const locLimit = (u) => (LAPP.LIMITS[u.location_package] || 3) + Number(u.location_extra_evals || 0);
+// Balíček koupený jen přes /findlocation (Vyhledávač míst) neobsahuje vyhodnocení adres – jen dokoupená.
+const locLimit = (u) => (u.location_finder_only ? 0 : (LAPP.LIMITS[u.location_package] || 3)) + Number(u.location_extra_evals || 0);
 const locSearchLimit = (u) => (LAPP.SEARCH_LIMITS[u.location_package] || 3) + Number(u.location_extra_searches || 0);
 const locAreaNorm = (t) => { const m = String(t || '').trim().match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/); if (m) return (+m[1]).toFixed(4) + ',' + (+m[2]).toFixed(4); return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim(); };
 const locIsCoords = (t) => /^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/.test(String(t || '').trim());
@@ -1184,7 +1190,7 @@ app.get('/admin/online', requireAdmin, wrap(async (req, res) => {
   if (tab === 'orders') return res.redirect('/admin/location' + (req.query.status ? '?status=' + encodeURIComponent(req.query.status) : ''));
   if (tab === 'customers') {
     const qq = String(req.query.q || '').trim().slice(0, 80);
-    const rows = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.phone, s.status, s.location_package, s.location_expires_at, s.location_extra_evals, s.location_extra_searches,
+    const rows = (await q(`SELECT s.id, s.email, s.nick, s.first_name, s.last_name, s.phone, s.status, s.location_package, s.location_expires_at, s.location_extra_evals, s.location_extra_searches, s.location_finder_only,
         (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=s.id) AS sites_count,
         (SELECT count(*)::int FROM location_sites ls WHERE ls.supporter_id=s.id AND ls.evaluated_at IS NOT NULL) AS evals_used,
         (SELECT count(*)::int FROM location_searches x WHERE x.supporter_id=s.id) AS searches_used,
