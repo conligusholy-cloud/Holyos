@@ -572,6 +572,7 @@
       if ((F.kpis || []).length) h += '<div class="scard"><h5>📏 KPI</h5>' + F.kpis.map(function (k) { return '<div style="font-size:12.5px;padding:4px 0"><b>' + esc(k.metric) + ':</b> <span style="color:#4ade80">' + esc(k.target) + '</span> <span class="note">' + esc(k.why || '') + '</span></div>'; }).join('') + '</div>';
       if ((F.risks || []).length) h += '<div class="scard" style="border-color:rgba(239,68,68,.45)"><h5 style="color:#f87171">⚠ Rizika</h5><ul style="margin:0;padding-left:18px;font-size:12.5px">' + F.risks.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
       h += '</div>';
+      if ((F.ads || []).length || (F.pages || []).length) h += SEC('🗺 Diagram funnelu – celá cesta od reklamy po prádlomat') + invDiagram(F);
       h += '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:24px 0"><button class="btn on" id="inv-tofunnel">📥 Založit jako koncept funnelu v Centru reklamy</button>' + ((F.ads || []).length ? '<button class="btn" id="inv-fb" style="border-color:#1877f2">📣 Založit reklamy na Facebooku (pozastavené)</button>' : '') + (F.fb ? '<a class="btn" href="' + esc(F.fb.manager_url) + '" target="_blank" rel="noopener">↗ Kampaň ve Správci reklam</a>' : '') + '</div>';
       h += '<details style="margin-top:10px"><summary class="note" style="cursor:pointer">🎯 Změnit cíle a vymyslet znovu</summary>' + invGoalsForm(F.goals || goals, F) + '</details>';
       body.innerHTML = h; invGoalsBind();
@@ -580,6 +581,7 @@
       var tf = document.getElementById('inv-tofunnel'); if (tf) tf.onclick = async function () { if (!confirm('Založit vymyšlený funnel jako KONCEPT v Centru reklamy?\nSMS a e-maily budou vypnuté – nic se neodešle, dokud je sám nezapneš.')) return; tf.disabled = true; try { var r = await invFetch('/api/ads-center/director/invent/to-funnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); alert('✓ Založeno: ' + r.name + ' (' + r.nodes + ' uzlů). Najdeš ho mezi funely.'); } catch (e) { alert('Nepodařilo se: ' + e.message); } tf.disabled = false; };
       body.querySelectorAll('[data-pg]').forEach(function (b) { if (b.disabled) invPollPage(b.getAttribute('data-pg')); });
       var fbb = document.getElementById('inv-fb'); if (fbb) fbb.onclick = invFbOpen;
+      body.querySelectorAll('.dg-n').forEach(function (el) { el.onclick = function () { var n = (invDiagram._nodes || [])[+el.getAttribute('data-i')]; var d = document.getElementById('dg-detail'); if (!n || !d) return; body.querySelectorAll('.dg-n').forEach(function (x) { x.style.outline = x === el ? '2px solid ' + n.color : ''; }); d.style.display = 'block'; d.style.borderColor = n.color; d.innerHTML = '<div style="display:flex;gap:8px;align-items:center"><span style="color:' + n.color + ';font-weight:700;font-size:12px">' + esc(n.kind) + '</span><b style="font-size:15px">' + esc(n.title) + '</b><button class="btn btn-sm" style="margin-left:auto" onclick="this.parentNode.parentNode.style.display=\'none\'">✕</button></div>' + (n.sub ? '<div class="note" style="margin:4px 0">' + esc(n.sub) + '</div>' : '') + (n.detail ? '<div style="font-size:13px;white-space:pre-wrap;margin-top:6px">' + esc(n.detail) + '</div>' : ''); }; });
       body.querySelectorAll('[data-media]').forEach(function (inp) { inp.onchange = async function () {
         var f = inp.files && inp.files[0]; if (!f) return; var id = inp.getAttribute('data-media'); var msg = body.querySelector('[data-mmsg="' + id + '"]');
         if (f.size > 300 * 1024 * 1024) { msg.innerHTML = '<span style="color:#f87171">Soubor je větší než 300 MB.</span>'; return; }
@@ -614,6 +616,53 @@
           box.querySelector('.fb-res').innerHTML = '<div class="scard" style="margin-top:12px;border-color:#22c55e"><b style="color:#4ade80">✓ Kampaň založena (pozastavená)</b> · <a href="' + esc(r.manager_url) + '" target="_blank" rel="noopener" style="color:#93c5fd">otevřít ve Správci reklam ↗</a>' + r.ads.map(function (x) { return '<div style="font-size:12.5px;padding:4px 0">' + (x.error ? '<span style="color:#f87171">✗ ' + esc(x.name) + ': ' + esc(x.error) + '</span>' : '<span style="color:#4ade80">✓</span> ' + esc(x.name) + ' · ' + x.budget_czk_day + ' Kč/den' + (x.note ? ' <span class="note">(' + esc(x.note) + ')</span>' : '')) + '</div>'; }).join('') + '</div>';
         } catch (e) { box.querySelector('.fb-msg').innerHTML = '<span style="color:#f87171">' + esc(e.message) + '</span>'; go.disabled = false; }
       };
+    }
+    // 🗺 Diagram vymyšleného funnelu (styl editoru): Reklamy → Formulář / vstupní stránky → SMS a e-maily → další stránky → Schůzka → Prádlomat
+    function invDiagram(F) {
+      var W = 230, H = 96, CG = 120, RG = 22, TOP = 46;
+      var pages = F.pages || [], ads = F.ads || [], seq = F.sequence || [], rm = F.remarketing || [];
+      var pg = {}; pages.forEach(function (p) { pg[p.id] = p; });
+      var entryIds = {}; ads.forEach(function (a) { if (pg[a.destination]) entryIds[a.destination] = 1; });
+      if (!Object.keys(entryIds).length && pages[0]) entryIds[pages[0].id] = 1;
+      var useForm = (F.leadform && F.leadform.use) || ads.some(function (a) { return /form/i.test(a.destination || ''); });
+      var nodes = [], byKey = {}, edges = [];
+      var add = function (key, col, kind, title, sub, color, detail) { var n = { key: key, col: col, kind: kind, title: title, sub: sub, color: color, detail: detail }; nodes.push(n); byKey[key] = n; return n; };
+      ads.forEach(function (a) { add('ad:' + a.id, 0, '📣 Reklama' + (a.media ? ' · ' + (a.media.type === 'video' ? '🎞' : '🖼') : ''), a.name || a.id, (a.budget_czk_day ? a.budget_czk_day + ' Kč/den · ' : '') + (a.headline || ''), '#1877f2', a.primary_text); });
+      rm.forEach(function (r, i) { add('rm:' + i, 0, '🎯 Remarketing ' + (r.window || ''), r.angle || r.audience || 'Remarketing', r.audience || '', '#a78bfa', r.text); });
+      if (useForm) add('form', 1, '📝 Rychlý formulář', 'Lead Form na FB', (F.leadform && (F.leadform.questions || []).join(' · ')) || '', '#22c55e', F.leadform && F.leadform.why);
+      pages.forEach(function (p) { if (entryIds[p.id]) add('pg:' + p.id, 1, '📄 ' + (p.type || 'stránka'), p.name || p.headline || p.id, p.headline || p.purpose || '', '#f59e0b', p.purpose); });
+      seq.forEach(function (m, i) { var sms = String(m.channel || '').toLowerCase() === 'sms'; add('m:' + i, 2, (sms ? '📱 SMS' : '✉️ E-mail') + ' · ' + (m.day || ''), m.subject || m.goal || (sms ? 'SMS' : 'E-mail'), m.condition || m.goal || '', sms ? '#22c55e' : '#38bdf8', m.text); });
+      pages.forEach(function (p) { if (!entryIds[p.id]) add('pg:' + p.id, 3, '📄 ' + (p.type || 'stránka'), p.name || p.headline || p.id, p.headline || p.purpose || '', /rezerv/i.test(p.type || '') ? '#f472b6' : '#f59e0b', p.purpose); });
+      add('meet', 4, '🤝 Schůzka / prohlídka výroby', 'Osobní setkání', (F.sales_process && F.sales_process.capacity) || '', '#f472b6', F.sales_process && F.sales_process.meeting);
+      add('machine', 5, '🏭 Prodej', 'Prádlomat', (F.goals ? F.goals.machines_per_week + ' ks / týden' : ''), '#fbbf24', F.sales_process && F.sales_process.closing);
+      var E = function (a, b, label, style) { if (byKey[a] && byKey[b] && a !== b) edges.push({ a: a, b: b, label: label || '', style: style || '' }); };
+      ads.forEach(function (a) { E('ad:' + a.id, pg[a.destination] ? 'pg:' + a.destination : (useForm ? 'form' : 'pg:' + Object.keys(entryIds)[0]), a.cta_button || ''); });
+      rm.forEach(function (r, i) { E('rm:' + i, 'pg:' + r.link_page, '', 'rm'); });
+      var capture = useForm ? ['form'] : Object.keys(entryIds).map(function (k) { return 'pg:' + k; });
+      if (seq.length) capture.forEach(function (c) { E(c, 'm:0', 'kontakt'); });
+      seq.forEach(function (m, i) { if (i) E('m:' + (i - 1), 'm:' + i, '', 'chain'); if (m.link_page) E('m:' + i, 'pg:' + m.link_page, 'odkaz'); });
+      pages.forEach(function (p) { if (p.next && pg[p.next]) E('pg:' + p.id, 'pg:' + p.next, ''); });
+      var rez = pages.filter(function (p) { return /rezerv|schůz|schuz/i.test((p.type || '') + ' ' + (p.name || '')); });
+      (rez.length ? rez : pages.slice(-1)).forEach(function (p) { E('pg:' + p.id, 'meet', 'termín'); });
+      E('meet', 'machine', 'uzavření');
+      // rozložení do sloupců
+      var cols = {}; nodes.forEach(function (n) { (cols[n.col] = cols[n.col] || []).push(n); });
+      var maxRows = 0; Object.keys(cols).forEach(function (c) { maxRows = Math.max(maxRows, cols[c].length); });
+      var gh = TOP + maxRows * (H + RG) + 20, gw = 6 * (W + CG);
+      nodes.forEach(function (n) { var list = cols[n.col], i = list.indexOf(n), colH = list.length * (H + RG); n.x = n.col * (W + CG); n.y = TOP + (maxRows * (H + RG) - colH) / 2 + i * (H + RG); });
+      var HEADS = ['Reklamy a remarketing', 'Zachycení kontaktu', 'SMS a e-maily (časová osa)', 'Prodejní a důvěrové stránky', 'Schůzka', 'Prádlomat'];
+      var svg = edges.map(function (e) {
+        var a = byKey[e.a], b = byKey[e.b], x1, y1, x2, y2, d;
+        if (e.style === 'chain') { x1 = a.x + W / 2; y1 = a.y + H; x2 = b.x + W / 2; y2 = b.y; d = 'M' + x1 + ' ' + y1 + ' L' + x2 + ' ' + y2; }
+        else { x1 = a.x + W; y1 = a.y + H / 2; x2 = b.x; y2 = b.y + H / 2; if (b.col <= a.col) { x1 = a.x + W / 2; y1 = a.y + H; x2 = b.x + W / 2; y2 = b.y; } var dx = Math.max(50, Math.abs(x2 - x1) / 2); d = 'M' + x1 + ' ' + y1 + ' C' + (x1 + dx) + ' ' + y1 + ',' + (x2 - dx) + ' ' + y2 + ',' + x2 + ' ' + y2; }
+        var col = e.style === 'rm' ? '#a78bfa' : e.style === 'chain' ? '#475569' : '#f59e0b';
+        var lab = e.label && e.style !== 'chain' ? '<text x="' + ((x1 + x2) / 2) + '" y="' + ((y1 + y2) / 2 - 5) + '" text-anchor="middle" font-size="10" fill="#4ade80">' + esc(e.label) + '</text>' : '';
+        return '<path d="' + d + '" fill="none" stroke="' + col + '" stroke-width="1.8" stroke-opacity=".85"' + (e.style === 'rm' || e.style === 'chain' ? ' stroke-dasharray="5 4"' : '') + '/><circle cx="' + x2 + '" cy="' + y2 + '" r="3" fill="' + col + '"/>' + lab;
+      }).join('');
+      var cards = nodes.map(function (n, i) { return '<div class="dg-n" data-i="' + i + '" style="position:absolute;left:' + n.x + 'px;top:' + n.y + 'px;width:' + W + 'px;height:' + H + 'px;box-sizing:border-box;background:#161d33;border:1px solid #2c3a5c;border-top:3px solid ' + n.color + ';border-radius:10px;padding:7px 10px;overflow:hidden;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.35)"><div style="font-size:10.5px;color:' + n.color + ';font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(n.kind) + '</div><div style="font-size:13px;font-weight:800;color:#f1f5f9;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(n.title) + '</div><div style="font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.3;max-height:30px;overflow:hidden">' + esc(n.sub || '') + '</div></div>'; }).join('');
+      var heads = HEADS.map(function (t, c) { return cols[c] ? '<div style="position:absolute;left:' + (c * (W + CG)) + 'px;top:0;width:' + W + 'px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2c2;font-weight:700;text-align:center">' + esc(t) + '</div>' : ''; }).join('');
+      invDiagram._nodes = nodes;
+      return '<div style="overflow:auto;background:radial-gradient(circle,#1e293b 1px,transparent 1px) 0 0/18px 18px,#0b0f1d;border:1px solid #26304d;border-radius:12px;padding:16px"><div style="position:relative;width:' + gw + 'px;height:' + gh + 'px">' + heads + '<svg width="' + gw + '" height="' + gh + '" style="position:absolute;left:0;top:0;pointer-events:none">' + svg + '</svg>' + cards + '</div></div><div class="note" style="margin-top:6px">Klikni na uzel pro detail · <span style="color:#f59e0b">━</span> hlavní tok · <span style="color:#a78bfa">┅</span> remarketing · <span style="color:#64748b">┅</span> pořadí zpráv · zelený popisek = co se na spojnici děje</div><div id="dg-detail" class="scard" style="display:none;margin-top:10px"></div>';
     }
     var _invPolling = {};
     async function invPollPage(pid) {
