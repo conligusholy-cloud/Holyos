@@ -273,13 +273,38 @@ function toolFor(label) {
   ['risks', 'form_fields', 'changed_sections'].forEach((k) => { if (props[k]) props[k] = { type: 'array', items: {} }; }); // pole textů
   return Object.assign({}, OUT_TOOL, { input_schema: { type: 'object', properties: props, required: sh.arr.concat(sh.obj).filter((k) => !['leadform', 'form_fields', 'changed_sections'].includes(k)), additionalProperties: true } });
 }
+// Oprava JSONu od AI: neescapovaná uvozovka uvnitř textu (za ní nenásleduje , : } ]) se escapuje; holé konce řádků v textu → \n
+function repairJson(txt) {
+  const t = String(txt || ''); let out = '', inStr = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (!inStr) { out += c; if (c === '"') inStr = true; continue; }
+    if (c === '\\') { out += c + (t[i + 1] || ''); i++; continue; }
+    if (c === '\n') { out += '\\n'; continue; } if (c === '\r') continue; if (c === '\t') { out += '\\t'; continue; }
+    if (c === '"') { let j = i + 1; while (j < t.length && /\s/.test(t[j])) j++; const nx = t[j]; if (nx === undefined || nx === ',' || nx === ':' || nx === '}' || nx === ']') { out += c; inStr = false; } else out += '\\"'; continue; }
+    out += c;
+  }
+  return out;
+}
+function parseLoose(txt) { try { return JSON.parse(txt); } catch (e) { return JSON.parse(repairJson(txt)); } }
+// Záchrana poškozeného JSON textu (neescapované uvozovky v copy): vytáhne objekty {…} a v nich "klíč": "hodnota" / číslo
+function salvageArray(txt) {
+  const out = []; const t = String(txt || '');
+  const chunks = t.split(/\}\s*,\s*\{/);
+  chunks.forEach((c) => {
+    const o = {}; const re = /"([A-Za-z_][\w]*)"\s*:\s*(?:"((?:[^"\\]|\\.|"(?!\s*[,}\]]))*)"|(-?\d+(?:\.\d+)?)|(\[[^\]]*\]))/g; let m;
+    while ((m = re.exec(c))) { if (m[2] !== undefined) o[m[1]] = m[2].replace(/\\n/g, '\n').replace(/\\"/g, '"'); else if (m[3] !== undefined) o[m[1]] = Number(m[3]); else { try { o[m[1]] = JSON.parse(m[4]); } catch (e) { o[m[1]] = m[4]; } } }
+    if (Object.keys(o).length) out.push(o);
+  });
+  return out;
+}
 // Kontrola tvaru: pole musí být pole (řetězec s platným JSONem se rozparsuje, jinak = chyba → nový pokus)
 function checkShape(out, label) {
   const sh = shapeFor(label); if (!sh || !out) return out;
   sh.arr.concat(sh.obj).forEach((k) => {
-    let v = out[k]; if (typeof v === 'string') { try { v = JSON.parse(v); out[k] = v; } catch (e) { throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
+    let v = out[k]; if (typeof v === 'string') { try { v = parseLoose(v); out[k] = v; } catch (e) { const sv = sh.arr.includes(k) ? salvageArray(v) : []; if (sv.length) { v = sv; out[k] = sv; out.__salvaged = (out.__salvaged || []).concat([k]); } else throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
     if (v != null && sh.arr.includes(k) && !Array.isArray(v)) out[k] = typeof v === 'object' ? Object.values(v) : [v];
-    if (Array.isArray(out[k]) && out[k].length === 1 && typeof out[k][0] === 'string' && /^\s*[\[{]/.test(out[k][0])) { try { const x = JSON.parse(out[k][0]); out[k] = Array.isArray(x) ? x : [x]; } catch (e) { throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
+    if (Array.isArray(out[k]) && out[k].length === 1 && typeof out[k][0] === 'string' && /^\s*[\[{]/.test(out[k][0])) { try { const x = parseLoose(out[k][0]); out[k] = Array.isArray(x) ? x : [x]; } catch (e) { const sv = salvageArray(out[k][0]); if (sv.length) out[k] = sv; else throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
   });
   return out;
 }
@@ -291,7 +316,7 @@ async function aiJson(client, system, prompt, maxTokens, label) {
 // Model občas vloží pole/objekt jako řetězec s JSONem → rozparsovat (rekurzivně)
 function deepParse(v, d) {
   d = d || 0; if (d > 8) return v;
-  if (typeof v === 'string') { const t = v.trim(); if ((t[0] === '[' && t.endsWith(']')) || (t[0] === '{' && t.endsWith('}'))) { try { return deepParse(JSON.parse(t), d + 1); } catch (e) { return v; } } return v; }
+  if (typeof v === 'string') { const t = v.trim(); if ((t[0] === '[' && t.endsWith(']')) || (t[0] === '{' && t.endsWith('}'))) { try { return deepParse(parseLoose(t), d + 1); } catch (e) { return v; } } return v; }
   if (Array.isArray(v)) return v.map((x) => deepParse(x, d + 1));
   if (v && typeof v === 'object') { const o = {}; Object.keys(v).forEach((k) => { o[k] = deepParse(v[k], d + 1); }); return o; }
   return v;
@@ -304,7 +329,7 @@ async function aiJsonOnce(client, system, prompt, maxTokens, label) {
   if (tu && Object.keys(tu.input).length) return scrub(checkShape(deepParse(tu.input), label));
   // záloha: kdyby model přece jen napsal text
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
-  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(checkShape(JSON.parse(raw.slice(a, b + 1)), label)); }
+  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(checkShape(parseLoose(raw.slice(a, b + 1)), label)); }
   catch (e) {
     console.warn('[ads-director] ' + label + ' – neplatný výstup (stop=' + r.stop_reason + '):', raw.slice(0, 300).replace(/\s+/g, ' '));
     throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens', parse: true });
