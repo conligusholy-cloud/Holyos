@@ -621,7 +621,7 @@
       body.querySelectorAll('[data-pg]').forEach(function (b) { if (b.disabled) invPollPage(b.getAttribute('data-pg')); });
       var fbb = document.getElementById('inv-fb'); if (fbb) fbb.onclick = invFbOpen;
       body.querySelectorAll('.pg-vis').forEach(function (box) { var pid = box.getAttribute('data-pid'), key = pid + '|' + box.getAttribute('data-v'), fr = box.querySelector('iframe');
-        var put = function (html) { if (fr.getAttribute('data-k') !== key) { fr.srcdoc = html; fr.setAttribute('data-k', key); } };
+        var put = function (html) { if (fr.getAttribute('data-k') !== key) { fr.srcdoc = invSafeHtml(html); fr.setAttribute('data-k', key); } };
         if (invHtmlCache[key]) put(invHtmlCache[key]); else fetch('/api/ads-center/director/invent/pages/' + encodeURIComponent(pid) + '/html', { credentials: 'same-origin' }).then(function (r) { return r.text(); }).then(function (t) { invHtmlCache[key] = t; put(t); });
         box.querySelectorAll('[data-vw]').forEach(function (b) { b.onclick = function () { fr.style.width = b.getAttribute('data-vw') === '100%' ? '100%' : b.getAttribute('data-vw') + 'px'; box.querySelectorAll('[data-vw]').forEach(function (x) { x.classList.toggle('on', x === b); }); }; }); });
       var pga = document.getElementById('pg-all'); if (pga) pga.onclick = async function () { var todo = (F.pages || []).filter(function (p) { return !(p.job && p.job.running); }); if (!todo.length) return; if (todo.some(function (p) { return p.has_html; }) && !confirm('Přegenerovat i stránky, které už vizualizaci mají?\nOK = všechny, Zrušit = jen chybějící')) todo = todo.filter(function (p) { return !p.has_html; }); pga.disabled = true; for (var ti = 0; ti < todo.length; ti++) { try { await invFetch('/api/ads-center/director/invent/pages/' + encodeURIComponent(todo[ti].id) + '/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) { /* další */ } } todo.forEach(function (p) { invPollPage(p.id, true); }); var j0 = await invFetch('/api/ads-center/director/invent'); invData = j0.funnel; invRender(j0.funnel, j0.goals); };
@@ -822,7 +822,7 @@
     var invRevItem = null;
     function invCommentOpen(key, label, item) {
       var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px';
-      ov.innerHTML = '<div class="scard igf" style="width:680px;max-width:96vw;position:relative;background:#11172a;padding:22px;border-color:#38bdf8"><button data-x style="position:absolute;top:10px;right:14px;background:none;border:none;color:#8ea2c2;font-size:22px;cursor:pointer">×</button><h5 style="color:#38bdf8">💬 Připomínka – ' + esc(item ? item.label || label : label) + '</h5><div class="note" style="margin-bottom:10px">Napiš dotaz nebo co se ti nelíbí. Ředitel to zapracuje a upraví i ostatní sekce, kterých se změna týká (ceny → projekce, texty reklam, stránky, SMS…).</div><textarea class="cm-t" rows="6" placeholder="např. Rychlý snímek zdarma nechci, vstup ať je placený 290 Kč. / Proč je CR 8 %? / Reklamy víc na investory bez místa…"></textarea><div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn on cm-go">🧠 Zapracovat</button><span class="note">Trvá 1–3 min, běží na serveru.</span></div><div class="cm-m note" style="margin-top:8px"></div></div>';
+      ov.innerHTML = '<div class="scard igf" style="width:680px;max-width:96vw;position:relative;background:#11172a;padding:22px;border-color:#38bdf8"><button data-x style="position:absolute;top:10px;right:14px;background:none;border:none;color:#8ea2c2;font-size:22px;cursor:pointer">×</button><h5 style="color:#38bdf8">💬 Připomínka – ' + esc(item ? item.label || label : label) + '</h5><div class="note" style="margin-bottom:10px">Napiš dotaz nebo co se ti nelíbí – k textu i ke VZHLEDU (barvy, rozložení, obrázky, animace…). Ředitel to zapracuje, u stránek s vizualizací rovnou upraví i vzhled, a dotkne se i ostatních sekcí, kterých se změna týká.</div><textarea class="cm-t" rows="6" placeholder="např. Hero ať je světlejší a fotka prádlomatu větší / Tlačítko zlaté místo modrého / Rychlý snímek zdarma nechci, vstup 290 Kč / Proč je CR 8 %?"></textarea><div style="display:flex;gap:10px;align-items:center;margin-top:12px"><button class="btn on cm-go">🧠 Zapracovat</button><span class="note">Trvá 1–3 min, běží na serveru.</span></div><div class="cm-m note" style="margin-top:8px"></div></div>';
       document.body.appendChild(ov); var ta = ov.querySelector('.cm-t'); ta.focus();
       ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
       ov.querySelector('.cm-go').onclick = async function () {
@@ -855,6 +855,13 @@
       }
     }
     var invHtmlCache = {};
+    // Pojistka náhledu: odstranit ```html obal a po 2,5 s zviditelnit obsah, který zůstal skrytý (rozbitá animace náběhu)
+    function invSafeHtml(h) {
+      h = String(h || '').replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/i, '');
+      var a = h.search(/<!doctype html|<html[\s>]/i); if (a > 0) h = h.slice(a);
+      var fix = '<style>.pv-vis{opacity:1!important;transform:none!important;visibility:visible!important}<\/style><script>setTimeout(function(){try{document.querySelectorAll("body *").forEach(function(e){var c=getComputedStyle(e);if((c.opacity==="0"||c.visibility==="hidden")&&c.position!=="fixed"&&e.getBoundingClientRect().height>0)e.classList.add("pv-vis")})}catch(x){}},2500)<\/script>';
+      var i = h.toLowerCase().lastIndexOf('<\/body>'); return i >= 0 ? h.slice(0, i) + fix + h.slice(i) : h + fix;
+    }
     var _invPolling = {};
     async function invPollPage(pid, quiet) {
       if (_invPolling[pid]) return; _invPolling[pid] = true;
@@ -872,7 +879,7 @@
       var r = await fetch('/api/ads-center/director/invent/pages/' + encodeURIComponent(pid) + '/html', { credentials: 'same-origin', cache: 'no-store' }); var html = await r.text();
       var ov = document.createElement('div'); ov.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.75);display:flex;flex-direction:column';
       ov.innerHTML = '<div style="display:flex;gap:8px;align-items:center;padding:10px 16px;background:#0b0f1d;border-bottom:1px solid #26304d"><b>👁 Náhled stránky</b><button class="btn btn-sm" data-w="390">📱 Mobil</button><button class="btn btn-sm on" data-w="100%">🖥 Desktop</button><button class="btn btn-sm" data-dl>⬇ Stáhnout HTML</button><button class="btn on" style="margin-left:auto" data-x>Zavřít ×</button></div><div style="flex:1;display:flex;justify-content:center;overflow:auto;padding:10px"><iframe sandbox="allow-scripts" style="width:100%;height:100%;border:0;background:#fff;border-radius:8px"></iframe></div>';
-      document.body.appendChild(ov); var fr = ov.querySelector('iframe'); fr.srcdoc = html; // sandbox bez same-origin: stránka od AI nemá přístup k HolyOS
+      document.body.appendChild(ov); var fr = ov.querySelector('iframe'); fr.srcdoc = invSafeHtml(html); // sandbox bez same-origin: stránka od AI nemá přístup k HolyOS
       ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
       ov.querySelectorAll('[data-w]').forEach(function (b) { b.onclick = function () { fr.style.width = b.getAttribute('data-w') === '100%' ? '100%' : b.getAttribute('data-w') + 'px'; ov.querySelectorAll('[data-w]').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       ov.querySelector('[data-dl]').onclick = function () { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = 'stranka-' + pid + '.html'; a.click(); };

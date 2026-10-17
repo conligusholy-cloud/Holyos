@@ -436,7 +436,7 @@ router.post('/director/invent/revise', async (req, res, next) => {
     const job = runJob('revise', () => DIRECTOR.revise({ section: b.section, comment: b.comment, item })); job.section = String(b.section || ''); job.item = item; res.status(202).json({ ok: true, job });
   } catch (err) { next(err); } });
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
-  try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
+  try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); } // trvalé požadavky na vzhled (design_notes) se použijí automaticky
 });
 router.get('/director/invent/pages/:pid/live', (req, res) => { const pid = String(req.params.pid || ''); const j = _jobs['page:' + pid]; const L = DIRECTOR.pvLive(pid); res.set('Cache-Control', 'no-store'); res.json({ running: !!(j && j.running), started_at: j && j.started_at, error: j && j.error, chars: L ? L.chars : 0, html: L ? L.html : '' }); });
 router.get('/director/invent/pages/:pid/html', async (req, res, next) => {

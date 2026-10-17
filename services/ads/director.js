@@ -437,9 +437,9 @@ async function revise(opts) {
     const done = []; const failed = [];
     const store = async (fn) => { const F3 = await getJ(KEY_INVENT, null); if (!F3) return; fn(F3); F3.rev_progress = { at: new Date().toISOString(), done: done.slice(), failed: failed.slice(), total: targetPages.length, only: item ? item.id : null }; await setJ(KEY_INVENT, F3, 'Marketingový ředitel – vymyšlený funnel'); };
     await store(() => {});
-    await Promise.all(targetPages.map((pg) => aiJson(client, INVENT_SYSTEM, 'MAJITEL MÁ PŘIPOMÍNKU KE STRÁNKÁM FUNNELU:\n"""' + comment + '"""\n\nKONTEXT FUNNELU: ' + ctx + '\n\nPravidla: cenu prádlomatu NIKDY neuváděj (sděluje se až na osobní schůzce); online produkty smí mít ceny; BS2 je středobod.\n\nAKTUÁLNÍ STRÁNKA (JSON):\n' + JSON.stringify(pg).slice(0, 30000) + '\n\nÚKOL: připomínku zapracuj do TÉTO stránky (pokud se jí netýká, vrať ji beze změny). Zachovej id „' + pg.id + '“. Texty sekcí piš čitelně (lze Markdown: ## nadpis, **tučně**, odrážky „- “).\nVÝSTUP: celá stránka {"id","type","slug","name","purpose","headline","subheadline","sections":[{"name","copy"}],"form_fields":[],"cta","offer","design","next","success_metric"}', 12000, 'Stránka ' + (pg.name || pg.id), 'rev:' + pg.id)
-      .then(async (np) => { const hadHtml = (F.pages || []).some((x) => x.id === pg.id && x.html); const same = JSON.stringify(np) === JSON.stringify(pg); await store((F3) => { F3.pages = (F3.pages || []).map((p) => p.id === pg.id ? Object.assign({}, p, np, { id: pg.id }, same && p.html ? { html: p.html, html_at: p.html_at } : { html: undefined, html_at: undefined }) : p); }); delete LIVE['rev:' + pg.id];
-        if (hadHtml && !same) { try { liveSet('rev:' + pg.id, ' kreslím novou vizualizaci stránky…'); await pagePreview(pg.id); } catch (e) { console.warn('[ads-director] vizualizace po úpravě:', e.message); } delete LIVE['rev:' + pg.id]; } // vizualizace se sama přegeneruje
+    await Promise.all(targetPages.map((pg) => aiJson(client, INVENT_SYSTEM, 'MAJITEL MÁ PŘIPOMÍNKU KE STRÁNKÁM FUNNELU:\n"""' + comment + '"""\n\nKONTEXT FUNNELU: ' + ctx + '\n\nPravidla: cenu prádlomatu NIKDY neuváděj (sděluje se až na osobní schůzce); online produkty smí mít ceny; BS2 je středobod.\n\nAKTUÁLNÍ STRÁNKA (JSON):\n' + JSON.stringify(pg).slice(0, 30000) + '\n\nÚKOL: připomínku zapracuj do TÉTO stránky (pokud se jí netýká, vrať ji beze změny). Pokud jde o VZHLED (barvy, rozložení, obrázky, animace…), obsah měň jen je-li třeba a požadavek stručně zapiš do pole „design“ – vizualizaci podle něj upraví další krok. Zachovej id „' + pg.id + '“. Texty sekcí piš čitelně (lze Markdown: ## nadpis, **tučně**, odrážky „- “).\nVÝSTUP: celá stránka {"id","type","slug","name","purpose","headline","subheadline","sections":[{"name","copy"}],"form_fields":[],"cta","offer","design","next","success_metric"}', 12000, 'Stránka ' + (pg.name || pg.id), 'rev:' + pg.id)
+      .then(async (np) => { const oldPg = (F.pages || []).find((x) => x.id === pg.id) || {}; const hadHtml = !!oldPg.html; const same = JSON.stringify(np) === JSON.stringify(pg); np.design_notes = (pg.design_notes || []).concat([comment]).slice(-10); await store((F3) => { F3.pages = (F3.pages || []).map((p) => p.id === pg.id ? Object.assign({}, p, np, { id: pg.id }, same && p.html ? { html: p.html, html_at: p.html_at } : { html: undefined, html_at: undefined }) : p); }); delete LIVE['rev:' + pg.id];
+        if (hadHtml) { try { liveSet('rev:' + pg.id, ' upravuji vzhled a vizualizaci stránky…'); await pagePreview(pg.id, { feedback: comment, base: oldPg.html }); } catch (e) { console.warn('[ads-director] vizualizace po úpravě:', e.message); } delete LIVE['rev:' + pg.id]; } // vizualizace se sama přegeneruje
         done.push(pg.id); await store(() => {}); })
       .catch(async (e) => { failed.push(pg.id + ': ' + e.message); await store(() => {}); delete LIVE['rev:' + pg.id]; })));
     const F4 = await getJ(KEY_INVENT, null);
@@ -474,10 +474,19 @@ async function revise(opts) {
 }
 
 // Náhled stránky funnelu: AI napíše kompletní HTML podle návrhu (uloží se k funnelu)
+const DESIGN_SYSTEM_ROLE = 'Jsi špičkový webdesignér a front-end developer (úroveň Awwwards / Apple / Linear / Stripe). Tvoříš nádherné, moderní, konverzní landing pages v jednom HTML souboru: výrazná typografie, velkorysé mezery, vrstvené pozadí, jemné stíny a záře, precizní detaily, plynulé mikroanimace. Nikdy nevytváříš wireframe ani prázdné bloky – každá sekce je plně navržená s reálným obsahem. Vracíš jen čisté HTML bez Markdownu a bez ``` značek.';
+// Očištění HTML od AI: ```html obal, text před/za dokumentem
+function cleanHtml(t) {
+  let h = String(t || '').replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/i, '');
+  const a = h.search(/<!doctype html|<html[\s>]/i); const b = h.toLowerCase().lastIndexOf('</html>');
+  if (a >= 0) h = h.slice(a, b > a ? b + 7 : undefined);
+  return h.trim();
+}
 // Průběžné HTML náhledu stránky (UI ukazuje, jak stránka vzniká)
 const PV_LIVE = {};
-function pvLive(pid) { const L = PV_LIVE[pid]; if (!L) return null; const i = L.html.indexOf('<!DOCTYPE'); return { started: L.started, chars: L.html.length, done: !!L.done, html: i >= 0 ? L.html.slice(i) : L.html.replace(/^[\s\S]*?(<html)/i, '$1') }; }
-async function pagePreview(pageId) {
+function pvLive(pid) { const L = PV_LIVE[pid]; if (!L) return null; return { started: L.started, chars: L.html.length, done: !!L.done, model: L.model || null, html: cleanHtml(L.html) }; }
+async function pagePreview(pageId, opts) {
+  opts = opts || {};
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
   const F = await getJ(KEY_INVENT, null); if (!F) throw new Error('Funnel ještě není vymyšlený');
   const p = (F.pages || []).find((x) => x.id === pageId); if (!p) throw new Error('Stránka nenalezena');
@@ -494,16 +503,30 @@ async function pagePreview(pageId) {
     + 'LOGO (vlož přesně toto SVG): ' + logo.replace(/\s+/g, ' ') + '\n'
     + 'SKUTEČNÉ OBRÁZKY, které smíš použít (absolutní URL): https://www.bestseries2.cz/img/pradlomat.webp (prádlomat – samoobslužná prádelna v kontejneru), https://www.bestseries2.cz/img/pradlomat-mini.webp (prádlomat MINI). Dej jim „glow“ podsvícení, plovoucí animaci a odlesk.\n'
     + 'Další vizuály vytvoř JAKO INLINE SVG ILUSTRACE (žádné cizí URL): mapa s piny a pulzujícím kruhem spádové oblasti, semafor lokality (zelená/oranžová/červená), graf návratnosti, ikonky (pračka, mince, lokalita, kalendář, štít/garance), mockup telefonu/notebooku s aplikací BS2 (skóre lokality, mapa). Fotky lidí a provozoven, které natočí majitel, zobraz jako elegantní rámeček s gradientem, ikonou a popisem „Foto: …“; video jako přehrávač s velkým tlačítkem ▶ a popisem scény.\n'
+    + 'DŮLEŽITÉ: veškerý obsah MUSÍ být viditelný i bez JavaScriptu – animace náběhu dělej tak, že prvky skryje až skript (např. přidá html třídu .js a teprve pak .reveal{opacity:0}); žádný obsah nesmí zůstat neviditelný.\n'
     + 'ANIMACE (CSS + malý inline JS, žádné knihovny): náběh sekcí při scrollu (IntersectionObserver, fade+slide), počítadla čísel, pulzující CTA, plovoucí prvky, animované kreslení SVG čar (stroke-dashoffset), jemný parallax aurory, hover efekty karet; respektuj prefers-reduced-motion.\n'
     + 'Formuláře jen vizuálně (action="#", submit zobrazí ukázkovou hlášku). Sticky CTA lišta na mobilu. Plně responzivní (mobil 390px i desktop 1440px), max-width obsahu ~1120px.\n';
-  const prompt = 'Vytvoř KOMPLETNÍ, produkčně vypadající a REALISTICKOU HTML stránku (jeden soubor, inline CSS a JS, Google Fonts smí). Musí vypadat jako hotový web od špičkového studia – ne wireframe. Texty z návrhu převeď do skutečného designu (Markdown značky jako ## nebo ** nesmí být vidět). Česky.\n\n' + BS2_DESIGN + '\nPRAVIDLO: cenu prádlomatu (stroje) NIKDY neuváděj – sděluje se až na osobní schůzce; ceny online produktů uvádět smíš.\n\nFUNNEL: ' + F.name + ' — ' + (F.big_idea || '') + '\nHÁČEK: ' + (F.hook || '') + '\nNABÍDKY (online produkty): ' + JSON.stringify(offers.filter((o) => !/prádlomat/i.test(o.name || ''))).slice(0, 4000) + '\n\nSTRÁNKA: ' + JSON.stringify(p).slice(0, 14000) + '\n\nVrať POUZE HTML od <!DOCTYPE html> po </html>.';
+  const notes = (p.design_notes || []).filter(Boolean);
+  const NOTES = notes.length ? '\nTRVALÉ POŽADAVKY MAJITELE NA TUTO STRÁNKU (vzhled i obsah – vždy dodrž):\n' + notes.map((n, i) => (i + 1) + '. ' + String(n).slice(0, 800)).join('\n') + '\n' : '';
+  const base = opts.base && /<html/i.test(opts.base) ? String(opts.base) : '';
+  if (base && opts.feedback) {
+    var editPrompt = 'UPRAV EXISTUJÍCÍ HTML STRÁNKU podle připomínky majitele. Připomínka může mířit na VZHLED (barvy, rozložení, velikosti, obrázky, ilustrace, animace, pořadí sekcí, styl tlačítek…) i na TEXTY. Proveď ji přesně a viditelně; co připomínka nežádá, NEMĚŇ (zachovej design system Best Series 2.0, strukturu a animace). Texty sjednoť s aktuální verzí stránky (JSON níže).\n\nPŘIPOMÍNKA:\n"""' + String(opts.feedback).slice(0, 3000) + '"""\n' + NOTES + '\n' + BS2_DESIGN + '\nPRAVIDLO: cenu prádlomatu NIKDY neuváděj.\n\nAKTUÁLNÍ OBSAH STRÁNKY (JSON): ' + JSON.stringify(p).slice(0, 12000) + '\n\nSTÁVAJÍCÍ HTML:\n' + base.slice(0, 90000) + '\n\nVrať POUZE celé upravené HTML od <!DOCTYPE html> po </html>.';
+  }
+  const prompt = editPrompt || 'Vytvoř KOMPLETNÍ, produkčně vypadající a REALISTICKOU HTML stránku (jeden soubor, inline CSS a JS, Google Fonts smí). Musí vypadat jako hotový web od špičkového studia – ne wireframe. Texty z návrhu převeď do skutečného designu (Markdown značky jako ## nebo ** nesmí být vidět). Česky.\n\n' + BS2_DESIGN + '\nPRAVIDLO: cenu prádlomatu (stroje) NIKDY neuváděj – sděluje se až na osobní schůzce; ceny online produktů uvádět smíš.\n\nFUNNEL: ' + F.name + ' — ' + (F.big_idea || '') + '\nHÁČEK: ' + (F.hook || '') + '\nNABÍDKY (online produkty): ' + JSON.stringify(offers.filter((o) => !/prádlomat/i.test(o.name || ''))).slice(0, 4000) + NOTES + '\n\nSTRÁNKA: ' + JSON.stringify(p).slice(0, 14000) + '\n\nVrať POUZE HTML od <!DOCTYPE html> po </html>.';
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
   const PV = PV_LIVE[pageId] = { html: '', started: Date.now(), done: false };
-  const st = client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: 32000, messages: [{ role: 'user', content: prompt }] });
-  st.on('text', (t) => { PV.html += t; });
-  let r; try { r = await st.finalMessage(); } finally { PV.done = true; setTimeout(() => { if (PV_LIVE[pageId] === PV) delete PV_LIVE[pageId]; }, 120000); }
+  // Vizualizace kreslí nejsilnější model (kvalita jako v chatu s Claude); když ho API klíč nemá, záloha Sonnet
+  const models = [process.env.DIRECTOR_DESIGN_MODEL || 'claude-opus-5-5', 'claude-opus-4-6', 'claude-sonnet-4-6'].filter((m, i, a) => a.indexOf(m) === i);
+  let r = null, lastErr = null;
+  try {
+    for (const model of models) {
+      try { PV.html = ''; PV.model = model; const st = client.messages.stream({ model, max_tokens: 32000, system: DESIGN_SYSTEM_ROLE, messages: [{ role: 'user', content: prompt }] }); st.on('text', (t) => { PV.html += t; }); r = await st.finalMessage(); break; }
+      catch (e) { lastErr = e; const m = String(e && (e.message || e.status || '')); if (!/model|not[_ ]found|404|permission|access/i.test(m)) throw e; console.warn('[ads-director] model ' + model + ' nedostupný, zkouším další'); }
+    }
+    if (!r) throw lastErr || new Error('Žádný model není dostupný');
+  } finally { PV.done = true; setTimeout(() => { if (PV_LIVE[pageId] === PV) delete PV_LIVE[pageId]; }, 120000); }
   let html = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
-  const a = html.indexOf('<!DOCTYPE'), b = html.lastIndexOf('</html>'); if (a >= 0 && b > a) html = html.slice(a, b + 7);
+  html = cleanHtml(html);
   if (!/<html/i.test(html)) throw new Error('AI nevrátila HTML');
   const F2 = await getJ(KEY_INVENT, null); const p2 = F2 && (F2.pages || []).find((x) => x.id === pageId); if (!p2) throw new Error('Funnel se mezitím změnil');
   p2.html = html; p2.html_at = new Date().toISOString();
