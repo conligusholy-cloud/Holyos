@@ -589,10 +589,10 @@
           + '<label class="btn btn-sm" style="cursor:pointer;flex-direction:row">📤 ' + (a.media ? 'Vyměnit' : 'Nahrát foto/video') + '<input type="file" accept="image/*,video/*" data-media="' + esc(a.id) + '" style="display:none"></label></div><div class="note" data-mmsg="' + esc(a.id) + '"></div></div>';
       }).join('') + '</div>';
       if (F.leadform && F.leadform.use) h += '<div class="scard" style="margin-top:12px"><h5>📝 Rychlý formulář</h5><div style="font-size:12.5px">' + esc(F.leadform.why || '') + '</div><ul style="font-size:12.5px">' + (F.leadform.questions || []).map(function (q) { return '<li>' + esc(q) + '</li>'; }).join('') + '</ul></div>';
-      if ((F.pages || []).length) h += SEC('📄 Stránky funnelu – jak přesně mají vypadat') + F.pages.map(function (p) { var pj = p.job && p.job.running; return '<div class="scard" style="margin-bottom:12px;border-color:' + (p.type === 'záchytná' ? '#f59e0b' : '#334155') + '"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="tag">' + esc(p.type || '') + '</span><b style="font-size:15px">' + esc(p.name || '') + '</b><span class="note">' + esc(p.slug || '') + '</span>' + (p.pending ? '<span style="color:#fbbf24;font-size:12px">⏳ píšu texty…</span>' : '') + (p.error ? '<span style="color:#f87171;font-size:12px">✗ ' + esc(p.error) + '</span>' : '') + '<span style="margin-left:auto;display:flex;gap:6px">' + (p.has_html ? '<button class="btn on btn-sm" data-pv="' + esc(p.id) + '">👁 Náhled stránky</button>' : '') + '<button class="btn btn-sm" data-pg="' + esc(p.id) + '"' + (pj ? ' disabled' : '') + '>' + (pj ? '⏳ Generuji náhled…' : (p.has_html ? '↻ Přegenerovat náhled' : '🎨 Vygenerovat náhled stránky')) + '</button></span></div>'
+      if ((F.pages || []).length) h += SEC('📄 Stránky funnelu – jak přesně mají vypadat') + F.pages.map(function (p) { var pj = p.job && p.job.running; return '<div class="scard" style="margin-bottom:12px;border-color:' + (p.type === 'záchytná' ? '#f59e0b' : '#334155') + '"><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="tag">' + esc(p.type || '') + '</span><b style="font-size:15px">' + esc(p.name || '') + '</b><span class="note">' + esc(p.slug || '') + '</span>' + (p.pending ? '<span style="color:#fbbf24;font-size:12px">⏳ píšu texty…</span>' : '') + (invRevRunning === 'stranky' && F.rev_progress ? ((F.rev_progress.done || []).indexOf(p.id) >= 0 ? '<span style="color:#111;background:#4ade80;border-radius:6px;padding:1px 8px;font-size:11.5px;font-weight:700">✓ přepsáno</span>' : '<span style="color:#7dd3fc;font-size:12px;font-weight:700">⏳ ředitel přepisuje…</span>') : '') + (p.error ? '<span style="color:#f87171;font-size:12px">✗ ' + esc(p.error) + '</span>' : '') + '<span style="margin-left:auto;display:flex;gap:6px">' + (p.has_html ? '<button class="btn on btn-sm" data-pv="' + esc(p.id) + '">👁 Náhled stránky</button>' : '') + '<button class="btn btn-sm" data-pg="' + esc(p.id) + '"' + (pj ? ' disabled' : '') + '>' + (pj ? '⏳ Generuji náhled…' : (p.has_html ? '↻ Přegenerovat náhled' : '🎨 Vygenerovat náhled stránky')) + '</button></span></div>'
         + '<div class="note" style="margin:4px 0 8px">' + esc(p.purpose || '') + (p.next ? ' · dál → ' + esc(pageName[p.next] || p.next) : '') + (p.success_metric ? ' · 📏 ' + esc(p.success_metric) : '') + '</div>'
         + (!(p.headline || (p.sections || []).length) ? '' : '<div style="background:#f8fafc;color:#0f172a;border-radius:10px;padding:16px 18px"><div style="font-size:22px;font-weight:900;line-height:1.2">' + esc(p.headline || '') + '</div><div style="font-size:14.5px;color:#475569;margin:6px 0 10px">' + esc(p.subheadline || '') + '</div>'
-        + (p.sections || []).map(function (s) { return '<div style="border-top:1px solid #e2e8f0;padding:8px 0"><div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700">' + esc(s.name) + '</div><div style="font-size:13px;white-space:pre-wrap">' + esc(s.copy || '') + '</div></div>'; }).join('')
+        + (p.sections || []).map(function (s) { return '<div style="border-top:1px solid #e2e8f0;padding:8px 0"><div style="font-size:11px;text-transform:uppercase;color:#64748b;font-weight:700">' + esc(s.name) + '</div><div class="md-copy" data-raw="' + esc(String(s.copy || '').trim()) + '" style="font-size:13px;line-height:1.5">' + invMd(s.copy || '') + '</div></div>'; }).join('')
         + ((p.form_fields || []).length ? '<div style="border-top:1px solid #e2e8f0;padding:8px 0;display:flex;flex-wrap:wrap;gap:6px">' + p.form_fields.map(function (f) { return '<span style="border:1px solid #cbd5e1;border-radius:6px;padding:6px 10px;font-size:12.5px;color:#64748b;background:#fff">' + esc(f) + '</span>'; }).join('') + '</div>' : '')
         + (p.cta ? '<div style="margin-top:8px"><span style="display:inline-block;background:#f59e0b;color:#111;font-weight:900;border-radius:10px;padding:10px 18px">' + esc(p.cta) + '</span></div>' : '') + '</div>')
         + (p.design ? '<div class="note" style="margin-top:6px">🎨 ' + esc(p.design) + '</div>' : '') + '</div>'; }).join('');
@@ -609,7 +609,9 @@
       h += '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:24px 0"><button class="btn on" id="inv-tofunnel">📥 Založit jako koncept funnelu v Centru reklamy</button>' + ((F.ads || []).length ? '<button class="btn" id="inv-fb" style="border-color:#1877f2">📣 Založit reklamy na Facebooku (pozastavené)</button>' : '') + (F.fb ? '<a class="btn" href="' + esc(F.fb.manager_url) + '" target="_blank" rel="noopener">↗ Kampaň ve Správci reklam</a>' : '') + '</div>';
       h = '<div class="inv-tools" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px"><button class="btn btn-sm" id="inv-save">💾 Uložit strategii</button><button class="btn btn-sm" id="inv-saved">📂 Uložené strategie</button><button class="btn btn-sm" id="inv-pdf">📄 Export do PDF</button><button class="btn btn-sm" data-cm="celek" data-cml="Celý funnel" style="border-color:#38bdf8;color:#7dd3fc">💬 Připomínka k celku</button></div><div id="inv-impls"></div><div id="inv-rev-bar"></div>' + h;
 
-      body.innerHTML = h; invGoalsBind();
+      var cv = document.getElementById('dir-canvas'), sTop = cv ? cv.scrollTop : 0;
+      body.innerHTML = h; invGoalsBind(); if (cv) cv.scrollTop = sTop;
+      if (invRevRunning && invRevBanner) { var rbx = document.getElementById('inv-rev-bar'); if (rbx) rbx.innerHTML = invRevBanner; }
       var hlN = invHighlight(body, F); var LRx = F.last_revision;
       if (LRx && !invDiffHidden[LRx.at] && !invRevRunning) { var rb = document.getElementById('inv-rev-bar'); if (rb && !rb.innerHTML) rb.innerHTML = '<div style="display:flex;gap:10px;align-items:center;padding:8px 14px;margin:0 0 12px;border-radius:10px;background:rgba(253,224,71,.08);border:1px solid rgba(253,224,71,.45)"><span style="font-size:16px">✏️</span><div style="flex:1;font-size:12.5px"><b>Poslední úprava ' + new Date(LRx.at).toLocaleString('cs-CZ') + '</b> · změněno: ' + esc((LRx.changed || []).join(', ') || 'nic') + ' · <span style="background:rgba(253,224,71,.25);padding:0 5px;border-radius:4px">žlutě</span> zvýrazněno ' + hlN + ' změněných textů</div><button class="btn btn-sm" id="inv-hl-off">Skrýt zvýraznění</button></div>'; var ho = document.getElementById('inv-hl-off'); if (ho) ho.onclick = function () { invDiffHidden[LRx.at] = 1; document.getElementById('inv-rev-bar').innerHTML = ''; invRender(invData, null); }; }
       body.querySelectorAll('[data-pg]').forEach(function (b) { b.onclick = async function () { b.disabled = true; b.textContent = '⏳ Generuji náhled…'; try { await invFetch('/api/ads-center/director/invent/pages/' + encodeURIComponent(b.getAttribute('data-pg')) + '/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); invPollPage(b.getAttribute('data-pg')); } catch (e) { alert('Nepodařilo se: ' + e.message); b.disabled = false; } }; });
@@ -776,7 +778,25 @@
     // Rozpracované implementace – tlačítko „Pokračovat"
     async function implPending() { try { return await invFetch('/api/ads-center/director/impl'); } catch (e) { return []; } }
     // 💬 Připomínka k sekci → ředitel zapracuje (i přesahy do dalších sekcí)
-    var invRevRunning = null, invRevSince = null, invDiffHidden = {};
+    var invRevRunning = null, invRevSince = null, invDiffHidden = {}, invRevBanner = '';
+    // Jednoduchý Markdown → HTML (texty stránek): nadpisy, **tučně**, *kurzíva*, odrážky, citace, ---, tabulky
+    function invMd(src) {
+      var lines = String(src || '').replace(/\r/g, '').split('\n'), out = [], list = null, tbl = null;
+      var inl = function (t) { return esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>'); };
+      var flush = function () { if (list) { out.push('<ul style="margin:4px 0 6px;padding-left:20px">' + list.join('') + '</ul>'); list = null; } if (tbl) { out.push('<table style="border-collapse:collapse;margin:6px 0;font-size:12.5px">' + tbl.map(function (r, i) { return '<tr>' + r.map(function (c) { return (i ? '<td' : '<th') + ' style="border:1px solid #cbd5e1;padding:4px 8px;text-align:left">' + inl(c) + (i ? '</td>' : '</th>'); }).join('') + '</tr>'; }).join('') + '</table>'); tbl = null; } };
+      lines.forEach(function (ln) {
+        var t = ln.trim();
+        if (/^\|.*\|$/.test(t)) { if (list) flush(); if (/^\|[\s:|-]+\|$/.test(t)) return; (tbl = tbl || []).push(t.slice(1, -1).split('|').map(function (c) { return c.trim(); })); return; }
+        if (/^[-*•]\s+/.test(t)) { if (tbl) flush(); (list = list || []).push('<li>' + inl(t.replace(/^[-*•]\s+/, '')) + '</li>'); return; }
+        flush();
+        if (!t) { out.push('<div style="height:6px"></div>'); return; }
+        var m = t.match(/^(#{1,4})\s+(.*)$/); if (m) { var sz = [0, 20, 17, 15, 14][m[1].length]; out.push('<div style="font-size:' + sz + 'px;font-weight:800;margin:6px 0 2px">' + inl(m[2]) + '</div>'); return; }
+        if (/^-{3,}$/.test(t)) { out.push('<hr style="border:none;border-top:1px solid #e2e8f0;margin:8px 0">'); return; }
+        if (/^>\s?/.test(t)) { out.push('<div style="border-left:3px solid #f59e0b;padding:2px 10px;margin:4px 0;color:#475569;font-style:italic">' + inl(t.replace(/^>\s?/, '')) + '</div>'); return; }
+        out.push('<div>' + inl(t) + '</div>');
+      });
+      flush(); return out.join('');
+    }
     var INV_KEY2SEC = { projection: ['projekce'], offer_stack: ['nabidka'], new_products: ['nove'], tasks: ['ukoly'], owner_questions: ['ukoly'], ads: ['reklamy', 'media'], leadform: ['reklamy'], pages: ['stranky'], sequence: ['sekvence'], remarketing: ['remarketing'], sales_process: ['prodej'], page_plan: ['diagram'] };
     function invStrSet(o, set, d) { d = d || 0; if (d > 10 || o == null) return set; if (typeof o === 'string') { var t = o.trim(); if (t.length >= 4) set[t] = 1; } else if (typeof o === 'object') Object.keys(o).forEach(function (k) { if (k !== 'html' && k !== 'job') invStrSet(o[k], set, d + 1); }); return set; }
     // Zvýraznění textů změněných poslední připomínkou
@@ -784,7 +804,8 @@
       var LR = F && F.last_revision; if (!LR || invDiffHidden[LR.at] || !LR.prev) return 0;
       var oldS = {}, newS = {}; (LR.changed || []).forEach(function (k) { invStrSet(LR.prev[k], oldS); invStrSet(F[k], newS); });
       var changed = {}; Object.keys(newS).forEach(function (t) { if (!oldS[t]) changed[t] = 1; });
-      var n = 0; body.querySelectorAll('div,span,b,li,td,h5,p').forEach(function (el) { if (el.children.length) return; var t = (el.textContent || '').trim().replace(/^[„"]+|[“"]+$/g, ''); if (t.length >= 4 && (changed[t] || changed[(el.textContent || '').trim()])) { el.style.background = 'rgba(253,224,71,.18)'; el.style.boxShadow = 'inset 3px 0 0 #fde047'; el.style.borderRadius = '4px'; el.title = 'Upraveno připomínkou ' + new Date(LR.at).toLocaleString('cs-CZ'); n++; } });
+      var n = 0; body.querySelectorAll('.md-copy[data-raw]').forEach(function (el) { if (changed[el.getAttribute('data-raw')]) { el.style.background = 'rgba(253,224,71,.18)'; el.style.boxShadow = 'inset 3px 0 0 #fde047'; el.style.borderRadius = '4px'; el.title = 'Upraveno připomínkou ' + new Date(LR.at).toLocaleString('cs-CZ'); n++; } });
+      body.querySelectorAll('div,span,b,li,td,h5,p').forEach(function (el) { if (el.closest && el.closest('.md-copy')) return; if (el.children.length) return; var t = (el.textContent || '').trim().replace(/^[„"]+|[“"]+$/g, ''); if (t.length >= 4 && (changed[t] || changed[(el.textContent || '').trim()])) { el.style.background = 'rgba(253,224,71,.18)'; el.style.boxShadow = 'inset 3px 0 0 #fde047'; el.style.borderRadius = '4px'; el.title = 'Upraveno připomínkou ' + new Date(LR.at).toLocaleString('cs-CZ'); n++; } });
       return n;
     }
     var INV_SEC_KEY = [['📈', 'projekce', 'Projekce'], ['💎', 'nabidka', 'Nabídkový žebřík'], ['🆕', 'nove', 'Nové online produkty'], ['✅', 'ukoly', 'Úkoly'], ['📣', 'reklamy', 'Reklamy'], ['🎬', 'media', 'Foto a video'], ['📄', 'stranky', 'Stránky'], ['⏱', 'sekvence', 'SMS a e-maily'], ['🎯', 'remarketing', 'Remarketing'], ['🤝', 'prodej', 'Prodej na schůzce'], ['🗺', 'diagram', 'Diagram / tok funnelu']];
@@ -801,16 +822,25 @@
       };
     }
     async function invRevisePoll(label, key, since) {
-      var bar = document.getElementById('inv-rev-bar'); var started = since || new Date().toISOString();
-      invRevRunning = key || 'celek'; invRevSince = started; if (invData) invRender(invData, null); // indikace přímo u sekce
-      var show = function (h) { bar = document.getElementById('inv-rev-bar'); if (bar) bar.innerHTML = h; };
-      show('<div class="dirwork" style="margin:0 0 12px"><span class="cmp">💬</span><div style="flex:1"><div style="font-weight:800">Ředitel zapracovává připomínku' + (label ? ' – ' + esc(label) : '') + '…</div><div class="bar"><i></i></div><div class="note" style="font-size:11.5px;margin-top:6px">Kontroluje i přesahy do ostatních sekcí · běží <b class="elapsed" data-since="' + started + '" style="color:#fbbf24">0:00</b></div></div></div>');
-      for (var i = 0; i < 150; i++) {
-        await new Promise(function (r) { setTimeout(r, 4000); }); var j; try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; }
-        var rj = j.revise_job; if (rj && rj.running) continue;
-        invRevRunning = null; invRevSince = null; var rb0 = document.getElementById('inv-rev-bar'); if (rb0) rb0.innerHTML = '';
-        invData = j.funnel; invRender(j.funnel, j.goals); var last = ((j.funnel || {}).revisions || []).slice(-1)[0];
-        show(rj && rj.error ? '<div class="note warn" style="margin:0 0 12px">⚠ Připomínku se nepodařilo zapracovat: ' + esc(rj.error) + '</div>' : last ? '<div class="scard" style="margin:0 0 12px;border-color:#38bdf8"><b style="color:#38bdf8">💬 Zapracováno</b> <span class="note">· změněno: ' + esc((last.changed || []).join(', ') || 'nic') + ' · upravené texty jsou <span style="background:rgba(253,224,71,.25);padding:0 5px;border-radius:4px;color:#fde047">žlutě</span> a sekce mají štítek ✏️ upraveno</span><div style="font-size:13px;margin-top:6px;white-space:pre-wrap">' + esc(last.answer || '') + '</div></div>' : '');
+      var started = since || new Date().toISOString();
+      invRevRunning = key || 'celek'; invRevSince = started;
+      invRevBanner = '<div class="dirwork" style="margin:0 0 12px"><span class="cmp">💬</span><div style="flex:1;min-width:0"><div style="font-weight:800">Ředitel zapracovává připomínku' + (label ? ' – ' + esc(label) : '') + '… <span class="note" style="font-weight:400">· běží <b class="elapsed" data-since="' + started + '" style="color:#fbbf24">0:00</b> · změny se ukazují průběžně</span></div><div class="bar"><i></i></div><div id="inv-live" style="margin-top:8px;font-family:Consolas,monospace;font-size:11.5px;color:#94a3b8;max-height:110px;overflow:hidden;white-space:pre-wrap;word-break:break-word"></div></div></div>';
+      if (invData) invRender(invData, null);
+      var sig = '';
+      for (var i = 0; i < 200; i++) {
+        await new Promise(function (r) { setTimeout(r, 3000); }); var j; try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; }
+        var rj = j.revise_job, F = j.funnel || {};
+        var nsig = JSON.stringify([F.revised_at, F.rev_progress && F.rev_progress.done, F.rev_progress && F.rev_progress.failed]);
+        if (rj && rj.running) {
+          if (nsig !== sig) { sig = nsig; invData = F; invRender(F, j.goals); }
+          var lv = document.getElementById('inv-live'), L = j.live || {};
+          if (lv) { var keys = Object.keys(L); lv.innerHTML = keys.length ? keys.map(function (k) { var pid = k.replace(/^rev:/, ''); var pg = (F.pages || []).find(function (p) { return p.id === pid; }); var t = String(L[k] || '').replace(/\\n/g, ' ').replace(/\\"/g, '"').replace(/[{}\[\]"]/g, ' ').replace(/\s+/g, ' ').trim(); return '<div style="margin:2px 0"><b style="color:#7dd3fc">✍️ ' + esc(pg ? (pg.name || pid) : (pid === 'all' ? 'píše' : pid)) + ':</b> …' + esc(t.slice(-220)) + '</div>'; }).join('') : '<span>Ředitel promýšlí změny…</span>'; }
+          continue;
+        }
+        invRevRunning = null; invRevSince = null; invRevBanner = ''; var rb0 = document.getElementById('inv-rev-bar'); if (rb0) rb0.innerHTML = '';
+        invData = F; invRender(F, j.goals); var last = (F.revisions || []).slice(-1)[0];
+        var bar = document.getElementById('inv-rev-bar');
+        if (bar) bar.innerHTML = rj && rj.error ? '<div class="note warn" style="margin:0 0 12px">⚠ Připomínku se nepodařilo zapracovat: ' + esc(rj.error) + '</div>' : last ? '<div class="scard" style="margin:0 0 12px;border-color:#38bdf8"><b style="color:#38bdf8">💬 Zapracováno</b> <span class="note">· změněno: ' + esc((last.changed || []).join(', ') || 'nic') + ' · upravené texty jsou <span style="background:rgba(253,224,71,.25);padding:0 5px;border-radius:4px;color:#fde047">žlutě</span> a sekce mají štítek ✏️ upraveno</span><div style="font-size:13px;margin-top:6px;white-space:pre-wrap">' + esc(last.answer || '') + '</div></div>' : '';
         return;
       }
     }

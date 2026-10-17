@@ -313,9 +313,14 @@ function checkShape(out, label) {
   });
   return out;
 }
-async function aiJson(client, system, prompt, maxTokens, label) {
-  try { return await aiJsonOnce(client, system, prompt, maxTokens, label); }
-  catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
+// Živý náhled toho, co AI právě píše (pro UI během připomínky): key → { text, at }
+const LIVE = {};
+function liveSet(key, chunk) { const L = LIVE[key] || (LIVE[key] = { text: '', at: 0 }); L.text = (L.text + chunk).slice(-4000); L.at = Date.now(); }
+function liveGet() { const out = {}; Object.keys(LIVE).forEach((k) => { if (Date.now() - LIVE[k].at < 120000) out[k] = LIVE[k].text.slice(-700); }); return out; }
+function liveClear(prefix) { Object.keys(LIVE).forEach((k) => { if (!prefix || k.indexOf(prefix) === 0) delete LIVE[k]; }); }
+async function aiJson(client, system, prompt, maxTokens, label, liveKey) {
+  try { return await aiJsonOnce(client, system, prompt, maxTokens, label, liveKey); }
+  catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label, liveKey); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
 }
 // Výstup jako volání nástroje „vystup" → API vrátí hotový objekt (žádné ruční parsování JSONu z textu, který rozbíjejí uvozovky v copy)
 // Model občas vloží pole/objekt jako řetězec s JSONem → rozparsovat (rekurzivně)
@@ -327,8 +332,8 @@ function deepParse(v, d) {
   return v;
 }
 const OUT_TOOL = { name: 'vystup', description: 'Odevzdej výsledek jako jeden objekt přesně podle struktury popsané v zadání (sekce VÝSTUP).', input_schema: { type: 'object', additionalProperties: true } };
-async function aiJsonOnce(client, system, prompt, maxTokens, label) {
-  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [toolFor(label)], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }).finalMessage(); }
+async function aiJsonOnce(client, system, prompt, maxTokens, label, liveKey) {
+  let r; try { const st = client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [toolFor(label)], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }); if (liveKey) { liveSet(liveKey, ''); st.on('streamEvent', (ev) => { if (ev && ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'input_json_delta') liveSet(liveKey, ev.delta.partial_json || ''); }); } r = await st.finalMessage(); }
   catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
   const tu = (r.content || []).find((c) => c.type === 'tool_use' && c.input && typeof c.input === 'object');
   if (tu && Object.keys(tu.input).length) return scrub(checkShape(deepParse(tu.input), label));
@@ -423,11 +428,29 @@ async function revise(opts) {
   const F = await getJ(KEY_INVENT, null); if (!F || F.status === 'generating') throw new Error('Funnel ještě není hotový');
   const cur = {}; REVISABLE.forEach((k) => { if (F[k] !== undefined) cur[k] = k === 'pages' ? (F.pages || []).map((p) => { const { html, job, ...rest } = p; return rest; }) : F[k]; });
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+  liveClear('rev');
+  // Stránky: každá zvlášť a souběžně – hotová stránka se hned uloží (UI ji zobrazí bez obnovení)
+  if (section === 'stranky' && (F.pages || []).length) {
+    const prevPages = cur.pages; const ctx = JSON.stringify({ name: F.name, big_idea: F.big_idea, hook: F.hook, offer_stack: F.offer_stack, page_plan: (F.pages || []).map((p) => ({ id: p.id, type: p.type, name: p.name, next: p.next })) }).slice(0, 12000);
+    const done = []; const failed = [];
+    const store = async (fn) => { const F3 = await getJ(KEY_INVENT, null); if (!F3) return; fn(F3); F3.rev_progress = { at: new Date().toISOString(), done: done.slice(), failed: failed.slice(), total: prevPages.length }; await setJ(KEY_INVENT, F3, 'Marketingový ředitel – vymyšlený funnel'); };
+    await store(() => {});
+    await Promise.all(prevPages.map((pg) => aiJson(client, INVENT_SYSTEM, 'MAJITEL MÁ PŘIPOMÍNKU KE STRÁNKÁM FUNNELU:\n"""' + comment + '"""\n\nKONTEXT FUNNELU: ' + ctx + '\n\nPravidla: cenu prádlomatu NIKDY neuváděj (sděluje se až na osobní schůzce); online produkty smí mít ceny; BS2 je středobod.\n\nAKTUÁLNÍ STRÁNKA (JSON):\n' + JSON.stringify(pg).slice(0, 30000) + '\n\nÚKOL: připomínku zapracuj do TÉTO stránky (pokud se jí netýká, vrať ji beze změny). Zachovej id „' + pg.id + '“. Texty sekcí piš čitelně (lze Markdown: ## nadpis, **tučně**, odrážky „- “).\nVÝSTUP: celá stránka {"id","type","slug","name","purpose","headline","subheadline","sections":[{"name","copy"}],"form_fields":[],"cta","offer","design","next","success_metric"}', 12000, 'Stránka ' + (pg.name || pg.id), 'rev:' + pg.id)
+      .then(async (np) => { done.push(pg.id); const same = JSON.stringify(np) === JSON.stringify(pg); await store((F3) => { F3.pages = (F3.pages || []).map((p) => p.id === pg.id ? Object.assign({}, p, np, { id: pg.id }, same && p.html ? { html: p.html, html_at: p.html_at } : { html: undefined, html_at: undefined }) : p); }); delete LIVE['rev:' + pg.id]; })
+      .catch(async (e) => { failed.push(pg.id + ': ' + e.message); await store(() => {}); delete LIVE['rev:' + pg.id]; })));
+    const F4 = await getJ(KEY_INVENT, null);
+    const answer = 'Připomínku jsem zapracoval do ' + done.length + ' z ' + prevPages.length + ' stránek.' + (failed.length ? ' Nepovedlo se: ' + failed.join('; ') : '');
+    F4.revisions = (F4.revisions || []).concat([{ at: new Date().toISOString(), section, comment, answer, changed: ['pages'] }]).slice(-50);
+    F4.revised_at = new Date().toISOString(); F4.last_revision = { at: F4.revised_at, section, changed: ['pages'], prev: { pages: prevPages } }; delete F4.rev_progress;
+    await setJ(KEY_INVENT, F4, 'Marketingový ředitel – vymyšlený funnel');
+    return { answer, changed: ['pages'] };
+  }
   const prompt = 'MAJITEL MÁ PŘIPOMÍNKU K SEKCI „' + section + '" (' + (SECTION_KEYS[section] || section) + '):\n + comment + \n\nAKTUÁLNÍ FUNNEL (JSON):\n' + JSON.stringify(cur).slice(0, 150000)
     + '\n\nCENÍK: ' + JSON.stringify(F.catalog || {}).slice(0, 8000) + '\nPravidla: ceny prádlomatů STRIKTNĚ z ceníku a jen typy z ceníku; cenu prádlomatu NIKDY neuváděj v reklamách, na stránkách, v SMS ani e-mailech (sděluje se až na osobní schůzce); online produkty lze naceňovat volně; BS2 je středobod (účet v BS2 = klíčová konverze).'
     + '\n\nÚKOL: Připomínku POCTIVĚ zapracuj. Když jde o otázku, odpověz na ni v poli "answer" a případně uprav obsah. Projdi i OSTATNÍ sekce – pokud změna má přesah (např. nová cena → projekce, texty reklam, stránky, SMS/e-maily, úkoly), uprav je také, aby celek zůstal konzistentní. Zachovej id položek (ad1, p1, m1…), ať navazují odkazy.\n'
     + 'VÝSTUP (nástroj vystup): {"answer":"stručná odpověď majiteli / co jsi změnil a proč (2–6 vět)","changed_sections":["seznam klíčů, které měníš"],"patch":{ "<klíč z funnelu>": <CELÁ nová hodnota toho klíče> }} – do patch dej JEN změněné klíče (vždy celou hodnotu klíče, ne kousek).';
-  const out = await aiJson(client, INVENT_SYSTEM, prompt, 32000, 'Úprava');
+  const out = await aiJson(client, INVENT_SYSTEM, prompt, 32000, 'Úprava', 'rev:all');
+  delete LIVE['rev:all'];
   const patch = out && typeof out.patch === 'object' && out.patch ? out.patch : {};
   const F2 = await getJ(KEY_INVENT, null); if (!F2) throw new Error('Funnel zmizel');
   const changed = []; const prev = {};
@@ -463,4 +486,4 @@ async function pagePreview(pageId) {
   return { ok: true, html_at: p2.html_at };
 }
 
-module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, revise, machineTypes, KEY_INVENT };
+module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, revise, machineTypes, liveGet, KEY_INVENT };
