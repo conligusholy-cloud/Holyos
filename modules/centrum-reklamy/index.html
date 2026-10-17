@@ -504,7 +504,12 @@
       try {
         if (start) { body.innerHTML = invWork(new Date().toISOString()); await invFetch('/api/ads-center/director/invent', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}) }); }
         var j = await invFetch('/api/ads-center/director/invent');
-        if (j.job && j.job.running) { body.innerHTML = invWork(j.job.started_at); for (var i = 0; i < 200; i++) { await new Promise(function (r) { setTimeout(r, 4000); }); try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; } if (!j.job || !j.job.running) break; } }
+        if (j.job && j.job.running) {
+          // Průběžně ukazuj hotové části (jádro → reklamy / stránky / SMS a e-maily)
+          var showPartial = function () { var F0 = j.funnel; if (F0 && F0.status === 'generating' && F0.parts && F0.parts.core) { invRender(F0, j.goals, null, j.job); } else body.innerHTML = invWork(j.job.started_at); };
+          showPartial();
+          for (var i = 0; i < 300; i++) { await new Promise(function (r) { setTimeout(r, 4000); }); try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; } if (!j.job || !j.job.running) break; var sig = JSON.stringify((j.funnel || {}).parts || {}); if (sig !== invLoad._sig) { invLoad._sig = sig; showPartial(); } }
+        }
         invData = j.funnel; invRender(j.funnel, j.goals, j.job && j.job.error);
       } catch (e) { body.innerHTML = '<div class="note warn" style="margin:30px">Nepodařilo se: ' + esc(e.message) + '</div>'; }
       if (invTab === 'inv') invShowTab('inv');
@@ -513,9 +518,14 @@
       var b = document.getElementById('ig-go'); if (!b) return;
       b.onclick = function () { var g = { machines_per_week: +document.getElementById('ig-mpw').value, online_net_czk: +document.getElementById('ig-net').value, online_days: +document.getElementById('ig-days').value, budget_czk_day: +document.getElementById('ig-bud').value }; invLoad(true, { goals: g, brief: document.getElementById('ig-brief').value }); };
     }
-    function invRender(F, goals, err) {
+    function invRender(F, goals, err, runJob) {
       var body = document.getElementById('inv-body'); var SEC = function (t) { return '<div style="margin:18px 0 6px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2c2;font-weight:700">' + t + '</div>'; };
-      var h = (err ? '<div class="note warn" style="margin:10px auto;max-width:900px">Poslední pokus selhal: ' + esc(err) + '</div>' : '');
+      var h = (err ? '<div class="note warn" style="margin:10px auto;max-width:900px">⚠ ' + esc(err) + '</div>' : '');
+      if (F && F.status === 'generating') {
+        var PT = [['core', 'Myšlenka, nabídka, čísla'], ['ads', 'Reklamy + remarketing'], ['pages', 'Stránky'], ['sequence', 'SMS a e-maily, schůzka, plán']];
+        h += '<div class="dirwork" style="max-width:900px;margin:0 auto 14px"><span class="cmp">🧠</span><div style="flex:1"><div style="font-weight:800">' + (runJob ? 'Ředitel dopisuje funnel…' : 'Funnel nebyl dokončen') + '</div>' + (runJob ? '<div class="bar"><i></i></div>' : '') + '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:12.5px">' + PT.map(function (x) { var ok = F.parts && F.parts[x[0]], bad = F.part_errors && F.part_errors[x[0]]; return '<span style="color:' + (ok ? '#4ade80' : bad ? '#f87171' : '#8ea2c2') + '">' + (ok ? '✓' : bad ? '✗' : '⏳') + ' ' + x[1] + '</span>'; }).join('') + '</div>' + (runJob ? '<div class="note" style="font-size:11.5px;margin-top:6px">Začato ' + new Date(runJob.started_at).toLocaleTimeString('cs-CZ') + ' · běží <b class="elapsed" data-since="' + esc(runJob.started_at) + '" style="color:#fbbf24">0:00</b></div>' : '') + '</div></div>';
+      }
+      if (F && F.part_errors && Object.keys(F.part_errors).length && F.status !== 'generating') h += '<div class="note warn" style="margin:10px auto;max-width:900px">Nepovedené části: ' + esc(Object.values(F.part_errors).join('; ')) + ' – klikni znovu na „Vymyslet nový funnel".</div>';
       if (!F) { body.innerHTML = h + invGoalsForm(goals) + '<div class="note" style="text-align:center">Zatím žádný vymyšlený funnel. Nastav cíle a klikni na „🧠 Vymyslet nový funnel".</div>'; invGoalsBind(); return; }
       var pageName = {}; (F.pages || []).forEach(function (p) { pageName[p.id] = p.name || p.headline || p.id; });
       var FE = F.feasibility || {}; var fc = /nere/i.test(FE.verdict || '') ? '#ef4444' : /náro|naro/i.test(FE.verdict || '') ? '#f59e0b' : '#22c55e';
