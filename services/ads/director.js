@@ -430,8 +430,9 @@ async function revise(opts) {
   const out = await aiJson(client, INVENT_SYSTEM, prompt, 32000, 'Úprava');
   const patch = out && typeof out.patch === 'object' && out.patch ? out.patch : {};
   const F2 = await getJ(KEY_INVENT, null); if (!F2) throw new Error('Funnel zmizel');
-  const changed = [];
+  const changed = []; const prev = {};
   Object.keys(patch).forEach((k) => { if (!REVISABLE.includes(k)) return;
+    prev[k] = k === 'pages' ? (F2.pages || []).map((p) => { const { html, job, ...rest } = p; return rest; }) : F2[k];
     if (k === 'pages' && Array.isArray(patch.pages)) { const old = {}; (F2.pages || []).forEach((p) => { old[p.id] = p; }); F2.pages = patch.pages.map((p) => { const o = old[p.id]; const same = o && JSON.stringify(Object.assign({}, o, { html: undefined, html_at: undefined, job: undefined })) === JSON.stringify(Object.assign({}, o, p, { html: undefined, html_at: undefined, job: undefined })); return Object.assign({}, p, o && same && o.html ? { html: o.html, html_at: o.html_at } : {}); }); }
     else if (k === 'ads' && Array.isArray(patch.ads)) { const old = {}; (F2.ads || []).forEach((a) => { old[a.id] = a; }); F2.ads = patch.ads.map((a) => Object.assign({}, a, old[a.id] && old[a.id].media ? { media: old[a.id].media } : {})); }
     else F2[k] = patch[k];
@@ -439,6 +440,7 @@ async function revise(opts) {
   F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section, comment: (opts && opts.auto) ? '🤖 Automatická kontrola: cena prádlomatu ve veřejných textech' : comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
   if (opts && opts.auto) F2.price_leaks_after = findPriceLeaks(F2).length;
   F2.revised_at = new Date().toISOString();
+  F2.last_revision = { at: F2.revised_at, section, changed, prev }; // pro zvýraznění změn v UI
   await setJ(KEY_INVENT, F2, 'Marketingový ředitel – vymyšlený funnel');
   return { answer: out.answer, changed };
 }

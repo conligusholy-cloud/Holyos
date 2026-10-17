@@ -519,7 +519,7 @@
           for (var i = 0; i < 300; i++) { await new Promise(function (r) { setTimeout(r, 4000); }); try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; } if (!j.job || !j.job.running) break; var sig = JSON.stringify((j.funnel || {}).parts || {}); if (sig !== invLoad._sig) { invLoad._sig = sig; showPartial(); } }
         }
         invData = j.funnel; invRender(j.funnel, j.goals, j.job && j.job.error);
-        if (j.revise_job && j.revise_job.running) invRevisePoll('');
+        if (j.revise_job && j.revise_job.running) invRevisePoll('', j.revise_job.section, j.revise_job.started_at);
       } catch (e) { body.innerHTML = '<div class="note warn" style="margin:30px">Nepodařilo se: ' + esc(e.message) + '</div>'; }
       if (invTab === 'inv') invShowTab('inv');
     }
@@ -549,7 +549,8 @@
 };
     function invRender(F, goals, err, runJob) {
       F = invNorm(F);
-      var body = document.getElementById('inv-body'); var SEC = function (t) { var k = invSecKey(t); return '<div style="margin:18px 0 6px;display:flex;align-items:center;gap:10px"><span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2c2;font-weight:700">' + t + '</span>' + (k ? '<button class="btn btn-sm" data-cm="' + k[1] + '" data-cml="' + esc(k[2]) + '" style="padding:2px 9px;font-size:11.5px;border-color:#38bdf8;color:#7dd3fc" title="Napsat řediteli připomínku k této sekci">💬 Připomínka</button>' : '') + '</div>'; };
+      var body = document.getElementById('inv-body'); var LR = F && F.last_revision && !invDiffHidden[F.last_revision.at] ? F.last_revision : null; var LRsec = {}; if (LR) (LR.changed || []).forEach(function (c) { (INV_KEY2SEC[c] || []).forEach(function (x) { LRsec[x] = 1; }); });
+      var SEC = function (t) { var k = invSecKey(t); var run = k && invRevRunning && (invRevRunning === k[1] || invRevRunning === 'celek' || invRevRunning === 'kontrola' || (invRevRunning === 'reklamy' && k[1] === 'media')); return '<div style="margin:18px 0 6px;display:flex;align-items:center;gap:10px;' + (run ? 'padding:6px 10px;border-radius:10px;background:rgba(56,189,248,.1);border:1px dashed #38bdf8' : '') + '"><span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2c2;font-weight:700">' + t + '</span>' + (k ? (run ? '<span style="font-size:12px;color:#7dd3fc;font-weight:700">⏳ ředitel upravuje… <b class="elapsed" data-since="' + esc(invRevSince || '') + '" style="color:#fbbf24"></b></span>' : '<button class="btn btn-sm" data-cm="' + k[1] + '" data-cml="' + esc(k[2]) + '" style="padding:2px 9px;font-size:11.5px;border-color:#38bdf8;color:#7dd3fc" title="Napsat řediteli připomínku k této sekci">💬 Připomínka</button>') + (LRsec[k[1]] ? '<span style="font-size:11.5px;font-weight:700;color:#111;background:#fde047;border-radius:6px;padding:2px 8px">✏️ upraveno</span>' : '') : '') + '</div>'; };
       var h = (err ? '<div class="note warn" style="margin:10px auto;max-width:900px">⚠ ' + esc(err) + '</div>' : '');
       if (F && F.status === 'generating') {
         var PT = [['core', 'Myšlenka, nabídka, čísla'], ['ads', 'Reklamy + remarketing'], ['pages', 'Stránky'], ['sequence', 'SMS a e-maily, schůzka, plán'], ['tasks', 'Úkoly a otázky']];
@@ -609,6 +610,8 @@
       h = '<div class="inv-tools" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin:0 0 10px"><button class="btn btn-sm" id="inv-save">💾 Uložit strategii</button><button class="btn btn-sm" id="inv-saved">📂 Uložené strategie</button><button class="btn btn-sm" id="inv-pdf">📄 Export do PDF</button><button class="btn btn-sm" data-cm="celek" data-cml="Celý funnel" style="border-color:#38bdf8;color:#7dd3fc">💬 Připomínka k celku</button></div><div id="inv-impls"></div><div id="inv-rev-bar"></div>' + h;
 
       body.innerHTML = h; invGoalsBind();
+      var hlN = invHighlight(body, F); var LRx = F.last_revision;
+      if (LRx && !invDiffHidden[LRx.at] && !invRevRunning) { var rb = document.getElementById('inv-rev-bar'); if (rb && !rb.innerHTML) rb.innerHTML = '<div style="display:flex;gap:10px;align-items:center;padding:8px 14px;margin:0 0 12px;border-radius:10px;background:rgba(253,224,71,.08);border:1px solid rgba(253,224,71,.45)"><span style="font-size:16px">✏️</span><div style="flex:1;font-size:12.5px"><b>Poslední úprava ' + new Date(LRx.at).toLocaleString('cs-CZ') + '</b> · změněno: ' + esc((LRx.changed || []).join(', ') || 'nic') + ' · <span style="background:rgba(253,224,71,.25);padding:0 5px;border-radius:4px">žlutě</span> zvýrazněno ' + hlN + ' změněných textů</div><button class="btn btn-sm" id="inv-hl-off">Skrýt zvýraznění</button></div>'; var ho = document.getElementById('inv-hl-off'); if (ho) ho.onclick = function () { invDiffHidden[LRx.at] = 1; document.getElementById('inv-rev-bar').innerHTML = ''; invRender(invData, null); }; }
       body.querySelectorAll('[data-pg]').forEach(function (b) { b.onclick = async function () { b.disabled = true; b.textContent = '⏳ Generuji náhled…'; try { await invFetch('/api/ads-center/director/invent/pages/' + encodeURIComponent(b.getAttribute('data-pg')) + '/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); invPollPage(b.getAttribute('data-pg')); } catch (e) { alert('Nepodařilo se: ' + e.message); b.disabled = false; } }; });
       body.querySelectorAll('[data-pv]').forEach(function (b) { b.onclick = function () { invPreview(b.getAttribute('data-pv')); }; });
       var tf = document.getElementById('inv-tofunnel'); if (tf) tf.onclick = async function () { if (!confirm('Založit vymyšlený funnel jako KONCEPT v Centru reklamy?\nStrategie se uloží a otevře se průvodce implementací.\nSMS a e-maily budou vypnuté – nic se neodešle, dokud je sám nezapneš.')) return; tf.disabled = true; try { var r = await invFetch('/api/ads-center/director/invent/to-funnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); if (r.impl_id) implOpen(r.impl_id); else alert('✓ Založeno: ' + r.name); } catch (e) { alert('Nepodařilo se: ' + e.message); } tf.disabled = false; };
@@ -773,6 +776,17 @@
     // Rozpracované implementace – tlačítko „Pokračovat"
     async function implPending() { try { return await invFetch('/api/ads-center/director/impl'); } catch (e) { return []; } }
     // 💬 Připomínka k sekci → ředitel zapracuje (i přesahy do dalších sekcí)
+    var invRevRunning = null, invRevSince = null, invDiffHidden = {};
+    var INV_KEY2SEC = { projection: ['projekce'], offer_stack: ['nabidka'], new_products: ['nove'], tasks: ['ukoly'], owner_questions: ['ukoly'], ads: ['reklamy', 'media'], leadform: ['reklamy'], pages: ['stranky'], sequence: ['sekvence'], remarketing: ['remarketing'], sales_process: ['prodej'], page_plan: ['diagram'] };
+    function invStrSet(o, set, d) { d = d || 0; if (d > 10 || o == null) return set; if (typeof o === 'string') { var t = o.trim(); if (t.length >= 4) set[t] = 1; } else if (typeof o === 'object') Object.keys(o).forEach(function (k) { if (k !== 'html' && k !== 'job') invStrSet(o[k], set, d + 1); }); return set; }
+    // Zvýraznění textů změněných poslední připomínkou
+    function invHighlight(body, F) {
+      var LR = F && F.last_revision; if (!LR || invDiffHidden[LR.at] || !LR.prev) return 0;
+      var oldS = {}, newS = {}; (LR.changed || []).forEach(function (k) { invStrSet(LR.prev[k], oldS); invStrSet(F[k], newS); });
+      var changed = {}; Object.keys(newS).forEach(function (t) { if (!oldS[t]) changed[t] = 1; });
+      var n = 0; body.querySelectorAll('div,span,b,li,td,h5,p').forEach(function (el) { if (el.children.length) return; var t = (el.textContent || '').trim().replace(/^[„"]+|[“"]+$/g, ''); if (t.length >= 4 && (changed[t] || changed[(el.textContent || '').trim()])) { el.style.background = 'rgba(253,224,71,.18)'; el.style.boxShadow = 'inset 3px 0 0 #fde047'; el.style.borderRadius = '4px'; el.title = 'Upraveno připomínkou ' + new Date(LR.at).toLocaleString('cs-CZ'); n++; } });
+      return n;
+    }
     var INV_SEC_KEY = [['📈', 'projekce', 'Projekce'], ['💎', 'nabidka', 'Nabídkový žebřík'], ['🆕', 'nove', 'Nové online produkty'], ['✅', 'ukoly', 'Úkoly'], ['📣', 'reklamy', 'Reklamy'], ['🎬', 'media', 'Foto a video'], ['📄', 'stranky', 'Stránky'], ['⏱', 'sekvence', 'SMS a e-maily'], ['🎯', 'remarketing', 'Remarketing'], ['🤝', 'prodej', 'Prodej na schůzce'], ['🗺', 'diagram', 'Diagram / tok funnelu']];
     function invSecKey(t) { for (var i = 0; i < INV_SEC_KEY.length; i++) if (String(t).indexOf(INV_SEC_KEY[i][0]) === 0) return INV_SEC_KEY[i]; return null; }
     function invCommentOpen(key, label) {
@@ -782,19 +796,21 @@
       ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
       ov.querySelector('.cm-go').onclick = async function () {
         var c = ta.value.trim(); if (!c) return; this.disabled = true;
-        try { await invFetch('/api/ads-center/director/invent/revise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: key, comment: c }) }); ov.remove(); invRevisePoll(label); }
+        try { await invFetch('/api/ads-center/director/invent/revise', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: key, comment: c }) }); ov.remove(); invRevisePoll(label, key); }
         catch (e) { ov.querySelector('.cm-m').innerHTML = '<span style="color:#f87171">' + esc(e.message) + '</span>'; this.disabled = false; }
       };
     }
-    async function invRevisePoll(label) {
-      var bar = document.getElementById('inv-rev-bar'); var started = new Date().toISOString();
+    async function invRevisePoll(label, key, since) {
+      var bar = document.getElementById('inv-rev-bar'); var started = since || new Date().toISOString();
+      invRevRunning = key || 'celek'; invRevSince = started; if (invData) invRender(invData, null); // indikace přímo u sekce
       var show = function (h) { bar = document.getElementById('inv-rev-bar'); if (bar) bar.innerHTML = h; };
       show('<div class="dirwork" style="margin:0 0 12px"><span class="cmp">💬</span><div style="flex:1"><div style="font-weight:800">Ředitel zapracovává připomínku' + (label ? ' – ' + esc(label) : '') + '…</div><div class="bar"><i></i></div><div class="note" style="font-size:11.5px;margin-top:6px">Kontroluje i přesahy do ostatních sekcí · běží <b class="elapsed" data-since="' + started + '" style="color:#fbbf24">0:00</b></div></div></div>');
       for (var i = 0; i < 150; i++) {
         await new Promise(function (r) { setTimeout(r, 4000); }); var j; try { j = await invFetch('/api/ads-center/director/invent'); } catch (e) { continue; }
         var rj = j.revise_job; if (rj && rj.running) continue;
+        invRevRunning = null; invRevSince = null; var rb0 = document.getElementById('inv-rev-bar'); if (rb0) rb0.innerHTML = '';
         invData = j.funnel; invRender(j.funnel, j.goals); var last = ((j.funnel || {}).revisions || []).slice(-1)[0];
-        show(rj && rj.error ? '<div class="note warn" style="margin:0 0 12px">⚠ Připomínku se nepodařilo zapracovat: ' + esc(rj.error) + '</div>' : last ? '<div class="scard" style="margin:0 0 12px;border-color:#38bdf8"><b style="color:#38bdf8">💬 Zapracováno</b> <span class="note">· změněno: ' + esc((last.changed || []).join(', ') || 'nic') + '</span><div style="font-size:13px;margin-top:6px;white-space:pre-wrap">' + esc(last.answer || '') + '</div></div>' : '');
+        show(rj && rj.error ? '<div class="note warn" style="margin:0 0 12px">⚠ Připomínku se nepodařilo zapracovat: ' + esc(rj.error) + '</div>' : last ? '<div class="scard" style="margin:0 0 12px;border-color:#38bdf8"><b style="color:#38bdf8">💬 Zapracováno</b> <span class="note">· změněno: ' + esc((last.changed || []).join(', ') || 'nic') + ' · upravené texty jsou <span style="background:rgba(253,224,71,.25);padding:0 5px;border-radius:4px;color:#fde047">žlutě</span> a sekce mají štítek ✏️ upraveno</span><div style="font-size:13px;margin-top:6px;white-space:pre-wrap">' + esc(last.answer || '') + '</div></div>' : '');
         return;
       }
     }
