@@ -52,7 +52,11 @@
     '.bk-form .bk-ck{display:flex;gap:9px;align-items:flex-start;font-weight:400;font-size:13px;line-height:1.5;margin-top:6px;color:#c3d6e8}',
     '.bk-form .bk-ck input{margin-top:3px;flex:none}',
     '.bk-form .bk-ck a{color:#4aa3ea}',
-    '.bk-note{text-align:center;font-size:12.5px;color:#7fa6c8;margin-top:10px}'
+    '.bk-note{text-align:center;font-size:12.5px;color:#7fa6c8;margin-top:10px}',
+    '.bk-form .rq{color:#ff8f9a;font-style:normal;font-weight:700}',
+    '.bk-form .bk-req{font-size:12px;color:#7fa6c8;margin:8px 0 0}',
+    '.bk-form input::placeholder{color:#4f6584}',
+    '.bk-form input.bad{border-color:#ff5d6c!important;box-shadow:0 0 0 3px rgba(255,93,108,.15)}'
   ].join('\n');
 
   var DN = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
@@ -190,18 +194,21 @@
         '<button type="button" class="bk-back bk-fback">← vybrat jiný termín</button>' +
         '<h2 class="bk-h">Kam vám <span class="g">pošleme potvrzení?</span></h2>' +
         '<p class="bk-sub">' + (dt ? '<b>' + dayHead(dt) + ' v ' + hhmm(dt) + '</b> · ' : '') + MODE_LABEL[chosenMode] + (path ? ' · ' + PATH_LABEL[path] : '') + '</p>' +
-        '<div class="bk-fg"><label>Jméno<input name="first_name" autocomplete="given-name" value="' + v('first_name') + '"></label><label>Příjmení<input name="last_name" autocomplete="family-name" value="' + v('last_name') + '"></label></div>' +
-        '<div class="bk-fg"><label>E-mail<input name="email" type="email" autocomplete="email" value="' + v('email') + '"></label><label>Telefon<input name="phone" type="tel" autocomplete="tel" value="' + v('phone') + '"></label></div>' +
-        '<label class="bk-ck"><input type="checkbox" name="gdpr" value="1"> Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> pro domluvení schůzky a založení účtu v Best Series 2.0.</label>' +
+        '<div class="bk-fg"><label>Jméno <i class="rq">*</i><input name="first_name" required autocomplete="given-name" placeholder="Jan" value="' + v('first_name') + '"></label><label>Příjmení <i class="rq">*</i><input name="last_name" required autocomplete="family-name" placeholder="Novák" value="' + v('last_name') + '"></label></div>' +
+        '<div class="bk-fg"><label>E-mail <i class="rq">*</i><input name="email" type="email" required autocomplete="email" placeholder="jan@email.cz" value="' + v('email') + '"></label><label>Telefon <i class="rq">*</i><input name="phone" type="tel" required autocomplete="tel" placeholder="+420 777 123 456" value="' + v('phone') + '"></label></div>' +
+        '<label class="bk-ck"><input type="checkbox" name="gdpr" value="1" required><span>Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> pro domluvení schůzky a založení účtu v Best Series 2.0. <i class="rq">*</i></span></label>' +
+        '<p class="bk-req"><i class="rq">*</i> povinné údaje</p>' +
         '<button type="button" class="bk-mode bk-submit" style="width:100%;margin-top:14px">Potvrdit termín →</button>' +
         '<p class="bk-note">Zároveň vám založíme účet v Best Series 2.0 – přihlašovací odkaz vám pošleme e-mailem.</p>';
       show('form');
       elForm.querySelector('.bk-fback').addEventListener('click', function () { show('cal'); setStatus(''); });
       elForm.querySelector('.bk-submit').addEventListener('click', function () {
         var f = {}; ['first_name', 'last_name', 'email', 'phone'].forEach(function (k) { f[k] = elForm.querySelector('[name=' + k + ']').value.trim(); });
-        if (!f.first_name || !f.last_name) return setStatus('Vyplňte prosím jméno a příjmení.', true);
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return setStatus('Zadejte prosím platný e-mail.', true);
-        if (f.phone.replace(/\D/g, '').length < 9) return setStatus('Zadejte prosím telefon.', true);
+        var bad = function (k, m) { var el = elForm.querySelector('[name=' + k + ']'); el.classList.add('bad'); el.focus(); el.addEventListener('input', function () { el.classList.remove('bad'); }, { once: true }); setStatus(m, true); };
+        if (!f.first_name) return bad('first_name', 'Vyplňte prosím jméno.');
+        if (!f.last_name) return bad('last_name', 'Vyplňte prosím příjmení.');
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return bad('email', 'Zadejte prosím platný e-mail.');
+        if (f.phone.replace(/\D/g, '').length < 9) return bad('phone', 'Zadejte prosím telefon (aspoň 9 číslic).');
         if (!elForm.querySelector('[name=gdpr]').checked) return setStatus('Pro rezervaci je potřeba souhlas se zpracováním osobních údajů.', true);
         try { localStorage.setItem('bs2_bk_contact', JSON.stringify(f)); } catch (e) {}
         var btn = this; btn.disabled = true;
@@ -211,12 +218,14 @@
     }
     function send(slotId, f, onFail) {
       var payload = { slot_id: slotId, t: token || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
+      try { if (window.__bs2Lead) payload.lead = window.__bs2Lead(); } catch (e) {}
       setStatus('Rezervuji termín…');
       fetch('/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (d) {
           if (d && d.ok) {
             setStatus(''); renderDone(d, true);
+            try { if (d.lead_id && window.__bs2LeadSet) window.__bs2LeadSet(d.lead_id); } catch (e) {}
             var p = elDone.querySelector('p');
             if (p) p.insertAdjacentHTML('afterend', '<p style="margin-top:10px">' + (d.account === 'created' ? '📧 Na <b>' + f.email.replace(/</g, '') + '</b> jsme vám poslali potvrzení a odkaz pro přihlášení do Best Series 2.0.' : d.account === 'exists' ? '📧 Potvrzení jsme poslali na <b>' + f.email.replace(/</g, '') + '</b>. Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : '') + '</p>');
             root.scrollIntoView({ block: 'start', behavior: 'smooth' });
