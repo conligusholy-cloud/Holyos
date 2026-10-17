@@ -215,7 +215,8 @@ const INVENT_SYSTEM = 'Jsi kreativní marketingový ředitel a špičkový direc
 // Generování po částech: 1) jádro (myšlenka, nabídka, čísla) ~1 min, 2) souběžně reklamy / stránky / sekvence.
 // Každá hotová část se hned uloží (status 'generating') → UI ukazuje průběžný výsledek a po restartu serveru se pozná přerušení.
 async function aiJson(client, system, prompt, maxTokens, label) {
-  const r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] }).finalMessage();
+  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] }).finalMessage(); }
+  catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(JSON.parse(raw.slice(a, b + 1))); }
   catch (e) { throw new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')); }
@@ -227,9 +228,12 @@ async function invent(opts) {
   const inv = await inventory(); const m = await metrics(30);
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
   const GOALS = 'CÍLE MAJITELE (závazné):\n- prodávat stabilně ' + goals.machines_per_week + ' prádlomaty TÝDNĚ (90 % prodejů se uzavírá na osobní schůzce nebo prohlídce výroby),\n- během ' + goals.online_days + ' dní vydělat na doplňkovém prodeji ONLINE produktů ' + Number(goals.online_net_czk).toLocaleString('cs-CZ') + ' Kč ČISTÉHO (po odečtení reklamy),\n' + (goals.budget_czk_day ? '- rozpočet na reklamu: ' + goals.budget_czk_day + ' Kč/den,\n' : '- rozpočet na reklamu navrhni sám (dnes ~5 800 Kč/den),\n') + (goals.note ? '- poznámka majitele: ' + goals.note + '\n' : '') + (brief ? '- doplňující zadání: ' + brief + '\n' : '');
-  const F = { status: 'generating', parts: {}, part_errors: {}, started_at: new Date().toISOString(), goals, brief: brief || null };
-  const save = () => setJ(KEY_INVENT, F, 'Marketingový ředitel – vymyšlený funnel');
+  const F = { status: 'generating', parts: {}, part_errors: {}, started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), goals, brief: brief || null };
+  const save = () => { F.heartbeat_at = new Date().toISOString(); return setJ(KEY_INVENT, F, 'Marketingový ředitel – vymyšlený funnel'); };
   await save();
+  // Tep: dokud úloha žije, každých 20 s obnoví heartbeat_at → UI pozná skutečný restart serveru (tep přestane)
+  const beat = setInterval(() => { save().catch(() => {}); }, 20000);
+  try {
 
   // 1) Jádro
   const core = await aiJson(client, INVENT_SYSTEM, GOALS
@@ -253,6 +257,10 @@ async function invent(opts) {
   await save();
   if (F.status === 'partial') throw new Error('Část se nepovedla: ' + Object.values(F.part_errors).join('; ') + ' – zbytek je uložený, zkus „Vymyslet" znovu.');
   return F;
+  } catch (e) {
+    if (F.status === 'generating') { F.status = 'failed'; F.error = e.message; await save().catch(() => {}); }
+    throw e;
+  } finally { clearInterval(beat); }
 }
 
 // Náhled stránky funnelu: AI napíše kompletní HTML podle návrhu (uloží se k funnelu)

@@ -396,7 +396,11 @@ router.get('/director/invent', async (req, res, next) => {
     if (F && Array.isArray(F.pages)) F.pages = F.pages.map((p) => { const { html, ...rest } = p; return Object.assign(rest, { has_html: !!html, job: _jobs['page:' + p.id] || null }); });
     let job = _jobs.invent || null;
     // Funnel se generoval, ale job v paměti neběží → server se mezitím restartoval (nasazení) – ukaž to, ať se nečeká naprázdno
-    if (F && F.status === 'generating' && !(job && job.running)) job = { running: false, interrupted: true, started_at: F.started_at, error: 'Generování přerušil restart serveru (nasazení). Hotové části jsou zachované – spusť „Vymyslet nový funnel" znovu.' };
+    const beatAge = F && F.heartbeat_at ? Date.now() - Date.parse(F.heartbeat_at) : Infinity;
+    if (F && F.status === 'generating' && !(job && job.running)) {
+      job = beatAge < 70000 ? { running: true, started_at: F.started_at } // úloha žije (tep) – třeba na jiné instanci serveru
+        : { running: false, interrupted: true, started_at: F.started_at, error: 'Generování přerušil restart serveru (nasazení). Hotové části jsou zachované – spusť „Vymyslet nový funnel" znovu.' };
+    } else if (F && F.status === 'failed' && !(job && job.running)) job = Object.assign({}, job || {}, { running: false, error: F.error || (job && job.error) });
     res.json({ funnel: F, job, goals: await DIRECTOR.getGoals() });
   } catch (err) { next(err); }
 });
