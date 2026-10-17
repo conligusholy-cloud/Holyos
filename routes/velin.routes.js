@@ -2035,6 +2035,90 @@ mobile.put('/support/sound', supportGuard, express.json({ limit: '2kb' }), async
   } catch (err) { next(err); }
 });
 
+// ─── Administrace schůzek ve Velínu (jen Tomáš a Jan Holý; stejná data jako BS2 admin → Schůzky a Prodejní objednávky → Termíny) ───
+//   GET  /api/velin/meetings/me                           — { allowed }
+//   GET  /api/velin/meetings?from=ISO&to=ISO              — termíny + rezervace (+ lead)
+//   POST /api/velin/meetings/slots                        — založit termín(y) {slots:[{starts_at,duration_min,capacity,mode,note}]}
+//   POST /api/velin/meetings/slots/:id/update             — upravit termín
+//   POST /api/velin/meetings/slots/:id/delete             — smazat (s historií jen vypnout)
+//   POST /api/velin/meetings/reservations/:id             — {status: booked|done|canceled|no_show, note?}
+const MEET_STATUSES = ['booked', 'done', 'canceled', 'no_show'];
+function meetingsGuard(req, res, next) {
+  if (!supportAllowed(req.velin.person)) return res.status(403).json({ error: 'Schůzky jsou dostupné jen Tomáši a Janu Holému.' });
+  next();
+}
+mobile.get('/meetings/me', (req, res) => res.json({ allowed: supportAllowed(req.velin.person) }));
+mobile.get('/meetings', meetingsGuard, async (req, res, next) => {
+  try {
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(Date.now() - 7 * 86400000);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 60 * 86400000);
+    if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'Neplatný rozsah' });
+    const slots = await prisma.meetingSlot.findMany({
+      where: { starts_at: { gte: from, lt: to } }, orderBy: { starts_at: 'asc' },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true } } },
+    });
+    const leadIds = [...new Set(slots.flatMap((s) => s.reservations.map((r) => r.compounder_lead_id)).filter(Boolean))];
+    const leads = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true, email: true, phone: true, city: true, status: true } }).catch(() => []) : [];
+    const lm = new Map(leads.map((l) => [l.id, l]));
+    res.json({ slots: slots.map((s) => ({
+      id: s.id, starts_at: s.starts_at, duration_min: s.duration_min, capacity: s.capacity, mode: s.mode, note: s.note, active: s.active,
+      booked: s.reservations.filter((r) => r.status === 'booked').length,
+      reservations: s.reservations.map((r) => ({ ...r, lead: r.compounder_lead_id ? (lm.get(r.compounder_lead_id) || null) : null })),
+    })) });
+  } catch (err) { next(err); }
+});
+mobile.post('/meetings/slots', meetingsGuard, express.json({ limit: '300kb' }), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const items = (Array.isArray(b.slots) ? b.slots : [b]).slice(0, 500);
+    const created = [];
+    for (const it of items) {
+      const d = it && it.starts_at ? new Date(it.starts_at) : null;
+      if (!d || isNaN(d)) continue;
+      const mode = ['online', 'osobne'].includes(it.mode) ? it.mode : null;
+      const sl = await prisma.meetingSlot.create({
+        data: { starts_at: d, duration_min: Math.min(Math.max(parseInt(it.duration_min, 10) || 17, 5), 480), capacity: Math.min(Math.max(parseInt(it.capacity, 10) || 1, 1), 50), mode, note: it.note ? String(it.note).slice(0, 500) : null, active: it.active !== false, created_by_person_id: req.velin.person.id },
+        select: { id: true },
+      });
+      created.push(sl.id);
+    }
+    res.status(201).json({ ok: true, created });
+  } catch (err) { next(err); }
+});
+mobile.post('/meetings/slots/:id(\\d+)/update', meetingsGuard, express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const b = req.body || {}, data = {};
+    if (b.starts_at) { const d = new Date(b.starts_at); if (!isNaN(d)) data.starts_at = d; }
+    if (b.duration_min != null) data.duration_min = Math.min(Math.max(parseInt(b.duration_min, 10) || 17, 5), 480);
+    if (b.capacity != null) data.capacity = Math.min(Math.max(parseInt(b.capacity, 10) || 1, 1), 50);
+    if (b.mode !== undefined) data.mode = ['online', 'osobne'].includes(b.mode) ? b.mode : null;
+    if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 500) : null;
+    if (b.active !== undefined) data.active = !!b.active;
+    await prisma.meetingSlot.update({ where: { id: parseInt(req.params.id, 10) }, data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+mobile.post('/meetings/slots/:id(\\d+)/delete', meetingsGuard, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const booked = await prisma.meetingReservation.count({ where: { slot_id: id, status: 'booked' } });
+    if (booked) return res.status(409).json({ ok: false, error: 'Termín má aktivní rezervaci — nejdřív ji zrušte, nebo termín jen vypněte.' });
+    const any = await prisma.meetingReservation.count({ where: { slot_id: id } });
+    if (any) { await prisma.meetingSlot.update({ where: { id }, data: { active: false } }); return res.json({ ok: true, deactivated: true }); }
+    await prisma.meetingSlot.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+mobile.post('/meetings/reservations/:id(\\d+)', meetingsGuard, express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    const b = req.body || {}, data = {};
+    if (b.status !== undefined) { if (!MEET_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' }); data.status = b.status; }
+    if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 1000) : null;
+    await prisma.meetingReservation.update({ where: { id: parseInt(req.params.id, 10) }, data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.use('/', mobile);
 
 // ─── Helpers (geo) ───────────────────────────────────────────────────────

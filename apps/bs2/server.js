@@ -624,7 +624,8 @@ app.get('/lp/:slug', wrap(async (req, res) => {
     + 'var go=function(){location.href="/login?from=lp-' + slug + '"+(location.search?"&"+location.search.slice(1):"");};'
     + 'document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a,button");if(!a)return;var h=a.getAttribute("href");if((a.tagName==="A"&&(!h||h==="#"||h.indexOf("javascript:")===0))||(a.tagName==="BUTTON"&&!a.closest("form")&&/\\b(ú[čc]et|registr|za[čc]ít|zjistit|vyzkou|chci|zaregistr|vytvo)/i.test(a.textContent||""))){e.preventDefault();go();}},true);'
     + 'document.addEventListener("submit",function(e){e.preventDefault();go();},true);})();<\/script>';
-  let html = r.html; const i = html.toLowerCase().lastIndexOf('</body>'); html = i >= 0 ? html.slice(0, i) + inj + html.slice(i) : html + inj;
+  const inj2 = inj + '<script>' + require('./stats-track').PUB_TRACK_JS + '<\/script>'; // chování návštěvníka (scroll, sekce, kliky…) + první dotyk pro lead
+  let html = r.html; const i = html.toLowerCase().lastIndexOf('</body>'); html = i >= 0 ? html.slice(0, i) + inj2 + html.slice(i) : html + inj2;
   res.set('Cache-Control', 'public, max-age=60'); res.type('html').send(html);
 }));
 // Aktuální ceník online produktů (Prověření lokality, Vyhledávač míst, dokupy) pro AI ředitele v HolyOS – ceny v Kč vč. úprav z admin → Online produkty
@@ -667,7 +668,9 @@ app.get('/api/presence', wrap(async (req, res) => {
 const PUB_EV = ['view', 'scroll', 'section', 'dwell', 'click', 'mouse', 'time', 'exit', 'custom', 'ping'];
 app.post('/api/public/track', wrap(async (req, res) => {
   res.status(204); const b = req.body || {}; const sid = String(b.sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64); const path = String(b.path || '').split('?')[0].replace(/\/+$/, '').slice(0, 120) || '/';
-  if (!sid || !PUBLIC_HIT_PATHS.includes(path) || !Array.isArray(b.ev) || rateLimited('ptk:' + req.ip, 3000, 3600e3)) return res.end();
+  if (!sid || !(PUBLIC_HIT_PATHS.includes(path) || /^\/lp\/[a-z0-9-]{1,60}$/.test(path)) || !Array.isArray(b.ev) || rateLimited('ptk:' + req.ip, 3000, 3600e3)) return res.end();
+  // známý lead (po rezervaci/objednávce) – každé další sezení se mu připíše, ať vidíme celé jeho chování
+  const leadId = parseInt(b.lead, 10); if (leadId > 0) q('UPDATE leads SET sids = array_append(sids, $2) WHERE id=$1 AND NOT ($2 = ANY(sids)) AND cardinality(sids) < 200', [leadId, sid]).catch(() => {});
   const rows = b.ev.slice(0, 40).filter((e) => e && PUB_EV.includes(e.k)).map((e) => [sid, path, e.k, e.l != null ? String(e.l).slice(0, 80) : null, e.m && typeof e.m === 'object' && JSON.stringify(e.m).length <= 4000 ? JSON.stringify(e.m) : null, Number.isFinite(e.t) ? Math.round(e.t) : null]);
   if (rows.length) { const vals = []; const ph = rows.map((r, i) => { vals.push(...r); const o = i * 6; return '($' + (o + 1) + ',$' + (o + 2) + ',$' + (o + 3) + ',$' + (o + 4) + ',$' + (o + 5) + '::jsonb,$' + (o + 6) + ')'; }).join(','); await q('INSERT INTO page_events (sid, path, kind, label, meta, t_ms) VALUES ' + ph, vals).catch(() => {}); }
   res.end();
@@ -749,8 +752,10 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
     + (activated ? 'Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : 'Zároveň jsme vám založili účet v Best Series 2.0 – najdete v něm aplikace pro výběr a prověření místa. Účet aktivujete kliknutím na tlačítko níže: zadejte tento e-mail (' + f.email + ') a zvolte si nick a heslo.')
     + '\n\nBest Series s.r.o.';
   sendBs2Mail({ to: f.email, subject: 'Schůzka ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, link: PUBLIC_URL + (activated ? '/login' : '/activate'), linkLabel: activated ? 'Přihlásit se' : 'Aktivovat účet' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
-  if (account === 'created') notifyVelin('📅 Nová schůzka + účet', f.first_name + ' ' + f.last_name + ' · ' + when, '/admin/meetings', 'order');
-  res.json(Object.assign({}, d, { account: account === 'error' ? 'exists' : account }));
+  const leadId = await recordLead({ kind: 'meeting', refId: d.id, supporterId: u && u.id, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, lead: b.lead,
+    detail: { termin: when, forma: d.mode || null, cesta: d.financing_path || b.path || null, ucet: account === 'created' ? 'nový' : 'existující', sms_token: !!b.t },
+    title: '📅 Schůzka ' + when + (account === 'created' ? ' + nový účet' : '') });
+  res.json(Object.assign({}, d, { account: account === 'error' ? 'exists' : account, lead_id: leadId }));
 }));
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
@@ -805,6 +810,32 @@ function locParse(b) {
   return { name, email, phone: phone || null, company: company || null, pkg, marketing: !!b.marketing };
 }
 app.get('/api/location/pay-config', (req, res) => { res.set('Cache-Control', 'no-store'); res.json({ stripe: !!process.env.STRIPE_SECRET_KEY, packages: Object.fromEntries(Object.entries(LOC.PACKAGES).map(([k, v]) => [k, v.amount / 100])) }); });
+// ── Leady z veřejných stránek: záznam (kdo + odkud) + notifikace do Velína Tomášovi a Janovi ──
+function leadSource(a) {
+  a = a || {}; const host = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch (e) { return ''; } };
+  const parts = [];
+  if (a.utm_source || a.utm_medium || a.utm_campaign) parts.push([a.utm_source, a.utm_medium].filter(Boolean).join(' / ') + (a.utm_campaign ? ' · kampaň „' + a.utm_campaign + '“' : '') + (a.utm_content ? ' · ' + a.utm_content : ''));
+  else if (a.fbclid) parts.push('Facebook / Instagram (reklama)');
+  else if (a.gclid) parts.push('Google Ads');
+  else if (a.ref) parts.push('odkaz z ' + host(a.ref));
+  else parts.push('přímý vstup');
+  if (a.ad_id) parts.push('reklama ' + a.ad_id);
+  return parts.join(' · ');
+}
+async function recordLead({ kind, refId, supporterId, name, email, phone, lead, detail, title }) {
+  const lb = lead && typeof lead === 'object' ? lead : {};
+  const attr = lb.attr && typeof lb.attr === 'object' ? lb.attr : {};
+  const clean = {}; Object.keys(attr).slice(0, 20).forEach((k) => { if (/^[a-z_]{1,20}$/.test(k) && attr[k] != null) clean[k] = String(attr[k]).slice(0, 240); });
+  const sids = (Array.isArray(lb.sids) ? lb.sids : []).map((s) => String(s).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)).filter(Boolean).slice(-40);
+  const landing = clean.landing || null;
+  let id = null;
+  try { id = (await q('INSERT INTO leads (kind, ref_id, supporter_id, name, email, phone, source, landing, sids, detail) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10::jsonb) RETURNING id', [kind, refId || null, supporterId || null, name || null, email || null, phone || null, JSON.stringify(clean), landing, sids, detail ? JSON.stringify(detail) : null])).rows[0].id; } catch (e) { console.warn('[bs2] lead:', e.message); }
+  // kudy prošel: vstupní stránka + navštívené stránky (z page_events jeho sezení)
+  let pathTxt = '';
+  try { if (sids.length) { const ps = (await q("SELECT path, min(created_at) AS f FROM page_events WHERE sid = ANY($1) AND kind='view' GROUP BY path ORDER BY f LIMIT 6", [sids])).rows.map((r) => r.path.replace('/lp/zachytna-stranka-velka-myslenka-bestseries2-cz-start', '/lp (záchytná)')); if (ps.length) pathTxt = ' · cesta: ' + ps.join(' → '); } } catch (e) {}
+  notifyVelin((title || '🎯 Nový lead') + ': ' + (name || email || 'zájemce'), 'Zdroj: ' + leadSource(clean) + (landing ? ' · vstup ' + landing.split('?')[0] : '') + pathTxt + (phone ? ' · ' + phone : ''), id ? '/admin/leads/' + id : '/admin/leads', 'order');
+  return id;
+}
 // Platba kartou: založí objednávku (pending) a vrátí URL Stripe Checkout.
 app.post('/api/location/checkout', wrap(async (req, res) => {
   if (!process.env.STRIPE_SECRET_KEY) return res.status(503).json({ ok: false, error: 'Online platba není dostupná.' });
@@ -817,7 +848,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   const oid = ins.rows[0].id; saveAttribution(oid, req.body).catch(() => {}); const base = locBase(req);
   if (isFinder) await q("UPDATE location_orders SET product='finder' WHERE id=$1", [oid]);
   const retPath = isFinder || (req.body || {}).ret === '/findlocation' ? '/findlocation' : '/location'; // návrat ze Stripe na správnou záchytnou stránku
-  notifyVelin('🌐 Nová online objednávka #' + oid, d.name + ' · balíček ' + d.pkg + ' · ' + (pkg.amount / 100) + ' Kč (čeká na platbu)', '/admin/online', 'order');
+  const leadId = await recordLead({ kind: 'order', refId: oid, name: d.name, email: d.email, phone: d.phone, lead: (req.body || {}).lead || { attr: (req.body || {}).attr, sids: [(req.body || {}).sid] }, detail: { produkt: isFinder ? 'Vyhledávač míst' : 'Prověření lokality', balicek: d.pkg, castka_czk: pkg.amount / 100, stav: 'čeká na platbu' }, title: '🌐 Online objednávka #' + oid + ' (' + (isFinder ? 'Vyhledávač' : 'Prověření') + ' ' + d.pkg + ', ' + (pkg.amount / 100) + ' Kč)' });
   const session = await stripePost('checkout/sessions', {
     mode: 'payment', customer_email: d.email, locale: 'cs',
     success_url: base + retPath + '?paid=1&s={CHECKOUT_SESSION_ID}#objednat', cancel_url: base + retPath + '?canceled=1#objednat',
@@ -828,7 +859,7 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   });
   await q('UPDATE location_orders SET stripe_session=$1 WHERE id=$2', [session.id, oid]);
   console.log('[bs2] /location checkout #' + oid + ' ' + d.pkg + ' → ' + session.id);
-  res.json({ ok: true, url: session.url });
+  res.json({ ok: true, url: session.url, lead_id: leadId });
 }));
 // Náhradní režim bez Stripe: žádost o objednávku (admin pošle platební údaje ručně).
 app.post('/api/location/interest', wrap(async (req, res) => {
@@ -839,8 +870,9 @@ app.post('/api/location/interest', wrap(async (req, res) => {
     [d.name, d.email, d.phone, d.company, d.pkg, pkg.amount / 100, 'request', d.marketing, String(req.ip || '').slice(0, 64), LT.TERMS_VERSION]);
   saveAttribution(insReq.rows[0].id, req.body).catch(() => {});
   if ((req.body || {}).product === 'finder') await q("UPDATE location_orders SET product='finder' WHERE id=$1", [insReq.rows[0].id]);
-  locNotify('Nová žádost o balíček ' + pkg.label + ' – ' + d.name, 'Žádost (bez online platby): ' + d.name + ', ' + d.email + (d.phone ? ', ' + d.phone : '') + '. Pošlete platební údaje a po úhradě předejte přístup.').catch(() => {});
-  res.json({ ok: true });
+  const isF = (req.body || {}).product === 'finder';
+  const leadId = await recordLead({ kind: 'interest', refId: insReq.rows[0].id, name: d.name, email: d.email, phone: d.phone, lead: (req.body || {}).lead || { attr: (req.body || {}).attr, sids: [(req.body || {}).sid] }, detail: { produkt: isF ? 'Vyhledávač míst' : 'Prověření lokality', balicek: d.pkg, stav: 'žádost bez online platby – poslat platební údaje' }, title: '🌐 Žádost o balíček ' + (pkg.label || d.pkg) });
+  res.json({ ok: true, lead_id: leadId });
 }));
 async function locNotify(subject, body) {
   notifyVelin('🌐 ' + subject, String(body || '').slice(0, 200), '/admin/online', 'order');
@@ -922,6 +954,7 @@ async function locGrantAccess(o, req) {
   const finderOnly = o.product === 'finder' && !prevFull;
   if (!!u.location_finder_only !== finderOnly) u = (await q('UPDATE supporters SET location_finder_only=$2, updated_at=now() WHERE id=$1 RETURNING *', [u.id, finderOnly])).rows[0];
   await q("UPDATE location_orders SET supporter_id=$2, status='granted', access_granted_at=COALESCE(access_granted_at, now()) WHERE id=$1", [o.id, u.id]);
+  q("UPDATE leads SET supporter_id=$2, detail = coalesce(detail,'{}'::jsonb) || '{\"stav\":\"zaplaceno – přístup předán\"}'::jsonb WHERE kind IN ('order','interest') AND ref_id=$1", [o.id, u.id]).catch(() => {}); // lead → účet (chování po přihlášení)
   const base = (process.env.BS2_BASE_URL || 'https://www.bestseries2.cz').replace(/\/+$/, '');
   const activated = !!u.password_hash;
   const fnd = o.product === 'finder'; const appName = fnd ? 'Vyhledávač míst' : 'Prověření lokality'; const appPath = fnd ? '/lokalita/analyza' : '/lokalita';
@@ -1677,6 +1710,22 @@ async function holyosSvc(method, p, body) {
   if (!r.ok) { const e = new Error(j.error || ('HolyOS vrátil chybu ' + r.status)); e.status = r.status; throw e; }
   return j;
 }
+// Leady z webu: seznam + detail s chováním (page_events všech sezení + user_events účtu)
+const LA = require('./leads-admin');
+app.get('/admin/leads', requireAdmin, wrap(async (req, res) => {
+  const qs = String(req.query.q || '').trim().slice(0, 80);
+  const where = qs ? "WHERE (name ILIKE $1 OR email ILIKE $1 OR phone ILIKE $1 OR source::text ILIKE $1 OR landing ILIKE $1)" : '';
+  const rows = (await q(`SELECT id, kind, name, email, phone, source, landing, detail, created_at, cardinality(sids) AS sessions FROM leads ${where} ORDER BY created_at DESC LIMIT 300`, qs ? ['%' + qs + '%'] : [])).rows;
+  res.send(LA.listPage(V, { admin: req.admin, holyosUrl: HOLYOS_URL, rows, leadSource, q: qs }));
+}));
+app.get('/admin/leads/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
+  const lead = (await q('SELECT * FROM leads WHERE id=$1', [req.params.id])).rows[0];
+  if (!lead) return res.status(404).send(V.errorPage('Lead nenalezen', 'Tenhle lead neexistuje.', '/admin/leads'));
+  const events = lead.sids && lead.sids.length ? (await q('SELECT sid, path, kind, label, meta, created_at FROM page_events WHERE sid = ANY($1) ORDER BY created_at LIMIT 4000', [lead.sids])).rows : [];
+  const userEvents = lead.supporter_id ? (await q('SELECT type, path, label, created_at FROM user_events WHERE supporter_id=$1 ORDER BY created_at DESC LIMIT 300', [lead.supporter_id])).rows : [];
+  const related = (await q('SELECT id, kind, created_at FROM leads WHERE id<>$1 AND ((email IS NOT NULL AND lower(email)=lower($2)) OR (phone IS NOT NULL AND phone=$3)) ORDER BY created_at DESC LIMIT 10', [lead.id, lead.email || '', lead.phone || ''])).rows;
+  res.send(LA.detailPage(V, { admin: req.admin, holyosUrl: HOLYOS_URL, lead, events, userEvents, leadSource, related }));
+}));
 const MA = require('./meetings-admin');
 app.get('/admin/meetings', requireAdmin, (req, res) => res.send(MA.meetingsPage(V, { admin: req.admin, holyosUrl: HOLYOS_URL })));
 const meetApi = (fn) => wrap(async (req, res) => { try { res.json(await fn(req)); } catch (e) { res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: e.message }); } });

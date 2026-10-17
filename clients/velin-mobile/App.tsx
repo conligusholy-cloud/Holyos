@@ -48,6 +48,7 @@ import HomeHub from './screens/HomeHub';
 import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
 import SupportSound from './screens/SupportSound';
+import Meetings from './screens/Meetings';
 import { colors } from './lib/theme';
 import { useSupportAllowed, useSupportUnread } from './lib/support';
 
@@ -82,6 +83,7 @@ export type RootStackParamList = {
   MeProfile: undefined;
   SupportThread: { supporterId: number; title?: string };
   SupportSound: undefined;
+  Meetings: undefined;
 };
 
 export type TabsParamList = {
@@ -380,6 +382,18 @@ export default function App() {
             name="SupportThread"
             component={SupportThread}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="Meetings"
+            component={Meetings}
+            options={{
+              animation: 'slide_from_right',
+              headerShown: true,
+              title: 'Schůzky',
+              headerStyle: { backgroundColor: colors.surface },
+              headerTintColor: colors.text,
+              headerShadowVisible: false,
+            }}
           />
           <Stack.Screen
             name="SupportSound"

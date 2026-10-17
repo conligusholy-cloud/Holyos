@@ -276,6 +276,24 @@ async function migrate() {
     );
     CREATE INDEX IF NOT EXISTS page_events_path_created_idx ON page_events (path, created_at);
     CREATE INDEX IF NOT EXISTS page_events_sid_idx ON page_events (sid);
+    -- Leady z veřejných stránek (schůzka z /cesta, online objednávka…): kdo, odkud přišel (první dotyk) a všechny jeho návštěvy (sid → page_events)
+    CREATE TABLE IF NOT EXISTS leads (
+      id           SERIAL PRIMARY KEY,
+      kind         TEXT NOT NULL,               -- meeting | order | interest
+      ref_id       INTEGER,                     -- id rezervace (HolyOS) / objednávky (location_orders)
+      supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL,
+      name         TEXT,
+      email        TEXT,
+      phone        TEXT,
+      source       JSONB,                       -- utm_*, fbclid/gclid, ref, landing, ft
+      landing      TEXT,
+      sids         TEXT[] NOT NULL DEFAULT '{}',
+      detail       JSONB,                       -- termín, forma, balíček…
+      created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS leads_created_idx ON leads (created_at);
+    CREATE INDEX IF NOT EXISTS leads_email_idx ON leads (lower(email));
+    CREATE INDEX IF NOT EXISTS leads_sids_idx ON leads USING GIN (sids);
     CREATE UNIQUE INDEX IF NOT EXISTS location_orders_session_idx ON location_orders (stripe_session) WHERE stripe_session IS NOT NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS supporter_id INTEGER REFERENCES supporters(id) ON DELETE SET NULL;
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS sid TEXT;

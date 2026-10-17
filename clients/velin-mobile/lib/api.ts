@@ -35,6 +35,17 @@ export type LoginResponse = {
   };
 };
 
+export type MeetingReservation = {
+  id: number; name: string | null; email: string | null; phone: string | null; status: 'booked' | 'done' | 'canceled' | 'no_show' | string;
+  compounder_lead_id: number | null; created_at: string; note: string | null; mode: string | null; financing_path: string | null;
+  lead: { id: number; name: string; email: string | null; phone: string | null; city: string | null; status: string } | null;
+};
+export type MeetingSlot = {
+  id: number; starts_at: string; duration_min: number; capacity: number; mode: string | null; note: string | null; active: boolean;
+  booked: number; reservations: MeetingReservation[];
+};
+export type MeetingSlotInput = { starts_at: string; duration_min?: number; capacity?: number; mode?: string | null; note?: string | null; active?: boolean };
+
 export type SupportMessage = {
   id: number;
   supporter_id: number;
@@ -408,6 +419,18 @@ export const api = {
   },
 
   // ─── Podpora BS2 (jen Tomáš a Jan Holý; proxy HolyOS → BS2) ───────────────
+  // Administrace schůzek (jen Tomáš a Jan Holý)
+  meetings: (jwt: string, from: string, to: string) =>
+    request<{ slots: MeetingSlot[] }>('GET', `/api/velin/meetings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { jwt }),
+  meetingsCreate: (jwt: string, slots: MeetingSlotInput[]) =>
+    request<{ ok: boolean; created: number[] }>('POST', '/api/velin/meetings/slots', { jwt, body: { slots }, timeoutMs: 60000 }),
+  meetingSlotUpdate: (jwt: string, id: number, body: Partial<MeetingSlotInput>) =>
+    request<{ ok: boolean }>('POST', `/api/velin/meetings/slots/${id}/update`, { jwt, body }),
+  meetingSlotDelete: (jwt: string, id: number) =>
+    request<{ ok: boolean; deactivated?: boolean }>('POST', `/api/velin/meetings/slots/${id}/delete`, { jwt, body: {} }),
+  meetingReservationSet: (jwt: string, id: number, body: { status?: string; note?: string | null }) =>
+    request<{ ok: boolean }>('POST', `/api/velin/meetings/reservations/${id}`, { jwt, body }),
+
   supportMe: (jwt: string) =>
     request<{ allowed: boolean }>('GET', '/api/velin/support/me', { jwt }),
 

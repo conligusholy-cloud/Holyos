@@ -12,6 +12,7 @@ import * as Updates from 'expo-updates';
 import * as Application from 'expo-application';
 import { loadAuth } from '../lib/auth';
 import { api } from '../lib/api';
+import { useSupportAllowed } from '../lib/support';
 
 // Paleta Best Series 2.0 (shodná s webem bestseries2.cz)
 const BS = {
@@ -28,11 +29,13 @@ const BS = {
   err: '#ff5d6c',
 };
 
-type HubApp = { key: string; title: string; icon: string; tint: string; screen: string; params?: any };
+type HubApp = { key: string; title: string; icon: string; tint: string; screen: string; params?: any; adminOnly?: boolean };
 
 // ── Aplikace na ploše (pořadí = pořadí v mřížce) ──
 const APPS: HubApp[] = [
   { key: 'assistant', title: 'Vzkazy', icon: '📞', tint: BS.accent, screen: 'AssistantSettings' },
+  // Administrace schůzek — zatím jen Tomáš a Jan Holý (stejné oprávnění jako Podpora)
+  { key: 'meetings', title: 'Schůzky', icon: '📅', tint: BS.vio, screen: 'Meetings', adminOnly: true },
 ];
 
 function greeting(): string {
@@ -71,6 +74,7 @@ export default function HomeHub() {
   };
   const vi = versionInfo();
   const navigation = useNavigation<any>();
+  const adminAllowed = useSupportAllowed();
   const [name, setName] = useState<string>('');
   const [badges, setBadges] = useState<Record<string, number>>({});
   const [refreshing, setRefreshing] = useState(false);
@@ -104,7 +108,7 @@ export default function HomeHub() {
         <View style={styles.line} />
 
         <View style={styles.grid}>
-          {APPS.map((a) => {
+          {APPS.filter((a) => !a.adminOnly || adminAllowed).map((a) => {
             const n = badges[a.key] || 0;
             return (
               <TouchableOpacity key={a.key} activeOpacity={0.75} style={styles.app} onPress={() => navigation.navigate(a.screen, a.params)}>

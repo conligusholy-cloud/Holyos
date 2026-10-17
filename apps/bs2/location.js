@@ -651,6 +651,7 @@ const PAGE = `<!DOCTYPE html>
     fd.forEach(function(v,k){ body[k]=v; });
     body.terms = !!fd.get('terms'); body.consent = body.terms; body.marketing = body.terms; body.sid=SID;
     body.attr = firstTouch();
+    try { if (window.__bs2Lead) body.lead = window.__bs2Lead(); } catch(e){}
     if(!body.terms){ track('form_invalid',{ why:'terms' }); setMsg('err','Před platbou je třeba souhlasit s obchodními podmínkami.'); return; }
     if(!body.name||!body.email){ track('form_invalid',{ why:'name_email' }); setMsg('err','Vyplňte prosím jméno a e-mail.'); return; }
     if(!body.consent){ setMsg('err','Potvrďte prosím souhlas se zpracováním údajů.'); return; }
@@ -659,8 +660,10 @@ const PAGE = `<!DOCTYPE html>
       var url=STRIPE?'/api/location/checkout':'/api/location/interest';
       var r=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       var j=await r.json().catch(function(){ return {}; });
+      try { if(j && j.lead_id && window.__bs2LeadSet) window.__bs2LeadSet(j.lead_id); } catch(e){}
       if(STRIPE && r.ok && j.ok && j.url){ track('misto_checkout',{ variant: body.variant }); location.href=j.url; return; }
       if(STRIPE && r.status===503){ STRIPE=false; sub.textContent=BTN_REQ; r=await fetch('/api/location/interest',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }); j=await r.json().catch(function(){ return {}; }); }
+      try { if(j && j.lead_id && window.__bs2LeadSet) window.__bs2LeadSet(j.lead_id); } catch(e){}
       if(r.ok && j.ok){ setMsg('ok','Děkujeme! Žádost jsme přijali. Do jednoho pracovního dne vám pošleme platební údaje a informace o zpřístupnění aplikace.'); f.reset(); track('misto_interest_sent',{ variant: body.variant }); }
       else { track('misto_checkout_fail',{ s:r.status, variant: body.variant }); setMsg('err',(j&&j.error)||'Odeslání se nepodařilo, zkuste to prosím znovu.'); }
     } catch(err){ setMsg('err','Odeslání se nepodařilo, zkuste to prosím znovu.'); }
