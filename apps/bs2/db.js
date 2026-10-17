@@ -313,6 +313,8 @@ async function migrate() {
     ALTER TABLE location_searches ADD COLUMN IF NOT EXISTS label TEXT; -- čitelný název (u špendlíku v mapě = reverzně geokódovaná adresa)
     -- Návštěvy veřejných stránek (anonymní): unikátní prohlížeč (sid) za den a cestu – pro Centrum reklamy v HolyOS
     CREATE TABLE IF NOT EXISTS page_hits (d DATE NOT NULL, path TEXT NOT NULL, sid TEXT NOT NULL, PRIMARY KEY (d, path, sid));
+    -- Záchytné stránky zveřejněné z HolyOS (AI ředitel → „Zveřejnit na odkaz“), servírované na /lp/<slug>
+    CREATE TABLE IF NOT EXISTS landing_pages (slug TEXT PRIMARY KEY, title TEXT, html TEXT NOT NULL, published BOOLEAN NOT NULL DEFAULT true, source TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now());
     CREATE INDEX IF NOT EXISTS page_hits_path_idx ON page_hits (path, d);
     -- Lokality zákazníka (vstupy formuláře + poslední výpočet a vyhodnocení)
     CREATE TABLE IF NOT EXISTS location_sites (

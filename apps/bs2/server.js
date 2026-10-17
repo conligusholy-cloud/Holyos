@@ -455,7 +455,7 @@ app.post('/api/presence/ping', (req, res) => {
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
     ST.anonTouch(sid);
     const path = String((req.body || {}).path || '').split('?')[0].replace(/\/+$/, '') || '/';
-    if (PUBLIC_HIT_PATHS.includes(path)) q('INSERT INTO page_hits (d, path, sid) VALUES (CURRENT_DATE, $1, $2) ON CONFLICT DO NOTHING', [path, sid]).catch(() => {});
+    if (PUBLIC_HIT_PATHS.includes(path) || /^\/lp\/[a-z0-9-]{1,60}$/.test(path)) q('INSERT INTO page_hits (d, path, sid) VALUES (CURRENT_DATE, $1, $2) ON CONFLICT DO NOTHING', [path, sid]).catch(() => {});
   }
   res.json({ ok: true });
 });
@@ -597,6 +597,36 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
 }));
 // Skutečné návštěvy záchytné stránky z odkazů v oslovení: kódy leadů (?l=<kód>) z OPRAVDOVÉHO zobrazení stránky v prohlížeči (JS sledování),
 // ne z automatických otevření odkazu (poštovní skenery, náhledy). HolyOS podle toho počítá „otevřel odkaz" ve funelu.
+// ── Záchytné stránky z HolyOS: zveřejnění / stažení (JWT jako ostatní /api/holyos/*) a servírování na /lp/<slug> ──
+function holyosAuth(req, res) { const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || ''); if (!secret || !m) { res.status(401).json({ error: 'Neautorizováno' }); return false; } try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); return true; } catch (e) { res.status(401).json({ error: 'Neplatný token' }); return false; } }
+const LP_SLUG = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/;
+const LP_RESERVED = ['location', 'findlocation', 'login', 'activate', 'home', 'admin', 'api', 'img', 'arena', 'app'];
+app.post('/api/holyos/landing', wrap(async (req, res) => {
+  if (!holyosAuth(req, res)) return;
+  const b = req.body || {}; const slug = String(b.slug || '').toLowerCase();
+  if (!LP_SLUG.test(slug) || LP_RESERVED.includes(slug)) return res.status(400).json({ error: 'Neplatný název adresy (jen malá písmena, číslice a pomlčky).' });
+  const html = String(b.html || ''); if (!/<html/i.test(html) || html.length > 3000000) return res.status(400).json({ error: 'Chybí HTML stránky' });
+  await q('INSERT INTO landing_pages (slug, title, html, published, source, updated_at) VALUES ($1,$2,$3,true,$4,now()) ON CONFLICT (slug) DO UPDATE SET title=EXCLUDED.title, html=EXCLUDED.html, published=true, source=EXCLUDED.source, updated_at=now()', [slug, String(b.title || '').slice(0, 200), html, String(b.source || 'holyos').slice(0, 80)]);
+  res.json({ ok: true, slug, path: '/lp/' + slug });
+}));
+app.delete('/api/holyos/landing/:slug', wrap(async (req, res) => {
+  if (!holyosAuth(req, res)) return;
+  await q('UPDATE landing_pages SET published=false, updated_at=now() WHERE slug=$1', [String(req.params.slug || '').toLowerCase()]);
+  res.json({ ok: true });
+}));
+app.get('/lp/:slug', wrap(async (req, res) => {
+  const slug = String(req.params.slug || '').toLowerCase(); if (!LP_SLUG.test(slug)) return res.status(404).send('Stránka nenalezena');
+  const r = (await q('SELECT html FROM landing_pages WHERE slug=$1 AND published=true', [slug])).rows[0];
+  if (!r) return res.status(404).send('Stránka nenalezena');
+  // Měření návštěv (page_hits jako u ostatních stránek) + odkazy/formuláře bez cíle → registrace do BS2
+  const inj = '<script>(function(){var sid;try{sid=localStorage.getItem("bs2pv");if(!sid){sid=Math.random().toString(36).slice(2)+Date.now().toString(36);localStorage.setItem("bs2pv",sid);}}catch(e){sid="x"+Date.now();}'
+    + 'try{fetch("/api/presence/ping",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sid:sid,path:location.pathname}),keepalive:true});}catch(e){}'
+    + 'var go=function(){location.href="/login?from=lp-' + slug + '"+(location.search?"&"+location.search.slice(1):"");};'
+    + 'document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a,button");if(!a)return;var h=a.getAttribute("href");if((a.tagName==="A"&&(!h||h==="#"||h.indexOf("javascript:")===0))||(a.tagName==="BUTTON"&&!a.closest("form")&&/\\b(ú[čc]et|registr|za[čc]ít|zjistit|vyzkou|chci|zaregistr|vytvo)/i.test(a.textContent||""))){e.preventDefault();go();}},true);'
+    + 'document.addEventListener("submit",function(e){e.preventDefault();go();},true);})();<\/script>';
+  let html = r.html; const i = html.toLowerCase().lastIndexOf('</body>'); html = i >= 0 ? html.slice(0, i) + inj + html.slice(i) : html + inj;
+  res.set('Cache-Control', 'public, max-age=60'); res.type('html').send(html);
+}));
 // Aktuální ceník online produktů (Prověření lokality, Vyhledávač míst, dokupy) pro AI ředitele v HolyOS – ceny v Kč vč. úprav z admin → Online produkty
 app.get('/api/holyos/catalog', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');

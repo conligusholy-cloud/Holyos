@@ -438,6 +438,36 @@ router.post('/director/invent/revise', async (req, res, next) => {
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
   try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); } // trvalé požadavky na vzhled (design_notes) se použijí automaticky
 });
+// 🌐 Zveřejnit stránku na skutečný odkaz: www.bestseries2.cz/lp/<slug> (BS2 ji servíruje, měří návštěvy, prázdné CTA vedou na registraci)
+function bs2Call(method, pathname, body) { const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, ''); if (!secret) throw new Error('Chybí BS2_SSO_SECRET'); const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '2m' }); return fetch(base + pathname, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('BS2 ' + r.status)); return Object.assign(j, { base }); }); }
+const LP_FIX = '<style>.pv-vis{opacity:1!important;transform:none!important;visibility:visible!important}</style><script>setTimeout(function(){try{document.querySelectorAll("body *").forEach(function(e){var c=getComputedStyle(e);if((c.opacity==="0"||c.visibility==="hidden")&&c.position!=="fixed"&&e.getBoundingClientRect().height>0)e.classList.add("pv-vis")})}catch(x){}},2500)</script>';
+router.post('/director/invent/pages/:pid/publish', async (req, res) => {
+  try {
+    const { getSetting, setSetting } = require('../services/settings');
+    const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));
+    if (!p) return res.status(404).json({ error: 'Stránka nenalezena' }); if (!p.html) return res.status(400).json({ error: 'Stránka zatím nemá vizualizaci – nejdřív ji vygeneruj.' });
+    if ((req.body || {}).confirm !== true) return res.status(400).json({ error: 'Chybí potvrzení zveřejnění.' });
+    const slug = String((req.body || {}).slug || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+    if (!slug) return res.status(400).json({ error: 'Zadej název adresy' });
+    let html = String(p.html).replace(/^\s*```(?:html)?\s*/i, '').replace(/\s*```\s*$/i, ''); const bi = html.toLowerCase().lastIndexOf('</body>'); html = bi >= 0 ? html.slice(0, bi) + LP_FIX + html.slice(bi) : html + LP_FIX;
+    const r = await bs2Call('POST', '/api/holyos/landing', { slug, title: p.name || p.headline || slug, html, source: 'holyos-director:' + p.id });
+    const url = r.base + r.path;
+    const F2 = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const p2 = F2 && (F2.pages || []).find((x) => x.id === p.id);
+    if (p2) { p2.published = { url, slug, at: new Date().toISOString(), html_at: p.html_at || null, by: req.user && (req.user.display_name || req.user.username) || null }; await setSetting(DIRECTOR.KEY_INVENT, F2, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id }); }
+    res.json({ ok: true, url, slug });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+router.delete('/director/invent/pages/:pid/publish', async (req, res) => {
+  try {
+    const { getSetting, setSetting } = require('../services/settings');
+    const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));
+    if (!p || !p.published) return res.status(404).json({ error: 'Stránka není zveřejněná' });
+    await bs2Call('DELETE', '/api/holyos/landing/' + encodeURIComponent(p.published.slug));
+    p.published = Object.assign({}, p.published, { removed_at: new Date().toISOString() }); p.published.active = false;
+    await setSetting(DIRECTOR.KEY_INVENT, F, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id });
+    res.json({ ok: true });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
 router.get('/director/invent/pages/:pid/live', (req, res) => { const pid = String(req.params.pid || ''); const j = _jobs['page:' + pid]; const L = DIRECTOR.pvLive(pid); res.set('Cache-Control', 'no-store'); res.json({ running: !!(j && j.running), started_at: j && j.started_at, error: j && j.error, chars: L ? L.chars : 0, html: L ? L.html : '' }); });
 router.get('/director/invent/pages/:pid/html', async (req, res, next) => {
   try {
@@ -712,7 +742,7 @@ router.get('/director/invent/fb-prep', async (req, res) => {
 });
 function fbAdUrl(F, a) {
   const p = (F.pages || []).find((x) => x.id === a.destination);
-  let url = p && /^https?:\/\//.test(String(p.slug || '')) ? p.slug : p && p.slug ? 'https://www.bestseries2.cz' + (String(p.slug).startsWith('/') ? '' : '/') + p.slug : 'https://www.bestseries2.cz/location';
+  let url = p && p.published && p.published.url && !p.published.removed_at ? p.published.url : p && /^https?:\/\//.test(String(p.slug || '')) ? p.slug : p && p.slug ? 'https://www.bestseries2.cz' + (String(p.slug).startsWith('/') ? '' : '/') + p.slug : 'https://www.bestseries2.cz/location';
   url = String(url).replace(/[…]+$/, '').split(' ')[0];
   return url + (url.includes('?') ? '&' : '?') + 'utm_source=facebook&utm_medium=paid&utm_campaign=' + encodeURIComponent(String(F.name || 'funnel').slice(0, 40)) + '&utm_content=' + encodeURIComponent(a.id || 'ad');
 }
