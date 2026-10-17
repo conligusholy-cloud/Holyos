@@ -1078,7 +1078,9 @@ app.get(/^\/modules\/.*(\.html|\/)$/, (req, res, next) => {
     fs.readFile(file, 'utf8', (err, html) => {
       if (err || !html || !/<\/body>/i.test(html)) return next();
       if (html.indexOf('/js/version-watcher.js') >= 0) { res.type('html'); return res.send(html); }
-      const out = html.replace(/<\/body>/i, '  <script src="/js/version-watcher.js"></script>\n</body>');
+      // Vložit před POSLEDNÍ </body> – text „</body>" se může vyskytnout i uvnitř řetězce ve skriptu stránky (např. tiskové okno)
+      const bi = html.toLowerCase().lastIndexOf('</body>');
+      const out = html.slice(0, bi) + '  <script src="/js/version-watcher.js"></script>\n' + html.slice(bi);
       res.type('html'); res.send(out);
     });
   } catch (_) { next(); }
