@@ -115,9 +115,17 @@
   .btn-hero{display:block;text-align:center;text-decoration:none}
   .tl .dot{background:#04060c}
   .step.final .box{background:var(--card2)}
+  /* Interaktivní pozadí jako na /findlocation (síť bodů + záře + perspektivní mřížka) */
+  #net{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:.7}
+  .bgglow{position:fixed;border-radius:50%;filter:blur(90px);opacity:.45;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
+  .bgglow.a{width:620px;height:620px;left:-200px;top:-200px;background:radial-gradient(circle,rgba(30,134,224,.6),transparent 65%)}
+  .bgglow.b{width:560px;height:560px;right:-180px;bottom:-220px;background:radial-gradient(circle,rgba(124,92,255,.5),transparent 65%);animation-delay:-9s}
+  .gridfx{position:fixed;inset:auto 0 0 0;height:40vh;z-index:-1;pointer-events:none;background-image:linear-gradient(rgba(120,160,255,.14) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,255,.14) 1px,transparent 1px);background-size:64px 64px;transform:perspective(600px) rotateX(62deg);transform-origin:top;mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 35%,#000 70%,transparent)}
+  @keyframes drift{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(50px,30px,0) scale(1.1)}}
 </style>
 </head>
 <body>
+<canvas id="net" aria-hidden="true"></canvas><div class="bgglow a"></div><div class="bgglow b"></div><div class="gridfx" aria-hidden="true"></div>
   <div class="wrap">
     <div class="top">
       <span class="brand">@@LOGO@@<span class="name">Best Series <span>2.0</span></span></span>
@@ -235,5 +243,6 @@
   if (infoBtn && location.search) infoBtn.href = '/login?from=cesta&' + location.search.slice(1);
 })();
 </script>
+<script>(function(){var c=document.getElementById('net');if(!c)return;var x=c.getContext('2d'),w,h,P=[],N=70,R=150,dpr=Math.min(2,window.devicePixelRatio||1),mx=-1e4,my=-1e4;function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);N=Math.max(34,Math.min(90,Math.round(w*h/16000)));P=[];for(var i=0;i<N;i++)P.push({x:Math.random()*w,y:Math.random()*h,vx:(Math.random()-.5)*.35,vy:(Math.random()-.5)*.35,r:Math.random()*1.6+.6})}window.addEventListener('resize',size);size();window.addEventListener('pointermove',function(e){mx=e.clientX;my=e.clientY},{passive:true});var reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;function step(){x.clearRect(0,0,w,h);for(var i=0;i<P.length;i++){var p=P[i];if(!reduce){p.x+=p.vx;p.y+=p.vy;var dx=p.x-mx,dy=p.y-my,d=Math.hypot(dx,dy);if(d<140){p.x+=dx/d*.6;p.y+=dy/d*.6}}if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;}for(var i=0;i<P.length;i++){for(var j=i+1;j<P.length;j++){var a=P[i],b=P[j],dd=Math.hypot(a.x-b.x,a.y-b.y);if(dd<R){x.globalAlpha=(1-dd/R)*.35;x.strokeStyle='#4fa3ff';x.lineWidth=1;x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke()}}}x.globalAlpha=1;for(var i=0;i<P.length;i++){var p=P[i];x.fillStyle='#8fd0ff';x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill()}if(!reduce)requestAnimationFrame(step)}step();})();</script>
 </body>
 </html>
