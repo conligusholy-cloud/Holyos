@@ -424,28 +424,31 @@ const REVISABLE = ['name', 'big_idea', 'hook', 'feasibility', 'offer_stack', 'ne
 async function revise(opts) {
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
   const section = String((opts || {}).section || 'celek'); const comment = String((opts || {}).comment || '').trim().slice(0, 4000);
+  const item = (opts || {}).item && typeof opts.item === 'object' ? { key: String(opts.item.key || ''), id: String(opts.item.id || ''), label: String(opts.item.label || '').slice(0, 120) } : null;
+  const itemOf = (F, it) => { const arr = Array.isArray(F[it.key]) ? F[it.key] : []; const ix = /^i\d+$/.test(it.id) ? parseInt(it.id.slice(1), 10) : -1; return arr.find((x) => x && String(x.id) === it.id) || (ix >= 0 ? arr[ix] : null); };
   if (!comment) throw new Error('Chybí připomínka');
   const F = await getJ(KEY_INVENT, null); if (!F || F.status === 'generating') throw new Error('Funnel ještě není hotový');
   const cur = {}; REVISABLE.forEach((k) => { if (F[k] !== undefined) cur[k] = k === 'pages' ? (F.pages || []).map((p) => { const { html, job, ...rest } = p; return rest; }) : F[k]; });
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
   liveClear('rev');
   // Stránky: každá zvlášť a souběžně – hotová stránka se hned uloží (UI ji zobrazí bez obnovení)
-  if (section === 'stranky' && (F.pages || []).length) {
-    const prevPages = cur.pages; const ctx = JSON.stringify({ name: F.name, big_idea: F.big_idea, hook: F.hook, offer_stack: F.offer_stack, page_plan: (F.pages || []).map((p) => ({ id: p.id, type: p.type, name: p.name, next: p.next })) }).slice(0, 12000);
+  if ((section === 'stranky' || (item && item.key === 'pages')) && (F.pages || []).length) {
+    const prevPages = cur.pages; const targetPages = item && item.key === 'pages' ? prevPages.filter((p) => String(p.id) === item.id) : prevPages; if (!targetPages.length) throw new Error('Stránka nenalezena'); const ctx = JSON.stringify({ name: F.name, big_idea: F.big_idea, hook: F.hook, offer_stack: F.offer_stack, page_plan: (F.pages || []).map((p) => ({ id: p.id, type: p.type, name: p.name, next: p.next })) }).slice(0, 12000);
     const done = []; const failed = [];
-    const store = async (fn) => { const F3 = await getJ(KEY_INVENT, null); if (!F3) return; fn(F3); F3.rev_progress = { at: new Date().toISOString(), done: done.slice(), failed: failed.slice(), total: prevPages.length }; await setJ(KEY_INVENT, F3, 'Marketingový ředitel – vymyšlený funnel'); };
+    const store = async (fn) => { const F3 = await getJ(KEY_INVENT, null); if (!F3) return; fn(F3); F3.rev_progress = { at: new Date().toISOString(), done: done.slice(), failed: failed.slice(), total: targetPages.length, only: item ? item.id : null }; await setJ(KEY_INVENT, F3, 'Marketingový ředitel – vymyšlený funnel'); };
     await store(() => {});
-    await Promise.all(prevPages.map((pg) => aiJson(client, INVENT_SYSTEM, 'MAJITEL MÁ PŘIPOMÍNKU KE STRÁNKÁM FUNNELU:\n"""' + comment + '"""\n\nKONTEXT FUNNELU: ' + ctx + '\n\nPravidla: cenu prádlomatu NIKDY neuváděj (sděluje se až na osobní schůzce); online produkty smí mít ceny; BS2 je středobod.\n\nAKTUÁLNÍ STRÁNKA (JSON):\n' + JSON.stringify(pg).slice(0, 30000) + '\n\nÚKOL: připomínku zapracuj do TÉTO stránky (pokud se jí netýká, vrať ji beze změny). Zachovej id „' + pg.id + '“. Texty sekcí piš čitelně (lze Markdown: ## nadpis, **tučně**, odrážky „- “).\nVÝSTUP: celá stránka {"id","type","slug","name","purpose","headline","subheadline","sections":[{"name","copy"}],"form_fields":[],"cta","offer","design","next","success_metric"}', 12000, 'Stránka ' + (pg.name || pg.id), 'rev:' + pg.id)
+    await Promise.all(targetPages.map((pg) => aiJson(client, INVENT_SYSTEM, 'MAJITEL MÁ PŘIPOMÍNKU KE STRÁNKÁM FUNNELU:\n"""' + comment + '"""\n\nKONTEXT FUNNELU: ' + ctx + '\n\nPravidla: cenu prádlomatu NIKDY neuváděj (sděluje se až na osobní schůzce); online produkty smí mít ceny; BS2 je středobod.\n\nAKTUÁLNÍ STRÁNKA (JSON):\n' + JSON.stringify(pg).slice(0, 30000) + '\n\nÚKOL: připomínku zapracuj do TÉTO stránky (pokud se jí netýká, vrať ji beze změny). Zachovej id „' + pg.id + '“. Texty sekcí piš čitelně (lze Markdown: ## nadpis, **tučně**, odrážky „- “).\nVÝSTUP: celá stránka {"id","type","slug","name","purpose","headline","subheadline","sections":[{"name","copy"}],"form_fields":[],"cta","offer","design","next","success_metric"}', 12000, 'Stránka ' + (pg.name || pg.id), 'rev:' + pg.id)
       .then(async (np) => { done.push(pg.id); const same = JSON.stringify(np) === JSON.stringify(pg); await store((F3) => { F3.pages = (F3.pages || []).map((p) => p.id === pg.id ? Object.assign({}, p, np, { id: pg.id }, same && p.html ? { html: p.html, html_at: p.html_at } : { html: undefined, html_at: undefined }) : p); }); delete LIVE['rev:' + pg.id]; })
       .catch(async (e) => { failed.push(pg.id + ': ' + e.message); await store(() => {}); delete LIVE['rev:' + pg.id]; })));
     const F4 = await getJ(KEY_INVENT, null);
-    const answer = 'Připomínku jsem zapracoval do ' + done.length + ' z ' + prevPages.length + ' stránek.' + (failed.length ? ' Nepovedlo se: ' + failed.join('; ') : '');
-    F4.revisions = (F4.revisions || []).concat([{ at: new Date().toISOString(), section, comment, answer, changed: ['pages'] }]).slice(-50);
+    const answer = (item ? 'Stránku „' + (item.label || item.id) + '“ jsem upravil podle připomínky.' : 'Připomínku jsem zapracoval do ' + done.length + ' z ' + targetPages.length + ' stránek.') + (failed.length ? ' Nepovedlo se: ' + failed.join('; ') : '');
+    F4.revisions = (F4.revisions || []).concat([{ at: new Date().toISOString(), section: item ? 'stránka: ' + (item.label || item.id) : section, comment, answer, changed: ['pages'] }]).slice(-50);
     F4.revised_at = new Date().toISOString(); F4.last_revision = { at: F4.revised_at, section, changed: ['pages'], prev: { pages: prevPages } }; delete F4.rev_progress;
     await setJ(KEY_INVENT, F4, 'Marketingový ředitel – vymyšlený funnel');
     return { answer, changed: ['pages'] };
   }
-  const prompt = 'MAJITEL MÁ PŘIPOMÍNKU K SEKCI „' + section + '" (' + (SECTION_KEYS[section] || section) + '):\n + comment + \n\nAKTUÁLNÍ FUNNEL (JSON):\n' + JSON.stringify(cur).slice(0, 150000)
+  const itemTxt = item ? '\n\nPŘIPOMÍNKA SE TÝKÁ KONKRÉTNÍ POLOŽKY v „' + item.key + '“ (id/pořadí ' + item.id + ', „' + item.label + '“):\n' + JSON.stringify(itemOf(cur, item) || {}).slice(0, 12000) + '\nUprav hlavně TUTO položku (zachovej její id); ostatní měň jen tam, kde to změna nutně vyžaduje (přesah).' : '';
+  const prompt = 'MAJITEL MÁ PŘIPOMÍNKU K SEKCI „' + section + '" (' + (SECTION_KEYS[section] || section) + '):\n"""' + comment + '"""' + itemTxt + '\n\nAKTUÁLNÍ FUNNEL (JSON):\n' + JSON.stringify(cur).slice(0, 150000)
     + '\n\nCENÍK: ' + JSON.stringify(F.catalog || {}).slice(0, 8000) + '\nPravidla: ceny prádlomatů STRIKTNĚ z ceníku a jen typy z ceníku; cenu prádlomatu NIKDY neuváděj v reklamách, na stránkách, v SMS ani e-mailech (sděluje se až na osobní schůzce); online produkty lze naceňovat volně; BS2 je středobod (účet v BS2 = klíčová konverze).'
     + '\n\nÚKOL: Připomínku POCTIVĚ zapracuj. Když jde o otázku, odpověz na ni v poli "answer" a případně uprav obsah. Projdi i OSTATNÍ sekce – pokud změna má přesah (např. nová cena → projekce, texty reklam, stránky, SMS/e-maily, úkoly), uprav je také, aby celek zůstal konzistentní. Zachovej id položek (ad1, p1, m1…), ať navazují odkazy.\n'
     + 'VÝSTUP (nástroj vystup): {"answer":"stručná odpověď majiteli / co jsi změnil a proč (2–6 vět)","changed_sections":["seznam klíčů, které měníš"],"patch":{ "<klíč z funnelu>": <CELÁ nová hodnota toho klíče> }} – do patch dej JEN změněné klíče (vždy celou hodnotu klíče, ne kousek).';
@@ -460,7 +463,7 @@ async function revise(opts) {
     else if (k === 'ads' && Array.isArray(patch.ads)) { const old = {}; (F2.ads || []).forEach((a) => { old[a.id] = a; }); F2.ads = patch.ads.map((a) => Object.assign({}, a, old[a.id] && old[a.id].media ? { media: old[a.id].media } : {})); }
     else F2[k] = patch[k];
     changed.push(k); });
-  F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section, comment: (opts && opts.auto) ? '🤖 Automatická kontrola: cena prádlomatu ve veřejných textech' : comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
+  F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section: item ? section + ': ' + (item.label || item.id) : section, comment: (opts && opts.auto) ? '🤖 Automatická kontrola: cena prádlomatu ve veřejných textech' : comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
   if (opts && opts.auto) F2.price_leaks_after = findPriceLeaks(F2).length;
   F2.revised_at = new Date().toISOString();
   F2.last_revision = { at: F2.revised_at, section, changed, prev }; // pro zvýraznění změn v UI

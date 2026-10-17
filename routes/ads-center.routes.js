@@ -432,7 +432,8 @@ router.delete('/director/invent/saved/:id', async (req, res, next) => {
 router.post('/director/invent/revise', async (req, res, next) => {
   try { const b = req.body || {}; if (!String(b.comment || '').trim()) return res.status(400).json({ error: 'Napiš připomínku' });
     if ((_jobs.invent && _jobs.invent.running) || (_jobs.revise && _jobs.revise.running)) return res.status(409).json({ error: 'Ředitel právě pracuje – počkej, až doběhne.' });
-    const job = runJob('revise', () => DIRECTOR.revise({ section: b.section, comment: b.comment })); job.section = String(b.section || ''); res.status(202).json({ ok: true, job });
+    const item = b.item && typeof b.item === 'object' ? { key: String(b.item.key || '').slice(0, 30), id: String(b.item.id || '').slice(0, 40), label: String(b.item.label || '').slice(0, 120) } : null;
+    const job = runJob('revise', () => DIRECTOR.revise({ section: b.section, comment: b.comment, item })); job.section = String(b.section || ''); job.item = item; res.status(202).json({ ok: true, job });
   } catch (err) { next(err); } });
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
   try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
