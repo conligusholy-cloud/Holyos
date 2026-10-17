@@ -222,6 +222,9 @@ function normalizeFunnel(F) {
   if (F.feasibility && typeof F.feasibility === 'object') F.feasibility.what_it_takes = A(F.feasibility.what_it_takes);
   if (F.projection && typeof F.projection === 'object') F.projection.assumptions = A(F.projection.assumptions);
   if (F.leadform && typeof F.leadform === 'object') F.leadform.questions = A(F.leadform.questions);
+  // Poškozené sekce (AI vrátila celé pole jako jeden text) → vyprázdnit a nahlásit
+  F.broken = [];
+  ['ads', 'remarketing', 'sequence', 'tasks', 'pages', 'offer_stack', 'new_products', 'launch_plan'].forEach((k) => { const v = F[k]; if (Array.isArray(v) && v.length === 1 && v[0] && typeof v[0] === 'object' && Object.keys(v[0]).some((f) => typeof v[0][f] === 'string' && v[0][f].length > 300 && /^\s*[\[{]/.test(v[0][f]))) { F[k] = []; F.broken.push(k); } });
   return F;
 }
 async function getInvent() { return normalizeFunnel(scrub(await getJ(KEY_INVENT, null))); }
@@ -254,6 +257,32 @@ const BS2_HUB = 'BEST SERIES 2.0 (www.bestseries2.cz) JE STŘEDOBOD: každý zá
 
 // Generování po částech: 1) jádro (myšlenka, nabídka, čísla) ~1 min, 2) souběžně reklamy / stránky / sekvence.
 // Každá hotová část se hned uloží (status 'generating') → UI ukazuje průběžný výsledek a po restartu serveru se pozná přerušení.
+// Které klíče MUSÍ být pole / objekt (podle části) – model pak nevrací seznam jako jeden řetězec
+const AI_SHAPES = {
+  'Jádro': { arr: ['offer_stack', 'new_products', 'page_plan', 'kpis', 'risks'], obj: ['feasibility', 'projection'] },
+  'Reklamy': { arr: ['ads', 'remarketing'], obj: ['leadform'] },
+  'SMS a e-maily': { arr: ['sequence', 'launch_plan'], obj: ['sales_process'] },
+  'Úkoly': { arr: ['tasks', 'owner_questions'], obj: [] },
+  'Stránka': { arr: ['sections', 'form_fields'], obj: [] },
+  'Úprava': { arr: ['changed_sections'], obj: ['patch'] },
+};
+function shapeFor(label) { const k = Object.keys(AI_SHAPES).find((x) => String(label).indexOf(x) === 0); return k ? AI_SHAPES[k] : null; }
+function toolFor(label) {
+  const sh = shapeFor(label); if (!sh) return OUT_TOOL;
+  const props = {}; sh.arr.forEach((k) => { props[k] = { type: 'array', items: { type: 'object', additionalProperties: true } }; }); sh.obj.forEach((k) => { props[k] = { type: 'object', additionalProperties: true }; });
+  ['risks', 'form_fields', 'changed_sections'].forEach((k) => { if (props[k]) props[k] = { type: 'array', items: {} }; }); // pole textů
+  return Object.assign({}, OUT_TOOL, { input_schema: { type: 'object', properties: props, required: sh.arr.concat(sh.obj).filter((k) => !['leadform', 'form_fields', 'changed_sections'].includes(k)), additionalProperties: true } });
+}
+// Kontrola tvaru: pole musí být pole (řetězec s platným JSONem se rozparsuje, jinak = chyba → nový pokus)
+function checkShape(out, label) {
+  const sh = shapeFor(label); if (!sh || !out) return out;
+  sh.arr.concat(sh.obj).forEach((k) => {
+    let v = out[k]; if (typeof v === 'string') { try { v = JSON.parse(v); out[k] = v; } catch (e) { throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
+    if (v != null && sh.arr.includes(k) && !Array.isArray(v)) out[k] = typeof v === 'object' ? Object.values(v) : [v];
+    if (Array.isArray(out[k]) && out[k].length === 1 && typeof out[k][0] === 'string' && /^\s*[\[{]/.test(out[k][0])) { try { const x = JSON.parse(out[k][0]); out[k] = Array.isArray(x) ? x : [x]; } catch (e) { throw Object.assign(new Error(label + ': pole „' + k + '" přišlo jako poškozený text'), { parse: true }); } }
+  });
+  return out;
+}
 async function aiJson(client, system, prompt, maxTokens, label) {
   try { return await aiJsonOnce(client, system, prompt, maxTokens, label); }
   catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
@@ -269,13 +298,13 @@ function deepParse(v, d) {
 }
 const OUT_TOOL = { name: 'vystup', description: 'Odevzdej výsledek jako jeden objekt přesně podle struktury popsané v zadání (sekce VÝSTUP).', input_schema: { type: 'object', additionalProperties: true } };
 async function aiJsonOnce(client, system, prompt, maxTokens, label) {
-  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [OUT_TOOL], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }).finalMessage(); }
+  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [toolFor(label)], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }).finalMessage(); }
   catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
   const tu = (r.content || []).find((c) => c.type === 'tool_use' && c.input && typeof c.input === 'object');
-  if (tu && Object.keys(tu.input).length) return scrub(deepParse(tu.input));
+  if (tu && Object.keys(tu.input).length) return scrub(checkShape(deepParse(tu.input), label));
   // záloha: kdyby model přece jen napsal text
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
-  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(JSON.parse(raw.slice(a, b + 1))); }
+  try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(checkShape(JSON.parse(raw.slice(a, b + 1)), label)); }
   catch (e) {
     console.warn('[ads-director] ' + label + ' – neplatný výstup (stop=' + r.stop_reason + '):', raw.slice(0, 300).replace(/\s+/g, ' '));
     throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens', parse: true });
