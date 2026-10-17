@@ -438,6 +438,7 @@ router.post('/director/invent/revise', async (req, res, next) => {
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
   try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
 });
+router.get('/director/invent/pages/:pid/live', (req, res) => { const pid = String(req.params.pid || ''); const j = _jobs['page:' + pid]; const L = DIRECTOR.pvLive(pid); res.set('Cache-Control', 'no-store'); res.json({ running: !!(j && j.running), started_at: j && j.started_at, error: j && j.error, chars: L ? L.chars : 0, html: L ? L.html : '' }); });
 router.get('/director/invent/pages/:pid/html', async (req, res, next) => {
   try {
     const F = await DIRECTOR.getInvent(); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));

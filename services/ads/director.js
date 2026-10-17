@@ -474,6 +474,9 @@ async function revise(opts) {
 }
 
 // Náhled stránky funnelu: AI napíše kompletní HTML podle návrhu (uloží se k funnelu)
+// Průběžné HTML náhledu stránky (UI ukazuje, jak stránka vzniká)
+const PV_LIVE = {};
+function pvLive(pid) { const L = PV_LIVE[pid]; if (!L) return null; const i = L.html.indexOf('<!DOCTYPE'); return { started: L.started, chars: L.html.length, done: !!L.done, html: i >= 0 ? L.html.slice(i) : L.html.replace(/^[\s\S]*?(<html)/i, '$1') }; }
 async function pagePreview(pageId) {
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
   const F = await getJ(KEY_INVENT, null); if (!F) throw new Error('Funnel ještě není vymyšlený');
@@ -495,7 +498,10 @@ async function pagePreview(pageId) {
     + 'Formuláře jen vizuálně (action="#", submit zobrazí ukázkovou hlášku). Sticky CTA lišta na mobilu. Plně responzivní (mobil 390px i desktop 1440px), max-width obsahu ~1120px.\n';
   const prompt = 'Vytvoř KOMPLETNÍ, produkčně vypadající a REALISTICKOU HTML stránku (jeden soubor, inline CSS a JS, Google Fonts smí). Musí vypadat jako hotový web od špičkového studia – ne wireframe. Texty z návrhu převeď do skutečného designu (Markdown značky jako ## nebo ** nesmí být vidět). Česky.\n\n' + BS2_DESIGN + '\nPRAVIDLO: cenu prádlomatu (stroje) NIKDY neuváděj – sděluje se až na osobní schůzce; ceny online produktů uvádět smíš.\n\nFUNNEL: ' + F.name + ' — ' + (F.big_idea || '') + '\nHÁČEK: ' + (F.hook || '') + '\nNABÍDKY (online produkty): ' + JSON.stringify(offers.filter((o) => !/prádlomat/i.test(o.name || ''))).slice(0, 4000) + '\n\nSTRÁNKA: ' + JSON.stringify(p).slice(0, 14000) + '\n\nVrať POUZE HTML od <!DOCTYPE html> po </html>.';
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
-  const r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: 32000, messages: [{ role: 'user', content: prompt }] }).finalMessage();
+  const PV = PV_LIVE[pageId] = { html: '', started: Date.now(), done: false };
+  const st = client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: 32000, messages: [{ role: 'user', content: prompt }] });
+  st.on('text', (t) => { PV.html += t; });
+  let r; try { r = await st.finalMessage(); } finally { PV.done = true; setTimeout(() => { if (PV_LIVE[pageId] === PV) delete PV_LIVE[pageId]; }, 120000); }
   let html = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   const a = html.indexOf('<!DOCTYPE'), b = html.lastIndexOf('</html>'); if (a >= 0 && b > a) html = html.slice(a, b + 7);
   if (!/<html/i.test(html)) throw new Error('AI nevrátila HTML');
@@ -505,4 +511,4 @@ async function pagePreview(pageId) {
   return { ok: true, html_at: p2.html_at };
 }
 
-module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, revise, machineTypes, liveGet, KEY_INVENT };
+module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, revise, machineTypes, liveGet, pvLive, KEY_INVENT };
