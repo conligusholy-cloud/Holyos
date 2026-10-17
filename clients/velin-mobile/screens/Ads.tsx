@@ -85,6 +85,11 @@ export default function Ads() {
           ))}
         </View>
 
+        <TouchableOpacity style={[s.webBtn, { borderColor: '#2fe3a0' }]} activeOpacity={0.8} onPress={() => navigation.navigate('AdsLive')}>
+          <Text style={s.webBtnTxt}>🟢 Živě — v reálném čase</Text>
+          <Text style={s.webBtnSub}>kdo je právě na stránkách, co dělá, poslední akce</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity style={s.webBtn} activeOpacity={0.8} onPress={() => navigation.navigate('AdsWeb')}>
           <Text style={s.webBtnTxt}>🖥 Otevřít celé Centrum reklamy</Text>
           <Text style={s.webBtnSub}>plné ovládání: funely, editor, ředitel, Meta, nastavení</Text>
