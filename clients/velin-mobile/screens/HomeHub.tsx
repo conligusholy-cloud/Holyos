@@ -36,6 +36,8 @@ const APPS: HubApp[] = [
   { key: 'assistant', title: 'Vzkazy', icon: '📞', tint: BS.accent, screen: 'AssistantSettings' },
   // Administrace schůzek — zatím jen Tomáš a Jan Holý (stejné oprávnění jako Podpora)
   { key: 'meetings', title: 'Schůzky', icon: '📅', tint: BS.vio, screen: 'Meetings', adminOnly: true },
+  // Centrum reklamy (statistiky stránek, funely, Meta + celé Centrum ve WebView) — jen Tomáš a Jan Holý
+  { key: 'ads', title: 'Reklama', icon: '📣', tint: BS.accent2, screen: 'Ads', adminOnly: true },
 ];
 
 function greeting(): string {

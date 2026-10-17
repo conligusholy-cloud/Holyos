@@ -49,6 +49,8 @@ import SupportList from './screens/SupportList';
 import SupportThread from './screens/SupportThread';
 import SupportSound from './screens/SupportSound';
 import Meetings from './screens/Meetings';
+import Ads from './screens/Ads';
+import AdsWeb from './screens/AdsWeb';
 import { colors } from './lib/theme';
 import { useSupportAllowed, useSupportUnread } from './lib/support';
 
@@ -84,6 +86,8 @@ export type RootStackParamList = {
   SupportThread: { supporterId: number; title?: string };
   SupportSound: undefined;
   Meetings: undefined;
+  Ads: undefined;
+  AdsWeb: undefined;
 };
 
 export type TabsParamList = {
@@ -382,6 +386,16 @@ export default function App() {
             name="SupportThread"
             component={SupportThread}
             options={{ animation: 'slide_from_right' }}
+          />
+          <Stack.Screen
+            name="Ads"
+            component={Ads}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Reklama', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="AdsWeb"
+            component={AdsWeb}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Centrum reklamy', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="Meetings"

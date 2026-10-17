@@ -419,6 +419,10 @@ export const api = {
   },
 
   // ─── Podpora BS2 (jen Tomáš a Jan Holý; proxy HolyOS → BS2) ───────────────
+  // Centrum reklamy (jen Tomáš a Jan Holý — stejná oprávnění jako na webu; token je shodný HolyOS JWT)
+  adsGet: <T = any>(jwt: string, path: string) =>
+    request<T>('GET', '/api/ads-center' + path, { jwt, timeoutMs: 60000 }),
+
   // Administrace schůzek (jen Tomáš a Jan Holý)
   meetings: (jwt: string, from: string, to: string) =>
     request<{ slots: MeetingSlot[] }>('GET', `/api/velin/meetings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { jwt }),
