@@ -18,6 +18,7 @@ const { prisma } = require('../../config/database');
 
 const FIELDS = {
   sources: { label: 'Zdroj', options: [['facebook_ads', 'FB reklama'], ['google_ads', 'Google Ads'], ['web', 'Web'], ['misto', 'Prověř místo'], ['compounder', 'Compounder'], ['crm_import', 'Import CRM'], ['manual', 'Ručně']] },
+  marketing_statuses: { label: 'Marketingový stav (Centrum reklamy)', options: [['none', 'Dosud neosloveno'], ['osloven_specialista', 'Osloven – specialista'], ['osloven_schuzka', 'Osloven – schůzka'], ['blokovan', 'Blokován (odhlášen / bounce)']] },
   statuses: { label: 'Stav v CRM', options: [['new', 'Nový'], ['nedovolano', 'Nedovoláno'], ['volat_pristi', 'Volat příště'], ['contacted', 'Kontaktován'], ['access_sent', 'Přístup odeslán'], ['odeslan_specialista', 'Odeslán specialista'], ['odeslana_schuzka', 'Odeslána schůzka'], ['qualified', 'Kvalifikován'], ['nezajem', 'Nezájem'], ['nelze_pouzit', 'Nelze použít'], ['rejected', 'Odmítnut'], ['won', 'Vyhráno']] },
 };
 
@@ -28,6 +29,12 @@ function whereOf(cond, baseWhere) {
   const w = Object.assign({}, baseWhere || {}); const c = cond || {};
   if (Array.isArray(c.sources) && c.sources.length) w.source = { in: c.sources };
   if (Array.isArray(c.statuses) && c.statuses.length) w.status = { in: c.statuses };
+  if (Array.isArray(c.marketing_statuses) && c.marketing_statuses.length) {
+    const ms = c.marketing_statuses.filter((x) => x !== 'none'); const or = [];
+    if (ms.length) or.push({ marketing_status: { in: ms } });
+    if (c.marketing_statuses.includes('none')) or.push({ marketing_status: null });
+    w.AND = (Array.isArray(w.AND) ? w.AND : []).concat([{ OR: or }]);
+  }
   if (Array.isArray(c.ad_ids) && c.ad_ids.length) w.meta_ad_id = { in: c.ad_ids.map(String) };
   if (c.created_min_days != null && c.created_min_days !== '') w.created_at = Object.assign({}, w.created_at || {}, { lte: daysAgo(c.created_min_days) });
   if (c.created_max_days != null && c.created_max_days !== '') w.created_at = Object.assign({}, w.created_at || {}, { gte: daysAgo(c.created_max_days) });
@@ -50,7 +57,7 @@ function passMem(l, cond) {
   if (c.noreact_days != null && c.noreact_days !== '') { const t = [sentSms(l), sentEmail(l)].filter(Boolean).map((x) => new Date(x).getTime()); if (!t.length) return false; if (Math.max(...t) > daysAgo(c.noreact_days).getTime()) return false; if (clickedAny(l)) return false; }
   return true;
 }
-const SEL = { id: true, name: true, email: true, phone: true, status: true, source: true, city: true, created_at: true, owner_person_id: true, external_rep_id: true, outreach_variant: true, meta_ad_id: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true, schuzka_opened_at: true, ai_specialist_opened_at: true };
+const SEL = { id: true, name: true, email: true, phone: true, status: true, marketing_status: true, source: true, city: true, created_at: true, owner_person_id: true, external_rep_id: true, outreach_variant: true, meta_ad_id: true, schuzka_sms_sent_at: true, ai_specialist_sms_sent_at: true, schuzka_email_sent_at: true, ai_specialist_email_sent_at: true, schuzka_opened_at: true, ai_specialist_opened_at: true };
 
 // Základní množina uzlu: všechny kontakty v HolyOS, nebo jen z formuláře (form = { form_id, ad_ids })
 function baseWhere(nd, form) {
@@ -73,6 +80,7 @@ function passAll(l, cond) {
   const c = cond || {};
   if (Array.isArray(c.sources) && c.sources.length && !c.sources.includes(l.source)) return false;
   if (Array.isArray(c.statuses) && c.statuses.length && !c.statuses.includes(l.status)) return false;
+  if (Array.isArray(c.marketing_statuses) && c.marketing_statuses.length && !c.marketing_statuses.includes(l.marketing_status || 'none')) return false;
   if (Array.isArray(c.ad_ids) && c.ad_ids.length && !c.ad_ids.map(String).includes(String(l.meta_ad_id))) return false;
   if (c.created_min_days != null && c.created_min_days !== '' && new Date(l.created_at) > daysAgo(c.created_min_days)) return false;
   if (c.created_max_days != null && c.created_max_days !== '' && new Date(l.created_at) < daysAgo(c.created_max_days)) return false;

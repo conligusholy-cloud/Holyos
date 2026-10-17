@@ -6182,6 +6182,10 @@ model CompounderLead {
   status String @default("new") @db.VarChar(30)
   // new | contacted | qualified | converted | rejected
 
+  // Samostatný stav pro Centrum reklamy (automat, kampaně, funel) — NEZÁVISÍ na CRM stavu `status`,
+  // který používají obchodníci. null | osloven_specialista | osloven_schuzka | blokovan
+  marketing_status String? @db.VarChar(40)
+
   // Zdroj a kontext příchodu
   source     String  @default("web") @db.VarChar(50)
   ref        String? @db.VarChar(500) // document.referrer
@@ -6309,6 +6313,7 @@ model CompounderLead {
   messages LeadMessage[]
 
   @@index([status])
+  @@index([marketing_status])
   @@index([role])
   @@index([email])
   @@index([owner_person_id])

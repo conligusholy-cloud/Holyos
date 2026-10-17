@@ -1519,10 +1519,10 @@ async function autosendAiSpecialistSms(lead, opts) {
         ai_specialist_sms_status: 'odesláno',
         ai_specialist_sms_channel: 'gateway',
         outreach_variant: 'specialist',
-        status: 'odeslan_specialista', // automaticky přepnout stav kontaktu
+        marketing_status: 'osloven_specialista', // marketingový stav; CRM `status` se nemění
       },
     }).catch(() => {});
-    console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ stav odeslan_specialista');
+    console.log('[aispec-autosend] SMS specialisty odeslána na lead', lead.id, '→ marketing_status osloven_specialista');
     require('../services/ads/funnel-events').record('sms', lead.id, { variant: 'specialist', channel: 'sms', to: lead.phone, text: String(text || '').slice(0, 600), msg_id: String(sid || ''), link });
   } catch (e) { logOutreach(lead && lead.id, 'specialist', 'error', 'SMS brána: ' + e.message); }
 }
@@ -1548,7 +1548,7 @@ async function sendSchuzkaSmsAuto(lead, cfg) {
         schuzka_sms_status: 'odesláno',
         schuzka_sms_channel: 'gateway',
         outreach_variant: 'schuzka',
-        status: 'odeslana_schuzka',
+        marketing_status: 'osloven_schuzka',
       },
     }).catch(() => {});
     console.log('[schuzka-autosend] SMS „cesta k rozhodnutí" odeslána na lead', lead.id);
@@ -1570,7 +1570,7 @@ async function sendSchuzkaEmailAuto(lead, cfg) {
     const r = await sendMail({ to: lead.email, subject: m.subject, body: m.body, from, fromName: '💧 PRÁDLOMATY 💧', link: m.link, linkLabel: m.linkLabel, trackingPixel: mailOpenPixel(lead.id, 'schuzka'), preheader: m.preheader, brand: 'pradlomaty', leadId: lead.id, campaignId: 'funnel-schuzka' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
-      data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
+      data: { schuzka_email_sent_at: new Date(), schuzka_email_status: (r && r.sent) ? 'odesláno' : ('neodesláno: ' + ((r && r.error) || r.skipped || '?')).slice(0, 40), outreach_variant: 'schuzka', marketing_status: 'osloven_schuzka' },
     }).catch(() => {});
     if (!r || !r.sent) logOutreach(lead.id, 'schuzka', 'error', 'e-mail: ' + ((r && (r.error || r.skipped)) || '?'));
     else { console.log('[schuzka-autosend-email] e-mail „cesta k rozhodnutí" odeslán na lead', lead.id); require('../services/ads/funnel-events').record('email', lead.id, { variant: 'schuzka', channel: 'email', to: lead.email, subject: String(m.subject || '').slice(0, 200), text: String(m.body || '').slice(0, 1500), from, link: m.link }); }
@@ -1594,7 +1594,7 @@ async function autosendAiSpecialistEmail(lead, opts) {
     // (Rozdělení leadů → Seznam → E-mail). Dřív právě ony tiše zastavovaly nové leady (zejména Tomáše a Jana).
     if (lead.outreach_variant === 'schuzka' || lead.schuzka_sms_sent_at || lead.schuzka_email_sent_at) return skip('už osloveno variantou schůzka');
     if (!manual && Array.isArray(cfg.sources) && cfg.sources.length && cfg.sources.indexOf(lead.source || '') === -1) return skip('zdroj „' + (lead.source || '?') + '" není v pravidlech');
-    if (!manual && cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('stav není Nový');
+    if (!manual && cfg.onlyNew && (lead.status || 'new') !== 'new' && lead.status !== 'odeslan_specialista') return skip('CRM stav není Nový');
     if (lead.ai_specialist_email_sent_at) return skip('e-mail už odeslán');
     if (cfg.skipBlacklist) { const blocked = await _isBlocked(lead.email, lead.phone).catch(() => false); if (blocked) return skip('black list'); }
     await prisma.compounderLead.update({ where: { id: lead.id }, data: { show_ai_specialist: true } }).catch(() => {});
@@ -1605,7 +1605,7 @@ async function autosendAiSpecialistEmail(lead, opts) {
     await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     await prisma.compounderLead.update({
       where: { id: lead.id },
-      data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' },
+      data: { ai_specialist_email_sent_at: new Date(), ai_specialist_email_status: 'odesláno', marketing_status: 'osloven_specialista' },
     }).catch(() => {});
     console.log('[aispec-autosend-email] e-mail specialisty odeslán na lead', lead.id);
     require('../services/ads/funnel-events').record('email', lead.id, { variant: 'specialist', channel: 'email', to: lead.email, subject: String(subject || '').slice(0, 200), text: String(body || '').slice(0, 1500), from, link });

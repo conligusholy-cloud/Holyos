@@ -21,7 +21,7 @@ async function autoUnsubscribe(email, reason) {
     const ex = await prisma.compounderBlocklist.findFirst({ where: { email: { equals: em, mode: 'insensitive' } }, select: { id: true } });
     if (!ex) await prisma.compounderBlocklist.create({ data: { email: em, note: ('auto: ' + (reason || 'odhlášení')).slice(0, 255) } });
     await prisma.emailMessage.updateMany({ where: { to: { equals: em, mode: 'insensitive' } }, data: { unsubscribed: true } }).catch(() => {});
-    await prisma.compounderLead.updateMany({ where: { email: { equals: em, mode: 'insensitive' } }, data: { status: 'nelze_pouzit' } }).catch(() => {});
+    await prisma.compounderLead.updateMany({ where: { email: { equals: em, mode: 'insensitive' } }, data: { marketing_status: 'blokovan' } }).catch(() => {});
   } catch (e) { console.warn('[email-log] autoUnsubscribe:', e.message); }
 }
 
