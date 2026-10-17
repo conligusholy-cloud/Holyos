@@ -410,6 +410,23 @@ router.post('/director/invent', async (req, res, next) => {
     res.status(202).json({ ok: true, job: runJob('invent', () => DIRECTOR.invent({ brief: b.brief })) });
   } catch (err) { next(err); }
 });
+// Uložené strategie (verze vymyšleného funnelu) – max 30, aktuální lze uložit pod názvem a kdykoli vrátit
+const SAVED_KEY = 'ads_director.invent_saved';
+router.get('/director/invent/saved', async (req, res, next) => { try { const { getSetting } = require('../services/settings'); const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; res.json(list.map((x) => ({ id: x.id, name: x.name, saved_at: x.saved_at, saved_by: x.saved_by, funnel_name: x.funnel && x.funnel.name, generated_at: x.funnel && x.funnel.generated_at }))); } catch (err) { next(err); } });
+router.post('/director/invent/save', async (req, res, next) => {
+  try { const { getSetting, setSetting } = require('../services/settings'); const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); if (!F || F.status === 'generating') return res.status(400).json({ error: 'Není co uložit (funnel se ještě generuje nebo neexistuje).' });
+    const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || [];
+    const item = { id: Date.now().toString(36), name: String((req.body || {}).name || F.name || 'Strategie').slice(0, 120), saved_at: new Date().toISOString(), saved_by: req.user && (req.user.display_name || req.user.username) || null, funnel: F };
+    list.unshift(item); await setSetting(SAVED_KEY, list.slice(0, 30), { type: 'json', description: 'Marketingový ředitel – uložené strategie', scope: 'marketing', userId: req.user && req.user.id });
+    res.json({ ok: true, id: item.id, name: item.name });
+  } catch (err) { next(err); } });
+router.post('/director/invent/saved/:id/load', async (req, res, next) => {
+  try { const { getSetting, setSetting } = require('../services/settings'); const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; const it = list.find((x) => x.id === req.params.id); if (!it) return res.status(404).json({ error: 'Nenalezeno' });
+    if (_jobs.invent && _jobs.invent.running) return res.status(409).json({ error: 'Právě se generuje nový funnel – počkej, až doběhne.' });
+    await setSetting(DIRECTOR.KEY_INVENT, it.funnel, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id }); res.json({ ok: true });
+  } catch (err) { next(err); } });
+router.delete('/director/invent/saved/:id', async (req, res, next) => {
+  try { const { getSetting, setSetting } = require('../services/settings'); const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; await setSetting(SAVED_KEY, list.filter((x) => x.id !== req.params.id), { type: 'json', description: 'Marketingový ředitel – uložené strategie', scope: 'marketing', userId: req.user && req.user.id }); res.json({ ok: true }); } catch (err) { next(err); } });
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
   try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
 });

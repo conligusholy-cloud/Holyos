@@ -242,12 +242,20 @@ async function aiJson(client, system, prompt, maxTokens, label) {
   try { return await aiJsonOnce(client, system, prompt, maxTokens, label); }
   catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
 }
+// Výstup jako volání nástroje „vystup" → API vrátí hotový objekt (žádné ruční parsování JSONu z textu, který rozbíjejí uvozovky v copy)
+const OUT_TOOL = { name: 'vystup', description: 'Odevzdej výsledek jako jeden objekt přesně podle struktury popsané v zadání (sekce VÝSTUP).', input_schema: { type: 'object', additionalProperties: true } };
 async function aiJsonOnce(client, system, prompt, maxTokens, label) {
-  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] }).finalMessage(); }
+  let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [OUT_TOOL], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }).finalMessage(); }
   catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
+  const tu = (r.content || []).find((c) => c.type === 'tool_use' && c.input && typeof c.input === 'object');
+  if (tu && Object.keys(tu.input).length) return scrub(tu.input);
+  // záloha: kdyby model přece jen napsal text
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(JSON.parse(raw.slice(a, b + 1))); }
-  catch (e) { throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens', parse: true }); }
+  catch (e) {
+    console.warn('[ads-director] ' + label + ' – neplatný výstup (stop=' + r.stop_reason + '):', raw.slice(0, 300).replace(/\s+/g, ' '));
+    throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens', parse: true });
+  }
 }
 async function invent(opts) {
   if (!deps) throw new Error('Ředitel není inicializovaný');
