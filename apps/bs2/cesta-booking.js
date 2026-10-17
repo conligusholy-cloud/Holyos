@@ -42,7 +42,17 @@
     '.bk-chip{font-size:12.5px;color:#dceaf6;background:rgba(30,134,224,.12);border:0.5px solid rgba(46,140,224,.4);padding:5px 12px;border-radius:999px}',
     '.bk-change{margin-top:12px;background:none;border:1px solid rgba(46,140,224,.3);border-radius:10px;padding:10px 14px;color:#4aa3ea;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer}',
     '.bk-status{min-height:20px;margin-top:12px;font-size:14px;color:#4aa3ea;text-align:center}',
-    '.bk-foot{position:relative;margin-top:14px;text-align:center;font-size:12.5px;color:#7fa6c8}'
+    '.bk-foot{position:relative;margin-top:14px;text-align:center;font-size:12.5px;color:#7fa6c8}',
+    '.bk-form{position:relative}',
+    '.bk-fg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}',
+    '@media(max-width:520px){.bk-fg{grid-template-columns:1fr}}',
+    '.bk-form label{display:block;font-size:12.5px;color:#9db6cd;font-weight:600}',
+    '.bk-form input[name]:not([type=checkbox]){display:block;width:100%;box-sizing:border-box;margin-top:5px;background:#0e1e33;border:1px solid rgba(46,140,224,.3);border-radius:10px;padding:12px 13px;color:#e9f0f7;font:inherit;font-size:15px;font-weight:400}',
+    '.bk-form input:focus{outline:none;border-color:#4aa3ea}',
+    '.bk-form .bk-ck{display:flex;gap:9px;align-items:flex-start;font-weight:400;font-size:13px;line-height:1.5;margin-top:6px;color:#c3d6e8}',
+    '.bk-form .bk-ck input{margin-top:3px;flex:none}',
+    '.bk-form .bk-ck a{color:#4aa3ea}',
+    '.bk-note{text-align:center;font-size:12.5px;color:#7fa6c8;margin-top:10px}'
   ].join('\n');
 
   var DN = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
@@ -96,6 +106,7 @@
       elModes.style.display = which === 'modes' ? '' : 'none';
       elCal.style.display = which === 'cal' ? '' : 'none';
       elDone.style.display = which === 'done' ? '' : 'none';
+      var fm = root.querySelector('.bk-form'); if (fm) fm.style.display = which === 'form' ? '' : 'none';
       elFoot.style.display = which === 'done' ? 'none' : '';
       var intro = document.getElementById('intro'); if (intro) intro.style.display = which === 'modes' ? '' : 'none';
     }
@@ -167,18 +178,52 @@
       show('done');
     }
 
+    // Po výběru termínu: kontaktní údaje (jméno, příjmení, e-mail, telefon) → rezervace + účet v Best Series 2.0
+    var elForm = null;
     function book(slotId) {
-      if (!token) { setStatus('Odkaz nemá platný identifikátor. Otevřete prosím odkaz z SMS.', true); return; }
-      var payload = { slot_id: slotId, t: token, mode: chosenMode, path: path || undefined };
-      elWeek.querySelectorAll('.bk-slot').forEach(function (x) { x.disabled = true; });
+      var slot = (slotsCache || []).filter(function (s) { return s.id === slotId; })[0];
+      var dt = slot ? new Date(slot.starts_at) : null;
+      if (!elForm) { elForm = document.createElement('div'); elForm.className = 'bk-form'; elCal.parentNode.insertBefore(elForm, elDone); }
+      var saved = {}; try { saved = JSON.parse(localStorage.getItem('bs2_bk_contact') || '{}') || {}; } catch (e) { saved = {}; }
+      var v = function (k) { return String(saved[k] || '').replace(/"/g, '&quot;'); };
+      elForm.innerHTML =
+        '<button type="button" class="bk-back bk-fback">← vybrat jiný termín</button>' +
+        '<h2 class="bk-h">Kam vám <span class="g">pošleme potvrzení?</span></h2>' +
+        '<p class="bk-sub">' + (dt ? '<b>' + dayHead(dt) + ' v ' + hhmm(dt) + '</b> · ' : '') + MODE_LABEL[chosenMode] + (path ? ' · ' + PATH_LABEL[path] : '') + '</p>' +
+        '<div class="bk-fg"><label>Jméno<input name="first_name" autocomplete="given-name" value="' + v('first_name') + '"></label><label>Příjmení<input name="last_name" autocomplete="family-name" value="' + v('last_name') + '"></label></div>' +
+        '<div class="bk-fg"><label>E-mail<input name="email" type="email" autocomplete="email" value="' + v('email') + '"></label><label>Telefon<input name="phone" type="tel" autocomplete="tel" value="' + v('phone') + '"></label></div>' +
+        '<label class="bk-ck"><input type="checkbox" name="gdpr" value="1"> Souhlasím se <a href="/gdpr" target="_blank">zpracováním osobních údajů</a> pro domluvení schůzky a založení účtu v Best Series 2.0.</label>' +
+        '<button type="button" class="bk-mode bk-submit" style="width:100%;margin-top:14px">Potvrdit termín →</button>' +
+        '<p class="bk-note">Zároveň vám založíme účet v Best Series 2.0 – přihlašovací odkaz vám pošleme e-mailem.</p>';
+      show('form');
+      elForm.querySelector('.bk-fback').addEventListener('click', function () { show('cal'); setStatus(''); });
+      elForm.querySelector('.bk-submit').addEventListener('click', function () {
+        var f = {}; ['first_name', 'last_name', 'email', 'phone'].forEach(function (k) { f[k] = elForm.querySelector('[name=' + k + ']').value.trim(); });
+        if (!f.first_name || !f.last_name) return setStatus('Vyplňte prosím jméno a příjmení.', true);
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return setStatus('Zadejte prosím platný e-mail.', true);
+        if (f.phone.replace(/\D/g, '').length < 9) return setStatus('Zadejte prosím telefon.', true);
+        if (!elForm.querySelector('[name=gdpr]').checked) return setStatus('Pro rezervaci je potřeba souhlas se zpracováním osobních údajů.', true);
+        try { localStorage.setItem('bs2_bk_contact', JSON.stringify(f)); } catch (e) {}
+        var btn = this; btn.disabled = true;
+        send(slotId, f, function () { btn.disabled = false; });
+      });
+      root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }
+    function send(slotId, f, onFail) {
+      var payload = { slot_id: slotId, t: token || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
       setStatus('Rezervuji termín…');
       fetch('/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (d) {
-          if (d && d.ok) { setStatus(''); renderDone(d, true); root.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
-          else { setStatus((d && d.error) || 'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.', true); elWeek.querySelectorAll('.bk-slot').forEach(function (x) { x.disabled = false; }); }
+          if (d && d.ok) {
+            setStatus(''); renderDone(d, true);
+            var p = elDone.querySelector('p');
+            if (p) p.insertAdjacentHTML('afterend', '<p style="margin-top:10px">' + (d.account === 'created' ? '📧 Na <b>' + f.email.replace(/</g, '') + '</b> jsme vám poslali potvrzení a odkaz pro přihlášení do Best Series 2.0.' : d.account === 'exists' ? '📧 Potvrzení jsme poslali na <b>' + f.email.replace(/</g, '') + '</b>. Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : '') + '</p>');
+            root.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          }
+          else { setStatus((d && d.error) || 'Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.', true); onFail && onFail(); }
         })
-        .catch(function () { setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.', true); elWeek.querySelectorAll('.bk-slot').forEach(function (x) { x.disabled = false; }); });
+        .catch(function () { setStatus('Rezervaci se nepodařilo dokončit. Zkuste to prosím znovu.', true); onFail && onFail(); });
     }
 
     // Už má rezervaci? Ukázat ji místo výběru (jeden lead = jeden termín).

@@ -711,7 +711,47 @@ async function holyosMeeting(req, res, method, sub) {
 }
 app.get('/api/cesta/meeting-slots', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-slots?days=' + (parseInt(req.query.days, 10) || 15)));
 app.get('/api/cesta/meeting-reservation', (req, res) => holyosMeeting(req, res, 'GET', 'meeting-reservation?t=' + encodeURIComponent(String(req.query.t || ''))));
-app.post('/api/cesta/meeting-reservation', (req, res) => { if (rateLimited('cmr:' + req.ip, 20, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho pokusů. Zkuste to prosím později.' }); holyosMeeting(req, res, 'POST', 'meeting-reservation'); });
+// Rezervace z /cesta: kontakt (jméno, příjmení, e-mail, telefon) → rezervace v HolyOS + účet v BS2 (pozvaný) + e-mail s přihlášením
+app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
+  if (rateLimited('cmr:' + req.ip, 20, 3600e3)) return res.status(429).json({ ok: false, error: 'Příliš mnoho pokusů. Zkuste to prosím později.' });
+  const b = req.body || {};
+  const f = { first_name: String(b.first_name || '').trim().slice(0, 80), last_name: String(b.last_name || '').trim().slice(0, 80), email: String(b.email || '').trim().toLowerCase().slice(0, 160), phone: String(b.phone || '').trim().slice(0, 30) };
+  if (!f.first_name || !f.last_name) return res.status(400).json({ ok: false, error: 'Vyplňte prosím jméno a příjmení.' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) return res.status(400).json({ ok: false, error: 'Zadejte prosím platný e-mail.' });
+  if (!/^[+0-9 ()./-]{6,25}$/.test(f.phone) || f.phone.replace(/\D/g, '').length < 9) return res.status(400).json({ ok: false, error: 'Zadejte prosím platný telefon.' });
+  if (b.gdpr !== true && String(b.gdpr) !== '1') return res.status(400).json({ ok: false, error: 'Pro rezervaci je potřeba souhlas se zpracováním osobních údajů.' });
+  // 1) rezervace v HolyOS
+  let d;
+  try {
+    const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone }) });
+    d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
+  } catch (e) { console.warn('[bs2] cesta rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
+  // 2) účet v BS2 (když ještě neexistuje) – pozvaný; nick + heslo si zvolí přes odkaz z e-mailu
+  let account = 'exists', u = null;
+  try {
+    u = (await q('SELECT id, password_hash, status FROM supporters WHERE email=$1', [f.email])).rows[0];
+    if (!u) {
+      const tail = f.phone.replace(/\D/g, '').slice(-9);
+      const phoneTaken = (await q("SELECT 1 FROM supporters WHERE phone IS NOT NULL AND right(regexp_replace(phone, '\\D', '', 'g'), 9)=$1", [tail])).rows.length > 0;
+      u = (await q("INSERT INTO supporters (email, first_name, last_name, phone, status, user_type, source, gdpr_consent_at) VALUES ($1,$2,$3,$4,'invited','new','cesta',now()) RETURNING id, password_hash, status", [f.email, f.first_name, f.last_name, phoneTaken ? null : f.phone])).rows[0];
+      account = 'created';
+    }
+  } catch (e) { console.warn('[bs2] cesta účet:', e.message); account = 'error'; }
+  // 3) e-mail: potvrzení termínu + přihlášení / aktivace účtu
+  const MON = ['ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
+  const dt = new Date(d.starts_at); const p = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(dt).reduce((a, x) => (a[x.type] = x.value, a), {});
+  const when = p.weekday + ' ' + p.day + '. ' + MON[(+p.month) - 1] + ' v ' + p.hour + ':' + p.minute;
+  const modeTxt = d.mode === 'online' ? 'online video hovor (odkaz vám pošleme před schůzkou)' : d.mode === 'osobne' ? 'osobní schůzka (místo upřesníme)' : 'schůzka';
+  const activated = !!(u && u.password_hash);
+  const body = 'Dobrý den, ' + f.first_name + ',\n\nděkujeme, máte rezervovanou schůzku: ' + when + ' – ' + modeTxt + '. Potrvá zhruba 17 minut. Kdyby vám termín nevyhovoval, stačí odpovědět na tento e-mail.\n\n'
+    + (activated ? 'Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : 'Zároveň jsme vám založili účet v Best Series 2.0 – najdete v něm aplikace pro výběr a prověření místa. Účet aktivujete kliknutím na tlačítko níže: zadejte tento e-mail (' + f.email + ') a zvolte si nick a heslo.')
+    + '\n\nBest Series s.r.o.';
+  sendBs2Mail({ to: f.email, subject: 'Schůzka ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, link: PUBLIC_URL + (activated ? '/login' : '/activate'), linkLabel: activated ? 'Přihlásit se' : 'Aktivovat účet' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
+  if (account === 'created') notifyVelin('📅 Nová schůzka + účet', f.first_name + ' ' + f.last_name + ' · ' + when, '/admin/meetings', 'order');
+  res.json(Object.assign({}, d, { account: account === 'error' ? 'exists' : account }));
+}));
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
 // Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu
