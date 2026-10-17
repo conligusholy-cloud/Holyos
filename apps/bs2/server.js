@@ -597,6 +597,20 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
 }));
 // Skutečné návštěvy záchytné stránky z odkazů v oslovení: kódy leadů (?l=<kód>) z OPRAVDOVÉHO zobrazení stránky v prohlížeči (JS sledování),
 // ne z automatických otevření odkazu (poštovní skenery, náhledy). HolyOS podle toho počítá „otevřel odkaz" ve funelu.
+// Aktuální ceník online produktů (Prověření lokality, Vyhledávač míst, dokupy) pro AI ředitele v HolyOS – ceny v Kč vč. úprav z admin → Online produkty
+app.get('/api/holyos/catalog', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');
+  if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
+  try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
+  const kc = (a) => Math.round(Number(a || 0)) / 100;
+  res.json({
+    location: Object.entries(LOC.PACKAGES).map(([k, v]) => ({ key: k, name: v.name, desc: v.desc, price_czk: kc(v.amount) })),
+    finder: Object.entries(LOC.FINDER_PRICES).map(([k, a]) => ({ key: k, name: 'Vyhledávač míst – ' + ((LOC.PACKAGES[k] || {}).label || k), desc: 'Přístup do aplikace Vyhledávač míst na 12 měsíců', price_czk: kc(a) })),
+    addons: Object.entries(LOC.EVAL_PACKS).map(([k, v]) => ({ key: k, name: v.name, desc: v.desc, price_czk: kc(v.amount) })),
+    upgrades: 'Přechod na vyšší balíček = doplatek rozdílu ceny',
+  });
+}));
 app.get('/api/holyos/ads-landing-codes', wrap(async (req, res) => {
   res.set('Cache-Control', 'no-store');
   const secret = process.env.BS2_SSO_SECRET; const m = /^Bearer (.+)$/.exec(req.headers.authorization || '');

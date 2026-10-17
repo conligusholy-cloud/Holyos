@@ -212,18 +212,42 @@ async function getInvent() { return scrub(await getJ(KEY_INVENT, null)); }
 
 const INVENT_SYSTEM = 'Jsi kreativní marketingový ředitel a špičkový direct-response marketér (úroveň Russell Brunson / Alex Hormozi / Dan Kennedy, ale na český trh). Stavíš FUNNELY, které prodávají: silná velká myšlenka (big idea), neodolatelná nabídka (value stack, bonusy, garance, omezení), háčky do reklam, copywriting, který zastaví palec, a následné sekvence, které dovedou člověka k nákupu. Nejsi úředník, který popisuje stav – jsi stratég, který VYMÝŠLÍ a ROZHODUJE. Píšeš hotové texty (reklamy, stránky, SMS, e-maily) připravené k použití, ne osnovy. Firma: Best Series – prádlomaty (samoobslužné prádelny v kontejneru / v prostoru; prodej strojů, financování/leasing, servis, díly) a online aplikace Prověření lokality a Vyhledávač míst; weby bestseries2.cz, pradlomaty.info, compounder.world. Jiný projekt Špagetka/Špageta pro tebe neexistuje. Buď ale POCTIVÝ v číslech: kreativní v nabídce, realistický v matematice. Když je cíl v daném čase nereálný, řekni to rovnou, spočítej proč a navrhni, co by ho reálně splnilo (jiná cena, jiný produkt, jiné publikum, jiný čas). Vše česky.';
 
+// Skutečný ceník: stroje z Prodejního ceníku HolyOS + online produkty z BS2 (aktuální ceny z admin → Online produkty)
+async function catalog() {
+  const out = { machines: [], online: null, source_note: '' };
+  try {
+    const rows = await prisma.salesPricelistItem.findMany({ where: { active: true, kind: 'machine' }, orderBy: [{ price_czk: 'asc' }], take: 80,
+      select: { name_cs: true, price_czk: true, price_eur: true, model_version: true, model_variant: true, machine_code: true, config_options: true, note: true } });
+    out.machines = rows.map((r) => ({ name: r.name_cs, price_czk_bez_dph: r.price_czk != null ? Number(r.price_czk) : null, price_eur_bez_dph: r.price_eur != null ? Number(r.price_eur) : null, model: [r.model_version, r.model_variant].filter(Boolean).join(' ') || null, code: r.machine_code || null,
+      options: Array.isArray(r.config_options) ? r.config_options.map((g) => g && g.name + ': ' + (Array.isArray(g.options) ? g.options.map((o) => o && o.name).filter(Boolean).join(' / ') : '')).filter(Boolean).slice(0, 8) : undefined }));
+  } catch (e) { out.source_note += 'Ceník strojů nenačten (' + e.message + '). '; }
+  try {
+    const jwt = require('jsonwebtoken'); const secret = process.env.BS2_SSO_SECRET; const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+    if (secret) { const r = await fetch(base + '/api/holyos/catalog', { headers: { Authorization: 'Bearer ' + jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '1m' }) }, signal: AbortSignal.timeout(10000) }); if (r.ok) out.online = await r.json(); }
+  } catch (e) { /* fallback níže */ }
+  if (!out.online) { // výchozí ceny z kódu BS2 (bez případných úprav v adminu)
+    try { const L = require('../../apps/bs2/location'); const kc = (a) => Math.round(Number(a || 0)) / 100;
+      out.online = { location: Object.entries(L.PACKAGES).map(([k, v]) => ({ key: k, name: v.name, desc: v.desc, price_czk: kc(v.amount) })), finder: Object.entries(L.FINDER_PRICES).map(([k, a]) => ({ key: k, name: 'Vyhledávač míst – ' + k, price_czk: kc(a) })), addons: Object.entries(L.EVAL_PACKS).map(([k, v]) => ({ key: k, name: v.name, price_czk: kc(v.amount) })) };
+      out.source_note += 'Online ceny = výchozí z kódu BS2 (živý ceník nedostupný). ';
+    } catch (e) { out.source_note += 'Online ceník nenačten. '; }
+  }
+  return out;
+}
+
+const BS2_HUB = 'BEST SERIES 2.0 (www.bestseries2.cz) JE STŘEDOBOD: každý zájemce si tam zakládá ÚČET a přihlašuje se – v účtu kupuje a používá online produkty (Prověření lokality, Vyhledávač míst, dokupy vyhodnocení/vyhledání), vidí své lokality a výsledky, komunikuje s podporou (chat s Best Series), rezervuje schůzku / prohlídku výroby a postupně dojde k nákupu prádlomatu. Funnel proto MUSÍ vést k vytvoření účtu v BS2 jako klíčové konverzi (účet = vlastní kontakt + souhlas + místo, kam se zákazník vrací) a e-maily/SMS mají zvát zpět do účtu. Záchytné stránky mohou být na bestseries2.cz (/location, /findlocation, nové stránky navrhni s URL na bestseries2.cz).';
+
 // Generování po částech: 1) jádro (myšlenka, nabídka, čísla) ~1 min, 2) souběžně reklamy / stránky / sekvence.
 // Každá hotová část se hned uloží (status 'generating') → UI ukazuje průběžný výsledek a po restartu serveru se pozná přerušení.
 async function aiJson(client, system, prompt, maxTokens, label) {
   try { return await aiJsonOnce(client, system, prompt, maxTokens, label); }
-  catch (e) { if (!e.truncated) throw e; return aiJsonOnce(client, system, prompt + '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.', Math.min(maxTokens * 2, 48000), label); } // usekla se → 1× znovu s vyšším limitem
+  catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
 }
 async function aiJsonOnce(client, system, prompt, maxTokens, label) {
   let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, messages: [{ role: 'user', content: prompt }] }).finalMessage(); }
   catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(JSON.parse(raw.slice(a, b + 1))); }
-  catch (e) { throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens' }); }
+  catch (e) { throw Object.assign(new Error(label + ': ' + (r.stop_reason === 'max_tokens' ? 'odpověď AI se usekla' : 'neplatná odpověď AI')), { truncated: r.stop_reason === 'max_tokens', parse: true }); }
 }
 async function invent(opts) {
   if (!deps) throw new Error('Ředitel není inicializovaný');
@@ -232,7 +256,9 @@ async function invent(opts) {
   const inv = await inventory(); const m = await metrics(30);
   const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
   const GOALS = 'CÍLE MAJITELE (závazné):\n- prodávat stabilně ' + goals.machines_per_week + ' prádlomaty TÝDNĚ (90 % prodejů se uzavírá na osobní schůzce nebo prohlídce výroby),\n- během ' + goals.online_days + ' dní vydělat na doplňkovém prodeji ONLINE produktů ' + Number(goals.online_net_czk).toLocaleString('cs-CZ') + ' Kč ČISTÉHO (po odečtení reklamy),\n' + (goals.budget_czk_day ? '- rozpočet na reklamu: ' + goals.budget_czk_day + ' Kč/den,\n' : '- rozpočet na reklamu navrhni sám (dnes ~5 800 Kč/den),\n') + (goals.note ? '- poznámka majitele: ' + goals.note + '\n' : '') + (brief ? '- doplňující zadání: ' + brief + '\n' : '');
-  const F = { status: 'generating', parts: {}, part_errors: {}, started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), goals, brief: brief || null };
+  const CAT = await catalog();
+  const PRICES = '\n\nSKUTEČNÝ CENÍK (ZÁVAZNÝ – používej POUZE tyto ceny a názvy; nevymýšlej ceny prádlomatů ani existujících online produktů. Nový produkt smíš navrhnout, ale označ ho v názvu „(NOVÝ)" a cenu zdůvodni):\nPRÁDLOMATY (Prodejní ceník HolyOS, Kč bez DPH): ' + JSON.stringify(CAT.machines).slice(0, 7000) + '\nONLINE PRODUKTY v BS2 (Kč vč. DPH): ' + JSON.stringify(CAT.online || {}).slice(0, 4000) + (CAT.source_note ? '\nPozn.: ' + CAT.source_note : '') + '\n\n' + BS2_HUB + '\n';
+  const F = { status: 'generating', parts: {}, part_errors: {}, started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), goals, brief: brief || null, catalog: CAT };
   const save = () => { F.heartbeat_at = new Date().toISOString(); return setJ(KEY_INVENT, F, 'Marketingový ředitel – vymyšlený funnel'); };
   await save();
   // Tep: dokud úloha žije, každých 20 s obnoví heartbeat_at → UI pozná skutečný restart serveru (tep přestane)
@@ -240,23 +266,28 @@ async function invent(opts) {
   try {
 
   // 1) Jádro
-  const core = await aiJson(client, INVENT_SYSTEM, GOALS
+  const core = await aiJson(client, INVENT_SYSTEM, GOALS + PRICES
     + '\nDNEŠNÍ STAV (jen pro poučení – NEKOPÍRUJ ho; dnešní cesta „FB reklama → rychlý formulář → e-mail/SMS s odkazem" je prodělečná):\nINVENTÁŘ: ' + JSON.stringify(inv).slice(0, 12000) + '\nČÍSLA ZA 30 DNÍ: ' + JSON.stringify(m).slice(0, 10000)
     + '\n\nÚKOL (krok 1 ze 2): vymysli JÁDRO nového funnelu od nuly: velkou myšlenku, háček, nabídkový žebřík online produktů s cenami (i produkty, které dnes neexistují – tak, aby se cíl čistého zisku dal reálně spočítat: vstupní produkt, order bump, upsell, prémiová služba, rezervace prádlomatu se zálohou, VIP prohlídka výroby…), cestu zákazníka (jaké stránky funnel potřebuje), poctivou proveditelnost a projekci čísel.\n'
     + 'VÝSTUP: pouze JSON bez Markdownu:\n{"name":"krátký název","big_idea":"1–2 věty","hook":"hlavní háček / slib","feasibility":{"verdict":"realné|náročné|nereálné v daném čase","math":"výpočet s čísly","what_it_takes":[""],"adjusted_goal":""},"offer_stack":[{"name":"","type":"vstupní|bump|upsell|prémiový|rezervace|schůzka|prádlomat","price_czk":0,"promise":"","contents":[""],"why_buy":"","expected_take_rate":""}],"page_plan":[{"id":"p1","type":"záchytná|prodejní|důvěra|děkovací|rezervace","name":"","purpose":"","next":"p2"}],"channel_decision":"rychlý formulář vs. záchytná stránka – rozhodnutí a proč","projection":{"days":' + goals.online_days + ',"spend_czk":0,"visitors":0,"leads":0,"online_orders":0,"online_revenue_czk":0,"online_net_czk":0,"meetings_per_week":0,"machines_per_week":0,"calc":"výpočet krok za krokem","assumptions":[""]},"kpis":[{"metric":"","target":"","why":""}],"risks":[""]}\nČísla jsou čísla. Texty stručné a úderné (calc max ~8 řádků, ostatní pole 1–3 věty). Česky.', 16000, 'Jádro');
   Object.assign(F, core); F.parts.core = true; await save();
 
-  const CTX = GOALS + '\nJÁDRO FUNNELU (už rozhodnuto, drž se ho):\n' + JSON.stringify({ name: core.name, big_idea: core.big_idea, hook: core.hook, offer_stack: core.offer_stack, page_plan: core.page_plan, channel_decision: core.channel_decision, projection: core.projection }).slice(0, 9000) + '\n\n';
+  const CTX = GOALS + PRICES + '\nJÁDRO FUNNELU (už rozhodnuto, drž se ho):\n' + JSON.stringify({ name: core.name, big_idea: core.big_idea, hook: core.hook, offer_stack: core.offer_stack, page_plan: core.page_plan, channel_decision: core.channel_decision, projection: core.projection }).slice(0, 9000) + '\n\n';
   const pageIds = (core.page_plan || []).map((p) => p.id).join(', ');
   const parts = [
     ['ads', 'Reklamy', 14000, CTX + 'ÚKOL (krok 2a): napiš 3–5 FB reklam s HOTOVÝM textem a remarketing (3–4 okruhy). destination/link_page = id stránky z page_plan (' + pageIds + ') nebo "leadform".\nVÝSTUP: pouze JSON:\n{"ads":[{"id":"ad1","name":"","angle":"","audience":"cílení","format":"video|obrázek|carousel","creative_brief":"scéna po scéně / co je na obrázku","primary_text":"plný text","headline":"","description":"","cta_button":"","destination":"p1","why_destination":"","budget_czk_day":0}],"leadform":{"use":false,"why":"","questions":[]},"remarketing":[{"audience":"","window":"","angle":"","text":"","link_page":"p1","budget_czk_day":0}]}'],
-    ['pages', 'Stránky', 24000, CTX + 'ÚKOL (krok 2b): pro KAŽDOU stránku z page_plan napiš, jak přesně má vypadat – hotové texty všech sekcí shora dolů (prodejní copywriting: hero, problém, řešení, důkazy, nabídka s value stackem, garance, FAQ, výzva), formulář, CTA, vizuální styl. Zachovej id stránek.\nVÝSTUP: pouze JSON:\n{"pages":[{"id":"p1","type":"","slug":"/navrh-url","name":"","purpose":"","headline":"","subheadline":"","sections":[{"name":"","copy":"hotový text"}],"form_fields":[],"cta":"","offer":"","design":"","next":"p2","success_metric":""}]}'],
     ['sequence', 'SMS a e-maily', 16000, CTX + 'ÚKOL (krok 2c): napiš sekvenci 12–18 SMS a e-mailů po získání kontaktu s HOTOVÝMI texty (SMS max 300 znaků), podmínkami komu, odkazem na stránku z page_plan (' + pageIds + '); dál prodejní proces na schůzce/prohlídce výroby a plán spuštění po dnech.\nVÝSTUP: pouze JSON:\n{"sequence":[{"id":"m1","day":"D0 +5 min","channel":"sms|email","condition":"","subject":"","text":"","link_page":"p2","goal":""}],"sales_process":{"meeting":"","closing":"","follow_up":"","capacity":""},"launch_plan":[{"when":"den 1","what":""}]}'],
   ];
+  // Stránky: každá zvlášť (menší JSON = spolehlivější a rychlejší, běží souběžně)
+  const plan = (core.page_plan || []).slice(0, 7); F.pages = plan.map((p) => Object.assign({}, p, { pending: true }));
+  const pageJobs = plan.map((pp, i) => aiJson(client, INVENT_SYSTEM, CTX + 'ÚKOL (krok 2b): napiš JEDNU stránku funnelu – id "' + pp.id + '" (' + (pp.type || '') + ': ' + (pp.name || '') + ' – ' + (pp.purpose || '') + '). Přesně jak má vypadat: hotové prodejní texty všech sekcí shora dolů (hero, problém, řešení, důkazy, nabídka s value stackem a SKUTEČNÝMI cenami z ceníku, garance, FAQ, výzva), formulář (u registrace účet v BS2), CTA, vizuální styl.\nVÝSTUP: pouze JSON:\n{"id":"' + pp.id + '","type":"","slug":"https://www.bestseries2.cz/…","name":"","purpose":"","headline":"","subheadline":"","sections":[{"name":"","copy":"hotový text"}],"form_fields":[],"cta":"","offer":"","design":"","next":"' + (pp.next || '') + '","success_metric":""}', 9000, 'Stránka ' + (pp.name || pp.id))
+    .then(async (res) => { F.pages[i] = Object.assign({}, pp, res, { id: pp.id }); await save(); })
+    .catch(async (e) => { F.pages[i] = Object.assign({}, pp, { error: e.message }); F.part_errors['page_' + pp.id] = e.message; await save(); }));
   await Promise.all(parts.map(([key, label, max, prompt]) => aiJson(client, INVENT_SYSTEM, prompt, max, label)
     .then(async (res) => { Object.assign(F, res); F.parts[key] = true; await save(); })
-    .catch(async (e) => { F.part_errors[key] = e.message; await save(); })));
-  if (!F.pages || !F.pages.length) F.pages = (core.page_plan || []).map((p) => Object.assign({}, p));
+    .catch(async (e) => { F.part_errors[key] = e.message; await save(); })).concat(pageJobs));
+  F.pages = (F.pages || []).map((p) => { const { pending, ...rest } = p; return rest; });
+  if (plan.length && !plan.some((pp) => F.part_errors['page_' + pp.id])) F.parts.pages = true;
   F.status = Object.keys(F.part_errors).length ? 'partial' : 'done'; F.generated_at = new Date().toISOString();
   await save();
   if (F.status === 'partial') throw new Error('Část se nepovedla: ' + Object.values(F.part_errors).join('; ') + ' – zbytek je uložený, zkus „Vymyslet" znovu.');
