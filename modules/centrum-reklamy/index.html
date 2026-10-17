@@ -99,7 +99,15 @@
     .legend { font-size:11px; color:var(--text2); display:flex; gap:12px; }
     .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
     @media(max-width:768px){ .main-wrapper{margin-left:0;} .nums{grid-template-columns:repeat(2,1fr);} .grid{grid-template-columns:1fr;} }
-  </style>
+    /* Formulář cílů – Vymyslet nový funnel */
+  .igf label { display:flex; flex-direction:column; gap:6px; font-size:12px; font-weight:600; color:#a5b4d4; letter-spacing:.02em; }
+  .igf input, .igf textarea { width:100%; box-sizing:border-box; padding:11px 14px; background:#0b1222; color:#f1f5f9; border:1px solid #2c3a5c; border-radius:10px; font-family:inherit; font-size:15px; font-weight:600; line-height:1.3; outline:none; transition:border-color .15s, box-shadow .15s; }
+  .igf textarea { font-weight:400; font-size:14px; line-height:1.5; resize:vertical; min-height:84px; }
+  .igf input:focus, .igf textarea:focus { border-color:#a78bfa; box-shadow:0 0 0 3px rgba(167,139,250,.22); }
+  .igf input::placeholder, .igf textarea::placeholder { color:#5b6b8c; }
+  .igf .unit { position:relative; } .igf .unit input { padding-right:46px; } .igf .unit span { position:absolute; right:14px; top:50%; transform:translateY(-50%); color:#6b7a99; font-size:13px; font-weight:600; pointer-events:none; }
+  .igf input[type=number]::-webkit-inner-spin-button { opacity:.4; }
+</style>
   <style>
     .ov { position:fixed; inset:0; background:rgba(4,6,12,.7); display:none; align-items:center; justify-content:center; z-index:100000; } .ov.open { display:flex; }
     .dlg { width:min(1700px,96vw); max-height:94vh; overflow:auto; background:var(--surface,#171a26); border:1px solid var(--border,#2a2f45); border-radius:14px; padding:18px 20px; box-shadow:0 30px 80px rgba(0,0,0,.6); }
@@ -479,14 +487,14 @@
     async function invFetch(url, opt) { for (var k = 0; ; k++) { try { var r = await fetch(url, Object.assign({ credentials: 'same-origin', cache: 'no-store' }, opt || {})); if ([502, 503, 504].indexOf(r.status) >= 0 && k < 12) throw new Error('retry'); var j = await r.json().catch(function () { return {}; }); if (!r.ok) throw Object.assign(new Error(j.error || ('HTTP ' + r.status)), { fatal: true }); return j; } catch (e) { if (e.fatal || k >= 12) throw e; await new Promise(function (res) { setTimeout(res, 5000); }); } } }
     function invGoalsForm(g, F) {
       g = g || {}; var cz = function (n) { return Number(n || 0).toLocaleString('cs-CZ'); };
-      return '<div class="scard" style="max-width:900px;margin:10px auto 18px;border-color:#a78bfa"><h5 style="color:#c4b5fd">🎯 Cíle, podle kterých ředitel vymyslí funnel</h5>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:8px">'
-        + '<label class="note">Prádlomatů týdně<br><input id="ig-mpw" type="number" min="0" value="' + (g.machines_per_week != null ? g.machines_per_week : 3) + '" style="width:100%"></label>'
-        + '<label class="note">Čistý zisk z online produktů (Kč)<br><input id="ig-net" type="number" min="0" step="100000" value="' + (g.online_net_czk != null ? g.online_net_czk : 5000000) + '" style="width:100%"></label>'
-        + '<label class="note">Za kolik dní<br><input id="ig-days" type="number" min="1" value="' + (g.online_days || 14) + '" style="width:100%"></label>'
-        + '<label class="note">Rozpočet na reklamu Kč/den (0 = navrhne)<br><input id="ig-bud" type="number" min="0" value="' + (g.budget_czk_day || 0) + '" style="width:100%"></label></div>'
-        + '<label class="note" style="display:block;margin-top:10px">Doplňující zadání (co chceš, co nechceš, nápady)<br><textarea id="ig-brief" rows="3" style="width:100%" placeholder="např. chci využít prohlídky výroby, nechci slevy, máme 40 referencí…">' + esc((F && F.brief) || g.note || '') + '</textarea></label>'
-        + '<div style="display:flex;gap:10px;align-items:center;margin-top:10px"><button class="btn on" id="ig-go">🧠 Vymyslet nový funnel</button><span class="note">Trvá 3–6 min, běží na serveru – okno můžeš zavřít. Cíl: ' + cz(g.machines_per_week) + ' prádlomaty/týden + ' + cz(g.online_net_czk) + ' Kč čistého za ' + (g.online_days || 14) + ' dní.</span></div></div>';
+      return '<div class="scard igf" style="max-width:900px;margin:10px auto 18px;border-color:#a78bfa;padding:20px 22px"><h5 style="color:#c4b5fd;margin-bottom:14px">🎯 Cíle, podle kterých ředitel vymyslí funnel</h5>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end">'
+        + '<label>Prádlomatů týdně<div class="unit"><input id="ig-mpw" type="number" min="0" value="' + (g.machines_per_week != null ? g.machines_per_week : 3) + '"><span>ks</span></div></label>'
+        + '<label>Čistý zisk z online produktů<div class="unit"><input id="ig-net" type="number" min="0" step="100000" value="' + (g.online_net_czk != null ? g.online_net_czk : 5000000) + '"><span>Kč</span></div></label>'
+        + '<label>Za kolik dní<div class="unit"><input id="ig-days" type="number" min="1" value="' + (g.online_days || 14) + '"><span>dní</span></div></label>'
+        + '<label>Rozpočet na reklamu <span style="font-weight:400;color:#6b7a99">(0 = navrhne ředitel)</span><div class="unit"><input id="ig-bud" type="number" min="0" step="500" value="' + (g.budget_czk_day || 0) + '"><span>Kč/den</span></div></label></div>'
+        + '<label style="margin-top:16px">Doplňující zadání <span style="font-weight:400;color:#6b7a99">(co chceš, co nechceš, nápady)</span><textarea id="ig-brief" rows="3" placeholder="např. chci využít prohlídky výroby, nechci slevy, máme 40 referencí…">' + esc((F && F.brief) || g.note || '') + '</textarea></label>'
+        + '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px"><button class="btn on" id="ig-go" style="padding:11px 20px;font-size:15px">🧠 Vymyslet nový funnel</button><span class="note">Trvá 3–6 min, běží na serveru – okno můžeš zavřít. Cíl: ' + cz(g.machines_per_week) + ' prádlomaty/týden + ' + cz(g.online_net_czk) + ' Kč čistého za ' + (g.online_days || 14) + ' dní.</span></div></div>';
     }
     function invWork(since, what) { return '<div class="dirwork" style="max-width:680px;margin:60px auto"><span class="cmp">🧠</span><div style="flex:1"><div style="font-weight:800">' + (what || 'Ředitel vymýšlí nový funnel…') + '</div><div class="bar"><i></i></div><div class="note" style="font-size:11.5px;margin-top:6px">Velká myšlenka → nabídka → reklamy → stránky → SMS/e-maily → remarketing → prodej na schůzce → čísla. Běží na serveru (3–6 min).' + (since ? ' Začato ' + new Date(since).toLocaleTimeString('cs-CZ') + '.' : '') + '</div></div></div>'; }
     async function invLoad(start, payload) {
