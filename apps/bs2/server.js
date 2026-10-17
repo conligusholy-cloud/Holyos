@@ -46,7 +46,28 @@ app.use((req, res, next) => {
   res.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (isHttps(req)) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   // CSP: cizí skripty se nespustí, formuláře nejdou odeslat jinam, stránku nelze vložit do iframe. Inline skripty/handlery aplikace jsou povoleny ('unsafe-inline').
-  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self'; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'");
+  res.set('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://connect.facebook.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://www.facebook.com https://connect.facebook.net; media-src 'self' blob:; frame-src https://www.youtube-nocookie.com https://www.youtube.com; object-src 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; frame-ancestors 'none'");
+  next();
+});
+// ---- Meta Pixel + souhlas s cookies (pixel-client.js): vkládá se jen do VEŘEJNÝCH stránek, načte se až po souhlasu ----
+const META_PIXEL_ID = String(process.env.META_PIXEL_ID || '1426721986233963').replace(/\D/g, '');
+const PIXEL_PATHS = /^\/(cesta(\/|$)|location(\/|$)|findlocation\/?$|arena\/?$|lp\/[a-z0-9-]{1,60}\/?$|home\/?$)/;
+app.get('/bs2-pixel.js', (req, res) => {
+  let js = '';
+  try { js = require('fs').readFileSync(require('path').join(__dirname, 'pixel-client.js'), 'utf8').split('__PIXEL_ID__').join(META_PIXEL_ID); } catch (e) { js = ''; }
+  res.set('Cache-Control', 'public, max-age=300').type('application/javascript').send(js);
+});
+app.use((req, res, next) => {
+  if (req.method !== 'GET' || !PIXEL_PATHS.test(req.path)) return next();
+  const send = res.send.bind(res);
+  res.send = function (body) {
+    try {
+      if (typeof body === 'string' && /<html/i.test(body) && body.indexOf('/bs2-pixel.js') < 0 && /text\/html/i.test(String(res.get('Content-Type') || 'text/html'))) {
+        body = /<head[^>]*>/i.test(body) ? body.replace(/<head[^>]*>/i, (m) => m + '<script src="/bs2-pixel.js"></script>') : body.replace('</body>', '<script src="/bs2-pixel.js"></script></body>');
+      }
+    } catch (e) { /* stránka se pošle bez pixelu */ }
+    return send(body);
+  };
   next();
 });
 // ---- CSRF: každý POST musí přijít z našeho webu (Origin/Referer = náš host). Formuláře navíc nesou token svázaný s relací. ----
@@ -860,6 +881,25 @@ app.post('/api/location/checkout', wrap(async (req, res) => {
   await q('UPDATE location_orders SET stripe_session=$1 WHERE id=$2', [session.id, oid]);
   console.log('[bs2] /location checkout #' + oid + ' ' + d.pkg + ' → ' + session.id);
   res.json({ ok: true, url: session.url, lead_id: leadId });
+}));
+// Ověření platby pro Meta Purchase: vrací jen částku/CZK/ID objednávky (žádné osobní údaje). Platba musí být potvrzená (DB po webhooku, nebo přímo u Stripe).
+app.get('/api/location/paid-info', wrap(async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const sid = String(req.query.s || '');
+  if (!/^cs_[A-Za-z0-9_]{10,200}$/.test(sid)) return res.status(400).json({ paid: false });
+  if (rateLimited('pi:' + req.ip, 60, 600e3)) return res.status(429).json({ paid: false });
+  const row = (await q('SELECT id, package, product, amount_czk, status FROM location_orders WHERE stripe_session=$1', [sid])).rows[0];
+  if (!row) return res.json({ paid: false });
+  const name = (row.product === 'finder' ? 'Vyhledávač míst – ' : 'Prověření lokality – ') + String(row.package || '');
+  if (['paid', 'granted'].includes(row.status) && Number(row.amount_czk) > 0) return res.json({ paid: true, value: Number(row.amount_czk), currency: 'CZK', order_id: row.id, package: row.package, name });
+  if (process.env.STRIPE_SECRET_KEY && !['refunded', 'canceled'].includes(row.status)) { // webhook ještě nedoběhl → ověř přímo u Stripe
+    try {
+      const r = await fetch('https://api.stripe.com/v1/checkout/sessions/' + encodeURIComponent(sid), { headers: { Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY }, signal: AbortSignal.timeout(10000) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.payment_status === 'paid' && String(j.currency || '').toLowerCase() === 'czk' && j.amount_total > 0) return res.json({ paid: true, value: Math.round(j.amount_total) / 100, currency: 'CZK', order_id: row.id, package: row.package, name });
+    } catch (e) { /* nepotvrzeno */ }
+  }
+  res.json({ paid: false });
 }));
 // Náhradní režim bez Stripe: žádost o objednávku (admin pošle platební údaje ručně).
 app.post('/api/location/interest', wrap(async (req, res) => {

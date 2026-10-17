@@ -7,6 +7,6 @@ const FOOTER_CSS = `.site-foot{margin-top:70px;padding:26px 0 8px;border-top:1px
 .site-foot nav a{color:#7d93b8;text-decoration:none}.site-foot nav a:hover{color:#4fd1ff}
 @media(max-width:720px){.site-foot{flex-direction:column;align-items:flex-start}}`;
 function siteFooter() {
-  return `<footer class="site-foot"><div class="sf-brand">${logoSvg(40, 'sf')}<span><b>Best Series 2.0</b> &nbsp;© Best Series</span></div><nav><a href="/findlocation">Vyhledávač míst</a><a href="/location">Prověření lokality</a><a href="/location/vop">Obchodní podmínky</a><a href="/location/gdpr">Ochrana osobních údajů</a><a href="/login">Přihlášení</a></nav></footer>`;
+  return `<footer class="site-foot"><div class="sf-brand">${logoSvg(40, 'sf')}<span><b>Best Series 2.0</b> &nbsp;© Best Series</span></div><nav><a href="/findlocation">Vyhledávač míst</a><a href="/location">Prověření lokality</a><a href="/location/vop">Obchodní podmínky</a><a href="/location/gdpr">Ochrana osobních údajů</a><a href="/login">Přihlášení</a><a href="#" data-bs2-cookies>Nastavení cookies</a></nav></footer>`;
 }
 module.exports = { siteFooter, FOOTER_CSS };

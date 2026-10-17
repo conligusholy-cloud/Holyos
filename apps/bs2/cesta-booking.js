@@ -226,6 +226,13 @@
           if (d && d.ok) {
             setStatus(''); renderDone(d, true);
             try { if (d.lead_id && window.__bs2LeadSet) window.__bs2LeadSet(d.lead_id); } catch (e) {}
+            // Meta Pixel (jen s marketingovým souhlasem; bez osobních údajů): Lead = kontakt přijat a uložen na serveru, Schedule = potvrzená rezervace
+            try {
+              if (window.bs2Pixel) {
+                if (d.lead_id) window.bs2Pixel.event('Lead', { content_name: 'Zájem o prádlomat', content_category: 'prádlomat' }, 'lead-' + d.lead_id);
+                window.bs2Pixel.event('Schedule', { content_name: 'Schůzka – prádlomat' }, 'schedule-' + (d.id || d.lead_id || Date.now()));
+              }
+            } catch (e) {}
             var p = elDone.querySelector('p');
             if (p) p.insertAdjacentHTML('afterend', '<p style="margin-top:10px">' + (d.account === 'created' ? '📧 Na <b>' + f.email.replace(/</g, '') + '</b> jsme vám poslali potvrzení a odkaz pro přihlášení do Best Series 2.0.' : d.account === 'exists' ? '📧 Potvrzení jsme poslali na <b>' + f.email.replace(/</g, '') + '</b>. Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : '') + '</p>');
             root.scrollIntoView({ block: 'start', behavior: 'smooth' });
