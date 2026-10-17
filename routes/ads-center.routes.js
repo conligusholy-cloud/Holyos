@@ -429,6 +429,38 @@ router.post('/director/invent/saved/:id/load', async (req, res, next) => {
   } catch (err) { next(err); } });
 router.delete('/director/invent/saved/:id', async (req, res, next) => {
   try { const { getSetting, setSetting } = require('../services/settings'); const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; await setSetting(SAVED_KEY, list.filter((x) => x.id !== req.params.id), { type: 'json', description: 'Marketingový ředitel – uložené strategie', scope: 'marketing', userId: req.user && req.user.id }); res.json({ ok: true }); } catch (err) { next(err); } });
+// ── Přesné zadání pro Clauda (Claude Code) k navrženému online produktu: konkrétní soubory/tabulky/endpointy BS2, hotové k vložení ──
+router.post('/director/invent/dev-brief', async (req, res, next) => {
+  try {
+    const it = req.body && req.body.item; if (!it || typeof it !== 'object' || !it.name) return res.status(400).json({ error: 'Chybí produkt' });
+    const Anthropic = require('@anthropic-ai/sdk'); const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY není nastavený' });
+    const client = new Anthropic({ apiKey });
+    const spec = JSON.stringify(it, null, 1).slice(0, 9000);
+    const prompt = 'Jsi senior softwarový architekt a produktový manažer. Napiš PŘESNÉ ZADÁNÍ PRO VÝVOJ, které majitel vloží jako prompt Claudovi (Claude Code) pracujícímu v repozitáři „Výroba" (HolyOS + BS2), a ten podle něj funkci rovnou naprogramuje bez dalších dotazů.\n\n'
+      + 'KONTEXT REPOZITÁŘE (skutečný, drž se ho):\n'
+      + '• BS2 = samostatná aplikace apps/bs2 (Node 18, Express 4, PostgreSQL přes `pg`, bez ORM, vanilla JS na frontendu, bez frameworků, jazyk UI i komentářů ČEŠTINA). Veřejná na bestseries2.cz; vstupní soubor apps/bs2/server.js (routy `app.get/post(\'/api/...\', wrap(async (req,res)=>…))`), schéma DB v apps/bs2/db.js jako `CREATE TABLE IF NOT EXISTS …` / `ALTER TABLE … ADD COLUMN IF NOT EXISTS …` (bez migračního nástroje, idempotentně).\n'
+      + '• Existující tabulky BS2: supporters (účty; user_type standard|owner|seller, status invited|active|blocked, extra JSONB), products, product_offers, purchases, credits, orders, support_transfers, user_events, mail_log, suggestions, support_messages, location_orders (Stripe checkout /api/location/checkout + webhook), page_events/page_hits, landing_pages, location_sites, arena_*. Přihlášení = cookie/JWT, kontrola přes existující middleware (např. requireLocation pro zakoupené funkce) – NOVÉ placené funkce mají využít stejný vzor nákupu (Stripe checkout + webhook → záznam v purchases/credits) a stejný vzor přístupu po zakoupení.\n'
+      + '• Data prádlomatů a ceník jsou v HolyOS (Express + Prisma + PostgreSQL); BS2 je čte přes služební endpointy /api/holyos/* (JWT aud holyos-api, iss bs2, tajemství BS2_SSO_SECRET). Nové zdroje dat pro BS2 se přidávají do HolyOS jen přes nový službený endpoint v routes/ + Prisma (nikdy raw SQL v HolyOS; migrace SQL souborem v prisma/migrations, na Railway se neaplikuje `migrate dev`).\n'
+      + '• Pravidla: čeština, `node --check` všech změněných JS, žádné nové závislosti bez nutnosti, nic neposílat zákazníkům samo, žádné ostré platby při testu, nic nemazat. Nasazení: git push do main (Railway), HolyOS před BS2.\n\n'
+      + 'PRODUKT K IMPLEMENTACI (návrh marketingového ředitele, JSON):\n' + spec + '\n\n'
+      + 'VÝSTUP: pouze text zadání (Markdown), v tomto pořadí, bez úvodu a bez závěrečných poznámek:\n'
+      + '# Cíl (2–3 věty: co se postaví a proč – prodat které balíčky za kolik)\n'
+      + '# Rozsah MVP (co JE v první verzi, co ne – realisticky nejmenší prodejná verze; zbytek do „Později")\n'
+      + '# Uživatelský tok (krok za krokem: kde zákazník produkt uvidí, jak zaplatí, co uvidí po zaplacení)\n'
+      + '# Datový model (přesné SQL `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE … IF NOT EXISTS` pro apps/bs2/db.js, sloupce a typy, indexy; případně Prisma model + migrace pro HolyOS, jen pokud nutné)\n'
+      + '# Backend (seznam endpointů: metoda, cesta, auth, vstup, výstup, chybové stavy; přesně do kterého souboru; logika výpočtů se vzorci a vstupními hodnotami)\n'
+      + '# Frontend (kterých stránek/souborů se to týká, obrazovky, pole formulářů, texty tlačítek česky, stavy načítání/chyb)\n'
+      + '# Platby a přístup (balíčky s cenami z návrhu, jak se po platbě odemkne přístup, co se stane při expiraci)\n'
+      + '# Zdroje dat (odkud se berou čísla; co je skutečně v DB a co je třeba nejdřív doplnit; nic si nevymýšlej – kde data nejsou, napiš to a navrhni zástupné řešení)\n'
+      + '# Tracking a měření (události do user_events/page_events, které umožní marketingu měřit prodej produktu)\n'
+      + '# Akceptační kritéria (odškrtávací seznam ověřitelných bodů)\n'
+      + '# Pořadí práce (očíslované kroky, každý samostatně ověřitelný)\n'
+      + '# Na co si dát pozor (bezpečnost, GDPR u anonymizovaných dat, souběh, idempotence webhooku)\n\n'
+      + 'Buď konkrétní (názvy tabulek, endpointů, polí), ne obecný. Co nejde z kontextu jistě určit (přesný název existujícího souboru/funkce), označ větou „ověř v kódu" a řekni Claudovi, ať to nejdřív dohledá, než začne psát. Žádné vymyšlené reference ani čísla mimo návrh.';
+    const r = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 8000, messages: [{ role: 'user', content: prompt }] });
+    const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+    res.json({ ok: true, text });
+  } catch (err) { next(err); } });
 router.post('/director/invent/revise', async (req, res, next) => {
   try { const b = req.body || {}; if (!String(b.comment || '').trim()) return res.status(400).json({ error: 'Napiš připomínku' });
     if ((_jobs.invent && _jobs.invent.running) || (_jobs.revise && _jobs.revise.running)) return res.status(409).json({ error: 'Ředitel právě pracuje – počkej, až doběhne.' });
