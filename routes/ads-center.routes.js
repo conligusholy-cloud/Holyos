@@ -3,6 +3,7 @@
 // Zdroje: CompounderEvent (page_view / misto_view / lok_view), CompounderLead, PradlomatSpotInquiry,
 // ShopOrder a Best Series 2.0 (přes /api/holyos/ads-stats, JWT se sdíleným BS2_SSO_SECRET).
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/database');
@@ -439,6 +440,68 @@ router.get('/director/invent/pages/:pid/html', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 // Převod vymyšleného funnelu do Centra reklamy jako KONCEPT (SMS/e-maily vypnuté – nic se neodešle bez zapnutí)
+// ── 🚀 Průvodce implementací funnelu: seznam kroků (co udělat → zaškrtnout / nahrát / vložit odkaz / odpovědět).
+// Ukládá se průběžně (AppSetting ads_director.impl), lze kdykoli přerušit a vrátit se. Spuštění je zamčené, dokud nejsou povinné kroky hotové.
+const IMPL_KEY = 'ads_director.impl';
+const IMPL_DIR = path.join(process.env.STORAGE_DIR || path.join(__dirname, '..', 'data'), 'marketing-impl');
+async function implLoad() { const { getSetting } = require('../services/settings'); const v = await getSetting(IMPL_KEY, { type: 'json', defaultValue: [] }); return Array.isArray(v) ? v : []; }
+async function implSave(list, req) { const { setSetting } = require('../services/settings'); await setSetting(IMPL_KEY, list.slice(0, 20), { type: 'json', description: 'Marketingový ředitel – průvodce implementací funnelů', scope: 'marketing', userId: req && req.user && req.user.id }); }
+function implBuildSteps(F) {
+  const st = []; const one = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+  const add = (o) => st.push(Object.assign({ id: 's' + (st.length + 1), who: 'ty', required: true, done: false, value: '', files: [] }, o));
+  const offers = (F.offer_stack || []).map((o) => o.name + ' ' + (o.price_czk != null ? Number(o.price_czk).toLocaleString('cs-CZ') + ' Kč' : '')).join(' · ');
+  add({ group: 'Schválit', type: 'check', title: 'Schval ceny a nabídky', what: one(offers) || 'Zkontroluj nabídkový žebřík ve strategii.' });
+  (F.new_products || []).forEach((p) => add({ group: 'Schválit', type: 'check', title: 'Rozhodni o novém produktu: ' + one(p.name), what: one('Ano = předat zadání programátorovi. ' + (p.build_effort ? 'Náročnost vývoje: ' + p.build_effort + '.' : '')), required: false }));
+  (F.ads || []).forEach((a) => { const mb = a.media_brief || {}; if (/majitel/i.test(mb.who_makes || '')) add({ group: 'Natočit / nafotit', type: 'media', ad_id: a.id, title: (/video/i.test(mb.type || '') ? 'Natoč video: ' : 'Nafoť: ') + one(a.name), what: one([mb.format, mb.duration_s ? mb.duration_s + ' s' : '', mb.location, mb.goal].filter(Boolean).join(' · ')) + ' — scénář je ve strategii (🎬).' }); });
+  (F.tasks || []).filter((t) => /majitel|ty\b/i.test(t.who || '')).sort((a, b) => (Number(a.priority) || 99) - (Number(b.priority) || 99))
+    .forEach((t) => add({ group: 'Tvoje úkoly', type: 'check', title: one(t.title), what: one(t.how || t.output || t.why), files_ok: true }));
+  (F.pages || []).forEach((p) => add({ group: 'Stránky', type: 'url', page_id: p.id, title: 'Zveřejni stránku: ' + one(p.name || p.headline), what: one('Návrh ' + (p.slug || '') + ' – podklad je náhled stránky ve strategii. Vlož odkaz na hotovou stránku.') }));
+  add({ group: 'Facebook', type: 'fb', title: 'Založ reklamy na Facebooku (pozastavené)', what: 'Tlačítko „📣 Založit reklamy na Facebooku" – vlastní foto/video se použijí automaticky.' });
+  if (!(F.tasks || []).some((t) => /pixel|capi|conversions/i.test((t.title || '') + ' ' + (t.how || '')))) add({ group: 'Facebook', type: 'check', title: 'Nasaď Meta Pixel + Conversions API na bestseries2.cz', what: 'Události Lead (registrace), Purchase (platba), Schedule (rezervace) – bez nich nefunguje remarketing ani optimalizace.' });
+  add({ group: 'Rozesílky', type: 'check', title: 'Zkontroluj SMS a e-maily ve funnelu', what: 'V konceptu funnelu jsou VYPNUTÉ – projdi texty a odkazy, pošli si test.' });
+  (F.owner_questions || []).forEach((q) => add({ group: 'Odpovědi pro ředitele', type: 'text', title: one(q.question), what: one(q.why), required: false }));
+  return st;
+}
+function implView(it) { const req = it.steps.filter((s) => s.required), done = req.filter((s) => s.done); return Object.assign({}, it, { progress: { done: it.steps.filter((s) => s.done).length, total: it.steps.length, req_done: done.length, req_total: req.length }, can_launch: done.length === req.length }); }
+async function implCreate(F, funnelId, savedId, req) {
+  const list = await implLoad();
+  const it = { id: 'i' + Date.now().toString(36), name: F.name || 'Funnel', funnel_id: funnelId, saved_id: savedId, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), status: 'open', steps: implBuildSteps(F) };
+  list.unshift(it); await implSave(list, req); return it;
+}
+router.get('/director/impl', async (req, res, next) => { try { res.json((await implLoad()).map((x) => { const v = implView(x); return { id: v.id, name: v.name, created_at: v.created_at, updated_at: v.updated_at, status: v.status, progress: v.progress, can_launch: v.can_launch, funnel_id: v.funnel_id }; })); } catch (err) { next(err); } });
+router.get('/director/impl/:id', async (req, res, next) => {
+  try { const list = await implLoad(); const it = list.find((x) => x.id === req.params.id); if (!it) return res.status(404).json({ error: 'Implementace nenalezena' });
+    // Automatické kroky: FB reklamy založené / médium u reklamy nahrané (z aktuálního vymyšleného funnelu)
+    const F = await DIRECTOR.getInvent(); let changed = false;
+    if (F) it.steps.forEach((s) => {
+      if (s.type === 'fb' && !s.done && F.fb && F.fb.campaign_id) { s.done = true; s.value = F.fb.manager_url; s.done_at = F.fb.created_at; changed = true; }
+      if (s.type === 'media' && !s.done) { const a = (F.ads || []).find((x) => x.id === s.ad_id); if (a && a.media) { s.done = true; s.value = a.media.name || a.media.type; s.done_at = a.media.uploaded_at; changed = true; } }
+    });
+    if (changed) { it.updated_at = new Date().toISOString(); await implSave(list, req); }
+    res.json(implView(it));
+  } catch (err) { next(err); } });
+router.put('/director/impl/:id/steps/:sid', async (req, res, next) => {
+  try { const list = await implLoad(); const it = list.find((x) => x.id === req.params.id); if (!it) return res.status(404).json({ error: 'Implementace nenalezena' });
+    const s = it.steps.find((x) => x.id === req.params.sid); if (!s) return res.status(404).json({ error: 'Krok nenalezen' }); const b = req.body || {};
+    if (b.value != null) s.value = String(b.value).slice(0, 4000);
+    if (s.type === 'url' && b.value != null && b.value && !/^https?:\/\//i.test(s.value)) return res.status(400).json({ error: 'Vlož celý odkaz začínající https://' });
+    if (b.done != null) { s.done = !!b.done; s.done_at = s.done ? new Date().toISOString() : null; s.done_by = s.done ? (req.user && (req.user.display_name || req.user.username)) || null : null; }
+    if ((s.type === 'url' || s.type === 'text') && b.value != null) { s.done = !!s.value; s.done_at = s.done ? new Date().toISOString() : null; }
+    it.updated_at = new Date().toISOString(); await implSave(list, req); res.json(implView(it));
+  } catch (err) { next(err); } });
+const _implUpload = require('multer')({ storage: require('multer').diskStorage({ destination: (req, file, cb) => { require('fs').mkdirSync(IMPL_DIR, { recursive: true }); cb(null, IMPL_DIR); }, filename: (req, file, cb) => cb(null, Date.now().toString(36) + '-' + String(file.originalname || 'soubor').replace(/[^\w.\-]+/g, '_').slice(-80)) }), limits: { fileSize: 200 * 1024 * 1024 } });
+router.post('/director/impl/:id/steps/:sid/file', _implUpload.single('file'), async (req, res, next) => {
+  try { const list = await implLoad(); const it = list.find((x) => x.id === req.params.id); const s = it && it.steps.find((x) => x.id === req.params.sid); if (!s || !req.file) return res.status(404).json({ error: 'Krok nebo soubor chybí' });
+    s.files = (s.files || []).concat([{ name: req.file.originalname, file: req.file.filename, size: req.file.size, at: new Date().toISOString() }]).slice(-20);
+    it.updated_at = new Date().toISOString(); await implSave(list, req); res.json(implView(it));
+  } catch (err) { next(err); } });
+router.get('/director/impl/:id/files/:file', async (req, res) => { const f = path.join(IMPL_DIR, path.basename(req.params.file)); if (!require('fs').existsSync(f)) return res.status(404).send('Soubor nenalezen'); res.download(f, req.params.file.replace(/^[a-z0-9]+-/, '')); });
+router.post('/director/impl/:id/launch', async (req, res, next) => {
+  try { const list = await implLoad(); const it = list.find((x) => x.id === req.params.id); if (!it) return res.status(404).json({ error: 'Implementace nenalezena' }); const v = implView(it);
+    if (!v.can_launch) return res.status(400).json({ error: 'Ještě nejsou hotové všechny povinné kroky (' + v.progress.req_done + '/' + v.progress.req_total + ').' });
+    it.status = 'ready'; it.ready_at = new Date().toISOString(); await implSave(list, req); res.json(implView(it));
+  } catch (err) { next(err); } });
+router.delete('/director/impl/:id', async (req, res, next) => { try { await implSave((await implLoad()).filter((x) => x.id !== req.params.id), req); res.json({ ok: true }); } catch (err) { next(err); } });
 router.post('/director/invent/to-funnel', async (req, res, next) => {
   try {
     const F = await DIRECTOR.getInvent(); if (!F) return res.status(404).json({ error: 'Funnel ještě není vymyšlený' });
@@ -459,7 +522,10 @@ router.post('/director/invent/to-funnel', async (req, res, next) => {
     const { setSetting } = require('../services/settings');
     await setSetting(FUNNELS_KEY, list.slice(0, 50).map(cleanFunnel), { type: 'json', description: 'Centrum reklamy – definice funelů', scope: 'marketing', userId: req.user && req.user.id });
     try { require('../services/ads/funnel-events').invalidate(); } catch (_) { /* cache */ }
-    res.json({ ok: true, funnel_id: fn.id, name: fn.name, nodes: fn.nodes.length });
+    // Strategii uložit (verze) + založit průvodce implementací
+    let savedId = null; try { const { getSetting: gS, setSetting: sS } = require('../services/settings'); const FF = await gS(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const sl = (await gS(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; savedId = Date.now().toString(36); sl.unshift({ id: savedId, name: (F.name || 'Strategie') + ' – koncept ' + new Date().toLocaleDateString('cs-CZ'), saved_at: new Date().toISOString(), saved_by: req.user && (req.user.display_name || req.user.username) || null, funnel: FF }); await sS(SAVED_KEY, sl.slice(0, 30), { type: 'json', description: 'Marketingový ředitel – uložené strategie', scope: 'marketing', userId: req.user && req.user.id }); } catch (e) { console.warn('[impl] uložení strategie:', e.message); }
+    const impl = await implCreate(F, fn.id, savedId, req);
+    res.json({ ok: true, funnel_id: fn.id, name: fn.name, nodes: fn.nodes.length, impl_id: impl.id, saved_id: savedId });
   } catch (err) { next(err); }
 });
 // Strategie se generuje 2–4 min → běží na pozadí (proxy by dlouhý požadavek utnula), UI se dotazuje GETem
