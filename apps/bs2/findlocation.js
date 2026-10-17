@@ -36,7 +36,21 @@ const CSS = `
   .fl-card span{display:block;font-size:13.5px;color:var(--text2);margin-top:2px}
   @media(max-width:720px){.radar{width:100%;max-width:360px;margin:0 auto}}
   @media(prefers-reduced-motion:reduce){.radar .sweep,.radar .dot,.radar .pulse{animation:none}.radar .dot{opacity:.8}}
+  /* Hlavička jako na záchytné stránce: logo · navigace · Přihlásit se · CTA */
+  header .in{justify-content:space-between;flex-wrap:nowrap}
+  header .brand{font-size:17px}
+  header .fl-nav{display:flex;gap:26px;margin-left:34px;flex:1}
+  header .fl-nav a{color:var(--text2);font-size:15px;font-weight:500;text-decoration:none;transition:color .2s}
+  header .fl-nav a:hover{color:#fff}
+  header .fl-act{display:flex;gap:12px;align-items:center}
+  header .fl-login{color:#fff;font-weight:700;font-size:14.5px;text-decoration:none;border:1px solid var(--border2);border-radius:12px;padding:10px 18px;background:rgba(255,255,255,.02)}
+  header .fl-login:hover{border-color:var(--accent2)}
+  header .fl-cta{color:#fff;font-weight:700;font-size:14.5px;text-decoration:none;border-radius:12px;padding:10px 18px;background:linear-gradient(90deg,#1e86e0,#7c5cff);box-shadow:0 10px 30px -10px rgba(58,108,245,.9)}
+  @media(max-width:900px){header .fl-nav{display:none}}
+  @media(max-width:520px){header .fl-login{display:none}header .fl-cta{padding:9px 14px;font-size:13.5px}}
 `;
+const NAV = '<nav class="fl-nav"><a href="#jak">Jak to funguje</a><a href="#co">Co dostanete</a><a href="#cena">Cena</a><a href="#otazky">Otázky</a></nav>'
+  + '<div class="fl-act"><a class="fl-login" href="/login">Přihlásit se</a><a class="fl-cta" href="#objednat" data-cta="header">Najít místo</a></div>';
 
 // Radar: střed = město, kruh = spádová oblast 15 km, body = kandidátní místa (zeleně ta nejlepší)
 function radarSvg() {
@@ -83,7 +97,7 @@ function how() {
 }
 
 function what() {
-  return `<section class="sec">
+  return `<section class="sec" id="co">
     <h2>Co dostanete</h2>
     <div class="list">
       <div class="item"><div class="n">1</div><div><b>Přístup do webové aplikace na 12 měsíců</b><span>Jednorázová platba, přístup se automaticky placeně neobnovuje. Funguje v mobilu i na počítači.</span></div></div>
@@ -114,7 +128,7 @@ function prices(limits, searchLimits) {
 }
 
 function faq() {
-  return `<section class="sec">
+  return `<section class="sec" id="otazky">
     <h2>Časté otázky</h2>
     <details><summary>Co přesně je „vyhledání"?</summary><p>Analýza jednoho města: spádová oblast 15 km, počet obyvatel, odhad kapacity, stávající prádlomaty a seznam kandidátních míst. Odečte se při spuštění analýzy a výsledek se trvale uloží, takže ho kdykoli znovu otevřete bez dalšího odečtu.</p></details>
     <details><summary>Jak dlouho mám přístup?</summary><p>12 měsíců od aktivace. Platba je jednorázová, přístup se automaticky neobnovuje a nic dalšího vám nestrháváme.</p></details>
@@ -130,7 +144,8 @@ function findLocationPage(limits, searchLimits) {
   h = h.replace(/<title>[\s\S]*?<\/title>/, '<title>Najděte nejlepší místo pro prádlomat za pár minut – Vyhledávač míst</title>')
     .replace(/<meta name="description"[^>]*>/, '<meta name="description" content="Zadejte město a aplikace najde nejlepší místa pro prádlomat: spádová oblast 15 km, počet obyvatel, kapacita, konkurence a konkrétní kandidátní místa. Přístup na 12 měsíců, jednorázová platba." />')
     .replace('<a class="brand" href="/location">', '<a class="brand" href="/findlocation">')
-    .replace('<span class="tag">Prověření lokality</span>', '<span class="tag">Vyhledávač míst</span>')
+    .replace(/<span class="tag">Prověření lokality<\/span>(<!--PRESENCE-->)?/, NAV)
+    .replace(/<span style="margin-left:auto"><\/span><span class="presence" id="presence"[\s\S]*?<\/b><\/span>/, '')
     .replace('</head>', '<style>' + CSS + '</style></head>');
   // hero (včetně koncové značky)
   h = swap(h, /<section class="hero">/, /<\/section>/, hero().replace(/<\/section>$/, ''));
