@@ -616,7 +616,7 @@ router.get('/director/invent/fb-prep', async (req, res) => {
     if (!pages.length) { try { pages = ((await graph('me/accounts', { fields: 'id,name', limit: 50 }, c.token)).data || []); } catch (e) { /* nic */ } }
     const F = await DIRECTOR.getInvent();
     res.json({ account: c.account, pages: pages.map((p) => ({ id: p.id, name: p.name })), created: (F && F.fb) || null,
-      ads: ((F && F.ads) || []).map((a) => ({ id: a.id, name: a.name, headline: a.headline, destination: a.destination, budget_czk_day: a.budget_czk_day, url: fbAdUrl(F, a) })) });
+      ads: ((F && F.ads) || []).map((a) => ({ id: a.id, name: a.name, headline: a.headline, destination: a.destination, budget_czk_day: a.budget_czk_day, url: fbAdUrl(F, a), media: a.media ? a.media.type : null })) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 function fbAdUrl(F, a) {
@@ -644,8 +644,9 @@ router.post('/director/invent/fb-create', async (req, res) => {
         const set = await graphPost(act + '/adsets', { name: ((a.name || a.id) + ' – ' + String(a.audience || '').slice(0, 80)).slice(0, 200), campaign_id: camp.id, daily_budget: kc * 100, billing_event: 'IMPRESSIONS', optimization_goal: 'LANDING_PAGE_VIEWS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
           targeting: { geo_locations: { countries: ['CZ'] }, age_min: age.min, age_max: age.max, targeting_automation: { advantage_audience: 1 } }, status: 'PAUSED' }, c.token);
         r.adset_id = set.id;
-        const link = fbAdUrl(F, a);
-        const cr = await graphPost(act + '/adcreatives', { name: ('Kreativa – ' + (a.name || a.id)).slice(0, 200), object_story_spec: { page_id: pageId, link_data: { link, message: String(a.primary_text || '').slice(0, 2000), name: String(a.headline || '').slice(0, 255), description: String(a.description || '').slice(0, 255), call_to_action: { type: fbCta(a.cta_button), value: { link } } } } }, c.token);
+        const cs = fbCreativeSpec(F, a, pageId, a.media); const link = cs.link; // s vlastním foto/videem majitele, pokud je nahrané
+        const cr = await graphPost(act + '/adcreatives', { name: ('Kreativa – ' + (a.name || a.id)).slice(0, 200), object_story_spec: cs.spec }, c.token);
+        r.media = a.media ? a.media.type : null;
         r.creative_id = cr.id;
         const ad = await graphPost(act + '/ads', { name: (a.name || a.id).slice(0, 200), adset_id: set.id, creative: { creative_id: cr.id }, status: 'PAUSED' }, c.token);
         r.ad_id = ad.id; r.link = link; r.budget_czk_day = kc;
@@ -657,6 +658,58 @@ router.post('/director/invent/fb-create', async (req, res) => {
     try { const { getSetting, setSetting } = require('../services/settings'); const cur = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); if (cur) { cur.fb = fb; await setSetting(DIRECTOR.KEY_INVENT, cur, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id }); } } catch (e) { /* jen záznam */ }
     res.json(fb);
   } catch (err) { res.status(400).json({ error: err.message }); }
+});
+// ── Vlastní foto / video majitele k reklamě: nahraje se rovnou do reklamního účtu Meta (adimages / advideos) ──
+// Uloží se k reklamě ve vymyšleném funnelu (F.ads[i].media). Když už je reklama na FB založená, vymění se jí kreativa (zůstává pozastavená).
+const _fbUpload = require('multer')({ storage: require('multer').diskStorage({ destination: require('os').tmpdir() }), limits: { fileSize: 300 * 1024 * 1024 } });
+async function fbUploadMedia(c, file) {
+  const fs = require('fs'); const act = 'act_' + c.account; const isVideo = /^video\//.test(file.mimetype || '');
+  const buf = await fs.promises.readFile(file.path);
+  const fd = new FormData(); fd.set('access_token', c.token);
+  if (!isVideo) {
+    fd.set('filename', new Blob([buf], { type: file.mimetype }), file.originalname || 'foto.jpg');
+    const r = await fetch(GRAPH + act + '/adimages', { method: 'POST', body: fd, signal: AbortSignal.timeout(120000) }); const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error((j.error && (j.error.error_user_msg || j.error.message)) || 'Meta ' + r.status);
+    const im = Object.values(j.images || {})[0] || {}; if (!im.hash) throw new Error('Meta nevrátila hash obrázku');
+    return { type: 'image', image_hash: im.hash, thumb_url: im.url || null };
+  }
+  fd.set('source', new Blob([buf], { type: file.mimetype }), file.originalname || 'video.mp4'); fd.set('title', String(file.originalname || 'Video').slice(0, 100));
+  const r = await fetch(GRAPH.replace('graph.facebook.com', 'graph-video.facebook.com') + act + '/advideos', { method: 'POST', body: fd, signal: AbortSignal.timeout(15 * 60000) }); const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error || !j.id) throw new Error((j.error && (j.error.error_user_msg || j.error.message)) || 'Meta ' + r.status);
+  let thumb = null; // náhledový obrázek je pro video reklamu povinný – Meta ho vytvoří po zpracování videa
+  for (let i = 0; i < 18 && !thumb; i++) { await new Promise((ok) => setTimeout(ok, 5000)); try { const t = await graph(j.id + '/thumbnails', { fields: 'uri,is_preferred' }, c.token); const list = t.data || []; thumb = ((list.find((x) => x.is_preferred) || list[0]) || {}).uri || null; } catch (e) { /* ještě se zpracovává */ } }
+  return { type: 'video', video_id: j.id, thumb_url: thumb };
+}
+function fbCreativeSpec(F, a, pageId, media) {
+  const link = fbAdUrl(F, a); const cta = { type: fbCta(a.cta_button), value: { link } };
+  if (media && media.type === 'video') {
+    return { link, spec: { page_id: pageId, video_data: Object.assign({ video_id: media.video_id, message: String(a.primary_text || '').slice(0, 2000), title: String(a.headline || '').slice(0, 255), link_description: String(a.description || '').slice(0, 255), call_to_action: cta }, media.thumb_url ? { image_url: media.thumb_url } : {}) } };
+  }
+  return { link, spec: { page_id: pageId, link_data: Object.assign({ link, message: String(a.primary_text || '').slice(0, 2000), name: String(a.headline || '').slice(0, 255), description: String(a.description || '').slice(0, 255), call_to_action: cta }, media && media.image_hash ? { image_hash: media.image_hash } : {}) } };
+}
+router.post('/director/invent/ads/:adId/media', _fbUpload.single('file'), async (req, res) => {
+  const fs = require('fs');
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Chybí soubor' });
+    if (!/^(image|video)\//.test(req.file.mimetype || '')) return res.status(400).json({ error: 'Nahraj obrázek (JPG/PNG) nebo video (MP4/MOV).' });
+    const c = await metaCfg(); if (!c.token || !c.account) return res.status(400).json({ error: 'Meta Ads není napojené.' });
+    const { getSetting, setSetting } = require('../services/settings');
+    const F0 = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const a0 = F0 && (F0.ads || []).find((x) => x.id === req.params.adId); if (!a0) return res.status(404).json({ error: 'Reklama nenalezena' });
+    const media = Object.assign(await fbUploadMedia(c, req.file), { name: req.file.originalname, size: req.file.size, uploaded_at: new Date().toISOString() });
+    // Záznam k reklamě (znovu načíst – mezitím se mohlo měnit)
+    const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const a = F && (F.ads || []).find((x) => x.id === req.params.adId); if (!a) return res.status(404).json({ error: 'Reklama nenalezena' });
+    a.media = media; let swapped = null;
+    // Už založená reklama na FB → nová kreativa s médiem a výměna (reklama zůstává pozastavená)
+    const made = F.fb && (F.fb.ads || []).find((x) => x.id === a.id && x.ad_id);
+    if (made) {
+      try { const cs = fbCreativeSpec(F, a, F.fb.page_id, media); const cr = await graphPost('act_' + c.account + '/adcreatives', { name: ('Kreativa – ' + (a.name || a.id) + ' (vlastní ' + (media.type === 'video' ? 'video' : 'foto') + ')').slice(0, 200), object_story_spec: cs.spec }, c.token);
+        await graphPost(made.ad_id, { creative: { creative_id: cr.id } }, c.token); made.creative_id = cr.id; swapped = { ok: true };
+      } catch (e) { swapped = { ok: false, error: e.message }; }
+    }
+    await setSetting(DIRECTOR.KEY_INVENT, F, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id });
+    res.json({ ok: true, media, swapped, video_thumb_missing: media.type === 'video' && !media.thumb_url });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+  finally { if (req.file) fs.promises.unlink(req.file.path).catch(() => {}); }
 });
 // Kampaně se statistikami za období
 router.get('/meta/campaigns', async (req, res, next) => {
