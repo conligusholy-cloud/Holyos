@@ -34,14 +34,14 @@
   h1{font-weight:600;font-size:clamp(30px,7vw,44px);line-height:1.12;letter-spacing:-.01em}
   h1 .g{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
   .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:520px;margin:14px 0 20px}
-  .hero-wrap{position:relative;float:right;width:min(46%,520px);margin:4px 0 26px 30px}
+  .hero-wrap{position:relative;float:right;width:min(36%,340px);margin:6px 0 26px 28px}
   .hero-photo{display:block;width:100%;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55)}
-  @media(max-width:760px){.hero-wrap{float:none;width:100%;margin:0 0 30px}}
+  @media(max-width:760px){.hero-wrap{float:none;width:78%;max-width:300px;margin:0 auto 30px}}
 
   /* Pečeť kvality — 100% český výrobek */
-  .seal{position:absolute;right:-12px;bottom:-18px;width:146px;height:146px;
+  .seal{position:absolute;right:-14px;bottom:-16px;width:108px;height:108px;
     filter:drop-shadow(0 16px 30px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(212,175,55,.25))}
-  @media(max-width:760px){.seal{width:128px;height:128px;right:8px;bottom:-18px}}
+  @media(max-width:760px){.seal{width:96px;height:96px;right:6px;bottom:-14px}}
   .seal-ring{position:absolute;inset:0;width:100%;height:100%;animation:sealspin 30s linear infinite}
   @keyframes sealspin{to{transform:rotate(360deg)}}
   .seal-bg{fill:#0a1728}
@@ -50,16 +50,16 @@
   .seal-inner{fill:none;stroke:url(#sealGold);stroke-width:1.6}
   .seal-text{font-family:'Inter',system-ui,sans-serif;font-weight:800;font-size:12.6px;letter-spacing:.2em;fill:#f1dc9a}
   .seal-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none}
-  .seal-flag{width:62px;height:42px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
-  @media(max-width:760px){.seal-flag{width:54px;height:36px}}
-  .seal-100{font-size:13px;font-weight:800;letter-spacing:.06em;color:#f7e7b0;line-height:1;white-space:nowrap}
-  .seal-100 small{display:block;font-size:7.5px;letter-spacing:.22em;font-weight:700;color:#d9bd6a;margin-top:3px}
+  .seal-flag{width:44px;height:30px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
+  @media(max-width:760px){.seal-flag{width:38px;height:26px}}
+  .seal-100{font-size:10px;font-weight:800;letter-spacing:.06em;color:#f7e7b0;line-height:1;white-space:nowrap}
+  .seal-100 small{display:block;font-size:5.5px;letter-spacing:.22em;font-weight:700;color:#d9bd6a;margin-top:3px}
 
   /* Štítky s čísly přes fotku */
-  .hero-stats{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:7px}
+  .hero-stats{position:absolute;left:8px;bottom:8px;display:flex;flex-direction:column;gap:5px}
   .hs{display:inline-flex;align-items:baseline;gap:6px;width:max-content;background:rgba(8,20,36,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-    border:1px solid rgba(230,196,96,.5);border-radius:999px;padding:6px 13px 6px 11px;font-size:11.5px;color:#e9f0f7;letter-spacing:.02em}
-  .hs b{font-size:15px;font-weight:800;color:#f7e7b0;letter-spacing:-.01em}
+    border:1px solid rgba(230,196,96,.5);border-radius:999px;padding:4px 10px 4px 8px;font-size:10px;color:#e9f0f7;letter-spacing:.02em}
+  .hs b{font-size:12.5px;font-weight:800;color:#f7e7b0;letter-spacing:-.01em}
   .hs .st{width:12px;height:12px;fill:#e6c460;align-self:center;margin-right:2px}
   @media (prefers-reduced-motion:reduce){.seal-ring{animation:none}}
   .goal{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:0.5px solid rgba(46,140,224,.45);
