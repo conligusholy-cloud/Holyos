@@ -691,7 +691,7 @@ app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.s
 // Cesta k rozhodnutí (záchytná stránka funelu, značka Best Series 2.0): 3 kroky k prádlomatu → CTA na vytvoření účtu
 app.get('/cesta', wrap(async (req, res) => {
   const fs = require('fs'), path = require('path');
-  const html = fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8').replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('</body>', PUBT);
+  const html = fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8').replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('@@FOOTER@@', '<div style="max-width:720px;margin:0 auto;padding:0 22px 40px">' + require('./footer').siteFooter() + '</div>').replace('</style>', require('./footer').FOOTER_CSS + '</style>').replace('</body>', PUBT);
   res.set('Cache-Control', 'no-cache').type('html').send(html);
 }));
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality

@@ -275,6 +275,7 @@ const PAGE = `<!DOCTYPE html>
   .cz-track{flex:1;min-width:200px;display:flex;gap:4px} .cz-track i{flex:1;height:8px;border-radius:4px;background:rgba(120,160,255,.12);border:1px solid var(--border);position:relative;transition:background .3s} .cz-track i.on{background:linear-gradient(90deg,var(--accent),var(--vio));box-shadow:0 0 12px rgba(79,209,255,.45);border-color:rgba(79,209,255,.5)} .cz-track i.now{animation:czbreathe 1.2s ease-in-out infinite} .cz-track i::after{content:attr(data-y);position:absolute;top:12px;left:50%;transform:translateX(-50%);font-size:10.5px;color:var(--text3)}
   @media(max-width:720px){.cz-pin{width:2.2%}.cz-pin span{display:none}.cz-track i::after{font-size:9px}}
   .foot{margin-top:60px;font-size:12.5px;color:var(--text3);text-align:center}
+  ${require('./footer').FOOTER_CSS}
   @media (max-width:720px){.calc,form{grid-template-columns:1fr}.gridfx{display:none}}
 </style>
 </head>
@@ -530,7 +531,7 @@ const PAGE = `<!DOCTYPE html>
     <details><summary>Odečte se mi cena balíčku z ceny prádlomatu?</summary><p>Tuto výhodu připravujeme; její přesné podmínky zveřejníme v obchodních podmínkách. Do té doby ji neberte jako součást nabídky.</p></details>
   </section>
 
-  <div class="foot"><a href="/location/vop">Obchodní podmínky</a> · <a href="/location/gdpr">Ochrana osobních údajů</a><br><a href="/login">Přihlášení</a></div>
+  ${require('./footer').siteFooter()}
 </main>
 
 <script>
