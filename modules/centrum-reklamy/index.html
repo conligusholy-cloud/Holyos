@@ -495,9 +495,17 @@
         + '<label>Čistý zisk z online produktů<div class="unit"><input id="ig-net" type="number" min="0" step="100000" value="' + (g.online_net_czk != null ? g.online_net_czk : 5000000) + '"><span>Kč</span></div></label>'
         + '<label>Za kolik dní<div class="unit"><input id="ig-days" type="number" min="1" value="' + (g.online_days || 14) + '"><span>dní</span></div></label>'
         + '<label>Rozpočet na reklamu <span style="font-weight:400;color:#6b7a99">(0 = navrhne ředitel)</span><div class="unit"><input id="ig-bud" type="number" min="0" step="500" value="' + (g.budget_czk_day || 0) + '"><span>Kč/den</span></div></label></div>'
+        + '<div style="margin-top:16px"><div style="font-size:12px;font-weight:600;color:#a5b4d4;margin-bottom:6px">Prádlomaty v nabídce <span style="font-weight:400;color:#6b7a99">(z Prodejního ceníku – ředitel nabídne jen zaškrtnuté; cena stroje se zákazníkovi říká až na schůzce)</span></div><div class="ig-mt" data-sel="' + esc(JSON.stringify(g.machine_types || null)) + '" style="display:flex;gap:8px;flex-wrap:wrap"><span class="note">Načítám ceník…</span></div></div>'
         + '<label style="margin-top:16px">Doplňující zadání <span style="font-weight:400;color:#6b7a99">(co chceš, co nechceš, nápady)</span><textarea id="ig-brief" rows="3" placeholder="např. chci využít prohlídky výroby, nechci slevy, máme 40 referencí…">' + esc((F && F.brief) || g.note || '') + '</textarea></label>'
         + '<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:16px"><button class="btn on" id="ig-go" style="padding:11px 20px;font-size:15px">🧠 Vymyslet nový funnel</button><span class="note">Trvá 3–6 min, běží na serveru – okno můžeš zavřít. Cíl: ' + cz(g.machines_per_week) + ' prádlomaty/týden + ' + cz(g.online_net_czk) + ' Kč čistého za ' + (g.online_days || 14) + ' dní.</span></div></div>';
     }
+    async function invMtFill(root) {
+      var box = (root || document).querySelector('.ig-mt'); if (!box) return;
+      var sel = null; try { sel = JSON.parse(box.getAttribute('data-sel')); } catch (e) { sel = null; }
+      var list = []; try { list = await invFetch('/api/ads-center/director/machine-types'); } catch (e) { box.innerHTML = '<span class="note">Ceník se nepodařilo načíst.</span>'; return; }
+      box.innerHTML = list.map(function (m) { var on = Array.isArray(sel) ? sel.indexOf(m.type) >= 0 : !/\bPRO\b|FLEX R/i.test(m.type); return '<label style="flex-direction:row;align-items:center;gap:7px;padding:7px 12px;border:1px solid #2c3a5c;border-radius:10px;background:#0b1222;cursor:pointer;color:#e2e8f0;font-weight:600"><input type="checkbox" value="' + esc(m.type) + '"' + (on ? ' checked' : '') + ' style="width:auto"> ' + esc(m.type) + (m.price_czk ? ' <span class="note" style="font-weight:400">' + Number(m.price_czk).toLocaleString('cs-CZ') + ' Kč</span>' : '') + '</label>'; }).join('') || '<span class="note">V ceníku nejsou aktivní prádlomaty.</span>';
+    }
+    function invMtGet(root) { var box = (root || document).querySelector('.ig-mt'); if (!box || !box.querySelector('input')) return undefined; return [].slice.call(box.querySelectorAll('input:checked')).map(function (x) { return x.value; }); }
     function invWork(since, what) { return '<div class="dirwork" style="max-width:680px;margin:60px auto"><span class="cmp">🧠</span><div style="flex:1"><div style="font-weight:800">' + (what || 'Ředitel vymýšlí nový funnel…') + '</div><div class="bar"><i></i></div><div class="note" style="font-size:11.5px;margin-top:6px">Velká myšlenka → nabídka → reklamy → stránky → SMS/e-maily → remarketing → prodej na schůzce → čísla. Běží na serveru (3–6 min).' + (since ? ' Začato ' + new Date(since).toLocaleTimeString('cs-CZ') + ' · běží <b class="elapsed" data-since="' + esc(since) + '" style="color:#fbbf24">0:00</b>' : '') + '</div></div></div>'; }
     async function invLoad(start, payload) {
       var body = document.getElementById('inv-body');
@@ -517,7 +525,8 @@
     }
     function invGoalsBind() {
       var b = document.getElementById('ig-go'); if (!b) return;
-      b.onclick = function () { var g = { machines_per_week: +document.getElementById('ig-mpw').value, online_net_czk: +document.getElementById('ig-net').value, online_days: +document.getElementById('ig-days').value, budget_czk_day: +document.getElementById('ig-bud').value }; invLoad(true, { goals: g, brief: document.getElementById('ig-brief').value }); };
+      invMtFill(document.getElementById('inv-body'));
+      b.onclick = function () { var mt = invMtGet(document.getElementById('inv-body')); if (mt && !mt.length) return alert('Zaškrtni aspoň jeden prádlomat.'); var g = { machines_per_week: +document.getElementById('ig-mpw').value, online_net_czk: +document.getElementById('ig-net').value, online_days: +document.getElementById('ig-days').value, budget_czk_day: +document.getElementById('ig-bud').value, machine_types: mt }; invLoad(true, { goals: g, brief: document.getElementById('ig-brief').value }); };
     }
     var invNorm = function (F) {
   if (!F || typeof F !== 'object') return F;
@@ -814,8 +823,8 @@
       if (j.job && j.job.running) return alert('Ředitel už funnel vymýšlí – počkej, až doběhne.');
       var ov = document.createElement('div'); ov.id = 'ig-modal'; ov.style.cssText = 'position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto';
       ov.innerHTML = '<div style="position:relative;width:940px;max-width:97vw"><button data-x style="position:absolute;top:14px;right:16px;z-index:2;background:none;border:none;color:#8ea2c2;font-size:22px;cursor:pointer">×</button>' + invGoalsForm(j.goals || (j.funnel && j.funnel.goals) || {}, j.funnel) + '<div class="note" style="text-align:center;margin-top:-8px;color:#fbbf24">Aktuální funnel se nahradí novým – pokud ho chceš zachovat, nejdřív ho ulož (💾 Uložit strategii).</div></div>';
-      document.body.appendChild(ov); ov.querySelector('[data-x]').onclick = function () { ov.remove(); };
-      ov.querySelector('#ig-go').onclick = function () { var q = function (id) { return ov.querySelector('#' + id); }; var goals = { machines_per_week: +q('ig-mpw').value, online_net_czk: +q('ig-net').value, online_days: +q('ig-days').value, budget_czk_day: +q('ig-bud').value }; var brief = q('ig-brief').value; ov.remove(); invShowTab('inv'); invLoad(true, { goals: goals, brief: brief }); };
+      document.body.appendChild(ov); ov.querySelector('[data-x]').onclick = function () { ov.remove(); }; invMtFill(ov);
+      ov.querySelector('#ig-go').onclick = function () { var q = function (id) { return ov.querySelector('#' + id); }; var mt = invMtGet(ov); if (mt && !mt.length) return alert('Zaškrtni aspoň jeden prádlomat.'); var goals = { machines_per_week: +q('ig-mpw').value, online_net_czk: +q('ig-net').value, online_days: +q('ig-days').value, budget_czk_day: +q('ig-bud').value, machine_types: mt }; var brief = q('ig-brief').value; ov.remove(); invShowTab('inv'); invLoad(true, { goals: goals, brief: brief }); };
     });
     document.getElementById('sc-regen').addEventListener('click', function () { scLoad(true); });
     document.getElementById('sc-close').addEventListener('click', function () { document.getElementById('dir-canvas').style.display = 'none'; });

@@ -389,6 +389,7 @@ function runJob(key, fn) {
     .catch((e) => { job.running = false; job.finished_at = new Date().toISOString(); job.error = e.message; console.warn('[ads-director] ' + key + ':', e.message); });
   return job;
 }
+router.get('/director/machine-types', async (req, res, next) => { try { res.json(await DIRECTOR.machineTypes()); } catch (err) { next(err); } });
 router.get('/director/goals', async (req, res, next) => { try { res.json(await DIRECTOR.getGoals()); } catch (err) { next(err); } });
 router.put('/director/goals', async (req, res, next) => { try { res.json(await DIRECTOR.setGoals(req.body || {})); } catch (err) { next(err); } });
 router.get('/director/invent', async (req, res, next) => {
