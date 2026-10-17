@@ -38,6 +38,9 @@ main{padding:22px 18px calc(28px + env(safe-area-inset-bottom));max-width:1100px
 .tabs a{display:inline-flex;align-items:center;gap:7px;padding:12px 14px;color:var(--text2);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent}
 .tabs a .ico{opacity:.8}.tabs a.active .ico{opacity:1;filter:drop-shadow(0 0 6px rgba(79,209,255,.6))}.tabs a.active{color:var(--accent2);border-bottom-color:var(--accent2);text-shadow:0 0 18px rgba(79,209,255,.5)} .tabs a:hover{color:var(--text)}
 .tabs .right{margin-left:auto;display:inline-flex;gap:2px}
+/* Menu bez vodorovného posuvníku: na počítači se zalomí do více řádků, v mobilu se posouvá prstem bez viditelné lišty */
+.tabs{scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
+@media(min-width:701px){.tabs{overflow:visible}.tabs .in{flex-wrap:wrap;white-space:normal;row-gap:0}.tabs a{white-space:nowrap}}
 h1{font-size:24px;margin:0 0 6px;letter-spacing:-.02em} h2{font-size:17px;margin:18px 0 8px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
