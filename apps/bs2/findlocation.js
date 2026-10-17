@@ -48,9 +48,7 @@ function hero() {
     <h1>Najděte nejlepší místo pro prádlomat <span class="g">za pár minut.</span></h1>
     <p class="lead">Zadejte město. Aplikace spočítá obyvatele v okruhu 15 km, odhadne, kolik prádlomatů oblast uživí, ukáže ty, které už v okolí fungují, a najde konkrétní místa, kde by váš prádlomat mohl stát.</p>
     <div class="cta-row" style="display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn" href="#objednat" data-cta="hero">Chci najít své místo</a>
-      <a class="btn sec" href="#jak" data-cta="hero_how">Jak to funguje</a>
-    </div>
+      <a class="btn" href="#objednat" data-cta="hero">Chci najít své místo</a>    </div>
     <p class="small" style="margin-top:14px;color:var(--text3)">Aplikaci připravuje Best Series s.r.o., výrobce a provozovatel prádlomatů. Výsledky jsou orientační podklad pro vaše rozhodnutí, ne předpověď výdělku.</p>
    </div>
    ${radarSvg()}
