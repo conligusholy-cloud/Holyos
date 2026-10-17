@@ -473,6 +473,42 @@ router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
 // 🌐 Zveřejnit stránku na skutečný odkaz: www.bestseries2.cz/lp/<slug> (BS2 ji servíruje, měří návštěvy, prázdné CTA vedou na registraci)
 function bs2Call(method, pathname, body) { const secret = process.env.BS2_SSO_SECRET, base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, ''); if (!secret) throw new Error('Chybí BS2_SSO_SECRET'); const token = jwt.sign({ aud: 'bs2-api', iss: 'holyos' }, secret, { expiresIn: '2m' }); return fetch(base + pathname, { method, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(30000) }).then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || ('BS2 ' + r.status)); return Object.assign(j, { base }); }); }
 const LP_FIX = '<style>.pv-vis{opacity:1!important;transform:none!important;visibility:visible!important}</style><script>setTimeout(function(){try{document.querySelectorAll("body *").forEach(function(e){var c=getComputedStyle(e);if((c.opacity==="0"||c.visibility==="hidden")&&c.position!=="fixed"&&e.getBoundingClientRect().height>0)e.classList.add("pv-vis")})}catch(x){}},2500)</script>';
+// ── Přesné zadání pro Clauda: postavit stránku funnelu jako skutečnou stránku v BS2 + zapojit ji do Centra reklamy (aby byla strategie kompletní a aktuální) ──
+router.post('/director/invent/pages/:pid/dev-brief', async (req, res, next) => {
+  try {
+    const { getSetting } = require('../services/settings');
+    const F = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); const p = F && (F.pages || []).find((x) => x.id === String(req.params.pid || ''));
+    if (!p) return res.status(404).json({ error: 'Stránka nenalezena' });
+    const Anthropic = require('@anthropic-ai/sdk'); const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY není nastavený' });
+    const client = new Anthropic({ apiKey });
+    const pg = Object.assign({}, p); delete pg.html; delete pg.job; const spec = JSON.stringify(pg, null, 1).slice(0, 12000);
+    const ctx = { nazev_funnelu: F.name, velka_myslenka: F.big_idea, hacek: F.hook, nabidkovy_zebrik: (F.offer_stack || []).slice(0, 8), nove_produkty: (F.new_products || []).map((x) => ({ name: x.name, packages: x.packages })), vsechny_stranky: (F.pages || []).map((x) => ({ id: x.id, type: x.type, name: x.name, slug: x.slug })) };
+    const regs = PAGES.filter((x) => x.bs2).map((x) => x.key + ' → ' + x.bs2.path).join('; ');
+    const prompt = 'Jsi senior full-stack architekt. Napiš PŘESNÉ ZADÁNÍ PRO VÝVOJ, které majitel vloží jako prompt Claudovi (Claude Code) v repozitáři „Výroba" (HolyOS + BS2). Úkol: z navržené stránky funnelu postavit SKUTEČNOU stránku v BS2 a ZAPOJIT ji do Centra reklamy tak, aby marketingová strategie byla kompletní a aktuální (stránka se měří, objevuje se v přehledech, ředitel o ní ví a funel na ni odkazuje).\n\n'
+      + 'KONTEXT REPOZITÁŘE (skutečný, drž se ho):\n'
+      + '• BS2 = apps/bs2 (Node 18, Express 4, `pg` bez ORM, vanilla JS, čeština). Routy v apps/bs2/server.js (`app.get(\'/…\', wrap(async (req,res)=>…))`), DB schéma v apps/bs2/db.js (idempotentní `CREATE TABLE IF NOT EXISTS` / `ALTER … ADD COLUMN IF NOT EXISTS`). Veřejné stránky BS2 (např. /location, /findlocation, /home) jsou samostatné moduly (location.js, findlocation.js, views.js…). Měření návštěv: stats-track.js / stats.js / stats-views.js (page_hits, page_events, endpoint /api/track, /api/public/track), HolyOS je čte přes /api/holyos/ads-stats a /api/holyos/ads-live?path=… Existuje také rychlá varianta: HolyOS publikuje HTML náhled na /lp/<slug> (tabulka landing_pages, endpoint /api/holyos/landing) – ta je jen PROVIZORIUM; zadání má vést k trvalé, kvalitní nativní stránce (nebo ji jako landing_pages záznam s plnohodnotným trackingem, pokud je to prokazatelně vhodnější – zdůvodni jednou větou).\n'
+      + '• Centrum reklamy (HolyOS): routes/ads-center.routes.js má pole `PAGES` (objekty { key, name, url, desc, admin, color, bs2: { path } } – pro stránky BS2 stačí `bs2.path`, podle něj se berou návštěvy, unikáty, chování i objednávky; aktuálně zapojené: ' + regs + '). Marketingový ředitel (services/ads/director.js) čte inventář stránek z PAGES, takže po přidání nové položky o stránce automaticky ví. Funely (editor funelu, modules/centrum-reklamy/editor.html) odkazují na stránky přes uzel typu stránka – nová stránka se musí dát vybrat/napojit. Statistiky stránek a „Kontrola stránek" (page-watch) jsou odvozené z PAGES.\n'
+      + '• Vzor odeslání leadu: stránky vedou na registraci účtu BS2 (aktivace → Onboarding Quiz) nebo na vytvoření leadu přes HolyOS; UTM/ad parametry a kód leadu (ads-landing-codes) se musí přenést do měření.\n'
+      + '• Pravidla: čeština; `node --check` všech změněných JS; HolyOS nikdy raw SQL (Prisma), změna schématu = SQL soubor v prisma/migrations; žádné nové závislosti bez nutnosti; nic neposílat zákazníkům samo; nasazení git push do main, HolyOS před BS2.\n\n'
+      + 'FUNNEL (kontext, JSON):\n' + JSON.stringify(ctx).slice(0, 5000) + '\n\nSTRÁNKA K POSTAVENÍ (návrh ředitele, JSON; vizuální předloha je HTML náhled připojený pod zadáním):\n' + spec + '\n\n'
+      + 'VÝSTUP: pouze text zadání (Markdown), v tomto pořadí, bez úvodu a závěrečných poznámek:\n'
+      + '# Cíl (co stránka dělá ve funelu, odkud přijde návštěvník, co je jediná akce, kam vede dál)\n'
+      + '# Adresa a umístění v kódu (URL, soubor/y v apps/bs2, jak se zaregistruje route; zdůvodni volbu nativní stránka vs. /lp/<slug>)\n'
+      + '# Obsah a design (přesné texty z návrhu – nadpisy, sekce, CTA, pole formuláře; design podle připojeného HTML náhledu; responzivita mobil first; rychlost načtení; SEO/OG tagy; bez vymyšlených čísel a referencí – drž se tvrzení z návrhu)\n'
+      + '# Chování a napojení (CTA → kam přesně, přenos UTM/ad kódu a kódu leadu, události kliků, scroll, video; co se uloží kam)\n'
+      + '# Měření (které page_hits/page_events/user_events se zapisují, aby HolyOS /api/holyos/ads-stats a ads-live viděl návštěvy, unikáty, chování a konverze této stránky)\n'
+      + '# Zapojení do Centra reklamy (přesné změny: nová položka v poli PAGES v routes/ads-center.routes.js s konkrétními hodnotami key/name/url/desc/color/bs2.path/leadLabel; úpravy ostatních míst, kde jsou stránky vyjmenované – ověř grepem „PAGES", „bs2_home", seznamy v editoru funelu a v director.js; jak se stránka objeví ve funelu a ve statistikách; co aktualizovat, aby ředitel strategii viděl jako aktuální)\n'
+      + '# Aktualizace strategie (jak označit stránku v návrhu ředitele jako „postaveno": pole/stav, odkaz na živou URL, aby plátno strategie a seznam úkolů ukazovaly skutečný stav; nic nepřepisuj bez nutnosti)\n'
+      + '# Akceptační kritéria (odškrtávací seznam ověřitelných bodů včetně: stránka se otevře na živé URL, návštěva se objeví v Centru reklamy, CTA přenáší parametry)\n'
+      + '# Pořadí práce (očíslované kroky, každý samostatně ověřitelný, na konci seznam souborů, které se mění)\n'
+      + '# Na co si dát pozor (rezervované slugy, CSP v BS2 – viz hlavička Content-Security-Policy v server.js, GDPR/cookies, souběh, cache)\n\n'
+      + 'Buď konkrétní. Co z kontextu nelze jistě určit (přesný název funkce/souboru), označ „ověř v kódu" a řekni Claudovi, ať to nejdřív dohledá, než začne psát.';
+    const r = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 8000, messages: [{ role: 'user', content: prompt }] });
+    let text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n').trim();
+    if (p.html) text += '\n\n# Příloha: HTML náhled stránky (vizuální předloha – převezmi layout, styl a texty; tracking, CTA a napojení implementuj podle zadání výše)\n```html\n' + String(p.html).slice(0, 60000) + (String(p.html).length > 60000 ? '\n<!-- … zkráceno -->' : '') + '\n```\n';
+    else text += '\n\n(Pozn.: stránka zatím nemá HTML náhled – nejdřív v Centru reklamy klikni „Vygenerovat náhled stránky", pak zadání vygeneruj znovu, ať v něm je vizuální předloha.)\n';
+    res.json({ ok: true, text });
+  } catch (err) { next(err); } });
 router.post('/director/invent/pages/:pid/publish', async (req, res) => {
   try {
     const { getSetting, setSetting } = require('../services/settings');

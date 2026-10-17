@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Vydělá prádlomat na vašem místě? Zjistěte to dřív, než podepíšete – Best Series 2.0</title>
+<meta name="description" content="Stroj nikdy neprodělá. Místo ano. Prověřte lokalitu pro samoobslužnou prádelnu podle dat – domácnosti, konkurence, dostupnost – dřív, než podepíšete nájem.">
+<meta name="theme-color" content="#04060c">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#04060c;--card:rgba(14,22,40,.72);--card2:rgba(8,13,26,.85);--border:rgba(120,160,255,.14);--border2:rgba(120,160,255,.28);--text:#eaf2ff;--text2:#8ea2c2;--text3:#58698a;--accent:#1e86e0;--accent2:#4fd1ff;--vio:#7c5cff;--ok:#2fe3a0;--err:#ff5d6c;--gold:#fbbf24;--grad:linear-gradient(90deg,#4fd1ff,#3a6cf5 55%,#7c5cff)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.6 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.wrap{max-width:1160px;margin:0 auto;padding:0 22px}
+/* pozadí: aurory + mřížka */
+.sky{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none}
+.sky:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(120,160,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(120,160,255,.045) 1px,transparent 1px);background-size:64px 64px;mask-image:radial-gradient(ellipse at 50% 20%,#000 30%,transparent 75%)}
+.aur{position:absolute;border-radius:50%;filter:blur(90px);opacity:.38;animation:drift 22s ease-in-out infinite alternate}
+.aur.a1{width:620px;height:620px;left:-160px;top:-160px;background:#1e86e0}
+.aur.a2{width:540px;height:540px;right:-180px;top:120px;background:#7c5cff;animation-delay:-7s}
+.aur.a3{width:480px;height:480px;left:30%;top:900px;background:#4fd1ff;opacity:.16;animation-delay:-12s}
+@keyframes drift{to{transform:translate(80px,60px) scale(1.12)}}
+/* hlavička */
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);background:rgba(4,6,12,.62);border-bottom:1px solid var(--border)}
+.nav{display:flex;align-items:center;gap:18px;height:66px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.01em}
+.brand span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.links{display:flex;gap:22px;margin-left:24px;font-size:14px;color:var(--text2);font-weight:600}
+.links a:hover{color:var(--text)}
+.nav .sp{flex:1}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;font:inherit;font-weight:700;font-size:15px;color:#fff;border:0;border-radius:12px;padding:14px 22px;cursor:pointer;background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);box-shadow:0 10px 28px rgba(58,108,245,.35);transition:transform .18s,box-shadow .18s;position:relative;white-space:nowrap}
+.btn:hover{transform:translateY(-2px);box-shadow:0 16px 40px rgba(58,108,245,.5)}
+.btn.big{font-size:17px;padding:18px 28px;border-radius:14px}
+.btn.pulse{animation:glow 2.8s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 10px 28px rgba(58,108,245,.35)}50%{box-shadow:0 10px 44px rgba(79,209,255,.55)}}
+.btn.ghost{background:transparent;border:1px solid var(--border2);box-shadow:none;color:var(--text)}
+.btn.ghost:hover{border-color:var(--accent2);background:rgba(79,209,255,.06)}
+.btn.sm{padding:10px 16px;font-size:14px}
+/* typografie */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;border:1px solid var(--border2);background:rgba(14,22,40,.6);color:var(--accent2);font-size:13px;font-weight:700;letter-spacing:.02em}
+.eyebrow i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 rgba(47,227,160,.6);animation:ping 2s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 rgba(47,227,160,.6)}100%{box-shadow:0 0 0 10px rgba(47,227,160,0)}}
+h1,h2,h3{letter-spacing:-.025em;line-height:1.08;margin:0}
+h1{font-size:clamp(36px,5.6vw,64px);font-weight:900}
+h2{font-size:clamp(28px,3.8vw,44px);font-weight:850;font-weight:800}
+h3{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{font-size:clamp(17px,1.6vw,20px);color:var(--text2);max-width:620px}
+.muted{color:var(--text2)}
+section{padding:96px 0;position:relative}
+.sh{max-width:760px;margin:0 auto 46px;text-align:center}
+.sh p{color:var(--text2);font-size:18px;margin:14px 0 0}
+.kicker{color:var(--accent2);font-weight:800;font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px;display:block}
+/* hero */
+.hero{padding:64px 0 40px}
+.hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+.hero h1{margin:20px 0 18px}
+.cta-row{display:flex;gap:12px;flex-wrap:wrap;margin:30px 0 22px}
+.ticks{display:flex;gap:20px;flex-wrap:wrap;color:var(--text2);font-size:14px;font-weight:600}
+.ticks b{color:var(--ok);margin-right:6px}
+.stage{position:relative;min-height:520px}
+.machine{position:absolute;left:6%;right:6%;top:40px;filter:drop-shadow(0 40px 60px rgba(30,134,224,.35));animation:float 7s ease-in-out infinite}
+.machine img{width:100%;height:auto;display:block}
+.halo{position:absolute;left:50%;top:52%;width:440px;height:440px;margin:-220px 0 0 -220px;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.32),rgba(124,92,255,.12) 45%,transparent 70%);filter:blur(10px);animation:breathe 6s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-14px)}}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.85}50%{transform:scale(1.08);opacity:1}}
+.chip{position:absolute;background:var(--card2);border:1px solid var(--border2);border-radius:16px;padding:14px 16px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 50px rgba(0,0,0,.45);font-size:13px}
+.chip .l{color:var(--text3);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.chip.score{right:-6px;top:12px;display:flex;gap:14px;align-items:center;animation:float 6s ease-in-out infinite;animation-delay:-2s}
+.ring{width:64px;height:64px}
+.ring .bg{stroke:rgba(120,160,255,.15)}
+.ring .fg{stroke:url(#rg);stroke-dasharray:176;stroke-dashoffset:176;transition:stroke-dashoffset 2s cubic-bezier(.2,.8,.2,1)}
+.on .ring .fg{stroke-dashoffset:30}
+.chip.score b{font-size:22px}
+.chip.map{left:-10px;bottom:30px;width:230px;animation:float 8s ease-in-out infinite;animation-delay:-4s}
+.chip.tag{right:10%;bottom:-6px;display:flex;align-items:center;gap:10px;animation:float 6.5s ease-in-out infinite;animation-delay:-1s}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+.demo{position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:11px;color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
+/* pás */
+.band{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(8,13,26,.55)}
+.band .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;padding:26px 22px}
+.bi{display:flex;gap:12px;align-items:center;font-weight:700;font-size:15px}
+.bi .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(79,209,255,.08);border:1px solid var(--border2);flex:none}
+.bi small{display:block;color:var(--text2);font-weight:500;font-size:13px}
+/* karty */
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);box-shadow:0 20px 60px rgba(0,0,0,.35);transition:transform .25s,border-color .25s,box-shadow .25s;position:relative;overflow:hidden}
+.card:hover{transform:translateY(-6px);border-color:var(--border2);box-shadow:0 24px 70px rgba(0,0,0,.45),0 0 0 1px rgba(79,209,255,.12),0 0 40px rgba(79,209,255,.08)}
+.card .ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;margin-bottom:16px;background:rgba(255,93,108,.1);border:1px solid rgba(255,93,108,.3)}
+.card p{color:var(--text2);margin:10px 0 0;font-size:15px}
+.punch{margin:44px auto 0;max-width:820px;text-align:center;font-size:clamp(20px,2.4vw,28px);font-weight:800;letter-spacing:-.01em}
+.punch .r{color:var(--err)}
+/* řešení */
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.app{padding:30px;border-radius:24px}
+.app .badge{display:inline-flex;gap:8px;align-items:center;font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent2);background:rgba(79,209,255,.08);border:1px solid var(--border2);border-radius:999px;padding:6px 12px;margin-bottom:16px}
+.app h3{font-size:26px}
+.app ul{list-style:none;padding:0;margin:18px 0 24px;display:grid;gap:10px}
+.app li{display:flex;gap:10px;color:var(--text2)}
+.app li:before{content:"";flex:none;width:20px;height:20px;margin-top:3px;border-radius:6px;background:rgba(47,227,160,.12) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10.5l3 3 7-7' fill='none' stroke='%232fe3a0' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+.app .vis{height:200px;border-radius:16px;background:var(--card2);border:1px solid var(--border);margin-bottom:22px;position:relative;overflow:hidden}
+.pin{animation:pinpulse 2.4s ease-out infinite;transform-origin:center;transform-box:fill-box}
+@keyframes pinpulse{0%{opacity:.7;transform:scale(.4)}100%{opacity:0;transform:scale(2.2)}}
+.draw{stroke-dasharray:600;stroke-dashoffset:600;transition:stroke-dashoffset 2.4s ease}
+.on .draw{stroke-dashoffset:0}
+/* výsledek – ukázka dashboardu */
+.dash{display:grid;grid-template-columns:1.2fr .8fr;gap:22px;align-items:stretch}
+.mock{border-radius:24px;padding:22px;background:linear-gradient(180deg,rgba(14,22,40,.9),rgba(8,13,26,.95));border:1px solid var(--border2);box-shadow:0 40px 100px rgba(0,0,0,.55),0 0 80px rgba(58,108,245,.12)}
+.mock .top{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:13px;color:var(--text2)}
+.mock .top i{width:10px;height:10px;border-radius:50%}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+.kpi{background:rgba(4,6,12,.55);border:1px solid var(--border);border-radius:14px;padding:14px}
+.kpi .v{font-size:26px;font-weight:900;letter-spacing:-.02em}
+.kpi .l{font-size:12px;color:var(--text2)}
+.bar{height:8px;border-radius:6px;background:rgba(120,160,255,.12);overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:var(--grad);transition:width 1.8s cubic-bezier(.2,.8,.2,1)}
+.why{display:grid;gap:14px;align-content:center}
+.why .it{display:flex;gap:14px;align-items:flex-start;padding:18px;border-radius:16px;background:var(--card);border:1px solid var(--border)}
+.why .n{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-weight:900;background:var(--grad);color:#fff}
+.why p{margin:4px 0 0;color:var(--text2);font-size:15px}
+.note{font-size:12px;color:var(--text3);margin-top:10px}
+/* kroky */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;position:relative}
+.steps:before{content:"";position:absolute;left:12%;right:12%;top:34px;height:2px;background:linear-gradient(90deg,transparent,var(--border2),transparent)}
+.step{text-align:center;padding:0 10px}
+.step .num{width:68px;height:68px;margin:0 auto 18px;border-radius:20px;display:grid;place-items:center;font-size:26px;font-weight:900;background:var(--card2);border:1px solid var(--border2);box-shadow:0 0 0 6px var(--bg),0 0 40px rgba(79,209,255,.18);position:relative}
+.step p{color:var(--text2);margin:8px 0 0}
+/* prádlomaty */
+.machines{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.mcard{display:grid;grid-template-columns:.9fr 1.1fr;gap:10px;align-items:center;padding:26px;border-radius:24px}
+.mcard .ph{position:relative;display:grid;place-items:center;min-height:220px}
+.mcard .ph:before{content:"";position:absolute;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(79,209,255,.25),transparent 70%)}
+.mcard img{position:relative;width:100%;max-width:240px;height:auto;filter:drop-shadow(0 24px 30px rgba(0,0,0,.5));transition:transform .4s}
+.mcard:hover img{transform:translateY(-6px) scale(1.03)}
+.pills{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 0}
+.pill{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(79,209,255,.08);border:1px solid var(--border2);color:var(--accent2)}
+.priceq{margin-top:22px;display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:22px 26px;border-radius:20px;background:linear-gradient(90deg,rgba(30,134,224,.14),rgba(124,92,255,.14));border:1px solid var(--border2)}
+.priceq b{font-size:18px}
+/* prohlídka */
+.visit{display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center}
+.visit .frame{border-radius:24px;aspect-ratio:4/3;position:relative;overflow:hidden;border:1px solid var(--border2);background:radial-gradient(circle at 30% 30%,rgba(79,209,255,.18),transparent 55%),radial-gradient(circle at 75% 70%,rgba(124,92,255,.2),transparent 55%),var(--card2);display:grid;place-items:center}
+.visit .frame img{width:62%;filter:drop-shadow(0 30px 40px rgba(0,0,0,.6));animation:float 8s ease-in-out infinite}
+.visit ul{list-style:none;padding:0;margin:22px 0 28px;display:grid;gap:12px}
+.visit li{display:flex;gap:12px;align-items:flex-start;color:var(--text2)}
+.visit li b{color:var(--text)}
+.visit li .ic{flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(79,209,255,.1);border:1px solid var(--border2)}
+/* FAQ */
+.faq{max-width:820px;margin:0 auto;display:grid;gap:12px}
+.faq details{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:0 22px;transition:border-color .2s}
+.faq details[open]{border-color:var(--border2)}
+.faq summary{list-style:none;cursor:pointer;padding:20px 0;font-weight:700;font-size:17px;display:flex;justify-content:space-between;gap:16px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary:after{content:"+";color:var(--accent2);font-size:24px;line-height:1;transition:transform .25s}
+.faq details[open] summary:after{transform:rotate(45deg)}
+.faq details p{margin:0 0 20px;color:var(--text2)}
+/* finále */
+.final{text-align:center;padding:90px 30px;border-radius:32px;position:relative;overflow:hidden;background:radial-gradient(circle at 20% 0%,rgba(79,209,255,.22),transparent 50%),radial-gradient(circle at 90% 100%,rgba(124,92,255,.28),transparent 55%),var(--card2);border:1px solid var(--border2)}
+.final h2{font-size:clamp(30px,4.4vw,52px)}
+.final p{color:var(--text2);font-size:19px;max-width:620px;margin:18px auto 32px}
+footer{border-top:1px solid var(--border);padding:40px 0 110px;color:var(--text3);font-size:14px}
+footer .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:center}
+footer nav{display:flex;gap:18px;flex-wrap:wrap;margin-left:auto}
+footer a:hover{color:var(--text)}
+/* sticky CTA mobil */
+.sticky{position:fixed;left:12px;right:12px;bottom:12px;z-index:60;display:none;transform:translateY(140%);transition:transform .35s}
+.sticky.show{transform:none}
+.sticky .btn{width:100%}
+/* náběh – skryje se jen když běží JS (.js) */
+.js .rv{opacity:0;transform:translateY(26px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+.js .rv.on{opacity:1;transform:none}
+.js .rv.d1{transition-delay:.08s}.js .rv.d2{transition-delay:.16s}.js .rv.d3{transition-delay:.24s}
+@media (max-width:960px){
+  .links{display:none}.hero .grid,.duo,.dash,.machines,.visit{grid-template-columns:1fr}
+  .cards{grid-template-columns:1fr 1fr}.band .wrap{grid-template-columns:1fr 1fr}
+  .stage{min-height:440px;margin-top:10px}.steps{grid-template-columns:1fr;gap:34px}.steps:before{display:none}
+  .mcard{grid-template-columns:1fr}.sticky{display:block}section{padding:72px 0}
+}
+@media (max-width:560px){.cards,.band .wrap,.kpis{grid-template-columns:1fr}.nav .btn.ghost{display:none}.chip.map{display:none}.hero{padding-top:36px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.js .rv{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="sky"><div class="aur a1"></div><div class="aur a2"></div><div class="aur a3"></div></div>
+
+<header><div class="wrap nav">
+  <a class="brand" href="/"><svg width="36" height="36" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:block;flex:none">
+<defs>
+  <linearGradient id="hg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+  <linearGradient id="hb" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#121d36"/><stop offset="1" stop-color="#070b16"/></linearGradient>
+  <radialGradient id="hr" cx="46" cy="18" r="22" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></radialGradient>
+  <filter id="hf" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+</defs>
+<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#hb)"/>
+<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#hr)"/>
+<rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#hg)" stroke-width="1.5"/>
+<path d="M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22" stroke="url(#hg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="32" cy="32" rx="26" ry="11" transform="rotate(-28 32 32)" stroke="url(#hg)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 4"/>
+<circle cx="50.5" cy="15" r="4.5" fill="#4fd1ff" filter="url(#hf)" opacity=".7"/>
+<circle cx="50.5" cy="15" r="2.6" fill="#eaf2ff"/>
+</svg><span>Best Series 2.0</span></a>
+  <nav class="links"><a href="#problem">Proč místo</a><a href="#aplikace">Aplikace</a><a href="#jak">Jak to funguje</a><a href="#pradlomaty">Prádlomaty</a><a href="#faq">Otázky</a></nav>
+  <div class="sp"></div>
+  <a class="btn ghost sm" href="/login">Přihlásit se</a>
+  <a class="btn sm" href="/findlocation">Prověřit místo</a>
+</div></header>
+
+<!-- HERO -->
+<section class="hero"><div class="wrap grid">
+  <div>
+    <span class="eyebrow rv"><i></i>Výrobce samoobslužných prádelen · ČR &amp; SK</span>
+    <h1 class="rv d1">Stroj nikdy neprodělá.<br><span class="g">Místo ano.</span></h1>
+    <p class="lead rv d2">Než podepíšete nájem, zjistěte podle dat, jestli vaše lokalita prádlomat uživí – kolik domácností je kolem, kde je konkurence a jak se k vám lidé dostanou.</p>
+    <div class="cta-row rv d3">
+      <a class="btn big pulse" href="/findlocation">Najít místo, které vydělá <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+      <a class="btn big ghost" href="/location">Mám konkrétní adresu</a>
+    </div>
+    <div class="ticks rv d3"><span><b>✓</b>Rozhodnutí podle dat, ne od oka</span><span><b>✓</b>Výsledky ve vašem účtu BS2</span><span><b>✓</b>Bez závazku koupit stroj</span></div>
+  </div>
+  <div class="stage rv d2" id="stage">
+    <svg width="0" height="0" style="position:absolute"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4fd1ff"/><stop offset="1" stop-color="#7c5cff"/></linearGradient></defs></svg>
+    <div class="halo"></div>
+    <div class="machine"><img src="https://www.bestseries2.cz/img/pradlomat.webp" alt="Prádlomat – samoobslužná prádelna v kontejneru od Best Series"></div>
+    <div class="chip score"><svg class="ring" viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="28" fill="none" stroke-width="7"/><circle class="fg" cx="32" cy="32" r="28" fill="none" stroke-width="7" stroke-linecap="round" transform="rotate(-90 32 32)"/></svg><div><div class="l">Skóre lokality</div><b>Velmi slibná</b><div class="muted" style="font-size:12px">ukázka výsledku</div></div></div>
+    <div class="chip map"><div class="l" style="margin-bottom:8px">Spádová oblast</div>
+      <svg viewBox="0 0 200 110" width="100%"><rect width="200" height="110" rx="10" fill="#070b16"/><path d="M0 70 C40 60 70 90 110 72 S170 40 200 52" stroke="rgba(120,160,255,.25)" stroke-width="6" fill="none"/><path d="M60 0 L78 110" stroke="rgba(120,160,255,.18)" stroke-width="4"/><path d="M150 0 L130 110" stroke="rgba(120,160,255,.14)" stroke-width="3"/><circle cx="100" cy="56" r="34" fill="rgba(79,209,255,.08)" stroke="rgba(79,209,255,.5)" stroke-dasharray="4 4"/><circle class="pin" cx="100" cy="56" r="14" fill="rgba(79,209,255,.5)"/><circle cx="100" cy="56" r="6" fill="#4fd1ff"/><circle cx="40" cy="30" r="5" fill="#ff5d6c"/><circle cx="168" cy="86" r="5" fill="#ff5d6c"/></svg>
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:11px" class="muted"><span><i class="dot" style="display:inline-block;background:#4fd1ff;vertical-align:middle"></i> vaše místo</span><span><i class="dot" style="display:inline-block;background:#ff5d6c;vertical-align:middle"></i> konkurence</span></div></div>
+    <div class="chip tag"><i class="dot" style="background:var(--ok);box-shadow:0 0 12px var(--ok)"></i><b>Pere 24/7</b><span class="muted">bez obsluhy</span></div>
+  </div>
+</div></section>
+
+<div class="band"><div class="wrap">
+  <div class="bi rv"><div class="ic">🏭</div><div>Vlastní výroba<small>stroje vyrábíme sami</small></div></div>
+  <div class="bi rv d1"><div class="ic">🗺️</div><div>Data o lokalitě<small>domácnosti, konkurence, dostupnost</small></div></div>
+  <div class="bi rv d2"><div class="ic">🤝</div><div>Osobní schůzka<small>konfigurace a financování na míru</small></div></div>
+  <div class="bi rv d3"><div class="ic">🇨🇿🇸🇰</div><div>Česko i Slovensko<small>stejná péče na obou trzích</small></div></div>
+</div></div>
+
+<!-- PROBLÉM -->
+<section id="problem"><div class="wrap">
+  <div class="sh rv"><span class="kicker">Nejdražší chyba</span><h2>Většina lidí vybírá místo <span class="g">od oka.</span></h2><p>Podívají se z okna, řeknou si „tady prádelna chybí“ – a podepíšou nájem na roky. Jenže úspěch samoobslužné prádelny rozhoduje hlavně to, co z okna vidět není.</p></div>
+  <div class="cards">
+    <div class="card rv"><div class="ic">🧺</div><h3>Pračka v každém bytě</h3><p>Hustá zástavba ještě neznamená zákazníky. Rozhoduje, kolik domácností nemá kde prát nebo sušit.</p></div>
+    <div class="card rv d1"><div class="ic">📍</div><h3>Skrytá konkurence</h3><p>Prádelna o dvě ulice dál, o které nevíte, si ukousne velkou část poptávky.</p></div>
+    <div class="card rv d2"><div class="ic">🚶</div><h3>Kudy lidé chodí</h3><p>Místo mimo přirozené trasy – bez parkování, zastávky nebo obchodu – zůstane prázdné.</p></div>
+    <div class="card rv d3"><div class="ic">📅</div><h3>Nájem na roky</h3><p>Stroj přestěhujete. Smlouvu a promarněný čas ne. Chyba ve výběru místa je nejdražší.</p></div>
+  </div>
+  <p class="punch rv">Špatné místo = <span class="r">špatný byznys</span>, i s nejlepším strojem.<br><span class="g">Stačí to vědět předem.</span></p>
+</div></section>
+
+<!-- ŘEŠENÍ -->
+<section id="aplikace"><div class="wrap">
+  <div class="sh rv"><span class="kicker">Řešení</span><h2>Dvě aplikace, které vám řeknou <span class="g">pravdu o místě.</span></h2><p>Nejste-li si jistí, kde začít, začněte vyhledáním. Máte-li adresu, prověřte ji. Obojí najdete ve svém účtu Best Series 2.0.</p></div>
+  <div class="duo">
+    <div class="card app rv">
+      <span class="badge">🔎 Nemám místo</span>
+      <div class="vis" id="v1"><svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"><rect width="400" height="200" fill="#070b16"/><g stroke="rgba(120,160,255,.12)"><path d="M0 50H400M0 100H400M0 150H400M80 0V200M160 0V200M240 0V200M320 0V200"/></g><path class="draw" d="M10 160 C80 120 120 170 190 110 S300 60 390 80" stroke="url(#rg)" stroke-width="4" fill="none" stroke-linecap="round"/><g><circle class="pin" cx="190" cy="110" r="22" fill="rgba(47,227,160,.45)"/><circle cx="190" cy="110" r="8" fill="#2fe3a0"/><circle cx="300" cy="72" r="7" fill="#fbbf24"/><circle cx="90" cy="140" r="7" fill="#ff5d6c"/><circle cx="350" cy="150" r="7" fill="#4fd1ff"/></g><g font-family="Inter" font-size="11" font-weight="700"><rect x="204" y="78" rx="7" width="98" height="24" fill="rgba(4,6,12,.85)" stroke="rgba(47,227,160,.5)"/><text x="214" y="94" fill="#2fe3a0">nejlepší okrsek</text></g></svg></div>
+      <h3>Vyhledávač míst</h3>
+      <p class="muted" style="margin:8px 0 0">Zadáte město nebo čtvrť a aplikace vám ukáže, kde v okolí má samoobslužná prádelna největší šanci uspět.</p>
+      <ul><li>Analýza spádové oblasti podle dat o domácnostech</li><li>Přehled existující konkurence v okolí</li><li>Porovnání více míst vedle sebe</li></ul>
+      <a class="btn" href="/findlocation">Najít vhodné místo →</a>
+    </div>
+    <div class="card app rv d1">
+      <span class="badge">📍 Mám adresu</span>
+      <div class="vis"><svg viewBox="0 0 400 200" width="100%" height="100%" preserveAspectRatio="xMidYMid slice"><rect width="400" height="200" fill="#070b16"/><g font-family="Inter" font-size="12" font-weight="600" fill="#8ea2c2"><text x="24" y="40">Domácnosti v okolí</text><text x="24" y="86">Konkurence</text><text x="24" y="132">Dostupnost</text><text x="24" y="178">Ekonomika</text></g><g><rect x="170" y="30" width="200" height="10" rx="5" fill="rgba(120,160,255,.12)"/><rect class="draw" x="170" y="30" width="170" height="10" rx="5" fill="#4fd1ff"/><rect x="170" y="76" width="200" height="10" rx="5" fill="rgba(120,160,255,.12)"/><rect x="170" y="76" width="120" height="10" rx="5" fill="#2fe3a0"/><rect x="170" y="122" width="200" height="10" rx="5" fill="rgba(120,160,255,.12)"/><rect x="170" y="122" width="150" height="10" rx="5" fill="#7c5cff"/><rect x="170" y="168" width="200" height="10" rx="5" fill="rgba(120,160,255,.12)"/><rect x="170" y="168" width="140" height="10" rx="5" fill="#fbbf24"/></g></svg></div>
+      <h3>Prověření lokality</h3>
+      <p class="muted" style="margin:8px 0 0">Konkrétní adresa projde studií lokality a kalkulačkou ekonomiky. Uvidíte, jestli se tam prádelna vyplatí – ještě před podpisem.</p>
+      <ul><li>AI studie lokality na konkrétní adrese</li><li>Kalkulačka ekonomiky provozu</li><li>Export do PDF – pro vás, banku i pronajímatele</li></ul>
+      <a class="btn" href="/location">Prověřit moji adresu →</a>
+    </div>
+  </div>
+</div></section>
+
+<!-- CO UVIDÍTE -->
+<section><div class="wrap dash">
+  <div class="mock rv" id="mock">
+    <div class="top"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span style="margin-left:8px">Best Series 2.0 · výsledek lokality</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">Domácnosti ve spádové oblasti</div><div class="v"><span class="cnt" data-to="4820">0</span></div><div class="bar"><i data-w="78%"></i></div></div>
+      <div class="kpi"><div class="l">Konkurence do 1 km</div><div class="v"><span class="cnt" data-to="1">0</span> prádelna</div><div class="bar"><i data-w="22%"></i></div></div>
+      <div class="kpi"><div class="l">Skóre místa</div><div class="v"><span class="cnt" data-to="87">0</span>/100</div><div class="bar"><i data-w="87%"></i></div></div>
+    </div>
+    <svg viewBox="0 0 560 170" width="100%"><defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop stop-color="rgba(79,209,255,.35)"/><stop offset="1" stop-color="rgba(79,209,255,0)"/></linearGradient></defs><g stroke="rgba(120,160,255,.1)"><path d="M0 40H560M0 85H560M0 130H560"/></g><path d="M0 150 L80 132 L160 120 L240 96 L320 82 L400 60 L480 48 L560 30 L560 170 L0 170Z" fill="url(#ar)"/><path class="draw" d="M0 150 L80 132 L160 120 L240 96 L320 82 L400 60 L480 48 L560 30" stroke="url(#rg)" stroke-width="3.5" fill="none" stroke-linecap="round"/><g font-family="Inter" font-size="11" fill="#58698a"><text x="6" y="164">rok 1</text><text x="520" y="164">rok 5</text></g></svg>
+    <div class="note">Ilustrační ukázka – skutečné hodnoty závisí na vaší lokalitě.</div>
+  </div>
+  <div class="why">
+    <span class="kicker rv">Co z toho máte</span>
+    <div class="it rv"><div class="n">1</div><div><b>Jistotu před podpisem</b><p>Rozhodujete se podle čísel o konkrétním místě, ne podle pocitu.</p></div></div>
+    <div class="it rv d1"><div class="n">2</div><div><b>Silnější vyjednávání</b><p>Podklady v PDF ukážete pronajímateli i bance.</p></div></div>
+    <div class="it rv d2"><div class="n">3</div><div><b>Klid, když řeknete ne</b><p>Někdy je nejlepší výsledek zjištění, že sem prádelna nepatří. I to šetří peníze.</p></div></div>
+  </div>
+</div></section>
+
+<!-- JAK TO FUNGUJE -->
+<section id="jak"><div class="wrap">
+  <div class="sh rv"><span class="kicker">Jak to funguje</span><h2>Od nápadu k jistotě <span class="g">ve třech krocích.</span></h2></div>
+  <div class="steps">
+    <div class="step rv"><div class="num">1</div><h3>Vyberte aplikaci</h3><p>Vyhledávač míst, když místo hledáte. Prověření lokality, když už máte adresu.</p></div>
+    <div class="step rv d1"><div class="num">2</div><h3>Získejte výsledek</h3><p>Data o lokalitě a ekonomice uvidíte přehledně ve svém účtu Best Series 2.0.</p></div>
+    <div class="step rv d2"><div class="num">3</div><h3>Přijeďte za námi</h3><p>Když místo vychází, ukážeme vám stroje ve výrobě a připravíme konfiguraci a financování.</p></div>
+  </div>
+  <div style="text-align:center;margin-top:46px" class="rv"><a class="btn big pulse" href="/findlocation">Začít prověřovat místo →</a></div>
+</div></section>
+
+<!-- PRÁDLOMATY -->
+<section id="pradlomaty"><div class="wrap">
+  <div class="sh rv"><span class="kicker">Stroje</span><h2>Prádlomaty, které perou <span class="g">nonstop.</span></h2><p>Samoobslužná prádelna připravená k provozu – bez obsluhy, s platbou kartou i mincemi, otevřená 24 hodin denně.</p></div>
+  <div class="machines">
+    <div class="card mcard rv"><div class="ph"><img src="https://www.bestseries2.cz/img/pradlomat.webp" alt="Prádlomat"></div><div><h3>Prádlomat</h3><p class="muted" style="margin:8px 0 0">Plnohodnotná samoobslužná prádelna v kompaktním provedení pro místa s vysokou poptávkou.</p><div class="pills"><span class="pill">Provoz 24/7</span><span class="pill">Bez obsluhy</span><span class="pill">Peřiny i deky</span></div></div></div>
+    <div class="card mcard rv d1"><div class="ph"><img src="https://www.bestseries2.cz/img/pradlomat-mini.webp" alt="Prádlomat MINI"></div><div><h3>Prádlomat MINI</h3><p class="muted" style="margin:8px 0 0">Kompaktní verze pro menší lokality nebo jako doplněk ke stávajícímu podnikání.</p><div class="pills"><span class="pill">Menší prostor</span><span class="pill">Rychlý start</span><span class="pill">Provoz 24/7</span></div></div></div>
+  </div>
+  <div class="priceq rv"><div><b>Cenu a konfiguraci připravíme osobně.</b><div class="muted" style="font-size:15px">Správná sestava i financování záleží na vašem místě. Proto vše řešíme na schůzce nebo prohlídce výroby – individuálně.</div></div><a class="btn" href="/findlocation">Nejdřív prověřit místo →</a></div>
+</div></section>
+
+<!-- PROHLÍDKA VÝROBY -->
+<section><div class="wrap visit">
+  <div class="frame rv"><img src="https://www.bestseries2.cz/img/pradlomat-mini.webp" alt="Prohlídka výroby Best Series"></div>
+  <div>
+    <span class="kicker rv">Prohlídka výroby</span>
+    <h2 class="rv d1">Uvidíte, sáhnete si, <span class="g">rozhodnete se.</span></h2>
+    <ul class="rv d2">
+      <li><span class="ic">🏭</span><span><b>Stroje naživo ve výrobě</b> – jak vznikají a jak fungují.</span></li>
+      <li><span class="ic">🧮</span><span><b>Konfigurace a financování na míru</b> – podle výsledků vaší lokality.</span></li>
+      <li><span class="ic">💬</span><span><b>Odpovědi na všechno</b> – provoz, servis, platby, údržba.</span></li>
+    </ul>
+    <a class="btn rv d3" href="/location">Prověřit místo a domluvit prohlídku →</a>
+  </div>
+</div></section>
+
+<!-- FAQ -->
+<section id="faq"><div class="wrap">
+  <div class="sh rv"><span class="kicker">Otázky</span><h2>Na co se lidé ptají</h2></div>
+  <div class="faq">
+    <details class="rv"><summary>Jaký je rozdíl mezi Vyhledávačem míst a Prověřením lokality?</summary><p>Vyhledávač míst použijete, když ještě nevíte kde – ukáže, kde v okolí má prádelna největší šanci. Prověření lokality použijete, když už máte konkrétní adresu – projde ji studií lokality a kalkulačkou ekonomiky.</p></details>
+    <details class="rv"><summary>Musím potom koupit prádlomat?</summary><p>Ne. Aplikace vám dají podklady pro rozhodnutí – a někdy je nejlepším výsledkem zjištění, že dané místo vhodné není. Stroj řešíme, až když místo vychází a vy chcete pokračovat.</p></details>
+    <details class="rv"><summary>Kolik stojí prádlomat?</summary><p>Cenu, konfiguraci i možnosti financování připravujeme individuálně na osobní schůzce nebo prohlídce výroby – podle vaší lokality a záměru.</p></details>
+    <details class="rv"><summary>Kde najdu výsledky?</summary><p>Ve svém účtu Best Series 2.0. Tam se k nim můžete kdykoli vrátit, exportovat je do PDF a napsat nám přes chat.</p></details>
+    <details class="rv"><summary>Funguje to i na Slovensku?</summary><p>Ano, působíme v Česku i na Slovensku.</p></details>
+  </div>
+</div></section>
+
+<!-- FINÁLE -->
+<section style="padding-top:20px"><div class="wrap">
+  <div class="final rv">
+    <span class="eyebrow"><i></i>Rozhodněte se podle dat</span>
+    <h2 style="margin-top:20px">Nejdražší prádelna je ta<br><span class="g">na špatném místě.</span></h2>
+    <p>Pár minut s daty vám může ušetřit roky nájmu a statisíce. Prověřte místo dřív, než podepíšete.</p>
+    <div class="cta-row" style="justify-content:center;margin:0"><a class="btn big pulse" href="/findlocation">Najít místo, které vydělá →</a><a class="btn big ghost" href="/location">Prověřit konkrétní adresu</a></div>
+  </div>
+</div></section>
+
+<footer><div class="wrap"><a class="brand" href="/"><svg width="36" height="36" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:block;flex:none">
+<defs>
+  <linearGradient id="hg" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff"/><stop offset=".55" stop-color="#3a6cf5"/><stop offset="1" stop-color="#7c5cff"/></linearGradient>
+  <linearGradient id="hb" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#121d36"/><stop offset="1" stop-color="#070b16"/></linearGradient>
+  <radialGradient id="hr" cx="46" cy="18" r="22" gradientUnits="userSpaceOnUse"><stop stop-color="#4fd1ff" stop-opacity=".45"/><stop offset="1" stop-color="#4fd1ff" stop-opacity="0"/></radialGradient>
+  <filter id="hf" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2"/></filter>
+</defs>
+<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#hb)"/>
+<rect x="2" y="2" width="60" height="60" rx="17" fill="url(#hr)"/>
+<rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.5" stroke="url(#hg)" stroke-width="1.5"/>
+<path d="M22 17.5v29M22 17.5h11.5a7.25 7.25 0 0 1 0 14.5H22M22 32h13.5a7.25 7.25 0 0 1 0 14.5H22" stroke="url(#hg)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+<ellipse cx="32" cy="32" rx="26" ry="11" transform="rotate(-28 32 32)" stroke="url(#hg)" stroke-opacity=".55" stroke-width="1.2" stroke-dasharray="3 4"/>
+<circle cx="50.5" cy="15" r="4.5" fill="#4fd1ff" filter="url(#hf)" opacity=".7"/>
+<circle cx="50.5" cy="15" r="2.6" fill="#eaf2ff"/>
+</svg><span>Best Series 2.0</span></a><span>© Best Series</span>
+  <nav><a href="/findlocation">Vyhledávač míst</a><a href="/location">Prověření lokality</a><a href="/location/vop">Obchodní podmínky</a><a href="/location/gdpr">Ochrana osobních údajů</a><a href="/login">Přihlášení</a></nav></div></footer>
+
+<div class="sticky" id="sticky"><a class="btn big" href="/findlocation">Prověřit moje místo →</a></div>
+
+<script>
+(function(){
+  var d=document.documentElement; d.classList.add('js');
+  var els=[].slice.call(document.querySelectorAll('.rv'));
+  var show=function(e){e.classList.add('on');};
+  if(!('IntersectionObserver' in window)){els.forEach(show);}
+  else{var io=new IntersectionObserver(function(es){es.forEach(function(x){if(x.isIntersecting){show(x.target);io.unobserve(x.target);}});},{threshold:.12,rootMargin:'0px 0px -40px 0px'});els.forEach(function(e){io.observe(e);});}
+  setTimeout(function(){els.forEach(show);},3500); // pojistka
+  // kruh skóre a kreslené čáry
+  var stage=document.getElementById('stage'); setTimeout(function(){stage&&stage.classList.add('on');},600);
+  [].slice.call(document.querySelectorAll('.app,.mock')).forEach(function(b){new IntersectionObserver(function(es,o){es.forEach(function(x){if(x.isIntersecting){b.classList.add('on');o.disconnect();run(b);}});},{threshold:.3}).observe(b);});
+  function run(root){
+    [].slice.call(root.querySelectorAll('.bar i')).forEach(function(i){i.style.width=i.getAttribute('data-w');});
+    [].slice.call(root.querySelectorAll('.cnt')).forEach(function(c){var to=+c.getAttribute('data-to'),t0=performance.now();(function f(t){var p=Math.min(1,(t-t0)/1600),v=Math.round(to*(1-Math.pow(1-p,3)));c.textContent=v.toLocaleString('cs-CZ');if(p<1)requestAnimationFrame(f);})(t0);});
+  }
+  // sticky CTA na mobilu po odscrollování hero
+  var st=document.getElementById('sticky'); window.addEventListener('scroll',function(){st.classList.toggle('show',window.scrollY>650&&(window.innerHeight+window.scrollY)<document.body.scrollHeight-300);},{passive:true});
+})();
+</script>
+</body>
+</html>
