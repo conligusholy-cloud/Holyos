@@ -600,6 +600,64 @@ router.put('/meta/config', express.json({ limit: '20kb' }), async (req, res, nex
     res.json({ ok: true, connected: !!(v.token && v.account) }); } catch (err) { next(err); } });
 router.get('/meta/test', async (req, res, next) => { try { const c = await metaCfg(); if (!c.token) return res.status(400).json({ error: 'Chybí token' }); const me = await graph('me', { fields: 'id,name' }, c.token); let acc = null; if (c.account) acc = await graph('act_' + c.account, { fields: 'id,name,account_status,currency,amount_spent' }, c.token); res.json({ me, account: acc }); } catch (err) { res.status(400).json({ error: err.message }); } });
 router.get('/meta/accounts', async (req, res, next) => { try { const c = await metaCfg(); if (!c.token) return res.status(400).json({ error: 'Chybí token' }); const j = await graph('me/adaccounts', { fields: 'id,name,account_status,currency', limit: 100 }, c.token); res.json((j.data || []).map((a) => ({ id: String(a.id).replace(/^act_/, ''), name: a.name, status: a.account_status, currency: a.currency }))); } catch (err) { res.status(400).json({ error: err.message }); } });
+// ── Založení reklam z vymyšleného funnelu na Facebooku – VŽDY POZASTAVENÉ (PAUSED), nic neutrácí, dokud je majitel nezapne ve Správci reklam ──
+async function graphPost(path, body, token) {
+  const form = new URLSearchParams(); Object.entries(body || {}).forEach(([k, v]) => form.set(k, typeof v === 'object' ? JSON.stringify(v) : String(v))); form.set('access_token', token);
+  const r = await fetch(GRAPH + path, { method: 'POST', body: form, signal: AbortSignal.timeout(30000) }); const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) { const e = j.error || {}; throw new Error((e.error_user_msg || e.message || ('Meta ' + r.status)) + (e.error_user_title ? ' (' + e.error_user_title + ')' : '')); }
+  return j;
+}
+function fbCta(t) { t = String(t || '').toLowerCase(); if (/regist|účet|ucet|založ|zaloz/.test(t)) return 'SIGN_UP'; if (/koup|objedn|nakup/.test(t)) return 'SHOP_NOW'; if (/nabíd|nabid|sleva|zdarma/.test(t)) return 'GET_OFFER'; if (/přihl|prihl|odeb/.test(t)) return 'SUBSCRIBE'; return 'LEARN_MORE'; }
+// Stránky (FB Page), za které lze z reklamního účtu inzerovat
+router.get('/director/invent/fb-prep', async (req, res) => {
+  try {
+    const c = await metaCfg(); if (!c.token || !c.account) return res.status(400).json({ error: 'Meta Ads není napojené (Centrum reklamy → Meta: token + reklamní účet).' });
+    let pages = []; try { pages = ((await graph('act_' + c.account + '/promote_pages', { fields: 'id,name', limit: 50 }, c.token)).data || []); } catch (e) { /* fallback */ }
+    if (!pages.length) { try { pages = ((await graph('me/accounts', { fields: 'id,name', limit: 50 }, c.token)).data || []); } catch (e) { /* nic */ } }
+    const F = await DIRECTOR.getInvent();
+    res.json({ account: c.account, pages: pages.map((p) => ({ id: p.id, name: p.name })), created: (F && F.fb) || null,
+      ads: ((F && F.ads) || []).map((a) => ({ id: a.id, name: a.name, headline: a.headline, destination: a.destination, budget_czk_day: a.budget_czk_day, url: fbAdUrl(F, a) })) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+function fbAdUrl(F, a) {
+  const p = (F.pages || []).find((x) => x.id === a.destination);
+  let url = p && /^https?:\/\//.test(String(p.slug || '')) ? p.slug : p && p.slug ? 'https://www.bestseries2.cz' + (String(p.slug).startsWith('/') ? '' : '/') + p.slug : 'https://www.bestseries2.cz/location';
+  url = String(url).replace(/[…]+$/, '').split(' ')[0];
+  return url + (url.includes('?') ? '&' : '?') + 'utm_source=facebook&utm_medium=paid&utm_campaign=' + encodeURIComponent(String(F.name || 'funnel').slice(0, 40)) + '&utm_content=' + encodeURIComponent(a.id || 'ad');
+}
+router.post('/director/invent/fb-create', async (req, res) => {
+  try {
+    const c = await metaCfg(); if (!c.token || !c.account) return res.status(400).json({ error: 'Meta Ads není napojené.' });
+    const b = req.body || {}; const pageId = String(b.page_id || '').replace(/[^0-9]/g, ''); if (!pageId) return res.status(400).json({ error: 'Vyber facebookovou stránku, za kterou se bude inzerovat.' });
+    if (b.confirm !== true) return res.status(400).json({ error: 'Chybí potvrzení.' });
+    const F = await DIRECTOR.getInvent(); if (!F || !(F.ads || []).length) return res.status(400).json({ error: 'Vymyšlený funnel nemá reklamy.' });
+    const pick = Array.isArray(b.ad_ids) && b.ad_ids.length ? F.ads.filter((a) => b.ad_ids.includes(a.id)) : F.ads;
+    const budgets = b.budgets || {};
+    const act = 'act_' + c.account;
+    const camp = await graphPost(act + '/campaigns', { name: ('🧠 Koncept – ' + (F.name || 'Nový funnel')).slice(0, 200), objective: 'OUTCOME_TRAFFIC', status: 'PAUSED', special_ad_categories: [], buying_type: 'AUCTION' }, c.token);
+    const out = [];
+    for (const a of pick) {
+      const r = { id: a.id, name: a.name };
+      try {
+        const kc = Math.max(100, Math.round(Number(budgets[a.id] || a.budget_czk_day || 300)));
+        const age = { min: 25, max: 60 };
+        const set = await graphPost(act + '/adsets', { name: ((a.name || a.id) + ' – ' + String(a.audience || '').slice(0, 80)).slice(0, 200), campaign_id: camp.id, daily_budget: kc * 100, billing_event: 'IMPRESSIONS', optimization_goal: 'LANDING_PAGE_VIEWS', bid_strategy: 'LOWEST_COST_WITHOUT_CAP', destination_type: 'WEBSITE',
+          targeting: { geo_locations: { countries: ['CZ'] }, age_min: age.min, age_max: age.max, targeting_automation: { advantage_audience: 1 } }, status: 'PAUSED' }, c.token);
+        r.adset_id = set.id;
+        const link = fbAdUrl(F, a);
+        const cr = await graphPost(act + '/adcreatives', { name: ('Kreativa – ' + (a.name || a.id)).slice(0, 200), object_story_spec: { page_id: pageId, link_data: { link, message: String(a.primary_text || '').slice(0, 2000), name: String(a.headline || '').slice(0, 255), description: String(a.description || '').slice(0, 255), call_to_action: { type: fbCta(a.cta_button), value: { link } } } } }, c.token);
+        r.creative_id = cr.id;
+        const ad = await graphPost(act + '/ads', { name: (a.name || a.id).slice(0, 200), adset_id: set.id, creative: { creative_id: cr.id }, status: 'PAUSED' }, c.token);
+        r.ad_id = ad.id; r.link = link; r.budget_czk_day = kc;
+        if (String(a.destination || '').toLowerCase().includes('form')) r.note = 'Ředitel chtěl rychlý formulář – reklama zatím vede na web; formulář přiřaď ve Správci reklam.';
+      } catch (e) { r.error = e.message; }
+      out.push(r);
+    }
+    const fb = { account: c.account, page_id: pageId, campaign_id: camp.id, created_at: new Date().toISOString(), ads: out, manager_url: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=' + c.account + '&selected_campaign_ids=' + camp.id };
+    try { const { getSetting, setSetting } = require('../services/settings'); const cur = await getSetting(DIRECTOR.KEY_INVENT, { type: 'json', defaultValue: null }); if (cur) { cur.fb = fb; await setSetting(DIRECTOR.KEY_INVENT, cur, { type: 'json', description: 'Marketingový ředitel – vymyšlený funnel', scope: 'marketing', userId: req.user && req.user.id }); } } catch (e) { /* jen záznam */ }
+    res.json(fb);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
 // Kampaně se statistikami za období
 router.get('/meta/campaigns', async (req, res, next) => {
   try { const c = await metaCfg(req); if (!c.token) return res.status(400).json({ error: 'Meta Ads nejsou napojené – nastav token v Centru reklamy → Nastavení.' }); if (!c.account) return res.status(400).json({ error: 'Vyber reklamní účet.' });
