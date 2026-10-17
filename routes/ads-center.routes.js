@@ -402,7 +402,7 @@ router.get('/director/invent', async (req, res, next) => {
       job = beatAge < 70000 ? { running: true, started_at: F.started_at } // úloha žije (tep) – třeba na jiné instanci serveru
         : { running: false, interrupted: true, started_at: F.started_at, error: 'Generování přerušil restart serveru (nasazení). Hotové části jsou zachované – spusť „Vymyslet nový funnel" znovu.' };
     } else if (F && F.status === 'failed' && !(job && job.running)) job = Object.assign({}, job || {}, { running: false, error: F.error || (job && job.error) });
-    res.json({ funnel: F, job, goals: await DIRECTOR.getGoals() });
+    res.json({ funnel: F, job, revise_job: _jobs.revise || null, goals: await DIRECTOR.getGoals() });
   } catch (err) { next(err); }
 });
 router.post('/director/invent', async (req, res, next) => {
@@ -428,6 +428,11 @@ router.post('/director/invent/saved/:id/load', async (req, res, next) => {
   } catch (err) { next(err); } });
 router.delete('/director/invent/saved/:id', async (req, res, next) => {
   try { const { getSetting, setSetting } = require('../services/settings'); const list = (await getSetting(SAVED_KEY, { type: 'json', defaultValue: [] })) || []; await setSetting(SAVED_KEY, list.filter((x) => x.id !== req.params.id), { type: 'json', description: 'Marketingový ředitel – uložené strategie', scope: 'marketing', userId: req.user && req.user.id }); res.json({ ok: true }); } catch (err) { next(err); } });
+router.post('/director/invent/revise', async (req, res, next) => {
+  try { const b = req.body || {}; if (!String(b.comment || '').trim()) return res.status(400).json({ error: 'Napiš připomínku' });
+    if ((_jobs.invent && _jobs.invent.running) || (_jobs.revise && _jobs.revise.running)) return res.status(409).json({ error: 'Ředitel právě pracuje – počkej, až doběhne.' });
+    const job = runJob('revise', () => DIRECTOR.revise({ section: b.section, comment: b.comment })); job.section = String(b.section || ''); res.status(202).json({ ok: true, job });
+  } catch (err) { next(err); } });
 router.post('/director/invent/pages/:pid/preview', async (req, res, next) => {
   try { const pid = String(req.params.pid || '').slice(0, 20); res.status(202).json({ ok: true, job: runJob('page:' + pid, () => DIRECTOR.pagePreview(pid)) }); } catch (err) { next(err); }
 });

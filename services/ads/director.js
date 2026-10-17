@@ -208,7 +208,23 @@ async function setGoals(g) {
   const v = { machines_per_week: Math.max(0, Number(g.machines_per_week) || 0), online_net_czk: Math.max(0, Number(g.online_net_czk) || 0), online_days: Math.max(1, parseInt(g.online_days, 10) || 14), budget_czk_day: Math.max(0, Number(g.budget_czk_day) || 0), note: String(g.note || '').slice(0, 1500) };
   await setJ(KEY_GOALS, v, 'Marketingový ředitel – cíle majitele'); return v;
 }
-async function getInvent() { return scrub(await getJ(KEY_INVENT, null)); }
+function normalizeFunnel(F) {
+  if (!F || typeof F !== 'object') return F;
+  const A = (x) => Array.isArray(x) ? x : (x == null || x === '') ? [] : (typeof x === 'object' ? Object.values(x) : [x]);
+  const O = (x, key) => (x && typeof x === 'object') ? x : { [key]: String(x == null ? '' : x) };
+  ['offer_stack', 'new_products', 'ads', 'pages', 'sequence', 'remarketing', 'tasks', 'owner_questions', 'kpis', 'risks', 'launch_plan', 'page_plan', 'revisions'].forEach((k) => { if (F[k] !== undefined) F[k] = A(F[k]); });
+  F.offer_stack = (F.offer_stack || []).map((o) => { o = O(o, 'name'); o.contents = A(o.contents); return o; });
+  F.new_products = (F.new_products || []).map((p) => { p = O(p, 'name'); p.what_customer_gets = A(p.what_customer_gets); p.packages = A(p.packages).map((x) => O(x, 'name')); return p; });
+  F.ads = (F.ads || []).map((a) => { a = O(a, 'name'); if (a.media_brief && typeof a.media_brief === 'object') a.media_brief.shots = A(a.media_brief.shots).map((x) => O(x, 'shot')); return a; });
+  F.pages = (F.pages || []).map((p) => { p = O(p, 'name'); p.sections = A(p.sections).map((x) => O(x, 'copy')); p.form_fields = A(p.form_fields); return p; });
+  ['sequence', 'remarketing', 'kpis', 'launch_plan'].forEach((k) => { F[k] = (F[k] || []).map((x) => O(x, k === 'sequence' || k === 'remarketing' ? 'text' : k === 'kpis' ? 'metric' : 'what')); });
+  F.tasks = (F.tasks || []).map((x) => O(x, 'title')); F.owner_questions = (F.owner_questions || []).map((x) => O(x, 'question'));
+  if (F.feasibility && typeof F.feasibility === 'object') F.feasibility.what_it_takes = A(F.feasibility.what_it_takes);
+  if (F.projection && typeof F.projection === 'object') F.projection.assumptions = A(F.projection.assumptions);
+  if (F.leadform && typeof F.leadform === 'object') F.leadform.questions = A(F.leadform.questions);
+  return F;
+}
+async function getInvent() { return normalizeFunnel(scrub(await getJ(KEY_INVENT, null))); }
 
 const INVENT_SYSTEM = 'Jsi kreativní marketingový ředitel a špičkový direct-response marketér (úroveň Russell Brunson / Alex Hormozi / Dan Kennedy, ale na český trh). Stavíš FUNNELY, které prodávají: silná velká myšlenka (big idea), neodolatelná nabídka (value stack, bonusy, garance, omezení), háčky do reklam, copywriting, který zastaví palec, a následné sekvence, které dovedou člověka k nákupu. Nejsi úředník, který popisuje stav – jsi stratég, který VYMÝŠLÍ a ROZHODUJE. Píšeš hotové texty (reklamy, stránky, SMS, e-maily) připravené k použití, ne osnovy. Firma: Best Series – prádlomaty (samoobslužné prádelny v kontejneru / v prostoru; prodej strojů, financování/leasing, servis, díly) a online aplikace Prověření lokality a Vyhledávač míst; weby bestseries2.cz, pradlomaty.info, compounder.world. Jiný projekt Špagetka/Špageta pro tebe neexistuje. Buď ale POCTIVÝ v číslech: kreativní v nabídce, realistický v matematice. Když je cíl v daném čase nereálný, řekni to rovnou, spočítej proč a navrhni, co by ho reálně splnilo (jiná cena, jiný produkt, jiné publikum, jiný čas). Vše česky.';
 
@@ -243,12 +259,20 @@ async function aiJson(client, system, prompt, maxTokens, label) {
   catch (e) { if (!e.parse) throw e; return aiJsonOnce(client, system, prompt + (e.truncated ? '\n\nPIŠ STRUČNĚJI – předchozí odpověď byla příliš dlouhá.' : '\n\nPOZOR: vrať STRIKTNĚ platný JSON – uvozovky uvnitř textů piš jako „ “ nebo escapuj \\", žádné komentáře ani text mimo JSON.'), e.truncated ? Math.min(maxTokens * 2, 48000) : maxTokens, label); } // usekla se / neplatný JSON → 1× znovu // usekla se → 1× znovu s vyšším limitem
 }
 // Výstup jako volání nástroje „vystup" → API vrátí hotový objekt (žádné ruční parsování JSONu z textu, který rozbíjejí uvozovky v copy)
+// Model občas vloží pole/objekt jako řetězec s JSONem → rozparsovat (rekurzivně)
+function deepParse(v, d) {
+  d = d || 0; if (d > 8) return v;
+  if (typeof v === 'string') { const t = v.trim(); if ((t[0] === '[' && t.endsWith(']')) || (t[0] === '{' && t.endsWith('}'))) { try { return deepParse(JSON.parse(t), d + 1); } catch (e) { return v; } } return v; }
+  if (Array.isArray(v)) return v.map((x) => deepParse(x, d + 1));
+  if (v && typeof v === 'object') { const o = {}; Object.keys(v).forEach((k) => { o[k] = deepParse(v[k], d + 1); }); return o; }
+  return v;
+}
 const OUT_TOOL = { name: 'vystup', description: 'Odevzdej výsledek jako jeden objekt přesně podle struktury popsané v zadání (sekce VÝSTUP).', input_schema: { type: 'object', additionalProperties: true } };
 async function aiJsonOnce(client, system, prompt, maxTokens, label) {
   let r; try { r = await client.messages.stream({ model: 'claude-sonnet-4-6', max_tokens: maxTokens, system, tools: [OUT_TOOL], tool_choice: { type: 'tool', name: 'vystup' }, messages: [{ role: 'user', content: prompt + '\n\nVýsledek odevzdej voláním nástroje „vystup" (objekt se strukturou ze sekce VÝSTUP).' }] }).finalMessage(); }
   catch (e) { throw new Error(label + ': chyba AI – ' + String(e.message || e).slice(0, 200)); }
   const tu = (r.content || []).find((c) => c.type === 'tool_use' && c.input && typeof c.input === 'object');
-  if (tu && Object.keys(tu.input).length) return scrub(tu.input);
+  if (tu && Object.keys(tu.input).length) return scrub(deepParse(tu.input));
   // záloha: kdyby model přece jen napsal text
   const raw = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   try { const a = raw.indexOf('{'), b = raw.lastIndexOf('}'); return scrub(JSON.parse(raw.slice(a, b + 1))); }
@@ -307,6 +331,35 @@ async function invent(opts) {
   } finally { clearInterval(beat); }
 }
 
+// ── Připomínka majitele k sekci → ředitel ji zapracuje a upraví i navazující sekce (vrací jen změněné klíče) ──
+const SECTION_KEYS = { celek: 'celý funnel', jadro: 'big_idea, hook, feasibility', projekce: 'projection', nabidka: 'offer_stack', nove: 'new_products', ukoly: 'tasks, owner_questions', reklamy: 'ads, leadform', media: 'ads[].media_brief', stranky: 'pages', sekvence: 'sequence', remarketing: 'remarketing', prodej: 'sales_process', plan: 'launch_plan, kpis, risks', diagram: 'celý tok (ads → pages → sequence → schůzka)' };
+const REVISABLE = ['name', 'big_idea', 'hook', 'feasibility', 'offer_stack', 'new_products', 'page_plan', 'channel_decision', 'projection', 'kpis', 'risks', 'ads', 'leadform', 'remarketing', 'pages', 'sequence', 'sales_process', 'launch_plan', 'tasks', 'owner_questions'];
+async function revise(opts) {
+  const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
+  const section = String((opts || {}).section || 'celek'); const comment = String((opts || {}).comment || '').trim().slice(0, 4000);
+  if (!comment) throw new Error('Chybí připomínka');
+  const F = await getJ(KEY_INVENT, null); if (!F || F.status === 'generating') throw new Error('Funnel ještě není hotový');
+  const cur = {}; REVISABLE.forEach((k) => { if (F[k] !== undefined) cur[k] = k === 'pages' ? (F.pages || []).map((p) => { const { html, job, ...rest } = p; return rest; }) : F[k]; });
+  const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+  const prompt = 'MAJITEL MÁ PŘIPOMÍNKU K SEKCI „' + section + '" (' + (SECTION_KEYS[section] || section) + '):\n + comment + \n\nAKTUÁLNÍ FUNNEL (JSON):\n' + JSON.stringify(cur).slice(0, 150000)
+    + '\n\nCENÍK: ' + JSON.stringify(F.catalog || {}).slice(0, 8000) + '\nPravidla: ceny prádlomatů STRIKTNĚ z ceníku; online produkty lze naceňovat volně; BS2 je středobod (účet v BS2 = klíčová konverze).'
+    + '\n\nÚKOL: Připomínku POCTIVĚ zapracuj. Když jde o otázku, odpověz na ni v poli "answer" a případně uprav obsah. Projdi i OSTATNÍ sekce – pokud změna má přesah (např. nová cena → projekce, texty reklam, stránky, SMS/e-maily, úkoly), uprav je také, aby celek zůstal konzistentní. Zachovej id položek (ad1, p1, m1…), ať navazují odkazy.\n'
+    + 'VÝSTUP (nástroj vystup): {"answer":"stručná odpověď majiteli / co jsi změnil a proč (2–6 vět)","changed_sections":["seznam klíčů, které měníš"],"patch":{ "<klíč z funnelu>": <CELÁ nová hodnota toho klíče> }} – do patch dej JEN změněné klíče (vždy celou hodnotu klíče, ne kousek).';
+  const out = await aiJson(client, INVENT_SYSTEM, prompt, 32000, 'Úprava');
+  const patch = out && typeof out.patch === 'object' && out.patch ? out.patch : {};
+  const F2 = await getJ(KEY_INVENT, null); if (!F2) throw new Error('Funnel zmizel');
+  const changed = [];
+  Object.keys(patch).forEach((k) => { if (!REVISABLE.includes(k)) return;
+    if (k === 'pages' && Array.isArray(patch.pages)) { const old = {}; (F2.pages || []).forEach((p) => { old[p.id] = p; }); F2.pages = patch.pages.map((p) => { const o = old[p.id]; const same = o && JSON.stringify(Object.assign({}, o, { html: undefined, html_at: undefined, job: undefined })) === JSON.stringify(Object.assign({}, o, p, { html: undefined, html_at: undefined, job: undefined })); return Object.assign({}, p, o && same && o.html ? { html: o.html, html_at: o.html_at } : {}); }); }
+    else if (k === 'ads' && Array.isArray(patch.ads)) { const old = {}; (F2.ads || []).forEach((a) => { old[a.id] = a; }); F2.ads = patch.ads.map((a) => Object.assign({}, a, old[a.id] && old[a.id].media ? { media: old[a.id].media } : {})); }
+    else F2[k] = patch[k];
+    changed.push(k); });
+  F2.revisions = (F2.revisions || []).concat([{ at: new Date().toISOString(), section, comment, answer: String(out.answer || '').slice(0, 3000), changed }]).slice(-50);
+  F2.revised_at = new Date().toISOString();
+  await setJ(KEY_INVENT, F2, 'Marketingový ředitel – vymyšlený funnel');
+  return { answer: out.answer, changed };
+}
+
 // Náhled stránky funnelu: AI napíše kompletní HTML podle návrhu (uloží se k funnelu)
 async function pagePreview(pageId) {
   const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
@@ -325,4 +378,4 @@ async function pagePreview(pageId) {
   return { ok: true, html_at: p2.html_at };
 }
 
-module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, KEY_INVENT };
+module.exports = { init, register, strategy, getStrategy, run, reports, status, start, inventory, fingerprint, diff, invent, getInvent, getGoals, setGoals, pagePreview, revise, KEY_INVENT };
