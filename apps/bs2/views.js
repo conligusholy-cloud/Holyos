@@ -1471,6 +1471,7 @@ const ADMIN_NAV = [
   { id: 'prod', href: '/admin/products', label: 'Produkty', icon: 'box' },
   { id: 'ord', href: '/admin/orders', label: 'Objednávky', icon: 'check' },
   { id: 'loc', href: '/admin/online', label: 'Online produkty', icon: 'box' },
+  { id: 'meet', href: '/admin/meetings', label: 'Schůzky', icon: 'calendar' },
   { id: 'trf', href: '/admin/transfers', label: 'Převody podpory', icon: 'bolt' },
   { id: 'stat', href: '/admin/stats', label: 'Statistiky', icon: 'chart' },
   { id: 'sug', href: '/admin/suggestions', label: 'Podněty', icon: 'bolt' },

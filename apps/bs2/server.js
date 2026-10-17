@@ -1628,6 +1628,23 @@ async function loadProducts() {
   productsCache = { at: Date.now(), items: await r.json() };
   return { items: productsCache.items };
 }
+// ── Kalendář schůzek (admin) — data v HolyOS (MeetingSlot/MeetingReservation), BS2 je spravuje přes /api/auth/bs2/meetings* ──
+async function holyosSvc(method, p, body) {
+  const secret = process.env.BS2_SSO_SECRET; if (!secret) throw new Error('Chybí BS2_SSO_SECRET.');
+  const token = jwt.sign({ aud: 'holyos-api', iss: 'bs2' }, secret, { expiresIn: '1m' });
+  const r = await fetch(HOLYOS_URL + p, { method, headers: Object.assign({ Authorization: 'Bearer ' + token }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(20000) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(j.error || ('HolyOS vrátil chybu ' + r.status)); e.status = r.status; throw e; }
+  return j;
+}
+const MA = require('./meetings-admin');
+app.get('/admin/meetings', requireAdmin, (req, res) => res.send(MA.meetingsPage(V, { admin: req.admin, holyosUrl: HOLYOS_URL })));
+const meetApi = (fn) => wrap(async (req, res) => { try { res.json(await fn(req)); } catch (e) { res.status(e.status && e.status < 500 ? e.status : 502).json({ ok: false, error: e.message }); } });
+app.get('/admin/api/meetings', requireAdmin, meetApi(async (req) => ({ ok: true, slots: await holyosSvc('GET', '/api/auth/bs2/meetings?from=' + encodeURIComponent(String(req.query.from || '')) + '&to=' + encodeURIComponent(String(req.query.to || ''))) })));
+app.post('/admin/api/meetings/slots', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('POST', '/api/auth/bs2/meetings/slots', { slots: (req.body || {}).slots || [] }); log(req.admin, 'meeting_slots_create', { count: (r.created || []).length }); return r; }));
+app.post('/admin/api/meetings/slots/:id(\\d+)/update', requireAdmin, meetApi(async (req) => holyosSvc('PATCH', '/api/auth/bs2/meetings/slots/' + req.params.id, req.body || {})));
+app.post('/admin/api/meetings/slots/:id(\\d+)/delete', requireAdmin, meetApi(async (req) => holyosSvc('DELETE', '/api/auth/bs2/meetings/slots/' + req.params.id)));
+app.post('/admin/api/meetings/reservations/:id(\\d+)', requireAdmin, meetApi(async (req) => { const r = await holyosSvc('PATCH', '/api/auth/bs2/meetings/reservations/' + req.params.id, { status: (req.body || {}).status }); log(req.admin, 'meeting_reservation_status', { id: +req.params.id, status: (req.body || {}).status }); return r; }));
 // Obrázek produktu — proxy z HolyOS (uživatel BS2 nemá do HolyOS přístup), cache v paměti 1 h
 const productImgCache = new Map(); // id → { at, buf, type }
 app.get('/img/product/:id(\\d+)', wrap(async (req, res) => {

@@ -431,6 +431,90 @@ router.post('/bs2/notify', express.json({ limit: '20kb' }), async (req, res, nex
   } catch (err) { next(err); }
 });
 
+// ─── Kalendář schůzek pro administraci BS2 (stejná data jako Prodejní objednávky → Termíny) ───
+// GET    /api/auth/bs2/meetings?from=ISO&to=ISO  — termíny v rozsahu + rezervace (+ jméno leada)
+// POST   /api/auth/bs2/meetings/slots            — založit termín(y): {starts_at, duration_min, capacity, mode, note} nebo {slots:[…]}
+// PATCH  /api/auth/bs2/meetings/slots/:id        — upravit termín (čas, délka, kapacita, forma, poznámka, aktivní)
+// DELETE /api/auth/bs2/meetings/slots/:id        — smazat termín (jen bez aktivní rezervace; jinak vypnout)
+// PATCH  /api/auth/bs2/meetings/reservations/:id — stav rezervace {status: booked|done|canceled|no_show, note?}
+const BS2_RES_STATUSES = ['booked', 'done', 'canceled', 'no_show'];
+router.get('/bs2/meetings', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const from = req.query.from ? new Date(String(req.query.from)) : new Date(Date.now() - 7 * 86400000);
+    const to = req.query.to ? new Date(String(req.query.to)) : new Date(Date.now() + 60 * 86400000);
+    if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'Neplatný rozsah' });
+    const slots = await prisma.meetingSlot.findMany({
+      where: { starts_at: { gte: from, lt: to } },
+      orderBy: { starts_at: 'asc' },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true } } },
+    });
+    const leadIds = [...new Set(slots.flatMap((s) => s.reservations.map((r) => r.compounder_lead_id)).filter(Boolean))];
+    const leads = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true, email: true, phone: true, city: true, status: true } }).catch(() => []) : [];
+    const lm = new Map(leads.map((l) => [l.id, l]));
+    res.json(slots.map((s) => ({
+      id: s.id, starts_at: s.starts_at, duration_min: s.duration_min, capacity: s.capacity, mode: s.mode, note: s.note, active: s.active,
+      booked: s.reservations.filter((r) => r.status === 'booked').length,
+      reservations: s.reservations.map((r) => ({ ...r, lead: r.compounder_lead_id ? (lm.get(r.compounder_lead_id) || null) : null })),
+    })));
+  } catch (err) { next(err); }
+});
+router.post('/bs2/meetings/slots', express.json({ limit: '200kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {};
+    const items = (Array.isArray(b.slots) ? b.slots : [b]).slice(0, 500);
+    const created = [];
+    for (const it of items) {
+      const d = it && it.starts_at ? new Date(it.starts_at) : null;
+      if (!d || isNaN(d)) continue;
+      const mode = ['online', 'osobne'].includes(it.mode) ? it.mode : null;
+      const s = await prisma.meetingSlot.create({
+        data: { starts_at: d, duration_min: Math.min(Math.max(parseInt(it.duration_min, 10) || 17, 5), 480), capacity: Math.min(Math.max(parseInt(it.capacity, 10) || 1, 1), 50), mode, note: it.note ? String(it.note).slice(0, 500) : null, active: it.active === false ? false : true },
+        select: { id: true },
+      });
+      created.push(s.id);
+    }
+    res.status(201).json({ ok: true, created });
+  } catch (err) { next(err); }
+});
+router.patch('/bs2/meetings/slots/:id(\\d+)', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {}, data = {};
+    if (b.starts_at) { const d = new Date(b.starts_at); if (!isNaN(d)) data.starts_at = d; }
+    if (b.duration_min != null) data.duration_min = Math.min(Math.max(parseInt(b.duration_min, 10) || 17, 5), 480);
+    if (b.capacity != null) data.capacity = Math.min(Math.max(parseInt(b.capacity, 10) || 1, 1), 50);
+    if (b.mode !== undefined) data.mode = ['online', 'osobne'].includes(b.mode) ? b.mode : null;
+    if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 500) : null;
+    if (b.active !== undefined) data.active = !!b.active;
+    await prisma.meetingSlot.update({ where: { id: parseInt(req.params.id, 10) }, data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+router.delete('/bs2/meetings/slots/:id(\\d+)', async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const id = parseInt(req.params.id, 10);
+    const booked = await prisma.meetingReservation.count({ where: { slot_id: id, status: 'booked' } });
+    if (booked) return res.status(409).json({ ok: false, error: 'Termín má aktivní rezervaci — nejdřív ji zrušte, nebo termín jen vypněte.' });
+    const any = await prisma.meetingReservation.count({ where: { slot_id: id } });
+    if (any) { await prisma.meetingSlot.update({ where: { id }, data: { active: false } }); return res.json({ ok: true, deactivated: true }); } // historii rezervací nemažeme
+    await prisma.meetingSlot.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+router.patch('/bs2/meetings/reservations/:id(\\d+)', express.json({ limit: '20kb' }), async (req, res, next) => {
+  try {
+    if (!verifyBs2Token(req, res)) return;
+    const b = req.body || {}, data = {};
+    if (b.status !== undefined) { if (!BS2_RES_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' }); data.status = b.status; }
+    if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 1000) : null;
+    await prisma.meetingReservation.update({ where: { id: parseInt(req.params.id, 10) }, data });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/auth/bs2/products/:id/image — obrázek položky ceníku pro BS2 (stejná autorizace tokenem)
 router.get('/bs2/products/:id/image', async (req, res, next) => {
   try {
