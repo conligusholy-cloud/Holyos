@@ -87,10 +87,13 @@ async function withSesEmails(funnelId, f, rows, since) {
 }
 
 // Statistika funelu: per uzel { leads (unikátní), events } jen od aktivace uzlu a v období (since).
+// 'Počítat statistiky cílů od' nastavené u cílů STRÁNKY (Cíle stránky → datum) platí i pro uzly záchytné stránky ve funelu
+async function pageGoalsFrom() { try { const { getSetting } = require('../settings'); const v = await getSetting('ads_center.page_goals', { type: 'json', defaultValue: {} }); return v && typeof v === 'object' ? v : {}; } catch (e) { return {}; } }
+function landingFromMs(nd, goals) { if (!nd || nd.kind !== 'landing') return 0; const key = nd.page || ((nd.variant || 'specialist') === 'schuzka' ? 'cesta' : 'specialist'); const sf = goals && goals[key] && goals[key].stats_from; const t = sf ? new Date(sf).getTime() : 0; return isNaN(t) ? 0 : t; }
 async function stats(funnelId, since) {
   try { await backfill(funnelId); } catch (e) { console.warn('[funnel-events] backfill', e.message); }
   let rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { event: true, path: true, props: true, created_at: true }, orderBy: { created_at: 'asc' } });
-  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; (f && f.nodes || []).forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); kinds[nd.id] = nd.kind; }); // od aktivace i od 'pocitat statistiky od'
+  const f = (await funnels()).find((x) => x.id === funnelId); const act = {}; const kinds = {}; const PG = await pageGoalsFrom(); (f && f.nodes || []).forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0, landingFromMs(nd, PG)); kinds[nd.id] = nd.kind; }); // od aktivace i od 'pocitat statistiky od'
   const per = {}; const opened = {}; const landingByLead = {}; // landingByLead[lead] = [{t, channel}]
   const allowL = f ? await confirmedLanding(f) : null;
   rows = await withSesEmails(funnelId, f, rows, since);
@@ -113,7 +116,7 @@ async function stats(funnelId, since) {
 async function edgeFlows(funnelId, since, withList) {
   const f = (await funnels()).find((x) => x.id === funnelId); if (!f) return {};
   const nodes = f.nodes || [], edges = f.edges || []; const byId = {}; nodes.forEach((nd) => { byId[nd.id] = nd; });
-  const act = {}; nodes.forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0); });
+  const act = {}; const PG = await pageGoalsFrom(); nodes.forEach((nd) => { act[nd.id] = Math.max(nd.activated_at ? new Date(nd.activated_at).getTime() : 0, nd.stats_from ? new Date(nd.stats_from).getTime() : 0, landingFromMs(nd, PG)); });
   // 1) události → first[nodeId][leadId] = čas
   let rows = await prisma.compounderEvent.findMany({ where: { event: { in: ['funnel_sms', 'funnel_email', 'funnel_landing', 'funnel_open'] }, path: { startsWith: '/funnel/' + funnelId + '/' }, created_at: rng(since) }, select: { path: true, props: true, event: true, created_at: true }, orderBy: { created_at: 'asc' } });
   rows = await withSesEmails(funnelId, f, rows, since);
