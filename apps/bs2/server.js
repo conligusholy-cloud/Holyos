@@ -449,7 +449,7 @@ const TRACK_TYPES = ['pageview', 'click', 'time', 'scroll', 'section', 'interact
 // Číslo v liště = online právě teď (ping do 90 s) + aktivní lidé za posledních 60 minut z databáze událostí (stejně jako admin Živě); cache 10 s
 let _presCache = { at: 0, data: null };
 // Anonymní ping z veřejných stránek (bez přihlášení): jen náhodné sid z prohlížeče, žádné osobní údaje
-const PUBLIC_HIT_PATHS = ['/location', '/findlocation', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
+const PUBLIC_HIT_PATHS = ['/cesta', '/location', '/findlocation', '/login', '/activate', '/home', '/location/vop', '/location/gdpr', '/arena'];
 app.post('/api/presence/ping', (req, res) => {
   const sid = String((req.body || {}).sid || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
   if (sid && !rateLimited('pp:' + req.ip, 240, 3600e3)) {
@@ -688,6 +688,13 @@ app.get('/vop', (req, res) => res.send(V.vopPage()));
 const PUBT = '<script>' + require('./stats-track').PUB_TRACK_JS + '</script></body>';
 app.get('/findlocation', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(FL.findLocationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
 app.get('/location', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(LOC.locationPage(LAPP.LIMITS, LAPP.SEARCH_LIMITS).replace('</body>', PUBT)); });
+// Cesta k rozhodnutí (záchytná stránka funelu, značka Best Series 2.0): 3 kroky k prádlomatu → CTA na vytvoření účtu
+app.get('/cesta', wrap(async (req, res) => {
+  const fs = require('fs'), path = require('path');
+  const html = fs.readFileSync(path.join(__dirname, 'cesta.html'), 'utf8').replace('@@LOGO@@', '<span style="margin-right:10px;display:inline-flex">' + require('./logo').logoSvg(34, 'cs') + '</span>').replace('</body>', PUBT);
+  res.set('Cache-Control', 'no-cache').type('html').send(html);
+}));
+app.get('/img/kiosk.jpg', (req, res) => res.set('Cache-Control', 'public, max-age=604800').sendFile(require('path').join(__dirname, 'kiosk.jpg')));
 // Aréna – kvízová záchytná stránka (Milionář): jméno → 5 otázek → virtuální kapitál → CTA na Prověření lokality
 app.get('/arena', (req, res) => { res.set('Cache-Control', 'no-cache'); res.send(require('./arena').arenaPage().replace('</body>', PUBT)); });
 // Aréna – online kolo o slevové kupony (30 s): připojení, stav kola, uplatnění kuponu

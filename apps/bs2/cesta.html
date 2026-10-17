@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Prádlomat — ať přesně víte, co vás čeká · Best Series 2.0</title>
+<meta name="description" content="Cesta k vlastnímu prádlomatu ve třech krocích. Naším cílem je, abyste do 10 dní od schůzky měli všechny informace ke kvalifikovanému rozhodnutí." />
+<meta name="theme-color" content="#04060c" />
+<meta name="robots" content="noindex,nofollow" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#04060c; --card:rgba(14,22,40,.72); --card2:rgba(10,18,36,.9); --line:rgba(120,160,255,.22); --cyan:#4fd1ff; --vio:#7c5cff;
+    --blue:#1e86e0; --blue-soft:#4fd1ff; --text:#eaf2ff; --muted:#8ea2c2; --muted2:#7d93b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);
+    min-height:100vh;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background:radial-gradient(120% 70% at 50% -10%, rgba(58,108,245,.22), transparent 55%), radial-gradient(70% 50% at 100% 0%, rgba(124,92,255,.14), transparent 60%), var(--bg)}
+  .wrap{width:100%;max-width:720px;margin:0 auto;padding:26px 22px 60px}
+  a{color:inherit;text-decoration:none}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+  .brand{display:inline-flex;align-items:center;gap:10px}
+    .brand .name{font-weight:800;letter-spacing:-.01em;font-size:18px}
+  .brand .name span{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#a9cdec;background:rgba(30,134,224,.14);
+    border:0.5px solid rgba(46,140,224,.4);padding:6px 13px;border-radius:999px}
+  .badge svg{width:15px;height:15px;stroke:var(--blue-soft);fill:none;stroke-width:1.8}
+  .eyebrow{font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-soft);margin:14px 0 10px}
+  h1{font-weight:600;font-size:clamp(30px,7vw,44px);line-height:1.12;letter-spacing:-.01em}
+  h1 .g{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .intro{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:520px;margin:14px 0 20px}
+  .hero-wrap{position:relative;float:right;width:min(46%,520px);margin:4px 0 26px 30px}
+  .hero-photo{display:block;width:100%;border-radius:16px;border:1px solid rgba(46,140,224,.35);box-shadow:0 24px 60px -24px rgba(30,134,224,.55)}
+  @media(max-width:760px){.hero-wrap{float:none;width:100%;margin:0 0 30px}}
+
+  /* Pečeť kvality — 100% český výrobek */
+  .seal{position:absolute;right:-12px;bottom:-18px;width:146px;height:146px;
+    filter:drop-shadow(0 16px 30px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(212,175,55,.25))}
+  @media(max-width:760px){.seal{width:128px;height:128px;right:8px;bottom:-18px}}
+  .seal-ring{position:absolute;inset:0;width:100%;height:100%;animation:sealspin 30s linear infinite}
+  @keyframes sealspin{to{transform:rotate(360deg)}}
+  .seal-bg{fill:#0a1728}
+  .seal-gold{fill:none;stroke:url(#sealGold);stroke-width:3.5}
+  .seal-dots{fill:none;stroke:rgba(230,196,96,.55);stroke-width:1.2;stroke-dasharray:2.5 4}
+  .seal-inner{fill:none;stroke:url(#sealGold);stroke-width:1.6}
+  .seal-text{font-family:'Inter',system-ui,sans-serif;font-weight:800;font-size:12.6px;letter-spacing:.2em;fill:#f1dc9a}
+  .seal-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none}
+  .seal-flag{width:62px;height:42px;filter:drop-shadow(0 3px 6px rgba(0,0,0,.55))}
+  @media(max-width:760px){.seal-flag{width:54px;height:36px}}
+  .seal-100{font-size:13px;font-weight:800;letter-spacing:.06em;color:#f7e7b0;line-height:1;white-space:nowrap}
+  .seal-100 small{display:block;font-size:7.5px;letter-spacing:.22em;font-weight:700;color:#d9bd6a;margin-top:3px}
+
+  /* Štítky s čísly přes fotku */
+  .hero-stats{position:absolute;left:12px;bottom:12px;display:flex;flex-direction:column;gap:7px}
+  .hs{display:inline-flex;align-items:baseline;gap:6px;width:max-content;background:rgba(8,20,36,.78);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    border:1px solid rgba(230,196,96,.5);border-radius:999px;padding:6px 13px 6px 11px;font-size:11.5px;color:#e9f0f7;letter-spacing:.02em}
+  .hs b{font-size:15px;font-weight:800;color:#f7e7b0;letter-spacing:-.01em}
+  .hs .st{width:12px;height:12px;fill:#e6c460;align-self:center;margin-right:2px}
+  @media (prefers-reduced-motion:reduce){.seal-ring{animation:none}}
+  .goal{display:flex;align-items:flex-start;gap:12px;background:var(--card2);border:0.5px solid rgba(46,140,224,.45);
+    border-radius:12px;padding:15px 17px;margin-bottom:30px}
+  .goal svg{width:22px;height:22px;stroke:var(--blue-soft);fill:none;stroke-width:1.7;flex:0 0 auto;margin-top:1px}
+  .goal p{font-size:14.5px;line-height:1.55;color:#c3d6e8}
+  .goal b{color:#fff;font-weight:600}
+  .tl{position:relative;padding-left:38px}
+  .tl:before{content:"";position:absolute;left:12px;top:8px;bottom:34px;width:2px;
+    background:linear-gradient(var(--blue),rgba(30,134,224,.25))}
+  .step{position:relative;margin-bottom:24px}
+  .dot{position:absolute;left:-38px;top:0;width:26px;height:26px;border-radius:50%;background:var(--bg);
+    border:2px solid var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--blue-soft);font-weight:500}
+  .dot.done{background:var(--blue);border-color:var(--blue);color:#fff}
+  .dot.done svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.4}
+  .step .row{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+  .step h3{font-size:16.5px;font-weight:600}
+  .step .when{font-size:12.5px;color:var(--blue-soft);white-space:nowrap}
+  .step p{font-size:14px;color:var(--muted);margin-top:4px}
+  .step.final .box{border:2px solid var(--blue);border-radius:14px;padding:16px 18px;background:var(--card2)}
+  .step.final .when{color:#a9cdec}
+  .step.final p{color:#a9cdec}
+  /* Neodolatelná CTA sekce */
+  .cta{position:relative;margin-top:36px;border-radius:18px;padding:1px;
+    background:linear-gradient(135deg,rgba(79,209,255,.7),rgba(120,160,255,.12) 45%,rgba(124,92,255,.7));
+    box-shadow:0 34px 90px -34px rgba(30,134,224,.7)}
+  .cta-inner{position:relative;background:linear-gradient(180deg,#0f1a33,#080d1c);border-radius:17px;padding:28px 24px;overflow:hidden}
+  .cta-inner:before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(85% 60% at 50% -12%,rgba(30,134,224,.28),transparent 60%)}
+  .cta-eyebrow{position:relative;display:inline-flex;align-items:center;gap:9px;font-size:12px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--blue-soft);font-weight:600;margin-bottom:13px}
+  .pulse-dot{width:9px;height:9px;border-radius:50%;background:#3ee08a;box-shadow:0 0 0 0 rgba(62,224,138,.7);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(62,224,138,.6)}70%{box-shadow:0 0 0 10px rgba(62,224,138,0)}100%{box-shadow:0 0 0 0 rgba(62,224,138,0)}}
+  .cta-h{position:relative;font-size:clamp(23px,5.2vw,31px);font-weight:700;line-height:1.16;letter-spacing:-.01em}
+  .cta-h .g{background:linear-gradient(90deg,#4fd1ff,#7c5cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cta-sub{position:relative;font-size:14.5px;line-height:1.6;color:#c3d6e8;margin:13px 0 20px;max-width:560px}
+  .cta-list{position:relative;list-style:none;display:flex;flex-direction:column;gap:13px;margin-bottom:24px}
+  .cta-list li{display:flex;gap:12px;align-items:flex-start;font-size:14.5px;line-height:1.5;color:#dceaf6}
+  .cta-list b{color:#fff;font-weight:600}
+  .cta-list .ck{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:rgba(62,224,138,.16);
+    display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .cta-list .ck svg{width:14px;height:14px;stroke:#3ee08a;fill:none;stroke-width:2.6}
+  .btn-hero{position:relative;font-size:17px;padding:18px;background:linear-gradient(90deg,#1e86e0,#3a6cf5 55%,#7c5cff);
+    box-shadow:0 16px 36px -10px rgba(58,108,245,.85);animation:glow 2.8s ease-in-out infinite}
+  @keyframes glow{0%,100%{box-shadow:0 16px 36px -12px rgba(30,134,224,.7)}50%{box-shadow:0 18px 50px -8px rgba(30,134,224,1)}}
+  .btn-hero:hover{transform:translateY(-2px);filter:brightness(1.06)}
+  .cta-foot{position:relative;margin-top:14px;text-align:center;font-size:12.5px;color:var(--muted2)}
+  @media (prefers-reduced-motion:reduce){.pulse-dot,.btn-hero{animation:none}}
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none}}
+
+  .btn-hero{display:block;text-align:center;text-decoration:none}
+  .tl .dot{background:#04060c}
+  .step.final .box{background:var(--card2)}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <span class="brand">@@LOGO@@<span class="name">Best Series <span>2.0</span></span></span>
+      <span class="badge"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 20v-1a6 6 0 0 1 12 0v1M16 5a3 3 0 0 1 0 6"/></svg>zájem převyšuje kapacitu</span>
+    </div>
+
+    <div class="reveal in">
+      <div class="hero-wrap">
+        <img class="hero-photo" src="/img/kiosk.jpg" alt="Samoobslužný prádlomat 24/7 — pračky a sušička" loading="lazy">
+
+        <div class="hero-stats" aria-label="Ověřeno v praxi">
+          <span class="hs"><svg class="st" viewBox="0 0 24 24"><path d="M12 2l2.9 6.6 7.1.7-5.4 4.8 1.6 7L12 17.3 5.8 21.1l1.6-7L2 9.3l7.1-.7z"/></svg><b>70+</b> lokalit v ČR</span>
+          <span class="hs"><svg class="st" viewBox="0 0 24 24"><path d="M3 21V9l6-4v4l6-4v4l6-4v16H3z"/></svg><b>4 500 m²</b> vlastní výroba</span>
+        </div>
+
+        <div class="seal" role="img" aria-label="Pečeť kvality: 100% český výrobek, ověřený byznys model na více než 70 lokalitách v ČR, výroba 4 500 m²">
+          <svg class="seal-ring" viewBox="0 0 200 200">
+            <defs>
+              <linearGradient id="sealGold" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#f6e3a1"/><stop offset=".45" stop-color="#d4af37"/><stop offset="1" stop-color="#8e6a1a"/>
+              </linearGradient>
+              <path id="sealPath" d="M100,100 m-79,0 a79,79 0 1,1 158,0 a79,79 0 1,1 -158,0"/>
+            </defs>
+            <circle class="seal-bg" cx="100" cy="100" r="97"/>
+            <circle class="seal-gold" cx="100" cy="100" r="95"/>
+            <circle class="seal-dots" cx="100" cy="100" r="88"/>
+            <circle class="seal-inner" cx="100" cy="100" r="66"/>
+            <text class="seal-text"><textPath href="#sealPath" startOffset="0">100% ČESKÝ VÝROBEK ★ OVĚŘENO NA 70+ LOKALITÁCH ★ VÝROBA 4 500 m² ★ </textPath></text>
+          </svg>
+          <div class="seal-center">
+            <svg class="seal-flag" viewBox="0 0 90 60" aria-hidden="true">
+              <defs>
+                <clipPath id="flagWave">
+                  <path d="M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z">
+                    <animate attributeName="d" dur="2.4s" repeatCount="indefinite"
+                      values="M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z;
+                              M0,4 Q22,8 45,4 T90,4 L90,56 Q68,52 45,56 T0,56 Z;
+                              M0,4 Q22,0 45,4 T90,4 L90,56 Q68,60 45,56 T0,56 Z"/>
+                  </path>
+                </clipPath>
+                <linearGradient id="flagShade" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#000" stop-opacity=".22"/>
+                  <stop offset=".35" stop-color="#fff" stop-opacity=".16"/>
+                  <stop offset=".65" stop-color="#000" stop-opacity=".22"/>
+                  <stop offset="1" stop-color="#fff" stop-opacity=".12"/>
+                  <animate attributeName="x1" values="-1;0" dur="2.4s" repeatCount="indefinite"/>
+                  <animate attributeName="x2" values="0;1" dur="2.4s" repeatCount="indefinite"/>
+                </linearGradient>
+              </defs>
+              <g clip-path="url(#flagWave)">
+                <rect width="90" height="30" fill="#ffffff"/>
+                <rect y="30" width="90" height="30" fill="#d7141a"/>
+                <polygon points="0,0 45,30 0,60" fill="#11457e"/>
+                <rect width="90" height="60" fill="url(#flagShade)"/>
+              </g>
+            </svg>
+            <div class="seal-100">100 %<small>MADE IN CZ</small></div>
+          </div>
+        </div>
+      </div>
+      <p class="eyebrow">Děkujeme za velký zájem</p>
+      <h1>Ať přesně víte,<br><span class="g">co vás čeká</span></h1>
+      <p class="intro">Zájemců máme hodně. Abychom se každému věnovali pořádně, dali jsme začátku jasný řád — tři kroky. Vážíme si svého i vašeho času a věříme, že úspěšní lidé s opravdovým zájmem to ocení.</p>
+
+      <div class="goal">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+        <p><b>Náš cíl: do 10 dní od schůzky</b> budete mít v ruce všechny informace, abyste se mohli kvalifikovaně rozhodnout — ano, nebo ne.</p>
+      </div>
+    </div>
+
+    <div class="tl reveal">
+      <div class="step">
+        <span class="dot">1</span>
+        <div class="row"><h3>Schůzka — online i osobně</h3><span class="when">17 min</span></div>
+        <p>Tady zjistíte, jestli je byznys právě pro vás a jestli dává smysl pokračovat v čerpání dalších informací.</p>
+      </div>
+      <div class="step">
+        <span class="dot">2</span>
+        <div class="row"><h3>Návštěva výroby s majiteli</h3><span class="when">60 min</span></div>
+        <p>Zde zjistíte, jaké máme připravené lokality a jaké jsou možnosti financování.</p>
+      </div>
+      <div class="step final">
+        <span class="dot done"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span>
+        <div class="box">
+          <div class="row"><h3>Kvalifikované rozhodnutí</h3><span class="when">do 10 dní od schůzky</span></div>
+          <p>Do 10 dní budete mít všechno potřebné a rozhodnete se — ano, nebo ne. Rozhodujeme se oba: prádlomat svěřujeme jen partnerům, se kterými si sedneme.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="reveal cta">
+      <div class="cta-inner">
+        <p class="cta-eyebrow"><span class="pulse-dot"></span> Než se rozhodnete — to nejdůležitější</p>
+        <h2 class="cta-h">Za 3 minuty pochopíte byznys,<br>který vydělává, <span class="g">i&nbsp;když spíte</span></h2>
+        <p class="cta-sub">Otevřeli jsme kartu s tím nejdůležitějším. Bez omáček a bez tlaku — jen fakta, díky kterým se rozhodnete se zdravým rozumem, ne podle pocitu.</p>
+        <ul class="cta-list">
+          <li><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>Kolik prádlomat reálně vydělává</b> a za jak dlouho se vám investice vrátí.</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>Proč poptávka roste</b> rychleji, než stíháme otevírat nové provozy — a jak toho využít.</span></li>
+          <li><span class="ck"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg></span><span><b>Jak ho pořídit i bez vlastního kapitálu</b> — konkrétní možnosti financování.</span></li>
+        </ul>
+        <a class="btn btn-hero" id="infoBtn" href="/login?from=cesta">Vytvořit účet a vidět, jak to funguje →</a>
+        <p class="cta-foot">Účet je zdarma · Bez závazku · Počet partnerů je omezený</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }); }, {threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  // Parametry z reklamy (utm_*, fbclid, t, c…) předáme do registrace, ať se zdroj neztratí.
+  var infoBtn = document.getElementById('infoBtn');
+  if (infoBtn && location.search) infoBtn.href = '/login?from=cesta&' + location.search.slice(1);
+})();
+</script>
+</body>
+</html>
