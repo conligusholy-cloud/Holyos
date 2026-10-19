@@ -34,7 +34,7 @@ export default function AdsPage() {
   const [live, setLive] = useState<any>(null);
   const [liveErr, setLiveErr] = useState('');
   const [at, setAt] = useState<Date | null>(null);
-  const [adsOnly, setAdsOnly] = useState(false);
+  const [adsOnly, setAdsOnly] = useState(true);
   const [period, setPeriod] = useState(PERIODS[0]);
   const [hist, setHist] = useState<any>(null);
   const [histLoading, setHistLoading] = useState(true);
