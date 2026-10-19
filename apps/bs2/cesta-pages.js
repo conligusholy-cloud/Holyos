@@ -138,8 +138,7 @@ function vlastniPage() {
       ${item('Nejrychlejší rozjezd', 'Bez schvalování financování — od rozhodnutí rovnou k instalaci.')}
       ${item('Servis a místo zajistíme', 'Provoz, údržbu i připravenou lokalitu řešíme za vás, stejně jako u financování.')}
     </div>
-    ${bookCard('vlastni')}
-    <a class="bx-alt" data-keep href="/cesta/financovani">Zajímá vás spíš financování? →</a>`, true);
+    ${bookCard('vlastni')}`, true);
 }
 
 function financovaniPage() {
@@ -161,9 +160,7 @@ function financovaniPage() {
       ${item('Rámec podle vás', 'Schválit se dá v podstatě jakýkoli rámec. Je jen na vás, na kolik prádlomatů se cítíte.')}
     </div>
     <div class="bx-closing"><h2>Příležitost <span class="g">století</span></h2><p>A je na každém, kdo u toho bude.</p></div>
-    ${bookCard('financovani')}
-    <a class="bx-alt" data-keep href="/cesta/vlastni-kapital">Máte vlastní zdroje? Podívejte se na tuto cestu →</a>
-    <p class="bx-disc">Konkrétní podmínky a schválení financování stanovuje financující partner.</p>`, true);
+    ${bookCard('financovani')}`, true);
 }
 
 function schuzkaPage() {
