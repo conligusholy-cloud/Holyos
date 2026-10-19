@@ -168,6 +168,14 @@ router.get('/meeting-reservation', async (req, res) => {
   } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
 });
 
+// Podepsaný odkaz „změna termínu" (z potvrzovacího e-mailu): <id rezervace>.<HMAC>. Nová rezervace s tímto tokenem zruší původní.
+const _chgSecret = () => process.env.BS2_SSO_SECRET || process.env.JWT_SECRET || 'holyos';
+const meetingChangeToken = (id) => id + '.' + crypto.createHmac('sha256', _chgSecret()).update('mchg:' + id).digest('hex').slice(0, 24);
+function verifyMeetingChangeToken(t) {
+  const m = /^(\d+)\.([a-f0-9]{24})$/.exec(String(t || '')); if (!m) return null;
+  return meetingChangeToken(m[1]) === t ? parseInt(m[1], 10) : null;
+}
+
 // POST /api/compounder/meeting-reservation — rezervace termínu.
 // { t?: portalToken (z SMS), slot_id, mode?: online|osobne, path?: vlastni|financovani, name?, email?, phone? }.
 // Token spáruje leada. Jeden lead = jeden aktivní termín (nová rezervace nahradí starou).
@@ -221,6 +229,12 @@ router.post('/meeting-reservation', async (req, res) => {
           props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode, financing_path: path } } });
       } catch (e) { /* timeline je bonus, rezervaci neblokuje */ }
     }
+    // Změna termínu z e-mailu: původní rezervaci zrušíme (uvolní se slot) a označíme jako přesun.
+    const oldId = verifyMeetingChangeToken(b.change);
+    if (oldId && oldId !== resv.id) {
+      const c = await prisma.meetingReservation.updateMany({ where: { id: oldId, status: 'booked' }, data: { status: 'canceled' } }).catch(() => ({ count: 0 }));
+      if (c && c.count) req._meetingRebooked = true;
+    }
     // Potvrzovací SMS zákazníkovi (fire-and-forget) — ať ví, že schůzku bereme vážně.
     if (phone) {
       try {
@@ -238,7 +252,7 @@ router.post('/meeting-reservation', async (req, res) => {
         leadId: leadId || null, reservationId: resv.id, startsAt: slot.starts_at, mode, financingPath: path, rebooked: !!req._meetingRebooked,
       });
     } catch (e) { console.warn('[meeting-notify] init:', e.message); }
-    res.status(201).json({ ok: true, id: resv.id, starts_at: slot.starts_at, duration_min: slot.duration_min, mode, financing_path: path });
+    res.status(201).json({ ok: true, id: resv.id, change_token: meetingChangeToken(resv.id), starts_at: slot.starts_at, duration_min: slot.duration_min, mode, financing_path: path });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
 

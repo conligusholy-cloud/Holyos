@@ -74,6 +74,7 @@
 
   function mount(root) {
     var token = new URLSearchParams(location.search).get('t') || '';
+    var changeTok = new URLSearchParams(location.search).get('zmena') || ''; // změna termínu z e-mailu: původní rezervace se po novém výběru zruší
     var path = root.getAttribute('data-path') || new URLSearchParams(location.search).get('path') || '';
     if (!PATH_LABEL[path]) path = '';
     var chosenMode = '', week = 0, slotsCache = null;
@@ -216,7 +217,7 @@
       root.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
     function send(slotId, f, onFail) {
-      var payload = { slot_id: slotId, t: token || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
+      var payload = { slot_id: slotId, t: token || undefined, change: changeTok || undefined, mode: chosenMode, path: path || undefined, first_name: f.first_name, last_name: f.last_name, email: f.email, phone: f.phone, gdpr: true };
       try { if (window.__bs2Lead) payload.lead = window.__bs2Lead(); } catch (e) {}
       setStatus('Rezervuji termín…');
       fetch('/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) })
@@ -243,6 +244,7 @@
 
     // Už má rezervaci? Ukázat ji místo výběru (jeden lead = jeden termín).
     show('modes');
+    if (changeTok) { var sub0 = root.querySelector('.bk-modes-wrap .bk-sub'); if (sub0) sub0.textContent = 'Změna termínu: vyberte si nový čas, původní rezervaci po potvrzení zrušíme.'; }
     if (token) {
       fetch('/api/compounder/meeting-reservation?t=' + encodeURIComponent(token), { credentials: 'include' })
         .then(function (r) { return r.json(); })

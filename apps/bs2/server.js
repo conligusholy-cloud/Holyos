@@ -754,7 +754,7 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
   let d;
   try {
     const r = await fetch(HOLYOS_URL + '/api/compounder/meeting-reservation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
-      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone }) });
+      body: JSON.stringify({ slot_id: b.slot_id, t: b.t || undefined, change: b.change || undefined, mode: b.mode, path: b.path, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone }) });
     d = await r.json().catch(() => ({}));
     if (!r.ok || !d.ok) return res.status(r.status >= 400 ? r.status : 400).json({ ok: false, error: d.error || 'Rezervaci se nepodařilo dokončit.' });
   } catch (e) { console.warn('[bs2] cesta rezervace:', e.message); return res.status(502).json({ ok: false, error: 'Rezervace je teď nedostupná. Zkuste to prosím za chvíli.' }); }
@@ -783,10 +783,10 @@ app.post('/api/cesta/meeting-reservation', wrap(async (req, res) => {
     'UID:schuzka-' + (d.id || Date.now()) + '@bestseries2.cz', 'DTSTAMP:' + icsDt(new Date()), 'DTSTART:' + icsDt(dt), 'DTEND:' + icsDt(new Date(dt.getTime() + durMin * 60000)),
     'SUMMARY:' + icsEsc('Schůzka Best Series – prádlomat'), 'DESCRIPTION:' + icsEsc('Potvrzená schůzka (' + modeTxt + '). Potrvá zhruba ' + durMin + ' minut. Best Series s.r.o.'),
     'STATUS:CONFIRMED', 'BEGIN:VALARM', 'TRIGGER:-PT1H', 'ACTION:DISPLAY', 'DESCRIPTION:Schůzka Best Series za hodinu', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-  const body = 'Dobrý den, ' + f.first_name + ',\n\nvaši schůzku potvrzujeme: ' + when + ' – ' + modeTxt + '. Potrvá zhruba ' + durMin + ' minut.\n\nTermín jsme si pro vás pevně vyhradili a rádi bychom, abyste ho využili – berte to prosím jako domluvu, na které nám záleží. Pozvánku do kalendáře najdete v příloze tohoto e-mailu (stačí na ni kliknout). Kdyby vám termín přesto nevyhovoval, odpovězte nám na tento e-mail a najdeme jiný.\n\n'
-    + (activated ? 'Do Best Series 2.0 se přihlásíte svým stávajícím účtem.' : 'Zároveň jsme vám založili účet v Best Series 2.0 – najdete v něm aplikace pro výběr a prověření místa. Účet aktivujete kliknutím na tlačítko níže: zadejte tento e-mail (' + f.email + ') a zvolte si nick a heslo.')
+  const body = 'Dobrý den, ' + f.first_name + ',\n\nvaši schůzku potvrzujeme: ' + when + ' – ' + modeTxt + '. Potrvá zhruba ' + durMin + ' minut.\n\nTermín jsme si pro vás pevně vyhradili a rádi bychom, abyste ho využili – berte to prosím jako domluvu, na které nám záleží. Pozvánku do kalendáře najdete v příloze tohoto e-mailu (stačí na ni kliknout). Kdyby vám termín přesto nevyhovoval, můžete ho jedním kliknutím změnit pomocí tlačítka níže.\n\n'
+    + (activated ? '' : 'Zároveň jsme vám založili účet v Best Series 2.0 – aktivujete ho na ' + PUBLIC_URL + '/activate (zadejte tento e-mail ' + f.email + ' a zvolte si nick a heslo).')
     + '\n\nBest Series s.r.o.';
-  sendBs2Mail({ to: f.email, subject: 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, ics, link: PUBLIC_URL + (activated ? '/login' : '/activate'), linkLabel: activated ? 'Přihlásit se' : 'Aktivovat účet' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
+  sendBs2Mail({ to: f.email, subject: 'Potvrzení schůzky ' + when + (activated ? '' : ' · přístup do Best Series 2.0'), body, ics, link: PUBLIC_URL + '/cesta/schuzka' + (d.change_token ? '?zmena=' + encodeURIComponent(d.change_token) : ''), linkLabel: 'Změnit termín' }).catch((e) => console.warn('[bs2] cesta mail:', e.message));
   const leadId = await recordLead({ kind: 'meeting', refId: d.id, supporterId: u && u.id, name: f.first_name + ' ' + f.last_name, email: f.email, phone: f.phone, lead: b.lead,
     detail: { termin: when, forma: d.mode || null, cesta: d.financing_path || b.path || null, ucet: account === 'created' ? 'nový' : 'existující', sms_token: !!b.t },
     title: '📅 Schůzka ' + when + (account === 'created' ? ' + nový účet' : '') });
