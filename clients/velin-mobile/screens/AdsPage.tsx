@@ -186,6 +186,7 @@ export default function AdsPage() {
                   <View style={[s.metrics, { marginTop: 12 }]}>
                     <View style={s.m}><Text style={s.mN}>{(() => { const n = adsData.ad_visitors != null ? adsData.ad_visitors : (hist && hist.uniques); return n ? nf(Math.round(adsData.totals.spend / n)) + ' Kč' : '—'; })()}</Text><Text style={s.mL}>cena / návštěvník z reklamy</Text></View>
                     {adsData.meetings != null ? <View style={s.m}><Text style={s.mN}>{nf(adsData.meetings)}</Text><Text style={s.mL}>schůzek</Text></View> : null}
+                    {adsData.meetings_canceled != null ? <View style={s.m}><Text style={[s.mN, { color: adsData.meetings_canceled > 0 ? BS.warn : BS.accent2 }]}>{nf(adsData.meetings_canceled)}</Text><Text style={s.mL}>zrušeno</Text></View> : null}
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
                   {adsData.meetings != null ? <Text style={s.sub}>Schůzky = všechny nezrušené rezervace v období (z jakéhokoli zdroje).</Text> : null}

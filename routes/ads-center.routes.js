@@ -1001,9 +1001,13 @@ router.get('/pages/:key/ads', async (req, res) => {
       } catch (e) { adVisitors = null; }
     }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
-    let meetings = null;
-    if (page.key === 'bs2_cesta') { meetings = await prisma.meetingReservation.count({ where: { created_at: rng(sinceDate(days, shift)), status: { not: 'canceled' } } }).catch(() => null); }
-    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, cost_per_meeting: meetings ? totals.spend / meetings : null });
+    let meetings = null, meetingsCanceled = null;
+    if (page.key === 'bs2_cesta') {
+      const rg = rng(sinceDate(days, shift));
+      meetings = await prisma.meetingReservation.count({ where: { created_at: rg, status: { not: 'canceled' } } }).catch(() => null);
+      meetingsCanceled = await prisma.meetingReservation.count({ where: { created_at: rg, status: 'canceled' } }).catch(() => null);
+    }
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, cost_per_meeting: meetings ? totals.spend / meetings : null });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
