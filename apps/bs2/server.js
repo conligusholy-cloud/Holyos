@@ -598,7 +598,7 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
   const ev = (await q("SELECT sid, kind, label, meta, t_ms, created_at FROM page_events WHERE (path = $1 OR ($1 <> '/' AND path LIKE $1 || '/%')) AND created_at > now() - interval '60 minutes' ORDER BY created_at", [bp])).rows;
   const now = Date.now(); const by = {};
   ev.forEach((r) => { (by[r.sid] = by[r.sid] || []).push(r); });
-  const visitors = [], feed = []; let last5 = 0, last30 = 0;
+  const visitors = [], feed = [], recent = []; let last5 = 0, last30 = 0;
   Object.keys(by).forEach((sid) => {
     const list = by[sid]; const lastR = list[list.length - 1]; const ago = (now - new Date(lastR.created_at).getTime()) / 1000;
     const hidden = lastR.kind === 'exit'; const id = '#' + require('crypto').createHash('md5').update(sid).digest('hex').slice(0, 4);
@@ -606,6 +606,8 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
     const acts = list.map((r) => ({ at: new Date(r.created_at).getTime(), text: liveAction(r), r })).filter((a) => a.text);
     acts.slice(-12).forEach((a) => feed.push({ id, at: a.at, text: a.text }));
     if (ago <= 300 && !hidden) last5++; if (ago <= 1800) last30++;
+    const camp = (() => { try { const u = new URLSearchParams(String(vm.q || '').replace(/^\?/, '')); const s = u.get('utm_source'), c = u.get('utm_campaign'); if (s || c) return (s || '–') + (c ? ' / ' + c : ''); if (u.get('fbclid')) return 'Facebook'; if (u.get('gclid')) return 'Google'; } catch (e) { /* bez zdroje */ } const rf = String(vm.ref || '').replace(/^https?:\/\//, '').split('/')[0]; return rf || 'přímo'; })();
+    recent.push({ id, source: camp, last_ago: Math.round(ago), hidden, active: !hidden && ago <= 60 }); // všichni z posledních 60 min (i ti, kteří už odešli) – pro počty „za 5 / 30 min" v aplikaci
     if (ago > 60 && !(ago <= 300 && !hidden)) return;
     const pings = list.filter((r) => r.kind === 'ping'); const lp = pings[pings.length - 1]; const secEv = list.filter((r) => r.kind === 'section'); const section = (lp && lp.label) || (secEv.length ? secEv[secEv.length - 1].label : '');
     const scroll = Math.max(0, ...list.filter((r) => r.kind === 'scroll').map((r) => Number(r.label) || 0), lp && lp.meta ? Number(lp.meta.s) || 0 : 0);
@@ -615,12 +617,11 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
     if (lastCustom && recent(lastCustom)) { const l = lastCustom.label; if (l === 'misto_checkout') status = '💳 v platební bráně'; else if (l === 'field_focus' || l === 'form_submit') status = '✍️ vyplňuje formulář'; else if (l === 'pkg_pick') status = '📦 vybírá balíček'; else if (l === 'misto_paid_return') status = '✅ zaplatil'; }
     const lastAct = acts.length ? acts[acts.length - 1] : null;
     const first = new Date(list[0].created_at).getTime();
-    const camp = (() => { try { const u = new URLSearchParams(String(vm.q || '').replace(/^\?/, '')); const s = u.get('utm_source'), c = u.get('utm_campaign'); if (s || c) return (s || '–') + (c ? ' / ' + c : ''); if (u.get('fbclid')) return 'Facebook'; if (u.get('gclid')) return 'Google'; } catch (e) { /* bez zdroje */ } const rf = String(vm.ref || '').replace(/^https?:\/\//, '').split('/')[0]; return rf || 'přímo'; })();
     visitors.push({ id, device: vm.ua === 'm' ? 'mobil' : vm.ua === 'd' ? 'počítač' : '?', browser: vm.br || '', source: camp, secs: Math.round((now - first) / 1000), scroll, section, status, active: !hidden && ago <= 60, hidden, last_ago: Math.round(ago), last_action: lastAct ? lastAct.text : '', actions: acts.slice(-6).reverse().map((a) => ({ ago: Math.round((now - a.at) / 1000), text: a.text })) });
   });
   feed.sort((a, b) => b.at - a.at);
   const nowCount = visitors.filter((v) => v.active).length;
-  res.json({ at: new Date().toISOString(), now: nowCount, last5, last30, visitors: visitors.sort((a, b) => (b.active - a.active) || a.last_ago - b.last_ago).slice(0, 40), feed: feed.slice(0, 25).map((f) => ({ id: f.id, ago: Math.round((now - f.at) / 1000), text: f.text })) });
+  res.json({ at: new Date().toISOString(), now: nowCount, last5, last30, recent, visitors: visitors.sort((a, b) => (b.active - a.active) || a.last_ago - b.last_ago).slice(0, 40), feed: feed.slice(0, 25).map((f) => ({ id: f.id, ago: Math.round((now - f.at) / 1000), text: f.text })) });
 }));
 // Skutečné návštěvy záchytné stránky z odkazů v oslovení: kódy leadů (?l=<kód>) z OPRAVDOVÉHO zobrazení stránky v prohlížeči (JS sledování),
 // ne z automatických otevření odkazu (poštovní skenery, náhledy). HolyOS podle toho počítá „otevřel odkaz" ve funelu.
