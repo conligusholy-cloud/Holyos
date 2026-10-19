@@ -221,6 +221,7 @@ Vrať stejnou strukturu jako hlavička + items v jednom objektu:
 }
 
 Buď extra pečlivý na:
+- DODAVATELE: blok „Dodavatel" (i když je popisek světle šedý, vyblklý nebo je doklad sken) obsahuje obchodní jméno, IČO a DIČ vystavitele — vždy je přečti (např. „O2 Czech Republic a.s., IČO 60193336"). Rukou psané poznámky na dokladu (např. „Placeno hotově, pokladna hala, obj. 4410") nejsou dodavatel; z nich pouze urči způsob úhrady (payment_method = cash).
 - Přesné čtení čísel (0 vs O, 1 vs l, 5 vs S)
 - Správné datum (CZ formát DD.MM.YYYY)
 - VS/KS/SS — může být víc symbolů, vyber ten hlavní

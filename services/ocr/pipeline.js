@@ -173,6 +173,21 @@ async function runPipeline(filePath, ctx = {}) {
   if (header && header.supplier && ROLE_LABEL.test(String(header.supplier.name || ''))) {
     header.supplier.name = null;
   }
+  // Dodavatel nepřečten vůbec (ani název, ani IČO — typicky sken s vyblklým popiskem „Dodavatel:"): vynutit druhé čtení silnějším
+  // modelem (Opus) a převzít z něj dodavatele, ať faktura nevisí na „Neznámém dodavateli".
+  if (header && (!header.supplier || (!header.supplier.name && !header.supplier.ico))) {
+    try {
+      const rr = await rereadWithOpus(filePath, { header, items });
+      passes.push(rr);
+      const sup = rr && rr.data && rr.data.header && rr.data.header.supplier;
+      if (sup && (sup.name || sup.ico) && !ROLE_LABEL.test(String(sup.name || ''))) {
+        header.supplier = Object.assign({}, header.supplier || {}, sup);
+        warnings.push({ pass: 'supplier_reread', message: 'Dodavatel nebyl přečten při prvním průchodu — doplněn z druhého čtení (Opus): ' + (sup.name || sup.ico) });
+      }
+    } catch (err) {
+      warnings.push({ pass: 'supplier_reread', message: 'Druhé čtení dodavatele selhalo: ' + err.message });
+    }
+  }
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
   let aresResult = null, aresCross = null;
