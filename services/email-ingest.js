@@ -346,6 +346,13 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
     return { ingest, invoices: [], skippedDuplicates: [], results };
   }
 
+  // Přílohy, ze kterých OCR nevyčetla žádnou částku ani číslo dokladu (screenshoty, ikony, loga), nejsou faktury.
+  // Pokud e-mail obsahuje aspoň jeden skutečný doklad, takové výsledky zahodíme — jinak by vznikaly prázdné faktury na 0 Kč.
+  const isJunkResult = (r) => !(Number(r.header && r.header.total) > 0) && !(r.header && r.header.external_number);
+  if (results.some((r) => !isJunkResult(r))) {
+    for (let i = results.length - 1; i >= 0; i--) if (isJunkResult(results[i])) results.splice(i, 1);
+  }
+
   const createdInvoices = [];
   const skippedDuplicates = [];
   const lowConfidenceResults = [];
