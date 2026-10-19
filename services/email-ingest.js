@@ -589,6 +589,15 @@ async function createInvoiceFromResult(result, ingest, opts = {}) {
     },
   });
 
+  // Účet z dokladu doplnit do Společnosti, pokud tam ještě žádný není (existující účet nepřepisujeme; do whitelistu ověřených účtů
+  // se automaticky NIC nepřidává — to zůstává ruční potvrzení kvůli ochraně proti podvodům).
+  try {
+    const acc = (h.partner_bank_account || h.partner_iban || '').toString().trim().slice(0, 50);
+    if (acc && result.matched_company_id) {
+      await prisma.company.updateMany({ where: { id: result.matched_company_id, bank_account: null }, data: { bank_account: acc } });
+    }
+  } catch (e) { console.warn('[email-ingest] doplnění účtu do společnosti:', e.message); }
+
   return invoice;
 }
 
