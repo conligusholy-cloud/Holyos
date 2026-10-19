@@ -423,6 +423,9 @@ export const api = {
   adsGet: <T = any>(jwt: string, path: string) =>
     request<T>('GET', '/api/ads-center' + path, { jwt, timeoutMs: 60000 }),
 
+  adsPost: <T = any>(jwt: string, path: string, body: any = {}) =>
+    request<T>('POST', '/api/ads-center' + path, { jwt, body, timeoutMs: 60000 }),
+
   // Administrace schůzek (jen Tomáš a Jan Holý)
   meetings: (jwt: string, from: string, to: string) =>
     request<{ slots: MeetingSlot[] }>('GET', `/api/velin/meetings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { jwt }),

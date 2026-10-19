@@ -28,6 +28,51 @@ const dur = (s: number) => (s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + S
 const ago = (s: number) => (s < 5 ? 'teď' : s < 60 ? 'před ' + s + ' s' : s < 3600 ? 'před ' + Math.floor(s / 60) + ' min' : 'před ' + Math.floor(s / 3600) + ' h');
 const isAd = (v: any) => /fb|facebook|insta|\big\b|meta|google|gclid|cpc|paid/i.test(String(v && v.source || ''));
 
+// Hodnocení reklamy: dobrá / průměrná / neefektivní (+ málo dat). Porovnává se s průměrem reklam na stránce.
+// Nejdůležitější je cena za schůzku; bez schůzek rozhoduje útrata vs. průměrná cena schůzky a kvalita prokliků (CTR, cena/klik).
+function rateAd(a: any, ctx: any) {
+  const spend = Number(a.spend) || 0, imp = Number(a.impressions) || 0, clicks = Number(a.clicks) || 0;
+  const ctr = a.ctr != null ? Number(a.ctr) : (imp ? (clicks / imp) * 100 : null);
+  const cpc = clicks ? spend / clicks : null;
+  const T = ctx && ctx.totals ? ctx.totals : null;
+  const avgCpc = T && T.clicks ? T.spend / T.clicks : null;
+  const avgCpm = ctx && ctx.cost_per_meeting != null ? Number(ctx.cost_per_meeting) : null; // průměrná cena schůzky na stránce
+  const GOOD = { label: 'Dobrá', color: BS.ok, icon: '🟢' }, AVG = { label: 'Průměrná', color: BS.warn, icon: '🟡' }, BAD = { label: 'Neefektivní', color: BS.err, icon: '🔴' }, FEW = { label: 'Málo dat', color: BS.text2, icon: '⏳' };
+  const fmt = (n: number) => Math.round(n).toLocaleString('cs-CZ');
+  if (spend < 300 || imp < 1500) return { ...FEW, reason: 'Zatím nízká útrata (' + fmt(spend) + ' Kč) / zobrazení – hodnotit až po vyšším vzorku.', action: 'Nechat běžet' };
+  if (a.meetings != null && a.meetings > 0) {
+    const cm = spend / a.meetings;
+    if (!avgCpm || cm <= avgCpm * 1.15) return { ...GOOD, reason: a.meetings + '× schůzka za ' + fmt(cm) + ' Kč' + (avgCpm ? ' (průměr stránky ' + fmt(avgCpm) + ' Kč)' : ''), action: 'Ponechat, zvážit navýšení rozpočtu' };
+    if (cm <= avgCpm * 2) return { ...AVG, reason: 'Schůzka vychází na ' + fmt(cm) + ' Kč, průměr stránky ' + fmt(avgCpm) + ' Kč', action: 'Ponechat, sledovat; vyzkoušet nový text' };
+    return { ...BAD, reason: 'Schůzka za ' + fmt(cm) + ' Kč – víc než dvojnásobek průměru stránky (' + fmt(avgCpm) + ' Kč)', action: 'Zvážit vypnutí nebo výměnu kreativy' };
+  }
+  const limit = avgCpm ? avgCpm * 1.5 : 2000;
+  if (a.meetings != null && spend >= limit && clicks >= 40) return { ...BAD, reason: 'Utraceno ' + fmt(spend) + ' Kč, ' + fmt(clicks) + ' kliků a žádná schůzka', action: 'Doporučuji VYPNOUT / nahradit' };
+  if (ctr != null && ctr >= 1.5 && (avgCpc == null || (cpc != null && cpc <= avgCpc * 1.1))) return { ...GOOD, reason: 'Silný CTR ' + String(Math.round(ctr * 100) / 100).replace('.', ',') + ' % a levné prokliky; schůzka zatím nepřišla', action: 'Ponechat, sledovat konverzi stránky' };
+  if (ctr != null && ctr < 0.8 && cpc != null && avgCpc != null && cpc > avgCpc * 1.3) return { ...BAD, reason: 'Nízký CTR ' + String(Math.round(ctr * 100) / 100).replace('.', ',') + ' % a drahý klik (' + String(Math.round(cpc * 100) / 100).replace('.', ',') + ' Kč)', action: 'Doporučuji vypnout nebo přepsat text' };
+  return { ...AVG, reason: 'Zatím bez schůzky' + (ctr != null ? ', CTR ' + String(Math.round(ctr * 100) / 100).replace('.', ',') + ' %' : '') + (cpc != null ? ', klik ' + String(Math.round(cpc * 100) / 100).replace('.', ',') + ' Kč' : ''), action: 'Sledovat' };
+}
+
+// Jednoduché zobrazení Markdownu z AI analýzy (nadpisy, odrážky, tabulky jako řádky, tučné bez hvězdiček)
+function MdView({ text }: { text: string }) {
+  const lines = String(text || '').split('\n');
+  const clean = (t: string) => t.replace(/\*\*/g, '').replace(/`/g, '');
+  return (
+    <View>
+      {lines.map((ln, i) => {
+        const t = ln.trim();
+        if (!t) return <View key={i} style={{ height: 6 }} />;
+        if (/^\|?[\s:-]+(\|[\s:-]+)+\|?$/.test(t)) return null; // oddělovač tabulky
+        if (/^#{1,3}\s/.test(t)) return <Text key={i} style={s.mdH}>{clean(t.replace(/^#+\s*/, ''))}</Text>;
+        if (t.startsWith('|')) return <Text key={i} style={s.mdRow}>{clean(t.replace(/^\||\|$/g, '').split('|').map((c) => c.trim()).join('  ·  '))}</Text>;
+        if (/^[-*•]\s/.test(t)) return <Text key={i} style={s.mdLi}>•  {clean(t.replace(/^[-*•]\s+/, ''))}</Text>;
+        if (/^\d+\.\s/.test(t)) return <Text key={i} style={s.mdLi}>{clean(t)}</Text>;
+        return <Text key={i} style={s.mdP}>{clean(t)}</Text>;
+      })}
+    </View>
+  );
+}
+
 export default function AdsPage() {
   const route = useRoute<any>();
   const { key, name, color } = (route.params || {}) as { key: string; name: string; color?: string };
@@ -43,6 +88,32 @@ export default function AdsPage() {
   const [histLoading, setHistLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const alive = useRef(true);
+  const [ai, setAi] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
+
+  // Hloubková AI analýza stránky + reklam (běží na serveru 1–3 min, průběh se dotazuje)
+  const runAi = async () => {
+    if (aiBusy) return;
+    setAiBusy(true); setAiOpen(true); setAiMsg('Spouštím analýzu…');
+    try {
+      const auth = await loadAuth(); if (!auth.jwt) throw new Error('Nejsi přihlášený.');
+      const days = period.key === '7' ? 7 : 30; // pro smysluplnou analýzu aspoň týden
+      const st: any = await api.adsPost(auth.jwt, '/pages/' + encodeURIComponent(key) + '/deep-analysis?days=' + days);
+      for (let i = 0; i < 130 && alive.current; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const j: any = await api.adsGet(auth.jwt, '/deep-analysis/job/' + encodeURIComponent(st.job));
+        if (j.status === 'error') throw new Error(j.error || 'Analýza selhala.');
+        if (j.status === 'done') { if (alive.current) { setAi(j.result); setAiMsg(''); } break; }
+        if (alive.current) setAiMsg((j.progress || 'Pracuji…') + ' · ' + (j.elapsed_s || 0) + ' s');
+      }
+    } catch (e: any) { if (alive.current) setAiMsg('Analýza se nezdařila: ' + (e?.message || 'chyba')); }
+    if (alive.current) setAiBusy(false);
+  };
+  useEffect(() => {
+    (async () => { try { const auth = await loadAuth(); if (!auth.jwt) return; const x: any = await api.adsGet(auth.jwt, '/pages/' + encodeURIComponent(key) + '/deep-analysis/last'); if (x && x.text && alive.current) setAi(x); } catch (e) { /* bez poslední analýzy */ } })();
+  }, [key]);
 
   const loadLive = useCallback(async () => {
     try {
@@ -85,8 +156,10 @@ export default function AdsPage() {
   const all: any[] = d.visitors || [];
   const vis = adsOnly ? all.filter(isAd) : all;
   const now = adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0);
-  const l5 = adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 300).length : (Number(d.last5) || 0);
-  const l30 = adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 1800).length : (Number(d.last30) || 0);
+  // Počty za 5 / 30 min ze seznamu VŠECH nedávných návštěvníků (recent) — seznam „vis" obsahuje jen aktivní, po odchodu by počty mizely
+  const rec: any[] | null = Array.isArray(d.recent) ? d.recent : null;
+  const l5 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && !v.hidden && (v.last_ago || 0) <= 300).length : vis.filter((v) => (v.last_ago || 0) <= 300).length) : (Number(d.last5) || 0);
+  const l30 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && (v.last_ago || 0) <= 1800).length : vis.filter((v) => (v.last_ago || 0) <= 1800).length) : (Number(d.last30) || 0);
   const ids = new Set(vis.map((v) => String(v.id)));
   const feed: any[] = ((d.feed || []) as any[]).filter((f) => !adsOnly || ids.has(String(f.id))).sort((a, b) => a.ago - b.ago);
   const accent = color || BS.accent;
@@ -95,6 +168,24 @@ export default function AdsPage() {
     <SafeAreaView style={s.root} edges={['bottom']}>
       <ScrollView contentContainerStyle={s.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BS.accent2} />}>
         <Text style={[s.title, { borderLeftColor: accent }]}>{name}</Text>
+        <TouchableOpacity onPress={() => (ai && !aiBusy ? setAiOpen(!aiOpen) : runAi())} activeOpacity={0.8} style={s.aiBtn}>
+          <Text style={s.aiBtnT}>{aiBusy ? '🧠 Analyzuji…' : ai ? (aiOpen ? '🧠 Skrýt AI analýzu' : '🧠 Zobrazit poslední AI analýzu') : '🧠 AI analýza stránky a reklam'}</Text>
+        </TouchableOpacity>
+        {aiOpen ? (
+          <View style={s.aiBox}>
+            {aiMsg ? <Text style={s.sub}>{aiBusy ? <ActivityIndicator color={BS.accent2} size="small" /> : null} {aiMsg}</Text> : null}
+            {ai ? (
+              <>
+                <Text style={s.aiMeta}>{new Date(ai.at).toLocaleString('cs-CZ')} · období {ai.days} dní</Text>
+                <MdView text={ai.text} />
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <TouchableOpacity onPress={runAi} disabled={aiBusy} style={[s.tg, { flex: 1 }]}><Text style={s.tgT}>↻ Nová analýza</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => setAiOpen(false)} style={[s.tg, { flex: 1 }]}><Text style={s.tgT}>Zavřít</Text></TouchableOpacity>
+                </View>
+              </>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text style={s.h2}>🟢 Živě</Text>
         <View style={s.bigRow}>
@@ -191,13 +282,18 @@ export default function AdsPage() {
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
                 </View>
-                {adsData.ads.map((a: any) => (
-                  <View key={a.id} style={[s.card, { marginTop: 8 }]}>
+                {adsData.ads.map((a: any) => { const rt = rateAd(a, adsData); return (
+                  <View key={a.id} style={[s.card, { marginTop: 8, borderLeftWidth: 4, borderLeftColor: rt.color }]}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Text style={[s.cardT, { flex: 1 }]} numberOfLines={2}>{a.name}</Text>
                       <Text style={[s.pill, { color: a.status === 'ACTIVE' ? BS.ok : BS.text2, borderColor: (a.status === 'ACTIVE' ? BS.ok : BS.text2) + '88' }]}>{a.status === 'ACTIVE' ? 'běží' : String(a.status || '—').toLowerCase()}</Text>
                     </View>
                     <Text style={s.sub} numberOfLines={1}>{a.campaign}</Text>
+                    <View style={[s.rate, { borderColor: rt.color + '99', backgroundColor: rt.color + '1f' }]}>
+                      <Text style={[s.rateT, { color: rt.color }]}>{rt.icon} {rt.label}</Text>
+                      <Text style={s.rateR}>{rt.reason}</Text>
+                      <Text style={[s.rateA, { color: rt.color }]}>{rt.action}</Text>
+                    </View>
                     <View style={s.metrics}>
                       <View style={s.m}><Text style={s.mN}>{nf(Math.round(a.spend))}</Text><Text style={s.mL}>útrata Kč</Text></View>
                       <View style={s.m}><Text style={s.mN}>{nf(a.impressions)}</Text><Text style={s.mL}>zobrazení</Text></View>
@@ -213,7 +309,7 @@ export default function AdsPage() {
                       </View>
                     ) : null}
                   </View>
-                ))}
+                ); })}
               </>
             )}
           </>
@@ -264,5 +360,17 @@ const s = StyleSheet.create({
   rev: { color: BS.ok, fontWeight: '700', marginTop: 8, fontSize: 13 },
   sub: { color: BS.text2, fontSize: 12, marginTop: 4 },
   cardT: { color: BS.text, fontWeight: '800', fontSize: 14 },
+  aiBtn: { backgroundColor: 'rgba(245,158,11,0.14)', borderWidth: 1, borderColor: 'rgba(245,158,11,0.6)', borderRadius: 12, paddingVertical: 12, alignItems: 'center', marginTop: 4, marginBottom: 6 },
+  aiBtnT: { color: '#fbbf24', fontWeight: '800', fontSize: 14 },
+  aiBox: { backgroundColor: BS.card, borderWidth: 1, borderColor: 'rgba(245,158,11,0.35)', borderRadius: 14, padding: 12, marginBottom: 8 },
+  aiMeta: { color: BS.text3, fontSize: 11.5, marginBottom: 6 },
+  mdH: { color: BS.accent2, fontSize: 15, fontWeight: '800', marginTop: 12, marginBottom: 4 },
+  mdP: { color: BS.text, fontSize: 13, lineHeight: 19 },
+  mdLi: { color: BS.text, fontSize: 13, lineHeight: 19, paddingLeft: 4 },
+  mdRow: { color: BS.text2, fontSize: 12, lineHeight: 17, paddingVertical: 2 },
+  rate: { borderWidth: 1, borderRadius: 10, padding: 8, marginTop: 8 },
+  rateT: { fontWeight: '800', fontSize: 13.5 },
+  rateR: { color: BS.text2, fontSize: 12, marginTop: 2 },
+  rateA: { fontWeight: '700', fontSize: 12, marginTop: 3 },
   pill: { fontSize: 11.5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
 });
