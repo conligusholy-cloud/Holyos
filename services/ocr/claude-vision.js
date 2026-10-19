@@ -34,6 +34,27 @@ function readFileForClaude(filePath) {
   return { type, media_type, data: b64, size: buf.length };
 }
 
+// Textová vrstva PDF (přesný text bez OCR chyb). U skenů/fotek vrací '' → jen obraz.
+async function extractPdfText(filePath) {
+  if (path.extname(filePath).toLowerCase() !== '.pdf') return '';
+  try {
+    const pdfParse = require('pdf-parse');
+    const data = await pdfParse(fs.readFileSync(filePath));
+    const t = String(data.text || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    // Méně než ~80 znaků = sken bez textové vrstvy
+    return t.length >= 80 ? t.slice(0, 12000) : '';
+  } catch (e) {
+    return '';
+  }
+}
+
+// Připojí textovou vrstvu k promptu (pokud existuje)
+async function withTextLayer(filePath, prompt) {
+  const t = await extractPdfText(filePath);
+  if (!t) return prompt;
+  return `${prompt}\n\nTEXTOVÁ VRSTVA PDF (přesný text z dokumentu — pro čísla, IČO, DIČ, čísla účtů, částky a data ji upřednostni před vizuálním čtením; při rozporu rozhoduj podle toho, co dává smysl):\n"""\n${t}\n"""`;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // PASS 1 — Hlavička faktury
 // ────────────────────────────────────────────────────────────────────────────
@@ -107,7 +128,7 @@ async function extractHeader(filePath, options = {}) {
       role: 'user',
       content: [
         { type: file.type, source: { type: 'base64', media_type: file.media_type, data: file.data } },
-        { type: 'text', text: HEADER_PROMPT },
+        { type: 'text', text: await withTextLayer(filePath, HEADER_PROMPT) },
       ],
     }],
   });
@@ -178,7 +199,7 @@ async function extractItems(filePath, options = {}) {
       role: 'user',
       content: [
         { type: file.type, source: { type: 'base64', media_type: file.media_type, data: file.data } },
-        { type: 'text', text: ITEMS_PROMPT },
+        { type: 'text', text: await withTextLayer(filePath, ITEMS_PROMPT) },
       ],
     }],
   });
@@ -244,7 +265,7 @@ async function rereadWithOpus(filePath, previousData) {
       role: 'user',
       content: [
         { type: file.type, source: { type: 'base64', media_type: file.media_type, data: file.data } },
-        { type: 'text', text: prompt },
+        { type: 'text', text: await withTextLayer(filePath, prompt) },
       ],
     }],
   });
@@ -283,5 +304,6 @@ module.exports = {
   extractItems,
   rereadWithOpus,
   readFileForClaude,
+  extractPdfText,
   MODEL_SONNET, MODEL_OPUS, MODEL_HAIKU,
 };

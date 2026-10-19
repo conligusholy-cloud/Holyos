@@ -12,6 +12,7 @@ const { lookupByIco, crossCheck } = require('../ares-lookup');
 const { validateInvoiceMath } = require('../vat-math');
 const { checkDuplicate } = require('../invoice-duplicate');
 const { prisma } = require('../../config/database');
+const { validateHeaderNumbers } = require('./validators');
 
 const CONFIDENCE_THRESHOLDS = {
   ready: 0.85,       // automaticky vytvořit Invoice (status=draft, needs_human_review=false)
@@ -187,6 +188,39 @@ async function runPipeline(filePath, ctx = {}) {
     } catch (err) {
       warnings.push({ pass: 'supplier_reread', message: 'Druhé čtení dodavatele selhalo: ' + err.message });
     }
+  }
+
+  // ─── Kontrolní součty IČO / účet / IBAN ───────────────────────────────
+  // Špatně přečtená číslice rozbije modulo 11 → vynutit druhé čtení Opusem a znovu ověřit.
+  let numberIssues = [];
+  if (header) {
+    let chk = validateHeaderNumbers(header);
+    if (!chk.ok) {
+      try {
+        const rr = await rereadWithOpus(filePath, { header, items, checksum_problems: chk.issues.map(i => i.message) });
+        passes.push(rr);
+        const h2 = rr && rr.data && rr.data.header;
+        if (h2) {
+          const before = JSON.stringify(header.supplier || {}) + (header.partner_bank_account || '') + (header.partner_iban || '');
+          const cand = JSON.parse(JSON.stringify(header));
+          if (h2.supplier) cand.supplier = Object.assign({}, cand.supplier || {}, h2.supplier);
+          if (h2.partner_bank_account) cand.partner_bank_account = h2.partner_bank_account;
+          if (h2.partner_iban) cand.partner_iban = h2.partner_iban;
+          // převezmi opravu jen pokud nezhoršila stav (méně problémů než původně)
+          if (validateHeaderNumbers(cand).issues.length < chk.issues.length) {
+            header.supplier = cand.supplier;
+            header.partner_bank_account = cand.partner_bank_account;
+            header.partner_iban = cand.partner_iban;
+            warnings.push({ pass: 'checksum', message: 'Neplatný kontrolní součet opraven druhým čtením (Opus).' });
+          }
+        }
+      } catch (err) {
+        warnings.push({ pass: 'checksum', message: 'Druhé čtení kvůli kontrolnímu součtu selhalo: ' + err.message });
+      }
+      chk = validateHeaderNumbers(header);
+    }
+    numberIssues = chk.issues;
+    for (const i of numberIssues) warnings.push({ pass: 'checksum', message: i.message + ' — ověř podle dokladu.' });
   }
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
@@ -390,6 +424,11 @@ async function runPipeline(filePath, ctx = {}) {
   if (composite >= CONFIDENCE_THRESHOLDS.ready) recommendation = 'ready';
   else if (composite >= CONFIDENCE_THRESHOLDS.review) recommendation = 'needs_review';
   else recommendation = 'unreadable';
+
+  // Čísla s neplatným kontrolním součtem (IČO / účet / IBAN) po druhém čtení → vždy ruční kontrola
+  if (numberIssues.length && recommendation === 'ready') {
+    recommendation = 'needs_review';
+  }
 
   // Sanity override: i když má OCR vysokou důvěru, podezřelá direction-detekce
   // sráží recommendation na needs_review. Lepší obtěžovat uživatele schválením
