@@ -43,6 +43,14 @@ function meetingPersonKey(r) {
   const ph = String(r.phone || '').replace(/\D/g, '').slice(-9); if (ph.length >= 9) return 'p' + ph;
   return 'r' + r.id;
 }
+// Interní/testovací rezervace (tým si zkouší rezervační formulář) — e-mail z našich domén; ve statistice reklam se nepočítají.
+// Domény lze změnit proměnnou ADS_INTERNAL_EMAIL_DOMAINS (čárkou oddělené).
+function isInternalReservation(r) {
+  const domains = String(process.env.ADS_INTERNAL_EMAIL_DOMAINS || 'bestseries.cz,bestseries2.cz,pradlomaty.info').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const em = String((r && r.email) || '').trim().toLowerCase();
+  const at = em.lastIndexOf('@');
+  return at > 0 && domains.indexOf(em.slice(at + 1)) !== -1;
+}
 // Slučování osob přes VŠECHNY identifikátory: rezervace, které sdílejí lead, e-mail NEBO telefon, jsou jeden člověk
 // (např. 1. rezervace z SMS odkazu s leadem, 2. ručně z webu jen s e-mailem + stejným telefonem). Vrací první rezervaci od každé osoby.
 function uniquePersonReservations(list) {
@@ -109,7 +117,7 @@ async function buildOverview(days, sinceExact, onlyKey) {
       // /cesta: lead = domluvená schůzka (každá nezrušená rezervace zakládá lead)
       if (p.key === 'bs2_cesta') {
         const rs0 = await prisma.meetingReservation.findMany({ where: { created_at: rng(since), status: { not: 'canceled' } }, select: { id: true, created_at: true, compounder_lead_id: true, email: true, phone: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
-        const rs = uniquePersonReservations(rs0); // jen první rezervace od každé osoby (slučuje přes lead / e-mail / telefon)
+        const rs = uniquePersonReservations(rs0.filter((r) => !isInternalReservation(r))); // jen první rezervace od každé osoby (slučuje přes lead / e-mail / telefon)
         item.leads = rs.length; item.leadLabel = 'schůzky'; const m = {}; rs.forEach((r) => { const k = dayKey(r.created_at); m[k] = (m[k] || 0) + 1; });
         item.leadsSeries = dayKeys(days).map((d) => ({ d, n: m[d] || 0 }));
       }
@@ -1039,7 +1047,8 @@ router.get('/pages/:key/ads', async (req, res) => {
     let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null, meetingsDuplicates = null, meetingsUnmatched = null;
     if (page.key === 'bs2_cesta') {
       const rg = rng(sinceDate(days, shift));
-      const rsAll = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
+      const rsAll0 = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
+      const rsAll = rsAll0.filter((r) => !isInternalReservation(r)); // testovací rezervace týmu se do statistiky reklam nepočítají
       meetingsCanceled = rsAll.filter((r) => r.status === 'canceled').length;
       // Duplicity: stejná osoba (lead / e-mail / telefon) s víc nezrušenými rezervacemi se počítá jednou — první rezervace
       const activeAll = rsAll.filter((r) => r.status !== 'canceled');
