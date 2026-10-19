@@ -1078,7 +1078,7 @@ router.get('/pages/:key/ads', async (req, res) => {
       meetingsUnmatched = unmatched;
       ads.forEach((a) => { a.cost_per_meeting = a.meetings ? a.spend / a.meetings : null; });
     }
-    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_duplicates: meetingsDuplicates, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, meetings_unmatched: meetingsUnmatched, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_duplicates: meetingsDuplicates, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, meetings_unmatched: meetingsUnmatched, cost_per_meeting: meetings ? totals.spend / meetings : null });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
