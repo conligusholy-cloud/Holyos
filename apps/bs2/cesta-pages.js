@@ -167,7 +167,7 @@ function financovaniPage() {
 }
 
 function schuzkaPage() {
-  return page('Prádlomat — Schůzka 17,5 minuty', 'Druhý nejdůležitější krok: 17,5 minuty, po kterých budete vědět, jestli je prádlomat pro vás. Online nebo osobně.', `
+  return page('Prádlomat — Schůzka 17,5 minuty', 'Druhý nejdůležitější krok: 17,5 minuty, po kterých budete vědět, jestli je prádlomat pro vás. Online video hovor.', `
     <a class="bx-back" data-keep href="/cesta/info">← zpět</a>
     <div id="intro">
       <p class="bx-eyebrow"><span class="pulse-dot"></span>Druhý nejdůležitější krok</p>
