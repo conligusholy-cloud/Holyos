@@ -1898,7 +1898,7 @@
 
     window.ingestTab = 'active'; // 'active' | 'duplicate' | 'archive' | 'logs'
 
-    window.openIngestList = async function(tab) {
+    window.openIngestList = async function(tab, soft) {
       if (tab) window.ingestTab = tab;
 
       // Tab "Logy" má jiný flow — tabulka audit logů
@@ -1912,14 +1912,15 @@
       // Auto-refresh každou 1 s, pokud je něco ve stavu extracting/parsing
       const hasInFlight = (r.data || []).some(ing => ['extracting', 'parsing'].includes(ing.status));
       if (window._ingestPollTimer) { clearTimeout(window._ingestPollTimer); window._ingestPollTimer = null; }
-      if (hasInFlight) {
+      // Při hromadném reprocessu obnovuje seznam pollReprocess — vlastní časovač by jen blikal
+      if (hasInFlight && !window._reprocPolling) {
         window._ingestPollTimer = setTimeout(() => {
-          // Re-render jen pokud je modal stále otevřený
+          // Měkké obnovení (jen tělo tabulky) jen pokud je modal stále otevřený
           if (document.querySelector('#modal-root .modal')) {
-            openIngestList();
+            openIngestList(undefined, true);
             loadInvoices(); loadSummary();
           }
-        }, 1000);
+        }, 3000);
       }
       const rows = (r.data || []).map(ing => {
         const statusCls = { received: 'draft', parsing: 'awaiting_approval', extracting: 'awaiting_approval',
@@ -1961,6 +1962,13 @@
         (ing.attachments?.filter(a => a.is_invoice_candidate)?.length || 0) > 0
       ).length;
 
+      // Měkké obnovení: přepsat jen řádky tabulky (bez překreslení celého okna → žádné blikání, zachová se scroll i lišta průběhu)
+      if (soft) {
+        const tb = document.querySelector('#modal-root #ingest-tbody');
+        if (tb) { tb.innerHTML = rows || tb.innerHTML; return; }
+        if (document.querySelector('#modal-root .modal')) return;
+      }
+
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
           '<div class="modal wide" style="max-width:1500px; width:96%;">' +
@@ -1985,7 +1993,7 @@
                   '<th>Obdrženo</th><th>Od</th><th>Původní odesílatel</th><th>Předmět</th><th>Stav</th>' +
                   '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th></th>' +
                 '</tr></thead>' +
-                '<tbody>' + (rows || '<tr><td colspan="9" class="empty-hint" style="padding:20px;">' +
+                '<tbody id="ingest-tbody">' + (rows || '<tr><td colspan="9" class="empty-hint" style="padding:20px;">' +
                   ({active: 'Žádné aktivní e-maily — vše zpracováno.',
                     duplicate: 'Žádné duplikáty.',
                     archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.') +
@@ -2227,7 +2235,7 @@
           draw(st);
           tick++;
           if (!st.running) { if (st.total) { await openIngestList(); draw(st); loadInvoices(); loadSummary(); } break; }
-          if (tick % 4 === 0) { await openIngestList(); draw(st); }   // obnovit tabulku se stavy e-mailů a lištu vykreslit znovu
+          if (tick % 3 === 0) { await openIngestList(undefined, true); draw(st); }   // měkce obnovit řádky se stavy e-mailů
           await new Promise((res) => setTimeout(res, 1500));
         }
       } finally { window._reprocPolling = false; }

@@ -1379,22 +1379,32 @@ router.post('/email/ingests/reprocess-all', async (req, res, next) => {
     // Background processing (fire-and-forget, errors jen do logu) + průběh pro UI (GET /email/ingests/reprocess-status)
     Object.assign(reprocessBatch, { running: true, total: eligible.length, done: 0, created: 0, duplicates: 0, failed: 0, current: null, started_at: Date.now(), finished_at: null });
     (async () => {
-      for (const ingest of eligible) {
-        reprocessBatch.current = (ingest.subject || '').slice(0, 80) || ('e-mail #' + ingest.id);
-        try {
-          await prisma.ocrExtraction.deleteMany({ where: { email_ingest_id: ingest.id } });
-          await prisma.emailIngest.update({
-            where: { id: ingest.id },
-            data: { status: 'extracting', attempts: { increment: 1 }, sender_notify_reason: null, note: 'Hromadný reprocess' },
-          });
-          const r = await runPipelineAndFinalize(ingest, ingest.attachments, { notifyContext: null });
-          if (r) { reprocessBatch.created += (r.invoices || []).length; reprocessBatch.duplicates += (r.skippedDuplicates || []).length; }
-        } catch (e) {
-          reprocessBatch.failed++;
-          console.error(`[reprocess-all] Chyba u ingestu ${ingest.id}:`, e.message);
+      // 3 e-maily paralelně (jinak 75 × desítky sekund trvá věčnost) + limit 4 min na e-mail, aby jeden zaseknutý nezablokoval dávku
+      const queue = eligible.slice();
+      const worker = async () => {
+        for (let ingest = queue.shift(); ingest; ingest = queue.shift()) {
+          reprocessBatch.current = (ingest.subject || '').slice(0, 80) || ('e-mail #' + ingest.id);
+          let timer;
+          try {
+            await prisma.ocrExtraction.deleteMany({ where: { email_ingest_id: ingest.id } });
+            await prisma.emailIngest.update({
+              where: { id: ingest.id },
+              data: { status: 'extracting', attempts: { increment: 1 }, sender_notify_reason: null, note: 'Hromadný reprocess' },
+            });
+            const r = await Promise.race([
+              runPipelineAndFinalize(ingest, ingest.attachments, { notifyContext: null }),
+              new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Časový limit 4 min')), 240000); }),
+            ]);
+            if (r) { reprocessBatch.created += (r.invoices || []).length; reprocessBatch.duplicates += (r.skippedDuplicates || []).length; }
+          } catch (e) {
+            reprocessBatch.failed++;
+            console.error(`[reprocess-all] Chyba u ingestu ${ingest.id}:`, e.message);
+            try { await prisma.emailIngest.update({ where: { id: ingest.id }, data: { status: 'unreadable', note: 'Reprocess selhal: ' + e.message } }); } catch (_) { /* ignoruj */ }
+          } finally { clearTimeout(timer); }
+          reprocessBatch.done++;
         }
-        reprocessBatch.done++;
-      }
+      };
+      await Promise.all([worker(), worker(), worker()]);
       Object.assign(reprocessBatch, { running: false, current: null, finished_at: Date.now() });
       console.log(`[reprocess-all] Dokončeno pro ${eligible.length} e-mailů ze skupiny "${group}".`);
     })().catch(() => { reprocessBatch.running = false; });
