@@ -1922,6 +1922,7 @@
           }
         }, 3000);
       }
+      window._ingestRowsById = {}; (r.data || []).forEach(i => { window._ingestRowsById[i.id] = i; });
       const rows = (r.data || []).map(ing => {
         const statusCls = { received: 'draft', parsing: 'awaiting_approval', extracting: 'awaiting_approval',
           awaiting_review: 'awaiting_approval', linked_to_invoice: 'paid',
@@ -1984,12 +1985,14 @@
                 escapeHtml(tabHints[window.ingestTab] || '') + ' &nbsp;·&nbsp; celkem: ' + (r.data?.length || 0) +
                 ' &nbsp;·&nbsp; cena OCR: ' + totalCost.toFixed(2).replace('.', ',') + ' Kč' +
               '</span>' +
-              '<div style="margin-left:auto;">' +
+              '<div style="margin-left:auto; display:flex; gap:8px;">' +
+                '<button class="btn btn-secondary btn-sm" onclick="runIngestDiagnose()" title="AI agent zjistí, proč se e-maily nezpracovaly, a navrhne opatření">🤖 AI diagnostika</button>' +
                 (eligibleForReprocess > 0
                   ? '<button class="btn btn-primary btn-sm" onclick="reprocessAll()" title="Spustit reprocess pro všechny e-maily v této záložce">⚡ Hromadný reprocess (' + eligibleForReprocess + ')</button>'
                   : '') +
               '</div>' +
             '</div>' +
+            '<div id="ingest-diag-box"></div>' +
             '<div style="max-height:65vh; overflow:auto;">' +
               '<table class="items-table" style="width:100%; min-width:1100px;">' +
                 '<thead><tr>' +
@@ -2194,6 +2197,57 @@
           '</div>' +
         '</div>'
       );
+    };
+
+    // ─── AI diagnostika nezpracovaných e-mailů: proč selhaly + co přesně udělat ───
+    const DIAG_CAT = {
+      not_invoice: '📄 Není faktura', no_attachment: '📭 Bez přílohy', link_only: '🔗 Jen odkaz', image_junk: '🖼 Jen loga/podpisy',
+      scan_unreadable: '🔍 Nečitelný sken', ocr_wrong: '⚠ OCR přečetlo špatně', missing_data: '❓ Chybí údaje', duplicate: '🔁 Duplicita',
+      system_error: '🛠 Chyba systému', other: '• Jiné',
+    };
+    const DIAG_ACT = { ignore_sender: '🚫 Ignorovat odesílatele', reprocess: '↻ Znovu zpracovat', manual: '✍ Ručně', ask_sender: '✉ Vyžádat PDF', system_change: '🛠 Úprava systému' };
+    window.runIngestDiagnose = async function() {
+      const box = document.getElementById('ingest-diag-box'); if (!box) return;
+      box.innerHTML = '<div style="margin-bottom:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;color:var(--text2);">🤖 AI agent prochází nezpracované e-maily (tělo, přílohy, chyby OCR)… trvá to cca 30–90 s.</div>';
+      const r = await api('POST', '/api/accounting/email/diagnose', {});
+      if (r.status !== 200) { box.innerHTML = '<div style="margin-bottom:14px;color:#ef4444;">Diagnostika selhala: ' + escapeHtml((r.data && r.data.error) || String(r.status)) + '</div>'; return; }
+      renderIngestDiagnose(r.data);
+    };
+    function renderIngestDiagnose(d) {
+      const box = document.getElementById('ingest-diag-box'); if (!box || !d) return;
+      window._diagLast = d;
+      if (d.empty) { box.innerHTML = '<div style="margin-bottom:14px;padding:12px;border:1px solid var(--border);border-radius:10px;">' + escapeHtml(d.summary || 'Není co diagnostikovat.') + '</div>'; return; }
+      const counts = Object.entries(d.counts || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => '<span class="inline-code" style="margin-right:6px;">' + (DIAG_CAT[k] || k) + ': <b>' + v + '</b></span>').join('');
+      const imps = (d.improvements || []).map((x) => '<li style="margin:4px 0;"><b>' + escapeHtml(x.title || '') + '</b>' + (x.priority ? ' <span style="font-size:.78em;color:' + (x.priority === 'high' ? '#ef4444' : x.priority === 'medium' ? '#f59e0b' : 'var(--text2)') + ';">[' + escapeHtml(x.priority) + ']</span>' : '') + (x.affected ? ' <span style="font-size:.8em;color:var(--text2);">(týká se ' + x.affected + ')</span>' : '') + '<div style="font-size:.88em;color:var(--text2);">' + escapeHtml(x.detail || '') + '</div></li>').join('');
+      const rows = (d.items || []).map((x) => {
+        const ing = (window._ingestRowsById || {})[x.id] || {};
+        const act = DIAG_ACT[x.action] || escapeHtml(x.action || '');
+        const btn = x.action === 'ignore_sender' && x.ignore_value
+          ? '<button class="btn btn-secondary btn-sm" onclick="diagIgnore(\'' + escapeHtml(String(x.ignore_value).toLowerCase()).replace(/'/g, '') + '\')">🚫 Ignorovat</button>'
+          : (x.action === 'reprocess' ? '<button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + x.id + ')">↻ Znovu</button>' : '');
+        return '<tr>' +
+          '<td style="font-size:.85em;"><b>' + escapeHtml(String(ing.subject || ('e-mail #' + x.id)).slice(0, 60)) + '</b><div style="color:var(--text2);">' + escapeHtml(ing.from_email || '') + '</div></td>' +
+          '<td style="white-space:nowrap;font-size:.85em;">' + (DIAG_CAT[x.category] || escapeHtml(x.category || '')) + '</td>' +
+          '<td style="font-size:.88em;">' + escapeHtml(x.cause || '') + '</td>' +
+          '<td style="font-size:.88em;">' + escapeHtml(x.fix || '') + '<div style="font-size:.8em;color:var(--text2);margin-top:2px;">' + act + (x.confidence != null ? ' · jistota ' + Math.round(Number(x.confidence) * 100) + ' %' : '') + '</div></td>' +
+          '<td>' + btn + '</td></tr>';
+      }).join('');
+      box.innerHTML = '<div style="margin-bottom:14px;border:1px solid #6366f155;background:#6366f10f;border-radius:12px;padding:14px 16px;">' +
+        '<div style="display:flex;align-items:center;gap:8px;"><b>🤖 AI diagnostika</b><span style="font-size:.8em;color:var(--text2);">' + (d.generated_at ? fmtDateTime(d.generated_at) : '') + ' · rozebráno ' + (d.analyzed || 0) + ' e-mailů</span>' +
+          '<button class="btn btn-secondary btn-sm" style="margin-left:auto;" onclick="runIngestDiagnose()">↻ Znovu</button><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'ingest-diag-box\').innerHTML=\'\'">✕</button></div>' +
+        '<div style="margin:8px 0;">' + counts + '</div>' +
+        (imps ? '<div style="margin:8px 0;"><b style="font-size:.92em;">Navržené úpravy systému (aby se příště zpracovaly):</b><ul style="margin:4px 0 0 18px;">' + imps + '</ul></div>' : '') +
+        '<div style="max-height:34vh;overflow:auto;"><table class="items-table" style="width:100%;"><thead><tr><th>E-mail</th><th>Kategorie</th><th>Příčina</th><th>Co s tím</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '</div>';
+    }
+    window.diagIgnore = async function(value) {
+      if (!confirm('Ignorovat ' + value + '? Nové e-maily od něj se už nebudou zpracovávat.')) return;
+      const rr = await api('GET', '/api/accounting/email/ingest-rules');
+      const rules = (rr.data && rr.data.rules) || { ignore_senders: [], ignore_subject_keywords: [] };
+      rules.ignore_senders = [...new Set([...(rules.ignore_senders || []), value])];
+      const r = await api('PUT', '/api/accounting/email/ingest-rules', rules);
+      if (r.status !== 200) return alert('Uložení pravidla selhalo.');
+      alert('Pravidlo uloženo.');
     };
 
     window.reprocessAll = async function() {

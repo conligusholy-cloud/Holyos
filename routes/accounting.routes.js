@@ -1349,6 +1349,80 @@ router.post('/email/ai-analyze', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/email/diagnose { ids?, group? } — AI agent: u každého nezpracovaného e-mailu zjistí PROČ se nezpracoval
+// (tělo e-mailu, přílohy, výsledky a chyby OCR průchodů) a navrhne konkrétní opatření (ignorovat / znovu zpracovat / ručně / změna systému).
+router.post('/email/diagnose', async (req, res, next) => {
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) return res.status(400).json({ error: 'ANTHROPIC_API_KEY není nastavený' });
+    const body = req.body || {};
+    const where = Array.isArray(body.ids) && body.ids.length
+      ? { id: { in: body.ids.map(Number).filter(Boolean).slice(0, 60) } }
+      : { status: { in: ['unreadable', 'awaiting_review', 'extracting', 'parsing', 'received'] } };
+    const ingests = await prisma.emailIngest.findMany({
+      where, orderBy: { received_at: 'desc' }, take: 40,
+      include: {
+        attachments: { select: { filename: true, content_type: true, size_bytes: true, is_invoice_candidate: true, source: true } },
+        extractions: { orderBy: { pass_number: 'asc' }, select: { pass_type: true, model_used: true, confidence: true, warnings: true, errors: true, extracted_data: true } },
+        invoices: { select: { invoice_number: true } },
+      },
+    });
+    if (!ingests.length) return res.json({ ok: true, empty: true, summary: 'Žádné nezpracované e-maily.', items: [], improvements: [] });
+
+    const strip = (h) => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+    const links = (h) => [...new Set((String(h || '').match(/https?:\/\/[^\s"'<>)]+/g) || []).filter((u) => !/unsubscribe|facebook|twitter|linkedin|instagram/i.test(u)))].slice(0, 6);
+    const short = (v, n) => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s ? s.slice(0, n) : null; };
+    const evidence = ingests.map((i) => {
+      const txt = strip(i.body_text || i.body_html);
+      const hdr = (i.extractions || []).find((e) => e.pass_type === 'claude_vision_header');
+      const hd = hdr && hdr.extracted_data ? hdr.extracted_data : null;
+      return {
+        id: i.id, stav: i.status, pokusu: i.attempts, jistota: i.confidence != null ? Number(i.confidence) : null,
+        od: i.from_email, predmet: String(i.subject || '').slice(0, 200), poznamka: short(i.note || i.sender_notify_reason, 300),
+        text_emailu: txt.slice(0, 900), odkazy_v_tele: links(i.body_html || i.body_text),
+        prilohy: i.attachments.map((a) => ({ nazev: a.filename, typ: a.content_type, kb: a.size_bytes ? Math.round(a.size_bytes / 1024) : null, kandidat: a.is_invoice_candidate, zdroj: a.source })),
+        ocr: (i.extractions || []).map((e) => ({ pruchod: e.pass_type, model: e.model_used, jistota: e.confidence != null ? Number(e.confidence) : null, varovani: short(e.warnings, 300), chyby: short(e.errors, 300) })).slice(0, 8),
+        ocr_hlavicka: hd ? { druh: hd.document_kind, dodavatel: hd.supplier && hd.supplier.name, ico: hd.supplier && hd.supplier.ico, cislo: hd.external_number, celkem: hd.total, ucet: hd.partner_bank_account || hd.partner_iban, zpusob_platby: hd.payment_method } : null,
+        vytvorene_faktury: i.invoices.map((x) => x.invoice_number),
+      };
+    });
+    const rules = (await getSetting(INGEST_RULES_KEY, { type: 'json', defaultValue: {} })) || {};
+    const { MODEL_OPUS } = require('../services/ocr/claude-vision');
+    const Anthropic = require('@anthropic-ai/sdk'); const client = new Anthropic({ apiKey });
+    const sys = 'Jsi senior inženýr zpracování přijatých faktur. HolyOS sleduje schránku invoice@ (do ní přeposílají faktury kolegové — předmět často „FW:“), z příloh/odkazů čte doklady pomocí Claude Vision OCR, ověřuje IČO v ARES, počítá DPH a zakládá přijatou fakturu. ' +
+      'Pravidla systému: jen přijaté faktury; platba kartou = zaplaceno; hotově = zaplaceno; u převodu musí být číslo účtu; soupis faktur / potvrzení platby / upomínka NENÍ faktura; když je v e-mailu faktura i potvrzení, platí jen faktura; obrázky <10 kB jsou ignorovány (loga, podpisy). ' +
+      'Odpovídáš výhradně validním JSON bez markdownu.';
+    const items = [];
+    const batchSize = 8;
+    for (let b = 0; b < evidence.length; b += batchSize) {
+      const part = evidence.slice(b, b + batchSize);
+      const prompt = 'Pro každý e-mail níže urči PRAVOU příčinu, proč se nezpracoval (nebo proč skončil v ověření), opři se o konkrétní důkazy (tělo, přílohy, chyby a varování OCR, přečtená hlavička). Nehádej — když to z důkazů nelze poznat, řekni co chybí.\n' +
+        'Kategorie (category): not_invoice (nejde o fakturu: notifikace, soupis, upomínka, potvrzení…), no_attachment (přeposlaný e-mail bez přílohy/odkazu, např. jen text), link_only (faktura jen odkazem / za přihlášením), image_junk (jen loga/podpisy), scan_unreadable (nečitelný sken), ocr_wrong (OCR přečetlo špatně — uveď co), missing_data (chybí číslo dokladu/účet/dodavatel), duplicate (už existuje), system_error (technická chyba pipeline), other.\n' +
+        'Akce (action): ignore_sender (pravidlo ignorovat — jen když odesílatel NIKDY neposílá faktury; uveď ignore_value), reprocess (po opravě systému stačí znovu zpracovat), manual (zadat/ověřit ručně), ask_sender (požádat odesílatele o PDF), system_change (potřeba úprava systému — popiš v fix).\n' +
+        'Aktuální ignore pravidla: ' + JSON.stringify({ ignore_senders: rules.ignore_senders || [], ignore_subject_keywords: rules.ignore_subject_keywords || [] }) + '\n' +
+        'E-maily:\n' + JSON.stringify(part) + '\n\n' +
+        'Vrať JSON: {"items":[{"id":0,"category":"...","cause":"1-2 věty česky, konkrétně","fix":"co přesně udělat, aby se příště zpracoval správně","action":"...","ignore_value":null,"confidence":0.0}],"improvements":[{"title":"...","detail":"konkrétní úprava systému (co a kde změnit)","priority":"high|medium|low","affected":0}]}';
+      const resp = await client.messages.create({ model: process.env.INGEST_DIAG_MODEL || MODEL_OPUS, max_tokens: 6000, system: sys, messages: [{ role: 'user', content: prompt }] });
+      const txt = (resp.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+      try {
+        const o = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
+        (o.items || []).forEach((x) => items.push(x));
+        (o.improvements || []).forEach((x) => { x._batch = b; (items.improvements = items.improvements || []).push(x); });
+      } catch (e) { part.forEach((p) => items.push({ id: p.id, category: 'other', cause: 'AI vrátila nečitelnou odpověď — spusť diagnostiku znovu.', fix: '', action: 'manual', confidence: 0 })); }
+    }
+    // Souhrn souhrnných vylepšení: sloučit duplicity podle názvu
+    const impMap = new Map();
+    (items.improvements || []).forEach((x) => { const k = String(x.title || '').toLowerCase().trim(); if (!k) return; const e = impMap.get(k); if (e) e.affected = (Number(e.affected) || 0) + (Number(x.affected) || 0); else impMap.set(k, { title: x.title, detail: x.detail, priority: x.priority, affected: Number(x.affected) || 0 }); });
+    const improvements = [...impMap.values()].sort((a, b) => ({ high: 0, medium: 1, low: 2 }[a.priority] ?? 3) - ({ high: 0, medium: 1, low: 2 }[b.priority] ?? 3));
+    const catCount = {}; items.forEach((x) => { catCount[x.category] = (catCount[x.category] || 0) + 1; });
+    const out = { ok: true, generated_at: new Date().toISOString(), analyzed: evidence.length, items: items.slice(), counts: catCount, improvements };
+    await setSetting('accounting.email_ingest.diagnose_last', out, { type: 'json', description: 'Účetní doklady – poslední AI diagnostika nezpracovaných e-mailů', scope: 'accounting', userId: req.user && req.user.id }).catch(() => {});
+    res.json(out);
+  } catch (err) { next(err); }
+});
+router.get('/email/diagnose-last', async (req, res, next) => {
+  try { res.json((await getSetting('accounting.email_ingest.diagnose_last', { type: 'json', defaultValue: null })) || null); } catch (err) { next(err); }
+});
+
 // GET /api/accounting/email/ingests/:id — detail s extrakcemi
 router.get('/email/ingests/:id', async (req, res, next) => {
   try {
