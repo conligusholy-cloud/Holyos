@@ -979,13 +979,24 @@ router.get('/pages/:key/ads', async (req, res) => {
     }
     const ads = rows.filter((r) => { const m = meta[r.ad_id]; return m && norm(adLink(m.creative)) === target; }).map((r) => {
       const spend = Number(r.spend || 0), clicks = Number(r.inline_link_clicks || r.clicks || 0);
-      return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend, impressions: Number(r.impressions || 0), clicks, ctr: r.ctr != null ? Number(r.ctr) : null, cpc: clicks ? spend / clicks : null };
+      const lpv = Number(((r.actions || []).find((x) => x.action_type === 'landing_page_view') || {}).value || 0);
+      return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend, impressions: Number(r.impressions || 0), clicks, landing_views: lpv, ctr: r.ctr != null ? Number(r.ctr) : null, cpc: clicks ? spend / clicks : null };
     }).sort((a, b) => b.spend - a.spend);
-    const totals = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, clicks: a.clicks + x.clicks }), { spend: 0, impressions: 0, clicks: 0 });
+    const totals = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, clicks: a.clicks + x.clicks, landing_views: a.landing_views + x.landing_views }), { spend: 0, impressions: 0, clicks: 0, landing_views: 0 });
+    // Návštěvníci stránky ze zdrojů reklamy (Facebook / Instagram / Google…) — unikátní relace z BS2 sledování, stejné období
+    let adVisitors = null;
+    if (page.bs2 && page.bs2.path) {
+      try {
+        const st = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path);
+        const camps = (st && st.behavior && st.behavior.campaigns) || [];
+        const isAdSrc = /(^|[^a-z])(fb|ig)([^a-z]|$)|facebook|insta|meta|google|gclid|fbclid|cpc|paid/i;
+        adVisitors = camps.filter((x) => isAdSrc.test(String(x.name || ''))).reduce((a, x) => a + (Number(x.sessions) || 0), 0);
+      } catch (e) { adVisitors = null; }
+    }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
     let meetings = null;
     if (page.key === 'bs2_cesta') { meetings = await prisma.meetingReservation.count({ where: { created_at: rng(sinceDate(days, shift)), status: { not: 'canceled' } } }).catch(() => null); }
-    res.json({ connected: true, ads, totals, meetings, cost_per_meeting: meetings ? totals.spend / meetings : null });
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, cost_per_meeting: meetings ? totals.spend / meetings : null });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 

@@ -142,6 +142,22 @@ export default function AdsPage() {
         </View>
         {histLoading ? <ActivityIndicator color={BS.accent2} style={{ marginTop: 16 }} /> : !hist ? <Text style={s.empty}>Žádná data za toto období.</Text> : (
           <View style={s.card}>
+            {adsOnly && adsData && adsData.ad_visitors != null ? (
+              <>
+                <View style={s.metrics}>
+                  <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{nf(adsData.ad_visitors)}</Text><Text style={s.mL}>lidí z reklamy na webu</Text></View>
+                  <View style={s.m}><Text style={s.mN}>{nf(adsData.totals ? adsData.totals.clicks : null)}</Text><Text style={s.mL}>kliků na reklamě</Text></View>
+                  <View style={s.m}><Text style={s.mN}>{adsData.totals && adsData.totals.clicks ? Math.round((adsData.ad_visitors / adsData.totals.clicks) * 100) + ' %' : '—'}</Text><Text style={s.mL}>dorazilo na web</Text></View>
+                </View>
+                <Text style={s.sub}>Kliků na reklamě je víc než lidí na webu, pokud se stránka nenačte (zavření, pomalé připojení). Nízké „dorazilo na web" ukazuje problém se stránkou nebo rychlostí.</Text>
+                <View style={[s.metrics, { marginTop: 12 }]}>
+                  <View style={s.m}><Text style={s.mN}>{nf(hist.leads)}</Text><Text style={s.mL}>{hist.leadLabel || 'leady'}</Text></View>
+                  <View style={s.m}><Text style={s.mN}>{nf(hist.conversions)}</Text><Text style={s.mL}>{hist.convLabel || 'dokončeno'}</Text></View>
+                  {adsData.totals && adsData.totals.landing_views ? <View style={s.m}><Text style={s.mN}>{nf(adsData.totals.landing_views)}</Text><Text style={s.mL}>zobrazení stránky (Meta)</Text></View> : null}
+                </View>
+              </>
+            ) : (
+            <>
             <View style={s.metrics}>
               <View style={s.m}><Text style={s.mN}>{nf(hist.uniques)}</Text><Text style={s.mL}>unikátních</Text></View>
               <View style={s.m}><Text style={s.mN}>{nf(hist.visits)}</Text><Text style={s.mL}>zobrazení</Text></View>
@@ -151,6 +167,8 @@ export default function AdsPage() {
             {hist.revenue ? <Text style={s.rev}>Tržba {nf(hist.revenue)} {hist.currency === 'EUR' ? '€' : 'Kč'}</Text> : null}
             {hist.conv_rate != null ? <Text style={s.sub}>Konverze {String(hist.conv_rate).replace('.', ',')} %</Text> : null}
             {hist.note ? <Text style={s.sub}>{hist.note}</Text> : null}
+            </>
+            )}
           </View>
         )}
 
@@ -166,7 +184,7 @@ export default function AdsPage() {
                     <View style={s.m}><Text style={s.mN}>{adsData.totals.clicks ? nf(Math.round((adsData.totals.spend / adsData.totals.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
                   </View>
                   <View style={[s.metrics, { marginTop: 12 }]}>
-                    <View style={s.m}><Text style={s.mN}>{hist && hist.uniques ? nf(Math.round(adsData.totals.spend / hist.uniques)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / návštěvník</Text></View>
+                    <View style={s.m}><Text style={s.mN}>{(() => { const n = adsData.ad_visitors != null ? adsData.ad_visitors : (hist && hist.uniques); return n ? nf(Math.round(adsData.totals.spend / n)) + ' Kč' : '—'; })()}</Text><Text style={s.mL}>cena / návštěvník z reklamy</Text></View>
                     {adsData.meetings != null ? <View style={s.m}><Text style={s.mN}>{nf(adsData.meetings)}</Text><Text style={s.mL}>schůzek</Text></View> : null}
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>

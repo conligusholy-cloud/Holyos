@@ -1571,6 +1571,7 @@
               '<button class="btn btn-g" style="flex:1" id="calltimer-'+l.id+'" onclick="toggleCall('+l.id+')">⏱️ Zaznamenat hovor</button>' +
             '</div>' +
             '<div style="font-size:11px;color:var(--muted2);margin-top:4px">🎙️ Diktovat můžeš i mikrofonem na klávesnici telefonu (funguje na iOS i Androidu).</div>' +
+            '<div id="actlog-'+l.id+'" style="margin-top:10px">'+actLogHtml(l.activity_log)+'</div>' +
           '</div>' +
           obVersionField(l) +
           '<div style="margin-top:10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted2)">Viditelné sekce portálu</div>' + secBoxes +
@@ -1579,7 +1580,6 @@
         '<div class="field"><label>Nabídka lokalit'+(l.extra_offers?' 🎯':'')+'</label><button class="btn btn-g" style="width:100%" onclick="showOffer('+l.id+')">👁️ Zobrazit nabídku, co lead vidí</button>' +
           ((window.__perm && (window.__perm.canAddIndividualOffers || window.__perm.admin)) ? '<button class="btn btn-g" style="width:100%;margin-top:6px" onclick="openAddOffer('+l.id+')">➕ Přidat individuální lokalitu</button>' : '') +
         '</div>' +
-        '<div class="field"><label>Aktivity</label><div id="actlog-'+l.id+'" class="note-log">'+(l.activity_log ? esc(l.activity_log) : 'Zatím žádná aktivita.')+'</div></div>' +
         '<div class="field"><label>Poznámky <span class="saved" id="saved-'+l.id+'"></span></label><textarea id="notes-'+l.id+'" placeholder="Sem si napiš cokoli…" onblur="setField('+l.id+',\'notes\',this.value)">'+esc(l.notes||'')+'</textarea></div>' +
         '<div class="field"><label>Cesta zákazníka / analytika</label><div id="journey-'+l.id+'" class="note-log">Načítám…</div></div>' +
         '<div class="field"><label>Rezervace lokalit</label><div id="resv-'+l.id+'" class="note-log">Načítám…</div></div>' +
@@ -2196,6 +2196,15 @@
       render();
     }catch(e){ if(err) err.textContent='Chyba: '+(e.message||''); if(btn){ btn.disabled=false; btn.textContent='✅ Vygenerovat objednávku'; } }
   };
+  // Aktivity: vlastní záznamy obchodníka („• [datum] text“) nahoře, systémové řádky (odeslané e-maily, změny stavu, hovory…) sbalené pod nimi
+  function actLogHtml(log){
+    var lines = String(log||'').split('\n').filter(function(x){ return x.trim(); });
+    var mine = lines.filter(function(x){ return /^• \[/.test(x); }), sys = lines.filter(function(x){ return !/^• \[/.test(x); });
+    var h = '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#60a5fa;font-weight:700;margin-bottom:4px">Moje aktivity'+(mine.length?' ('+mine.length+')':'')+'</div>';
+    h += mine.length ? '<div class="note-log" style="max-height:260px;margin-top:0">'+mine.map(esc).join('\n')+'</div>' : '<div style="font-size:12px;color:var(--muted2)">Zatím žádný vlastní záznam.</div>';
+    if (sys.length) h += '<details style="margin-top:8px"><summary style="font-size:12px;color:var(--muted);cursor:pointer">Systémové záznamy ('+sys.length+') – hovory, změny stavu, e-maily</summary><div class="note-log">'+sys.map(esc).join('\n')+'</div></details>';
+    return h;
+  }
   async function addActivity(id){
     var inp = document.getElementById('act-'+id); var txt = (inp.value||'').trim();
     if (!txt) return;
