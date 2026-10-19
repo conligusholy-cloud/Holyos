@@ -5,7 +5,7 @@
 // Data: /api/ads-center/pages/:key/live (BS2 ads-live). Obnovuje se sám každých 6 s, dokud je obrazovka otevřená.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { api } from '../lib/api';
 import { loadAuth } from '../lib/auth';
@@ -27,6 +27,7 @@ export default function AdsLive() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [at, setAt] = useState<Date | null>(null);
+  const [adsOnly, setAdsOnly] = useState(true);
   const keysRef = useRef<{ key: string; name: string; color?: string }[] | null>(null);
   const alive = useRef(true);
 
@@ -64,10 +65,22 @@ export default function AdsLive() {
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
-  const sum = (f: (d: any) => number) => pages.reduce((a, p) => a + (p.data ? f(p.data) : 0), 0);
-  const nowTotal = sum((d) => Number(d.now) || 0), last5 = sum((d) => Number(d.last5) || 0), last30 = sum((d) => Number(d.last30) || 0);
+  // Návštěvník z reklamy = zdroj z Facebooku/Instagramu/Googlu/placené kampaně (ne „přímo")
+  const isAd = (v: any) => /fb|facebook|insta|\big\b|meta|google|gclid|cpc|paid/i.test(String(v && v.source || ''));
+  const viewPages = pages.map((p) => {
+    const d = p.data || {};
+    const all: any[] = d.visitors || [];
+    const vis = adsOnly ? all.filter(isAd) : all;
+    const now = adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0);
+    const l5 = adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 300).length : (Number(d.last5) || 0);
+    const l30 = adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 1800).length : (Number(d.last30) || 0);
+    return { p, d, vis, now, l5, l30 };
+  }).sort((a, b) => (b.now - a.now) || (b.l5 - a.l5) || (b.l30 - a.l30));
+  const nowTotal = viewPages.reduce((a, x) => a + x.now, 0), last5 = viewPages.reduce((a, x) => a + x.l5, 0), last30 = viewPages.reduce((a, x) => a + x.l30, 0);
+  const adIds = new Set<string>();
+  viewPages.forEach((x) => x.vis.forEach((v) => adIds.add(String(v.id))));
   const feed: { page: string; id: string; ago: number; text: string }[] = [];
-  pages.forEach((p) => (p.data && p.data.feed || []).forEach((f: any) => feed.push({ page: p.name, id: f.id, ago: f.ago, text: f.text })));
+  pages.forEach((p) => (p.data && p.data.feed || []).forEach((f: any) => { if (!adsOnly || adIds.has(String(f.id))) feed.push({ page: p.name, id: f.id, ago: f.ago, text: f.text }); }));
   feed.sort((a, b) => a.ago - b.ago);
 
   return (
@@ -81,27 +94,29 @@ export default function AdsLive() {
           <View style={s.big}><Text style={s.bigL}>za 5 min</Text><Text style={s.bigN2}>{last5}</Text></View>
           <View style={s.big}><Text style={s.bigL}>za 30 min</Text><Text style={s.bigN2}>{last30}</Text></View>
         </View>
+        <View style={s.toggle}>
+          <TouchableOpacity onPress={() => setAdsOnly(true)} style={[s.tg, adsOnly && s.tgOn]}><Text style={[s.tgT, adsOnly && s.tgTOn]}>📣 Jen z reklamy</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setAdsOnly(false)} style={[s.tg, !adsOnly && s.tgOn]}><Text style={[s.tgT, !adsOnly && s.tgTOn]}>Všichni</Text></TouchableOpacity>
+        </View>
         <Text style={s.upd}>{at ? 'Obnoveno ' + at.toLocaleTimeString('cs-CZ') + ' · automaticky každých 6 s' : 'Načítám…'}</Text>
         {error ? <Text style={s.err}>{error}</Text> : null}
 
         {loading ? <ActivityIndicator color={BS.accent2} style={{ marginTop: 30 }} /> : (
           <>
             {pages.length === 0 ? <Text style={s.empty}>Žádná stránka s živým sledováním.</Text> : null}
-            {pages.map((p) => {
-              const d = p.data || {};
-              const vis: any[] = d.visitors || [];
+            {viewPages.map(({ p, vis, now, l5, l30 }) => {
               return (
                 <View key={p.key} style={[s.card, { borderLeftColor: p.color || BS.accent, borderLeftWidth: 4 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={[s.cardT, { flex: 1 }]} numberOfLines={2}>{p.name}</Text>
-                    <Text style={[s.pill, { color: (d.now || 0) > 0 ? BS.ok : BS.text2, borderColor: ((d.now || 0) > 0 ? BS.ok : BS.text2) + '88' }]}>{d.now || 0} online</Text>
+                    <Text style={[s.pill, { color: now > 0 ? BS.ok : BS.text2, borderColor: (now > 0 ? BS.ok : BS.text2) + '88' }]}>{now} online</Text>
                   </View>
-                  <Text style={s.sub}>za 5 min: {d.last5 || 0} · za 30 min: {d.last30 || 0}</Text>
-                  {vis.length === 0 ? <Text style={s.none}>Nikdo není na stránce.</Text> : vis.slice(0, 12).map((v, i) => (
+                  <Text style={s.sub}>za 5 min: {l5} · za 30 min: {l30}</Text>
+                  {vis.length === 0 ? <Text style={s.none}>{adsOnly ? 'Nikdo z reklamy.' : 'Nikdo není na stránce.'}</Text> : vis.slice(0, 12).map((v, i) => (
                     <View key={v.id + i} style={s.vis}>
                       <View style={[s.dot, { backgroundColor: v.active ? BS.ok : BS.text3, marginTop: 5 }]} />
                       <View style={{ flex: 1 }}>
-                        <Text style={s.visT}>{v.id} · {v.device}{v.source ? ' · ' + v.source : ''}</Text>
+                        <Text style={s.visT}>{v.id} · {v.device}{v.source ? ' · ' + v.source : ''}{!adsOnly && isAd(v) ? ' 📣' : ''}</Text>
                         <Text style={s.visS}>{v.status}{v.scroll ? ' · scroll ' + v.scroll + ' %' : ''}</Text>
                         <Text style={s.visM}>na stránce {dur(v.secs || 0)} · {v.active ? 'aktivní' : ago(v.last_ago || 0)}{v.last_action ? ' · ' + v.last_action : ''}</Text>
                       </View>
@@ -138,6 +153,11 @@ const s = StyleSheet.create({
   bigN2: { color: BS.text, fontSize: 28, fontWeight: '800', marginTop: 6 },
   dotRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
+  toggle: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  tg: { flex: 1, borderWidth: 1, borderColor: BS.border2, borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
+  tgOn: { backgroundColor: BS.accent, borderColor: BS.accent },
+  tgT: { color: BS.text2, fontWeight: '700', fontSize: 13 },
+  tgTOn: { color: '#fff' },
   upd: { color: BS.text3, fontSize: 11.5, marginTop: 8, marginBottom: 6 },
   err: { color: BS.err, marginTop: 6, fontSize: 13 },
   empty: { color: BS.text3, fontSize: 13, paddingVertical: 8 },
