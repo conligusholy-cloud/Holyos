@@ -309,6 +309,13 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   const realCandidates = candidates.filter((a) => !isTinyImage(a));
   if (realCandidates.length > 0) candidates = realCandidates;
 
+  // Účtenka / potvrzení o platbě (Stripe „Receipt-…pdf") není samostatný doklad — patří k faktuře ze stejného e-mailu.
+  // Má-li e-mail i fakturu, účtenka se nezpracovává (zůstane uložená jako příloha e-mailu, ke kterému je faktura navázaná).
+  const isReceiptDoc = (a) => /receipt|účtenk|uctenk|potvrzen[ií] (o )?(platb|přijetí|prijeti)/i.test(a.filename || '');
+  const nonReceipts = candidates.filter((a) => !isReceiptDoc(a));
+  const skippedReceipts = nonReceipts.length > 0 ? candidates.filter(isReceiptDoc) : [];
+  if (skippedReceipts.length > 0) candidates = nonReceipts;
+
   const results = [];
   const total = candidates.length;
   for (let i = 0; i < candidates.length; i++) {
@@ -401,9 +408,10 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   const avgConfidence = results.reduce((s, r) => s + (r.composite_confidence || 0), 0) / results.length;
 
   if (createdInvoices.length > 0) {
-    const note = skippedDuplicates.length > 0
-      ? `Vytvořeno ${createdInvoices.length} faktur, přeskočeno ${skippedDuplicates.length} duplikátů.`
-      : null;
+    const noteParts = [];
+    if (skippedDuplicates.length > 0) noteParts.push(`Vytvořeno ${createdInvoices.length} faktur, přeskočeno ${skippedDuplicates.length} duplikátů.`);
+    if (skippedReceipts.length > 0) noteParts.push(`Účtenka (${skippedReceipts.map((a) => a.filename).join(', ')}) je přiložena k faktuře, samostatný doklad nevznikl.`);
+    const note = noteParts.length ? noteParts.join(' ') : null;
     await prisma.emailIngest.update({
       where: { id: ingest.id },
       data: { status: 'linked_to_invoice', confidence: avgConfidence, note },
