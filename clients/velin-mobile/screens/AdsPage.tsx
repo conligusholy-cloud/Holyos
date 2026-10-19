@@ -181,6 +181,7 @@ export default function AdsPage() {
                   <View style={s.metrics}>
                     <View style={s.m}><Text style={s.mN}>{nf(Math.round(adsData.totals.spend))} Kč</Text><Text style={s.mL}>útrata</Text></View>
                     <View style={s.m}><Text style={s.mN}>{nf(adsData.totals.clicks)}</Text><Text style={s.mL}>kliků na web</Text></View>
+                    <View style={s.m}><Text style={s.mN}>{nf(adsData.totals.unique_clicks)}</Text><Text style={s.mL}>unikátních kliků</Text></View>
                     <View style={s.m}><Text style={s.mN}>{adsData.totals.clicks ? nf(Math.round((adsData.totals.spend / adsData.totals.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
                   </View>
                   <View style={[s.metrics, { marginTop: 12 }]}>
@@ -191,6 +192,9 @@ export default function AdsPage() {
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
                   {adsData.meetings != null ? <Text style={s.sub}>Schůzky: {adsData.meetings} celkem · z reklam {adsData.meetings_from_ads != null ? adsData.meetings_from_ads : '—'} · bez značky reklamy / jiný zdroj {adsData.meetings_other != null ? adsData.meetings_other : '—'}. Cena za schůzku = útrata ÷ schůzky přiřazené reklamám (když žádná, ÷ všechny).</Text> : null}
+                  {Array.isArray(adsData.meetings_unmatched) && adsData.meetings_unmatched.length > 0 ? (
+                    <Text style={s.sub}>Nepřiřazeno: {adsData.meetings_unmatched.map((u: any) => u.bez_znacek ? 'bez značek (přímý vstup)' : [u.utm_source, u.utm_campaign, u.utm_content, u.ad_id, u.fbclid ? 'fbclid' : ''].filter(Boolean).join(' / ') || 'prázdné').join(' | ')}</Text>
+                  ) : null}
                 </View>
                 {adsData.ads.map((a: any) => (
                   <View key={a.id} style={[s.card, { marginTop: 8 }]}>
@@ -203,6 +207,7 @@ export default function AdsPage() {
                       <View style={s.m}><Text style={s.mN}>{nf(Math.round(a.spend))}</Text><Text style={s.mL}>útrata Kč</Text></View>
                       <View style={s.m}><Text style={s.mN}>{nf(a.impressions)}</Text><Text style={s.mL}>zobrazení</Text></View>
                       <View style={s.m}><Text style={s.mN}>{nf(a.clicks)}</Text><Text style={s.mL}>kliků</Text></View>
+                      <View style={s.m}><Text style={s.mN}>{nf(a.unique_clicks)}</Text><Text style={s.mL}>unikátních kliků</Text></View>
                       <View style={s.m}><Text style={s.mN}>{a.ctr != null ? String(Math.round(a.ctr * 100) / 100).replace('.', ',') + ' %' : '—'}</Text><Text style={s.mL}>CTR</Text></View>
                     </View>
                     {a.meetings != null ? (
