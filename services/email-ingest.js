@@ -14,6 +14,7 @@ const { sendMail: smtpSendMail } = require('./email');
 const msGraph = require('./ms-graph-client');
 const msOAuth2 = require('./ms-oauth2');
 const { logAudit } = require('./audit');
+const linkFetch = require('./invoice-link-fetch');
 
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
 const INVOICE_INGEST_SUBDIR = 'invoices-incoming';
@@ -64,15 +65,16 @@ function extractInvoiceLinksFromBody(html, text) {
   const haystack = (html || '') + '\n' + (text || '');
   if (!haystack.trim()) return [];
   const urlRegex = /https?:\/\/[^\s"'<>)]+/gi;
-  const urls = [...haystack.matchAll(urlRegex)].map(m => m[0].replace(/[.,;:!?)\]>]+$/, ''));
+  const urls = [...haystack.matchAll(urlRegex)].map(m => linkFetch.normUrl(m[0]));
   const seen = new Map();
   for (const u of urls) {
     let score = 0;
     if (/\.pdf(\?|$|#)/i.test(u)) score += 10;
     if (/invoice|faktur|attachment|download|stahnout|st%c3%a1hnout/i.test(u)) score += 5;
+    if (/stripe\.com\/(i|invoice|receipts?)\//i.test(u)) score += 8; // Stripe faktura/účtenka (Anthropic, OpenAI…)
     if (score > 0 && !seen.has(u)) seen.set(u, { url: u, score });
   }
-  return [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+  return linkFetch.preferInvoiceLinks([...seen.values()].sort((a, b) => b.score - a.score)).slice(0, 5);
 }
 
 /**
@@ -82,35 +84,15 @@ function extractInvoiceLinksFromBody(html, text) {
  */
 async function downloadInvoiceFromLink(url, ingestId, targetDir) {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: controller.signal,
-      headers: { 'Accept': 'application/pdf,image/*,*/*' },
-    }).finally(() => clearTimeout(timeout));
-
-    if (!res.ok) {
-      console.warn(`[email-ingest] Link download ${url} → HTTP ${res.status}`);
+    // Přímý PDF/obrázek, nebo HTML stránka (Stripe apod.), ze které se PDF dohledá
+    const doc = await linkFetch.fetchInvoiceDocument(url);
+    if (!doc) {
+      console.warn(`[email-ingest] Link download ${url} → žádný dokument k načtení`);
       return null;
     }
-    const contentType = (res.headers.get('content-type') || '').toLowerCase();
-    const ab = await res.arrayBuffer();
-    if (ab.byteLength > 20 * 1024 * 1024) {
-      console.warn(`[email-ingest] Link download ${url} → příliš velké (${ab.byteLength} B)`);
-      return null;
-    }
-    const buffer = Buffer.from(ab);
-
-    const cd = res.headers.get('content-disposition') || '';
-    const cdMatch = cd.match(/filename[^=]*=([^;]+)/i);
-    const urlPath = url.split('?')[0].split('#')[0];
-    const urlName = urlPath.split('/').pop() || 'invoice';
-    let filename = (cdMatch ? cdMatch[1].replace(/['"]/g, '').trim() : urlName) || 'invoice';
-    if (!/\.(pdf|png|jpe?g|webp)$/i.test(filename)) {
-      if (contentType.includes('application/pdf')) filename += '.pdf';
-      else if (contentType.startsWith('image/')) filename += '.' + contentType.split('/')[1].split(';')[0];
-    }
+    const buffer = doc.buffer;
+    const contentType = doc.contentType;
+    const filename = doc.filename;
     if (!isInvoiceCandidate(filename, contentType)) {
       console.warn(`[email-ingest] Link ${url} → ${contentType}, není faktura-kandidát, přeskakuji`);
       return null;
@@ -244,7 +226,9 @@ async function processMessage(userPrincipalName, msg) {
       const file = await msGraph.downloadAttachment(userPrincipalName, msg.id, att.id);
       if (!file) continue;
 
-      const candidate = isInvoiceCandidate(file.name, file.contentType);
+      // Drobné obrázky (loga, tracking pixely, podpisy do ~10 kB) nejsou faktury — jen by zahltily OCR a shodily jistotu
+      const tinyImage = /^image\//i.test(file.contentType || '') && file.buffer.length < 10 * 1024;
+      const candidate = isInvoiceCandidate(file.name, file.contentType) && !tinyImage;
       const filename = `${ingest.id}-${Date.now()}-${sanitizeFilename(file.name || 'attachment')}`;
       const filePath = path.join(targetDir, filename);
       fs.writeFileSync(filePath, file.buffer);

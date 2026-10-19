@@ -1406,41 +1406,31 @@ router.post('/email/ingests/:id/reprocess', async (req, res, next) => {
     const haystack = (ingest.body_html || '') + '\n' + (ingest.body_text || '');
     const urlRegex = /https?:\/\/[^\s"'<>)]+/gi;
     const seen = new Map();
+    const linkFetch = require('../services/invoice-link-fetch');
     for (const m of haystack.matchAll(urlRegex)) {
-      const u = m[0].replace(/[.,;:!?)\]>]+$/, '');
+      const u = linkFetch.normUrl(m[0]);
       // Vyloučit běžné non-invoice URL (analytics, social, unsubscribe)
       if (/google-analytics|googletagmanager|facebook\.com|twitter\.com|linkedin\.com|youtube\.com|unsubscribe|preferences|privacy-policy/i.test(u)) continue;
       let score = 0;
       if (/\.pdf(\?|$|#)/i.test(u)) score += 10;
       if (/invoice|faktur|attachment|download|stahnout|view.{0,5}doc|getfile|nayax|portal/i.test(u)) score += 5;
+      if (/stripe\.com\/(i|invoice|receipts?)\//i.test(u)) score += 8; // Stripe faktura/účtenka (Anthropic, OpenAI…)
       // I score=0 přijmeme — content-type rozhodne při fetchi
       if (!seen.has(u)) seen.set(u, { url: u, score });
     }
-    const links = [...seen.values()].sort((a, b) => b.score - a.score).slice(0, 10);
+    const links = linkFetch.preferInvoiceLinks([...seen.values()].sort((a, b) => b.score - a.score)).slice(0, 10);
     const existingUrls = new Set(ingest.attachments.filter(a => a.source_url).map(a => a.source_url));
     let newlyDownloaded = 0;
 
     for (const { url } of links) {
       if (existingUrls.has(url)) continue;
       try {
-        const ctrl = new AbortController();
-        const tmo = setTimeout(() => ctrl.abort(), 30000);
-        const r = await fetch(url, { redirect: 'follow', signal: ctrl.signal, headers: { 'Accept': 'application/pdf,image/*,*/*' } }).finally(() => clearTimeout(tmo));
-        if (!r.ok) { console.warn(`[reprocess link] ${url} → HTTP ${r.status}`); continue; }
-        const ct = (r.headers.get('content-type') || '').toLowerCase();
-        if (!ct.includes('pdf') && !ct.startsWith('image/')) {
-          console.warn(`[reprocess link] ${url} → ${ct}, není PDF/obrázek`); continue;
-        }
-        const ab = await r.arrayBuffer();
-        if (ab.byteLength > 20 * 1024 * 1024) { console.warn(`[reprocess link] ${url} → příliš velké`); continue; }
-        const buffer = Buffer.from(ab);
-        const cd = r.headers.get('content-disposition') || '';
-        const cdMatch = cd.match(/filename[^=]*=([^;]+)/i);
-        const urlName = url.split('?')[0].split('/').pop() || 'invoice';
-        let fname = (cdMatch ? cdMatch[1].replace(/['"]/g, '').trim() : urlName) || 'invoice';
-        if (!/\.(pdf|png|jpe?g|webp)$/i.test(fname)) {
-          fname += ct.includes('pdf') ? '.pdf' : '.' + ct.split('/')[1].split(';')[0];
-        }
+        // PDF/obrázek přímo, nebo HTML stránka (Stripe apod.), ze které se PDF dohledá
+        const doc = await linkFetch.fetchInvoiceDocument(url);
+        if (!doc) { console.warn(`[reprocess link] ${url} → žádný dokument (PDF/obrázek) nenalezen`); continue; }
+        const buffer = doc.buffer;
+        const ct = doc.contentType;
+        const fname = doc.filename;
         const safeName = `${id}-${Date.now()}-${fname.replace(/[^\w\-\.\s]/g, '_').slice(0, 120)}`;
         const filePath = pathLink.join(targetDir, safeName);
         fsLink.writeFileSync(filePath, buffer);
