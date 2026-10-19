@@ -257,6 +257,43 @@ async function runPipeline(filePath, ctx = {}) {
     }
   }
 
+  // Protistrana bez IČO (typicky zahraniční dodavatel — Anthropic, OpenAI, Stripe…): najít ve Společnostech podle DIČ / názvu,
+  // jinak ji tam rovnou založit, ať faktura nevisí na „Neznámý dodavatel (OCR fallback)".
+  if (!partnerIco) {
+    try {
+      const party = (direction === 'ap' ? header?.supplier : header?.customer) || {};
+      const pName = String(party.name || '').trim();
+      if (pName.length >= 2) {
+        const pDic = String(party.dic || '').replace(/\s+/g, '').toUpperCase() || null;
+        let existing = null;
+        if (pDic) existing = await prisma.company.findFirst({ where: { dic: pDic } });
+        if (!existing) existing = await prisma.company.findFirst({ where: { name: { equals: pName, mode: 'insensitive' } } });
+        if (existing) {
+          matchedCompanyId = existing.id;
+        } else {
+          const cc = String(party.country || (pDic && /^[A-Z]{2}/.test(pDic) ? pDic.slice(0, 2) : '') || '').toUpperCase().slice(0, 2);
+          const created = await prisma.company.create({
+            data: {
+              name: pName.slice(0, 255),
+              dic: pDic ? pDic.slice(0, 20) : null,
+              address: party.address ? String(party.address).slice(0, 255) : null,
+              city: party.city ? String(party.city).slice(0, 100) : null,
+              zip: party.zip ? String(party.zip).slice(0, 10) : null,
+              country: /^[A-Z]{2}$/.test(cc) ? cc : 'CZ',
+              type: direction === 'ap' ? 'supplier' : 'customer',
+              notes: 'Auto-založeno z OCR faktury (protistrana bez IČO).',
+              active: true,
+            },
+          });
+          matchedCompanyId = created.id;
+          warnings.push({ pass: 'company', message: `Nová společnost založena z faktury bez IČO: ${pName} (id=${created.id})` });
+        }
+      }
+    } catch (err) {
+      warnings.push({ pass: 'company', message: 'Založení společnosti bez IČO selhalo: ' + err.message });
+    }
+  }
+
   let dupResult = { isDuplicate: false, confidence: 1, matches: [] };
   if (matchedCompanyId && header.date_issued && header.total) {
     dupResult = await checkDuplicate({

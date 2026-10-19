@@ -50,7 +50,8 @@ Vrať přesně tuto strukturu (všechna pole, chybějící = null):
     "dic": "DIČ s prefixem země, např. CZ12345678",
     "address": "ulice + č.p.",
     "city": "město",
-    "zip": "PSČ"
+    "zip": "PSČ",
+    "country": "dvoupísmenný kód země dodavatele (CZ, SK, IE, DE, US…), je-li z dokladu poznat"
   },
   "customer": {
     "name": "Obchodní jméno odběratele",
