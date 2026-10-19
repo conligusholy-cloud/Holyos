@@ -303,6 +303,12 @@ async function processMessage(userPrincipalName, msg) {
 async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   const { notifyContext = null } = opts;
 
+  // Drobné obrázky (loga, ikony, tracking pixely do ~10 kB) nejsou faktury — vyřadit, ať nesráží průměrnou jistotu
+  // a nepřebíjí skutečné PDF (starší ingesty je mají uložené jako kandidáty). Když by nezbylo nic, ponecháme původní seznam.
+  const isTinyImage = (a) => /^image\//i.test(a.content_type || '') && (a.size_bytes || 0) < 10 * 1024;
+  const realCandidates = candidates.filter((a) => !isTinyImage(a));
+  if (realCandidates.length > 0) candidates = realCandidates;
+
   const results = [];
   const total = candidates.length;
   for (let i = 0; i < candidates.length; i++) {
@@ -416,7 +422,7 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   // Direction-suspicious větev — OCR si není jistá směrem (AP/AR), čekáme na manual review.
   // Toto je MEZIstav: faktura není vytvořená, ale e-mail není ani "nečitelný" — Tomáš
   // ho v UI Aktivní tabu otevře, schválí směr a založí fakturu ručně.
-  if (awaitingReviewResults.length > 0 && lowConfidenceResults.length === 0) {
+  if (awaitingReviewResults.length > 0) {
     const reasons = awaitingReviewResults
       .map(r => r.direction_reason || 'OCR si není jistá směrem')
       .filter((v, i, a) => a.indexOf(v) === i)
