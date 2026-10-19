@@ -395,10 +395,13 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       awaitingReviewResults.push(result);
       continue;
     }
+    // Dodavatel, který se platí VŽDY kartou (Autodesk, Anthropic…): seznam v nastavení + naučené z dřívějších faktur (karta u téže firmy).
+    const cardSupplier = await isCardSupplier(result);
+    if (cardSupplier) result.header.payment_method = 'card';
     // Úhrada převodem musí mít číslo účtu (z dokladu, nebo z karty společnosti). Bez něj by nešlo zaplatit → ruční doplnění.
     {
       const payM = (hdr.payment_method || 'bank_transfer');
-      const paidSig = hdr.paid_by_card === true || payM === 'card' || payM === 'cash' || skippedReceipts.length > 0;
+      const paidSig = cardSupplier || hdr.paid_by_card === true || payM === 'card' || payM === 'cash' || skippedReceipts.length > 0;
       if (result.direction === 'ap' && !paidSig && payM === 'bank_transfer' && !hdr.partner_bank_account && !hdr.partner_iban) {
         let known = null;
         if (result.matched_company_id) { try { const c = await prisma.company.findUnique({ where: { id: result.matched_company_id }, select: { bank_account: true } }); known = c && c.bank_account; } catch (e) { /* bez účtu z karty */ } }
@@ -428,7 +431,7 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       // Důkaz o zaplacení kartou: účtenka (Receipt) ve stejném e-mailu, nebo předmět „receipt/účtenka/platba přijata"
       const subj = String(ingest.subject || '');
       const subjectPaid = /receipt|účtenk|uctenk|payment (received|successful)|platba (přijata|proběhla)/i.test(subj) && !/unsuccessful|failed|declined|nepodař|selhal|zamítnut/i.test(subj);
-      const invoice = await createInvoiceFromResult(result, ingest, { paidEvidence: skippedReceipts.length > 0 || subjectPaid });
+      const invoice = await createInvoiceFromResult(result, ingest, { paidEvidence: skippedReceipts.length > 0 || subjectPaid || cardSupplier });
       createdInvoices.push(invoice);
       await prisma.ocrExtraction.updateMany({
         where: {
@@ -560,6 +563,9 @@ async function createInvoiceFromResult(result, ingest, opts = {}) {
   const needsReview = result.recommendation === 'needs_review';
   // Přijatá faktura zaplacená kartou (Stripe, Anthropic, OpenAI…) → rovnou „zaplaceno", ať se nedostane do plateb a upomínek.
   const paidByCard = direction === 'ap' && (h.paid_by_card === true || h.payment_method === 'card' || !!opts.paidEvidence);
+  // Hotovost = zaplaceno na místě (pokladní doklad, paragon) → také rovnou „zaplaceno".
+  const paidByCash = direction === 'ap' && !paidByCard && h.payment_method === 'cash';
+  const paidNow = paidByCard || paidByCash;
   const totalNum = Number(h.total || 0);
 
   const year = new Date().getFullYear();
@@ -609,25 +615,25 @@ async function createInvoiceFromResult(result, ingest, opts = {}) {
       date_issued: h.date_issued ? new Date(h.date_issued) : new Date(),
       date_taxable: h.date_taxable ? new Date(h.date_taxable) : null,
       date_received: ingest.received_at || new Date(),
-      date_due: paidByCard
+      date_due: paidNow
         ? new Date(h.date_paid || h.date_issued || Date.now())
         : (h.date_due ? new Date(h.date_due) : new Date(Date.now() + 14 * 86400 * 1000)),
       payment_method: paidByCard ? 'card' : (h.payment_method || 'bank_transfer'),
-      paid_amount: paidByCard ? totalNum.toFixed(2) : 0,
+      paid_amount: paidNow ? totalNum.toFixed(2) : 0,
       variable_symbol: h.variable_symbol || null,
       constant_symbol: h.constant_symbol || null,
       specific_symbol: h.specific_symbol || null,
       partner_bank_account: h.partner_bank_account || null,
       partner_iban: h.partner_iban || null,
       partner_bic: h.partner_bic || null,
-      status: paidByCard ? 'paid' : 'draft',
+      status: paidNow ? 'paid' : 'draft',
       source: 'email',
       email_ingest_id: ingest.id,
       ocr_confidence: result.composite_confidence,
       ocr_passes_done: result.passes_count,
       needs_human_review: needsReview,
       source_file_path: result.attachment?.file_path || null,
-      note: [paidByCard ? 'Zaplaceno kartou (rozpoznáno z dokladu / účtenky) — automaticky označeno jako zaplacené.' : null, needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null].filter(Boolean).join(' ') || null,
+      note: [paidByCard ? 'Zaplaceno kartou (rozpoznáno z dokladu / účtenky) — automaticky označeno jako zaplacené.' : (paidByCash ? 'Zaplaceno hotově — automaticky označeno jako zaplacené.' : null), needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null].filter(Boolean).join(' ') || null,
       items: { create: items },
     },
   });
@@ -642,6 +648,25 @@ async function createInvoiceFromResult(result, ingest, opts = {}) {
   } catch (e) { console.warn('[email-ingest] doplnění účtu do společnosti:', e.message); }
 
   return invoice;
+}
+
+// Je dodavatel „vždy kartou"? 1) názvový seznam v nastavení accounting.card_suppliers (podřetězce, bez diakritiky/velikosti),
+// 2) naučeno: u téže firmy už existuje přijatá faktura s úhradou kartou.
+const DEFAULT_CARD_SUPPLIERS = ['autodesk', 'anthropic'];
+async function isCardSupplier(result) {
+  try {
+    if (result.direction !== 'ap') return false;
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const name = norm(result.header && result.header.supplier && result.header.supplier.name);
+    let list = DEFAULT_CARD_SUPPLIERS;
+    try { const s = await require('./settings').getSetting('accounting.card_suppliers', { type: 'json', defaultValue: null }); if (Array.isArray(s) && s.length) list = s; } catch (e) { /* výchozí seznam */ }
+    if (name && list.some((k) => { const n = norm(k); return n && name.includes(n); })) return true;
+    if (result.matched_company_id) {
+      const prev = await prisma.invoice.findFirst({ where: { company_id: result.matched_company_id, direction: 'ap', payment_method: 'card' }, select: { id: true } });
+      if (prev) return true;
+    }
+  } catch (e) { console.warn('[email-ingest] isCardSupplier:', e.message); }
+  return false;
 }
 
 // Najde už existující fakturu, která je stejným dokladem jako právě přečtený výsledek OCR.
