@@ -83,6 +83,10 @@ Vrať přesně tuto strukturu (všechna pole, chybějící = null):
 Pokyny:
 - Pokud je typ dokumentu "faktura daňový doklad", type = "received" (přijatá) pokud my (HolyOS, IČO 25883259 nebo podobné) jsme odběratel, jinak "issued".
 - POZOR: Pro "received" je "supplier" = kdo nám fakturu vystavil.
+- DODAVATEL (supplier) = právní subjekt v bloku označeném „Dodavatel", „Prodávající", „Vystavil", „Supplier", „Seller", „Od" — má IČO/DIČ a u něj bývá „Bankovní spojení / Číslo účtu". NIKDY nepoužij jako jméno dodavatele nadpis nebo popisek jako „Koncový zákazník", „Zákazník", „Odběratel", „Příjemce", „Bill to", „Ship to" — to je strana, které je faktura určena, ne dodavatel.
+- Logo nebo obchodní značka v záhlaví (např. DATART, Alza, Tesco) NEMUSÍ být právním dodavatelem. Jméno dodavatele vždy vezmi z bloku „Dodavatel" s IČO (např. „HP TRONIC Zlín, spol. s r.o."), ne z loga.
+- Prázdný rámeček „Koncový zákazník" (bez jména) znamená, že odběratel není uveden → customer.name = null. Nesmíš ho zaměnit za dodavatele.
+- partner_bank_account = „Číslo účtu" z bloku dodavatele ve tvaru číslo/kód banky (např. 4582802/0800), partner_iban = IBAN téhož dodavatele. Pokud je uveden, VŽDY je vyplň.
 - Pokud vidíš "Dobropis", použij credit_note_*.
 - Pokud vidíš "Zálohová faktura" nebo "Proforma", použij proforma_*.
 - Čísla vrat jako number, ne jako string. Formát "1 234,56" = 1234.56.

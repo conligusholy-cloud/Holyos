@@ -168,6 +168,11 @@ async function runPipeline(filePath, ctx = {}) {
 
   const header = headerResult.data;
   const items = itemsResult.data?.items || [];
+  // Pojistka: popisek role („Koncový zákazník", „Odběratel"…) není název dodavatele — zahodit, jméno doplní ARES podle IČO.
+  const ROLE_LABEL = /^\s*(koncov[ýy]\s+z[áa]kazn[ií]k|z[áa]kazn[ií]k|odb[ěe]ratel|p[řr][ií]jemce|customer|bill\s*to|ship\s*to|dodavatel|supplier)\s*:?\s*$/i;
+  if (header && header.supplier && ROLE_LABEL.test(String(header.supplier.name || ''))) {
+    header.supplier.name = null;
+  }
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
   let aresResult = null, aresCross = null;
@@ -235,6 +240,11 @@ async function runPipeline(filePath, ctx = {}) {
     const existing = await prisma.company.findFirst({ where: { ico: partnerIco } });
     if (existing) {
       matchedCompanyId = existing.id;
+      // Samoopravení: firma dříve založená se špatným názvem („Koncový zákazník" apod.) dostane správné jméno z ARES / dokladu
+      if (ROLE_LABEL.test(String(existing.name || '')) && canonicalName && !ROLE_LABEL.test(canonicalName)) {
+        await prisma.company.update({ where: { id: existing.id }, data: { name: String(canonicalName).slice(0, 255) } }).catch(() => {});
+        warnings.push({ pass: 'company', message: `Název společnosti opraven z „${existing.name}" na „${canonicalName}"` });
+      }
     } else if (canonicalName) {
       // Auto-create Company z ARES dat (user může později upravit)
       const newCompany = await prisma.company.create({
