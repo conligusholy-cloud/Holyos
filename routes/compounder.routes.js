@@ -1793,7 +1793,7 @@ router.post('/leads/:id/send-schuzka-sms', requireAuth, async (req, res) => {
     const sentAt = new Date();
     await prisma.compounderLead.update({
       where: { id },
-      data: { schuzka_sms_sent_at: sentAt, schuzka_sms_id: String(sid || ''), schuzka_sms_status: 'odesláno', schuzka_sms_channel: 'gateway', outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
+      data: { schuzka_sms_sent_at: sentAt, schuzka_sms_id: String(sid || ''), schuzka_sms_status: 'odesláno', schuzka_sms_channel: 'gateway', outreach_variant: 'schuzka', marketing_status: 'osloven_schuzka' },
     }).catch(() => {});
     res.json({ ok: true, sid, link, sentAt, status: 'odesláno' });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
@@ -1842,7 +1842,7 @@ router.post('/leads/:id/send-schuzka-email', requireAuth, async (req, res) => {
     const sentAt = new Date();
     await prisma.compounderLead.update({
       where: { id },
-      data: { schuzka_email_sent_at: sentAt, schuzka_email_status: 'odesláno', outreach_variant: 'schuzka', status: 'odeslana_schuzka' },
+      data: { schuzka_email_sent_at: sentAt, schuzka_email_status: 'odesláno', outreach_variant: 'schuzka', marketing_status: 'osloven_schuzka' },
     }).catch(() => {});
     res.json({ ok: true, link: m.link, subject: m.subject, sentAt, via: r.via || null, from });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
@@ -1874,7 +1874,7 @@ router.post('/leads/:id/send-ai-specialist-email', requireAuth, async (req, res)
     const { subject, body, linkLabel: spLabel } = await specialistEmail(lead && lead.name, link);
     await sendMail({ to: lead.email, subject, body, from, fromName: '💧 PRÁDLOMATY 💧', link, linkLabel: spLabel, brand: 'pradlomaty', trackingPixel: mailOpenPixel(lead.id, 'specialist'), leadId: lead.id, campaignId: 'funnel-specialist' });
     const sentAt = new Date();
-    await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', status: 'odeslan_specialista' } }).catch(() => {});
+    await prisma.compounderLead.update({ where: { id }, data: { ai_specialist_email_sent_at: sentAt, ai_specialist_email_status: 'odesláno', marketing_status: 'osloven_specialista' } }).catch(() => {});
     res.json({ ok: true, sentAt, link });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
@@ -1890,7 +1890,7 @@ router.post('/leads/:id/ai-specialist-mark-phone-sent', requireAuth, async (req,
         ai_specialist_sms_sent_at: new Date(),
         ai_specialist_sms_channel: 'phone',
         ai_specialist_sms_status: 'odesláno',
-        status: 'odeslan_specialista',
+        marketing_status: 'osloven_specialista', // odeslání je jen systémová evidence – CRM stav (status) mění výhradně obchodník
         show_ai_specialist: true,
       },
     }).catch(() => {});
