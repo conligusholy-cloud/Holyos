@@ -185,11 +185,11 @@ export default function AdsPage() {
                     <View style={s.m}><Text style={s.mN}>{adsData.totals.clicks ? nf(Math.round((adsData.totals.spend / adsData.totals.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
                   </View>
                   <View style={[s.metrics, { marginTop: 12 }]}>
-                    <View style={s.m}><Text style={s.mN}>{(() => { const n = adsData.ad_visitors != null ? adsData.ad_visitors : (hist && hist.uniques); return n ? nf(Math.round(adsData.totals.spend / n)) + ' Kč' : '—'; })()}</Text><Text style={s.mL}>cena / návštěvník z reklamy</Text></View>
+                    <View style={s.m}><Text style={s.mN} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>{(() => { const n = adsData.ad_visitors != null ? adsData.ad_visitors : (hist && hist.uniques); return n ? nf(Math.round(adsData.totals.spend / n)) + ' Kč' : '—'; })()}</Text><Text style={s.mL}>cena / návštěvník z reklamy</Text></View>
                     {adsData.meetings != null ? <View style={s.m}><Text style={s.mN}>{nf(adsData.meetings)}</Text><Text style={s.mL}>schůzek</Text></View> : null}
                     {adsData.meetings_duplicates ? <View style={s.m}><Text style={[s.mN, { color: BS.warn }]}>{nf(adsData.meetings_duplicates)}</Text><Text style={s.mL}>duplicitních</Text></View> : null}
                     {adsData.meetings_canceled != null ? <View style={s.m}><Text style={[s.mN, { color: adsData.meetings_canceled > 0 ? BS.warn : BS.accent2 }]}>{nf(adsData.meetings_canceled)}</Text><Text style={s.mL}>zrušeno</Text></View> : null}
-                    {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
+                    {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
                   {adsData.meetings != null ? <Text style={s.sub}>Schůzky: {adsData.meetings} celkem · z reklam {adsData.meetings_from_ads != null ? adsData.meetings_from_ads : '—'} · bez značky reklamy / jiný zdroj {adsData.meetings_other != null ? adsData.meetings_other : '—'}. Cena za schůzku = útrata ÷ schůzky přiřazené reklamám (když žádná, ÷ všechny).</Text> : null}
                   {Array.isArray(adsData.meetings_unmatched) && adsData.meetings_unmatched.length > 0 ? (
@@ -213,7 +213,7 @@ export default function AdsPage() {
                     {a.meetings != null ? (
                       <View style={[s.metrics, { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: BS.border }]}>
                         <View style={s.m}><Text style={s.mN}>{nf(a.meetings)}</Text><Text style={s.mL}>schůzek z této reklamy</Text></View>
-                        <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{a.cost_per_meeting != null ? nf(Math.round(a.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View>
+                        <View style={s.m}><Text style={[s.mN, { color: BS.ok }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>{a.cost_per_meeting != null ? nf(Math.round(a.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View>
                         <View style={s.m}><Text style={s.mN}>{a.clicks ? nf(Math.round((a.spend / a.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
                       </View>
                     ) : null}

@@ -595,7 +595,7 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
   if (!secret || !m) return res.status(401).json({ error: 'Neautorizováno' });
   try { jwt.verify(m[1], secret, { audience: 'bs2-api', issuer: 'holyos' }); } catch (e) { return res.status(401).json({ error: 'Neplatný token' }); }
   const bp = String(req.query.path || '').slice(0, 120); if (!bp) return res.json({ now: 0, visitors: [], feed: [] });
-  const ev = (await q("SELECT sid, kind, label, meta, t_ms, created_at FROM page_events WHERE path = $1 AND created_at > now() - interval '60 minutes' ORDER BY created_at", [bp])).rows;
+  const ev = (await q("SELECT sid, kind, label, meta, t_ms, created_at FROM page_events WHERE (path = $1 OR ($1 <> '/' AND path LIKE $1 || '/%')) AND created_at > now() - interval '60 minutes' ORDER BY created_at", [bp])).rows;
   const now = Date.now(); const by = {};
   ev.forEach((r) => { (by[r.sid] = by[r.sid] || []).push(r); });
   const visitors = [], feed = []; let last5 = 0, last30 = 0;
