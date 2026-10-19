@@ -607,7 +607,7 @@ app.get('/api/holyos/ads-live', wrap(async (req, res) => {
     acts.slice(-12).forEach((a) => feed.push({ id, at: a.at, text: a.text }));
     if (ago <= 300 && !hidden) last5++; if (ago <= 1800) last30++;
     const camp = (() => { try { const u = new URLSearchParams(String(vm.q || '').replace(/^\?/, '')); const s = u.get('utm_source'), c = u.get('utm_campaign'); if (s || c) return (s || '–') + (c ? ' / ' + c : ''); if (u.get('fbclid')) return 'Facebook'; if (u.get('gclid')) return 'Google'; } catch (e) { /* bez zdroje */ } const rf = String(vm.ref || '').replace(/^https?:\/\//, '').split('/')[0]; return rf || 'přímo'; })();
-    recentAll.push({ id, source: camp, last_ago: Math.round(ago), hidden, active: !hidden && ago <= 60 }); // všichni z posledních 60 min (i ti, kteří už odešli) – pro počty „za 5 / 30 min" v aplikaci
+    recentAll.push({ id, source: camp, last_at: new Date(lastR.created_at).getTime(), last_ago: Math.round(ago), hidden, active: !hidden && ago <= 60 }); // všichni z posledních 60 min (i ti, kteří už odešli) – pro počty „za 5 / 30 min" v aplikaci
     if (ago > 60 && !(ago <= 300 && !hidden)) return;
     const pings = list.filter((r) => r.kind === 'ping'); const lp = pings[pings.length - 1]; const secEv = list.filter((r) => r.kind === 'section'); const section = (lp && lp.label) || (secEv.length ? secEv[secEv.length - 1].label : '');
     const scroll = Math.max(0, ...list.filter((r) => r.kind === 'scroll').map((r) => Number(r.label) || 0), lp && lp.meta ? Number(lp.meta.s) || 0 : 0);
