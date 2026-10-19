@@ -122,7 +122,7 @@ function infoPage() {
         <p class="bx-per">měsíčně v ČR</p>
         <p class="bx-note">Podle lokality, spádové oblasti a vytížení.</p>
       </div>
-      <div class="bx-kpi"><span class="n"><svg viewBox="0 0 24 24"><path d="M14 7l3 3-9 9H5v-3z"/><path d="M13 4l3 3"/></svg></span><div><h3>Servis a provoz zajistíme kompletně</h3><p>Instalaci, zaškolení, dálkový dohled, údržbu i infolinku — všechno bereme na sebe. Vy se staráte jen o svůj příjem.</p></div></div>
+      <div class="bx-kpi"><span class="n"><svg viewBox="0 0 24 24"><path d="M14 7l3 3-9 9H5v-3z"/><path d="M13 4l3 3"/></svg></span><div><h3>Instalaci, servis i provoz umíme kompletně zajistit</h3><p>Instalaci, zaškolení, dálkový dohled, údržbu i infolinku — všechno bereme na sebe. Vy se staráte jen o svůj příjem.</p></div></div>
       <div class="bx-kpi"><span class="n"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.1-7-12a7 7 0 1 1 14 0c0 5.9-7 12-7 12z"/><circle cx="12" cy="9" r="2.6"/></svg></span><div><h3>Místa máme pro vás připravená</h3><p>Předjednané lokality s dobrou spádovostí a parkováním. Vybereme spolu tu nejlepší právě pro vás.</p></div></div>
     </div>`, false);
 }
