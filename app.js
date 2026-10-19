@@ -1311,6 +1311,11 @@ server.listen(PORT, async () => {
     console.error('[app] compounder-digest nelze spustit:', err.message);
   }
   try {
+    require('./services/meeting/reminder-worker').start(); // SMS připomínka schůzky 15 min předem
+  } catch (err) {
+    console.error('[app] meeting-reminder-worker nelze spustit:', err.message);
+  }
+  try {
     const salesManagerWorker = require('./services/sales/sales-manager-worker');
     salesManagerWorker.start();
   } catch (err) {

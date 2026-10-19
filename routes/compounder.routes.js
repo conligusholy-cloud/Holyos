@@ -240,8 +240,8 @@ router.post('/meeting-reservation', async (req, res) => {
       try {
         const fmt = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
         const when = fmt.weekday + ' ' + fmt.day + '.' + fmt.month + '. v ' + fmt.hour + ':' + fmt.minute;
-        const first = (name || '').trim().split(/\s+/)[0];
-        const smsText = (first ? first + ', schuzku' : 'Schuzku') + ' mame potvrzenou na ' + when + '. Budeme se na vas tesit a pripravime se. Potvrzeni mate i v e-mailu. Kdyby se cokoli zmenilo, odpovezte na nej.';
+        const first = require('../services/vocative').vocativeFirstName(name);
+        const smsText = (first ? first + ', schůzku' : 'Schůzku') + ' máme potvrzenou na ' + when + '. Budeme se na Vás těšit a připravíme se. Potvrzení máte i v e-mailu. Kdyby se cokoli změnilo, odpovězte na něj.';
         require('../services/voice/sms').sendSms(phone, smsText, { context: 'schuzka_potvrzeni', leadId: leadId || undefined })
           .catch((e) => console.warn('[meeting] potvrzovací SMS:', e.message));
       } catch (e) { console.warn('[meeting] potvrzovací SMS init:', e.message); }

@@ -10,6 +10,9 @@ const FIRST_EXC = {
   igor: 'Igore', gustav: 'Gustave', viktor: 'Viktore', václav: 'Václave', oldřich: 'Oldřichu', jindřich: 'Jindřichu',
   vojtěch: 'Vojtěchu', bohumil: 'Bohumile', alois: 'Aloisi', denis: 'Denisi', dušan: 'Dušane', andrej: 'Andreji',
   tony: 'Tony', alex: 'Alexi', max: 'Maxi', felix: 'Felixi', lukas: 'Lukasi', thomas: 'Thomasi',
+  // běžná jména zadaná bez diakritiky (formuláře) — výsledek se vrací s diakritikou
+  tomas: 'Tomáši', lukas: 'Lukáši', ales: 'Aleši', milos: 'Miloši', jiri: 'Jiří', ondrej: 'Ondřeji', matej: 'Matěji', stepan: 'Štěpáne',
+  zdenek: 'Zdeňku', vaclav: 'Václave', vojtech: 'Vojtěchu', dusan: 'Dušane', lubos: 'Luboši', jindrich: 'Jindřichu', oldrich: 'Oldřichu',
   // ženská jména končící souhláskou — beze změny
   dagmar: 'Dagmar', miriam: 'Miriam', ester: 'Ester', ruth: 'Ruth', karin: 'Karin', ingrid: 'Ingrid', beatrix: 'Beatrix', iris: 'Iris',
 };
@@ -64,4 +67,4 @@ function vocativeName(first, last) {
   return [first ? vocFirst(first, fem) : '', last ? vocLast(last) : ''].filter(Boolean).join(' ');
 }
 
-module.exports = { vocativeName, vocFirst, vocLast };
+module.exports = { vocativeName, vocFirst, vocLast, isFemale };
