@@ -2190,8 +2190,47 @@
       if (!confirm('Spustit reprocess pro všechny ' + (tabLabels[window.ingestTab] || '') + ' e-maily?\nProces běží na pozadí — sleduj progress v tabulce.')) return;
       const r = await api('POST', '/api/accounting/email/ingests/reprocess-all?group=' + window.ingestTab);
       if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
-      alert('Reprocess zahájen pro ' + (r.data?.queued || 0) + ' e-mailů. Status se bude průběžně aktualizovat.');
-      openIngestList();
+      window.pollReprocess();
+    };
+
+    // Ukazatel průběhu hromadného reprocessu: lišta nad tabulkou, dotazuje server každou ~1,5 s a po každých pár dotazech obnoví seznam
+    window.pollReprocess = async function() {
+      if (window._reprocPolling) return;
+      window._reprocPolling = true;
+      let tick = 0;
+      const fmtS = (s) => s >= 60 ? Math.floor(s / 60) + ' min ' + (s % 60) + ' s' : s + ' s';
+      const draw = (st) => {
+        const modal = document.querySelector('#modal-root .modal');
+        if (!modal) return;
+        let bar = document.getElementById('reproc-bar');
+        if (!bar) {
+          bar = document.createElement('div'); bar.id = 'reproc-bar';
+          bar.style.cssText = 'margin:0 0 14px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:rgba(99,120,255,.08);';
+          const h = modal.querySelector('h2'); if (h) h.insertAdjacentElement('afterend', bar); else modal.prepend(bar);
+        }
+        const pct = st.total ? Math.round((st.done / st.total) * 100) : 0;
+        const head = st.running
+          ? '⚡ Hromadný reprocess běží: <b>' + st.done + ' / ' + st.total + '</b> (' + pct + ' %)' + (st.eta_s != null ? ' · zbývá cca ' + fmtS(st.eta_s) : '')
+          : '✅ Hromadný reprocess dokončen: <b>' + st.done + ' / ' + st.total + '</b> za ' + fmtS(st.elapsed_s || 0);
+        bar.innerHTML =
+          '<div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; font-size:.92em;">' +
+            '<span>' + head + '</span>' +
+            '<span style="color:var(--text2);">vytvořeno faktur: <b>' + (st.created || 0) + '</b> · duplicit: ' + (st.duplicates || 0) + ' · chyb: ' + (st.failed || 0) + '</span>' +
+          '</div>' +
+          '<div style="height:8px; border-radius:6px; background:rgba(255,255,255,.08); margin-top:8px; overflow:hidden;"><div style="height:100%; width:' + pct + '%; background:' + (st.running ? '#6378ff' : '#22c55e') + '; transition:width .4s;"></div></div>' +
+          (st.running && st.current ? '<div style="margin-top:6px; font-size:.82em; color:var(--text2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Zpracovávám: ' + escapeHtml(st.current) + '</div>' : '');
+      };
+      try {
+        for (;;) {
+          const r = await api('GET', '/api/accounting/email/reprocess-status');
+          const st = r.data || {};
+          draw(st);
+          tick++;
+          if (!st.running) { if (st.total) { await openIngestList(); draw(st); loadInvoices(); loadSummary(); } break; }
+          if (tick % 4 === 0) { await openIngestList(); draw(st); }   // obnovit tabulku se stavy e-mailů a lištu vykreslit znovu
+          await new Promise((res) => setTimeout(res, 1500));
+        }
+      } finally { window._reprocPolling = false; }
     };
 
     window.reprocessIngest = async function(id) {

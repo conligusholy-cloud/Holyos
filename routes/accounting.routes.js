@@ -1343,6 +1343,15 @@ router.get('/email/ingests/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Stav hromadného reprocessu (v paměti serveru) — UI ho dotazuje a kreslí ukazatel průběhu
+const reprocessBatch = { running: false, total: 0, done: 0, created: 0, duplicates: 0, failed: 0, current: null, started_at: null, finished_at: null };
+router.get('/email/reprocess-status', (req, res) => { // mimo /email/ingests/:id, aby ho dynamická cesta nepřebila
+  res.set('Cache-Control', 'no-store');
+  const elapsed = reprocessBatch.started_at ? ((reprocessBatch.finished_at || Date.now()) - reprocessBatch.started_at) / 1000 : 0;
+  const eta = reprocessBatch.running && reprocessBatch.done > 0 ? Math.round((elapsed / reprocessBatch.done) * (reprocessBatch.total - reprocessBatch.done)) : null;
+  res.json(Object.assign({}, reprocessBatch, { elapsed_s: Math.round(elapsed), eta_s: eta }));
+});
+
 // POST /api/accounting/email/ingests/reprocess-all — hromadný reprocess
 // Query: ?group=active|duplicate|archive  (default: active)
 router.post('/email/ingests/reprocess-all', async (req, res, next) => {
@@ -1361,25 +1370,34 @@ router.post('/email/ingests/reprocess-all', async (req, res, next) => {
 
     const eligible = ingests.filter(i => i.attachments.length > 0);
 
+    // Už běží jiná dávka? Nespouštět druhou současně (stejné e-maily by se zpracovávaly dvakrát).
+    if (reprocessBatch.running) return res.status(409).json({ error: 'Hromadný reprocess už běží (' + reprocessBatch.done + ' / ' + reprocessBatch.total + ').' });
+
     // Vrátíme hned a pipeline běží na pozadí (jinak by request timed out při více ingests)
     res.json({ ok: true, queued: eligible.length, total_in_group: ingests.length });
 
-    // Background processing (fire-and-forget, errors jen do logu)
+    // Background processing (fire-and-forget, errors jen do logu) + průběh pro UI (GET /email/ingests/reprocess-status)
+    Object.assign(reprocessBatch, { running: true, total: eligible.length, done: 0, created: 0, duplicates: 0, failed: 0, current: null, started_at: Date.now(), finished_at: null });
     (async () => {
       for (const ingest of eligible) {
+        reprocessBatch.current = (ingest.subject || '').slice(0, 80) || ('e-mail #' + ingest.id);
         try {
           await prisma.ocrExtraction.deleteMany({ where: { email_ingest_id: ingest.id } });
           await prisma.emailIngest.update({
             where: { id: ingest.id },
             data: { status: 'extracting', attempts: { increment: 1 }, sender_notify_reason: null, note: 'Hromadný reprocess' },
           });
-          await runPipelineAndFinalize(ingest, ingest.attachments, { notifyContext: null });
+          const r = await runPipelineAndFinalize(ingest, ingest.attachments, { notifyContext: null });
+          if (r) { reprocessBatch.created += (r.invoices || []).length; reprocessBatch.duplicates += (r.skippedDuplicates || []).length; }
         } catch (e) {
+          reprocessBatch.failed++;
           console.error(`[reprocess-all] Chyba u ingestu ${ingest.id}:`, e.message);
         }
+        reprocessBatch.done++;
       }
+      Object.assign(reprocessBatch, { running: false, current: null, finished_at: Date.now() });
       console.log(`[reprocess-all] Dokončeno pro ${eligible.length} e-mailů ze skupiny "${group}".`);
-    })().catch(() => {});
+    })().catch(() => { reprocessBatch.running = false; });
   } catch (err) { next(err); }
 });
 
