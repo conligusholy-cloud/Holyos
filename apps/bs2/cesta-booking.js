@@ -80,9 +80,15 @@
 
     root.className = (root.className ? root.className + ' ' : '') + 'bk';
     root.innerHTML =
-      '<div class="bk-modes-wrap" style="display:none"></div>' +
+      '<div class="bk-modes-wrap">' +
+        '<h2 class="bk-h">Jak vám to <span class="g">vyhovuje?</span></h2>' +
+        '<p class="bk-sub">Klikněte a hned uvidíte volné termíny.</p>' +
+        '<div class="bk-modes" style="grid-template-columns:1fr">' +
+          '<button type="button" class="bk-mode" data-mode="online"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>Online hovor<small>video hovor z pohodlí domova</small></button>' +
+        '</div>' +
+      '</div>' +
       '<div class="bk-cal" style="display:none">' +
-        '<button type="button" class="bk-back" style="display:none">← zpět</button>' +
+        '<button type="button" class="bk-back">← zpět</button>' +
         '<h2 class="bk-h">Vyberte <span class="g">termín</span></h2>' +
         '<p class="bk-sub bk-modelbl"></p>' +
         '<div class="bk-tabs"><button type="button" class="bk-tab on" data-week="0">Tento týden</button><button type="button" class="bk-tab" data-week="1">Příští týden</button></div>' +
@@ -105,7 +111,7 @@
       elDone.style.display = which === 'done' ? '' : 'none';
       var fm = root.querySelector('.bk-form'); if (fm) fm.style.display = which === 'form' ? '' : 'none';
       elFoot.style.display = which === 'done' ? 'none' : '';
-      var intro = document.getElementById('intro'); if (intro) intro.style.display = (which === 'modes' || which === 'cal') ? '' : 'none';
+      var intro = document.getElementById('intro'); if (intro) intro.style.display = which === 'modes' ? '' : 'none';
     }
 
     // Schůzky jen ONLINE (video hovor) — výběr formy se nezobrazuje, rovnou se ukáže kalendář termínů.
@@ -116,7 +122,8 @@
       show('cal'); setStatus(''); loadSlots();
       if (!noScroll) root.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }
-    root.querySelector('.bk-back').addEventListener('click', function () { chooseMode('online'); });
+    root.querySelectorAll('.bk-mode[data-mode]').forEach(function (b) { b.addEventListener('click', function () { chooseMode('online'); }); });
+    root.querySelector('.bk-back').addEventListener('click', function () { show('modes'); setStatus(''); });
     root.querySelectorAll('.bk-tab').forEach(function (t) {
       t.addEventListener('click', function () {
         week = parseInt(t.getAttribute('data-week'), 10) || 0;
@@ -170,7 +177,7 @@
         '<div class="chips">' + (r.mode ? '<span class="bk-chip">' + (r.mode === 'online' ? '💻 ' : '👤 ') + MODE_LABEL[r.mode] + '</span>' : '') +
           (r.financing_path ? '<span class="bk-chip">' + (r.financing_path === 'vlastni' ? '💰 ' : '🏦 ') + PATH_LABEL[r.financing_path] + '</span>' : '') + '</div>' +
         '<button type="button" class="bk-change">Změnit termín</button>';
-      elDone.querySelector('.bk-change').addEventListener('click', function () { chooseMode('online'); });
+      elDone.querySelector('.bk-change').addEventListener('click', function () { show('modes'); setStatus(''); });
       show('done');
     }
 
@@ -235,7 +242,7 @@
     }
 
     // Už má rezervaci? Ukázat ji místo výběru (jeden lead = jeden termín).
-    chooseMode('online', true);
+    show('modes');
     if (token) {
       fetch('/api/compounder/meeting-reservation?t=' + encodeURIComponent(token), { credentials: 'include' })
         .then(function (r) { return r.json(); })
