@@ -189,7 +189,7 @@ export default function AdsPage() {
                     {adsData.meetings_canceled != null ? <View style={s.m}><Text style={[s.mN, { color: adsData.meetings_canceled > 0 ? BS.warn : BS.accent2 }]}>{nf(adsData.meetings_canceled)}</Text><Text style={s.mL}>zrušeno</Text></View> : null}
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
-                  {adsData.meetings != null ? <Text style={s.sub}>Schůzky = všechny nezrušené rezervace v období (z jakéhokoli zdroje).</Text> : null}
+                  {adsData.meetings != null ? <Text style={s.sub}>Schůzky: {adsData.meetings} celkem · z reklam {adsData.meetings_from_ads != null ? adsData.meetings_from_ads : '—'} · bez značky reklamy / jiný zdroj {adsData.meetings_other != null ? adsData.meetings_other : '—'}. Cena za schůzku = útrata ÷ schůzky přiřazené reklamám (když žádná, ÷ všechny).</Text> : null}
                 </View>
                 {adsData.ads.map((a: any) => (
                   <View key={a.id} style={[s.card, { marginTop: 8 }]}>
@@ -204,6 +204,13 @@ export default function AdsPage() {
                       <View style={s.m}><Text style={s.mN}>{nf(a.clicks)}</Text><Text style={s.mL}>kliků</Text></View>
                       <View style={s.m}><Text style={s.mN}>{a.ctr != null ? String(Math.round(a.ctr * 100) / 100).replace('.', ',') + ' %' : '—'}</Text><Text style={s.mL}>CTR</Text></View>
                     </View>
+                    {a.meetings != null ? (
+                      <View style={[s.metrics, { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: BS.border }]}>
+                        <View style={s.m}><Text style={s.mN}>{nf(a.meetings)}</Text><Text style={s.mL}>schůzek z této reklamy</Text></View>
+                        <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{a.cost_per_meeting != null ? nf(Math.round(a.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View>
+                        <View style={s.m}><Text style={s.mN}>{a.clicks ? nf(Math.round((a.spend / a.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
+                      </View>
+                    ) : null}
                   </View>
                 ))}
               </>

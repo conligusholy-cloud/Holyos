@@ -986,10 +986,10 @@ router.get('/pages/:key/ads', async (req, res) => {
     // Právě běžící reklamy bez zobrazení v období (např. nově spuštěná kopie) Meta v přehledu výkonu nevrací — doplníme je s nulami
     try {
       const have = new Set(rows.map((r) => String(r.ad_id)));
-      const act = await graph('act_' + c.account + '/ads', { effective_status: JSON.stringify(['ACTIVE']), fields: 'id,name,effective_status,campaign{name},creative{object_story_spec,asset_feed_spec,link_url,object_url}', limit: 200 }, c.token);
+      const act = await graph('act_' + c.account + '/ads', { effective_status: JSON.stringify(['ACTIVE']), fields: 'id,name,effective_status,campaign{id,name},creative{object_story_spec,asset_feed_spec,link_url,object_url}', limit: 200 }, c.token);
       (act.data || []).forEach((a) => {
         if (have.has(String(a.id))) return;
-        rows.push({ ad_id: a.id, ad_name: a.name, campaign_name: a.campaign && a.campaign.name, spend: 0, impressions: 0, clicks: 0, inline_link_clicks: 0, ctr: null, actions: [] });
+        rows.push({ ad_id: a.id, ad_name: a.name, campaign_id: a.campaign && a.campaign.id, campaign_name: a.campaign && a.campaign.name, spend: 0, impressions: 0, clicks: 0, inline_link_clicks: 0, ctr: null, actions: [] });
         meta[a.id] = { effective_status: a.effective_status, creative: a.creative };
       });
     } catch (e) { /* bez doplnění běžících reklam */ }
@@ -1011,13 +1011,29 @@ router.get('/pages/:key/ads', async (req, res) => {
       } catch (e) { adVisitors = null; }
     }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
-    let meetings = null, meetingsCanceled = null;
+    let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null;
     if (page.key === 'bs2_cesta') {
       const rg = rng(sinceDate(days, shift));
-      meetings = await prisma.meetingReservation.count({ where: { created_at: rg, status: { not: 'canceled' } } }).catch(() => null);
-      meetingsCanceled = await prisma.meetingReservation.count({ where: { created_at: rg, status: 'canceled' } }).catch(() => null);
+      const rs = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true } }).catch(() => []);
+      meetings = rs.filter((r) => r.status !== 'canceled').length;
+      meetingsCanceled = rs.filter((r) => r.status === 'canceled').length;
+      // Atribuce: BS2 má u každé rezervace značky reklamy z prvního dotyku (ad_id / utm_*). Párujeme na ID reklamy, jinak na ID kampaně.
+      let attr = []; try { const st2 = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path); attr = (st2 && st2.meeting_attr) || []; } catch (e) { attr = []; }
+      const attrBy = {}; attr.forEach((a) => { attrBy[String(a.ref_id)] = a; });
+      const adById = {}; ads.forEach((a) => { adById[String(a.id)] = a; });
+      const byCamp = {}; rows.forEach((r) => { if (r.campaign_id && adById[String(r.ad_id)]) (byCamp[String(r.campaign_id)] = byCamp[String(r.campaign_id)] || []).push(adById[String(r.ad_id)]); });
+      ads.forEach((a) => { a.meetings = 0; });
+      meetingsFromAds = 0; meetingsOther = 0;
+      rs.filter((r) => r.status !== 'canceled').forEach((r) => {
+        const a = attrBy[String(r.id)]; let hit = null;
+        if (a) { const vals = [a.ad_id, a.utm_content, a.utm_campaign, a.utm_term].filter(Boolean).map(String);
+          for (const v of vals) { if (adById[v]) { hit = adById[v]; break; } }
+          if (!hit) for (const v of vals) { if (byCamp[v] && byCamp[v].length) { hit = byCamp[v][0]; break; } } }
+        if (hit) { hit.meetings++; meetingsFromAds++; } else meetingsOther++;
+      });
+      ads.forEach((a) => { a.cost_per_meeting = a.meetings ? a.spend / a.meetings : null; });
     }
-    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, cost_per_meeting: meetings ? totals.spend / meetings : null });
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 

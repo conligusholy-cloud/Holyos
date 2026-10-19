@@ -564,7 +564,10 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   // Unikátní návštěvníci stránky z reklamy (UTM zdroj fb/ig/meta/google, fbclid, gclid, utm_medium cpc/paid) — samostatný dotaz, nezávislý na rozšířené analýze
   let adSessions = null;
   if (bp) { try { adSessions = Number(((await q("SELECT count(DISTINCT COALESCE(substring(meta->>'q' from 'fbclid=([^&]+)'), 'sid:' || sid))::int AS n FROM page_events WHERE path = $1 AND kind = 'view' AND created_at > $2::timestamptz AND created_at < $3::timestamptz AND (meta->>'q') ~* $4", [bp, sinceTs, untilTs, '(utm_source=(fb|facebook|ig|instagram|meta|google)|fbclid=|gclid=|utm_medium=(cpc|paid))'])).rows[0] || {}).n || 0); } catch (e) { adSessions = null; } }
-  res.json({ days, ordersByAttr, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior, ad_sessions: adSessions });
+  // Atribuce schůzek: u každé rezervace (leads.kind='meeting', ref_id = id rezervace v HolyOS) značky reklamy z prvního dotyku
+  let meetingAttr = null;
+  if (bp) { try { meetingAttr = (await q("SELECT ref_id, source FROM leads WHERE kind = 'meeting' AND created_at > $1::timestamptz AND created_at < $2::timestamptz", [sinceTs, untilTs])).rows.map((r) => { const s = r.source || {}; return { ref_id: r.ref_id, utm_source: s.utm_source || null, utm_campaign: s.utm_campaign || null, utm_content: s.utm_content || null, utm_term: s.utm_term || null, ad_id: s.ad_id || null, fbclid: s.fbclid ? true : false }; }); } catch (e) { meetingAttr = null; } }
+  res.json({ days, ordersByAttr, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior, ad_sessions: adSessions, meeting_attr: meetingAttr });
 }));
 // Živý přehled návštěvníků záchytné stránky pro HolyOS Centrum reklamy: kdo je teď na stránce a co dělá (anonymně, bez obsahu polí)
 const LIVE_LBL = { misto_cta: 'klik na CTA', misto_checkout: 'vstoupil do platby', misto_checkout_fail: 'platba selhala', misto_paid_return: 'vrátil se po zaplacení ✔', misto_pay_canceled: 'zrušil platbu', form_submit: 'odeslal formulář', form_abandon: 'opustil rozepsaný formulář' };
