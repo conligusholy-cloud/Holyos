@@ -983,6 +983,16 @@ router.get('/pages/:key/ads', async (req, res) => {
       const ids = rows.slice(i, i + 40).map((r) => r.ad_id).join(',');
       try { const j = await graph('', { ids, fields: 'effective_status,creative{object_story_spec,asset_feed_spec,link_url,object_url}' }, c.token); Object.keys(j).forEach((k) => { meta[k] = j[k]; }); } catch (e) { /* bez detailu těchto reklam */ }
     }
+    // Právě běžící reklamy bez zobrazení v období (např. nově spuštěná kopie) Meta v přehledu výkonu nevrací — doplníme je s nulami
+    try {
+      const have = new Set(rows.map((r) => String(r.ad_id)));
+      const act = await graph('act_' + c.account + '/ads', { effective_status: JSON.stringify(['ACTIVE']), fields: 'id,name,effective_status,campaign{name},creative{object_story_spec,asset_feed_spec,link_url,object_url}', limit: 200 }, c.token);
+      (act.data || []).forEach((a) => {
+        if (have.has(String(a.id))) return;
+        rows.push({ ad_id: a.id, ad_name: a.name, campaign_name: a.campaign && a.campaign.name, spend: 0, impressions: 0, clicks: 0, inline_link_clicks: 0, ctr: null, actions: [] });
+        meta[a.id] = { effective_status: a.effective_status, creative: a.creative };
+      });
+    } catch (e) { /* bez doplnění běžících reklam */ }
     const ads = rows.filter((r) => { const m = meta[r.ad_id]; return m && norm(adLink(m.creative)) === target; }).map((r) => {
       const spend = Number(r.spend || 0), clicks = Number(r.inline_link_clicks || r.clicks || 0);
       const lpv = Number(((r.actions || []).find((x) => x.action_type === 'landing_page_view') || {}).value || 0);
