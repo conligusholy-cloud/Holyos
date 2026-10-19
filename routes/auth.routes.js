@@ -278,6 +278,10 @@ router.post('/bs2/send-mail', express.json({ limit: '50kb' }), async (req, res, 
     const fallback = process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined;
     const mailer = require('../services/email');
     const base2 = { to, brand: 'bs2', fromName: process.env.BS2_MAIL_FROM_NAME || 'Best Series 2.0', subject: String(b.subject || 'Best Series 2.0').slice(0, 200), body: String(b.body || '').slice(0, 5000), link, linkLabel: b.linkLabel ? String(b.linkLabel).slice(0, 80) : undefined };
+    // Volitelná kalendářová pozvánka (.ics) jako příloha — zákazník si schůzku jedním klikem přidá do kalendáře
+    if (b.ics && typeof b.ics === 'string' && b.ics.indexOf('BEGIN:VCALENDAR') === 0 && b.ics.length < 20000) {
+      base2.attachments = [{ filename: 'schuzka.ics', content: b.ics, contentType: 'text/calendar; charset=utf-8; method=PUBLISH' }];
+    }
     let from = preferred;
     let r = await mailer.sendMail(Object.assign({}, base2, { from }));
     if ((!r || !r.sent) && fallback && fallback !== preferred) {

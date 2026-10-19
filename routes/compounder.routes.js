@@ -221,6 +221,17 @@ router.post('/meeting-reservation', async (req, res) => {
           props: { lead_id: leadId, reservation_id: resv.id, starts_at: slot.starts_at, mode, financing_path: path } } });
       } catch (e) { /* timeline je bonus, rezervaci neblokuje */ }
     }
+    // Potvrzovací SMS zákazníkovi (fire-and-forget) — ať ví, že schůzku bereme vážně.
+    if (phone) {
+      try {
+        const fmt = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'long', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' }).formatToParts(slot.starts_at).reduce((a, x) => (a[x.type] = x.value, a), {});
+        const when = fmt.weekday + ' ' + fmt.day + '.' + fmt.month + '. v ' + fmt.hour + ':' + fmt.minute;
+        const first = (name || '').trim().split(/\s+/)[0];
+        const smsText = 'Best Series: ' + (first ? first + ', schuzku' : 'Schuzku') + ' mame potvrzenou na ' + when + '. Budeme se na vas tesit a pripravime se. Potvrzeni mate i v e-mailu. Kdyby se cokoli zmenilo, odpovezte na nej.';
+        require('../services/voice/sms').sendSms(phone, smsText, { context: 'schuzka_potvrzeni', leadId: leadId || undefined })
+          .catch((e) => console.warn('[meeting] potvrzovací SMS:', e.message));
+      } catch (e) { console.warn('[meeting] potvrzovací SMS init:', e.message); }
+    }
     // Velín push + zvonek: vždy Jan a Tomáš Holý + přidělený obchodník (fire-and-forget).
     try {
       require('../services/meeting/notify').notifyMeetingBooked(prisma, {
