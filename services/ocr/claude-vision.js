@@ -72,6 +72,8 @@ Vrať přesně tuto strukturu (všechna pole, chybějící = null):
   "partner_iban": "IBAN",
   "partner_bic": "BIC/SWIFT",
   "payment_method": "bank_transfer" | "cash" | "card" | null,
+  "paid_by_card": true | false | null (true, pokud doklad uvádí, že už je ZAPLACENO kartou — např. "Paid on … with VISA", "paid by card", "Zaplaceno kartou", "Receipt"/účtenka s kartou; jinak null),
+  "date_paid": "YYYY-MM-DD" | null (datum úhrady, je-li na dokladu uvedeno — "Date paid", "Paid on"),
   "vat_regime": "standard" | "reverse_charge" | "eu_goods" | "non_vat_payer",
   "confidence": number 0-1 (odhad, jak jistě jsi tyto hodnoty extrahoval)
 }

@@ -389,7 +389,10 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       }
     } catch (e) { console.warn('[email-ingest] kontrola duplicit selhala:', e.message); }
     try {
-      const invoice = await createInvoiceFromResult(result, ingest);
+      // Důkaz o zaplacení kartou: účtenka (Receipt) ve stejném e-mailu, nebo předmět „receipt/účtenka/platba přijata"
+      const subj = String(ingest.subject || '');
+      const subjectPaid = /receipt|účtenk|uctenk|payment (received|successful)|platba (přijata|proběhla)/i.test(subj) && !/unsuccessful|failed|declined|nepodař|selhal|zamítnut/i.test(subj);
+      const invoice = await createInvoiceFromResult(result, ingest, { paidEvidence: skippedReceipts.length > 0 || subjectPaid });
       createdInvoices.push(invoice);
       await prisma.ocrExtraction.updateMany({
         where: {
@@ -500,11 +503,14 @@ function typeForDirection(type, direction) {
   return base ? `${base}_${suffix}` : suffix;
 }
 
-async function createInvoiceFromResult(result, ingest) {
+async function createInvoiceFromResult(result, ingest, opts = {}) {
   const h = Object.assign({}, result.header || {});
   const direction = result.direction;
   h.type = typeForDirection(h.type, direction);
   const needsReview = result.recommendation === 'needs_review';
+  // Přijatá faktura zaplacená kartou (Stripe, Anthropic, OpenAI…) → rovnou „zaplaceno", ať se nedostane do plateb a upomínek.
+  const paidByCard = direction === 'ap' && (h.paid_by_card === true || h.payment_method === 'card' || !!opts.paidEvidence);
+  const totalNum = Number(h.total || 0);
 
   const year = new Date().getFullYear();
   const prefix = direction === 'ap' ? 'FP' : 'FV';
@@ -553,22 +559,25 @@ async function createInvoiceFromResult(result, ingest) {
       date_issued: h.date_issued ? new Date(h.date_issued) : new Date(),
       date_taxable: h.date_taxable ? new Date(h.date_taxable) : null,
       date_received: ingest.received_at || new Date(),
-      date_due: h.date_due ? new Date(h.date_due) : new Date(Date.now() + 14 * 86400 * 1000),
-      payment_method: h.payment_method || 'bank_transfer',
+      date_due: paidByCard
+        ? new Date(h.date_paid || h.date_issued || Date.now())
+        : (h.date_due ? new Date(h.date_due) : new Date(Date.now() + 14 * 86400 * 1000)),
+      payment_method: paidByCard ? 'card' : (h.payment_method || 'bank_transfer'),
+      paid_amount: paidByCard ? totalNum.toFixed(2) : 0,
       variable_symbol: h.variable_symbol || null,
       constant_symbol: h.constant_symbol || null,
       specific_symbol: h.specific_symbol || null,
       partner_bank_account: h.partner_bank_account || null,
       partner_iban: h.partner_iban || null,
       partner_bic: h.partner_bic || null,
-      status: 'draft',
+      status: paidByCard ? 'paid' : 'draft',
       source: 'email',
       email_ingest_id: ingest.id,
       ocr_confidence: result.composite_confidence,
       ocr_passes_done: result.passes_count,
       needs_human_review: needsReview,
       source_file_path: result.attachment?.file_path || null,
-      note: needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null,
+      note: [paidByCard ? 'Zaplaceno kartou (rozpoznáno z dokladu / účtenky) — automaticky označeno jako zaplacené.' : null, needsReview ? 'OCR vyhodnotilo středí důvěru — zkontrolovat údaje.' : null].filter(Boolean).join(' ') || null,
       items: { create: items },
     },
   });
