@@ -348,6 +348,11 @@ router.patch('/admin/meeting-reservations/:id', requireAuth, async (req, res) =>
     const id = parseInt(req.params.id, 10);
     const status = (req.body && req.body.status) ? String(req.body.status).slice(0, 20) : 'canceled';
     await prisma.meetingReservation.update({ where: { id }, data: { status } });
+    // „Nedorazil" → za 20 min odejde e-mail s odkazem na nový termín (pokud se stav mezitím nezmění); jiný stav čekající e-mail zruší
+    try {
+      const w = require('../services/meeting/reminder-worker');
+      if (status === 'no_show') await w.markNoShow(id); else await w.clearNoShow(id);
+    } catch (e) { console.warn('[meeting-noshow] plánování:', e.message); }
     res.json({ ok: true });
   } catch (err) { res.status(400).json({ ok: false, error: err.message }); }
 });
