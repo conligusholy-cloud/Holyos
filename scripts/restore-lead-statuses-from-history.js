@@ -63,15 +63,23 @@ const L = (s) => LABEL[s] || s || '—';
     console.log('K vrácení:', plan.length); Object.keys(sum).forEach((k) => console.log('  ' + sum[k] + '× ' + k));
     console.log('\nSeznam:'); plan.forEach((p) => console.log('  #' + p.l.id + ' ' + (p.l.name || p.l.email || '') + ' · ' + L(p.l.status) + ' → ' + L(p.to) + ' · přepsáno ' + new Date(p.at).toLocaleString('cs-CZ')));
     console.log('\nPřeskočeno:', skipped.length); skipped.slice(0, 60).forEach(([l, why]) => console.log('  #' + l.id + ' ' + (l.name || l.email || '') + ' — ' + why));
-    if (!APPLY) { console.log('\n[NÁHLED] Nic se nezapsalo. Pro zápis přidej --apply.'); await prisma.$disconnect(); return; }
+    if (!APPLY) { console.log('\n[NÁHLED] Nic se nezapsalo. Pro zápis přidej --apply.'); await prisma.$disconnect(); process.exit(0); }
 
-    const stamp = new Date().toLocaleString('cs-CZ'); let n = 0;
-    for (const p of plan) {
-      const line = '[' + stamp + '] ↩ Stav vrácen z „' + L(p.l.status) + '“ na „' + L(p.to) + '“ (odeslání z funelu ' + new Date(p.at).toLocaleString('cs-CZ') + ' omylem přepsalo stav; odeslání vedeno jen systémově)';
-      await prisma.compounderLead.update({ where: { id: p.l.id }, data: { status: p.to, marketing_status: p.mkt, activity_log: line + (p.l.activity_log ? '\n' + p.l.activity_log : '') } });
-      n++;
+    // Zápis po dávkách (20 souběžně) s průběhem – přes veřejné připojení k Railway je jeden zápis ~0,1–0,3 s
+    const stamp = new Date().toLocaleString('cs-CZ'); let n = 0, fail = 0; const t0 = Date.now();
+    console.log('\nZapisuji ' + plan.length + ' kontaktů…');
+    for (let i = 0; i < plan.length; i += 20) {
+      const batch = plan.slice(i, i + 20);
+      const res = await Promise.allSettled(batch.map((p) => {
+        const line = '[' + stamp + '] ↩ Stav vrácen z „' + L(p.l.status) + '“ na „' + L(p.to) + '“ (odeslání z funelu ' + new Date(p.at).toLocaleString('cs-CZ') + ' omylem přepsalo stav; odeslání vedeno jen systémově)';
+        // updateMany s podmínkou na aktuální stav = když ho mezitím někdo změnil, nepřepíše se
+        return prisma.compounderLead.updateMany({ where: { id: p.l.id, status: p.l.status }, data: { status: p.to, marketing_status: p.mkt, activity_log: line + (p.l.activity_log ? '\n' + p.l.activity_log : '') } });
+      }));
+      res.forEach((r, k) => { if (r.status === 'fulfilled') n += r.value.count; else { fail++; console.log('  ✗ #' + batch[k].l.id + ': ' + String(r.reason && r.reason.message || r.reason).slice(0, 160)); } });
+      console.log('  … ' + Math.min(i + 20, plan.length) + '/' + plan.length + ' (' + Math.round((Date.now() - t0) / 1000) + ' s)');
     }
-    console.log('\n✅ Vráceno:', n);
+    console.log('\n✅ Vráceno: ' + n + (fail ? ' · chyb: ' + fail + ' (spusť skript znovu, dokončí zbytek)' : ''));
     await prisma.$disconnect();
+    process.exit(0);
   } catch (e) { console.error('Chyba:', e.message); try { await prisma.$disconnect(); } catch (_) {} process.exit(1); }
 })();
