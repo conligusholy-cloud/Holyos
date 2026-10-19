@@ -33,6 +33,22 @@ const p2 = (n: number) => String(n).padStart(2, '0');
 const hm = (d: Date) => d.getHours() + ':' + p2(d.getMinutes());
 const ymd = (d: Date) => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
 const dlong = (d: Date) => DN[d.getDay()] + ' ' + d.getDate() + '. ' + MON[d.getMonth()];
+// WhatsApp: číslo v mezinárodním tvaru bez + (9 číslic = ČR → 420…)
+const waNumber = (phone: string) => { let d = String(phone || '').replace(/\D/g, ''); if (d.startsWith('00')) d = d.slice(2); if (d.length === 9) d = '420' + d; return d; };
+// „dnes v 16:00“ / „zítra v 10:30“ / „v pondělí 20. 10. v 9:00“
+const whenText = (d: Date) => {
+  const diff = Math.round((+sod(d) - +sod(new Date())) / 86400000);
+  const DNF = ['v neděli', 'v pondělí', 'v úterý', 've středu', 've čtvrtek', 'v pátek', 'v sobotu'];
+  return (diff === 0 ? 'dnes' : diff === 1 ? 'zítra' : DNF[d.getDay()] + ' ' + d.getDate() + '. ' + (d.getMonth() + 1) + '.') + ' v ' + hm(d);
+};
+const confirmText = (d: Date, mode?: string | null) => 'Dobrý den, ' + whenText(d) + (mode === 'osobne' ? ' máme domluvenou osobní schůzku' : ' bychom si měli volat videohovor') + ' ohledně Prádlomatu. Mohu s Vámi počítat? 😊🤝';
+const openWhatsApp = async (phone: string, text?: string) => {
+  const n = waNumber(phone); if (!n) return;
+  const q = text ? '&text=' + encodeURIComponent(text) : '';
+  const app = 'whatsapp://send?phone=' + n + q;
+  try { if (await Linking.canOpenURL(app)) return Linking.openURL(app); } catch (e) { /* fallback níže */ }
+  Linking.openURL('https://wa.me/' + n + (text ? '?text=' + encodeURIComponent(text) : ''));
+};
 const parseDate = (s: string, t: string): Date | null => {
   const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s.trim()); const tm = /^(\d{1,2})[:.](\d{2})$/.exec(t.trim());
   if (!m || !tm) return null;
@@ -238,6 +254,12 @@ function SlotModal({ slot, onClose, onChanged }: { slot: MeetingSlot; onClose: (
                   <Text style={s.resSub}>{[phone, email, L && L.city].filter(Boolean).join(' · ')}</Text>
                   <Text style={s.resSub}>{[r.mode && MODE[r.mode], r.financing_path && PATH[r.financing_path], r.compounder_lead_id ? 'lead #' + r.compounder_lead_id : ''].filter(Boolean).join(' · ')}</Text>
                   {r.note ? <Text style={s.resSub}>{r.note}</Text> : null}
+                  {phone ? (
+                    <View style={s.actRow}>
+                      <TouchableOpacity style={[s.btn, { backgroundColor: '#25D366' }]} onPress={() => openWhatsApp(phone, confirmText(d0, r.mode || slot.mode))}><Text style={[s.btnTxt, { color: '#0a2e17' }]}>💬 Potvrdit na WhatsApp</Text></TouchableOpacity>
+                      <TouchableOpacity style={[s.btn2, { borderColor: '#25D366' }]} onPress={() => Alert.alert('Videohovor přes WhatsApp', 'Otevře se chat s ' + phone + '. Videohovor spustíš ikonou kamery 📹 vpravo nahoře.', [{ text: 'Zpět', style: 'cancel' }, { text: 'Otevřít WhatsApp', onPress: () => openWhatsApp(phone) }])}><Text style={[s.btn2Txt, { color: '#25D366' }]}>📹 Videohovor WhatsApp</Text></TouchableOpacity>
+                    </View>
+                  ) : null}
                   <View style={s.actRow}>
                     {phone ? <TouchableOpacity style={s.btn2} onPress={() => Linking.openURL('tel:' + phone.replace(/\s+/g, ''))}><Text style={s.btn2Txt}>📞 Zavolat</Text></TouchableOpacity> : null}
                     {email ? <TouchableOpacity style={s.btn2} onPress={() => Linking.openURL('mailto:' + email)}><Text style={s.btn2Txt}>✉️ Napsat</Text></TouchableOpacity> : null}
