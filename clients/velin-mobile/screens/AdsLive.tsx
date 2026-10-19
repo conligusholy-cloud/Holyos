@@ -30,6 +30,7 @@ export default function AdsLive() {
   const [error, setError] = useState('');
   const [at, setAt] = useState<Date | null>(null);
   const [adsOnly, setAdsOnly] = useState(true);
+  const [nowTs, setNowTs] = useState(Date.now());
   const keysRef = useRef<{ key: string; name: string; color?: string }[] | null>(null);
   const alive = useRef(true);
   const lastData = useRef<Record<string, any>>({});
@@ -61,6 +62,7 @@ export default function AdsLive() {
     if (alive.current) setLoading(false);
   }, []);
 
+  useEffect(() => { const t = setInterval(() => setNowTs(Date.now()), 5000); return () => clearInterval(t); }, []);
   useEffect(() => {
     alive.current = true; load();
     let timer: any = setInterval(load, POLL_MS);
@@ -76,11 +78,12 @@ export default function AdsLive() {
     const d = p.data || {};
     const all: any[] = d.visitors || [];
     const vis = adsOnly ? all.filter(isAd) : all;
-    const now = adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0);
-    // Počty za 5 / 30 min bereme ze seznamu VŠECH nedávných návštěvníků (recent) – seznam „vis“ obsahuje jen aktivní, proto by po odchodu návštěvníka počty mizely
-    const rec: any[] = Array.isArray(d.recent) ? d.recent : null as any;
-    const l5 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && !v.hidden && (v.last_ago || 0) <= 300).length : vis.filter((v) => (v.last_ago || 0) <= 300).length) : (Number(d.last5) || 0);
-    const l30 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && (v.last_ago || 0) <= 1800).length : vis.filter((v) => (v.last_ago || 0) <= 1800).length) : (Number(d.last30) || 0);
+    // Počty se vždy dopočítají zpětně k aktuálnímu okamžiku z absolutních časů poslední aktivity (včetně těch, kdo už odešli)
+    const rec: any[] | null = Array.isArray(d.recent) && d.recent.every((v: any) => v.last_at) ? d.recent : null;
+    const inRec = (v: any) => (adsOnly ? isAd(v) : true);
+    const now = rec ? rec.filter((v) => inRec(v) && !v.hidden && nowTs - v.last_at <= 60000).length : (adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0));
+    const l5 = rec ? rec.filter((v) => inRec(v) && nowTs - v.last_at <= 300000).length : (adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 300).length : (Number(d.last5) || 0));
+    const l30 = rec ? rec.filter((v) => inRec(v) && nowTs - v.last_at <= 1800000).length : (adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 1800).length : (Number(d.last30) || 0));
     return { p, d, vis, now, l5, l30 };
   }).sort((a, b) => (b.now - a.now) || (b.l5 - a.l5) || (b.l30 - a.l30));
   const nowTotal = viewPages.reduce((a, x) => a + x.now, 0), last5 = viewPages.reduce((a, x) => a + x.l5, 0), last30 = viewPages.reduce((a, x) => a + x.l30, 0);

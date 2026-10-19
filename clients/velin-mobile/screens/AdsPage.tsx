@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '../lib/api';
 import { loadAuth } from '../lib/auth';
 
@@ -88,6 +89,7 @@ export default function AdsPage() {
   const [histLoading, setHistLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const alive = useRef(true);
+  const [nowTs, setNowTs] = useState(Date.now());
   const [ai, setAi] = useState<any>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMsg, setAiMsg] = useState('');
@@ -120,7 +122,7 @@ export default function AdsPage() {
       const auth = await loadAuth();
       if (!auth.jwt) throw new Error('Nejsi přihlášený.');
       const d = await api.adsGet(auth.jwt, '/pages/' + encodeURIComponent(key) + '/live');
-      if (alive.current) { setLive(d); setAt(new Date()); setLiveErr(''); }
+      if (alive.current) { setLive(d); setAt(new Date()); setLiveErr(''); AsyncStorage.setItem('ads_live_' + key, JSON.stringify({ at: Date.now(), d })).catch(() => {}); }
     } catch (e: any) { if (alive.current) setLiveErr(e?.message || 'Živá data se nenačetla.'); }
   }, [key]);
 
@@ -149,17 +151,25 @@ export default function AdsPage() {
     return () => { alive.current = false; clearInterval(timer); sub.remove(); };
   }, [loadLive]);
   useEffect(() => { loadHist(); }, [loadHist]);
+  // Po otevření se hned ukážou poslední uložená živá data (časy jsou absolutní, takže se počty „za 5 / 30 min" vždy dopočítají k aktuálnímu okamžiku)
+  useEffect(() => {
+    AsyncStorage.getItem('ads_live_' + key).then((raw) => { if (!raw) return; try { const c = JSON.parse(raw); if (c && c.d && alive.current) { setLive((cur: any) => cur || c.d); setAt((cur) => cur || new Date(c.at)); } } catch (e) { /* poškozená cache */ } }).catch(() => {});
+  }, [key]);
+  useEffect(() => { const t = setInterval(() => setNowTs(Date.now()), 5000); return () => clearInterval(t); }, []);
 
   const onRefresh = async () => { setRefreshing(true); await Promise.all([loadLive(), loadHist()]); setRefreshing(false); };
 
   const d = live || {};
   const all: any[] = d.visitors || [];
   const vis = adsOnly ? all.filter(isAd) : all;
-  const now = adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0);
-  // Počty za 5 / 30 min ze seznamu VŠECH nedávných návštěvníků (recent) — seznam „vis" obsahuje jen aktivní, po odchodu by počty mizely
-  const rec: any[] | null = Array.isArray(d.recent) ? d.recent : null;
-  const l5 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && !v.hidden && (v.last_ago || 0) <= 300).length : vis.filter((v) => (v.last_ago || 0) <= 300).length) : (Number(d.last5) || 0);
-  const l30 = adsOnly ? (rec ? rec.filter((v) => isAd(v) && (v.last_ago || 0) <= 1800).length : vis.filter((v) => (v.last_ago || 0) <= 1800).length) : (Number(d.last30) || 0);
+  // „právě teď" / „za 5 min" / „za 30 min" se vždy dopočítají zpětně k aktuálnímu okamžiku z absolutních časů poslední aktivity každého návštěvníka
+  // (včetně těch, kteří už stránku opustili); starý server bez těchto časů → záloha podle dosavadních počtů.
+  const rec: any[] | null = Array.isArray(d.recent) && d.recent.every((v: any) => v.last_at) ? d.recent : null;
+  const inRec = (v: any) => (adsOnly ? isAd(v) : true);
+  const now = rec ? rec.filter((v) => inRec(v) && !v.hidden && nowTs - v.last_at <= 60000).length : (adsOnly ? vis.filter((v) => v.active).length : (Number(d.now) || 0));
+  const l5 = rec ? rec.filter((v) => inRec(v) && nowTs - v.last_at <= 300000).length : (adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 300).length : (Number(d.last5) || 0));
+  const l30 = rec ? rec.filter((v) => inRec(v) && nowTs - v.last_at <= 1800000).length : (adsOnly ? vis.filter((v) => (v.last_ago || 0) <= 1800).length : (Number(d.last30) || 0));
+  const liveReady = live != null;
   const ids = new Set(vis.map((v) => String(v.id)));
   const feed: any[] = ((d.feed || []) as any[]).filter((f) => !adsOnly || ids.has(String(f.id))).sort((a, b) => a.ago - b.ago);
   const accent = color || BS.accent;
@@ -191,10 +201,10 @@ export default function AdsPage() {
         <View style={s.bigRow}>
           <View style={[s.big, { borderColor: now > 0 ? BS.ok : BS.border2 }]}>
             <View style={s.dotRow}><View style={[s.dot, { backgroundColor: now > 0 ? BS.ok : BS.text3 }]} /><Text style={s.bigL}>právě teď</Text></View>
-            <Text style={s.bigN}>{now}</Text>
+            <Text style={s.bigN}>{liveReady ? now : '…'}</Text>
           </View>
-          <View style={s.big}><Text style={s.bigL}>za 5 min</Text><Text style={s.bigN2}>{l5}</Text></View>
-          <View style={s.big}><Text style={s.bigL}>za 30 min</Text><Text style={s.bigN2}>{l30}</Text></View>
+          <View style={s.big}><Text style={s.bigL}>za 5 min</Text><Text style={s.bigN2}>{liveReady ? l5 : '…'}</Text></View>
+          <View style={s.big}><Text style={s.bigL}>za 30 min</Text><Text style={s.bigN2}>{liveReady ? l30 : '…'}</Text></View>
         </View>
         <View style={s.toggle}>
           <TouchableOpacity onPress={() => setAdsOnly(true)} style={[s.tg, adsOnly && s.tgOn]}><Text style={[s.tgT, adsOnly && s.tgTOn]}>📣 Jen z reklamy</Text></TouchableOpacity>
