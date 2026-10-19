@@ -149,7 +149,6 @@ export default function AdsPage() {
                   <View style={s.m}><Text style={s.mN}>{nf(adsData.totals ? adsData.totals.clicks : null)}</Text><Text style={s.mL}>kliků na reklamě</Text></View>
                   <View style={s.m}><Text style={s.mN}>{adsData.totals && adsData.totals.clicks ? Math.round((adsData.ad_visitors / adsData.totals.clicks) * 100) + ' %' : '—'}</Text><Text style={s.mL}>dorazilo na web</Text></View>
                 </View>
-                <Text style={s.sub}>Kliků na reklamě je víc než lidí na webu, pokud se stránka nenačte (zavření, pomalé připojení). Nízké „dorazilo na web" ukazuje problém se stránkou nebo rychlostí.</Text>
                 <View style={[s.metrics, { marginTop: 12 }]}>
                   <View style={s.m}><Text style={s.mN}>{nf(hist.leads)}</Text><Text style={s.mL}>{hist.leadLabel || 'leady'}</Text></View>
                   <View style={s.m}><Text style={s.mN}>{nf(hist.conversions)}</Text><Text style={s.mL}>{hist.convLabel || 'dokončeno'}</Text></View>
@@ -191,10 +190,6 @@ export default function AdsPage() {
                     {adsData.meetings_canceled != null ? <View style={s.m}><Text style={[s.mN, { color: adsData.meetings_canceled > 0 ? BS.warn : BS.accent2 }]}>{nf(adsData.meetings_canceled)}</Text><Text style={s.mL}>zrušeno</Text></View> : null}
                     {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.55}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
                   </View>
-                  {adsData.meetings != null ? <Text style={s.sub}>Schůzky: {adsData.meetings} celkem · z reklam {adsData.meetings_from_ads != null ? adsData.meetings_from_ads : '—'} · bez značky reklamy / jiný zdroj {adsData.meetings_other != null ? adsData.meetings_other : '—'}. Cena za schůzku = útrata ÷ schůzky přiřazené reklamám (když žádná, ÷ všechny).</Text> : null}
-                  {Array.isArray(adsData.meetings_unmatched) && adsData.meetings_unmatched.length > 0 ? (
-                    <Text style={s.sub}>Nepřiřazeno: {adsData.meetings_unmatched.map((u: any) => u.bez_znacek ? 'bez značek (přímý vstup)' : [u.utm_source, u.utm_campaign, u.utm_content, u.ad_id, u.fbclid ? 'fbclid' : ''].filter(Boolean).join(' / ') || 'prázdné').join(' | ')}</Text>
-                  ) : null}
                 </View>
                 {adsData.ads.map((a: any) => (
                   <View key={a.id} style={[s.card, { marginTop: 8 }]}>

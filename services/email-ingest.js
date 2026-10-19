@@ -357,6 +357,7 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   const skippedDuplicates = [];
   const lowConfidenceResults = [];
   const awaitingReviewResults = [];
+  const nonInvoiceResults = [];
 
   for (const result of results) {
     if (result.recommendation === 'unreadable') {
@@ -380,6 +381,34 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       awaitingReviewResults.push(result);
       console.log(`[email-ingest] Direction sanity check selhal pro ${result.attachment.filename}: ${result.direction_reason}. Posílám do awaiting_review.`);
       continue;
+    }
+    // Není to faktura (soupis/přehled faktur, výpis, upomínka, objednávka…) → doklad se nezakládá vůbec.
+    const hdr = result.header || {};
+    if (/^(statement|other)$/i.test(String(hdr.document_kind || ''))) {
+      nonInvoiceResults.push(result);
+      console.log(`[email-ingest] ${result.attachment.filename} není faktura (document_kind=${hdr.document_kind}) — doklad nezakládám.`);
+      continue;
+    }
+    // Skutečná faktura má číslo dokladu nebo aspoň VS. Když chybí obojí, je to pravděpodobně soupis/přehled → ruční ověření, nezakládat.
+    if (!String(hdr.external_number || '').trim() && !String(hdr.variable_symbol || '').trim()) {
+      result.direction_reason = 'Na dokladu chybí číslo faktury i variabilní symbol — pravděpodobně to není faktura (soupis, přehled). Ověř ručně.';
+      awaitingReviewResults.push(result);
+      continue;
+    }
+    // Úhrada převodem musí mít číslo účtu (z dokladu, nebo z karty společnosti). Bez něj by nešlo zaplatit → ruční doplnění.
+    {
+      const payM = (hdr.payment_method || 'bank_transfer');
+      const paidSig = hdr.paid_by_card === true || payM === 'card' || payM === 'cash' || skippedReceipts.length > 0;
+      if (result.direction === 'ap' && !paidSig && payM === 'bank_transfer' && !hdr.partner_bank_account && !hdr.partner_iban) {
+        let known = null;
+        if (result.matched_company_id) { try { const c = await prisma.company.findUnique({ where: { id: result.matched_company_id }, select: { bank_account: true } }); known = c && c.bank_account; } catch (e) { /* bez účtu z karty */ } }
+        if (known) { result.header.partner_bank_account = known; }
+        else {
+          result.direction_reason = 'Úhrada převodem, ale na dokladu chybí číslo účtu dodavatele — doplň ručně.';
+          awaitingReviewResults.push(result);
+          continue;
+        }
+      }
     }
     // Pojistka proti duplicitám i bez rozpoznané firmy (zahraniční dodavatel bez IČO → „Neznámý dodavatel"):
     // stejné externí číslo, nebo stejná částka + měna + datum (Stripe posílá k jedné platbě fakturu i účtenku).
@@ -454,6 +483,20 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
   // Direction-suspicious větev — OCR si není jistá směrem (AP/AR), čekáme na manual review.
   // Toto je MEZIstav: faktura není vytvořená, ale e-mail není ani "nečitelný" — Tomáš
   // ho v UI Aktivní tabu otevře, schválí směr a založí fakturu ručně.
+  // Všechny přílohy jsou „není faktura" (soupis, přehled, výpis…) → e-mail ignorovat, doklad nezakládat, odesílateli nic neposílat.
+  if (nonInvoiceResults.length > 0 && awaitingReviewResults.length === 0 && lowConfidenceResults.length === 0) {
+    await prisma.emailIngest.update({
+      where: { id: ingest.id },
+      data: { status: 'ignored', confidence: avgConfidence, note: 'Není faktura (soupis / přehled / výpis) — doklad nebyl založen.', sender_notify_reason: null },
+    });
+    logAudit({
+      action: 'update', entity: 'email_ingest', entity_id: ingest.id,
+      description: `🚫 ${ingest.subject?.slice(0, 60) || ''} → není faktura (${nonInvoiceResults.map((r) => r.attachment.filename).join(', ').slice(0, 120)}), doklad nezaložen`,
+      user: { username: 'system', display_name: 'Email ingest' },
+    }).catch(() => {});
+    return { ingest, invoices: [], skippedDuplicates, results };
+  }
+
   if (awaitingReviewResults.length > 0) {
     const reasons = awaitingReviewResults
       .map(r => r.direction_reason || 'OCR si není jistá směrem')
@@ -464,7 +507,7 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       data: {
         status: 'awaiting_review',
         confidence: avgConfidence,
-        note: `Vyžaduje ruční ověření směru (AP/AR): ${reasons}`,
+        note: `Vyžaduje ruční ověření: ${reasons}`,
         sender_notify_reason: null,
       },
     });

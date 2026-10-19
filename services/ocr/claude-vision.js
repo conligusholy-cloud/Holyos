@@ -42,6 +42,7 @@ const HEADER_PROMPT = `Jsi expert na extrakci dat z českých faktur. Analyzuj d
 
 Vrať přesně tuto strukturu (všechna pole, chybějící = null):
 {
+  "document_kind": "invoice" | "statement" | "other" (invoice = SKUTEČNÁ faktura / dobropis / zálohová faktura / daňový doklad s číslem dokladu; statement = soupis či přehled faktur, výpis z účtu, vyúčtování/zůstatek bez vlastního čísla faktury, upomínka, objednávka, dodací list, nabídka; other = cokoli jiného, co není faktura),
   "type": "received" | "issued" | "credit_note_received" | "credit_note_issued" | "proforma_received" | "proforma_issued",
   "external_number": "číslo dokladu u dodavatele (např. 202601234)",
   "supplier": {
