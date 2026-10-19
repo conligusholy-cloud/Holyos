@@ -79,9 +79,10 @@ export default function ChatThread({ route }: Props) {
     navigation.setOptions({
       title: channelTitle || 'Chat',
       headerShown: true,
-      headerStyle: { backgroundColor: colors.surface },
-      headerTintColor: colors.text,
-      headerTitleStyle: { color: colors.text, fontWeight: '600' },
+      headerStyle: { backgroundColor: '#070b16' },
+      headerTintColor: '#eaf2ff',
+      headerShadowVisible: false,
+      headerTitleStyle: { color: '#eaf2ff', fontWeight: '700' },
     });
   }, [navigation, channelTitle]);
 
@@ -306,7 +307,7 @@ export default function ChatThread({ route }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg, paddingBottom: kbPad }}
+      style={{ flex: 1, backgroundColor: '#04060c', paddingBottom: kbPad }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
@@ -319,15 +320,24 @@ export default function ChatThread({ route }: Props) {
             const prev = index > 0 ? messages[index - 1] : null;
             const sameAuthorAsPrev = prev && prev.sender_id === item.sender_id;
             const isMine = item.sender_id != null && item.sender_id === myUserId;
+            const newDay = !prev || dayKey(prev.created_at) !== dayKey(item.created_at);
             return (
-              <Bubble
-                message={item}
-                isMe={isMine}
-                showSenderName={!sameAuthorAsPrev && !isMine}
-                onImageTap={(url) => setFullscreenImage(url)}
-                onFileTap={openExternalFile}
-                onRetry={() => handleRetry(item)}
-              />
+              <>
+                {newDay && (
+                  <View style={styles.dayWrap}>
+                    <Text style={styles.dayPill}>{dayLabel(item.created_at)}</Text>
+                  </View>
+                )}
+                <Bubble
+                  message={item}
+                  isMe={isMine}
+                  showSenderName={(!sameAuthorAsPrev || newDay) && !isMine}
+                  groupedWithPrev={!!sameAuthorAsPrev && !newDay}
+                  onImageTap={(url) => setFullscreenImage(url)}
+                  onFileTap={openExternalFile}
+                  onRetry={() => handleRetry(item)}
+                />
+              </>
             );
           }}
           contentContainerStyle={styles.list}
@@ -403,9 +413,9 @@ export default function ChatThread({ route }: Props) {
             disabled={!draft.trim() || sending}
           >
             {sending ? (
-              <ActivityIndicator color="#0b1220" size="small" />
+              <ActivityIndicator color="#ffffff" size="small" />
             ) : (
-              <Text style={styles.sendBtnText}>Pošli</Text>
+              <Text style={styles.sendBtnText}>↑</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -438,10 +448,25 @@ export default function ChatThread({ route }: Props) {
   );
 }
 
+// Oddělovač dnů (Dnes / Včera / datum)
+function dayKey(iso: string): string {
+  const d = new Date(iso);
+  return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+}
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yest = new Date(); yest.setDate(today.getDate() - 1);
+  if (dayKey(iso) === dayKey(today.toISOString())) return 'Dnes';
+  if (dayKey(iso) === dayKey(yest.toISOString())) return 'Včera';
+  return d.toLocaleDateString('cs-CZ', { weekday: 'long', day: 'numeric', month: 'numeric' });
+}
+
 function Bubble({
   message,
   isMe,
   showSenderName,
+  groupedWithPrev,
   onImageTap,
   onFileTap,
   onRetry,
@@ -449,6 +474,7 @@ function Bubble({
   message: LocalMessage;
   isMe: boolean;
   showSenderName: boolean;
+  groupedWithPrev: boolean;
   onImageTap: (url: string) => void;
   onFileTap: (url: string) => void;
   onRetry: () => void;
@@ -464,9 +490,11 @@ function Bubble({
   const wrapProps = isFailed ? { onPress: onRetry } : {};
 
   return (
-    <View style={[styles.row, isMe ? styles.rowMe : styles.rowOther]}>
+    <View style={[styles.row, isMe ? styles.rowMe : styles.rowOther, groupedWithPrev && { marginTop: -2 }]}>
       {!isMe && (
-        message.sender?.person?.photo_url ? (
+        groupedWithPrev ? (
+          <View style={styles.avatar} />
+        ) : message.sender?.person?.photo_url ? (
           <Image source={{ uri: message.sender.person.photo_url }} style={styles.avatar} />
         ) : (
           <View style={[styles.avatar, styles.avatarFallback]}>
@@ -558,18 +586,47 @@ const styles = StyleSheet.create({
 
   bubble: {
     maxWidth: '78%',
-    borderRadius: 18,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
   },
-  bubbleMe: { backgroundColor: colors.accent, borderBottomRightRadius: 4, marginLeft: 'auto' },
-  bubbleOther: { backgroundColor: colors.surface2, borderBottomLeftRadius: 4 },
+  // Best Series 2.0: modrofialový akcent, skleněné tmavé bubliny s jemným okrajem
+  bubbleMe: {
+    backgroundColor: '#3a6cf5',
+    borderBottomRightRadius: 6,
+    marginLeft: 'auto',
+    shadowColor: '#3a6cf5',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  bubbleOther: {
+    backgroundColor: 'rgba(18,28,50,0.95)',
+    borderBottomLeftRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(120,160,255,0.16)',
+  },
   bubbleFailed: { opacity: 0.7, borderWidth: 1, borderColor: colors.danger },
 
-  senderName: { color: colors.accent2, fontSize: 11, fontWeight: '700', marginBottom: 2 },
-  text: { fontSize: 15, lineHeight: 20 },
-  textMe: { color: '#0b1220' },
-  textOther: { color: colors.text },
+  senderName: { color: '#4fd1ff', fontSize: 11.5, fontWeight: '700', marginBottom: 2 },
+  text: { fontSize: 15.5, lineHeight: 21 },
+  textMe: { color: '#ffffff' },
+  textOther: { color: '#eaf2ff' },
+
+  dayWrap: { alignItems: 'center', marginVertical: 12 },
+  dayPill: {
+    color: '#8ea2c2',
+    fontSize: 11.5,
+    fontWeight: '600',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(120,160,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(120,160,255,0.16)',
+  },
 
   attachments: { marginTop: spacing.xs },
   attachmentLabel: { fontSize: 13, marginTop: 2 },
@@ -584,46 +641,53 @@ const styles = StyleSheet.create({
 
   meta: { flexDirection: 'row', alignItems: 'center', marginTop: 2, justifyContent: 'flex-end' },
   time: { fontSize: 10 },
-  timeMe: { color: 'rgba(11,18,32,0.6)' },
-  timeOther: { color: colors.text2 },
+  timeMe: { color: 'rgba(255,255,255,0.7)' },
+  timeOther: { color: '#8ea2c2' },
   status: { fontSize: 10 },
 
-  // Send bar (footer)
+  // Send bar (footer) — tmavý skleněný pruh, oblé pole a kulaté odesílací tlačítko
   sendBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    padding: spacing.sm,
-    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    backgroundColor: '#070b16',
     borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderTopColor: 'rgba(120,160,255,0.16)',
   },
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 42,
     maxHeight: 120,
-    color: colors.text,
-    backgroundColor: colors.bg,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
-    marginRight: spacing.sm,
+    color: '#eaf2ff',
+    backgroundColor: 'rgba(18,28,50,0.95)',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(120,160,255,0.22)',
+    paddingHorizontal: 16,
+    paddingTop: 11,
+    paddingBottom: 11,
+    fontSize: 15.5,
+    marginRight: 8,
   },
   sendBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 10,
-    borderRadius: radius.md,
+    backgroundColor: '#3a6cf5',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 64,
-    minHeight: 40,
+    shadowColor: '#3a6cf5',
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
-  sendBtnDisabled: { opacity: 0.4 },
-  sendBtnText: { color: '#0b1220', fontWeight: '700', fontSize: 15 },
+  sendBtnDisabled: { opacity: 0.35, shadowOpacity: 0 },
+  sendBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 20, marginTop: -2 },
 
-  attachBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginRight: 4 },
-  attachIcon: { fontSize: 20 },
+  attachBtn: { width: 34, height: 40, alignItems: 'center', justifyContent: 'center' },
+  attachIcon: { fontSize: 19, opacity: 0.85 },
 
   // Fullscreen image modal
   fullscreenBg: {
