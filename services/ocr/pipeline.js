@@ -44,7 +44,20 @@ const OUR_COMPANY_ICOS_NORM = OUR_COMPANY_ICOS.map(normalizeIco);
  * je jen ve small-print hlavičce. OCR potom občas přiřadí naše IČO supplieru
  * a faktura se vytvoří jako AR z naší firmy → nesmysl. Sanity check to chytí.
  */
-function detectDirection(headerData) {
+// Normalizace názvu pro porovnání firem: bez diakritiky, bez právní formy (s.r.o., a.s.), jen malá písmena a čísla.
+function normName(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').replace(/\b(s r o|a s|spol|ltd|limited|gmbh|inc)\b/g, ' ').replace(/\s+/g, ' ').trim();
+}
+// Jména, pod kterými figurujeme na dokladech (název naší firmy z nastavení + OUR_COMPANY_NAMES + výchozí).
+async function loadOurNames() {
+  const names = ['best series', 'bestseries', 'tomas holy'];
+  (process.env.OUR_COMPANY_NAMES || '').split(',').forEach((n) => { if (n.trim()) names.push(n); });
+  try { const our = await require('../settings').getOurCompany(); if (our && our.name) names.push(our.name); } catch (e) { /* bez názvu z nastavení */ }
+  return [...new Set(names.map(normName).filter(Boolean))];
+}
+
+function detectDirection(headerData, ourNames = []) {
   const supplierIco = headerData?.supplier?.ico || null;
   const customerIco = headerData?.customer?.ico || null;
   const supplierIcoNorm = normalizeIco(supplierIco);
@@ -76,6 +89,13 @@ function detectDirection(headerData) {
   // 4) Naše IČO se na faktuře vůbec nenašlo. Buď OCR pole nepřečetla
   //    (atypický layout — BestDrive small-print bug), nebo je to faktura mezi
   //    3rd parties (raritní). Flagneme jako podezřelé.
+  // 4a) IČO nesedí (typicky zahraniční dodavatel bez IČO — Anthropic, OpenAI, Stripe…), ale odběratel je podle
+  //     NÁZVU my a dodavatel ne → jednoznačně přijatá faktura, není důvod k ruční kontrole směru.
+  const matchesUs = (n) => { const x = normName(n); return !!x && ourNames.some((o) => x === o || x.includes(o) || o.includes(x)); };
+  if (!ourIsSupplier && matchesUs(headerData?.customer?.name) && !matchesUs(headerData?.supplier?.name)) {
+    return { direction: 'ap', suspicious: false, reason: null };
+  }
+
   const t = headerData?.type || '';
   if (t.endsWith('_issued') || t === 'issued') {
     return {
@@ -151,7 +171,7 @@ async function runPipeline(filePath, ctx = {}) {
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
   let aresResult = null, aresCross = null;
-  const { direction, suspicious: directionSuspicious, reason: directionReason } = detectDirection(header);
+  const { direction, suspicious: directionSuspicious, reason: directionReason } = detectDirection(header, await loadOurNames());
   if (directionSuspicious) {
     warnings.push({ pass: 'direction_sanity', message: directionReason });
   }
