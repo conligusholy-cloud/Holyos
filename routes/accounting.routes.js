@@ -1168,7 +1168,26 @@ router.get('/email/ingests', async (req, res, next) => {
       orderBy: { received_at: 'desc' },
       take: Math.min(parseInt(limit, 10) || 100, 500),
     });
-    res.json(ingests);
+    // Původní odesílatel: u přeposlaných e-mailů (FW:) je from_email přeposílající schránka,
+    // skutečný odesílatel je v hlavičce „Od:/From:" uvnitř textu zprávy.
+    const stripTags = (h) => String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li)>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    const ownAddr = (e) => String(e || '').toLowerCase();
+    const parseOriginalSender = (ing) => {
+      const txt = ing.body_text || stripTags(ing.body_html);
+      if (!txt) return null;
+      const re = /^[\s>*_]*(?:From|Od|Odesílatel)\s*:\s*(.+)$/gim;
+      let m;
+      while ((m = re.exec(txt.slice(0, 20000)))) {
+        const line = m[1].replace(/\*+/g, '').trim();
+        const em = /([A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/.exec(line);
+        if (!em) continue;
+        if (ownAddr(em[1]) === ownAddr(ing.from_email)) continue;
+        const name = line.replace(/[<\[(]?\s*(mailto:)?[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\s*[>\])]?/g, '').replace(/["']/g, '').replace(/\s+/g, ' ').trim();
+        return { email: em[1], name: name || null };
+      }
+      return null;
+    };
+    res.json(ingests.map((ing) => Object.assign({}, ing, { original_sender: parseOriginalSender(ing) })));
   } catch (err) { next(err); }
 });
 

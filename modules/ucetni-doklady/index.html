@@ -1932,6 +1932,9 @@
           '<tr>' +
             '<td style="white-space:nowrap;">' + fmtDateTime(ing.received_at) + '</td>' +
             '<td>' + escapeHtml(ing.from_email) + (ing.from_name ? ' <span style="color:var(--text2);">(' + escapeHtml(ing.from_name) + ')</span>' : '') + '</td>' +
+            '<td style="font-size:.9em;">' + (ing.original_sender
+              ? (ing.original_sender.name ? escapeHtml(ing.original_sender.name) + '<div style="color:var(--text2);font-size:.85em;">' + escapeHtml(ing.original_sender.email) + '</div>' : escapeHtml(ing.original_sender.email))
+              : '<span style="color:var(--text2);">—</span>') + '</td>' +
             '<td>' + escapeHtml(ing.subject.slice(0, 80)) + '</td>' +
             '<td><span class="status-badge ' + statusCls + '">' +
               escapeHtml(ing.status === 'extracting' && ing.note ? ing.note : ing.status) +
@@ -1979,10 +1982,10 @@
             '<div style="max-height:65vh; overflow-y:auto;">' +
               '<table class="items-table" style="width:100%;">' +
                 '<thead><tr>' +
-                  '<th>Obdrženo</th><th>Od</th><th>Předmět</th><th>Stav</th>' +
+                  '<th>Obdrženo</th><th>Od</th><th>Původní odesílatel</th><th>Předmět</th><th>Stav</th>' +
                   '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th></th>' +
                 '</tr></thead>' +
-                '<tbody>' + (rows || '<tr><td colspan="8" class="empty-hint" style="padding:20px;">' +
+                '<tbody>' + (rows || '<tr><td colspan="9" class="empty-hint" style="padding:20px;">' +
                   ({active: 'Žádné aktivní e-maily — vše zpracováno.',
                     duplicate: 'Žádné duplikáty.',
                     archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.') +
