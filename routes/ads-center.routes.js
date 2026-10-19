@@ -36,6 +36,13 @@ function sinceDate(days, shift) { const sh = shift != null ? shift : ((SHIFT_ALS
 function rng(since) { return since && since.until ? { gte: since, lt: since.until } : { gte: since }; }
 function parseShift(q) { const v = parseInt(q, 10); return isNaN(v) ? 0 : Math.min(3650, Math.max(0, v)); }
 function parseDays(q, def) { const v = parseInt(q, 10); return isNaN(v) ? def : Math.min(3650, Math.max(0, v)); }
+// Unikátní osoby mezi rezervacemi schůzek (jeden člověk = jeden lead, i když zadal schůzku víckrát): klíč = lead, jinak e-mail, jinak telefon (posledních 9 číslic)
+function meetingPersonKey(r) {
+  if (r.compounder_lead_id) return 'l' + r.compounder_lead_id;
+  const em = String(r.email || '').trim().toLowerCase(); if (em) return 'e' + em;
+  const ph = String(r.phone || '').replace(/\D/g, '').slice(-9); if (ph.length >= 9) return 'p' + ph;
+  return 'r' + r.id;
+}
 function dayKey(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 function dayKeys(days) { const out = []; const s = sinceDate(days); for (let i = 0; i < days; i++) { const d = new Date(s); d.setDate(s.getDate() + i); out.push(dayKey(d)); } return out; }
 
@@ -84,7 +91,8 @@ async function buildOverview(days, sinceExact, onlyKey) {
       }
       // /cesta: lead = domluvená schůzka (každá nezrušená rezervace zakládá lead)
       if (p.key === 'bs2_cesta') {
-        const rs = await prisma.meetingReservation.findMany({ where: { created_at: rng(since), status: { not: 'canceled' } }, select: { created_at: true } }).catch(() => []);
+        const rs0 = await prisma.meetingReservation.findMany({ where: { created_at: rng(since), status: { not: 'canceled' } }, select: { id: true, created_at: true, compounder_lead_id: true, email: true, phone: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
+        const seenP = new Set(); const rs = rs0.filter((r) => { const k = meetingPersonKey(r); if (seenP.has(k)) return false; seenP.add(k); return true; }); // jen první rezervace od každé osoby
         item.leads = rs.length; item.leadLabel = 'schůzky'; const m = {}; rs.forEach((r) => { const k = dayKey(r.created_at); m[k] = (m[k] || 0) + 1; });
         item.leadsSeries = dayKeys(days).map((d) => ({ d, n: m[d] || 0 }));
       }
@@ -1011,12 +1019,15 @@ router.get('/pages/:key/ads', async (req, res) => {
       } catch (e) { adVisitors = null; }
     }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
-    let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null;
+    let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null, meetingsDuplicates = null;
     if (page.key === 'bs2_cesta') {
       const rg = rng(sinceDate(days, shift));
-      const rs = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true } }).catch(() => []);
-      meetings = rs.filter((r) => r.status !== 'canceled').length;
-      meetingsCanceled = rs.filter((r) => r.status === 'canceled').length;
+      const rsAll = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
+      meetingsCanceled = rsAll.filter((r) => r.status === 'canceled').length;
+      // Duplicity: stejná osoba (lead / e-mail / telefon) s víc nezrušenými rezervacemi se počítá jednou — první rezervace
+      const activeAll = rsAll.filter((r) => r.status !== 'canceled'); const seenP = new Set();
+      const rs = activeAll.filter((r) => { const k = meetingPersonKey(r); if (seenP.has(k)) return false; seenP.add(k); return true; });
+      meetings = rs.length; meetingsDuplicates = activeAll.length - rs.length;
       // Atribuce: BS2 má u každé rezervace značky reklamy z prvního dotyku (ad_id / utm_*). Párujeme na ID reklamy, jinak na ID kampaně.
       let attr = []; try { const st2 = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path); attr = (st2 && st2.meeting_attr) || []; } catch (e) { attr = []; }
       const attrBy = {}; attr.forEach((a) => { attrBy[String(a.ref_id)] = a; });
@@ -1024,7 +1035,7 @@ router.get('/pages/:key/ads', async (req, res) => {
       const byCamp = {}; rows.forEach((r) => { if (r.campaign_id && adById[String(r.ad_id)]) (byCamp[String(r.campaign_id)] = byCamp[String(r.campaign_id)] || []).push(adById[String(r.ad_id)]); });
       ads.forEach((a) => { a.meetings = 0; });
       meetingsFromAds = 0; meetingsOther = 0;
-      rs.filter((r) => r.status !== 'canceled').forEach((r) => {
+      rs.forEach((r) => {
         const a = attrBy[String(r.id)]; let hit = null;
         if (a) { const vals = [a.ad_id, a.utm_content, a.utm_campaign, a.utm_term].filter(Boolean).map(String);
           for (const v of vals) { if (adById[v]) { hit = adById[v]; break; } }
@@ -1033,7 +1044,7 @@ router.get('/pages/:key/ads', async (req, res) => {
       });
       ads.forEach((a) => { a.cost_per_meeting = a.meetings ? a.spend / a.meetings : null; });
     }
-    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_duplicates: meetingsDuplicates, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
