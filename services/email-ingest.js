@@ -367,6 +367,20 @@ async function runPipelineAndFinalize(ingest, candidates, opts = {}) {
       console.log(`[email-ingest] Direction sanity check selhal pro ${result.attachment.filename}: ${result.direction_reason}. Posílám do awaiting_review.`);
       continue;
     }
+    // Pojistka proti duplicitám i bez rozpoznané firmy (zahraniční dodavatel bez IČO → „Neznámý dodavatel"):
+    // stejné externí číslo, nebo stejná částka + měna + datum (Stripe posílá k jedné platbě fakturu i účtenku).
+    try {
+      const dup = await findExistingInvoiceDuplicate(result);
+      if (dup) {
+        skippedDuplicates.push({
+          attachment_id: result.attachment.id,
+          attachment_name: result.attachment.filename,
+          existing_invoice_ids: [dup.id],
+        });
+        console.log(`[email-ingest] Duplikát (externí č./částka+datum) z ${result.attachment.filename} — už existuje ${dup.invoice_number}. Přeskakuji.`);
+        continue;
+      }
+    } catch (e) { console.warn('[email-ingest] kontrola duplicit selhala:', e.message); }
     try {
       const invoice = await createInvoiceFromResult(result, ingest);
       createdInvoices.push(invoice);
@@ -552,6 +566,21 @@ async function createInvoiceFromResult(result, ingest) {
   });
 
   return invoice;
+}
+
+// Najde už existující fakturu, která je stejným dokladem jako právě přečtený výsledek OCR.
+async function findExistingInvoiceDuplicate(result) {
+  const h = result.header || {};
+  const ors = [];
+  const ext = String(h.external_number || '').trim();
+  if (ext.length >= 4) ors.push({ external_number: { equals: ext, mode: 'insensitive' } });
+  const total = Number(h.total);
+  if (total > 0 && h.date_issued) {
+    const d = new Date(h.date_issued);
+    if (!isNaN(d)) ors.push({ total: total.toFixed(2), currency: h.currency || 'CZK', date_issued: d, company_id: result.matched_company_id || await getPlaceholderCompanyId() });
+  }
+  if (!ors.length) return null;
+  return prisma.invoice.findFirst({ where: { direction: result.direction, OR: ors }, select: { id: true, invoice_number: true } });
 }
 
 async function getPlaceholderCompanyId() {
