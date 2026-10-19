@@ -990,7 +990,8 @@ router.get('/pages/:key/ads', async (req, res) => {
         const st = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path);
         const camps = (st && st.behavior && st.behavior.campaigns) || [];
         const isAdSrc = /(^|[^a-z])(fb|ig)([^a-z]|$)|facebook|insta|meta|google|gclid|fbclid|cpc|paid/i;
-        adVisitors = camps.filter((x) => isAdSrc.test(String(x.name || ''))).reduce((a, x) => a + (Number(x.sessions) || 0), 0);
+        // přednost má přesný dotaz z BS2 (ad_sessions); starší BS2 bez něj → záložní součet z přehledu kampaní
+        adVisitors = st && st.ad_sessions != null ? Number(st.ad_sessions) : camps.filter((x) => isAdSrc.test(String(x.name || ''))).reduce((a, x) => a + (Number(x.sessions) || 0), 0);
       } catch (e) { adVisitors = null; }
     }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
