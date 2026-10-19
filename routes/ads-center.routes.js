@@ -43,6 +43,23 @@ function meetingPersonKey(r) {
   const ph = String(r.phone || '').replace(/\D/g, '').slice(-9); if (ph.length >= 9) return 'p' + ph;
   return 'r' + r.id;
 }
+// Slučování osob přes VŠECHNY identifikátory: rezervace, které sdílejí lead, e-mail NEBO telefon, jsou jeden člověk
+// (např. 1. rezervace z SMS odkazu s leadem, 2. ručně z webu jen s e-mailem + stejným telefonem). Vrací první rezervaci od každé osoby.
+function uniquePersonReservations(list) {
+  const parent = list.map((_, i) => i);
+  const find = (i) => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb); };
+  const seen = new Map();
+  list.forEach((r, i) => {
+    const keys = [];
+    if (r.compounder_lead_id) keys.push('l' + r.compounder_lead_id);
+    const em = String(r.email || '').trim().toLowerCase(); if (em) keys.push('e' + em);
+    const ph = String(r.phone || '').replace(/\D/g, '').slice(-9); if (ph.length >= 9) keys.push('p' + ph);
+    keys.forEach((k) => { if (seen.has(k)) union(i, seen.get(k)); else seen.set(k, i); });
+  });
+  const firstOfGroup = new Set();
+  return list.filter((r, i) => { const g = find(i); if (firstOfGroup.has(g)) return false; firstOfGroup.add(g); return true; });
+}
 function dayKey(d) { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
 function dayKeys(days) { const out = []; const s = sinceDate(days); for (let i = 0; i < days; i++) { const d = new Date(s); d.setDate(s.getDate() + i); out.push(dayKey(d)); } return out; }
 
@@ -92,7 +109,7 @@ async function buildOverview(days, sinceExact, onlyKey) {
       // /cesta: lead = domluvená schůzka (každá nezrušená rezervace zakládá lead)
       if (p.key === 'bs2_cesta') {
         const rs0 = await prisma.meetingReservation.findMany({ where: { created_at: rng(since), status: { not: 'canceled' } }, select: { id: true, created_at: true, compounder_lead_id: true, email: true, phone: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
-        const seenP = new Set(); const rs = rs0.filter((r) => { const k = meetingPersonKey(r); if (seenP.has(k)) return false; seenP.add(k); return true; }); // jen první rezervace od každé osoby
+        const rs = uniquePersonReservations(rs0); // jen první rezervace od každé osoby (slučuje přes lead / e-mail / telefon)
         item.leads = rs.length; item.leadLabel = 'schůzky'; const m = {}; rs.forEach((r) => { const k = dayKey(r.created_at); m[k] = (m[k] || 0) + 1; });
         item.leadsSeries = dayKeys(days).map((d) => ({ d, n: m[d] || 0 }));
       }
@@ -1025,8 +1042,8 @@ router.get('/pages/:key/ads', async (req, res) => {
       const rsAll = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
       meetingsCanceled = rsAll.filter((r) => r.status === 'canceled').length;
       // Duplicity: stejná osoba (lead / e-mail / telefon) s víc nezrušenými rezervacemi se počítá jednou — první rezervace
-      const activeAll = rsAll.filter((r) => r.status !== 'canceled'); const seenP = new Set();
-      const rs = activeAll.filter((r) => { const k = meetingPersonKey(r); if (seenP.has(k)) return false; seenP.add(k); return true; });
+      const activeAll = rsAll.filter((r) => r.status !== 'canceled');
+      const rs = uniquePersonReservations(activeAll);
       meetings = rs.length; meetingsDuplicates = activeAll.length - rs.length;
       // Atribuce: BS2 má u každé rezervace značky reklamy z prvního dotyku (ad_id / utm_*). Párujeme na ID reklamy, jinak na ID kampaně.
       let attr = []; try { const st2 = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path); attr = (st2 && st2.meeting_attr) || []; } catch (e) { attr = []; }
