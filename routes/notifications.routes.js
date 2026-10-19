@@ -17,8 +17,9 @@ const bus = require('../services/notification-bus');
 const { sendMail } = require('../services/email');
 const { notifyPerson } = require('../services/push/expo-push');
 
-// Typy notifikací, pro které odesíláme email (ostatní jen v appce)
-const EMAIL_TYPES = new Set(['chat_message', 'task_status', 'mention']);
+// Typy notifikací, pro které odesíláme email (ostatní jen v appce).
+// 'chat_message' tu záměrně NENÍ: upozornění na zprávy v chatu se e-mailem neposílají (jen SSE na webu + push do Velínu).
+const EMAIL_TYPES = new Set(['task_status', 'mention']);
 
 // Typy notifikací, pro které posíláme Expo push na Velín mobilní zařízení.
 // notifyPerson() sám respektuje quiet_from/quiet_to na Person — tichý push
