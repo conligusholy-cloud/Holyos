@@ -196,7 +196,15 @@ async function tick() {
   } catch (e) { console.warn('[ads-director] tick:', e.message); }
   finally { _busy = false; }
 }
-function start() { if (start._on) return; start._on = true; setTimeout(tick, 90 * 1000); setInterval(tick, 20 * 60 * 1000); }
+function start() {
+  if (start._on) return; start._on = true; setTimeout(tick, 90 * 1000); setInterval(tick, 20 * 60 * 1000);
+  // Healthcheck napojení FB Lead Ads každé 2 hodiny (první za 3 min po startu). Je celý asynchronní (fetch s timeouty) → event loop neblokuje.
+  // Při problému odejde alert e-mail (viz services/ads/fb-health.js). Vypnutí: FB_HEALTH_DISABLED=1.
+  if (process.env.FB_HEALTH_DISABLED !== '1') {
+    const fbRun = () => { require('./fb-health').run().catch((e) => console.warn('[fb-health] cron:', e.message)); };
+    setTimeout(fbRun, 3 * 60 * 1000); setInterval(fbRun, 2 * 3600 * 1000);
+  }
+}
 
 
 // ── 5) VYMYSLET NOVÝ FUNNEL: kreativní ředitel navrhne celý systém od nuly podle cílů majitele ──

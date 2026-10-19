@@ -1173,6 +1173,16 @@ router.post('/meta/leads-sync/repair', async (req, res, next) => {
       if (older) { const line = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' · Nová reakce z FB reklamy (napřímo, lead ' + r.meta_lead_id + ') — kontakt už v systému.'; await prisma.compounderLead.update({ where: { id: older.id }, data: { activity_log: line + (older.activity_log ? '\n' + older.activity_log : '') } }).catch(() => {}); await prisma.compounderLead.delete({ where: { id: r.id } }); removed++; continue; }
       await prisma.compounderLead.update({ where: { id: r.id }, data: { name: (name || r.name || 'FB lead').slice(0, 255), first_name: first ? first.slice(0, 120) : undefined, last_name: last ? last.slice(0, 120) : undefined, email: email ? email.slice(0, 255) : undefined, phone: phone ? phone.slice(0, 40) : undefined, company: f.company ? String(f.company).slice(0, 200) : undefined, city: f.city ? String(f.city).slice(0, 120) : undefined } }); fixed++; try { await cmp.rerunAutosend(r.id); } catch (e) { /* automat best-effort */ } } // po doplnění kontaktů znovu spustit automat (SMS / e-mail)
     res.json({ ok: true, checked: rows.length, fixed, removed, skipped }); } catch (err) { next(err); } });
+// Healthcheck napojení FB Lead Ads: GET /fb-health (živá kontrola + zalogování), GET /fb-health/last (poslední uložený výsledek pro badge)
+router.get('/fb-health', async (req, res) => {
+  try {
+    const r = await require('../services/ads/fb-health').check();
+    res.json({ ok: r.ok, token_expires_at: r.token_expires_at, webhook_ok: r.webhook_ok, last_lead_at: r.last_lead_at, token_ok: r.token_ok, sync_ok: r.sync_ok, active_campaigns: r.active_campaigns, stale_leads: r.stale_leads, reasons: r.reasons, pages: r.pages, tokens: r.tokens, checked_at: r.checked_at });
+  } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+router.get('/fb-health/last', async (req, res, next) => {
+  try { res.json((await require('../services/ads/fb-health').lastResult()) || null); } catch (err) { next(err); }
+});
 router.post('/meta/leads-sync/run', express.json({ limit: '10kb' }), async (req, res) => { try { const b = req.body || {}; const r = await leadsSync.sync({ since: b.since || undefined }); res.json(r); } catch (err) { res.status(400).json({ error: err.message }); } });
 
 // ── Komunikační kanály pro akční prvky funelu (e-mail, SMS) ──

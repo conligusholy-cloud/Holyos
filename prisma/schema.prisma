@@ -6344,6 +6344,17 @@ model MeetingSlot {
   @@map("meeting_slots")
 }
 
+// Systémový log technických událostí (healthchecky napojení apod.). type = např. 'fb_health'.
+model SystemLog {
+  id         Int      @id @default(autoincrement())
+  type       String   @db.VarChar(50)
+  payload    Json
+  created_at DateTime @default(now())
+
+  @@index([type, created_at])
+  @@map("system_logs")
+}
+
 // Rezervace termínu schůzky. Váže se na volný termín a (volitelně) na Compounder leada.
 model MeetingReservation {
   id                 Int      @id @default(autoincrement())

@@ -123,6 +123,7 @@
         <div>
           <h1>📣 Centrum reklamy</h1>
           <div class="sub">Všechny veřejné záchytné stránky na jednom místě – návštěvy, leady, objednávky a platby. Jen pro Tomáše a Jana Holého.</div>
+          <div id="fb-health-badge" role="button" tabindex="0" title="Stav napojení Facebook Lead Ads – klikni pro okamžitou kontrolu" style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);font-size:11.5px;cursor:pointer">⏳ Facebook napojení: načítám…</div>
         </div>
         <div id="dir-pill" role="button" tabindex="0" title="Otevřít marketingového ředitele" style="margin-left:auto;margin-right:18px;cursor:pointer;display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;border:1px solid rgba(245,158,11,.55);background:linear-gradient(135deg,rgba(245,158,11,.16),rgba(99,102,241,.12));max-width:520px">
           <span style="font-size:22px">🧭</span>
@@ -945,6 +946,25 @@
     async function dirRun(mode, btn) { var old = btn.textContent; btn.disabled = true; btn.textContent = '⏳ Pracuji…'; dirWorkStart(); try { var r = await fetch('/api/ads-center/director/run', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode: mode, days: 30 }) }); var j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); dirWorkStop(); await dirLoad(); } catch (e) { dirWorkStop(); document.getElementById('dir-out').innerHTML = '<div class="note warn">Ředitel selhal: ' + esc(e.message) + '</div>'; } dirWorkStop(); btn.disabled = false; btn.textContent = old; }
     document.getElementById('dir-run').addEventListener('click', function (e) { dirRun('audit', e.currentTarget); });
     document.getElementById('dir-changes').addEventListener('click', function (e) { dirRun('changes', e.currentTarget); });
+    // ── Badge stavu napojení Facebook Lead Ads (poslední výsledek healthchecku; klik = živá kontrola) ──
+    function fbHealthDraw(h, live) {
+      var b = document.getElementById('fb-health-badge'); if (!b) return;
+      if (!h) { b.style.borderColor = 'var(--border)'; b.style.color = ''; b.textContent = '⚪ Facebook napojení: zatím nezkontrolováno (kontrola běží každé 2 h)'; b.title = 'Klikni pro okamžitou kontrolu'; return; }
+      var stale = h.stale_leads, bad = h.ok === false;
+      var col = bad ? '#ef4444' : (stale || (h.reasons || []).length ? '#f59e0b' : '#22c55e');
+      var icon = bad ? '🔴' : (stale || (h.reasons || []).length ? '🟡' : '🟢');
+      var when = h.checked_at || h.logged_at; var ago = when ? Math.max(0, Math.round((Date.now() - new Date(when).getTime()) / 60000)) : null;
+      var last = h.last_lead_at ? 'poslední lead ' + new Date(h.last_lead_at).toLocaleString('cs-CZ') : 'žádný lead z FB';
+      b.style.borderColor = col; b.style.color = col;
+      b.textContent = icon + ' Facebook: ' + (bad ? 'PROBLÉM' : (stale ? 'dlouho bez leadu' : 'v pořádku')) + ' · ' + last + (ago != null ? ' · ověřeno před ' + (ago < 60 ? ago + ' min' : Math.round(ago / 60) + ' h') : '');
+      b.title = ((h.reasons || []).length ? h.reasons.join('\n') + '\n\n' : '') + 'Token: ' + (h.token_ok ? 'OK' : 'CHYBA') + (h.token_expires_at ? ' (platí do ' + new Date(h.token_expires_at).toLocaleDateString('cs-CZ') + ')' : '') + ' · Webhook: ' + (h.webhook_ok ? 'OK' : 'CHYBA') + ' · Stahování leadů: ' + (h.sync_ok === false ? 'CHYBA' : 'OK') + '\nKlikni pro okamžitou kontrolu';
+    }
+    async function fbHealthLoad() { try { var r = await fetch('/api/ads-center/fb-health/last', { credentials: 'same-origin', cache: 'no-store' }); fbHealthDraw(r.ok ? await r.json() : null); } catch (e) { fbHealthDraw(null); } }
+    document.getElementById('fb-health-badge').addEventListener('click', async function () {
+      var b = this; b.textContent = '⏳ Kontroluji Facebook…';
+      try { var r = await fetch('/api/ads-center/fb-health', { credentials: 'same-origin', cache: 'no-store' }); var j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); fbHealthDraw(j, true); if ((j.reasons || []).length) alert('Facebook napojení – nalezeno:\n\n• ' + j.reasons.join('\n• ')); } catch (e) { b.textContent = '🔴 Kontrola selhala: ' + e.message; }
+    });
+    fbHealthLoad(); setInterval(fbHealthLoad, 5 * 60 * 1000);
     document.getElementById('dir-pill').addEventListener('click', function () { document.getElementById('dir-modal').style.display = 'block'; dirLoad(); });
     document.getElementById('dir-close').addEventListener('click', function () { document.getElementById('dir-modal').style.display = 'none'; });
     dirLoad(); setInterval(dirLoad, 5 * 60 * 1000);
