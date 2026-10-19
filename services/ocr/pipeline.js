@@ -171,7 +171,18 @@ async function runPipeline(filePath, ctx = {}) {
 
   // ─── Pass 3 — ARES lookup ─────────────────────────────────────────────
   let aresResult = null, aresCross = null;
-  const { direction, suspicious: directionSuspicious, reason: directionReason } = detectDirection(header, await loadOurNames());
+  let det = detectDirection(header, await loadOurNames());
+  // Schránka pro příchozí faktury (invoice@) dostává VÝHRADNĚ doklady vystavené na nás — vždy je to přijatá faktura (AP).
+  // Směr proto nehádáme: nikdy „podezřelé", a když OCR vyhodnotila nás jako dodavatele, prohodíme dodavatele a odběratele.
+  // Vypnutí: INVOICE_MAILBOX_AP_ONLY=0.
+  if (ctx.email_ingest_id && process.env.INVOICE_MAILBOX_AP_ONLY !== '0') {
+    if (det.direction !== 'ap' && header && header.supplier && header.customer) {
+      const tmp = header.supplier; header.supplier = header.customer; header.customer = tmp;
+      warnings.push({ pass: 'direction_sanity', message: 'Schránka přijímá jen přijaté faktury — dodavatel a odběratel prohozeni.' });
+    }
+    det = { direction: 'ap', suspicious: false, reason: null };
+  }
+  const { direction, suspicious: directionSuspicious, reason: directionReason } = det;
   if (directionSuspicious) {
     warnings.push({ pass: 'direction_sanity', message: directionReason });
   }
