@@ -5,8 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const MODEL_SONNET = 'claude-sonnet-4-6';
-const MODEL_OPUS = 'claude-opus-4-6';
+// Modely lze přepnout bez nasazení kódu: OCR_MODEL_FIRST (průchod 1+2) a OCR_MODEL_REREAD (druhé čtení) v env / Railway.
+const MODEL_SONNET = process.env.OCR_MODEL_FIRST || 'claude-fable-5-1';
+const MODEL_OPUS = process.env.OCR_MODEL_REREAD || 'claude-opus-5-5';
 const MODEL_HAIKU = 'claude-haiku-4-5-20251001';
 
 function getClient() {

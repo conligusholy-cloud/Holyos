@@ -1187,7 +1187,30 @@ router.get('/email/ingests', async (req, res, next) => {
       }
       return null;
     };
-    res.json(ingests.map((ing) => Object.assign({}, ing, { original_sender: parseOriginalSender(ing) })));
+    // Skutečná cena OCR: součet tokenů z uložených průchodů × ceník modelu (USD/MTok vstup, výstup) × kurz
+    const PRICES = {
+      'claude-fable-5-1': [10, 50], 'claude-opus-5-5': [4, 20], 'claude-sonnet-5-5': [2, 10], 'claude-haiku-5-5': [0.1, 0.5],
+      'claude-opus-4-6': [5, 25], 'claude-sonnet-4-6': [3, 15], 'claude-haiku-4-5-20251001': [1, 5],
+    };
+    const usdCzk = Number(process.env.USD_CZK) || 21.7;
+    const costByIngest = {};
+    if (ingests.length) {
+      const usage = await prisma.ocrExtraction.groupBy({
+        by: ['email_ingest_id', 'model_used'],
+        where: { email_ingest_id: { in: ingests.map((i) => i.id) }, input_tokens: { not: null } },
+        _sum: { input_tokens: true, output_tokens: true },
+      });
+      for (const u of usage) {
+        const p = PRICES[u.model_used];
+        if (!p) continue;
+        const usd = ((u._sum.input_tokens || 0) * p[0] + (u._sum.output_tokens || 0) * p[1]) / 1e6;
+        costByIngest[u.email_ingest_id] = (costByIngest[u.email_ingest_id] || 0) + usd * usdCzk;
+      }
+    }
+    res.json(ingests.map((ing) => Object.assign({}, ing, {
+      original_sender: parseOriginalSender(ing),
+      ocr_cost_czk: costByIngest[ing.id] != null ? Math.round(costByIngest[ing.id] * 100) / 100 : null,
+    })));
   } catch (err) { next(err); }
 });
 

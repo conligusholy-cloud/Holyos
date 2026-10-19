@@ -1947,10 +1947,12 @@
             ) + '</td>' +
             '<td style="text-align:center;">' + (ing.attachments?.length || 0) + '</td>' +
             '<td>' + invoicesHtml + '</td>' +
+            '<td style="text-align:right;white-space:nowrap;">' + (ing.ocr_cost_czk != null ? ing.ocr_cost_czk.toFixed(2).replace('.', ',') + ' Kč' : '—') + '</td>' +
             '<td><button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + ing.id + ')">Reprocess</button></td>' +
           '</tr>'
         );
       }).join('');
+      const totalCost = (r.data || []).reduce((s, i) => s + (i.ocr_cost_czk || 0), 0);
 
       const tabBtn = (key, label) =>
         '<button class="btn ' + (window.ingestTab === key ? 'btn-primary' : 'btn-secondary') + '" ' +
@@ -1980,6 +1982,7 @@
               tabBtn('logs', '📋 Logy') +
               '<span style="color:var(--text2); font-size:0.88em;">' +
                 escapeHtml(tabHints[window.ingestTab] || '') + ' &nbsp;·&nbsp; celkem: ' + (r.data?.length || 0) +
+                ' &nbsp;·&nbsp; cena OCR: ' + totalCost.toFixed(2).replace('.', ',') + ' Kč' +
               '</span>' +
               '<div style="margin-left:auto;">' +
                 (eligibleForReprocess > 0
@@ -1991,9 +1994,9 @@
               '<table class="items-table" style="width:100%; min-width:1100px;">' +
                 '<thead><tr>' +
                   '<th>Obdrženo</th><th>Od</th><th>Původní odesílatel</th><th>Předmět</th><th>Stav</th>' +
-                  '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th></th>' +
+                  '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th style="text-align:right;" title="Cena OCR (AI) za e-mail, poslední zpracování">Cena OCR</th><th></th>' +
                 '</tr></thead>' +
-                '<tbody id="ingest-tbody">' + (rows || '<tr><td colspan="9" class="empty-hint" style="padding:20px;">' +
+                '<tbody id="ingest-tbody">' + (rows || '<tr><td colspan="10" class="empty-hint" style="padding:20px;">' +
                   ({active: 'Žádné aktivní e-maily — vše zpracováno.',
                     duplicate: 'Žádné duplikáty.',
                     archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.') +
