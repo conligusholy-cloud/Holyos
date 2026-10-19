@@ -82,6 +82,12 @@ async function buildOverview(days, sinceExact, onlyKey) {
           if (p.key === 'bs2_location') { item.leads = Number(bs2.orders.total || 0); item.conversions = Number(bs2.orders.paid || 0); item.revenue = Number(bs2.orders.revenue || 0); item.note = bs2.customers + ' zákazníků s balíčkem · ' + bs2.logins + ' přihlášených za období'; const m = {}; (bs2.ordersByDay || []).forEach((o) => { m[o.d] = o.n; }); item.leadsSeries = dayKeys(days).map((d) => ({ d, n: m[d] || 0 })); }
         } else item.note = 'Best Series 2.0 nedostupné' + (bs2Err ? ' (' + bs2Err + ')' : '');
       }
+      // /cesta: lead = domluvená schůzka (každá nezrušená rezervace zakládá lead)
+      if (p.key === 'bs2_cesta') {
+        const rs = await prisma.meetingReservation.findMany({ where: { created_at: rng(since), status: { not: 'canceled' } }, select: { created_at: true } }).catch(() => []);
+        item.leads = rs.length; item.leadLabel = 'schůzky'; const m = {}; rs.forEach((r) => { const k = dayKey(r.created_at); m[k] = (m[k] || 0) + 1; });
+        item.leadsSeries = dayKeys(days).map((d) => ({ d, n: m[d] || 0 }));
+      }
       if (p.visits) { const v = await visitSeries(p.visits, days); item.series = v.series; item.uniques = v.uniques; item.visits = v.series.reduce((a, x) => a + x.n, 0); }
       if (p.leads) {
         const srcs = new Set(p.leads.source);
