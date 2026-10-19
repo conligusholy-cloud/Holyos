@@ -1963,7 +1963,7 @@
 
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-          '<div class="modal wide">' +
+          '<div class="modal wide" style="max-width:1500px; width:96%;">' +
             '<h2>Příchozí e-maily</h2>' +
             '<div style="margin-bottom:14px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">' +
               tabBtn('active', '📥 Aktivní') +
@@ -1979,8 +1979,8 @@
                   : '') +
               '</div>' +
             '</div>' +
-            '<div style="max-height:65vh; overflow-y:auto;">' +
-              '<table class="items-table" style="width:100%;">' +
+            '<div style="max-height:65vh; overflow:auto;">' +
+              '<table class="items-table" style="width:100%; min-width:1100px;">' +
                 '<thead><tr>' +
                   '<th>Obdrženo</th><th>Od</th><th>Původní odesílatel</th><th>Předmět</th><th>Stav</th>' +
                   '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th></th>' +
@@ -2162,7 +2162,7 @@
 
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
-          '<div class="modal wide">' +
+          '<div class="modal wide" style="max-width:1500px; width:96%;">' +
             '<h2>Příchozí e-maily</h2>' +
             '<div style="margin-bottom:14px; display:flex; align-items:center; flex-wrap:wrap; gap:8px;">' +
               tabBtn('active', '📥 Aktivní') +
