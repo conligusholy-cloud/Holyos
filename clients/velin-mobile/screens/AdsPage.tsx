@@ -37,6 +37,9 @@ export default function AdsPage() {
   const [adsOnly, setAdsOnly] = useState(true);
   const [period, setPeriod] = useState(PERIODS[0]);
   const [hist, setHist] = useState<any>(null);
+  const [adsData, setAdsData] = useState<any>(null);
+  const [adsErr, setAdsErr] = useState('');
+  const [adsLoading, setAdsLoading] = useState(false);
   const [histLoading, setHistLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const alive = useRef(true);
@@ -58,6 +61,12 @@ export default function AdsPage() {
       const ov = await api.adsGet(auth.jwt, '/overview?' + period.q);
       const p = (ov.pages || []).find((x: any) => x.key === key) || null;
       if (alive.current) setHist(p);
+      // reklamy na tuto stránku + útrata (Meta) — načítá se zvlášť, ať nezdržuje čísla stránky
+      setAdsLoading(true);
+      api.adsGet(auth.jwt, '/pages/' + encodeURIComponent(key) + '/ads?' + period.q)
+        .then((j: any) => { if (alive.current) { setAdsData(j); setAdsErr(''); } })
+        .catch((e: any) => { if (alive.current) { setAdsData(null); setAdsErr(e?.message || 'Reklamy se nenačetly.'); } })
+        .finally(() => { if (alive.current) setAdsLoading(false); });
     } catch (e) { if (alive.current) setHist(null); }
     if (alive.current) setHistLoading(false);
   }, [key, period]);
@@ -144,6 +153,44 @@ export default function AdsPage() {
             {hist.note ? <Text style={s.sub}>{hist.note}</Text> : null}
           </View>
         )}
+
+        <Text style={[s.h2, { marginTop: 24 }]}>📣 Reklamy na tuto stránku</Text>
+        {adsLoading ? <ActivityIndicator color={BS.accent2} style={{ marginTop: 10 }} /> : adsErr ? <Text style={s.err}>{adsErr}</Text> : !adsData ? null : adsData.connected === false ? <Text style={s.empty}>Meta Ads nejsou napojené.</Text> : (
+          <>
+            {adsData.ads.length === 0 ? <Text style={s.empty}>V tomto období neběžela žádná reklama s odkazem na tuto stránku.</Text> : (
+              <>
+                <View style={s.card}>
+                  <View style={s.metrics}>
+                    <View style={s.m}><Text style={s.mN}>{nf(Math.round(adsData.totals.spend))} Kč</Text><Text style={s.mL}>útrata</Text></View>
+                    <View style={s.m}><Text style={s.mN}>{nf(adsData.totals.clicks)}</Text><Text style={s.mL}>kliků na web</Text></View>
+                    <View style={s.m}><Text style={s.mN}>{adsData.totals.clicks ? nf(Math.round((adsData.totals.spend / adsData.totals.clicks) * 100) / 100) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / klik</Text></View>
+                  </View>
+                  <View style={[s.metrics, { marginTop: 12 }]}>
+                    <View style={s.m}><Text style={s.mN}>{hist && hist.uniques ? nf(Math.round(adsData.totals.spend / hist.uniques)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / návštěvník</Text></View>
+                    {adsData.meetings != null ? <View style={s.m}><Text style={s.mN}>{nf(adsData.meetings)}</Text><Text style={s.mL}>schůzek</Text></View> : null}
+                    {adsData.meetings != null ? <View style={s.m}><Text style={[s.mN, { color: BS.ok }]}>{adsData.cost_per_meeting != null ? nf(Math.round(adsData.cost_per_meeting)) + ' Kč' : '—'}</Text><Text style={s.mL}>cena / schůzka</Text></View> : null}
+                  </View>
+                  {adsData.meetings != null ? <Text style={s.sub}>Schůzky = všechny nezrušené rezervace v období (z jakéhokoli zdroje).</Text> : null}
+                </View>
+                {adsData.ads.map((a: any) => (
+                  <View key={a.id} style={[s.card, { marginTop: 8 }]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={[s.cardT, { flex: 1 }]} numberOfLines={2}>{a.name}</Text>
+                      <Text style={[s.pill, { color: a.status === 'ACTIVE' ? BS.ok : BS.text2, borderColor: (a.status === 'ACTIVE' ? BS.ok : BS.text2) + '88' }]}>{a.status === 'ACTIVE' ? 'běží' : String(a.status || '—').toLowerCase()}</Text>
+                    </View>
+                    <Text style={s.sub} numberOfLines={1}>{a.campaign}</Text>
+                    <View style={s.metrics}>
+                      <View style={s.m}><Text style={s.mN}>{nf(Math.round(a.spend))}</Text><Text style={s.mL}>útrata Kč</Text></View>
+                      <View style={s.m}><Text style={s.mN}>{nf(a.impressions)}</Text><Text style={s.mL}>zobrazení</Text></View>
+                      <View style={s.m}><Text style={s.mN}>{nf(a.clicks)}</Text><Text style={s.mL}>kliků</Text></View>
+                      <View style={s.m}><Text style={s.mN}>{a.ctr != null ? String(Math.round(a.ctr * 100) / 100).replace('.', ',') + ' %' : '—'}</Text><Text style={s.mL}>CTR</Text></View>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -189,4 +236,6 @@ const s = StyleSheet.create({
   mL: { color: BS.text2, fontSize: 10.5, marginTop: 1 },
   rev: { color: BS.ok, fontWeight: '700', marginTop: 8, fontSize: 13 },
   sub: { color: BS.text2, fontSize: 12, marginTop: 4 },
+  cardT: { color: BS.text, fontWeight: '800', fontSize: 14 },
+  pill: { fontSize: 11.5, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
 });

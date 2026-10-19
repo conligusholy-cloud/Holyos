@@ -956,6 +956,39 @@ router.get('/meta/campaigns/:id', async (req, res, next) => {
       ads: (ads.data || []).map((a) => { const ins = (a.insights && a.insights.data && a.insights.data[0]) || {}; const ep = a._ep; if (ep.type === 'lead_form' && ep.form_id) ep.form = formNames[ep.form_id]; return { id: a.id, name: a.name, status: a.effective_status || a.status, adset_id: a.adset_id, endpoint: ep, impressions: Number(ins.impressions || 0), clicks: Number(ins.clicks || 0), link_clicks: Number(ins.inline_link_clicks || 0), spend: Number(ins.spend || 0), ctr: ins.ctr != null ? Number(ins.ctr) : null, leads: ((ins.actions || []).find((x) => x.action_type === 'lead' || x.action_type === 'onsite_conversion.lead_grouped') || {}).value || 0 }; }) });
   } catch (err) { res.status(400).json({ error: err.message }); } });
 
+// Reklamy z Meta, které míří na danou záchytnou stránku (podle cílové URL), s útratou za období + cena za schůzku.
+// GET /api/ads-center/pages/:key/ads?days=0|7|30&shift=0|1 — pro detail stránky ve Velínu.
+router.get('/pages/:key/ads', async (req, res) => {
+  try {
+    const page = PAGES.find((p) => p.key === req.params.key);
+    if (!page) return res.status(404).json({ error: 'Stránka nenalezena' });
+    const c = await metaCfg(req);
+    if (!c.token || !c.account) return res.json({ connected: false, ads: [], totals: null });
+    const days = parseDays(req.query.days, 0); const shift = parseShift(req.query.shift);
+    const preset = shift === 1 && days <= 1 ? 'yesterday' : days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d');
+    const norm = (u) => String(u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('#')[0].split('?')[0].replace(/\/+$/, '');
+    const target = norm(page.url);
+    const ins = await graph('act_' + c.account + '/insights', { level: 'ad', fields: 'ad_id,ad_name,campaign_id,campaign_name,spend,impressions,clicks,inline_link_clicks,ctr,actions', date_preset: preset, limit: 500 }, c.token);
+    const rows = ins.data || [];
+    const adLink = (cr) => { if (!cr) return null; const spec = cr.object_story_spec || {}; const ld = spec.link_data || {}; const vd = spec.video_data || {}; const afs = cr.asset_feed_spec || {};
+      return ld.link || (vd.call_to_action && vd.call_to_action.value && vd.call_to_action.value.link) || cr.link_url || cr.object_url || (afs.link_urls && afs.link_urls[0] && afs.link_urls[0].website_url) || null; };
+    const meta = {};
+    for (let i = 0; i < rows.length; i += 40) {
+      const ids = rows.slice(i, i + 40).map((r) => r.ad_id).join(',');
+      try { const j = await graph('', { ids, fields: 'effective_status,creative{object_story_spec,asset_feed_spec,link_url,object_url}' }, c.token); Object.keys(j).forEach((k) => { meta[k] = j[k]; }); } catch (e) { /* bez detailu těchto reklam */ }
+    }
+    const ads = rows.filter((r) => { const m = meta[r.ad_id]; return m && norm(adLink(m.creative)) === target; }).map((r) => {
+      const spend = Number(r.spend || 0), clicks = Number(r.inline_link_clicks || r.clicks || 0);
+      return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend, impressions: Number(r.impressions || 0), clicks, ctr: r.ctr != null ? Number(r.ctr) : null, cpc: clicks ? spend / clicks : null };
+    }).sort((a, b) => b.spend - a.spend);
+    const totals = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, clicks: a.clicks + x.clicks }), { spend: 0, impressions: 0, clicks: 0 });
+    // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
+    let meetings = null;
+    if (page.key === 'bs2_cesta') { meetings = await prisma.meetingReservation.count({ where: { created_at: rng(sinceDate(days, shift)), status: { not: 'canceled' } } }).catch(() => null); }
+    res.json({ connected: true, ads, totals, meetings, cost_per_meeting: meetings ? totals.spend / meetings : null });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 // ── Leady z rychlého formuláře: seznam kontaktů, které přes formulář přišly do HolyOS (CompounderLead.meta_form_id,
 //    plní je webhook FB Lead Ads). ?days= období (0 = celá historie), ?campaign= záložní párování podle názvu kampaně.
 const CMP_STATUS = { new: 'Nový', nedovolano: 'Nedovoláno', volat_pristi: 'Volat příště', contacted: 'Kontaktován', access_sent: 'Odeslán přístup', odeslan_specialista: 'Odeslán odkaz na specialistu', psal_chatovi: 'Psal s chatem', schuzka: 'Domluvena schůzka', schuzka_online: 'Domluvena schůzka online', qualified: 'Kvalifikován', dosledovani: 'Dosledování', slibeny_krok: 'Slíbený krok', smlouva_odeslat: 'Odeslat dokumentaci', smlouva_odeslana: 'Dokumentace odeslána', poptavka_financovani: 'Poptávka financování', odeslana_schuzka: 'Odeslána schůzka', prodano: 'Prodáno', converted: 'Převeden', nezajem: 'Nemá zájem', nelze_pouzit: 'Nelze použít', rejected: 'Zamítnut' };
