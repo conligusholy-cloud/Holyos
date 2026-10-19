@@ -563,7 +563,7 @@ app.get('/api/holyos/ads-stats', wrap(async (req, res) => {
   if (behavior) { try { Object.assign(behavior, behaviorExtras(ev)); } catch (e) { /* rozšířená data jsou nepovinná */ } }
   // Unikátní návštěvníci stránky z reklamy (UTM zdroj fb/ig/meta/google, fbclid, gclid, utm_medium cpc/paid) — samostatný dotaz, nezávislý na rozšířené analýze
   let adSessions = null;
-  if (bp) { try { adSessions = Number(((await q("SELECT count(DISTINCT sid)::int AS n FROM page_events WHERE path = $1 AND kind = 'view' AND created_at > $2::timestamptz AND created_at < $3::timestamptz AND (meta->>'q') ~* $4", [bp, sinceTs, untilTs, '(utm_source=(fb|facebook|ig|instagram|meta|google)|fbclid=|gclid=|utm_medium=(cpc|paid))'])).rows[0] || {}).n || 0); } catch (e) { adSessions = null; } }
+  if (bp) { try { adSessions = Number(((await q("SELECT count(DISTINCT COALESCE(substring(meta->>'q' from 'fbclid=([^&]+)'), 'sid:' || sid))::int AS n FROM page_events WHERE path = $1 AND kind = 'view' AND created_at > $2::timestamptz AND created_at < $3::timestamptz AND (meta->>'q') ~* $4", [bp, sinceTs, untilTs, '(utm_source=(fb|facebook|ig|instagram|meta|google)|fbclid=|gclid=|utm_medium=(cpc|paid))'])).rows[0] || {}).n || 0); } catch (e) { adSessions = null; } }
   res.json({ days, ordersByAttr, visits, uniques, orders, ordersByDay, revenueByDay, ordersByPackage, orderHours, customers, logins: Number(logins.n || 0), behavior, ad_sessions: adSessions });
 }));
 // Živý přehled návštěvníků záchytné stránky pro HolyOS Centrum reklamy: kdo je teď na stránce a co dělá (anonymně, bez obsahu polí)
