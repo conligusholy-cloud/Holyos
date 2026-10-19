@@ -4673,6 +4673,11 @@
       if (ev==='install_choice') return '📲 Instalace PWA: '+cmpEsc(p.outcome||'');
       if (ev==='visit_end') return '🚪 Konec návštěvy'+(p.ms?(' · '+cmpFmtDur(p.ms)):'')+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
       if (ev==='page_leave') return '🚪 Odešel z webu'+(p.depth!=null?(' · scroll '+p.depth+'%'):'');
+      if (ev==='lead_status') { var SL=(typeof CMP_STATUS!=='undefined'&&CMP_STATUS)||{}; return '🏷️ Změna stavu: '+(p.from?cmpEsc(SL[p.from]||p.from):'—')+' → <b>'+cmpEsc(SL[p.to]||p.to||'?')+'</b>'; }
+      if (ev==='sales_action') { var SA={call:'📞 Obchodník volal',sms:'💬 Obchodník poslal SMS',email:'📧 Obchodník poslal e-mail',note:'📝 Obchodník přidal poznámku',status:'🏷️ Obchodník změnil stav',import:'📥 Import kontaktů'}; return (SA[p.action]||('🧑‍💼 Akce obchodníka: '+cmpEsc(p.action||'?'))); }
+      if (ev==='funnel_email') return '📧 Odeslán e-mail z funnelu'+(p.variant?(' ('+cmpEsc(p.variant==='schuzka'?'schůzka':p.variant==='specialista'?'specialista':p.variant)+')'):'');
+      if (ev==='funnel_open') return '👀 Otevřel e-mail z funnelu';
+      if (ev==='autosend_email_open') return '👀 Otevřel automatický e-mail'+(p.variant?(' ('+cmpEsc(p.variant==='schuzka'?'schůzka':p.variant==='specialista'?'specialista':p.variant)+')'):'');
       return cmpEsc(ev);
     }
     async function cmpActivity(id, row) {
