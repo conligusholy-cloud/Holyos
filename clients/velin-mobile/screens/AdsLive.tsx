@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { api } from '../lib/api';
 import { loadAuth } from '../lib/auth';
 
@@ -22,6 +23,7 @@ const ago = (s: number) => (s < 5 ? 'teď' : s < 60 ? 'před ' + s + ' s' : s < 
 type LivePage = { key: string; name: string; color?: string; data: any };
 
 export default function AdsLive() {
+  const navigation = useNavigation<any>();
   const [pages, setPages] = useState<LivePage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,9 +108,9 @@ export default function AdsLive() {
             {pages.length === 0 ? <Text style={s.empty}>Žádná stránka s živým sledováním.</Text> : null}
             {viewPages.map(({ p, vis, now, l5, l30 }) => {
               return (
-                <View key={p.key} style={[s.card, { borderLeftColor: p.color || BS.accent, borderLeftWidth: 4 }]}>
+                <TouchableOpacity key={p.key} activeOpacity={0.8} onPress={() => navigation.navigate('AdsPage', { key: p.key, name: p.name, color: p.color })} style={[s.card, { borderLeftColor: p.color || BS.accent, borderLeftWidth: 4 }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={[s.cardT, { flex: 1 }]} numberOfLines={2}>{p.name}</Text>
+                    <Text style={[s.cardT, { flex: 1 }]} numberOfLines={2}>{p.name}  ›</Text>
                     <Text style={[s.pill, { color: now > 0 ? BS.ok : BS.text2, borderColor: (now > 0 ? BS.ok : BS.text2) + '88' }]}>{now} online</Text>
                   </View>
                   <Text style={s.sub}>za 5 min: {l5} · za 30 min: {l30}</Text>
@@ -122,7 +124,7 @@ export default function AdsLive() {
                       </View>
                     </View>
                   ))}
-                </View>
+                </TouchableOpacity>
               );
             })}
 

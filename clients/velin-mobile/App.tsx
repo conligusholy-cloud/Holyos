@@ -52,6 +52,7 @@ import Meetings from './screens/Meetings';
 import Ads from './screens/Ads';
 import AdsWeb from './screens/AdsWeb';
 import AdsLive from './screens/AdsLive';
+import AdsPage from './screens/AdsPage';
 import { colors } from './lib/theme';
 import { useSupportAllowed, useSupportUnread } from './lib/support';
 
@@ -90,6 +91,7 @@ export type RootStackParamList = {
   Ads: undefined;
   AdsWeb: undefined;
   AdsLive: undefined;
+  AdsPage: { key: string; name: string; color?: string };
 };
 
 export type TabsParamList = {
@@ -398,6 +400,11 @@ export default function App() {
             name="AdsLive"
             component={AdsLive}
             options={{ animation: 'slide_from_right', headerShown: true, title: 'Reklama živě', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
+          />
+          <Stack.Screen
+            name="AdsPage"
+            component={AdsPage}
+            options={{ animation: 'slide_from_right', headerShown: true, title: 'Stránka', headerStyle: { backgroundColor: colors.surface }, headerTintColor: colors.text, headerShadowVisible: false }}
           />
           <Stack.Screen
             name="AdsWeb"
