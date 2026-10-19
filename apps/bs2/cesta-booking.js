@@ -84,7 +84,7 @@
         '<h2 class="bk-h">Jak vám to <span class="g">vyhovuje?</span></h2>' +
         '<p class="bk-sub">Klikněte a hned uvidíte volné termíny.</p>' +
         '<div class="bk-modes" style="grid-template-columns:1fr">' +
-          '<button type="button" class="bk-mode" data-mode="online"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>Online hovor<small>video hovor z pohodlí domova</small></button>' +
+          '<button type="button" class="bk-mode" data-mode="online"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3z"/></svg>Domluvit videohovor přes WhatsApp<small>video hovor z pohodlí domova</small></button>' +
         '</div>' +
       '</div>' +
       '<div class="bk-cal" style="display:none">' +

@@ -982,7 +982,7 @@ router.get('/pages/:key/ads', async (req, res) => {
     const preset = shift === 1 && days <= 1 ? 'yesterday' : days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d');
     const norm = (u) => String(u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('#')[0].split('?')[0].replace(/\/+$/, '');
     const target = norm(page.url);
-    const ins = await graph('act_' + c.account + '/insights', { level: 'ad', fields: 'ad_id,ad_name,campaign_id,campaign_name,spend,impressions,clicks,inline_link_clicks,ctr,actions', date_preset: preset, limit: 500 }, c.token);
+    const ins = await graph('act_' + c.account + '/insights', { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,campaign_name,spend,impressions,reach,clicks,inline_link_clicks,unique_inline_link_clicks,ctr,actions', date_preset: preset, limit: 500 }, c.token);
     const rows = ins.data || [];
     const adLink = (cr) => { if (!cr) return null; const spec = cr.object_story_spec || {}; const ld = spec.link_data || {}; const vd = spec.video_data || {}; const afs = cr.asset_feed_spec || {};
       return ld.link || (vd.call_to_action && vd.call_to_action.value && vd.call_to_action.value.link) || cr.link_url || cr.object_url || (afs.link_urls && afs.link_urls[0] && afs.link_urls[0].website_url) || null; };
@@ -994,19 +994,19 @@ router.get('/pages/:key/ads', async (req, res) => {
     // Právě běžící reklamy bez zobrazení v období (např. nově spuštěná kopie) Meta v přehledu výkonu nevrací — doplníme je s nulami
     try {
       const have = new Set(rows.map((r) => String(r.ad_id)));
-      const act = await graph('act_' + c.account + '/ads', { effective_status: JSON.stringify(['ACTIVE']), fields: 'id,name,effective_status,campaign{id,name},creative{object_story_spec,asset_feed_spec,link_url,object_url}', limit: 200 }, c.token);
+      const act = await graph('act_' + c.account + '/ads', { effective_status: JSON.stringify(['ACTIVE']), fields: 'id,name,adset_id,effective_status,campaign{id,name},creative{object_story_spec,asset_feed_spec,link_url,object_url}', limit: 200 }, c.token);
       (act.data || []).forEach((a) => {
         if (have.has(String(a.id))) return;
-        rows.push({ ad_id: a.id, ad_name: a.name, campaign_id: a.campaign && a.campaign.id, campaign_name: a.campaign && a.campaign.name, spend: 0, impressions: 0, clicks: 0, inline_link_clicks: 0, ctr: null, actions: [] });
+        rows.push({ ad_id: a.id, ad_name: a.name, adset_id: a.adset_id, campaign_id: a.campaign && a.campaign.id, campaign_name: a.campaign && a.campaign.name, spend: 0, impressions: 0, clicks: 0, inline_link_clicks: 0, ctr: null, actions: [] });
         meta[a.id] = { effective_status: a.effective_status, creative: a.creative };
       });
     } catch (e) { /* bez doplnění běžících reklam */ }
     const ads = rows.filter((r) => { const m = meta[r.ad_id]; return m && norm(adLink(m.creative)) === target; }).map((r) => {
       const spend = Number(r.spend || 0), clicks = Number(r.inline_link_clicks || r.clicks || 0);
       const lpv = Number(((r.actions || []).find((x) => x.action_type === 'landing_page_view') || {}).value || 0);
-      return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend, impressions: Number(r.impressions || 0), clicks, landing_views: lpv, ctr: r.ctr != null ? Number(r.ctr) : null, cpc: clicks ? spend / clicks : null };
+      return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend, impressions: Number(r.impressions || 0), reach: Number(r.reach || 0), clicks, unique_clicks: Number(r.unique_inline_link_clicks || 0), landing_views: lpv, ctr: r.ctr != null ? Number(r.ctr) : null, cpc: clicks ? spend / clicks : null };
     }).sort((a, b) => b.spend - a.spend);
-    const totals = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, clicks: a.clicks + x.clicks, landing_views: a.landing_views + x.landing_views }), { spend: 0, impressions: 0, clicks: 0, landing_views: 0 });
+    const totals = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, clicks: a.clicks + x.clicks, unique_clicks: a.unique_clicks + x.unique_clicks, landing_views: a.landing_views + x.landing_views }), { spend: 0, impressions: 0, clicks: 0, unique_clicks: 0, landing_views: 0 });
     // Návštěvníci stránky ze zdrojů reklamy (Facebook / Instagram / Google…) — unikátní relace z BS2 sledování, stejné období
     let adVisitors = null;
     if (page.bs2 && page.bs2.path) {
@@ -1019,7 +1019,7 @@ router.get('/pages/:key/ads', async (req, res) => {
       } catch (e) { adVisitors = null; }
     }
     // Schůzky: rezervace (nezrušené) za stejné období — jen u stránky /cesta, odkud se rezervuje
-    let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null, meetingsDuplicates = null;
+    let meetings = null, meetingsCanceled = null, meetingsFromAds = null, meetingsOther = null, meetingsDuplicates = null, meetingsUnmatched = null;
     if (page.key === 'bs2_cesta') {
       const rg = rng(sinceDate(days, shift));
       const rsAll = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true }, orderBy: { created_at: 'asc' } }).catch(() => []);
@@ -1032,19 +1032,27 @@ router.get('/pages/:key/ads', async (req, res) => {
       let attr = []; try { const st2 = await bs2Stats(Math.max(1, days + 1), sinceDate(days, shift), page.bs2.path); attr = (st2 && st2.meeting_attr) || []; } catch (e) { attr = []; }
       const attrBy = {}; attr.forEach((a) => { attrBy[String(a.ref_id)] = a; });
       const adById = {}; ads.forEach((a) => { adById[String(a.id)] = a; });
-      const byCamp = {}; rows.forEach((r) => { if (r.campaign_id && adById[String(r.ad_id)]) (byCamp[String(r.campaign_id)] = byCamp[String(r.campaign_id)] || []).push(adById[String(r.ad_id)]); });
+      const byCamp = {}, bySet = {}; rows.forEach((r) => { const ad = adById[String(r.ad_id)]; if (!ad) return; if (r.campaign_id) (byCamp[String(r.campaign_id)] = byCamp[String(r.campaign_id)] || []).push(ad); if (r.adset_id) (bySet[String(r.adset_id)] = bySet[String(r.adset_id)] || []).push(ad); });
       ads.forEach((a) => { a.meetings = 0; });
-      meetingsFromAds = 0; meetingsOther = 0;
+      meetingsFromAds = 0; meetingsOther = 0; const unmatched = [];
+      const adLike = /(^|[^a-z])(fb|ig)([^a-z]|$)|facebook|insta|meta|google/i;
+      const withDelivery = ads.filter((a) => a.impressions > 0);
       rs.forEach((r) => {
         const a = attrBy[String(r.id)]; let hit = null;
         if (a) { const vals = [a.ad_id, a.utm_content, a.utm_campaign, a.utm_term].filter(Boolean).map(String);
-          for (const v of vals) { if (adById[v]) { hit = adById[v]; break; } }
-          if (!hit) for (const v of vals) { if (byCamp[v] && byCamp[v].length) { hit = byCamp[v][0]; break; } } }
+          for (const v of vals) { if (adById[v]) { hit = adById[v]; break; } }                    // přesně ID reklamy
+          if (!hit) for (const v of vals) { if (bySet[v] && bySet[v].length) { hit = bySet[v][0]; break; } }   // ID sady reklam
+          if (!hit) for (const v of vals) { if (byCamp[v] && byCamp[v].length) { hit = byCamp[v][0]; break; } } // ID kampaně
+          // záloha: návštěvník přišel z reklamy (fb/ig/google), ale značka nesedí s ničím — když na stránku v období běžela jediná reklama s doručením, patří jí
+          if (!hit && (adLike.test(String(a.utm_source || '')) || a.fbclid) && withDelivery.length === 1) hit = withDelivery[0];
+          if (!hit) unmatched.push({ utm_source: a.utm_source, utm_campaign: a.utm_campaign, utm_content: a.utm_content, utm_term: a.utm_term, ad_id: a.ad_id, fbclid: !!a.fbclid }); }
+        else unmatched.push({ bez_znacek: true });
         if (hit) { hit.meetings++; meetingsFromAds++; } else meetingsOther++;
       });
+      meetingsUnmatched = unmatched;
       ads.forEach((a) => { a.cost_per_meeting = a.meetings ? a.spend / a.meetings : null; });
     }
-    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_duplicates: meetingsDuplicates, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
+    res.json({ connected: true, ads, totals, ad_visitors: adVisitors, meetings, meetings_canceled: meetingsCanceled, meetings_duplicates: meetingsDuplicates, meetings_from_ads: meetingsFromAds, meetings_other: meetingsOther, meetings_unmatched: meetingsUnmatched, cost_per_meeting: meetingsFromAds ? totals.spend / meetingsFromAds : (meetings ? totals.spend / meetings : null) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
