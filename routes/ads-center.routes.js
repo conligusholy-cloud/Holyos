@@ -332,6 +332,110 @@ router.post('/pages/:key/recommend', async (req, res, next) => { try {
   const textOut = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
   res.json({ ok: true, text: textOut, at: new Date().toISOString() });
 } catch (err) { next(err); } });
+// ── HLOUBKOVÁ AI ANALÝZA: reklamy → záchytná stránka → navazující stránky → rezervace schůzky ──
+// Sbírá data z celé cesty (Meta reklamy vč. textů, cílení, umístění; měření BS2 po stránkách; rezervace schůzek vč. no-show a volných termínů),
+// spočítá ekonomiku a scénáře očekávaných výsledků v KÓDU (AI čísla nevymýšlí, jen je interpretuje) a nechá silnější model napsat strategii.
+// Běží jako úloha na pozadí (trvá 1–3 min): POST /pages/:key/deep-analysis → { job }, GET /deep-analysis/job/:job (stav), GET /pages/:key/deep-analysis/last.
+const DEEP_JOBS = new Map();
+const DEEP_KEY = (k) => 'ads_center.deep.' + k;
+const JOURNEY = { bs2_cesta: ['/cesta', '/cesta/info', '/cesta/vlastni-kapital', '/cesta/financovani', '/cesta/schuzka'] };
+const stripHtml = (html) => String(html || '').replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<(h[1-6]|p|li|button|a|label|summary|div|section)[^>]*>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim();
+async function deepMeetings(rg) {
+  const rows = await prisma.meetingReservation.findMany({ where: { created_at: rg }, select: { id: true, status: true, compounder_lead_id: true, email: true, phone: true, created_at: true, mode: true, financing_path: true, slot: { select: { starts_at: true } } }, orderBy: { created_at: 'asc' } }).catch(() => []);
+  const all = rows.filter((r) => !isInternalReservation(r));
+  const active = all.filter((r) => r.status !== 'canceled'); const uniq = uniquePersonReservations(active);
+  const cnt = (f) => all.filter(f).length; const hist = (arr, fn) => arr.reduce((a, r) => { const k = fn(r); a[k] = (a[k] || 0) + 1; return a; }, {});
+  const hourOf = (d) => Number(new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', hour12: false }).format(new Date(d)));
+  const dowOf = (d) => new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', weekday: 'short' }).format(new Date(d));
+  const lead = uniq.filter((r) => r.slot && r.slot.starts_at).map((r) => (new Date(r.slot.starts_at).getTime() - new Date(r.created_at).getTime()) / 3600000).filter((x) => x > 0);
+  return { total_reservations: all.length, unique_people: uniq.length, duplicates: active.length - uniq.length, canceled: cnt((r) => r.status === 'canceled'), no_show: cnt((r) => r.status === 'no_show'), done: cnt((r) => r.status === 'done'), booked_open: cnt((r) => r.status === 'booked'),
+    by_mode: hist(uniq, (r) => r.mode || 'neuvedeno'), by_financing_path: hist(uniq, (r) => r.financing_path || 'neuvedeno'), booking_hour_prague: hist(uniq, (r) => hourOf(r.created_at)), booking_weekday: hist(uniq, (r) => dowOf(r.created_at)),
+    avg_hours_between_booking_and_meeting: lead.length ? Math.round(lead.reduce((a, b) => a + b, 0) / lead.length * 10) / 10 : null };
+}
+async function deepCollect(page, days, shift, req, progress) {
+  const out = { page: { key: page.key, name: page.name, url: page.url, desc: page.desc }, period: { days, shift } };
+  const since = sinceDate(days, shift); const rg = rng(since);
+  // 1) reklamy mířící na stránku + texty, cílení, umístění
+  progress('Stahuji reklamy a jejich texty z Meta…');
+  let ads = [], adsTot = null;
+  try {
+    const c = await metaCfg(req);
+    if (c.token && c.account) {
+      const preset = shift === 1 && days <= 1 ? 'yesterday' : days === 0 ? 'today' : 'last_' + (days <= 7 ? '7d' : days <= 30 ? '30d' : '90d');
+      const norm = (u) => String(u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('#')[0].split('?')[0].replace(/\/+$/, ''); const target = norm(page.url);
+      const ins = await graph('act_' + c.account + '/insights', { level: 'ad', fields: 'ad_id,ad_name,adset_id,campaign_id,campaign_name,spend,impressions,reach,frequency,clicks,inline_link_clicks,unique_inline_link_clicks,ctr,cpm,actions', date_preset: preset, limit: 500 }, c.token);
+      const rows = ins.data || []; const meta = {};
+      for (let i = 0; i < rows.length; i += 40) { try { const j = await graph('', { ids: rows.slice(i, i + 40).map((r) => r.ad_id).join(','), fields: 'effective_status,creative{object_story_spec,asset_feed_spec,link_url,object_url,title,body,call_to_action_type}' }, c.token); Object.keys(j).forEach((k) => { meta[k] = j[k]; }); } catch (e) { /* bez detailu */ } }
+      const link = (cr) => { if (!cr) return null; const sp = cr.object_story_spec || {}; const ld = sp.link_data || {}; const vd = sp.video_data || {}; const afs = cr.asset_feed_spec || {}; return ld.link || (vd.call_to_action && vd.call_to_action.value && vd.call_to_action.value.link) || cr.link_url || cr.object_url || (afs.link_urls && afs.link_urls[0] && afs.link_urls[0].website_url) || null; };
+      const copy = (cr) => { if (!cr) return null; const sp = cr.object_story_spec || {}; const ld = sp.link_data || {}; const vd = sp.video_data || {}; const afs = cr.asset_feed_spec || {}; return { primary_text: ld.message || vd.message || cr.body || (afs.bodies && afs.bodies.map((b) => b.text).join(' | ')) || null, headline: ld.name || vd.title || cr.title || (afs.titles && afs.titles.map((b) => b.text).join(' | ')) || null, description: ld.description || vd.link_description || (afs.descriptions && afs.descriptions.map((b) => b.text).join(' | ')) || null, cta: (ld.call_to_action && ld.call_to_action.type) || (vd.call_to_action && vd.call_to_action.type) || cr.call_to_action_type || null, format: vd.video_id ? 'video' : (ld.child_attachments ? 'karusel' : (ld.picture || ld.image_hash ? 'obrázek' : 'neznámý')) }; };
+      const mine = rows.filter((r) => { const m = meta[r.ad_id]; return m && norm(link(m.creative)) === target; });
+      const adsetIds = [...new Set(mine.map((r) => r.adset_id).filter(Boolean))]; const sets = {};
+      if (adsetIds.length) { try { const j = await graph('', { ids: adsetIds.join(','), fields: 'name,status,daily_budget,lifetime_budget,optimization_goal,billing_event,bid_strategy,targeting{age_min,age_max,genders,geo_locations,flexible_spec,exclusions,custom_audiences,publisher_platforms,facebook_positions,instagram_positions,device_platforms,targeting_automation}' }, c.token); Object.keys(j).forEach((k) => { sets[k] = j[k]; }); } catch (e) { /* bez cílení */ } }
+      ads = mine.map((r) => { const spend = Number(r.spend || 0), clicks = Number(r.inline_link_clicks || r.clicks || 0); const lpv = Number(((r.actions || []).find((x) => x.action_type === 'landing_page_view') || {}).value || 0); const st = sets[r.adset_id] || null;
+        return { id: r.ad_id, name: r.ad_name, campaign: r.campaign_name, status: (meta[r.ad_id] || {}).effective_status || '', spend: Math.round(spend), impressions: Number(r.impressions || 0), reach: Number(r.reach || 0), frequency: r.frequency != null ? Number(r.frequency) : null, link_clicks: clicks, unique_link_clicks: Number(r.unique_inline_link_clicks || 0), landing_views: lpv, ctr_pct: r.ctr != null ? Math.round(Number(r.ctr) * 100) / 100 : null, cpm: r.cpm != null ? Math.round(Number(r.cpm)) : null, cpc: clicks ? Math.round(spend / clicks * 100) / 100 : null, creative: copy((meta[r.ad_id] || {}).creative), adset: st ? { name: st.name, optimization_goal: st.optimization_goal, bid_strategy: st.bid_strategy, daily_budget_czk: st.daily_budget ? Number(st.daily_budget) / 100 : null, lifetime_budget_czk: st.lifetime_budget ? Number(st.lifetime_budget) / 100 : null, targeting: st.targeting || null } : null }; }).sort((a, b) => b.spend - a.spend);
+      adsTot = ads.reduce((a, x) => ({ spend: a.spend + x.spend, impressions: a.impressions + x.impressions, link_clicks: a.link_clicks + x.link_clicks, unique_link_clicks: a.unique_link_clicks + x.unique_link_clicks, landing_views: a.landing_views + x.landing_views }), { spend: 0, impressions: 0, link_clicks: 0, unique_link_clicks: 0, landing_views: 0 });
+      // rozpad výkonu: umístění, věk/pohlaví, zařízení (jen pro reklamy této stránky)
+      const ids = ads.map((a) => a.id); const flt = JSON.stringify([{ field: 'ad.id', operator: 'IN', value: ids }]);
+      const brk = async (breakdowns) => { try { const j = await graph('act_' + c.account + '/insights', { level: 'account', fields: 'spend,impressions,inline_link_clicks,ctr', breakdowns, date_preset: preset, filtering: flt, limit: 60 }, c.token); return (j.data || []).map((r) => Object.assign({}, ...breakdowns.split(',').map((k) => ({ [k]: r[k] })), { spend: Math.round(Number(r.spend || 0)), impressions: Number(r.impressions || 0), link_clicks: Number(r.inline_link_clicks || 0), ctr_pct: r.ctr != null ? Math.round(Number(r.ctr) * 100) / 100 : null })); } catch (e) { return null; } };
+      if (ids.length) { out.breakdown_placement = await brk('publisher_platform,platform_position'); out.breakdown_age_gender = await brk('age,gender'); out.breakdown_device = await brk('device_platform'); }
+    } else out.ads_note = 'Meta není připojená – reklamy nelze analyzovat.';
+  } catch (e) { out.ads_note = 'Reklamy se nepodařilo načíst: ' + e.message; }
+  out.ads = ads; out.ads_totals = adsTot;
+  // 2) cesta návštěvníka po stránkách (měření BS2 + skutečné texty stránek)
+  progress('Analyzuji chování návštěvníků na všech stránkách cesty…');
+  const paths = JOURNEY[page.key] || (page.bs2 && page.bs2.path ? [page.bs2.path] : []); const base = String(process.env.BS2_URL || 'https://www.bestseries2.cz').replace(/\/$/, '');
+  out.journey = []; let adSessions = null, meetingAttr = null;
+  for (const pth of paths) {
+    const row = { path: pth };
+    try { const st = await bs2Stats(Math.max(1, days + 1), since, pth); const u = (st.uniques || []).find((x) => x.path === pth); row.unique_visitors = u ? u.n : 0; row.visits = (st.visits || []).filter((v) => v.path === pth).reduce((a, v) => a + v.n, 0); row.behavior = st.behavior ? JSON.stringify(Object.assign({}, st.behavior, { mouse: undefined })).slice(0, 3500) : null; if (pth === (page.bs2 && page.bs2.path)) { adSessions = st.ad_sessions != null ? Number(st.ad_sessions) : null; meetingAttr = st.meeting_attr || null; } } catch (e) { row.stats_error = e.message; }
+    try { const pr = await fetch(base + pth, { signal: AbortSignal.timeout(10000), headers: { 'User-Agent': 'HolyOS-PageAnalyzer' } }); if (pr.ok) row.page_text = stripHtml(await pr.text()).slice(0, 3800); } catch (e) { /* bez textu */ }
+    out.journey.push(row);
+  }
+  out.ad_sessions = adSessions; out.meeting_attribution_sample = Array.isArray(meetingAttr) ? meetingAttr.slice(0, 15) : null;
+  // 3) schůzky: teď vs. předchozí období + nabídka volných termínů
+  progress('Počítám rezervace schůzek a ekonomiku…');
+  out.meetings = await deepMeetings(rg); out.meetings_prev = await deepMeetings(rng(sinceDate(days, (shift || 0) + Math.max(1, days))));
+  try { const now = new Date(); const wk = new Date(now.getTime() + 7 * 86400000); const sl = await prisma.meetingSlot.findMany({ where: { active: true, starts_at: { gt: now, lte: wk } }, select: { capacity: true, reservations: { select: { status: true } } } }); out.slots_next_7_days = { slots: sl.length, free_places: sl.reduce((a, s) => a + Math.max(0, s.capacity - s.reservations.filter((r) => r.status === 'booked').length), 0) }; } catch (e) { out.slots_next_7_days = null; }
+  // 4) ekonomika + scénáře (počítá kód, ne AI)
+  const m = out.meetings, T = adsTot; const R = (x, d) => (x == null || !isFinite(x) ? null : Math.round(x * Math.pow(10, d || 0)) / Math.pow(10, d || 0));
+  const sessions = adSessions != null ? adSessions : null;
+  const econ = { spend_czk: T ? T.spend : null, cpm_czk: T && T.impressions ? R(T.spend / T.impressions * 1000, 1) : null, ctr_pct: T && T.impressions ? R(T.link_clicks / T.impressions * 100, 2) : null, cpc_czk: T && T.link_clicks ? R(T.spend / T.link_clicks, 2) : null,
+    click_to_session_rate: T && T.unique_link_clicks && sessions != null ? R(sessions / T.unique_link_clicks, 3) : null, ad_sessions: sessions, meetings_unique: m.unique_people,
+    session_to_meeting_rate_pct: sessions ? R(m.unique_people / sessions * 100, 2) : null, cost_per_meeting_czk: T && m.unique_people ? R(T.spend / m.unique_people) : null,
+    no_show_rate_pct: (m.no_show + m.done) ? R(m.no_show / (m.no_show + m.done) * 100, 1) : null, cost_per_held_meeting_czk: T && m.done ? R(T.spend / m.done) : null, sample_warning: m.unique_people < 10 ? 'Méně než 10 schůzek – závěry jsou jen signál, ne jistota.' : null };
+  out.economics = econ;
+  if (T && T.impressions && econ.click_to_session_rate && econ.session_to_meeting_rate_pct != null && m.unique_people > 0) {
+    const ns0 = (econ.no_show_rate_pct || 0) / 100; const sc = (name, ctrM, convM, nsM, cpmM) => { const imp = T.spend / ((econ.cpm_czk * cpmM) / 1000); const clicks = imp * (T.link_clicks / T.impressions) * ctrM; const ses = clicks * (T.unique_link_clicks / T.link_clicks || 1) * econ.click_to_session_rate; const mt = ses * (econ.session_to_meeting_rate_pct / 100) * convM; const held = mt * (1 - ns0 * nsM); return { scenario: name, assumptions: 'CTR ×' + ctrM + ', konverze návštěva→schůzka ×' + convM + ', no-show ×' + nsM + ', CPM ×' + cpmM, meetings_at_same_budget: R(mt, 1), cost_per_meeting_czk: mt ? R(T.spend / mt) : null, held_meetings: R(held, 1), cost_per_held_meeting_czk: held ? R(T.spend / held) : null }; };
+    out.scenarios = [sc('současný stav', 1, 1, 1, 1), sc('konzervativní', 1.1, 1.15, 0.8, 1), sc('realistický', 1.25, 1.4, 0.6, 1), sc('optimistický', 1.5, 1.8, 0.4, 0.95)];
+  } else out.scenarios = null;
+  return out;
+}
+async function deepRun(jobId, page, days, shift, req) {
+  const job = DEEP_JOBS.get(jobId); const progress = (t) => { job.progress = t; };
+  try {
+    const data = await deepCollect(page, days, shift, req, progress);
+    progress('AI píše strategii (1–2 min)…');
+    const Anthropic = require('@anthropic-ai/sdk'); const apiKey = process.env.ANTHROPIC_API_KEY; if (!apiKey) throw new Error('ANTHROPIC_API_KEY není nastavený');
+    const client = new Anthropic({ apiKey }); const { MODEL_OPUS } = require('../services/ocr/claude-vision');
+    const sys = 'Jsi spojení špičkového Meta Ads strategy leadu (performance marketing), CRO specialisty a direct-response copywritera. Pracuješ pro Best Series (prádlomaty – samoobslužné prádelny, prodej strojů). Cíl celé cesty: reklama na Facebooku → záchytná stránka → navazující stránky → REZERVACE SCHŮZKY (online videohovor / osobně). Piš česky, věcně, konkrétně, bez vaty. PRAVIDLA: (1) Každé tvrzení opři o číslo z dodaných dat; chybí-li číslo, řekni to a navrhni měření. (2) Čísla NEVYMÝŠLEJ a nepočítej si vlastní scénáře – očekávané výsledky přebírej výhradně z pole "scenarios" a "economics" (jsou spočítané kódem) a vysvětli, co za nimi stojí; u malého vzorku (sample_warning) piš „signál", ne jistota. (3) Hotové texty piš tak, aby šly rovnou vložit (česky, přirozeně, bez klišé, bez slibů výdělku, které nelze doložit). (4) Respektuj omezení Meta (délka textů: primární text do ~125 znaků viditelných, nadpis do ~40).';
+    const user = 'DATA (JSON):\n' + JSON.stringify(data).slice(0, 60000) + '\n\nVýstup v Markdownu přesně v těchto částech:\n## 1. Verdikt\nJedna věta + 5 odrážek: co funguje, co brzdí, největší páka. Pod tím tabulka klíčových čísel cesty (zobrazení → kliky → návštěvy → schůzky → proběhlé) s konverzemi mezi kroky a hodnocením zdravé / problém.\n## 2. Kvalita dat a čemu věřit\nVzorek, nesoulady zdrojů (Meta vs. BS2), co nelze tvrdit; co zapnout/změřit.\n## 3. Analýza cesty krok za krokem\nPro každou stránku cesty (/cesta, /cesta/info, /cesta/vlastni-kapital, /cesta/financovani, /cesta/schuzka): návštěvníci, kam se ztrácejí (scroll/sekce/exity/kliky z dat), co v textu stránky brzdí rozhodnutí, konkrétní úprava. Zvlášť rezervace schůzky: tření, nabídka termínů (slots_next_7_days), no-show.\n## 4. Reklamy: analýza současných kreativ a textů\nTabulka reklam (útrata, CTR, CPC, kliky, schůzky) + rozbor primárního textu, nadpisu, formátu, CTA; co funguje / co ne a proč. Rozpad podle umístění, věku/pohlaví, zařízení – kde platíme zbytečně a kde vyděláváme.\n## 5. Strategie nastavení kampaní\nStruktura kampaní a sad, optimalizační událost (a co zapnout v pixelu/CAPI), cílení (publika, vyloučení, umístění), rozpočet a jeho rozdělení, pravidla pro vypínání/škálování, fáze učení, frekvence. Konkrétní kroky klik po kliku v Ads Manageru.\n## 6. Hotové reklamní texty\n5 kompletních variant reklamy (hook, primární text, nadpis, popis, CTA) pro různé motivace publika + 3 nápady na video/kreativu (scénář prvních 3 sekund). Označ, kterou variantu testovat první a proč.\n## 7. Hotové texty stránek k nasazení\nPro nejslabší místa cesty (hero, kroky, CTA, FAQ, rezervace, potvrzení) přepsané texty.\n## 8. Priorizovaný plán úprav\nTabulka: úprava | kde | dopad | náročnost | metrika | očekávaný efekt (jen z dodaných scénářů). Seřazeno podle poměru dopad/náročnost.\n## 9. Co očekávat\nTabulka scénářů (z pole scenarios): schůzky při stejném rozpočtu, cena za schůzku, cena za proběhlou schůzku. Pod ní co musí platit, aby se scénář naplnil, a za jak dlouho ho půjde vyhodnotit.\n## 10. A/B testy a plán na 7 a 30 dní\n3 hypotézy „Pokud…, pak…, protože…“ s metrikou a minimálním vzorkem; plán po dnech.\n## 11. Rizika a na co si dát pozor';
+    const r = await client.messages.create({ model: process.env.ADS_DEEP_MODEL || MODEL_OPUS, max_tokens: 14000, system: sys, messages: [{ role: 'user', content: user }] });
+    const text = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('\n');
+    const res = { text, at: new Date().toISOString(), days, shift, key: page.key, economics: data.economics, scenarios: data.scenarios };
+    try { await require('../services/settings').setSetting(DEEP_KEY(page.key), res, { type: 'json', description: 'Centrum reklamy – poslední hloubková AI analýza stránky', scope: 'marketing' }); } catch (e) { /* uložení je bonus */ }
+    job.status = 'done'; job.result = res; progress('Hotovo');
+  } catch (e) { job.status = 'error'; job.error = e.message; console.warn('[ads-deep] ' + e.message); }
+}
+router.post('/pages/:key/deep-analysis', async (req, res, next) => { try {
+  const page = PAGES.find((x) => x.key === String(req.params.key || '')); if (!page) return res.status(404).json({ error: 'Stránka nenalezena' });
+  const days = parseDays(req.query.days, 30), shift = parseShift(req.query.shift);
+  const jobId = 'j' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  DEEP_JOBS.set(jobId, { status: 'running', progress: 'Spouštím…', started: Date.now() }); if (DEEP_JOBS.size > 30) DEEP_JOBS.delete(DEEP_JOBS.keys().next().value);
+  res.json({ ok: true, job: jobId });
+  deepRun(jobId, page, days, shift, req).catch(() => {});
+} catch (err) { next(err); } });
+router.get('/deep-analysis/job/:job', (req, res) => { const j = DEEP_JOBS.get(String(req.params.job || '')); if (!j) return res.status(404).json({ error: 'Úloha nenalezena (server se mezitím restartoval) – spusť analýzu znovu.' }); res.json({ status: j.status, progress: j.progress, error: j.error || null, result: j.status === 'done' ? j.result : null, elapsed_s: Math.round((Date.now() - j.started) / 1000) }); });
+router.get('/pages/:key/deep-analysis/last', async (req, res, next) => { try { res.json((await require('../services/settings').getSetting(DEEP_KEY(String(req.params.key || '')), { type: 'json', defaultValue: null })) || null); } catch (err) { next(err); } });
 // ── Segmenty kontaktů (uzel Segment): počty seznamů a leady seznamu; definice přichází v těle (ještě neuložená) ──
 router.post('/segments/count', async (req, res, next) => { try { const b = req.body || {}; const nd = { kind: 'db', seg: b.seg || {} }; const c = await require('../services/ads/segments').counts(nd, b.form || null); res.json(c); } catch (err) { next(err); } });
 router.post('/segments/leads', async (req, res, next) => { try { const b = req.body || {}; const nd = { kind: 'db', seg: b.seg || {} }; const L = await require('../services/ads/segments').leadsFor(nd, parseInt(b.port, 10) || 0, b.form || null, 500); res.json({ total: L.length, list: L.map((l) => ({ id: l.id, name: l.name, email: l.email, phone: l.phone, status: l.status, source: l.source, created_at: l.created_at, sms: l.schuzka_sms_sent_at || l.ai_specialist_sms_sent_at, email_at: l.schuzka_email_sent_at || l.ai_specialist_email_sent_at, clicked: l.schuzka_opened_at || l.ai_specialist_opened_at })) }); } catch (err) { next(err); } });
