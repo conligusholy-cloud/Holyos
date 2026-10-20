@@ -2543,7 +2543,20 @@
         }
         return out;
       };
-      const calcCells = (x) => x ? ['revenue_gross', 'revenue_net', 'fee_net', 'cost_d', 'cost_e', 'cost_f'].map((k, i) => '<td style="text-align:right;white-space:nowrap;">' + (i >= 2 ? '− ' : '') + rentMoney(x[k], '') + '</td>').join('') + '<td style="text-align:right;white-space:nowrap;"><b style="color:' + (Number(x.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(x.rent, x.currency) + '</b></td>' : '<td colspan="7" style="color:var(--text2);text-align:center;">— nevytvořeno —</td>';
+      const calcCells = (x) => {
+        if (!x) return '<td colspan="7" style="color:var(--text2);text-align:center;">— nevytvořeno —</td>';
+        const num = (k, neg) => '<td style="text-align:right;white-space:nowrap;">' + (neg ? '− ' : '') + rentMoney(x[k], '') + '</td>';
+        const lines = Array.isArray(x.lines) ? x.lines : [];
+        const docCell = (k, cat, what) => {
+          const missing = !(Number(x[k]) > 0);
+          const ln = lines.find(l => l.cat === cat && Number(l.amount) > 0);
+          const src = ln ? (ln.source === 'invoice' || ln.invoice_id ? '<div style="font-size:10.5px;color:#16a34a;" title="Částka převzata z přijaté faktury">✓ z faktury</div>' : ln.source === 'ai' ? '<div style="font-size:10.5px;color:#16a34a;">✓ AI doklad</div>' : '<div style="font-size:10.5px;color:var(--text2);">✎ ručně</div>') : '';
+          const btn = x.status === 'issued' ? '' : '<div><button class="btn btn-secondary btn-sm" style="padding:1px 7px;font-size:11px;margin-top:3px;" title="Prohledat přijaté doklady (pravidla + AI) a najít ' + what + '" onclick="rentFindDoc(' + x.id + ')">🔍 Najít doklad</button></div>';
+          return '<td style="text-align:right;white-space:nowrap;' + (missing ? 'background:rgba(239,68,68,.10);' : '') + '">− ' + rentMoney(x[k], '') + (missing ? '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ chybí ' + what + '</div>' + btn : src) + '</td>';
+        };
+        return num('revenue_gross') + num('revenue_net') + num('fee_net', true) + docCell('cost_d', 'D', 'faktura za nájem') + docCell('cost_e', 'E', 'faktura za energie') + num('cost_f', true)
+          + '<td style="text-align:right;white-space:nowrap;"><b style="color:' + (Number(x.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(x.rent, x.currency) + '</b></td>';
+      };
       const pRows = planned.map(p => { const late = p.date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
         return '<tr style="background:rgba(99,102,241,.07)"><td><span style="color:#818cf8;font-weight:700;">plánováno</span></td><td>' + escapeHtml(p.c.kiosk_code) + '</td><td>' + escapeHtml(p.c.customer_name || '—') + '</td><td>' + periodCell(pym, p.st) + '</td>' + calcCells(p.st) +
           '<td>' + p.date.toLocaleDateString('cs-CZ') + (late ? ' <span style="color:#f59e0b;">(zpracuje se při nejbližším běhu)</span>' : '') + '<div style="font-size:11px;color:var(--text2);">' + MODE2[p.c.auto_mode] + (p.c.auto_mode === 'send' && p.c.contact_email ? ' → ' + escapeHtml(p.c.contact_email) : '') + '</div></td>' +
@@ -2761,6 +2774,14 @@
       renderRentModal(); rentSave();
     };
     window.rentSugDismiss = function(i) { window.__rentCur.suggestions.splice(i, 1); renderRentModal(); rentSave(); };
+    window.rentFindDoc = async function(id) {
+      const st = (window.__rentSt || []).find(x => x.id === id); if (!st || !st.contract_id) return alert('Podklad nemá nájemní smlouvu.');
+      const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: st.contract_id, ym: st.period_ym });
+      if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      await loadRent();
+      if (r.data.missing && r.data.missing.length) alert('V přijatých dokladech zatím nenalezeno: ' + r.data.missing.join(', ') + '.\nZkontroluj dodavatele/klíčová slova ve smlouvě, nebo částku doplň ručně v podkladu.');
+      openRentModal(r.data.id);
+    };
     window.rentRescan = async function() {
       const c = window.__rentCur; if (!c.st.contract_id) return alert('Podklad nemá nájemní smlouvu.');
       const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: c.st.contract_id, ym: c.st.period_ym });
