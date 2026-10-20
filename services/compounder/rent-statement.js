@@ -12,6 +12,13 @@ const { computePrevMonthRevenue } = require('./kiosk-revenue');
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const CATS = { D: 'Náklad na užívání lokality', E: 'Energie a provozní média', F: 'Pozáruční servis a náhradní díly' };
 const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+// Klíčové slovo pravidla: „+" = musí platit všechno (AND), „|" = stačí jedno z nich (OR). Bez diakritiky a velikosti písmen.
+// Např. „HM Breclav + Nájemné" nebo „HM Breclav + elektr|energi|voda". Prázdné = bere celou fakturu.
+function kwMatch(desc, kw) {
+  const k = norm(kw).trim(); if (!k) return true;
+  const d = norm(desc);
+  return k.split('+').every((grp) => { const alts = grp.split('|').map((x) => x.trim()).filter(Boolean); return !alts.length || alts.some((a) => d.includes(a)); });
+}
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
 // Čisté přepočtení řádků a výsledku (bez DB)
@@ -57,7 +64,7 @@ async function pullInvoiceLines(contract, rev) {
       });
       const kw = norm(rule.keyword); const share = (Number(rule.share_pct) > 0 ? Number(rule.share_pct) : 100) / 100;
       for (const inv of invs) {
-        const items = (inv.items || []).filter((it) => !kw || norm(it.description).includes(kw));
+        const items = (inv.items || []).filter((it) => kwMatch(it.description, rule.keyword));
         const byRate = {};
         for (const it of items) { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); }
         for (const [rate, total] of Object.entries(byRate)) {
