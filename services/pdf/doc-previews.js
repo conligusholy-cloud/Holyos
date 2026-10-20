@@ -118,17 +118,27 @@ function purchaseOrderHtml(order, ourCompany, opts) {
   };
   const our = ourCompany || OUR; const cur = o.currency === 'EUR' ? 'EUR' : 'CZK';
   const d = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
-  let total = 0;
+  const pd = o.po_data || {};
+  let total = 0; let vat = 0; let anyVat = false;
   const rows = (o.items || []).map((it, i) => { const t = Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0) * 100) / 100; total += t;
-    return `<tr><td class="c">${i + 1}</td><td class="d">${esc(it.name)}</td><td class="r">${Number(it.quantity) || 0} ${esc(it.unit || 'ks')}</td><td class="r">${money(it.unit_price, cur)}</td><td class="r">${money(t, cur)}</td><td>${d(it.expected_delivery || o.expected_delivery)}</td></tr>`; }).join('');
-  return bs2.page({ title: 'Nákupní objednávka', number: o.order_number, pill: 'Objednávka dodavateli', demo: !order || (opts && opts.demo) }, `
+    if (it.vat_rate != null && it.vat_rate !== '') { anyVat = true; vat += t * Number(it.vat_rate) / 100; }
+    const sub = [it.spec, it.production_ref ? 'Zakázka: ' + it.production_ref : '', it.delivery_place ? 'Místo: ' + it.delivery_place : ''].filter(Boolean).map(esc).join(' · ');
+    const dv = Array.isArray(it.deliveries) && it.deliveries.length ? '<div style="font-size:10.5px;color:#6b7280">Dílčí dodávky: ' + it.deliveries.map((x, k) => (k + 1) + '× ' + (Number(x.qty) || 0) + ' ' + esc(it.unit || 'ks') + ' do ' + d(x.confirmed || x.requested)).join('; ') + '</div>' : '';
+    return `<tr><td class="c">${i + 1}</td><td class="d">${esc(it.name)}${sub ? `<div style="font-size:10.5px;color:#6b7280">${sub}</div>` : ''}${dv}</td><td class="r">${Number(it.quantity) || 0} ${esc(it.unit || 'ks')}</td><td class="r">${money(it.unit_price, cur)}</td><td class="r">${money(t, cur)}</td><td class="r">${it.vat_rate != null && it.vat_rate !== '' ? Number(it.vat_rate) + ' %' : '—'}</td><td>${d(it.expected_delivery || o.expected_delivery)}${it.confirmed_delivery ? `<div style="font-size:10.5px;color:#059669">potvrzeno ${d(it.confirmed_delivery)}</div>` : ''}</td></tr>`; }).join('');
+  const PD_LABELS = { subject: 'Předmět', project: 'Projekt / zakázka', requester: 'Interní žadatel', offer_no: 'Nabídka dodavatele', framework_no: 'Rámcová smlouva', tech_contact: 'Technický kontakt', time_window: 'Časové okno', term_meaning: 'Význam termínu', partial_ok: 'Dílčí dodávky', early_ok: 'Předčasné dodávky', receiver: 'Příjemce', receiving_hours: 'Doba příjmu', transport_by: 'Dopravu zajišťuje a hradí', unloading_by: 'Vykládku zajišťuje a hradí', pre_notice: 'Ohlášení dodávky', packaging: 'Balení a značení', incoterms: 'Dodací doložka', returnable: 'Vratné obaly', pay_method: 'Způsob úhrady', due_days: 'Splatnost (dnů)', deposit: 'Záloha', milestones: 'Doplatek / milníky', invoice_docs: 'Podklady k fakturaci', invoice_email: 'Faktury zasílat na', partial_invoicing: 'Fakturace dílčích dodávek', quality: 'Specifikace a kvalita', substitutions: 'Náhrady / změny provedení', docs_required: 'Doklady s dodávkou', acceptance: 'Přejímka', warranty: 'Záruka a servis', other_terms: 'Další podmínky', attachments: 'Přílohy', precedence: 'Pořadí přednosti', discounts: 'Slevy', price_regime: 'Cenový režim', extra_costs: 'Doprava / balení / náklady' };
+  const pdRows = Object.keys(PD_LABELS).filter((k) => pd[k] && !['issued_by', 'approved_by', 'confirm_by', 'delivery_place'].includes(k)).map((k) => `<tr><td style="width:34%;color:#6b7280">${PD_LABELS[k]}</td><td>${esc(pd[k])}</td></tr>`).join('');
+  const place = pd.delivery_place || o.delivery_address;
+  const rev = Number(o.revision) || 0;
+  return bs2.page({ title: 'Nákupní objednávka', number: o.order_number + (rev ? ' / rev. ' + String(rev).padStart(2, '0') : ''), pill: 'Objednávka dodavateli', demo: !order || (opts && opts.demo) }, `
   <div class="parties">${party('Objednatel', our)}${party('Dodavatel', o.company || SUPPLIER)}</div>
-  <div class="meta"><div><div class="l">Vystaveno</div><div class="v">${d(o.created_at)}</div></div><div><div class="l">Požadované dodání</div><div class="v">${d(o.expected_delivery)}</div></div><div><div class="l">Platební podmínky</div><div class="v">${esc(o.payment_terms || 'Bankovním převodem')}</div></div><div><div class="l">Vyřizuje</div><div class="v">${esc(o.issued_by || '—')}</div></div></div>
-  <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Množství</th><th class="r">Cena / MJ</th><th class="r">Celkem</th><th>Termín dodání</th></tr></thead><tbody>${rows}</tbody></table>
-  <div class="sum"><div class="row total"><span>Celkem (bez DPH)</span><span>${money(total, cur)}</span></div></div>
-  ${o.delivery_address ? `<div class="box"><h3>Místo dodání</h3>${esc(o.delivery_address)}</div>` : ''}
+  <div class="meta"><div><div class="l">Vystaveno</div><div class="v">${d(o.created_at)}</div></div><div><div class="l">Požadované dodání</div><div class="v">${d(o.expected_delivery)}</div></div><div><div class="l">Potvrzeno dodavatelem</div><div class="v">${o.confirmed_delivery ? d(o.confirmed_delivery) : 'čeká na potvrzení'}</div></div><div><div class="l">Vyřizuje</div><div class="v">${esc(pd.issued_by || o.issued_by || '—')}</div></div></div>
+  ${pd.subject ? `<div class="box"><h3>Předmět objednávky</h3>${esc(pd.subject)}</div>` : ''}
+  <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Množství</th><th class="r">Cena / MJ</th><th class="r">Celkem</th><th class="r">DPH</th><th>Termín dodání</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="sum"><div class="row"><span>Celkem bez DPH</span><strong>${money(total, cur)}</strong></div>${anyVat ? `<div class="row"><span>DPH</span><strong>${money(vat, cur)}</strong></div><div class="row total"><span>Celkem s DPH</span><span>${money(total + vat, cur)}</span></div>` : ''}</div>
+  ${place ? `<div class="box"><h3>Místo dodání</h3>${esc(place)}</div>` : ''}
+  ${pdRows ? `<div class="box"><h3>Podmínky objednávky</h3><table style="width:100%;font-size:11.5px;border-collapse:collapse">${pdRows}</table></div>` : (o.payment_terms ? `<div class="box"><h3>Platební podmínky</h3>${esc(o.payment_terms)}</div>` : '')}
   ${o.note ? `<div class="box"><h3>Poznámka</h3>${esc(o.note)}</div>` : ''}
-  <div class="box"><h3>Potvrzení objednávky</h3>Prosíme o potvrzení přijetí objednávky a termínů dodání odpovědí na tento dokument. Ceny jsou uvedeny bez DPH.</div>
+  <div class="box"><h3>Potvrzení objednávky</h3>Prosíme o potvrzení přijetí objednávky a termínů dodání${pd.confirm_by ? ' do ' + esc(pd.confirm_by) : ''} odpovědí na tento dokument. Odchylky uveďte výslovně; změny ceny, množství, specifikace nebo termínů podléhají odsouhlasení objednatelem. Je-li u položky vlastní termín, má přednost před termínem celé objednávky. Ceny jsou uvedeny po slevě a bez DPH.</div>
   <div class="sig"><div>Za objednatele</div><div>Potvrzení dodavatele (akceptace)</div></div>`);
 }
 function receiptHtml() {

@@ -758,6 +758,12 @@
         .po-ta { min-height:76px; resize:vertical; border:1px solid #e4e0d2; background:#fff; padding:8px 10px; }
         .po-sum { text-align:right; } .po-sum .l { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#8a8f9c; font-weight:700; }
         .po-grand { font-size:30px; font-weight:800; letter-spacing:-.01em; }
+        .po-sub { font-size:11.5px; color:#6b7280; padding:2px 3px; } .po-sub2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+        .po-deliv { margin-top:2px; } .po-dv { display:grid; grid-template-columns:60px 80px 1fr 1fr 26px; gap:6px; align-items:center; font-size:11.5px; color:#6b7280; }
+        .po-link { background:none; border:0; color:#6366f1; cursor:pointer; font-size:11.5px; padding:2px 3px; }
+        .po-sec { border:1px solid #e4e0d2; border-radius:8px; background:#fff; margin-top:10px; padding:2px 14px; } .po-sec summary { cursor:pointer; padding:9px 0; font-weight:700; font-size:12.5px; } .po-sec summary em { font-style:normal; color:#9ca3af; font-weight:400; margin-left:6px; }
+        .po-grid { display:grid; grid-template-columns:1fr 1fr; gap:4px 18px; padding-bottom:10px; } .po-grid label span { display:block; font-size:10.5px; color:#8a8f9c; margin-top:4px; } .po-fld { border-bottom:1px solid #e4e0d2 !important; }
+        .po-sec:not([open]) { } @media print { .po-sec { break-inside:avoid; } .po-sec:not([open]) .po-grid { display:grid; } }
         @media print { body * { visibility:hidden !important; } .po-sheet, .po-sheet * { visibility:visible !important; } .po-sheet { position:absolute; left:0; top:0; width:100%; box-shadow:none; border-top:0; }
           .po-noprint { display:none !important; } .po-in, .po-sel, .po-ta, .po-st { border:0 !important; background:transparent !important; box-shadow:none !important; appearance:none; -webkit-appearance:none; } }
       `;
@@ -782,15 +788,41 @@
       const sc = (ITEM_STATUSES[it.status] || ITEM_STATUSES.pending).color;
       const opts = Object.entries(ITEM_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (it.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
       return '<tr data-id="' + it.id + '"><td class="po-n">' + (idx + 1) + '</td>' +
-        '<td><input class="po-in" data-f="name" value="' + poAttr(it.name || (it.material && it.material.name) || '') + '"></td>' +
+        '<td><input class="po-in" data-f="name" value="' + poAttr(it.name || (it.material && it.material.name) || '') + '">' +
+          '<input class="po-in po-sub" data-f="spec" placeholder="Specifikace / výkres / verze" value="' + poAttr(it.spec) + '">' +
+          '<div class="po-sub2"><input class="po-in po-sub" data-f="production_ref" placeholder="Zakázka / středisko" value="' + poAttr(it.production_ref) + '"><input class="po-in po-sub" data-f="delivery_place" placeholder="Jiné místo dodání" value="' + poAttr(it.delivery_place) + '"></div>' +
+          poDelivRows(it) + '</td>' +
         '<td class="r" style="width:78px"><input class="po-in r" type="number" step="0.01" min="0" data-f="quantity" value="' + (Number(it.quantity) || 0) + '"></td>' +
         '<td style="width:52px"><input class="po-in" data-f="unit" value="' + poAttr(it.unit || 'ks') + '"></td>' +
         '<td class="r" style="width:104px"><input class="po-in r" type="number" step="0.01" min="0" data-f="unit_price" value="' + (Number(it.unit_price) || 0) + '"></td>' +
         '<td class="r po-rowtot" style="width:116px">' + poMoney(it.total_price, cur) + '</td>' +
-        '<td style="width:132px"><input class="po-in' + (late ? ' po-late' : '') + '" type="date" data-f="expected_delivery" value="' + eta + '" title="' + (late ? 'Po termínu!' : 'Termín dodání položky') + '"></td>' +
+        '<td class="r" style="width:62px"><input class="po-in r" type="number" step="1" min="0" data-f="vat_rate" placeholder="21" value="' + (it.vat_rate == null ? '' : Number(it.vat_rate)) + '"></td>' +
+        '<td style="width:132px"><input class="po-in' + (late ? ' po-late' : '') + '" type="date" data-f="expected_delivery" value="' + eta + '" title="' + (late ? 'Po termínu!' : 'Požadovaný termín dodání položky') + '"></td>' +
+        '<td style="width:132px"><input class="po-in' + (it.confirmed_delivery && eta && poDay(it.confirmed_delivery) > eta ? ' po-late' : '') + '" type="date" data-f="confirmed_delivery" value="' + poDay(it.confirmed_delivery) + '" title="Dodavatelem potvrzený termín (červeně = později než požadovaný)"></td>' +
         '<td class="r" style="width:78px"><input class="po-in r" type="number" step="0.01" min="0" data-f="delivered_quantity" value="' + (Number(it.delivered_quantity) || 0) + '"></td>' +
         '<td style="width:128px"><select class="po-st" data-f="status" style="color:' + sc + ';border-color:' + sc + '66;background:' + sc + '14">' + opts + '</select></td>' +
         '<td class="po-noprint" style="width:30px"><button class="po-x" title="Smazat řádek">✕</button></td></tr>';
+    }
+    // Rozpis dílčích dodávek položky (součet musí odpovídat množství)
+    function poDelivRows(it) {
+      const d = Array.isArray(it.deliveries) ? it.deliveries : [];
+      const sum = d.reduce((s, x) => s + (Number(x.qty) || 0), 0); const bad = d.length && Math.abs(sum - Number(it.quantity || 0)) > 0.0001;
+      return '<div class="po-deliv">' + d.map((x, i) => '<div class="po-dv" data-i="' + i + '"><span>Dávka ' + (i + 1) + '</span><input class="po-in r" type="number" step="0.01" min="0" data-dv="qty" value="' + (Number(x.qty) || 0) + '" title="Množství"><input class="po-in" type="date" data-dv="requested" value="' + poDay(x.requested) + '" title="Požadovaný termín"><input class="po-in" type="date" data-dv="confirmed" value="' + poDay(x.confirmed) + '" title="Potvrzený termín"><button class="po-x po-noprint" data-dvdel="1">✕</button></div>').join('') +
+        '<div class="po-noprint"><button class="po-link" data-dvadd="1">＋ dílčí dodávka</button>' + (bad ? ' <span class="po-late">součet dávek ' + sum + ' ≠ množství ' + Number(it.quantity || 0) + '</span>' : '') + '</div></div>';
+    }
+    // Podmínky objednávky podle šablony (sekce 2, 3, 8–11) — ukládají se do Order.po_data
+    const PO_SECTIONS = [
+      ['Identifikace a podklady', [['subject', 'Předmět objednávky'], ['project', 'Projekt / zakázka / středisko'], ['requester', 'Interní žadatel'], ['offer_no', 'Nabídka dodavatele č. / ze dne'], ['framework_no', 'Rámcová smlouva č.'], ['tech_contact', 'Technický kontakt (jméno, e-mail, tel.)']]],
+      ['Termín a způsob dodání', [['time_window', 'Časové okno dodání'], ['term_meaning', 'Význam termínu (doručení / připravenost k odběru / dokončení služby)'], ['partial_ok', 'Dílčí dodávky (ano / ne / po souhlasu)'], ['early_ok', 'Předčasné dodávky (ano / ne / po souhlasu)']]],
+      ['Doprava a převzetí', [['delivery_place', 'Místo dodání (areál, ulice, místo vykládky)'], ['receiver', 'Příjemce (jméno, tel., e-mail)'], ['receiving_hours', 'Doba příjmu'], ['transport_by', 'Dopravu zajišťuje a hradí'], ['unloading_by', 'Vykládku zajišťuje a hradí'], ['pre_notice', 'Ohlášení dodávky předem (lhůta, kontakt)'], ['packaging', 'Balení a značení'], ['incoterms', 'Dodací doložka (Incoterms 2020)'], ['returnable', 'Vratné obaly']]],
+      ['Platba a fakturace', [['pay_method', 'Způsob úhrady'], ['due_days', 'Splatnost (dnů od události)'], ['deposit', 'Záloha'], ['milestones', 'Doplatek / milníkové platby'], ['invoice_docs', 'Podklady pro fakturaci'], ['invoice_email', 'Faktury zasílat na'], ['partial_invoicing', 'Fakturace dílčích dodávek']]],
+      ['Technické požadavky a dokumentace', [['quality', 'Specifikace a kvalita (materiál, tolerance, normy)'], ['substitutions', 'Náhrady nebo změny provedení'], ['docs_required', 'Doklady s dodávkou (DL, certifikáty, protokoly)'], ['acceptance', 'Přejímka a ověření funkčnosti'], ['warranty', 'Záruka a servis'], ['other_terms', 'Další sjednané podmínky']]],
+      ['Přílohy a potvrzení', [['attachments', 'Přílohy (název, číslo, revize)'], ['precedence', 'Pořadí přednosti dokumentů'], ['confirm_by', 'Potvrzení zaslat do (datum)'], ['issued_by', 'Vystavil (jméno, funkce)'], ['approved_by', 'Schválil (jméno, funkce)'], ['discounts', 'Slevy a cenové úpravy'], ['price_regime', 'Cenový režim (pevná cena / změna ceny)'], ['extra_costs', 'Doprava / balení / další náklady bez DPH (částka)']]],
+    ];
+    function poTermsHtml() {
+      const d = PO.o.po_data || {};
+      return PO_SECTIONS.map((s, i) => '<details class="po-sec"' + (i < 1 ? ' open' : '') + '><summary>' + s[0] + ' <em>' + s[1].filter((f) => d[f[0]]).length + '/' + s[1].length + '</em></summary><div class="po-grid">' +
+        s[1].map((f) => '<label><span>' + f[1] + '</span><input class="po-in po-fld" data-pd="' + f[0] + '" value="' + poAttr(d[f[0]]) + '"></label>').join('') + '</div></details>').join('');
     }
     function poCompanyCard() {
       const c = companies.find((x) => x.id === PO.o.company_id) || PO.o.company || null;
@@ -806,6 +838,7 @@
       return '<div class="po-lbl">Dodání</div>' +
         '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center;font-size:12.5px;color:#6b7280;">' +
         '<span>Požadované dodání</span><input class="po-in" type="date" data-h="expected_delivery" value="' + poDay(PO.o.expected_delivery) + '">' +
+        '<span>Potvrzeno dodavatelem</span><input class="po-in" type="date" data-h="confirmed_delivery" value="' + poDay(PO.o.confirmed_delivery) + '">' +
         '<span>První termín položek</span><b style="color:#1d2433">' + (dates[0] ? new Date(dates[0]).toLocaleDateString('cs-CZ') : '—') + '</b>' +
         '<span>Poslední termín položek</span><b style="color:#1d2433">' + (dates.length ? new Date(dates[dates.length - 1]).toLocaleDateString('cs-CZ') : '—') + '</b></div>' +
         '<div class="po-bar"><i style="width:' + pct + '%"></i></div><div style="font-size:12px;color:#6b7280;">Ukončeno ' + done + ' z ' + items.length + ' položek (' + pct + ' %)</div>';
@@ -813,6 +846,8 @@
     function poRecalc() {
       const items = PO.o.items || []; const sum = items.reduce((s, i) => s + (Number(i.total_price) || 0), 0); PO.o.total_amount = sum;
       const g = document.getElementById('po-grand'); if (g) g.textContent = poMoney(sum, PO.o.currency);
+      const vat = items.reduce((s, i) => s + (Number(i.total_price) || 0) * (i.vat_rate == null ? 0 : Number(i.vat_rate)) / 100, 0);
+      const vEl = document.getElementById('po-vat'); if (vEl) vEl.innerHTML = items.some((i) => i.vat_rate != null) ? 'DPH ' + poMoney(vat, PO.o.currency) + '<br><b style="color:#1d2433">Celkem s DPH ' + poMoney(sum + vat, PO.o.currency) + '</b>' : '<span style="color:#9ca3af">DPH nevyplněno</span>';
       const d = document.getElementById('po-delivery'); if (d) d.innerHTML = poDeliveryBox();
       const n = document.getElementById('po-count'); if (n) n.textContent = items.length + ' ' + (items.length === 1 ? 'položka' : items.length < 5 && items.length > 0 ? 'položky' : 'položek');
     }
@@ -827,18 +862,20 @@
         '<div class="po-head"><div><div class="po-kicker">' + kind + '</div><div class="po-num">' + poTxt(o.order_number) + '</div></div>' +
           '<div class="po-meta"><span>Stav</span><select class="po-sel" data-h="status">' + stOpts + '</select>' +
           '<span>Vystaveno</span><b style="color:#1d2433;padding:5px 3px">' + created + '</b>' +
+          '<span>Revize</span><input class="po-in" type="number" min="0" step="1" data-h="revision" value="' + (Number(o.revision) || 0) + '" title="Zvyš při změně již odsouhlasené objednávky">' +
           '<span>Měna</span><select class="po-sel" data-h="currency"><option value="CZK"' + (o.currency !== 'EUR' ? ' selected' : '') + '>CZK – koruny</option><option value="EUR"' + (o.currency === 'EUR' ? ' selected' : '') + '>EUR – eura</option></select></div></div>' +
         '<div class="po-parties"><div class="po-box"><div class="po-lbl">Dodavatel</div><select class="po-sel po-noprint" data-h="company_id" style="font-weight:700;margin-bottom:6px">' + compOpts + '</select><div id="po-company">' + poCompanyCard() + '</div></div>' +
           '<div class="po-box" id="po-delivery">' + poDeliveryBox() + '</div></div>' +
-        '<table class="po-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th>Termín dodání</th><th class="r">Doručeno</th><th>Stav</th><th class="po-noprint"></th></tr></thead><tbody id="po-rows">' +
+        '<table class="po-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th class="r">DPH %</th><th>Požadováno</th><th>Potvrzeno</th><th class="r">Doručeno</th><th>Stav</th><th class="po-noprint"></th></tr></thead><tbody id="po-rows">' +
           (o.items || []).map(poItemRow).join('') +
           '<tr class="po-add po-noprint"><td class="po-n">＋</td><td><input class="po-in" id="po-new-name" list="po-mats" placeholder="Přidat položku – piš název (nabídne zboží ze skladu)" autocomplete="off"></td>' +
           '<td class="r"><input class="po-in r" id="po-new-qty" type="number" step="0.01" min="0.01" value="1"></td><td><input class="po-in" id="po-new-unit" value="ks"></td>' +
           '<td class="r"><input class="po-in r" id="po-new-price" type="number" step="0.01" min="0" value="0"></td><td></td>' +
-          '<td><input class="po-in" id="po-new-date" type="date"></td><td></td><td colspan="2"><button class="po-add-btn" id="po-add-btn">+ Přidat</button></td></tr>' +
+          '<td></td><td><input class="po-in" id="po-new-date" type="date"></td><td></td><td></td><td colspan="2"><button class="po-add-btn" id="po-add-btn">+ Přidat</button></td></tr>' +
         '</tbody></table><datalist id="po-mats">' + matList + '</datalist>' +
+        '<div id="po-terms" style="margin-top:20px">' + poTermsHtml() + '</div>' +
         '<div class="po-foot"><div><div class="po-lbl">Poznámka</div><textarea class="po-ta" data-h="note" placeholder="Poznámka k objednávce (platební podmínky, dopravce, kontakt…)">' + poTxt(o.note || '') + '</textarea></div>' +
-          '<div class="po-sum"><div class="l">Celkem</div><div class="po-grand" id="po-grand">' + poMoney(o.total_amount, o.currency) + '</div><div style="color:#8a8f9c;font-size:12px" id="po-count"></div></div></div>' +
+          '<div class="po-sum"><div class="l">Celkem bez DPH</div><div class="po-grand" id="po-grand">' + poMoney(o.total_amount, o.currency) + '</div><div style="color:#6b7280;font-size:12.5px;margin-top:4px" id="po-vat"></div><div style="color:#8a8f9c;font-size:12px" id="po-count"></div></div></div>' +
         '</div></div>';
       poRecalc();
       const sheet = document.getElementById('po-sheet');
@@ -850,8 +887,24 @@
     }
     async function poChange(e) {
       const t = e.target; const o = PO.o;
+      if (t.dataset.pd) { // podmínky objednávky (po_data)
+        o.po_data = o.po_data || {}; const k = t.dataset.pd; const v = t.value.trim();
+        if (v) o.po_data[k] = v; else delete o.po_data[k];
+        await poReq('PUT', '/api/wh/orders/' + o.id, { po_data: { [k]: v } });
+        const el = document.getElementById('po-terms'); if (el) { el.querySelectorAll('details').forEach((dt, i) => { const em = dt.querySelector('summary em'); if (em) em.textContent = PO_SECTIONS[i][1].filter((f) => o.po_data[f[0]]).length + '/' + PO_SECTIONS[i][1].length; }); }
+        return;
+      }
+      if (t.dataset.dv) { // rozpis dílčích dodávek
+        const tr = t.closest('tr[data-id]'); const it = (o.items || []).find((x) => String(x.id) === tr.dataset.id); if (!it) return;
+        const i = parseInt(t.closest('.po-dv').dataset.i, 10); it.deliveries = it.deliveries || []; it.deliveries[i] = it.deliveries[i] || {};
+        it.deliveries[i][t.dataset.dv] = t.dataset.dv === 'qty' ? (parseFloat(t.value) || 0) : (t.value || null);
+        await poReq('PUT', '/api/wh/orders/' + o.id + '/items/' + it.id, { deliveries: it.deliveries });
+        tr.querySelector('.po-deliv').outerHTML = poDelivRows(it); return;
+      }
       if (t.dataset.h) { // údaje v hlavičce objednávky
         const f = t.dataset.h; let v = t.value;
+        if (f === 'revision') v = Math.max(0, parseInt(v, 10) || 0);
+        if (f === 'confirmed_delivery') v = v || null;
         if (f === 'company_id') { v = v ? parseInt(v, 10) : null; o.company_id = v; document.getElementById('po-company').innerHTML = poCompanyCard(); }
         if (f === 'expected_delivery') v = v || null;
         o[f] = v; if (f === 'currency') { poRecalc(); (o.items || []).forEach((i, k) => { const tr = document.querySelector('tr[data-id="' + i.id + '"] .po-rowtot'); if (tr) tr.textContent = poMoney(i.total_price, o.currency); }); }
@@ -861,7 +914,8 @@
       const it = (o.items || []).find((x) => String(x.id) === tr.dataset.id); if (!it) return;
       const body = {}; let v = t.value;
       if (['quantity', 'unit_price', 'delivered_quantity'].includes(f)) { v = parseFloat(v); if (isNaN(v)) v = 0; }
-      if (f === 'expected_delivery') v = v || null;
+      if (f === 'vat_rate') { v = v === '' ? null : parseFloat(v); if (v !== null && isNaN(v)) v = null; }
+      if (f === 'expected_delivery' || f === 'confirmed_delivery') v = v || null;
       if (f === 'name' && !String(v).trim()) { t.value = it.name || ''; return; }
       body[f] = v; it[f] = v;
       if (f === 'quantity' || f === 'unit_price') { it.total_price = Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0) * 100) / 100; tr.querySelector('.po-rowtot').textContent = poMoney(it.total_price, o.currency); }
@@ -876,6 +930,15 @@
     }
     async function poClick(e) {
       if (e.target.id === 'po-add-btn') return poAddItem();
+      const dvb = e.target.closest('[data-dvadd],[data-dvdel]');
+      if (dvb) {
+        const tr = dvb.closest('tr[data-id]'); const it = (PO.o.items || []).find((i) => String(i.id) === tr.dataset.id); if (!it) return;
+        it.deliveries = Array.isArray(it.deliveries) ? it.deliveries : [];
+        if (dvb.dataset.dvadd) { const used = it.deliveries.reduce((s, x) => s + (Number(x.qty) || 0), 0); it.deliveries.push({ qty: Math.max(0, (Number(it.quantity) || 0) - used), requested: poDay(it.expected_delivery) || null, confirmed: null }); }
+        else it.deliveries.splice(parseInt(dvb.closest('.po-dv').dataset.i, 10), 1);
+        await poReq('PUT', '/api/wh/orders/' + PO.o.id + '/items/' + it.id, { deliveries: it.deliveries });
+        tr.querySelector('.po-deliv').outerHTML = poDelivRows(it); return;
+      }
       const x = e.target.closest('.po-x'); if (!x) return;
       const tr = x.closest('tr[data-id]'); const it = (PO.o.items || []).find((i) => String(i.id) === tr.dataset.id); if (!it) return;
       if (!confirm('Smazat položku „' + (it.name || '') + '"?')) return;

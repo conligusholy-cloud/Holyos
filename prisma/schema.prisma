@@ -634,6 +634,12 @@ model Order {
   delivered_at      DateTime? @db.Date
   share_token       String?   @unique @db.VarChar(64)
 
+  // Nákupní objednávka (šablona Sablona_nakupni_objednavky): revize, dodavatelem potvrzený termín
+  // a ostatní podmínky (předmět, zakázka, doprava, platba, technické požadavky…) v JSON po_data.
+  revision            Int       @default(0)
+  confirmed_delivery  DateTime? @db.Date
+  po_data             Json?
+
   // Zákaznické potvrzení objednávky přes veřejný odkaz /order/<token>
   // Tok: awaiting_customer → signed (zákazník podepsal, čeká na autorizaci) → confirmed (Tomáš/Jan autorizoval).
   customer_email         String?   @db.VarChar(255)
@@ -772,6 +778,13 @@ model OrderItem {
   status             String    @default("pending") @db.VarChar(20)
   note               String?   @db.Text
   serial_number      String?   @db.VarChar(100) // Výrobní číslo kiosku (přidělené ručně na úrovni položky)
+  // Nákupní objednávka: specifikace/výkres/revize, potvrzený termín, DPH, odlišné místo dodání, vazba na zakázku
+  spec               String?   @db.Text
+  confirmed_delivery DateTime? @db.Date
+  vat_rate           Decimal?  @db.Decimal(5, 2)
+  delivery_place     String?   @db.VarChar(255)
+  production_ref     String?   @db.VarChar(100)
+  deliveries         Json? // rozpis dílčích dodávek [{qty, requested, confirmed}]
 
   // Factorify migrace
   factorify_id                 String? @db.VarChar(100) // PurchaseOrderItem.id
@@ -789,6 +802,7 @@ model OrderItem {
   @@index([product_id])
   @@index([serial_number])
   @@index([factorify_id])
+  @@index([confirmed_delivery])
   @@map("order_items")
 }
 

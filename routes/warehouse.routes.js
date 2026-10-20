@@ -1131,6 +1131,19 @@ router.put('/orders/:id', async (req, res, next) => {
     for (const f of fields) {
       if (req.body[f] !== undefined) allowed[f] = req.body[f];
     }
+    // Nákupní objednávka: revize, potvrzený termín, podmínky (JSON po_data se slučuje po klíčích)
+    if (req.body.revision !== undefined) allowed.revision = Math.max(0, parseInt(req.body.revision) || 0);
+    if (req.body.confirmed_delivery !== undefined) allowed.confirmed_delivery = parseDate(req.body.confirmed_delivery);
+    if (req.body.po_data && typeof req.body.po_data === 'object' && !Array.isArray(req.body.po_data)) {
+      const cur = await prisma.order.findUnique({ where: { id: orderId }, select: { po_data: true } });
+      const merged = Object.assign({}, (cur && cur.po_data) || {});
+      for (const [k, v] of Object.entries(req.body.po_data)) {
+        if (!/^[a-z_]{1,40}$/.test(k)) continue;
+        const s = v == null ? '' : String(v).slice(0, 2000);
+        if (s.trim() === '') delete merged[k]; else merged[k] = s;
+      }
+      allowed.po_data = merged;
+    }
     if (allowed.company_id) allowed.company_id = parseInt(allowed.company_id);
     if (allowed.sales_person_id !== undefined) allowed.sales_person_id = allowed.sales_person_id ? parseInt(allowed.sales_person_id) : null;
     if (allowed.financing_type !== undefined) allowed.financing_type = ['own', 'leasing'].includes(allowed.financing_type) ? allowed.financing_type : null;
@@ -1271,7 +1284,7 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
-    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery, serial_number } = req.body;
+    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery, serial_number, spec, vat_rate, production_ref } = req.body;
     const item = await prisma.orderItem.create({
       data: {
         order_id: parseInt(req.params.id),
@@ -1285,6 +1298,9 @@ router.post('/orders/:id/items', async (req, res, next) => {
         note: note || null,
         expected_delivery: parseDate(expected_delivery),
         serial_number: serial_number ? String(serial_number).trim() || null : null,
+        spec: spec ? String(spec).trim() || null : null,
+        vat_rate: vat_rate !== undefined && vat_rate !== null && vat_rate !== '' ? parseFloat(vat_rate) : null,
+        production_ref: production_ref ? String(production_ref).trim().slice(0, 100) || null : null,
       },
     });
     // Auto kamionová cena při plném kamionu + přepočet celkové částky
@@ -1300,10 +1316,16 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
   try {
     // Whitelist polí + konverze typů (nikdy nespreaduj req.body napřímo do data)
     const allowed = {};
-    const stringFields = ['name', 'unit', 'note', 'serial_number'];
+    const stringFields = ['name', 'unit', 'note', 'serial_number', 'spec', 'delivery_place', 'production_ref'];
     const intFields = ['product_id', 'material_id'];
-    const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity'];
-    const dateFields = ['expected_delivery'];
+    const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity', 'vat_rate'];
+    const dateFields = ['expected_delivery', 'confirmed_delivery'];
+    // Rozpis dílčích dodávek [{qty, requested, confirmed}]
+    if (req.body.deliveries !== undefined) {
+      allowed.deliveries = Array.isArray(req.body.deliveries)
+        ? req.body.deliveries.slice(0, 50).map((d) => ({ qty: parseFloat(d && d.qty) || 0, requested: (d && d.requested) || null, confirmed: (d && d.confirmed) || null }))
+        : [];
+    }
     // Stav položky (jen známé hodnoty)
     if (req.body.status !== undefined && ['pending', 'ordered', 'partial', 'completed', 'cancelled'].includes(String(req.body.status))) allowed.status = String(req.body.status);
     // Změna množství / ceny za kus bez explicitní celkové ceny → dopočítat celkem řádku
