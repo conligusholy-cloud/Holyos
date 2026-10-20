@@ -12,6 +12,7 @@ import {
   Linking,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -160,6 +161,14 @@ export default function AssistantSettings() {
                         <Text style={styles.callBackTxt}>📞 Zavolat zpět {c.from_number}</Text>
                       </TouchableOpacity>
                     ) : null}
+                    {c.from_number ? (
+                      <View style={styles.numRow}>
+                        <Text selectable style={styles.numTxt}>{c.from_number}</Text>
+                        <TouchableOpacity onPress={() => { Share.share({ message: String(c.from_number) }).catch(() => {}); }}>
+                          <Text style={styles.link}>📋 Kopírovat</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
 
                     {c.summary ? (
                       <View style={styles.summaryBox}>
@@ -239,6 +248,8 @@ const styles = StyleSheet.create({
   msgTag: { color: colors.text2, fontSize: 12, marginTop: 6 },
   detail: { marginTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md },
   callBack: { backgroundColor: colors.accent, borderRadius: radius.md, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.md },
+  numRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md, paddingHorizontal: 4 },
+  numTxt: { color: colors.text, fontSize: 15, fontWeight: '600' },
   callBackTxt: { color: '#fff', fontWeight: '700', fontSize: 14 },
   summaryBox: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.sm, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
   summary: { color: colors.text, fontSize: 14, lineHeight: 20 },
