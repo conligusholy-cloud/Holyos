@@ -4282,6 +4282,7 @@ function rentContractData(d) {
   if (d.effective_from) out.effective_from = new Date(d.effective_from + 'T00:00:00Z');
   if (d.effective_to !== undefined) out.effective_to = d.effective_to ? new Date(d.effective_to + 'T00:00:00Z') : null;
   ['issue_day', 'vat_rate', 'fee_pct'].forEach(function (k) { if (d[k] !== undefined) out[k] = d[k]; });
+  if (d.rent_fixed_net !== undefined) out.rent_fixed_net = d.rent_fixed_net === null ? null : d.rent_fixed_net;
   if (d.auto_mode) out.auto_mode = d.auto_mode;
   if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
   ['active', 'vat_deductible', 'ai_match'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
