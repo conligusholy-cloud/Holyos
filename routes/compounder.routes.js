@@ -4173,6 +4173,7 @@ const subSchema = z.object({
   active: z.boolean().optional(),
   auto_send: z.boolean().optional(),
   billing_day: z.number().int().optional(),
+  first_invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal('')),
   contract_id: z.number().int().optional().nullable(),
   contract_number: z.string().max(80).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
@@ -4188,6 +4189,7 @@ router.post('/service-subscriptions', requireAuth, async (req, res, next) => {
       fee_pct: d.fee_pct != null ? d.fee_pct : 13, currency: (d.currency || 'CZK').toUpperCase().slice(0, 3),
       vat_rate: d.vat_rate != null ? d.vat_rate : 21, active: d.active !== false,
       auto_send: !!d.auto_send, billing_day: d.billing_day != null ? d.billing_day : 3,
+      first_invoice_date: d.first_invoice_date ? new Date(d.first_invoice_date + 'T00:00:00Z') : null,
       contract_id: d.contract_id || null, contract_number: (d.contract_number || '').trim() || null, note: d.note || null,
       created_by_user_id: (req.user && req.user.id) || null,
     };
@@ -4208,6 +4210,7 @@ router.put('/service-subscriptions/:id', requireAuth, async (req, res, next) => 
     ['company_id', 'buyer_ico', 'customer_name', 'email', 'currency', 'contract_id', 'contract_number', 'note'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] || null; });
     ['fee_pct', 'vat_rate', 'billing_day'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k]; });
     ['active', 'auto_send'].forEach(function (k) { if (d[k] !== undefined) data[k] = !!d[k]; });
+    if (d.first_invoice_date !== undefined) data.first_invoice_date = d.first_invoice_date ? new Date(d.first_invoice_date + 'T00:00:00Z') : null;
     const sub = await prisma.serviceSubscription.update({ where: { id }, data });
     res.json(sub);
   } catch (err) { next(err); }

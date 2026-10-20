@@ -144,8 +144,11 @@ async function runOnce() {
   try {
     const subs = await prisma.serviceSubscription.findMany({ where: { active: true } });
     const today = new Date().getDate();
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
     for (const sub of subs) {
       try {
+        // Datum první faktury periody: dřív se nefakturuje (porovnání jako YYYY-MM-DD v pražském čase)
+        if (sub.first_invoice_date && todayStr < new Date(sub.first_invoice_date).toISOString().slice(0, 10)) continue;
         if (today < (sub.billing_day || 3)) continue; // ještě není den fakturace
         const r = await billSubscription(sub);
         if (r && r.ok && !r.skipped) console.log('[service-billing] faktura ' + r.invoice_number + ' pro kiosk ' + sub.kiosk_code + (r.sent ? ' (odeslána)' : ' (koncept)'));

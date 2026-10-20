@@ -2513,8 +2513,9 @@
       const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
       document.getElementById('modal-root').innerHTML = `
         <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
-          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(560px,94vw); max-height:92vh; overflow:auto;">
-            <h3 style="margin-top:0;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(560px,94vw); max-height:92vh; overflow:auto; position:relative;">
+            <button type="button" onclick="closeModal()" title="Zavřít" aria-label="Zavřít" style="position:absolute; top:10px; right:12px; background:none; border:0; color:var(--text2); font-size:22px; line-height:1; cursor:pointer; padding:4px 8px; border-radius:6px;">✕</button>
+            <h3 style="margin-top:0; padding-right:30px;">${s ? 'Upravit servisní smlouvu' : '+ Nová servisní smlouva'}</h3>
             <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
               <label>Stroj (Compounding) *</label>${comboHtml('sub-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, s ? s.kiosk_code : '', !!s, inp)}
               <label>Odběratel (provozovatel) *</label><div><input id="sub-name" value="${v('customer_name','')}" placeholder="Doplní se z Compoundingu po výběru stroje" oninput="subNameEdited()" style="${inp}"><input type="hidden" id="sub-companyid" value="${s && s.company_id ? s.company_id : ''}"><div id="sub-conote" style="font-size:11px;color:var(--text2);margin-top:3px;"></div></div>
@@ -2524,6 +2525,7 @@
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
               <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
               <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
+              <label>První faktura periody</label><div><input id="sub-first" type="date" value="${s && s.first_invoice_date ? String(s.first_invoice_date).slice(0, 10) : ''}" onchange="subFirstChanged()" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">Datum vystavení první faktury (za předchozí měsíc). Dřív se nefakturuje; prázdné = hned od dne fakturace v měsíci.</div></div>
               <label>Den fakturace v měsíci</label><input id="sub-day" type="number" min="1" max="28" value="${v('billing_day',3)}" style="${inp}">
               <label>Poznámka</label><input id="sub-note" value="${v('note','')}" style="${inp}">
               <label>Tržby za minulý měsíc</label><div id="sub-rev" style="font-size:13px;color:var(--text2);">Vyber stroj — načtou se tržby ze SIS.</div>
@@ -2564,6 +2566,11 @@
       }
     }
     window.subNameEdited = function() { applyCompanyMatch(false); };
+    // Zvolené datum první faktury nastaví i pravidelný den fakturace v měsíci (1–28), jde ještě upravit
+    window.subFirstChanged = function() {
+      const v = document.getElementById('sub-first').value; if (!v) return;
+      const d = parseInt(v.slice(8, 10), 10); if (d) document.getElementById('sub-day').value = Math.min(28, d);
+    };
     window.subKioskChanged = function() {
       const code = document.getElementById('sub-kiosk').value;
       const k = (window.__kiosks || []).find(x => x.code === code);
@@ -2599,7 +2606,7 @@
       if (!name) return alert('Vyplň odběratele (provozovatele).');
       const cid = parseInt(document.getElementById('sub-companyid').value, 10) || null;
       const body = { kiosk_code: kiosk, company_id: cid, customer_name: name, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
-        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), note: g('sub-note') || null, contract_number: g('sub-contract') || null,
+        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), first_invoice_date: g('sub-first') || null, note: g('sub-note') || null, contract_number: g('sub-contract') || null,
         active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
       if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
       const r = id ? await api('PUT', '/api/compounder/service-subscriptions/' + id, body) : await api('POST', '/api/compounder/service-subscriptions', body);
