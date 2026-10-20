@@ -2580,7 +2580,6 @@
               <label>Režim</label><select id="rc-mode" style="${inp}"><option value="draft"${c && c.auto_mode === 'draft' || !c ? ' selected' : ''}>Jen vytvořit koncept (vydám ručně)</option><option value="issue"${c && c.auto_mode === 'issue' ? ' selected' : ''}>Automaticky vystavit (bez odeslání)</option><option value="send"${c && c.auto_mode === 'send' ? ' selected' : ''}>Automaticky vystavit a odeslat e-mailem</option></select>
               <label>Servisní poplatek (% z tržeb vč. DPH)</label><input id="rc-fee" type="number" step="0.01" value="${v('fee_pct', 13)}" style="${inp}">
               <label>DPH (%) / Měna</label><div style="display:flex;gap:8px;"><input id="rc-vat" type="number" step="0.01" value="${v('vat_rate', 21)}" style="${inp}"><input id="rc-cur" maxlength="3" value="${v('currency', 'CZK')}" style="${inp}"></div>
-              <label>Odpočet DPH u D–F</label><label style="display:flex;gap:8px;align-items:center;"><input id="rc-ded" type="checkbox" ${!c || c.vat_deductible !== false ? 'checked' : ''}> Nájemce má nárok na odpočet (do nákladu jen základ bez DPH)</label>
               <label style="align-self:start;padding-top:6px;">Faktury za nájem lokality (D)</label><div id="rc-rent-rules"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za energie (E)</label><div id="rc-energy-rules"></div>
               <label>Poznámka</label><input id="rc-note" value="${v('note', '')}" style="${inp}">
@@ -2616,7 +2615,7 @@
       const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
       return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
         effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: g('rc-mode'),
-        fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: document.getElementById('rc-ded').checked,
+        fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: true,
         rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
     }
     window.saveRentContract = async function(id) {
@@ -2643,7 +2642,7 @@
     };
     function rentCalc(st, lines) {
       const vat = Number(st.vat_rate) || 0, fee = Number(st.fee_pct) || 0;
-      const ls = lines.map(l => { const lv = Number(l.vat_rate) || 0, amt = Number(l.amount) || 0; return Object.assign({}, l, { net: (l.deductible !== false && lv > 0) ? amt / (1 + lv / 100) : amt }); });
+      const ls = lines.map(l => { const lv = Number(l.vat_rate) || 0, amt = Number(l.amount) || 0; return Object.assign({}, l, { net: lv > 0 ? amt / (1 + lv / 100) : amt }); });
       const sum = c => ls.filter(l => l.cat === c).reduce((s, l) => s + l.net, 0);
       const A = (Number(st.revenue_sis) || 0) + (Number(st.revenue_adjust) || 0), B = A / (1 + vat / 100), C = A * fee / 100;
       return { A, B, C, D: sum('D'), E: sum('E'), F: sum('F'), rent: B - C - sum('D') - sum('E') - sum('F') };
@@ -2662,7 +2661,6 @@
         const rows = lines.map((l, i) => l.cat !== c ? '' : '<tr><td><input value="' + escapeHtml(l.label || '') + '" placeholder="popis / č. dokladu" onchange="rentLine(' + i + ',\'label\',this.value)" style="' + inp + '"' + dis + '></td>' +
           '<td style="width:110px"><input type="number" step="0.01" value="' + (l.amount === 0 || l.amount ? l.amount : '') + '" placeholder="částka vč. DPH" onchange="rentLine(' + i + ',\'amount\',this.value)" style="' + inp + 'text-align:right;"' + dis + '></td>' +
           '<td style="width:64px"><input type="number" step="1" value="' + (l.vat_rate === 0 || l.vat_rate ? l.vat_rate : 21) + '" onchange="rentLine(' + i + ',\'vat_rate\',this.value)" style="' + inp + 'text-align:right;" title="DPH %"' + dis + '></td>' +
-          '<td style="width:70px;text-align:center;" title="Nárok na odpočet DPH — do nákladu se počítá jen základ"><label style="font-size:11px;"><input type="checkbox" ' + (l.deductible !== false ? 'checked' : '') + ' onchange="rentLine(' + i + ',\'deductible\',this.checked)"' + dis + '> odpočet</label></td>' +
           '<td style="width:100px;text-align:right;white-space:nowrap;">' + rentMoney(rentCalc(st, [l]).D + rentCalc(st, [l]).E + rentCalc(st, [l]).F, '') + '</td>' +
           '<td style="width:28px">' + (issued ? '' : '<button class="btn btn-danger btn-sm" onclick="rentDelLine(' + i + ')">✕</button>') + '</td></tr>').join('');
         return '<div style="margin-top:14px;"><div style="display:flex;justify-content:space-between;align-items:center;"><b>' + CATS[c] + '</b>' + (issued ? '' : '<button class="btn btn-secondary btn-sm" onclick="rentAddLine(\'' + c + '\')">+ položka</button>') + '</div>' +

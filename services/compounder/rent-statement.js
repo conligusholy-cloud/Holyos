@@ -19,8 +19,8 @@ function calc(st) {
   const vat = Number(st.vat_rate) || 0; const fee = Number(st.fee_pct) || 0;
   const lines = (Array.isArray(st.lines) ? st.lines : []).filter((l) => l && CATS[l.cat]).map((l) => {
     const amount = Number(l.amount) || 0; const lv = l.vat_rate === '' || l.vat_rate == null ? 0 : Number(l.vat_rate) || 0;
-    const deductible = l.deductible !== false && lv > 0; // nárok na odpočet → do nákladu jen základ bez DPH
-    const out = { cat: l.cat, label: String(l.label || '').slice(0, 300), amount: r2(amount), vat_rate: lv, deductible: l.deductible !== false, net: r2(deductible ? amount / (1 + lv / 100) : amount) };
+    const deductible = lv > 0; // náklady D–F se vždy počítají bez DPH (nájem se účtuje z ceny bez DPH)
+    const out = { cat: l.cat, label: String(l.label || '').slice(0, 300), amount: r2(amount), vat_rate: lv, deductible: true, net: r2(deductible ? amount / (1 + lv / 100) : amount) };
     if (l.source) out.source = l.source; if (l.invoice_id) out.invoice_id = l.invoice_id;
     return out;
   });
