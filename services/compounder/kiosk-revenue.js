@@ -31,7 +31,8 @@ async function computePrevMonthRevenue(code, opts) {
   if (!/^[A-Za-z0-9_-]{1,32}$/.test(code)) { const e = new Error('BAD_CODE'); e.code = 'BAD_CODE'; throw e; }
   const CZ_MONTHS = ['leden', 'únor', 'březen', 'duben', 'květen', 'červen', 'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
   const today = ymdParts(pragueYmd(Date.now()));
-  const pm = today.m - 1 < 0 ? 11 : today.m - 1; const py = today.m - 1 < 0 ? today.y - 1 : today.y;
+  let pm = today.m - 1 < 0 ? 11 : today.m - 1; let py = today.m - 1 < 0 ? today.y - 1 : today.y;
+  if (opts.ym && /^\d{4}-\d{2}$/.test(opts.ym)) { py = parseInt(opts.ym.slice(0, 4), 10); pm = parseInt(opts.ym.slice(5, 7), 10) - 1; } // libovolný měsíc místo předchozího
   const monthDays = new Date(Date.UTC(py, pm + 1, 0)).getUTCDate();
   const prevMonthYm = py + '-' + String(pm + 1).padStart(2, '0');
   const monthFrom = prevMonthYm + '-01', monthTo = prevMonthYm + '-' + String(monthDays).padStart(2, '0');

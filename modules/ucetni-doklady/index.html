@@ -539,6 +539,32 @@
 
       <!-- TAB: FAKTURACE SERVISNÍCH SMLUV -->
       <div class="tab-pane" id="tab-servicebilling">
+        <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" id="sbsec-btn-service" onclick="sbSection('service')">🔧 Fakturace servisní smlouvy</button>
+          <button class="btn btn-secondary btn-sm" id="sbsec-btn-rent" onclick="sbSection('rent')">🏭 Nájem kiosku — podklady k fakturaci</button>
+        </div>
+        <div id="sbsec-rent" style="display:none;">
+          <div class="pb-card">
+            <h3>🏭 Nájem kiosku — podklady k fakturaci</h3>
+            <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">
+              Podle čl. VI nájemní smlouvy: <b>Měsíční nájemné = B − C − D − E − F</b>, kde <b>A</b> = tržby s DPH ze SIS (po vratkách), <b>B</b> = obrat bez DPH, <b>C</b> = 13 % z A (servisní a provozní poplatek Nájemce, bez DPH),
+              <b>D</b> = náklad na užívání lokality, <b>E</b> = energie a provozní média, <b>F</b> = pozáruční servis a náhradní díly (D–F bez DPH po odečtu nároku na odpočet).
+              Záporný výsledek = vyúčtování nekrytých nákladů (odst. 4). Tržby se berou jen za dny, kdy smlouva běžela. Z podkladu uděláš PDF, podle kterého může subjekt fakturovat.
+            </div>
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+              <label style="font-size:13px;">Měsíc <input type="month" id="rent-ym" onchange="loadRent()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;"></label>
+              <button class="btn btn-secondary btn-sm" onclick="loadRent()">🔄 Obnovit</button>
+            </div>
+          </div>
+          <div class="pb-card" style="margin-top:16px;">
+            <h3>📋 Kiosky a podklady za měsíc</h3>
+            <table class="data-table" id="rent-table" style="width:100%;">
+              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Smlouva od–do</th><th>Tržby s DPH (A)</th><th>Nájemné</th><th>Stav</th><th></th></tr></thead>
+              <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="sbsec-service">
         <div class="pb-card">
           <h3>🔧 Automatická fakturace servisních smluv</h3>
           <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
@@ -567,6 +593,7 @@
             <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
           </table>
         </div>
+        </div><!-- /sbsec-service -->
       </div><!-- /tab-servicebilling -->
 
       <!-- TAB: SOFTWAROVÁ PODPORA -->
@@ -2452,6 +2479,121 @@
       const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
       tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendServiceInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
         : '<tr><td colspan="7" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
+    };
+    // ─── Nájem kiosku: podklady k fakturaci (čl. VI: nájemné = B − C − D − E − F) ──
+    window.sbSection = function(which) {
+      document.getElementById('sbsec-service').style.display = which === 'service' ? '' : 'none';
+      document.getElementById('sbsec-rent').style.display = which === 'rent' ? '' : 'none';
+      document.getElementById('sbsec-btn-service').className = 'btn btn-sm ' + (which === 'service' ? 'btn-primary' : 'btn-secondary');
+      document.getElementById('sbsec-btn-rent').className = 'btn btn-sm ' + (which === 'rent' ? 'btn-primary' : 'btn-secondary');
+      if (which === 'rent') loadRent();
+    };
+    const rentMoney = (n, cur) => Number(n || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
+    window.__rentSt = [];
+    window.loadRent = async function() {
+      const ymEl = document.getElementById('rent-ym');
+      if (!ymEl.value) { const d = new Date(); d.setMonth(d.getMonth() - 1); ymEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+      const ym = ymEl.value; const tb = document.querySelector('#rent-table tbody');
+      const [rs, rr] = await Promise.all([api('GET', '/api/compounder/service-subscriptions'), api('GET', '/api/compounder/rent-statements?ym=' + encodeURIComponent(ym))]);
+      if (rs.status !== 200 || !Array.isArray(rs.data)) { tb.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načtení (' + rs.status + ')</td></tr>'; return; }
+      window.__rentSt = Array.isArray(rr.data) ? rr.data : [];
+      const fd = (v) => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '…';
+      tb.innerHTML = rs.data.length ? rs.data.map(s => {
+        const st = window.__rentSt.find(x => x.subscription_id === s.id);
+        return '<tr><td><b>' + escapeHtml(s.kiosk_code) + '</b></td><td>' + escapeHtml(s.customer_name || '—') + (s.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(s.buyer_ico) + '</div>' : '') + '</td>' +
+          '<td>' + fd(s.contract_start) + ' – ' + fd(s.contract_end) + '</td>' +
+          '<td>' + (st ? rentMoney(st.revenue_gross, st.currency) : '—') + '</td>' +
+          '<td>' + (st ? '<b style="color:' + (Number(st.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(st.rent, st.currency) + '</b>' + (Number(st.rent) < 0 ? '<div style="font-size:11px;color:var(--text2);">záporné = vyúčtování nákladů</div>' : '') : '—') + '</td>' +
+          '<td>' + (st ? (st.status === 'issued' ? '<span style="color:#16a34a;font-weight:600;">vydáno ' + escapeHtml(st.doc_number || '') + '</span>' : '<span style="color:#f59e0b;">koncept</span>') : '<span style="color:var(--text2);">nevytvořeno</span>') + '</td>' +
+          '<td style="white-space:nowrap;">' + (st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + st.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + st.id + '/pdf" target="_blank">📄 PDF</a>'
+            : '<button class="btn btn-primary btn-sm" onclick="rentGenerate(' + s.id + ')">Vytvořit podklad</button>') + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="empty-hint">Nejdřív přidej servisní smlouvu (stroj + subjekt) v sekci Fakturace servisní smlouvy.</td></tr>';
+    };
+    window.rentGenerate = async function(subId) {
+      const ym = document.getElementById('rent-ym').value;
+      const r = await api('POST', '/api/compounder/rent-statements/generate', { subscription_id: subId, ym });
+      if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      await loadRent(); openRentModal(r.data.id);
+    };
+    function rentCalc(st, lines) {
+      const vat = Number(st.vat_rate) || 0, fee = Number(st.fee_pct) || 0;
+      const ls = lines.map(l => { const lv = Number(l.vat_rate) || 0, amt = Number(l.amount) || 0; return Object.assign({}, l, { net: (l.deductible !== false && lv > 0) ? amt / (1 + lv / 100) : amt }); });
+      const sum = c => ls.filter(l => l.cat === c).reduce((s, l) => s + l.net, 0);
+      const A = (Number(st.revenue_sis) || 0) + (Number(st.revenue_adjust) || 0), B = A / (1 + vat / 100), C = A * fee / 100;
+      return { A, B, C, D: sum('D'), E: sum('E'), F: sum('F'), rent: B - C - sum('D') - sum('E') - sum('F') };
+    }
+    window.openRentModal = function(id) {
+      const st = window.__rentSt.find(x => x.id === id); if (!st) return;
+      window.__rentCur = { id, st: Object.assign({}, st), lines: (Array.isArray(st.lines) ? st.lines : []).map(l => Object.assign({}, l)) };
+      renderRentModal();
+    };
+    function renderRentModal() {
+      const { st, lines } = window.__rentCur; const issued = st.status === 'issued'; const cur = st.currency;
+      const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;width:100%;';
+      const dis = issued ? ' disabled' : '';
+      const CATS = { D: 'D. Náklad na užívání lokality', E: 'E. Energie a provozní média', F: 'F. Pozáruční servis a náhradní díly' };
+      const secs = ['D', 'E', 'F'].map(c => {
+        const rows = lines.map((l, i) => l.cat !== c ? '' : '<tr><td><input value="' + escapeHtml(l.label || '') + '" placeholder="popis / č. dokladu" onchange="rentLine(' + i + ',\'label\',this.value)" style="' + inp + '"' + dis + '></td>' +
+          '<td style="width:110px"><input type="number" step="0.01" value="' + (l.amount === 0 || l.amount ? l.amount : '') + '" placeholder="částka vč. DPH" onchange="rentLine(' + i + ',\'amount\',this.value)" style="' + inp + 'text-align:right;"' + dis + '></td>' +
+          '<td style="width:64px"><input type="number" step="1" value="' + (l.vat_rate === 0 || l.vat_rate ? l.vat_rate : 21) + '" onchange="rentLine(' + i + ',\'vat_rate\',this.value)" style="' + inp + 'text-align:right;" title="DPH %"' + dis + '></td>' +
+          '<td style="width:70px;text-align:center;" title="Nárok na odpočet DPH — do nákladu se počítá jen základ"><label style="font-size:11px;"><input type="checkbox" ' + (l.deductible !== false ? 'checked' : '') + ' onchange="rentLine(' + i + ',\'deductible\',this.checked)"' + dis + '> odpočet</label></td>' +
+          '<td style="width:100px;text-align:right;white-space:nowrap;">' + rentMoney(rentCalc(st, [l]).D + rentCalc(st, [l]).E + rentCalc(st, [l]).F, '') + '</td>' +
+          '<td style="width:28px">' + (issued ? '' : '<button class="btn btn-danger btn-sm" onclick="rentDelLine(' + i + ')">✕</button>') + '</td></tr>').join('');
+        return '<div style="margin-top:14px;"><div style="display:flex;justify-content:space-between;align-items:center;"><b>' + CATS[c] + '</b>' + (issued ? '' : '<button class="btn btn-secondary btn-sm" onclick="rentAddLine(\'' + c + '\')">+ položka</button>') + '</div>' +
+          '<table style="width:100%;border-collapse:separate;border-spacing:0 4px;">' + (rows || '<tr><td style="color:var(--text2);font-size:12px;">Žádné položky (0).</td></tr>') + '</table></div>';
+      }).join('');
+      const k = rentCalc(st, lines);
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(780px,95vw); max-height:92vh; overflow:auto; position:relative;">
+            <button type="button" onclick="closeModal()" title="Zavřít" style="position:absolute; top:10px; right:12px; background:none; border:0; color:var(--text2); font-size:22px; line-height:1; cursor:pointer; padding:4px 8px;">✕</button>
+            <h3 style="margin-top:0; padding-right:30px;">🏭 Nájem kiosku ${escapeHtml(st.kiosk_code)} — ${escapeHtml(st.period_ym)} ${issued ? '<span style="color:#16a34a;font-size:13px;">vydáno ' + escapeHtml(st.doc_number || '') + '</span>' : '<span style="color:#f59e0b;font-size:13px;">koncept</span>'}</h3>
+            <div style="color:var(--text2);font-size:12.5px;">${escapeHtml(st.customer_name || '')}${st.buyer_ico ? ' · IČO ' + escapeHtml(st.buyer_ico) : ''} · období ${new Date(st.period_from).toLocaleDateString('cs-CZ', { timeZone: 'UTC' })} – ${new Date(st.period_to).toLocaleDateString('cs-CZ', { timeZone: 'UTC' })} · DPH ${Number(st.vat_rate)} % · poplatek ${Number(st.fee_pct)} %</div>
+            <div style="display:grid;grid-template-columns:1fr 150px;gap:6px 12px;margin-top:14px;align-items:center;">
+              <div><b>A. Tržby s DPH</b> ze SIS</div><div style="text-align:right;">${rentMoney(st.revenue_sis, cur)}</div>
+              <div>Úprava tržeb (vratky, refundy, chargebacky — zadej záporně)</div><input type="number" step="0.01" value="${Number(st.revenue_adjust) || 0}" onchange="rentAdjust(this.value)" style="${inp}text-align:right;"${dis}>
+              <div><b>A po úpravě</b></div><div style="text-align:right;"><b>${rentMoney(k.A, cur)}</b></div>
+              <div><b>B. Obrat bez DPH</b></div><div style="text-align:right;">${rentMoney(k.B, cur)}</div>
+              <div><b>C. Servisní a provozní poplatek</b> (${Number(st.fee_pct)} % z A)</div><div style="text-align:right;">− ${rentMoney(k.C, cur)}</div>
+            </div>
+            ${secs}
+            <div style="margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--surface2);display:flex;justify-content:space-between;align-items:center;">
+              <div><b>${k.rent >= 0 ? 'Měsíční nájemné' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</b><div style="font-size:11.5px;color:var(--text2);">B − C − D − E − F = ${rentMoney(k.B, '')} − ${rentMoney(k.C, '')} − ${rentMoney(k.D, '')} − ${rentMoney(k.E, '')} − ${rentMoney(k.F, '')}</div></div>
+              <div style="font-size:22px;font-weight:800;color:${k.rent < 0 ? '#ef4444' : '#16a34a'};">${rentMoney(k.rent, cur)}</div>
+            </div>
+            <div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">Poznámka</label><input value="${escapeHtml(st.note || '')}" onchange="window.__rentCur.st.note=this.value;rentSave()" style="${inp}"${dis}></div>
+            <div style="display:flex; gap:10px; justify-content:space-between; margin-top:18px; flex-wrap:wrap;">
+              <div style="display:flex;gap:8px;"><a class="btn btn-secondary" href="/api/compounder/rent-statements/${st.id}/pdf" target="_blank">📄 PDF podklad</a>${issued ? '<button class="btn btn-secondary" onclick="rentStatus(\'draft\')">Vrátit do konceptu</button>' : '<button class="btn btn-danger btn-sm" onclick="rentDelete()">Smazat</button>'}</div>
+              <div style="display:flex;gap:8px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>${issued ? '' : '<button class="btn btn-primary" onclick="rentStatus(\'issued\')">Vydat podklad</button>'}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+    let __rentTimer = null;
+    async function rentSave() {
+      clearTimeout(__rentTimer);
+      const c = window.__rentCur;
+      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '' });
+      if (r.status !== 200) return alert('Chyba uložení: ' + ((r.data && r.data.error) || r.status));
+      c.st = Object.assign(c.st, r.data); const i = window.__rentSt.findIndex(x => x.id === c.id); if (i >= 0) window.__rentSt[i] = r.data;
+    }
+    window.rentLine = function(i, f, v) {
+      const l = window.__rentCur.lines[i]; l[f] = (f === 'amount' || f === 'vat_rate') ? (v === '' ? '' : Number(v)) : v;
+      renderRentModal(); rentSave();
+    };
+    window.rentAddLine = function(c) { window.__rentCur.lines.push({ cat: c, label: '', amount: '', vat_rate: 21, deductible: true }); renderRentModal(); };
+    window.rentDelLine = function(i) { window.__rentCur.lines.splice(i, 1); renderRentModal(); rentSave(); };
+    window.rentAdjust = function(v) { window.__rentCur.st.revenue_adjust = Number(v) || 0; renderRentModal(); rentSave(); };
+    window.rentStatus = async function(status) {
+      const c = window.__rentCur;
+      if (status === 'issued' && !confirm('Vydat podklad a přidělit číslo dokladu? Vydaný podklad už nepůjde upravit.')) return;
+      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '', status });
+      if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      closeModal(); loadRent();
+    };
+    window.rentDelete = async function() {
+      if (!confirm('Smazat koncept podkladu?')) return;
+      await api('DELETE', '/api/compounder/rent-statements/' + window.__rentCur.id); closeModal(); loadRent();
     };
     // ─── Chytré vyhledávání (typeahead): píšeš, pod polem se nabízí odpovídající možnosti ──
     function comboNorm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }

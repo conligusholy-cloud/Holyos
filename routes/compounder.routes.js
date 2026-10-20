@@ -4223,6 +4223,47 @@ router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) 
   try { await prisma.serviceSubscription.delete({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
   catch (err) { next(err); }
 });
+// ─── Podklady pro fakturaci nájmu kiosku (čl. VI: nájemné = B − C − D − E − F) ───
+// GET /rent-statements?ym=2026-09 — podklady za měsíc (nebo všechny)
+router.get('/rent-statements', requireAuth, async (req, res, next) => {
+  try {
+    const where = {}; if (req.query.ym && /^\d{4}-\d{2}$/.test(req.query.ym)) where.period_ym = req.query.ym;
+    res.json(await prisma.kioskRentStatement.findMany({ where, orderBy: [{ period_ym: 'desc' }, { kiosk_code: 'asc' }], take: 500 }));
+  } catch (err) { next(err); }
+});
+// POST /rent-statements/generate { subscription_id, ym? } — vytvoří/obnoví koncept (tržby ze SIS jen za dny trvání smlouvy)
+router.post('/rent-statements/generate', requireAuth, async (req, res, next) => {
+  try {
+    const sid = parseInt(req.body && req.body.subscription_id, 10); if (!sid) return res.status(400).json({ error: 'Chybí smlouva.' });
+    res.status(201).json(await require('../services/compounder/rent-statement').generate(sid, req.body.ym || null));
+  } catch (err) {
+    if (err && err.status) return res.status(err.status).json({ error: err.message });
+    if (err && err.code === 'SIS_NOT_CONFIGURED') return res.status(400).json({ error: 'SIS není nakonfigurovaný (chybí SIS_KIOSK_API_KEY).' });
+    next(err);
+  }
+});
+router.put('/rent-statements/:id', requireAuth, async (req, res, next) => {
+  try { res.json(await require('../services/compounder/rent-statement').update(parseInt(req.params.id, 10), req.body || {})); }
+  catch (err) { if (err && err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+router.get('/rent-statements/:id/pdf', requireAuth, async (req, res, next) => {
+  try {
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (!st) return res.status(404).json({ error: 'Podklad nenalezen' });
+    const buf = await require('../services/compounder/rent-statement').pdf(st);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="najem-' + st.kiosk_code + '-' + st.period_ym + '.pdf"');
+    res.send(buf);
+  } catch (err) { next(err); }
+});
+router.delete('/rent-statements/:id', requireAuth, async (req, res, next) => {
+  try {
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (st && st.status === 'issued') return res.status(409).json({ error: 'Vydaný podklad nelze smazat.' });
+    if (st) await prisma.kioskRentStatement.delete({ where: { id: st.id } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
 // GET /service-subscriptions/revenue/:code?fee_pct=13&vat_rate=21 — tržby stroje za předchozí měsíc ze SIS + vypočtený poplatek (náhled)
 router.get('/service-subscriptions/revenue/:code', requireAuth, async (req, res, next) => {
   try {

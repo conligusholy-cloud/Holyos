@@ -3238,6 +3238,44 @@ model ServiceSubscription {
   @@map("service_subscriptions")
 }
 
+// Podklad pro fakturaci nájmu kiosku (Nájemce → Pronajímatel) podle čl. VI nájemní smlouvy:
+// Měsíční nájemné = B − C − D − E − F
+//   A tržby s DPH (SIS) · B obrat bez DPH · C servisní a provozní poplatek (% z A, bez DPH)
+//   D náklad na užívání lokality · E energie a provozní média · F pozáruční servis a náhradní díly (vše bez DPH po odečtu nároku na odpočet)
+// Záporný výsledek = vyúčtování nákladů nekrytých obratem (čl. VI odst. 4).
+model KioskRentStatement {
+  id              Int      @id @default(autoincrement())
+  subscription_id Int // ServiceSubscription = subjekt/stroj
+  kiosk_code      String   @db.VarChar(40)
+  customer_name   String?  @db.VarChar(255)
+  buyer_ico       String?  @db.VarChar(20)
+  doc_number      String?  @unique @db.VarChar(30) // NP-2026-0001
+  period_ym       String   @db.VarChar(7)
+  period_from     DateTime @db.Date
+  period_to       DateTime @db.Date
+  currency        String   @default("CZK") @db.VarChar(3)
+  vat_rate        Decimal  @default(21) @db.Decimal(5, 2)
+  fee_pct         Decimal  @default(13) @db.Decimal(5, 2)
+  revenue_sis     Decimal  @default(0) @db.Decimal(14, 2) // A ze SIS (tržby s DPH za období)
+  revenue_adjust  Decimal  @default(0) @db.Decimal(14, 2) // ruční úprava A (vratky, refundy, chargebacky — zadat záporně)
+  lines           Json? // [{ cat:'D'|'E'|'F', label, amount, vat_rate, deductible, net }]
+  revenue_gross   Decimal  @default(0) @db.Decimal(14, 2) // A = SIS + úprava
+  revenue_net     Decimal  @default(0) @db.Decimal(14, 2) // B
+  fee_net         Decimal  @default(0) @db.Decimal(14, 2) // C
+  cost_d          Decimal  @default(0) @db.Decimal(14, 2)
+  cost_e          Decimal  @default(0) @db.Decimal(14, 2)
+  cost_f          Decimal  @default(0) @db.Decimal(14, 2)
+  rent            Decimal  @default(0) @db.Decimal(14, 2) // B − C − D − E − F
+  status          String   @default("draft") @db.VarChar(12) // draft | issued
+  note            String?  @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  @@unique([subscription_id, period_ym])
+  @@index([period_ym])
+  @@map("kiosk_rent_statements")
+}
+
 // Dodací list k prodejní objednávce (jednoduchá evidence + PDF).
 model DeliveryNote {
   id                 Int      @id @default(autoincrement())
