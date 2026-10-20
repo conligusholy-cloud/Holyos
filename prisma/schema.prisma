@@ -3302,6 +3302,7 @@ model KioskRentContract {
   fee_pct         Decimal   @default(13) @db.Decimal(5, 2)
   vat_deductible  Boolean   @default(true) // Nájemce má nárok na odpočet DPH u D–F
   // Pravidla párování přijatých faktur: [{ company_id, keyword?, share_pct? }]
+  rent_fixed_net  Decimal?  @db.Decimal(14, 2) // pevný nájem lokality bez DPH za měsíc (kontroluje se proti přijatému dokladu)
   rent_rules      Json?
   energy_rules    Json?
   service_rules   Json? // F — pozáruční servis a náhradní díly

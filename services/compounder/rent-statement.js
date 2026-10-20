@@ -32,6 +32,18 @@ function onePerCat(lines) {
   }
   return out;
 }
+// Pevný nájem lokality (D) ze smlouvy bez DPH: řádek D = pevná částka; přijatý doklad (pravidla / AI / ručně vybraný) se jen kontroluje
+function applyFixedRent(c, rev, lines) {
+  const fixed = Number(c.rent_fixed_net) || 0; if (!(fixed > 0)) return { lines, check: null };
+  const vatR = Number(c.vat_rate) || 21; const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
+  const net = r2(fixed * factor);
+  const dl = lines.filter((l) => l && l.cat === 'D' && l.invoice_id);
+  const invNet = r2(dl.reduce((a, l) => a + (Number(l.amount) || 0) / (1 + (Number(l.vat_rate) || 0) / 100), 0));
+  const m = dl.length ? String(dl[0].label || '').match(/^Faktura\s+(.+?)\s+—/) : null;
+  const check = !dl.length ? { status: 'none' } : { status: Math.abs(invNet - net) <= 1 ? 'ok' : 'diff', invoice_id: dl[0].invoice_id, number: m ? m[1] : null, invoice_net: invNet };
+  const line = { cat: 'D', label: 'Nájem lokality — pevná částka dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + vatR / 100)), vat_rate: vatR, deductible: true, source: 'fixed', check };
+  return { lines: lines.filter((l) => !(l && l.cat === 'D')).concat([line]), check };
+}
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
 // Čisté přepočtení řádků a výsledku (bez DB)
@@ -41,7 +53,7 @@ function calc(st) {
     const amount = Number(l.amount) || 0; const lv = l.vat_rate === '' || l.vat_rate == null ? 0 : Number(l.vat_rate) || 0;
     const deductible = lv > 0; // náklady D–F se vždy počítají bez DPH (nájem se účtuje z ceny bez DPH)
     const out = { cat: l.cat, label: String(l.label || '').slice(0, 300), amount: r2(amount), vat_rate: lv, deductible: true, net: r2(deductible ? amount / (1 + lv / 100) : amount) };
-    if (l.source) out.source = l.source; if (l.invoice_id) out.invoice_id = l.invoice_id;
+    if (l.source) out.source = l.source; if (l.invoice_id) out.invoice_id = l.invoice_id; if (l.check) out.check = l.check;
     return out;
   });
   const sum = (c) => r2(lines.filter((l) => l.cat === c).reduce((s, l) => s + l.net, 0));
@@ -108,18 +120,21 @@ async function generate(contractId, ym) {
   const existing = await prisma.kioskRentStatement.findUnique({ where: { contract_id_period_ym: { contract_id: c.id, period_ym: period } } });
   if (existing && existing.status === 'issued') { const e = new Error('Podklad už je vydaný — nelze přepsat.'); e.status = 409; throw e; }
   const inv = await pullInvoiceLines(c, rev);
-  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice' && l.source !== 'ai');
+  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice' && l.source !== 'ai' && l.source !== 'fixed');
   // Chytré vyhledání: AI přečte ostatní přijaté doklady za měsíc a určí nájem / energie / díly pro tento kiosk
   let ai = { lines: [], suggestions: [] };
   try {
     const taken = inv.lines.concat(manual).map((l) => l.invoice_id).filter(Boolean);
     ai = await require('./rent-doc-matcher').match(c, rev, { skipInvoiceIds: taken });
   } catch (e) { console.warn('[rent-statement] AI vyhledání selhalo:', e.message); }
-  const allLines = onePerCat(manual.concat(inv.lines, ai.lines));
+  const fx = applyFixedRent(c, rev, manual.concat(inv.lines, ai.lines));
+  const allLines = onePerCat(fx.lines);
   const haveIds = new Set(allLines.map((l) => l.invoice_id).filter(Boolean));
   const suggestions = (ai.suggestions || []).filter((s) => !haveIds.has(s.invoice_id));
   // „Chybí" = pravidla požadují doklad (nájem/energie), ale nenašel se ani podle pravidel, ani AI
   const missing = inv.missing.filter((cat) => !allLines.some((l) => l.cat === cat)).map((cat) => (cat === 'D' ? 'faktura za nájem lokality' : 'faktura za energie'));
+  if (fx.check && fx.check.status === 'none') missing.push('doklad za nájem lokality (ke kontrole pevného nájmu)');
+  if (fx.check && fx.check.status === 'diff') missing.push('nájem na dokladu ' + (fx.check.number || '') + ' (' + fx.check.invoice_net + ') se liší od pevného nájmu ve smlouvě');
   const base = {
     kiosk_code: c.kiosk_code, customer_name: c.customer_name || null, buyer_ico: c.buyer_ico || null,
     period_from: new Date(rev.period_from + 'T00:00:00Z'), period_to: new Date(rev.period_to + 'T00:00:00Z'),

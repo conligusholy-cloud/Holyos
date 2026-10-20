@@ -4274,7 +4274,7 @@ const rentContractSchema = z.object({
   effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
   issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
   currency: z.string().max(3).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
-  rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
+  rent_fixed_net: z.number().min(0).nullable().optional(), rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
 });
 function rentContractData(d) {
   const out = {};

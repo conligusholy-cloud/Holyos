@@ -2550,6 +2550,16 @@
         const num = (k, neg) => '<td style="text-align:right;white-space:nowrap;">' + (neg ? '− ' : '') + rentMoney(x[k], '') + '</td>';
         const lines = Array.isArray(x.lines) ? x.lines : [];
         const docCell = (k, cat, what) => {
+          if (cat === 'D') {
+            const fl = lines.find(l => l.cat === 'D' && l.source === 'fixed');
+            if (fl) {
+              const ck = fl.check || { status: 'none' }; const ok = ck.status === 'ok';
+              const lnk = ck.invoice_id ? '<div style="font-size:11px;white-space:nowrap;"><a href="javascript:void(0)" style="color:#818cf8;" onclick="openDetail(' + ck.invoice_id + ')">' + escapeHtml(ck.number || 'doklad') + '</a> <a href="/api/accounting/invoices/' + ck.invoice_id + '/source-pdf" target="_blank" style="text-decoration:none;">📄</a></div>' : '';
+              const msg = ok ? '<div style="font-size:10.5px;color:#16a34a;">✓ pevně, shoduje se s dokladem</div>' : ck.status === 'diff' ? '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ doklad: ' + rentMoney(ck.invoice_net, '') + ' bez DPH</div>' : '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ doklad nenalezen (pevně)</div>';
+              const btn = (!ok && x.status !== 'issued') ? '<div><button class="btn btn-secondary btn-sm" style="padding:1px 7px;font-size:11px;margin-top:3px;" onclick="rentFindDoc(' + x.id + ',\'D\')">🔍 Najít doklad</button></div>' : '';
+              return '<td style="text-align:right;white-space:nowrap;' + (ok ? '' : 'background:rgba(239,68,68,.10);') + '">− ' + rentMoney(x[k], '') + lnk + msg + btn + '</td>';
+            }
+          }
           const missing = !(Number(x[k]) > 0);
           const ln = lines.find(l => l.cat === cat && Number(l.amount) > 0);
           const src = ln ? (ln.source === 'invoice' || ln.invoice_id ? '<div style="font-size:10.5px;color:#16a34a;" title="Částka převzata z přijaté faktury">✓ z faktury</div>' : ln.source === 'ai' ? '<div style="font-size:10.5px;color:#16a34a;">✓ AI doklad</div>' : '<div style="font-size:10.5px;color:var(--text2);">✎ ručně</div>') : '';
@@ -2636,6 +2646,7 @@
                 <div style="font-size:11px;color:var(--text2);margin-top:4px;">Nezaškrtnuto = v zadaný den vznikne jen koncept, který vydáš ručně. Odeslání vyžaduje vystavení.</div></div>
               <label>Servisní poplatek (% z tržeb vč. DPH)</label><input id="rc-fee" type="number" step="0.01" value="${v('fee_pct', 13)}" style="${inp}">
               <label>DPH (%) / Měna</label><div style="display:flex;gap:8px;"><input id="rc-vat" type="number" step="0.01" value="${v('vat_rate', 21)}" style="${inp}"><input id="rc-cur" maxlength="3" value="${v('currency', 'CZK')}" style="${inp}"></div>
+              <label title="Pevná výše nájmu lokality bez DPH za celý měsíc. Používá se jako hodnota D a systém ji kontroluje proti přijatému dokladu.">Nájem lokality bez DPH (pevně)</label><div><input id="rc-rentfix" type="number" step="0.01" min="0" placeholder="např. 8000 — prázdné = z dokladu" value="${c && c.rent_fixed_net != null ? Number(c.rent_fixed_net) : ''}" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:2px;">Když je vyplněno, D = tato částka a doklad od dodavatele se jen ověřuje (shoda / odchylka / chybí). Při neúplném měsíci se krátí poměrně.</div></div>
               <label style="align-self:start;padding-top:6px;">Faktury za nájem lokality (D)</label><div id="rc-rent-rules"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za energie (E)</label><div id="rc-energy-rules"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za servis / díly (F)</label><div id="rc-service-rules"></div>
@@ -2674,7 +2685,7 @@
       const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
       return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
         effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: document.getElementById('rc-autosend').checked ? 'send' : (document.getElementById('rc-autoissue').checked ? 'issue' : 'draft'),
-        fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: true,
+        rent_fixed_net: g('rc-rentfix') === '' ? null : (Number(g('rc-rentfix')) || null), fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: true,
         rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), service_rules: clean(window.__rcDraft.service_rules), ai_match: document.getElementById('rc-ai').checked, note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
     }
     window.saveRentContract = async function(id) {
