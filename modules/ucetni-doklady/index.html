@@ -2668,6 +2668,10 @@
       if (b.effective_to && b.effective_to < b.effective_from) return alert('Konec smlouvy je dřív než její začátek.');
       if (b.auto_mode === 'send' && !b.contact_email) return alert('Pro automatické odesílání vyplň e-mail kompetentní osoby.');
       const r = id ? await api('PUT', '/api/compounder/rent-contracts/' + id, b) : await api('POST', '/api/compounder/rent-contracts', b);
+      if (r.status === 409 && r.data && r.data.existing_id) {
+        if (confirm(r.data.error + '\n\nOtevřít stávající smlouvu k úpravě' + (r.data.existing_active === false ? ' (a znovu ji aktivovat)' : '') + '?')) { closeModal(); document.getElementById('rent-inactive').checked = true; await loadRent(); openRentContractModal(r.data.existing_id); }
+        return;
+      }
       if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
       closeModal(); loadRent();
     };

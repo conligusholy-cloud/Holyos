@@ -4263,7 +4263,7 @@ router.post('/rent-contracts', requireAuth, async (req, res, next) => {
     const data = rentContractData(p.data);
     if (data.auto_mode === 'send' && !data.contact_email) return res.status(400).json({ error: 'Pro automatické odesílání vyplň e-mail kompetentní osoby.' });
     res.status(201).json(await prisma.kioskRentContract.create({ data }));
-  } catch (err) { if (err && err.code === 'P2002') return res.status(409).json({ error: 'Pro tento stroj už nájemní smlouva existuje.' }); next(err); }
+  } catch (err) { if (err && err.code === 'P2002') { const ex = await prisma.kioskRentContract.findUnique({ where: { kiosk_code: req.body.kiosk_code } }).catch(() => null); return res.status(409).json({ error: 'Pro tento stroj už nájemní smlouva existuje' + (ex && !ex.active ? ' (je neaktivní)' : '') + '.', existing_id: ex ? ex.id : null, existing_active: ex ? ex.active : null }); } next(err); }
 });
 router.put('/rent-contracts/:id', requireAuth, async (req, res, next) => {
   try {
