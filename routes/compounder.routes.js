@@ -4259,7 +4259,7 @@ router.get('/rent-statements/:id/candidates', requireAuth, async (req, res, next
       return {
         id: i.id, number: i.external_number || i.invoice_number, company: i.company && i.company.name, date_taxable: i.date_taxable, date_issued: i.date_issued, in_period: inPeriod,
         currency: i.currency, total: Number(i.total), status: i.status, used: used.has(i.id),
-        items: (i.items || []).map((it) => ({ id: it.id, description: it.description, subtotal: Number(it.subtotal), vat_rate: Number(it.vat_rate), total: Number(it.total), match: kws.length ? kws.some((k) => kwMatch(it.description, k)) : false })),
+        items: (i.items || []).map((it) => ({ id: it.id, description: it.description, subtotal: Number(it.subtotal), vat_rate: Number(it.vat_rate), total: Number(it.total), match: kws.length ? kws.some((k) => kwMatch(it.description, k)) : false, period: require('../services/compounder/rent-period').periodVsMonth(it.description, st.period_ym) })),
       };
     });
     res.json({ cat, fallback, has_keywords: !fallback && kws.length > 0, keywords: Array.from(new Set(kws)).join(' · '), companies: Array.from(new Set(invs.map((i) => i.company && i.company.name).filter(Boolean))), period_ym: st.period_ym, invoices: out });

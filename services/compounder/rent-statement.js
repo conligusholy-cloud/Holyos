@@ -41,6 +41,7 @@ function applyFixedRent(c, rev, lines) {
   const line = { cat: 'D', label: 'Nájem lokality — pevná částka dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + vatR / 100)), vat_rate: vatR, deductible: true, source: 'fixed' };
   return { lines: rest.concat([line]), check: null };
 }
+const { periodVsMonth } = require('./rent-period');
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
 // Čisté přepočtení řádků a výsledku (bez DB)
@@ -72,6 +73,7 @@ async function pullInvoiceLines(contract, rev) {
   const out = []; const missing = [];
   const ymFrom = new Date(rev.prevMonthYm + '-01T00:00:00Z');
   const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
+  const winFrom = new Date(ymFrom.getTime() - 62 * 86400000), winTo = new Date(ymTo.getTime() + 150 * 86400000); // doklad může přijít se zpožděním
   const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
   const ded = contract.vat_deductible !== false;
   for (const [cat, key] of [['E', 'energy_rules'], ['F', 'service_rules']]) {
@@ -81,12 +83,12 @@ async function pullInvoiceLines(contract, rev) {
     for (const rule of rules) {
       const invs = await prisma.invoice.findMany({
         where: { type: 'received', company_id: parseInt(rule.company_id, 10), status: { notIn: ['cancelled', 'written_off'] },
-          OR: [{ date_taxable: { gte: ymFrom, lte: ymTo } }, { date_taxable: null, date_issued: { gte: ymFrom, lte: ymTo } }] },
+          OR: [{ date_taxable: { gte: winFrom, lte: winTo } }, { date_taxable: null, date_issued: { gte: winFrom, lte: winTo } }] },
         include: { items: true, company: { select: { name: true } } },
       });
       const kw = norm(rule.keyword); const share = (Number(rule.share_pct) > 0 ? Number(rule.share_pct) : 100) / 100;
       for (const inv of invs) {
-        const items = (inv.items || []).filter((it) => kwMatch(it.description, rule.keyword || DEFAULT_KW[cat] || ''));
+        const items = (inv.items || []).filter((it) => kwMatch(it.description, rule.keyword || DEFAULT_KW[cat] || '') && periodVsMonth(it.description, rev.prevMonthYm) === 'yes')  // jen když období na dokladu jistě odpovídá měsíci;
         const byRate = {};
         for (const it of items) { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); }
         for (const [rate, total] of Object.entries(byRate)) {

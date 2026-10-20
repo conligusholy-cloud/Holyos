@@ -6,6 +6,7 @@
 'use strict';
 
 const { prisma } = require('../../config/database');
+const { periodVsMonth } = require('./rent-period');
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const MODEL = process.env.RENT_MATCH_MODEL || 'claude-haiku-4-5-20251001';
 const CAT_MAP = { rent: 'D', energy: 'E', parts_service: 'F' };
@@ -78,11 +79,14 @@ async function match(contract, rev, opts) {
       const inv = batch.find((x) => x.id === a.id); const cat = CAT_MAP[a.category];
       if (!inv || !cat || a.belongs === 'no') continue;
       const conf = Number(a.confidence) || 0; if (conf < 0.5) continue;
-      const byRate = {}; (inv.items || []).forEach((it) => { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); });
+      const okItems = (inv.items || []).filter((it) => periodVsMonth(it.description, rev.prevMonthYm) !== 'no'); // jiné období na dokladu = nepatří
+      if (!okItems.length) continue;
+      const certain = okItems.every((it) => periodVsMonth(it.description, rev.prevMonthYm) === 'yes');
+      const byRate = {}; okItems.forEach((it) => { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); });
       for (const [rate, total] of Object.entries(byRate)) {
         const amount = r2(total * factor); if (!(amount > 0)) continue;
         const line = { cat, label: 'Faktura ' + (inv.external_number || inv.invoice_number) + ' — ' + ((inv.company && inv.company.name) || '') + ' (AI: ' + CAT_NAME[a.category] + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : '') + ')', amount, vat_rate: Number(rate), deductible: true, invoice_id: inv.id, confidence: conf, reason: String(a.reason || '').slice(0, 160), belongs: a.belongs };
-        if (conf >= 0.8 && a.belongs === 'yes') lines.push(Object.assign(line, { source: 'ai' })); else suggestions.push(line);
+        if (conf >= 0.8 && a.belongs === 'yes' && certain) lines.push(Object.assign(line, { source: 'ai' })); else suggestions.push(line);
       }
     }
   }
