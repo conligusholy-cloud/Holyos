@@ -563,10 +563,10 @@
             </div>
           </div>
           <div class="pb-card" style="margin-top:16px;">
-            <h3>📋 Aktivní nájemní smlouvy <label style="font-size:12px;font-weight:400;color:var(--text2);margin-left:12px;"><input type="checkbox" id="rent-inactive" onchange="loadRent()"> zobrazit i neaktivní <span id="rent-inactive-hint"></span></label></h3>
+            <h3>📋 Nájemní smlouvy kiosků <span id="rent-inactive-hint" style="font-size:12px;font-weight:400;color:var(--text2);margin-left:10px;"></span></h3>
             <table class="data-table" id="rent-table" style="width:100%;">
-              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den vystavení</th><th>Automatizace</th><th>Poplatek</th><th></th></tr></thead>
-              <tbody><tr><td colspan="8" class="empty-hint">Načítám…</td></tr></tbody>
+              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den vystavení</th><th>Automatizace</th><th>Poplatek</th><th title="Aktivní smlouvu zpracovává automatika (plánování, vystavení, odeslání)">Automatika zapnutá</th><th></th></tr></thead>
+              <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
             </table>
           </div>
           <div class="pb-card" style="margin-top:16px;">
@@ -2514,18 +2514,18 @@
       const forYm = Array.isArray(rr.data) ? rr.data : [];
       const fd = (v) => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '…';
       const MODE = { draft: 'jen koncept', issue: 'vystavit', send: 'vystavit + odeslat' };
-      const showInactive = !!(document.getElementById('rent-inactive') && document.getElementById('rent-inactive').checked);
       const inactiveCnt = rc.data.filter(c => !c.active).length;
-      const lst = rc.data.filter(c => c.active || showInactive);
-      const hint = document.getElementById('rent-inactive-hint'); if (hint) hint.textContent = inactiveCnt ? '(' + inactiveCnt + ')' : '';
-      tb.innerHTML = lst.length ? lst.map(c => '<tr' + (c.active ? '' : ' style="opacity:.55"') + '><td><b>' + escapeHtml(c.kiosk_code) + '</b>' + (c.active ? '' : '<div style="font-size:11px;color:var(--text2);">neaktivní</div>') + '</td><td>' + escapeHtml(c.customer_name || '—') + (c.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(c.buyer_ico) + '</div>' : '') + '</td>' +
+      const lst = rc.data;
+      const hint = document.getElementById('rent-inactive-hint'); if (hint) hint.textContent = lst.length ? 'aktivních ' + (lst.length - inactiveCnt) + ' z ' + lst.length : '';
+      tb.innerHTML = lst.length ? lst.map(c => '<tr' + (c.active ? '' : ' style="opacity:.55"') + '><td><b>' + escapeHtml(c.kiosk_code) + '</b>' + '' + '</td><td>' + escapeHtml(c.customer_name || '—') + (c.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(c.buyer_ico) + '</div>' : '') + '</td>' +
           '<td>' + escapeHtml(c.contact_name || '—') + '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(c.contact_email || 'bez e-mailu') + '</div></td>' +
           '<td>' + fd(c.effective_from) + ' – ' + fd(c.effective_to) + '</td>' +
           '<td>' + c.issue_day + '. v měsíci</td>' +
           '<td>' + (c.auto_mode === 'send' ? 'vystavit + odeslat' : c.auto_mode === 'issue' ? 'vystavit' : 'jen koncept') + '</td>' +
           '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %</td>' +
-          '<td style="white-space:nowrap;">' + (c.active ? '<button class="btn btn-primary btn-sm" title="Vytvořit podklad za měsíc zvolený nahoře" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' : '<button class="btn btn-primary btn-sm" title="Smlouvu znovu zapnout (automatika ji začne zpracovávat)" onclick="rentToggleActive(' + c.id + ',true)">Aktivovat</button> ') + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>').join('')
-        : '<tr><td colspan="8" class="empty-hint">Zatím žádná aktivní nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".</td></tr>';
+          '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + (c.active ? 'Automatika zapnutá — kliknutím vypnout' : 'Automatika vypnutá — kliknutím zapnout') + '"><input type="checkbox" ' + (c.active ? 'checked ' : '') + 'onchange="rentToggleActive(' + c.id + ',this.checked)"> <span style="font-size:11px;color:' + (c.active ? '#16a34a' : 'var(--text2)') + ';">' + (c.active ? 'aktivní' : 'neaktivní') + '</span></label></td>' +
+          '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" title="Ručně vytvořit podklad za měsíc zvolený nahoře (funguje i u neaktivní smlouvy)" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>').join('')
+        : '<tr><td colspan="9" class="empty-hint">Zatím žádná nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".</td></tr>';
       // Plánované: co se vytvoří tento měsíc (podklad za předchozí měsíc v den vystavení u každé aktivní smlouvy)
       const now = new Date(); const pmD = new Date(now.getFullYear(), now.getMonth() - 1, 1); const pym = pmD.getFullYear() + '-' + String(pmD.getMonth() + 1).padStart(2, '0');
       const pStart = pym + '-01', pEnd = pym + '-' + String(new Date(pmD.getFullYear(), pmD.getMonth() + 1, 0).getDate()).padStart(2, '0');
