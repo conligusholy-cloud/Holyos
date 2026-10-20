@@ -102,6 +102,35 @@ function offerHtml() {
   <div class="box"><h3>Poznámka</h3>Nabídka je nezávazná, platí do uvedeného data. Pro potvrzení nabídky nám zašlete podepsanou objednávku.</div>
   <div class="sig"><div>Za dodavatele</div><div>Za odběratele (akceptace)</div></div>`);
 }
+// Nákupní objednávka dodavateli (objednávka na dodání zboží / materiálu). Bez dat = ukázková data; se skutečnou objednávkou lze použít i pro tisk / PDF.
+// order: { order_number, created_at, expected_delivery, currency, note, delivery_address, payment_terms, issued_by, company:{…dodavatel…}, items:[{ name, quantity, unit, unit_price, expected_delivery }] }
+function purchaseOrderHtml(order, ourCompany, opts) {
+  const o = order || {
+    order_number: 'FY-4035', created_at: new Date('2026-10-01'), expected_delivery: new Date('2026-10-20'), currency: 'CZK', issued_by: 'Jan Nákupčí',
+    payment_terms: 'Bankovním převodem, splatnost 30 dní od doručení', delivery_address: 'Best Series s.r.o., Ukázková 123, 602 00 Brno — příjem zboží, Sklad A',
+    note: 'Zboží prosím dodejte včetně dodacího listu a certifikátů. Při zpoždění dodávky nás neprodleně kontaktujte.',
+    company: SUPPLIER,
+    items: [
+      { name: 'Motor pračky 18 kg', quantity: 4, unit: 'ks', unit_price: 12400, expected_delivery: new Date('2026-10-15') },
+      { name: 'Ložisko 6205 2RS', quantity: 16, unit: 'ks', unit_price: 86, expected_delivery: new Date('2026-10-15') },
+      { name: 'Těsnění dveří — sada', quantity: 4, unit: 'ks', unit_price: 1450, expected_delivery: new Date('2026-10-20') },
+    ],
+  };
+  const our = ourCompany || OUR; const cur = o.currency === 'EUR' ? 'EUR' : 'CZK';
+  const d = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+  let total = 0;
+  const rows = (o.items || []).map((it, i) => { const t = Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0) * 100) / 100; total += t;
+    return `<tr><td class="c">${i + 1}</td><td class="d">${esc(it.name)}</td><td class="r">${Number(it.quantity) || 0} ${esc(it.unit || 'ks')}</td><td class="r">${money(it.unit_price, cur)}</td><td class="r">${money(t, cur)}</td><td>${d(it.expected_delivery || o.expected_delivery)}</td></tr>`; }).join('');
+  return bs2.page({ title: 'Nákupní objednávka', number: o.order_number, pill: 'Objednávka dodavateli', demo: !order || (opts && opts.demo) }, `
+  <div class="parties">${party('Objednatel', our)}${party('Dodavatel', o.company || SUPPLIER)}</div>
+  <div class="meta"><div><div class="l">Vystaveno</div><div class="v">${d(o.created_at)}</div></div><div><div class="l">Požadované dodání</div><div class="v">${d(o.expected_delivery)}</div></div><div><div class="l">Platební podmínky</div><div class="v">${esc(o.payment_terms || 'Bankovním převodem')}</div></div><div><div class="l">Vyřizuje</div><div class="v">${esc(o.issued_by || '—')}</div></div></div>
+  <table class="items"><thead><tr><th>#</th><th>Položka</th><th class="r">Množství</th><th class="r">Cena / MJ</th><th class="r">Celkem</th><th>Termín dodání</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="sum"><div class="row total"><span>Celkem (bez DPH)</span><span>${money(total, cur)}</span></div></div>
+  ${o.delivery_address ? `<div class="box"><h3>Místo dodání</h3>${esc(o.delivery_address)}</div>` : ''}
+  ${o.note ? `<div class="box"><h3>Poznámka</h3>${esc(o.note)}</div>` : ''}
+  <div class="box"><h3>Potvrzení objednávky</h3>Prosíme o potvrzení přijetí objednávky a termínů dodání odpovědí na tento dokument. Ceny jsou uvedeny bez DPH.</div>
+  <div class="sig"><div>Za objednatele</div><div>Potvrzení dodavatele (akceptace)</div></div>`);
+}
 function receiptHtml() {
   const rows = [['Motor pračky 18 kg', 4, 'ks'], ['Ložisko 6205 2RS', 16, 'ks'], ['Těsnění dveří — sada', 4, 'ks']].map((r, i) => `<tr><td class="c">${i + 1}</td><td class="d">${esc(r[0])}</td><td class="r">${r[1]} ${r[2]}</td><td class="r">${r[1]} ${r[2]}</td><td>Sklad A-02-3</td></tr>`).join('');
   return shell('Příjemka', 'PR-2026-00094', 'Skladový doklad', `
@@ -148,6 +177,7 @@ const CATALOG = [
   { variants: true, key: 'invoice_credit',   group: 'Vydané doklady', name: 'Dobropis vydaný', desc: 'Opravný doklad snižující fakturovanou částku.', used: 'Účetní doklady → Vydané' },
   { key: 'offer',            group: 'Obchod', name: 'Cenová nabídka', desc: 'Nabídka prádlomatu s platebními podmínkami a akceptací.', used: 'Prodejní objednávky' },
   { key: 'order',            group: 'Obchod', name: 'Potvrzená objednávka', desc: 'Potvrzení objednávky se sloty výroby a platebním kalendářem.', used: 'Prodejní objednávky → průvodce' },
+  { key: 'purchase_order',   group: 'Nákup', name: 'Nákupní objednávka', desc: 'Objednávka zboží / materiálu dodavateli s termíny dodání položek.', used: 'Nákup a sklad → Nákupní objednávky' },
   { key: 'delivery_note',    group: 'Sklad a expedice', name: 'Dodací list', desc: 'Předávací doklad k expedici s podpisy.', used: 'Prodejní objednávky / Skladové doklady' },
   { key: 'goods_issue',      group: 'Sklad a expedice', name: 'Výdejka', desc: 'Doklad o výdeji materiálu ze skladu do výroby / na zakázku.', used: 'Skladové doklady' },
   { key: 'stock_transfer',   group: 'Sklad a expedice', name: 'Přesun materiálu (převodka)', desc: 'Doklad o přesunu zboží mezi sklady nebo pozicemi.', used: 'Skladové doklady / Sklady' },
@@ -166,6 +196,7 @@ async function renderPreview(key, opts) {
     case 'invoice_credit': return renderInvoiceHtml(variantInvoice('credit', opts));
     case 'invoice_received': return renderInvoiceHtml(variantInvoice('received', opts));
     case 'offer': return offerHtml();
+    case 'purchase_order': return purchaseOrderHtml();
     case 'goods_receipt': return receiptHtml();
     case 'goods_issue': return issueHtml();
     case 'stock_transfer': return transferHtml();
@@ -180,4 +211,4 @@ async function renderPreview(key, opts) {
   }
 }
 
-module.exports = { CATALOG, renderPreview };
+module.exports = { CATALOG, renderPreview, purchaseOrderHtml };
