@@ -4231,6 +4231,40 @@ router.get('/rent-statements', requireAuth, async (req, res, next) => {
     res.json(await prisma.kioskRentStatement.findMany({ where, orderBy: [{ period_ym: 'desc' }, { kiosk_code: 'asc' }], take: 500 }));
   } catch (err) { next(err); }
 });
+// GET /rent-statements/:id/candidates?cat=D|E|F — všechny přijaté doklady od společností zadaných ve smlouvě (pro ruční výběr dokladu)
+router.get('/rent-statements/:id/candidates', requireAuth, async (req, res, next) => {
+  try {
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id: parseInt(req.params.id, 10) } });
+    if (!st || !st.contract_id) return res.status(404).json({ error: 'Podklad nenalezen.' });
+    const c = await prisma.kioskRentContract.findUnique({ where: { id: st.contract_id } });
+    if (!c) return res.status(404).json({ error: 'Smlouva nenalezena.' });
+    const cat = ['D', 'E', 'F'].includes(req.query.cat) ? req.query.cat : 'D';
+    const key = { D: 'rent_rules', E: 'energy_rules', F: 'service_rules' }[cat];
+    const rulesOf = (k) => (Array.isArray(c[k]) ? c[k] : []).filter((r) => r && r.company_id);
+    let rules = rulesOf(key); let fallback = false;
+    if (!rules.length) { rules = rulesOf('rent_rules').concat(rulesOf('energy_rules'), rulesOf('service_rules')); fallback = true; }
+    const ids = Array.from(new Set(rules.map((r) => parseInt(r.company_id, 10)).filter(Boolean)));
+    if (!ids.length) return res.json({ cat, no_rules: true, companies: [], invoices: [] });
+    const { kwMatch } = require('../services/compounder/rent-statement');
+    const invs = await prisma.invoice.findMany({
+      where: { type: 'received', company_id: { in: ids }, status: { notIn: ['cancelled', 'draft', 'written_off'] } },
+      include: { items: { orderBy: { line_order: 'asc' } }, company: { select: { id: true, name: true } } },
+      orderBy: [{ date_taxable: 'desc' }, { id: 'desc' }], take: 150,
+    });
+    const used = new Set((Array.isArray(st.lines) ? st.lines : []).map((l) => l && l.invoice_id).filter(Boolean));
+    const ymFrom = new Date(st.period_ym + '-01T00:00:00Z'); const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
+    const kws = rules.filter((r) => r.keyword).map((r) => r.keyword);
+    const out = invs.map((i) => {
+      const d = i.date_taxable || i.date_issued; const inPeriod = !!d && d >= ymFrom && d <= ymTo;
+      return {
+        id: i.id, number: i.external_number || i.invoice_number, company: i.company && i.company.name, date_taxable: i.date_taxable, date_issued: i.date_issued, in_period: inPeriod,
+        currency: i.currency, total: Number(i.total), used: used.has(i.id),
+        items: (i.items || []).map((it) => ({ id: it.id, description: it.description, subtotal: Number(it.subtotal), vat_rate: Number(it.vat_rate), total: Number(it.total), match: kws.length ? kws.some((k) => kwMatch(it.description, k)) : false })),
+      };
+    });
+    res.json({ cat, fallback, companies: Array.from(new Set(invs.map((i) => i.company && i.company.name).filter(Boolean))), period_ym: st.period_ym, invoices: out });
+  } catch (err) { next(err); }
+});
 // ── Nájemní smlouvy kiosků (definice automatických podkladů) ──
 const rentRuleSchema = z.array(z.object({ company_id: z.number().int(), keyword: z.string().max(80).optional().nullable(), share_pct: z.number().min(0).max(100).optional().nullable() })).optional().nullable();
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);

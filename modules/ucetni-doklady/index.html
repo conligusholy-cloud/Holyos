@@ -2551,7 +2551,7 @@
           const missing = !(Number(x[k]) > 0);
           const ln = lines.find(l => l.cat === cat && Number(l.amount) > 0);
           const src = ln ? (ln.source === 'invoice' || ln.invoice_id ? '<div style="font-size:10.5px;color:#16a34a;" title="Částka převzata z přijaté faktury">✓ z faktury</div>' : ln.source === 'ai' ? '<div style="font-size:10.5px;color:#16a34a;">✓ AI doklad</div>' : '<div style="font-size:10.5px;color:var(--text2);">✎ ručně</div>') : '';
-          const btn = x.status === 'issued' ? '' : '<div><button class="btn btn-secondary btn-sm" style="padding:1px 7px;font-size:11px;margin-top:3px;" title="Prohledat přijaté doklady (pravidla + AI) a najít ' + what + '" onclick="rentFindDoc(' + x.id + ')">🔍 Najít doklad</button></div>';
+          const btn = x.status === 'issued' ? '' : '<div><button class="btn btn-secondary btn-sm" style="padding:1px 7px;font-size:11px;margin-top:3px;" title="Zobrazit přijaté doklady od dodavatele ze smlouvy a vybrat ' + what + '" onclick="rentFindDoc(' + x.id + ',\'' + cat + '\')">🔍 Najít doklad</button></div>';
           return '<td style="text-align:right;white-space:nowrap;' + (missing ? 'background:rgba(239,68,68,.10);' : '') + '">− ' + rentMoney(x[k], '') + (missing ? '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ chybí ' + what + '</div>' + btn : src) + '</td>';
         };
         return num('revenue_gross') + num('revenue_net') + num('fee_net', true) + docCell('cost_d', 'D', 'faktura za nájem') + docCell('cost_e', 'E', 'faktura za energie') + num('cost_f', true)
@@ -2774,13 +2774,70 @@
       renderRentModal(); rentSave();
     };
     window.rentSugDismiss = function(i) { window.__rentCur.suggestions.splice(i, 1); renderRentModal(); rentSave(); };
-    window.rentFindDoc = async function(id) {
-      const st = (window.__rentSt || []).find(x => x.id === id); if (!st || !st.contract_id) return alert('Podklad nemá nájemní smlouvu.');
+    // Ruční výběr dokladu: výpis všech přijatých dokladů od společností zadaných ve smlouvě
+    window.rentFindDoc = async function(id, cat) {
+      window.__rentPick = { id, cat: cat || 'D', q: '', onlyPeriod: false, data: null };
+      await rentPickLoad();
+    };
+    async function rentPickLoad() {
+      const pk = window.__rentPick;
+      const r = await api('GET', '/api/compounder/rent-statements/' + pk.id + '/candidates?cat=' + pk.cat);
+      if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      pk.data = r.data; rentPickRender();
+    }
+    window.rentPickCat = function(c) { window.__rentPick.cat = c; rentPickLoad(); };
+    window.rentPickFilter = function(v) { window.__rentPick.q = v; rentPickRender(true); };
+    window.rentPickPeriod = function(v) { window.__rentPick.onlyPeriod = !!v; rentPickRender(true); };
+    function rentPickRender(keepFocus) {
+      const pk = window.__rentPick, d = pk.data; if (!d) return;
+      const st = (window.__rentSt || []).find(x => x.id === pk.id) || {};
+      const CATN = { D: 'Nájem lokality (D)', E: 'Energie (E)', F: 'Servis / díly (F)' };
+      const q = comboNorm(pk.q);
+      const fmtD = v => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '—';
+      const list = (d.invoices || []).filter(i => (!pk.onlyPeriod || i.in_period) && (!q || comboNorm(i.number + ' ' + i.company + ' ' + i.items.map(x => x.description).join(' ')).includes(q)));
+      const body = d.no_rules ? '<div style="padding:14px;color:#f59e0b;">Ve smlouvě není u nájmu/energií/servisu zadaný žádný dodavatel. Otevři smlouvu (Upravit) a přidej pravidlo s dodavatelem, např. Tesco Stores ČR.</div>'
+        : list.length ? list.map(i => '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:8px 10px;' + (i.in_period ? 'border-color:#6366f1;' : '') + '">'
+          + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;"><div><b>' + escapeHtml(i.number || '') + '</b> · ' + escapeHtml(i.company || '') + ' · DUZP ' + fmtD(i.date_taxable || i.date_issued) + (i.in_period ? ' <span style="color:#818cf8;font-weight:600;">· v období podkladu</span>' : '') + '</div><div>' + rentMoney(i.total, i.currency) + '</div></div>'
+          + i.items.map(it => '<div style="display:grid;grid-template-columns:1fr 110px 50px 90px;gap:8px;align-items:center;padding:4px 0;border-top:1px dashed var(--border);font-size:12.5px;margin-top:4px;' + (it.match ? 'background:rgba(34,197,94,.08);' : '') + '"><div>' + escapeHtml(it.description) + (it.match ? ' <span style="color:#16a34a;font-size:11px;">✓ odpovídá pravidlu</span>' : '') + '</div><div style="text-align:right;">' + rentMoney(it.subtotal, '') + ' bez DPH</div><div style="text-align:right;">' + Number(it.vat_rate) + ' %</div><div style="text-align:right;">'
+            + (st.status === 'issued' ? '' : (i.used ? '<span style="color:#16a34a;font-size:11.5px;">✓ použito</span>' : '<button class="btn btn-primary btn-sm" onclick="rentPickUse(' + i.id + ',' + it.id + ')">Použít</button>')) + '</div></div>').join('') + '</div>').join('')
+        : '<div style="padding:14px;color:var(--text2);">Žádné doklady' + (pk.onlyPeriod ? ' v období podkladu — zkus vypnout filtr „jen za měsíc“.' : ' od tohoto dodavatele.') + '</div>';
+      const prev = document.getElementById('rp-q'); const hadFocus = keepFocus && prev && document.activeElement === prev;
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(900px,96vw); max-height:92vh; overflow:auto; position:relative;">
+            <button type="button" onclick="closeModal()" title="Zavřít" style="position:absolute; top:10px; right:12px; background:none; border:0; color:var(--text2); font-size:22px; line-height:1; cursor:pointer; padding:4px 8px;">✕</button>
+            <h3 style="margin-top:0;padding-right:30px;">🔍 Doklady k podkladu ${escapeHtml(st.kiosk_code || '')} — ${escapeHtml(st.period_ym || '')}</h3>
+            <div style="color:var(--text2);font-size:12.5px;margin-bottom:8px;">Přijaté doklady od: <b>${escapeHtml((d.companies || []).join(', ') || '—')}</b>${d.fallback ? ' (u této kategorie není dodavatel, zobrazuji dodavatele ze všech pravidel smlouvy)' : ''}. Vyber položku, která se má započítat do: <b>${CATN[pk.cat]}</b>.</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+              ${['D', 'E', 'F'].map(c => '<button class="btn ' + (c === pk.cat ? 'btn-primary' : 'btn-secondary') + ' btn-sm" onclick="rentPickCat(\'' + c + '\')">' + CATN[c] + '</button>').join('')}
+              <input id="rp-q" type="text" placeholder="Hledat (číslo, popis…)" value="${escapeHtml(pk.q)}" oninput="rentPickFilter(this.value)" style="flex:1;min-width:160px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;">
+              <label style="font-size:12px;color:var(--text2);"><input type="checkbox" ${pk.onlyPeriod ? 'checked' : ''} onchange="rentPickPeriod(this.checked)"> jen za měsíc podkladu</label>
+            </div>
+            <div>${body}</div>
+            <div style="display:flex;justify-content:space-between;gap:8px;margin-top:12px;">
+              <button class="btn btn-secondary btn-sm" title="Pravidla ze smlouvy + AI projdou doklady za měsíc a doplní, co najdou" onclick="rentPickAuto()">🤖 Zkusit automaticky (pravidla + AI)</button>
+              <button class="btn btn-secondary" onclick="closeModal();openRentModal(${pk.id})">Otevřít podklad</button>
+            </div>
+          </div>
+        </div>`;
+      if (hadFocus) { const n = document.getElementById('rp-q'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }
+    }
+    window.rentPickUse = async function(invId, itemId) {
+      const pk = window.__rentPick; const inv = pk.data.invoices.find(i => i.id === invId); const it = inv && inv.items.find(x => x.id === itemId); if (!it) return;
+      const st = (window.__rentSt || []).find(x => x.id === pk.id); if (!st) return;
+      const lines = (Array.isArray(st.lines) ? st.lines : []).map(l => Object.assign({}, l));
+      lines.push({ cat: pk.cat, label: 'Faktura ' + inv.number + ' — ' + inv.company + ' (' + it.description + ')', amount: it.total, vat_rate: it.vat_rate, deductible: true, source: 'manual', invoice_id: inv.id });
+      const r = await api('PUT', '/api/compounder/rent-statements/' + pk.id, { lines });
+      if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      await loadRent(); await rentPickLoad();
+    };
+    window.rentPickAuto = async function() {
+      const pk = window.__rentPick; const st = (window.__rentSt || []).find(x => x.id === pk.id); if (!st || !st.contract_id) return;
       const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: st.contract_id, ym: st.period_ym });
       if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
       await loadRent();
-      if (r.data.missing && r.data.missing.length) alert('V přijatých dokladech zatím nenalezeno: ' + r.data.missing.join(', ') + '.\nZkontroluj dodavatele/klíčová slova ve smlouvě, nebo částku doplň ručně v podkladu.');
-      openRentModal(r.data.id);
+      if (r.data.missing && r.data.missing.length) alert('Automaticky nenalezeno: ' + r.data.missing.join(', ') + '.');
+      await rentPickLoad();
     };
     window.rentRescan = async function() {
       const c = window.__rentCur; if (!c.st.contract_id) return alert('Podklad nemá nájemní smlouvu.');

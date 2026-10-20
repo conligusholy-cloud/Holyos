@@ -232,4 +232,4 @@ async function deliver(statementId, contract) {
   return { statement: upd, sent: !!r.sent, error: r.sent ? null : (r.error || r.skipped || 'neodesláno') };
 }
 
-module.exports = { calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };
+module.exports = { kwMatch, calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };
