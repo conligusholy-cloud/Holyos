@@ -4305,7 +4305,15 @@ router.put('/rent-contracts/:id', requireAuth, async (req, res, next) => {
     const p = rentContractSchema.partial().safeParse(req.body); if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
     const data = rentContractData(p.data);
     if (data.auto_mode === 'send' && data.contact_email === null) return res.status(400).json({ error: 'Pro automatické odesílání vyplň e-mail kompetentní osoby.' });
-    res.json(await prisma.kioskRentContract.update({ where: { id: parseInt(req.params.id, 10) }, data }));
+    const cid = parseInt(req.params.id, 10);
+    const updated = await prisma.kioskRentContract.update({ where: { id: cid }, data });
+    // Po změně nastavení smlouvy se přepočítají všechny nevydané podklady (koncepty), aby odpovídaly novým hodnotám
+    try {
+      const rs = require('../services/compounder/rent-statement');
+      const drafts = await prisma.kioskRentStatement.findMany({ where: { contract_id: cid, status: { not: 'issued' } }, select: { period_ym: true } });
+      for (const d of drafts) { try { await rs.generate(cid, d.period_ym); } catch (e) { console.warn('[rent-contract] přepočet konceptu ' + d.period_ym + ' selhal:', e.message); } }
+    } catch (e) { console.warn('[rent-contract] přepočet konceptů:', e.message); }
+    res.json(updated);
   } catch (err) { next(err); }
 });
 router.delete('/rent-contracts/:id', requireAuth, async (req, res, next) => {
