@@ -59,7 +59,7 @@ async function match(contract, rev, opts) {
   const ymFrom = new Date(rev.prevMonthYm + '-01T00:00:00Z');
   const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
   const cands = await prisma.invoice.findMany({
-    where: { type: 'received', status: { notIn: ['cancelled', 'draft', 'written_off'] }, id: { notIn: Array.from(skip) },
+    where: { type: 'received', status: { notIn: ['cancelled', 'written_off'] }, id: { notIn: Array.from(skip) },
       OR: [{ date_taxable: { gte: ymFrom, lte: ymTo } }, { date_taxable: null, date_issued: { gte: ymFrom, lte: ymTo } }] },
     include: { items: true, company: { select: { name: true, ico: true } } }, orderBy: { id: 'desc' }, take: 80,
   });

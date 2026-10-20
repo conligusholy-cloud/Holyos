@@ -4244,21 +4244,21 @@ router.get('/rent-statements/:id/candidates', requireAuth, async (req, res, next
     let rules = rulesOf(key); let fallback = false;
     if (!rules.length) { rules = rulesOf('rent_rules').concat(rulesOf('energy_rules'), rulesOf('service_rules')); fallback = true; }
     const ids = Array.from(new Set(rules.map((r) => parseInt(r.company_id, 10)).filter(Boolean)));
-    if (!ids.length) return res.json({ cat, no_rules: true, companies: [], invoices: [] });
+    if (!ids.length && req.query.all !== '1') return res.json({ cat, no_rules: true, companies: [], invoices: [] });
+    const ymFrom = new Date(st.period_ym + '-01T00:00:00Z'); const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
     const { kwMatch } = require('../services/compounder/rent-statement');
     const invs = await prisma.invoice.findMany({
-      where: { type: 'received', company_id: { in: ids }, status: { notIn: ['cancelled', 'draft', 'written_off'] } },
+      where: Object.assign({ type: 'received', status: { notIn: ['cancelled', 'written_off'] } }, req.query.all === '1' ? { date_taxable: { gte: ymFrom, lte: ymTo } } : { company_id: { in: ids } }),
       include: { items: { orderBy: { line_order: 'asc' } }, company: { select: { id: true, name: true } } },
-      orderBy: [{ date_taxable: 'desc' }, { id: 'desc' }], take: 150,
+      orderBy: [{ date_taxable: 'desc' }, { id: 'desc' }], take: 200,
     });
     const used = new Set((Array.isArray(st.lines) ? st.lines : []).map((l) => l && l.invoice_id).filter(Boolean));
-    const ymFrom = new Date(st.period_ym + '-01T00:00:00Z'); const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
     const kws = rules.filter((r) => r.keyword).map((r) => r.keyword);
     const out = invs.map((i) => {
       const d = i.date_taxable || i.date_issued; const inPeriod = !!d && d >= ymFrom && d <= ymTo;
       return {
         id: i.id, number: i.external_number || i.invoice_number, company: i.company && i.company.name, date_taxable: i.date_taxable, date_issued: i.date_issued, in_period: inPeriod,
-        currency: i.currency, total: Number(i.total), used: used.has(i.id),
+        currency: i.currency, total: Number(i.total), status: i.status, used: used.has(i.id),
         items: (i.items || []).map((it) => ({ id: it.id, description: it.description, subtotal: Number(it.subtotal), vat_rate: Number(it.vat_rate), total: Number(it.total), match: kws.length ? kws.some((k) => kwMatch(it.description, k)) : false })),
       };
     });

@@ -58,7 +58,7 @@ async function pullInvoiceLines(contract, rev) {
     let found = 0;
     for (const rule of rules) {
       const invs = await prisma.invoice.findMany({
-        where: { type: 'received', company_id: parseInt(rule.company_id, 10), status: { notIn: ['cancelled', 'draft', 'written_off'] },
+        where: { type: 'received', company_id: parseInt(rule.company_id, 10), status: { notIn: ['cancelled', 'written_off'] },
           OR: [{ date_taxable: { gte: ymFrom, lte: ymTo } }, { date_taxable: null, date_issued: { gte: ymFrom, lte: ymTo } }] },
         include: { items: true, company: { select: { name: true } } },
       });
