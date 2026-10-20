@@ -2780,6 +2780,7 @@
       const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, suggestions: c.suggestions, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '' });
       if (r.status !== 200) return alert('Chyba uložení: ' + ((r.data && r.data.error) || r.status));
       c.st = Object.assign(c.st, r.data); const i = window.__rentSt.findIndex(x => x.id === c.id); if (i >= 0) window.__rentSt[i] = r.data;
+      loadRent(); // tabulka na pozadí ukáže aktuální stav (modal zůstává otevřený)
     }
     window.rentSugAccept = function(i) {
       const c = window.__rentCur; const s = c.suggestions.splice(i, 1)[0]; if (!s) return;
