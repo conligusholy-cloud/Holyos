@@ -96,9 +96,13 @@ async function sendTestEmail(sub, to) {
 // Vyfakturuje jednu smlouvu za předchozí měsíc. Vrací {ok, skipped?, invoice_number?, reason?}.
 async function billSubscription(sub, opts) {
   opts = opts || {};
-  const rev = await computePrevMonthRevenue(sub.kiosk_code);
+  // Obrat jen za dny, kdy smlouva skutečně běžela (první/poslední měsíc bývá neúplný)
+  const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
+  const rev = await computePrevMonthRevenue(sub.kiosk_code, { from: toYmd(sub.contract_start), to: toYmd(sub.contract_end) });
+  if (rev.empty) return { ok: true, skipped: true, reason: 'outside_contract' };
   if (!opts.force && sub.last_billed_ym === rev.prevMonthYm) return { ok: true, skipped: true, reason: 'already_billed' };
   if (rev.prevMonth <= 0) return { ok: true, skipped: true, reason: 'no_revenue' };
+  rev.prevMonthName = rev.periodLabel; // do popisu faktury i e-mailu: „23.–30. 9. 2026 (část měsíce září 2026)"
 
   const feePct = num(sub.fee_pct) || 13;
   const vatRate = num(sub.vat_rate) || 21;

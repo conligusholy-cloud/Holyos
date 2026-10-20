@@ -4174,6 +4174,8 @@ const subSchema = z.object({
   auto_send: z.boolean().optional(),
   billing_day: z.number().int().optional(),
   first_invoice_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal('')),
+  contract_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal('')),
+  contract_end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable().or(z.literal('')),
   contract_id: z.number().int().optional().nullable(),
   contract_number: z.string().max(80).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
@@ -4190,6 +4192,8 @@ router.post('/service-subscriptions', requireAuth, async (req, res, next) => {
       vat_rate: d.vat_rate != null ? d.vat_rate : 21, active: d.active !== false,
       auto_send: !!d.auto_send, billing_day: d.billing_day != null ? d.billing_day : 3,
       first_invoice_date: d.first_invoice_date ? new Date(d.first_invoice_date + 'T00:00:00Z') : null,
+      contract_start: d.contract_start ? new Date(d.contract_start + 'T00:00:00Z') : null,
+      contract_end: d.contract_end ? new Date(d.contract_end + 'T00:00:00Z') : null,
       contract_id: d.contract_id || null, contract_number: (d.contract_number || '').trim() || null, note: d.note || null,
       created_by_user_id: (req.user && req.user.id) || null,
     };
@@ -4210,7 +4214,7 @@ router.put('/service-subscriptions/:id', requireAuth, async (req, res, next) => 
     ['company_id', 'buyer_ico', 'customer_name', 'email', 'currency', 'contract_id', 'contract_number', 'note'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] || null; });
     ['fee_pct', 'vat_rate', 'billing_day'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k]; });
     ['active', 'auto_send'].forEach(function (k) { if (d[k] !== undefined) data[k] = !!d[k]; });
-    if (d.first_invoice_date !== undefined) data.first_invoice_date = d.first_invoice_date ? new Date(d.first_invoice_date + 'T00:00:00Z') : null;
+    ['first_invoice_date', 'contract_start', 'contract_end'].forEach(function (k) { if (d[k] !== undefined) data[k] = d[k] ? new Date(d[k] + 'T00:00:00Z') : null; });
     const sub = await prisma.serviceSubscription.update({ where: { id }, data });
     res.json(sub);
   } catch (err) { next(err); }
@@ -4223,11 +4227,11 @@ router.delete('/service-subscriptions/:id', requireAuth, async (req, res, next) 
 router.get('/service-subscriptions/revenue/:code', requireAuth, async (req, res, next) => {
   try {
     const { computePrevMonthRevenue } = require('../services/compounder/kiosk-revenue');
-    const rev = await computePrevMonthRevenue(req.params.code);
+    const rev = await computePrevMonthRevenue(req.params.code, { from: req.query.from || null, to: req.query.to || null });
     const feePct = Number(req.query.fee_pct) || 13, vatRate = req.query.vat_rate != null && req.query.vat_rate !== '' ? Number(req.query.vat_rate) : 21;
     const subtotal = Math.round(rev.prevMonth * feePct) / 100;
     const vat = Math.round(subtotal * vatRate) / 100;
-    res.json({ code: rev.code, currency: rev.currency, month: rev.prevMonthName, month_ym: rev.prevMonthYm, revenue: rev.prevMonth, complete: rev.complete, fee_pct: feePct, vat_rate: vatRate, fee_net: subtotal, fee_vat: vat, fee_total: Math.round((subtotal + vat) * 100) / 100 });
+    res.json({ code: rev.code, currency: rev.currency, month: rev.periodLabel || rev.prevMonthName, partial: rev.partial, empty: rev.empty, days: rev.days, month_days: rev.month_days, month_ym: rev.prevMonthYm, revenue: rev.prevMonth, complete: rev.complete, fee_pct: feePct, vat_rate: vatRate, fee_net: subtotal, fee_vat: vat, fee_total: Math.round((subtotal + vat) * 100) / 100 });
   } catch (err) {
     if (err && err.code === 'SIS_NOT_CONFIGURED') return res.status(400).json({ error: 'SIS není nakonfigurovaný (chybí SIS_KIOSK_API_KEY).' });
     if (err && err.code === 'BAD_CODE') return res.status(400).json({ error: 'Neplatný kód stroje.' });

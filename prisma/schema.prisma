@@ -3226,6 +3226,8 @@ model ServiceSubscription {
   auto_send          Boolean  @default(false) // odeslat fakturu automaticky e-mailem (jinak jen koncept)
   billing_day        Int      @default(3) // den v měsíci, odkdy fakturovat předchozí měsíc
   first_invoice_date DateTime? @db.Date // datum vystavení první faktury periody (dřív se nefakturuje)
+  contract_start     DateTime? @db.Date // smlouva účinná od — obrat se počítá až od tohoto dne (první měsíc poměrně)
+  contract_end       DateTime? @db.Date // smlouva účinná do — obrat se počítá nejvýš do tohoto dne (poslední měsíc poměrně)
   last_billed_ym    String?  @db.VarChar(7) // "2026-08" — naposledy vyfakturovaný měsíc (idempotence)
   note               String?  @db.Text
   created_by_user_id Int?

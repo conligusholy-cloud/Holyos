@@ -2525,6 +2525,8 @@
               <label>Poplatek (% z obratu vč. DPH)</label><input id="sub-fee" type="number" step="0.01" value="${v('fee_pct',13)}" oninput="subRevenuePreview()" style="${inp}">
               <label>DPH na faktuře (%)</label><input id="sub-vat" type="number" step="0.01" value="${v('vat_rate',21)}" oninput="subRevenuePreview()" style="${inp}">
               <label>Měna</label><input id="sub-cur" maxlength="3" value="${v('currency','CZK')}" style="${inp}">
+              <label>Smlouva účinná od</label><div><input id="sub-start" type="date" value="${s && s.contract_start ? String(s.contract_start).slice(0, 10) : ''}" onchange="subRevenuePreview()" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">Přesný začátek (např. podpis 23. 9.). Obrat se pro první měsíc počítá jen od tohoto dne.</div></div>
+              <label>Smlouva účinná do</label><div><input id="sub-end" type="date" value="${s && s.contract_end ? String(s.contract_end).slice(0, 10) : ''}" onchange="subRevenuePreview()" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">Volitelně — poslední měsíc se spočítá jen do tohoto dne, pak se nefakturuje.</div></div>
               <label>První faktura periody</label><div><input id="sub-first" type="date" value="${s && s.first_invoice_date ? String(s.first_invoice_date).slice(0, 10) : ''}" onchange="subFirstChanged()" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">Datum vystavení první faktury (za předchozí měsíc). Dřív se nefakturuje; prázdné = hned od dne fakturace v měsíci.</div></div>
               <label>Den fakturace v měsíci</label><input id="sub-day" type="number" min="1" max="28" value="${v('billing_day',3)}" style="${inp}">
               <label>Poznámka</label><input id="sub-note" value="${v('note','')}" style="${inp}">
@@ -2590,9 +2592,10 @@
         if (!code) { box.textContent = 'Vyber stroj — načtou se tržby ze SIS.'; return; }
         box.textContent = 'Načítám tržby ze SIS…';
         const fee = document.getElementById('sub-fee').value || 13, vat = document.getElementById('sub-vat').value || 21;
-        const r = await api('GET', '/api/compounder/service-subscriptions/revenue/' + encodeURIComponent(code) + '?fee_pct=' + encodeURIComponent(fee) + '&vat_rate=' + encodeURIComponent(vat));
+        const r = await api('GET', '/api/compounder/service-subscriptions/revenue/' + encodeURIComponent(code) + '?fee_pct=' + encodeURIComponent(fee) + '&vat_rate=' + encodeURIComponent(vat) + '&from=' + encodeURIComponent(document.getElementById('sub-start').value || '') + '&to=' + encodeURIComponent(document.getElementById('sub-end').value || ''));
         if (!document.getElementById('sub-rev')) return;
         if (r.status !== 200) { box.innerHTML = '<span style="color:#ef4444;">' + escapeHtml((r.data && r.data.error) || ('Chyba ' + r.status)) + '</span>'; return; }
+        if (r.data && r.data.empty) { box.innerHTML = '<span style="color:#f59e0b;">V uplynulém měsíci smlouva ještě/už neběžela — nic se nefakturuje.</span>'; return; }
         const d = r.data, f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + d.currency;
         box.innerHTML = '<b style="color:var(--text);">' + escapeHtml(d.month) + ':</b> obrat ' + f(d.revenue) + (d.complete ? '' : ' <span style="color:#f59e0b;">(neúplné načtení)</span>')
           + '<br>Poplatek ' + Number(d.fee_pct) + ' %: <b style="color:var(--text);">' + f(d.fee_net) + '</b> + DPH ' + f(d.fee_vat) + ' = <b style="color:var(--text);">' + f(d.fee_total) + '</b>';
@@ -2606,9 +2609,10 @@
       if (!name) return alert('Vyplň odběratele (provozovatele).');
       const cid = parseInt(document.getElementById('sub-companyid').value, 10) || null;
       const body = { kiosk_code: kiosk, company_id: cid, customer_name: name, buyer_ico: g('sub-ico') || null, email: g('sub-email') || null, fee_pct: Number(g('sub-fee')) || 13, vat_rate: Number(g('sub-vat')) || 21, currency: (g('sub-cur') || 'CZK').toUpperCase(),
-        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), first_invoice_date: g('sub-first') || null, note: g('sub-note') || null, contract_number: g('sub-contract') || null,
+        billing_day: Math.min(28, Math.max(1, parseInt(g('sub-day'), 10) || 3)), first_invoice_date: g('sub-first') || null, contract_start: g('sub-start') || null, contract_end: g('sub-end') || null, note: g('sub-note') || null, contract_number: g('sub-contract') || null,
         active: document.getElementById('sub-active').checked, auto_send: document.getElementById('sub-auto').checked };
       if (body.auto_send && !body.email) return alert('Pro automatické odesílání vyplň e-mail odběratele.');
+      if (body.contract_start && body.contract_end && body.contract_end < body.contract_start) return alert('Konec smlouvy je dřív než její začátek.');
       const r = id ? await api('PUT', '/api/compounder/service-subscriptions/' + id, body) : await api('POST', '/api/compounder/service-subscriptions', body);
       if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + (r.data?.error || r.status));
       closeModal(); loadServiceBilling();
