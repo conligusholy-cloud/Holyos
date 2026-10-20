@@ -781,6 +781,7 @@ model OrderItem {
   // Nákupní objednávka: specifikace/výkres/revize, potvrzený termín, DPH, odlišné místo dodání, vazba na zakázku
   spec               String?   @db.Text
   confirmed_delivery DateTime? @db.Date
+  needed_by          DateTime? @db.Date // kdy musí být díl bezpodmínečně ve výrobě (start montáže podle výrobního plánu)
   vat_rate           Decimal?  @db.Decimal(5, 2)
   delivery_place     String?   @db.VarChar(255)
   production_ref     String?   @db.VarChar(100)

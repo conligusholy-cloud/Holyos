@@ -885,7 +885,7 @@ router.post('/orders', async (req, res, next) => {
       }
       const noPrice = list.filter((i) => !(parseFloat(i.unit_price) > 0));
       if (noPrice.length) return res.status(400).json({ error: 'Položky bez ceny: ' + noPrice.map((i) => i.name).slice(0, 5).join(', ') + (noPrice.length > 5 ? ' …' : '') + '. Doplň cenu ručně (v nákupním ceníku dodavatele není).' });
-      const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), material_id: i.material_id ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
+      const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), material_id: i.material_id ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), needed_by: parseDate(i.needed_by), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
       const created = await prisma.order.create({
         data: {
           order_number: await nextPurchaseNumber(), type: rest.type, company_id: cid, status: rest.status || 'new', currency: rest.currency === 'EUR' ? 'EUR' : 'CZK',
@@ -1442,7 +1442,7 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
-    const { product_id, material_id, name, quantity, unit, total_price, note, expected_delivery, serial_number, spec, vat_rate, production_ref } = req.body;
+    const { product_id, material_id, name, quantity, unit, total_price, note, expected_delivery, serial_number, spec, vat_rate, production_ref, needed_by } = req.body;
     let unit_price = req.body.unit_price;
     // Nákupní objednávka: chybí-li cena, doplň z nákupního ceníku dodavatele
     if (material_id && !(parseFloat(unit_price) > 0)) {
@@ -1464,6 +1464,7 @@ router.post('/orders/:id/items', async (req, res, next) => {
         total_price: parseFloat(total_price) || (parseFloat(quantity) || 1) * (parseFloat(unit_price) || 0),
         note: note || null,
         expected_delivery: parseDate(expected_delivery),
+        needed_by: parseDate(needed_by),
         serial_number: serial_number ? String(serial_number).trim() || null : null,
         spec: spec ? String(spec).trim() || null : null,
         vat_rate: vat_rate !== undefined && vat_rate !== null && vat_rate !== '' ? parseFloat(vat_rate) : null,
@@ -1486,7 +1487,7 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
     const stringFields = ['name', 'unit', 'note', 'serial_number', 'spec', 'delivery_place', 'production_ref'];
     const intFields = ['product_id', 'material_id'];
     const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity', 'vat_rate'];
-    const dateFields = ['expected_delivery', 'confirmed_delivery'];
+    const dateFields = ['expected_delivery', 'confirmed_delivery', 'needed_by'];
     // Rozpis dílčích dodávek [{qty, requested, confirmed}]
     if (req.body.deliveries !== undefined) {
       allowed.deliveries = Array.isArray(req.body.deliveries)
