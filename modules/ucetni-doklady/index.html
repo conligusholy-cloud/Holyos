@@ -2577,7 +2577,10 @@
               <label>Účinnost od *</label><input id="rc-from" type="date" value="${dv('effective_from')}" style="${inp}">
               <label>Účinnost do</label><input id="rc-to" type="date" value="${dv('effective_to')}" style="${inp}">
               <label>Den vystavení v měsíci</label><div><input id="rc-day" type="number" min="1" max="28" value="${v('issue_day', 5)}" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">V tento den se vystaví podklad za <b>minulý měsíc</b>.</div></div>
-              <label>Režim</label><select id="rc-mode" style="${inp}"><option value="draft"${c && c.auto_mode === 'draft' || !c ? ' selected' : ''}>Jen vytvořit koncept (vydám ručně)</option><option value="issue"${c && c.auto_mode === 'issue' ? ' selected' : ''}>Automaticky vystavit (bez odeslání)</option><option value="send"${c && c.auto_mode === 'send' ? ' selected' : ''}>Automaticky vystavit a odeslat e-mailem</option></select>
+              <label style="align-self:start;padding-top:2px;">Automatizace</label><div>
+                <label style="display:flex;gap:8px;align-items:center;margin-bottom:6px;"><input id="rc-autoissue" type="checkbox" ${c && (c.auto_mode === 'issue' || c.auto_mode === 'send') ? 'checked' : ''} onchange="if(!this.checked)document.getElementById('rc-autosend').checked=false"> Automaticky vystavit podklad</label>
+                <label style="display:flex;gap:8px;align-items:center;"><input id="rc-autosend" type="checkbox" ${c && c.auto_mode === 'send' ? 'checked' : ''} onchange="if(this.checked)document.getElementById('rc-autoissue').checked=true"> Automaticky odeslat e-mailem kompetentní osobě</label>
+                <div style="font-size:11px;color:var(--text2);margin-top:4px;">Nezaškrtnuto = v zadaný den vznikne jen koncept, který vydáš ručně. Odeslání vyžaduje vystavení.</div></div>
               <label>Servisní poplatek (% z tržeb vč. DPH)</label><input id="rc-fee" type="number" step="0.01" value="${v('fee_pct', 13)}" style="${inp}">
               <label>DPH (%) / Měna</label><div style="display:flex;gap:8px;"><input id="rc-vat" type="number" step="0.01" value="${v('vat_rate', 21)}" style="${inp}"><input id="rc-cur" maxlength="3" value="${v('currency', 'CZK')}" style="${inp}"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za nájem lokality (D)</label><div id="rc-rent-rules"></div>
@@ -2614,7 +2617,7 @@
       const g = (i) => document.getElementById(i).value.trim();
       const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
       return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
-        effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: g('rc-mode'),
+        effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: document.getElementById('rc-autosend').checked ? 'send' : (document.getElementById('rc-autoissue').checked ? 'issue' : 'draft'),
         fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: true,
         rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
     }
