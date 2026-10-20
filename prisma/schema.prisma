@@ -3262,7 +3262,8 @@ model KioskRentStatement {
   fee_pct         Decimal  @default(13) @db.Decimal(5, 2)
   revenue_sis     Decimal  @default(0) @db.Decimal(14, 2) // A ze SIS (tržby s DPH za období)
   revenue_adjust  Decimal  @default(0) @db.Decimal(14, 2) // ruční úprava A (vratky, refundy, chargebacky — zadat záporně)
-  lines           Json? // [{ cat:'D'|'E'|'F', label, amount, vat_rate, deductible, net }]
+  lines           Json? // [{ cat:'D'|'E'|'F', label, amount, vat_rate, deductible, net, source?, invoice_id? }]
+  suggestions     Json? // návrhy dokladů od AI k potvrzení (nižší jistota)
   revenue_gross   Decimal  @default(0) @db.Decimal(14, 2) // A = SIS + úprava
   revenue_net     Decimal  @default(0) @db.Decimal(14, 2) // B
   fee_net         Decimal  @default(0) @db.Decimal(14, 2) // C
@@ -3303,6 +3304,8 @@ model KioskRentContract {
   // Pravidla párování přijatých faktur: [{ company_id, keyword?, share_pct? }]
   rent_rules      Json?
   energy_rules    Json?
+  service_rules   Json? // F — pozáruční servis a náhradní díly
+  ai_match        Boolean   @default(true) // AI přečte přijaté doklady za měsíc a určí nájem / energie / díly pro tento kiosk
   note            String?   @db.Text
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt

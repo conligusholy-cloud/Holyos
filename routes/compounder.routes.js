@@ -4240,7 +4240,7 @@ const rentContractSchema = z.object({
   effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
   issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
   currency: z.string().max(3).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
-  rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, note: z.string().max(2000).optional().nullable(),
+  rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, service_rules: rentRuleSchema, ai_match: z.boolean().optional(), note: z.string().max(2000).optional().nullable(),
 });
 function rentContractData(d) {
   const out = {};
@@ -4250,8 +4250,8 @@ function rentContractData(d) {
   ['issue_day', 'vat_rate', 'fee_pct'].forEach(function (k) { if (d[k] !== undefined) out[k] = d[k]; });
   if (d.auto_mode) out.auto_mode = d.auto_mode;
   if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
-  ['active', 'vat_deductible'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
-  ['rent_rules', 'energy_rules'].forEach(function (k) { if (d[k] !== undefined) out[k] = (d[k] || []).map(function (r) { return { company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: r.share_pct || 100 }; }); });
+  ['active', 'vat_deductible', 'ai_match'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
+  ['rent_rules', 'energy_rules', 'service_rules'].forEach(function (k) { if (d[k] !== undefined) out[k] = (d[k] || []).map(function (r) { return { company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: r.share_pct || 100 }; }); });
   return out;
 }
 router.get('/rent-contracts', requireAuth, async (req, res, next) => {

@@ -45,7 +45,7 @@ async function pullInvoiceLines(contract, rev) {
   const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
   const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
   const ded = contract.vat_deductible !== false;
-  for (const [cat, key] of [['D', 'rent_rules'], ['E', 'energy_rules']]) {
+  for (const [cat, key] of [['D', 'rent_rules'], ['E', 'energy_rules'], ['F', 'service_rules']]) {
     const rules = Array.isArray(contract[key]) ? contract[key].filter((x) => x && x.company_id) : [];
     if (!rules.length) continue;
     let found = 0;
@@ -67,7 +67,7 @@ async function pullInvoiceLines(contract, rev) {
         }
       }
     }
-    if (!found) missing.push(cat === 'D' ? 'faktura za nájem lokality' : 'faktura za energie');
+    if (!found && cat !== 'F') missing.push(cat); // F (servis/díly) je příležitostné — nechybí
   }
   return { lines: out, missing };
 }
@@ -82,19 +82,30 @@ async function generate(contractId, ym) {
   const existing = await prisma.kioskRentStatement.findUnique({ where: { contract_id_period_ym: { contract_id: c.id, period_ym: period } } });
   if (existing && existing.status === 'issued') { const e = new Error('Podklad už je vydaný — nelze přepsat.'); e.status = 409; throw e; }
   const inv = await pullInvoiceLines(c, rev);
-  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice');
+  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice' && l.source !== 'ai');
+  // Chytré vyhledání: AI přečte ostatní přijaté doklady za měsíc a určí nájem / energie / díly pro tento kiosk
+  let ai = { lines: [], suggestions: [] };
+  try {
+    const taken = inv.lines.concat(manual).map((l) => l.invoice_id).filter(Boolean);
+    ai = await require('./rent-doc-matcher').match(c, rev, { skipInvoiceIds: taken });
+  } catch (e) { console.warn('[rent-statement] AI vyhledání selhalo:', e.message); }
+  const allLines = manual.concat(inv.lines, ai.lines);
+  const haveIds = new Set(allLines.map((l) => l.invoice_id).filter(Boolean));
+  const suggestions = (ai.suggestions || []).filter((s) => !haveIds.has(s.invoice_id));
+  // „Chybí" = pravidla požadují doklad (nájem/energie), ale nenašel se ani podle pravidel, ani AI
+  const missing = inv.missing.filter((cat) => !allLines.some((l) => l.cat === cat)).map((cat) => (cat === 'D' ? 'faktura za nájem lokality' : 'faktura za energie'));
   const base = {
     kiosk_code: c.kiosk_code, customer_name: c.customer_name || null, buyer_ico: c.buyer_ico || null,
     period_from: new Date(rev.period_from + 'T00:00:00Z'), period_to: new Date(rev.period_to + 'T00:00:00Z'),
     currency: c.currency || rev.currency || 'CZK', vat_rate: Number(c.vat_rate) || 21, fee_pct: Number(c.fee_pct) || 13,
     revenue_sis: rev.prevMonth,
   };
-  const k = calc(Object.assign({}, existing || {}, base, { lines: manual.concat(inv.lines) }));
-  const data = Object.assign({}, base, { lines: k.lines, revenue_gross: k.revenue_gross, revenue_net: k.revenue_net, fee_net: k.fee_net, cost_d: k.cost_d, cost_e: k.cost_e, cost_f: k.cost_f, rent: k.rent });
+  const k = calc(Object.assign({}, existing || {}, base, { lines: allLines }));
+  const data = Object.assign({}, base, { suggestions, lines: k.lines, revenue_gross: k.revenue_gross, revenue_net: k.revenue_net, fee_net: k.fee_net, cost_d: k.cost_d, cost_e: k.cost_e, cost_f: k.cost_f, rent: k.rent });
   const statement = existing
     ? await prisma.kioskRentStatement.update({ where: { id: existing.id }, data })
     : await prisma.kioskRentStatement.create({ data: Object.assign({ contract_id: c.id, period_ym: period }, data) });
-  return { statement, missing: inv.missing };
+  return { statement, missing, suggestions };
 }
 
 // Úprava: řádky D/E/F, ruční úprava A, poznámka; status 'issued' přidělí číslo dokladu
@@ -108,6 +119,7 @@ async function update(id, body) {
   const c = calc(merged);
   const data = { lines: c.lines, revenue_adjust: merged.revenue_adjust, revenue_gross: c.revenue_gross, revenue_net: c.revenue_net, fee_net: c.fee_net, cost_d: c.cost_d, cost_e: c.cost_e, cost_f: c.cost_f, rent: c.rent };
   if (body.note !== undefined) data.note = body.note ? String(body.note).slice(0, 4000) : null;
+  if (Array.isArray(body.suggestions)) data.suggestions = body.suggestions.slice(0, 100);
   if (body.status === 'issued' && st.status !== 'issued') { data.status = 'issued'; if (!st.doc_number) data.doc_number = await nextDocNumber(); }
   if (body.status === 'draft' && st.status === 'issued') data.status = 'draft';
   return prisma.kioskRentStatement.update({ where: { id }, data });
@@ -193,11 +205,13 @@ async function sendTest(contract, to) {
 // Zpracování jedné smlouvy za měsíc podle režimu (volá worker): draft = jen koncept, issue = vystavit, send = vystavit a odeslat.
 // Chybí-li očekávaná faktura (nájem/energie), podklad se nevydává automaticky — zůstane koncept s upozorněním a zkusí se znovu.
 async function processContract(contract, ym) {
-  const { statement, missing } = await generate(contract.id, ym);
+  const { statement, missing, suggestions } = await generate(contract.id, ym);
   if (contract.auto_mode === 'draft') return { statement, action: 'draft' };
-  if (missing.length) {
-    await prisma.kioskRentStatement.update({ where: { id: statement.id }, data: { send_error: 'Čeká na doklady: ' + missing.join(', ') } });
-    return { statement, action: 'held', missing };
+  // Neúplné doklady nebo nepotvrzené návrhy AI → automaticky nevydávat, ať se nepošle chybná částka
+  const hold = missing.concat(suggestions && suggestions.length ? [suggestions.length + '× návrh AI čeká na potvrzení'] : []);
+  if (hold.length) {
+    await prisma.kioskRentStatement.update({ where: { id: statement.id }, data: { send_error: 'Čeká: ' + hold.join(', ') } });
+    return { statement, action: 'held', missing: hold };
   }
   const issued = await update(statement.id, { status: 'issued', lines: statement.lines });
   if (contract.auto_mode !== 'send') { await prisma.kioskRentStatement.update({ where: { id: issued.id }, data: { send_error: null } }); return { statement: issued, action: 'issued' }; }

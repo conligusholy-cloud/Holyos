@@ -2558,7 +2558,7 @@
       const used = new Set((window.__rentContracts || []).map(x => x.kiosk_code));
       const kObj = c ? kiosks.find(k => k.code === c.kiosk_code) : null;
       const kioskLabel = c ? (kObj ? (kObj.label || kObj.code) + ' (' + kObj.code + ')' : c.kiosk_code) : '';
-      window.__rcDraft = { id: id || 0, rent_rules: ((c && c.rent_rules) || []).map(r => Object.assign({}, r)), energy_rules: ((c && c.energy_rules) || []).map(r => Object.assign({}, r)) };
+      window.__rcDraft = { id: id || 0, rent_rules: ((c && c.rent_rules) || []).map(r => Object.assign({}, r)), energy_rules: ((c && c.energy_rules) || []).map(r => Object.assign({}, r)), service_rules: ((c && c.service_rules) || []).map(r => Object.assign({}, r)) };
       const v = (k, d) => escapeHtml(String(c && c[k] != null ? c[k] : d));
       const dv = (k) => c && c[k] ? String(c[k]).slice(0, 10) : '';
       const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
@@ -2585,6 +2585,8 @@
               <label>DPH (%) / Měna</label><div style="display:flex;gap:8px;"><input id="rc-vat" type="number" step="0.01" value="${v('vat_rate', 21)}" style="${inp}"><input id="rc-cur" maxlength="3" value="${v('currency', 'CZK')}" style="${inp}"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za nájem lokality (D)</label><div id="rc-rent-rules"></div>
               <label style="align-self:start;padding-top:6px;">Faktury za energie (E)</label><div id="rc-energy-rules"></div>
+              <label style="align-self:start;padding-top:6px;">Faktury za servis / díly (F)</label><div id="rc-service-rules"></div>
+              <label style="align-self:start;padding-top:2px;">Chytré vyhledávání</label><div><label style="display:flex;gap:8px;align-items:center;"><input id="rc-ai" type="checkbox" ${!c || c.ai_match !== false ? 'checked' : ''}> AI přečte přijaté doklady za měsíc a sama pozná nájem, energie i díly pro tento kiosk</label><div style="font-size:11px;color:var(--text2);margin-top:3px;">Funguje i bez zadaných dodavatelů. Jisté shody (≥ 80 %) doplní sama, nejisté nabídne ke schválení. Dodavatelé výše mají přednost.</div></div>
               <label>Poznámka</label><input id="rc-note" value="${v('note', '')}" style="${inp}">
               <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="rc-active" type="checkbox" ${!c || c.active ? 'checked' : ''}> automaticky zpracovávat</label>
               <label>Testovací e-mail</label><div><div style="display:flex;gap:8px;"><input id="rc-testto" type="email" placeholder="na jaký e-mail poslat vizualizaci" value="${escapeHtml((window.currentUser && window.currentUser.email) || '')}" style="${inp}"><button type="button" class="btn btn-secondary btn-sm" onclick="rentContractTest()" style="white-space:nowrap;">✉ Poslat test</button></div><div id="rc-testres" style="font-size:11.5px;color:var(--text2);margin-top:4px;">${c ? 'Pošle ukázkový podklad (PDF) se skutečnými tržbami a fakturami, nic se neukládá.' : 'Test lze poslat po uložení smlouvy.'}</div></div>
@@ -2610,6 +2612,7 @@
       const co = window.__companies || [];
       document.getElementById('rc-rent-rules').innerHTML = rulesHtml('rent_rules', window.__rcDraft.rent_rules, co, inp);
       document.getElementById('rc-energy-rules').innerHTML = rulesHtml('energy_rules', window.__rcDraft.energy_rules, co, inp);
+      document.getElementById('rc-service-rules').innerHTML = rulesHtml('service_rules', window.__rcDraft.service_rules, co, inp);
     }
     window.rentRuleAdd = function(kind) { window.__rcDraft[kind].push({ company_id: null, keyword: '', share_pct: 100 }); rcRenderRules(); };
     window.rentRuleDel = function(kind, i) { window.__rcDraft[kind].splice(i, 1); rcRenderRules(); };
@@ -2619,7 +2622,7 @@
       return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
         effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: document.getElementById('rc-autosend').checked ? 'send' : (document.getElementById('rc-autoissue').checked ? 'issue' : 'draft'),
         fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: true,
-        rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
+        rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), service_rules: clean(window.__rcDraft.service_rules), ai_match: document.getElementById('rc-ai').checked, note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
     }
     window.saveRentContract = async function(id) {
       const b = rcBody();
@@ -2652,7 +2655,7 @@
     }
     window.openRentModal = function(id) {
       const st = window.__rentSt.find(x => x.id === id); if (!st) return;
-      window.__rentCur = { id, st: Object.assign({}, st), lines: (Array.isArray(st.lines) ? st.lines : []).map(l => Object.assign({}, l)) };
+      window.__rentCur = { id, st: Object.assign({}, st), lines: (Array.isArray(st.lines) ? st.lines : []).map(l => Object.assign({}, l)), suggestions: (Array.isArray(st.suggestions) ? st.suggestions : []).map(l => Object.assign({}, l)) };
       renderRentModal();
     };
     function renderRentModal() {
@@ -2683,6 +2686,12 @@
               <div><b>B. Obrat bez DPH</b></div><div style="text-align:right;">${rentMoney(k.B, cur)}</div>
               <div><b>C. Servisní a provozní poplatek</b> (${Number(st.fee_pct)} % z A)</div><div style="text-align:right;">− ${rentMoney(k.C, cur)}</div>
             </div>
+            ${(() => {
+              const sg = window.__rentCur.suggestions || [];
+              if (!sg.length || issued) return '';
+              return '<div style="margin-top:14px;padding:10px 12px;border:1px solid #f59e0b;border-radius:10px;"><b style="color:#f59e0b;">🤖 AI našla ' + sg.length + ' možných dokladů — potvrď, které patří k tomuto kiosku</b>' +
+                sg.map((s, i) => '<div style="display:grid;grid-template-columns:1fr 110px 120px;gap:8px;align-items:center;margin-top:6px;font-size:12.5px;"><div>' + escapeHtml(s.label) + '<div style="font-size:11px;color:var(--text2);">kategorie ' + s.cat + ' · jistota ' + Math.round((s.confidence || 0) * 100) + ' % · ' + escapeHtml(s.reason || '') + '</div></div><div style="text-align:right;">' + rentMoney(s.amount, cur) + '</div><div style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="rentSugAccept(' + i + ')">Přidat</button> <button class="btn btn-secondary btn-sm" onclick="rentSugDismiss(' + i + ')">Zahodit</button></div></div>').join('') + '</div>';
+            })()}
             ${secs}
             <div style="margin-top:16px;padding:12px 14px;border-radius:10px;background:var(--surface2);display:flex;justify-content:space-between;align-items:center;">
               <div><b>${k.rent >= 0 ? 'Měsíční nájemné' : 'Záporný výsledek — vyúčtování nekrytých nákladů'}</b><div style="font-size:11.5px;color:var(--text2);">B − C − D − E − F = ${rentMoney(k.B, '')} − ${rentMoney(k.C, '')} − ${rentMoney(k.D, '')} − ${rentMoney(k.E, '')} − ${rentMoney(k.F, '')}</div></div>
@@ -2690,7 +2699,7 @@
             </div>
             <div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">Poznámka</label><input value="${escapeHtml(st.note || '')}" onchange="window.__rentCur.st.note=this.value;rentSave()" style="${inp}"${dis}></div>
             <div style="display:flex; gap:10px; justify-content:space-between; margin-top:18px; flex-wrap:wrap;">
-              <div style="display:flex;gap:8px;"><a class="btn btn-secondary" href="/api/compounder/rent-statements/${st.id}/pdf" target="_blank">📄 PDF podklad</a>${issued ? '<button class="btn btn-secondary" onclick="rentStatus(\'draft\')">Vrátit do konceptu</button>' : '<button class="btn btn-danger btn-sm" onclick="rentDelete()">Smazat</button>'}</div>
+              <div style="display:flex;gap:8px;"><a class="btn btn-secondary" href="/api/compounder/rent-statements/${st.id}/pdf" target="_blank">📄 PDF podklad</a>${issued ? '' : '<button class="btn btn-secondary" title="Znovu projít přijaté doklady za měsíc (pravidla + AI)" onclick="rentRescan()">🔍 Vyhledat doklady</button>'}${issued ? '<button class="btn btn-secondary" onclick="rentStatus(\'draft\')">Vrátit do konceptu</button>' : '<button class="btn btn-danger btn-sm" onclick="rentDelete()">Smazat</button>'}</div>
               <div style="display:flex;gap:8px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>${issued ? '<button class="btn btn-primary" onclick="closeModal();rentSendNow(' + st.id + ')">✉ ' + (st.sent_at ? 'Poslat znovu' : 'Odeslat kompetentní osobě') + '</button>' : '<button class="btn btn-primary" onclick="rentStatus(\'issued\')">Vydat podklad</button>'}</div>
             </div>
           </div>
@@ -2700,10 +2709,22 @@
     async function rentSave() {
       clearTimeout(__rentTimer);
       const c = window.__rentCur;
-      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '' });
+      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, suggestions: c.suggestions, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '' });
       if (r.status !== 200) return alert('Chyba uložení: ' + ((r.data && r.data.error) || r.status));
       c.st = Object.assign(c.st, r.data); const i = window.__rentSt.findIndex(x => x.id === c.id); if (i >= 0) window.__rentSt[i] = r.data;
     }
+    window.rentSugAccept = function(i) {
+      const c = window.__rentCur; const s = c.suggestions.splice(i, 1)[0]; if (!s) return;
+      c.lines.push({ cat: s.cat, label: s.label, amount: s.amount, vat_rate: s.vat_rate, deductible: true, source: 'ai_confirmed', invoice_id: s.invoice_id });
+      renderRentModal(); rentSave();
+    };
+    window.rentSugDismiss = function(i) { window.__rentCur.suggestions.splice(i, 1); renderRentModal(); rentSave(); };
+    window.rentRescan = async function() {
+      const c = window.__rentCur; if (!c.st.contract_id) return alert('Podklad nemá nájemní smlouvu.');
+      const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: c.st.contract_id, ym: c.st.period_ym });
+      if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      await loadRent(); openRentModal(r.data.id);
+    };
     window.rentLine = function(i, f, v) {
       const l = window.__rentCur.lines[i]; l[f] = (f === 'amount' || f === 'vat_rate') ? (v === '' ? '' : Number(v)) : v;
       renderRentModal(); rentSave();
@@ -2714,7 +2735,7 @@
     window.rentStatus = async function(status) {
       const c = window.__rentCur;
       if (status === 'issued' && !confirm('Vydat podklad a přidělit číslo dokladu? Vydaný podklad už nepůjde upravit.')) return;
-      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '', status });
+      const r = await api('PUT', '/api/compounder/rent-statements/' + c.id, { lines: c.lines, suggestions: c.suggestions, revenue_adjust: c.st.revenue_adjust, note: c.st.note || '', status });
       if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
       closeModal(); loadRent();
     };
