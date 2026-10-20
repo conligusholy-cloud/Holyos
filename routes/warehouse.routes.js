@@ -1304,6 +1304,17 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
     const intFields = ['product_id', 'material_id'];
     const floatFields = ['quantity', 'unit_price', 'total_price', 'delivered_quantity'];
     const dateFields = ['expected_delivery'];
+    // Stav položky (jen známé hodnoty)
+    if (req.body.status !== undefined && ['pending', 'ordered', 'partial', 'completed', 'cancelled'].includes(String(req.body.status))) allowed.status = String(req.body.status);
+    // Změna množství / ceny za kus bez explicitní celkové ceny → dopočítat celkem řádku
+    if ((req.body.quantity !== undefined || req.body.unit_price !== undefined) && req.body.total_price === undefined) {
+      const cur = await prisma.orderItem.findUnique({ where: { id: parseInt(req.params.itemId) }, select: { quantity: true, unit_price: true } });
+      if (cur) {
+        const q = req.body.quantity !== undefined ? (parseFloat(req.body.quantity) || 0) : Number(cur.quantity);
+        const up = req.body.unit_price !== undefined ? (parseFloat(req.body.unit_price) || 0) : Number(cur.unit_price);
+        allowed.total_price = Math.round(q * up * 100) / 100;
+      }
+    }
 
     for (const f of stringFields) {
       if (req.body[f] !== undefined) {
@@ -1320,6 +1331,15 @@ router.put('/orders/:orderId/items/:itemId', async (req, res, next) => {
       where: { id: parseInt(req.params.itemId) },
       data: allowed,
     });
+    // Přepočet celkové částky objednávky (po změně množství / ceny / smazání řádku)
+    if (allowed.quantity !== undefined || allowed.unit_price !== undefined || allowed.total_price !== undefined) {
+      const oid = parseInt(req.params.orderId);
+      if (oid) {
+        const all = await prisma.orderItem.findMany({ where: { order_id: oid }, select: { total_price: true } });
+        const total = all.reduce((s, i) => s + Number(i.total_price || 0), 0);
+        await prisma.order.update({ where: { id: oid }, data: { total_amount: total, items_count: all.length } });
+      }
+    }
     res.json(item);
   } catch (err) {
     next(err);

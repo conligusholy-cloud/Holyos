@@ -718,7 +718,190 @@
         '</form></div></div>';
     }
 
+    // ============================================================
+    // NÁKUPNÍ OBJEDNÁVKA JAKO LIST PAPÍRU — vše se edituje přímo v dokumentu, změny se ukládají hned
+    // ============================================================
+    (function () {
+      const st = document.createElement('style');
+      st.textContent = `
+        .po-overlay { overflow:auto; align-items:flex-start !important; padding:26px 12px 60px; }
+        .po-sheet { background:#fbfaf6; color:#1d2433; width:min(1020px,100%); margin:0 auto; border-radius:4px; padding:40px 54px 34px; position:relative;
+          box-shadow:0 36px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.1); border-top:6px solid #6366f1; font-size:13.5px; }
+        .po-top { position:absolute; top:12px; right:16px; display:flex; gap:8px; align-items:center; }
+        #po-saved { font-size:12px; font-weight:700; opacity:0; transition:opacity .4s; margin-right:6px; }
+        .po-btn { background:#fff; border:1px solid #d6d2c4; color:#334; border-radius:8px; padding:5px 11px; font-size:12px; cursor:pointer; }
+        .po-btn:hover { background:#f1efe6; }
+        .po-head { display:flex; justify-content:space-between; gap:24px; align-items:flex-end; margin:6px 0 24px; flex-wrap:wrap; }
+        .po-kicker { font-size:11.5px; letter-spacing:.2em; color:#6b7280; font-weight:700; }
+        .po-num { font-size:34px; font-weight:800; letter-spacing:-.01em; line-height:1.1; }
+        .po-meta { display:grid; grid-template-columns:auto 170px; gap:6px 12px; align-items:center; font-size:12.5px; color:#6b7280; }
+        .po-in, .po-sel, .po-ta { border:0; border-bottom:1px solid transparent; background:transparent; font:inherit; color:inherit; width:100%; padding:5px 3px; border-radius:3px; box-sizing:border-box; }
+        .po-in:hover, .po-sel:hover, .po-ta:hover { background:#f1efe6; }
+        .po-in:focus, .po-sel:focus, .po-ta:focus { outline:0; background:#fff; border-bottom-color:#6366f1; box-shadow:0 2px 0 #6366f1; }
+        .po-in.r { text-align:right; } .po-late { color:#dc2626; font-weight:700; }
+        .po-parties { display:grid; grid-template-columns:1.2fr 1fr; gap:18px; margin-bottom:26px; }
+        .po-box { border:1px solid #e4e0d2; border-radius:8px; padding:14px 16px; background:#fff; }
+        .po-lbl { font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:#8a8f9c; font-weight:700; margin-bottom:6px; }
+        .po-co-name { font-weight:800; font-size:16px; } .po-co-line { color:#4b5563; font-size:12.5px; margin-top:2px; }
+        .po-bar { height:7px; border-radius:6px; background:#e7e3d6; overflow:hidden; margin:8px 0 4px; } .po-bar > i { display:block; height:100%; background:#10b981; }
+        .po-tbl { width:100%; border-collapse:collapse; }
+        .po-tbl th { text-align:left; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:#8a8f9c; font-weight:700; padding:8px 4px; border-bottom:2px solid #1d2433; white-space:nowrap; }
+        .po-tbl th.r, .po-tbl td.r { text-align:right; }
+        .po-tbl td { padding:2px 4px; border-bottom:1px solid #e7e3d6; vertical-align:middle; }
+        .po-tbl tr:hover td { background:#f7f5ec; }
+        .po-n { color:#9ca3af; width:24px; font-size:12px; } .po-rowtot { font-weight:700; white-space:nowrap; padding-left:10px !important; }
+        .po-st { border:1px solid; border-radius:999px; padding:3px 6px; font-size:11.5px; font-weight:700; cursor:pointer; max-width:130px; }
+        .po-x { background:none; border:0; color:#c0c4cc; cursor:pointer; font-size:14px; padding:4px 6px; border-radius:6px; } .po-x:hover { color:#dc2626; background:#fee2e2; }
+        .po-add td { border-bottom:1px dashed #cfcab9; background:#faf8f0; } .po-add .po-in { color:#6366f1; }
+        .po-add-btn { background:#6366f1; color:#fff; border:0; border-radius:8px; padding:6px 12px; font-weight:700; cursor:pointer; font-size:12px; white-space:nowrap; }
+        .po-foot { display:grid; grid-template-columns:1.4fr 1fr; gap:28px; margin-top:24px; align-items:start; }
+        .po-ta { min-height:76px; resize:vertical; border:1px solid #e4e0d2; background:#fff; padding:8px 10px; }
+        .po-sum { text-align:right; } .po-sum .l { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:#8a8f9c; font-weight:700; }
+        .po-grand { font-size:30px; font-weight:800; letter-spacing:-.01em; }
+        @media print { body * { visibility:hidden !important; } .po-sheet, .po-sheet * { visibility:visible !important; } .po-sheet { position:absolute; left:0; top:0; width:100%; box-shadow:none; border-top:0; }
+          .po-noprint { display:none !important; } .po-in, .po-sel, .po-ta, .po-st { border:0 !important; background:transparent !important; box-shadow:none !important; appearance:none; -webkit-appearance:none; } }
+      `;
+      document.head.appendChild(st);
+    })();
+
+    const PO = { o: null, timer: null };
+    const poAttr = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const poTxt = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const poMoney = (n, cur) => (Number(n) || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (cur === 'EUR' ? '€' : 'Kč');
+    const poDay = (v) => (v ? String(v).slice(0, 10) : '');
+    function poSaved(msg, err) { const el = document.getElementById('po-saved'); if (!el) return; el.textContent = msg; el.style.color = err ? '#dc2626' : '#16a34a'; el.style.opacity = 1; clearTimeout(PO.timer); PO.timer = setTimeout(() => { el.style.opacity = 0; }, 2400); }
+    async function poReq(method, url, body) {
+      try { const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error(r.status); poSaved('✓ Uloženo'); return r.json().catch(() => ({})); }
+      catch (e) { poSaved('Uložení selhalo – zkus znovu', true); return null; }
+    }
+    function poClose() { closeModal(); loadOrders(); loadStats(); }
+
+    function poItemRow(it, idx) {
+      const cur = PO.o.currency; const today = new Date().toISOString().slice(0, 10); const eta = poDay(it.expected_delivery);
+      const late = eta && eta < today && !['completed', 'cancelled'].includes(it.status);
+      const sc = (ITEM_STATUSES[it.status] || ITEM_STATUSES.pending).color;
+      const opts = Object.entries(ITEM_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (it.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+      return '<tr data-id="' + it.id + '"><td class="po-n">' + (idx + 1) + '</td>' +
+        '<td><input class="po-in" data-f="name" value="' + poAttr(it.name || (it.material && it.material.name) || '') + '"></td>' +
+        '<td class="r" style="width:78px"><input class="po-in r" type="number" step="0.01" min="0" data-f="quantity" value="' + (Number(it.quantity) || 0) + '"></td>' +
+        '<td style="width:52px"><input class="po-in" data-f="unit" value="' + poAttr(it.unit || 'ks') + '"></td>' +
+        '<td class="r" style="width:104px"><input class="po-in r" type="number" step="0.01" min="0" data-f="unit_price" value="' + (Number(it.unit_price) || 0) + '"></td>' +
+        '<td class="r po-rowtot" style="width:116px">' + poMoney(it.total_price, cur) + '</td>' +
+        '<td style="width:132px"><input class="po-in' + (late ? ' po-late' : '') + '" type="date" data-f="expected_delivery" value="' + eta + '" title="' + (late ? 'Po termínu!' : 'Termín dodání položky') + '"></td>' +
+        '<td class="r" style="width:78px"><input class="po-in r" type="number" step="0.01" min="0" data-f="delivered_quantity" value="' + (Number(it.delivered_quantity) || 0) + '"></td>' +
+        '<td style="width:128px"><select class="po-st" data-f="status" style="color:' + sc + ';border-color:' + sc + '66;background:' + sc + '14">' + opts + '</select></td>' +
+        '<td class="po-noprint" style="width:30px"><button class="po-x" title="Smazat řádek">✕</button></td></tr>';
+    }
+    function poCompanyCard() {
+      const c = companies.find((x) => x.id === PO.o.company_id) || PO.o.company || null;
+      if (!c) return '<div class="po-co-line">Vyber dodavatele v nabídce výše.</div>';
+      const addr = [c.address, [c.zip, c.city].filter(Boolean).join(' '), c.country && c.country !== 'CZ' ? c.country : ''].filter(Boolean).join(', ');
+      return '<div class="po-co-name">' + poTxt(c.name) + '</div>' + (addr ? '<div class="po-co-line">' + poTxt(addr) + '</div>' : '') +
+        (c.ico || c.dic ? '<div class="po-co-line">' + (c.ico ? 'IČO ' + poTxt(c.ico) : '') + (c.ico && c.dic ? ' · ' : '') + (c.dic ? 'DIČ ' + poTxt(c.dic) : '') + '</div>' : '') +
+        (c.email || c.phone ? '<div class="po-co-line">' + [c.email, c.phone].filter(Boolean).map(poTxt).join(' · ') + '</div>' : '');
+    }
+    function poDeliveryBox() {
+      const items = PO.o.items || []; const done = items.filter((i) => i.status === 'completed').length; const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+      const dates = items.map((i) => poDay(i.expected_delivery)).filter(Boolean).sort();
+      return '<div class="po-lbl">Dodání</div>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 12px;align-items:center;font-size:12.5px;color:#6b7280;">' +
+        '<span>Požadované dodání</span><input class="po-in" type="date" data-h="expected_delivery" value="' + poDay(PO.o.expected_delivery) + '">' +
+        '<span>První termín položek</span><b style="color:#1d2433">' + (dates[0] ? new Date(dates[0]).toLocaleDateString('cs-CZ') : '—') + '</b>' +
+        '<span>Poslední termín položek</span><b style="color:#1d2433">' + (dates.length ? new Date(dates[dates.length - 1]).toLocaleDateString('cs-CZ') : '—') + '</b></div>' +
+        '<div class="po-bar"><i style="width:' + pct + '%"></i></div><div style="font-size:12px;color:#6b7280;">Ukončeno ' + done + ' z ' + items.length + ' položek (' + pct + ' %)</div>';
+    }
+    function poRecalc() {
+      const items = PO.o.items || []; const sum = items.reduce((s, i) => s + (Number(i.total_price) || 0), 0); PO.o.total_amount = sum;
+      const g = document.getElementById('po-grand'); if (g) g.textContent = poMoney(sum, PO.o.currency);
+      const d = document.getElementById('po-delivery'); if (d) d.innerHTML = poDeliveryBox();
+      const n = document.getElementById('po-count'); if (n) n.textContent = items.length + ' ' + (items.length === 1 ? 'položka' : items.length < 5 && items.length > 0 ? 'položky' : 'položek');
+    }
+    function poRender() {
+      const o = PO.o; const kind = o.type === 'cooperation' ? 'KOOPERAČNÍ OBJEDNÁVKA' : 'NÁKUPNÍ OBJEDNÁVKA';
+      const matList = materials.map((m) => '<option value="' + poAttr(m.name) + '">' + poTxt(m.code) + '</option>').join('');
+      const compOpts = '<option value="">— vyber dodavatele —</option>' + companies.map((c) => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + poTxt(c.name) + '</option>').join('');
+      const stOpts = Object.entries(ORDER_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
+      const created = o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—';
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)poClose()"><div class="po-sheet" id="po-sheet">' +
+        '<div class="po-top po-noprint"><span id="po-saved"></span><button class="po-btn" onclick="window.print()">🖨 Tisk</button><button class="po-btn" onclick="poClose()">✕ Zavřít</button></div>' +
+        '<div class="po-head"><div><div class="po-kicker">' + kind + '</div><div class="po-num">' + poTxt(o.order_number) + '</div></div>' +
+          '<div class="po-meta"><span>Stav</span><select class="po-sel" data-h="status">' + stOpts + '</select>' +
+          '<span>Vystaveno</span><b style="color:#1d2433;padding:5px 3px">' + created + '</b>' +
+          '<span>Měna</span><select class="po-sel" data-h="currency"><option value="CZK"' + (o.currency !== 'EUR' ? ' selected' : '') + '>CZK – koruny</option><option value="EUR"' + (o.currency === 'EUR' ? ' selected' : '') + '>EUR – eura</option></select></div></div>' +
+        '<div class="po-parties"><div class="po-box"><div class="po-lbl">Dodavatel</div><select class="po-sel po-noprint" data-h="company_id" style="font-weight:700;margin-bottom:6px">' + compOpts + '</select><div id="po-company">' + poCompanyCard() + '</div></div>' +
+          '<div class="po-box" id="po-delivery">' + poDeliveryBox() + '</div></div>' +
+        '<table class="po-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th>Termín dodání</th><th class="r">Doručeno</th><th>Stav</th><th class="po-noprint"></th></tr></thead><tbody id="po-rows">' +
+          (o.items || []).map(poItemRow).join('') +
+          '<tr class="po-add po-noprint"><td class="po-n">＋</td><td><input class="po-in" id="po-new-name" list="po-mats" placeholder="Přidat položku – piš název (nabídne zboží ze skladu)" autocomplete="off"></td>' +
+          '<td class="r"><input class="po-in r" id="po-new-qty" type="number" step="0.01" min="0.01" value="1"></td><td><input class="po-in" id="po-new-unit" value="ks"></td>' +
+          '<td class="r"><input class="po-in r" id="po-new-price" type="number" step="0.01" min="0" value="0"></td><td></td>' +
+          '<td><input class="po-in" id="po-new-date" type="date"></td><td></td><td colspan="2"><button class="po-add-btn" id="po-add-btn">+ Přidat</button></td></tr>' +
+        '</tbody></table><datalist id="po-mats">' + matList + '</datalist>' +
+        '<div class="po-foot"><div><div class="po-lbl">Poznámka</div><textarea class="po-ta" data-h="note" placeholder="Poznámka k objednávce (platební podmínky, dopravce, kontakt…)">' + poTxt(o.note || '') + '</textarea></div>' +
+          '<div class="po-sum"><div class="l">Celkem</div><div class="po-grand" id="po-grand">' + poMoney(o.total_amount, o.currency) + '</div><div style="color:#8a8f9c;font-size:12px" id="po-count"></div></div></div>' +
+        '</div></div>';
+      poRecalc();
+      const sheet = document.getElementById('po-sheet');
+      sheet.addEventListener('change', poChange);
+      sheet.addEventListener('click', poClick);
+      const nm = document.getElementById('po-new-name');
+      nm.addEventListener('input', () => { const m = materials.find((x) => x.name === nm.value); if (m) { document.getElementById('po-new-unit').value = m.unit || 'ks'; document.getElementById('po-new-price').value = m.unit_price || 0; nm.dataset.mat = m.id; } else delete nm.dataset.mat; });
+      sheet.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('.po-add')) { e.preventDefault(); poAddItem(); } if (e.key === 'Enter' && e.target.matches('.po-tbl input')) e.target.blur(); });
+    }
+    async function poChange(e) {
+      const t = e.target; const o = PO.o;
+      if (t.dataset.h) { // údaje v hlavičce objednávky
+        const f = t.dataset.h; let v = t.value;
+        if (f === 'company_id') { v = v ? parseInt(v, 10) : null; o.company_id = v; document.getElementById('po-company').innerHTML = poCompanyCard(); }
+        if (f === 'expected_delivery') v = v || null;
+        o[f] = v; if (f === 'currency') { poRecalc(); (o.items || []).forEach((i, k) => { const tr = document.querySelector('tr[data-id="' + i.id + '"] .po-rowtot'); if (tr) tr.textContent = poMoney(i.total_price, o.currency); }); }
+        await poReq('PUT', '/api/wh/orders/' + o.id, { [f]: v }); if (f === 'expected_delivery') poRecalc(); return;
+      }
+      const f = t.dataset.f; const tr = t.closest('tr[data-id]'); if (!f || !tr) return;
+      const it = (o.items || []).find((x) => String(x.id) === tr.dataset.id); if (!it) return;
+      const body = {}; let v = t.value;
+      if (['quantity', 'unit_price', 'delivered_quantity'].includes(f)) { v = parseFloat(v); if (isNaN(v)) v = 0; }
+      if (f === 'expected_delivery') v = v || null;
+      if (f === 'name' && !String(v).trim()) { t.value = it.name || ''; return; }
+      body[f] = v; it[f] = v;
+      if (f === 'quantity' || f === 'unit_price') { it.total_price = Math.round((Number(it.quantity) || 0) * (Number(it.unit_price) || 0) * 100) / 100; tr.querySelector('.po-rowtot').textContent = poMoney(it.total_price, o.currency); }
+      if (f === 'delivered_quantity') { // doručené množství → stav položky
+        const q = Number(it.quantity) || 0; const ns = v >= q && q > 0 ? 'completed' : v > 0 ? 'partial' : (it.status === 'completed' || it.status === 'partial' ? 'ordered' : it.status);
+        if (ns !== it.status) { it.status = ns; body.status = ns; const s = tr.querySelector('[data-f="status"]'); if (s) { s.value = ns; const c = ITEM_STATUSES[ns].color; s.style.color = c; s.style.borderColor = c + '66'; s.style.background = c + '14'; } }
+      }
+      if (f === 'status') { const c = (ITEM_STATUSES[v] || {}).color || '#9ca3af'; t.style.color = c; t.style.borderColor = c + '66'; t.style.background = c + '14'; }
+      if (f === 'expected_delivery') { const today = new Date().toISOString().slice(0, 10); t.classList.toggle('po-late', !!v && v < today && !['completed', 'cancelled'].includes(it.status)); }
+      poRecalc();
+      await poReq('PUT', '/api/wh/orders/' + o.id + '/items/' + it.id, body);
+    }
+    async function poClick(e) {
+      if (e.target.id === 'po-add-btn') return poAddItem();
+      const x = e.target.closest('.po-x'); if (!x) return;
+      const tr = x.closest('tr[data-id]'); const it = (PO.o.items || []).find((i) => String(i.id) === tr.dataset.id); if (!it) return;
+      if (!confirm('Smazat položku „' + (it.name || '') + '"?')) return;
+      const r = await poReq('DELETE', '/api/wh/order-items/' + it.id); if (r === null) return;
+      PO.o.items = PO.o.items.filter((i) => i.id !== it.id); tr.remove(); poRecalc();
+      document.querySelectorAll('#po-rows tr[data-id] .po-n').forEach((c, i) => { c.textContent = i + 1; });
+    }
+    async function poAddItem() {
+      const nm = document.getElementById('po-new-name'); const name = nm.value.trim(); if (!name) { nm.focus(); return; }
+      const body = { name, material_id: nm.dataset.mat || null, quantity: document.getElementById('po-new-qty').value, unit: document.getElementById('po-new-unit').value || 'ks', unit_price: document.getElementById('po-new-price').value, expected_delivery: document.getElementById('po-new-date').value || null };
+      const r = await poReq('POST', '/api/wh/orders/' + PO.o.id + '/items', body); if (r === null) return;
+      const ov = document.querySelector('.po-overlay'); const top = ov ? ov.scrollTop : 0;
+      await openOrderDetail(PO.o.id); const ov2 = document.querySelector('.po-overlay'); if (ov2) ov2.scrollTop = top;
+      const n2 = document.getElementById('po-new-name'); if (n2) n2.focus();
+    }
     async function openOrderDetail(id) {
+      try {
+        const res = await fetch('/api/wh/orders/' + id); const order = await res.json();
+        if (order.type === 'sales') return openOrderDetailLegacy(id); // prodejní objednávky mají vlastní složitější detail
+        if (materials.length === 0) { try { materials = await (await fetch('/api/wh/materials')).json(); } catch (e) { /* bez našeptávače */ } }
+        if (companies.length === 0) { try { companies = await (await fetch('/api/wh/companies')).json(); } catch (e) { /* bez firem */ } }
+        order.items = order.items || []; PO.o = order; poRender();
+      } catch (e) { console.error(e); }
+    }
+
+    async function openOrderDetailLegacy(id) {
       try {
         const res = await fetch('/api/wh/orders/' + id);
         const order = await res.json();
