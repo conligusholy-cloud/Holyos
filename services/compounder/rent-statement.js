@@ -32,17 +32,14 @@ function onePerCat(lines) {
   }
   return out;
 }
-// Pevný nájem lokality (D) ze smlouvy bez DPH: řádek D = pevná částka; přijatý doklad (pravidla / AI / ručně vybraný) se jen kontroluje
+// Nájem lokality (D) se bere STRIKTNĚ ze smlouvy (pevná částka bez DPH za měsíc, při neúplném měsíci poměrně). Žádné vyhledávání ani kontrola dokladů.
 function applyFixedRent(c, rev, lines) {
-  const fixed = Number(c.rent_fixed_net) || 0; if (!(fixed > 0)) return { lines, check: null };
+  const rest = lines.filter((l) => !(l && l.cat === 'D'));
+  const fixed = Number(c.rent_fixed_net) || 0; if (!(fixed > 0)) return { lines: rest, check: null };
   const vatR = Number(c.vat_rate) || 21; const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
   const net = r2(fixed * factor);
-  const dl = lines.filter((l) => l && l.cat === 'D' && l.invoice_id);
-  const invNet = r2(dl.reduce((a, l) => a + (Number(l.amount) || 0) / (1 + (Number(l.vat_rate) || 0) / 100), 0));
-  const m = dl.length ? String(dl[0].label || '').match(/^Faktura\s+(.+?)\s+—/) : null;
-  const check = !dl.length ? { status: 'none' } : { status: Math.abs(invNet - net) <= 1 ? 'ok' : 'diff', invoice_id: dl[0].invoice_id, number: m ? m[1] : null, invoice_net: invNet };
-  const line = { cat: 'D', label: 'Nájem lokality — pevná částka dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + vatR / 100)), vat_rate: vatR, deductible: true, source: 'fixed', check };
-  return { lines: lines.filter((l) => !(l && l.cat === 'D')).concat([line]), check };
+  const line = { cat: 'D', label: 'Nájem lokality — pevná částka dle smlouvy' + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount: r2(net * (1 + vatR / 100)), vat_rate: vatR, deductible: true, source: 'fixed' };
+  return { lines: rest.concat([line]), check: null };
 }
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
@@ -77,7 +74,7 @@ async function pullInvoiceLines(contract, rev) {
   const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
   const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
   const ded = contract.vat_deductible !== false;
-  for (const [cat, key] of [['D', 'rent_rules'], ['E', 'energy_rules'], ['F', 'service_rules']]) {
+  for (const [cat, key] of [['E', 'energy_rules'], ['F', 'service_rules']]) {
     const rules = Array.isArray(contract[key]) ? contract[key].filter((x) => x && x.company_id) : [];
     if (!rules.length) continue;
     let found = 0; const catLines = [];
@@ -127,14 +124,13 @@ async function generate(contractId, ym) {
     const taken = inv.lines.concat(manual).map((l) => l.invoice_id).filter(Boolean);
     ai = await require('./rent-doc-matcher').match(c, rev, { skipInvoiceIds: taken });
   } catch (e) { console.warn('[rent-statement] AI vyhledání selhalo:', e.message); }
+  ai.lines = (ai.lines || []).filter((l) => l.cat !== 'D'); ai.suggestions = (ai.suggestions || []).filter((x) => x.cat !== 'D');
   const fx = applyFixedRent(c, rev, manual.concat(inv.lines, ai.lines));
   const allLines = onePerCat(fx.lines);
   const haveIds = new Set(allLines.map((l) => l.invoice_id).filter(Boolean));
   const suggestions = (ai.suggestions || []).filter((s) => !haveIds.has(s.invoice_id));
   // „Chybí" = pravidla požadují doklad (nájem/energie), ale nenašel se ani podle pravidel, ani AI
   const missing = inv.missing.filter((cat) => !allLines.some((l) => l.cat === cat)).map((cat) => (cat === 'D' ? 'faktura za nájem lokality' : 'faktura za energie'));
-  if (fx.check && fx.check.status === 'none') missing.push('doklad za nájem lokality (ke kontrole pevného nájmu)');
-  if (fx.check && fx.check.status === 'diff') missing.push('nájem na dokladu ' + (fx.check.number || '') + ' (' + fx.check.invoice_net + ') se liší od pevného nájmu ve smlouvě');
   const base = {
     kiosk_code: c.kiosk_code, customer_name: c.customer_name || null, buyer_ico: c.buyer_ico || null,
     period_from: new Date(rev.period_from + 'T00:00:00Z'), period_to: new Date(rev.period_to + 'T00:00:00Z'),
