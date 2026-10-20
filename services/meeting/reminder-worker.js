@@ -33,7 +33,7 @@ async function tick() {
       if (!r.phone) { reminded.push(r.id); changed = true; continue; }
       const t = new Intl.DateTimeFormat('cs-CZ', { timeZone: 'Europe/Prague', hour: '2-digit', minute: '2-digit' }).format(r.slot.starts_at);
       const first = vocativeFirstName(r.name);
-      const text = (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka dnes v ' + t + ', online videohovor přes WhatsApp. Těšíme se na Vás.';
+      const text = (first ? first + ', připomínáme' : 'Připomínáme') + ': schůzka dnes v ' + t + ', online videohovor. Těšíme se na Vás.';
       // Nejdřív označit (ať se při pádu SMS nikdy neposílá dvakrát), pak odeslat
       reminded.push(r.id); changed = true;
       try {
