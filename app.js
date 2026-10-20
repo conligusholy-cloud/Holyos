@@ -1356,6 +1356,11 @@ server.listen(PORT, async () => {
     console.error('[app] service-billing-worker nelze spustit:', err.message);
   }
   try {
+    require('./services/compounder/rent-billing-worker').start();
+  } catch (err) {
+    console.error('[app] rent-billing-worker nelze spustit:', err.message);
+  }
+  try {
     const softwareBillingWorker = require('./services/compounder/software-billing-worker');
     softwareBillingWorker.start();
   } catch (err) {

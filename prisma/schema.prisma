@@ -3245,7 +3245,11 @@ model ServiceSubscription {
 // Záporný výsledek = vyúčtování nákladů nekrytých obratem (čl. VI odst. 4).
 model KioskRentStatement {
   id              Int      @id @default(autoincrement())
-  subscription_id Int // ServiceSubscription = subjekt/stroj
+  contract_id     Int? // KioskRentContract (nájemní smlouva kiosku)
+  subscription_id Int? // legacy — dřív vazba na ServiceSubscription
+  sent_at         DateTime?
+  sent_to         String?  @db.VarChar(255)
+  send_error      String?  @db.Text
   kiosk_code      String   @db.VarChar(40)
   customer_name   String?  @db.VarChar(255)
   buyer_ico       String?  @db.VarChar(20)
@@ -3271,9 +3275,40 @@ model KioskRentStatement {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
-  @@unique([subscription_id, period_ym])
+  @@unique([contract_id, period_ym])
   @@index([period_ym])
   @@map("kiosk_rent_statements")
+}
+
+// Nájemní smlouva kiosku — definice pro měsíční automatický podklad k fakturaci nájmu:
+// který stroj (Compounding), kontaktní osoba + e-mail, účinnost od–do, den vystavení, režim (koncept / vystavit / vystavit a odeslat)
+// a pravidla pro rozpoznání přijatých faktur za nájem lokality (D) a energie (E).
+model KioskRentContract {
+  id              Int       @id @default(autoincrement())
+  kiosk_code      String    @unique @db.VarChar(40)
+  customer_name   String?   @db.VarChar(255) // subjekt (Nájemce / provozovatel)
+  buyer_ico       String?   @db.VarChar(20)
+  contact_name    String?   @db.VarChar(255) // kompetentní osoba
+  contact_email   String?   @db.VarChar(255) // kam se podklad posílá
+  cc_emails       String?   @db.VarChar(500) // další příjemci (čárkou)
+  effective_from  DateTime  @db.Date // počítá se od tohoto dne (první měsíc poměrně)
+  effective_to    DateTime? @db.Date
+  issue_day       Int       @default(5) // den v měsíci, kdy se podklad za předchozí měsíc vystaví
+  auto_mode       String    @default("draft") @db.VarChar(10) // draft = jen koncept | issue = vystavit | send = vystavit a odeslat
+  active          Boolean   @default(true)
+  currency        String    @default("CZK") @db.VarChar(3)
+  vat_rate        Decimal   @default(21) @db.Decimal(5, 2)
+  fee_pct         Decimal   @default(13) @db.Decimal(5, 2)
+  vat_deductible  Boolean   @default(true) // Nájemce má nárok na odpočet DPH u D–F
+  // Pravidla párování přijatých faktur: [{ company_id, keyword?, share_pct? }]
+  rent_rules      Json?
+  energy_rules    Json?
+  note            String?   @db.Text
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@index([active])
+  @@map("kiosk_rent_contracts")
 }
 
 // Dodací list k prodejní objednávce (jednoduchá evidence + PDF).

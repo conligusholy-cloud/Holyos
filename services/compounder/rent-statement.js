@@ -3,6 +3,7 @@
 //   A tržby s DPH (SIS, po odečtu vratek) · B = A / (1 + DPH) · C = % z A (bez DPH)
 //   D náklad na lokalitu · E energie a média · F pozáruční servis a náhradní díly (D–F bez DPH po odečtu nároku na odpočet)
 // Záporný výsledek = vyúčtování nákladů nekrytých obratem (čl. VI odst. 4).
+// Subjekt a pravidla: KioskRentContract. D a E se automaticky doplní z PŘIJATÝCH faktur (dodavatel + klíčové slovo).
 'use strict';
 
 const { prisma } = require('../../config/database');
@@ -10,6 +11,8 @@ const { computePrevMonthRevenue } = require('./kiosk-revenue');
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const CATS = { D: 'Náklad na užívání lokality', E: 'Energie a provozní média', F: 'Pozáruční servis a náhradní díly' };
+const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
 // Čisté přepočtení řádků a výsledku (bez DB)
 function calc(st) {
@@ -17,7 +20,9 @@ function calc(st) {
   const lines = (Array.isArray(st.lines) ? st.lines : []).filter((l) => l && CATS[l.cat]).map((l) => {
     const amount = Number(l.amount) || 0; const lv = l.vat_rate === '' || l.vat_rate == null ? 0 : Number(l.vat_rate) || 0;
     const deductible = l.deductible !== false && lv > 0; // nárok na odpočet → do nákladu jen základ bez DPH
-    return { cat: l.cat, label: String(l.label || '').slice(0, 200), amount: r2(amount), vat_rate: lv, deductible: l.deductible !== false, net: r2(deductible ? amount / (1 + lv / 100) : amount) };
+    const out = { cat: l.cat, label: String(l.label || '').slice(0, 300), amount: r2(amount), vat_rate: lv, deductible: l.deductible !== false, net: r2(deductible ? amount / (1 + lv / 100) : amount) };
+    if (l.source) out.source = l.source; if (l.invoice_id) out.invoice_id = l.invoice_id;
+    return out;
   });
   const sum = (c) => r2(lines.filter((l) => l.cat === c).reduce((s, l) => s + l.net, 0));
   const A = r2((Number(st.revenue_sis) || 0) + (Number(st.revenue_adjust) || 0));
@@ -32,27 +37,64 @@ async function nextDocNumber() {
   return series + '-' + String(row.last_seq).padStart(4, '0');
 }
 
-// Vytvoří / obnoví podklad za měsíc ym (YYYY-MM; výchozí předchozí měsíc). Tržby A se načtou ze SIS jen za dny, kdy smlouva běžela.
-async function generate(subscriptionId, ym) {
-  const sub = await prisma.serviceSubscription.findUnique({ where: { id: subscriptionId } });
-  if (!sub) { const e = new Error('Smlouva nenalezena'); e.status = 404; throw e; }
-  const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
-  const rev = await computePrevMonthRevenue(sub.kiosk_code, { from: toYmd(sub.contract_start), to: toYmd(sub.contract_end), ym: ym || undefined });
+// Z přijatých faktur vybere řádky pro D (nájem lokality) a E (energie) podle pravidel smlouvy.
+// Období = kalendářní měsíc podle DUZP (jinak data vystavení). Při neúplném měsíci (začátek/konec smlouvy) se částky krátí poměrně dnům.
+async function pullInvoiceLines(contract, rev) {
+  const out = []; const missing = [];
+  const ymFrom = new Date(rev.prevMonthYm + '-01T00:00:00Z');
+  const ymTo = new Date(Date.UTC(ymFrom.getUTCFullYear(), ymFrom.getUTCMonth() + 1, 0));
+  const factor = rev.partial && rev.month_days ? rev.days / rev.month_days : 1;
+  const ded = contract.vat_deductible !== false;
+  for (const [cat, key] of [['D', 'rent_rules'], ['E', 'energy_rules']]) {
+    const rules = Array.isArray(contract[key]) ? contract[key].filter((x) => x && x.company_id) : [];
+    if (!rules.length) continue;
+    let found = 0;
+    for (const rule of rules) {
+      const invs = await prisma.invoice.findMany({
+        where: { type: 'received', company_id: parseInt(rule.company_id, 10), status: { notIn: ['cancelled', 'draft', 'written_off'] },
+          OR: [{ date_taxable: { gte: ymFrom, lte: ymTo } }, { date_taxable: null, date_issued: { gte: ymFrom, lte: ymTo } }] },
+        include: { items: true, company: { select: { name: true } } },
+      });
+      const kw = norm(rule.keyword); const share = (Number(rule.share_pct) > 0 ? Number(rule.share_pct) : 100) / 100;
+      for (const inv of invs) {
+        const items = (inv.items || []).filter((it) => !kw || norm(it.description).includes(kw));
+        const byRate = {};
+        for (const it of items) { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); }
+        for (const [rate, total] of Object.entries(byRate)) {
+          const amount = r2(total * share * factor); if (!(amount > 0)) continue;
+          found++;
+          out.push({ cat, label: 'Faktura ' + (inv.external_number || inv.invoice_number) + ' — ' + ((inv.company && inv.company.name) || '') + (kw ? ' (' + rule.keyword + ')' : '') + (share < 1 ? ', podíl ' + Math.round(share * 100) + ' %' : '') + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount, vat_rate: Number(rate), deductible: ded, source: 'invoice', invoice_id: inv.id });
+        }
+      }
+    }
+    if (!found) missing.push(cat === 'D' ? 'faktura za nájem lokality' : 'faktura za energie');
+  }
+  return { lines: out, missing };
+}
+
+// Vytvoří / obnoví podklad za měsíc ym (YYYY-MM; výchozí předchozí). Vrací { statement, missing[] }.
+async function generate(contractId, ym) {
+  const c = await prisma.kioskRentContract.findUnique({ where: { id: contractId } });
+  if (!c) { const e = new Error('Nájemní smlouva nenalezena'); e.status = 404; throw e; }
+  const rev = await computePrevMonthRevenue(c.kiosk_code, { from: toYmd(c.effective_from), to: toYmd(c.effective_to), ym: ym || undefined });
   if (rev.empty) { const e = new Error('V tomto měsíci smlouva neběžela — není co vyúčtovat.'); e.status = 400; throw e; }
   const period = rev.prevMonthYm;
-  const existing = await prisma.kioskRentStatement.findUnique({ where: { subscription_id_period_ym: { subscription_id: sub.id, period_ym: period } } });
+  const existing = await prisma.kioskRentStatement.findUnique({ where: { contract_id_period_ym: { contract_id: c.id, period_ym: period } } });
   if (existing && existing.status === 'issued') { const e = new Error('Podklad už je vydaný — nelze přepsat.'); e.status = 409; throw e; }
+  const inv = await pullInvoiceLines(c, rev);
+  const manual = ((existing && Array.isArray(existing.lines)) ? existing.lines : []).filter((l) => l && l.source !== 'invoice');
   const base = {
-    kiosk_code: sub.kiosk_code, customer_name: sub.customer_name || null, buyer_ico: sub.buyer_ico || null,
+    kiosk_code: c.kiosk_code, customer_name: c.customer_name || null, buyer_ico: c.buyer_ico || null,
     period_from: new Date(rev.period_from + 'T00:00:00Z'), period_to: new Date(rev.period_to + 'T00:00:00Z'),
-    currency: sub.currency || rev.currency || 'CZK', vat_rate: Number(sub.vat_rate) || 21, fee_pct: Number(sub.fee_pct) || 13,
+    currency: c.currency || rev.currency || 'CZK', vat_rate: Number(c.vat_rate) || 21, fee_pct: Number(c.fee_pct) || 13,
     revenue_sis: rev.prevMonth,
   };
-  const merged = Object.assign({}, existing || {}, base);
-  const c = calc(merged);
-  const data = Object.assign({}, base, { lines: c.lines, revenue_gross: c.revenue_gross, revenue_net: c.revenue_net, fee_net: c.fee_net, cost_d: c.cost_d, cost_e: c.cost_e, cost_f: c.cost_f, rent: c.rent });
-  if (existing) return prisma.kioskRentStatement.update({ where: { id: existing.id }, data });
-  return prisma.kioskRentStatement.create({ data: Object.assign({ subscription_id: sub.id, period_ym: period }, data) });
+  const k = calc(Object.assign({}, existing || {}, base, { lines: manual.concat(inv.lines) }));
+  const data = Object.assign({}, base, { lines: k.lines, revenue_gross: k.revenue_gross, revenue_net: k.revenue_net, fee_net: k.fee_net, cost_d: k.cost_d, cost_e: k.cost_e, cost_f: k.cost_f, rent: k.rent });
+  const statement = existing
+    ? await prisma.kioskRentStatement.update({ where: { id: existing.id }, data })
+    : await prisma.kioskRentStatement.create({ data: Object.assign({ contract_id: c.id, period_ym: period }, data) });
+  return { statement, missing: inv.missing };
 }
 
 // Úprava: řádky D/E/F, ruční úprava A, poznámka; status 'issued' přidělí číslo dokladu
@@ -85,7 +127,7 @@ function html(st, ourCompany) {
     return `<tr><td><b>${c}. ${CATS[c]}</b></td><td class="r"></td><td class="r"><b>− ${m(total)}</b></td></tr>${detail}`;
   }).join('');
   const rent = Number(st.rent) || 0;
-  return bs2.page({ title: 'Podklad pro fakturaci nájemného', number: st.doc_number || 'KONCEPT', pill: 'Nájem kiosku · ' + st.kiosk_code, ext: st.status === 'issued' ? '' : 'Koncept — nevydáno' }, `
+  return bs2.page({ title: 'Podklad pro fakturaci nájemného', number: st.doc_number || 'KONCEPT', pill: 'Nájem kiosku · ' + st.kiosk_code, ext: st.status === 'issued' ? '' : (st.test ? 'TESTOVACÍ UKÁZKA' : 'Koncept — nevydáno') }, `
   <div class="parties"><div class="party"><span class="h">Nájemce (provozovatel)</span><div class="name">${esc(st.customer_name || '—')}</div>${st.buyer_ico ? `<div class="row">IČO ${esc(st.buyer_ico)}</div>` : ''}<div class="row">Kiosk: ${esc(st.kiosk_code)}</div></div>
     <div class="party"><span class="h">Pronajímatel</span><div class="name">${esc((ourCompany && ourCompany.name) || 'Best Series s.r.o.')}</div>${ourCompany && ourCompany.ico ? `<div class="row">IČO ${esc(ourCompany.ico)}</div>` : ''}</div></div>
   <div class="meta"><div><div class="l">Období</div><div class="v">${d(st.period_from)} – ${d(st.period_to)}</div></div><div><div class="l">Měsíc</div><div class="v">${esc(st.period_ym)}</div></div><div><div class="l">DPH</div><div class="v">${Number(st.vat_rate)} %</div></div><div><div class="l">Poplatek Nájemce</div><div class="v">${Number(st.fee_pct)} % z tržeb</div></div></div>
@@ -101,9 +143,72 @@ function html(st, ourCompany) {
   <div class="sig"><div>Za Nájemce (zpracoval)</div><div>Za Pronajímatele (odsouhlasil)</div></div>`);
 }
 
-async function pdf(st) {
-  let our = null; try { our = await require('../settings').getOurCompany(); } catch (e) { our = null; }
-  return require('../pdf/contracts').htmlToPdfBuffer(html(st, our));
+async function ourCompany() { try { return await require('../settings').getOurCompany(); } catch (e) { return null; } }
+async function pdf(st) { return require('../pdf/contracts').htmlToPdfBuffer(html(st, await ourCompany())); }
+
+// ─── E-mail ─────────────────────────────────────────────────────────────────
+async function mailFrom() {
+  const our = await ourCompany();
+  return { from: process.env.SERVICE_BILLING_MAIL_FROM || (our && our.email) || process.env.COMPOUNDER_MAIL_FROM || undefined, fromName: process.env.SERVICE_BILLING_MAIL_FROM_NAME || '🧾 Fakturace Best Series - Prádlomat' };
+}
+function mailText(st, contract, test) {
+  const cur = st.currency || 'CZK'; const f = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+  const rent = Number(st.rent) || 0;
+  const hi = contract && contract.contact_name ? 'Dobrý den, ' + String(contract.contact_name).split(' ')[0] + ',' : 'Dobrý den,';
+  return (test ? 'TESTOVACÍ E-MAIL — takto bude vypadat zpráva pro kompetentní osobu. Podklad v příloze je ukázka.\n\n' : '')
+    + hi + '\n\nv příloze zasíláme podklad pro fakturaci nájemného kiosku ' + st.kiosk_code + ' za období ' + st.period_ym + (st.doc_number ? ' (' + st.doc_number + ')' : '') + '.\n\n'
+    + 'Tržby s DPH (A): ' + f(st.revenue_gross) + '\nServisní a provozní poplatek (C): ' + f(st.fee_net) + '\n'
+    + (rent >= 0 ? 'Měsíční nájemné bez DPH (B − C − D − E − F): ' : 'Záporný výsledek — vyúčtování nekrytých nákladů: ') + f(rent) + '\n\n'
+    + 'Podle tohoto podkladu prosím vystavte fakturu.\n\nS pozdravem\nBest Series';
+}
+async function sendStatementMail(st, contract, opts) {
+  opts = opts || {};
+  const { sendMail } = require('../email');
+  const to = opts.to || contract.contact_email; if (!to) return { sent: false, error: 'Chybí e-mail kompetentní osoby' };
+  const cc = !opts.to && contract.cc_emails ? contract.cc_emails : undefined;
+  const buf = await pdf(st);
+  const r = await sendMail(Object.assign({}, await mailFrom(), {
+    to: cc ? to + ', ' + cc : to, brand: 'bs2',
+    subject: (opts.test ? '[TEST] ' : '') + 'Podklad pro fakturaci nájmu kiosku ' + st.kiosk_code + ' — ' + st.period_ym,
+    body: mailText(st, contract, !!opts.test),
+    attachments: [{ filename: 'najem-' + st.kiosk_code + '-' + st.period_ym + '.pdf', content: buf, contentType: 'application/pdf' }],
+  }));
+  return Object.assign({}, r, { to });
 }
 
-module.exports = { calc, generate, update, html, pdf, CATS };
+// Testovací e-mail: ukázkový podklad (skutečné tržby a faktury, pokud jdou načíst; jinak vzorová data) — NIC se neukládá.
+async function sendTest(contract, to) {
+  let rev = null; try { rev = await computePrevMonthRevenue(contract.kiosk_code, { from: toYmd(contract.effective_from), to: toYmd(contract.effective_to) }); } catch (e) { rev = null; }
+  if (rev && rev.empty) rev = null;
+  const real = !!(rev && rev.prevMonth > 0);
+  const base = rev || { prevMonthYm: new Date().toISOString().slice(0, 7), period_from: new Date().toISOString().slice(0, 8) + '01', period_to: new Date().toISOString().slice(0, 10), prevMonth: 0, partial: false, days: 30, month_days: 30 };
+  let inv = { lines: [], missing: [] }; try { inv = await pullInvoiceLines(contract, base); } catch (e) { /* bez faktur */ }
+  const lines = inv.lines.length ? inv.lines : [{ cat: 'D', label: 'Ukázka — faktura za nájem lokality', amount: 12100, vat_rate: 21, deductible: true }, { cat: 'E', label: 'Ukázka — faktura za energie', amount: 6050, vat_rate: 21, deductible: true }];
+  const st = { test: true, kiosk_code: contract.kiosk_code, customer_name: contract.customer_name, buyer_ico: contract.buyer_ico, period_ym: base.prevMonthYm, period_from: new Date(base.period_from + 'T00:00:00Z'), period_to: new Date(base.period_to + 'T00:00:00Z'), currency: contract.currency || 'CZK', vat_rate: Number(contract.vat_rate) || 21, fee_pct: Number(contract.fee_pct) || 13, revenue_sis: real ? base.prevMonth : 121000, revenue_adjust: 0, lines, status: 'draft', note: real ? null : 'UKÁZKA — vzorová data, tržby za minulý měsíc se nepodařilo načíst.' };
+  Object.assign(st, calc(st));
+  const r = await sendStatementMail(st, contract, { to, test: true });
+  return Object.assign({}, r, { sent_to: to, rent: st.rent, real_data: real });
+}
+
+// Zpracování jedné smlouvy za měsíc podle režimu (volá worker): draft = jen koncept, issue = vystavit, send = vystavit a odeslat.
+// Chybí-li očekávaná faktura (nájem/energie), podklad se nevydává automaticky — zůstane koncept s upozorněním a zkusí se znovu.
+async function processContract(contract, ym) {
+  const { statement, missing } = await generate(contract.id, ym);
+  if (contract.auto_mode === 'draft') return { statement, action: 'draft' };
+  if (missing.length) {
+    await prisma.kioskRentStatement.update({ where: { id: statement.id }, data: { send_error: 'Čeká na doklady: ' + missing.join(', ') } });
+    return { statement, action: 'held', missing };
+  }
+  const issued = await update(statement.id, { status: 'issued', lines: statement.lines });
+  if (contract.auto_mode !== 'send') { await prisma.kioskRentStatement.update({ where: { id: issued.id }, data: { send_error: null } }); return { statement: issued, action: 'issued' }; }
+  return Object.assign({ action: 'issued' }, await deliver(issued.id, contract));
+}
+// Odeslání vydaného podkladu e-mailem (zapíše sent_at / send_error)
+async function deliver(statementId, contract) {
+  const st = await prisma.kioskRentStatement.findUnique({ where: { id: statementId } });
+  let r; try { r = await sendStatementMail(st, contract); } catch (e) { r = { sent: false, error: e.message }; }
+  const upd = await prisma.kioskRentStatement.update({ where: { id: st.id }, data: r.sent ? { sent_at: new Date(), sent_to: r.to, send_error: null } : { send_error: String(r.error || r.skipped || 'neodesláno').slice(0, 500) } });
+  return { statement: upd, sent: !!r.sent, error: r.sent ? null : (r.error || r.skipped || 'neodesláno') };
+}
+
+module.exports = { calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };

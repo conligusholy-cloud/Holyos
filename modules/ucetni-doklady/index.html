@@ -551,15 +551,28 @@
               <b>D</b> = náklad na užívání lokality, <b>E</b> = energie a provozní média, <b>F</b> = pozáruční servis a náhradní díly (D–F bez DPH po odečtu nároku na odpočet).
               Záporný výsledek = vyúčtování nekrytých nákladů (odst. 4). Tržby se berou jen za dny, kdy smlouva běžela. Z podkladu uděláš PDF, podle kterého může subjekt fakturovat.
             </div>
+            <div style="font-size:13px; color:var(--text2); line-height:1.5; margin-bottom:12px;">
+              Pro každý kiosk založ <b>nájemní smlouvu</b>: stroj z Compoundingu, kompetentní osobu + e-mail, datum, od kdy se počítá, a <b>den v měsíci</b>, kdy se podklad za <b>minulý měsíc</b> vystaví.
+              Tržby (A) se berou ze SIS, <b>13 % servisní poplatek</b> se dopočítá z obratu a faktury za <b>nájem lokality (D)</b> a <b>energie (E)</b> se automaticky vyhledají v <b>přijatých dokladech</b> podle dodavatele a klíčového slova.
+              Režim: jen koncept · vystavit · <b>vystavit a automaticky odeslat</b> kompetentní osobě. Vizualizaci můžeš kdykoli poslat na <b>testovací e-mail</b>.
+            </div>
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" onclick="openRentContractModal()">+ Nová nájemní smlouva kiosku</button>
               <label style="font-size:13px;">Měsíc <input type="month" id="rent-ym" onchange="loadRent()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;"></label>
               <button class="btn btn-secondary btn-sm" onclick="loadRent()">🔄 Obnovit</button>
             </div>
           </div>
           <div class="pb-card" style="margin-top:16px;">
-            <h3>📋 Kiosky a podklady za měsíc</h3>
+            <h3>📋 Aktivní nájemní smlouvy a podklady za zvolený měsíc</h3>
             <table class="data-table" id="rent-table" style="width:100%;">
-              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Smlouva od–do</th><th>Tržby s DPH (A)</th><th>Nájemné</th><th>Stav</th><th></th></tr></thead>
+              <thead><tr><th>Stroj (kód)</th><th>Subjekt</th><th>Kompetentní osoba</th><th>Účinnost</th><th>Den / režim</th><th>Tržby s DPH (A)</th><th>Nájemné</th><th>Stav podkladu</th><th></th></tr></thead>
+              <tbody><tr><td colspan="9" class="empty-hint">Načítám…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="pb-card" style="margin-top:16px;">
+            <h3>🧾 Vystavené podklady k fakturaci nájmu</h3>
+            <table class="data-table" id="rentdocs-table" style="width:100%;">
+              <thead><tr><th>Číslo</th><th>Stroj</th><th>Subjekt</th><th>Měsíc</th><th>Nájemné</th><th>Odesláno</th><th></th></tr></thead>
               <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
             </table>
           </div>
@@ -2489,31 +2502,144 @@
       if (which === 'rent') loadRent();
     };
     const rentMoney = (n, cur) => Number(n || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + (cur || 'CZK');
-    window.__rentSt = [];
+    window.__rentSt = []; window.__rentContracts = [];
     window.loadRent = async function() {
       const ymEl = document.getElementById('rent-ym');
-      if (!ymEl.value) { const d = new Date(); d.setMonth(d.getMonth() - 1); ymEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+      if (!ymEl.value) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); ymEl.value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
       const ym = ymEl.value; const tb = document.querySelector('#rent-table tbody');
-      const [rs, rr] = await Promise.all([api('GET', '/api/compounder/service-subscriptions'), api('GET', '/api/compounder/rent-statements?ym=' + encodeURIComponent(ym))]);
-      if (rs.status !== 200 || !Array.isArray(rs.data)) { tb.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načtení (' + rs.status + ')</td></tr>'; return; }
-      window.__rentSt = Array.isArray(rr.data) ? rr.data : [];
+      const [rc, rr, ra] = await Promise.all([api('GET', '/api/compounder/rent-contracts'), api('GET', '/api/compounder/rent-statements?ym=' + encodeURIComponent(ym)), api('GET', '/api/compounder/rent-statements')]);
+      if (rc.status !== 200 || !Array.isArray(rc.data)) { tb.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba načtení (' + rc.status + ')</td></tr>'; return; }
+      window.__rentContracts = rc.data;
+      window.__rentSt = Array.isArray(ra.data) ? ra.data : (Array.isArray(rr.data) ? rr.data : []);
+      const forYm = Array.isArray(rr.data) ? rr.data : [];
       const fd = (v) => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '…';
-      tb.innerHTML = rs.data.length ? rs.data.map(s => {
-        const st = window.__rentSt.find(x => x.subscription_id === s.id);
-        return '<tr><td><b>' + escapeHtml(s.kiosk_code) + '</b></td><td>' + escapeHtml(s.customer_name || '—') + (s.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(s.buyer_ico) + '</div>' : '') + '</td>' +
-          '<td>' + fd(s.contract_start) + ' – ' + fd(s.contract_end) + '</td>' +
+      const MODE = { draft: 'jen koncept', issue: 'vystavit', send: 'vystavit + odeslat' };
+      tb.innerHTML = rc.data.length ? rc.data.map(c => {
+        const st = forYm.find(x => x.contract_id === c.id);
+        return '<tr' + (c.active ? '' : ' style="opacity:.55"') + '><td><b>' + escapeHtml(c.kiosk_code) + '</b></td><td>' + escapeHtml(c.customer_name || '—') + (c.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(c.buyer_ico) + '</div>' : '') + '</td>' +
+          '<td>' + escapeHtml(c.contact_name || '—') + '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(c.contact_email || 'bez e-mailu') + '</div></td>' +
+          '<td>' + fd(c.effective_from) + ' – ' + fd(c.effective_to) + '</td>' +
+          '<td>' + c.issue_day + '. v měsíci<div style="font-size:11px;color:var(--text2);">' + MODE[c.auto_mode] + '</div></td>' +
           '<td>' + (st ? rentMoney(st.revenue_gross, st.currency) : '—') + '</td>' +
-          '<td>' + (st ? '<b style="color:' + (Number(st.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(st.rent, st.currency) + '</b>' + (Number(st.rent) < 0 ? '<div style="font-size:11px;color:var(--text2);">záporné = vyúčtování nákladů</div>' : '') : '—') + '</td>' +
-          '<td>' + (st ? (st.status === 'issued' ? '<span style="color:#16a34a;font-weight:600;">vydáno ' + escapeHtml(st.doc_number || '') + '</span>' : '<span style="color:#f59e0b;">koncept</span>') : '<span style="color:var(--text2);">nevytvořeno</span>') + '</td>' +
-          '<td style="white-space:nowrap;">' + (st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + st.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + st.id + '/pdf" target="_blank">📄 PDF</a>'
-            : '<button class="btn btn-primary btn-sm" onclick="rentGenerate(' + s.id + ')">Vytvořit podklad</button>') + '</td></tr>';
-      }).join('') : '<tr><td colspan="7" class="empty-hint">Nejdřív přidej servisní smlouvu (stroj + subjekt) v sekci Fakturace servisní smlouvy.</td></tr>';
+          '<td>' + (st ? '<b style="color:' + (Number(st.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(st.rent, st.currency) + '</b>' : '—') + '</td>' +
+          '<td>' + (st ? (st.status === 'issued' ? '<span style="color:#16a34a;font-weight:600;">vydáno ' + escapeHtml(st.doc_number || '') + '</span>' + (st.sent_at ? '<div style="font-size:11px;color:var(--text2);">odesláno ' + new Date(st.sent_at).toLocaleDateString('cs-CZ') + '</div>' : (st.send_error ? '<div style="font-size:11px;color:#ef4444;">' + escapeHtml(st.send_error) + '</div>' : '')) : '<span style="color:#f59e0b;">koncept</span>' + (st.send_error ? '<div style="font-size:11px;color:#f59e0b;">' + escapeHtml(st.send_error) + '</div>' : '')) : '<span style="color:var(--text2);">nevytvořeno</span>') + '</td>' +
+          '<td style="white-space:nowrap;">' + (st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + st.id + ')">Otevřít</button> ' : '<button class="btn btn-primary btn-sm" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ') +
+            '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>';
+      }).join('') : '<tr><td colspan="9" class="empty-hint">Zatím žádná nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".</td></tr>';
+      const td = document.querySelector('#rentdocs-table tbody'); const issued = window.__rentSt.filter(x => x.status === 'issued');
+      td.innerHTML = issued.length ? issued.map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + escapeHtml(x.period_ym) + '</td><td><b>' + rentMoney(x.rent, x.currency) + '</b></td><td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + '</td>' +
+        '<td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-primary btn-sm" onclick="rentSendNow(' + x.id + ')">' + (x.sent_at ? '✉ Poslat znovu' : '✉ Odeslat') + '</button></td></tr>').join('')
+        : '<tr><td colspan="7" class="empty-hint">Zatím žádný vystavený podklad.</td></tr>';
     };
-    window.rentGenerate = async function(subId) {
+    window.rentGenerate = async function(contractId) {
       const ym = document.getElementById('rent-ym').value;
-      const r = await api('POST', '/api/compounder/rent-statements/generate', { subscription_id: subId, ym });
+      const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: contractId, ym });
       if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
-      await loadRent(); openRentModal(r.data.id);
+      await loadRent();
+      if (r.data.missing && r.data.missing.length) alert('Pozor, v přijatých dokladech za tento měsíc zatím nenalezeno: ' + r.data.missing.join(', ') + '. Můžeš je doplnit ručně v podkladu.');
+      openRentModal(r.data.id);
+    };
+    window.rentSendNow = async function(id) {
+      if (!confirm('Odeslat podklad e-mailem kompetentní osobě?')) return;
+      const r = await api('POST', '/api/compounder/rent-statements/' + id + '/send', {});
+      if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      alert('Odesláno na ' + r.data.sent_to); loadRent();
+    };
+    // ── Nájemní smlouva kiosku (definice) ──
+    function rulesHtml(kind, rules, companies, inp) {
+      const opts = (sel) => '<option value="">— dodavatel —</option>' + companies.map(c => '<option value="' + c.id + '"' + (String(sel) === String(c.id) ? ' selected' : '') + '>' + escapeHtml(c.name) + '</option>').join('');
+      return (rules || []).map((r, i) => '<div style="display:grid;grid-template-columns:1fr 130px 70px 28px;gap:6px;margin-bottom:4px;"><select data-rk="' + kind + '" data-i="' + i + '" data-f="company_id" style="' + inp + '">' + opts(r.company_id) + '</select><input data-rk="' + kind + '" data-i="' + i + '" data-f="keyword" value="' + escapeHtml(r.keyword || '') + '" placeholder="klíč. slovo" style="' + inp + '"><input data-rk="' + kind + '" data-i="' + i + '" data-f="share_pct" type="number" min="1" max="100" value="' + (r.share_pct || 100) + '" title="Podíl na tento kiosk v %" style="' + inp + '"><button type="button" class="btn btn-danger btn-sm" onclick="rentRuleDel(\'' + kind + '\',' + i + ')">✕</button></div>').join('')
+        + '<button type="button" class="btn btn-secondary btn-sm" onclick="rentRuleAdd(\'' + kind + '\')">+ dodavatel</button>';
+    }
+    window.openRentContractModal = async function(id) {
+      const c = id ? window.__rentContracts.find(x => x.id === id) : null;
+      const kiosks = await loadKiosks();
+      if (!window.__companies) { const rc = await api('GET', '/api/wh/companies'); window.__companies = (rc.status === 200 && Array.isArray(rc.data)) ? rc.data : []; }
+      const used = new Set((window.__rentContracts || []).map(x => x.kiosk_code));
+      const kObj = c ? kiosks.find(k => k.code === c.kiosk_code) : null;
+      const kioskLabel = c ? (kObj ? (kObj.label || kObj.code) + ' (' + kObj.code + ')' : c.kiosk_code) : '';
+      window.__rcDraft = { id: id || 0, rent_rules: ((c && c.rent_rules) || []).map(r => Object.assign({}, r)), energy_rules: ((c && c.energy_rules) || []).map(r => Object.assign({}, r)) };
+      const v = (k, d) => escapeHtml(String(c && c[k] != null ? c[k] : d));
+      const dv = (k) => c && c[k] ? String(c[k]).slice(0, 10) : '';
+      const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;width:100%;';
+      document.getElementById('modal-root').innerHTML = `
+        <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+          <div style="background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width:min(640px,95vw); max-height:92vh; overflow:auto; position:relative;">
+            <button type="button" onclick="closeModal()" title="Zavřít" style="position:absolute; top:10px; right:12px; background:none; border:0; color:var(--text2); font-size:22px; line-height:1; cursor:pointer; padding:4px 8px;">✕</button>
+            <h3 style="margin-top:0; padding-right:30px;">${c ? 'Upravit nájemní smlouvu kiosku' : '+ Nová nájemní smlouva kiosku'}</h3>
+            <div style="display:grid; grid-template-columns: 170px 1fr; gap:10px; align-items:center;">
+              <label>Stroj (Compounding) *</label>${comboHtml('rc-kiosk', 'Začni psát: lokalita, název nebo kód stroje…', kioskLabel, c ? c.kiosk_code : '', !!c, inp)}
+              <label>Subjekt (Nájemce) *</label><input id="rc-name" value="${v('customer_name', '')}" placeholder="Doplní se z Compoundingu po výběru stroje" style="${inp}">
+              <label>IČO subjektu</label><input id="rc-ico" value="${v('buyer_ico', '')}" style="${inp}">
+              <label>Kompetentní osoba</label><input id="rc-contact" value="${v('contact_name', '')}" placeholder="jméno a příjmení" style="${inp}">
+              <label>E-mail pro podklad *</label><input id="rc-email" type="email" value="${v('contact_email', '')}" placeholder="kam se podklad pošle" style="${inp}">
+              <label>Další příjemci (kopie)</label><input id="rc-cc" value="${v('cc_emails', '')}" placeholder="volitelně, oddělené čárkou" style="${inp}">
+              <label>Účinnost od *</label><input id="rc-from" type="date" value="${dv('effective_from')}" style="${inp}">
+              <label>Účinnost do</label><input id="rc-to" type="date" value="${dv('effective_to')}" style="${inp}">
+              <label>Den vystavení v měsíci</label><div><input id="rc-day" type="number" min="1" max="28" value="${v('issue_day', 5)}" style="${inp}"><div style="font-size:11px;color:var(--text2);margin-top:3px;">V tento den se vystaví podklad za <b>minulý měsíc</b>.</div></div>
+              <label>Režim</label><select id="rc-mode" style="${inp}"><option value="draft"${c && c.auto_mode === 'draft' || !c ? ' selected' : ''}>Jen vytvořit koncept (vydám ručně)</option><option value="issue"${c && c.auto_mode === 'issue' ? ' selected' : ''}>Automaticky vystavit (bez odeslání)</option><option value="send"${c && c.auto_mode === 'send' ? ' selected' : ''}>Automaticky vystavit a odeslat e-mailem</option></select>
+              <label>Poplatek (% z tržeb vč. DPH)</label><input id="rc-fee" type="number" step="0.01" value="${v('fee_pct', 13)}" style="${inp}">
+              <label>DPH (%) / Měna</label><div style="display:flex;gap:8px;"><input id="rc-vat" type="number" step="0.01" value="${v('vat_rate', 21)}" style="${inp}"><input id="rc-cur" maxlength="3" value="${v('currency', 'CZK')}" style="${inp}"></div>
+              <label>Odpočet DPH u D–F</label><label style="display:flex;gap:8px;align-items:center;"><input id="rc-ded" type="checkbox" ${!c || c.vat_deductible !== false ? 'checked' : ''}> Nájemce má nárok na odpočet (do nákladu jen základ bez DPH)</label>
+              <label style="align-self:start;padding-top:6px;">Faktury za nájem lokality (D)</label><div id="rc-rent-rules"></div>
+              <label style="align-self:start;padding-top:6px;">Faktury za energie (E)</label><div id="rc-energy-rules"></div>
+              <label>Poznámka</label><input id="rc-note" value="${v('note', '')}" style="${inp}">
+              <label>Aktivní</label><label style="display:flex;gap:8px;align-items:center;"><input id="rc-active" type="checkbox" ${!c || c.active ? 'checked' : ''}> automaticky zpracovávat</label>
+              <label>Testovací e-mail</label><div><div style="display:flex;gap:8px;"><input id="rc-testto" type="email" placeholder="na jaký e-mail poslat vizualizaci" value="${escapeHtml((window.currentUser && window.currentUser.email) || '')}" style="${inp}"><button type="button" class="btn btn-secondary btn-sm" onclick="rentContractTest()" style="white-space:nowrap;">✉ Poslat test</button></div><div id="rc-testres" style="font-size:11.5px;color:var(--text2);margin-top:4px;">${c ? 'Pošle ukázkový podklad (PDF) se skutečnými tržbami a fakturami, nic se neukládá.' : 'Test lze poslat po uložení smlouvy.'}</div></div>
+            </div>
+            <div style="font-size:11.5px;color:var(--text2);margin-top:8px;">Pravidla D/E: u každého dodavatele (z přijatých dokladů) lze zadat klíčové slovo v popisu položky a podíl na tento kiosk v %. Faktury se hledají podle DUZP v měsíci podkladu.</div>
+            <div style="display:flex; gap:10px; justify-content:space-between; margin-top:18px;">
+              <div>${c ? '<button class="btn btn-danger btn-sm" onclick="rentContractDelete(' + c.id + ')">Smazat</button>' : ''}</div>
+              <div style="display:flex;gap:10px;"><button class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button class="btn btn-primary" onclick="saveRentContract(${c ? c.id : 0})">Uložit</button></div>
+            </div>
+          </div>
+        </div>`;
+      initCombo('rc-kiosk', kiosks.map(k => ({ v: k.code, label: (k.label || k.code) + ' (' + k.code + ')', tag: used.has(k.code) ? 'už má smlouvu' : '', hay: (k.label || '') + ' ' + k.code })), (code) => {
+        const k = (window.__kiosks || []).find(x => x.code === code); if (!k) return;
+        if (k.currency) document.getElementById('rc-cur').value = k.currency;
+        const op = String(k.companyName || '').trim(); if (op) document.getElementById('rc-name').value = op;
+      });
+      rcRenderRules();
+      const root = document.getElementById('modal-root');
+      root.onchange = function(e) { const t = e.target; if (!t.dataset || !t.dataset.rk) return; const r = window.__rcDraft[t.dataset.rk][parseInt(t.dataset.i, 10)]; if (!r) return; r[t.dataset.f] = t.dataset.f === 'company_id' ? (parseInt(t.value, 10) || null) : (t.dataset.f === 'share_pct' ? (Number(t.value) || 100) : t.value); };
+    };
+    function rcRenderRules() {
+      const inp = 'background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;width:100%;';
+      const co = window.__companies || [];
+      document.getElementById('rc-rent-rules').innerHTML = rulesHtml('rent_rules', window.__rcDraft.rent_rules, co, inp);
+      document.getElementById('rc-energy-rules').innerHTML = rulesHtml('energy_rules', window.__rcDraft.energy_rules, co, inp);
+    }
+    window.rentRuleAdd = function(kind) { window.__rcDraft[kind].push({ company_id: null, keyword: '', share_pct: 100 }); rcRenderRules(); };
+    window.rentRuleDel = function(kind, i) { window.__rcDraft[kind].splice(i, 1); rcRenderRules(); };
+    function rcBody() {
+      const g = (i) => document.getElementById(i).value.trim();
+      const clean = (rs) => rs.filter(r => r.company_id).map(r => ({ company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: Number(r.share_pct) || 100 }));
+      return { kiosk_code: g('rc-kiosk'), customer_name: g('rc-name') || null, buyer_ico: g('rc-ico') || null, contact_name: g('rc-contact') || null, contact_email: g('rc-email') || null, cc_emails: g('rc-cc') || null,
+        effective_from: g('rc-from'), effective_to: g('rc-to') || null, issue_day: Math.min(28, Math.max(1, parseInt(g('rc-day'), 10) || 5)), auto_mode: g('rc-mode'),
+        fee_pct: Number(g('rc-fee')) || 13, vat_rate: Number(g('rc-vat')) || 21, currency: (g('rc-cur') || 'CZK').toUpperCase(), vat_deductible: document.getElementById('rc-ded').checked,
+        rent_rules: clean(window.__rcDraft.rent_rules), energy_rules: clean(window.__rcDraft.energy_rules), note: g('rc-note') || null, active: document.getElementById('rc-active').checked };
+    }
+    window.saveRentContract = async function(id) {
+      const b = rcBody();
+      if (!b.kiosk_code) return alert('Vyber stroj.'); if (!b.customer_name) return alert('Vyplň subjekt (Nájemce).'); if (!b.effective_from) return alert('Zadej, od kdy smlouva platí.');
+      if (b.effective_to && b.effective_to < b.effective_from) return alert('Konec smlouvy je dřív než její začátek.');
+      if (b.auto_mode === 'send' && !b.contact_email) return alert('Pro automatické odesílání vyplň e-mail kompetentní osoby.');
+      const r = id ? await api('PUT', '/api/compounder/rent-contracts/' + id, b) : await api('POST', '/api/compounder/rent-contracts', b);
+      if (r.status !== 200 && r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      closeModal(); loadRent();
+    };
+    window.rentContractDelete = async function(id) {
+      if (!confirm('Smazat nájemní smlouvu kiosku? Už vytvořené podklady zůstanou.')) return;
+      await api('DELETE', '/api/compounder/rent-contracts/' + id); closeModal(); loadRent();
+    };
+    window.rentContractTest = async function() {
+      const res = document.getElementById('rc-testres'); const id = window.__rcDraft.id;
+      if (!id) { res.style.color = '#f59e0b'; res.textContent = 'Nejdřív smlouvu ulož, pak půjde poslat test.'; return; }
+      const to = document.getElementById('rc-testto').value.trim(); if (!to) { res.style.color = '#ef4444'; res.textContent = 'Zadej e-mail pro test.'; return; }
+      res.style.color = 'var(--text2)'; res.textContent = 'Odesílám test…';
+      const r = await api('POST', '/api/compounder/rent-contracts/' + id + '/test-email', { to });
+      if (r.status !== 200 || !r.data || !r.data.ok) { res.style.color = '#ef4444'; res.textContent = 'Chyba: ' + ((r.data && (r.data.error + (r.data.reason ? ' (' + r.data.reason + ')' : ''))) || r.status); return; }
+      res.style.color = '#16a34a'; res.textContent = '✓ Odesláno na ' + r.data.sent_to + (r.data.real_data ? ' (skutečná data za minulý měsíc)' : ' (vzorová data — tržby se nepodařilo načíst)') + '. Zkontroluj schránku (i spam).';
     };
     function rentCalc(st, lines) {
       const vat = Number(st.vat_rate) || 0, fee = Number(st.fee_pct) || 0;
@@ -2564,7 +2690,7 @@
             <div style="margin-top:12px;"><label style="font-size:12px;color:var(--text2);">Poznámka</label><input value="${escapeHtml(st.note || '')}" onchange="window.__rentCur.st.note=this.value;rentSave()" style="${inp}"${dis}></div>
             <div style="display:flex; gap:10px; justify-content:space-between; margin-top:18px; flex-wrap:wrap;">
               <div style="display:flex;gap:8px;"><a class="btn btn-secondary" href="/api/compounder/rent-statements/${st.id}/pdf" target="_blank">📄 PDF podklad</a>${issued ? '<button class="btn btn-secondary" onclick="rentStatus(\'draft\')">Vrátit do konceptu</button>' : '<button class="btn btn-danger btn-sm" onclick="rentDelete()">Smazat</button>'}</div>
-              <div style="display:flex;gap:8px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>${issued ? '' : '<button class="btn btn-primary" onclick="rentStatus(\'issued\')">Vydat podklad</button>'}</div>
+              <div style="display:flex;gap:8px;"><button class="btn btn-secondary" onclick="closeModal()">Zavřít</button>${issued ? '<button class="btn btn-primary" onclick="closeModal();rentSendNow(' + st.id + ')">✉ ' + (st.sent_at ? 'Poslat znovu' : 'Odeslat kompetentní osobě') + '</button>' : '<button class="btn btn-primary" onclick="rentStatus(\'issued\')">Vydat podklad</button>'}</div>
             </div>
           </div>
         </div>`;

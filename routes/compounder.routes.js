@@ -4231,11 +4231,87 @@ router.get('/rent-statements', requireAuth, async (req, res, next) => {
     res.json(await prisma.kioskRentStatement.findMany({ where, orderBy: [{ period_ym: 'desc' }, { kiosk_code: 'asc' }], take: 500 }));
   } catch (err) { next(err); }
 });
-// POST /rent-statements/generate { subscription_id, ym? } — vytvoří/obnoví koncept (tržby ze SIS jen za dny trvání smlouvy)
+// ── Nájemní smlouvy kiosků (definice automatických podkladů) ──
+const rentRuleSchema = z.array(z.object({ company_id: z.number().int(), keyword: z.string().max(80).optional().nullable(), share_pct: z.number().min(0).max(100).optional().nullable() })).optional().nullable();
+const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const rentContractSchema = z.object({
+  kiosk_code: z.string().min(1).max(40), customer_name: z.string().max(255).optional().nullable(), buyer_ico: z.string().max(20).optional().nullable(),
+  contact_name: z.string().max(255).optional().nullable(), contact_email: z.string().max(255).optional().nullable(), cc_emails: z.string().max(500).optional().nullable(),
+  effective_from: dateStr, effective_to: dateStr.optional().nullable().or(z.literal('')),
+  issue_day: z.number().int().min(1).max(28).optional(), auto_mode: z.enum(['draft', 'issue', 'send']).optional(), active: z.boolean().optional(),
+  currency: z.string().max(3).optional(), vat_rate: z.number().optional(), fee_pct: z.number().optional(), vat_deductible: z.boolean().optional(),
+  rent_rules: rentRuleSchema, energy_rules: rentRuleSchema, note: z.string().max(2000).optional().nullable(),
+});
+function rentContractData(d) {
+  const out = {};
+  ['kiosk_code', 'customer_name', 'buyer_ico', 'contact_name', 'contact_email', 'cc_emails', 'note'].forEach(function (k) { if (d[k] !== undefined) out[k] = d[k] ? String(d[k]).trim() : null; });
+  if (d.effective_from) out.effective_from = new Date(d.effective_from + 'T00:00:00Z');
+  if (d.effective_to !== undefined) out.effective_to = d.effective_to ? new Date(d.effective_to + 'T00:00:00Z') : null;
+  ['issue_day', 'vat_rate', 'fee_pct'].forEach(function (k) { if (d[k] !== undefined) out[k] = d[k]; });
+  if (d.auto_mode) out.auto_mode = d.auto_mode;
+  if (d.currency) out.currency = d.currency.toUpperCase().slice(0, 3);
+  ['active', 'vat_deductible'].forEach(function (k) { if (d[k] !== undefined) out[k] = !!d[k]; });
+  ['rent_rules', 'energy_rules'].forEach(function (k) { if (d[k] !== undefined) out[k] = (d[k] || []).map(function (r) { return { company_id: r.company_id, keyword: (r.keyword || '').trim() || null, share_pct: r.share_pct || 100 }; }); });
+  return out;
+}
+router.get('/rent-contracts', requireAuth, async (req, res, next) => {
+  try { res.json(await prisma.kioskRentContract.findMany({ orderBy: { kiosk_code: 'asc' } })); } catch (err) { next(err); }
+});
+router.post('/rent-contracts', requireAuth, async (req, res, next) => {
+  try {
+    const p = rentContractSchema.safeParse(req.body); if (!p.success) return res.status(400).json({ error: 'Neplatná data: ' + p.error.issues.map(function (i) { return i.path.join('.'); }).join(', ') });
+    const data = rentContractData(p.data);
+    if (data.auto_mode === 'send' && !data.contact_email) return res.status(400).json({ error: 'Pro automatické odesílání vyplň e-mail kompetentní osoby.' });
+    res.status(201).json(await prisma.kioskRentContract.create({ data }));
+  } catch (err) { if (err && err.code === 'P2002') return res.status(409).json({ error: 'Pro tento stroj už nájemní smlouva existuje.' }); next(err); }
+});
+router.put('/rent-contracts/:id', requireAuth, async (req, res, next) => {
+  try {
+    const p = rentContractSchema.partial().safeParse(req.body); if (!p.success) return res.status(400).json({ error: 'Neplatná data' });
+    const data = rentContractData(p.data);
+    if (data.auto_mode === 'send' && data.contact_email === null) return res.status(400).json({ error: 'Pro automatické odesílání vyplň e-mail kompetentní osoby.' });
+    res.json(await prisma.kioskRentContract.update({ where: { id: parseInt(req.params.id, 10) }, data }));
+  } catch (err) { next(err); }
+});
+router.delete('/rent-contracts/:id', requireAuth, async (req, res, next) => {
+  try { await prisma.kioskRentContract.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); } catch (err) { next(err); }
+});
+// POST /rent-contracts/:id/test-email { to } — ukázkový podklad na testovací e-mail (nic se neukládá)
+router.post('/rent-contracts/:id/test-email', requireAuth, async (req, res, next) => {
+  try {
+    const c = await prisma.kioskRentContract.findUnique({ where: { id: parseInt(req.params.id, 10) } }); if (!c) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const to = String((req.body && req.body.to) || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ error: 'Zadej platný e-mail, na který se má test poslat.' });
+    const r = await require('../services/compounder/rent-statement').sendTest(c, to);
+    if (!r.sent) return res.status(502).json({ error: 'Testovací e-mail se nepodařilo odeslat', reason: r.error || r.skipped || 'unknown' });
+    res.json({ ok: true, sent_to: to, real_data: r.real_data, rent: r.rent });
+  } catch (err) { next(err); }
+});
+// POST /rent-contracts/:id/run { ym? } — zpracuje měsíc hned podle režimu smlouvy (koncept / vystavit / vystavit a odeslat)
+router.post('/rent-contracts/:id/run', requireAuth, async (req, res, next) => {
+  try {
+    const c = await prisma.kioskRentContract.findUnique({ where: { id: parseInt(req.params.id, 10) } }); if (!c) return res.status(404).json({ error: 'Smlouva nenalezena' });
+    const r = await require('../services/compounder/rent-statement').processContract(c, (req.body && req.body.ym) || null);
+    res.json({ action: r.action, missing: r.missing || [], sent: r.sent, error: r.error || null, statement_id: r.statement && r.statement.id });
+  } catch (err) { if (err && err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+// POST /rent-statements/:id/send — odeslat vydaný podklad e-mailem kompetentní osobě
+router.post('/rent-statements/:id/send', requireAuth, async (req, res, next) => {
+  try {
+    const st = await prisma.kioskRentStatement.findUnique({ where: { id: parseInt(req.params.id, 10) } }); if (!st) return res.status(404).json({ error: 'Podklad nenalezen' });
+    const c = st.contract_id ? await prisma.kioskRentContract.findUnique({ where: { id: st.contract_id } }) : null; if (!c) return res.status(400).json({ error: 'Podklad nemá nájemní smlouvu.' });
+    if (st.status !== 'issued') return res.status(400).json({ error: 'Nejdřív podklad vystav.' });
+    const r = await require('../services/compounder/rent-statement').deliver(st.id, c);
+    if (!r.sent) return res.status(502).json({ error: 'Odeslání selhalo: ' + r.error });
+    res.json({ ok: true, sent_to: r.statement.sent_to });
+  } catch (err) { next(err); }
+});
+// POST /rent-statements/generate { contract_id, ym? } — vytvoří/obnoví koncept (tržby ze SIS jen za dny trvání smlouvy, D/E z přijatých faktur)
 router.post('/rent-statements/generate', requireAuth, async (req, res, next) => {
   try {
-    const sid = parseInt(req.body && req.body.subscription_id, 10); if (!sid) return res.status(400).json({ error: 'Chybí smlouva.' });
-    res.status(201).json(await require('../services/compounder/rent-statement').generate(sid, req.body.ym || null));
+    const cid = parseInt(req.body && req.body.contract_id, 10); if (!cid) return res.status(400).json({ error: 'Chybí smlouva.' });
+    const g = await require('../services/compounder/rent-statement').generate(cid, req.body.ym || null);
+    res.status(201).json(Object.assign({}, g.statement, { missing: g.missing }));
   } catch (err) {
     if (err && err.status) return res.status(err.status).json({ error: err.message });
     if (err && err.code === 'SIS_NOT_CONFIGURED') return res.status(400).json({ error: 'SIS není nakonfigurovaný (chybí SIS_KIOSK_API_KEY).' });
