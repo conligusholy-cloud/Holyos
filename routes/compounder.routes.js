@@ -4262,7 +4262,7 @@ router.get('/rent-statements/:id/candidates', requireAuth, async (req, res, next
         items: (i.items || []).map((it) => ({ id: it.id, description: it.description, subtotal: Number(it.subtotal), vat_rate: Number(it.vat_rate), total: Number(it.total), match: kws.length ? kws.some((k) => kwMatch(it.description, k)) : false })),
       };
     });
-    res.json({ cat, fallback, companies: Array.from(new Set(invs.map((i) => i.company && i.company.name).filter(Boolean))), period_ym: st.period_ym, invoices: out });
+    res.json({ cat, fallback, has_keywords: !fallback && kws.length > 0, keywords: Array.from(new Set(kws)).join(' · '), companies: Array.from(new Set(invs.map((i) => i.company && i.company.name).filter(Boolean))), period_ym: st.period_ym, invoices: out });
   } catch (err) { next(err); }
 });
 // ── Nájemní smlouvy kiosků (definice automatických podkladů) ──

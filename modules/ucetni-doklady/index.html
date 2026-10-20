@@ -2776,7 +2776,7 @@
     window.rentSugDismiss = function(i) { window.__rentCur.suggestions.splice(i, 1); renderRentModal(); rentSave(); };
     // Ruční výběr dokladu: výpis všech přijatých dokladů od společností zadaných ve smlouvě
     window.rentFindDoc = async function(id, cat) {
-      window.__rentPick = { id, cat: cat || 'D', q: '', onlyPeriod: false, all: false, data: null };
+      window.__rentPick = { id, cat: cat || 'D', q: '', onlyPeriod: false, all: false, onlyRule: null, data: null };
       await rentPickLoad();
     };
     async function rentPickLoad() {
@@ -2787,6 +2787,7 @@
     }
     window.rentPickCat = function(c) { window.__rentPick.cat = c; rentPickLoad(); };
     window.rentPickFilter = function(v) { window.__rentPick.q = v; rentPickRender(true); };
+    window.rentPickRule = function(v) { window.__rentPick.onlyRule = !!v; rentPickRender(true); };
     window.rentPickAll = function(v) { window.__rentPick.all = !!v; rentPickLoad(); };
     window.rentPickPeriod = function(v) { window.__rentPick.onlyPeriod = !!v; rentPickRender(true); };
     function rentPickRender(keepFocus) {
@@ -2795,13 +2796,20 @@
       const CATN = { D: 'Nájem lokality (D)', E: 'Energie (E)', F: 'Servis / díly (F)' };
       const q = comboNorm(pk.q);
       const fmtD = v => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '—';
-      const list = (d.invoices || []).filter(i => (!pk.onlyPeriod || i.in_period) && (!q || comboNorm(i.number + ' ' + i.company + ' ' + i.items.map(x => x.description).join(' ')).includes(q)));
+      const hasRule = (d.invoices || []).some(i => i.items.some(x => x.match)) || !!d.has_keywords;
+      if (pk.onlyRule === null) pk.onlyRule = !!d.has_keywords;
+      const list = (d.invoices || []).map(i => {
+        if (pk.onlyPeriod && !i.in_period) return null;
+        const headHit = !q || comboNorm(i.number + ' ' + i.company).includes(q);
+        const its = i.items.filter(x => (!pk.onlyRule || x.match) && (headHit || comboNorm(x.description).includes(q)));
+        return its.length ? Object.assign({}, i, { items: its }) : null;
+      }).filter(Boolean);
       const body = d.no_rules ? '<div style="padding:14px;color:#f59e0b;">Ve smlouvě není u nájmu/energií/servisu zadaný žádný dodavatel. Otevři smlouvu (Upravit) a přidej pravidlo s dodavatelem, např. Tesco Stores ČR.</div>'
         : list.length ? list.map(i => '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;padding:8px 10px;' + (i.in_period ? 'border-color:#6366f1;' : '') + '">'
           + '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:12.5px;"><div><b>' + escapeHtml(i.number || '') + '</b> · ' + escapeHtml(i.company || '') + ' · DUZP ' + fmtD(i.date_taxable || i.date_issued) + (i.status === 'draft' ? ' <span style="color:#f59e0b;">· ke schválení</span>' : '') + (i.in_period ? ' <span style="color:#818cf8;font-weight:600;">· v období podkladu</span>' : '') + '</div><div>' + rentMoney(i.total, i.currency) + '</div></div>'
           + i.items.map(it => '<div style="display:grid;grid-template-columns:1fr 110px 50px 90px;gap:8px;align-items:center;padding:4px 0;border-top:1px dashed var(--border);font-size:12.5px;margin-top:4px;' + (it.match ? 'background:rgba(34,197,94,.08);' : '') + '"><div>' + escapeHtml(it.description) + (it.match ? ' <span style="color:#16a34a;font-size:11px;">✓ odpovídá pravidlu</span>' : '') + '</div><div style="text-align:right;">' + rentMoney(it.subtotal, '') + ' bez DPH</div><div style="text-align:right;">' + Number(it.vat_rate) + ' %</div><div style="text-align:right;">'
             + (st.status === 'issued' ? '' : (i.used ? '<span style="color:#16a34a;font-size:11.5px;">✓ použito</span>' : '<button class="btn btn-primary btn-sm" onclick="rentPickUse(' + i.id + ',' + it.id + ')">Použít</button>')) + '</div></div>').join('') + '</div>').join('')
-        : '<div style="padding:14px;color:var(--text2);">Žádné doklady' + (pk.onlyPeriod ? ' v období podkladu — zkus vypnout filtr „jen za měsíc“.' : ' od tohoto dodavatele.') + '</div>';
+        : '<div style="padding:14px;color:var(--text2);">Žádné doklady' + (pk.onlyPeriod ? ' v období podkladu — zkus vypnout filtr „jen za měsíc“.' : (pk.onlyRule ? ' odpovídající pravidlu smlouvy (' + escapeHtml(d.keywords || '') + ') — zkus vypnout filtr „jen dle pravidla“ nebo hledej ručně.' : ' od tohoto dodavatele.')) + '</div>';
       const prev = document.getElementById('rp-q'); const hadFocus = keepFocus && prev && document.activeElement === prev;
       document.getElementById('modal-root').innerHTML = `
         <div class="modal-backdrop" onclick="if(event.target===this)closeModal()" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
@@ -2812,6 +2820,7 @@
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
               ${['D', 'E', 'F'].map(c => '<button class="btn ' + (c === pk.cat ? 'btn-primary' : 'btn-secondary') + ' btn-sm" onclick="rentPickCat(\'' + c + '\')">' + CATN[c] + '</button>').join('')}
               <input id="rp-q" type="text" placeholder="Hledat (číslo, popis…)" value="${escapeHtml(pk.q)}" oninput="rentPickFilter(this.value)" style="flex:1;min-width:160px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;">
+              ${d.has_keywords ? '<label style="font-size:12px;color:var(--text2);" title="Zobrazí jen položky odpovídající klíčovému slovu v pravidle smlouvy: ' + escapeHtml(d.keywords || '') + '"><input type="checkbox" ' + (pk.onlyRule ? 'checked' : '') + ' onchange="rentPickRule(this.checked)"> jen dle pravidla (' + escapeHtml(d.keywords || '') + ')</label>' : ''}
               <label style="font-size:12px;color:var(--text2);"><input type="checkbox" ${pk.onlyPeriod ? 'checked' : ''} onchange="rentPickPeriod(this.checked)"> jen za měsíc podkladu</label>
               <label style="font-size:12px;color:var(--text2);" title="Všechny přijaté doklady za měsíc podkladu bez ohledu na dodavatele (např. když je doklad přiřazený jiné společnosti)"><input type="checkbox" ${pk.all ? 'checked' : ''} onchange="rentPickAll(this.checked)"> všichni dodavatelé (za měsíc)</label>
             </div>
