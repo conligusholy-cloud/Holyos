@@ -724,8 +724,8 @@
     (function () {
       const st = document.createElement('style');
       st.textContent = `
-        .po-overlay { overflow:auto; align-items:flex-start !important; padding:26px 12px 60px; }
-        .po-sheet { background:#fbfaf6; color:#1d2433; width:min(1020px,100%); margin:0 auto; border-radius:4px; padding:40px 54px 34px; position:relative;
+        .po-overlay { overflow:auto; display:flex !important; align-items:center !important; justify-content:center !important; padding:26px 12px; }
+        .po-sheet { background:#fbfaf6; color:#1d2433; width:min(1020px,100%); margin:auto; border-radius:4px; padding:40px 54px 34px; position:relative;
           box-shadow:0 36px 90px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.1); border-top:6px solid #6366f1; font-size:13.5px; }
         .po-top { position:absolute; top:12px; right:16px; display:flex; gap:8px; align-items:center; }
         #po-saved { font-size:12px; font-weight:700; opacity:0; transition:opacity .4s; margin-right:6px; }
