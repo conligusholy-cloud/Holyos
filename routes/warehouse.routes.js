@@ -758,6 +758,15 @@ async function nextPurchaseNumber() {
   return 'PO-' + year + '-' + Date.now().toString().slice(-6);
 }
 
+// Nákupní report z plánovače je drahý (MRP přes všechny dávky) → krátká cache 90 s
+let _prCache = { at: 0, data: null };
+async function getPurchaseReportCached() {
+  if (_prCache.data && Date.now() - _prCache.at < 90000) return _prCache.data;
+  const data = await require('../services/planning/purchase-report').computePurchaseReport({});
+  _prCache = { at: Date.now(), data };
+  return data;
+}
+
 // GET /api/wh/orders/purchase-assist — chytrý asistent tvorby nákupní objednávky
 //   bez supplier_id: dodavatelé, u kterých je zboží pod minimem (přehled „co je potřeba objednat")
 //   se supplier_id: údaje dodavatele, podmínky z poslední objednávky a návrh položek (nedostatek – už objednáno)
@@ -776,22 +785,38 @@ router.get('/orders/purchase-assist', async (req, res, next) => {
     }) : [];
     const incoming = {};
     for (const it of open) { const r = incoming[it.material_id] || (incoming[it.material_id] = { qty: 0, orders: [] }); r.qty += Math.max(0, Number(it.quantity) - Number(it.delivered_quantity)); if (!r.orders.includes(it.order.order_number)) r.orders.push(it.order.order_number); }
+    // Potřeba výroby: nedostatek materiálu napříč aktivními výrobními dávkami (MRP) + termín = start dávky
+    const prod = {};
+    try {
+      const rep = await getPurchaseReportCached();
+      for (const it of rep.items || []) {
+        const mid = it.material && it.material.id; if (!mid) continue;
+        prod[mid] = { shortage: Number(it.total_shortage) || 0, needed_by: it.needed_by || null, batches: (it.contributors || []).map((c) => ({ batch_number: c.batch_number, product: c.product, planned_start: c.planned_start, shortage: c.shortage })) };
+      }
+    } catch (e) { console.warn('[purchase-assist] výrobní potřeba nedostupná:', e.message); }
+    const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+    const roundQty = (m, qty) => { const mult = Number(m.processed_in_multiples) || 0; if (mult > 0) qty = Math.ceil(qty / mult) * mult; const bmin = Number(m.batch_size_min) || 0; if (bmin > 0 && qty < bmin) qty = bmin; return Math.round(qty * 100) / 100; };
     const suggestions = [];
     for (const m of mats) {
       const stock = Number(m.current_stock) || 0; const min = Number(m.min_stock) || 0; const max = Number(m.max_stock) || 0;
-      const inc = (incoming[m.id] && incoming[m.id].qty) || 0;
-      if (!(min > 0)) continue;
-      if (stock + inc >= min) continue; // zásoba (i s již objednaným) pokrývá minimum
+      const inc = (incoming[m.id] && incoming[m.id].qty) || 0; const lead = Number(m.lead_time_days) || 0;
+      const base = { material_id: m.id, supplier_id: m.supplier_id, code: m.code, name: m.name, unit: m.unit, stock, min_stock: min, incoming: inc, incoming_orders: (incoming[m.id] && incoming[m.id].orders) || [], unit_price: Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: lead };
+      // 1) Do výroby — přesně to, co plán potřebuje (po odečtení již objednaného), s termínem
+      const p = prod[m.id]; const open = p ? p.shortage - inc : 0;
+      if (p && open > 0.0001) {
+        const needed = p.needed_by ? new Date(p.needed_by) : null; const orderBy = needed ? new Date(needed.getTime() - lead * 86400000) : null;
+        suggestions.push(Object.assign(base, { kind: 'production', suggested_qty: roundQty(m, open), exact_qty: Math.round(open * 100) / 100, needed_by: needed ? needed.toISOString().slice(0, 10) : null, order_by: orderBy ? orderBy.toISOString().slice(0, 10) : null, late: !!(orderBy && orderBy < todayD), batches: p.batches.slice(0, 6), urgency: (orderBy && orderBy < todayD) || stock <= 0 ? 'critical' : 'low' }));
+        continue;
+      }
+      // 2) Na minimum — doplnění zásoby na cílovou úroveň
+      if (!(min > 0) || stock + inc >= min) continue;
       const target = max > 0 ? max : min + (Number(m.reorder_quantity) || min);
-      let qty = target - stock - inc;
-      const mult = Number(m.processed_in_multiples) || 0; if (mult > 0) qty = Math.ceil(qty / mult) * mult;
-      const bmin = Number(m.batch_size_min) || 0; if (bmin > 0 && qty < bmin) qty = bmin;
-      if (!(qty > 0)) continue;
-      suggestions.push({ material_id: m.id, supplier_id: m.supplier_id, code: m.code, name: m.name, unit: m.unit, stock, min_stock: min, incoming: inc, incoming_orders: (incoming[m.id] && incoming[m.id].orders) || [], suggested_qty: Math.round(qty * 100) / 100, unit_price: Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, urgency: stock <= 0 ? 'critical' : 'low' });
+      const qty = target - stock - inc; if (!(qty > 0)) continue;
+      suggestions.push(Object.assign(base, { kind: 'minimum', suggested_qty: roundQty(m, qty), urgency: stock <= 0 ? 'critical' : 'low' }));
     }
-    suggestions.sort((a, b) => (a.urgency === b.urgency ? a.name.localeCompare(b.name, 'cs') : a.urgency === 'critical' ? -1 : 1));
+    suggestions.sort((a, b) => (a.kind !== b.kind ? (a.kind === 'production' ? -1 : 1) : a.kind === 'production' ? String(a.order_by || '9').localeCompare(String(b.order_by || '9')) : (a.urgency === b.urgency ? a.name.localeCompare(b.name, 'cs') : a.urgency === 'critical' ? -1 : 1)));
     if (!supplierId) {
-      const by = {}; for (const s of suggestions) { const r = by[s.supplier_id] || (by[s.supplier_id] = { supplier_id: s.supplier_id, count: 0, critical: 0 }); r.count++; if (s.urgency === 'critical') r.critical++; }
+      const by = {}; for (const s of suggestions) { const r = by[s.supplier_id] || (by[s.supplier_id] = { supplier_id: s.supplier_id, min: 0, min_critical: 0, prod: 0, prod_late: 0 }); if (s.kind === 'production') { r.prod++; if (s.late) r.prod_late++; } else { r.min++; if (s.urgency === 'critical') r.min_critical++; } }
       return res.json({ suppliers: Object.values(by) });
     }
     // Ceny z poslední objednávky + podmínky poslední objednávky dodavateli
