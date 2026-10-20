@@ -773,21 +773,22 @@
             return h;
           })() +
           '<div style="margin-top:10px"><input class="po-in" id="pn-search" list="pn-goods" placeholder="＋ Další zboží tohoto dodavatele nebo volný text – piš a Enter" autocomplete="off" style="border:1px dashed #cfcab9;background:#faf8f0;padding:8px 10px"><datalist id="pn-goods">' + (a.all_goods || []).map((g) => '<option value="' + poAttr(g.name) + '">' + poTxt(g.code) + '</option>').join('') + '</datalist></div></div>';
-        const lines = PN.cart.map((c, i) => '<tr data-i="' + i + '"><td class="pn-muted">' + (i + 1) + '</td><td><input class="po-in" data-pf="name" value="' + poAttr(c.name) + '"></td><td style="width:84px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="quantity" value="' + (Number(c.quantity) || 0) + '"></td><td style="width:54px"><input class="po-in" data-pf="unit" value="' + poAttr(c.unit) + '"></td><td style="width:104px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="unit_price" value="' + (Number(c.unit_price) || 0) + '"></td><td class="r" style="width:110px"><b>' + poMoney((Number(c.quantity) || 0) * (Number(c.unit_price) || 0), PN.currency) + '</b></td><td style="width:130px"><input class="po-in" type="date" data-pf="expected_delivery" value="' + poAttr(c.expected_delivery || '') + '"></td><td style="width:30px"><button class="po-x" data-pn="del">✕</button></td></tr>').join('');
+        const lines = PN.cart.map((c, i) => '<tr data-i="' + i + '"><td class="pn-muted">' + (i + 1) + '</td><td><input class="po-in" data-pf="name" value="' + poAttr(c.name) + '"></td><td style="width:84px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="quantity" value="' + (Number(c.quantity) || 0) + '"></td><td style="width:54px"><input class="po-in" data-pf="unit" value="' + poAttr(c.unit) + '"></td><td style="width:124px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="unit_price" value="' + (Number(c.unit_price) || 0) + '"' + (Number(c.unit_price) > 0 ? '' : ' placeholder="doplň cenu" style="background:#fee2e2;border-bottom:2px solid #dc2626"') + '>' + (Number(c.unit_price) > 0 ? '<div class="pn-muted" style="text-align:right;font-size:10px">' + ({ cenik: 'z nákupního ceníku', last_order: 'z poslední objednávky', material: 'z karty zboží' }[c.price_source] || 'ručně') + '</div>' : '<div style="text-align:right;font-size:10px;color:#dc2626;font-weight:700">chybí cena</div>') + '</td><td class="r" style="width:110px"><b>' + poMoney((Number(c.quantity) || 0) * (Number(c.unit_price) || 0), PN.currency) + '</b></td><td style="width:130px"><input class="po-in" type="date" data-pf="expected_delivery" value="' + poAttr(c.expected_delivery || '') + '"></td><td style="width:30px"><button class="po-x" data-pn="del">✕</button></td></tr>').join('');
         body += '<div class="pn-box"><div class="pn-h"><span class="n">3</span>Objednávka</div>' +
           (PN.cart.length ? '<table class="pn-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th>Dodání</th><th></th></tr></thead><tbody>' + lines + '</tbody></table>' : '<div class="pn-muted">Zatím prázdné — přidej položky výše.</div>') +
           '<div class="pn-row" style="margin-top:12px;justify-content:space-between"><div class="pn-row"><label class="pn-muted">Požadované dodání celé objednávky<br><input class="po-in" type="date" id="pn-date" value="' + poAttr(PN.expected) + '" style="border:1px solid #e4e0d2;background:#fff"></label><label class="pn-muted">Měna<br><select class="po-sel" id="pn-cur" style="border:1px solid #e4e0d2;background:#fff"><option value="CZK"' + (PN.currency !== 'EUR' ? ' selected' : '') + '>CZK</option><option value="EUR"' + (PN.currency === 'EUR' ? ' selected' : '') + '>EUR</option></select></label><label class="pn-muted">Typ<br><select class="po-sel" id="pn-type" style="border:1px solid #e4e0d2;background:#fff"><option value="purchase"' + (PN.type === 'purchase' ? ' selected' : '') + '>Nákupní</option><option value="cooperation"' + (PN.type === 'cooperation' ? ' selected' : '') + '>Kooperační</option></select></label></div>' +
           '<div style="text-align:right"><div class="pn-muted">Celkem bez DPH</div><div class="po-grand" style="font-size:26px">' + poMoney(pnTotal(), PN.currency) + '</div></div></div>' +
           '<label class="pn-muted" style="display:block;margin-top:8px">Poznámka<br><textarea class="po-ta" id="pn-note" style="min-height:48px">' + poTxt(PN.note) + '</textarea></label></div>';
       }
-      const can = PN.supplier && PN.cart.length && !PN.busy;
+      const noPrice = PN.cart.filter((c) => !(Number(c.unit_price) > 0)).length;
+      const can = PN.supplier && PN.cart.length && !PN.busy && !noPrice;
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)closeModal()"><div class="po-sheet" id="pn-sheet" style="padding:30px 38px">' +
         '<div class="po-top"><button class="po-btn" onclick="closeModal()">✕ Zavřít</button></div>' +
         '<div class="po-kicker">NOVÁ OBJEDNÁVKA</div><div class="po-num" style="font-size:26px;margin-bottom:16px">Nákup od dodavatele</div>' +
         '<div class="pn-box"><div class="pn-h"><span class="n">1</span>Dodavatel</div><select class="po-sel" id="pn-sup" style="border:1px solid #e4e0d2;background:#fff;font-weight:700;padding:8px">' + supOpts + '</select>' +
           (chips ? '<div style="margin-top:10px"><div class="pn-muted" style="margin-bottom:6px">Doporučeno — tam je zboží pod minimální zásobou:</div>' + chips + '</div>' : (!PN.supplier && !PN.overview.length ? '<div class="pn-muted" style="margin-top:8px">Žádné zboží s dodavatelem není pod minimem.</div>' : '')) + '</div>' +
         body +
-        '<div class="pn-row" style="justify-content:flex-end"><span class="pn-muted">Číslo objednávky se přidělí automaticky, doklad pak doladíš jako papír.</span><button class="pn-go" id="pn-create"' + (can ? '' : ' disabled') + '>Vytvořit objednávku →</button></div>' +
+        '<div class="pn-row" style="justify-content:flex-end"><span class="pn-muted"' + (noPrice ? ' style="color:#dc2626;font-weight:700"' : '') + '>' + (noPrice ? noPrice + ' položek nemá cenu — doplň ji (v nákupním ceníku dodavatele není).' : 'Číslo objednávky se přidělí automaticky, doklad pak doladíš jako papír.') + '</span><button class="pn-go" id="pn-create"' + (can ? '' : ' disabled') + '>Vytvořit objednávku →</button></div>' +
         '</div></div>';
       const sh = document.getElementById('pn-sheet');
       sh.addEventListener('click', pnClick); sh.addEventListener('change', pnChange);
@@ -799,12 +800,12 @@
       const name = String(v || '').trim(); if (!name) return;
       const g = ((PN.assist && PN.assist.all_goods) || []).find((x) => x.name === name);
       const lead = g ? Number(g.lead_time_days) || 0 : 0;
-      pnAdd(g ? { material_id: g.material_id, name: g.name, unit: g.unit, unit_price: g.unit_price, quantity: 1, lead, expected_delivery: pnToday(lead || 7) } : { name, quantity: 1, expected_delivery: pnToday(7) });
+      pnAdd(g ? { material_id: g.material_id, name: g.name, unit: g.unit, unit_price: g.unit_price, price_source: g.price_source, quantity: 1, lead, expected_delivery: pnToday(lead || 7) } : { name, quantity: 1, expected_delivery: pnToday(7) });
       pnRecalcDate(); pnRender(); const s2 = document.getElementById('pn-search'); if (s2) s2.focus();
     }
     function pnAddSuggestion(s) {
       const prodItem = s.kind === 'production' && s.needed_by;
-      pnAdd({ material_id: s.material_id, name: s.name, unit: s.unit, unit_price: s.unit_price, quantity: s.suggested_qty, lead: s.lead_time_days,
+      pnAdd({ material_id: s.material_id, name: s.name, unit: s.unit, unit_price: s.unit_price, price_source: s.price_source, quantity: s.suggested_qty, lead: s.lead_time_days,
         needed_by: prodItem ? s.needed_by : null, spec: prodItem && s.batches && s.batches.length ? 'Pro výrobu: ' + s.batches.slice(0, 3).map((b) => b.batch_number).join(', ') : undefined,
         expected_delivery: prodItem ? s.needed_by : pnToday(s.lead_time_days || 7) });
     }
@@ -916,8 +917,8 @@
     const poDay = (v) => (v ? String(v).slice(0, 10) : '');
     function poSaved(msg, err) { const el = document.getElementById('po-saved'); if (!el) return; el.textContent = msg; el.style.color = err ? '#dc2626' : '#16a34a'; el.style.opacity = 1; clearTimeout(PO.timer); PO.timer = setTimeout(() => { el.style.opacity = 0; }, 2400); }
     async function poReq(method, url, body) {
-      try { const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) throw new Error(r.status); poSaved('✓ Uloženo'); return r.json().catch(() => ({})); }
-      catch (e) { poSaved('Uložení selhalo – zkus znovu', true); return null; }
+      try { const r = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined }); if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || r.status); } poSaved('✓ Uloženo'); return r.json().catch(() => ({})); }
+      catch (e) { poSaved(/\D/.test(String(e.message)) ? e.message : 'Uložení selhalo – zkus znovu', true); return null; }
     }
     function poClose() { closeModal(); loadOrders(); loadStats(); }
 

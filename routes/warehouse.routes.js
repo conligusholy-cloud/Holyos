@@ -758,6 +758,26 @@ async function nextPurchaseNumber() {
   return 'PO-' + year + '-' + Date.now().toString().slice(-6);
 }
 
+// Nákupní ceník dodavatele (SupplierPriceList + množstevní tiery): načtení pro více materiálů a výběr tieru podle množství
+async function loadPriceTiers(supplierId, materialIds) {
+  const map = {}; if (!supplierId || !materialIds.length) return map;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const lists = await prisma.supplierPriceList.findMany({
+    where: { supplier_id: supplierId, material_id: { in: materialIds }, is_valid: true, OR: [{ valid_from: null }, { valid_from: { lte: today } }], AND: [{ OR: [{ valid_to: null }, { valid_to: { gte: today } }] }] },
+    include: { items: true }, orderBy: [{ is_primary: 'desc' }, { id: 'desc' }],
+  });
+  for (const l of lists) {
+    if (map[l.material_id]) continue; // první = primární / nejnovější ceník
+    map[l.material_id] = l.items.map((i) => ({ qmin: Number(i.quantity_min) || 0, price: Number(i.price) || 0, currency: i.currency || 'CZK', moq: Number(i.min_order_quantity) || 0, days: i.delivery_time_days, partno: i.supplier_part_no })).filter((t) => t.price > 0).sort((a, b) => a.qmin - b.qmin);
+  }
+  return map;
+}
+function pickTier(tiers, qty) {
+  if (!tiers || !tiers.length) return null; let best = tiers[0];
+  for (const t of tiers) if (t.qmin <= qty) best = t;
+  return best;
+}
+
 // Nákupní report z plánovače je drahý (MRP přes všechny dávky) → krátká cache 90 s
 let _prCache = { at: 0, data: null };
 async function getPurchaseReportCached() {
@@ -825,13 +845,25 @@ router.get('/orders/purchase-assist', async (req, res, next) => {
       const hist = await prisma.orderItem.findMany({ where: { material_id: { in: ids }, unit_price: { gt: 0 }, order: { type: { in: ['purchase', 'cooperation'] }, company_id: supplierId } }, orderBy: { id: 'desc' }, take: 400, select: { material_id: true, unit_price: true } });
       for (const h of hist) if (lastPrices[h.material_id] === undefined) lastPrices[h.material_id] = Number(h.unit_price);
     }
-    suggestions.forEach((s) => { if (lastPrices[s.material_id] !== undefined) { s.unit_price = lastPrices[s.material_id]; s.price_source = 'last_order'; } });
+    // Cena: 1) nákupní ceník dodavatele (tier podle množství) → 2) poslední objednávka → 3) karta zboží → jinak ručně
+    const tiers = await loadPriceTiers(supplierId, ids);
+    let priceCur = null;
+    suggestions.forEach((s) => {
+      const t = pickTier(tiers[s.material_id], s.suggested_qty);
+      if (t) {
+        s.unit_price = t.price; s.price_source = 'cenik'; s.price_currency = t.currency; priceCur = priceCur || t.currency;
+        if (t.moq && s.suggested_qty < t.moq) { s.suggested_qty = t.moq; s.moq_applied = true; }
+        if (t.days != null && !s.lead_time_days) s.lead_time_days = t.days;
+      } else if (lastPrices[s.material_id] !== undefined) { s.unit_price = lastPrices[s.material_id]; s.price_source = 'last_order'; }
+      else if (s.unit_price > 0) s.price_source = 'material';
+      else s.price_source = 'none';
+    });
     const company = await prisma.company.findUnique({ where: { id: supplierId } });
     const lastOrder = await prisma.order.findFirst({ where: { type: { in: ['purchase', 'cooperation'] }, company_id: supplierId, status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, select: { order_number: true, currency: true, po_data: true, note: true } });
     const keep = ['transport_by', 'unloading_by', 'delivery_place', 'receiver', 'receiving_hours', 'pre_notice', 'packaging', 'incoterms', 'returnable', 'pay_method', 'due_days', 'deposit', 'invoice_docs', 'invoice_email', 'partial_invoicing', 'docs_required', 'acceptance', 'warranty', 'partial_ok', 'early_ok', 'term_meaning'];
     const terms = {}; if (lastOrder && lastOrder.po_data) for (const k of keep) if (lastOrder.po_data[k]) terms[k] = lastOrder.po_data[k];
     if (company && company.payment_terms_days && !terms.due_days) terms.due_days = String(company.payment_terms_days);
-    res.json({ company, last_order: lastOrder ? { order_number: lastOrder.order_number, currency: lastOrder.currency } : null, terms, currency: (lastOrder && lastOrder.currency) || 'CZK', suggestions, all_goods: mats.filter((m) => !suggestions.find((s) => s.material_id === m.id)).map((m) => ({ material_id: m.id, code: m.code, name: m.name, unit: m.unit, unit_price: lastPrices[m.id] !== undefined ? lastPrices[m.id] : Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, stock: Number(m.current_stock) || 0 })) });
+    res.json({ company, last_order: lastOrder ? { order_number: lastOrder.order_number, currency: lastOrder.currency } : null, terms, currency: priceCur || (lastOrder && lastOrder.currency) || 'CZK', suggestions, all_goods: mats.filter((m) => !suggestions.find((s) => s.material_id === m.id)).map((m) => { const t = pickTier(tiers[m.id], 1); return ({ material_id: m.id, code: m.code, name: m.name, unit: m.unit, price_source: t ? 'cenik' : lastPrices[m.id] !== undefined ? 'last_order' : Number(m.weighted_avg_price || m.unit_price) > 0 ? 'material' : 'none', unit_price: t ? t.price : lastPrices[m.id] !== undefined ? lastPrices[m.id] : Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, stock: Number(m.current_stock) || 0 }); }) });
   } catch (err) { next(err); }
 });
 
@@ -845,6 +877,14 @@ router.post('/orders', async (req, res, next) => {
       if (!cid || isNaN(cid)) return res.status(400).json({ error: 'Vyberte dodavatele.' });
       const list = (Array.isArray(items) ? items : []).filter((i) => i && String(i.name || '').trim());
       const po = {}; if (rest.po_data && typeof rest.po_data === 'object') for (const [k, v] of Object.entries(rest.po_data)) if (/^[a-z_]{1,40}$/.test(k) && String(v || '').trim()) po[k] = String(v).slice(0, 2000);
+      // Každá položka musí mít cenu: ručně zadaná, jinak z nákupního ceníku dodavatele (tier podle množství)
+      const needPrice = list.filter((i) => !(parseFloat(i.unit_price) > 0) && i.material_id);
+      if (needPrice.length) {
+        const tiers = await loadPriceTiers(cid, needPrice.map((i) => parseInt(i.material_id)));
+        for (const i of needPrice) { const t = pickTier(tiers[parseInt(i.material_id)], parseFloat(i.quantity) || 1); if (t) i.unit_price = t.price; }
+      }
+      const noPrice = list.filter((i) => !(parseFloat(i.unit_price) > 0));
+      if (noPrice.length) return res.status(400).json({ error: 'Položky bez ceny: ' + noPrice.map((i) => i.name).slice(0, 5).join(', ') + (noPrice.length > 5 ? ' …' : '') + '. Doplň cenu ručně (v nákupním ceníku dodavatele není).' });
       const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), material_id: i.material_id ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
       const created = await prisma.order.create({
         data: {
@@ -1265,6 +1305,15 @@ router.put('/orders/:id', async (req, res, next) => {
       allowed.expected_delivery_manual = !!allowed.expected_delivery;
     }
 
+    // Nákupní objednávku nelze objednat/potvrdit, dokud má položku bez ceny
+    if (['ordered', 'confirmed'].includes(allowed.status)) {
+      const cur = await prisma.order.findUnique({ where: { id: orderId }, select: { type: true, items: { select: { name: true, unit_price: true, status: true } } } });
+      if (cur && ['purchase', 'cooperation'].includes(cur.type)) {
+        const bad = cur.items.filter((i) => i.status !== 'cancelled' && !(Number(i.unit_price) > 0));
+        if (bad.length) return res.status(400).json({ error: 'Nelze objednat — položky bez ceny: ' + bad.map((i) => i.name).slice(0, 5).join(', ') });
+      }
+    }
+
     // Při zrušení objednávky uvolni sloty
     if (allowed.status === 'cancelled') {
       const assignments = await prisma.slotAssignment.findMany({ where: { order_id: orderId } });
@@ -1393,7 +1442,16 @@ router.get('/orders/:id/items', async (req, res, next) => {
 // POST /api/wh/orders/:id/items
 router.post('/orders/:id/items', async (req, res, next) => {
   try {
-    const { product_id, material_id, name, quantity, unit, unit_price, total_price, note, expected_delivery, serial_number, spec, vat_rate, production_ref } = req.body;
+    const { product_id, material_id, name, quantity, unit, total_price, note, expected_delivery, serial_number, spec, vat_rate, production_ref } = req.body;
+    let unit_price = req.body.unit_price;
+    // Nákupní objednávka: chybí-li cena, doplň z nákupního ceníku dodavatele
+    if (material_id && !(parseFloat(unit_price) > 0)) {
+      const ord = await prisma.order.findUnique({ where: { id: parseInt(req.params.id) }, select: { company_id: true, type: true } });
+      if (ord && ['purchase', 'cooperation'].includes(ord.type)) {
+        const t = pickTier((await loadPriceTiers(ord.company_id, [parseInt(material_id)]))[parseInt(material_id)], parseFloat(quantity) || 1);
+        if (t) unit_price = t.price;
+      }
+    }
     const item = await prisma.orderItem.create({
       data: {
         order_id: parseInt(req.params.id),
