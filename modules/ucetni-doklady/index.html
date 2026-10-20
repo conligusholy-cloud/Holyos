@@ -2533,6 +2533,8 @@
       const planned = rc.data.filter(c => c.active && String(c.effective_from).slice(0, 10) <= pEnd && (!c.effective_to || String(c.effective_to).slice(0, 10) >= pStart))
         .map(c => ({ c, st: window.__rentSt.find(x => x.contract_id === c.id && x.period_ym === pym), date: new Date(now.getFullYear(), now.getMonth(), c.issue_day || 5) }))
         .filter(p => !p.st || p.st.status !== 'issued').sort((a, b) => a.date - b.date);
+      const invLinks = (ls) => ls.filter(l => l.invoice_id).map(l => { const m = String(l.label || '').match(/^Faktura\s+(.+?)\s+—/); const num = m ? m[1] : 'doklad';
+        return '<div style="font-size:11px;white-space:nowrap;"><a href="javascript:void(0)" style="color:#818cf8;" title="Otevřít detail dokladu v účetních dokladech" onclick="openDetail(' + l.invoice_id + ')">' + escapeHtml(num) + '</a> <a href="/api/accounting/invoices/' + l.invoice_id + '/source-pdf" target="_blank" title="Originální PDF dokladu" style="text-decoration:none;">📄</a></div>'; }).join('');
       const periodCell = (ym, x) => {
         let out = escapeHtml(ym);
         if (x && x.period_from && x.period_to) {
@@ -2552,7 +2554,7 @@
           const ln = lines.find(l => l.cat === cat && Number(l.amount) > 0);
           const src = ln ? (ln.source === 'invoice' || ln.invoice_id ? '<div style="font-size:10.5px;color:#16a34a;" title="Částka převzata z přijaté faktury">✓ z faktury</div>' : ln.source === 'ai' ? '<div style="font-size:10.5px;color:#16a34a;">✓ AI doklad</div>' : '<div style="font-size:10.5px;color:var(--text2);">✎ ručně</div>') : '';
           const btn = x.status === 'issued' ? '' : '<div><button class="btn btn-secondary btn-sm" style="padding:1px 7px;font-size:11px;margin-top:3px;" title="Zobrazit přijaté doklady od dodavatele ze smlouvy a vybrat ' + what + '" onclick="rentFindDoc(' + x.id + ',\'' + cat + '\')">🔍 Najít doklad</button></div>';
-          return '<td style="text-align:right;white-space:nowrap;' + (missing ? 'background:rgba(239,68,68,.10);' : '') + '">− ' + rentMoney(x[k], '') + (missing ? '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ chybí ' + what + '</div>' + btn : src) + '</td>';
+          return '<td style="text-align:right;white-space:nowrap;' + (missing ? 'background:rgba(239,68,68,.10);' : '') + '">− ' + rentMoney(x[k], '') + invLinks(lines.filter(l => l.cat === cat)) + (missing ? '<div style="font-size:10.5px;color:#ef4444;font-weight:600;">⚠ chybí ' + what + '</div>' + btn : src) + '</td>';
         };
         return num('revenue_gross') + num('revenue_net') + num('fee_net', true) + docCell('cost_d', 'D', 'faktura za nájem') + docCell('cost_e', 'E', 'faktura za energie') + num('cost_f', true)
           + '<td style="text-align:right;white-space:nowrap;"><b style="color:' + (Number(x.rent) < 0 ? '#ef4444' : '#16a34a') + '">' + rentMoney(x.rent, x.currency) + '</b></td>';
@@ -2723,7 +2725,7 @@
           '<td style="width:110px"><input type="number" step="0.01" value="' + (l.amount === 0 || l.amount ? l.amount : '') + '" placeholder="částka vč. DPH" onchange="rentLine(' + i + ',\'amount\',this.value)" style="' + inp + 'text-align:right;"' + dis + '></td>' +
           '<td style="width:64px"><input type="number" step="1" value="' + (l.vat_rate === 0 || l.vat_rate ? l.vat_rate : 21) + '" onchange="rentLine(' + i + ',\'vat_rate\',this.value)" style="' + inp + 'text-align:right;" title="DPH %"' + dis + '></td>' +
           '<td style="width:100px;text-align:right;white-space:nowrap;">' + rentMoney(rentCalc(st, [l]).D + rentCalc(st, [l]).E + rentCalc(st, [l]).F, '') + '</td>' +
-          '<td style="width:28px">' + (issued ? '' : '<button class="btn btn-danger btn-sm" onclick="rentDelLine(' + i + ')">✕</button>') + '</td></tr>').join('');
+          '<td style="width:70px;white-space:nowrap;">' + (l.invoice_id ? '<a href="javascript:void(0)" title="Otevřít detail dokladu" onclick="openDetail(' + l.invoice_id + ')" style="text-decoration:none;">🔗</a> <a href="/api/accounting/invoices/' + l.invoice_id + '/source-pdf" target="_blank" title="Originální PDF dokladu" style="text-decoration:none;">📄</a> ' : '') + (issued ? '' : '<button class="btn btn-danger btn-sm" onclick="rentDelLine(' + i + ')">✕</button>') + '</td></tr>').join('');
         return '<div style="margin-top:14px;"><div style="display:flex;justify-content:space-between;align-items:center;"><b>' + CATS[c] + '</b>' + (issued ? '' : '<button class="btn btn-secondary btn-sm" onclick="rentAddLine(\'' + c + '\')">+ položka</button>') + '</div>' +
           '<table style="width:100%;border-collapse:separate;border-spacing:0 4px;">' + (rows || '<tr><td style="color:var(--text2);font-size:12px;">Žádné položky (0).</td></tr>') + '</table></div>';
       }).join('');
