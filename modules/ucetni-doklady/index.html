@@ -570,9 +570,9 @@
             </table>
           </div>
           <div class="pb-card" style="margin-top:16px;">
-            <h3>🧾 Vystavené podklady k fakturaci nájmu</h3>
+            <h3>🧾 Podklady k fakturaci nájmu — plánované a vystavené</h3>
             <table class="data-table" id="rentdocs-table" style="width:100%;">
-              <thead><tr><th>Číslo</th><th>Stroj</th><th>Subjekt</th><th>Měsíc</th><th>Nájemné</th><th>Odesláno</th><th></th></tr></thead>
+              <thead><tr><th>Číslo / stav</th><th>Stroj</th><th>Subjekt</th><th>Za měsíc</th><th>Nájemné</th><th>Odesláno / plán</th><th></th></tr></thead>
               <tbody><tr><td colspan="7" class="empty-hint">Načítám…</td></tr></tbody>
             </table>
           </div>
@@ -2526,10 +2526,21 @@
           '<td style="white-space:nowrap;">' + (st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + st.id + ')">Otevřít</button> ' : '<button class="btn btn-primary btn-sm" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ') +
             '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>';
       }).join('') : '<tr><td colspan="9" class="empty-hint">Zatím žádná nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".</td></tr>';
+      // Plánované: co se vytvoří tento měsíc (podklad za předchozí měsíc v den vystavení u každé aktivní smlouvy)
+      const now = new Date(); const pmD = new Date(now.getFullYear(), now.getMonth() - 1, 1); const pym = pmD.getFullYear() + '-' + String(pmD.getMonth() + 1).padStart(2, '0');
+      const pStart = pym + '-01', pEnd = pym + '-' + String(new Date(pmD.getFullYear(), pmD.getMonth() + 1, 0).getDate()).padStart(2, '0');
+      const MODE2 = { draft: 'vznikne koncept', issue: 'automaticky se vystaví', send: 'automaticky se vystaví a odešle' };
+      const planned = rc.data.filter(c => c.active && String(c.effective_from).slice(0, 10) <= pEnd && (!c.effective_to || String(c.effective_to).slice(0, 10) >= pStart))
+        .map(c => ({ c, st: window.__rentSt.find(x => x.contract_id === c.id && x.period_ym === pym), date: new Date(now.getFullYear(), now.getMonth(), c.issue_day || 5) }))
+        .filter(p => !p.st || p.st.status !== 'issued').sort((a, b) => a.date - b.date);
+      const pRows = planned.map(p => { const late = p.date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        return '<tr style="background:rgba(99,102,241,.07)"><td><span style="color:#818cf8;font-weight:700;">plánováno</span></td><td>' + escapeHtml(p.c.kiosk_code) + '</td><td>' + escapeHtml(p.c.customer_name || '—') + '</td><td>' + escapeHtml(pym) + '</td><td>' + (p.st ? '<b>' + rentMoney(p.st.rent, p.st.currency) + '</b> <span style="font-size:11px;color:var(--text2);">(koncept)</span>' : '—') + '</td>' +
+          '<td>' + p.date.toLocaleDateString('cs-CZ') + (late ? ' <span style="color:#f59e0b;">(zpracuje se při nejbližším běhu)</span>' : '') + '<div style="font-size:11px;color:var(--text2);">' + MODE2[p.c.auto_mode] + (p.c.auto_mode === 'send' && p.c.contact_email ? ' → ' + escapeHtml(p.c.contact_email) : '') + '</div></td>' +
+          '<td style="white-space:nowrap;">' + (p.st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + p.st.id + ')">Otevřít</button>' : '<button class="btn btn-secondary btn-sm" onclick="rentPlanNow(' + p.c.id + ',\'' + pym + '\')">Vytvořit teď</button>') + '</td></tr>'; }).join('');
       const td = document.querySelector('#rentdocs-table tbody'); const issued = window.__rentSt.filter(x => x.status === 'issued');
-      td.innerHTML = issued.length ? issued.map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + escapeHtml(x.period_ym) + '</td><td><b>' + rentMoney(x.rent, x.currency) + '</b></td><td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + '</td>' +
+      td.innerHTML = (pRows || '') + (issued.length ? issued.map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + escapeHtml(x.period_ym) + '</td><td><b>' + rentMoney(x.rent, x.currency) + '</b></td><td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + '</td>' +
         '<td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-primary btn-sm" onclick="rentSendNow(' + x.id + ')">' + (x.sent_at ? '✉ Poslat znovu' : '✉ Odeslat') + '</button></td></tr>').join('')
-        : '<tr><td colspan="7" class="empty-hint">Zatím žádný vystavený podklad.</td></tr>';
+        : (pRows ? '' : '<tr><td colspan="7" class="empty-hint">Zatím žádný vystavený ani plánovaný podklad.</td></tr>'));
     };
     window.rentGenerate = async function(contractId) {
       const ym = document.getElementById('rent-ym').value;
@@ -2538,6 +2549,12 @@
       await loadRent();
       if (r.data.missing && r.data.missing.length) alert('Pozor, v přijatých dokladech za tento měsíc zatím nenalezeno: ' + r.data.missing.join(', ') + '. Můžeš je doplnit ručně v podkladu.');
       openRentModal(r.data.id);
+    };
+    window.rentPlanNow = async function(contractId, ym) {
+      if (!confirm('Vytvořit podklad za ' + ym + ' hned (jako koncept)?')) return;
+      const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: contractId, ym });
+      if (r.status !== 201) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));
+      await loadRent(); openRentModal(r.data.id);
     };
     window.rentSendNow = async function(id) {
       if (!confirm('Odeslat podklad e-mailem kompetentní osobě?')) return;
