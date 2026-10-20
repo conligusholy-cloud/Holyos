@@ -2839,6 +2839,11 @@
       const pk = window.__rentPick; const inv = pk.data.invoices.find(i => i.id === invId); const it = inv && inv.items.find(x => x.id === itemId); if (!it) return;
       const st = (window.__rentSt || []).find(x => x.id === pk.id); if (!st) return;
       const lines = (Array.isArray(st.lines) ? st.lines : []).map(l => Object.assign({}, l));
+      if (pk.cat === 'D' || pk.cat === 'E') {
+        const other = lines.filter(l => l.cat === pk.cat && l.invoice_id !== inv.id);
+        if (other.length && !confirm('V této kategorii už je jiný doklad (' + other.map(l => String(l.label || '').replace(/ — .*/, '')).join(', ') + '). V podkladu má být jen jeden — nahradit ho tímto?')) return;
+        for (let i = lines.length - 1; i >= 0; i--) if (lines[i].cat === pk.cat && lines[i].invoice_id !== inv.id) lines.splice(i, 1);
+      }
       lines.push({ cat: pk.cat, label: 'Faktura ' + inv.number + ' — ' + inv.company + ' (' + it.description + ')', amount: it.total, vat_rate: it.vat_rate, deductible: true, source: 'manual', invoice_id: inv.id });
       const r = await api('PUT', '/api/compounder/rent-statements/' + pk.id, { lines });
       if (r.status !== 200) return alert('Chyba: ' + ((r.data && r.data.error) || r.status));

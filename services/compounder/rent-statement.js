@@ -21,6 +21,17 @@ function kwMatch(desc, kw) {
   const d = norm(desc);
   return k.split('+').every((grp) => { const alts = grp.split('|').map((x) => x.trim()).filter(Boolean); return !alts.length || alts.some((a) => d.includes(a)); });
 }
+// D a E: v podkladu je vždy jen jeden doklad (první v pořadí: ručně → pravidla → AI); ruční řádek bez dokladu má přednost před fakturami
+function onePerCat(lines) {
+  const chosen = {}; const out = [];
+  for (const l of lines) {
+    if (!l || (l.cat !== 'D' && l.cat !== 'E')) { out.push(l); continue; }
+    if (!(l.cat in chosen)) { chosen[l.cat] = l.invoice_id || null; out.push(l); continue; }
+    if (chosen[l.cat] && l.invoice_id === chosen[l.cat]) out.push(l);
+    else if (!chosen[l.cat] && !l.invoice_id) out.push(l);
+  }
+  return out;
+}
 const toYmd = (d) => (d ? new Date(d).toISOString().slice(0, 10) : null);
 
 // Čisté přepočtení řádků a výsledku (bez DB)
@@ -57,7 +68,7 @@ async function pullInvoiceLines(contract, rev) {
   for (const [cat, key] of [['D', 'rent_rules'], ['E', 'energy_rules'], ['F', 'service_rules']]) {
     const rules = Array.isArray(contract[key]) ? contract[key].filter((x) => x && x.company_id) : [];
     if (!rules.length) continue;
-    let found = 0;
+    let found = 0; const catLines = [];
     for (const rule of rules) {
       const invs = await prisma.invoice.findMany({
         where: { type: 'received', company_id: parseInt(rule.company_id, 10), status: { notIn: ['cancelled', 'written_off'] },
@@ -72,10 +83,16 @@ async function pullInvoiceLines(contract, rev) {
         for (const [rate, total] of Object.entries(byRate)) {
           const amount = r2(total * share * factor); if (!(amount > 0)) continue;
           found++;
-          out.push({ cat, label: 'Faktura ' + (inv.external_number || inv.invoice_number) + ' — ' + ((inv.company && inv.company.name) || '') + (kw ? ' (' + rule.keyword + ')' : '') + (share < 1 ? ', podíl ' + Math.round(share * 100) + ' %' : '') + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount, vat_rate: Number(rate), deductible: ded, source: 'invoice', invoice_id: inv.id });
+          catLines.push({ _d: inv.date_taxable || inv.date_issued, line: { cat, label: 'Faktura ' + (inv.external_number || inv.invoice_number) + ' — ' + ((inv.company && inv.company.name) || '') + (kw ? ' (' + rule.keyword + ')' : '') + (share < 1 ? ', podíl ' + Math.round(share * 100) + ' %' : '') + (factor < 1 ? ', poměrně ' + rev.days + '/' + rev.month_days + ' dní' : ''), amount, vat_rate: Number(rate), deductible: ded, source: 'invoice', invoice_id: inv.id } });
         }
       }
     }
+    // D (nájem) a E (energie): k podkladu patří vždy jen JEDEN doklad (nejnovější podle DUZP); jeho všechny odpovídající položky se sečtou
+    if (catLines.length && (cat === 'D' || cat === 'E')) {
+      catLines.sort((x, y) => (new Date(y._d || 0) - new Date(x._d || 0)) || (y.line.invoice_id - x.line.invoice_id));
+      const keep = catLines[0].line.invoice_id;
+      catLines.filter((x) => x.line.invoice_id === keep).forEach((x) => out.push(x.line));
+    } else catLines.forEach((x) => out.push(x.line));
     if (!found && cat !== 'F') missing.push(cat); // F (servis/díly) je příležitostné — nechybí
   }
   return { lines: out, missing };
@@ -98,7 +115,7 @@ async function generate(contractId, ym) {
     const taken = inv.lines.concat(manual).map((l) => l.invoice_id).filter(Boolean);
     ai = await require('./rent-doc-matcher').match(c, rev, { skipInvoiceIds: taken });
   } catch (e) { console.warn('[rent-statement] AI vyhledání selhalo:', e.message); }
-  const allLines = manual.concat(inv.lines, ai.lines);
+  const allLines = onePerCat(manual.concat(inv.lines, ai.lines));
   const haveIds = new Set(allLines.map((l) => l.invoice_id).filter(Boolean));
   const suggestions = (ai.suggestions || []).filter((s) => !haveIds.has(s.invoice_id));
   // „Chybí" = pravidla požadují doklad (nájem/energie), ale nenašel se ani podle pravidel, ani AI
@@ -234,4 +251,4 @@ async function deliver(statementId, contract) {
   return { statement: upd, sent: !!r.sent, error: r.sent ? null : (r.error || r.skipped || 'neodesláno') };
 }
 
-module.exports = { kwMatch, calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };
+module.exports = { kwMatch, onePerCat, calc, generate, update, html, pdf, sendTest, processContract, deliver, sendStatementMail, CATS };
