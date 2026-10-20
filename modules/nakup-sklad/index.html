@@ -697,7 +697,119 @@
       el.innerHTML = html;
     }
 
+    // ============================================================
+    // NOVÁ NÁKUPNÍ OBJEDNÁVKA — chytrý průvodce na jedné obrazovce:
+    // 1) dodavatel (s doporučením, kde je zboží pod minimem) → 2) návrh položek ze zásob → 3) košík, termín, vytvoření
+    // ============================================================
+    (function () {
+      const st = document.createElement('style');
+      st.textContent = `
+        .pn-box { border:1px solid #e4e0d2; border-radius:10px; background:#fff; padding:14px 16px; margin-bottom:14px; }
+        .pn-h { display:flex; align-items:center; gap:10px; font-weight:800; font-size:14px; margin-bottom:10px; } .pn-h .n { background:#6366f1; color:#fff; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:12px; }
+        .pn-chip { display:inline-flex; gap:6px; align-items:center; border:1px solid #d6d2c4; background:#faf8f0; border-radius:999px; padding:5px 12px; font-size:12.5px; cursor:pointer; margin:0 6px 6px 0; } .pn-chip:hover { border-color:#6366f1; background:#eef0ff; }
+        .pn-chip b.c { color:#dc2626; } .pn-badge { font-size:10.5px; font-weight:700; border-radius:999px; padding:2px 8px; } .pn-crit { background:#fee2e2; color:#b91c1c; } .pn-low { background:#fef3c7; color:#b45309; }
+        .pn-tbl { width:100%; border-collapse:collapse; font-size:12.5px; } .pn-tbl th { text-align:left; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:#8a8f9c; padding:6px 4px; border-bottom:2px solid #1d2433; } .pn-tbl td { padding:3px 4px; border-bottom:1px solid #e7e3d6; vertical-align:middle; } .pn-tbl .r { text-align:right; }
+        .pn-muted { color:#8a8f9c; font-size:11.5px; } .pn-info { background:#eef6ff; border:1px solid #bfdbfe; color:#1e40af; border-radius:8px; padding:8px 12px; font-size:12.5px; margin-bottom:10px; }
+        .pn-go { background:#6366f1; color:#fff; border:0; border-radius:10px; padding:11px 22px; font-weight:800; font-size:14px; cursor:pointer; } .pn-go:disabled { background:#c7c9d9; cursor:not-allowed; }
+        .pn-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+      `;
+      document.head.appendChild(st);
+    })();
+    const PN = { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false };
+    const pnToday = (add) => { const d = new Date(); d.setDate(d.getDate() + (add || 0)); return d.toISOString().slice(0, 10); };
+    async function poNew() {
+      if (companies.length === 0) { try { companies = await (await fetch('/api/wh/companies')).json(); } catch (e) { /* bez firem */ } }
+      Object.assign(PN, { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false });
+      try { PN.overview = (await (await fetch('/api/wh/orders/purchase-assist')).json()).suppliers || []; } catch (e) { PN.overview = []; }
+      pnRender();
+    }
+    async function pnPickSupplier(id) {
+      PN.supplier = id ? parseInt(id, 10) : null; PN.assist = null; PN.cart = []; PN.expected = ''; PN.dateManual = false;
+      if (PN.supplier) { try { PN.assist = await (await fetch('/api/wh/orders/purchase-assist?supplier_id=' + PN.supplier)).json(); PN.currency = PN.assist.currency || 'CZK'; } catch (e) { PN.assist = null; } }
+      pnRender();
+    }
+    function pnAdd(it) {
+      const ex = PN.cart.find((c) => it.material_id && c.material_id === it.material_id);
+      if (ex) { ex.quantity = (Number(ex.quantity) || 0) + (Number(it.quantity) || 0); return; }
+      PN.cart.push(Object.assign({ unit: 'ks', unit_price: 0, quantity: 1, lead: 0 }, it));
+    }
+    function pnRecalcDate() {
+      if (PN.dateManual) return;
+      const lead = Math.max(0, ...PN.cart.map((c) => Number(c.lead) || 0)); PN.expected = PN.cart.length ? pnToday(lead || 7) : '';
+    }
+    function pnTotal() { return PN.cart.reduce((s, c) => s + (Number(c.quantity) || 0) * (Number(c.unit_price) || 0), 0); }
+    function pnRender() {
+      const supOpts = '<option value="">— vyber dodavatele —</option>' + companies.map((c) => '<option value="' + c.id + '"' + (PN.supplier === c.id ? ' selected' : '') + '>' + poTxt(c.name) + '</option>').join('');
+      const chips = PN.supplier ? '' : PN.overview.map((s) => { const c = companies.find((x) => x.id === s.supplier_id); if (!c) return ''; return '<span class="pn-chip" data-pn-sup="' + c.id + '">' + poTxt(c.name) + ' <span class="pn-muted">' + s.count + ' pod minimem</span>' + (s.critical ? ' <b class="c">' + s.critical + '× došlo</b>' : '') + '</span>'; }).join('');
+      let body = '';
+      if (PN.supplier && PN.assist) {
+        const a = PN.assist; const sug = a.suggestions || []; const inCart = (id) => PN.cart.some((c) => c.material_id === id);
+        body += '<div class="pn-box"><div class="pn-h"><span class="n">2</span>Co objednat</div>' +
+          (a.last_order ? '<div class="pn-info">Podmínky dopravy a platby převezmu z poslední objednávky ' + poTxt(a.last_order.order_number) + ' (půjdou upravit v dokumentu).</div>' : '') +
+          (sug.length ? '<div class="pn-row" style="margin-bottom:8px"><b>' + sug.length + ' položek pod minimem u tohoto dodavatele</b><button class="po-add-btn" data-pn="addall">+ Přidat vše doporučené</button></div>' +
+            '<table class="pn-tbl"><thead><tr><th></th><th>Zboží</th><th class="r">Sklad</th><th class="r">Min.</th><th class="r">Objednáno</th><th class="r">Doporučeno</th><th></th></tr></thead><tbody>' +
+            sug.map((s) => '<tr><td><span class="pn-badge ' + (s.urgency === 'critical' ? 'pn-crit' : 'pn-low') + '">' + (s.urgency === 'critical' ? 'došlo' : 'nízká') + '</span></td><td>' + poTxt(s.name) + ' <span class="pn-muted">' + poTxt(s.code) + '</span></td><td class="r">' + s.stock + '</td><td class="r">' + s.min_stock + '</td><td class="r" title="' + poAttr((s.incoming_orders || []).join(', ')) + '">' + (s.incoming || '—') + '</td><td class="r"><b>' + s.suggested_qty + ' ' + poTxt(s.unit) + '</b></td><td class="r">' + (inCart(s.material_id) ? '<span class="pn-muted">✓ v objednávce</span>' : '<button class="po-btn" data-pn="add" data-mid="' + s.material_id + '">+ Přidat</button>') + '</td></tr>').join('') + '</tbody></table>'
+            : '<div class="pn-muted" style="margin-bottom:8px">Nic z tohoto dodavatele není pod minimem. Přidej zboží ručně níže.</div>') +
+          '<div style="margin-top:10px"><input class="po-in" id="pn-search" list="pn-goods" placeholder="＋ Další zboží tohoto dodavatele nebo volný text – piš a Enter" autocomplete="off" style="border:1px dashed #cfcab9;background:#faf8f0;padding:8px 10px"><datalist id="pn-goods">' + (a.all_goods || []).map((g) => '<option value="' + poAttr(g.name) + '">' + poTxt(g.code) + '</option>').join('') + '</datalist></div></div>';
+        const lines = PN.cart.map((c, i) => '<tr data-i="' + i + '"><td class="pn-muted">' + (i + 1) + '</td><td><input class="po-in" data-pf="name" value="' + poAttr(c.name) + '"></td><td style="width:84px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="quantity" value="' + (Number(c.quantity) || 0) + '"></td><td style="width:54px"><input class="po-in" data-pf="unit" value="' + poAttr(c.unit) + '"></td><td style="width:104px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="unit_price" value="' + (Number(c.unit_price) || 0) + '"></td><td class="r" style="width:110px"><b>' + poMoney((Number(c.quantity) || 0) * (Number(c.unit_price) || 0), PN.currency) + '</b></td><td style="width:130px"><input class="po-in" type="date" data-pf="expected_delivery" value="' + poAttr(c.expected_delivery || '') + '"></td><td style="width:30px"><button class="po-x" data-pn="del">✕</button></td></tr>').join('');
+        body += '<div class="pn-box"><div class="pn-h"><span class="n">3</span>Objednávka</div>' +
+          (PN.cart.length ? '<table class="pn-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th>Dodání</th><th></th></tr></thead><tbody>' + lines + '</tbody></table>' : '<div class="pn-muted">Zatím prázdné — přidej položky výše.</div>') +
+          '<div class="pn-row" style="margin-top:12px;justify-content:space-between"><div class="pn-row"><label class="pn-muted">Požadované dodání celé objednávky<br><input class="po-in" type="date" id="pn-date" value="' + poAttr(PN.expected) + '" style="border:1px solid #e4e0d2;background:#fff"></label><label class="pn-muted">Měna<br><select class="po-sel" id="pn-cur" style="border:1px solid #e4e0d2;background:#fff"><option value="CZK"' + (PN.currency !== 'EUR' ? ' selected' : '') + '>CZK</option><option value="EUR"' + (PN.currency === 'EUR' ? ' selected' : '') + '>EUR</option></select></label><label class="pn-muted">Typ<br><select class="po-sel" id="pn-type" style="border:1px solid #e4e0d2;background:#fff"><option value="purchase"' + (PN.type === 'purchase' ? ' selected' : '') + '>Nákupní</option><option value="cooperation"' + (PN.type === 'cooperation' ? ' selected' : '') + '>Kooperační</option></select></label></div>' +
+          '<div style="text-align:right"><div class="pn-muted">Celkem bez DPH</div><div class="po-grand" style="font-size:26px">' + poMoney(pnTotal(), PN.currency) + '</div></div></div>' +
+          '<label class="pn-muted" style="display:block;margin-top:8px">Poznámka<br><textarea class="po-ta" id="pn-note" style="min-height:48px">' + poTxt(PN.note) + '</textarea></label></div>';
+      }
+      const can = PN.supplier && PN.cart.length && !PN.busy;
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)closeModal()"><div class="po-sheet" id="pn-sheet" style="padding:30px 38px">' +
+        '<div class="po-top"><button class="po-btn" onclick="closeModal()">✕ Zavřít</button></div>' +
+        '<div class="po-kicker">NOVÁ OBJEDNÁVKA</div><div class="po-num" style="font-size:26px;margin-bottom:16px">Nákup od dodavatele</div>' +
+        '<div class="pn-box"><div class="pn-h"><span class="n">1</span>Dodavatel</div><select class="po-sel" id="pn-sup" style="border:1px solid #e4e0d2;background:#fff;font-weight:700;padding:8px">' + supOpts + '</select>' +
+          (chips ? '<div style="margin-top:10px"><div class="pn-muted" style="margin-bottom:6px">Doporučeno — tam je zboží pod minimální zásobou:</div>' + chips + '</div>' : (!PN.supplier && !PN.overview.length ? '<div class="pn-muted" style="margin-top:8px">Žádné zboží s dodavatelem není pod minimem.</div>' : '')) + '</div>' +
+        body +
+        '<div class="pn-row" style="justify-content:flex-end"><span class="pn-muted">Číslo objednávky se přidělí automaticky, doklad pak doladíš jako papír.</span><button class="pn-go" id="pn-create"' + (can ? '' : ' disabled') + '>Vytvořit objednávku →</button></div>' +
+        '</div></div>';
+      const sh = document.getElementById('pn-sheet');
+      sh.addEventListener('click', pnClick); sh.addEventListener('change', pnChange);
+      const s = document.getElementById('pn-search');
+      if (s) s.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); pnAddFromSearch(s.value); } });
+      document.getElementById('pn-sup').addEventListener('change', (e) => pnPickSupplier(e.target.value));
+    }
+    function pnAddFromSearch(v) {
+      const name = String(v || '').trim(); if (!name) return;
+      const g = ((PN.assist && PN.assist.all_goods) || []).find((x) => x.name === name);
+      const lead = g ? Number(g.lead_time_days) || 0 : 0;
+      pnAdd(g ? { material_id: g.material_id, name: g.name, unit: g.unit, unit_price: g.unit_price, quantity: 1, lead, expected_delivery: pnToday(lead || 7) } : { name, quantity: 1, expected_delivery: pnToday(7) });
+      pnRecalcDate(); pnRender(); const s2 = document.getElementById('pn-search'); if (s2) s2.focus();
+    }
+    function pnAddSuggestion(s) { pnAdd({ material_id: s.material_id, name: s.name, unit: s.unit, unit_price: s.unit_price, quantity: s.suggested_qty, lead: s.lead_time_days, expected_delivery: pnToday(s.lead_time_days || 7) }); }
+    async function pnClick(e) {
+      const chip = e.target.closest('[data-pn-sup]'); if (chip) return pnPickSupplier(chip.dataset.pnSup);
+      if (e.target.id === 'pn-create') return pnCreate();
+      const b = e.target.closest('[data-pn]'); if (!b) return; const a = PN.assist || {};
+      if (b.dataset.pn === 'addall') { (a.suggestions || []).forEach(pnAddSuggestion); pnRecalcDate(); pnRender(); }
+      else if (b.dataset.pn === 'add') { const s = (a.suggestions || []).find((x) => String(x.material_id) === b.dataset.mid); if (s) { pnAddSuggestion(s); pnRecalcDate(); pnRender(); } }
+      else if (b.dataset.pn === 'del') { PN.cart.splice(parseInt(b.closest('tr').dataset.i, 10), 1); pnRecalcDate(); pnRender(); }
+    }
+    function pnChange(e) {
+      const t = e.target;
+      if (t.id === 'pn-date') { PN.expected = t.value; PN.dateManual = !!t.value; return; }
+      if (t.id === 'pn-cur') { PN.currency = t.value; return pnRender(); }
+      if (t.id === 'pn-type') { PN.type = t.value; return; }
+      if (t.id === 'pn-note') { PN.note = t.value; return; }
+      if (t.id === 'pn-search') { return pnAddFromSearch(t.value); }
+      if (t.dataset.pf) { const c = PN.cart[parseInt(t.closest('tr').dataset.i, 10)]; if (!c) return; const f = t.dataset.pf; c[f] = ['quantity', 'unit_price'].includes(f) ? (parseFloat(t.value) || 0) : t.value; if (f === 'expected_delivery' && !PN.dateManual) { /* termín položky má přednost */ } pnRender(); }
+    }
+    async function pnCreate() {
+      if (PN.busy) return; PN.busy = true; const btn = document.getElementById('pn-create'); if (btn) { btn.disabled = true; btn.textContent = 'Vytvářím…'; }
+      try {
+        const body = { type: PN.type, company_id: PN.supplier, currency: PN.currency, expected_delivery: PN.expected || null, note: PN.note || null, po_data: (PN.assist && PN.assist.terms) || {}, items: PN.cart };
+        const r = await fetch('/api/wh/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
+        const o = await r.json(); loadOrders(); loadStats(); await openOrderDetail(o.id);
+      } catch (e) { PN.busy = false; alert('Objednávku se nepodařilo vytvořit: ' + e.message); pnRender(); }
+    }
+
     async function openOrderModal(id) {
+      if (!id && currentOrderType !== 'sales') return poNew();
       if (companies.length === 0) { try { const r = await fetch('/api/wh/companies'); companies = await r.json(); } catch(e) {} }
       let o = {};
       if (id) { try { const r = await fetch('/api/wh/orders/' + id); o = await r.json(); } catch(e) {} }

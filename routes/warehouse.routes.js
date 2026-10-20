@@ -745,9 +745,93 @@ router.put('/customer-mail-pause', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Atomické přidělení čísla nákupní objednávky PO-ROK-0001 (DocumentCounter; jeden retry při souběhu create)
+async function nextPurchaseNumber() {
+  const year = new Date().getFullYear(); const series = 'PO-' + year;
+  for (let k = 0; k < 3; k++) {
+    try {
+      const row = await prisma.documentCounter.upsert({ where: { series }, create: { series, last_seq: 1 }, update: { last_seq: { increment: 1 } } });
+      const num = series + '-' + String(row.last_seq).padStart(4, '0');
+      if (!(await prisma.order.findUnique({ where: { order_number: num }, select: { id: true } }))) return num;
+    } catch (e) { if (k === 2) throw e; }
+  }
+  return 'PO-' + year + '-' + Date.now().toString().slice(-6);
+}
+
+// GET /api/wh/orders/purchase-assist — chytrý asistent tvorby nákupní objednávky
+//   bez supplier_id: dodavatelé, u kterých je zboží pod minimem (přehled „co je potřeba objednat")
+//   se supplier_id: údaje dodavatele, podmínky z poslední objednávky a návrh položek (nedostatek – už objednáno)
+router.get('/orders/purchase-assist', async (req, res, next) => {
+  try {
+    const supplierId = req.query.supplier_id ? parseInt(req.query.supplier_id) : null;
+    const mats = await prisma.material.findMany({
+      where: { status: 'active', supplier_id: supplierId || { not: null } },
+      select: { id: true, code: true, name: true, unit: true, unit_price: true, weighted_avg_price: true, current_stock: true, min_stock: true, max_stock: true, reorder_quantity: true, processed_in_multiples: true, batch_size_min: true, batch_size_default: true, lead_time_days: true, supplier_id: true },
+    });
+    const ids = mats.map((m) => m.id);
+    // Už objednané a nedodané množství (otevřené nákupní objednávky)
+    const open = ids.length ? await prisma.orderItem.findMany({
+      where: { material_id: { in: ids }, status: { notIn: ['completed', 'cancelled'] }, order: { type: { in: ['purchase', 'cooperation'] }, status: { notIn: ['delivered', 'cancelled'] } } },
+      select: { material_id: true, quantity: true, delivered_quantity: true, expected_delivery: true, confirmed_delivery: true, order: { select: { order_number: true } } },
+    }) : [];
+    const incoming = {};
+    for (const it of open) { const r = incoming[it.material_id] || (incoming[it.material_id] = { qty: 0, orders: [] }); r.qty += Math.max(0, Number(it.quantity) - Number(it.delivered_quantity)); if (!r.orders.includes(it.order.order_number)) r.orders.push(it.order.order_number); }
+    const suggestions = [];
+    for (const m of mats) {
+      const stock = Number(m.current_stock) || 0; const min = Number(m.min_stock) || 0; const max = Number(m.max_stock) || 0;
+      const inc = (incoming[m.id] && incoming[m.id].qty) || 0;
+      if (!(min > 0)) continue;
+      if (stock + inc >= min) continue; // zásoba (i s již objednaným) pokrývá minimum
+      const target = max > 0 ? max : min + (Number(m.reorder_quantity) || min);
+      let qty = target - stock - inc;
+      const mult = Number(m.processed_in_multiples) || 0; if (mult > 0) qty = Math.ceil(qty / mult) * mult;
+      const bmin = Number(m.batch_size_min) || 0; if (bmin > 0 && qty < bmin) qty = bmin;
+      if (!(qty > 0)) continue;
+      suggestions.push({ material_id: m.id, supplier_id: m.supplier_id, code: m.code, name: m.name, unit: m.unit, stock, min_stock: min, incoming: inc, incoming_orders: (incoming[m.id] && incoming[m.id].orders) || [], suggested_qty: Math.round(qty * 100) / 100, unit_price: Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, urgency: stock <= 0 ? 'critical' : 'low' });
+    }
+    suggestions.sort((a, b) => (a.urgency === b.urgency ? a.name.localeCompare(b.name, 'cs') : a.urgency === 'critical' ? -1 : 1));
+    if (!supplierId) {
+      const by = {}; for (const s of suggestions) { const r = by[s.supplier_id] || (by[s.supplier_id] = { supplier_id: s.supplier_id, count: 0, critical: 0 }); r.count++; if (s.urgency === 'critical') r.critical++; }
+      return res.json({ suppliers: Object.values(by) });
+    }
+    // Ceny z poslední objednávky + podmínky poslední objednávky dodavateli
+    const lastPrices = {};
+    if (ids.length) {
+      const hist = await prisma.orderItem.findMany({ where: { material_id: { in: ids }, unit_price: { gt: 0 }, order: { type: { in: ['purchase', 'cooperation'] }, company_id: supplierId } }, orderBy: { id: 'desc' }, take: 400, select: { material_id: true, unit_price: true } });
+      for (const h of hist) if (lastPrices[h.material_id] === undefined) lastPrices[h.material_id] = Number(h.unit_price);
+    }
+    suggestions.forEach((s) => { if (lastPrices[s.material_id] !== undefined) { s.unit_price = lastPrices[s.material_id]; s.price_source = 'last_order'; } });
+    const company = await prisma.company.findUnique({ where: { id: supplierId } });
+    const lastOrder = await prisma.order.findFirst({ where: { type: { in: ['purchase', 'cooperation'] }, company_id: supplierId, status: { not: 'cancelled' } }, orderBy: { id: 'desc' }, select: { order_number: true, currency: true, po_data: true, note: true } });
+    const keep = ['transport_by', 'unloading_by', 'delivery_place', 'receiver', 'receiving_hours', 'pre_notice', 'packaging', 'incoterms', 'returnable', 'pay_method', 'due_days', 'deposit', 'invoice_docs', 'invoice_email', 'partial_invoicing', 'docs_required', 'acceptance', 'warranty', 'partial_ok', 'early_ok', 'term_meaning'];
+    const terms = {}; if (lastOrder && lastOrder.po_data) for (const k of keep) if (lastOrder.po_data[k]) terms[k] = lastOrder.po_data[k];
+    if (company && company.payment_terms_days && !terms.due_days) terms.due_days = String(company.payment_terms_days);
+    res.json({ company, last_order: lastOrder ? { order_number: lastOrder.order_number, currency: lastOrder.currency } : null, terms, currency: (lastOrder && lastOrder.currency) || 'CZK', suggestions, all_goods: mats.filter((m) => !suggestions.find((s) => s.material_id === m.id)).map((m) => ({ material_id: m.id, code: m.code, name: m.name, unit: m.unit, unit_price: lastPrices[m.id] !== undefined ? lastPrices[m.id] : Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, stock: Number(m.current_stock) || 0 })) });
+  } catch (err) { next(err); }
+});
+
 router.post('/orders', async (req, res, next) => {
   try {
     const { items, items_count, total_amount, ...rest } = req.body;
+
+    // Nákupní/kooperační objednávka: číslo se přidělí automaticky, položky se založí společně s hlavičkou
+    if (['purchase', 'cooperation'].includes(rest.type)) {
+      const cid = parseInt(rest.company_id);
+      if (!cid || isNaN(cid)) return res.status(400).json({ error: 'Vyberte dodavatele.' });
+      const list = (Array.isArray(items) ? items : []).filter((i) => i && String(i.name || '').trim());
+      const po = {}; if (rest.po_data && typeof rest.po_data === 'object') for (const [k, v] of Object.entries(rest.po_data)) if (/^[a-z_]{1,40}$/.test(k) && String(v || '').trim()) po[k] = String(v).slice(0, 2000);
+      const mk = list.map((i) => { const q = parseFloat(i.quantity) || 1; const up = parseFloat(i.unit_price) || 0; return { name: String(i.name).slice(0, 255), material_id: i.material_id ? parseInt(i.material_id) : null, quantity: q, unit: i.unit || 'ks', unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: parseDate(i.expected_delivery), vat_rate: i.vat_rate !== undefined && i.vat_rate !== null && i.vat_rate !== '' ? parseFloat(i.vat_rate) : null, spec: i.spec ? String(i.spec).trim() || null : null, production_ref: i.production_ref ? String(i.production_ref).slice(0, 100) : null }; });
+      const created = await prisma.order.create({
+        data: {
+          order_number: await nextPurchaseNumber(), type: rest.type, company_id: cid, status: rest.status || 'new', currency: rest.currency === 'EUR' ? 'EUR' : 'CZK',
+          note: rest.note || null, expected_delivery: parseDate(rest.expected_delivery), expected_delivery_manual: !!parseDate(rest.expected_delivery),
+          created_by: (req.user && req.user.person && req.user.person.id) || null, po_data: Object.keys(po).length ? po : undefined,
+          items_count: mk.length, total_amount: mk.reduce((s, i) => s + i.total_price, 0), items: { create: mk },
+        },
+        include: { items: true, company: true },
+      });
+      return res.status(201).json(created);
+    }
 
     // Zajisti správné typy
     const orderData = {
