@@ -14,6 +14,8 @@ const CATS = { D: 'Náklad na užívání lokality', E: 'Energie a provozní mé
 const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 // Klíčové slovo pravidla: „+" = musí platit všechno (AND), „|" = stačí jedno z nich (OR). Bez diakritiky a velikosti písmen.
 // Např. „HM Breclav + Nájemné" nebo „HM Breclav + elektr|energi|voda". Prázdné = bere celou fakturu.
+// Výchozí slova kategorie, když pravidlo nemá klíčové slovo (aby jedna faktura nešla do nájmu i energií zároveň)
+const DEFAULT_KW = { D: 'najem|najemn|pronajm', E: 'elektr|energi|vod|stocn|odpad|plyn|teplo|smet' };
 function kwMatch(desc, kw) {
   const k = norm(kw).trim(); if (!k) return true;
   const d = norm(desc);
@@ -64,7 +66,7 @@ async function pullInvoiceLines(contract, rev) {
       });
       const kw = norm(rule.keyword); const share = (Number(rule.share_pct) > 0 ? Number(rule.share_pct) : 100) / 100;
       for (const inv of invs) {
-        const items = (inv.items || []).filter((it) => kwMatch(it.description, rule.keyword));
+        const items = (inv.items || []).filter((it) => kwMatch(it.description, rule.keyword || DEFAULT_KW[cat] || ''));
         const byRate = {};
         for (const it of items) { const k = Number(it.vat_rate) || 0; byRate[k] = (byRate[k] || 0) + Number(it.total || 0); }
         for (const [rate, total] of Object.entries(byRate)) {
