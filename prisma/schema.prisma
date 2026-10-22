@@ -6460,6 +6460,7 @@ model MeetingReservation {
   phone              String?  @db.VarChar(60)
   status             String   @default("booked") @db.VarChar(20) // booked | canceled | done
   note               String?  @db.Text
+  internal_note      String?  @db.Text // naše interní poznámka ze Velínu (diktovaná / psaná)
   mode               String?  @db.VarChar(20) // online | osobne
   financing_path     String?  @db.VarChar(20) // vlastni | financovani
   created_at         DateTime @default(now())

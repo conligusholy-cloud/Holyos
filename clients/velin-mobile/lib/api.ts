@@ -37,7 +37,7 @@ export type LoginResponse = {
 
 export type MeetingReservation = {
   id: number; name: string | null; email: string | null; phone: string | null; status: 'booked' | 'done' | 'canceled' | 'no_show' | string;
-  compounder_lead_id: number | null; created_at: string; note: string | null; mode: string | null; financing_path: string | null;
+  compounder_lead_id: number | null; created_at: string; note: string | null; internal_note?: string | null; mode: string | null; financing_path: string | null;
   lead: { id: number; name: string; email: string | null; phone: string | null; city: string | null; status: string } | null;
 };
 export type MeetingSlot = {
@@ -435,8 +435,14 @@ export const api = {
     request<{ ok: boolean }>('POST', `/api/velin/meetings/slots/${id}/update`, { jwt, body }),
   meetingSlotDelete: (jwt: string, id: number) =>
     request<{ ok: boolean; deactivated?: boolean }>('POST', `/api/velin/meetings/slots/${id}/delete`, { jwt, body: {} }),
-  meetingReservationSet: (jwt: string, id: number, body: { status?: string; note?: string | null }) =>
+  meetingReservationSet: (jwt: string, id: number, body: { status?: string; note?: string | null; internal_note?: string | null }) =>
     request<{ ok: boolean }>('POST', `/api/velin/meetings/reservations/${id}`, { jwt, body }),
+  meetingLeasingCompanies: (jwt: string) =>
+    request<{ id: number; name: string; contact_name: string | null; email: string | null; phone: string | null }[]>('GET', '/api/velin/meetings/leasing-companies', { jwt }),
+  meetingLeasingList: (jwt: string, id: number) =>
+    request<{ id: number; company: string | null; status: string; subject: string; price: number; sent_at: string; deadline_at: string | null; result_note: string | null; result_monthly: number | null }[]>('GET', `/api/velin/meetings/reservations/${id}/leasing`, { jwt }),
+  meetingLeasingSend: (jwt: string, id: number, body: { company_ids: number[]; client_first_name: string; client_last_name: string; client_company?: string | null; client_ico?: string | null; client_email?: string | null; client_phone?: string | null; subject: string; price: number; note?: string | null }) =>
+    request<{ ok: boolean; sent: { company: string; email_sent?: boolean; sms_sent?: boolean; errors?: string[] }[] }>('POST', `/api/velin/meetings/reservations/${id}/leasing`, { jwt, body }),
 
   supportMe: (jwt: string) =>
     request<{ allowed: boolean }>('GET', '/api/velin/support/me', { jwt }),

@@ -254,6 +254,8 @@ function SlotModal({ slot, onClose, onChanged }: { slot: MeetingSlot; onClose: (
                   <Text style={s.resSub}>{[phone, email, L && L.city].filter(Boolean).join(' · ')}</Text>
                   <Text style={s.resSub}>{[r.mode && MODE[r.mode], r.financing_path && PATH[r.financing_path], r.compounder_lead_id ? 'lead #' + r.compounder_lead_id : ''].filter(Boolean).join(' · ')}</Text>
                   {r.note ? <Text style={s.resSub}>{r.note}</Text> : null}
+                  <ResNote r={r} run={run} onChanged={onChanged} />
+                  <LeasingBox r={r} run={run} />
                   {phone ? (
                     <View style={s.actRow}>
                       <TouchableOpacity style={[s.btn, { backgroundColor: '#25D366' }]} onPress={() => openWhatsApp(phone, confirmText(d0, r.mode || slot.mode))}><Text style={[s.btnTxt, { color: '#0a2e17' }]}>💬 Potvrdit na WhatsApp</Text></TouchableOpacity>
@@ -350,6 +352,132 @@ function AddModal({ day, onClose, onChanged }: { day: Date | null; onClose: () =
         </View>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+
+// Interní poznámka k rezervaci — píše se nebo diktuje mikrofonem na klávesnici telefonu
+function ResNote({ r, run, onChanged }: { r: MeetingReservation; run: (fn: (jwt: string) => Promise<any>) => Promise<any>; onChanged: () => void }) {
+  const [txt, setTxt] = useState(r.internal_note || '');
+  const [saved, setSaved] = useState(r.internal_note || '');
+  const [busy, setBusy] = useState(false);
+  const dirty = txt !== saved;
+  const save = async () => {
+    setBusy(true);
+    const x = await run((jwt) => api.meetingReservationSet(jwt, r.id, { internal_note: txt.trim() || null }));
+    setBusy(false);
+    if (x) { setSaved(txt); onChanged(); }
+  };
+  return (
+    <View style={{ marginTop: 8 }}>
+      <Text style={s.lbl}>Moje poznámka ke schůzce (🎤 diktuj mikrofonem na klávesnici)</Text>
+      <TextInput
+        style={[s.inp, { minHeight: 80, textAlignVertical: 'top' }]}
+        value={txt} onChangeText={setTxt} multiline
+        placeholder="Co jste probírali, na čem jste se domluvili…" placeholderTextColor={BS.text3}
+        autoCapitalize="sentences"
+      />
+      {dirty ? (
+        <TouchableOpacity style={[s.btn, { marginTop: 6, alignSelf: 'flex-start' }]} onPress={save} disabled={busy}>
+          <Text style={s.btnTxt}>{busy ? 'Ukládám…' : '💾 Uložit poznámku'}</Text>
+        </TouchableOpacity>
+      ) : saved ? <Text style={[s.resSub, { marginTop: 4 }]}>✓ uloženo</Text> : null}
+    </View>
+  );
+}
+
+
+// Poptávka financování: stejná funkce jako „Poslat kontakt leasingové společnosti“ v HolyOS (e-mail + SMS leasingovce s odkazem pro odpověď)
+const LEAS_ST: Record<string, [string, string]> = { sent: ['📤 Odesláno', '#94a3b8'], opened: ['👀 Otevřeno', '#60a5fa'], in_progress: ['⏳ Zpracovává se', '#f59e0b'], approved: ['✅ Schváleno', '#22c55e'], rejected: ['❌ Zamítnuto', '#ef4444'], canceled: ['Zrušeno', '#6b7280'] };
+function LeasingBox({ r, run }: { r: MeetingReservation; run: (fn: (jwt: string) => Promise<any>) => Promise<any> }) {
+  const L = r.lead; const fullName = ((L && L.name) || r.name || '').trim();
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  const [open, setOpen] = useState(false);
+  const [fn, setFn] = useState(parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0] || '');
+  const [ln, setLn] = useState(parts.length > 1 ? parts[parts.length - 1] : '');
+  const [phone, setPhone] = useState(r.phone || (L && L.phone) || '');
+  const [email, setEmail] = useState(r.email || (L && L.email) || '');
+  const [company, setCompany] = useState('');
+  const [ico, setIco] = useState('');
+  const [subject, setSubject] = useState('');
+  const [price, setPrice] = useState('');
+  const [note, setNote] = useState('');
+  const [cos, setCos] = useState<{ id: number; name: string; contact_name: string | null; email: string | null; phone: string | null }[] | null>(null);
+  const [sel, setSel] = useState<number[]>([]);
+  const [cosErr, setCosErr] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [hist, setHist] = useState<any[]>([]);
+  const loadHist = useCallback(async () => { const x = await run((jwt) => api.meetingLeasingList(jwt, r.id)); if (Array.isArray(x)) setHist(x); }, [r.id]);
+  useEffect(() => { loadHist(); }, [loadHist]);
+  const openForm = async () => {
+    setOpen(true);
+    if (!cos) { const x = await run((jwt) => api.meetingLeasingCompanies(jwt)); if (Array.isArray(x)) { setCos(x); setCosErr(false); } else { setCosErr(true); } }
+  };
+  const send = async () => {
+    const pr = Number(String(price).replace(/[^0-9.,]/g, '').replace(',', '.')) || 0;
+    if (!fn.trim() || !ln.trim()) return Alert.alert('Doplň jméno a příjmení klienta');
+    if (!subject.trim()) return Alert.alert('Napiš, co se bude financovat');
+    if (!pr) return Alert.alert('Zadej cenu bez DPH');
+    if (!sel.length) return Alert.alert('Vyber alespoň jednu leasingovou společnost');
+    setBusy(true);
+    const x = await run((jwt) => api.meetingLeasingSend(jwt, r.id, { company_ids: sel, client_first_name: fn.trim(), client_last_name: ln.trim(), client_company: company.trim() || null, client_ico: ico.trim() || null, client_email: email.trim() || null, client_phone: phone.trim() || null, subject: subject.trim(), price: pr, note: note.trim() || null }));
+    setBusy(false);
+    if (x && x.ok) {
+      const lines = (x.sent || []).map((s: any) => (s.email_sent || s.sms_sent ? '✅ ' : '⚠️ ') + s.company + ': ' + (s.email_sent ? 'e-mail ✓ ' : '') + (s.sms_sent ? 'SMS ✓' : ''));
+      Alert.alert('Poptávka odeslána', lines.join('\n') + '\n\nVýsledek očekáváme do 3 dnů.');
+      setOpen(false); setSel([]); loadHist();
+    }
+  };
+  const inp = [s.inp, { marginBottom: 6 }];
+  return (
+    <View style={{ marginTop: 10 }}>
+      {!open ? (
+        <TouchableOpacity style={[s.btn, { backgroundColor: '#0f766e' }]} onPress={openForm}><Text style={s.btnTxt}>🏦 Poslat kontakt leasingové společnosti</Text></TouchableOpacity>
+      ) : (
+        <View style={{ borderWidth: 1, borderColor: 'rgba(20,184,166,0.5)', borderRadius: 12, padding: 10, backgroundColor: 'rgba(20,184,166,0.06)' }}>
+          <Text style={s.resName}>🏦 Poptávka financování</Text>
+          <Text style={[s.resSub, { marginBottom: 6 }]}>Leasingovka dostane e-mail i SMS s odkazem, kde označí stav. Výsledek čekáme do 3 dnů.</Text>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TextInput style={[...inp, { flex: 1 }]} value={fn} onChangeText={setFn} placeholder="Jméno *" placeholderTextColor={BS.text3} />
+            <TextInput style={[...inp, { flex: 1 }]} value={ln} onChangeText={setLn} placeholder="Příjmení *" placeholderTextColor={BS.text3} />
+          </View>
+          <TextInput style={inp} value={phone} onChangeText={setPhone} placeholder="Telefon" placeholderTextColor={BS.text3} keyboardType="phone-pad" />
+          <TextInput style={inp} value={email} onChangeText={setEmail} placeholder="E-mail" placeholderTextColor={BS.text3} keyboardType="email-address" autoCapitalize="none" />
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <TextInput style={[...inp, { flex: 2 }]} value={company} onChangeText={setCompany} placeholder="Firma (volitelné)" placeholderTextColor={BS.text3} />
+            <TextInput style={[...inp, { flex: 1 }]} value={ico} onChangeText={setIco} placeholder="IČO" placeholderTextColor={BS.text3} keyboardType="number-pad" />
+          </View>
+          <TextInput style={inp} value={subject} onChangeText={setSubject} placeholder="Co se financuje * (např. Prádlomat MINI SK, 1 ks)" placeholderTextColor={BS.text3} />
+          <TextInput style={inp} value={price} onChangeText={setPrice} placeholder="Cena bez DPH (Kč) *" placeholderTextColor={BS.text3} keyboardType="number-pad" />
+          <TextInput style={[...inp, { minHeight: 56, textAlignVertical: 'top' }]} value={note} onChangeText={setNote} placeholder="Poznámka pro leasingovku" placeholderTextColor={BS.text3} multiline />
+          <Text style={[s.lbl, { marginTop: 4 }]}>Komu poslat? (lze více)</Text>
+          {cosErr ? <Text style={[s.empty, { color: BS.err }]}>Nepodařilo se načíst leasingové společnosti (server zatím nemusí být aktualizovaný). Zkus to za chvíli znovu.</Text> : cos === null ? <ActivityIndicator color={BS.accent2} /> : cos.length === 0 ? <Text style={s.empty}>V HolyOS není žádná aktivní leasingová společnost.</Text> : cos.map((c) => {
+            const ok = !!(c.email || c.phone); const on = sel.includes(c.id);
+            return (
+              <TouchableOpacity key={c.id} disabled={!ok} onPress={() => setSel(on ? sel.filter((x) => x !== c.id) : sel.concat(c.id))}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 10, padding: 9, marginTop: 5, borderWidth: 1, borderRadius: 10, borderColor: on ? '#14b8a6' : BS.border, opacity: ok ? 1 : 0.45 }}>
+                <Text style={{ fontSize: 18 }}>{on ? '☑️' : '⬜'}</Text>
+                <View style={{ flex: 1 }}><Text style={s.resName}>{c.name}</Text><Text style={s.resSub}>{(c.contact_name || '—') + ' · ' + (c.email ? '📧 ' : '') + (c.phone ? '📱 ' : '') + (ok ? '' : 'chybí kontakt')}</Text></View>
+              </TouchableOpacity>
+            );
+          })}
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+            <TouchableOpacity style={s.btn2} onPress={() => setOpen(false)}><Text style={s.btn2Txt}>Zrušit</Text></TouchableOpacity>
+            <TouchableOpacity style={[s.btn, { backgroundColor: '#0f766e', opacity: busy ? 0.6 : 1 }]} disabled={busy} onPress={send}><Text style={s.btnTxt}>{busy ? 'Odesílám…' : '📨 Odeslat poptávku'}</Text></TouchableOpacity>
+          </View>
+        </View>
+      )}
+      {hist.map((q) => {
+        const st = LEAS_ST[q.status] || [q.status, '#94a3b8'];
+        return (
+          <View key={q.id} style={{ borderWidth: 1, borderColor: st[1] + '55', borderLeftWidth: 3, borderLeftColor: st[1], borderRadius: 10, padding: 8, marginTop: 6 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}><Text style={s.resName}>🏦 {q.company}</Text><Text style={{ color: st[1], fontWeight: '700', fontSize: 12.5 }}>{st[0]}</Text></View>
+            <Text style={s.resSub}>{q.subject} · {Math.round(q.price).toLocaleString('cs-CZ')} Kč · odesláno {new Date(q.sent_at).toLocaleDateString('cs-CZ')}</Text>
+            {q.result_note ? <Text style={s.resSub}>{q.result_note}{q.result_monthly ? ' · splátka ' + Math.round(q.result_monthly).toLocaleString('cs-CZ') + ' Kč/měs' : ''}</Text> : null}
+          </View>
+        );
+      })}
+    </View>
   );
 }
 

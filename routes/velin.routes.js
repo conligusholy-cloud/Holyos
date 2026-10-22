@@ -2055,7 +2055,7 @@ mobile.get('/meetings', meetingsGuard, async (req, res, next) => {
     if (isNaN(from) || isNaN(to)) return res.status(400).json({ error: 'Neplatný rozsah' });
     const slots = await prisma.meetingSlot.findMany({
       where: { starts_at: { gte: from, lt: to } }, orderBy: { starts_at: 'asc' },
-      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true } } },
+      include: { reservations: { orderBy: { created_at: 'asc' }, select: { id: true, name: true, email: true, phone: true, status: true, compounder_lead_id: true, created_at: true, note: true, mode: true, financing_path: true, internal_note: true } } },
     });
     const leadIds = [...new Set(slots.flatMap((s) => s.reservations.map((r) => r.compounder_lead_id)).filter(Boolean))];
     const leads = leadIds.length ? await prisma.compounderLead.findMany({ where: { id: { in: leadIds } }, select: { id: true, name: true, email: true, phone: true, city: true, status: true } }).catch(() => []) : [];
@@ -2114,8 +2114,51 @@ mobile.post('/meetings/reservations/:id(\\d+)', meetingsGuard, express.json({ li
     const b = req.body || {}, data = {};
     if (b.status !== undefined) { if (!MEET_STATUSES.includes(b.status)) return res.status(400).json({ ok: false, error: 'Neplatný stav' }); data.status = b.status; }
     if (b.note !== undefined) data.note = b.note ? String(b.note).slice(0, 1000) : null;
+    if (b.internal_note !== undefined) data.internal_note = b.internal_note ? String(b.internal_note).slice(0, 4000) : null;
     await prisma.meetingReservation.update({ where: { id: parseInt(req.params.id, 10) }, data });
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// ─── Schůzky → poptávka financování u leasingovky (stejná funkce jako „Poslat kontakt leasingové společnosti" v HolyOS) ───
+mobile.get('/meetings/leasing-companies', meetingsGuard, async (req, res, next) => {
+  try {
+    res.json(await prisma.leasingCompany.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true, contact_name: true, email: true, phone: true } }));
+  } catch (err) { next(err); }
+});
+mobile.get('/meetings/reservations/:id(\\d+)/leasing', meetingsGuard, async (req, res, next) => {
+  try {
+    const r = await prisma.meetingReservation.findUnique({ where: { id: parseInt(req.params.id, 10) }, select: { compounder_lead_id: true } });
+    if (!r || !r.compounder_lead_id) return res.json([]);
+    const rows = await prisma.leasingInquiry.findMany({ where: { compounder_lead_id: r.compounder_lead_id }, orderBy: { sent_at: 'desc' }, take: 20, include: { company: { select: { name: true } } } });
+    res.json(rows.map((q) => ({ id: q.id, company: q.company && q.company.name, status: q.status, subject: q.subject, price: Number(q.price), sent_at: q.sent_at, deadline_at: q.deadline_at, result_note: q.result_note, result_monthly: q.result_monthly != null ? Number(q.result_monthly) : null })));
+  } catch (err) { next(err); }
+});
+mobile.post('/meetings/reservations/:id(\\d+)/leasing', meetingsGuard, express.json({ limit: '30kb' }), async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const sch = z.object({
+      company_ids: z.array(z.number().int()).min(1, 'Vyber alespoň jednu leasingovou společnost'),
+      client_first_name: z.string().trim().min(1, 'Zadej jméno').max(120),
+      client_last_name: z.string().trim().min(1, 'Zadej příjmení').max(120),
+      client_company: z.string().trim().max(255).optional().nullable(),
+      client_ico: z.string().trim().max(20).optional().nullable(),
+      client_email: z.string().trim().max(255).optional().nullable(),
+      client_phone: z.string().trim().max(60).optional().nullable(),
+      subject: z.string().trim().min(1, 'Napiš, co se bude financovat').max(300),
+      price: z.number().positive('Zadej cenu bez DPH'),
+      note: z.string().trim().max(4000).optional().nullable(),
+    });
+    const p = sch.safeParse(b);
+    if (!p.success) return res.status(400).json({ ok: false, error: p.error.issues.map((i) => i.message).join(', ') });
+    const resv = await prisma.meetingReservation.findUnique({ where: { id: parseInt(req.params.id, 10) }, select: { compounder_lead_id: true } });
+    if (!resv) return res.status(404).json({ ok: false, error: 'Rezervace nenalezena' });
+    const d = Object.assign({}, p.data, { lead_id: resv.compounder_lead_id || null, akontace_pct: null, months: null });
+    const companies = await prisma.leasingCompany.findMany({ where: { id: { in: d.company_ids } } });
+    if (!companies.length) return res.status(404).json({ ok: false, error: 'Leasingová společnost nenalezena' });
+    const person = req.velin.person; const name = ((person.first_name || '') + ' ' + (person.last_name || '')).trim() || 'obchodník Best Series';
+    const sent = await require('./leasing.routes').createAndSendInquiries(companies, d, person.id, name);
+    res.status(201).json({ ok: true, sent });
   } catch (err) { next(err); }
 });
 

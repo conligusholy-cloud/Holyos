@@ -1109,6 +1109,32 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/invoices/:id/mark-checked — vizuální kontrola přepsaných údajů proti originálu
+// Body: { checked: true|false }. Ukládá se jako tag `ocr_checked` (bez migrace) + shodí needs_human_review.
+router.post('/invoices/:id/mark-checked', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const checked = req.body?.checked !== false;
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, invoice_number: true } });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    const tags = (invoice.tags || []).filter(t => t !== 'ocr_checked');
+    if (checked) tags.push('ocr_checked');
+    const updated = await prisma.invoice.update({
+      where: { id },
+      data: { tags, ...(checked ? { needs_human_review: false } : {}) },
+      select: { id: true, tags: true, needs_human_review: true },
+    });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: checked
+        ? `Údaje faktury ${invoice.invoice_number} zkontrolovány proti originálu`
+        : `Zrušena kontrola údajů faktury ${invoice.invoice_number}`,
+      user: req.user,
+    }).catch(() => {});
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+
 // ────────────────────────────────────────────────────────────────────────────
 // E-MAIL INGEST — seznam, ruční spuštění, reprocess
 // ────────────────────────────────────────────────────────────────────────────

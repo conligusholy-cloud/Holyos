@@ -728,4 +728,5 @@ router.get('/calc-data', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.createAndSendInquiries = createAndSendInquiries; // sdílí i Velín (schůzky)
 module.exports = router;
