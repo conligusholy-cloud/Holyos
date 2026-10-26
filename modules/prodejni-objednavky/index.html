@@ -4364,6 +4364,9 @@
           var todayStr = (l.todayMs && l.todayMs > 0) ? ('<div style="font-size:11px;color:#22c55e;font-weight:600;" title="Čas strávený na webu dnes">🕒 dnes ' + cmpFmtDur(l.todayMs) + '</div>') : '';
           var roleLabel = l.role === 'distributor' ? 'Distributor' : 'Compounder';
           var sel = '<select onclick="event.stopPropagation()" onchange="cmpSetStatus(' + l.id + ', this.value)" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;">';
+          // Stav, který v nabídce není (např. starý systémový „odeslana_schuzka"), ukázat pod jeho skutečným
+          // jménem — jinak by select tiše ukázal první volbu „Nový" a nesouhlasil by s filtrem.
+          if (l.status && !CMP_STATUS[l.status]) sel += '<option value="' + cmpEsc(l.status) + '" selected disabled>⚠ ' + cmpEsc(l.status) + '</option>';
           Object.keys(CMP_STATUS).forEach(function(k){ sel += '<option value="' + k + '"' + (l.status===k?' selected':'') + '>' + CMP_STATUS[k] + '</option>'; });
           sel += '</select>';
           var langCode = (l.lang||'').toLowerCase().split(/[-_]/)[0];

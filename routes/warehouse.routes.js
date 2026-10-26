@@ -527,10 +527,56 @@ router.post('/materials', async (req, res, next) => {
 // PUT /api/wh/materials/:id
 router.put('/materials/:id', async (req, res, next) => {
   try {
-    const before = await prisma.material.findUnique({ where: { id: parseInt(req.params.id) } });
-    const material = await prisma.material.update({ where: { id: parseInt(req.params.id) }, data: normalizeMaterialBody(req.body) });
+    const id = parseInt(req.params.id);
+    const before = await prisma.material.findUnique({ where: { id } });
+    const body = { ...req.body };
+    const confirmRename = body.confirm_rename === true || body.confirm_rename === 'true';
+    delete body.confirm_rename;
+
+    // Pojistka proti „recyklaci" karet: přejmenování / změna kódu karty, na kterou je napojený
+    // pracovní postup, nebo obnovení smazané karty pod jiným názvem, mění význam kódu.
+    // (Stalo se 21.–23. 10. 2026: staré smazané karty NA00xx dostaly názvy jiných dílů a postupy
+    // zůstaly pod původními názvy.) Vyžaduje vědomé potvrzení; po potvrzení se název/kód
+    // přenese i do napojeného postupu, aby sklad a pracovní postup nikdy nebyly v rozporu.
+    const trim = (v) => String(v == null ? '' : v).trim();
+    const renamed = !!before && body.name !== undefined && trim(body.name) !== trim(before.name);
+    const recoded = !!before && body.code !== undefined && trim(body.code) !== '' && trim(body.code) !== trim(before.code);
+    const reactivating = !!before && before.status !== 'active' && body.status === 'active';
+    let linked = [];
+    if (renamed || recoded) {
+      linked = await prisma.product.findMany({
+        where: { material_id: id },
+        select: { id: true, code: true, name: true, _count: { select: { operations: true } } },
+      });
+    }
+    if ((renamed || recoded) && (linked.length || reactivating) && !confirmRename) {
+      return res.status(409).json({
+        code: 'CONFIRM_RENAME',
+        error: reactivating
+          ? 'Obnovuješ smazanou kartu a zároveň měníš její ' + (renamed ? 'název' : 'kód') + '. Pokud jde o JINÝ díl, nepoužívej starou kartu — založ novou (nový kód). Starý kód má historii, výkresy a pracovní postup původního dílu.'
+          : 'Karta je napojená na pracovní postup. Změna ' + (renamed ? 'názvu' : 'kódu') + ' se přenese i do postupu. Pokud jde o JINÝ díl, nepřejmenovávej — založ novou kartu.',
+        old_name: before.name, new_name: renamed ? trim(body.name) : before.name,
+        old_code: before.code, new_code: recoded ? trim(body.code) : before.code,
+        reactivating,
+        linked: linked.map((p) => ({ id: p.id, code: p.code, name: p.name, operations: p._count.operations })),
+      });
+    }
+
+    const material = await prisma.material.update({ where: { id }, data: normalizeMaterialBody(body) });
     const changes = diffObjects(before, material);
     if (changes) await logAudit({ action: 'update', entity: 'material', entity_id: material.id, description: `Upraven materiál: ${material.name}`, changes, snapshot: makeSnapshot(before), user: req.user });
+
+    // Přenést název / kód do napojených pracovních postupů (sklad = zdroj pravdy)
+    for (const p of linked) {
+      const data = {};
+      if (renamed && p.name !== material.name) data.name = material.name;
+      if (recoded && p.code === before.code) data.code = material.code;
+      if (!Object.keys(data).length) continue;
+      try {
+        await prisma.product.update({ where: { id: p.id }, data });
+        await logAudit({ action: 'update', entity: 'product', entity_id: p.id, description: `Pracovní postup srovnán se skladovou kartou ${material.code}`, changes: Object.fromEntries(Object.keys(data).map((k) => [k, { from: p[k], to: data[k] }])), user: req.user });
+      } catch (e) { console.warn('[wh] propagace do postupu #' + p.id + ' selhala:', e.message); }
+    }
     res.json(material);
   } catch (err) {
     next(err);
@@ -847,7 +893,16 @@ router.get('/orders/purchase-assist', async (req, res, next) => {
       const hist = await prisma.orderItem.findMany({ where: { material_id: { in: ids }, unit_price: { gt: 0 }, order: { type: { in: ['purchase', 'cooperation'] }, company_id: supplierId } }, orderBy: { id: 'desc' }, take: 400, select: { material_id: true, unit_price: true } });
       for (const h of hist) if (lastPrices[h.material_id] === undefined) lastPrices[h.material_id] = Number(h.unit_price);
     }
-    // Cena: 1) nákupní ceník dodavatele (tier podle množství) → 2) poslední objednávka → 3) karta zboží → jinak ručně
+    // Ceny z odpovězených poptávek tohoto dodavatele (posledních 180 dní) — novější než poslední objednávka
+    const inqPrices = {};
+    if (ids.length) {
+      try {
+        const since = new Date(Date.now() - 180 * 86400000);
+        const qi = await prisma.purchaseInquiryItem.findMany({ where: { material_id: { in: ids }, offered_price: { gt: 0 }, inquiry: { company_id: supplierId, status: { in: ['answered', 'converted'] }, answered_at: { gte: since } } }, orderBy: { id: 'desc' }, take: 400, select: { material_id: true, offered_price: true, lead_time_days: true, inquiry: { select: { number: true } } } });
+        for (const q of qi) if (inqPrices[q.material_id] === undefined) inqPrices[q.material_id] = { price: Number(q.offered_price), lead: q.lead_time_days, number: q.inquiry.number };
+      } catch (e) { /* tabulka poptávek ještě neexistuje */ }
+    }
+    // Cena: 1) nákupní ceník dodavatele (tier podle množství) → 2) poptávka → 3) poslední objednávka → 4) karta zboží → jinak ručně
     const tiers = await loadPriceTiers(supplierId, ids);
     let priceCur = null;
     suggestions.forEach((s) => {
@@ -856,7 +911,8 @@ router.get('/orders/purchase-assist', async (req, res, next) => {
         s.unit_price = t.price; s.price_source = 'cenik'; s.price_currency = t.currency; priceCur = priceCur || t.currency;
         if (t.moq && s.suggested_qty < t.moq) { s.suggested_qty = t.moq; s.moq_applied = true; }
         if (t.days != null && !s.lead_time_days) s.lead_time_days = t.days;
-      } else if (lastPrices[s.material_id] !== undefined) { s.unit_price = lastPrices[s.material_id]; s.price_source = 'last_order'; }
+      } else if (inqPrices[s.material_id]) { const q = inqPrices[s.material_id]; s.unit_price = q.price; s.price_source = 'inquiry'; s.price_ref = q.number; if (q.lead != null && !s.lead_time_days) s.lead_time_days = q.lead; }
+      else if (lastPrices[s.material_id] !== undefined) { s.unit_price = lastPrices[s.material_id]; s.price_source = 'last_order'; }
       else if (s.unit_price > 0) s.price_source = 'material';
       else s.price_source = 'none';
     });
@@ -865,7 +921,7 @@ router.get('/orders/purchase-assist', async (req, res, next) => {
     const keep = ['transport_by', 'unloading_by', 'delivery_place', 'receiver', 'receiving_hours', 'pre_notice', 'packaging', 'incoterms', 'returnable', 'pay_method', 'due_days', 'deposit', 'invoice_docs', 'invoice_email', 'partial_invoicing', 'docs_required', 'acceptance', 'warranty', 'partial_ok', 'early_ok', 'term_meaning'];
     const terms = {}; if (lastOrder && lastOrder.po_data) for (const k of keep) if (lastOrder.po_data[k]) terms[k] = lastOrder.po_data[k];
     if (company && company.payment_terms_days && !terms.due_days) terms.due_days = String(company.payment_terms_days);
-    res.json({ company, last_order: lastOrder ? { order_number: lastOrder.order_number, currency: lastOrder.currency } : null, terms, currency: priceCur || (lastOrder && lastOrder.currency) || 'CZK', suggestions, all_goods: mats.filter((m) => !suggestions.find((s) => s.material_id === m.id)).map((m) => { const t = pickTier(tiers[m.id], 1); return ({ material_id: m.id, code: m.code, name: m.name, unit: m.unit, price_source: t ? 'cenik' : lastPrices[m.id] !== undefined ? 'last_order' : Number(m.weighted_avg_price || m.unit_price) > 0 ? 'material' : 'none', unit_price: t ? t.price : lastPrices[m.id] !== undefined ? lastPrices[m.id] : Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, stock: Number(m.current_stock) || 0 }); }) });
+    res.json({ company, last_order: lastOrder ? { order_number: lastOrder.order_number, currency: lastOrder.currency } : null, terms, currency: priceCur || (lastOrder && lastOrder.currency) || 'CZK', suggestions, all_goods: mats.filter((m) => !suggestions.find((s) => s.material_id === m.id)).map((m) => { const t = pickTier(tiers[m.id], 1); const q = inqPrices[m.id]; return ({ material_id: m.id, code: m.code, name: m.name, unit: m.unit, price_source: t ? 'cenik' : q ? 'inquiry' : lastPrices[m.id] !== undefined ? 'last_order' : Number(m.weighted_avg_price || m.unit_price) > 0 ? 'material' : 'none', price_ref: !t && q ? q.number : undefined, unit_price: t ? t.price : q ? q.price : lastPrices[m.id] !== undefined ? lastPrices[m.id] : Number(m.weighted_avg_price || m.unit_price) || 0, lead_time_days: Number(m.lead_time_days) || 0, stock: Number(m.current_stock) || 0 }); }) });
   } catch (err) { next(err); }
 });
 

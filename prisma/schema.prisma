@@ -7290,3 +7290,60 @@ model SoftwareSubscription {
   @@index([active])
   @@map("software_subscriptions")
 }
+
+// Poptávka u dodavatele — z průvodce nákupem, když u položek chybí cena.
+// Dodavatel dostane odkaz (token) na veřejný poptávkový list, doplní ceny, dodací lhůtu
+// a termín dodání; může uložit rozpracované nebo odeslat. Odpovědi tvoří historii cen.
+// Vazby (firma, kontakt, uživatel, objednávka) jsou jen jako ID — bez Prisma relací do velkých modelů.
+model PurchaseInquiry {
+  id               Int       @id @default(autoincrement())
+  number           String    @unique @db.VarChar(30) // POP-2026-0001
+  company_id       Int
+  contact_person_id Int?
+  contact_email    String?   @db.VarChar(255)
+  contact_name     String?   @db.VarChar(255)
+  token            String    @unique @db.VarChar(64)
+  status           String    @default("draft") @db.VarChar(20) // draft | sent | opened | in_progress | answered | cancelled | converted
+  currency         String    @default("CZK") @db.VarChar(3)
+  required_delivery DateTime? @db.Date // požadované dodání celé poptávky
+  note             String?   @db.Text   // náš průvodní text pro dodavatele
+  supplier_note    String?   @db.Text   // poznámka dodavatele k nabídce
+  supplier_name    String?   @db.VarChar(255) // kdo nabídku vyplnil
+  order_id         Int?      // objednávka vytvořená z odpovědi
+  created_by       Int?      // User.id
+  sent_at          DateTime?
+  opened_at        DateTime?
+  saved_at         DateTime?
+  answered_at      DateTime?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  items            PurchaseInquiryItem[]
+
+  @@index([company_id])
+  @@index([status])
+  @@map("purchase_inquiries")
+}
+
+model PurchaseInquiryItem {
+  id               Int       @id @default(autoincrement())
+  inquiry_id       Int
+  inquiry          PurchaseInquiry @relation(fields: [inquiry_id], references: [id], onDelete: Cascade)
+  line_order       Int       @default(0)
+  material_id      Int?
+  name             String    @db.VarChar(255)
+  code             String?   @db.VarChar(100)
+  quantity         Decimal   @db.Decimal(12, 3)
+  unit             String    @default("ks") @db.VarChar(20)
+  needed_by        DateTime? @db.Date // požadovaný termín dodání položky
+  offered_price    Decimal?  @db.Decimal(12, 4) // cena/jedn. od dodavatele
+  lead_time_days   Int?      // kolik dní dopředu objednat
+  offered_delivery DateTime? @db.Date // termín, který dodavatel garantuje
+  min_order_qty    Decimal?  @db.Decimal(12, 3)
+  supplier_note    String?   @db.Text
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  @@index([inquiry_id])
+  @@index([material_id])
+  @@map("purchase_inquiry_items")
+}

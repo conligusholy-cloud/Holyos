@@ -465,6 +465,15 @@ router.put('/products/:id', async (req, res, next) => {
       where: { id: parseInt(req.params.id) },
       data,
     });
+    // Postup a skladová karta musí mít stejný název — přejmenování postupu se přenese do napojené karty
+    if (name !== undefined && product.material_id) {
+      try {
+        const mat = await prisma.material.findUnique({ where: { id: product.material_id }, select: { id: true, name: true } });
+        if (mat && String(mat.name || '').trim() !== String(product.name || '').trim()) {
+          await prisma.material.update({ where: { id: mat.id }, data: { name: product.name } });
+        }
+      } catch (e) { console.warn('[production] propagace názvu do skladové karty selhala:', e.message); }
+    }
     res.json(product);
   } catch (err) { next(err); }
 });

@@ -200,8 +200,23 @@
   <script>
     // === Stav ===
     let allProducts = [];
-    let currentType = 'product';
+    // Záložka (Výrobky / Polotovary / Nářezové plány), hledání a pozice v seznamu se pamatují
+    // v sessionStorage — po refreshi nebo návratu z detailu se uživatel vrátí tam, kde byl.
+    const PP_TYPES = ['product', 'semi-product', 'cutting'];
+    let currentType = (function(){ try { var t = sessionStorage.getItem('pp.subtab'); return PP_TYPES.indexOf(t) >= 0 ? t : 'product'; } catch(e){ return 'product'; } })();
     const token = sessionStorage.getItem('token');
+    function ppListEl(type) { return document.getElementById(type === 'cutting' ? 'cutting-list' : 'product-list'); }
+    function ppSaveScroll() { try { var el = ppListEl(currentType); if (el) sessionStorage.setItem('pp.scroll.' + currentType, String(el.scrollTop)); } catch(e){} }
+    function ppRestoreScroll() {
+      try {
+        var y = parseInt(sessionStorage.getItem('pp.scroll.' + currentType) || '0', 10) || 0;
+        var el = ppListEl(currentType); if (!el || !y) return;
+        // Seznam se vykresluje asynchronně → zkusit opakovaně, dokud není dost vysoký
+        var tries = 0;
+        (function go(){ el.scrollTop = y; if (Math.abs(el.scrollTop - y) > 2 && tries++ < 20) setTimeout(go, 100); })();
+      } catch(e){}
+    }
+    window.addEventListener('pagehide', ppSaveScroll);
 
     // === API ===
     async function api(path) {
@@ -343,8 +358,10 @@
       document.getElementById('count-badge').textContent = allProducts.length;
     }
 
-    function switchTab(type) {
+    function switchTab(type, opts) {
+      if (!(opts && opts.restore)) ppSaveScroll();
       currentType = type;
+      try { sessionStorage.setItem('pp.subtab', type); } catch(e){}
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       const tabId = type === 'product' ? 'tab-products' : (type === 'semi-product' ? 'tab-semi' : 'tab-cutting');
       document.getElementById(tabId).classList.add('active');
@@ -443,7 +460,7 @@
       list.innerHTML = html;
     }
 
-    function filterProducts(q) { renderProducts(); }
+    function filterProducts(q) { try { sessionStorage.setItem('pp.search', q || ''); } catch(e){} renderProducts(); }
 
     async function toggleConfigurator(productId, el) {
       try {
@@ -758,7 +775,18 @@
     }
 
     // === Init ===
-    document.addEventListener('DOMContentLoaded', loadProducts);
+    document.addEventListener('DOMContentLoaded', async function () {
+      // Obnovit hledání + záložku z minula (refresh / návrat z detailu)
+      try { var s = sessionStorage.getItem('pp.search'); if (s) document.getElementById('search-input').value = s; } catch(e){}
+      await loadProducts();
+      if (currentType !== 'product') switchTab(currentType, { restore: true });
+      ppRestoreScroll();
+      // Průběžně ukládat pozici (pro refresh bez opuštění stránky)
+      ['product-list', 'cutting-list'].forEach(function (id) {
+        var el = document.getElementById(id); var t = null;
+        if (el) el.addEventListener('scroll', function () { clearTimeout(t); t = setTimeout(ppSaveScroll, 150); }, { passive: true });
+      });
+    });
   </script>
 
   <!-- Nový výrobek / polotovar (nativní HolyOS linie, nezávisle na Factorify) -->

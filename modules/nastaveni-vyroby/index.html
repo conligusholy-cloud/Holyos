@@ -177,21 +177,45 @@
       'planovani-vyroby': { page: 'modules/planovani-vyroby/index.html' },
     };
     var current = null;
+    // Stránka uvnitř záložky (např. detail výrobku) se pamatuje v URL (&p=…) i v sessionStorage,
+    // aby refresh vrátil uživatele přesně tam, kde byl — ne na začátek záložky.
+    function tabDir(name) { var pg = '/' + TABS[name].page; return pg.slice(0, pg.lastIndexOf('/') + 1); }
+    function validInner(name, p) { return typeof p === 'string' && p.indexOf(tabDir(name)) === 0 && !/[<>"']|\/\//.test(p.slice(1)); }
+    function withEmbed(p) { return /[?&]embed=1(&|$)/.test(p) ? p : p + (p.indexOf('?') === -1 ? '?' : '&') + 'embed=1'; }
     function switchTab(name, opts) {
       if (!TABS[name]) name = 'pracoviste';
       current = name;
       document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
       var src = TABS[name].page + '?embed=1';
+      var inner = opts && opts.inner;
+      if (!inner) { try { inner = sessionStorage.getItem('nastaveni-vyroby.frame.' + name); } catch (e) {} }
+      if (inner && validInner(name, inner)) src = withEmbed(inner);
       var fr = document.getElementById('tab-frame');
       if (fr.getAttribute('data-tab') !== name) { fr.setAttribute('data-tab', name); fr.src = src; }
       document.getElementById('open-full').href = TABS[name].page;
       try { localStorage.setItem('nastaveni-vyroby.tab', name); } catch (e) {}
       if (!(opts && opts.silent)) { try { history.replaceState(null, '', location.pathname + '?tab=' + name); } catch (e) {} }
     }
+    // Po každé navigaci uvnitř rámce uložit aktuální stránku (stejný origin → location je čitelná)
+    document.getElementById('tab-frame').addEventListener('load', function () {
+      var fr = this, name = fr.getAttribute('data-tab');
+      if (!name || !TABS[name]) return;
+      try {
+        var l = fr.contentWindow.location;
+        var p = (l.pathname + l.search.replace(/([?&])embed=1(&|$)/, '$1').replace(/[?&]$/, '')).replace(/\?$/, '');
+        if (!validInner(name, p)) return;
+        sessionStorage.setItem('nastaveni-vyroby.frame.' + name, p);
+        var isStart = p === '/' + TABS[name].page;
+        history.replaceState(null, '', location.pathname + '?tab=' + name + (isStart ? '' : '&p=' + encodeURIComponent(p)));
+        if (fr.contentDocument && fr.contentDocument.title) document.title = fr.contentDocument.title.replace(/\s*\|\s*HOLYOS.*$/i, '') + ' | Nastavení výroby';
+      } catch (e) { /* jiný origin / prázdný rámec */ }
+    });
     (function () {
-      var q = new URLSearchParams(location.search).get('tab');
+      var sp = new URLSearchParams(location.search);
+      var q = sp.get('tab');
       var last = null; try { last = localStorage.getItem('nastaveni-vyroby.tab'); } catch (e) {}
-      switchTab(q || last || 'pracoviste', { silent: !q });
+      var name = q || last || 'pracoviste';
+      switchTab(name, { silent: !q, inner: sp.get('p') || null });
     })();
   </script>
 </body>

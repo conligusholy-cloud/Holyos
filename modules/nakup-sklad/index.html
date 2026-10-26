@@ -96,6 +96,7 @@
       <div class="tab active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Přehled</div>
       <div class="tab" data-tab="companies" onclick="switchTab('companies')">🏢 Společnosti</div>
       <div class="tab" data-tab="orders" onclick="switchTab('orders')">📋 Nákupní objednávky</div>
+      <div class="tab" data-tab="pricelist" onclick="switchTab('pricelist')">💰 Nákupní ceník</div>
       <div class="tab" data-tab="materials" onclick="switchTab('materials')">📦 Zboží</div>
       <div class="tab" data-tab="stock" onclick="switchTab('stock')">📦 Skladové zásoby</div>
       <div class="tab" data-tab="movements" onclick="switchTab('movements')">🔄 Pohyby</div>
@@ -151,6 +152,18 @@
           <button class="btn btn-primary" onclick="openOrderModal()">+ Nová objednávka</button>
         </div>
         <div id="orders-table"></div>
+      </div>
+
+      <!-- TAB: Nákupní ceník (zboží × dodavatelé, ceny, dodací lhůty) -->
+      <div class="tab-content" id="tab-pricelist">
+        <div class="toolbar">
+          <input type="text" id="pl-search" placeholder="Hledat zboží (kód, název)..." oninput="plSearchSoon()" style="width:280px">
+          <select id="pl-supplier" onchange="loadPriceList()"><option value="">Všichni dodavatelé</option></select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2)"><input type="checkbox" id="pl-active" checked onchange="loadPriceList()"> Jen platné nabídky</label>
+          <div style="flex:1"></div>
+          <button class="btn btn-primary" onclick="plPick()">＋ Přidat nabídku</button>
+        </div>
+        <div id="pl-table"></div>
       </div>
 
       <!-- TAB: Zboží -->
@@ -341,6 +354,7 @@
       if (tab === 'dashboard') loadDashboard();
       if (tab === 'companies') loadCompanies();
       if (tab === 'orders') loadOrders();
+      if (tab === 'pricelist' && typeof loadPriceList === 'function') loadPriceList();
       if (tab === 'materials') { loadMaterials(); populateMatCatFilter(); populateMatSupplierFilter(); }
       if (tab === 'categories') loadCategoriesTab();
       if (tab === 'stock') { loadStock(); populateStockWhFilter(); }
@@ -733,17 +747,19 @@
       `;
       document.head.appendChild(st);
     })();
-    const PN = { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false };
+    const PN = { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false, inquiries: [], fromInquiry: null };
     const pnToday = (add) => { const d = new Date(); d.setDate(d.getDate() + (add || 0)); return d.toISOString().slice(0, 10); };
     async function poNew() {
       if (companies.length === 0) { try { companies = await (await fetch('/api/wh/companies')).json(); } catch (e) { /* bez firem */ } }
-      Object.assign(PN, { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false });
+      Object.assign(PN, { supplier: null, assist: null, overview: [], cart: [], currency: 'CZK', expected: '', dateManual: false, note: '', type: 'purchase', busy: false, inquiries: [], fromInquiry: null });
       try { PN.overview = (await (await fetch('/api/wh/orders/purchase-assist')).json()).suppliers || []; } catch (e) { PN.overview = []; }
       pnRender();
     }
     async function pnPickSupplier(id) {
       PN.supplier = id ? parseInt(id, 10) : null; PN.assist = null; PN.cart = []; PN.expected = ''; PN.dateManual = false;
       if (PN.supplier) { try { PN.assist = await (await fetch('/api/wh/orders/purchase-assist?supplier_id=' + PN.supplier)).json(); PN.currency = PN.assist.currency || 'CZK'; } catch (e) { PN.assist = null; } }
+      PN.inquiries = []; PN.fromInquiry = null;
+      if (PN.supplier) { try { const r = await fetch('/api/wh/inquiries?company_id=' + PN.supplier + '&status=sent,opened,in_progress,answered'); if (r.ok) PN.inquiries = (await r.json()).slice(0, 8); } catch (e) { /* bez poptávek */ } }
       pnRender();
     }
     function pnAdd(it) {
@@ -771,7 +787,9 @@
       let body = '';
       if (PN.supplier && PN.assist) {
         const a = PN.assist; const sug = a.suggestions || []; const inCart = (id) => PN.cart.some((c) => c.material_id === id);
-        body += '<div class="pn-box"><div class="pn-h"><span class="n">2</span>Co objednat</div>' +
+        const INQ_ST = { sent: 'odesláno', opened: 'dodavatel otevřel', in_progress: 'dodavatel vyplňuje', answered: '✅ odpovězeno' };
+        const inqHtml = (PN.inquiries || []).length ? '<div class="pn-info" style="margin-bottom:10px">📨 <b>Poptávky u dodavatele:</b> ' + PN.inquiries.map((q) => '<span class="pn-chip" style="cursor:default">' + poTxt(q.number) + ' <span class="pn-muted">' + (INQ_ST[q.status] || q.status) + (q.answered_at ? ' ' + new Date(q.answered_at).toLocaleDateString('cs-CZ') : q.sent_at ? ' ' + new Date(q.sent_at).toLocaleDateString('cs-CZ') : '') + '</span>' + (q.status === 'answered' ? ' <button class="po-btn" data-pn="inq-apply" data-id="' + q.id + '" title="Doplní ceny, lhůty a termíny z odpovědi dodavatele do objednávky">Převzít ceny</button>' : ' <a class="pn-muted" href="' + poAttr(q.link) + '" target="_blank" title="Otevřít poptávkový list">↗</a>') + '</span>').join(' ') + (PN.fromInquiry ? '<div style="margin-top:6px;color:#4ade80">Ceny převzaty z poptávky — po vytvoření objednávky se poptávka označí jako uzavřená.</div>' : '') + '</div>' : '';
+        body += '<div class="pn-box"><div class="pn-h"><span class="n">2</span>Co objednat</div>' + inqHtml +
           (a.last_order ? '<div class="pn-info">Podmínky dopravy a platby převezmu z poslední objednávky ' + poTxt(a.last_order.order_number) + ' (půjdou upravit v dokumentu).</div>' : '') +
           (() => {
             const dfmt = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
@@ -789,7 +807,7 @@
             return h;
           })() +
           '<div style="margin-top:10px"><input class="po-in" id="pn-search" list="pn-goods" placeholder="＋ Další zboží tohoto dodavatele nebo volný text – piš a Enter" autocomplete="off" style="border:1px dashed var(--border);background:var(--surface2);padding:8px 10px"><datalist id="pn-goods">' + (a.all_goods || []).map((g) => '<option value="' + poAttr(g.name) + '">' + poTxt(g.code) + '</option>').join('') + '</datalist></div></div>';
-        const lines = PN.cart.map((c, i) => '<tr data-i="' + i + '"><td class="pn-muted">' + (i + 1) + '</td><td><input class="po-in" data-pf="name" value="' + poAttr(c.name) + '"></td><td style="width:84px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="quantity" value="' + (Number(c.quantity) || 0) + '"></td><td style="width:54px"><input class="po-in" data-pf="unit" value="' + poAttr(c.unit) + '"></td><td style="width:124px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="unit_price" value="' + (Number(c.unit_price) || 0) + '"' + (Number(c.unit_price) > 0 ? '' : ' placeholder="doplň cenu" style="background:rgba(239,68,68,.18);border-bottom:2px solid #f87171"') + '>' + (Number(c.unit_price) > 0 ? '<div class="pn-muted" style="text-align:right;font-size:10px">' + ({ cenik: 'z nákupního ceníku', last_order: 'z poslední objednávky', material: 'z karty zboží' }[c.price_source] || 'ručně') + '</div>' : '<div style="text-align:right;font-size:10px;color:#f87171;font-weight:700">chybí cena</div>') + '</td><td class="r" style="width:110px"><b>' + poMoney((Number(c.quantity) || 0) * (Number(c.unit_price) || 0), PN.currency) + '</b></td><td style="width:150px"><input class="po-in' + (c.needed_by && c.expected_delivery && c.expected_delivery > c.needed_by ? ' po-late' : '') + '" type="date" data-pf="expected_delivery" title="' + (c.needed_by ? 'Ve výrobě nejpozději ' + c.needed_by + ' — dodání musí být nejpozději tento den' : 'Požadovaný termín dodání') + '" value="' + poAttr(c.expected_delivery || '') + '"></td><td style="width:30px"><button class="po-x" data-pn="del">✕</button></td></tr>').join('');
+        const lines = PN.cart.map((c, i) => '<tr data-i="' + i + '"><td class="pn-muted">' + (i + 1) + '</td><td><input class="po-in" data-pf="name" value="' + poAttr(c.name) + '"></td><td style="width:84px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="quantity" value="' + (Number(c.quantity) || 0) + '"></td><td style="width:54px"><input class="po-in" data-pf="unit" value="' + poAttr(c.unit) + '"></td><td style="width:124px"><input class="po-in r" type="number" step="0.01" min="0" data-pf="unit_price" value="' + (Number(c.unit_price) || 0) + '"' + (Number(c.unit_price) > 0 ? '' : ' placeholder="doplň cenu" style="background:rgba(239,68,68,.18);border-bottom:2px solid #f87171"') + '>' + (Number(c.unit_price) > 0 ? '<div class="pn-muted" style="text-align:right;font-size:10px">' + ({ cenik: 'z nákupního ceníku', inquiry: 'z poptávky' + (c.price_ref ? ' ' + poTxt(c.price_ref) : ''), last_order: 'z poslední objednávky', material: 'z karty zboží' }[c.price_source] || 'ručně') + '</div>' : '<div style="text-align:right;font-size:10px;color:#f87171;font-weight:700">chybí cena</div>') + '</td><td class="r" style="width:110px"><b>' + poMoney((Number(c.quantity) || 0) * (Number(c.unit_price) || 0), PN.currency) + '</b></td><td style="width:150px"><input class="po-in' + (c.needed_by && c.expected_delivery && c.expected_delivery > c.needed_by ? ' po-late' : '') + '" type="date" data-pf="expected_delivery" title="' + (c.needed_by ? 'Ve výrobě nejpozději ' + c.needed_by + ' — dodání musí být nejpozději tento den' : 'Požadovaný termín dodání') + '" value="' + poAttr(c.expected_delivery || '') + '"></td><td style="width:30px"><button class="po-x" data-pn="del">✕</button></td></tr>').join('');
         body += '<div class="pn-box"><div class="pn-h"><span class="n">3</span>Objednávka</div>' +
           (PN.cart.length ? '<table class="pn-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th>Požadovaný termín dodání</th><th></th></tr></thead><tbody>' + lines + '</tbody></table>' : '<div class="pn-muted">Zatím prázdné — přidej položky výše.</div>') +
           '<div class="pn-row" style="margin-top:12px;justify-content:space-between"><div class="pn-row"><label class="pn-muted">Požadované dodání celé objednávky<br><input class="po-in" type="date" id="pn-date" value="' + poAttr(PN.expected) + '" style="border:1px solid var(--border);background:var(--bg);"></label><label class="pn-muted">Měna<br><select class="po-sel" id="pn-cur" style="border:1px solid var(--border);background:var(--bg);"><option value="CZK"' + (PN.currency !== 'EUR' ? ' selected' : '') + '>CZK</option><option value="EUR"' + (PN.currency === 'EUR' ? ' selected' : '') + '>EUR</option></select></label><label class="pn-muted">Typ<br><select class="po-sel" id="pn-type" style="border:1px solid var(--border);background:var(--bg);"><option value="purchase"' + (PN.type === 'purchase' ? ' selected' : '') + '>Nákupní</option><option value="cooperation"' + (PN.type === 'cooperation' ? ' selected' : '') + '>Kooperační</option></select></label></div>' +
@@ -804,7 +822,7 @@
         '<div class="pn-box"><div class="pn-h"><span class="n">1</span>Dodavatel</div><select class="po-sel" id="pn-sup" style="font-weight:700;padding:9px 10px">' + supOpts + '</select>' +
           (chips ? '<div style="margin-top:10px"><div class="pn-muted" style="margin-bottom:6px">Doporučeno — tam je zboží pod minimální zásobou:</div>' + chips + '</div>' : (!PN.supplier && !PN.overview.length ? '<div class="pn-muted" style="margin-top:8px">Žádné zboží s dodavatelem není pod minimem.</div>' : '')) + '</div>' +
         body +
-        '<div class="pn-row" style="justify-content:flex-end"><span class="pn-muted"' + (noPrice ? ' style="color:#f87171;font-weight:700"' : '') + '>' + (noPrice ? noPrice + ' položek nemá cenu — doplň ji (v nákupním ceníku dodavatele není).' : 'Číslo objednávky se přidělí automaticky, doklad pak doladíš jako papír.') + '</span><button class="pn-go" id="pn-create"' + (can ? '' : ' disabled') + '>Vytvořit objednávku →</button></div>' +
+        '<div class="pn-row" style="justify-content:flex-end"><span class="pn-muted"' + (noPrice ? ' style="color:#f87171;font-weight:700"' : '') + '>' + (noPrice ? noPrice + ' položek nemá cenu — doplň ji, nebo ji poptej u dodavatele.' : 'Číslo objednávky se přidělí automaticky, doklad pak doladíš jako papír.') + '</span>' + (PN.supplier && PN.cart.length ? '<button class="po-btn" id="pn-inquiry" style="padding:10px 14px;font-weight:700" title="Pošle dodavateli odkaz na poptávkový list — doplní ceny, dodací lhůtu a termín">📨 Poptat ceny u dodavatele</button>' : '') + '<button class="pn-go" id="pn-create"' + (can ? '' : ' disabled') + '>Vytvořit objednávku →</button></div>' +
         '</div></div>';
       const sh = document.getElementById('pn-sheet');
       sh.addEventListener('click', pnClick); sh.addEventListener('change', pnChange);
@@ -828,9 +846,11 @@
     async function pnClick(e) {
       const chip = e.target.closest('[data-pn-sup]'); if (chip) return pnPickSupplier(chip.dataset.pnSup);
       if (e.target.id === 'pn-create') return pnCreate();
+      if (e.target.id === 'pn-inquiry') return pnInquiryOpen();
       const b = e.target.closest('[data-pn]'); if (!b) return; const a = PN.assist || {};
       if (b.dataset.pn === 'addall') { (a.suggestions || []).filter((s) => (s.kind === 'production' ? 'production' : 'minimum') === b.dataset.kind).forEach(pnAddSuggestion); pnRecalcDate(); pnRender(); }
       else if (b.dataset.pn === 'add') { const s = (a.suggestions || []).find((x) => String(x.material_id) === b.dataset.mid); if (s) { pnAddSuggestion(s); pnRecalcDate(); pnRender(); } }
+      else if (b.dataset.pn === 'inq-apply') { return pnInquiryApply(parseInt(b.dataset.id, 10)); }
       else if (b.dataset.pn === 'del') { PN.cart.splice(parseInt(b.closest('tr').dataset.i, 10), 1); pnRecalcDate(); pnRender(); }
     }
     function pnChange(e) {
@@ -848,8 +868,77 @@
         const body = { type: PN.type, company_id: PN.supplier, currency: PN.currency, expected_delivery: PN.expected || null, note: PN.note || null, po_data: (PN.assist && PN.assist.terms) || {}, items: PN.cart };
         const r = await fetch('/api/wh/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
-        const o = await r.json(); loadOrders(); loadStats(); await openOrderDetail(o.id);
+        const o = await r.json();
+        if (PN.fromInquiry) { try { await fetch('/api/wh/inquiries/' + PN.fromInquiry + '/converted', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: o.id }) }); } catch (e) { /* jen evidence */ } }
+        loadOrders(); loadStats(); await openOrderDetail(o.id);
       } catch (e) { PN.busy = false; alert('Objednávku se nepodařilo vytvořit: ' + e.message); pnRender(); }
+    }
+
+    // ─── Poptávka u dodavatele (když chybí cena) ───────────────────────────
+    function pnInquiryApply(id) {
+      const q = (PN.inquiries || []).find((x) => x.id === id); if (!q) return;
+      let n = 0;
+      (q.items || []).forEach((it) => {
+        const c = PN.cart.find((x) => (it.material_id && x.material_id === it.material_id) || (!it.material_id && String(x.name).trim() === String(it.name).trim()));
+        if (!c) { if (it.offered_price != null) { pnAdd({ material_id: it.material_id, name: it.name, unit: it.unit, unit_price: it.offered_price, price_source: 'inquiry', price_ref: q.number, quantity: it.quantity, lead: it.lead_time_days || 0, expected_delivery: it.offered_delivery || it.needed_by || pnToday(it.lead_time_days || 7) }); n++; } return; }
+        if (it.offered_price != null) { c.unit_price = it.offered_price; c.price_source = 'inquiry'; c.price_ref = q.number; n++; }
+        if (it.lead_time_days != null) c.lead = it.lead_time_days;
+        if (it.offered_delivery) c.expected_delivery = it.offered_delivery;
+        if (it.supplier_note) c.spec = [c.spec, 'Dodavatel: ' + it.supplier_note].filter(Boolean).join(' · ');
+      });
+      PN.fromInquiry = q.id; pnRecalcDate(); pnRender();
+      if (!n) alert('V odpovědi nejsou žádné ceny k převzetí.');
+    }
+    async function pnInquiryOpen() {
+      const noPriceIdx = PN.cart.map((c, i) => (Number(c.unit_price) > 0 ? -1 : i)).filter((i) => i >= 0);
+      let ct = { contacts: [], company: {} };
+      try { ct = await (await fetch('/api/wh/inquiries/contacts?company_id=' + PN.supplier)).json(); } catch (e) { /* bez kontaktů */ }
+      const last = ct.last_used && ct.last_used.contact_email;
+      const opts = (ct.contacts || []).map((c, i) => '<option value="' + i + '"' + (last && c.email.toLowerCase() === last.toLowerCase() ? ' selected' : '') + '>' + poTxt(c.name) + ' — ' + poTxt(c.email) + (c.company ? ' (e-mail firmy)' : '') + '</option>').join('');
+      const rows = PN.cart.map((c, i) => '<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="inq-it" value="' + i + '"' + (!noPriceIdx.length || noPriceIdx.includes(i) ? ' checked' : '') + '> <span>' + poTxt(c.name) + ' — <b>' + (Number(c.quantity) || 0) + ' ' + poTxt(c.unit) + '</b>' + (c.expected_delivery ? ' <span class="pn-muted">dodat do ' + new Date(c.expected_delivery).toLocaleDateString('cs-CZ') + '</span>' : '') + (Number(c.unit_price) > 0 ? ' <span class="pn-muted">(cena ' + Number(c.unit_price) + ')</span>' : ' <span style="color:#f87171">bez ceny</span>') + '</span></label>').join('');
+      const ov = document.createElement('div'); ov.id = 'inq-ov'; ov.className = 'modal-overlay po-overlay'; ov.style.zIndex = 3000;
+      ov.innerHTML = '<div class="po-sheet" style="max-width:720px;padding:26px 30px">' +
+        '<div class="po-top"><button class="po-btn" id="inq-x">✕ Zavřít</button></div>' +
+        '<div class="po-kicker">POPTÁVKA</div><div class="po-num" style="font-size:22px;margin-bottom:12px">Poptat ceny u dodavatele</div>' +
+        '<div class="pn-muted" style="margin-bottom:12px">Dodavatel dostane e-mail s odkazem na poptávkový list. Doplní cenu, dodací lhůtu (kolik dní předem objednat) a termín dodání — může si uložit rozpracované a odeslat později. Odpověď se pak jedním klikem převezme do objednávky a uloží do historie cen.</div>' +
+        '<div class="pn-box"><div class="pn-h">Komu</div>' +
+          (opts ? '<select class="po-sel" id="inq-contact" style="padding:8px 10px;margin-bottom:8px"><option value="">— jiný e-mail —</option>' + opts + '</select>' : '<div class="pn-muted" style="margin-bottom:6px">U dodavatele nemáme kontakt s e-mailem — zadej ho ručně.</div>') +
+          '<div class="pn-row"><input class="po-in" id="inq-name" placeholder="Jméno (oslovení)" style="flex:1;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="inq-email" type="email" placeholder="e-mail dodavatele" style="flex:1.4;border:1px solid var(--border);background:var(--bg)"></div></div>' +
+        '<div class="pn-box"><div class="pn-h">Co poptat</div>' + rows + '<label class="pn-muted" style="display:block;margin-top:8px">Požadované dodání celé poptávky<br><input class="po-in" type="date" id="inq-date" value="' + poAttr(PN.expected || '') + '" style="border:1px solid var(--border);background:var(--bg);max-width:180px"></label></div>' +
+        '<div class="pn-box"><div class="pn-h">Zpráva pro dodavatele <span class="pn-muted">(nepovinné)</span></div><textarea class="po-ta" id="inq-msg" style="min-height:60px" placeholder="např. Prosíme o nabídku včetně dopravy na adresu…"></textarea></div>' +
+        '<div id="inq-res"></div>' +
+        '<div class="pn-row" style="justify-content:flex-end"><button class="pn-go" id="inq-go">📨 Vytvořit a odeslat poptávku</button></div></div>';
+      document.body.appendChild(ov);
+      const fill = () => { const sel = document.getElementById('inq-contact'); const c = sel && sel.value !== '' ? ct.contacts[parseInt(sel.value, 10)] : null; if (c) { document.getElementById('inq-email').value = c.email; document.getElementById('inq-name').value = c.company ? '' : c.name; document.getElementById('inq-email').dataset.pid = c.person_id || ''; } };
+      const sel = document.getElementById('inq-contact'); if (sel) { sel.addEventListener('change', fill); fill(); }
+      const close = () => ov.remove();
+      document.getElementById('inq-x').onclick = close; ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+      document.getElementById('inq-go').onclick = () => pnInquirySend(ov);
+    }
+    async function pnInquirySend(ov) {
+      const idx = Array.from(ov.querySelectorAll('.inq-it:checked')).map((x) => parseInt(x.value, 10));
+      const emailEl = document.getElementById('inq-email'); const email = emailEl.value.trim();
+      const res = document.getElementById('inq-res');
+      if (!idx.length) { res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Vyber aspoň jednu položku.</div>'; return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Zadej platný e-mail dodavatele.</div>'; return; }
+      const sup = (companies.find((c) => c.id === PN.supplier) || {}).name || 'dodavatele';
+      if (!confirm('Odeslat poptávku (' + idx.length + ' položek) na ' + email + ' (' + sup + ')?')) return;
+      const go = document.getElementById('inq-go'); go.disabled = true; go.textContent = 'Odesílám…';
+      try {
+        const items = idx.map((i) => PN.cart[i]).map((c) => ({ material_id: c.material_id || null, name: c.name, quantity: c.quantity, unit: c.unit, needed_by: c.expected_delivery || c.needed_by || null }));
+        const r1 = await fetch('/api/wh/inquiries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_id: PN.supplier, currency: PN.currency, required_delivery: document.getElementById('inq-date').value || null, items }) });
+        const q = await r1.json(); if (!r1.ok) throw new Error(q.error || r1.status);
+        const r2 = await fetch('/api/wh/inquiries/' + q.id + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, name: document.getElementById('inq-name').value.trim(), person_id: emailEl.dataset.pid || null, message: document.getElementById('inq-msg').value.trim() }) });
+        const s2 = await r2.json();
+        if (!r2.ok) { res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Poptávka ' + poTxt(q.number) + ' je vytvořená, ale e-mail neodešel: ' + poTxt(s2.error || r2.status) + '<br>Odkaz můžeš poslat ručně: <a href="' + poAttr(q.link) + '" target="_blank">' + poTxt(q.link) + '</a></div>'; go.disabled = false; go.textContent = '📨 Zkusit odeslat znovu'; go.onclick = async () => { const r3 = await fetch('/api/wh/inquiries/' + q.id + '/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: document.getElementById('inq-email').value.trim(), name: document.getElementById('inq-name').value.trim(), message: document.getElementById('inq-msg').value.trim() }) }); if (r3.ok) { ov.remove(); pnPickSupplierKeep(); } else alert('Odeslání znovu selhalo.'); }; return; }
+        ov.querySelector('.po-sheet').innerHTML = '<div class="po-kicker">POPTÁVKA ODESLÁNA</div><div class="po-num" style="font-size:22px;margin:6px 0 12px">' + poTxt(q.number) + ' → ' + poTxt(email) + '</div><div class="pn-muted" style="margin-bottom:10px">Až dodavatel vyplní ceny, přijde ti upozornění a v průvodci u dodavatele se objeví tlačítko „Převzít ceny“.</div><div class="pn-muted">Odkaz na poptávkový list (pro kontrolu): <a href="' + poAttr(q.link) + '" target="_blank" style="color:#60a5fa">' + poTxt(q.link) + '</a></div><div class="pn-row" style="justify-content:flex-end;margin-top:16px"><button class="pn-go" id="inq-done">Hotovo</button></div>';
+        document.getElementById('inq-done').onclick = () => { ov.remove(); pnPickSupplierKeep(); };
+      } catch (e) { go.disabled = false; go.textContent = '📨 Vytvořit a odeslat poptávku'; res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Chyba: ' + poTxt(e.message) + '</div>'; }
+    }
+    // Obnoví seznam poptávek dodavatele, ale nechá rozpracovaný košík
+    async function pnPickSupplierKeep() {
+      try { const r = await fetch('/api/wh/inquiries?company_id=' + PN.supplier + '&status=sent,opened,in_progress,answered'); if (r.ok) PN.inquiries = (await r.json()).slice(0, 8); } catch (e) { /* nic */ }
+      pnRender();
     }
 
     async function openOrderModal(id) {
@@ -1340,6 +1429,7 @@
           '<div class="sub-tab mat-tab active" data-tab="general" onclick="switchMatTab(\'general\')">Obecné</div>' +
           '<div class="sub-tab mat-tab" data-tab="technical" onclick="switchMatTab(\'technical\');loadCadPanel()">Výkres / Tech</div>' +
           '<div class="sub-tab mat-tab" data-tab="planning" onclick="switchMatTab(\'planning\')">Plánování</div>' +
+          (id ? '<div class="sub-tab mat-tab" data-tab="pricing" onclick="switchMatTab(\'pricing\');loadMatPricing(' + id + ')">💰 Dodavatelé a ceny</div>' : '') +
           '<div class="sub-tab mat-tab" data-tab="properties" onclick="switchMatTab(\'properties\')">Vlastnosti</div>' +
           (showSnTab ? '<div class="sub-tab mat-tab" data-tab="serials" onclick="switchMatTab(\'serials\');loadSerialPanel(' + id + ')">🔖 Sériová čísla</div>' : '') +
           (showLotTab ? '<div class="sub-tab mat-tab" data-tab="lots" onclick="switchMatTab(\'lots\');loadLotPanel(' + id + ')">📦 Šarže</div>' : '') +
@@ -1385,6 +1475,7 @@
                 : '<div id="cv-list" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;"><span style="color:var(--text2);font-size:12px;">Načítám…</span></div>' +
                   '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><input type="text" id="cv-name" placeholder="Název barvy (Červená)" style="flex:1;min-width:160px;"><input type="color" id="cv-hex" value="#ef4444" title="Odstín (nepovinné)" style="width:44px;height:36px;padding:2px;"><button type="button" class="btn btn-primary" onclick="cvAdd(' + id + ')">＋ Přidat barvu</button></div>') +
             '</div>' : '') +
+            (id ? '<div class="form-group full" id="ph-box" style="border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:12px 14px;background:rgba(34,197,94,.05);"><label style="color:#4ade80;">💰 Historie cen <span style="font-weight:400;color:var(--text2);">— za kolik a kdy se objednávalo a co nabídli dodavatelé v poptávkách</span></label><div id="ph-list" style="font-size:12px;color:var(--text2);">Načítám…</div></div>' : '') +
             '<div class="form-group full"><label>Fotografie</label>' +
               '<div id="photo-upload-area" style="border:2px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;position:relative;" onclick="document.getElementById(\'photo-file-input\').click()" ondragover="event.preventDefault();this.style.borderColor=\'#eab308\';this.style.background=\'rgba(234,179,8,0.06)\'" ondragleave="this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\'" ondrop="event.preventDefault();this.style.borderColor=\'var(--border)\';this.style.background=\'transparent\';handlePhotoDrop(event)">' +
                 (v('photo_url') ? '<div id="photo-preview" style="margin-bottom:8px;"><img src="' + v('photo_url') + '" style="max-width:200px;max-height:140px;border-radius:8px;object-fit:cover;"></div>' : '<div id="photo-preview"></div>') +
@@ -1502,6 +1593,8 @@
               '</div>'
             : '') +
           // === TAB: Poznámky ===
+          // === TAB: Dodavatelé a ceny (jen u uložené karty; obsah dotahuje pricelist.js) ===
+          (id ? '<div class="form-grid mat-grid mat-tab-content" data-tab="pricing" style="display:none"><div class="form-group full" id="mat-pricing-panel"></div></div>' : '') +
           '<div class="form-grid mat-grid mat-tab-content" data-tab="notes" style="display:none">' +
             '<div class="form-group full"><label>Poznámka</label><textarea name="description" rows="4">' + v('description') + '</textarea></div>' +
             '<div class="form-group full"><label>Poznámka pro výrobu</label><textarea name="production_note" rows="4">' + v('production_note') + '</textarea></div>' +
@@ -1513,6 +1606,7 @@
           '<button type="submit" class="btn btn-primary">' + (id ? 'Uložit' : 'Vytvořit') + '</button>' +
         '</div></form></div></div>';
       if (id && !m.parent_material_id) cvLoad(id);
+      if (id) phLoad(id);
       // Kód + id pro spárování s CAD výkresem / „kde se používá" (načte se po kliknutí na záložku).
       window.__cadMatCode = (m && m.code) ? String(m.code) : '';
       window.__matId = (m && m.id) ? m.id : (id || null);
@@ -1781,6 +1875,23 @@
     function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
     // ---- Barevné varianty materiálu ----
+    // Historie cen zboží: nákupní objednávky + odpovědi na poptávky (cena, lhůta, termín)
+    async function phLoad(id) {
+      const el = document.getElementById('ph-list'); if (!el) return;
+      try {
+        const r = await fetch('/api/wh/inquiries/price-history?material_id=' + id); const j = await r.json();
+        if (!r.ok) throw new Error(j.error || r.status);
+        const rows = [].concat(
+          (j.orders || []).map((o) => ({ d: o.date, kind: '📦 Objednávka', ref: o.order_number, comp: o.company, price: o.unit_price, cur: o.currency, qty: o.quantity, unit: o.unit, lead: null, del: null })),
+          (j.inquiries || []).map((q) => ({ d: q.date, kind: '📨 Poptávka' + (q.status === 'in_progress' ? ' (rozpracovaná)' : ''), ref: q.number, comp: q.company, price: q.unit_price, cur: q.currency, qty: q.quantity, unit: q.unit, lead: q.lead_time_days, del: q.offered_delivery, moq: q.min_order_qty }))
+        ).sort((a, b) => new Date(b.d || 0) - new Date(a.d || 0));
+        if (!rows.length) { el.innerHTML = 'Zatím žádná objednávka ani poptávka.'; return; }
+        const fd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+        const fm = (v, c) => (v == null ? '—' : Number(v).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' ' + (c || ''));
+        el.innerHTML = '<table class="data-table" style="font-size:12px;"><thead><tr><th>Datum</th><th>Zdroj</th><th>Dodavatel</th><th style="text-align:right">Cena/jedn.</th><th style="text-align:right">Množ.</th><th>Lhůta</th><th>Termín</th></tr></thead><tbody>' +
+          rows.slice(0, 40).map((x) => '<tr><td>' + fd(x.d) + '</td><td>' + x.kind + ' <span style="color:var(--text2)">' + esc(x.ref || '') + '</span></td><td>' + esc(x.comp || '—') + '</td><td style="text-align:right;font-weight:700">' + fm(x.price, x.cur) + '</td><td style="text-align:right">' + (x.qty || '') + ' ' + esc(x.unit || '') + (x.moq ? '<div style="color:var(--text2)">min. ' + x.moq + '</div>' : '') + '</td><td>' + (x.lead != null ? x.lead + ' dní' : '—') + '</td><td>' + fd(x.del) + '</td></tr>').join('') + '</tbody></table>';
+      } catch (e) { el.innerHTML = 'Historii cen se nepodařilo načíst (' + esc(e.message) + ').'; }
+    }
     async function cvLoad(id) {
       const el = document.getElementById('cv-list'); if (!el) return;
       try {
@@ -1832,11 +1943,28 @@
       // Checkboxes (unchecked = not in FormData)
       const cbs = ['non_stock','uses_service_eshop','distinguish_batches','interchangeable_batches','no_availability_check','check_availability_stage','check_availability_expedition','plan_orders','mandatory_scan','save_sn_first_scan','temp_barcode','auto_complete_after_bom_scan','exact_consumption','ignore','ignore_forecast_eval','split_receipt_by_sales_items','expirable','allow_rotation'];
       for (const cb of cbs) d[cb] = f.has(cb);
-      const res = await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', {
+      let res = await fetch(id ? '/api/wh/materials/' + id : '/api/wh/materials', {
         method: id ? 'PUT' : 'POST',
         headers: {'Content-Type':'application/json'},
         body: JSON.stringify(d),
       });
+      // Pojistka: přejmenování karty napojené na pracovní postup / obnovení smazané karty pod jiným názvem
+      if (res.status === 409) {
+        const j = await res.clone().json().catch(() => null);
+        if (j && j.code === 'CONFIRM_RENAME') {
+          const lines = ['⚠️ ' + j.error, ''];
+          if (j.old_name !== j.new_name) lines.push('Název: „' + j.old_name + '“ → „' + j.new_name + '“');
+          if (j.old_code !== j.new_code) lines.push('Kód: ' + j.old_code + ' → ' + j.new_code);
+          if (j.linked && j.linked.length) {
+            lines.push('', 'Napojené pracovní postupy (změní se taky):');
+            j.linked.forEach(p => lines.push('  • ' + p.code + ' – ' + p.name + (p.operations ? ' (' + p.operations + ' operací)' : '')));
+          }
+          lines.push('', 'Opravdu jde o STEJNÝ díl a jen opravuješ ' + (j.old_code !== j.new_code ? 'kód' : 'název') + '?', 'OK = uložit a přenést do postupu · Zrušit = nic neměnit');
+          if (!confirm(lines.join('\n'))) return;
+          d.confirm_rename = true;
+          res = await fetch('/api/wh/materials/' + id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(d) });
+        }
+      }
       if (!res.ok) {
         const err = await res.text();
         alert('Uložení selhalo (' + res.status + '): ' + err);
@@ -3306,5 +3434,6 @@
       } catch (e) {}
     })();
   </script>
+  <script src="pricelist.js?v=1"></script>
 </body>
 </html>

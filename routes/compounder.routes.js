@@ -4761,6 +4761,32 @@ router.post('/leads/:id(\\d+)/create-sales-order', requireAuth, async (req, res,
   } catch (err) { next(err); }
 });
 
+// POST /api/compounder/leads/bulk-owner — hromadné přeřazení kontaktů obchodníkovi.
+// Body: { lead_ids: number[], owner_person_id: number }. Na rozdíl od PATCH /leads/:id
+// pošle obchodníkovi JEDNU souhrnnou notifikaci (ne push za každý kontakt). Stav leadu nemění.
+router.post('/leads/bulk-owner', requireAuth, async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body && req.body.lead_ids) ? req.body.lead_ids.map(Number).filter(Number.isInteger) : [];
+    const owner = Number(req.body && req.body.owner_person_id);
+    if (!ids.length || !Number.isInteger(owner) || owner <= 0) return res.status(400).json({ error: 'Chybí lead_ids nebo owner_person_id' });
+    if (ids.length > 2000) return res.status(400).json({ error: 'Max 2000 kontaktů najednou' });
+    const person = await prisma.person.findUnique({ where: { id: owner }, select: { id: true, first_name: true, last_name: true, active: true } });
+    if (!person || !person.active) return res.status(404).json({ error: 'Obchodník nenalezen' });
+    const r = await prisma.compounderLead.updateMany({ where: { id: { in: ids } }, data: { owner_person_id: owner, external_rep_id: null } });
+    try {
+      const { logAudit } = require('../services/audit');
+      await logAudit({ action: 'update', entity: 'compounder_lead', entity_id: null, description: `Hromadně přiřazeno ${r.count} kontaktů obchodníkovi ${person.first_name} ${person.last_name}`, changes: { lead_ids: ids }, user: req.user });
+    } catch (e) { /* audit nesmí shodit operaci */ }
+    const actorPid = (req.user && req.user.person) ? req.user.person.id : null;
+    if (owner !== actorPid && r.count) {
+      getNotifyPrefs(owner).then((pr) => {
+        if (pr.new_contact) notifySalesperson(owner, { title: 'Nové přidělené kontakty', body: 'Bylo ti přiřazeno ' + r.count + ' kontaktů.', data: { type: 'lead_assigned_bulk', count: r.count } });
+      }).catch(() => {});
+    }
+    res.json({ ok: true, updated: r.count, owner: owner });
+  } catch (err) { next(err); }
+});
+
 router.patch('/leads/:id', requireAuth, async (req, res, next) => {
   try {
     const id = Number(req.params.id);

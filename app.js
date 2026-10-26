@@ -32,6 +32,7 @@ const authRoutes = require('./routes/auth.routes');
 const hrRoutes = require('./routes/hr.routes');
 const applicantsRoutes = require('./routes/applicants.routes');
 const warehouseRoutes = require('./routes/warehouse.routes');
+const purchasePricelistRoutes = require('./routes/purchase-pricelist.routes');
 const warehouseV2Routes = require('./routes/warehouse-v2.routes');
 const mindmapRoutes = require('./routes/mindmap.routes');
 const adminTasksRoutes = require('./routes/admin-tasks.routes');
@@ -658,6 +659,13 @@ app.get('/order/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'order-view.html'));
 });
 
+// Poptávkový list pro dodavatele (odkaz z e-mailu) + jeho veřejné API — bez přihlášení, jen token
+const purchaseInquiriesRoutes = require('./routes/purchase-inquiries.routes');
+app.use('/api/public/inquiry', purchaseInquiriesRoutes.publicRouter);
+app.get('/poptavka/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'inquiry.html'));
+});
+
 // Veřejná stránka pro sdílené obchodní pomůcky (token-based, bez auth)
 app.get('/share/tools/:tool/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tool-share.html'));
@@ -731,10 +739,16 @@ app.get('/vybery-admin/', serveVyberyAdmin);
 app.use('/api/auth', authRoutes);
 app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
+app.use('/api/wh/pricelist', purchasePricelistRoutes); // Nákupní ceník — PŘED /api/wh (pevná podcesta)
+app.use('/api/wh/inquiries', purchaseInquiriesRoutes); // Poptávky u dodavatelů (před /api/wh, ať je nepohltí :id routy)
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)
 app.use('/api/mindmap', mindmapRoutes);
 app.use('/api/admin-tasks', adminTasksRoutes);
+// Kontrola platnosti klíčů externích služeb (po rotaci secretů) — jen super admin, jen čtecí volání
+app.get('/api/admin/secrets-health', require('./middleware/auth').requireAuth, require('./middleware/auth').requireSuperAdmin, async (req, res, next) => {
+  try { res.json(await require('./services/secrets-health').runAll()); } catch (err) { next(err); }
+});
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', voiceRoutes);  // stt-check, transcribe, voice (bez auth)
 app.use('/api/ai', chatRoutes);   // chat endpoint (bez auth — pro panel)
