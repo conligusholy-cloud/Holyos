@@ -42,8 +42,11 @@ router.put('/bs2-billing/config', async (req, res, next) => {
 });
 
 // Pro UI — info o aktuálním uživateli (potřeba pro skryté akce)
-router.get('/whoami', (req, res) => {
+router.get('/whoami', async (req, res) => {
+  let canManual = false;
+  try { canManual = await canManualMatch(req.user); } catch (e) { /* false */ }
   res.json({
+    canManualMatch: canManual,
     id: req.user.id,
     username: req.user.username,
     displayName: req.user.displayName,
@@ -1114,8 +1117,32 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
 // POST /api/accounting/invoices/:id/manual-match — ruční potvrzení „má objednávku" / „má příjemku" (dočasně místo 3-way match)
 // Body: { field: 'order'|'receipt', checked: bool }. Ukládá se jako tag manual_order / manual_receipt (bez migrace).
 // Když má faktura obojí a je už schválená (approved), posune se rovnou do ready_to_pay.
+// Kdo smí škrtat: admin / super admin + jmenovitě povolené osoby (výchozí Radomír Bečka, Lucie Makalušová).
+// Seznam lze přepsat v AppSetting accounting.manual_match_people (JSON pole jmen).
+const MANUAL_MATCH_DEFAULT_PEOPLE = ['Radomír Bečka', 'Lucie Makalušová'];
+const normName = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+async function canManualMatch(user) {
+  if (!user) return false;
+  if (user.isSuperAdmin || user.role === 'admin') return true;
+  let list = MANUAL_MATCH_DEFAULT_PEOPLE;
+  try { const s = await require('../services/settings').getSetting('accounting.manual_match_people', { type: 'json', defaultValue: null }); if (Array.isArray(s) && s.length) list = s; } catch (e) { /* výchozí */ }
+  const allowed = list.map(normName);
+  const p = user.person || {};
+  const names = [
+    p.first_name && p.last_name ? p.first_name + ' ' + p.last_name : null,
+    p.first_name && p.last_name ? p.last_name + ' ' + p.first_name : null,
+    user.displayName,
+  ].filter(Boolean).map(normName);
+  return names.some((n) => allowed.includes(n));
+}
+function userLabel(user) {
+  const p = (user && user.person) || {};
+  return ((p.first_name && p.last_name) ? p.first_name + ' ' + p.last_name : (user && (user.displayName || user.username))) || 'neznámý';
+}
+
 router.post('/invoices/:id/manual-match', async (req, res, next) => {
   try {
+    if (!(await canManualMatch(req.user))) return res.status(403).json({ error: 'Ruční potvrzení objednávky/příjemky smí jen admin, Radomír Bečka a Lucie Makalušová' });
     const id = parseInt(req.params.id, 10);
     const field = req.body?.field;
     if (!['order', 'receipt'].includes(field)) return res.status(400).json({ error: 'field musí být order nebo receipt' });
@@ -1129,9 +1156,12 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
     const hasOrder = !!invoice.order_id || tags.includes('manual_order');
     const hasReceipt = !!invoice.warehouse_document_id || tags.includes('manual_receipt');
     const data = { tags };
+    // Kdo a kdy — při zaškrtnutí i odškrtnutí (poslední změna)
+    if (field === 'order') { data.manual_order_at = new Date(); data.manual_order_by = (checked ? '' : 'zrušil ') + userLabel(req.user); }
+    else { data.manual_receipt_at = new Date(); data.manual_receipt_by = (checked ? '' : 'zrušil ') + userLabel(req.user); }
     if (invoice.direction === 'ap' && invoice.status === 'approved' && hasOrder && hasReceipt) data.status = 'ready_to_pay';
     if (invoice.status === 'ready_to_pay' && !(hasOrder && hasReceipt)) data.status = 'approved';
-    const updated = await prisma.invoice.update({ where: { id }, data, select: { id: true, tags: true, status: true } });
+    const updated = await prisma.invoice.update({ where: { id }, data, select: { id: true, tags: true, status: true, manual_order_at: true, manual_order_by: true, manual_receipt_at: true, manual_receipt_by: true } });
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: `${invoice.invoice_number}: ručně ${checked ? 'potvrzena' : 'zrušena'} ${field === 'order' ? 'objednávka' : 'příjemka'}${data.status ? ' → ' + data.status : ''}`,

@@ -945,12 +945,19 @@
       if (tags.includes('service') || tags.includes('sluzba')) return '<span style="color:var(--text2);font-size:0.8em;" title="Služba — není potřeba">n/a</span>';
       const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
       const on = tags.includes(tag);
-      const locked = ['paid', 'cancelled', 'payment_queued'].includes(inv.status);
-      const title = field === 'order' ? 'Ručně potvrdit: faktura má objednávku' : 'Ručně potvrdit: zboží bylo přijato (má příjemku)';
-      return '<label title="' + title + '" style="display:inline-flex;align-items:center;gap:4px;cursor:' + (locked ? 'default' : 'pointer') + ';">' +
+      const canEdit = !!(window.currentUser && window.currentUser.canManualMatch);
+      const locked = !canEdit || ['paid', 'cancelled', 'payment_queued'].includes(inv.status);
+      const at = field === 'order' ? inv.manual_order_at : inv.manual_receipt_at;
+      const by = field === 'order' ? inv.manual_order_by : inv.manual_receipt_by;
+      const when = at ? fmtDateTime(at) : '';
+      let title = field === 'order' ? 'Ručně potvrdit: faktura má objednávku' : 'Ručně potvrdit: zboží bylo přijato (má příjemku)';
+      if (at) title += ' — poslední změna ' + when + (by ? ' (' + by + ')' : '');
+      if (!canEdit) title += ' — měnit smí jen admin, Radomír Bečka a Lucie Makalušová';
+      return '<label title="' + escapeHtml(title) + '" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;cursor:' + (locked ? 'default' : 'pointer') + ';">' +
         '<input type="checkbox" ' + (on ? 'checked ' : '') + (locked ? 'disabled ' : '') +
         'onchange="toggleManualMatch(' + inv.id + ',\'' + field + '\',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +
-        (on ? '<span style="color:#10b981;font-size:0.78em;">ručně</span>' : '') + '</label>';
+        (at ? '<span style="color:' + (on ? '#10b981' : 'var(--text2)') + ';font-size:0.72em;white-space:nowrap;line-height:1.2;">' + escapeHtml(when) + (by ? '<br>' + escapeHtml(by) : '') + '</span>' : '') +
+        '</label>';
     }
     window.toggleManualMatch = async function(id, field, el) {
       el.disabled = true;
@@ -2693,7 +2700,11 @@
     // ─── Whoami (pro super admin akce) ───────────────────────────────────
     window.currentUser = null;
     api('GET', '/api/accounting/whoami').then(r => {
-      if (r.status === 200) window.currentUser = r.data;
+      if (r.status === 200) {
+        window.currentUser = r.data;
+        // seznam se mohl vykreslit dřív, než dorazila oprávnění → překreslit kvůli zaškrtávátkům
+        if (r.data && r.data.canManualMatch && typeof loadInvoices === 'function') loadInvoices();
+      }
     });
 
     // ─── Tab switching (Faktury / K platbě) ─────────────────────────────

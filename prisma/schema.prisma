@@ -3175,6 +3175,12 @@ model Invoice {
   internal_note String?  @db.Text
   tags          String[] @default([])
 
+  // Ruční potvrzení „má objednávku" / „má příjemku" (tagy manual_order / manual_receipt) — kdo a kdy
+  manual_order_at   DateTime?
+  manual_order_by   String?   @db.VarChar(150)
+  manual_receipt_at DateTime?
+  manual_receipt_by String?   @db.VarChar(150)
+
   created_by_id      Int?
   created_by         Person? @relation("InvoiceCreator", fields: [created_by_id], references: [id])
   // Vždy vyplněné — User, který fakturu založil (i když nemá propojený Person)
