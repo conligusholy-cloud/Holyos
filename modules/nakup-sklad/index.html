@@ -3071,7 +3071,7 @@
     async function loadMovements() {
       const type = document.getElementById('mv-type-filter')?.value || '';
       const wh = document.getElementById('mv-wh-filter')?.value || '';
-      let url = '/api/wh/movements?';
+      let url = '/api/wh/movements?limit=2000&'; // víc řádků, ať chytré filtry hledají i ve starších pohybech
       if (type) url += 'type=' + type + '&';
       if (wh) url += 'warehouse_id=' + wh;
       try { const r = await fetch(url); renderMovements(await r.json()); } catch(e) { console.error(e); }
@@ -3115,11 +3115,18 @@
       const v = mvNorm(val);
       return mvNorm(f).split(/\s+/).filter(Boolean).every((w) => (w[0] === '!' && w.length > 1 ? !v.includes(w.slice(1)) : v.includes(w)));
     }
+    // Pozice pohybu: příjem → kam, výdej → odkud, přesun → odkud → kam
+    function mvLoc(mv) {
+      const from = mv.from_location?.label, to = mv.to_location?.label, loc = mv.location?.label;
+      if (from && to && from !== to) return from + ' → ' + to;
+      return to || loc || from || '';
+    }
     const MV_COLS = [
       { key: 'date', label: 'Datum', ph: 'např. >1.10.2026', get: (mv) => new Date(mv.factorify_moved_at || mv.created_at), match: mvMatchDate },
       { key: 'type', label: 'Typ', ph: 'Typ…', get: (mv) => ((MV_TYPES[mv.type] || {}).label || mv.type) + ' ' + mv.type, match: mvMatchText },
       { key: 'mat', label: 'Zboží', ph: 'Název nebo kód…', get: (mv) => (mv.material?.name || mv.material_name || '') + ' ' + (mv.material?.code || ''), match: mvMatchText },
       { key: 'wh', label: 'Sklad', ph: 'Sklad…', get: (mv) => mv.warehouse?.name || mv.warehouse_name || '', match: mvMatchText },
+      { key: 'loc', label: 'Pozice', ph: 'Pozice…', get: (mv) => mvLoc(mv), match: mvMatchText },
       { key: 'qty', label: 'Množství', ph: '>0, <0, 5..10', get: (mv) => Number(mv.quantity), match: mvMatchNum },
       { key: 'price', label: 'Cena/ks', ph: '>0', get: (mv) => Number(mv.unit_price || 0), match: mvMatchNum },
       { key: 'note', label: 'Poznámka', ph: 'Poznámka…', get: (mv) => mv.note || '', match: mvMatchText },
@@ -3154,6 +3161,7 @@
         html += '<td><span class="badge" style="background:' + t.color + '22;color:' + t.color + ';">' + t.label + '</span></td>';
         html += '<td>' + matCol + '</td>';
         html += '<td>' + esc(warehouseName) + '</td>';
+        html += '<td style="font-family:monospace;font-size:12px;white-space:nowrap">' + (mvLoc(mv) ? esc(mvLoc(mv)) : '<span style="color:var(--text2)">—</span>') + '</td>';
         html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
         html += '<td>' + (Number(mv.unit_price) || 0).toLocaleString('cs-CZ') + ' Kč</td>';
         html += '<td style="color:var(--text2);">' + esc(mv.note || '') + '</td></tr>';

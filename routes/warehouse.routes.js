@@ -2338,10 +2338,16 @@ router.get('/movements', async (req, res, next) => {
         material: { select: { id: true, name: true, code: true, unit: true } },
         warehouse: { select: { id: true, name: true } },
         creator: { select: { id: true, first_name: true, last_name: true } },
+        // Pozice: kam se naskladnilo / odkud se bralo
+        location: { select: { id: true, label: true } },
+        from_location: { select: { id: true, label: true } },
+        to_location: { select: { id: true, label: true } },
       },
+      // Nejnovější pohyby nahoře (i ty z čtečky, které nemají factorify_moved_at);
+      // dávka importu z Factorify (stejné created_at) se uvnitř řadí podle skutečného data pohybu.
       orderBy: [
-        { factorify_moved_at: { sort: 'desc', nulls: 'last' } },
         { created_at: 'desc' },
+        { factorify_moved_at: { sort: 'desc', nulls: 'last' } },
       ],
       take: limit,
       skip: offset,
