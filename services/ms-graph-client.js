@@ -56,7 +56,22 @@ async function findMailFolderId(userPrincipalName, displayName) {
     const d = await r.json();
     if (d.value && d.value[0]) return d.value[0].id;
   }
-  return null;
+  // Záloha: projít všechny složky (2 úrovně) a porovnat bez ohledu na velikost písmen
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const names = [];
+  const listAll = async (u) => { const r = await fetch(u, { headers: await authHeaders() }); if (!r.ok) { const t = await r.text().catch(() => ''); throw new Error('Graph mailFolders ' + r.status + ' ' + t.slice(0, 200)); } return (await r.json()).value || []; };
+  const top = await listAll(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders?$top=100&$select=id,displayName,childFolderCount`);
+  for (const f of top) {
+    names.push(f.displayName);
+    if (norm(f.displayName) === norm(displayName)) return f.id;
+  }
+  for (const f of top.filter((x) => x.childFolderCount > 0)) {
+    const kids = await listAll(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders/${f.id}/childFolders?$top=100&$select=id,displayName`).catch(() => []);
+    for (const k of kids) { names.push(f.displayName + '/' + k.displayName); if (norm(k.displayName) === norm(displayName)) return k.id; }
+  }
+  const err = new Error(`Složka „${displayName}" ve schránce ${userPrincipalName} nenalezena. Složky v této schránce: ${names.slice(0, 30).join(', ') || '—'}`);
+  err.code = 'FOLDER_NOT_FOUND';
+  throw err;
 }
 
 /**
