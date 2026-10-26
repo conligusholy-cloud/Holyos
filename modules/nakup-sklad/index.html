@@ -3077,32 +3077,95 @@
       try { const r = await fetch(url); renderMovements(await r.json()); } catch(e) { console.error(e); }
     }
 
+    // ─── Pohyby: chytré filtrování po sloupcích (jako Záznamy hovorů Infolinky) ───
+    // Text: obsahuje (bez ohledu na diakritiku a velikost písmen), více slov = všechna musí sedět, „!slovo" = nesmí obsahovat.
+    // Čísla (Množství, Cena/ks): „>10", „<0", „>=5", „5..10", „=2" nebo přímo číslo.
+    // Datum: „26.10.", „10.2026", „>1.10.2026", „<20.5.2026", „1.10.2026..15.10.2026", „dnes", „včera".
+    let MV_ALL = [];
+    const MV_F = {};
+    const MV_LIMIT = 500;
+    const mvNorm = (v) => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    function mvParseDate(t) {
+      const m = String(t).trim().match(/^(\d{1,2})\.\s*(\d{1,2})\.?\s*(\d{4})?$/);
+      if (!m) return null;
+      const y = m[3] ? +m[3] : new Date().getFullYear();
+      return new Date(y, +m[2] - 1, +m[1]);
+    }
+    function mvMatchNum(val, f) {
+      const n = Number(val); const t = f.replace(/\s/g, '').replace(',', '.');
+      let m;
+      if ((m = t.match(/^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/))) return n >= +m[1] && n <= +m[2];
+      if ((m = t.match(/^(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/))) { const x = +m[2]; return m[1] === '>' ? n > x : m[1] === '<' ? n < x : m[1] === '>=' ? n >= x : m[1] === '<=' ? n <= x : n === x; }
+      if (/^-?\d+(?:\.\d+)?$/.test(t)) return String(val).includes(t) || n === +t;
+      return mvNorm(val).includes(mvNorm(f));
+    }
+    function mvMatchDate(d, f) {
+      const t = mvNorm(f).trim(); if (!t) return true;
+      const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (t === 'dnes') return +day === +today;
+      if (t === 'vcera') return +day === +today - 86400000;
+      let m;
+      if ((m = t.match(/^(.+?)\.\.(.+)$/))) { const a = mvParseDate(m[1]); const b = mvParseDate(m[2]); return (!a || day >= a) && (!b || day <= b); }
+      if ((m = t.match(/^(>=|<=|>|<)(.+)$/))) { const x = mvParseDate(m[2]); if (!x) return true; return m[1] === '>' ? day > x : m[1] === '<' ? day < x : m[1] === '>=' ? day >= x : day <= x; }
+      if ((m = t.match(/^(\d{1,2})\.(\d{4})$/))) return d.getMonth() + 1 === +m[1] && d.getFullYear() === +m[2];
+      return mvNorm(d.toLocaleString('cs-CZ')).replace(/\s/g, '').includes(t.replace(/\s/g, ''));
+    }
+    function mvMatchText(val, f) {
+      const v = mvNorm(val);
+      return mvNorm(f).split(/\s+/).filter(Boolean).every((w) => (w[0] === '!' && w.length > 1 ? !v.includes(w.slice(1)) : v.includes(w)));
+    }
+    const MV_COLS = [
+      { key: 'date', label: 'Datum', ph: 'např. >1.10.2026', get: (mv) => new Date(mv.factorify_moved_at || mv.created_at), match: mvMatchDate },
+      { key: 'type', label: 'Typ', ph: 'Typ…', get: (mv) => ((MV_TYPES[mv.type] || {}).label || mv.type) + ' ' + mv.type, match: mvMatchText },
+      { key: 'mat', label: 'Zboží', ph: 'Název nebo kód…', get: (mv) => (mv.material?.name || mv.material_name || '') + ' ' + (mv.material?.code || ''), match: mvMatchText },
+      { key: 'wh', label: 'Sklad', ph: 'Sklad…', get: (mv) => mv.warehouse?.name || mv.warehouse_name || '', match: mvMatchText },
+      { key: 'qty', label: 'Množství', ph: '>0, <0, 5..10', get: (mv) => Number(mv.quantity), match: mvMatchNum },
+      { key: 'price', label: 'Cena/ks', ph: '>0', get: (mv) => Number(mv.unit_price || 0), match: mvMatchNum },
+      { key: 'note', label: 'Poznámka', ph: 'Poznámka…', get: (mv) => mv.note || '', match: mvMatchText },
+    ];
+
     function renderMovements(list) {
+      MV_ALL = Array.isArray(list) ? list : [];
       const el = document.getElementById('movements-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><h3>Žádné pohyby</h3><p>Zaznamenejte první příjem nebo výdej.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Datum</th><th>Typ</th><th>Zboží</th><th>Sklad</th><th>Množství</th><th>Cena/ks</th><th>Poznámka</th></tr></thead><tbody>';
-      for (const mv of list) {
+      if (!MV_ALL.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><h3>Žádné pohyby</h3><p>Zaznamenejte první příjem nebo výdej.</p></div>'; return; }
+      el.innerHTML = '<div id="mv-filter-info" style="font-size:12px;color:var(--text2);margin:0 0 6px;display:flex;gap:10px;align-items:center"></div>' +
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + MV_COLS.map((c) => '<th>' + c.label + '</th>').join('') + '</tr>' +
+        '<tr class="mv-filter-row">' + MV_COLS.map((c) => '<th style="padding:4px 6px"><input data-mvf="' + c.key + '" value="' + ordAttr(MV_F[c.key] || '') + '" placeholder="' + ordAttr(c.ph) + '" style="width:100%;min-width:70px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0"></th>').join('') + '</tr></thead><tbody id="mv-tbody"></tbody></table></div>';
+      el.querySelectorAll('[data-mvf]').forEach((inp) => inp.addEventListener('input', () => { MV_F[inp.dataset.mvf] = inp.value; renderMovementRows(); }));
+      renderMovementRows();
+    }
+
+    function renderMovementRows() {
+      const active = MV_COLS.filter((c) => String(MV_F[c.key] || '').trim());
+      const rows = active.length ? MV_ALL.filter((mv) => active.every((c) => c.match(c.get(mv), String(MV_F[c.key]).trim()))) : MV_ALL;
+      let html = '';
+      for (const mv of rows.slice(0, MV_LIMIT)) {
         const t = MV_TYPES[mv.type] || { label: mv.type, color: '#9ca3af' };
-        // Backend vrací material/warehouse jako nested objekt; jména extrahujeme bezpečně.
         const materialName = mv.material?.name || mv.material_name || '—';
         const materialCode = mv.material?.code || '';
         const warehouseName = mv.warehouse?.name || mv.warehouse_name || '—';
         const matCol = materialCode
-          ? '<span class="person-name">' + materialName + '</span> <span style="font-family:monospace;font-size:11px;color:var(--text2);">(' + materialCode + ')</span>'
-          : '<span class="person-name">' + materialName + '</span>';
+          ? '<span class="person-name">' + esc(materialName) + '</span> <span style="font-family:monospace;font-size:11px;color:var(--text2);">(' + esc(materialCode) + ')</span>'
+          : '<span class="person-name">' + esc(materialName) + '</span>';
         // Datum: preferuj factorify_moved_at (skutečné datum pohybu) před created_at (datum importu)
         const movedAt = mv.factorify_moved_at || mv.created_at;
-        html += '<tr><td style="color:var(--text2);">' + new Date(movedAt).toLocaleString('cs-CZ') + '</td>';
+        html += '<tr><td style="color:var(--text2);white-space:nowrap">' + new Date(movedAt).toLocaleString('cs-CZ') + '</td>';
         html += '<td><span class="badge" style="background:' + t.color + '22;color:' + t.color + ';">' + t.label + '</span></td>';
         html += '<td>' + matCol + '</td>';
-        html += '<td>' + warehouseName + '</td>';
+        html += '<td>' + esc(warehouseName) + '</td>';
         html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
-        html += '<td>' + (mv.unit_price||0).toLocaleString('cs-CZ') + ' Kč</td>';
-        html += '<td style="color:var(--text2);">' + (mv.note||'') + '</td></tr>';
+        html += '<td>' + (Number(mv.unit_price) || 0).toLocaleString('cs-CZ') + ' Kč</td>';
+        html += '<td style="color:var(--text2);">' + esc(mv.note || '') + '</td></tr>';
       }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+      if (!rows.length) html = '<tr><td colspan="' + MV_COLS.length + '" style="text-align:center;color:var(--text2);padding:18px">Filtrům nic neodpovídá.</td></tr>';
+      document.getElementById('mv-tbody').innerHTML = html;
+      const info = document.getElementById('mv-filter-info');
+      if (info) info.innerHTML = (active.length ? 'Zobrazeno <b>' + rows.length + '</b> z ' + MV_ALL.length + ' pohybů' : 'Zobrazeno všech ' + MV_ALL.length + ' pohybů') + (rows.length > MV_LIMIT ? ' · prvních ' + MV_LIMIT + ' — upřesni filtr' : '') +
+        (active.length ? ' <button class="btn btn-secondary btn-sm" onclick="mvClearFilters()">✕ Zrušit filtry</button>' : '') +
+        ' <span title="Text: více slov = všechna, !slovo = vyloučit · Čísla: >10, <0, 5..10 · Datum: dnes, včera, 26.10., 10.2026, >1.10.2026, 1.10.2026..15.10.2026" style="cursor:help">ⓘ</span>';
     }
+    function mvClearFilters() { Object.keys(MV_F).forEach((k) => delete MV_F[k]); renderMovements(MV_ALL); }
 
     async function populateMovementFilters() {
       if (warehouses.length === 0) { try { const r = await fetch('/api/wh/warehouses'); warehouses = await r.json(); } catch(e) {} }
