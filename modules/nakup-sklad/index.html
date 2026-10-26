@@ -252,6 +252,7 @@
           </select>
           <select id="inv-wh-filter" onchange="loadInventories()"></select>
           <div style="flex:1"></div>
+          <button class="btn btn-secondary btn-sm" onclick="deleteAllInventories()" title="Smaže všechny inventury včetně položek (jen admin)">🗑️ Smazat všechny inventury</button>
           <button class="btn btn-primary" onclick="openInventoryModal()">+ Nová inventura</button>
         </div>
         <div id="inventories-table"></div>
@@ -3482,6 +3483,23 @@
       if (!confirm('Zahájit inventuru? Po zahájení se začne počítat.')) return;
       await fetch('/api/wh/inventories/' + id + '/start', { method: 'PUT' });
       loadInventories();
+    }
+
+    // Hromadné smazání všech inventur (admin) — nejdřív spočítá, pak dvakrát potvrdit
+    async function deleteAllInventories() {
+      try {
+        const r0 = await fetch('/api/wh/inventories/all?dry=1', { method: 'DELETE' });
+        const j0 = await r0.json();
+        if (!r0.ok) { alert('Nelze: ' + (j0.error || r0.status)); return; }
+        if (!j0.count) { alert('Žádné inventury ke smazání.'); return; }
+        if (!confirm('Opravdu NEVRATNĚ smazat všech ' + j0.count + ' inventur včetně spočítaných položek?\n(Skladové pohyby vzniklé uzavřením inventur zůstanou.)')) return;
+        if (!confirm('Poslední potvrzení: smazat ' + j0.count + ' inventur?')) return;
+        const r = await fetch('/api/wh/inventories/all', { method: 'DELETE' });
+        const j = await r.json();
+        if (!r.ok) { alert('Smazání selhalo: ' + (j.error || r.status)); return; }
+        alert('Smazáno inventur: ' + j.deleted);
+        loadInventories();
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     async function deleteInventory(id) {

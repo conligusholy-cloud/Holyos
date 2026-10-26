@@ -2079,10 +2079,43 @@ router.get('/inventories', async (req, res, next) => {
       },
       orderBy: { created_at: 'desc' },
     });
-    res.json(inventories);
+    // Souhrny pro seznam (počet položek, spočítané, rozdíl v Kč) — dvěma agregacemi, ne N+1
+    const [totals, counted] = await Promise.all([
+      prisma.inventoryItem.groupBy({ by: ['inventory_id'], _count: { _all: true }, _sum: { value_difference: true } }),
+      prisma.inventoryItem.groupBy({ by: ['inventory_id'], where: { actual_qty: { not: null } }, _count: { _all: true } }),
+    ]);
+    const tMap = Object.fromEntries(totals.map((t) => [t.inventory_id, t]));
+    const cMap = Object.fromEntries(counted.map((t) => [t.inventory_id, t._count._all]));
+    res.json(inventories.map((i) => ({
+      ...i,
+      warehouse_name: i.warehouse ? i.warehouse.name : null,
+      items_total: tMap[i.id] ? tMap[i.id]._count._all : 0,
+      items_counted: cMap[i.id] || 0,
+      value_difference: tMap[i.id] && tMap[i.id]._sum.value_difference != null ? Number(tMap[i.id]._sum.value_difference) : 0,
+    })));
   } catch (err) {
     next(err);
   }
+});
+
+// DELETE /api/wh/inventories/all — hromadně smazat všechny inventury včetně položek (jen admin; ?dry=1 jen spočítá).
+// Pozor: nevrací zpět skladové pohyby, které případně vznikly při uzavření inventury. Pevná podcesta nad /:id.
+router.delete('/inventories/all', require('../middleware/auth').requireAdmin, async (req, res, next) => {
+  try {
+    const count = await prisma.inventory.count();
+    if (req.query.dry === '1') return res.json({ count });
+    const r = await prisma.inventory.deleteMany({});
+    await logAudit({ action: 'delete', entity: 'inventory', entity_id: 0, description: `Hromadně smazány všechny inventury: ${r.count}`, user: req.user }).catch(() => {});
+    res.json({ deleted: r.count });
+  } catch (err) { next(err); }
+});
+
+// DELETE /api/wh/inventories/:id — smazat jednu inventuru (jen nezahájenou/zrušenou/dokončenou lze řešit z UI)
+router.delete('/inventories/:id', async (req, res, next) => {
+  try {
+    await prisma.inventory.delete({ where: { id: parseInt(req.params.id, 10) } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 // GET /api/wh/inventories/:id
