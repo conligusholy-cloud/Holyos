@@ -889,12 +889,18 @@
       PN.fromInquiry = q.id; pnRecalcDate(); pnRender();
       if (!n) alert('V odpovědi nejsou žádné ceny k převzetí.');
     }
-    async function pnInquiryOpen() {
+    async function pnInquiryOpen(preselectPid, keep) {
+      const old = document.getElementById('inq-ov'); if (old) old.remove();
       const noPriceIdx = PN.cart.map((c, i) => (Number(c.unit_price) > 0 ? -1 : i)).filter((i) => i >= 0);
       let ct = { contacts: [], company: {} };
       try { ct = await (await fetch('/api/wh/inquiries/contacts?company_id=' + PN.supplier)).json(); } catch (e) { /* bez kontaktů */ }
       const last = ct.last_used && ct.last_used.contact_email;
-      const opts = (ct.contacts || []).map((c, i) => '<option value="' + i + '"' + (last && c.email.toLowerCase() === last.toLowerCase() ? ' selected' : '') + '>' + poTxt(c.name) + ' — ' + poTxt(c.email) + (c.company ? ' (e-mail firmy)' : '') + '</option>').join('');
+      // předvybraný: právě přidaný → výchozí pro objednávky → naposledy použitý
+      let selIdx = -1;
+      (ct.contacts || []).forEach((c, i) => { if (selIdx < 0 && preselectPid && c.person_id === preselectPid) selIdx = i; });
+      (ct.contacts || []).forEach((c, i) => { if (selIdx < 0 && c.is_default) selIdx = i; });
+      (ct.contacts || []).forEach((c, i) => { if (selIdx < 0 && last && c.email.toLowerCase() === last.toLowerCase()) selIdx = i; });
+      const opts = (ct.contacts || []).map((c, i) => '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + (c.is_default ? '★ ' : '') + poTxt(c.name) + ' — ' + poTxt(c.email) + (c.company ? ' (e-mail firmy)' : '') + (c.is_default ? ' · výchozí pro objednávky' : '') + '</option>').join('');
       const rows = PN.cart.map((c, i) => '<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="inq-it" value="' + i + '"' + (!noPriceIdx.length || noPriceIdx.includes(i) ? ' checked' : '') + '> <span>' + poTxt(c.name) + ' — <b>' + (Number(c.quantity) || 0) + ' ' + poTxt(c.unit) + '</b>' + (c.expected_delivery ? ' <span class="pn-muted">dodat do ' + new Date(c.expected_delivery).toLocaleDateString('cs-CZ') + '</span>' : '') + (Number(c.unit_price) > 0 ? ' <span class="pn-muted">(cena ' + Number(c.unit_price) + ')</span>' : ' <span style="color:#f87171">bez ceny</span>') + '</span></label>').join('');
       const ov = document.createElement('div'); ov.id = 'inq-ov'; ov.className = 'modal-overlay po-overlay'; ov.style.zIndex = 3000;
       ov.innerHTML = '<div class="po-sheet" style="max-width:720px;padding:26px 30px">' +
@@ -903,12 +909,44 @@
         '<div class="pn-muted" style="margin-bottom:12px">Dodavatel dostane e-mail s odkazem na poptávkový list. Doplní cenu, dodací lhůtu (kolik dní předem objednat) a termín dodání — může si uložit rozpracované a odeslat později. Odpověď se pak jedním klikem převezme do objednávky a uloží do historie cen.</div>' +
         '<div class="pn-box"><div class="pn-h">Komu</div>' +
           (opts ? '<select class="po-sel" id="inq-contact" style="padding:8px 10px;margin-bottom:8px"><option value="">— jiný e-mail —</option>' + opts + '</select>' : '<div class="pn-muted" style="margin-bottom:6px">U dodavatele nemáme kontakt s e-mailem — zadej ho ručně.</div>') +
-          '<div class="pn-row"><input class="po-in" id="inq-name" placeholder="Jméno (oslovení)" style="flex:1;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="inq-email" type="email" placeholder="e-mail dodavatele" style="flex:1.4;border:1px solid var(--border);background:var(--bg)"></div></div>' +
+          '<div class="pn-row"><input class="po-in" id="inq-name" placeholder="Jméno (oslovení)" style="flex:1;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="inq-email" type="email" placeholder="e-mail dodavatele" style="flex:1.4;border:1px solid var(--border);background:var(--bg)"></div>' +
+          '<div style="margin-top:8px"><a href="#" id="inq-newc-toggle" style="color:#60a5fa;font-size:12.5px">＋ Uložit nový kontakt u dodavatele</a></div>' +
+          '<div id="inq-newc" style="display:none;margin-top:8px;padding:10px;border:1px dashed var(--border);border-radius:8px">' +
+            '<div class="pn-row"><input class="po-in" id="nc-name" placeholder="Jméno a příjmení" style="flex:1;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="nc-email" type="email" placeholder="e-mail" style="flex:1;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="nc-phone" placeholder="telefon (nepovinné)" style="flex:.8;border:1px solid var(--border);background:var(--bg)"></div>' +
+            '<label class="pn-muted" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="nc-def" checked> Nastavit jako výchozí kontakt pro objednávky a poptávky</label>' +
+            '<div id="nc-err" style="color:#f87171;margin-top:6px"></div>' +
+            '<div class="pn-row" style="justify-content:flex-end;margin-top:8px"><button class="po-btn" id="nc-save">Uložit kontakt</button></div></div>' +
+          '<div id="inq-defrow" class="pn-muted" style="margin-top:6px"></div></div>' +
         '<div class="pn-box"><div class="pn-h">Co poptat</div>' + rows + '<label class="pn-muted" style="display:block;margin-top:8px">Požadované dodání celé poptávky<br><input class="po-in" type="date" id="inq-date" value="' + poAttr(PN.expected || '') + '" style="border:1px solid var(--border);background:var(--bg);max-width:180px"></label></div>' +
         '<div class="pn-box"><div class="pn-h">Zpráva pro dodavatele <span class="pn-muted">(nepovinné)</span></div><textarea class="po-ta" id="inq-msg" style="min-height:60px" placeholder="např. Prosíme o nabídku včetně dopravy na adresu…"></textarea></div>' +
         '<div id="inq-res"></div>' +
-        '<div class="pn-row" style="justify-content:flex-end"><button class="pn-go" id="inq-go">📨 Vytvořit a odeslat poptávku</button></div></div>';
+        '<div class="pn-row" style="justify-content:flex-end;gap:10px"><button class="po-btn" id="inq-test" title="Pošle náhled e-mailu na tvůj e-mail — dodavatel nic nedostane">📧 Poslat test sobě</button><button class="pn-go" id="inq-go">📨 Vytvořit a odeslat poptávku</button></div></div>';
       document.body.appendChild(ov);
+      if (keep) { if (keep.msg) document.getElementById('inq-msg').value = keep.msg; if (keep.date) document.getElementById('inq-date').value = keep.date; if (keep.off) ov.querySelectorAll('.inq-it').forEach((x) => { x.checked = !keep.off.includes(x.value); }); }
+      const snap = () => ({ msg: document.getElementById('inq-msg').value, date: document.getElementById('inq-date').value, off: Array.from(ov.querySelectorAll('.inq-it:not(:checked)')).map((x) => x.value) });
+      document.getElementById('inq-newc-toggle').onclick = (e) => { e.preventDefault(); const b = document.getElementById('inq-newc'); b.style.display = b.style.display === 'none' ? 'block' : 'none'; if (b.style.display === 'block') { document.getElementById('nc-email').value = document.getElementById('inq-email').value; document.getElementById('nc-name').value = document.getElementById('inq-name').value; } };
+      document.getElementById('nc-save').onclick = async () => {
+        const err = document.getElementById('nc-err'); err.textContent = '';
+        try {
+          const r = await fetch('/api/wh/inquiries/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company_id: PN.supplier, name: document.getElementById('nc-name').value, email: document.getElementById('nc-email').value, phone: document.getElementById('nc-phone').value, make_default: document.getElementById('nc-def').checked }) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+          pnInquiryOpen(j.person_id, snap());
+        } catch (e) { err.textContent = e.message; }
+      };
+      const dsel = ct.contacts && ct.contacts.find((c) => c.is_default);
+      document.getElementById('inq-defrow').innerHTML = dsel ? '★ Výchozí kontakt pro objednávky: <b>' + poTxt(dsel.name) + '</b> (' + poTxt(dsel.email) + ')' : 'Zatím není nastavený výchozí kontakt pro objednávky — ulož ho přes „＋ Uložit nový kontakt“.';
+      document.getElementById('inq-test').onclick = async () => {
+        const res = document.getElementById('inq-res'); const b = document.getElementById('inq-test');
+        const idx = Array.from(ov.querySelectorAll('.inq-it:checked')).map((x) => parseInt(x.value, 10));
+        if (!idx.length) { res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Vyber aspoň jednu položku.</div>'; return; }
+        b.disabled = true; b.textContent = 'Odesílám test…';
+        try {
+          const r = await fetch('/api/wh/inquiries/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: document.getElementById('inq-name').value.trim(), message: document.getElementById('inq-msg').value.trim(), items: idx.map((i) => ({ name: PN.cart[i].name, quantity: PN.cart[i].quantity, unit: PN.cart[i].unit })) }) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+          res.innerHTML = '<div style="color:#34d399;margin-bottom:8px">✓ Testovací e-mail odešel na ' + poTxt(j.sent_to) + ' (dodavatel nic nedostal).</div>';
+        } catch (e) { res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Test selhal: ' + poTxt(e.message) + '</div>'; }
+        b.disabled = false; b.textContent = '📧 Poslat test sobě';
+      };
       const fill = () => { const sel = document.getElementById('inq-contact'); const c = sel && sel.value !== '' ? ct.contacts[parseInt(sel.value, 10)] : null; if (c) { document.getElementById('inq-email').value = c.email; document.getElementById('inq-name').value = c.company ? '' : c.name; document.getElementById('inq-email').dataset.pid = c.person_id || ''; } };
       const sel = document.getElementById('inq-contact'); if (sel) { sel.addEventListener('change', fill); fill(); }
       const close = () => ov.remove();

@@ -561,6 +561,9 @@ model Company {
   notes                  String? @db.Text
   active                 Boolean @default(true)
 
+  // Výchozí kontakt pro nákupní objednávky a poptávky (Person.id, osoba u firmy s e-mailem)
+  order_contact_person_id Int?
+
   // Factorify migrace
   factorify_id String? @db.VarChar(100) // Company.id
 
