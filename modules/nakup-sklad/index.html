@@ -735,7 +735,24 @@
     }
     const ordDay = (v) => (v ? String(v).slice(0, 10) : '');
     const ordFmt = (v) => (v ? new Date(ordDay(v) + 'T00:00:00Z').toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '—');
-    const ordCompany = (o) => o.company_name || (o.company && o.company.name) || '—';
+    const ordCompany = (o) => o.company_name || (o.company && o.company.name) || (o.supplier_confirm_email ? '✉ ' + o.supplier_confirm_email : '—');
+    // Bezpečný text do atributu title (esc() neescapuje uvozovky)
+    const ordAttr = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '&#10;');
+    // Podrobný popis odchylek po položkách (tooltip u štítku „mimo požadavky")
+    function devDetail(o) {
+      const lines = ['Dodavatel potvrdil mimo naše požadavky:'];
+      (o.items || []).forEach((it) => {
+        const d = itemDev(it, o); const parts = [];
+        if (d.late) parts.push('termín ' + ordFmt(it.confirmed_delivery) + ' (požadujeme ' + ordFmt(it.expected_delivery || o.expected_delivery) + ')');
+        if (d.price) parts.push('cena ' + Number(it.confirmed_price) + ' (objednáno za ' + Number(it.unit_price || 0) + ')');
+        if (it.supplier_note) parts.push('poznámka: ' + it.supplier_note);
+        if (parts.length) lines.push('• ' + (it.name || it.code || 'položka') + ' — ' + parts.join('; '));
+      });
+      if (o.supplier_confirm_name) lines.push('Potvrdil: ' + o.supplier_confirm_name);
+      if (o.supplier_confirm_note) lines.push('Poznámka dodavatele: ' + o.supplier_confirm_note);
+      lines.push('(klikni na řádek pro detail)');
+      return lines.join('\n');
+    }
     // Odchylky potvrzení dodavatele od našich požadavků (pozdější termín, jiná cena)
     function itemDev(it, o) {
       const req = ordDay(it.expected_delivery || o.expected_delivery), conf = ordDay(it.confirmed_delivery);
@@ -780,20 +797,21 @@
       const el = document.getElementById('orders-table');
       if (orderView === 'items') return renderOrderItems(list);
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
         const dev = orderDev(o);
         const confDates = (o.items || []).map((it) => ordDay(it.confirmed_delivery)).filter(Boolean).sort();
         const lastConf = confDates.length ? confDates[confDates.length - 1] : ordDay(o.confirmed_delivery);
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        html += '<td style="white-space:nowrap;color:var(--text2)" title="' + (o.created_at ? new Date(o.created_at).toLocaleString('cs-CZ') : '') + '">' + (o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—') + '</td>';
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (ORDER_TYPES[o.type] || o.type) + '</td>';
         html += '<td>' + esc(ordCompany(o)) + '</td>';
         // Nákupní: „Objednáno" = odesláno dodavateli, „Objednávka potvrzena" = dodavatel potvrdil přes odkaz
         const scs = o.supplier_confirm_status;
         const devTxt = [dev.late ? dev.late + '× později než požadujeme' : '', dev.price ? dev.price + '× jiná cena' : ''].filter(Boolean).join(', ');
-        const scBadge = (scs === 'changes' || dev.any) ? ' <span class="badge" title="Dodavatel potvrdil mimo naše požadavky' + (devTxt ? ': ' + devTxt : '') + ' — zkontroluj v detailu" style="background:#f59e0b22;color:#f59e0b;">⚠ mimo požadavky' + (devTxt ? ' (' + devTxt + ')' : '') + '</span>' : (scs === 'sent' && o.status === 'ordered' ? ' <span class="badge" title="Čeká se na potvrzení dodavatelem" style="background:#3b82f622;color:#60a5fa;">čeká na potvrzení</span>' : '');
+        const scBadge = (scs === 'changes' || dev.any) ? ' <span class="badge" title="' + ordAttr(devDetail(o)) + '" style="background:#f59e0b22;color:#f59e0b;">⚠ mimo požadavky' + (devTxt ? ' (' + devTxt + ')' : '') + '</span>' : (scs === 'sent' && o.status === 'ordered' ? ' <span class="badge" title="Čeká se na potvrzení dodavatelem" style="background:#3b82f622;color:#60a5fa;">čeká na potvrzení</span>' : '');
         html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span>' + scBadge + '</td>';
         html += '<td>' + (o.items_count || 0) + '</td>';
         html += '<td style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency||'CZK') + '</td>';
