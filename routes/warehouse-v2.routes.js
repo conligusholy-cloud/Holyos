@@ -995,7 +995,7 @@ router.get('/pwa/receive/orders', async (req, res, next) => {
 router.get('/pwa/receive/suppliers', async (req, res, next) => {
   try {
     const q = String(req.query.q || '').trim();
-    const where = { type: { in: ['purchase', 'cooperation'] }, status: { notIn: PO_CLOSED }, company_id: { not: null } };
+    const where = { type: { in: ['purchase', 'cooperation'] }, status: { notIn: PO_CLOSED } }; // company_id je povinné (Int) — filtr na null nejde
     if (q) where.company = { name: { contains: q, mode: 'insensitive' } };
     const list = await prisma.order.findMany({ where, take: 500, include: { company: { select: { id: true, name: true } }, items: { select: { quantity: true, delivered_quantity: true, status: true } } } });
     const by = {};
