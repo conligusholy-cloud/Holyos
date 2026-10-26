@@ -963,6 +963,12 @@ const PWA_AWAIT_STATUSES = ['awaiting_goods_receipt', 'po_matched'];
 // PWA — Příjem podle nákupní objednávky (hledání podle čísla objednávky / dodavatele)
 // ---------------------------------------------------------------------------
 const PO_CLOSED = ['delivered', 'cancelled', 'completed', 'closed', 'done'];
+// InventoryMovement.client_uuid je sloupec typu UUID → pro každou položku odvodit platné UUID
+// (deterministicky z UUID požadavku + id položky, aby opakované odeslání nenaskladnilo dvakrát)
+function lineUuid(base, itemId) {
+  const h = require('crypto').createHash('sha1').update(base + ':' + itemId).digest('hex');
+  return h.slice(0, 8) + '-' + h.slice(8, 12) + '-5' + h.slice(13, 16) + '-' + ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16) + h.slice(17, 20) + '-' + h.slice(20, 32);
+}
 const remainingOf = (it) => Math.max(0, Number(it.quantity || 0) - Number(it.delivered_quantity || 0));
 
 function summarizePo(o) {
@@ -1054,19 +1060,25 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
     const doc = await createDocument({ type: 'receipt_doc', partner_id: o.company_id || null, reference: o.order_number, note: (String(b.note || '').trim() || ('Příjem k objednávce ' + o.order_number)).slice(0, 2000), created_by: personId });
     // 2) Skladové pohyby (idempotentně podle client_uuid + položka)
     const moved = [];
+    try {
     for (const l of lines) {
       const it = byId[l.id];
       const r = await createMove({
         type: 'receipt', material_id: it.material_id, warehouse_id: loc.warehouse_id, quantity: l.qty,
         location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: it.unit_price != null ? Number(it.unit_price) : undefined,
         reference_type: 'order_item', reference_id: it.id, created_by: personId,
-        client_uuid: b.client_uuid ? String(b.client_uuid).slice(0, 40) + '-' + it.id : undefined, note: 'Objednávka ' + o.order_number,
+        client_uuid: b.client_uuid ? lineUuid(String(b.client_uuid), it.id) : undefined, note: 'Objednávka ' + o.order_number,
       });
       if (r.deduped) continue;
       const delivered = Number(it.delivered_quantity || 0) + l.qty;
       await prisma.orderItem.update({ where: { id: it.id }, data: { delivered_quantity: delivered, status: delivered + 0.0001 >= Number(it.quantity) ? 'completed' : 'partial' } });
       it.delivered_quantity = delivered;
       moved.push({ item_id: it.id, name: it.name, quantity: l.qty });
+    }
+    } catch (e) {
+      // Nic nepřijato → zrušit prázdnou příjemku, ať v systému nezůstane viset koncept
+      if (!moved.length) { await cancelDocument(doc.id).catch(() => {}); }
+      throw e;
     }
     await completeDocument(doc.id, personId).catch(() => {});
     // 3) Stav objednávky
