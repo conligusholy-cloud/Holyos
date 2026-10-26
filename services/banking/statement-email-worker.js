@@ -8,7 +8,7 @@
 const graph = require('../ms-graph-client');
 const { importStatementBuffer } = require('./statement-import');
 
-const MAILBOX = () => process.env.BANK_STATEMENT_MAILBOX || process.env.INVOICE_IMAP_USER || '';
+const MAILBOX = () => process.env.BANK_STATEMENT_MAILBOX || 'invoice@bestseries.cz';
 const FOLDER = () => process.env.BANK_STATEMENT_MAIL_FOLDER || 'VYPISY';
 const INTERVAL_MIN = Math.max(5, parseInt(process.env.BANK_STATEMENT_POLL_MINUTES || '30', 10) || 30);
 const STATEMENT_FILE = /\.(pdf|gpc|abo|csv|sta|mt940|txt)$/i;
