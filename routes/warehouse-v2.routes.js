@@ -1081,13 +1081,16 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
       throw e;
     }
     await completeDocument(doc.id, personId).catch(() => {});
+    // Kdo přijímal — jméno osoby (pro sloupec „Doručeno" v Nákupních objednávkách)
+    let receiverName = (req.user && (req.user.display_name || req.user.username)) || 'sklad';
+    try { if (personId) { const pp = await prisma.person.findUnique({ where: { id: personId }, select: { first_name: true, last_name: true } }); if (pp) receiverName = (pp.first_name + ' ' + pp.last_name).trim() || receiverName; } } catch (e) { /* ponechat */ }
     // 3) Stav objednávky
     const fresh = await prisma.orderItem.findMany({ where: { order_id: o.id }, select: { quantity: true, delivered_quantity: true, status: true } });
     const active = fresh.filter((x) => x.status !== 'cancelled');
     const allDone = active.length && active.every((x) => Number(x.delivered_quantity || 0) + 0.0001 >= Number(x.quantity));
     const newStatus = allDone ? 'delivered' : 'partial';
     await prisma.order.update({ where: { id: o.id }, data: { status: newStatus, delivered_at: allDone ? new Date() : undefined } });
-    try { require('../services/order-events').logOrderEvent(o.id, { type: 'goods_received', label: (allDone ? 'Zboží přijato kompletně' : 'Částečný příjem zboží') + ' — příjemka ' + doc.number, detail: moved.map((m) => m.name + ' ' + m.quantity).join(', ').slice(0, 500), actor: (req.user && (req.user.display_name || req.user.username)) || 'sklad' }); } catch (e) { /* jen historie */ }
+    try { require('../services/order-events').logOrderEvent(o.id, { type: 'goods_received', label: (allDone ? 'Zboží přijato kompletně' : 'Částečný příjem zboží') + ' — příjemka ' + doc.number, detail: moved.map((m) => m.name + ' ' + m.quantity).join(', ').slice(0, 500), actor: receiverName }); } catch (e) { /* jen historie */ }
     // 4) 3-way match: přijatá faktura k objednávce bez příjemky → napojit
     let invoicesLinked = 0;
     try {

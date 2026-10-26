@@ -815,7 +815,7 @@
       const el = document.getElementById('orders-table');
       if (orderView === 'items') return renderOrderItems(list);
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Doručeno</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
         const dev = orderDev(o);
         const confDates = (o.items || []).map((it) => ordDay(it.confirmed_delivery)).filter(Boolean).sort();
@@ -835,6 +835,12 @@
         html += '<td style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency||'CZK') + '</td>';
         html += '<td>' + ordFmt(o.expected_delivery) + '</td>';
         html += '<td' + (dev.late ? ' style="color:#f59e0b;font-weight:600"' : '') + '>' + (lastConf ? ordFmt(lastConf) + (dev.late ? ' ⚠' : '') : '—') + '</td>';
+        // Doručeno: poslední příjem (datum + čas), po najetí myší kdo a co přijímal
+        const rcv = (o.events || []);
+        const lastR = rcv.length ? rcv[rcv.length - 1] : null;
+        const fdt = (v) => { const d = new Date(v); return d.toLocaleDateString('cs-CZ') + ' ' + d.toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }); };
+        const rcvTip = rcv.map((e) => fdt(e.ts) + ' — ' + (e.actor || '?') + ' · ' + (e.label || '') + (e.detail ? ' (' + e.detail + ')' : '')).join('\n');
+        html += '<td style="white-space:nowrap' + (o.status === 'partial' ? ';color:#60a5fa' : '') + '" title="' + ordAttr(rcvTip || (o.delivered_at ? 'Doručeno ' + fdt(o.delivered_at) : '')) + '">' + (lastR ? fdt(lastR.ts) + (rcv.length > 1 ? ' <span style="color:var(--text2);font-size:11px">(' + rcv.length + '×)</span>' : '') + (o.status === 'partial' ? ' <span style="font-size:11px">částečně</span>' : '') : (o.delivered_at ? fdt(o.delivered_at) : '—')) + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
         html += '</tr>';
       }

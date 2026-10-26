@@ -658,6 +658,8 @@ router.get('/orders', async (req, res, next) => {
         company: { select: { id: true, name: true } },
         sales_person: { select: { id: true, first_name: true, last_name: true } },
         items: { include: { product: { select: { id: true, code: true, name: true } } } },
+        // Příjmy zboží (PWA čtečka) — kdy a kdo přijímal, pro sloupec „Doručeno"
+        events: { where: { type: 'goods_received' }, orderBy: { ts: 'asc' }, select: { ts: true, actor: true, label: true, detail: true } },
         final_invoice: {
           select: {
             id: true, invoice_number: true, total: true, currency: true,
