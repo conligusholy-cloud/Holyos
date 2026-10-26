@@ -425,9 +425,13 @@ async function sendPoForConfirmation(orderId, { email, name, message }, req) {
     (message ? '\n\n' + message : '') + '\n\nDěkujeme,\n' + ((req && req.user && (req.user.display_name || req.user.username)) || OUR_COMPANY) + '\n' + OUR_COMPANY;
   const { sendMail } = require('../services/email');
   const replyTo = req && req.user && req.user.person && req.user.person.email ? req.user.person.email : undefined;
-  const r = await sendMail({ from: inquiryFrom(), fromName: inquiryFromName(req), to: email, subject: 'Objednávka ' + order.order_number + ' — prosíme o potvrzení — ' + OUR_COMPANY, preheader: 'Potvrďte prosím ceny a termíny dodání', body, link, linkLabel: 'Potvrdit objednávku', replyTo });
+  // Objednávka jako PDF podle šablony (Šablony dokumentů → Nákupní objednávka) do přílohy
+  let attachments;
+  try { const p = await require('../services/purchasing/po-document').buildPoPdf(order.id); if (p) attachments = [{ filename: p.filename, content: p.pdf, contentType: 'application/pdf' }]; }
+  catch (e) { console.warn('[po-confirm] PDF objednávky se nepodařilo vytvořit:', e.message); }
+  const r = await sendMail({ from: inquiryFrom(), fromName: inquiryFromName(req), to: email, subject: 'Objednávka ' + order.order_number + ' — prosíme o potvrzení — ' + OUR_COMPANY, preheader: 'Potvrďte prosím ceny a termíny dodání', body, link, linkLabel: 'Potvrdit objednávku', replyTo, attachments });
   if (r && r.sent === false) throw Object.assign(new Error('E-mail se nepodařilo odeslat: ' + (r.error || r.skipped || 'neznámá chyba')), { status: 502 });
-  await prisma.order.update({ where: { id: order.id }, data: { supplier_confirm_token: token, supplier_confirm_status: 'sent', supplier_confirm_email: email, supplier_confirm_sent_at: new Date(), status: order.status === 'new' ? 'ordered' : order.status } });
+  await prisma.order.update({ where: { id: order.id }, data: { supplier_confirm_token: token, supplier_confirm_status: 'sent', supplier_confirm_email: email, supplier_confirm_sent_at: new Date(), status: ['new', 'quoted', 'pending'].includes(order.status) ? 'ordered' : order.status } });
   try { require('../services/order-events').logOrderEvent(order.id, { type: 'supplier_confirm_sent', label: 'Objednávka odeslána dodavateli k potvrzení', detail: email, actor: (req && req.user && (req.user.display_name || req.user.username)) || null }); } catch (e) { /* jen historie */ }
   return { link, sent_to: email };
 }
@@ -467,6 +471,26 @@ router.post('/:id/accept', async (req, res, next) => {
       catch (e) { sendError = e.message; }
     }
     res.status(201).json({ ok: true, order_id: order.id, order_number: order.order_number, sent, send_error: sendError });
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/inquiries/po/:orderId/document — nákupní objednávka podle šablony „Šablony dokumentů" (?print=1 / ?pdf=1)
+router.get('/po/:orderId/document', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.orderId, 10);
+    const doc = require('../services/purchasing/po-document');
+    if (req.query.pdf === '1') {
+      const r = await doc.buildPoPdf(id);
+      if (!r) return res.status(404).json({ error: 'Objednávka nenalezena' });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="' + r.filename + '"');
+      return res.send(r.pdf);
+    }
+    const r = await doc.buildPoHtml(id);
+    if (!r) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    let html = r.html;
+    if (req.query.print === '1') html = html.replace(/<\/body>/i, '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},300);});<\/script></body>');
+    res.type('html').send(html);
   } catch (err) { next(err); }
 });
 
@@ -525,7 +549,7 @@ poPublicRouter.post('/:token', express.json({ limit: '200kb' }), async (req, res
     });
     await prisma.$transaction(ops);
     const status = changes ? 'changes' : 'confirmed';
-    await prisma.order.update({ where: { id: o.id }, data: { supplier_confirm_status: status, supplier_confirmed_at: new Date(), supplier_confirm_name: txt(b.supplier_name, 255), supplier_confirm_note: txt(b.note, 4000), status: status === 'confirmed' ? 'confirmed' : o.status } });
+    await prisma.order.update({ where: { id: o.id }, data: { supplier_confirm_status: status, supplier_confirmed_at: new Date(), supplier_confirm_name: txt(b.supplier_name, 255), supplier_confirm_note: txt(b.note, 4000), status: ['new', 'quoted', 'pending', 'ordered'].includes(o.status) && status === 'confirmed' ? 'confirmed' : o.status } });
     try { require('../services/order-events').logOrderEvent(o.id, { type: 'supplier_confirmed', label: status === 'confirmed' ? 'Dodavatel potvrdil objednávku (ceny i termíny)' : 'Dodavatel potvrdil objednávku se ZMĚNAMI (' + changes + ' položek)', detail: txt(b.note, 500), actor: txt(b.supplier_name, 255) || 'dodavatel' }); } catch (e) { /* jen historie */ }
     // Upozornit zakladatele objednávky (zvonek + Velín)
     if (o.created_by) {

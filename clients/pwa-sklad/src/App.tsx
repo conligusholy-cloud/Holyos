@@ -6,6 +6,8 @@ import DashboardPage from './pages/DashboardPage';
 import DebugSyncPage from './pages/DebugSyncPage';
 import PwaUpdatePrompt from './components/PwaUpdatePrompt';
 import ReceivePage from './pages/ReceivePage';
+import ReceiveFreePage from './pages/ReceiveFreePage';
+import ReceiveOrderPage from './pages/ReceiveOrderPage';
 import IssuePage from './pages/IssuePage';
 import TransferPage from './pages/TransferPage';
 import InventoryListPage from './pages/InventoryListPage';
@@ -38,6 +40,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ReceivePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/receive/free"
+        element={
+          <ProtectedRoute>
+            <ReceiveFreePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/receive/order"
+        element={
+          <ProtectedRoute>
+            <ReceiveOrderPage />
           </ProtectedRoute>
         }
       />

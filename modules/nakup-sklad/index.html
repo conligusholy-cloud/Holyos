@@ -324,7 +324,7 @@
       new: { label: 'Nový', color: '#9ca3af' },
       quoted: { label: 'Poptáno', color: '#3b82f6' },
       ordered: { label: 'Objednáno', color: '#8b5cf6' },
-      confirmed: { label: 'Potvrzeno', color: '#f59e0b' },
+      confirmed: { label: 'Objednávka potvrzena', color: '#22c55e' },
       delivered: { label: 'Doručeno', color: '#10b981' },
       cancelled: { label: 'Zrušeno', color: '#ef4444' },
       imported: { label: 'Importováno', color: '#9ca3af' },
@@ -728,7 +728,10 @@
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (ORDER_TYPES[o.type] || o.type) + '</td>';
         html += '<td>' + (o.company_name || '—') + '</td>';
-        html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span></td>';
+        // Nákupní: „Objednáno" = odesláno dodavateli, „Objednávka potvrzena" = dodavatel potvrdil přes odkaz
+        const scs = o.supplier_confirm_status;
+        const scBadge = scs === 'changes' ? ' <span class="badge" title="Dodavatel potvrdil, ale změnil cenu nebo termín — zkontroluj v detailu" style="background:#f59e0b22;color:#f59e0b;">⚠ se změnami</span>' : (scs === 'sent' && o.status === 'ordered' ? ' <span class="badge" title="Čeká se na potvrzení dodavatelem" style="background:#3b82f622;color:#60a5fa;">čeká na potvrzení</span>' : '');
+        html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span>' + scBadge + '</td>';
         html += '<td>' + (o.items_count || 0) + '</td>';
         html += '<td style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency||'CZK') + '</td>';
         html += '<td>' + (o.expected_delivery || '—') + '</td>';
@@ -1251,7 +1254,7 @@
       const stOpts = Object.entries(ORDER_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
       const created = o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—';
       document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)poClose()"><div class="po-sheet po-dark" id="po-sheet">' +
-        '<div class="po-top po-noprint"><span id="po-saved"></span><button class="po-btn" onclick="window.print()">🖨 Tisk</button><button class="po-btn" onclick="poClose()">✕ Zavřít</button></div>' +
+        '<div class="po-top po-noprint"><span id="po-saved"></span>' + (['purchase', 'cooperation'].includes(o.type) ? '<button class="po-btn" onclick="window.open(\'/api/wh/inquiries/po/' + o.id + '/document?print=1\', \'_blank\')" title="Tisk podle šablony Nákupní objednávka (Šablony dokumentů)">🖨 Tisk</button><button class="po-btn" onclick="window.open(\'/api/wh/inquiries/po/' + o.id + '/document?pdf=1\', \'_blank\')">📄 PDF</button>' : '<button class="po-btn" onclick="window.print()">🖨 Tisk</button>') +'<button class="po-btn" onclick="poClose()">✕ Zavřít</button></div>' +
         '<div class="po-head"><div><div class="po-kicker">' + kind + '</div><div class="po-num">' + poTxt(o.order_number) + '</div></div>' +
           '<div class="po-meta"><span>Stav</span><select class="po-sel" data-h="status">' + stOpts + '</select>' +
           '<span>Vystaveno</span><b style="color:#1d2433;padding:5px 3px">' + created + '</b>' +

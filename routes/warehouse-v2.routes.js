@@ -959,6 +959,140 @@ router.patch('/lots/:id/status', async (req, res, next) => {
 const PWA_AWAIT_STATUSES = ['awaiting_goods_receipt', 'po_matched'];
 
 // GET /api/wh/pwa/awaiting-receipt — list AP faktur čekajících na příjem
+// ---------------------------------------------------------------------------
+// PWA — Příjem podle nákupní objednávky (hledání podle čísla objednávky / dodavatele)
+// ---------------------------------------------------------------------------
+const PO_CLOSED = ['delivered', 'cancelled', 'completed', 'closed', 'done'];
+const remainingOf = (it) => Math.max(0, Number(it.quantity || 0) - Number(it.delivered_quantity || 0));
+
+function summarizePo(o) {
+  const open = (o.items || []).filter((it) => it.status !== 'cancelled' && remainingOf(it) > 0.0001);
+  return {
+    id: o.id, order_number: o.order_number, status: o.status, type: o.type,
+    company: o.company ? { id: o.company.id, name: o.company.name } : null,
+    expected_delivery: o.expected_delivery, created_at: o.created_at,
+    items_total: (o.items || []).length, items_open: open.length,
+    supplier_confirm_status: o.supplier_confirm_status || null,
+  };
+}
+
+// GET /api/wh/pwa/receive/orders?q=&supplier_id= — otevřené nákupní/kooperační objednávky se zbývajícím množstvím
+router.get('/pwa/receive/orders', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const where = { type: { in: ['purchase', 'cooperation'] }, status: { notIn: PO_CLOSED } };
+    if (req.query.supplier_id) where.company_id = parseInt(req.query.supplier_id, 10);
+    if (q) where.OR = [{ order_number: { contains: q, mode: 'insensitive' } }, { company: { name: { contains: q, mode: 'insensitive' } } }];
+    const list = await prisma.order.findMany({
+      where, orderBy: [{ expected_delivery: 'asc' }, { id: 'desc' }], take: 60,
+      include: { company: { select: { id: true, name: true } }, items: { select: { quantity: true, delivered_quantity: true, status: true } } },
+    });
+    res.json(list.map(summarizePo).filter((o) => o.items_open > 0));
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/pwa/receive/suppliers?q= — dodavatelé, od kterých čekáme zboží (počet otevřených objednávek)
+router.get('/pwa/receive/suppliers', async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    const where = { type: { in: ['purchase', 'cooperation'] }, status: { notIn: PO_CLOSED }, company_id: { not: null } };
+    if (q) where.company = { name: { contains: q, mode: 'insensitive' } };
+    const list = await prisma.order.findMany({ where, take: 500, include: { company: { select: { id: true, name: true } }, items: { select: { quantity: true, delivered_quantity: true, status: true } } } });
+    const by = {};
+    for (const o of list) {
+      const s = summarizePo(o); if (!s.items_open || !s.company) continue;
+      const r = by[s.company.id] || (by[s.company.id] = { id: s.company.id, name: s.company.name, orders: 0, items_open: 0 });
+      r.orders++; r.items_open += s.items_open;
+    }
+    res.json(Object.values(by).sort((a, b) => a.name.localeCompare(b.name, 'cs')));
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/pwa/receive/orders/:id — položky objednávky se zbývajícím množstvím k příjmu
+router.get('/pwa/receive/orders/:id', async (req, res, next) => {
+  try {
+    const o = await prisma.order.findUnique({
+      where: { id: parseInt(req.params.id, 10) },
+      include: { company: { select: { id: true, name: true } }, items: { orderBy: { id: 'asc' }, include: { material: { select: { id: true, code: true, name: true, unit: true, barcode: true } } } } },
+    });
+    if (!o || !['purchase', 'cooperation'].includes(o.type)) return res.status(404).json({ error: 'Nákupní objednávka nenalezena' });
+    res.json({
+      ...summarizePo(o),
+      items: o.items.filter((it) => it.status !== 'cancelled').map((it) => ({
+        id: it.id, name: it.name, material_id: it.material_id, material_code: it.material ? it.material.code : null, barcode: it.material ? it.material.barcode : null,
+        unit: it.unit || (it.material && it.material.unit) || 'ks', quantity: Number(it.quantity), delivered_quantity: Number(it.delivered_quantity || 0),
+        remaining: remainingOf(it), expected_delivery: it.expected_delivery, confirmed_delivery: it.confirmed_delivery,
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/pwa/receive/orders/:id — příjem proti objednávce.
+// Body: { location_id, lines:[{ order_item_id, quantity }], note, client_uuid }
+// → příjemka (receipt_doc), skladové pohyby na lokaci, delivered_quantity + stav položek a objednávky,
+//   napojení přijaté faktury na příjemku (3-way match).
+router.post('/pwa/receive/orders/:id', async (req, res, next) => {
+  try {
+    const orderId = parseInt(req.params.id, 10);
+    const b = req.body || {};
+    const locationId = parseInt(b.location_id, 10);
+    if (!locationId) return res.status(400).json({ error: 'Naskenujte cílovou lokaci.' });
+    const loc = await prisma.warehouseLocation.findUnique({ where: { id: locationId }, select: { id: true, warehouse_id: true, label: true } }).catch(() => null);
+    if (!loc) return res.status(400).json({ error: 'Lokace nenalezena.' });
+    const o = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true, company: { select: { id: true, name: true } } } });
+    if (!o || !['purchase', 'cooperation'].includes(o.type)) return res.status(404).json({ error: 'Nákupní objednávka nenalezena' });
+    const lines = (Array.isArray(b.lines) ? b.lines : []).map((l) => ({ id: parseInt(l.order_item_id, 10), qty: Number(String(l.quantity).replace(',', '.')) })).filter((l) => l.id && l.qty > 0);
+    if (!lines.length) return res.status(400).json({ error: 'Zadejte přijaté množství aspoň u jedné položky.' });
+    const byId = Object.fromEntries(o.items.map((it) => [it.id, it]));
+    for (const l of lines) {
+      const it = byId[l.id];
+      if (!it) return res.status(400).json({ error: 'Položka #' + l.id + ' nepatří k objednávce.' });
+      if (!it.material_id) return res.status(400).json({ error: 'Položka „' + it.name + '" nemá skladovou kartu — příjem na sklad nejde. Napoj ji na zboží v objednávce.' });
+    }
+    const personId = await resolvePersonIdForUser(req.user).catch(() => null);
+    // 1) Příjemka
+    const doc = await createDocument({ type: 'receipt_doc', partner_id: o.company_id || null, reference: o.order_number, note: (String(b.note || '').trim() || ('Příjem k objednávce ' + o.order_number)).slice(0, 2000), created_by: personId });
+    // 2) Skladové pohyby (idempotentně podle client_uuid + položka)
+    const moved = [];
+    for (const l of lines) {
+      const it = byId[l.id];
+      const r = await createMove({
+        type: 'receipt', material_id: it.material_id, warehouse_id: loc.warehouse_id, quantity: l.qty,
+        location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: it.unit_price != null ? Number(it.unit_price) : undefined,
+        reference_type: 'order_item', reference_id: it.id, created_by: personId,
+        client_uuid: b.client_uuid ? String(b.client_uuid).slice(0, 40) + '-' + it.id : undefined, note: 'Objednávka ' + o.order_number,
+      });
+      if (r.deduped) continue;
+      const delivered = Number(it.delivered_quantity || 0) + l.qty;
+      await prisma.orderItem.update({ where: { id: it.id }, data: { delivered_quantity: delivered, status: delivered + 0.0001 >= Number(it.quantity) ? 'completed' : 'partial' } });
+      it.delivered_quantity = delivered;
+      moved.push({ item_id: it.id, name: it.name, quantity: l.qty });
+    }
+    await completeDocument(doc.id, personId).catch(() => {});
+    // 3) Stav objednávky
+    const fresh = await prisma.orderItem.findMany({ where: { order_id: o.id }, select: { quantity: true, delivered_quantity: true, status: true } });
+    const active = fresh.filter((x) => x.status !== 'cancelled');
+    const allDone = active.length && active.every((x) => Number(x.delivered_quantity || 0) + 0.0001 >= Number(x.quantity));
+    const newStatus = allDone ? 'delivered' : 'partial';
+    await prisma.order.update({ where: { id: o.id }, data: { status: newStatus, delivered_at: allDone ? new Date() : undefined } });
+    try { require('../services/order-events').logOrderEvent(o.id, { type: 'goods_received', label: (allDone ? 'Zboží přijato kompletně' : 'Částečný příjem zboží') + ' — příjemka ' + doc.number, detail: moved.map((m) => m.name + ' ' + m.quantity).join(', ').slice(0, 500), actor: (req.user && (req.user.display_name || req.user.username)) || 'sklad' }); } catch (e) { /* jen historie */ }
+    // 4) 3-way match: přijatá faktura k objednávce bez příjemky → napojit
+    let invoicesLinked = 0;
+    try {
+      const invs = await prisma.invoice.findMany({ where: { order_id: o.id, direction: 'ap', warehouse_document_id: null }, select: { id: true, status: true } });
+      for (const inv of invs) {
+        const data = { warehouse_document_id: doc.id };
+        if (['draft', 'awaiting_po_match', 'po_matched', 'awaiting_goods_receipt'].includes(inv.status)) data.status = 'goods_received';
+        await prisma.invoice.update({ where: { id: inv.id }, data }); invoicesLinked++;
+      }
+    } catch (e) { console.warn('[pwa/receive] napojení faktury:', e.message); }
+    res.status(201).json({ ok: true, document_number: doc.number, document_id: doc.id, order_status: newStatus, received: moved, location: loc.label, invoices_linked: invoicesLinked });
+  } catch (err) {
+    if (err && /quantity|Materiál|Šarže|pohyb/i.test(err.message || '')) return res.status(400).json({ error: err.message });
+    next(err);
+  }
+});
+
 router.get('/pwa/awaiting-receipt', async (req, res, next) => {
   try {
     const invoices = await prisma.invoice.findMany({

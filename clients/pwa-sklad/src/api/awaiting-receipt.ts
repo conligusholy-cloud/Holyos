@@ -74,7 +74,7 @@ export async function confirmReceipt(
     `/api/wh/pwa/awaiting-receipt/${invoiceId}/confirm`,
     {
       method: 'POST',
-      body: JSON.stringify(input),
+      body: input, // apiFetch serializuje sám (dřív dvojitý JSON → server dostal string a vracel 400)
     }
   );
 }
