@@ -919,8 +919,8 @@
           '<td style="white-space:nowrap;">' + fmtPayment(inv.payment_method) + '</td>' +
           '<td>' + fmtDate(inv.date_issued) + '</td>' +
           '<td' + (isOverdue ? ' style="color:#ef4444;font-weight:600;"' : '') + '>' + fmtDate(inv.date_due) + '</td>' +
-          '<td>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : '—') + '</td>' +
-          '<td>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '—') + '</td>' +
+          '<td' + (inv.order ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : manualMatchBox(inv, 'order')) + '</td>' +
+          '<td' + (inv.warehouse_document ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : manualMatchBox(inv, 'receipt')) + '</td>' +
           '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
           '<td style="color:var(--text2);font-size:0.88em;white-space:nowrap;">' + fmtDateTime(inv.created_at) + '</td>' +
           '<td onclick="event.stopPropagation()" style="white-space:nowrap;">' +
@@ -936,6 +936,35 @@
       }).join('');
     }
     window.loadInvoices = loadInvoices;
+
+    // ─── Ruční potvrzení objednávky / příjemky (dočasně místo 3-way match) ───
+    // Jen u přijatých (AP); služby (štítek service) je nepotřebují. Obojí zaškrtnuté = projde kontrolou k platbě.
+    function manualMatchBox(inv, field) {
+      if (inv.direction !== 'ap') return '—';
+      const tags = Array.isArray(inv.tags) ? inv.tags : [];
+      if (tags.includes('service') || tags.includes('sluzba')) return '<span style="color:var(--text2);font-size:0.8em;" title="Služba — není potřeba">n/a</span>';
+      const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
+      const on = tags.includes(tag);
+      const locked = ['paid', 'cancelled', 'payment_queued'].includes(inv.status);
+      const title = field === 'order' ? 'Ručně potvrdit: faktura má objednávku' : 'Ručně potvrdit: zboží bylo přijato (má příjemku)';
+      return '<label title="' + title + '" style="display:inline-flex;align-items:center;gap:4px;cursor:' + (locked ? 'default' : 'pointer') + ';">' +
+        '<input type="checkbox" ' + (on ? 'checked ' : '') + (locked ? 'disabled ' : '') +
+        'onchange="toggleManualMatch(' + inv.id + ',\'' + field + '\',this)" style="width:16px;height:16px;cursor:inherit;accent-color:#10b981;">' +
+        (on ? '<span style="color:#10b981;font-size:0.78em;">ručně</span>' : '') + '</label>';
+    }
+    window.toggleManualMatch = async function(id, field, el) {
+      el.disabled = true;
+      try {
+        const r = await api('POST', '/api/accounting/invoices/' + id + '/manual-match', { field, checked: el.checked });
+        const d = r.data || {};
+        if (r.status !== 200) throw new Error(d.error || ('HTTP ' + r.status));
+        if (typeof showToast === 'function') showToast(d.has_order && d.has_receipt ? '✅ Objednávka i příjemka potvrzeny — může jít k platbě' + (d.status === 'ready_to_pay' ? ' (přesunuto do K platbě)' : ' po schválení') : 'Uloženo');
+        loadInvoices();
+      } catch (e) {
+        el.checked = !el.checked; el.disabled = false;
+        alert('Nepodařilo se uložit: ' + e.message);
+      }
+    };
 
     // ─── Vizuální kontrola: originál dokladu vedle detailu ──────────────
     // Panel vpravo (mimo modal-root, aby přežil přepnutí detail → Upravit),
@@ -1325,7 +1354,7 @@
             : li(false, '<a href="javascript:void(0)" onclick="openReviewPane(' + inv.id + ')" style="color:#818cf8;font-weight:600;">🔍 Zkontrolovat údaje proti originálu</a> — vedle se otevře originál dokladu, pak <b>Upravit</b> odchylky nebo <b>Zkontrolováno</b>')) +
           (isService
             ? li(true, 'Služba / režie (štítek <span class="inline-code">service</span>) — objednávka ani příjemka není potřeba')
-            : li(!!(inv.order_id && inv.warehouse_document_id), 'Napojit na objednávku a příjemku (<b>3-way match → Navázat</b>) — <i>u služeb a režie (energie, nájem, telco…) místo toho přidat štítek <span class="inline-code">service</span></i>')) +
+            : li(!!((inv.order_id || tags.includes('manual_order')) && (inv.warehouse_document_id || tags.includes('manual_receipt'))), 'Napojit (nebo v seznamu ručně zaškrtnout sloupce Objednávka + Příjemka) na objednávku a příjemku (<b>3-way match → Navázat</b>) — <i>u služeb a režie (energie, nájem, telco…) místo toho přidat štítek <span class="inline-code">service</span></i>')) +
           li(approved, steps.length ? 'Schválení (' + req.filter(s => s.status === 'approved').length + '/' + req.length + ')' : '<b>Odeslat ke schválení</b> — zatím nejsou přiřazení schvalovatelé') +
           li(accOk, isTransfer ? 'Ověřený bankovní účet protistrany' : 'Platba ' + escapeHtml(inv.payment_method || '') + ' — ověření účtu není potřeba') +
           '</ul>' +

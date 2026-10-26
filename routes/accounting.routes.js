@@ -965,7 +965,8 @@ async function decideApproval(req, res, decision) {
       approvedById = decidingPersonId;
 
       // Pokud už je matched + goods_received, rovnou na ready_to_pay
-      if (invoice.order_id && invoice.warehouse_document_id) {
+      const tg = Array.isArray(invoice.tags) ? invoice.tags : [];
+      if ((invoice.order_id || tg.includes('manual_order')) && (invoice.warehouse_document_id || tg.includes('manual_receipt'))) {
         newStatus = 'ready_to_pay';
       }
     }
@@ -1012,8 +1013,9 @@ router.post('/invoices/:id/mark-ready-to-pay', async (req, res, next) => {
 
     const hardChecks = [];
     if (!isService) {
-      if (!invoice.order_id) hardChecks.push('chybí napojení na objednávku');
-      if (!invoice.warehouse_document_id) hardChecks.push('chybí napojení na příjemku (zboží nebylo přijato)');
+      const tg = Array.isArray(invoice.tags) ? invoice.tags : [];
+      if (!invoice.order_id && !tg.includes('manual_order')) hardChecks.push('chybí objednávka (napoj ji, nebo ručně zaškrtni „má objednávku")');
+      if (!invoice.warehouse_document_id && !tg.includes('manual_receipt')) hardChecks.push('chybí příjemka (napoj ji, nebo ručně zaškrtni „má příjemku")');
     }
     const allApproved = invoice.approval_steps.length > 0 &&
       invoice.approval_steps.filter(s => s.required).every(s => s.status === 'approved');
@@ -1106,6 +1108,36 @@ router.get('/invoices/:id/source-pdf', async (req, res, next) => {
     res.setHeader('Content-Type', mime);
     res.setHeader('Content-Disposition', `inline; filename="${invoice.invoice_number}${ext}"`);
     fs.createReadStream(filePath).pipe(res);
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/manual-match — ruční potvrzení „má objednávku" / „má příjemku" (dočasně místo 3-way match)
+// Body: { field: 'order'|'receipt', checked: bool }. Ukládá se jako tag manual_order / manual_receipt (bez migrace).
+// Když má faktura obojí a je už schválená (approved), posune se rovnou do ready_to_pay.
+router.post('/invoices/:id/manual-match', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const field = req.body?.field;
+    if (!['order', 'receipt'].includes(field)) return res.status(400).json({ error: 'field musí být order nebo receipt' });
+    const checked = req.body?.checked !== false;
+    const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
+    const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, status: true, direction: true, invoice_number: true, order_id: true, warehouse_document_id: true } });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (['paid', 'cancelled', 'payment_queued'].includes(invoice.status)) return res.status(400).json({ error: 'U faktury v tomto stavu už nelze měnit' });
+    const tags = (invoice.tags || []).filter(t => t !== tag);
+    if (checked) tags.push(tag);
+    const hasOrder = !!invoice.order_id || tags.includes('manual_order');
+    const hasReceipt = !!invoice.warehouse_document_id || tags.includes('manual_receipt');
+    const data = { tags };
+    if (invoice.direction === 'ap' && invoice.status === 'approved' && hasOrder && hasReceipt) data.status = 'ready_to_pay';
+    if (invoice.status === 'ready_to_pay' && !(hasOrder && hasReceipt)) data.status = 'approved';
+    const updated = await prisma.invoice.update({ where: { id }, data, select: { id: true, tags: true, status: true } });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: `${invoice.invoice_number}: ručně ${checked ? 'potvrzena' : 'zrušena'} ${field === 'order' ? 'objednávka' : 'příjemka'}${data.status ? ' → ' + data.status : ''}`,
+      user: req.user,
+    }).catch(() => {});
+    res.json({ ...updated, has_order: hasOrder, has_receipt: hasReceipt });
   } catch (err) { next(err); }
 });
 
