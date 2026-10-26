@@ -1404,7 +1404,8 @@ router.put('/orders/:id', async (req, res, next) => {
 // ?dry=1 jen spočítá. Pevná podcesta MUSÍ být nad /orders/:id.
 router.delete('/orders/imported', require('../middleware/auth').requireAdmin, async (req, res, next) => {
   try {
-    const where = { status: 'imported' };
+    // Import z Factorify = stav „imported" NEBO číslo objednávky FY-… (i ty už ukončené)
+    const where = { OR: [{ status: 'imported' }, { order_number: { startsWith: 'FY-' } }] };
     if (req.query.type) where.type = String(req.query.type);
     const orders = await prisma.order.findMany({ where, select: { id: true, order_number: true } });
     if (req.query.dry === '1') return res.json({ count: orders.length });
@@ -1422,7 +1423,7 @@ router.delete('/orders/imported', require('../middleware/auth').requireAdmin, as
         deleted++;
       } catch (e) { failed.push(o.order_number); }
     }
-    await logAudit({ action: 'delete', entity: 'order', entity_id: 0, description: `Hromadně smazány importované objednávky: ${deleted} (přeskočeno ${failed.length})`, user: req.user }).catch(() => {});
+    await logAudit({ action: 'delete', entity: 'order', entity_id: 0, description: `Hromadně smazány objednávky importované z Factorify: ${deleted} (přeskočeno ${failed.length})`, user: req.user }).catch(() => {});
     res.json({ deleted, failed });
   } catch (err) { next(err); }
 });
