@@ -222,7 +222,15 @@ const uploadStatementSchema = z.object({
   bank_account_id: z.number().int().positive(),
   filename: z.string().min(1).max(255),
   content_base64: z.string().min(1),
-  format: z.enum(['gpc', 'fio_csv', 'mt940', 'auto']).default('auto'),
+  format: z.enum(['gpc', 'fio_csv', 'mt940', 'moneta_pdf', 'auto']).default('auto'),
+});
+
+// POST /api/banking/statements/fetch-email — hned načíst výpisy ze složky VYPISY (jinak běží automaticky)
+router.post('/statements/fetch-email', async (req, res, next) => {
+  try {
+    const r = await require('../services/banking/statement-email-worker').runOnce();
+    res.json(r);
+  } catch (err) { next(err); }
 });
 
 // POST /api/banking/statements/upload
@@ -248,10 +256,13 @@ router.post('/statements/upload', async (req, res, next) => {
 
     let parseResult;
     try {
-      parseResult = parseStatement(buffer, {
-        filename,
-        format: format === 'auto' ? undefined : format,
-      });
+      const { isPdf, parseMonetaPdf } = require('../services/banking/parsers/moneta-pdf-parser');
+      parseResult = (format === 'moneta_pdf' || isPdf(buffer))
+        ? await parseMonetaPdf(buffer, { password: process.env.BANK_STATEMENT_PASSWORD || '' })
+        : parseStatement(buffer, {
+          filename,
+          format: format === 'auto' ? undefined : format,
+        });
     } catch (e) {
       return res.status(422).json({ error: 'Parser selhal: ' + e.message });
     }
@@ -284,7 +295,7 @@ router.post('/statements/upload', async (req, res, next) => {
       });
     }
 
-    const sourceMap = { gpc: 'gpc_upload', fio_csv: 'csv_upload', mt940: 'mt940_upload' };
+    const sourceMap = { gpc: 'gpc_upload', fio_csv: 'csv_upload', mt940: 'mt940_upload', moneta_pdf: 'pdf_upload' };
     const created = await prisma.$transaction(async tx => {
       const stmt = await tx.bankStatement.create({
         data: {

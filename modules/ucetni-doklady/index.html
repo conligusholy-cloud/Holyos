@@ -420,6 +420,7 @@
               <option value="">Všechny účty</option>
             </select>
             <button class="btn btn-primary" onclick="openUploadStatementModal()">📁 Nahrát výpis</button>
+            <button class="btn btn-secondary" id="btn-fetch-stmt-email" onclick="fetchStatementsFromEmail()" title="Načte nové výpisy ze složky VYPISY ve schránce faktur (zaheslované PDF MONETA se odemkne samo) a spáruje platby s fakturami. Běží i automaticky každých 30 min.">📨 Načíst z e-mailu</button>
             <button class="btn btn-secondary btn-sm" onclick="loadStatements()">🔄 Obnovit</button>
           </div>
 
@@ -4039,6 +4040,23 @@
       if (current) sel.value = current;
     }
 
+    // Výpisy z e-mailu (složka VYPISY) — import + automatické párování s fakturami
+    window.fetchStatementsFromEmail = async function() {
+      const b = document.getElementById('btn-fetch-stmt-email'); if (b) { b.disabled = true; b.textContent = '⏳ Načítám…'; }
+      try {
+        const r = await api('POST', '/api/banking/statements/fetch-email', {});
+        const d = r.data || {};
+        const lines = [];
+        (d.imported || []).forEach((x) => lines.push('✅ Výpis ' + x.statement + ': ' + x.transactions + ' transakcí' + (x.matched != null ? ', spárováno ' + x.matched : '') + ((x.warnings || []).length ? '\n   ⚠ ' + x.warnings.join('; ') : '')));
+        (d.duplicates || []).forEach((x) => lines.push('↺ Výpis ' + x.statement + ' už v systému je'));
+        (d.no_account || []).forEach((x) => lines.push('❓ ' + x.file + ': účet ' + x.account + ' není v Bankách založený'));
+        (d.errors || []).forEach((x) => lines.push('❌ ' + x));
+        alert(lines.length ? lines.join('\n') : 'Žádné nové výpisy ve složce VYPISY.');
+        loadStatements();
+      } catch (e) { alert('Chyba: ' + e.message); }
+      finally { if (b) { b.disabled = false; b.textContent = '📨 Načíst z e-mailu'; } }
+    };
+
     window.loadStatements = async function() {
       const accountId = document.getElementById('bank-filter-account').value;
       const url = '/api/banking/statements' + (accountId ? '?bank_account_id=' + accountId : '');
@@ -4230,7 +4248,7 @@
             </div>
             <div style="margin:14px 0;">
               <label style="display:block; color:var(--text2); margin-bottom:4px;">Soubor výpisu</label>
-              <input type="file" id="upload-file" accept=".gpc,.csv,.sta,.mt940,.txt" style="width:100%;">
+              <input type="file" id="upload-file" accept=".gpc,.csv,.sta,.mt940,.txt,.pdf" style="width:100%;">
               <div style="color:var(--text2); font-size:0.85em; margin-top:4px;">Podporované: GPC (.gpc), Fio CSV (.csv), MT940 (.sta/.mt940). Max 10 MB.</div>
             </div>
             <div style="margin:14px 0;">

@@ -41,6 +41,44 @@ async function listUnreadMessages(userPrincipalName, opts = {}) {
 }
 
 /**
+ * Najde ID složky podle zobrazovaného názvu (nejdřív nejvyšší úroveň, pak podsložky Doručené pošty).
+ * @returns {Promise<string|null>}
+ */
+async function findMailFolderId(userPrincipalName, displayName) {
+  const esc = String(displayName).replace(/'/g, "''");
+  const tries = [
+    `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders?$filter=displayName eq '${esc}'&$top=5`,
+    `${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders/Inbox/childFolders?$filter=displayName eq '${esc}'&$top=5`,
+  ];
+  for (const u of tries) {
+    const r = await fetch(u, { headers: await authHeaders() });
+    if (!r.ok) continue;
+    const d = await r.json();
+    if (d.value && d.value[0]) return d.value[0].id;
+  }
+  return null;
+}
+
+/**
+ * Nepřečtené zprávy s přílohou v konkrétní složce (např. „VYPISY").
+ */
+async function listUnreadInFolder(userPrincipalName, folderId, opts = {}) {
+  const { top = 25 } = opts;
+  const url = new URL(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders/${encodeURIComponent(folderId)}/messages`);
+  url.searchParams.set('$filter', 'isRead eq false and hasAttachments eq true');
+  url.searchParams.set('$top', String(top));
+  url.searchParams.set('$select', 'id,subject,from,receivedDateTime,hasAttachments');
+  url.searchParams.set('$expand', 'attachments($select=id,name,contentType,size,isInline)');
+  const r = await fetch(url, { headers: await authHeaders() });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`Graph list folder selhal: ${r.status} — ${body.slice(0, 300)}`);
+  }
+  const data = await r.json();
+  return data.value || [];
+}
+
+/**
  * Stáhne obsah konkrétní přílohy jako Buffer.
  * Pro FileAttachment vrátí bytes.
  */
@@ -305,6 +343,8 @@ function isConfigured() {
 
 module.exports = {
   listUnreadMessages,
+  findMailFolderId,
+  listUnreadInFolder,
   downloadAttachment,
   markAsRead,
   sendReply,

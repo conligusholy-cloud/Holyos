@@ -1248,6 +1248,12 @@ server.listen(PORT, async () => {
     console.error('[app] email-ingest-worker nelze spustit:', err.message);
   }
   try {
+    // Bankovní výpisy z e-mailu (složka VYPISY) → Účetní doklady / Banka + párování s fakturami
+    require('./services/banking/statement-email-worker').start();
+  } catch (err) {
+    console.error('[app] bank-statement-email worker nelze spustit:', err.message);
+  }
+  try {
     const digestWorker = require('./services/digest-worker');
     digestWorker.start();
   } catch (err) {
