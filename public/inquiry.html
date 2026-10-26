@@ -91,12 +91,18 @@
           '<div class="actions" style="margin-top:14px"><span class="muted">Celkem bez DPH</span> <span class="total" id="tot"></span></div></div>' +
           '<div class="card"><div class="grid" style="margin-top:0;grid-template-columns:1fr 2fr"><label class="muted">Vyplnil(a)<input id="sname" value="' + esc(D.supplier_name || '') + '"' + (L ? ' disabled' : '') + ' placeholder="Jméno"></label>' +
           '<label class="muted">Poznámka k nabídce (doprava, platnost nabídky, podmínky…)<textarea id="snote" rows="2"' + (L ? ' disabled' : '') + '>' + esc(D.supplier_note || '') + '</textarea></label></div>' +
+          '<div class="attach" style="margin-top:14px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
+            '<span>📎 <b>Nabídka z vašeho systému</b> <span class="muted">(nepovinné — PDF, obrázek, Excel, Word; max 12 MB)</span></span>' +
+            '<span id="att-name" class="muted">' + (D.offer_file_name ? '✅ ' + esc(D.offer_file_name) : 'zatím nepřiloženo') + '</span>' +
+            (L ? '' : '<label class="btn-sec" style="padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:700">' + (D.offer_file_name ? 'Nahradit soubor' : 'Přiložit soubor') + '<input type="file" id="att-file" accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.docx,.doc,.csv,.txt" style="display:none"></label>') +
+            '<div class="muted" style="flex-basis:100%;font-size:12px">Přiloženou nabídku automaticky porovnáme s vyplněnými hodnotami.</div></div>' +
           (L ? '' : '<div class="actions" style="margin-top:16px"><button class="btn-sec" id="b-save">💾 Uložit rozpracované</button><button class="btn-pri" id="b-send">Odeslat nabídku →</button></div>') + '</div>' +
           '<div class="muted" style="text-align:center;font-size:12px">Poptávka ' + esc(D.number) + ' · ' + esc(D.buyer) + '</div>';
         recalc();
         if (!L) {
           document.getElementById('b-save').onclick = function () { save(false); };
           document.getElementById('b-send').onclick = function () { save(true); };
+          var af = document.getElementById('att-file'); if (af) af.onchange = function () { uploadOffer(af.files && af.files[0]); };
         }
       }
 
@@ -126,6 +132,20 @@
           tr.querySelectorAll('[data-f]').forEach(function (el) { o[el.dataset.f] = el.value; });
           return o;
         });
+      }
+
+      function uploadOffer(f) {
+        if (!f) return;
+        if (f.size > 12 * 1024 * 1024) { showMsg('<div class="msg err">Soubor je větší než 12 MB.</div>'); return; }
+        var nm = document.getElementById('att-name'); nm.textContent = '⏳ Nahrávám ' + f.name + '…';
+        var rd = new FileReader();
+        rd.onload = function () {
+          fetch(API + '/offer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: f.name, data: String(rd.result).split(',')[1] || '' }) })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+            .then(function (x) { if (!x.ok) { nm.textContent = 'zatím nepřiloženo'; showMsg('<div class="msg err">' + esc(x.j.error || 'Nahrání se nepodařilo.') + '</div>'); return; } D.offer_file_name = f.name; nm.textContent = '✅ ' + f.name + ' — přiloženo'; })
+            .catch(function () { nm.textContent = 'zatím nepřiloženo'; showMsg('<div class="msg err">Nahrání se nepodařilo, zkuste to znovu.</div>'); });
+        };
+        rd.readAsDataURL(f);
       }
 
       function save(submit) {

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Potvrzení objednávky</title>
+  <!-- HolyOS — Potvrzení nákupní objednávky dodavatelem (odkaz z e-mailu, bez přihlášení) -->
+  <style>
+    :root { --bg:#f4f6fa; --card:#fff; --text:#1e2433; --muted:#6b7280; --border:#e3e7ef; --accent:#16a34a; --blue:#2563eb; --err:#dc2626; --warn:#b45309; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); font-size:14px; }
+    .wrap { max-width: 1060px; margin: 0 auto; padding: 28px 18px 60px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px 24px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+    .kicker { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--blue); font-weight:700; }
+    h1 { margin:4px 0 6px; font-size:24px; }
+    .muted { color:var(--muted); }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(190px,1fr)); gap:12px; margin-top:14px; }
+    .grid div b { display:block; font-size:15px; margin-top:2px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); padding:8px 6px; border-bottom:1px solid var(--border); }
+    td { padding:10px 6px; border-bottom:1px solid var(--border); vertical-align:top; }
+    td.r, th.r { text-align:right; }
+    input, textarea { font:inherit; border:1px solid var(--border); border-radius:8px; padding:7px 9px; width:100%; background:#fff; color:var(--text); }
+    input[type=checkbox] { width:auto; transform:scale(1.2); }
+    .name { font-weight:600; }
+    .warn { color:var(--warn); font-size:12px; font-weight:600; margin-top:4px; }
+    .actions { display:flex; gap:10px; justify-content:flex-end; align-items:center; flex-wrap:wrap; }
+    button { font:inherit; border:0; border-radius:9px; padding:12px 20px; cursor:pointer; font-weight:700; background:var(--accent); color:#fff; }
+    button:disabled { opacity:.55; cursor:default; }
+    .msg { padding:12px 14px; border-radius:10px; margin-bottom:14px; }
+    .msg.ok { background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; }
+    .msg.err { background:#fef2f2; color:#991b1b; border:1px solid #fecaca; }
+    .msg.warn { background:#fffbeb; color:#92400e; border:1px solid #fde68a; }
+    .msg.info { background:#eff6ff; color:#1e3a8a; border:1px solid #bfdbfe; }
+    @media (max-width: 760px) {
+      thead { display:none; } tr { display:block; border-bottom:1px solid var(--border); padding:8px 0; } td { display:block; border:0; padding:4px 0; }
+      td[data-l]::before { content: attr(data-l); display:block; font-size:11px; color:var(--muted); text-transform:uppercase; margin-bottom:2px; }
+      td.r { text-align:left; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"><div class="card">Načítám objednávku…</div></div>
+  <script>
+    (function () {
+      var token = location.pathname.split('/').filter(Boolean).pop();
+      var API = '/api/public/po/' + encodeURIComponent(token);
+      var D = null;
+      var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+      var fd = function (v) { if (!v) return '—'; var p = String(v).slice(0, 10).split('-'); return (+p[2]) + '. ' + (+p[1]) + '. ' + p[0]; };
+      var money = function (v) { return (Number(v) || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' ' + (D ? D.currency : ''); };
+
+      function load() {
+        fetch(API).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (x) {
+          if (!x.ok) { document.getElementById('app').innerHTML = '<div class="card"><h1>Objednávka není dostupná</h1><p class="muted">' + esc(x.j.error || 'Odkaz je neplatný.') + '</p></div>'; return; }
+          D = x.j; render();
+        }).catch(function () { document.getElementById('app').innerHTML = '<div class="card">Nepodařilo se načíst objednávku. Zkuste to prosím znovu.</div>'; });
+      }
+
+      function render() {
+        var L = D.locked, dis = L ? ' disabled' : '';
+        var rows = D.items.map(function (it) {
+          var priceOk = it.confirmed_price == null;
+          return '<tr data-id="' + it.id + '">' +
+            '<td data-l="Položka"><div class="name">' + esc(it.name) + '</div></td>' +
+            '<td data-l="Množství" class="r" style="white-space:nowrap"><b>' + Number(it.quantity).toLocaleString('cs-CZ') + '</b> ' + esc(it.unit) + '</td>' +
+            '<td data-l="Cena/jedn. bez DPH" class="r" style="white-space:nowrap"><b>' + money(it.unit_price) + '</b></td>' +
+            '<td data-l="Cena" style="width:170px"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-f="price_ok"' + (priceOk ? ' checked' : '') + dis + '> souhlasí</label>' +
+              '<input class="r" data-f="confirmed_price" type="number" step="0.01" min="0" placeholder="vaše cena" value="' + (it.confirmed_price == null ? '' : it.confirmed_price) + '" style="margin-top:6px;' + (priceOk ? 'display:none' : '') + '"' + dis + '></td>' +
+            '<td data-l="Požadujeme dodat do" style="white-space:nowrap"><b>' + fd(it.required_delivery) + '</b></td>' +
+            '<td data-l="Potvrzený termín dodání" style="width:160px"><input data-f="confirmed_delivery" type="date" value="' + esc(it.confirmed_delivery || it.required_delivery || '') + '"' + dis + '><div class="warn" data-late></div></td>' +
+            '<td data-l="Poznámka" style="min-width:150px"><input data-f="supplier_note" placeholder="nepovinné" value="' + esc(it.supplier_note || '') + '"' + dis + '></td></tr>';
+        }).join('');
+        var st = D.status === 'confirmed' ? '<div class="msg ok">✅ Objednávka byla potvrzena ' + (D.confirmed_at ? new Date(D.confirmed_at).toLocaleString('cs-CZ') : '') + '. Děkujeme!</div>'
+          : D.status === 'changes' ? '<div class="msg warn">⚠️ Objednávka byla potvrzena se změnami ' + (D.confirmed_at ? new Date(D.confirmed_at).toLocaleString('cs-CZ') : '') + '. Ozveme se Vám.</div>' : '';
+        var terms = D.terms || {};
+        var termHtml = [terms.delivery_place ? 'Místo dodání: <b>' + esc(terms.delivery_place) + '</b>' : '', terms.transport_by ? 'Doprava: <b>' + esc(terms.transport_by) + '</b>' : '', terms.due_days ? 'Splatnost: <b>' + esc(terms.due_days) + ' dní</b>' : ''].filter(Boolean).join(' · ');
+        document.getElementById('app').innerHTML =
+          '<div class="card"><div class="kicker">Potvrzení objednávky</div><h1>Objednávka ' + esc(D.order_number) + '</h1>' +
+          '<div class="muted">' + esc(D.buyer) + ' u Vás objednává níže uvedené zboží. Potvrďte prosím <b>ceny</b> a <b>termíny dodání</b>. Když něco nemůžete dodržet, zrušte zaškrtnutí „souhlasí“ a uveďte svou cenu, případně změňte termín.</div>' +
+          '<div class="grid"><div class="muted">Odběratel<b>' + esc(D.buyer) + '</b></div><div class="muted">Dodavatel<b>' + esc(D.supplier || '') + '</b></div><div class="muted">Požadované dodání<b>' + fd(D.expected_delivery) + '</b></div><div class="muted">Celkem bez DPH<b>' + money(D.total) + '</b></div></div>' +
+          (termHtml ? '<div class="muted" style="margin-top:12px">' + termHtml + '</div>' : '') +
+          (D.note ? '<div class="msg info" style="margin-top:14px;white-space:pre-wrap">' + esc(D.note) + '</div>' : '') + '</div>' +
+          '<div id="msg"></div>' + st +
+          '<div class="card"><table><thead><tr><th>Položka</th><th class="r">Množství</th><th class="r">Cena/jedn.</th><th>Cena</th><th>Požadujeme do</th><th>Potvrzený termín</th><th>Poznámka</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+          '<div class="card"><div class="grid" style="margin-top:0;grid-template-columns:1fr 2fr"><label class="muted">Potvrzuje (jméno) *<input id="sname" value="' + esc(D.supplier_name || '') + '"' + dis + ' placeholder="Jméno a příjmení"></label>' +
+          '<label class="muted">Poznámka k objednávce<textarea id="snote" rows="2"' + dis + '>' + esc(D.supplier_note || '') + '</textarea></label></div>' +
+          (L ? '' : '<div class="actions" style="margin-top:16px"><button id="b-ok">✅ Potvrdit objednávku</button></div>') + '</div>' +
+          '<div class="muted" style="text-align:center;font-size:12px">Objednávka ' + esc(D.order_number) + ' · ' + esc(D.buyer) + '</div>';
+        recalc();
+        if (!L) document.getElementById('b-ok').onclick = submit;
+      }
+
+      function recalc() {
+        var changes = 0;
+        document.querySelectorAll('tr[data-id]').forEach(function (tr) {
+          var it = D.items.find(function (x) { return String(x.id) === tr.dataset.id; });
+          var ok = tr.querySelector('[data-f=price_ok]').checked;
+          var pe = tr.querySelector('[data-f=confirmed_price]'); pe.style.display = ok ? 'none' : '';
+          var de = tr.querySelector('[data-f=confirmed_delivery]').value;
+          var late = it.required_delivery && de && de > it.required_delivery;
+          tr.querySelector('[data-late]').textContent = late ? 'později než požadujeme' : '';
+          if (!ok || late) changes++;
+        });
+        var b = document.getElementById('b-ok'); if (b) b.textContent = changes ? '⚠️ Potvrdit se změnami (' + changes + ')' : '✅ Potvrdit objednávku';
+      }
+      document.addEventListener('change', function (e) { if (D && e.target && e.target.closest && e.target.closest('tr[data-id]')) recalc(); });
+      document.addEventListener('input', function (e) { if (D && e.target && e.target.closest && e.target.closest('tr[data-id]')) recalc(); });
+
+      function submit() {
+        var name = document.getElementById('sname').value.trim();
+        var m = document.getElementById('msg');
+        if (!name) { m.innerHTML = '<div class="msg err">Vyplňte prosím, kdo objednávku potvrzuje.</div>'; return; }
+        var items = Array.prototype.map.call(document.querySelectorAll('tr[data-id]'), function (tr) {
+          return { id: parseInt(tr.dataset.id, 10), price_ok: tr.querySelector('[data-f=price_ok]').checked, confirmed_price: tr.querySelector('[data-f=confirmed_price]').value, confirmed_delivery: tr.querySelector('[data-f=confirmed_delivery]').value, supplier_note: tr.querySelector('[data-f=supplier_note]').value };
+        });
+        var bad = items.filter(function (i) { return !i.price_ok && !(Number(i.confirmed_price) >= 0 && i.confirmed_price !== ''); }).length;
+        if (bad) { m.innerHTML = '<div class="msg err">U položek, kde cena nesouhlasí, prosím uveďte svou cenu.</div>'; return; }
+        if (!confirm('Potvrdit objednávku ' + D.order_number + '?')) return;
+        var b = document.getElementById('b-ok'); b.disabled = true;
+        fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: items, supplier_name: name, note: document.getElementById('snote').value }) })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (x) { if (!x.ok) { b.disabled = false; m.innerHTML = '<div class="msg err">' + esc(x.j.error || 'Potvrzení se nepodařilo.') + '</div>'; return; } load(); window.scrollTo(0, 0); })
+          .catch(function () { b.disabled = false; alert('Spojení selhalo, zkuste to prosím znovu.'); });
+      }
+      load();
+    })();
+  </script>
+</body>
+</html>

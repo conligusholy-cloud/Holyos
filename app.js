@@ -665,6 +665,11 @@ app.use('/api/public/inquiry', purchaseInquiriesRoutes.publicRouter);
 app.get('/poptavka/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'inquiry.html'));
 });
+// Potvrzení nákupní objednávky dodavatelem (ceny + termíny) — bez přihlášení, jen token
+app.use('/api/public/po', purchaseInquiriesRoutes.poPublicRouter);
+app.get('/potvrzeni-objednavky/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'po-confirm.html'));
+});
 
 // Veřejná stránka pro sdílené obchodní pomůcky (token-based, bez auth)
 app.get('/share/tools/:tool/:token', (req, res) => {

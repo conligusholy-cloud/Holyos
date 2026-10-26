@@ -787,8 +787,8 @@
       let body = '';
       if (PN.supplier && PN.assist) {
         const a = PN.assist; const sug = a.suggestions || []; const inCart = (id) => PN.cart.some((c) => c.material_id === id);
-        const INQ_ST = { sent: 'odesláno', opened: 'dodavatel otevřel', in_progress: 'dodavatel vyplňuje', answered: '✅ odpovězeno' };
-        const inqHtml = (PN.inquiries || []).length ? '<div class="pn-info" style="margin-bottom:10px">📨 <b>Poptávky u dodavatele:</b> ' + PN.inquiries.map((q) => '<span class="pn-chip" style="cursor:default">' + poTxt(q.number) + ' <span class="pn-muted">' + (INQ_ST[q.status] || q.status) + (q.answered_at ? ' ' + new Date(q.answered_at).toLocaleDateString('cs-CZ') : q.sent_at ? ' ' + new Date(q.sent_at).toLocaleDateString('cs-CZ') : '') + '</span>' + (q.status === 'answered' ? ' <button class="po-btn" data-pn="inq-apply" data-id="' + q.id + '" title="Doplní ceny, lhůty a termíny z odpovědi dodavatele do objednávky">Převzít ceny</button>' : ' <a class="pn-muted" href="' + poAttr(q.link) + '" target="_blank" title="Otevřít poptávkový list">↗</a>') + '</span>').join(' ') + (PN.fromInquiry ? '<div style="margin-top:6px;color:#4ade80">Ceny převzaty z poptávky — po vytvoření objednávky se poptávka označí jako uzavřená.</div>' : '') + '</div>' : '';
+        const INQ_ST = { sent: 'odesláno', opened: 'dodavatel otevřel', in_progress: 'dodavatel vyplňuje', answered: '✅ nabídka přijata' };
+        const inqHtml = (PN.inquiries || []).length ? '<div class="pn-info" style="margin-bottom:10px">📨 <b>Poptávky u dodavatele:</b> ' + PN.inquiries.map((q) => '<span class="pn-chip" style="cursor:default">' + poTxt(q.number) + ' <span class="pn-muted">' + (INQ_ST[q.status] || q.status) + (q.answered_at ? ' ' + new Date(q.answered_at).toLocaleDateString('cs-CZ') : q.sent_at ? ' ' + new Date(q.sent_at).toLocaleDateString('cs-CZ') : '') + '</span>' + (q.status === 'answered' || q.status === 'in_progress' ? ' <button class="po-btn" data-pn="inq-detail" data-id="' + q.id + '" title="Nabídka dodavatele, přiložený soubor a kontrola">🔍 Detail</button>' + (q.offer_check && q.offer_check.status === 'differences' ? ' <span style="color:#f59e0b" title="' + poAttr(q.offer_check.summary || '') + '">⚠️</span>' : '') : '') + (q.status === 'answered' ? ' <button class="po-btn" data-pn="inq-apply" data-id="' + q.id + '" title="Doplní ceny, lhůty a termíny z odpovědi dodavatele do objednávky">Převzít ceny</button>' : ' <a class="pn-muted" href="' + poAttr(q.link) + '" target="_blank" title="Otevřít poptávkový list">↗</a>') + '</span>').join(' ') + (PN.fromInquiry ? '<div style="margin-top:6px;color:#4ade80">Ceny převzaty z poptávky — po vytvoření objednávky se poptávka označí jako uzavřená.</div>' : '') + '</div>' : '';
         body += '<div class="pn-box"><div class="pn-h"><span class="n">2</span>Co objednat</div>' + inqHtml +
           (a.last_order ? '<div class="pn-info">Podmínky dopravy a platby převezmu z poslední objednávky ' + poTxt(a.last_order.order_number) + ' (půjdou upravit v dokumentu).</div>' : '') +
           (() => {
@@ -851,6 +851,7 @@
       if (b.dataset.pn === 'addall') { (a.suggestions || []).filter((s) => (s.kind === 'production' ? 'production' : 'minimum') === b.dataset.kind).forEach(pnAddSuggestion); pnRecalcDate(); pnRender(); }
       else if (b.dataset.pn === 'add') { const s = (a.suggestions || []).find((x) => String(x.material_id) === b.dataset.mid); if (s) { pnAddSuggestion(s); pnRecalcDate(); pnRender(); } }
       else if (b.dataset.pn === 'inq-apply') { return pnInquiryApply(parseInt(b.dataset.id, 10)); }
+      else if (b.dataset.pn === 'inq-detail') { return pnInquiryDetail(parseInt(b.dataset.id, 10)); }
       else if (b.dataset.pn === 'del') { PN.cart.splice(parseInt(b.closest('tr').dataset.i, 10), 1); pnRecalcDate(); pnRender(); }
     }
     function pnChange(e) {
@@ -972,6 +973,57 @@
         ov.querySelector('.po-sheet').innerHTML = '<div class="po-kicker">POPTÁVKA ODESLÁNA</div><div class="po-num" style="font-size:22px;margin:6px 0 12px">' + poTxt(q.number) + ' → ' + poTxt(email) + '</div><div class="pn-muted" style="margin-bottom:10px">Až dodavatel vyplní ceny, přijde ti upozornění a v průvodci u dodavatele se objeví tlačítko „Převzít ceny“.</div><div class="pn-muted">Odkaz na poptávkový list (pro kontrolu): <a href="' + poAttr(q.link) + '" target="_blank" style="color:#60a5fa">' + poTxt(q.link) + '</a></div><div class="pn-row" style="justify-content:flex-end;margin-top:16px"><button class="pn-go" id="inq-done">Hotovo</button></div>';
         document.getElementById('inq-done').onclick = () => { ov.remove(); pnPickSupplierKeep(); };
       } catch (e) { go.disabled = false; go.textContent = '📨 Vytvořit a odeslat poptávku'; res.innerHTML = '<div style="color:#f87171;margin-bottom:8px">Chyba: ' + poTxt(e.message) + '</div>'; }
+    }
+    // Detail odpovědi na poptávku: nabídnuté hodnoty, přiložená nabídka, AI kontrola, souhlas → objednávka k potvrzení
+    async function pnInquiryDetail(id) {
+      let q;
+      try { const r = await fetch('/api/wh/inquiries/' + id); q = await r.json(); if (!r.ok) throw new Error(q.error || r.status); } catch (e) { return alert('Poptávku se nepodařilo načíst: ' + e.message); }
+      const fd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+      const fm = (v) => (v == null ? '—' : Number(v).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' ' + q.currency);
+      const chk = q.offer_check || null;
+      const chkById = {}; ((chk && chk.items) || []).forEach((x) => { chkById[x.id] = x; });
+      const rows = (q.items || []).map((it) => { const c = chkById[it.id]; const late = it.needed_by && it.offered_delivery && it.offered_delivery > it.needed_by;
+        return '<tr><td>' + poTxt(it.name) + (it.code ? ' <span class="pn-muted">' + poTxt(it.code) + '</span>' : '') + '</td><td class="r">' + it.quantity + ' ' + poTxt(it.unit) + '</td><td class="r"><b>' + fm(it.offered_price) + '</b></td><td>' + (it.lead_time_days != null ? it.lead_time_days + ' d' : '—') + '</td><td>' + fd(it.needed_by) + '</td><td' + (late ? ' style="color:#f87171;font-weight:700" title="Později, než potřebujeme"' : '') + '>' + fd(it.offered_delivery) + '</td><td>' + (it.min_order_qty != null ? it.min_order_qty : '—') + '</td><td class="pn-muted">' + poTxt(it.supplier_note || '') + '</td><td>' + (c ? (c.ok ? '<span style="color:#4ade80">✓</span>' : '<span style="color:#f59e0b" title="' + poAttr((c.problems || []).join('; ')) + '">⚠ ' + poTxt((c.problems || []).join('; ')) + '</span>') : '') + '</td></tr>'; }).join('');
+      const total = (q.items || []).reduce((s, it) => s + (Number(it.offered_price) || 0) * (Number(it.quantity) || 0), 0);
+      const offer = q.offer_file_name
+        ? '<div class="pn-box"><div class="pn-h">📎 Nabídka z jejich systému</div><a href="/api/wh/inquiries/' + q.id + '/offer-file" target="_blank" style="color:#60a5fa">' + poTxt(q.offer_file_name) + '</a> <span class="pn-muted">' + fd(q.offer_uploaded_at) + '</span>' +
+          '<div style="margin-top:8px">' + (chk ? '<b style="color:' + (chk.status === 'ok' ? '#4ade80' : '#f59e0b') + '">' + poTxt(chk.summary || '') + '</b>' + (chk.offer_number ? ' <span class="pn-muted">č. nabídky ' + poTxt(chk.offer_number) + '</span>' : '') + (chk.valid_until ? ' <span class="pn-muted">platí do ' + fd(chk.valid_until) + '</span>' : '') + (chk.notes ? '<div class="pn-muted" style="margin-top:4px">' + poTxt(chk.notes) + '</div>' : '') : '<span class="pn-muted">⏳ Kontrola nabídky ještě neproběhla.</span>') + ' <button class="po-btn" id="inqd-recheck">🔄 Zkontrolovat znovu</button></div></div>'
+        : '<div class="pn-muted" style="margin:6px 0 12px">Dodavatel nepřiložil vlastní nabídku.</div>';
+      const can = q.status === 'answered';
+      const ov = document.createElement('div'); ov.className = 'modal-overlay po-overlay'; ov.style.zIndex = 3000;
+      ov.innerHTML = '<div class="po-sheet" style="max-width:1000px;padding:26px 30px">' +
+        '<div class="po-top"><button class="po-btn" id="inqd-x">✕ Zavřít</button></div>' +
+        '<div class="po-kicker">NABÍDKA DODAVATELE</div><div class="po-num" style="font-size:22px;margin-bottom:4px">' + poTxt(q.number) + ' — ' + poTxt(q.company_name || '') + '</div>' +
+        '<div class="pn-muted" style="margin-bottom:12px">Stav: <b>' + ({ answered: '✅ nabídka přijata', in_progress: 'dodavatel ještě vyplňuje', converted: 'převedeno na objednávku' }[q.status] || q.status) + '</b>' + (q.answered_at ? ' · odesláno ' + fd(q.answered_at) : '') + (q.supplier_name ? ' · vyplnil ' + poTxt(q.supplier_name) : '') + '</div>' +
+        '<table class="pn-tbl"><thead><tr><th>Položka</th><th class="r">Množ.</th><th class="r">Cena/jedn.</th><th>Lhůta</th><th>Potřebujeme do</th><th>Nabídnutý termín</th><th>Min. odběr</th><th>Poznámka</th><th>Kontrola</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<div style="text-align:right;margin:8px 0 14px">Celkem bez DPH <b style="font-size:18px">' + fm(total) + '</b></div>' +
+        (q.supplier_note ? '<div class="pn-info" style="margin-bottom:12px">Poznámka dodavatele: ' + poTxt(q.supplier_note) + '</div>' : '') + offer +
+        (can ? '<div class="pn-box"><div class="pn-h">✅ Souhlasím s nabídkou</div><div class="pn-muted" style="margin-bottom:8px">Vytvoří se nákupní objednávka s cenami z nabídky a <b>našimi požadovanými termíny</b>. Dodavatel dostane e-mail s odkazem, kde objednávku potvrdí (ceny i termíny) — případné změny uvidíš v detailu objednávky.</div>' +
+          '<div class="pn-row"><input class="po-in" id="inqd-email" type="email" value="' + poAttr(q.contact_email || '') + '" placeholder="e-mail dodavatele" style="flex:1.4;border:1px solid var(--border);background:var(--bg)"><input class="po-in" id="inqd-name" value="' + poAttr(q.contact_name || '') + '" placeholder="oslovení" style="flex:1;border:1px solid var(--border);background:var(--bg)"></div>' +
+          '<textarea class="po-ta" id="inqd-msg" style="min-height:44px;margin-top:8px" placeholder="Zpráva k objednávce (nepovinné)"></textarea>' +
+          '<div class="pn-row" style="justify-content:flex-end;margin-top:10px"><button class="pn-go" id="inqd-accept">Vytvořit objednávku a poslat k potvrzení →</button></div></div>'
+          : (q.order_id ? '<div class="pn-info">Z poptávky už vznikla objednávka. <a href="#" id="inqd-order" style="color:#60a5fa">Otevřít objednávku</a></div>' : '')) +
+        '</div>';
+      document.body.appendChild(ov);
+      const close = () => ov.remove();
+      ov.querySelector('#inqd-x').onclick = close; ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+      const rc = ov.querySelector('#inqd-recheck'); if (rc) rc.onclick = async () => { rc.disabled = true; rc.textContent = '⏳ Kontroluji…'; try { const r = await fetch('/api/wh/inquiries/' + q.id + '/recheck', { method: 'POST' }); if (!r.ok) throw new Error((await r.json()).error || r.status); close(); pnInquiryDetail(q.id); } catch (e) { rc.disabled = false; rc.textContent = '🔄 Zkontrolovat znovu'; alert('Kontrola selhala: ' + e.message); } };
+      const oo = ov.querySelector('#inqd-order'); if (oo) oo.onclick = (e) => { e.preventDefault(); close(); openOrderDetail(q.order_id); };
+      const ac = ov.querySelector('#inqd-accept');
+      if (ac) ac.onclick = async () => {
+        const email = ov.querySelector('#inqd-email').value.trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert('Zadej platný e-mail dodavatele.');
+        if (chk && chk.status === 'differences' && !confirm('Kontrola našla rozdíly mezi přiloženou nabídkou a vyplněnými hodnotami:\n' + (chk.summary || '') + '\n\nPřesto pokračovat?')) return;
+        if (!confirm('Vytvořit objednávku z poptávky ' + q.number + ' a poslat ji k potvrzení na ' + email + '?')) return;
+        ac.disabled = true; ac.textContent = 'Vytvářím…';
+        try {
+          const r = await fetch('/api/wh/inquiries/' + q.id + '/accept', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, name: ov.querySelector('#inqd-name').value.trim(), message: ov.querySelector('#inqd-msg').value.trim() }) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+          close(); closeModal(); loadOrders(); loadStats();
+          alert('Objednávka ' + j.order_number + ' vytvořena.' + (j.sent ? ' Odesláno k potvrzení na ' + j.sent.sent_to + '.' : ' E-mail se NEPODAŘILO odeslat (' + (j.send_error || '?') + ') — v detailu objednávky ho pošli znovu.'));
+          openOrderDetail(j.order_id);
+        } catch (e) { ac.disabled = false; ac.textContent = 'Vytvořit objednávku a poslat k potvrzení →'; alert('Chyba: ' + e.message); }
+      };
     }
     // Obnoví seznam poptávek dodavatele, ale nechá rozpracovaný košík
     async function pnPickSupplierKeep() {
@@ -1148,6 +1200,7 @@
           '<span>Vystaveno</span><b style="color:#1d2433;padding:5px 3px">' + created + '</b>' +
           '<span>Revize</span><input class="po-in" type="number" min="0" step="1" data-h="revision" value="' + (Number(o.revision) || 0) + '" title="Zvyš při změně již odsouhlasené objednávky">' +
           '<span>Měna</span><select class="po-sel" data-h="currency"><option value="CZK"' + (o.currency !== 'EUR' ? ' selected' : '') + '>CZK – koruny</option><option value="EUR"' + (o.currency === 'EUR' ? ' selected' : '') + '>EUR – eura</option></select></div></div>' +
+        poConfirmBox(o) +
         '<div class="po-parties"><div class="po-box"><div class="po-lbl">Dodavatel</div><select class="po-sel po-noprint" data-h="company_id" style="font-weight:700;margin-bottom:6px">' + compOpts + '</select><div id="po-company">' + poCompanyCard() + '</div></div>' +
           '<div class="po-box" id="po-delivery">' + poDeliveryBox() + '</div></div>' +
         '<table class="po-tbl"><thead><tr><th>#</th><th>Položka</th><th class="r">Množ.</th><th>Jedn.</th><th class="r">Cena/ks</th><th class="r">Celkem</th><th class="r">DPH %</th><th title="Start montáže — nejpozději tento den musí být díl ve výrobě">Ve výrobě do</th><th>Požadováno</th><th>Potvrzeno</th><th class="r">Doručeno</th><th>Stav</th><th class="po-noprint"></th></tr></thead><tbody id="po-rows">' +
@@ -1169,6 +1222,37 @@
       nm.addEventListener('input', () => { const m = materials.find((x) => x.name === nm.value); if (m) { document.getElementById('po-new-unit').value = m.unit || 'ks'; document.getElementById('po-new-price').value = m.unit_price || 0; nm.dataset.mat = m.id; } else delete nm.dataset.mat; });
       sheet.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('.po-add')) { e.preventDefault(); poAddItem(); } if (e.key === 'Enter' && e.target.matches('.po-tbl input')) e.target.blur(); });
     }
+    // Potvrzení nákupní objednávky dodavatelem (ceny + termíny) — stav + odeslání k potvrzení
+    function poConfirmBox(o) {
+      if (!['purchase', 'cooperation'].includes(o.type)) return '';
+      const fd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+      const st = o.supplier_confirm_status;
+      const btn = '<button class="po-btn" onclick="poSendConfirm(' + o.id + ')">📨 ' + (st ? 'Poslat k potvrzení znovu' : 'Poslat dodavateli k potvrzení') + '</button>';
+      let h = '';
+      if (!st) h = '<span style="color:#6b7280">Dodavatel zatím objednávku nepotvrdil — pošli mu ji k potvrzení cen a termínů.</span> ' + btn;
+      else if (st === 'sent') h = '<b style="color:#2563eb">📨 Odesláno k potvrzení</b> <span style="color:#6b7280">' + fd(o.supplier_confirm_sent_at) + ' na ' + poTxt(o.supplier_confirm_email || '') + ' — čeká se na dodavatele.</span> ' + btn;
+      else {
+        const diffs = (o.items || []).filter((it) => it.confirmed_price != null || (it.confirmed_delivery && it.expected_delivery && String(it.confirmed_delivery).slice(0, 10) > String(it.expected_delivery).slice(0, 10)));
+        h = (st === 'confirmed' ? '<b style="color:#16a34a">✅ Dodavatel potvrdil ceny i termíny</b>' : '<b style="color:#b45309">⚠️ Dodavatel potvrdil se ZMĚNAMI</b>') +
+          ' <span style="color:#6b7280">' + poTxt(o.supplier_confirm_name || '') + ', ' + fd(o.supplier_confirmed_at) + '</span>' +
+          (diffs.length ? '<ul style="margin:6px 0 0 18px;color:#92400e">' + diffs.map((it) => '<li>' + poTxt(it.name) + ': ' + [it.confirmed_price != null ? 'cena ' + Number(it.confirmed_price) + ' místo ' + Number(it.unit_price) : null, it.confirmed_delivery && it.expected_delivery && String(it.confirmed_delivery).slice(0, 10) > String(it.expected_delivery).slice(0, 10) ? 'termín ' + fd(it.confirmed_delivery) + ' místo ' + fd(it.expected_delivery) : null, it.supplier_note ? '„' + poTxt(it.supplier_note) + '“' : null].filter(Boolean).join(', ') + '</li>').join('') + '</ul>' : '') +
+          (o.supplier_confirm_note ? '<div style="margin-top:4px;color:#6b7280">Poznámka dodavatele: ' + poTxt(o.supplier_confirm_note) + '</div>' : '');
+      }
+      return '<div class="po-noprint" style="margin:0 0 14px;padding:10px 14px;border:1px solid #e3e7ef;border-radius:10px;background:#f8fafc;font-size:13px">' + h + '</div>';
+    }
+    async function poSendConfirm(id) {
+      const o = PO.o || {};
+      const comp = (companies || []).find((c) => c.id === o.company_id) || {};
+      const email = prompt('Na jaký e-mail poslat objednávku ' + (o.order_number || '') + ' k potvrzení?', o.supplier_confirm_email || comp.email || '');
+      if (!email) return;
+      try {
+        const r = await fetch('/api/wh/inquiries/po/' + id + '/send-confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim() }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+        alert('Objednávka odeslána k potvrzení na ' + j.sent_to + '.');
+        openOrderDetail(id);
+      } catch (e) { alert('Odeslání se nepodařilo: ' + e.message); }
+    }
+
     async function poChange(e) {
       const t = e.target; const o = PO.o;
       if (t.dataset.pd) { // podmínky objednávky (po_data)

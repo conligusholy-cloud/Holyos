@@ -285,6 +285,7 @@ publicRouter.get('/:token', async (req, res, next) => {
       number: inq.number, status: inq.status, locked: LOCKED.includes(inq.status), currency: inq.currency,
       required_delivery: ymd(inq.required_delivery), note: inq.note, supplier_note: inq.supplier_note, supplier_name: inq.supplier_name || inq.contact_name,
       supplier: company && company.name, buyer: OUR_COMPANY, answered_at: inq.answered_at, saved_at: inq.saved_at,
+      offer_file_name: inq.offer_file_name || null, offer_uploaded_at: inq.offer_uploaded_at || null,
       items: inq.items.map((it) => { const s = serializeItem(it); delete s.material_id; return s; }),
     });
   } catch (err) { next(err); }
@@ -315,6 +316,7 @@ publicRouter.post('/:token', express.json({ limit: '200kb' }), async (req, res, 
     const now = new Date();
     await prisma.purchaseInquiry.update({ where: { id: inq.id }, data: { supplier_note: txt(b.supplier_note, 4000), supplier_name: txt(b.supplier_name, 255), saved_at: now, status: submit ? 'answered' : 'in_progress', answered_at: submit ? now : null } });
 
+    if (submit && inq.offer_file_path) runOfferCheck(inq.id); // porovnat přiloženou nabídku s finálními hodnotami
     if (submit) {
       // Dodací lhůta od hlavního dodavatele → karta zboží (aby průvodce nákupem počítal „objednat do" správně)
       try {
@@ -340,5 +342,205 @@ publicRouter.post('/:token', express.json({ limit: '200kb' }), async (req, res, 
   } catch (err) { next(err); }
 });
 
+// ─── Příloha nabídky dodavatele + AI kontrola ──────────────────────────────
+const fs = require('fs');
+const path = require('path');
+const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', 'data', 'storage');
+const OFFER_EXT = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.xlsx', '.xls', '.docx', '.doc', '.csv', '.txt'];
+function runOfferCheck(id) {
+  setImmediate(() => { require('../services/purchasing/offer-check').checkInquiryOffer(id).catch((e) => console.warn('[inquiry] kontrola nabídky:', e.message)); });
+}
+
+// POST /api/public/inquiry/:token/offer — dodavatel přiloží nabídku ze svého systému. Body: { name, data (base64) }
+publicRouter.post('/:token/offer', express.json({ limit: '20mb' }), async (req, res, next) => {
+  try {
+    if (req.params.token === DEMO_TOKEN) return res.status(400).json({ error: 'Toto je jen ukázka — přílohu nelze nahrát.' });
+    const inq = await loadByToken(req.params.token);
+    if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
+    if (LOCKED.includes(inq.status)) return res.status(410).json({ error: 'Nabídka už byla odeslána. Pro změnu nás prosím kontaktujte.' });
+    const name = String((req.body && req.body.name) || 'nabidka').slice(0, 200);
+    const ext = path.extname(name).toLowerCase();
+    if (!OFFER_EXT.includes(ext)) return res.status(400).json({ error: 'Podporované soubory: PDF, obrázek (JPG/PNG), Excel, Word.' });
+    const b64 = String((req.body && req.body.data) || '').replace(/^data:[^,]*,/, '');
+    const buf = Buffer.from(b64, 'base64');
+    if (!buf.length) return res.status(400).json({ error: 'Soubor je prázdný.' });
+    if (buf.length > 12 * 1024 * 1024) return res.status(413).json({ error: 'Soubor je větší než 12 MB.' });
+    const dir = path.join(STORAGE_DIR, 'inquiry-offers'); fs.mkdirSync(dir, { recursive: true });
+    const fp = path.join(dir, inq.number.replace(/[^\w-]+/g, '_') + '_' + Date.now() + ext);
+    fs.writeFileSync(fp, buf);
+    await prisma.purchaseInquiry.update({ where: { id: inq.id }, data: { offer_file_path: fp, offer_file_name: name, offer_uploaded_at: new Date(), offer_check: null, offer_checked_at: null, status: inq.status === 'answered' ? inq.status : 'in_progress', saved_at: new Date() } });
+    runOfferCheck(inq.id);
+    res.json({ ok: true, file: name });
+  } catch (err) { next(err); }
+});
+
+// GET /api/wh/inquiries/:id/offer-file — stáhnout přiloženou nabídku
+router.get('/:id/offer-file', async (req, res, next) => {
+  try {
+    const inq = await prisma.purchaseInquiry.findUnique({ where: { id: parseInt(req.params.id, 10) }, select: { offer_file_path: true, offer_file_name: true } });
+    if (!inq || !inq.offer_file_path || !fs.existsSync(inq.offer_file_path)) return res.status(404).json({ error: 'Příloha nenalezena' });
+    if (!path.resolve(inq.offer_file_path).startsWith(path.resolve(STORAGE_DIR))) return res.status(403).json({ error: 'Soubor mimo úložiště' });
+    res.setHeader('Content-Disposition', 'inline; filename="' + encodeURIComponent(inq.offer_file_name || 'nabidka') + '"');
+    res.sendFile(path.resolve(inq.offer_file_path));
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/inquiries/:id/recheck — znovu spustit AI kontrolu nabídky (počká na výsledek)
+router.post('/:id/recheck', async (req, res, next) => {
+  try {
+    const r = await require('../services/purchasing/offer-check').checkInquiryOffer(parseInt(req.params.id, 10));
+    if (!r) return res.status(404).json({ error: 'Poptávka nemá přiloženou nabídku' });
+    res.json({ ok: true, offer_check: r.offer_check });
+  } catch (err) { next(err); }
+});
+
+// ─── Souhlas s nabídkou → nákupní objednávka → potvrzení dodavatelem ───────
+async function nextPurchaseNumber() {
+  const year = new Date().getFullYear(); const series = 'PO-' + year;
+  for (let k = 0; k < 3; k++) {
+    try {
+      const row = await prisma.documentCounter.upsert({ where: { series }, create: { series, last_seq: 1 }, update: { last_seq: { increment: 1 } } });
+      const nn = series + '-' + String(row.last_seq).padStart(4, '0');
+      if (!(await prisma.order.findUnique({ where: { order_number: nn }, select: { id: true } }))) return nn;
+    } catch (e) { if (k === 2) throw e; }
+  }
+  return series + '-' + Date.now().toString().slice(-6);
+}
+const poConfirmLink = (token) => buildShareUrl('/potvrzeni-objednavky/' + token);
+
+// Odešle nákupní objednávku dodavateli k potvrzení (ceny + naše požadované termíny)
+async function sendPoForConfirmation(orderId, { email, name, message }, req) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: { orderBy: { id: 'asc' } }, company: { select: { name: true } } } });
+  if (!order) throw Object.assign(new Error('Objednávka nenalezena'), { status: 404 });
+  if (!['purchase', 'cooperation'].includes(order.type)) throw Object.assign(new Error('K potvrzení dodavatelem jde jen nákupní objednávka.'), { status: 400 });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ''))) throw Object.assign(new Error('Zadej platný e-mail dodavatele.'), { status: 400 });
+  const token = order.supplier_confirm_token || crypto.randomBytes(24).toString('hex');
+  const link = poConfirmLink(token);
+  const fmtD = (d) => (d ? new Date(d).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '—');
+  const fmtM = (v) => Number(v || 0).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  const lines = order.items.map((it) => '• ' + it.name + ' — ' + Number(it.quantity) + ' ' + it.unit + ' × ' + fmtM(it.unit_price) + ' ' + order.currency + ', dodat do ' + fmtD(it.expected_delivery || order.expected_delivery)).join('\n');
+  const body = 'Dobrý den' + (name ? ', ' + name : '') + ',\n\n' +
+    'objednáváme u Vás zboží podle níže uvedených podmínek. Prosíme o POTVRZENÍ objednávky — cen a termínů dodání — přes tlačítko níže. Pokud některý termín nebo cenu nemůžete dodržet, uveďte to prosím přímo při potvrzení.\n\n' +
+    'Objednávka ' + order.order_number + '\n' + lines + '\n\nCelkem bez DPH: ' + fmtM(order.total_amount) + ' ' + order.currency +
+    (message ? '\n\n' + message : '') + '\n\nDěkujeme,\n' + ((req && req.user && (req.user.display_name || req.user.username)) || OUR_COMPANY) + '\n' + OUR_COMPANY;
+  const { sendMail } = require('../services/email');
+  const replyTo = req && req.user && req.user.person && req.user.person.email ? req.user.person.email : undefined;
+  const r = await sendMail({ from: inquiryFrom(), fromName: inquiryFromName(req), to: email, subject: 'Objednávka ' + order.order_number + ' — prosíme o potvrzení — ' + OUR_COMPANY, preheader: 'Potvrďte prosím ceny a termíny dodání', body, link, linkLabel: 'Potvrdit objednávku', replyTo });
+  if (r && r.sent === false) throw Object.assign(new Error('E-mail se nepodařilo odeslat: ' + (r.error || r.skipped || 'neznámá chyba')), { status: 502 });
+  await prisma.order.update({ where: { id: order.id }, data: { supplier_confirm_token: token, supplier_confirm_status: 'sent', supplier_confirm_email: email, supplier_confirm_sent_at: new Date(), status: order.status === 'new' ? 'ordered' : order.status } });
+  try { require('../services/order-events').logOrderEvent(order.id, { type: 'supplier_confirm_sent', label: 'Objednávka odeslána dodavateli k potvrzení', detail: email, actor: (req && req.user && (req.user.display_name || req.user.username)) || null }); } catch (e) { /* jen historie */ }
+  return { link, sent_to: email };
+}
+
+// POST /api/wh/inquiries/:id/accept — souhlas s nabídkou: vytvoří nákupní objednávku (ceny z nabídky,
+// NAŠE požadované termíny) a pošle ji dodavateli k potvrzení. Body: { email?, name?, message?, send=true }
+router.post('/:id/accept', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const b = req.body || {};
+    const inq = await prisma.purchaseInquiry.findUnique({ where: { id }, include: { items: { orderBy: { line_order: 'asc' } } } });
+    if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
+    if (inq.status === 'converted' && inq.order_id) return res.status(409).json({ error: 'Z poptávky už objednávka vznikla.', order_id: inq.order_id });
+    if (inq.status !== 'answered') return res.status(409).json({ error: 'Dodavatel ještě nabídku neodeslal.' });
+    const priced = inq.items.filter((it) => it.offered_price != null && Number(it.offered_price) > 0);
+    if (!priced.length) return res.status(400).json({ error: 'V nabídce nejsou žádné ceny.' });
+    const mk = priced.map((it) => {
+      const q = Number(it.quantity); const up = Number(it.offered_price);
+      const sup = [it.offered_delivery ? 'dodavatel nabídl termín ' + ymd(it.offered_delivery) : null, it.lead_time_days != null ? 'lhůta ' + it.lead_time_days + ' d' : null, it.supplier_note].filter(Boolean).join(' · ');
+      return { name: it.name, material_id: it.material_id, quantity: q, unit: it.unit, unit_price: up, total_price: Math.round(q * up * 100) / 100, expected_delivery: it.needed_by || inq.required_delivery || it.offered_delivery || null, spec: ('Z poptávky ' + inq.number + (sup ? ' — ' + sup : '')).slice(0, 2000) };
+    });
+    const due = mk.map((i) => i.expected_delivery).filter(Boolean).sort((a, c) => new Date(c) - new Date(a))[0] || null;
+    const order = await prisma.order.create({
+      data: {
+        order_number: await nextPurchaseNumber(), type: 'purchase', company_id: inq.company_id, status: 'new', currency: inq.currency,
+        note: ('Z poptávky ' + inq.number + (inq.supplier_note ? '\nPoznámka dodavatele: ' + inq.supplier_note : '')).slice(0, 4000),
+        expected_delivery: inq.required_delivery || due, expected_delivery_manual: !!inq.required_delivery,
+        created_by: (req.user && req.user.person && req.user.person.id) || null,
+        items_count: mk.length, total_amount: mk.reduce((s, i) => s + i.total_price, 0), items: { create: mk },
+      },
+    });
+    await prisma.purchaseInquiry.update({ where: { id }, data: { status: 'converted', order_id: order.id, accepted_at: new Date(), accepted_by: req.user ? req.user.id : null } });
+    logAudit({ action: 'create', entity: 'order', entity_id: order.id, description: `Z poptávky ${inq.number} vytvořena objednávka ${order.order_number}`, user: req.user }).catch(() => {});
+    let sent = null; let sendError = null;
+    if (b.send !== false) {
+      try { sent = await sendPoForConfirmation(order.id, { email: txt(b.email, 255) || inq.contact_email, name: txt(b.name, 255) || inq.contact_name, message: txt(b.message, 4000) }, req); }
+      catch (e) { sendError = e.message; }
+    }
+    res.status(201).json({ ok: true, order_id: order.id, order_number: order.order_number, sent, send_error: sendError });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/inquiries/po/:orderId/send-confirm — (znovu) poslat libovolnou nákupní objednávku k potvrzení
+router.post('/po/:orderId/send-confirm', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const r = await sendPoForConfirmation(parseInt(req.params.orderId, 10), { email: txt(b.email, 255), name: txt(b.name, 255), message: txt(b.message, 4000) }, req);
+    res.json({ ok: true, ...r });
+  } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); next(err); }
+});
+
+// ─── Veřejné potvrzení objednávky dodavatelem (/potvrzeni-objednavky/:token) ─
+const poPublicRouter = express.Router();
+async function loadPo(token) {
+  if (!/^[a-f0-9]{48}$/.test(String(token || ''))) return null;
+  return prisma.order.findUnique({ where: { supplier_confirm_token: String(token) }, include: { items: { orderBy: { id: 'asc' } }, company: { select: { name: true } } } });
+}
+const poLocked = (o) => ['confirmed', 'changes'].includes(o.supplier_confirm_status) || ['cancelled', 'delivered', 'completed', 'closed', 'done'].includes(o.status);
+
+poPublicRouter.get('/:token', async (req, res, next) => {
+  try {
+    const o = await loadPo(req.params.token);
+    if (!o) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (o.status === 'cancelled') return res.status(410).json({ error: 'Tato objednávka byla zrušena.' });
+    const pd = o.po_data || {};
+    res.json({
+      order_number: o.order_number, buyer: OUR_COMPANY, supplier: o.company && o.company.name, currency: o.currency,
+      expected_delivery: ymd(o.expected_delivery), note: o.note, total: Number(o.total_amount || 0),
+      terms: { delivery_place: pd.delivery_place || null, transport_by: pd.transport_by || null, pay_method: pd.pay_method || null, due_days: pd.due_days || null },
+      status: o.supplier_confirm_status || 'sent', locked: poLocked(o), confirmed_at: o.supplier_confirmed_at, supplier_name: o.supplier_confirm_name, supplier_note: o.supplier_confirm_note,
+      items: o.items.map((it) => ({ id: it.id, name: it.name, quantity: Number(it.quantity), unit: it.unit, unit_price: Number(it.unit_price), required_delivery: ymd(it.expected_delivery || o.expected_delivery), confirmed_delivery: ymd(it.confirmed_delivery), confirmed_price: it.confirmed_price == null ? null : Number(it.confirmed_price), supplier_note: it.supplier_note })),
+    });
+  } catch (err) { next(err); }
+});
+
+// POST /api/public/po/:token — potvrzení. Body: { items:[{id, price_ok, confirmed_price, confirmed_delivery, supplier_note}], supplier_name, note }
+poPublicRouter.post('/:token', express.json({ limit: '200kb' }), async (req, res, next) => {
+  try {
+    const o = await loadPo(req.params.token);
+    if (!o) return res.status(404).json({ error: 'Objednávka nenalezena' });
+    if (poLocked(o)) return res.status(410).json({ error: 'Objednávka už byla potvrzena. Pro změnu nás prosím kontaktujte.' });
+    const b = req.body || {};
+    if (!txt(b.supplier_name, 255)) return res.status(400).json({ error: 'Vyplňte prosím, kdo objednávku potvrzuje.' });
+    const rows = Array.isArray(b.items) ? b.items : [];
+    let changes = 0;
+    const ops = o.items.map((it) => {
+      const r = rows.find((x) => parseInt(x.id, 10) === it.id) || {};
+      const req0 = it.expected_delivery || o.expected_delivery;
+      const cd = dateOrNull(r.confirmed_delivery) || req0 || null;
+      const priceOk = r.price_ok !== false;
+      const cp = priceOk ? null : num(r.confirmed_price);
+      if (!priceOk && (cp == null || Math.abs(cp - Number(it.unit_price)) > 0.0001)) changes++;
+      else if (cd && req0 && ymd(cd) > ymd(req0)) changes++;
+      return prisma.orderItem.update({ where: { id: it.id }, data: { confirmed_delivery: cd, confirmed_price: cp, supplier_note: txt(r.supplier_note, 2000) } });
+    });
+    await prisma.$transaction(ops);
+    const status = changes ? 'changes' : 'confirmed';
+    await prisma.order.update({ where: { id: o.id }, data: { supplier_confirm_status: status, supplier_confirmed_at: new Date(), supplier_confirm_name: txt(b.supplier_name, 255), supplier_confirm_note: txt(b.note, 4000), status: status === 'confirmed' ? 'confirmed' : o.status } });
+    try { require('../services/order-events').logOrderEvent(o.id, { type: 'supplier_confirmed', label: status === 'confirmed' ? 'Dodavatel potvrdil objednávku (ceny i termíny)' : 'Dodavatel potvrdil objednávku se ZMĚNAMI (' + changes + ' položek)', detail: txt(b.note, 500), actor: txt(b.supplier_name, 255) || 'dodavatel' }); } catch (e) { /* jen historie */ }
+    // Upozornit zakladatele objednávky (zvonek + Velín)
+    if (o.created_by) {
+      try {
+        const person = await prisma.person.findUnique({ where: { id: o.created_by }, select: { id: true, user_id: true } });
+        const title = (status === 'confirmed' ? '✅ Dodavatel potvrdil ' : '⚠️ Dodavatel potvrdil se změnami ') + o.order_number;
+        const bodyTxt = (o.company ? o.company.name + ': ' : '') + (status === 'confirmed' ? 'ceny i termíny beze změny.' : changes + ' položek má jinou cenu nebo pozdější termín.');
+        if (person && person.user_id) { const { createNotification } = require('./notifications.routes'); await createNotification({ userId: person.user_id, type: 'system', title, body: bodyTxt, link: '/modules/nakup-sklad/index.html' }); }
+        try { require('../services/push/expo-push').notifyPerson(prisma, o.created_by, { title, body: bodyTxt, data: { type: 'po_supplier_confirmed', order_id: o.id } }); } catch (e) { /* push volitelně */ }
+      } catch (e) { console.warn('[po-confirm] notifikace:', e.message); }
+    }
+    res.json({ ok: true, status, changes });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;
 module.exports.publicRouter = publicRouter;
+module.exports.poPublicRouter = poPublicRouter;
