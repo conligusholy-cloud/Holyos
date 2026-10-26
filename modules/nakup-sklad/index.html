@@ -149,6 +149,10 @@
             <option value="delivered">Doručeno</option>
             <option value="cancelled">Zrušeno</option>
           </select>
+          <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:8px;overflow:hidden" title="Přepnout mezi stavy objednávek a stavy objednaných položek">
+            <button type="button" id="ov-orders" class="btn btn-primary btn-sm" style="border-radius:0" onclick="setOrderView('orders')">📋 Objednávky</button>
+            <button type="button" id="ov-items" class="btn btn-secondary btn-sm" style="border-radius:0" onclick="setOrderView('items')">📦 Položky</button>
+          </div>
           <div style="flex:1"></div>
           <button class="btn btn-primary" onclick="openOrderModal()">+ Nová objednávka</button>
         </div>
@@ -714,27 +718,87 @@
         let orders = await res.json();
         // V této sekci nezobrazujeme prodejní objednávky
         if (!currentOrderType) orders = orders.filter(o => o.type !== 'sales');
+        lastOrders = orders;
         renderOrders(orders);
       } catch(e) { console.error(e); }
     }
 
+    // Přepínač: stavy objednávek × stavy objednaných položek
+    let orderView = 'orders';
+    let lastOrders = [];
+    function setOrderView(v) {
+      orderView = v;
+      const a = document.getElementById('ov-orders'), b = document.getElementById('ov-items');
+      if (a) a.className = 'btn btn-sm ' + (v === 'orders' ? 'btn-primary' : 'btn-secondary');
+      if (b) b.className = 'btn btn-sm ' + (v === 'items' ? 'btn-primary' : 'btn-secondary');
+      renderOrders(lastOrders);
+    }
+    const ordDay = (v) => (v ? String(v).slice(0, 10) : '');
+    const ordFmt = (v) => (v ? new Date(ordDay(v) + 'T00:00:00Z').toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '—');
+    const ordCompany = (o) => o.company_name || (o.company && o.company.name) || '—';
+    // Odchylky potvrzení dodavatele od našich požadavků (pozdější termín, jiná cena)
+    function itemDev(it, o) {
+      const req = ordDay(it.expected_delivery || o.expected_delivery), conf = ordDay(it.confirmed_delivery);
+      const late = !!(conf && req && conf > req);
+      const price = it.confirmed_price != null && Math.abs(Number(it.confirmed_price) - Number(it.unit_price || 0)) > 0.0001;
+      return { late, price };
+    }
+    function orderDev(o) {
+      let late = 0, price = 0;
+      (o.items || []).forEach((it) => { const d = itemDev(it, o); if (d.late) late++; if (d.price) price++; });
+      return { late, price, any: late + price > 0 };
+    }
+
+    function renderOrderItems(list) {
+      const el = document.getElementById('orders-table');
+      const rows = [];
+      list.forEach((o) => (o.items || []).forEach((it) => rows.push({ o, it })));
+      if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné položky objednávek</h3></div>'; return; }
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Objednávka</th><th>Společnost</th><th>Položka</th><th>Množství</th><th>Cena / ks</th><th>Požadováno</th><th>Potvrzeno dodavatelem</th><th>Stav položky</th><th>Stav objednávky</th></tr></thead><tbody>';
+      for (const { o, it } of rows) {
+        const d = itemDev(it, o);
+        const ist = ITEM_STATUSES[it.status] || { label: it.status || '—', color: '#9ca3af' };
+        const ost = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
+        const q = Number(it.quantity) || 0, dl = Number(it.delivered_quantity) || 0;
+        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        html += '<td class="person-name">' + esc(o.order_number) + '</td>';
+        html += '<td>' + esc(ordCompany(o)) + '</td>';
+        html += '<td>' + esc(it.name || it.code || '') + '</td>';
+        html += '<td>' + (dl ? dl + ' / ' : '') + q + ' ' + esc(it.unit || '') + '</td>';
+        html += '<td>' + (d.price ? '<s style="color:var(--text2)">' + Number(it.unit_price || 0) + '</s> <b style="color:#f59e0b">' + Number(it.confirmed_price) + '</b>' : Number(it.unit_price || 0)) + '</td>';
+        html += '<td>' + ordFmt(it.expected_delivery || o.expected_delivery) + '</td>';
+        html += '<td' + (d.late ? ' style="color:#f59e0b;font-weight:600" title="Dodavatel potvrdil později, než požadujeme"' : '') + '>' + (it.confirmed_delivery ? ordFmt(it.confirmed_delivery) + (d.late ? ' ⚠' : '') : '—') + '</td>';
+        html += '<td><span class="badge" style="background:' + ist.color + '22;color:' + ist.color + ';">' + ist.label + '</span></td>';
+        html += '<td><span class="badge" style="background:' + ost.color + '22;color:' + ost.color + ';">' + ost.label + '</span></td>';
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+      el.innerHTML = html;
+    }
+
     function renderOrders(list) {
       const el = document.getElementById('orders-table');
+      if (orderView === 'items') return renderOrderItems(list);
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Dodání</th><th>Akce</th></tr></thead><tbody>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Akce</th></tr></thead><tbody>';
       for (const o of list) {
+        const dev = orderDev(o);
+        const confDates = (o.items || []).map((it) => ordDay(it.confirmed_delivery)).filter(Boolean).sort();
+        const lastConf = confDates.length ? confDates[confDates.length - 1] : ordDay(o.confirmed_delivery);
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td class="person-name">' + o.order_number + '</td>';
         html += '<td>' + (ORDER_TYPES[o.type] || o.type) + '</td>';
-        html += '<td>' + (o.company_name || '—') + '</td>';
+        html += '<td>' + esc(ordCompany(o)) + '</td>';
         // Nákupní: „Objednáno" = odesláno dodavateli, „Objednávka potvrzena" = dodavatel potvrdil přes odkaz
         const scs = o.supplier_confirm_status;
-        const scBadge = scs === 'changes' ? ' <span class="badge" title="Dodavatel potvrdil, ale změnil cenu nebo termín — zkontroluj v detailu" style="background:#f59e0b22;color:#f59e0b;">⚠ se změnami</span>' : (scs === 'sent' && o.status === 'ordered' ? ' <span class="badge" title="Čeká se na potvrzení dodavatelem" style="background:#3b82f622;color:#60a5fa;">čeká na potvrzení</span>' : '');
+        const devTxt = [dev.late ? dev.late + '× později než požadujeme' : '', dev.price ? dev.price + '× jiná cena' : ''].filter(Boolean).join(', ');
+        const scBadge = (scs === 'changes' || dev.any) ? ' <span class="badge" title="Dodavatel potvrdil mimo naše požadavky' + (devTxt ? ': ' + devTxt : '') + ' — zkontroluj v detailu" style="background:#f59e0b22;color:#f59e0b;">⚠ mimo požadavky' + (devTxt ? ' (' + devTxt + ')' : '') + '</span>' : (scs === 'sent' && o.status === 'ordered' ? ' <span class="badge" title="Čeká se na potvrzení dodavatelem" style="background:#3b82f622;color:#60a5fa;">čeká na potvrzení</span>' : '');
         html += '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + ';">' + st.label + '</span>' + scBadge + '</td>';
         html += '<td>' + (o.items_count || 0) + '</td>';
         html += '<td style="font-weight:600;">' + (o.total_amount || 0).toLocaleString('cs-CZ') + ' ' + (o.currency||'CZK') + '</td>';
-        html += '<td>' + (o.expected_delivery || '—') + '</td>';
+        html += '<td>' + ordFmt(o.expected_delivery) + '</td>';
+        html += '<td' + (dev.late ? ' style="color:#f59e0b;font-weight:600"' : '') + '>' + (lastConf ? ordFmt(lastConf) + (dev.late ? ' ⚠' : '') : '—') + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
         html += '</tr>';
       }
