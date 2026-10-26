@@ -133,7 +133,7 @@ router.get('/invoices', async (req, res, next) => {
   try {
     const {
       type, direction, status, company_id, search,
-      date_from, date_to, overdue, needs_review, limit = '200', source,
+      date_from, date_to, overdue, needs_review, limit = '200', source, unpaid,
     } = req.query;
 
     const where = {};
@@ -148,6 +148,11 @@ router.get('/invoices', async (req, res, next) => {
       where.date_issued = {};
       if (date_from) where.date_issued.gte = new Date(date_from);
       if (date_to) where.date_issued.lte = new Date(date_to);
+    }
+
+    // Nezaplacené (stejná definice jako dlaždice v summary)
+    if (unpaid === 'true' && !status) {
+      where.status = { notIn: ['paid', 'cancelled', 'written_off', 'archived'] };
     }
 
     if (overdue === 'true') {
@@ -1140,6 +1145,29 @@ function userLabel(user) {
   return ((p.first_name && p.last_name) ? p.first_name + ' ' + p.last_name : (user && (user.displayName || user.username))) || 'neznámý';
 }
 
+// GET /api/accounting/invoices/:id/manual-match/history?field=order|receipt — historie změn zaškrtávátka (z audit logu)
+router.get('/invoices/:id/manual-match/history', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const field = req.query.field === 'receipt' ? 'receipt' : 'order';
+    const word = field === 'order' ? 'objednávka' : 'příjemka';
+    const rows = await prisma.auditLog.findMany({
+      where: { entity: 'invoice', entity_id: id, description: { contains: 'ručně' } },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+      select: { timestamp: true, user_display: true, user_name: true, description: true, changes: true },
+    });
+    const out = rows.map((r) => {
+      const mm = r.changes && r.changes.manual_match;
+      const f = mm ? mm.field : (r.description.includes(word) ? field : null);
+      if (f !== field) return null;
+      const checked = mm ? !!mm.checked : r.description.includes('potvrzena');
+      return { at: r.timestamp, by: (mm && mm.by) || r.user_display || r.user_name || 'neznámý', checked, status_to: mm ? mm.status_to : null };
+    }).filter(Boolean);
+    res.json(out);
+  } catch (err) { next(err); }
+});
+
 router.post('/invoices/:id/manual-match', async (req, res, next) => {
   try {
     if (!(await canManualMatch(req.user))) return res.status(403).json({ error: 'Ruční potvrzení objednávky/příjemky smí jen admin, Radomír Bečka a Lucie Makalušová' });
@@ -1165,6 +1193,7 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
     logAudit({
       action: 'update', entity: 'invoice', entity_id: id,
       description: `${invoice.invoice_number}: ručně ${checked ? 'potvrzena' : 'zrušena'} ${field === 'order' ? 'objednávka' : 'příjemka'}${data.status ? ' → ' + data.status : ''}`,
+      changes: { manual_match: { field, checked, by: userLabel(req.user), status_to: data.status || null } },
       user: req.user,
     }).catch(() => {});
     res.json({ ...updated, has_order: hasOrder, has_receipt: hasReceipt });
