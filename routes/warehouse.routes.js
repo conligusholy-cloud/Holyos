@@ -2350,6 +2350,36 @@ router.post('/movements', async (req, res, next) => {
   }
 });
 
+// DELETE /api/wh/movements/:id — smazat jeden skladový pohyb (jen admin).
+// ?revert=1 navíc vrátí stav zásob (příjem → odečte, výdej → přičte; na pozici i na kartě zboží).
+// Revert umí jen příjem a výdej; ostatní typy se smažou bez úpravy zásob.
+router.delete('/movements/:id', require('../middleware/auth').requireAdmin, async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const mv = await prisma.inventoryMovement.findUnique({ where: { id } });
+    if (!mv) return res.status(404).json({ error: 'Pohyb nenalezen' });
+    const revert = req.query.revert === '1' && ['receipt', 'issue'].includes(mv.type);
+    await prisma.$transaction(async (tx) => {
+      if (revert) {
+        const q = Number(mv.quantity);
+        const sign = mv.type === 'receipt' ? -1 : 1; // opačný efekt než původní pohyb
+        await tx.material.update({ where: { id: mv.material_id }, data: { current_stock: { increment: sign * q } } });
+        const locId = mv.type === 'receipt' ? (mv.to_location_id || mv.location_id) : (mv.from_location_id || mv.location_id);
+        if (locId) {
+          const st = await tx.stock.findFirst({ where: { material_id: mv.material_id, location_id: locId, lot_id: null } });
+          if (st) await tx.stock.update({ where: { id: st.id }, data: { quantity: { increment: sign * q } } });
+        }
+      }
+      await tx.inventoryMovement.delete({ where: { id } });
+    });
+    await logAudit({ action: 'delete', entity: 'movement', entity_id: id, description: `Smazán skladový pohyb #${id} (${mv.type} ${mv.quantity}, materiál #${mv.material_id})${revert ? ' se vrácením zásob' : ''}`, snapshot: makeSnapshot(mv), user: req.user }).catch(() => {});
+    res.json({ ok: true, reverted: revert });
+  } catch (err) {
+    if (err.code === 'P2003') return res.status(409).json({ error: 'Pohyb nelze smazat — navazují na něj sériová čísla nebo šarže.' });
+    next(err);
+  }
+});
+
 // GET /api/wh/movements
 router.get('/movements', async (req, res, next) => {
   try {
