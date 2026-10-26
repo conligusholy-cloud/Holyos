@@ -698,8 +698,31 @@ async function getPlaceholderCompanyId() {
 // Auto-reply při nečitelné faktuře
 // ────────────────────────────────────────────────────────────────────────────
 
+// Pojistka proti smyčce: neodpovídat na nedoručenky, automatické odpovědi, systémové a vlastní adresy.
+function shouldSkipAutoReply(userPrincipalName, toAddress, originalMsg) {
+  const addr = String(toAddress || '').toLowerCase().trim();
+  const subj = String((originalMsg && originalMsg.subject) || '').toLowerCase();
+  if (!addr || !addr.includes('@')) return 'neplatná adresa';
+  if (addr === String(userPrincipalName || '').toLowerCase()) return 'vlastní schránka';
+  if (/^(microsoftexchange|mailer-daemon|postmaster|no-?reply|do-?not-?reply|bounce)/.test(addr)) return 'systémová adresa';
+  const ownDomains = (process.env.OWN_MAIL_DOMAINS || 'bestseries.cz').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean);
+  if (ownDomains.some((d) => addr.endsWith('@' + d))) return 'interní adresa';
+  if (/(automatick[aá] odpov[eě][dď]|nedoru[cč]iteln|undeliverable|delivery status|automatic reply|auto[- ]?reply|out of office|mimo kancel)/.test(subj)) return 'automatická zpráva / nedoručenka';
+  return null;
+}
+
 async function notifySenderUnreadable(userPrincipalName, toAddress, originalMsg, reason) {
   if (!toAddress) return;
+  const skip = shouldSkipAutoReply(userPrincipalName, toAddress, originalMsg);
+  if (skip) { console.log(`[email-ingest] auto-reply přeskočena (${skip}): ${toAddress}`); return; }
+  // Max. 1 upozornění na stejnou adresu za 24 h
+  try {
+    const recent = await prisma.emailIngest.findFirst({
+      where: { from_email: { equals: String(toAddress), mode: 'insensitive' }, sender_notified_at: { gte: new Date(Date.now() - 24 * 3600 * 1000) } },
+      select: { id: true },
+    });
+    if (recent) { console.log(`[email-ingest] auto-reply přeskočena (už upozorněn za 24 h): ${toAddress}`); return; }
+  } catch (e) { /* při chybě raději neposílat */ return; }
   const subject = 'Automatická odpověď: faktura nebyla čitelná';
   const body = `Dobrý den,
 
