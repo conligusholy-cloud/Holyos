@@ -2264,7 +2264,7 @@
           return;
         }
         // Úspěch — minimalistický toast přes alert (aby bylo jasné, že job odešel)
-        const printerTxt = data.printer_id ? (' tiskárna #' + data.printer_id) : '';
+        const printerTxt = data.printer_id ? (' „' + (data.printer_name || ('#' + data.printer_id)) + '“') : '';
         alert('✓ Etiketa odeslána na tiskárnu' + printerTxt + ' (kopií: ' + copies + ')');
       } catch (err) {
         alert('Tisk selhal: ' + (err.message || err));

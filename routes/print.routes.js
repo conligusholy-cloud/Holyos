@@ -292,7 +292,10 @@ router.post('/', async (req, res, next) => {
       user_id: req.user?.person_id ?? req.user?.id ?? null,
       device_id: req.get('X-Device-Id') || null,
     });
-    res.status(200).json(job);
+    // Název tiskárny do odpovědi, ať je v UI jasné, kam etiketa šla
+    let printer_name = null;
+    try { const p = await prisma.printer.findUnique({ where: { id: job.printer_id }, select: { name: true } }); printer_name = p && p.name; } catch (e) { /* jen informativní */ }
+    res.status(200).json({ ...job, printer_name });
   } catch (err) {
     if (err.name === 'ZodError') return res.status(400).json({ error: err.errors });
     if (err.message?.startsWith('Tisk selhal') || err.message?.startsWith('Žádná aktivní tiskárna')) {
