@@ -256,8 +256,24 @@ async function loadByToken(token) {
 }
 
 // GET /api/public/inquiry/:token
+// Ukázkový poptávkový list pro „Poslat test sobě" (token samé nuly) — nic se neukládá
+const DEMO_TOKEN = '0'.repeat(48);
+function demoInquiry() {
+  const d = (n) => { const x = new Date(); x.setDate(x.getDate() + n); return x.toISOString().slice(0, 10); };
+  return {
+    number: 'POP-UKÁZKA', status: 'sent', locked: false, demo: true, currency: 'CZK', required_delivery: d(14),
+    note: 'Toto je UKÁZKA poptávkového listu — takhle ho uvidí dodavatel. Vyplnění si můžete vyzkoušet, nic se neuloží ani neodešle.',
+    supplier_note: null, supplier_name: null, supplier: 'Ukázkový dodavatel s.r.o.', buyer: OUR_COMPANY, answered_at: null, saved_at: null,
+    items: [
+      { id: 1, line_order: 1, name: 'Ukázková položka – profil 100x50x2 mm', code: 'HU0049', quantity: 6, unit: 'm', needed_by: d(14), offered_price: null, lead_time_days: null, offered_delivery: null, min_order_qty: null, supplier_note: null },
+      { id: 2, line_order: 2, name: 'Ukázková položka – tyč Ø 20 mm', code: 'HU0057', quantity: 2.5, unit: 'm', needed_by: d(14), offered_price: null, lead_time_days: null, offered_delivery: null, min_order_qty: null, supplier_note: null },
+    ],
+  };
+}
+
 publicRouter.get('/:token', async (req, res, next) => {
   try {
+    if (req.params.token === DEMO_TOKEN) return res.json(demoInquiry());
     const inq = await loadByToken(req.params.token);
     if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
     if (inq.status === 'cancelled') return res.status(410).json({ error: 'Tato poptávka byla zrušena.' });
@@ -277,6 +293,7 @@ publicRouter.get('/:token', async (req, res, next) => {
 // POST /api/public/inquiry/:token — uložit rozpracované / odeslat. Body: { items:[{id, offered_price, lead_time_days, offered_delivery, min_order_qty, supplier_note}], supplier_note, supplier_name, submit }
 publicRouter.post('/:token', express.json({ limit: '200kb' }), async (req, res, next) => {
   try {
+    if (req.params.token === DEMO_TOKEN) return res.status(400).json({ error: 'Toto je jen ukázka poptávkového listu — nic se neukládá. Skutečnou poptávku dostane dodavatel s vlastním odkazem.' });
     const inq = await loadByToken(req.params.token);
     if (!inq) return res.status(404).json({ error: 'Poptávka nenalezena' });
     if (LOCKED.includes(inq.status)) return res.status(410).json({ error: inq.status === 'cancelled' ? 'Tato poptávka byla zrušena.' : 'Nabídka už byla odeslána. Pro změnu nás prosím kontaktujte.' });
