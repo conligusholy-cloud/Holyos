@@ -154,7 +154,6 @@
             <button type="button" id="ov-items" class="btn btn-secondary btn-sm" style="border-radius:0" onclick="setOrderView('items')">📦 Položky</button>
           </div>
           <div style="flex:1"></div>
-          <button class="btn btn-secondary btn-sm" onclick="deleteImportedOrders()" title="Smaže všechny objednávky importované z Factorify — stav Importováno i čísla FY-… (jen admin)">🗑️ Smazat importované z Factorify</button>
           <button class="btn btn-primary" onclick="openOrderModal()">+ Nová objednávka</button>
         </div>
         <div id="orders-table"></div>
@@ -3084,6 +3083,24 @@
     // Datum: „26.10.", „10.2026", „>1.10.2026", „<20.5.2026", „1.10.2026..15.10.2026", „dnes", „včera".
     let MV_ALL = [];
     const MV_F = {};
+    // Admin smí mazat pohyby (tlačítko 🗑 na řádku)
+    let IS_ADMIN = false;
+    fetch('/api/auth/me', { credentials: 'include' }).then((r) => r.json()).then((j) => {
+      IS_ADMIN = !!(j && j.user && (j.user.role === 'admin' || j.user.isSuperAdmin));
+      if (IS_ADMIN && MV_ALL.length && document.getElementById('mv-tbody')) renderMovements(MV_ALL);
+    }).catch(() => {});
+    async function mvDelete(id) {
+      if (!confirm('Smazat skladový pohyb #' + id + '?')) return;
+      const mv = MV_ALL.find((x) => x.id === id);
+      const canRevert = mv && ['receipt', 'issue'].includes(mv.type);
+      const revert = canRevert && confirm('Vrátit i stav zásob?\n\nOK = ' + (mv.type === 'receipt' ? 'odečíst přijaté množství ze skladu' : 'přičíst vydané množství zpět na sklad') + ' (doporučeno)\nZrušit = smazat jen záznam pohybu, zásoby nechat jak jsou');
+      try {
+        const r = await fetch('/api/wh/movements/' + id + (revert ? '?revert=1' : ''), { method: 'DELETE' });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { alert('Smazání selhalo: ' + (j.error || r.status)); return; }
+        loadMovements(); if (typeof loadStats === 'function') loadStats();
+      } catch (e) { alert('Chyba: ' + e.message); }
+    }
     const MV_LIMIT = 500;
     const mvNorm = (v) => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     function mvParseDate(t) {
@@ -3138,8 +3155,8 @@
       const el = document.getElementById('movements-table');
       if (!MV_ALL.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><h3>Žádné pohyby</h3><p>Zaznamenejte první příjem nebo výdej.</p></div>'; return; }
       el.innerHTML = '<div id="mv-filter-info" style="font-size:12px;color:var(--text2);margin:0 0 6px;display:flex;gap:10px;align-items:center"></div>' +
-        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + MV_COLS.map((c) => '<th>' + c.label + ' <button type="button" class="mv-sort-btn" data-mvs="' + c.key + '" title="Řazení a výběr hodnot" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button></th>').join('') + '</tr>' +
-        '<tr class="mv-filter-row">' + MV_COLS.map((c) => '<th style="padding:4px 6px"><input data-mvf="' + c.key + '" value="' + ordAttr(MV_F[c.key] || '') + '" placeholder="' + ordAttr(c.ph) + '" style="width:100%;min-width:70px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0"></th>').join('') + '</tr></thead><tbody id="mv-tbody"></tbody></table></div>';
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + MV_COLS.map((c) => '<th>' + c.label + ' <button type="button" class="mv-sort-btn" data-mvs="' + c.key + '" title="Řazení a výběr hodnot" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button></th>').join('') + (IS_ADMIN ? '<th></th>' : '') + '</tr>' +
+        '<tr class="mv-filter-row">' + MV_COLS.map((c) => '<th style="padding:4px 6px"><input data-mvf="' + c.key + '" value="' + ordAttr(MV_F[c.key] || '') + '" placeholder="' + ordAttr(c.ph) + '" style="width:100%;min-width:70px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0"></th>').join('') + (IS_ADMIN ? '<th></th>' : '') + '</tr></thead><tbody id="mv-tbody"></tbody></table></div>';
       el.querySelectorAll('[data-mvf]').forEach((inp) => inp.addEventListener('input', () => { MV_F[inp.dataset.mvf] = inp.value; renderMovementRows(); }));
       el.querySelectorAll('[data-mvs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); mvOpenSortMenu(b); }));
       renderMovementRows(); mvMarkSort();
@@ -3226,9 +3243,10 @@
         html += '<td style="font-family:monospace;font-size:12px;white-space:nowrap">' + (mvLoc(mv) ? esc(mvLoc(mv)) : '<span style="color:var(--text2)">—</span>') + '</td>';
         html += '<td style="font-weight:600;">' + mv.quantity + '</td>';
         html += '<td>' + (Number(mv.unit_price) || 0).toLocaleString('cs-CZ') + ' Kč</td>';
-        html += '<td style="color:var(--text2);">' + esc(mv.note || '') + '</td></tr>';
+        html += '<td style="color:var(--text2);">' + esc(mv.note || '') + '</td>' +
+          (IS_ADMIN ? '<td style="text-align:right"><button class="btn btn-danger btn-sm" title="Smazat pohyb (admin)" onclick="mvDelete(' + mv.id + ')">🗑️</button></td>' : '') + '</tr>';
       }
-      if (!rows.length) html = '<tr><td colspan="' + MV_COLS.length + '" style="text-align:center;color:var(--text2);padding:18px">Filtrům nic neodpovídá.</td></tr>';
+      if (!rows.length) html = '<tr><td colspan="' + (MV_COLS.length + (IS_ADMIN ? 1 : 0)) + '" style="text-align:center;color:var(--text2);padding:18px">Filtrům nic neodpovídá.</td></tr>';
       document.getElementById('mv-tbody').innerHTML = html;
       const info = document.getElementById('mv-filter-info');
       if (info) info.innerHTML = (active.length ? 'Zobrazeno <b>' + rows.length + '</b> z ' + MV_ALL.length + ' pohybů' : 'Zobrazeno všech ' + MV_ALL.length + ' pohybů') + (rows.length > MV_LIMIT ? ' · prvních ' + MV_LIMIT + ' — upřesni filtr' : '') +
