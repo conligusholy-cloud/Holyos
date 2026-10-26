@@ -136,6 +136,7 @@
           <div class="sub-tab active" data-ordertab="all" onclick="switchOrderTab('all')">Všechny</div>
           <div class="sub-tab" data-ordertab="purchase" onclick="switchOrderTab('purchase')">🛒 Nákupní</div>
           <div class="sub-tab" data-ordertab="cooperation" onclick="switchOrderTab('cooperation')">🤝 Kooperační</div>
+          <div class="sub-tab" data-ordertab="inquiries" onclick="switchOrderTab('inquiries')">📨 Poptávky <span id="inq-badge" style="display:none;background:#16a34a;color:#fff;border-radius:999px;padding:0 7px;font-size:11px;margin-left:4px"></span></div>
         </div>
         <div class="toolbar">
           <input type="text" id="order-search" placeholder="Hledat objednávku..." onkeyup="loadOrders()">
@@ -366,8 +367,34 @@
     function switchOrderTab(type) {
       document.querySelectorAll('[data-ordertab]').forEach(t => t.classList.toggle('active', t.dataset.ordertab === type));
       currentOrderType = type === 'all' ? '' : type;
+      if (type === 'inquiries') return loadInquiriesList();
       loadOrders();
     }
+
+    // Záložka Poptávky — všechny poptávky u dodavatelů (stav, odpověď, kontrola nabídky) → 🔍 detail / souhlas
+    async function loadInquiriesList() {
+      const el = document.getElementById('orders-table');
+      el.innerHTML = '<div class="empty-state"><p>Načítám poptávky…</p></div>';
+      try {
+        const r = await fetch('/api/wh/inquiries'); const list = await r.json(); if (!r.ok) throw new Error(list.error || r.status);
+        updateInquiryBadge(list);
+        const q = (document.getElementById('order-search')?.value || '').toLowerCase();
+        const rows = list.filter((i) => !q || (i.number + ' ' + (i.company_name || '')).toLowerCase().includes(q));
+        if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📨</div><h3>Žádné poptávky</h3><p>Poptávku vytvoříš v „+ Nová objednávka“ → Poptat ceny u dodavatele.</p></div>'; return; }
+        const ST = { draft: ['koncept', '#9ca3af'], sent: ['odesláno', '#3b82f6'], opened: ['dodavatel otevřel', '#3b82f6'], in_progress: ['dodavatel vyplňuje', '#f59e0b'], answered: ['✅ nabídka přijata', '#16a34a'], converted: ['převedeno na objednávku', '#8b5cf6'], cancelled: ['zrušeno', '#ef4444'] };
+        const fd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+        el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Položek</th><th>Nabídka celkem</th><th>Odesláno</th><th>Odpověď</th><th>Kontrola nabídky</th><th></th></tr></thead><tbody>' +
+          rows.map((i) => { const st = ST[i.status] || [i.status, '#9ca3af']; const tot = (i.items || []).reduce((s, it) => s + (Number(it.offered_price) || 0) * (Number(it.quantity) || 0), 0); const chk = i.offer_check;
+            return '<tr style="cursor:pointer" onclick="pnInquiryDetail(' + i.id + ')"><td><b>' + esc(i.number) + '</b></td><td>' + esc(i.company_name || '—') + '</td><td><span class="status-badge" style="background:' + st[1] + '22;color:' + st[1] + ';border:1px solid ' + st[1] + '55;padding:2px 8px;border-radius:999px;font-size:11px;">' + st[0] + '</span></td><td>' + (i.items || []).length + '</td><td>' + (tot ? tot.toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + esc(i.currency) : '—') + '</td><td>' + fd(i.sent_at) + (i.contact_email ? '<div style="font-size:11px;color:var(--text2)">' + esc(i.contact_email) + '</div>' : '') + '</td><td>' + fd(i.answered_at) + '</td><td>' + (chk ? '<span style="color:' + (chk.status === 'ok' ? '#4ade80' : '#f59e0b') + '" title="' + esc(chk.summary || '') + '">' + (chk.status === 'ok' ? '✓ sedí' : '⚠ rozdíly') + '</span>' : (i.offer_file_name ? '⏳' : '—')) + '</td><td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();pnInquiryDetail(' + i.id + ')">🔍 Detail</button></td></tr>'; }).join('') +
+          '</tbody></table></div>';
+      } catch (e) { el.innerHTML = '<div class="empty-state"><p>Poptávky se nepodařilo načíst (' + esc(e.message) + ').</p></div>'; }
+    }
+    function updateInquiryBadge(list) {
+      const b = document.getElementById('inq-badge'); if (!b) return;
+      const n = (list || []).filter((i) => i.status === 'answered').length;
+      b.style.display = n ? '' : 'none'; b.textContent = n;
+    }
+    setTimeout(() => { fetch('/api/wh/inquiries?status=answered').then((r) => r.ok ? r.json() : []).then(updateInquiryBadge).catch(() => {}); }, 1500);
 
 
     // ============================================================
@@ -675,6 +702,7 @@
     // ORDERS
     // ============================================================
     async function loadOrders() {
+      if (currentOrderType === 'inquiries') return loadInquiriesList();
       const search = document.getElementById('order-search')?.value || '';
       const status = document.getElementById('order-status-filter')?.value || '';
       let url = '/api/wh/orders?';
