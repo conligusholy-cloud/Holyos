@@ -1398,6 +1398,33 @@ router.put('/orders/:id', async (req, res, next) => {
 });
 
 // DELETE /api/wh/orders/:id
+// DELETE /api/wh/orders/imported — hromadně smazat naimportované objednávky (stav „imported", jen admin).
+// ?dry=1 jen spočítá. Pevná podcesta MUSÍ být nad /orders/:id.
+router.delete('/orders/imported', require('../middleware/auth').requireAdmin, async (req, res, next) => {
+  try {
+    const where = { status: 'imported' };
+    if (req.query.type) where.type = String(req.query.type);
+    const orders = await prisma.order.findMany({ where, select: { id: true, order_number: true } });
+    if (req.query.dry === '1') return res.json({ count: orders.length });
+    let deleted = 0; const failed = [];
+    for (const o of orders) {
+      try {
+        const assignments = await prisma.slotAssignment.findMany({ where: { order_id: o.id } });
+        const slotIds = [...new Set(assignments.map((a) => a.slot_id))];
+        await prisma.slotAssignment.deleteMany({ where: { order_id: o.id } });
+        for (const sid of slotIds) {
+          const remaining = await prisma.slotAssignment.count({ where: { slot_id: sid } });
+          if (remaining === 0) await prisma.productionSlot.update({ where: { id: sid }, data: { status: 'open' } });
+        }
+        await prisma.order.delete({ where: { id: o.id } });
+        deleted++;
+      } catch (e) { failed.push(o.order_number); }
+    }
+    await logAudit({ action: 'delete', entity: 'order', entity_id: 0, description: `Hromadně smazány importované objednávky: ${deleted} (přeskočeno ${failed.length})`, user: req.user }).catch(() => {});
+    res.json({ deleted, failed });
+  } catch (err) { next(err); }
+});
+
 router.delete('/orders/:id', async (req, res, next) => {
   try {
     const orderId = parseInt(req.params.id);

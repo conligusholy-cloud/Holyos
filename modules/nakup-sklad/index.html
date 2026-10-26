@@ -154,6 +154,7 @@
             <button type="button" id="ov-items" class="btn btn-secondary btn-sm" style="border-radius:0" onclick="setOrderView('items')">📦 Položky</button>
           </div>
           <div style="flex:1"></div>
+          <button class="btn btn-secondary btn-sm" onclick="deleteImportedOrders()" title="Smaže všechny objednávky se stavem Importováno (jen admin)">🗑️ Smazat importované</button>
           <button class="btn btn-primary" onclick="openOrderModal()">+ Nová objednávka</button>
         </div>
         <div id="orders-table"></div>
@@ -721,6 +722,23 @@
         lastOrders = orders;
         renderOrders(orders);
       } catch(e) { console.error(e); }
+    }
+
+    // Hromadné smazání naimportovaných objednávek (stav „Importováno") — nejdřív spočítá, pak se zeptá
+    async function deleteImportedOrders() {
+      try {
+        const r0 = await fetch('/api/wh/orders/imported?dry=1', { method: 'DELETE' });
+        const j0 = await r0.json();
+        if (!r0.ok) { alert('Nelze: ' + (j0.error || r0.status)); return; }
+        if (!j0.count) { alert('Žádné importované objednávky ke smazání.'); return; }
+        if (!confirm('Opravdu NEVRATNĚ smazat ' + j0.count + ' importovaných objednávek (stav Importováno) včetně položek?')) return;
+        if (!confirm('Poslední potvrzení: smazat ' + j0.count + ' objednávek?')) return;
+        const r = await fetch('/api/wh/orders/imported', { method: 'DELETE' });
+        const j = await r.json();
+        if (!r.ok) { alert('Smazání selhalo: ' + (j.error || r.status)); return; }
+        alert('Smazáno: ' + j.deleted + (j.failed && j.failed.length ? '\nPřeskočeno (vazby): ' + j.failed.join(', ') : ''));
+        loadOrders();
+      } catch (e) { alert('Chyba: ' + e.message); }
     }
 
     // Přepínač: stavy objednávek × stavy objednaných položek
