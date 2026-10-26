@@ -32,6 +32,16 @@ async function nextInquiryNumber() {
   return series + '-' + Date.now().toString().slice(-6);
 }
 
+// Odesílatel poptávek: firemní schránka přes Microsoft Graph (spolehlivé). Bez `from` by sendMail
+// spadl na SMTP fallback (SMTP_USER/SMTP_PASS), který po výměně klíčů vracel 535 Invalid credentials.
+function inquiryFrom() {
+  return process.env.PURCHASE_MAIL_FROM || process.env.GRAPH_DEFAULT_FROM || process.env.INVOICE_IMAP_USER || undefined;
+}
+function inquiryFromName(req) {
+  const n = req && req.user && (req.user.display_name || req.user.username);
+  return (n ? n + ' | ' : '') + OUR_COMPANY;
+}
+
 function inquiryLink(token) { return buildShareUrl('/poptavka/' + token); }
 
 function serializeItem(it) {
@@ -52,14 +62,65 @@ router.get('/contacts', async (req, res, next) => {
     const cid = parseInt(req.query.company_id, 10);
     if (!cid) return res.status(400).json({ error: 'Chybí company_id' });
     const [company, people, last] = await Promise.all([
-      prisma.company.findUnique({ where: { id: cid }, select: { id: true, name: true, email: true, contact_person: true } }),
+      prisma.company.findUnique({ where: { id: cid }, select: { id: true, name: true, email: true, contact_person: true, order_contact_person_id: true } }),
       prisma.person.findMany({ where: { company_id: cid, active: true, email: { not: null } }, select: { id: true, first_name: true, last_name: true, email: true, phone: true }, orderBy: [{ last_name: 'asc' }] }),
       prisma.purchaseInquiry.findFirst({ where: { company_id: cid, contact_email: { not: null } }, orderBy: { id: 'desc' }, select: { contact_email: true, contact_name: true, contact_person_id: true } }),
     ]);
     if (!company) return res.status(404).json({ error: 'Firma nenalezena' });
     const list = people.filter((p) => p.email && p.email.includes('@')).map((p) => ({ person_id: p.id, name: (p.first_name + ' ' + p.last_name).trim(), email: p.email }));
     if (company.email && company.email.includes('@') && !list.some((c) => c.email.toLowerCase() === company.email.toLowerCase())) list.push({ person_id: null, name: company.contact_person || company.name, email: company.email, company: true });
-    res.json({ company, contacts: list, last_used: last || null });
+    res.json({ company, contacts: list.map((c) => ({ ...c, is_default: !!c.person_id && c.person_id === company.order_contact_person_id })), default_person_id: company.order_contact_person_id || null, last_used: last || null });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/inquiries/contacts — rychle přidat kontakt k firmě. Body: { company_id, first_name, last_name, email, phone, make_default }
+router.post('/contacts', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const cid = parseInt(b.company_id, 10);
+    const email = String(b.email || '').trim();
+    if (!cid) return res.status(400).json({ error: 'Chybí firma.' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Zadej platný e-mail.' });
+    const company = await prisma.company.findUnique({ where: { id: cid }, select: { id: true, name: true } });
+    if (!company) return res.status(404).json({ error: 'Firma nenalezena' });
+    const dup = await prisma.person.findFirst({ where: { company_id: cid, email: { equals: email, mode: 'insensitive' } } });
+    const full = String(b.name || '').trim();
+    const first = txt(b.first_name, 255) || (full ? full.split(/\s+/)[0] : '') || '';
+    const last = txt(b.last_name, 255) || (full ? full.split(/\s+/).slice(1).join(' ') : '') || company.name.slice(0, 255);
+    const person = dup || await prisma.person.create({ data: { type: 'contact', first_name: first || 'Nákup', last_name: last, email, phone: txt(b.phone, 20), company_id: cid, active: true, notes: 'Kontakt pro objednávky a poptávky' } });
+    if (b.make_default !== false) await prisma.company.update({ where: { id: cid }, data: { order_contact_person_id: person.id } });
+    logAudit({ action: 'create', entity: 'company_contact', entity_id: person.id, description: `Kontakt ${email} přidán k firmě ${company.name}${b.make_default !== false ? ' (výchozí pro objednávky)' : ''}`, user: req.user }).catch(() => {});
+    res.status(201).json({ ok: true, person_id: person.id, existing: !!dup });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/inquiries/contacts/default — nastavit výchozí kontakt firmy. Body: { company_id, person_id | null }
+router.post('/contacts/default', async (req, res, next) => {
+  try {
+    const cid = parseInt(req.body && req.body.company_id, 10);
+    const pid = parseInt(req.body && req.body.person_id, 10) || null;
+    if (!cid) return res.status(400).json({ error: 'Chybí firma.' });
+    if (pid) { const p = await prisma.person.findFirst({ where: { id: pid, company_id: cid }, select: { id: true } }); if (!p) return res.status(400).json({ error: 'Kontakt nepatří k firmě.' }); }
+    await prisma.company.update({ where: { id: cid }, data: { order_contact_person_id: pid } });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// POST /api/wh/inquiries/test — testovací e-mail sobě (nic se nevytváří, dodavatel nic nedostane). Body: { items, name, message, required_delivery, to }
+router.post('/test', async (req, res, next) => {
+  try {
+    const b = req.body || {};
+    const own = req.user && req.user.person && req.user.person.email;
+    const to = String(own || b.to || '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'Nemáš v profilu e-mail — zadej ho ve formuláři „Test na e-mail“.' });
+    const items = (Array.isArray(b.items) ? b.items : []).filter((it) => it && String(it.name || '').trim());
+    const lines = items.map((it) => '• ' + String(it.name).trim() + ' — ' + (num(it.quantity) || 0) + ' ' + (txt(it.unit, 20) || 'ks')).join('\n');
+    const name = txt(b.name, 255);
+    const body = '*** TESTOVACÍ E-MAIL — dodavateli nic neodešlo ***\n\nDobrý den' + (name ? ', ' + name : '') + ',\n\nprosíme o cenovou nabídku na níže uvedené zboží. Ceny, dodací lhůtu a termín dodání můžete vyplnit přímo v poptávkovém listu přes tlačítko níže.\n\n' + lines + (txt(b.message, 4000) ? '\n\n' + txt(b.message, 4000) : '') + '\n\nDěkujeme,\n' + OUR_COMPANY;
+    const { sendMail } = require('../services/email');
+    const r = await sendMail({ from: inquiryFrom(), fromName: inquiryFromName(req), to, subject: '[TEST] Poptávka — ' + OUR_COMPANY, preheader: 'Testovací náhled poptávky', body, link: inquiryLink('0'.repeat(48)), linkLabel: 'Otevřít poptávkový list (ukázka)' });
+    if (r && r.sent === false) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + (r.error || r.skipped || 'neznámá chyba') });
+    res.json({ ok: true, sent_to: to });
   } catch (err) { next(err); }
 });
 
@@ -160,7 +221,7 @@ router.post('/:id/send', async (req, res, next) => {
       '\n\nDěkujeme,\n' + ((req.user && (req.user.display_name || req.user.username)) || OUR_COMPANY) + '\n' + OUR_COMPANY;
     const { sendMail } = require('../services/email');
     const replyTo = req.user && req.user.person && req.user.person.email ? req.user.person.email : undefined;
-    const r = await sendMail({ to: email, subject: 'Poptávka ' + inq.number + ' — ' + OUR_COMPANY, preheader: 'Prosíme o cenovou nabídku a dodací lhůtu', body, link, linkLabel: 'Otevřít poptávkový list', replyTo });
+    const r = await sendMail({ from: inquiryFrom(), fromName: inquiryFromName(req), to: email, subject: 'Poptávka ' + inq.number + ' — ' + OUR_COMPANY, preheader: 'Prosíme o cenovou nabídku a dodací lhůtu', body, link, linkLabel: 'Otevřít poptávkový list', replyTo });
     if (r && r.sent === false) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + (r.error || r.skipped || 'neznámá chyba') });
     const upd = await prisma.purchaseInquiry.update({ where: { id }, data: { status: inq.status === 'draft' ? 'sent' : inq.status, sent_at: new Date(), contact_email: email, contact_name: name, contact_person_id: parseInt(b.person_id, 10) || null, note: txt(b.message, 4000) || inq.note } });
     logAudit({ action: 'update', entity: 'purchase_inquiry', entity_id: id, description: `Poptávka ${inq.number} odeslána na ${email}`, user: req.user }).catch(() => {});
