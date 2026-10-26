@@ -230,6 +230,20 @@ async function createMove(input) {
       });
     }
 
+    // 3b. Vážená nákupní cena: příjem s cenou přepočítá Material.weighted_avg_price
+    //     nová = (stav před příjmem × stará cena + přijato × nákupní cena) / (stav + přijato).
+    //     Když stará cena chybí (nebo stav ≤ 0), vezme se rovnou nákupní cena příjmu.
+    if (input.type === 'receipt' && Number(input.unit_price) > 0) {
+      const m = await tx.material.findUnique({ where: { id: input.material_id }, select: { current_stock: true, weighted_avg_price: true, unit_price: true } });
+      if (m) {
+        const oldQty = Math.max(0, Number(m.current_stock) || 0);
+        const oldPrice = Number(m.weighted_avg_price) > 0 ? Number(m.weighted_avg_price) : (Number(m.unit_price) > 0 ? Number(m.unit_price) : null);
+        const q = Number(input.quantity); const p = Number(input.unit_price);
+        const wap = oldPrice == null || oldQty <= 0 ? p : (oldQty * oldPrice + q * p) / (oldQty + q);
+        await tx.material.update({ where: { id: input.material_id }, data: { weighted_avg_price: Math.round(wap * 10000) / 10000 } });
+      }
+    }
+
     // 4. Backward-compat: aktualizuj Material.current_stock (součet přes všechny lokace)
     // Pro transfer/pick je součet delt 0, takže current_stock se nemění.
     const netDelta = deltas.reduce((s, d) => s + Number(d.delta), 0);

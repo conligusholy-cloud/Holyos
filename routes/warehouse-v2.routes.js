@@ -1065,7 +1065,7 @@ router.post('/pwa/receive/orders/:id', async (req, res, next) => {
       const it = byId[l.id];
       const r = await createMove({
         type: 'receipt', material_id: it.material_id, warehouse_id: loc.warehouse_id, quantity: l.qty,
-        location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: it.unit_price != null ? Number(it.unit_price) : undefined,
+        location_id: loc.id, to_location_id: loc.id, document_id: doc.id, unit_price: (o.currency || 'CZK') === 'CZK' ? (it.confirmed_price != null ? Number(it.confirmed_price) : (it.unit_price != null ? Number(it.unit_price) : undefined)) : undefined, // vážená cena se vede v CZK
         reference_type: 'order_item', reference_id: it.id, created_by: personId,
         client_uuid: b.client_uuid ? lineUuid(String(b.client_uuid), it.id) : undefined, note: 'Objednávka ' + o.order_number,
       });

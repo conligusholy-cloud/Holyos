@@ -3056,7 +3056,7 @@
         html += '<td style="font-family:monospace;font-size:12px;">' + (s.location_label || '<span style="color:var(--text2);">bez pozice</span>') + '</td>';
         html += '<td style="text-align:right;font-weight:600;">' + s.qty.toFixed(2) + '</td>';
         html += '<td style="color:var(--text2);">' + (s.unit || 'ks') + '</td>';
-        html += '<td style="text-align:right;color:var(--text2);">' + (s.unit_price ? s.unit_price.toFixed(2) + ' Kč' : '—') + '</td>';
+        html += '<td style="text-align:right;color:var(--text2);" title="' + (s.price_source === 'wap' ? 'Vážená nákupní cena' : 'Cena z karty zboží (vážená nákupní cena zatím není)') + '">' + (s.unit_price ? s.unit_price.toFixed(2) + ' Kč' + (s.price_source === 'wap' ? '' : ' *') : '—') + '</td>';
         html += '<td style="text-align:right;font-weight:500;">' + value.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK' }) + '</td>';
         html += '</tr>';
       }

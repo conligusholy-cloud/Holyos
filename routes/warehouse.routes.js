@@ -2366,7 +2366,7 @@ router.get('/stats', async (req, res, next) => {
       prisma.company.count({ where: { active: true } }),
       prisma.order.count({ where: { status: { in: ['new', 'in_progress'] } } }),
       prisma.$queryRaw`
-        SELECT COALESCE(SUM(current_stock * COALESCE(unit_price, 0)), 0)::float as value
+        SELECT COALESCE(SUM(current_stock * COALESCE(NULLIF(weighted_avg_price, 0), unit_price, 0)), 0)::float as value
         FROM materials WHERE status = 'active'
       `,
       prisma.warehouse.count({ where: { active: true } }),
@@ -2411,7 +2411,7 @@ router.get('/stock', async (req, res, next) => {
     const movements = await prisma.inventoryMovement.findMany({
       where,
       include: {
-        material: { select: { id: true, name: true, code: true, unit: true, unit_price: true } },
+        material: { select: { id: true, name: true, code: true, unit: true, unit_price: true, weighted_avg_price: true } },
         warehouse: { select: { id: true, name: true } },
         location: { select: { id: true, label: true, section: true, rack: true, position: true } },
       },
@@ -2427,7 +2427,9 @@ router.get('/stock', async (req, res, next) => {
           material_name: mv.material.name,
           material_code: mv.material.code,
           unit: mv.material.unit,
-          unit_price: mv.material.unit_price ? parseFloat(mv.material.unit_price) : 0,
+          // Hodnota zásob = vážená nákupní cena × množství (náhradně cena z karty)
+          unit_price: Number(mv.material.weighted_avg_price) > 0 ? parseFloat(mv.material.weighted_avg_price) : (mv.material.unit_price ? parseFloat(mv.material.unit_price) : 0),
+          price_source: Number(mv.material.weighted_avg_price) > 0 ? 'wap' : 'card',
           warehouse_id: mv.warehouse.id,
           warehouse_name: mv.warehouse.name,
           location_id: mv.location?.id || null,
