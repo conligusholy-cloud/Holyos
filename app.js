@@ -1139,6 +1139,9 @@ app.get('/admin/users*', (req, res) => {
 // SPA fallback pro PWA (react-router) — musí být PŘED generickým /* fallbackem
 app.get('/pwa/*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
+  // Chybějící soubor (assets/*.js, *.css, obrázky…) = 404, NE index.html. Jinak si service worker
+  // čtečky uloží HTML místo JavaScriptu a aplikace zůstane natrvalo na prázdné (modré) obrazovce.
+  if (/^\/pwa\/assets\//.test(req.path) || /\.[a-z0-9]{2,6}$/i.test(req.path)) return res.status(404).type('text').send('Not found');
   const indexPath = path.join(PWA_DIST, 'index.html');
   res.sendFile(indexPath, (err) => {
     if (err) {
