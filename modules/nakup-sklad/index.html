@@ -1129,6 +1129,35 @@
         .po-sec:not([open]) { } @media print { .po-sec { break-inside:avoid; } .po-sec:not([open]) .po-grid { display:grid; } }
         @media print { body * { visibility:hidden !important; } .po-sheet, .po-sheet * { visibility:visible !important; } .po-sheet { position:absolute; left:0; top:0; width:100%; box-shadow:none; border-top:0; }
           .po-noprint { display:none !important; } .po-in, .po-sel, .po-ta, .po-st { border:0 !important; background:transparent !important; box-shadow:none !important; appearance:none; -webkit-appearance:none; } }
+        /* Tmavý design detailu objednávky (jako průvodce) — jen na obrazovce, tisk zůstává „papírový" */
+        @media screen {
+          .po-sheet.po-dark { background:var(--surface); color:var(--text); width:min(1560px,98vw); padding:30px 34px 26px; border-radius:14px; border:1px solid var(--border); border-top:4px solid var(--accent); box-shadow:0 20px 60px rgba(0,0,0,.55); }
+          .po-dark .po-kicker, .po-dark .po-meta, .po-dark .po-lbl, .po-dark .po-tbl th, .po-dark .po-sum .l, .po-dark .po-sub, .po-dark .po-dv, .po-dark .po-grid label span, .po-dark .po-co-line { color:var(--text2); }
+          .po-dark .po-kicker { color:var(--accent); }
+          .po-dark .po-num, .po-dark .po-grand, .po-dark .po-co-name, .po-dark .po-meta b { color:var(--text) !important; }
+          .po-dark .po-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); }
+          .po-dark .po-btn:hover { background:#3a3a5c; }
+          .po-dark .po-in, .po-dark .po-sel, .po-dark .po-ta { color:var(--text); }
+          .po-dark .po-in:hover, .po-dark .po-sel:hover, .po-dark .po-ta:hover { background:var(--surface2); }
+          .po-dark .po-in:focus, .po-dark .po-sel:focus, .po-dark .po-ta:focus { background:var(--bg); border-bottom-color:var(--accent); box-shadow:0 2px 0 var(--accent); }
+          .po-dark .po-ta { background:var(--bg); border:1px solid var(--border); }
+          .po-dark .po-sel option { background:var(--surface); color:var(--text); }
+          .po-dark input[type=date] { color-scheme:dark; }
+          .po-dark .po-box, .po-dark .po-sec { background:var(--bg); border-color:var(--border); }
+          .po-dark .po-bar { background:var(--surface2); }
+          .po-dark .po-tbl th { border-bottom:2px solid var(--border); }
+          .po-dark .po-tbl td { border-bottom:1px solid var(--border); }
+          .po-dark .po-tbl tr:hover td { background:rgba(255,255,255,.03); }
+          .po-dark .po-add td { background:rgba(108,140,255,.06); border-bottom:1px dashed var(--border); }
+          .po-dark .po-add .po-in, .po-dark .po-link { color:#a9bdff; }
+          .po-dark .po-fld { border-bottom:1px solid var(--border) !important; }
+          .po-dark .po-x:hover { background:rgba(239,68,68,.15); }
+          .po-dark .po-confirm-box { background:var(--bg) !important; border-color:var(--border) !important; }
+          .po-dark .po-tbl { font-size:13px; }
+          .po-dark .po-tbl td .po-in { min-width:0; }
+          .po-dark .po-tbl tr[data-id] > td:nth-child(2) { min-width:300px; }
+          .po-dark .po-tbl tr[data-id] > td:nth-child(2) .po-in[data-f=name] { font-weight:600; }
+        }
       `;
       document.head.appendChild(st);
     })();
@@ -1221,7 +1250,7 @@
       const compOpts = '<option value="">— vyber dodavatele —</option>' + companies.map((c) => '<option value="' + c.id + '"' + (o.company_id === c.id ? ' selected' : '') + '>' + poTxt(c.name) + '</option>').join('');
       const stOpts = Object.entries(ORDER_STATUSES).map(([k, v]) => '<option value="' + k + '"' + (o.status === k ? ' selected' : '') + '>' + v.label + '</option>').join('');
       const created = o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—';
-      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)poClose()"><div class="po-sheet" id="po-sheet">' +
+      document.getElementById('modal-root').innerHTML = '<div class="modal-overlay po-overlay" onclick="if(event.target===this)poClose()"><div class="po-sheet po-dark" id="po-sheet">' +
         '<div class="po-top po-noprint"><span id="po-saved"></span><button class="po-btn" onclick="window.print()">🖨 Tisk</button><button class="po-btn" onclick="poClose()">✕ Zavřít</button></div>' +
         '<div class="po-head"><div><div class="po-kicker">' + kind + '</div><div class="po-num">' + poTxt(o.order_number) + '</div></div>' +
           '<div class="po-meta"><span>Stav</span><select class="po-sel" data-h="status">' + stOpts + '</select>' +
@@ -1266,7 +1295,7 @@
           (diffs.length ? '<ul style="margin:6px 0 0 18px;color:#92400e">' + diffs.map((it) => '<li>' + poTxt(it.name) + ': ' + [it.confirmed_price != null ? 'cena ' + Number(it.confirmed_price) + ' místo ' + Number(it.unit_price) : null, it.confirmed_delivery && it.expected_delivery && String(it.confirmed_delivery).slice(0, 10) > String(it.expected_delivery).slice(0, 10) ? 'termín ' + fd(it.confirmed_delivery) + ' místo ' + fd(it.expected_delivery) : null, it.supplier_note ? '„' + poTxt(it.supplier_note) + '“' : null].filter(Boolean).join(', ') + '</li>').join('') + '</ul>' : '') +
           (o.supplier_confirm_note ? '<div style="margin-top:4px;color:#6b7280">Poznámka dodavatele: ' + poTxt(o.supplier_confirm_note) + '</div>' : '');
       }
-      return '<div class="po-noprint" style="margin:0 0 14px;padding:10px 14px;border:1px solid #e3e7ef;border-radius:10px;background:#f8fafc;font-size:13px">' + h + '</div>';
+      return '<div class="po-noprint po-confirm-box" style="margin:0 0 14px;padding:10px 14px;border:1px solid #e3e7ef;border-radius:10px;background:#f8fafc;font-size:13px">' + h + '</div>';
     }
     async function poSendConfirm(id) {
       const o = PO.o || {};
