@@ -719,19 +719,19 @@
       const st = document.createElement('style');
       st.textContent = `
         /* Průvodce nové objednávky — tmavý vzhled stejný jako zbytek HolyOS */
-        #pn-sheet { background:var(--surface) !important; color:var(--text) !important; border:1px solid var(--border); border-radius:14px !important; box-shadow:0 20px 60px rgba(0,0,0,.55); }
-        #pn-sheet .po-kicker { color:var(--accent); }
-        #pn-sheet .po-num { color:var(--text); }
-        #pn-sheet .po-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); }
-        #pn-sheet .po-btn:hover { background:#3a3a5c; }
-        #pn-sheet .po-in, #pn-sheet .po-sel, #pn-sheet .po-ta { background:var(--bg) !important; border:1px solid var(--border) !important; border-radius:8px; color:var(--text) !important; padding:7px 9px; }
-        #pn-sheet .po-in:hover, #pn-sheet .po-sel:hover, #pn-sheet .po-ta:hover { border-color:#4a4a78 !important; }
-        #pn-sheet .po-in:focus, #pn-sheet .po-sel:focus, #pn-sheet .po-ta:focus { outline:0; border-color:var(--accent) !important; box-shadow:0 0 0 2px rgba(108,140,255,.25); }
-        #pn-sheet .po-in::placeholder, #pn-sheet .po-ta::placeholder { color:var(--text2); opacity:.7; }
-        #pn-sheet option { background:var(--surface); color:var(--text); }
-        #pn-sheet input[type=date] { color-scheme:dark; }
-        #pn-sheet .po-grand { color:var(--text); }
-        #pn-sheet .po-late { color:#f87171; }
+        #pn-sheet, .pn-dark { background:var(--surface) !important; color:var(--text) !important; border:1px solid var(--border); border-radius:14px !important; box-shadow:0 20px 60px rgba(0,0,0,.55); }
+        #pn-sheet .po-kicker, .pn-dark .po-kicker { color:var(--accent); }
+        #pn-sheet .po-num, .pn-dark .po-num { color:var(--text); }
+        #pn-sheet .po-btn, .pn-dark .po-btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); }
+        #pn-sheet .po-btn:hover, .pn-dark .po-btn:hover { background:#3a3a5c; }
+        #pn-sheet .po-in, #pn-sheet .po-sel, #pn-sheet .po-ta, .pn-dark .po-in, .pn-dark .po-sel, .pn-dark .po-ta { background:var(--bg) !important; border:1px solid var(--border) !important; border-radius:8px; color:var(--text) !important; padding:7px 9px; }
+        #pn-sheet .po-in:hover, #pn-sheet .po-sel:hover, #pn-sheet .po-ta:hover, .pn-dark .po-in:hover, .pn-dark .po-sel:hover, .pn-dark .po-ta:hover { border-color:#4a4a78 !important; }
+        #pn-sheet .po-in:focus, #pn-sheet .po-sel:focus, #pn-sheet .po-ta:focus, .pn-dark .po-in:focus, .pn-dark .po-sel:focus, .pn-dark .po-ta:focus { outline:0; border-color:var(--accent) !important; box-shadow:0 0 0 2px rgba(108,140,255,.25); }
+        #pn-sheet .po-in::placeholder, #pn-sheet .po-ta::placeholder, .pn-dark .po-in::placeholder, .pn-dark .po-ta::placeholder { color:var(--text2); opacity:.7; }
+        #pn-sheet option, .pn-dark option { background:var(--surface); color:var(--text); }
+        #pn-sheet input[type=date], .pn-dark input[type=date] { color-scheme:dark; }
+        #pn-sheet .po-grand, .pn-dark .po-grand { color:var(--text); }
+        #pn-sheet .po-late, .pn-dark .po-late { color:#f87171; }
         .pn-box { border:1px solid var(--border); border-radius:12px; background:var(--bg); padding:16px 18px; margin-bottom:14px; }
         .pn-h { display:flex; align-items:center; gap:10px; font-weight:800; font-size:14px; margin-bottom:10px; color:var(--text); } .pn-h .n { background:var(--accent); color:#10101c; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:12px; }
         .pn-chip { display:inline-flex; gap:6px; align-items:center; border:1px solid var(--border); background:var(--surface2); color:var(--text); border-radius:999px; padding:5px 12px; font-size:12.5px; cursor:pointer; margin:0 6px 6px 0; transition:all .15s; } .pn-chip:hover { border-color:var(--accent); background:rgba(108,140,255,.15); }
@@ -741,8 +741,8 @@
         .pn-go { background:var(--accent); color:#10101c; border:0; border-radius:10px; padding:11px 22px; font-weight:800; font-size:14px; cursor:pointer; transition:filter .15s; } .pn-go:hover:not(:disabled) { filter:brightness(1.1); } .pn-go:disabled { background:#3a3a5c; color:#7b7b9c; cursor:not-allowed; }
         .pn-grp { margin-top:12px; } .pn-grph { font-weight:800; font-size:13px; margin-bottom:6px; color:var(--text); }
         .pn-sec { margin:10px 0 4px; font-weight:800; font-size:13px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; color:var(--text); }
-        #pn-sheet button.po-btn[data-pn] { background:rgba(108,140,255,.15); border-color:rgba(108,140,255,.45); color:#a9bdff; }
-        #pn-sheet button.po-btn[data-pn]:hover { background:rgba(108,140,255,.28); }
+        #pn-sheet button.po-btn[data-pn], .pn-dark button.po-btn[data-pn] { background:rgba(108,140,255,.15); border-color:rgba(108,140,255,.45); color:#a9bdff; }
+        #pn-sheet button.po-btn[data-pn]:hover, .pn-dark button.po-btn[data-pn]:hover { background:rgba(108,140,255,.28); }
         .pn-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
       `;
       document.head.appendChild(st);
@@ -904,7 +904,7 @@
       const opts = (ct.contacts || []).map((c, i) => '<option value="' + i + '"' + (i === selIdx ? ' selected' : '') + '>' + (c.is_default ? '★ ' : '') + poTxt(c.name) + ' — ' + poTxt(c.email) + (c.company ? ' (e-mail firmy)' : '') + (c.is_default ? ' · výchozí pro objednávky' : '') + '</option>').join('');
       const rows = PN.cart.map((c, i) => '<label style="display:flex;gap:8px;align-items:center;padding:4px 0"><input type="checkbox" class="inq-it" value="' + i + '"' + (!noPriceIdx.length || noPriceIdx.includes(i) ? ' checked' : '') + '> <span>' + poTxt(c.name) + ' — <b>' + (Number(c.quantity) || 0) + ' ' + poTxt(c.unit) + '</b>' + (c.expected_delivery ? ' <span class="pn-muted">dodat do ' + new Date(c.expected_delivery).toLocaleDateString('cs-CZ') + '</span>' : '') + (Number(c.unit_price) > 0 ? ' <span class="pn-muted">(cena ' + Number(c.unit_price) + ')</span>' : ' <span style="color:#f87171">bez ceny</span>') + '</span></label>').join('');
       const ov = document.createElement('div'); ov.id = 'inq-ov'; ov.className = 'modal-overlay po-overlay'; ov.style.zIndex = 3000;
-      ov.innerHTML = '<div class="po-sheet" style="max-width:720px;padding:26px 30px">' +
+      ov.innerHTML = '<div class="po-sheet pn-dark" style="max-width:720px;padding:26px 30px">' +
         '<div class="po-top"><button class="po-btn" id="inq-x">✕ Zavřít</button></div>' +
         '<div class="po-kicker">POPTÁVKA</div><div class="po-num" style="font-size:22px;margin-bottom:12px">Poptat ceny u dodavatele</div>' +
         '<div class="pn-muted" style="margin-bottom:12px">Dodavatel dostane e-mail s odkazem na poptávkový list. Doplní cenu, dodací lhůtu (kolik dní předem objednat) a termín dodání — může si uložit rozpracované a odeslat později. Odpověď se pak jedním klikem převezme do objednávky a uloží do historie cen.</div>' +
@@ -991,7 +991,7 @@
         : '<div class="pn-muted" style="margin:6px 0 12px">Dodavatel nepřiložil vlastní nabídku.</div>';
       const can = q.status === 'answered';
       const ov = document.createElement('div'); ov.className = 'modal-overlay po-overlay'; ov.style.zIndex = 3000;
-      ov.innerHTML = '<div class="po-sheet" style="max-width:1000px;padding:26px 30px">' +
+      ov.innerHTML = '<div class="po-sheet pn-dark" style="max-width:1000px;padding:26px 30px">' +
         '<div class="po-top"><button class="po-btn" id="inqd-x">✕ Zavřít</button></div>' +
         '<div class="po-kicker">NABÍDKA DODAVATELE</div><div class="po-num" style="font-size:22px;margin-bottom:4px">' + poTxt(q.number) + ' — ' + poTxt(q.company_name || '') + '</div>' +
         '<div class="pn-muted" style="margin-bottom:12px">Stav: <b>' + ({ answered: '✅ nabídka přijata', in_progress: 'dodavatel ještě vyplňuje', converted: 'převedeno na objednávku' }[q.status] || q.status) + '</b>' + (q.answered_at ? ' · odesláno ' + fd(q.answered_at) : '') + (q.supplier_name ? ' · vyplnil ' + poTxt(q.supplier_name) : '') + '</div>' +
