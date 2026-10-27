@@ -263,7 +263,7 @@
       <div class="tab-nav">
         <button type="button" class="tab-btn active" onclick="switchAccountingTab('invoices','ar',event)">📤 Vydané (naše)</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('invoices','ap',event)">📥 Přijaté (dodavatelé)</button>
-        <button type="button" class="tab-btn" onclick="switchAccountingTab('payments',null,event)">💳 K platbě</button>
+        <button type="button" class="tab-btn" style="display:none" onclick="switchAccountingTab('payments',null,event)">💳 K platbě</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('bank',null,event)">🏦 Banka</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('reminders',null,event)">📨 Upomínky</button>
         <button type="button" class="tab-btn" onclick="switchAccountingTab('handovers',null,event)">📦 Účetní firma</button>
@@ -424,6 +424,9 @@
         <div class="bank-subtabs" style="display:flex;gap:6px;margin-bottom:14px;">
           <button type="button" class="btn btn-primary btn-sm" id="bank-sub-stmts" onclick="switchBankSub('stmts')">📄 Výpisy</button>
           <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-pays" onclick="switchBankSub('pays')">💸 Platby</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-orders" onclick="switchBankSub('orders')">📤 Příkazy k úhradě</button>
+        </div>
+        <div id="bank-orders-wrap" style="display:none;">
         </div>
 
         <div class="pb-card" id="bank-pays-card" style="display:none;">
@@ -4849,12 +4852,21 @@
     let bankSub = 'stmts';
     window.switchBankSub = function(which) {
       bankSub = which;
+      // Příkazy k úhradě = obsah dřívější záložky „K platbě" přesunutý sem
+      const wrap = document.getElementById('bank-orders-wrap');
+      const pane = document.getElementById('tab-payments');
+      if (which === 'orders' && pane && wrap && pane.parentNode !== wrap) {
+        pane.classList.remove('tab-pane'); pane.style.display = 'block'; wrap.appendChild(pane);
+      }
       document.getElementById('bank-pays-card').style.display = which === 'pays' ? '' : 'none';
       document.getElementById('bank-stmts-wrap').style.display = which === 'stmts' ? '' : 'none';
-      document.getElementById('bank-sub-pays').className = 'btn btn-sm ' + (which === 'pays' ? 'btn-primary' : 'btn-secondary');
-      document.getElementById('bank-sub-stmts').className = 'btn btn-sm ' + (which === 'stmts' ? 'btn-primary' : 'btn-secondary');
+      if (wrap) wrap.style.display = which === 'orders' ? '' : 'none';
+      [['stmts', 'bank-sub-stmts'], ['pays', 'bank-sub-pays'], ['orders', 'bank-sub-orders']].forEach(([k, id]) => {
+        const b = document.getElementById(id); if (b) b.className = 'btn btn-sm ' + (which === k ? 'btn-primary' : 'btn-secondary');
+      });
       try { sessionStorage.setItem('ud.bankSub', which); } catch (e) { /* ignore */ }
       if (which === 'pays') loadBankPayments();
+      if (which === 'orders' && typeof loadPaymentsTab === 'function') loadPaymentsTab();
     };
     async function payFillAccounts() {
       const src = document.getElementById('bank-filter-account');
@@ -5334,8 +5346,19 @@
       _origSwitchTab(name, dir, ev);
       if (name === 'bank') {
         loadBankAccountsForFilter().then(loadStatements);
-        try { if (sessionStorage.getItem('ud.bankSub') === 'pays') switchBankSub('pays'); } catch (e) { /* ignore */ }
+        try { const sub = sessionStorage.getItem('ud.bankSub'); if (sub === 'pays' || sub === 'orders') switchBankSub(sub); } catch (e) { /* ignore */ }
       }
+    };
+    // „K platbě" je teď podzáložka Banka → Příkazy k úhradě
+    const _switchTabBank = window.switchAccountingTab;
+    window.switchAccountingTab = function(name, dir, ev) {
+      if (name === 'payments') {
+        const btn = document.querySelectorAll('.tab-btn')[3];
+        _switchTabBank('bank', null, btn ? { currentTarget: btn } : null);
+        switchBankSub('orders');
+        return;
+      }
+      return _switchTabBank(name, dir, ev);
     };
 
     // ─── Init ────────────────────────────────────────────────────────────
