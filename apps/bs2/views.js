@@ -1516,6 +1516,7 @@ function adminDash({ admin, stats, recent, history = [], holyosUrl }) {
 const BASE_COLS = [
   { key: 'email', label: 'E-mail', render: (r) => `<a href="mailto:${esc(r.email)}">${esc(r.email)}</a>` },
   { key: 'nick', label: 'Nick', render: (r) => r.nick ? esc(r.nick) : '<span class="muted">—</span>' },
+  { key: 'support_czk', label: 'Celkem podpořil (Kč)', render: (r) => r.support_czk != null && r.support_czk !== '' ? `<span style="white-space:nowrap" title="${r.support_currency === 'EUR' ? 'Eurový účet — přepočteno kurzem ČNB' : 'Celkem od počátku ze starého portálu'}"><b>${Number(r.support_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 })}</b>${r.support_currency === 'EUR' ? ' <span class="muted small">€→Kč</span>' : ''}</span>` : '<span class="muted small">—</span>' },
   { key: 'status', label: 'Stav', render: (r) => `<span class="badge ${esc(r.status)}">${r.status === 'active' ? 'aktivní' : r.status === 'blocked' ? 'blokován' : 'čeká na aktivaci'}</span>` },
   { key: 'user_type', label: 'Typ uživatele', render: (r) => typeBadge(r.user_type) },
   { key: 'last_login_at', label: 'Poslední přihlášení', render: (r) => `<span class="muted small">${fmtDT(r.last_login_at)}</span>` },
@@ -1524,7 +1525,7 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
   { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
+const DEFAULT_COLS = ['email', 'nick', 'support_czk', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
 // protože je to normální top-level navigace a cookie session se nastaví jako first-party.
@@ -1555,6 +1556,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
     <form method="post" action="/admin/supporters/columns" class="colpick-pop">
+      <input type="hidden" name="cols" value="_seen_czk">
       <input type="hidden" name="back" value="${esc('/admin/supporters?q=' + encodeURIComponent(qstr) + '&status=' + encodeURIComponent(status))}">
       <div class="colpick-grid">
         <div><div class="colpick-h">Základní</div>

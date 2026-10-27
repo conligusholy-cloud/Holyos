@@ -1713,7 +1713,13 @@ app.get('/admin', requireAdmin, wrap(async (req, res) => {
 }));
 // Volba sloupců seznamu (cookie, 1 rok). Klíče údajů z importu se načítají z DB (cache 5 min).
 const COLS_COOKIE = 'bs2_cols';
-function readCols(req) { try { const a = JSON.parse(req.cookies[COLS_COOKIE] || 'null'); return Array.isArray(a) && a.length ? a.filter(x => typeof x === 'string').slice(0, 60) : V.DEFAULT_COLS; } catch (e) { return V.DEFAULT_COLS; } }
+function readCols(req) {
+  let cols;
+  try { const a = JSON.parse(req.cookies[COLS_COOKIE] || 'null'); cols = Array.isArray(a) && a.length ? a.filter(x => typeof x === 'string').slice(0, 60) : V.DEFAULT_COLS; } catch (e) { cols = V.DEFAULT_COLS; }
+  // nový sloupec „Celkem podpořil (Kč)" ukázat i těm, kdo už mají uložený vlastní výběr (značka _seen_czk = už o něm rozhodli)
+  if (!cols.includes('_seen_czk') && !cols.includes('support_czk')) cols = cols.concat('support_czk');
+  return cols;
+}
 let extraKeysCache = { at: 0, keys: [] };
 async function extraKeys() {
   if (Date.now() - extraKeysCache.at < 5 * 60e3) return extraKeysCache.keys;
@@ -1749,7 +1755,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
