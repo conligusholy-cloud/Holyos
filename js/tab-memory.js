@@ -53,9 +53,8 @@
   const isActive = (el) => /(^|\s)(active|selected)(\s|$)/.test(el.className || '') || el.getAttribute('aria-selected') === 'true' || /btn-primary/.test(el.className || '');
 
   let replaying = false;
-  document.addEventListener('click', (e) => {
-    if (replaying || !e.isTrusted) return;
-    const el = e.target.closest && e.target.closest(TAB_SEL);
+  let ready = false; // dokud se neobnoví uložený stav, nic nezapisujeme (výchozí záložky stránky by ho přepsaly)
+  function record(el) {
     if (!el || el.closest(MODAL_SEL)) return;
     if (el.tagName === 'A' && el.getAttribute('href') && !/^#|^javascript/.test(el.getAttribute('href'))) return; // skutečná navigace
     if (el.matches('input, select, textarea, label')) return;
@@ -66,7 +65,26 @@
     if (i >= 0) steps.splice(i); // přepnutí v téže skupině → zahodit i podzáložky za ní
     steps.push(entry);
     write(steps);
+  }
+  // 1) kliknutí uživatele na záložku
+  document.addEventListener('click', (e) => {
+    if (replaying || !e.isTrusted) return;
+    const el = e.target.closest && e.target.closest(TAB_SEL);
+    if (el) record(el);
   }, true);
+  // 2) záložka se aktivovala jinak (dlaždice, odkaz, kód stránky) → zapsat taky
+  try {
+    new MutationObserver((muts) => {
+      if (replaying || !ready) return;
+      for (const m of muts) {
+        const el = m.target;
+        if (!(el instanceof Element) || !el.matches(TAB_SEL) || !isActive(el)) continue;
+        const was = m.oldValue || '';
+        if (/(^|\s)(active|selected|btn-primary)(\s|$)/.test(was)) continue; // byla aktivní už předtím
+        record(el);
+      }
+    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ['class', 'aria-selected'], attributeOldValue: true });
+  } catch (e) { /* starý prohlížeč — jen kliky */ }
 
   async function replay() {
     const steps = read();
@@ -81,8 +99,12 @@
         if (!isActive(el)) { el.click(); await new Promise(r => setTimeout(r, 350)); }
       }
     } catch (e) { /* nic — výchozí záložka */ }
-    finally { replaying = false; }
+    finally { replaying = false; setTimeout(() => { ready = true; }, 400); }
   }
-  if (document.readyState === 'complete') setTimeout(replay, 300);
-  else window.addEventListener('load', () => setTimeout(replay, 300));
+  // Obnovit co nejdřív (po vykreslení DOM), ať neproblikne výchozí záložka; prvky případně počká až 6 s
+  let started = false;
+  const start = () => { if (started) return; started = true; setTimeout(() => { replay().then(() => { if (!read().length) ready = true; }); }, 50); };
+  if (document.readyState !== 'loading') start();
+  else document.addEventListener('DOMContentLoaded', start);
+  window.HolyTabMemory = { read, record };
 })();

@@ -1537,7 +1537,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet ↗</a></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
