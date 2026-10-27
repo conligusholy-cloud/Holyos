@@ -318,8 +318,11 @@
         }
         dp.remove();
       });
-      dp.addEventListener('blur', () => setTimeout(() => dp.remove(), 150));
-      try { dp.showPicker(); } catch (e) { dp.style.opacity = '1'; dp.style.pointerEvents = 'auto'; dp.focus(); }
+      // Neodstraňovat při blur — prohlížeč by kalendář hned zavřel; úklid při změně / dalším otevření / po minutě
+      setTimeout(() => { if (dp.isConnected) dp.remove(); }, 60000);
+      dp.style.opacity = '0.01'; dp.style.height = '24px';
+      try { dp.focus({ preventScroll: true }); } catch (e) { /* nic */ }
+      try { dp.showPicker(); } catch (e) { dp.style.opacity = '1'; dp.style.pointerEvents = 'auto'; try { dp.click(); } catch (e2) { /* nic */ } }
     }
 
     function openEditor(anchor, key) {
