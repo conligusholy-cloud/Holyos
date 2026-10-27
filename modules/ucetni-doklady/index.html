@@ -63,6 +63,7 @@
     .status-badge.approved,
     .status-badge.ready_to_pay { background: #22c55e22; color: #22c55e; }
     .status-badge.payment_queued { background: #a78bfa22; color: #a78bfa; }
+    .status-badge.qr_pending { background: #06b6d422; color: #22d3ee; }
     .status-badge.paid,
     .status-badge.archived { background: #22c55e22; color: #86efac; }
     .status-badge.partially_paid { background: #eab30822; color: #eab308; }
@@ -860,6 +861,7 @@
       approved: 'Schváleno',
       ready_to_pay: 'K platbě',
       payment_queued: 'V ABO frontě',
+      qr_pending: 'Platí se přes QR',
       paid: 'Zaplaceno',
       partially_paid: 'Částečně zaplaceno',
       overdue: 'Po splatnosti',
@@ -1033,6 +1035,12 @@
               ? '<a href="/api/accounting/invoices/' + inv.id + '/source-pdf" target="_blank" class="btn btn-secondary btn-sm" title="Stáhnout / zobrazit originální PDF" style="margin-right:4px;text-decoration:none;">📄</a>'
               : '') +
             '<button class="btn btn-secondary btn-sm" onclick="openDetail(' + inv.id + ')">Detail</button>' +
+            (inv.direction === 'ap' && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status)
+              ? ' <button class="btn btn-secondary btn-sm" onclick="sendPayRequest(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Poslat Tomášovi / Janovi e-mail s QR platbou" style="margin-left:4px;">✉️ QR</button>'
+              : '') +
+            (inv.status === 'qr_pending' && window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
+              ? ' <button class="btn btn-secondary btn-sm" onclick="qrCancel(' + inv.id + ')" title="Admin: zrušit stav „platí se přes QR" (nakonec se nezaplatilo)" style="margin-left:4px;">↩ QR</button>'
+              : '') +
             ((window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
               && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status))
               ? ' <button class="btn btn-secondary btn-sm" onclick="markInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: ručně označit jako zaplaceno (mimo výpisy)" style="margin-left:4px;color:#22c55e;">✓</button>'
@@ -1234,7 +1242,7 @@
       const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
       const on = tags.includes(tag);
       const canEdit = !!(window.currentUser && window.currentUser.canManualMatch);
-      const locked = !canEdit || ['paid', 'cancelled', 'payment_queued'].includes(inv.status);
+      const locked = !canEdit || ['paid', 'cancelled', 'payment_queued', 'qr_pending'].includes(inv.status);
       const at = field === 'order' ? inv.manual_order_at : inv.manual_receipt_at;
       const by = field === 'order' ? inv.manual_order_by : inv.manual_receipt_by;
       const when = at ? fmtDateTime(at) : '';
@@ -1903,6 +1911,37 @@
       const r = await api('DELETE', '/api/accounting/invoices/' + id);
       if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
       closeModal(); loadInvoices(); loadSummary();
+    };
+
+    // ✉️ Žádost o zaplacení: e-mail Tomášovi / Janovi s odkazem na QR platbu dokladu
+    window.sendPayRequest = function(id, num) {
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
+      ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:420px;max-width:94vw;padding:20px 22px;">'
+        + '<h3 style="margin:0 0 6px;">✉️ Poslat k zaplacení (QR)</h3>'
+        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">Doklad ' + escapeHtml(num) + ' — v e-mailu bude odkaz, kde si vygeneruješ QR platbu. Po vygenerování QR se doklad označí „platí se přes QR" a přestane se nabízet k platbě; zaplaceno se potvrdí až nalezením ve výpisu.</div>'
+        + '<label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input type="checkbox" class="pr-t" checked> Tomáš Holý</label>'
+        + '<label style="display:flex;gap:8px;align-items:center;margin-bottom:14px;"><input type="checkbox" class="pr-j"> Jan Holý</label>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary pr-c">Zrušit</button><button class="btn btn-primary pr-s">✉️ Odeslat</button></div>'
+        + '<div class="pr-e" style="margin-top:8px;font-size:.88em;"></div></div>';
+      document.body.appendChild(ov);
+      const q = (c) => ov.querySelector(c);
+      q('.pr-c').onclick = () => ov.remove();
+      q('.pr-s').onclick = async () => {
+        const recipients = [q('.pr-t').checked ? 'tomas' : null, q('.pr-j').checked ? 'jan' : null].filter(Boolean);
+        if (!recipients.length) { q('.pr-e').style.color = '#ef4444'; q('.pr-e').textContent = 'Vyber příjemce.'; return; }
+        q('.pr-s').disabled = true;
+        const r = await api('POST', '/api/accounting/invoices/' + id + '/send-pay-request', { recipients });
+        if (r.status !== 200) { q('.pr-e').style.color = '#ef4444'; q('.pr-e').textContent = r.data?.error || ('Chyba ' + r.status); q('.pr-s').disabled = false; return; }
+        q('.pr-e').style.color = '#22c55e'; q('.pr-e').textContent = '✓ Odesláno: ' + (r.data.sent || []).join(', ');
+        setTimeout(() => ov.remove(), 1400);
+      };
+    };
+    window.qrCancel = async function(id) {
+      if (!confirm('Zrušit stav „platí se přes QR"?\n\nDoklad se vrátí do původního stavu a bude se zase nabízet k platbě. Použij jen když se podle QR nakonec nezaplatilo.')) return;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/qr-cancel');
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadInvoices(); loadSummary();
     };
 
     // ✓ Ruční označení jako zaplaceno (admin) — mimo vypořádání z výpisů

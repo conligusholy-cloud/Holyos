@@ -665,6 +665,12 @@ app.use('/api/public/inquiry', purchaseInquiriesRoutes.publicRouter);
 app.get('/poptavka/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'inquiry.html'));
 });
+// Zaplacení přijatého dokladu přes QR (odkaz z e-mailu pro Tomáše/Jana) — bez přihlášení, jen podepsaný token
+app.use('/api/public/invoice-qr', require('./routes/invoice-qr-public.routes').router);
+app.get('/platba-qr/:token', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'public', 'invoice-qr.html'));
+});
 // Potvrzení nákupní objednávky dodavatelem (ceny + termíny) — bez přihlášení, jen token
 app.use('/api/public/po', purchaseInquiriesRoutes.poPublicRouter);
 app.get('/potvrzeni-objednavky/:token', (req, res) => {

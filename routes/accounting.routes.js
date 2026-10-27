@@ -1017,6 +1017,7 @@ router.post('/invoices/:id/mark-ready-to-pay', async (req, res, next) => {
     if (invoice.direction !== 'ap') {
       return res.status(400).json({ error: 'Jen pro přijaté faktury' });
     }
+    if (invoice.status === 'qr_pending') return res.status(400).json({ error: 'Doklad se už platí přes QR — počkej na nalezení ve výpisu' });
 
     // Faktury za služby (energie, telco, pojistky, nájem) nemají objednávku
     // ani příjemku — 3-way match guard se na ně neaplikuje. Označí se přes
@@ -1184,7 +1185,7 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
     const tag = field === 'order' ? 'manual_order' : 'manual_receipt';
     const invoice = await prisma.invoice.findUnique({ where: { id }, select: { id: true, tags: true, status: true, direction: true, invoice_number: true, order_id: true, warehouse_document_id: true } });
     if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
-    if (['paid', 'cancelled', 'payment_queued'].includes(invoice.status)) return res.status(400).json({ error: 'U faktury v tomto stavu už nelze měnit' });
+    if (['paid', 'cancelled', 'payment_queued', 'qr_pending'].includes(invoice.status)) return res.status(400).json({ error: 'U faktury v tomto stavu už nelze měnit' });
     const tags = (invoice.tags || []).filter(t => t !== tag);
     if (checked) tags.push(tag);
     const hasOrder = !!invoice.order_id || tags.includes('manual_order');
@@ -1203,6 +1204,68 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
       user: req.user,
     }).catch(() => {});
     res.json({ ...updated, has_order: hasOrder, has_receipt: hasReceipt });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/send-pay-request — pošle Tomášovi / Janovi Holému e-mail s odkazem na QR platbu dokladu
+// Body: { recipients: ['tomas'|'jan', …] }
+const PAY_REQUEST_PEOPLE = { tomas: { email: 'tomas.holy@bestseries.cz', name: 'Tomáš Holý' }, jan: { email: 'jan.holy@bestseries.cz', name: 'Jan Holý' } };
+router.post('/invoices/:id/send-pay-request', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const keys = (Array.isArray(req.body?.recipients) ? req.body.recipients : []).filter((k) => PAY_REQUEST_PEOPLE[k]);
+    if (!keys.length) return res.status(400).json({ error: 'Vyber příjemce (Tomáš / Jan).' });
+    const inv = await prisma.invoice.findUnique({ where: { id }, include: { company: { select: { id: true, name: true } } } });
+    if (!inv) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (inv.direction !== 'ap') return res.status(400).json({ error: 'Jen pro přijaté doklady' });
+    const qrSvc = require('../services/accounting/invoice-qr');
+    if (qrSvc.BLOCKED[inv.status]) return res.status(400).json({ error: qrSvc.BLOCKED[inv.status] });
+    const remaining = Math.round((Number(inv.total) - Number(inv.paid_amount || 0)) * 100) / 100;
+    if (remaining <= 0.009) return res.status(400).json({ error: 'Na dokladu není co doplácet' });
+    if (!inv.partner_bank_account && !inv.partner_iban) return res.status(400).json({ error: 'Doklad nemá účet příjemce' });
+    const v = await verifyAccount({ companyId: inv.company_id, partnerBankAccount: inv.partner_bank_account, partnerIban: inv.partner_iban });
+    if (v.needs_physical) return res.status(400).json({ error: 'Bankovní účet příjemce není ověřený — nejdřív ho ověř („🔐 Fyzicky ověřit účet" v detailu dokladu).' });
+
+    const { getAppUrl, getShareBaseUrl } = require('../services/share-url');
+    const link = (getAppUrl() || getShareBaseUrl()) + '/platba-qr/' + qrSvc.makeToken(inv.id);
+    const fmt = (n) => Number(n).toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const due = inv.date_due ? new Date(inv.date_due).toLocaleDateString('cs-CZ') : '—';
+    const body = `Doklad ke kontrole a úhradě:\n\n` +
+      `Dodavatel: ${inv.company?.name || '—'}\n` +
+      `Doklad: ${inv.external_number || inv.invoice_number} (${inv.invoice_number})\n` +
+      `K úhradě: ${fmt(remaining)} ${inv.currency}\n` +
+      `Splatnost: ${due}\n` +
+      `Variabilní symbol: ${inv.variable_symbol || '—'}\n\n` +
+      `Odkazem níže si vygeneruješ QR kód pro platbu v bankovní aplikaci. Po vygenerování QR kódu se doklad v HolyOS označí jako „platí se přes QR" ` +
+      `a přestane se nabízet k platbě; jako zaplacený se potvrdí až po nalezení platby ve výpisu.\n\nOdeslal: ${userLabel(req.user)}`;
+    const from = process.env.PURCHASE_MAIL_FROM || process.env.GRAPH_DEFAULT_FROM || process.env.INVOICE_IMAP_USER || undefined;
+    const sent = [], failed = [];
+    for (const k of keys) {
+      const p = PAY_REQUEST_PEOPLE[k];
+      const r = await sendMail({ from, fromName: 'HolyOS', to: p.email, subject: `Zaplatit: ${inv.company?.name || ''} — ${fmt(remaining)} ${inv.currency} (${inv.external_number || inv.invoice_number})`, preheader: 'QR platba dokladu', body, link, linkLabel: 'Vygenerovat QR platbu' });
+      if (r && r.sent) sent.push(p.email); else failed.push(p.email + ': ' + ((r && (r.error || r.skipped)) || 'neodesláno'));
+    }
+    logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: `${inv.invoice_number}: odeslána žádost o zaplacení (QR) → ${sent.join(', ') || '—'}`, changes: { pay_request: { by: userLabel(req.user), sent, failed } }, user: req.user }).catch(() => {});
+    if (!sent.length) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + failed.join('; ') });
+    res.json({ sent, failed });
+  } catch (err) { next(err); }
+});
+
+// POST /api/accounting/invoices/:id/qr-cancel — zrušit stav „platí se přes QR" (QR se nakonec nezaplatilo) → vrátí původní stav
+router.post('/invoices/:id/qr-cancel', async (req, res, next) => {
+  try {
+    if (!(req.user && (req.user.role === 'admin' || req.user.isSuperAdmin))) return res.status(403).json({ error: 'Zrušit stav QR smí jen admin' });
+    const id = parseInt(req.params.id, 10);
+    const inv = await prisma.invoice.findUnique({ where: { id }, select: { id: true, status: true, tags: true, invoice_number: true } });
+    if (!inv) return res.status(404).json({ error: 'Doklad nenalezen' });
+    if (inv.status !== 'qr_pending') return res.status(400).json({ error: 'Doklad není ve stavu „platí se přes QR"' });
+    const prevTag = (inv.tags || []).find((t) => String(t).startsWith('qr_prev:'));
+    let prev = prevTag ? String(prevTag).slice(8) : 'approved';
+    if (!prev || ['qr_pending', 'paid', 'payment_queued'].includes(prev)) prev = 'approved';
+    const tags = (inv.tags || []).filter((t) => !String(t).startsWith('qr_prev:'));
+    await prisma.invoice.update({ where: { id }, data: { status: prev, tags } });
+    logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: `${inv.invoice_number}: zrušeno „platí se přes QR" → ${prev}`, user: req.user }).catch(() => {});
+    res.json({ id, status: prev });
   } catch (err) { next(err); }
 });
 
@@ -1984,7 +2047,7 @@ router.delete('/standing-orders/:id', async (req, res, next) => {
 // query: to=YYYY-MM-DD (volitelně jen do data)
 router.get('/payment-plan', async (req, res, next) => {
   try {
-    const where = { direction: 'ap', status: { notIn: ['paid', 'cancelled', 'written_off', 'archived'] } };
+    const where = { direction: 'ap', status: { notIn: ['paid', 'cancelled', 'written_off', 'archived', 'qr_pending'] } }; // qr_pending = už se platí přes QR → nenabízet
     if (req.query.to) where.date_due = { lte: new Date(String(req.query.to)) };
     const invoices = await prisma.invoice.findMany({
       where,
@@ -2116,11 +2179,11 @@ router.post('/payment-batches', async (req, res, next) => {
       return res.status(400).json({ error: 'Některé faktury neexistují' });
     }
     const wrongStatus = from_plan
-      ? invoices.filter(i => ['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(i.status))
+      ? invoices.filter(i => ['paid', 'cancelled', 'written_off', 'archived', 'payment_queued', 'qr_pending'].includes(i.status))
       : invoices.filter(i => i.status !== 'ready_to_pay');
     if (wrongStatus.length > 0) {
       return res.status(400).json({
-        error: from_plan ? 'Některé doklady jsou už zaplacené, zrušené nebo v jiném příkazu' : 'Některé faktury nejsou ve stavu "K platbě"',
+        error: from_plan ? 'Některé doklady jsou už zaplacené, zrušené, v jiném příkazu nebo se platí přes QR' : 'Některé faktury nejsou ve stavu "K platbě"',
         invalid: wrongStatus.map(i => ({ id: i.id, invoice_number: i.invoice_number, status: i.status })),
       });
     }
