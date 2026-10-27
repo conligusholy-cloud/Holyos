@@ -10,6 +10,7 @@
   <!-- SheetJS pro parsovani .xlsx v zalozce Sestava zbozi FY -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="/js/image-lightbox.js"></script>
+  <script src="/js/column-filters.js?v=4"></script>
   <style>
     /* === Layout === */
     .detail-header {
@@ -3129,22 +3130,27 @@
         ? '<div style="padding:10px 14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.35);border-radius:8px;margin-bottom:12px;font-size:12px;">⚠️ <b style="color:#ef4444;">' + missingCount + ' polotovarů</b> v souhrnu chybí pracovní postup, proto je nelze rozpadnout na nakupované díly. Zobrazují se jako jedna položka.</div>'
         : '';
       let html = toolbar + '<h3 style="margin-bottom:8px;">Celková spotřeba materiálu na 1 výrobek <span style="font-size:12px;font-weight:400;color:var(--text2);">(rekurzivní rozpad včetně polotovarů)</span></h3>' + missingNote;
-      html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">' +
+      html += '<table id="mat-summary-table" style="width:100%;border-collapse:collapse;font-size:13px;">' +
         '<thead><tr style="border-bottom:2px solid var(--border);text-align:left;">' +
         '<th style="padding:8px;width:60px;" title="ID materiálu (Material.id) — shoduje se se sloupcem ID v Nákup a sklad → Zboží">ID</th>' +
         '<th style="padding:8px;">Materiál</th><th style="padding:8px;">Kód</th>' +
         '<th style="padding:8px;">Typ</th>' +
         '<th style="padding:8px;text-align:right;">Množství</th><th style="padding:8px;">Jednotka</th>' +
         '<th style="padding:8px;">Sklad</th><th style="padding:8px;">Operace</th>' +
-        '</tr></thead><tbody>';
+        '</tr></thead><tbody></tbody></table>';
 
-      matList.forEach(m => {
+      content.innerHTML = html;
+      matSummaryTable.setRows(matList);
+    }
+
+    // Řádek plochého souhrnu materiálu
+    function matSummaryRowHtml(m) {
         const mat = m.material || {};
         const stock = mat.current_stock != null ? parseFloat(mat.current_stock) : '—';
         const stockColor = (typeof stock === 'number' && stock < m.totalQty) ? 'color:#ef4444;font-weight:600;' : '';
         const missingBadge = m.isMissingProcess ? ' <span title="Tento polotovar nemá v HolyOSu zadaný pracovní postup, proto se v plochém souhrnu objeví jako jedna položka místo rozpadu na nakupované díly." style="display:inline-block;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;cursor:help;">⚠ chybí postup</span>' : '';
         const typeLabel = wfTypeLabel(mat.type);
-        html += '<tr style="border-bottom:1px solid var(--border);' + (m.isMissingProcess ? 'background:rgba(239,68,68,0.05);' : '') + '">' +
+        return '<tr style="border-bottom:1px solid var(--border);' + (m.isMissingProcess ? 'background:rgba(239,68,68,0.05);' : '') + '">' +
           '<td style="padding:8px;font-family:monospace;color:var(--text2);font-size:11px;" title="Material.id">' + (mat.id || '') + '</td>' +
           '<td style="padding:8px;">' + esc(mat.name || '?') + missingBadge + '</td>' +
           '<td style="padding:8px;color:var(--text2);">' + esc(mat.code || '') + '</td>' +
@@ -3154,11 +3160,25 @@
           '<td style="padding:8px;' + stockColor + '">' + stock + '</td>' +
           '<td style="padding:8px;color:var(--text2);font-size:11px;">' + m.operations.join(', ') + '</td>' +
           '</tr>';
-      });
-
-      html += '</tbody></table>';
-      content.innerHTML = html;
     }
+    // Standardní sloupcové filtry + řazení (js/column-filters.js) — plochý souhrn materiálu
+    const matSummaryTable = ColFilters.table({
+      table: '#mat-summary-table',
+      columns: [
+        { key: 'id', label: 'ID', type: 'num', ph: '', get: (m) => (m.material && m.material.id) || null },
+        { key: 'name', label: 'Materiál', type: 'text', ph: 'Materiál…', get: (m) => (m.material && m.material.name) || '' },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (m) => (m.material && m.material.code) || '' },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (m) => wfTypeLabel((m.material || {}).type) },
+        { key: 'qty', label: 'Množství', type: 'num', ph: '', get: (m) => m.totalQty },
+        { key: 'unit', label: 'Jednotka', type: 'text', ph: 'Jedn.…', get: (m) => m.unit },
+        { key: 'stock', label: 'Sklad', type: 'num', ph: '', get: (m) => (m.material && m.material.current_stock != null) ? parseFloat(m.material.current_stock) : null },
+        { key: 'ops', label: 'Operace', type: 'text', ph: 'Operace…', enum: false, get: (m) => (m.operations || []).join(', ') },
+      ],
+      renderRow: (m) => matSummaryRowHtml(m),
+      noun: 'materiálů',
+      emptyText: 'Žádné materiály v operacích.',
+      limit: 2000,
+    });
 
     // =========================================================================
     // HISTORIE ZMĚN
@@ -4856,7 +4876,7 @@
         } else {
           // Plocha tabulka
           html += '<div id="fy-view-container" style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;background:var(--surface);">';
-          html += '<table class="data-table fy-table" style="width:100%;font-size:12px;border-collapse:collapse;">';
+          html += '<table class="data-table fy-table" id="fy-flat-table" style="width:100%;font-size:12px;border-collapse:collapse;">';
           html += '<thead><tr style="background:var(--surface2);">';
           html += '<th style="padding:8px 10px;text-align:left;width:60px;">Úroveň</th>';
           html += '<th style="padding:8px 10px;text-align:left;width:80px;">ID</th>';
@@ -4867,15 +4887,14 @@
           html += '<th style="padding:8px 10px;text-align:center;width:80px;" title="Je tato položka v pracovním postupu (přímo nebo přes polotovar)?">V postupu</th>';
           html += '<th style="padding:8px 10px;text-align:left;">Použito v operacích</th>';
           html += '<th style="padding:8px 10px;text-align:left;width:90px;">Definováno</th>';
-          html += '</tr></thead><tbody id="fy-tbody">';
-          html += fyRenderRows(items, wfQtyMap, _fyOnlyMissing);
-          html += '</tbody></table>';
+          html += '</tr></thead><tbody id="fy-tbody"></tbody></table>';
           html += '</div>';
         }
       }
 
       html += '</div>';
       content.innerHTML = html;
+      if (_fyViewMode === 'table' && document.getElementById('fy-flat-table')) fyApplyFilter();
     }
 
     // Parse FY level string (napr. "1. 1", "1.10", "1.76.70.20.1.1") na pole cisel
@@ -5025,73 +5044,88 @@
       return diff <= tol;
     }
 
-    function fyRenderRows(items, wfQtyMap, onlyMissing) {
-      if (!items || items.length === 0) {
-        return '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text2);">Žádné položky</td></tr>';
-      }
-      const qtyMap = wfQtyMap || new Map();
-      let out = '';
-      let visible = 0;
-      for (const it of items) {
-        const isLevel1 = String(it.level || '').replace(/\s+/g,'').trim() === '1';
-        // Lookup: factorify_item_id == Material.id, fallback first-token code
-        const wfEntry = qtyMap && typeof qtyMap.lookup === 'function' ? qtyMap.lookup(it) : null;
-        const codeMatch = isLevel1 ? true : !!wfEntry;
-        // Mnozstvi: FY hlasi quantity vzhledem k 1 ks rodicovskeho polotovaru.
-        // Pro top-level (uroven 1.X primo pod vyrobkem) se to porovnava s wfEntry.qty.
-        // Pro hlubsi urovne by to bylo komplikovanejsi (parent-relative); zatim porovname
-        // jen kdyz je jednoznacny case (kod sedi a obe maji qty).
-        const fyQty = it.quantity != null ? Number(it.quantity) : null;
-        const wfQty = wfEntry ? wfEntry.qty : null;
-        let qtyMatch = true;
-        let qtyDiffNote = '';
-        if (codeMatch && !isLevel1 && wfEntry && fyQty != null) {
-          qtyMatch = fyQtyMatch(fyQty, wfQty);
-          if (!qtyMatch) {
-            qtyDiffNote = 'FY: ' + Number(fyQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
-              + ' ' + (it.unit || '')
-              + ' / Postup: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
-              + ' ' + (wfEntry.unit || '')
-              + ' (rozdíl ' + (fyQty > wfQty ? '+' : '') + Number(fyQty - wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ')';
-          }
+    // Model jednoho řádku ploché FY tabulky (stav vůči pracovnímu postupu)
+    function fyRowModel(it, qtyMap) {
+      const isLevel1 = String(it.level || '').replace(/\s+/g,'').trim() === '1';
+      // Lookup: factorify_item_id == Material.id, fallback first-token code
+      const wfEntry = qtyMap && typeof qtyMap.lookup === 'function' ? qtyMap.lookup(it) : null;
+      const codeMatch = isLevel1 ? true : !!wfEntry;
+      // Mnozstvi: FY hlasi quantity vzhledem k 1 ks rodicovskeho polotovaru.
+      // Pro top-level (uroven 1.X primo pod vyrobkem) se to porovnava s wfEntry.qty.
+      // Pro hlubsi urovne by to bylo komplikovanejsi (parent-relative); zatim porovname
+      // jen kdyz je jednoznacny case (kod sedi a obe maji qty).
+      const fyQty = it.quantity != null ? Number(it.quantity) : null;
+      const wfQty = wfEntry ? wfEntry.qty : null;
+      let qtyMatch = true;
+      let qtyDiffNote = '';
+      if (codeMatch && !isLevel1 && wfEntry && fyQty != null) {
+        qtyMatch = fyQtyMatch(fyQty, wfQty);
+        if (!qtyMatch) {
+          qtyDiffNote = 'FY: ' + Number(fyQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+            + ' ' + (it.unit || '')
+            + ' / Postup: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 })
+            + ' ' + (wfEntry.unit || '')
+            + ' (rozdíl ' + (fyQty > wfQty ? '+' : '') + Number(fyQty - wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ')';
         }
-        const missing = !codeMatch;
-        const mismatch = codeMatch && !qtyMatch && !isLevel1;
-
-        if (onlyMissing && !missing && !mismatch) continue;
-        visible++;
-
-        const typeLabel = wfTypeLabel(it.item_type);
-        const typeColor = typeLabel === 'Výrobek' ? '#3b82f6' : (typeLabel === 'Polotovar' ? '#a855f7' : (typeLabel === 'Materiál' ? '#10b981' : 'var(--text2)'));
-        const qtyDisplay = it.quantity != null ? Number(it.quantity).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) : '';
-        let rowStyle = 'border-top:1px solid var(--border);';
-        if (missing) rowStyle += 'background:rgba(239,68,68,0.08);box-shadow:inset 3px 0 0 #ef4444;';
-        else if (mismatch) rowStyle += 'background:rgba(234,179,8,0.08);box-shadow:inset 3px 0 0 #eab308;';
-        out += '<tr style="' + rowStyle + '">';
-        out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + esc(it.level || '') + '</td>';
-        out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + (it.factorify_item_id || '') + '</td>';
-        out += '<td style="padding:6px 10px;">' + esc(it.name) + '</td>';
-        out += '<td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;' + (mismatch ? 'color:#eab308;font-weight:600;' : '') + '">' + qtyDisplay + '</td>';
-        out += '<td style="padding:6px 10px;color:var(--text2);">' + esc(it.unit || '') + '</td>';
-        out += '<td style="padding:6px 10px;color:' + typeColor + ';font-weight:600;">' + esc(typeLabel) + '</td>';
-        if (isLevel1) {
-          out += '<td style="padding:6px 10px;text-align:center;color:var(--text2);font-size:11px;" title="Toto je samotný výrobek">—</td>';
-        } else if (mismatch) {
-          out += '<td style="padding:6px 10px;text-align:center;color:#eab308;font-weight:700;cursor:help;" title="Kód ' + esc(code || '') + ' je v postupu, ale s jiným množstvím. ' + esc(qtyDiffNote) + '">⚠️</td>';
-        } else if (codeMatch) {
-          out += '<td style="padding:6px 10px;text-align:center;color:#10b981;font-weight:700;" title="Kód ' + esc(code || '') + ' je v pracovním postupu' + (wfEntry ? ' (množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') + ')' : '') + '">✅</td>';
-        } else {
-          out += '<td style="padding:6px 10px;text-align:center;color:#ef4444;font-weight:700;" title="Kód ' + esc(code || '') + ' není v pracovním postupu">❌</td>';
-        }
-        out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.used_in_operations || '') + '</td>';
-        out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.defined_in || '') + '</td>';
-        out += '</tr>';
       }
-      if (visible === 0) {
-        return '<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text2);">Filtru neodpovídá žádná položka</td></tr>';
+      const missing = !codeMatch;
+      const mismatch = codeMatch && !qtyMatch && !isLevel1;
+      const inWf = isLevel1 ? 'Výrobek' : (mismatch ? 'Jiné množství' : (codeMatch ? 'Ano' : 'Chybí'));
+      return { it, isLevel1, wfEntry, codeMatch, wfQty, qtyDiffNote, missing, mismatch, inWf, code: fyExtractCode(it.name) };
+    }
+
+    function fyRowHtml(r) {
+      const { it, isLevel1, wfEntry, codeMatch, wfQty, qtyDiffNote, missing, mismatch, code } = r;
+      const typeLabel = wfTypeLabel(it.item_type);
+      const typeColor = typeLabel === 'Výrobek' ? '#3b82f6' : (typeLabel === 'Polotovar' ? '#a855f7' : (typeLabel === 'Materiál' ? '#10b981' : 'var(--text2)'));
+      const qtyDisplay = it.quantity != null ? Number(it.quantity).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) : '';
+      let rowStyle = 'border-top:1px solid var(--border);';
+      if (missing) rowStyle += 'background:rgba(239,68,68,0.08);box-shadow:inset 3px 0 0 #ef4444;';
+      else if (mismatch) rowStyle += 'background:rgba(234,179,8,0.08);box-shadow:inset 3px 0 0 #eab308;';
+      let out = '<tr style="' + rowStyle + '">';
+      out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + esc(it.level || '') + '</td>';
+      out += '<td style="padding:6px 10px;color:var(--text2);font-family:monospace;">' + (it.factorify_item_id || '') + '</td>';
+      out += '<td style="padding:6px 10px;">' + esc(it.name) + '</td>';
+      out += '<td style="padding:6px 10px;text-align:right;font-variant-numeric:tabular-nums;' + (mismatch ? 'color:#eab308;font-weight:600;' : '') + '">' + qtyDisplay + '</td>';
+      out += '<td style="padding:6px 10px;color:var(--text2);">' + esc(it.unit || '') + '</td>';
+      out += '<td style="padding:6px 10px;color:' + typeColor + ';font-weight:600;">' + esc(typeLabel) + '</td>';
+      if (isLevel1) {
+        out += '<td style="padding:6px 10px;text-align:center;color:var(--text2);font-size:11px;" title="Toto je samotný výrobek">—</td>';
+      } else if (mismatch) {
+        out += '<td style="padding:6px 10px;text-align:center;color:#eab308;font-weight:700;cursor:help;" title="Kód ' + esc(code || '') + ' je v postupu, ale s jiným množstvím. ' + esc(qtyDiffNote) + '">⚠️</td>';
+      } else if (codeMatch) {
+        out += '<td style="padding:6px 10px;text-align:center;color:#10b981;font-weight:700;" title="Kód ' + esc(code || '') + ' je v pracovním postupu' + (wfEntry ? ' (množství: ' + Number(wfQty).toLocaleString('cs-CZ', { maximumFractionDigits: 4 }) + ' ' + (wfEntry.unit || '') + ')' : '') + '">✅</td>';
+      } else {
+        out += '<td style="padding:6px 10px;text-align:center;color:#ef4444;font-weight:700;" title="Kód ' + esc(code || '') + ' není v pracovním postupu">❌</td>';
       }
+      out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.used_in_operations || '') + '</td>';
+      out += '<td style="padding:6px 10px;color:var(--text2);font-size:11px;">' + esc(it.defined_in || '') + '</td>';
+      out += '</tr>';
       return out;
     }
+
+    // Řazení úrovně „1.2.10" číselně po segmentech
+    const fyLevelSortKey = (lvl) => fyParseLevel(lvl).map(n => String(n).padStart(5, '0')).join('.');
+
+    // Standardní sloupcové filtry + řazení (js/column-filters.js) — plochá tabulka FY
+    const fyFlatTable = ColFilters.table({
+      table: '#fy-flat-table',
+      columns: [
+        { key: 'level', label: 'Úroveň', type: 'text', ph: 'Úroveň…', enum: false, get: (r) => r.it.level || '', sortGet: (r) => fyLevelSortKey(r.it.level) },
+        { key: 'fid', label: 'ID', type: 'num', ph: '', get: (r) => r.it.factorify_item_id == null || r.it.factorify_item_id === '' ? null : Number(r.it.factorify_item_id) },
+        { key: 'name', label: 'Zboží', type: 'text', ph: 'Zboží…', get: (r) => r.it.name },
+        { key: 'qty', label: 'Množství', type: 'num', ph: '', get: (r) => r.it.quantity == null ? null : Number(r.it.quantity) },
+        { key: 'unit', label: 'Jed.', type: 'text', ph: 'Jed.…', get: (r) => r.it.unit || '' },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (r) => wfTypeLabel(r.it.item_type) },
+        { key: 'inwf', label: 'V postupu', type: 'text', ph: 'Stav…', get: (r) => r.inWf },
+        { key: 'ops', label: 'Použito v operacích', type: 'text', ph: 'Operace…', enum: false, get: (r) => r.it.used_in_operations || '' },
+        { key: 'def', label: 'Definováno', type: 'text', ph: 'Definováno…', get: (r) => r.it.defined_in || '' },
+      ],
+      renderRow: (r) => fyRowHtml(r),
+      noun: 'položek',
+      emptyText: 'Žádné položky.',
+      limit: 3000,
+    });
 
     function fyToggleOnlyMissing() {
       _fyOnlyMissing = !_fyOnlyMissing;
@@ -5119,8 +5153,9 @@
         // Vlastne lepsi: nahrad cely
         container.outerHTML = '<div id="fy-view-container">' + fyRenderTreeView(items, wfQtyMap, _fyOnlyMissing) + '</div>';
       } else {
-        const tbody = document.getElementById('fy-tbody');
-        if (tbody) tbody.innerHTML = fyRenderRows(items, wfQtyMap, _fyOnlyMissing);
+        // Plochá tabulka — horní hledání + „Jen problémové" zúží data, sloupcové filtry/řazení řeší ColFilters
+        const rows = items.map(it => fyRowModel(it, wfQtyMap)).filter(r => !_fyOnlyMissing || r.missing || r.mismatch);
+        fyFlatTable.setRows(rows);
       }
     }
 

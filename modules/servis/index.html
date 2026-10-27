@@ -12,6 +12,7 @@
   <!-- Leaflet pro mapu Kontrola servisního týmu -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="/js/column-filters.js?v=4"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .page-header {
@@ -656,7 +657,6 @@
               <option value="zamitnuto">Zamítnuto</option>
             </select>
           </div>
-          <button class="btn btn-secondary" id="sr-clear-filters" style="display:none;margin-left:10px;">✕ Zrušit filtry a řazení</button>
           <button class="btn btn-secondary" id="sr-settings-btn" title="Nastavení – kdo může řešit požadavky" style="margin-left:auto;">⚙️ Nastavení řešitelů</button>
         </div>
         <div style="overflow-x:auto">
@@ -739,7 +739,7 @@
           <button class="btn btn-secondary" id="ui-refresh">↻ Obnovit</button>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
-          <table class="data-table"><thead><tr><th>Kdy</th><th>Pobočka / stroj</th><th>Šablona</th><th>Kontroloval</th><th>Výsledek</th><th>Závad</th></tr></thead>
+          <table class="data-table" id="ui-table"><thead><tr><th>Kdy</th><th>Pobočka / stroj</th><th>Šablona</th><th>Kontroloval</th><th>Výsledek</th><th>Závad</th></tr></thead>
           <tbody id="ui-tbody"><tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
@@ -761,7 +761,7 @@
           <button class="btn btn-secondary" id="od-refresh">↻ Obnovit</button>
         </div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;">
-          <table class="data-table"><thead><tr><th>Kdy</th><th>Lokalita / stroj</th><th>Vodoměr (m³)</th><th>Elektroměr (kWh)</th><th title="Elektroměr / vodoměr">Koeficient (kWh/m³)</th><th>Fotky</th><th>Zadal</th><th></th></tr></thead>
+          <table class="data-table" id="od-table"><thead><tr><th>Kdy</th><th>Lokalita / stroj</th><th>Vodoměr (m³)</th><th>Elektroměr (kWh)</th><th title="Elektroměr / vodoměr">Koeficient (kWh/m³)</th><th>Fotky</th><th>Zadal</th><th></th></tr></thead>
           <tbody id="od-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr></tbody></table>
         </div>
       </div>
@@ -981,6 +981,7 @@
         if(s==='unknown') return ['❓ neznámý stav','#94a3b8'];
         return ['📤 odesláno','#22c55e']; // sent
       }
+      var _smsLogTable=null;
       window.infoLoadSmsLog = async function(){
         var box=el('info-sms-log'); if(!box) return;
         box.innerHTML='<span style="color:var(--text2);font-size:12px;">Načítám…</span>';
@@ -994,13 +995,25 @@
             +((d.undelivered||0)?(' · 🚫 nedoručeno <b style="color:#f59e0b;">'+d.undelivered+'</b>'):'')
             +((d.failed||0)?(' · ⚠️ chyba <b style="color:#ef4444;">'+d.failed+'</b>'):'')
             +'</div>';
-          var rows=items.map(function(r){
-            var lab=smsStatusLabel(r.status);
-            return '<tr><td style="padding:5px 8px;">'+esc(fmtDate(r.created_at))+'</td>'
-              +'<td style="padding:5px 8px;font-weight:600;">'+esc(r.to_number||'—')+'</td>'
-              +'<td style="padding:5px 8px;color:'+lab[1]+';">'+lab[0]+((r.status==='failed'&&r.error)?(' <span style="color:var(--text2);font-weight:400;">('+esc(r.error)+')</span>'):'')+'</td></tr>';
-          }).join('');
-          box.innerHTML=head+'<div style="max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:8px;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg);color:var(--text2);text-align:left;"><th style="padding:6px 8px;">Kdy</th><th style="padding:6px 8px;">Číslo</th><th style="padding:6px 8px;">Stav</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+          box.innerHTML=head+'<div style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 0 0;"><table id="info-smslog-table" style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--bg);color:var(--text2);text-align:left;"><th style="padding:6px 8px;">Kdy</th><th style="padding:6px 8px;">Číslo</th><th style="padding:6px 8px;">Stav</th></tr></thead><tbody></tbody></table></div>';
+          if(!_smsLogTable){
+            _smsLogTable=ColFilters.table({
+              table:'#info-smslog-table',
+              columns:[
+                { key:'kdy', label:'Kdy', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.created_at; } },
+                { key:'cislo', label:'Číslo', type:'text', ph:'Číslo…', get:function(r){ return r.to_number||''; } },
+                { key:'stav', label:'Stav', type:'text', ph:'Stav…', get:function(r){ return smsStatusLabel(r.status)[0].replace(/^\S+\s/,''); } },
+              ],
+              renderRow:function(r){
+                var lab=smsStatusLabel(r.status);
+                return '<tr><td style="padding:5px 8px;">'+esc(fmtDate(r.created_at))+'</td>'
+                  +'<td style="padding:5px 8px;font-weight:600;">'+esc(r.to_number||'—')+'</td>'
+                  +'<td style="padding:5px 8px;color:'+lab[1]+';">'+lab[0]+((r.status==='failed'&&r.error)?(' <span style="color:var(--text2);font-weight:400;">('+esc(r.error)+')</span>'):'')+'</td></tr>';
+              },
+              noun:'SMS', emptyText:'Zatím žádná SMS nebyla odeslána.', limit:500,
+            });
+          }
+          _smsLogTable.setRows(items);
         }catch(e){ box.innerHTML='<span style="color:#ef4444;font-size:12px;">Chyba: '+esc(e.message)+'</span>'; }
       };
       window.infoSave = async function(){
@@ -1392,63 +1405,44 @@
       window.infoKnClear = async function(){ if(!confirm('Smazat všechny nahrané podklady Infolinky?')) return; try{ await fetch('/api/compounder/ai-specialist-knowledge/clear',{ method:'POST', credentials:'include', headers:{'Content-Type':'application/json'}, body:JSON.stringify({scope:INFO_SCOPE}) }); infoKnLoad(); }catch(e){} };
 
       // ── Záznamy hovorů (jen linka infolinka) ──
-      // Sloupce tabulky. `text` vrací to, v čem filtr hledá — záměrně data,
+      // Standardní sloupcové filtry + řazení (js/column-filters.js). `get` vrací data,
       // ne vykreslené HTML buňky (ikonky a tlačítka by hledání jen rušily).
-      var INFO_CALL_COLS = [
-        { label:'Kdy', text:function(c){ return fmtDate(c.started_at); } },
-        { label:'Číslo', text:function(c){ return c.from_number||''; } },
-        { label:'Kredit', title:'Kredit přiřazený tomuto číslu — operátor ho vidí i při dalším hovoru',
-          text:function(c){ return c.credit ? (infoMoney(c.credit.amount,c.credit.currency)+' '+(c.credit.note||'')) : 'nepřiřazen'; } },
-        { label:'Kdo', text:function(c){ return c.caller_name||''; } },
-        { label:'Co chtěl', text:function(c){ return c.caller_intent||c.summary||''; } },
-        { label:'Servis', title:'Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?',
-          text:function(c){ return c.service_created ? 'ano požadavek' : (c.service_needed ? 'chybí' : 'ne'); } },
-        { label:'Místo', text:function(c){ return c.location||''; } },
-        { label:'SMS', text:function(c){
-            var log=Array.isArray(c.sms_log)?c.sms_log:[];
-            if(!log.length) return 'ne';
-            return log.map(function(a){ return ((a.status||'').toLowerCase()==='sent'?'ano odeslána ':'chyba ')+(a.to||''); }).join(' ');
-          } },
-        { label:'Přesměrováno', text:function(c){
-            var log=Array.isArray(c.transfer_log)?c.transfer_log:[];
-            if(!log.length) return c.handoff?'přepojováno':'ne';
-            return log.map(function(a){ return transferWho(a)+' '+(a.number||'')+' '+trStatusLabel(a.status)[0]; }).join(' ');
-          } },
-        { label:'Přepis Twilio', title:'Živý přepis z Twilia (AI ↔ zákazník), zdarma',
-          text:function(c){ return (Array.isArray(c.transcript)?c.transcript:[]).map(function(t){ return t.text||''; }).join(' '); } },
-        { label:'Kompletní přepis', title:'Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)',
-          text:function(c){ return c.full_transcript||''; } },
-        { label:'Nahrávka', text:function(c){ return c.audio_url?'ano':'ne'; } },
-        { label:'Délka', text:function(c){ return fmtDur(c.duration_sec); } },
-      ];
-
-      // Filtry sloupců: { index sloupce: hledaný text }. Prázdné pole = sloupec nefiltruje,
-      // takže po vymazání všech polí je zase vidět celý seznam.
-      var _infoFilters = {};
       var _infoCallCounts = {};
-
-      // Porovnáváme bez ohledu na velikost písmen a diakritiku ("simunek" najde "Šimůnek").
-      function infoNorm(s){
-        return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      function infoSmsText(c){
+        var log=Array.isArray(c.sms_log)?c.sms_log:[];
+        if(!log.length) return 'ne';
+        return log.map(function(a){ return ((a.status||'').toLowerCase()==='sent'?'odeslána ':'chyba ')+(a.to||''); }).join(' ');
       }
-      function infoCallMatches(c){
-        for (var i=0;i<INFO_CALL_COLS.length;i++){
-          var q=infoNorm(_infoFilters[i]||'').trim();
-          if(!q) continue;
-          if(infoNorm(INFO_CALL_COLS[i].text(c)).indexOf(q)<0) return false;
-        }
-        return true;
+      function infoSmsEnum(c){
+        var log=Array.isArray(c.sms_log)?c.sms_log:[];
+        if(!log.length) return 'Bez SMS';
+        return log.some(function(a){ return (a.status||'').toLowerCase()==='sent'; }) ? 'Odeslána' : 'Chyba';
       }
-      window.infoFilterCalls = function(inp){
-        _infoFilters[inp.getAttribute('data-col')] = inp.value;
-        infoApplyCallFilters();   // překresluje se jen <tbody>, kurzor zůstává v poli
-      };
-      window.infoClearCallFilters = function(){
-        _infoFilters = {};
-        var inputs=document.querySelectorAll('#info-calls-body .calls-filter');
-        Array.prototype.forEach.call(inputs, function(i){ i.value=''; });
-        infoApplyCallFilters();
-      };
+      function infoTrText(c){
+        var log=Array.isArray(c.transfer_log)?c.transfer_log:[];
+        if(!log.length) return c.handoff?'přepojováno':'ne';
+        return log.map(function(a){ return transferWho(a)+' '+(a.number||'')+' '+trStatusLabel(a.status)[0]; }).join(' ');
+      }
+      var INFO_CALL_COLS = [
+        { key:'kdy', label:'Kdy', type:'date', ph:'dd.mm.rrrr', get:function(c){ return c.started_at; } },
+        { key:'cislo', label:'Číslo', type:'text', ph:'Číslo…', get:function(c){ return c.from_number||''; } },
+        { key:'kredit', label:'Kredit', title:'Kredit přiřazený tomuto číslu — operátor ho vidí i při dalším hovoru', type:'num', ph:'Kč',
+          get:function(c){ return (c.credit && c.credit.amount!=null && c.credit.amount!=='') ? Number(c.credit.amount) : null; } },
+        { key:'kdo', label:'Kdo', type:'text', ph:'Kdo…', get:function(c){ return c.caller_name||''; } },
+        { key:'co', label:'Co chtěl', type:'text', ph:'Co chtěl…', get:function(c){ return c.caller_intent||c.summary||''; } },
+        { key:'servis', label:'Servis', title:'Hovor vypadá na servisní požadavek — vznikl do 5 min po hovoru?', type:'text', ph:'Servis…', enum:true,
+          get:function(c){ return c.service_created ? 'Požadavek vznikl' : (c.service_needed ? 'Chybí požadavek' : 'Ne'); } },
+        { key:'misto', label:'Místo', type:'text', ph:'Místo…', get:function(c){ return c.location||''; } },
+        { key:'sms', label:'SMS', type:'text', ph:'SMS…', get:infoSmsText, enumValue:infoSmsEnum },
+        { key:'presm', label:'Přesměrováno', type:'text', ph:'Přesměrováno…', get:infoTrText },
+        { key:'twilio', label:'Přepis Twilio', title:'Živý přepis z Twilia (AI ↔ zákazník), zdarma', type:'text', ph:'Přepis…', sort:false,
+          get:function(c){ return (Array.isArray(c.transcript)?c.transcript:[]).map(function(t){ return t.text||''; }).join(' '); } },
+        { key:'whisper', label:'Kompletní přepis', title:'Kompletní přepis nahrávky přes OpenAI Whisper (vč. technika)', type:'text', ph:'Přepis…', sort:false,
+          get:function(c){ return c.full_transcript||''; } },
+        { key:'nahravka', label:'Nahrávka', type:'text', ph:'Nahrávka…', enum:true, get:function(c){ return c.audio_url?'Ano':'Ne'; } },
+        { key:'delka', label:'Délka', type:'num', ph:'s', get:function(c){ return c.duration_sec==null?null:Number(c.duration_sec); } },
+      ];
+      var _infoCallsTable = null;
 
       // Jeden řádek hovoru + skrytý řádek s detailem.
       function infoCallRow(c){
@@ -1473,41 +1467,25 @@
           +'<tr id="info-call-'+c.id+'" style="display:none;"><td colspan="'+INFO_CALL_COLS.length+'" style="background:var(--surface2);padding:14px;border-left:3px solid #ec4899;">'+callDetail(c)+'</td></tr>';
       }
 
-      // Kostra tabulky (záhlaví + filtrovací řádek). Staví se jen při načtení dat,
-      // při psaní do filtru se mění pouze <tbody>.
+      // Kostra tabulky (záhlaví). Filtry, řazení a <tbody> řeší ColFilters.table().
       function infoRenderCalls(){
         var body=el('info-calls-body'); if(!body) return;
-        var head='', filt='';
-        INFO_CALL_COLS.forEach(function(col,i){
+        var head='';
+        INFO_CALL_COLS.forEach(function(col){
           head+='<th'+(col.title?(' title="'+esc(col.title)+'"'):'')+'>'+esc(col.label)+'</th>';
-          filt+='<th><input class="calls-filter" type="search" data-col="'+i+'" oninput="infoFilterCalls(this)"'
-              +' placeholder="'+esc(col.label)+'…" title="Filtrovat podle sloupce '+esc(col.label)+'"'
-              +' value="'+esc(_infoFilters[i]||'')+'"></th>';
         });
-        body.innerHTML='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
-          +'<span id="info-calls-count" style="font-size:12px;color:var(--text2);"></span>'
-          +'<button class="btn btn-secondary btn-sm" onclick="infoClearCallFilters()" title="Vyprázdní všechna filtrovací pole">✕ Zrušit filtry</button>'
-          +'</div>'
-          +'<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">'
-          +'<table class="data-table"><thead><tr>'+head+'</tr><tr class="calls-filter-row">'+filt+'</tr></thead>'
+        body.innerHTML='<div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:auto; padding:8px 0 0;">'
+          +'<table class="data-table" id="info-calls-table"><thead><tr>'+head+'</tr></thead>'
           +'<tbody id="info-calls-tbody"></tbody></table></div>';
-        infoApplyCallFilters();
-      }
-
-      function infoApplyCallFilters(){
-        var tb=el('info-calls-tbody'); if(!tb) return;
-        var all=_infoCalls||[];
-        var shown=all.filter(infoCallMatches);
-        var html=shown.map(infoCallRow).join('');
-        if(!shown.length){
-          html='<tr><td colspan="'+INFO_CALL_COLS.length+'" style="color:var(--text2);padding:14px;">'
-             +'Žádný hovor neodpovídá filtru. Vymaž text ve filtrovacích polích a uvidíš zase všechny záznamy.</td></tr>';
+        if(!_infoCallsTable){
+          _infoCallsTable = ColFilters.table({
+            table:'#info-calls-table',
+            columns:INFO_CALL_COLS,
+            renderRow:function(c){ return infoCallRow(c); },
+            noun:'hovorů', emptyText:'Zatím žádné hovory.', limit:500,
+          });
         }
-        tb.innerHTML=html;
-        var cnt=el('info-calls-count');
-        if(cnt) cnt.textContent = (shown.length===all.length)
-          ? ('Zobrazeno všech '+all.length+' hovorů')
-          : ('Zobrazeno '+shown.length+' z '+all.length+' hovorů');
+        _infoCallsTable.setRows(_infoCalls||[]);
       }
 
       window.infoLoadCalls = async function(){
@@ -1519,7 +1497,7 @@
         var body=el('info-calls-body'); if(!body) return;
         body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
         try{
-          var rows=await api('/calls?line='+INFO_LINE+'&limit=100');
+          var rows=await api('/calls?line='+INFO_LINE+'&limit=200');
           _infoCalls=Array.isArray(rows)?rows:[];
           if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
           // Kolikrát každé číslo volalo (z načtené historie).
@@ -1756,6 +1734,7 @@
       // ── Příchozí SMS ──
       function infoSmsBadge(n){ var b=el('info-sms-badge'); if(!b) return; if(n>0){ b.textContent=n; b.style.display=''; } else { b.style.display='none'; } }
       function infoSmsBadgeRefresh(){ api('/sms-inbound?line='+INFO_LINE).then(function(j){ infoSmsBadge((j&&j.unread)||0); }).catch(function(){}); }
+      var _smsInTable=null;
       window.infoLoadSms = async function(){
         var body=el('info-sms-body'); if(body) body.innerHTML='Načítám…';
         try{
@@ -1763,9 +1742,20 @@
           var items=(j&&j.items)||[];
           infoSmsBadge((j&&j.unread)||0);
           if(!items.length){ if(body) body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné příchozí SMS.</div>'; return; }
-          if(body) body.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;"><table class="data-table"><thead><tr><th>Kdy</th><th>Od</th><th>Zpráva</th></tr></thead><tbody>'
-            +items.map(function(s){ var un=!s.read_at; return '<tr'+(un?' style="font-weight:600;background:rgba(34,211,238,0.05);"':'')+'><td style="white-space:nowrap;">'+(un?'🔵 ':'')+esc(fmtDate(s.created_at))+'</td><td style="white-space:nowrap;">'+esc(s.from_number||'')+'</td><td>'+esc(s.body||'')+'</td></tr>'; }).join('')
-            +'</tbody></table></div>';
+          if(body) body.innerHTML='<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:auto;padding:8px 0 0;"><table class="data-table" id="info-smsin-table"><thead><tr><th>Kdy</th><th>Od</th><th>Zpráva</th></tr></thead><tbody></tbody></table></div>';
+          if(!_smsInTable){
+            _smsInTable=ColFilters.table({
+              table:'#info-smsin-table',
+              columns:[
+                { key:'kdy', label:'Kdy', type:'date', ph:'dd.mm.rrrr', get:function(s){ return s.created_at; } },
+                { key:'od', label:'Od', type:'text', ph:'Číslo…', get:function(s){ return s.from_number||''; } },
+                { key:'zprava', label:'Zpráva', type:'text', ph:'Zpráva…', get:function(s){ return s.body||''; } },
+              ],
+              renderRow:function(s){ var un=!s.read_at; return '<tr'+(un?' style="font-weight:600;background:rgba(34,211,238,0.05);"':'')+'><td style="white-space:nowrap;">'+(un?'🔵 ':'')+esc(fmtDate(s.created_at))+'</td><td style="white-space:nowrap;">'+esc(s.from_number||'')+'</td><td>'+esc(s.body||'')+'</td></tr>'; },
+              noun:'SMS', emptyText:'Zatím žádné příchozí SMS.', limit:500,
+            });
+          }
+          _smsInTable.setRows(items);
         }catch(e){ if(body) body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+esc(e.message)+'</div>'; }
       };
       window.infoSmsRead = async function(){
@@ -1779,23 +1769,48 @@
       var OMZ_ICON={site_out:'⛔',out:'🔴',limited:'🟠',known:'🟡',none:'🟢'}, OMZ_COLOR={site_out:'#ef4444',out:'#ef4444',limited:'#f59e0b',known:'#eab308'};
       var _omzItems=[];
       function omzFmt(d){ var x=new Date(d); return x.toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'})+' '+x.toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'}); }
+      var _omzTable=null;
+      function omzRowHtml(r){
+        var col=OMZ_COLOR[r.impact]||'var(--text2)'; var site=r.impact==='site_out';
+        return '<tr style="'+(site?'background:rgba(239,68,68,.12);':'')+'">'+
+          '<td style="white-space:nowrap;"><span style="font-size:18px;">'+OMZ_ICON[r.impact]+'</span> <span style="color:'+col+';font-weight:700;font-size:12px;">'+esc(r.impact_label)+'</span></td>'+
+          '<td style="font-weight:700;'+(site?'color:#ef4444;':'')+'">'+esc(r.location)+'</td>'+
+          '<td>'+(r.devices.length?r.devices.map(function(d){ return '<span class="badge badge-case" style="margin:1px;">'+esc(d)+'</span>'; }).join(' '):'<span style="color:var(--text2);">—</span>')+'</td>'+
+          '<td style="max-width:260px;">'+esc(r.problem||'—')+'</td>'+
+          '<td style="max-width:320px;color:#22d3ee;">'+esc(r.infoline_note||'—')+'</td>'+
+          '<td style="white-space:nowrap;">'+omzFmt(r.since)+'</td>'+
+          '<td><span class="badge '+(r.status==='reseni'?'badge-case':'badge-draft')+'">'+esc(r.status_label)+'</span>'+(r.assignee_name?'<div style="font-size:11px;color:var(--text2);">'+esc(r.assignee_name)+'</div>':'')+'</td>'+
+          '<td><button class="btn btn-secondary btn-sm" onclick="infoOpenRequest('+r.id+')">Otevřít</button></td></tr>';
+      }
+      var OMZ_RANK={site_out:4,out:3,limited:2,known:1,none:0};
       function omzRender(){
         var body=el('info-omezeni-body'); if(!body) return;
         var q=(el('info-omezeni-q').value||'').toLowerCase().trim();
-        var norm=function(t){ return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); };
+        var norm=function(t){ return String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); };
         var rows=_omzItems.filter(function(r){ if(!q) return true; return norm(r.location+' '+r.devices.join(' ')+' '+(r.problem||'')+' '+(r.infoline_note||'')).indexOf(norm(q))>=0; });
-        if(!rows.length){ body.innerHTML='<div class="empty-state"><p>'+(q?'Nic neodpovídá hledání.':'✅ Žádná aktivní omezení provozu.')+'</p></div>'; return; }
-        body.innerHTML='<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Stav</th><th>Lokalita</th><th>Zařízení</th><th>Problém</th><th>Informace pro infolinku</th><th>Od kdy</th><th>Stav servisu</th><th></th></tr></thead><tbody>'+
-          rows.map(function(r){ var col=OMZ_COLOR[r.impact]||'var(--text2)'; var site=r.impact==='site_out';
-            return '<tr style="'+(site?'background:rgba(239,68,68,.12);':'')+'">'+
-              '<td style="white-space:nowrap;"><span style="font-size:18px;">'+OMZ_ICON[r.impact]+'</span> <span style="color:'+col+';font-weight:700;font-size:12px;">'+esc(r.impact_label)+'</span></td>'+
-              '<td style="font-weight:700;'+(site?'color:#ef4444;':'')+'">'+esc(r.location)+'</td>'+
-              '<td>'+(r.devices.length?r.devices.map(function(d){ return '<span class="badge badge-case" style="margin:1px;">'+esc(d)+'</span>'; }).join(' '):'<span style="color:var(--text2);">—</span>')+'</td>'+
-              '<td style="max-width:260px;">'+esc(r.problem||'—')+'</td>'+
-              '<td style="max-width:320px;color:#22d3ee;">'+esc(r.infoline_note||'—')+'</td>'+
-              '<td style="white-space:nowrap;">'+omzFmt(r.since)+'</td>'+
-              '<td><span class="badge '+(r.status==='reseni'?'badge-case':'badge-draft')+'">'+esc(r.status_label)+'</span>'+(r.assignee_name?'<div style="font-size:11px;color:var(--text2);">'+esc(r.assignee_name)+'</div>':'')+'</td>'+
-              '<td><button class="btn btn-secondary btn-sm" onclick="infoOpenRequest('+r.id+')">Otevřít</button></td></tr>'; }).join('')+'</tbody></table></div>';
+        if(!_omzItems.length){ body.innerHTML='<div class="empty-state"><p>✅ Žádná aktivní omezení provozu.</p></div>'; return; }
+        // Kostra se staví jen jednou — auto-obnova (60 s) pak mění jen řádky, rozepsaný filtr zůstane.
+        if(!el('info-omz-table')){
+          body.innerHTML='<div style="overflow-x:auto;padding-top:4px;"><table class="data-table" id="info-omz-table"><thead><tr><th>Stav</th><th>Lokalita</th><th>Zařízení</th><th>Problém</th><th>Informace pro infolinku</th><th>Od kdy</th><th>Stav servisu</th><th></th></tr></thead><tbody></tbody></table></div>';
+        }
+        if(!_omzTable){
+          _omzTable=ColFilters.table({
+            table:'#info-omz-table',
+            columns:[
+              { key:'stav', label:'Stav', type:'text', ph:'Stav…', get:function(r){ return r.impact_label||''; }, sortGet:function(r){ return OMZ_RANK[r.impact]||0; } },
+              { key:'lok', label:'Lokalita', type:'text', ph:'Lokalita…', get:function(r){ return r.location||''; } },
+              { key:'zar', label:'Zařízení', type:'text', ph:'Zařízení…', get:function(r){ return (r.devices||[]).join(', '); } },
+              { key:'prob', label:'Problém', type:'text', ph:'Problém…', get:function(r){ return r.problem||''; } },
+              { key:'info', label:'Informace pro infolinku', type:'text', ph:'Informace…', get:function(r){ return r.infoline_note||''; } },
+              { key:'od', label:'Od kdy', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.since; } },
+              { key:'servis', label:'Stav servisu', type:'text', ph:'Stav…', get:function(r){ return r.status_label||''; } },
+              null,
+            ],
+            renderRow:omzRowHtml,
+            noun:'omezení', emptyText:'Nic neodpovídá hledání.', limit:500,
+          });
+        }
+        _omzTable.setRows(rows);
       }
       window.infoLoadOmezeni=function(){
         fetch('/api/service/restrictions',{credentials:'include'}).then(function(r){ return r.json(); }).then(function(j){
@@ -1947,115 +1962,11 @@
       if(est==null&&real==null) return '<td style="color:var(--text2)">—</td>';
       return '<td style="white-space:nowrap;color:var(--text2)">'+e+' / <b style="color:'+(overR?'#ef4444':'#22c55e')+'">'+r+'</b></td>';
     }
-    // ── Řazení a filtry po sloupcích (klik na ▾ v hlavičce) ──
-    var _srAll=[], _srSort=null /* {c,dir} */, _srFilt={} /* c → {q,mode} */, _srPop=null;
+    // ── Řazení a filtry po sloupcích: standardní komponenta js/column-filters.js ──
+    var _srAll=[];
     var SR_IMP_RANK={ site_out:4, out:3, limited:2, known:1, none:0 };
-    var SR_IMP_LBL={ site_out:'Celý prádlomat mimo provoz', out:'Mimo provoz zařízení', limited:'Omezený provoz', known:'Známý problém', none:'bez omezení' };
-    var SR_COLS=[
-      { t:'num', v:function(r){ return r.id; }, x:function(r){ return '#'+r.id+' '+r.id; } },
-      { t:'str', v:function(r){ return r.problem||''; }, x:function(r){ return [r.problem,(r.devices||[]).join(' '),r.description,r.voice_call&&r.voice_call.from_number].join(' '); } },
-      { t:'num', v:function(r){ return SR_IMP_RANK[r.impact||'none']; }, x:function(r){ return (SR_IMP_LBL[r.impact||'none']||'')+' '+(r.infoline_note||'')+' '+(r.show_infoline?'infolinka':''); }, hint:'největší = nejzávažnější omezení' },
-      { t:'str', v:function(r){ return [r.action,r.task].filter(Boolean).join(' · '); }, x:function(r){ return [r.action,r.task].filter(Boolean).join(' '); } },
-      { t:'str', v:function(r){ return r.ordered_by||''; }, x:function(r){ return r.ordered_by||''; } },
-      { t:'str', v:function(r){ return (STL[r.status]||[r.status])[0]; }, x:function(r){ return (STL[r.status]||[r.status])[0]; } },
-      { t:'str', v:function(r){ return r.assignee_name||''; }, x:function(r){ return r.assignee_name||''; } },
-      { t:'num', v:function(r){ return r.est_travel_min!=null?Number(r.est_travel_min):null; }, x:function(r){ return [r.est_travel_min,r.real_travel_min].join(' '); }, hint:'odhad (min)' },
-      { t:'num', v:function(r){ return r.est_work_min!=null?Number(r.est_work_min):null; }, x:function(r){ return [r.est_work_min,r.real_work_min].join(' '); }, hint:'odhad (min)' },
-      { t:'str', v:function(r){ return r.resolution||''; }, x:function(r){ return r.resolution||''; } },
-      { t:'num', v:function(r){ return r.created_at?new Date(r.created_at).getTime():null; }, x:function(r){ return fmtDate(r.created_at)+' '+String(r.created_at||'').slice(0,10); }, date:true }
-    ];
-    function srNorm(t){ return String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim(); }
-    function srMatch(ci,r){
-      var f=_srFilt[ci]; if(!f||!f.q) return true;
-      var col=SR_COLS[ci], q=f.q.trim();
-      if(col.t==='num' && !col.date){
-        var v=col.v(r), m;
-        if((m=q.match(/^(>=|<=|>|<|=)\s*(-?\d+(?:[.,]\d+)?)$/))){ if(v==null) return false; var n=parseFloat(m[2].replace(',','.')); return m[1]==='>'?v>n:m[1]==='<'?v<n:m[1]==='>='?v>=n:m[1]==='<='?v<=n:v===n; }
-        if((m=q.match(/^(-?\d+(?:[.,]\d+)?)\s*(?:-|–|až)\s*(-?\d+(?:[.,]\d+)?)$/))){ if(v==null) return false; return v>=parseFloat(m[1].replace(',','.')) && v<=parseFloat(m[2].replace(',','.')); }
-      }
-      var hay=srNorm(col.x(r)), nq=srNorm(q);
-      if(f.mode==='exact'){ var parts=hay.split(/\s{1,}/); return hay===nq || srNorm(col.v(r))===nq || (col.t==='num'&&!col.date&&String(col.v(r))===nq); }
-      return nq.split(/\s+/).every(function(w){ return hay.indexOf(w)>=0; }); // fulltext: všechna slova
-    }
-    function srApply(rows){
-      var out=rows.filter(function(r){ for(var ci in _srFilt){ if(!srMatch(+ci,r)) return false; } return true; });
-      if(_srSort){
-        var col=SR_COLS[_srSort.c], d=_srSort.dir==='desc'?-1:1;
-        out=out.slice().sort(function(a,b){
-          var x=col.v(a), y=col.v(b);
-          if(x==null||x==='') return (y==null||y==='')?0:1; // prázdné vždy dolů
-          if(y==null||y==='') return -1;
-          return (col.t==='num'?(x-y):String(x).localeCompare(String(y),'cs',{sensitivity:'base',numeric:true}))*d;
-        });
-      }
-      return out;
-    }
-    function srHeaderState(){
-      var ths=document.querySelectorAll('#sr-table thead th');
-      ths.forEach(function(th,i){
-        var b=th.querySelector('.sr-cf'); if(!b) return;
-        var active=!!(_srFilt[i]&&_srFilt[i].q), sorted=_srSort&&_srSort.c===i;
-        b.textContent=sorted?(_srSort.dir==='asc'?'▲':'▼'):(active?'⏷':'▾');
-        b.style.color=(active||sorted)?'#22d3ee':'var(--text2)';
-        b.style.background=(active||sorted)?'rgba(34,211,238,.15)':'transparent';
-      });
-      var any=Object.keys(_srFilt).some(function(k){ return _srFilt[k]&&_srFilt[k].q; })||_srSort;
-      var cb=document.getElementById('sr-clear-filters'); if(cb) cb.style.display=any?'':'none';
-    }
-    function srClosePop(){ if(_srPop){ _srPop.remove(); _srPop=null; } }
-    function srOpenPop(ci,th){
-      srClosePop();
-      var col=SR_COLS[ci], f=_srFilt[ci]||{q:'',mode:'contains'};
-      var pop=document.createElement('div'); _srPop=pop;
-      pop.style.cssText='position:fixed;z-index:3000;width:250px;background:var(--surface,#1b2530);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:10px;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400;';
-      var num=col.t==='num'&&!col.date;
-      pop.innerHTML=
-        '<div style="display:flex;gap:6px;margin-bottom:8px;">'+
-          '<button class="btn btn-sm btn-secondary" data-s="asc" style="flex:1;'+(_srSort&&_srSort.c===ci&&_srSort.dir==='asc'?'border-color:#22d3ee;color:#22d3ee;':'')+'">'+(col.t==='num'?'↑ Od nejmenšího':'↑ A → Z')+'</button>'+
-          '<button class="btn btn-sm btn-secondary" data-s="desc" style="flex:1;'+(_srSort&&_srSort.c===ci&&_srSort.dir==='desc'?'border-color:#22d3ee;color:#22d3ee;':'')+'">'+(col.t==='num'?'↓ Od největšího':'↓ Z → A')+'</button>'+
-        '</div>'+
-        (col.date?'<div style="color:var(--text2);font-size:11px;margin-bottom:6px;">Nejmenší = nejstarší, největší = nejnovější</div>':'')+
-        '<input class="sr-fq" placeholder="Hledat…" value="'+esc(f.q||'')+'" style="width:100%;margin-bottom:6px;">'+
-        '<select class="sr-fm" style="width:100%;margin-bottom:6px;"><option value="contains"'+(f.mode!=='exact'?' selected':'')+'>Obsahuje (fulltext, všechna slova)</option><option value="exact"'+(f.mode==='exact'?' selected':'')+'>Přesná shoda</option></select>'+
-        (num?'<div style="color:var(--text2);font-size:11px;margin-bottom:6px;">Číselně: <b>&gt;30</b>, <b>&lt;=120</b>, <b>10-50</b></div>':'')+
-        '<div style="display:flex;gap:6px;"><button class="btn btn-sm btn-primary" data-a="apply" style="flex:1;">Použít</button><button class="btn btn-sm btn-secondary" data-a="clear" style="flex:1;">Zrušit</button></div>';
-      document.body.appendChild(pop);
-      var r=th.getBoundingClientRect();
-      pop.style.top=Math.min(r.bottom+4,window.innerHeight-300)+'px';
-      pop.style.left=Math.max(8,Math.min(r.left,document.documentElement.clientWidth-262))+'px';
-      var inp=pop.querySelector('.sr-fq'); inp.focus();
-      function applyFilter(){ var q=inp.value.trim(); if(q) _srFilt[ci]={q:q,mode:pop.querySelector('.sr-fm').value}; else delete _srFilt[ci]; srClosePop(); srRerender(); }
-      inp.addEventListener('keydown',function(e){ if(e.key==='Enter') applyFilter(); if(e.key==='Escape') srClosePop(); });
-      pop.querySelectorAll('[data-s]').forEach(function(b){ b.addEventListener('click',function(){ _srSort=(_srSort&&_srSort.c===ci&&_srSort.dir===b.dataset.s)?null:{c:ci,dir:b.dataset.s}; var q=inp.value.trim(); if(q) _srFilt[ci]={q:q,mode:pop.querySelector('.sr-fm').value}; srClosePop(); srRerender(); }); });
-      pop.querySelector('[data-a="apply"]').addEventListener('click',applyFilter);
-      pop.querySelector('[data-a="clear"]').addEventListener('click',function(){ delete _srFilt[ci]; if(_srSort&&_srSort.c===ci) _srSort=null; srClosePop(); srRerender(); });
-    }
-    function srInitHeaders(){
-      var ths=document.querySelectorAll('#sr-table thead th');
-      ths.forEach(function(th,i){
-        if(i>=SR_COLS.length||th.querySelector('.sr-cf')) return;
-        var b=document.createElement('span'); b.className='sr-cf'; b.textContent='▾'; b.title='Řazení a filtr';
-        b.style.cssText='cursor:pointer;margin-left:6px;padding:1px 5px;border-radius:5px;font-size:11px;color:var(--text2);user-select:none;';
-        b.addEventListener('click',function(e){ e.stopPropagation(); if(_srPop&&_srPop._ci===i){ srClosePop(); return; } srOpenPop(i,th); if(_srPop) _srPop._ci=i; });
-        th.appendChild(b);
-      });
-      window.addEventListener('scroll',function(){ srClosePop(); },true);
-      document.addEventListener('click',function(e){ if(_srPop&&!_srPop.contains(e.target)&&!(e.target.classList&&e.target.classList.contains('sr-cf'))) srClosePop(); });
-      var cb=document.getElementById('sr-clear-filters'); if(cb) cb.addEventListener('click',function(){ _srFilt={}; _srSort=null; srRerender(); });
-    }
-    function srRerender(){ renderRaw(srApply(_srAll)); srHeaderState(); }
-    function render(rows){
-      _srAll=Array.isArray(rows)?rows:[];
-      srInitHeaders();
-      var shown=srApply(_srAll);
-      renderRaw(shown);
-      srHeaderState();
-      if(_srAll.length && !shown.length){ var tb=document.getElementById('sr-tbody'); if(tb) tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Filtru neodpovídá žádný požadavek ('+_srAll.length+' celkem). <a href="#" id="sr-nofilter">Zrušit filtry</a></td></tr>'; var nf=document.getElementById('sr-nofilter'); if(nf) nf.addEventListener('click',function(e){ e.preventDefault(); _srFilt={}; _srSort=null; srRerender(); }); }
-    }
-    function renderRaw(rows){
-      var tb=document.getElementById('sr-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné požadavky.</td></tr>'; return; }
-      tb.innerHTML=rows.map(function(r){
+    var SR_IMP_LBL={ site_out:'Celý prádlomat mimo provoz', out:'Mimo provoz', limited:'Omezený provoz', known:'Známý problém', none:'Bez omezení' };
+    function srRowHtml(r){
         var st=STL[r.status]||['?','badge-draft']; var ukon=[r.action,r.task].filter(Boolean).join(' · ');
         return '<tr>'+
           '<td style="white-space:nowrap;color:var(--text2);font-weight:700;">#'+r.id+'</td>'+
@@ -2079,9 +1990,40 @@
           '<td style="color:var(--text2);white-space:nowrap">'+fmtDate(r.created_at)+'</td>'+
           '<td style="white-space:nowrap;"><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button> <button class="btn btn-sm btn-danger" data-del="'+r.id+'" title="Smazat požadavek">🗑</button></td>'+
         '</tr>';
-      }).join('');
-      tb.querySelectorAll('[data-edit]').forEach(function(b){ b.addEventListener('click',function(){ var row=rows.filter(function(x){return x.id==b.dataset.edit;})[0]; openModal(row); }); });
-      tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ var id=b.dataset.del; var row=rows.filter(function(x){return x.id==id;})[0]||{}; if(!confirm('Opravdu smazat požadavek „'+(row.problem||('#'+id))+'"? Nelze vrátit.')) return; fetchJSON(API+'/requests/'+id,{method:'DELETE'}).then(function(){ load(); }).catch(function(){ alert('Smazání selhalo.'); }); }); });
+    }
+    function srNum(v){ return (v==null||v==='')?null:Number(v); }
+    var _srTable=ColFilters.table({
+      table:'#sr-table',
+      columns:[
+        { key:'id', label:'ID', type:'num', ph:'#', get:function(r){ return r.id; } },
+        { key:'pozadavek', label:'Požadavek', type:'text', ph:'Požadavek…', get:function(r){ return [r.problem,(r.devices||[]).join(' '),r.description,r.voice_call&&r.voice_call.from_number].filter(Boolean).join(' '); }, sortGet:function(r){ return r.problem||''; } },
+        { key:'omezeni', label:'Aktuální omezení', type:'text', ph:'Omezení…', get:function(r){ return SR_IMP_LBL[r.impact||'none']||''; }, sortGet:function(r){ return SR_IMP_RANK[r.impact||'none']; } },
+        { key:'ukon', label:'Úkon / úkol', type:'text', ph:'Úkon…', get:function(r){ return [r.action,r.task].filter(Boolean).join(' · '); } },
+        { key:'objednal', label:'Servis objednal', type:'text', ph:'Objednal…', get:function(r){ return r.ordered_by||''; } },
+        { key:'stav', label:'Stav', type:'text', ph:'Stav…', get:function(r){ return (STL[r.status]||[r.status])[0]; } },
+        { key:'resitel', label:'Řešitel', type:'text', ph:'Řešitel…', get:function(r){ return r.assignee_name||''; } },
+        { key:'cesta', label:'Čas cesty (odhad min)', type:'num', ph:'min', get:function(r){ return srNum(r.est_travel_min); } },
+        { key:'prace', label:'Čas práce (odhad min)', type:'num', ph:'min', get:function(r){ return srNum(r.est_work_min); } },
+        { key:'zpusob', label:'Způsob řešení', type:'text', ph:'Řešení…', get:function(r){ return r.resolution||''; } },
+        { key:'vytvoreno', label:'Vytvořeno', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.created_at; } },
+        null,
+      ],
+      renderRow:srRowHtml,
+      noun:'požadavků', emptyText:'Zatím žádné požadavky.', limit:500,
+    });
+    // Akce v řádcích — delegované, takže přežijí překreslení po změně filtru/řazení.
+    (function(){
+      var tbl=document.getElementById('sr-table'); if(!tbl) return;
+      tbl.addEventListener('click',function(e){
+        var be=e.target.closest('[data-edit]');
+        if(be && tbl.tBodies[0] && tbl.tBodies[0].contains(be)){ var row=_srAll.filter(function(x){return x.id==be.dataset.edit;})[0]; if(row) openModal(row); return; }
+        var bd=e.target.closest('[data-del]');
+        if(bd && tbl.tBodies[0] && tbl.tBodies[0].contains(bd)){ var id=bd.dataset.del; var row2=_srAll.filter(function(x){return x.id==id;})[0]||{}; if(!confirm('Opravdu smazat požadavek „'+(row2.problem||('#'+id))+'"? Nelze vrátit.')) return; fetchJSON(API+'/requests/'+id,{method:'DELETE'}).then(function(){ load(); }).catch(function(){ alert('Smazání selhalo.'); }); }
+      });
+    })();
+    function render(rows){
+      _srAll=Array.isArray(rows)?rows:[];
+      _srTable.setRows(_srAll);
     }
     function load(){
       var st=document.getElementById('sr-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
@@ -2268,16 +2210,8 @@
       rows.forEach(function(r){ var ex=r.extra; if(ex&&typeof ex==='object'){ Object.keys(ex).forEach(function(k){ if(!seen[k]){ seen[k]=true; cols.push(k); } }); } });
       return cols;
     }
-    function render(rows){
-      var tb=document.getElementById('sm-tbody'); if(!tb) return;
-      _extraCols=collectExtraCols(rows);
-      // Přestav hlavičku: pevné sloupce + dynamické z Excelu + akce.
-      var head=document.getElementById('sm-thead-row');
-      if(head){ head.innerHTML='<th>Stroj</th><th>Typ</th><th>Stav</th><th>Uvedení do provozu</th><th>Revize</th><th>Poznámka</th>'
-        +_extraCols.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'<th></th>'; }
-      var colspan=7+_extraCols.length;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="'+colspan+'" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné stroje. Přidej první tlačítkem „+ Nový stroj".</td></tr>'; return; }
-      tb.innerHTML=rows.map(function(r){
+    var _smAll=[], _smTable=null, _smColsSig=null;
+    function smRowHtml(r){
         var st=MST[r.status]||['?','badge-draft'];
         var ex=r.extra||{};
         var extraTds=_extraCols.map(function(c){ var v=(ex&&ex[c]!=null)?String(ex[c]):''; return '<td style="color:var(--text2)">'+(v?esc(v):'—')+'</td>'; }).join('');
@@ -2291,9 +2225,39 @@
           extraTds+
           '<td><button class="btn btn-sm btn-secondary" data-edit="'+r.id+'">Upravit</button></td>'+
         '</tr>';
-      }).join('');
-      tb.querySelectorAll('[data-edit]').forEach(function(b){ b.addEventListener('click',function(){ var row=rows.filter(function(x){return x.id==b.dataset.edit;})[0]; openModal(row); }); });
     }
+    function render(rows){
+      var tbl=document.getElementById('sm-table'); if(!tbl) return;
+      _smAll=Array.isArray(rows)?rows:[];
+      _extraCols=collectExtraCols(_smAll);
+      // Hlavička = pevné sloupce + dynamické z Excelu + akce. Při změně sady sloupců
+      // se celý <thead> i instance filtrů postaví znovu (filtry musí sedět 1:1 na <th>).
+      var sig=JSON.stringify(_extraCols);
+      if(!_smTable || sig!==_smColsSig){
+        _smColsSig=sig;
+        tbl.tHead.innerHTML='<tr id="sm-thead-row"><th>Stroj</th><th>Typ</th><th>Stav</th><th>Uvedení do provozu</th><th>Revize</th><th>Poznámka</th>'
+          +_extraCols.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('')+'<th></th></tr>';
+        var cols=[
+          { key:'name', label:'Stroj', type:'text', ph:'Stroj…', get:function(r){ return r.name||''; } },
+          { key:'type', label:'Typ', type:'text', ph:'Typ…', get:function(r){ return r.type||''; } },
+          { key:'status', label:'Stav', type:'text', ph:'Stav…', get:function(r){ return (MST[r.status]||[r.status||''])[0]; } },
+          { key:'commissioned', label:'Uvedení do provozu', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.commissioned_at; } },
+          { key:'revision', label:'Revize', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.revision_at; } },
+          { key:'note', label:'Poznámka', type:'text', ph:'Poznámka…', get:function(r){ return r.note||''; } },
+        ].concat(_extraCols.map(function(c,i){
+          return { key:'x'+i, label:c, type:'text', ph:'…', get:function(r){ var ex=r.extra||{}; return ex[c]!=null?String(ex[c]):''; } };
+        })).concat([null]);
+        _smTable=ColFilters.table({
+          table:'#sm-table', columns:cols, renderRow:smRowHtml,
+          noun:'strojů', emptyText:'Zatím žádné stroje. Přidej první tlačítkem „+ Nový stroj".', limit:1000,
+        });
+      }
+      _smTable.setRows(_smAll);
+    }
+    (function(){
+      var tbl=document.getElementById('sm-table'); if(!tbl) return;
+      tbl.addEventListener('click',function(e){ var b=e.target.closest('[data-edit]'); if(!b||!tbl.tBodies[0]||!tbl.tBodies[0].contains(b)) return; var row=_smAll.filter(function(x){return x.id==b.dataset.edit;})[0]; if(row) openModal(row); });
+    })();
     function load(){
       var st=document.getElementById('sm-filter-status'); var q=(st&&st.value)?('?status='+st.value):'';
       fetchJSON(API+'/machines'+q).then(render).catch(function(){ var tb=document.getElementById('sm-tbody'); if(tb) tb.innerHTML='<tr><td colspan="7" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
@@ -2496,14 +2460,14 @@
       };
       inp.click();
     }
-    function render(rows){
-      var tb=document.getElementById('od-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné odečty. Pošli kolegyni odkaz na formulář výše.</td></tr>'; return; }
-      tb.innerHTML=rows.map(function(r){
+    function odKoef(r){
+      // koeficient = elektroměr / (vodoměr + korekce vodoměru stroje)
+      var wc=(r.water_m3!=null)?Number(r.water_m3)+Number(r.water_correction||0):null;
+      return (wc>0&&r.electricity_kwh!=null)?(r.electricity_kwh/wc):null;
+    }
+    function odRowHtml(r){
         var photos=[photoLink(r.water_photo_url,'voda',r.id,'water_photo_url'),photoLink(r.electricity_photo_url,'elektro',r.id,'electricity_photo_url')].join(' · ');
-        // koeficient = elektroměr / (vodoměr + korekce vodoměru stroje)
-        var wc=(r.water_m3!=null)?Number(r.water_m3)+Number(r.water_correction||0):null;
-        var kval=(wc>0&&r.electricity_kwh!=null)?(r.electricity_kwh/wc):null;
+        var kval=odKoef(r);
         var koef=kval!=null?kval.toLocaleString('cs-CZ',{minimumFractionDigits:3,maximumFractionDigits:3}):'—';
         // barva: <25 červená, 25–30 žlutá, 30–90 zelená, 90–100 oranžová, ≥100 červená
         var kcol=kval==null?'':(kval<25?'#ef4444':kval<30?'#eab308':kval<90?'#22c55e':kval<100?'#f97316':'#ef4444');
@@ -2518,18 +2482,45 @@
           '<td style="color:var(--text2);">'+esc(r.created_by_name||'—')+'</td>'+
           '<td><button class="btn btn-sm btn-secondary" data-del="'+r.id+'">🗑</button></td>'+
         '</tr>';
-      }).join('');
-      tb.querySelectorAll('[data-ed]').forEach(function(a){ a.addEventListener('click',function(e){
-        e.preventDefault();
-        var cur=a.dataset.val==='' ? '' : String(a.dataset.val).replace('.',',');
-        var v=window.prompt('Nový stav ('+(a.dataset.field==='water_m3'?'vodoměr, m³':'elektroměr, kWh')+'):',cur);
-        if(v===null) return;
-        var body={}; body[a.dataset.field]=v.trim();
-        fetchJSON(API+'/readings/'+a.dataset.ed,{method:'PUT',body:JSON.stringify(body)}).then(load).catch(function(){ alert('Uložení selhalo.'); });
-      }); });
-      tb.querySelectorAll('[data-ph]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); uploadPhoto(a.dataset.ph,a.dataset.field); }); });
-      tb.querySelectorAll('[data-del]').forEach(function(b){ b.addEventListener('click',function(){ if(!confirm('Smazat tento odečet?')) return; fetchJSON(API+'/readings/'+b.dataset.del,{method:'DELETE'}).then(load).catch(function(){ alert('Smazání selhalo.'); }); }); });
     }
+    function odNum(v){ return (v==null||v==='')?null:Number(v); }
+    var _odTable=ColFilters.table({
+      table:'#od-table',
+      columns:[
+        { key:'kdy', label:'Kdy', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.created_at; } },
+        { key:'stroj', label:'Lokalita / stroj', type:'text', ph:'Lokalita…', get:function(r){ return r.machine_name||''; } },
+        { key:'voda', label:'Vodoměr (m³)', type:'num', ph:'m³', get:function(r){ return odNum(r.water_m3); } },
+        { key:'elektro', label:'Elektroměr (kWh)', type:'num', ph:'kWh', get:function(r){ return odNum(r.electricity_kwh); } },
+        { key:'koef', label:'Koeficient (kWh/m³)', type:'num', ph:'kWh/m³', get:odKoef },
+        { key:'fotky', label:'Fotky', type:'text', ph:'Fotky…', enum:true, sort:false, get:function(r){ var a=!!r.water_photo_url, b=!!r.electricity_photo_url; return a&&b?'Obě fotky':(a?'Jen voda':(b?'Jen elektro':'Bez fotek')); } },
+        { key:'zadal', label:'Zadal', type:'text', ph:'Zadal…', get:function(r){ return r.created_by_name||''; } },
+        null,
+      ],
+      renderRow:odRowHtml,
+      noun:'odečtů', emptyText:'Zatím žádné odečty. Pošli kolegyni odkaz na formulář výše.', limit:1000,
+    });
+    function render(rows){ _odTable.setRows(Array.isArray(rows)?rows:[]); }
+    // Akce v řádcích — delegované (přežijí překreslení po filtru/řazení).
+    (function(){
+      var tbl=document.getElementById('od-table'); if(!tbl) return;
+      tbl.addEventListener('click',function(e){
+        var tb=tbl.tBodies[0]; if(!tb) return;
+        var a=e.target.closest('[data-ed]');
+        if(a && tb.contains(a)){
+          e.preventDefault();
+          var cur=a.dataset.val==='' ? '' : String(a.dataset.val).replace('.',',');
+          var v=window.prompt('Nový stav ('+(a.dataset.field==='water_m3'?'vodoměr, m³':'elektroměr, kWh')+'):',cur);
+          if(v===null) return;
+          var body={}; body[a.dataset.field]=v.trim();
+          fetchJSON(API+'/readings/'+a.dataset.ed,{method:'PUT',body:JSON.stringify(body)}).then(load).catch(function(){ alert('Uložení selhalo.'); });
+          return;
+        }
+        var p=e.target.closest('[data-ph]');
+        if(p && tb.contains(p)){ e.preventDefault(); uploadPhoto(p.dataset.ph,p.dataset.field); return; }
+        var d=e.target.closest('[data-del]');
+        if(d && tb.contains(d)){ if(!confirm('Smazat tento odečet?')) return; fetchJSON(API+'/readings/'+d.dataset.del,{method:'DELETE'}).then(load).catch(function(){ alert('Smazání selhalo.'); }); }
+      });
+    })();
     function load(){
       var tb=document.getElementById('od-tbody'); if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--text2);padding:20px">Načítám…</td></tr>';
       fetchJSON(API+'/readings').then(render).catch(function(){ if(tb) tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });
@@ -2638,17 +2629,39 @@
       return (r.results||[]).filter(function(x){ return x.request_id; }).map(function(x){ var st=REQ_ST[x.request_status]||['🛠️','']; return ' <a href="#" data-req="'+x.request_id+'" title="Servisní požadavek #'+x.request_id+(st[1]?(' – '+st[1]):'')+' ('+esc(x.text)+')" style="text-decoration:none;font-size:15px;">'+st[0]+'</a>'; }).join('');
     }
     function stTag(o){ return o==='ok'?'<span style="color:#22c55e;font-weight:700;">OK</span>':'<span style="color:#ef4444;font-weight:700;">ZÁVADA</span>'; }
-    function renderInsp(rows){
-      inspCache=rows;
-      var tb=document.getElementById('ui-tbody'); if(!tb) return;
-      if(!rows.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px">Zatím žádné kontroly.</td></tr>'; return; }
-      tb.innerHTML=rows.map(function(r){
-        var bad=(r.results||[]).filter(function(x){ return x.status==='zavada'; }).length;
+    function inspBad(r){ return (r.results||[]).filter(function(x){ return x.status==='zavada'; }).length; }
+    function inspRowHtml(r){
+        var bad=inspBad(r);
         return '<tr style="cursor:pointer;" data-iid="'+r.id+'"><td style="white-space:nowrap;">'+esc(fmtD(r.inspected_at))+'</td><td>'+esc(r.machine_name||'—')+'</td><td style="color:var(--text2);">'+esc(r.checklist_name||'—')+'</td><td>'+esc(r.inspector_name||'—')+'</td><td>'+stTag(r.overall)+reqIcons(r)+'</td><td>'+(bad||'—')+'</td></tr>';
-      }).join('');
-      tb.querySelectorAll('a[data-req]').forEach(function(a){ a.addEventListener('click',function(e){ e.preventDefault(); e.stopPropagation(); openReq(+a.dataset.req); }); });
-      tb.querySelectorAll('tr[data-iid]').forEach(function(tr){ tr.addEventListener('click',function(){ var r=inspCache.filter(function(x){ return String(x.id)===tr.dataset.iid; })[0]; if(r) openInsp(r); }); });
     }
+    var _inspTable=ColFilters.table({
+      table:'#ui-table',
+      columns:[
+        { key:'kdy', label:'Kdy', type:'date', ph:'dd.mm.rrrr', get:function(r){ return r.inspected_at; } },
+        { key:'stroj', label:'Pobočka / stroj', type:'text', ph:'Pobočka…', get:function(r){ return r.machine_name||''; } },
+        { key:'sablona', label:'Šablona', type:'text', ph:'Šablona…', get:function(r){ return r.checklist_name||''; } },
+        { key:'kdo', label:'Kontroloval', type:'text', ph:'Kontroloval…', get:function(r){ return r.inspector_name||''; } },
+        { key:'vysledek', label:'Výsledek', type:'text', ph:'Výsledek…', get:function(r){ return r.overall==='ok'?'OK':'Závada'; } },
+        { key:'zavad', label:'Závad', type:'num', ph:'počet', get:inspBad },
+      ],
+      renderRow:inspRowHtml,
+      noun:'kontrol', emptyText:'Zatím žádné kontroly.', limit:1000,
+    });
+    function renderInsp(rows){
+      inspCache=Array.isArray(rows)?rows:[];
+      _inspTable.setRows(inspCache);
+    }
+    // Klik na řádek / ikonu požadavku — delegovaně (přežije překreslení po filtru/řazení).
+    (function(){
+      var tbl=document.getElementById('ui-table'); if(!tbl) return;
+      tbl.addEventListener('click',function(e){
+        var tb=tbl.tBodies[0]; if(!tb) return;
+        var a=e.target.closest('a[data-req]');
+        if(a && tb.contains(a)){ e.preventDefault(); e.stopPropagation(); openReq(+a.dataset.req); return; }
+        var tr=e.target.closest('tr[data-iid]');
+        if(tr && tb.contains(tr)){ var r=inspCache.filter(function(x){ return String(x.id)===tr.dataset.iid; })[0]; if(r) openInsp(r); }
+      });
+    })();
     function loadInsp(){
       var f=document.getElementById('ui-filter'); var q=f&&f.value?('?overall='+f.value):'';
       fetchJSON(API+'/maintenance-inspections'+q).then(renderInsp).catch(function(){ var tb=document.getElementById('ui-tbody'); if(tb) tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:#ef4444;padding:20px">Nepodařilo se načíst.</td></tr>'; });

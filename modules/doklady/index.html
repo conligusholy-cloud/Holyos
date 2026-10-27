@@ -56,7 +56,7 @@
     .btn-sm { padding: 6px 12px; font-size: 0.85em; }
     .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
   </style>
-  <script src="/js/column-filters.js?v=3"></script>
+  <script src="/js/column-filters.js?v=4"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -162,7 +162,8 @@
       const qs = new URLSearchParams();
       if (type) qs.set('type', type);
       if (status) qs.set('status', status);
-      const r = await api('GET', '/api/wh/documents' + (qs.toString() ? '?' + qs : ''));
+      qs.set('limit', '500'); // maximum serveru (výchozí je 100)
+      const r = await api('GET', '/api/wh/documents?' + qs);
       const tbody = document.querySelector('#docs-table tbody');
       if (r.status !== 200) {
         tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';

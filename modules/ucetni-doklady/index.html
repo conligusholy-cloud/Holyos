@@ -230,7 +230,7 @@
     .dv-actions-l,.dv-actions-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     @media(max-width:800px){.dv-summary{grid-template-columns:1fr}.dv-money{text-align:left}}
 </style>
-  <script src="/js/column-filters.js?v=3"></script>
+  <script src="/js/column-filters.js?v=4"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -419,6 +419,45 @@
       <!-- TAB: BANKA (výpisy + transakce) -->
       <div class="tab-pane" id="tab-bank">
 
+        <div class="bank-subtabs" style="display:flex;gap:6px;margin-bottom:14px;">
+          <button type="button" class="btn btn-primary btn-sm" id="bank-sub-stmts" onclick="switchBankSub('stmts')">📄 Výpisy</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-pays" onclick="switchBankSub('pays')">💸 Platby</button>
+        </div>
+
+        <div class="pb-card" id="bank-pays-card" style="display:none;">
+          <h3>💸 Platby — všechny pohyby z výpisů</h3>
+          <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;">
+            <label>Účet:</label>
+            <select id="pay-filter-account" onchange="loadBankPayments()"><option value="">Všechny účty</option></select>
+            <label>Od:</label><input type="date" id="pay-filter-from" onchange="loadBankPayments()">
+            <label>Do:</label><input type="date" id="pay-filter-to" onchange="loadBankPayments()">
+            <button class="btn btn-secondary btn-sm" onclick="loadBankPayments()">🔄 Obnovit</button>
+            <span id="pay-sums" style="margin-left:auto;font-size:0.9em;color:var(--text2);"></span>
+          </div>
+          <table class="data-table" id="payments-table">
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Účet</th>
+                <th>Výpis</th>
+                <th>Směr</th>
+                <th class="num">Částka</th>
+                <th>Měna</th>
+                <th>Protistrana</th>
+                <th>Účet protistrany</th>
+                <th>VS</th>
+                <th>KS</th>
+                <th>SS</th>
+                <th>Zpráva</th>
+                <th>Stav</th>
+              </tr>
+            </thead>
+            <tbody><tr><td colspan="13" class="empty-hint">Načítání…</td></tr></tbody>
+          </table>
+        </div>
+
+        <div id="bank-stmts-wrap">
+
         <div class="pb-card">
           <h3>🏦 Bankovní výpisy</h3>
           <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:14px;">
@@ -487,6 +526,8 @@
             <tbody><tr><td colspan="8" class="empty-hint">Klikněte na výpis pro zobrazení transakcí.</td></tr></tbody>
           </table>
         </div>
+
+        </div><!-- /bank-stmts-wrap -->
 
       </div><!-- /tab-bank -->
 
@@ -2488,6 +2529,57 @@
       loadInvoices(); loadSummary();
     };
 
+    // Standardní sloupcové filtry + řazení — modal Příchozí e-maily (seznam, logy, denní statistika)
+    let ingestRowHtml = () => '';
+    let ingestLogRowHtml = () => '';
+    let ingestStatsRowHtml = () => '';
+    const ingestOpts = {
+      table: '#ingest-table',
+      columns: [
+        { key: 'recv', label: 'Obdrženo', type: 'date', ph: 'dd.mm.rrrr', get: (g) => g.received_at },
+        { key: 'from', label: 'Od', type: 'text', ph: 'Od…', get: (g) => [g.from_email, g.from_name].filter(Boolean).join(' '), sortGet: (g) => g.from_email },
+        { key: 'orig', label: 'Původní odesílatel', type: 'text', ph: 'Odesílatel…', get: (g) => g.original_sender ? [g.original_sender.name, g.original_sender.email].filter(Boolean).join(' ') : '' },
+        { key: 'subj', label: 'Předmět', type: 'text', ph: 'Předmět…', get: (g) => g.subject, enum: false },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (g) => g.status === 'extracting' && g.note ? g.note : g.status, enumValue: (g) => g.status },
+        { key: 'conf', label: 'Jistota', type: 'num', ph: '', get: (g) => g.status === 'linked_to_invoice' ? 100 : (g.confidence != null ? Math.round(Number(g.confidence) * 100) : null) },
+        { key: 'att', label: 'Příl.', type: 'num', ph: '', get: (g) => (g.attachments && g.attachments.length) || 0 },
+        { key: 'inv', label: 'Faktura', type: 'text', ph: 'Faktura…', get: (g) => (g.invoices || []).map(i => i.invoice_number).join(' ') },
+        { key: 'cost', label: 'Cena OCR', type: 'num', ph: '', get: (g) => g.ocr_cost_czk == null ? null : Number(g.ocr_cost_czk) },
+        null,
+      ],
+      renderRow: (g) => ingestRowHtml(g),
+      noun: 'e-mailů',
+      emptyText: 'Prázdné.',
+      limit: 1000,
+    };
+    const ingestTable = ColFilters.table(ingestOpts);
+    const ingestLogsTable = ColFilters.table({
+      table: '#ingest-logs-table',
+      columns: [
+        { key: 'ts', label: 'Čas', type: 'date', ph: 'dd.mm.rrrr', get: (l) => l.timestamp },
+        { key: 'user', label: 'Kdo', type: 'text', ph: 'Kdo…', get: (l) => l.user_display || l.user_name },
+        { key: 'entity', label: 'Entita', type: 'text', ph: 'Entita…', get: (l) => l.entity },
+        { key: 'action', label: 'Akce', type: 'text', ph: 'Akce…', get: (l) => l.action },
+        { key: 'desc', label: 'Popis', type: 'text', ph: 'Popis…', get: (l) => l.description, enum: false },
+      ],
+      renderRow: (l) => ingestLogRowHtml(l),
+      noun: 'záznamů',
+      emptyText: 'Žádné logy.',
+    });
+    const ingestStatsTable = ColFilters.table({
+      table: '#ingest-stats-table',
+      columns: [
+        { key: 'recv', label: 'Čas', type: 'date', ph: 'dd.mm.rrrr', get: (x) => x.received_at },
+        { key: 'from', label: 'Od', type: 'text', ph: 'Od…', get: (x) => [x.from_name, x.from].filter(Boolean).join(' '), sortGet: (x) => x.from },
+        { key: 'subj', label: 'Předmět / přílohy', type: 'text', ph: 'Předmět / příloha…', get: (x) => [x.subject].concat((x.attachments || []).map(a => a.name)).join(' '), sortGet: (x) => x.subject, enum: false },
+        { key: 'bucket', label: 'Výsledek', type: 'text', ph: 'Výsledek…', get: (x) => (ING_BUCKET[x.bucket] || ING_BUCKET.pending).l },
+        { key: 'reason', label: 'Důvod / doklad', type: 'text', ph: 'Důvod / doklad…', get: (x) => [x.reason].concat((x.invoices || []).map(i => i.invoice_number)).filter(Boolean).join(' '), enum: false },
+        null,
+      ],
+      renderRow: (x) => ingestStatsRowHtml(x),
+      noun: 'e-mailů',
+      emptyText: 'Žádné e-maily v tomto filtru.',
+    });
     window.ingestTab = 'active'; // 'active' | 'duplicate' | 'archive' | 'logs'
 
     window.openIngestList = async function(tab, soft) {
@@ -2498,7 +2590,7 @@
         return openIngestLogs();
       }
 
-      const r = await api('GET', '/api/accounting/email/ingests?group=' + window.ingestTab);
+      const r = await api('GET', '/api/accounting/email/ingests?group=' + window.ingestTab + '&limit=500');
       if (r.status !== 200) return alert('Chyba: ' + r.status);
 
       // Auto-refresh každou 1 s, pokud je něco ve stavu extracting/parsing
@@ -2515,7 +2607,7 @@
         }, 3000);
       }
       window._ingestRowsById = {}; (r.data || []).forEach(i => { window._ingestRowsById[i.id] = i; });
-      const rows = (r.data || []).map(ing => {
+      ingestRowHtml = (ing) => {
         const statusCls = { received: 'draft', parsing: 'awaiting_approval', extracting: 'awaiting_approval',
           awaiting_review: 'awaiting_approval', linked_to_invoice: 'paid',
           unreadable: 'cancelled', duplicate: 'awaiting_approval', processed: 'paid', spam: 'cancelled' }[ing.status] || 'draft';
@@ -2544,7 +2636,7 @@
             '<td><button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + ing.id + ')">Reprocess</button></td>' +
           '</tr>'
         );
-      }).join('');
+      };
       const totalCost = (r.data || []).reduce((s, i) => s + (i.ocr_cost_czk || 0), 0);
 
       const tabBtn = (key, label) =>
@@ -2558,9 +2650,11 @@
       ).length;
 
       // Měkké obnovení: přepsat jen řádky tabulky (bez překreslení celého okna → žádné blikání, zachová se scroll i lišta průběhu)
+      ingestOpts.emptyText = ({active: 'Žádné aktivní e-maily — vše zpracováno.',
+        duplicate: 'Žádné duplikáty.',
+        archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.');
       if (soft) {
-        const tb = document.querySelector('#modal-root #ingest-tbody');
-        if (tb) { tb.innerHTML = rows || tb.innerHTML; return; }
+        if (document.querySelector('#modal-root #ingest-table')) { ingestTable.setRows(r.data || []); return; }
         if (document.querySelector('#modal-root .modal')) return;
       }
 
@@ -2586,16 +2680,12 @@
             '</div>' +
             '<div id="ingest-diag-box"></div>' +
             '<div style="max-height:65vh; overflow:auto;">' +
-              '<table class="items-table" style="width:100%; min-width:1100px;">' +
+              '<table class="items-table" id="ingest-table" style="width:100%; min-width:1100px;">' +
                 '<thead><tr>' +
                   '<th>Obdrženo</th><th>Od</th><th>Původní odesílatel</th><th>Předmět</th><th>Stav</th>' +
                   '<th>Jistota</th><th>Příl.</th><th>Faktura</th><th style="text-align:right;" title="Cena OCR (AI) za e-mail, poslední zpracování">Cena OCR</th><th></th>' +
                 '</tr></thead>' +
-                '<tbody id="ingest-tbody">' + (rows || '<tr><td colspan="10" class="empty-hint" style="padding:20px;">' +
-                  ({active: 'Žádné aktivní e-maily — vše zpracováno.',
-                    duplicate: 'Žádné duplikáty.',
-                    archive: 'Archiv je prázdný.'}[window.ingestTab] || 'Prázdné.') +
-                  '</td></tr>') + '</tbody>' +
+                '<tbody id="ingest-tbody"></tbody>' +
               '</table>' +
             '</div>' +
             '<div class="modal-actions">' +
@@ -2605,6 +2695,7 @@
           '</div>' +
         '</div>'
       );
+      ingestTable.setRows(r.data || []);
     };
 
     // ─── Statistika příjmu faktur e-mailem (den) + log problémů + AI návrh pravidel ───
@@ -2644,7 +2735,7 @@
       const f = window.ingestStatsFilter;
       const list = d.log.filter((x) => f === 'all' ? true : f === 'problem' ? (x.bucket === 'unreadable' || x.bucket === 'review' || x.bucket === 'pending') : x.bucket === f);
       const fBtn = (key, label) => '<button class="btn btn-sm ' + (f === key ? 'btn-primary' : 'btn-secondary') + '" onclick="window.ingestStatsFilter=\'' + key + '\';openIngestStats()">' + label + '</button>';
-      const rows = list.map((x) => {
+      ingestStatsRowHtml = (x) => {
         const b = ING_BUCKET[x.bucket] || ING_BUCKET.pending;
         const att = x.attachments.length ? x.attachments.map((a) => '<span class="inline-code" title="' + escapeHtml(a.type || '') + '" style="' + (a.candidate ? '' : 'opacity:.55;') + '">' + (a.source === 'link_download' ? '🔗 ' : '📎 ') + escapeHtml(a.name) + '</span>').join(' ') : '<span style="color:var(--text2)">bez příloh</span>';
         const inv = x.invoices.length ? x.invoices.map((i) => '<a href="javascript:void(0)" onclick="closeModal();openDetail(' + i.id + ')">' + escapeHtml(i.invoice_number) + '</a>').join(', ') : '';
@@ -2657,7 +2748,7 @@
           '<td style="font-size:.85em;">' + escapeHtml(x.reason || '') + (inv ? '<div>📄 ' + inv + '</div>' : '') + '</td>' +
           '<td style="white-space:nowrap;">' + (x.bucket !== 'ok' && x.bucket !== 'ignored' ? '<button class="btn btn-secondary btn-sm" title="Ignorovat tohoto odesílatele" onclick="ingestAddRule(\'ignore_senders\',\'' + escapeHtml(x.from).toLowerCase() + '\')">🚫</button> ' + (dom ? '<button class="btn btn-secondary btn-sm" title="Ignorovat celou doménu @' + escapeHtml(dom) + '" onclick="ingestAddRule(\'ignore_senders\',\'@' + escapeHtml(dom).toLowerCase() + '\')">@</button> ' : '') + '<button class="btn btn-secondary btn-sm" onclick="reprocessIngest(' + x.id + ')">↻</button>' : '') + '</td>' +
         '</tr>';
-      }).join('');
+      };
       const rulesHtml = '<div style="font-size:.85em;color:var(--text2);margin-top:6px;">Pravidla příjmu: ignorovat odesílatele ' +
         (rules.ignore_senders.length ? rules.ignore_senders.map((s) => '<span class="inline-code">' + escapeHtml(s) + ' <a href="javascript:void(0)" onclick="ingestRemoveRule(\'ignore_senders\',\'' + escapeHtml(s) + '\')" title="Odebrat">✕</a></span>').join(' ') : '—') +
         ' · předmět obsahuje ' + (rules.ignore_subject_keywords.length ? rules.ignore_subject_keywords.map((s) => '<span class="inline-code">' + escapeHtml(s) + ' <a href="javascript:void(0)" onclick="ingestRemoveRule(\'ignore_subject_keywords\',\'' + escapeHtml(s) + '\')" title="Odebrat">✕</a></span>').join(' ') : '—') + '</div>';
@@ -2685,11 +2776,12 @@
             fBtn('problem', '⚠ Problémové (' + (k.unreadable + k.review + k.pending) + ')') + fBtn('ok', '✅ Zpracované (' + k.ok + ')') + fBtn('duplicate', '🔁 Duplicity (' + k.duplicate + ')') + fBtn('ignored', '🚫 Ignorované (' + k.ignored + ')') + fBtn('all', 'Vše (' + k.emails + ')') +
             '<button class="btn btn-primary btn-sm" style="margin-left:auto;" onclick="runIngestAi()">🤖 AI: navrhnout nastavení</button>' +
           '</div>' +
-          '<div style="max-height:42vh;overflow-y:auto;"><table class="items-table" style="width:100%;"><thead><tr><th>Čas</th><th>Od</th><th>Předmět / přílohy</th><th>Výsledek</th><th>Důvod / doklad</th><th></th></tr></thead><tbody>' +
-            (rows || '<tr><td colspan="6" class="empty-hint" style="padding:18px;">Žádné e-maily v tomto filtru.</td></tr>') + '</tbody></table></div>' +
+          '<div style="max-height:42vh;overflow-y:auto;"><table class="items-table" id="ingest-stats-table" style="width:100%;"><thead><tr><th>Čas</th><th>Od</th><th>Předmět / přílohy</th><th>Výsledek</th><th>Důvod / doklad</th><th></th></tr></thead><tbody>' +
+            '</tbody></table></div>' +
           rulesHtml +
           '<div id="ingest-ai-box" style="margin-top:12px;"></div>' +
         '</div></div>';
+      ingestStatsTable.setRows(list);
       if (rr.data && rr.data.ai_last) renderIngestAi(rr.data.ai_last, true);
     };
 
@@ -2746,7 +2838,7 @@
     setInterval(refreshIngestStatsBtn, 5 * 60 * 1000);
 
     window.openIngestLogs = async function() {
-      const r = await api('GET', '/api/accounting/email/logs?limit=300');
+      const r = await api('GET', '/api/accounting/email/logs?limit=500');
       if (r.status !== 200) return alert('Chyba: ' + r.status);
       const logs = r.data || [];
       const tabBtn = (key, label) =>
@@ -2754,7 +2846,7 @@
         'onclick="openIngestList(\'' + key + '\')" style="margin-right:8px;">' + label + '</button>';
       const tabHints = { active: 'vyžadují akci', duplicate: 'duplikáty existujících faktur', archive: 'zpracované, faktura vytvořená', logs: 'historie akcí a chyb' };
 
-      const rows = logs.map(l => {
+      ingestLogRowHtml = (l) => {
         const isError = /error|❌|selhal/i.test(l.description || '');
         const color = isError ? 'color:#ef4444;' : '';
         return '<tr>' +
@@ -2764,7 +2856,7 @@
           '<td><span class="status-badge ' + (l.action === 'create' ? 'paid' : l.action === 'delete' ? 'cancelled' : 'awaiting_approval') + '">' + escapeHtml(l.action || '') + '</span></td>' +
           '<td style="' + color + '">' + escapeHtml(l.description || '') + '</td>' +
         '</tr>';
-      }).join('');
+      };
 
       document.getElementById('modal-root').innerHTML = (
         '<div class="modal-overlay" onclick="if(event.target===this)closeModal()">' +
@@ -2778,9 +2870,9 @@
               '<span style="color:var(--text2); font-size:0.88em;">' + escapeHtml(tabHints[window.ingestTab] || '') + ' &nbsp;·&nbsp; ' + logs.length + ' záznamů</span>' +
             '</div>' +
             '<div style="max-height:65vh; overflow-y:auto;">' +
-              '<table class="items-table" style="width:100%;">' +
+              '<table class="items-table" id="ingest-logs-table" style="width:100%;">' +
                 '<thead><tr><th>Čas</th><th>Kdo</th><th>Entita</th><th>Akce</th><th>Popis</th></tr></thead>' +
-                '<tbody>' + (rows || '<tr><td colspan="5" class="empty-hint" style="padding:20px;">Žádné logy.</td></tr>') + '</tbody>' +
+                '<tbody></tbody>' +
               '</table>' +
             '</div>' +
             '<div class="modal-actions">' +
@@ -2789,6 +2881,7 @@
           '</div>' +
         '</div>'
       );
+      ingestLogsTable.setRows(logs);
     };
 
     // ─── AI diagnostika nezpracovaných e-mailů: proč selhaly + co přesně udělat ───
@@ -3016,16 +3109,36 @@
       alert(r.status === 200 ? 'Odesláno.' : 'Odeslání selhalo: ' + ((r.data && r.data.error) || r.status));
       loadBs2Invoices();
     };
+    // Standardní sloupcové filtry + řazení — faktury Best Series 2.0 (produkty / online)
+    const BS2_DL = { sent: '✅ odesláno', failed: '❌ chyba', queued: '⏳ odesílá se', not_sent: '—' };
+    const BS2_DL_TEXT = { sent: 'odesláno', failed: 'chyba', queued: 'odesílá se', not_sent: 'neodesláno' };
+    const bs2Table = (sel) => ColFilters.table({
+      table: sel,
+      columns: [
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.invoice_number },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (i) => BS2_TYPE[i.type] || i.type },
+        { key: 'company', label: 'Odběratel', type: 'text', ph: 'Odběratel…', get: (i) => i.company && i.company.name },
+        { key: 'issued', label: 'Vystaveno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.date_issued },
+        { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.date_due },
+        { key: 'total', label: 'Částka', type: 'num', ph: '', get: (i) => i.total == null ? null : Number(i.total) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => STATUS_LABEL[i.status] || i.status },
+        { key: 'mail', label: 'E-mail', type: 'text', ph: 'E-mail…', get: (i) => BS2_DL_TEXT[i.delivery_status] || 'neodesláno' },
+        null,
+      ],
+      renderRow: (i) => { const DL = BS2_DL; return '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + (BS2_TYPE[i.type] || i.type) + '</td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td title="' + escapeHtml(i.send_error || '') + '">' + (DL[i.delivery_status] || '—') + '</td><td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/accounting/invoices/' + i.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-secondary btn-sm" onclick="resendBs2(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\')">✉ Znovu</button></td></tr>'; },
+      noun: 'faktur',
+      emptyText: 'Zatím žádné faktury.',
+    });
+    const bs2Tables = { products: bs2Table('#bs2-products-table'), online: bs2Table('#bs2-online-table') };
     window.loadBs2Invoices = async function() {
       await loadBs2Config();
       for (const [cat, src] of [['products', 'bs2_products'], ['online', 'bs2_online']]) {
         const tb = document.querySelector('#bs2-' + cat + '-table tbody');
-        const r = await api('GET', '/api/accounting/invoices?source=' + src + '&limit=300');
+        const r = await api('GET', '/api/accounting/invoices?source=' + src + '&limit=1000');
         const list = (r.status === 200 && r.data && (r.data.invoices || r.data)) || null;
         if (!Array.isArray(list)) { tb.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; continue; }
-        const DL = { sent: '✅ odesláno', failed: '❌ chyba', queued: '⏳ odesílá se', not_sent: '—' };
-        tb.innerHTML = list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + (BS2_TYPE[i.type] || i.type) + '</td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td title="' + escapeHtml(i.send_error || '') + '">' + (DL[i.delivery_status] || '—') + '</td><td style="white-space:nowrap;"><a class="btn btn-secondary btn-sm" href="/api/accounting/invoices/' + i.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-secondary btn-sm" onclick="resendBs2(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\')">✉ Znovu</button></td></tr>').join('')
-          : '<tr><td colspan="9" class="empty-hint">Zatím žádné faktury.</td></tr>';
+        bs2Tables[cat].setRows(list);
+
       }
     };
 
@@ -3038,7 +3151,30 @@
       const r = await api('GET', '/api/compounder/service-subscriptions');
       if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="10" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
       window.__subs = r.data;
-      tb.innerHTML = r.data.length ? r.data.map(s => '<tr>' +
+      subsTable.setRows(r.data);
+
+      const ri = await api('GET', '/api/accounting/invoices?source=service_billing&limit=1000');
+      const tb2 = document.querySelector('#subinv-table tbody');
+      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
+      subInvTable.setRows(Array.isArray(list) ? list : []);
+
+    };
+    // Standardní sloupcové filtry + řazení — servisní smlouvy
+    const subsTable = ColFilters.table({
+      table: '#subs-table',
+      columns: [
+        { key: 'kiosk', label: 'Stroj (kód)', type: 'text', ph: 'Kód…', get: (s) => s.kiosk_code },
+        { key: 'cust', label: 'Odběratel', type: 'text', ph: 'Odběratel / IČO…', get: (s) => [s.customer_name, s.buyer_ico].filter(Boolean).join(' '), sortGet: (s) => s.customer_name },
+        { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: (s) => s.email },
+        { key: 'fee', label: 'Poplatek', type: 'num', ph: '', get: (s) => s.fee_pct == null ? null : Number(s.fee_pct) },
+        { key: 'vat', label: 'DPH', type: 'num', ph: '', get: (s) => s.vat_rate == null ? null : Number(s.vat_rate) },
+        { key: 'day', label: 'Den', type: 'num', ph: '', get: (s) => s.billing_day == null ? null : Number(s.billing_day) },
+        { key: 'auto', label: 'Auto e-mail', type: 'text', ph: 'Auto…', get: (s) => s.auto_send ? 'ano' : 'ne (koncept)' },
+        { key: 'last', label: 'Naposledy', type: 'text', ph: 'RRRR-MM…', get: (s) => s.last_billed_ym },
+        { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (s) => s.active ? 'aktivní' : 'vypnuto' },
+        null,
+      ],
+      renderRow: (s) => '<tr>' +
         '<td><b>' + escapeHtml(s.kiosk_code) + '</b></td>' +
         '<td>' + escapeHtml(s.customer_name || '—') + (s.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(s.buyer_ico) + '</div>' : '') + '</td>' +
         '<td>' + escapeHtml(s.email || '—') + '</td>' +
@@ -3048,14 +3184,28 @@
         '<td>' + (s.active ? '<span style="color:#16a34a;font-weight:600;">aktivní</span>' : '<span style="color:var(--text2);">vypnuto</span>') + '</td>' +
         '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openSubModal(' + s.id + ')">Upravit</button> ' +
         '<button class="btn btn-secondary btn-sm" title="Vystavit fakturu za předchozí měsíc hned" onclick="billSubNow(' + s.id + ')">Vyfakturovat teď</button> ' +
-        '<button class="btn btn-danger btn-sm" onclick="deleteSub(' + s.id + ')">Smazat</button></td></tr>').join('')
-        : '<tr><td colspan="10" class="empty-hint">Zatím žádná servisní smlouva. Přidej ji tlačítkem „+ Nová servisní smlouva".</td></tr>';
-      const ri = await api('GET', '/api/accounting/invoices?source=service_billing&limit=100');
-      const tb2 = document.querySelector('#subinv-table tbody');
-      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
-      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendServiceInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
-        : '<tr><td colspan="7" class="empty-hint">Zatím žádné vystavené servisní faktury.</td></tr>';
-    };
+        '<button class="btn btn-danger btn-sm" onclick="deleteSub(' + s.id + ')">Smazat</button></td></tr>',
+      noun: 'smluv',
+      emptyText: 'Zatím žádná servisní smlouva. Přidej ji tlačítkem „+ Nová servisní smlouva".',
+    });
+    // Standardní sloupcové filtry + řazení — vystavené faktury (servis / SW podpora)
+    const BILLING_INV_COLS = (withLang) => [
+      { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.invoice_number },
+      { key: 'company', label: 'Odběratel', type: 'text', ph: 'Odběratel…', get: (i) => i.company && i.company.name },
+      { key: 'issued', label: 'Vystaveno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.date_issued },
+      { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.date_due },
+      { key: 'total', label: 'Částka', type: 'num', ph: '', get: (i) => i.total == null ? null : Number(i.total) },
+    ].concat(withLang ? [{ key: 'lang', label: 'Jazyk', type: 'text', ph: 'Jazyk…', get: (i) => i.language === 'en' ? 'EN' : 'CS' }] : []).concat([
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => STATUS_LABEL[i.status] || i.status },
+      null,
+    ]);
+    const subInvTable = ColFilters.table({
+      table: '#subinv-table',
+      columns: BILLING_INV_COLS(false),
+      renderRow: (i) => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ') + ' ' + escapeHtml(i.currency || 'CZK') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendServiceInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>',
+      noun: 'faktur',
+      emptyText: 'Zatím žádné vystavené servisní faktury.',
+    });
     // ─── Nájem kiosku: podklady k fakturaci (čl. VI: nájemné = B − C − D − E − F) ──
     window.sbSection = function(which) {
       document.getElementById('sbsec-service').style.display = which === 'service' ? '' : 'none';
@@ -3080,15 +3230,8 @@
       const inactiveCnt = rc.data.filter(c => !c.active).length;
       const lst = rc.data;
       const hint = document.getElementById('rent-inactive-hint'); if (hint) hint.textContent = lst.length ? 'aktivních ' + (lst.length - inactiveCnt) + ' z ' + lst.length : '';
-      tb.innerHTML = lst.length ? lst.map(c => '<tr' + (c.active ? '' : ' style="opacity:.55"') + '><td><b>' + escapeHtml(c.kiosk_code) + '</b>' + '' + '</td><td>' + escapeHtml(c.customer_name || '—') + (c.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(c.buyer_ico) + '</div>' : '') + '</td>' +
-          '<td>' + escapeHtml(c.contact_name || '—') + '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(c.contact_email || 'bez e-mailu') + '</div></td>' +
-          '<td>' + fd(c.effective_from) + ' – ' + fd(c.effective_to) + '</td>' +
-          '<td>' + c.issue_day + '. v měsíci</td>' +
-          '<td>' + (c.auto_mode === 'send' ? 'vystavit + odeslat' : c.auto_mode === 'issue' ? 'vystavit' : 'jen koncept') + '</td>' +
-          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %</td>' +
-          '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + (c.active ? 'Automatika zapnutá — kliknutím vypnout' : 'Automatika vypnutá — kliknutím zapnout') + '"><input type="checkbox" ' + (c.active ? 'checked ' : '') + 'onchange="rentToggleActive(' + c.id + ',this.checked)"> <span style="font-size:11px;color:' + (c.active ? '#16a34a' : 'var(--text2)') + ';">' + (c.active ? 'aktivní' : 'neaktivní') + '</span></label></td>' +
-          '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" title="Ručně vytvořit podklad za měsíc zvolený nahoře (funguje i u neaktivní smlouvy)" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>').join('')
-        : '<tr><td colspan="9" class="empty-hint">Zatím žádná nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".</td></tr>';
+      rentTable.setRows(lst);
+
       // Plánované: co se vytvoří tento měsíc (podklad za předchozí měsíc v den vystavení u každé aktivní smlouvy)
       const now = new Date(); const pmD = new Date(now.getFullYear(), now.getMonth() - 1, 1); const pym = pmD.getFullYear() + '-' + String(pmD.getMonth() + 1).padStart(2, '0');
       const pStart = pym + '-01', pEnd = pym + '-' + String(new Date(pmD.getFullYear(), pmD.getMonth() + 1, 0).getDate()).padStart(2, '0');
@@ -3126,17 +3269,71 @@
       const pRows = planned.map(p => { const late = p.date < new Date(now.getFullYear(), now.getMonth(), now.getDate());
         return '<tr style="background:rgba(99,102,241,.07)"><td><span style="color:#818cf8;font-weight:700;">plánováno</span></td><td>' + escapeHtml(p.c.kiosk_code) + '</td><td>' + escapeHtml(p.c.customer_name || '—') + '</td><td>' + periodCell(pym, p.st) + '</td>' + calcCells(p.st) +
           '<td>' + p.date.toLocaleDateString('cs-CZ') + (late ? ' <span style="color:#f59e0b;">(zpracuje se při nejbližším běhu)</span>' : '') + '<div style="font-size:11px;color:var(--text2);">' + MODE2[p.c.auto_mode] + (p.c.auto_mode === 'send' && p.c.contact_email ? ' → ' + escapeHtml(p.c.contact_email) : '') + '</div></td>' +
-          '<td style="white-space:nowrap;">' + (p.st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + p.st.id + ')">Otevřít</button>' : '<button class="btn btn-secondary btn-sm" onclick="rentPlanNow(' + p.c.id + ',\'' + pym + '\')">Vytvořit teď</button>') + '</td></tr>'; }).join('');
+          '<td style="white-space:nowrap;">' + (p.st ? '<button class="btn btn-primary btn-sm" onclick="openRentModal(' + p.st.id + ')">Otevřít</button>' : '<button class="btn btn-secondary btn-sm" onclick="rentPlanNow(' + p.c.id + ',\'' + pym + '\')">Vytvořit teď</button>') + '</td></tr>'; });
       const inactiveIds = new Set(rc.data.filter(c => !c.active).map(c => c.id)); const inb = (x) => inactiveIds.has(x.contract_id) ? ' <span style="font-size:10.5px;color:#f59e0b;" title="Smlouva je neaktivní — automatika ji nezpracovává">smlouva neaktivní</span>' : '';
       const td = document.querySelector('#rentdocs-table tbody');
       const plannedIds = new Set(planned.filter(p => p.st).map(p => p.st.id));
       const drafts = window.__rentSt.filter(x => x.status !== 'issued' && !plannedIds.has(x.id));
       const draftRows = drafts.map(x => '<tr><td><span style="color:#f59e0b;font-weight:700;">koncept</span></td><td>' + escapeHtml(x.kiosk_code) + inb(x) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + periodCell(x.period_ym, x) + '</td>' + calcCells(x) + '<td>' + (x.send_error ? '<span style="color:#f59e0b;">' + escapeHtml(x.send_error) + '</span>' : '—') + '</td>' +
-        '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-danger btn-sm" onclick="rentDeleteRow(' + x.id + ')">Smazat</button></td></tr>').join('');
+        '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-danger btn-sm" onclick="rentDeleteRow(' + x.id + ')">Smazat</button></td></tr>');
       const issuedRows = window.__rentSt.filter(x => x.status === 'issued').map(x => '<tr><td><b>' + escapeHtml(x.doc_number || '') + '</b></td><td>' + escapeHtml(x.kiosk_code) + inb(x) + '</td><td>' + escapeHtml(x.customer_name || '—') + '</td><td>' + periodCell(x.period_ym, x) + '</td>' + calcCells(x) + '<td>' + (x.sent_at ? '✅ ' + new Date(x.sent_at).toLocaleDateString('cs-CZ') + ' → ' + escapeHtml(x.sent_to || '') : (x.send_error ? '<span style="color:#ef4444;">' + escapeHtml(x.send_error) + '</span>' : '—')) + '</td>' +
-        '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-primary btn-sm" onclick="rentSendNow(' + x.id + ')">' + (x.sent_at ? '✉ Poslat znovu' : '✉ Odeslat') + '</button></td></tr>').join('');
-      td.innerHTML = (pRows + draftRows + issuedRows) || '<tr><td colspan="13" class="empty-hint">Zatím žádný plánovaný, rozpracovaný ani vystavený podklad.</td></tr>';
+        '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openRentModal(' + x.id + ')">Otevřít</button> <a class="btn btn-secondary btn-sm" href="/api/compounder/rent-statements/' + x.id + '/pdf" target="_blank">📄 PDF</a> <button class="btn btn-primary btn-sm" onclick="rentSendNow(' + x.id + ')">' + (x.sent_at ? '✉ Poslat znovu' : '✉ Odeslat') + '</button></td></tr>');
+      const issuedList = window.__rentSt.filter(x => x.status === 'issued');
+      const docRows = planned.map((p, i) => ({ html: pRows[i], state: 'plánováno', kiosk: p.c.kiosk_code, cust: p.c.customer_name, ym: pym, x: p.st, when: p.date }))
+        .concat(drafts.map((x, i) => ({ html: draftRows[i], state: 'koncept', kiosk: x.kiosk_code, cust: x.customer_name, ym: x.period_ym, x, when: null })))
+        .concat(issuedList.map((x, i) => ({ html: issuedRows[i], state: 'vystaveno', num: x.doc_number, kiosk: x.kiosk_code, cust: x.customer_name, ym: x.period_ym, x, when: x.sent_at })));
+      rentDocsTable.setRows(docRows);
     };
+    // Standardní sloupcové filtry + řazení — nájemní smlouvy kiosků
+    const rentFd = (v) => v ? new Date(v).toLocaleDateString('cs-CZ', { timeZone: 'UTC' }) : '…';
+    const RENT_MODE_LABEL = { send: 'vystavit + odeslat', issue: 'vystavit' };
+    const rentTable = ColFilters.table({
+      table: '#rent-table',
+      columns: [
+        { key: 'kiosk', label: 'Stroj (kód)', type: 'text', ph: 'Kód…', get: (c) => c.kiosk_code },
+        { key: 'cust', label: 'Subjekt', type: 'text', ph: 'Subjekt / IČO…', get: (c) => [c.customer_name, c.buyer_ico].filter(Boolean).join(' '), sortGet: (c) => c.customer_name },
+        { key: 'contact', label: 'Kompetentní osoba', type: 'text', ph: 'Osoba / e-mail…', get: (c) => [c.contact_name, c.contact_email].filter(Boolean).join(' '), sortGet: (c) => c.contact_name },
+        { key: 'from', label: 'Účinnost', type: 'date', ph: 'dd.mm.rrrr', get: (c) => c.effective_from },
+        { key: 'day', label: 'Den vystavení', type: 'num', ph: '', get: (c) => c.issue_day == null ? null : Number(c.issue_day) },
+        { key: 'mode', label: 'Automatizace', type: 'text', ph: 'Režim…', get: (c) => RENT_MODE_LABEL[c.auto_mode] || 'jen koncept' },
+        { key: 'fee', label: 'Poplatek', type: 'num', ph: '', get: (c) => c.fee_pct == null ? null : Number(c.fee_pct) },
+        { key: 'active', label: 'Automatika zapnutá', type: 'text', ph: 'Stav…', get: (c) => c.active ? 'aktivní' : 'neaktivní' },
+        null,
+      ],
+      renderRow: (c) => '<tr' + (c.active ? '' : ' style="opacity:.55"') + '><td><b>' + escapeHtml(c.kiosk_code) + '</b>' + '' + '</td><td>' + escapeHtml(c.customer_name || '—') + (c.buyer_ico ? '<div style="font-size:11px;color:var(--text2);">IČO ' + escapeHtml(c.buyer_ico) + '</div>' : '') + '</td>' +
+          '<td>' + escapeHtml(c.contact_name || '—') + '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(c.contact_email || 'bez e-mailu') + '</div></td>' +
+          '<td>' + rentFd(c.effective_from) + ' – ' + rentFd(c.effective_to) + '</td>' +
+          '<td>' + c.issue_day + '. v měsíci</td>' +
+          '<td>' + (c.auto_mode === 'send' ? 'vystavit + odeslat' : c.auto_mode === 'issue' ? 'vystavit' : 'jen koncept') + '</td>' +
+          '<td>' + Number(c.fee_pct) + ' % · DPH ' + Number(c.vat_rate) + ' %</td>' +
+          '<td style="text-align:center;"><label style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;" title="' + (c.active ? 'Automatika zapnutá — kliknutím vypnout' : 'Automatika vypnutá — kliknutím zapnout') + '"><input type="checkbox" ' + (c.active ? 'checked ' : '') + 'onchange="rentToggleActive(' + c.id + ',this.checked)"> <span style="font-size:11px;color:' + (c.active ? '#16a34a' : 'var(--text2)') + ';">' + (c.active ? 'aktivní' : 'neaktivní') + '</span></label></td>' +
+          '<td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" title="Ručně vytvořit podklad za měsíc zvolený nahoře (funguje i u neaktivní smlouvy)" onclick="rentGenerate(' + c.id + ')">Vytvořit podklad</button> ' + '<button class="btn btn-secondary btn-sm" onclick="openRentContractModal(' + c.id + ')">Upravit</button></td></tr>',
+      noun: 'smluv',
+      emptyText: 'Zatím žádná nájemní smlouva kiosku. Přidej ji tlačítkem „+ Nová nájemní smlouva kiosku".',
+    });
+    // Standardní sloupcové filtry + řazení — podklady k fakturaci nájmu (plánované, koncepty, vystavené)
+    const rentNum = (k) => (r) => r.x && r.x[k] != null ? Number(r.x[k]) : null;
+    const rentDocsTable = ColFilters.table({
+      table: '#rentdocs-table',
+      columns: [
+        { key: 'num', label: 'Číslo / stav', type: 'text', ph: 'Číslo / stav…', get: (r) => r.num ? r.num + ' ' + r.state : r.state, enumValue: (r) => r.state },
+        { key: 'kiosk', label: 'Stroj', type: 'text', ph: 'Stroj…', get: (r) => r.kiosk },
+        { key: 'cust', label: 'Subjekt', type: 'text', ph: 'Subjekt…', get: (r) => r.cust },
+        { key: 'ym', label: 'Za měsíc', type: 'text', ph: 'RRRR-MM…', get: (r) => r.ym },
+        { key: 'a', label: 'Tržby s DPH (A)', type: 'num', ph: '', get: rentNum('revenue_gross') },
+        { key: 'b', label: 'Obrat bez DPH (B)', type: 'num', ph: '', get: rentNum('revenue_net') },
+        { key: 'c', label: 'Servisní poplatek (C)', type: 'num', ph: '', get: rentNum('fee_net') },
+        { key: 'd', label: 'Nájem lokality (D)', type: 'num', ph: '', get: rentNum('cost_d') },
+        { key: 'e', label: 'Energie (E)', type: 'num', ph: '', get: rentNum('cost_e') },
+        { key: 'f', label: 'Servis / díly (F)', type: 'num', ph: '', get: rentNum('cost_f') },
+        { key: 'rent', label: 'Nájemné', type: 'num', ph: '', get: rentNum('rent') },
+        { key: 'when', label: 'Odesláno / plán', type: 'date', ph: 'dd.mm.rrrr', get: (r) => r.when },
+        null,
+      ],
+      renderRow: (r) => r.html,
+      noun: 'podkladů',
+      emptyText: 'Zatím žádný plánovaný, rozpracovaný ani vystavený podklad.',
+    });
     window.rentGenerate = async function(contractId) {
       const ym = document.getElementById('rent-ym').value;
       const r = await api('POST', '/api/compounder/rent-statements/generate', { contract_id: contractId, ym });
@@ -3658,7 +3855,32 @@
       const r = await api('GET', '/api/compounder/software-subscriptions');
       if (r.status !== 200 || !Array.isArray(r.data)) { tb.innerHTML = '<tr><td colspan="11" class="empty-hint">Chyba načtení (' + r.status + ')</td></tr>'; return; }
       window.__sws = r.data;
-      tb.innerHTML = r.data.length ? r.data.map(s => '<tr>' +
+      swTable.setRows(r.data);
+
+      const ri = await api('GET', '/api/accounting/invoices?source=software_billing&limit=1000');
+      const tb2 = document.querySelector('#swinv-table tbody');
+      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
+      swInvTable.setRows(Array.isArray(list) ? list : []);
+
+    };
+
+    // Standardní sloupcové filtry + řazení — softwarová podpora strojů
+    const swTable = ColFilters.table({
+      table: '#sw-table',
+      columns: [
+        { key: 'kiosk', label: 'Stroj (kód)', type: 'text', ph: 'Kód…', get: (s) => s.kiosk_code },
+        { key: 'cust', label: 'Odběratel', type: 'text', ph: 'Odběratel / DIČ…', get: (s) => [s.customer_name, s.buyer_dic].filter(Boolean).join(' '), sortGet: (s) => s.customer_name },
+        { key: 'contract', label: 'Smlouva', type: 'text', ph: 'Smlouva…', get: (s) => s.contract_number },
+        { key: 'amount', label: 'Cena / měs.', type: 'num', ph: '', get: (s) => s.amount == null ? null : Number(s.amount) },
+        { key: 'vat', label: 'DPH', type: 'text', ph: 'DPH…', get: (s) => s.vat_regime === 'standard' ? Number(s.vat_rate) + ' %' : (SW_REGIME[s.vat_regime] || s.vat_regime) },
+        { key: 'lang', label: 'Jazyk', type: 'text', ph: 'Jazyk…', get: (s) => s.language === 'en' ? 'EN' : 'CS' },
+        { key: 'day', label: 'Den', type: 'num', ph: '', get: (s) => s.billing_day == null ? null : Number(s.billing_day) },
+        { key: 'auto', label: 'Auto e-mail', type: 'text', ph: 'Auto…', get: (s) => s.auto_send ? 'ano' : 'ne (koncept)' },
+        { key: 'last', label: 'Naposledy', type: 'text', ph: 'RRRR-MM…', get: (s) => s.last_billed_ym },
+        { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (s) => s.active ? 'aktivní' : 'vypnuto' },
+        null,
+      ],
+      renderRow: (s) => '<tr>' +
         '<td><b>' + escapeHtml(s.kiosk_code) + '</b></td>' +
         '<td>' + escapeHtml(s.customer_name || '—') + (s.buyer_dic ? '<div style="font-size:11px;color:var(--text2);">' + escapeHtml(s.buyer_dic) + '</div>' : '') + '</td>' +
         '<td>' + escapeHtml(s.contract_number || '—') + '</td>' +
@@ -3670,15 +3892,17 @@
         '<td>' + (s.active ? '<span style="color:#16a34a;font-weight:600;">aktivní</span>' : '<span style="color:var(--text2);">vypnuto</span>') + '</td>' +
         '<td style="white-space:nowrap;"><button class="btn btn-secondary btn-sm" onclick="openSwModal(' + s.id + ')">Upravit</button> ' +
         '<button class="btn btn-secondary btn-sm" title="Vystavit fakturu za běžný měsíc hned" onclick="billSwNow(' + s.id + ')">Vyfakturovat teď</button> ' +
-        '<button class="btn btn-danger btn-sm" onclick="deleteSw(' + s.id + ')">Smazat</button></td></tr>').join('')
-        : '<tr><td colspan="11" class="empty-hint">Zatím žádná softwarová podpora. Přidej ji tlačítkem „+ Nová softwarová podpora".</td></tr>';
-      const ri = await api('GET', '/api/accounting/invoices?source=software_billing&limit=100');
-      const tb2 = document.querySelector('#swinv-table tbody');
-      const list = (ri.status === 200 && ri.data && (ri.data.invoices || ri.data)) || [];
-      tb2.innerHTML = Array.isArray(list) && list.length ? list.map(i => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'EUR') + '</td><td>' + (i.language === 'en' ? 'EN' : 'CS') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendSwInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>').join('')
-        : '<tr><td colspan="8" class="empty-hint">Zatím žádné vystavené faktury za softwarovou podporu.</td></tr>';
-    };
-
+        '<button class="btn btn-danger btn-sm" onclick="deleteSw(' + s.id + ')">Smazat</button></td></tr>',
+      noun: 'smluv',
+      emptyText: 'Zatím žádná softwarová podpora. Přidej ji tlačítkem „+ Nová softwarová podpora".',
+    });
+    const swInvTable = ColFilters.table({
+      table: '#swinv-table',
+      columns: BILLING_INV_COLS(true),
+      renderRow: (i) => '<tr><td><b>' + escapeHtml(i.invoice_number || '') + '</b></td><td>' + escapeHtml((i.company && i.company.name) || '—') + '</td><td>' + fmtDate(i.date_issued) + '</td><td>' + fmtDate(i.date_due) + '</td><td>' + Number(i.total).toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + escapeHtml(i.currency || 'EUR') + '</td><td>' + (i.language === 'en' ? 'EN' : 'CS') + '</td><td>' + escapeHtml(STATUS_LABEL[i.status] || i.status) + '</td><td style="white-space:nowrap;"><button class="btn btn-primary btn-sm" onclick="sendSwInvoice(' + i.id + ',\'' + escapeHtml(i.invoice_number || '') + '\',\'' + escapeHtml((i.company && i.company.email) || '') + '\')">' + (i.status === 'draft' ? '✉ Odeslat' : '✉ Poslat znovu') + '</button></td></tr>',
+      noun: 'faktur',
+      emptyText: 'Zatím žádné vystavené faktury za softwarovou podporu.',
+    });
     // Společná karta „Bankovní účty" (výběr z agendy Banka) — v záložkách Servisní smlouvy i Softwarová podpora
     function accCardHtml(p) {
       return '<div class="pb-card" style="margin-top:16px;"><h3>🏦 Bankovní účty pro příchozí platby</h3>'
@@ -3848,17 +4072,17 @@
       const r = await api('GET', '/api/accounting/handovers');
       const tbody = document.querySelector('#handovers-table tbody');
       if (r.status !== 200) { tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + r.status + '</td></tr>'; return; }
-      if (!r.data?.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Zatím žádné balíčky. Vytvoř první přes „+ Nový balíček".</td></tr>';
-        return;
-      }
+      handoversTable.setRows(r.data || []);
+    };
+    const HO_STATUS_LABEL = { preparing: 'Připravuje se', ready: 'Připraven', sent: 'Odesláno', confirmed_by_accountant: 'Potvrzeno', closed: 'Uzavřeno' };
+    function renderHandoverRow(h) {
       const isSuper = !!window.currentUser?.isSuperAdmin;
       const statusBadge = (s) => {
         const colors = { preparing: '#fbbf24', ready: '#22c55e', sent: '#0ea5e9', confirmed_by_accountant: '#a855f7', closed: '#888' };
         const labels = { preparing: 'Připravuje se', ready: 'Připraven', sent: 'Odesláno', confirmed_by_accountant: 'Potvrzeno', closed: 'Uzavřeno' };
         return `<span style="color:${colors[s] || '#888'};font-weight:600;">${labels[s] || s}</span>`;
       };
-      tbody.innerHTML = r.data.map(h => {
+      {
         const period = `${h.period_year}/${String(h.period_month).padStart(2, '0')}`;
         const buildBtn = isSuper && h.status === 'preparing'
           ? `<button class="btn btn-primary btn-sm" onclick="buildHandover(${h.id})">⚙️ Vyrobit ZIP</button>` : '';
@@ -3880,8 +4104,25 @@
             <td>${buildBtn} ${downloadBtn} ${sendBtn} ${deleteBtn}</td>
           </tr>
         `;
-      }).join('');
-    };
+      }
+    }
+    // Standardní sloupcové filtry + řazení — balíčky pro účetní firmu
+    const handoversTable = ColFilters.table({
+      table: '#handovers-table',
+      columns: [
+        { key: 'period', label: 'Období', type: 'text', ph: 'RRRR/MM…', get: (h) => h.period_year + '/' + String(h.period_month).padStart(2, '0'), enum: false },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (h) => HO_STATUS_LABEL[h.status] || h.status },
+        { key: 'docs', label: 'Dokumenty', type: 'num', ph: '', get: (h) => h.document_count || 0 },
+        { key: 'rec', label: 'Přijaté (Kč)', type: 'num', ph: '', get: (h) => h.total_received == null ? null : Number(h.total_received) },
+        { key: 'iss', label: 'Vydané (Kč)', type: 'num', ph: '', get: (h) => h.total_issued == null ? null : Number(h.total_issued) },
+        { key: 'sent', label: 'Odesláno', type: 'date', ph: 'dd.mm.rrrr', get: (h) => h.sent_at },
+        { key: 'to', label: 'Příjemce', type: 'text', ph: 'E-mail…', get: (h) => h.sent_to_email },
+        null,
+      ],
+      renderRow: (h) => renderHandoverRow(h),
+      noun: 'balíčků',
+      emptyText: 'Zatím žádné balíčky. Vytvoř první přes „+ Nový balíček".',
+    });
 
     window.openCreateHandoverModal = function() {
       const today = new Date();
@@ -4013,16 +4254,17 @@
     };
 
     async function loadRemindersList() {
-      const r = await api('GET', '/api/accounting/reminders?limit=200');
+      const r = await api('GET', '/api/accounting/reminders?limit=500');
       const tbody = document.querySelector('#reminders-table tbody');
       if (r.status !== 200) {
         tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
-      if (!r.data?.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Zatím žádné upomínky neodešly.</td></tr>';
-        return;
-      }
+      remindersTable.setRows(r.data || []);
+    }
+    const REM_STATUS_LABEL = { sent: 'Odesláno', scheduled: 'Naplánované', bounced: 'Selhalo', cancelled: 'Zrušeno' };
+    const REM_LEVEL_LABEL = { 1: '1. Připomínka', 2: '2. Urgence', 3: '3. Předsoudní' };
+    function renderReminderRow(rem) {
       const levelLabel = (l) => ({1: '1️⃣ Připomínka', 2: '2️⃣ Urgence', 3: '3️⃣ Předsoudní'})[l] || l;
       const statusBadge = (s) => {
         const colors = { sent: '#22c55e', scheduled: '#fbbf24', bounced: '#ef4444', cancelled: '#888' };
@@ -4030,7 +4272,7 @@
         return `<span style="color:${colors[s] || '#888'};font-weight:600;">${labels[s] || s}</span>`;
       };
       const langFlag = (lang) => ({cs: '🇨🇿', sk: '🇸🇰', de: '🇩🇪', en: '🇬🇧'})[lang] || lang || '—';
-      tbody.innerHTML = r.data.map(rem => `
+      return `
         <tr>
           <td><span class="invoice-num">${escapeHtml(rem.invoice?.invoice_number || '—')}</span></td>
           <td>${escapeHtml(rem.invoice?.company?.name || '—')}</td>
@@ -4041,8 +4283,25 @@
           <td>${rem.sent_at ? fmtDateTime(rem.sent_at) : '—'}</td>
           <td style="font-size:0.85em; color:var(--text2); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(rem.subject)}">${escapeHtml(rem.subject)}</td>
         </tr>
-      `).join('');
+      `;
     }
+    // Standardní sloupcové filtry + řazení — historie upomínek
+    const remindersTable = ColFilters.table({
+      table: '#reminders-table',
+      columns: [
+        { key: 'inv', label: 'Faktura', type: 'text', ph: 'Faktura…', get: (r) => r.invoice && r.invoice.invoice_number },
+        { key: 'company', label: 'Odběratel', type: 'text', ph: 'Odběratel…', get: (r) => r.invoice && r.invoice.company && r.invoice.company.name },
+        { key: 'level', label: 'Úroveň', type: 'text', ph: 'Úroveň…', get: (r) => REM_LEVEL_LABEL[r.level] || r.level },
+        { key: 'lang', label: 'Jazyk', type: 'text', ph: 'Země…', get: (r) => r.invoice && r.invoice.company && r.invoice.company.country },
+        { key: 'to', label: 'Příjemce', type: 'text', ph: 'E-mail…', get: (r) => r.sent_to_email },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (r) => REM_STATUS_LABEL[r.status] || r.status },
+        { key: 'sent', label: 'Odesláno', type: 'date', ph: 'dd.mm.rrrr', get: (r) => r.sent_at },
+        { key: 'subject', label: 'Předmět', type: 'text', ph: 'Předmět…', get: (r) => r.subject, enum: false },
+      ],
+      renderRow: (r) => renderReminderRow(r),
+      noun: 'upomínek',
+      emptyText: 'Zatím žádné upomínky neodešly.',
+    });
 
     // ─── Tab "K platbě" — Fáze 4 ────────────────────────────────────────
     let _paymentsState = {
@@ -4076,21 +4335,8 @@
       const tbody = document.querySelector('#ready-invoices-table tbody');
       if (ri.status === 200) {
         _paymentsState.readyInvoices = ri.data;
-        if (!ri.data.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Žádné faktury ve stavu „K platbě". Schvalte fakturu ve záložce Faktury.</td></tr>';
-        } else {
-          tbody.innerHTML = ri.data.map(i => `
-            <tr>
-              <td><input type="checkbox" class="pb-row-check" data-id="${i.id}" data-amount="${i.total}" onchange="onPbRowCheck()"></td>
-              <td><span class="invoice-num">${escapeHtml(i.invoice_number)}</span></td>
-              <td>${escapeHtml(i.company?.name || '—')}</td>
-              <td>${escapeHtml(i.variable_symbol || '—')}</td>
-              <td class="acc-num" style="font-family:monospace;font-size:0.85em;">${escapeHtml(i.partner_bank_account || i.partner_iban || '<span style="color:#ef4444">CHYBÍ</span>')}</td>
-              <td>${fmtDate(i.date_due)}</td>
-              <td class="amount-cell">${fmtAmount(i.total)}</td>
-            </tr>
-          `).join('');
-        }
+        _paymentsState.selected.clear();
+        readyTable.setRows(ri.data);
       } else {
         tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba: ' + ri.status + '</td></tr>';
       }
@@ -4101,6 +4347,37 @@
       await loadBatches();
     }
 
+    function renderReadyRow(i) {
+      return `
+            <tr>
+              <td><input type="checkbox" class="pb-row-check" data-id="${i.id}" data-amount="${i.total}" ${_paymentsState.selected.has(i.id) ? 'checked' : ''} onchange="onPbRowCheck()"></td>
+              <td><span class="invoice-num">${escapeHtml(i.invoice_number)}</span></td>
+              <td>${escapeHtml(i.company?.name || '—')}</td>
+              <td>${escapeHtml(i.variable_symbol || '—')}</td>
+              <td class="acc-num" style="font-family:monospace;font-size:0.85em;">${escapeHtml(i.partner_bank_account || i.partner_iban || '<span style="color:#ef4444">CHYBÍ</span>')}</td>
+              <td>${fmtDate(i.date_due)}</td>
+              <td class="amount-cell">${fmtAmount(i.total)}</td>
+            </tr>
+          `;
+    }
+    // Standardní sloupcové filtry + řazení — faktury k platbě (výběr checkboxem se drží v _paymentsState.selected i přes filtr)
+    const readyTable = ColFilters.table({
+      table: '#ready-invoices-table',
+      columns: [
+        null,
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.invoice_number },
+        { key: 'company', label: 'Dodavatel', type: 'text', ph: 'Dodavatel…', get: (i) => i.company && i.company.name },
+        { key: 'vs', label: 'VS', type: 'text', ph: 'VS…', get: (i) => i.variable_symbol },
+        { key: 'acc', label: 'Účet příjemce', type: 'text', ph: 'Účet…', get: (i) => i.partner_bank_account || i.partner_iban },
+        { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.date_due },
+        { key: 'total', label: 'Částka', type: 'num', ph: '', get: (i) => i.total == null ? null : Number(i.total) },
+      ],
+      renderRow: (i) => renderReadyRow(i),
+      noun: 'faktur',
+      emptyText: 'Žádné faktury ve stavu „K platbě". Schvalte fakturu ve záložce Faktury.',
+      limit: 1000,
+    });
+
     async function loadBatches() {
       const r = await api('GET', '/api/accounting/payment-batches');
       const tbody = document.querySelector('#batches-table tbody');
@@ -4109,12 +4386,12 @@
         return;
       }
       _paymentsState.batches = r.data;
-      if (!r.data.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné platební příkazy zatím nebyly vytvořeny.</td></tr>';
-        return;
-      }
+      batchesTable.setRows(r.data);
+    }
+
+    function renderBatchRow(b) {
       const isSuper = !!window.currentUser?.isSuperAdmin;
-      tbody.innerHTML = r.data.map(b => `
+      return `
         <tr>
           <td><span class="invoice-num">${escapeHtml(b.batch_number)}</span></td>
           <td><span class="batch-status ${b.status}">${batchStatusLabel(b.status)}</span></td>
@@ -4137,8 +4414,26 @@
               : ''}
           </td>
         </tr>
-      `).join('');
+      `;
     }
+    // Standardní sloupcové filtry + řazení — platební příkazy
+    const batchesTable = ColFilters.table({
+      table: '#batches-table',
+      columns: [
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (b) => b.batch_number },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (b) => batchStatusLabel(b.status) },
+        { key: 'bank', label: 'Banka', type: 'text', ph: 'Banka…', get: (b) => b.bank_account ? (b.bank_account.name || '') + ' ' + (b.bank_account.bank_code || '') : '' },
+        { key: 'count', label: 'Plateb', type: 'num', ph: '', get: (b) => b.total_count || (b._count && b._count.payments) || 0 },
+        { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (b) => b.total_amount == null ? null : Number(b.total_amount) },
+        { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (b) => b.due_date },
+        { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (b) => b.created_at },
+        { key: 'submitted', label: 'Odesláno', type: 'date', ph: 'dd.mm.rrrr', get: (b) => b.submitted_at },
+        null,
+      ],
+      renderRow: (b) => renderBatchRow(b),
+      noun: 'příkazů',
+      emptyText: 'Žádné platební příkazy zatím nebyly vytvořeny.',
+    });
 
     function batchStatusLabel(s) {
       return ({
@@ -4159,13 +4454,14 @@
     };
 
     window.onPbRowCheck = function() {
-      _paymentsState.selected.clear();
-      let total = 0;
+      // Viditelné řádky aktualizují výběr; skryté (vyfiltrované) zůstávají vybrané
       document.querySelectorAll('.pb-row-check').forEach(cb => {
-        if (cb.checked) {
-          _paymentsState.selected.add(parseInt(cb.dataset.id, 10));
-          total += parseFloat(cb.dataset.amount) || 0;
-        }
+        const id = parseInt(cb.dataset.id, 10);
+        if (cb.checked) _paymentsState.selected.add(id); else _paymentsState.selected.delete(id);
+      });
+      let total = 0;
+      (_paymentsState.readyInvoices || []).forEach(i => {
+        if (_paymentsState.selected.has(i.id)) total += parseFloat(i.total) || 0;
       });
       updatePbSummary(total);
     };
@@ -4388,16 +4684,15 @@
         return;
       }
 
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné výpisy zatím nebyly nahrány.</td></tr>';
-        return;
-      }
+      statementsTable.setRows(r.data);
+    };
 
-      const sourceLabel = {
-        api: 'API', gpc_upload: 'GPC', csv_upload: 'CSV', mt940_upload: 'MT940',
-      };
-
-      tbody.innerHTML = r.data.map(s => `
+    const STMT_SOURCE_LABEL = {
+      api: 'API', gpc_upload: 'GPC', csv_upload: 'CSV', mt940_upload: 'MT940',
+    };
+    function renderStatementRow(s) {
+      const sourceLabel = STMT_SOURCE_LABEL;
+      return `
         <tr onclick="openStatement(${s.id}, '${(s.statement_number || '').replace(/'/g, '\\\'')}')">
           <td><strong>${s.statement_number || '—'}</strong></td>
           <td>${s.bank_account?.name || '—'}<br><small style="color:var(--text2)">${s.bank_account?.account_number || ''}/${s.bank_account?.bank_code || ''}</small></td>
@@ -4411,8 +4706,26 @@
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deleteStatement(${s.id}, '${(s.statement_number || '').replace(/'/g, '\\\'')}')">🗑️</button>
           </td>
         </tr>
-      `).join('');
-    };
+      `;
+    }
+    // Standardní sloupcové filtry + řazení — bankovní výpisy
+    const statementsTable = ColFilters.table({
+      table: '#statements-table',
+      columns: [
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (s) => s.statement_number },
+        { key: 'acc', label: 'Účet', type: 'text', ph: 'Účet…', get: (s) => s.bank_account ? (s.bank_account.name || '') + ' ' + (s.bank_account.account_number || '') + '/' + (s.bank_account.bank_code || '') : '' },
+        { key: 'period', label: 'Období', type: 'date', ph: 'dd.mm.rrrr', get: (s) => s.period_from },
+        { key: 'open', label: 'Otev. zůstatek', type: 'num', ph: '', get: (s) => s.opening_balance == null ? null : Number(s.opening_balance) },
+        { key: 'close', label: 'Záv. zůstatek', type: 'num', ph: '', get: (s) => s.closing_balance == null ? null : Number(s.closing_balance) },
+        { key: 'tx', label: 'Transakcí', type: 'num', ph: '', get: (s) => (s._count && s._count.transactions) || 0 },
+        { key: 'source', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: (s) => STMT_SOURCE_LABEL[s.source] || s.source },
+        { key: 'imported', label: 'Importováno', type: 'date', ph: 'dd.mm.rrrr', get: (s) => s.imported_at },
+        null,
+      ],
+      renderRow: (s) => renderStatementRow(s),
+      noun: 'výpisů',
+      emptyText: 'Žádné výpisy zatím nebyly nahrány.',
+    });
 
     window.openStatement = function(id, label) {
       currentStatementId = id;
@@ -4434,7 +4747,7 @@
 
     window.loadTransactions = async function() {
       if (!currentStatementId) return;
-      const params = new URLSearchParams({ statement_id: String(currentStatementId), limit: '500' });
+      const params = new URLSearchParams({ statement_id: String(currentStatementId), limit: '1000' });
       const status = document.getElementById('tx-filter-status').value;
       const direction = document.getElementById('tx-filter-direction').value;
       const search = document.getElementById('tx-filter-search').value.trim();
@@ -4450,11 +4763,11 @@
         return;
       }
 
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">Žádné transakce odpovídající filtrům.</td></tr>';
-        return;
-      }
+      txTable.setRows(r.data);
+    };
 
+    const TX_STATUS_LABEL = { unmatched: 'Nepárováno', matched: 'Spárováno', needs_review: 'K posouzení', ignored: 'Ignorováno' };
+    function renderTxRow(t) {
       const statusBadge = {
         unmatched:    '<span class="batch-status draft">Nepárováno</span>',
         matched:      '<span class="batch-status processed">Spárováno</span>',
@@ -4462,7 +4775,7 @@
         ignored:      '<span class="batch-status cancelled">Ignor.</span>',
       };
 
-      tbody.innerHTML = r.data.map(t => {
+      {
         const sign = t.direction === 'in' ? '+' : '−';
         const cls = t.direction === 'in' ? 'style="color:#22c55e"' : 'style="color:#f87171"';
         const matchedInvoice = t.payment?.allocations?.[0]?.invoice;
@@ -4486,7 +4799,128 @@
             <td>${statusCell}</td>
           </tr>
         `;
-      }).join('');
+      }
+    }
+    // Standardní sloupcové filtry + řazení — transakce výpisu
+    const txTable = ColFilters.table({
+      table: '#transactions-table',
+      columns: [
+        { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (t) => t.transaction_date },
+        { key: 'dir', label: 'Směr', type: 'text', ph: 'Směr…', get: (t) => t.direction === 'in' ? 'Příjem' : 'Výdaj' },
+        { key: 'amount', label: 'Částka', type: 'num', ph: '', get: (t) => t.amount == null ? null : (t.direction === 'in' ? 1 : -1) * Number(t.amount) },
+        { key: 'cp', label: 'Protistrana', type: 'text', ph: 'Protistrana…', get: (t) => t.counterparty_name },
+        { key: 'cpacc', label: 'Účet protistrany', type: 'text', ph: 'Účet…', get: (t) => t.counterparty_account },
+        { key: 'vs', label: 'VS', type: 'text', ph: 'VS…', get: (t) => t.variable_symbol },
+        { key: 'msg', label: 'Zpráva', type: 'text', ph: 'Zpráva…', get: (t) => t.message, enum: false },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…',
+          get: (t) => { const inv = t.payment?.allocations?.[0]?.invoice; return (TX_STATUS_LABEL[t.match_status] || t.match_status) + (inv ? ' ' + inv.invoice_number : ''); },
+          enumValue: (t) => TX_STATUS_LABEL[t.match_status] || t.match_status },
+      ],
+      renderRow: (t) => renderTxRow(t),
+      noun: 'transakcí',
+      emptyText: 'Žádné transakce odpovídající filtrům.',
+      limit: 1000,
+    });
+
+    // ─── Banka → Platby: všechny transakce ze všech výpisů v jedné tabulce ───
+    let bankSub = 'stmts';
+    window.switchBankSub = function(which) {
+      bankSub = which;
+      document.getElementById('bank-pays-card').style.display = which === 'pays' ? '' : 'none';
+      document.getElementById('bank-stmts-wrap').style.display = which === 'stmts' ? '' : 'none';
+      document.getElementById('bank-sub-pays').className = 'btn btn-sm ' + (which === 'pays' ? 'btn-primary' : 'btn-secondary');
+      document.getElementById('bank-sub-stmts').className = 'btn btn-sm ' + (which === 'stmts' ? 'btn-primary' : 'btn-secondary');
+      try { sessionStorage.setItem('ud.bankSub', which); } catch (e) { /* ignore */ }
+      if (which === 'pays') loadBankPayments();
+    };
+    async function payFillAccounts() {
+      const src = document.getElementById('bank-filter-account');
+      const dst = document.getElementById('pay-filter-account');
+      if (!src || !dst || dst.options.length > 1) return;
+      if (src.options.length <= 1 && typeof loadBankAccountsForFilter === 'function') { try { await loadBankAccountsForFilter(); } catch (e) { /* ignore */ } }
+      const cur = dst.value;
+      dst.innerHTML = src.innerHTML; dst.value = cur;
+    }
+    window.loadBankPayments = async function() {
+      await payFillAccounts();
+      const params = new URLSearchParams({ limit: '5000' });
+      const acc = document.getElementById('pay-filter-account').value;
+      const from = document.getElementById('pay-filter-from').value;
+      const to = document.getElementById('pay-filter-to').value;
+      if (acc) params.set('bank_account_id', acc);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
+      const r = await api('GET', '/api/banking/transactions?' + params.toString());
+      if (r.status !== 200 || !Array.isArray(r.data)) {
+        document.querySelector('#payments-table tbody').innerHTML = '<tr><td colspan="13" class="empty-hint">Chyba: ' + escapeHtml(r.data?.error || String(r.status)) + '</td></tr>';
+        return;
+      }
+      payTable.setRows(r.data);
+    };
+    function renderPayRow(t) {
+      const sign = t.direction === 'in' ? '+' : '−';
+      const cls = t.direction === 'in' ? 'style="color:#22c55e"' : 'style="color:#f87171"';
+      const inv = t.payment?.allocations?.[0]?.invoice;
+      const onclickAttr = t.match_status === 'matched' ? 'onclick="confirmUnmatch(' + t.id + ')"' : 'onclick="openMatchModal(' + t.id + ')"';
+      const badge = {
+        unmatched: '<span class="batch-status draft">Nepárováno</span>',
+        matched: '<span class="batch-status processed">Spárováno</span>',
+        needs_review: '<span class="batch-status submitted_to_bank">K posouzení</span>',
+        ignored: '<span class="batch-status cancelled">Ignor.</span>',
+      }[t.match_status] || escapeHtml(t.match_status || '');
+      const statusCell = t.match_status === 'matched' && inv
+        ? '<span class="batch-status processed" title="Klikni pro odpojení">→ ' + escapeHtml(inv.invoice_number) + '</span>' : badge;
+      return '<tr style="cursor:pointer" ' + onclickAttr + '>' +
+        '<td style="white-space:nowrap">' + fmtDate(t.transaction_date) + '</td>' +
+        '<td><small>' + escapeHtml(t.bank_account?.name || '') + '</small></td>' +
+        '<td><small>' + escapeHtml(t.statement?.statement_number || '—') + '</small></td>' +
+        '<td style="white-space:nowrap"><span ' + cls + '>' + (t.direction === 'in' ? '↓ Příjem' : '↑ Výdaj') + '</span></td>' +
+        '<td class="num" style="white-space:nowrap"><span ' + cls + '>' + sign + ' ' + fmtAmount(t.amount) + '</span></td>' +
+        '<td>' + escapeHtml(t.currency || 'CZK') + '</td>' +
+        '<td>' + escapeHtml(t.counterparty_name || '—') + '</td>' +
+        '<td><small>' + escapeHtml(t.counterparty_account || '—') + '</small></td>' +
+        '<td>' + escapeHtml(t.variable_symbol || '—') + '</td>' +
+        '<td><small>' + escapeHtml(t.constant_symbol || '') + '</small></td>' +
+        '<td><small>' + escapeHtml(t.specific_symbol || '') + '</small></td>' +
+        '<td><small>' + escapeHtml(t.message || '—') + '</small></td>' +
+        '<td>' + statusCell + '</td></tr>';
+    }
+    const payTable = ColFilters.table({
+      table: '#payments-table',
+      columns: [
+        { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (t) => t.transaction_date },
+        { key: 'acc', label: 'Účet', type: 'text', ph: 'Účet…', get: (t) => t.bank_account?.name || '' },
+        { key: 'stmt', label: 'Výpis', type: 'text', ph: 'Výpis…', get: (t) => t.statement?.statement_number || '', enum: false },
+        { key: 'dir', label: 'Směr', type: 'text', ph: 'Směr…', get: (t) => t.direction === 'in' ? 'Příjem' : 'Výdaj' },
+        { key: 'amount', label: 'Částka', type: 'num', ph: '', get: (t) => t.amount == null ? null : (t.direction === 'in' ? 1 : -1) * Number(t.amount) },
+        { key: 'cur', label: 'Měna', type: 'text', ph: 'Měna…', get: (t) => t.currency || 'CZK' },
+        { key: 'cp', label: 'Protistrana', type: 'text', ph: 'Protistrana…', get: (t) => t.counterparty_name || '' },
+        { key: 'cpacc', label: 'Účet protistrany', type: 'text', ph: 'Účet…', get: (t) => t.counterparty_account || '' },
+        { key: 'vs', label: 'VS', type: 'text', ph: 'VS…', get: (t) => t.variable_symbol || '' },
+        { key: 'ks', label: 'KS', type: 'text', ph: 'KS…', get: (t) => t.constant_symbol || '' },
+        { key: 'ss', label: 'SS', type: 'text', ph: 'SS…', get: (t) => t.specific_symbol || '' },
+        { key: 'msg', label: 'Zpráva', type: 'text', ph: 'Zpráva…', get: (t) => t.message || '', enum: false },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…',
+          get: (t) => { const inv = t.payment?.allocations?.[0]?.invoice; return (TX_STATUS_LABEL[t.match_status] || t.match_status) + (inv ? ' ' + inv.invoice_number : ''); },
+          enumValue: (t) => TX_STATUS_LABEL[t.match_status] || t.match_status },
+      ],
+      renderRow: (t) => renderPayRow(t),
+      noun: 'plateb',
+      emptyText: 'Žádné platby.',
+      limit: 1000,
+      onRender: (list) => {
+        const el = document.getElementById('pay-sums'); if (!el) return;
+        let inSum = 0, outSum = 0, nIn = 0, nOut = 0;
+        list.forEach((t) => { if ((t.currency || 'CZK') !== 'CZK') return; const a = Number(t.amount) || 0; if (t.direction === 'in') { inSum += a; nIn++; } else { outSum += a; nOut++; } });
+        el.innerHTML = 'Ve výběru (CZK): <span style="color:#22c55e">↓ ' + nIn + '× ' + fmtAmount(inSum) + '</span> · <span style="color:#f87171">↑ ' + nOut + '× ' + fmtAmount(outSum) + '</span> · saldo <b>' + fmtAmount(inSum - outSum) + '</b>';
+      },
+    });
+    // po spárování / odpojení obnovit i Platby
+    const _origLoadTransactions = window.loadTransactions;
+    window.loadTransactions = async function() {
+      const r = await _origLoadTransactions.apply(this, arguments);
+      if (bankSub === 'pays') loadBankPayments();
+      return r;
     };
 
     window.debounceTxLoad = function() {
@@ -4811,6 +5245,7 @@
       _origSwitchTab(name, dir, ev);
       if (name === 'bank') {
         loadBankAccountsForFilter().then(loadStatements);
+        try { if (sessionStorage.getItem('ud.bankSub') === 'pays') switchBankSub('pays'); } catch (e) { /* ignore */ }
       }
     };
 

@@ -533,12 +533,14 @@ router.get('/transactions', async (req, res, next) => {
       ];
     }
 
-    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 1000);
+    // Záložka Platby (všechny transakce napříč výpisy) potřebuje víc než 1000
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 5000);
 
     const transactions = await prisma.bankTransaction.findMany({
       where,
       include: {
-        bank_account: { select: { id: true, name: true, bank: true } },
+        bank_account: { select: { id: true, name: true, bank: true, account_number: true } },
+        statement: { select: { id: true, statement_number: true } },
         match_rule: { select: { id: true, name: true } },
         payment: {
           include: {

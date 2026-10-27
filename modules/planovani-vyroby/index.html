@@ -135,6 +135,7 @@
     .modal textarea { min-height: 60px; resize: vertical; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
   </style>
+  <script src="/js/column-filters.js?v=4"></script>
 </head>
 <body>
 
@@ -408,7 +409,6 @@
   // ─── Stav ─────────────────────────────────────────────────────────────────
   let allBatches = [];
   let products = [];
-  let columnFilters = {}; // key → string (per-column input filter)
   let mrpCache = new Map(); // batch_id → MRP result (lazy fetched)
 
   // ─── Helpery ──────────────────────────────────────────────────────────────
@@ -423,6 +423,13 @@
     if (s == null) return '';
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   }
+
+  // ─── Sloupcové filtry (js/column-filters.js) — pomocné funkce ─────────────
+  // Datum pro filtr — komponenta filtruje jen nad objekty Date (YYYY-MM-DD = místní půlnoc)
+  const cfDate = (v) => { if (!v) return null; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v)); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v); return isNaN(d) ? null : d; };
+  const PV_STATUS_LABELS = { planned: 'Plánovaná', released: 'Vydaná', in_progress: 'Probíhá', paused: 'Pauza', done: 'Hotová', cancelled: 'Zrušená' };
+  const PV_TYPE_LABELS = { main: 'Hlavní', feeder: 'Feeder', subassembly: 'Podsestava' };
+  const cfBool = (v) => v === true ? 'Ano' : (v === false ? 'Ne' : '');
 
   function fmtDate(d) {
     if (!d) return '—';
@@ -544,26 +551,6 @@
     }
   }
 
-  function cellFilterMatches(col, b, filterValue) {
-    if (!filterValue) return true;
-    const fv = String(filterValue).toLowerCase().trim();
-    const v = col.get(b);
-    if (col.type === 'bool') {
-      // ✓ / ano / yes / true → true; ✗ / ne / no / false → false; — / na → null
-      if (['✓','y','ano','yes','true','1'].includes(fv)) return v === true;
-      if (['✗','n','ne','no','false','0'].includes(fv)) return v === false;
-      return true;
-    }
-    if (col.type === 'orders') return v && v.some(o => (o.order_number || '').toLowerCase().includes(fv));
-    if (col.type === 'link') return v && (`${v.code} ${v.name}`.toLowerCase().includes(fv));
-    if (col.type === 'num') return String(v).includes(fv);
-    if (col.type === 'date' || col.type === 'datetime') {
-      return v && fmtDateTime(v).toLowerCase().includes(fv);
-    }
-    if (col.type === 'badge') return String(v ?? '').toLowerCase().includes(fv);
-    return String(v ?? '').toLowerCase().includes(fv);
-  }
-
   // ─── Bulk re-plán všech aktivních dávek ───────────────────────────────────
   window.scheduleAllBatches = async function() {
     if (!confirm('Spustit bulk re-plán všech aktivních dávek (planned/released/paused)?\n\nVšechny non-started operace dostanou nové planned_start/end podle priority a queue konfliktů.')) return;
@@ -622,16 +609,45 @@
     if (year) filtered = filtered.filter(b => yearFromBatchNumber(b.batch_number) === parseInt(year, 10));
     if (overdueOnly) filtered = filtered.filter(b => isOverdue(b));
 
-    // Per-column inline filtry
-    for (const col of COLUMNS) {
-      const fv = columnFilters[col.key];
-      if (fv) filtered = filtered.filter(b => cellFilterMatches(col, b, fv));
-    }
+    // Sloupcové filtry + řazení řeší standardní komponenta (pvBatchesCf) nad tímto výběrem
 
     document.getElementById('batchCount').textContent = filtered.length === allBatches.length
       ? `(${allBatches.length})` : `(${filtered.length}/${allBatches.length})`;
     renderTable(filtered);
   }
+
+  // Standardní sloupcové filtry + řazení (nahrazuje původní řádek s inputy data-fkey)
+  function pvCfCol(c) {
+    switch (c.type) {
+      case 'actions': return null;
+      case 'num': return { key: c.key, label: c.label, type: 'num', ph: '', get: c.get };
+      case 'date': case 'datetime': return { key: c.key, label: c.label, type: 'date', ph: 'dd.mm.rrrr', get: (b) => cfDate(c.get(b)) };
+      case 'bool': return { key: c.key, label: c.label, type: 'text', ph: '', get: (b) => cfBool(c.get(b)) };
+      case 'badge': return { key: c.key, label: c.label, type: 'text', ph: 'Stav…', get: (b) => PV_STATUS_LABELS[c.get(b)] || c.get(b) || '' };
+      case 'orders': return { key: c.key, label: c.label, type: 'text', ph: 'Objednávka…', get: (b) => (c.get(b) || []).map(o => o.order_number || '').join(', ') };
+      case 'link': return { key: c.key, label: c.label, type: 'text', ph: 'Zboží…', get: (b) => { const v = c.get(b); return v ? ((v.code || '') + ' ' + (v.name || '')) : ''; }, sortGet: (b) => { const v = c.get(b); return v ? v.code : ''; } };
+      default:
+        if (c.key === 'batch_type') return { key: c.key, label: c.label, type: 'text', ph: 'Typ…', get: (b) => PV_TYPE_LABELS[c.get(b)] || c.get(b) || '' };
+        return { key: c.key, label: c.label, type: 'text', ph: c.label + '…', get: (b) => c.get(b) || '' };
+    }
+  }
+  const pvBatchesCf = ColFilters.table({
+    table: () => document.getElementById('pvBatchesTable'),
+    columns: COLUMNS.map(pvCfCol),
+    renderRow: (b) => {
+      const cells = COLUMNS.map(c => renderCell(c, b)).join('');
+      const overdueClass = isOverdue(b) ? ' style="border-left:3px solid #ef4444;"' : '';
+      return `<tr${overdueClass}>${cells}</tr>`;
+    },
+    noun: 'dávek',
+    emptyText: 'Žádné dávky neodpovídají filtru.',
+    limit: 1000,
+    onRender: () => {
+      // Action button listeners (řádky se překreslují komponentou)
+      const t = document.getElementById('pvBatchesTable');
+      if (t) t.querySelectorAll('tbody [data-action]').forEach(btn => btn.addEventListener('click', handleAction));
+    },
+  });
 
   function renderTable(batches) {
     if (allBatches.length === 0) {
@@ -640,40 +656,17 @@
       return;
     }
 
-    const titles = COLUMNS.map(c => `<th>${escHtml(c.label)}</th>`).join('');
-    const filters = COLUMNS.map(c => {
-      if (c.type === 'actions') return '<th></th>';
-      const cur = escHtml(columnFilters[c.key] || '');
-      return `<th><input type="text" data-fkey="${c.key}" value="${cur}" placeholder=""></th>`;
-    }).join('');
-
-    const rows = batches.map(b => {
-      const cells = COLUMNS.map(c => renderCell(c, b)).join('');
-      const overdueClass = isOverdue(b) ? ' style="border-left:3px solid #ef4444;"' : '';
-      return `<tr${overdueClass}>${cells}</tr>`;
-    }).join('');
-
-    document.getElementById('tableWrap').innerHTML = `
-      <table class="dense">
+    if (!document.getElementById('pvBatchesTable')) {
+      const titles = COLUMNS.map(c => `<th>${escHtml(c.label)}</th>`).join('');
+      document.getElementById('tableWrap').innerHTML = `
+      <table class="dense" id="pvBatchesTable">
         <thead>
           <tr class="head-titles">${titles}</tr>
-          <tr class="head-filters">${filters}</tr>
         </thead>
-        <tbody>${rows || `<tr><td colspan="${COLUMNS.length}" class="empty-state">Žádné dávky neodpovídají filtru.</td></tr>`}</tbody>
+        <tbody></tbody>
       </table>`;
-
-    // Per-column input listeners
-    document.querySelectorAll('input[data-fkey]').forEach(inp => {
-      inp.addEventListener('input', e => {
-        columnFilters[e.target.dataset.fkey] = e.target.value;
-        applyFilters();
-      });
-    });
-
-    // Action button listeners
-    document.querySelectorAll('[data-action]').forEach(btn => {
-      btn.addEventListener('click', handleAction);
-    });
+    }
+    pvBatchesCf.setRows(batches);
   }
 
   // ─── Akce ─────────────────────────────────────────────────────────────────
@@ -1538,10 +1531,10 @@
       if (o.deposit_paid) return '<span class="badge" style="background:rgba(16,185,129,0.18);color:#10b981;">Záloha zaplacena</span>';
       return '<span class="badge" style="background:rgba(234,179,8,0.18);color:#eab308;">Čeká na platbu</span>';
     };
-    let h = '<table class="dense" style="width:100%;"><thead><tr class="head-titles">' +
+    let h = '<table class="dense" id="pvOrdersTable" style="width:100%;"><thead><tr class="head-titles">' +
       '<th>Číslo</th><th>Zákazník</th><th>Položky</th><th>Celkem</th><th>Platba</th><th>Výroba do</th><th>Stav</th><th></th>' +
       '</tr></thead><tbody>';
-    rows.forEach(o => {
+    _pvOrdRowFn = (o) => { let h = '';
       const items = Array.isArray(o.items) ? o.items : [];
       const itemsTxt = items.map(i => escHtml((i.name || '') + (i.quantity ? ' ×' + i.quantity : ''))).join('<br>');
       const unlinked = items.filter(i => !i.product_id && !i.product).length;
@@ -1559,10 +1552,30 @@
         '<td>' + statusBadge(o.status === 'confirmed' ? 'released' : (o.status || '')) + '</td>' +
         '<td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();openProductionOrder(' + o.id + ')">Detail →</button></td>' +
         '</tr>';
-    });
+      return h;
+    };
     h += '</tbody></table>';
     wrap.innerHTML = h;
+    pvOrdersCf.setRows(rows);
   };
+  let _pvOrdRowFn = null;
+  const pvOrdersCf = ColFilters.table({
+    table: () => document.getElementById('pvOrdersTable'),
+    columns: [
+      { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (o) => o.order_number },
+      { key: 'customer', label: 'Zákazník', type: 'text', ph: 'Zákazník…', get: (o) => (o.company && o.company.name) || o.company_name || '' },
+      { key: 'items', label: 'Položky', type: 'text', ph: 'Položky…', get: (o) => (Array.isArray(o.items) ? o.items : []).map(i => i.name || '').join(', '), enum: false },
+      { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (o) => o.total_amount == null ? null : Number(o.total_amount) },
+      { key: 'pay', label: 'Platba', type: 'text', ph: 'Platba…', get: (o) => o.final_paid ? 'Doplaceno' : (o.deposit_paid ? 'Záloha zaplacena' : 'Čeká na platbu') },
+      { key: 'finish', label: 'Výroba do', type: 'date', ph: 'dd.mm.rrrr', get: (o) => cfDate(o.production_finish_last || o.expected_delivery) },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (o) => { const st = o.status === 'confirmed' ? 'released' : (o.status || ''); return PV_STATUS_LABELS[st] || st; } },
+      null,
+    ],
+    renderRow: (o, i) => _pvOrdRowFn(o, i),
+    noun: 'objednávek',
+    emptyText: 'Žádné objednávky.',
+    limit: 1000,
+  });
 
   // Detail objednávky pro výrobu — read-only, veškeré informace.
   window.openProductionOrder = async function(id) {
@@ -2035,8 +2048,12 @@
     try {
       var rows = await pv2Fetch('/api/planning/batches-plan'); pv2Loaded.batches = true;
       if (!rows.length) { box.innerHTML = '<div class="pv2-empty">Žádné naplánované dávky.</div>'; return; }
-      box.innerHTML = '<table class="pv2-table"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Lidé</th><th>Pracoviště</th><th>Stav</th><th></th></tr></thead><tbody>' +
-        rows.map(function (b) {
+      box.innerHTML = '<table class="pv2-table" id="pv2BatchesTable"><thead><tr><th>Dávka</th><th>Výrobek</th><th>Ks</th><th>Začátek</th><th>Konec</th><th>Operace</th><th>Lidé</th><th>Pracoviště</th><th>Stav</th><th></th></tr></thead><tbody></tbody></table>';
+      pv2BatchesCf.setRows(rows);
+    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
+  };
+  // Řádek tabulky Výrobní dávky
+  function pv2BatchRow(b) {
           var pct = b.ops_total ? Math.round(b.ops_done / b.ops_total * 100) : 0;
           var late = b.due_date && b.planned_end && new Date(b.planned_end) > new Date(b.due_date);
           return '<tr><td><b>' + pv2Esc(b.batch_number) + '</b>' + (b.is_test ? ' <span class="pv2-badge" style="color:#c084fc;">🧪</span>' : '') + (b.ignore_stock ? ' <span class="pv2-badge" style="color:#f59e0b;" title="Plánováno bez ohledu na sklad">⏩</span>' : '') + pv2FeederTag(b) + '</td><td>' + pv2Esc(b.product.code) + ' <small style="color:var(--text2)">' + pv2Esc(b.product.name) + '</small>' + (b.config_code ? '<div style="font-size:11px;font-family:ui-monospace,Consolas,monospace;color:#22c55e;font-weight:700;">' + pv2Esc(b.config_code) + '</div>' : '') + (b.variant_label ? '<div style="font-size:11px;color:#fb923c;">⎘ ' + pv2Esc(b.variant_label) + '</div>' : '') + '</td><td>' + b.quantity + '</td>' +
@@ -2046,9 +2063,27 @@
             '<td>' + b.workstations.map(function (w) { return '<span class="pv2-badge">' + pv2Esc(w.name) + '</span>'; }).join('') + '</td>' +
             '<td><span class="pv2-badge">' + pv2Esc(b.status) + '</span></td>' +
             '<td style="white-space:nowrap;text-align:right;">' + pv2ReplanBtn(b) + '<button class="btn btn-secondary" onclick="pv2DeleteBatch(' + b.id + ',' + JSON.stringify(b.batch_number).replace(/"/g, '&quot;') + ',' + JSON.stringify(b.status).replace(/"/g, '&quot;') + ')" title="Smazat dávku (operace a plán se smažou, sloty uvolní)" style="color:#ef4444;padding:4px 9px;">🗑️</button></td></tr>';
-        }).join('') + '</tbody></table>';
-    } catch (e) { box.innerHTML = '<div class="pv2-empty">Chyba: ' + pv2Esc(e.message) + '</div>'; }
-  };
+  }
+  // Standardní sloupcové filtry + řazení
+  const pv2BatchesCf = ColFilters.table({
+    table: () => document.getElementById('pv2BatchesTable'),
+    columns: [
+      { key: 'num', label: 'Dávka', type: 'text', ph: 'Dávka…', get: (b) => (b.batch_number || '') + (b.parent_batch ? ' polotovar ' + (b.parent_batch.batch_number || '') : ''), sortGet: (b) => b.batch_number || '' },
+      { key: 'product', label: 'Výrobek', type: 'text', ph: 'Výrobek…', get: (b) => [b.product && b.product.code, b.product && b.product.name, b.config_code, b.variant_label].filter(Boolean).join(' '), sortGet: (b) => (b.product && b.product.code) || '' },
+      { key: 'qty', label: 'Ks', type: 'num', ph: '', get: (b) => b.quantity },
+      { key: 'start', label: 'Začátek', type: 'date', ph: 'dd.mm.rrrr', get: (b) => cfDate(b.actual_start || b.planned_start) },
+      { key: 'end', label: 'Konec', type: 'date', ph: 'dd.mm.rrrr', get: (b) => cfDate(b.actual_end || b.forecast_end || b.planned_end) },
+      { key: 'ops', label: 'Operace (% hotovo)', type: 'num', ph: '%', get: (b) => b.ops_total ? Math.round(b.ops_done / b.ops_total * 100) : 0 },
+      { key: 'people', label: 'Lidé', type: 'text', ph: 'Lidé…', get: (b) => (b.people || []).map(p => p.first_name + ' ' + p.last_name).join(', ') || 'bez lidí', enum: false },
+      { key: 'ws', label: 'Pracoviště', type: 'text', ph: 'Pracoviště…', get: (b) => (b.workstations || []).map(w => w.name).join(', '), enum: false },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (b) => PV_STATUS_LABELS[b.status] || b.status || '' },
+      null,
+    ],
+    renderRow: (b) => pv2BatchRow(b),
+    noun: 'dávek',
+    emptyText: 'Žádné naplánované dávky.',
+    limit: 1000,
+  });
   function pv2FeederTag(b) {
     return b.parent_batch ? '<div style="font-size:11px;color:#a78bfa;" title="Dílčí dávka polotovaru — vyrábí se před hlavní dávkou">↳ polotovar pro <b>' + pv2Esc(b.parent_batch.batch_number) + '</b></div>' : '';
   }

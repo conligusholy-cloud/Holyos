@@ -80,7 +80,7 @@
   </style>
   <script src="/js/countries.js"></script>
   <script src="/js/image-lightbox.js"></script>
-  <script src="/js/column-filters.js?v=3"></script>
+  <script src="/js/column-filters.js?v=4"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -377,6 +377,31 @@
       loadOrders();
     }
 
+    // Poptávky — stavy, pomocné výpočty a tabulka se standardními filtry (js/column-filters.js)
+    const INQ_ST = { draft: ['koncept', '#9ca3af'], sent: ['odesláno', '#3b82f6'], opened: ['dodavatel otevřel', '#3b82f6'], in_progress: ['dodavatel vyplňuje', '#f59e0b'], answered: ['✅ nabídka přijata', '#16a34a'], converted: ['převedeno na objednávku', '#8b5cf6'], cancelled: ['zrušeno', '#ef4444'] };
+    const inqFd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
+    const inqTotal = (i) => (i.items || []).reduce((s, it) => s + (Number(it.offered_price) || 0) * (Number(it.quantity) || 0), 0);
+    const inqChkLabel = (i) => (i.offer_check ? (i.offer_check.status === 'ok' ? '✓ sedí' : '⚠ rozdíly') : (i.offer_file_name ? '⏳ kontroluje se' : ''));
+    const INQ_T = ColFilters.table({
+      table: '#inq-table',
+      columns: [
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (i) => i.number },
+        { key: 'sup', label: 'Dodavatel', type: 'text', ph: 'Dodavatel…', get: (i) => (i.company_name || '') + ' ' + (i.contact_email || '') },
+        { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => (INQ_ST[i.status] || [i.status])[0] },
+        { key: 'cnt', label: 'Položek', type: 'num', ph: '', get: (i) => (i.items || []).length },
+        { key: 'tot', label: 'Nabídka celkem', type: 'num', ph: '', get: (i) => inqTotal(i) || null },
+        { key: 'sent', label: 'Odesláno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.sent_at },
+        { key: 'ans', label: 'Odpověď', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.answered_at },
+        { key: 'chk', label: 'Kontrola nabídky', type: 'text', ph: 'Kontrola…', get: (i) => inqChkLabel(i) },
+        null,
+      ],
+      renderRow: (i) => { const st = INQ_ST[i.status] || [i.status, '#9ca3af']; const tot = inqTotal(i); const chk = i.offer_check;
+        return '<tr style="cursor:pointer" onclick="pnInquiryDetail(' + i.id + ')"><td><b>' + esc(i.number) + '</b></td><td>' + esc(i.company_name || '—') + '</td><td><span class="status-badge" style="background:' + st[1] + '22;color:' + st[1] + ';border:1px solid ' + st[1] + '55;padding:2px 8px;border-radius:999px;font-size:11px;">' + esc(st[0]) + '</span></td><td>' + (i.items || []).length + '</td><td>' + (tot ? tot.toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + esc(i.currency) : '—') + '</td><td>' + inqFd(i.sent_at) + (i.contact_email ? '<div style="font-size:11px;color:var(--text2)">' + esc(i.contact_email) + '</div>' : '') + '</td><td>' + inqFd(i.answered_at) + '</td><td>' + (chk ? '<span style="color:' + (chk.status === 'ok' ? '#4ade80' : '#f59e0b') + '" title="' + ordAttr(chk.summary || '') + '">' + (chk.status === 'ok' ? '✓ sedí' : '⚠ rozdíly') + '</span>' : (i.offer_file_name ? '⏳' : '—')) + '</td><td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();pnInquiryDetail(' + i.id + ')">🔍 Detail</button></td></tr>'; },
+      noun: 'poptávek',
+      emptyText: 'Žádné poptávky.',
+      limit: 1000,
+    });
+
     // Záložka Poptávky — všechny poptávky u dodavatelů (stav, odpověď, kontrola nabídky) → 🔍 detail / souhlas
     async function loadInquiriesList() {
       const el = document.getElementById('orders-table');
@@ -387,12 +412,8 @@
         const q = (document.getElementById('order-search')?.value || '').toLowerCase();
         const rows = list.filter((i) => !q || (i.number + ' ' + (i.company_name || '')).toLowerCase().includes(q));
         if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📨</div><h3>Žádné poptávky</h3><p>Poptávku vytvoříš v „+ Nová objednávka“ → Poptat ceny u dodavatele.</p></div>'; return; }
-        const ST = { draft: ['koncept', '#9ca3af'], sent: ['odesláno', '#3b82f6'], opened: ['dodavatel otevřel', '#3b82f6'], in_progress: ['dodavatel vyplňuje', '#f59e0b'], answered: ['✅ nabídka přijata', '#16a34a'], converted: ['převedeno na objednávku', '#8b5cf6'], cancelled: ['zrušeno', '#ef4444'] };
-        const fd = (v) => (v ? new Date(v).toLocaleDateString('cs-CZ') : '—');
-        el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Položek</th><th>Nabídka celkem</th><th>Odesláno</th><th>Odpověď</th><th>Kontrola nabídky</th><th></th></tr></thead><tbody>' +
-          rows.map((i) => { const st = ST[i.status] || [i.status, '#9ca3af']; const tot = (i.items || []).reduce((s, it) => s + (Number(it.offered_price) || 0) * (Number(it.quantity) || 0), 0); const chk = i.offer_check;
-            return '<tr style="cursor:pointer" onclick="pnInquiryDetail(' + i.id + ')"><td><b>' + esc(i.number) + '</b></td><td>' + esc(i.company_name || '—') + '</td><td><span class="status-badge" style="background:' + st[1] + '22;color:' + st[1] + ';border:1px solid ' + st[1] + '55;padding:2px 8px;border-radius:999px;font-size:11px;">' + st[0] + '</span></td><td>' + (i.items || []).length + '</td><td>' + (tot ? tot.toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' ' + esc(i.currency) : '—') + '</td><td>' + fd(i.sent_at) + (i.contact_email ? '<div style="font-size:11px;color:var(--text2)">' + esc(i.contact_email) + '</div>' : '') + '</td><td>' + fd(i.answered_at) + '</td><td>' + (chk ? '<span style="color:' + (chk.status === 'ok' ? '#4ade80' : '#f59e0b') + '" title="' + esc(chk.summary || '') + '">' + (chk.status === 'ok' ? '✓ sedí' : '⚠ rozdíly') + '</span>' : (i.offer_file_name ? '⏳' : '—')) + '</td><td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();pnInquiryDetail(' + i.id + ')">🔍 Detail</button></td></tr>'; }).join('') +
-          '</tbody></table></div>';
+        el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="inq-table"><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Položek</th><th>Nabídka celkem</th><th>Odesláno</th><th>Odpověď</th><th>Kontrola nabídky</th><th></th></tr></thead><tbody></tbody></table></div>';
+        INQ_T.setRows(rows);
       } catch (e) { el.innerHTML = '<div class="empty-state"><p>Poptávky se nepodařilo načíst (' + esc(e.message) + ').</p></div>'; }
     }
     function updateInquiryBadge(list) {
@@ -585,23 +606,36 @@
       } catch(e) { console.error(e); }
     }
 
+    const COMPANIES_T = ColFilters.table({
+      table: '#companies-tbl',
+      columns: [
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (c) => c.name },
+        { key: 'ico', label: 'IČO', type: 'text', ph: 'IČO…', get: (c) => c.ico || '' },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (c) => COMPANY_TYPES[c.type] || c.type || '' },
+        { key: 'contact', label: 'Kontakt', type: 'text', ph: 'E-mail, telefon…', get: (c) => c.email || c.phone || '' },
+        { key: 'terms', label: 'Splatnost', type: 'num', ph: '', get: (c) => c.payment_terms_days || 14 },
+        null,
+      ],
+      renderRow: (c) => {
+        const typeColor = c.type === 'own' ? '#8b5cf6' : c.type === 'supplier' ? '#f59e0b' : c.type === 'customer' ? '#10b981' : '#3b82f6';
+        return '<tr onclick="openCompanyModal(' + c.id + ')">' +
+          '<td class="person-name">' + esc(c.name) + '</td>' +
+          '<td>' + esc(c.ico || '—') + '</td>' +
+          '<td><span class="badge" style="background:' + typeColor + '22;color:' + typeColor + ';">' + esc(COMPANY_TYPES[c.type] || c.type) + '</span></td>' +
+          '<td>' + esc(c.email || c.phone || '—') + '</td>' +
+          '<td>' + (c.payment_terms_days || 14) + ' dní</td>' +
+          '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCompany(' + c.id + ')">🗑️</button></td>' +
+          '</tr>';
+      },
+      noun: 'společností',
+      emptyText: 'Žádné společnosti.',
+      limit: 1000,
+    });
     function renderCompanies(list) {
       const el = document.getElementById('companies-table');
       if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádné společnosti</h3><p>Přidejte dodavatele nebo odběratele.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Název</th><th>IČO</th><th>Typ</th><th>Kontakt</th><th>Splatnost</th><th>Akce</th></tr></thead><tbody>';
-      for (const c of list) {
-        const typeColor = c.type === 'own' ? '#8b5cf6' : c.type === 'supplier' ? '#f59e0b' : c.type === 'customer' ? '#10b981' : '#3b82f6';
-        html += '<tr onclick="openCompanyModal(' + c.id + ')">';
-        html += '<td class="person-name">' + c.name + '</td>';
-        html += '<td>' + (c.ico || '—') + '</td>';
-        html += '<td><span class="badge" style="background:' + typeColor + '22;color:' + typeColor + ';">' + (COMPANY_TYPES[c.type] || c.type) + '</span></td>';
-        html += '<td>' + (c.email || c.phone || '—') + '</td>';
-        html += '<td>' + (c.payment_terms_days || 14) + ' dní</td>';
-        html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteCompany(' + c.id + ')">🗑️</button></td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+      if (!document.getElementById('companies-tbl')) el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="companies-tbl"><thead><tr><th>Název</th><th>IČO</th><th>Typ</th><th>Kontakt</th><th>Splatnost</th><th>Akce</th></tr></thead><tbody></tbody></table></div>';
+      COMPANIES_T.setRows(list);
     }
 
     async function openCompanyModal(id) {
@@ -785,18 +819,27 @@
       return { late, price, any: late + price > 0 };
     }
 
-    function renderOrderItems(list) {
-      const el = document.getElementById('orders-table');
-      const rows = [];
-      list.forEach((o) => (o.items || []).forEach((it) => rows.push({ o, it })));
-      if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné položky objednávek</h3></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Objednávka</th><th>Společnost</th><th>Položka</th><th>Množství</th><th>Cena / ks</th><th>Požadováno</th><th>Potvrzeno dodavatelem</th><th>Stav položky</th><th>Stav objednávky</th></tr></thead><tbody>';
-      for (const { o, it } of rows) {
+    // ─── Položky objednávek: tabulka se standardními filtry + řazením (js/column-filters.js) ───
+    const ordItemPrice = (it) => { const d = itemDev(it, {}); return d.price ? Number(it.confirmed_price) : Number(it.unit_price || 0); };
+    const ORD_ITEMS_T = ColFilters.table({
+      table: '#ord-items-tbl',
+      columns: [
+        { key: 'num', label: 'Objednávka', type: 'text', ph: 'Číslo…', get: (r) => r.o.order_number },
+        { key: 'co', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (r) => ordCompany(r.o) },
+        { key: 'item', label: 'Položka', type: 'text', ph: 'Název nebo kód…', get: (r) => (r.it.name || '') + ' ' + (r.it.code || '') },
+        { key: 'qty', label: 'Množství', type: 'num', ph: '', get: (r) => Number(r.it.quantity) || 0 },
+        { key: 'price', label: 'Cena / ks', type: 'num', ph: '', get: (r) => ordItemPrice(r.it) },
+        { key: 'req', label: 'Požadováno', type: 'date', ph: 'dd.mm.rrrr', get: (r) => ordDay(r.it.expected_delivery || r.o.expected_delivery) || null },
+        { key: 'conf', label: 'Potvrzeno dodavatelem', type: 'date', ph: 'dd.mm.rrrr', get: (r) => ordDay(r.it.confirmed_delivery) || null },
+        { key: 'ist', label: 'Stav položky', type: 'text', ph: 'Stav…', get: (r) => (ITEM_STATUSES[r.it.status] || { label: r.it.status || '' }).label },
+        { key: 'ost', label: 'Stav objednávky', type: 'text', ph: 'Stav…', get: (r) => (ORDER_STATUSES[r.o.status] || { label: r.o.status || '' }).label },
+      ],
+      renderRow: ({ o, it }) => {
         const d = itemDev(it, o);
         const ist = ITEM_STATUSES[it.status] || { label: it.status || '—', color: '#9ca3af' };
         const ost = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         const q = Number(it.quantity) || 0, dl = Number(it.delivered_quantity) || 0;
-        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        let html = '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td class="person-name">' + esc(o.order_number) + '</td>';
         html += '<td>' + esc(ordCompany(o)) + '</td>';
         html += '<td>' + esc(it.name || it.code || '') + '</td>';
@@ -806,26 +849,34 @@
         html += '<td' + (d.late ? ' style="color:#f59e0b;font-weight:600" title="Dodavatel potvrdil později, než požadujeme"' : '') + '>' + (it.confirmed_delivery ? ordFmt(it.confirmed_delivery) + (d.late ? ' ⚠' : '') : '—') + '</td>';
         html += '<td><span class="badge" style="background:' + ist.color + '22;color:' + ist.color + ';">' + ist.label + '</span></td>';
         html += '<td><span class="badge" style="background:' + ost.color + '22;color:' + ost.color + ';">' + ost.label + '</span></td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+        return html + '</tr>';
+      },
+      noun: 'položek',
+      emptyText: 'Žádné položky objednávek.',
+      limit: 1000,
+    });
+    function renderOrderItems(list) {
+      const el = document.getElementById('orders-table');
+      const rows = [];
+      list.forEach((o) => (o.items || []).forEach((it) => rows.push({ o, it })));
+      if (!rows.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné položky objednávek</h3></div>'; return; }
+      if (!document.getElementById('ord-items-tbl')) el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="ord-items-tbl"><thead><tr><th>Objednávka</th><th>Společnost</th><th>Položka</th><th>Množství</th><th>Cena / ks</th><th>Požadováno</th><th>Potvrzeno dodavatelem</th><th>Stav položky</th><th>Stav objednávky</th></tr></thead><tbody></tbody></table></div>';
+      ORD_ITEMS_T.setRows(rows);
     }
 
-    function renderOrders(list) {
-      const el = document.getElementById('orders-table');
-      if (orderView === 'items') return renderOrderItems(list);
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Doručeno</th><th>Akce</th></tr></thead><tbody>';
-      for (const o of list) {
+    // ─── Objednávky: tabulka se standardními filtry + řazením (js/column-filters.js) ───
+    const ordLastConf = (o) => { const confDates = (o.items || []).map((it) => ordDay(it.confirmed_delivery)).filter(Boolean).sort(); return confDates.length ? confDates[confDates.length - 1] : ordDay(o.confirmed_delivery); };
+    const ordLastRcv = (o) => { const rcv = o.events || []; return rcv.length ? rcv[rcv.length - 1].ts : (o.delivered_at || null); };
+    // Doplňkový text ke stavu (štítek „mimo požadavky" / „čeká na potvrzení") — aby šel i filtrovat
+    const ordStateExtra = (o) => { const scs = o.supplier_confirm_status; return (scs === 'changes' || orderDev(o).any) ? 'mimo požadavky' : (scs === 'sent' && o.status === 'ordered' ? 'čeká na potvrzení' : ''); };
+    function ordRowHtml(o) {
         const dev = orderDev(o);
-        const confDates = (o.items || []).map((it) => ordDay(it.confirmed_delivery)).filter(Boolean).sort();
-        const lastConf = confDates.length ? confDates[confDates.length - 1] : ordDay(o.confirmed_delivery);
+        const lastConf = ordLastConf(o);
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
-        html += '<tr onclick="openOrderDetail(' + o.id + ')">';
+        let html = '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td style="white-space:nowrap;color:var(--text2)" title="' + (o.created_at ? new Date(o.created_at).toLocaleString('cs-CZ') : '') + '">' + (o.created_at ? new Date(o.created_at).toLocaleDateString('cs-CZ') : '—') + '</td>';
-        html += '<td class="person-name">' + o.order_number + '</td>';
-        html += '<td>' + (ORDER_TYPES[o.type] || o.type) + '</td>';
+        html += '<td class="person-name">' + esc(o.order_number) + '</td>';
+        html += '<td>' + (ORDER_TYPES[o.type] || esc(o.type)) + '</td>';
         html += '<td>' + esc(ordCompany(o)) + '</td>';
         // Nákupní: „Objednáno" = odesláno dodavateli, „Objednávka potvrzena" = dodavatel potvrdil přes odkaz
         const scs = o.supplier_confirm_status;
@@ -843,10 +894,34 @@
         const rcvTip = rcv.map((e) => fdt(e.ts) + ' — ' + (e.actor || '?') + ' · ' + (e.label || '') + (e.detail ? ' (' + e.detail + ')' : '')).join('\n');
         html += '<td style="white-space:nowrap' + (o.status === 'partial' ? ';color:#60a5fa' : '') + '" title="' + ordAttr(rcvTip || (o.delivered_at ? 'Doručeno ' + fdt(o.delivered_at) : '')) + '">' + (lastR ? fdt(lastR.ts) + (rcv.length > 1 ? ' <span style="color:var(--text2);font-size:11px">(' + rcv.length + '×)</span>' : '') + (o.status === 'partial' ? ' <span style="font-size:11px">částečně</span>' : '') : (o.delivered_at ? fdt(o.delivered_at) : '—')) + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+        return html + '</tr>';
+    }
+    const ORDERS_T = ColFilters.table({
+      table: '#orders-tbl',
+      columns: [
+        { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (o) => o.created_at },
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (o) => o.order_number },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (o) => ORDER_TYPES[o.type] || o.type || '' },
+        { key: 'co', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (o) => ordCompany(o) },
+        { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (o) => (ORDER_STATUSES[o.status] || { label: o.status }).label + ' ' + ordStateExtra(o), enumValue: (o) => (ORDER_STATUSES[o.status] || { label: o.status }).label },
+        { key: 'cnt', label: 'Položek', type: 'num', ph: '', get: (o) => o.items_count || 0 },
+        { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (o) => Number(o.total_amount || 0) },
+        { key: 'req', label: 'Požadované dodání', type: 'date', ph: 'dd.mm.rrrr', get: (o) => ordDay(o.expected_delivery) || null },
+        { key: 'conf', label: 'Potvrzené dodání', type: 'date', ph: 'dd.mm.rrrr', get: (o) => ordLastConf(o) || null },
+        { key: 'dlv', label: 'Doručeno', type: 'date', ph: 'dd.mm.rrrr', get: (o) => ordLastRcv(o) },
+        null,
+      ],
+      renderRow: (o) => ordRowHtml(o),
+      noun: 'objednávek',
+      emptyText: 'Žádné objednávky.',
+      limit: 1000,
+    });
+    function renderOrders(list) {
+      const el = document.getElementById('orders-table');
+      if (orderView === 'items') return renderOrderItems(list);
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné objednávky</h3><p>Vytvořte první objednávku.</p></div>'; return; }
+      if (!document.getElementById('orders-tbl')) el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="orders-tbl"><thead><tr><th>Vytvořeno</th><th>Číslo</th><th>Typ</th><th>Společnost</th><th>Stav</th><th>Položek</th><th>Celkem</th><th>Požadované dodání</th><th>Potvrzené dodání</th><th>Doručeno</th><th>Akce</th></tr></thead><tbody></tbody></table></div>';
+      ORDERS_T.setRows(list);
     }
 
     // ============================================================
@@ -1626,13 +1701,7 @@
       try { const r = await fetch('/api/wh/materials?' + params); materials = await r.json(); renderMaterials(materials); } catch(e) { console.error(e); }
     }
 
-    function renderMaterials(list) {
-      const el = document.getElementById('materials-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; updateMatBulkBar(); return; }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
-        '<th style="width:34px"><input type="checkbox" id="mat-check-all" onclick="event.stopPropagation();toggleAllMatSelection(this.checked)"></th>' +
-        '<th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Kategorie</th><th title="Dokumentace od konstruktéra (CAD výkres)">Dok.</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody>';
-      for (const m of list) {
+    function matRowHtml(m) {
         const stock = Number(m.current_stock) || 0;
         const minStock = Number(m.min_stock) || 0;
         const price = Number(m.unit_price) || 0;
@@ -1649,33 +1718,64 @@
           ? '<img src="' + m.photo_url + '" loading="lazy" onclick="event.stopPropagation();openImageLightbox(this.src,\'' + escName + '\')" onerror="this.replaceWith(Object.assign(document.createElement(\'div\'),{textContent:\'📦\',style:\'font-size:18px;opacity:.4;text-align:center\'}))" style="width:36px;height:36px;border-radius:6px;object-fit:cover;background:var(--surface2);border:1px solid var(--border);display:block;cursor:zoom-in" title="Klik = velký náhled">'
           : '<div style="width:36px;height:36px;border-radius:6px;background:var(--surface2);border:1px solid var(--border);"></div>';
         const catLabel = m.category ? esc(catPathName(m.category.id) || m.category.name) : '—';
-        html += '<tr onclick="openMaterialModal(' + m.id + ')">';
+        let html = '<tr onclick="openMaterialModal(' + m.id + ')">';
         html += '<td style="width:34px" onclick="event.stopPropagation()"><input type="checkbox" class="mat-row-check" data-mid="' + m.id + '"' + (matSelection.has(m.id) ? ' checked' : '') + ' onclick="toggleMatSelection(' + m.id + ', this.checked)"></td>';
         html += '<td style="width:48px;padding:4px 8px">' + thumb + '</td>';
         html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + m.id + '</td>';
         html += '<td><span class="badge" style="background:' + tColor + '22;color:' + tColor + '">' + tLabel + '</span></td>';
-        html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + (m.code||'—') + '</td>';
+        html += '<td style="font-family:monospace;color:var(--text2);font-size:12px">' + esc(m.code||'—') + '</td>';
         const cvN = (m._count && m._count.color_variants) || 0;
-        html += '<td class="person-name">' + m.name + (cvN ? ' <span class="badge" title="Díl má ' + cvN + ' barevné varianty — vždy se volí konkrétní barva" style="background:#8b5cf622;color:#a78bfa">🎨 ' + cvN + '</span>' : '') + (m.parent_material_id ? ' <span class="badge" title="Barevná varianta dílu ' + esc((m.parent_material && m.parent_material.code) || '') + '" style="background:#8b5cf622;color:#a78bfa"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + (m.color || '#64748b') + ';margin-right:4px;vertical-align:middle;"></i>' + esc(m.color_name || 'varianta') + '</span>' : '') + '</td>';
+        html += '<td class="person-name">' + esc(m.name) + (cvN ? ' <span class="badge" title="Díl má ' + cvN + ' barevné varianty — vždy se volí konkrétní barva" style="background:#8b5cf622;color:#a78bfa">🎨 ' + cvN + '</span>' : '') + (m.parent_material_id ? ' <span class="badge" title="Barevná varianta dílu ' + ordAttr((m.parent_material && m.parent_material.code) || '') + '" style="background:#8b5cf622;color:#a78bfa"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + (m.color || '#64748b') + ';margin-right:4px;vertical-align:middle;"></i>' + esc(m.color_name || 'varianta') + '</span>' : '') + '</td>';
         html += '<td style="font-size:12px;color:var(--text2);white-space:nowrap">' + catLabel + '</td>';
         const cadCount = (m._count && m._count.cad_drawings) || 0;
         html += '<td style="text-align:center">' + (cadCount > 0
           ? '<span class="badge" title="' + cadCount + ' výkres(ů) od konstruktéra" style="background:#10b98122;color:#10b981">📐 ' + cadCount + '</span>'
           : '<span title="Bez dokumentace" style="color:var(--text2);opacity:.5">—</span>') + '</td>';
         html += '<td><span class="badge" style="background:' + sColor + '22;color:' + sColor + '">' + sLabel + '</span></td>';
-        html += '<td>' + (m.unit||'ks') + '</td>';
+        html += '<td>' + esc(m.unit||'ks') + '</td>';
         html += '<td>' + price.toLocaleString('cs-CZ') + ' Kč</td>';
         html += '<td style="font-weight:600;color:' + (isLow ? '#ef4444' : '#10b981') + '">' + stock + (isLow ? ' ⚠️' : '') + '</td>';
         html += '<td>' + minStock + '</td>';
-        html += '<td style="font-size:12px;color:var(--text2)">' + supplierName + '</td>';
+        html += '<td style="font-size:12px;color:var(--text2)">' + esc(supplierName) + '</td>';
         html += '<td style="text-align:right;white-space:nowrap">' +
           '<button class="btn btn-secondary btn-sm" title="Vytisknout etiketu" onclick="event.stopPropagation();printMaterialLabel(' + m.id + ')" style="padding:4px 8px;margin-right:4px">🖨</button>' +
           '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteMaterial(' + m.id + ')">✕</button>' +
           '</td>';
-        html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+        return html + '</tr>';
+    }
+    // Zboží: standardní filtry + řazení po sloupcích (js/column-filters.js); horní filtry (hledání, typ, stav, kategorie…) zůstávají serverové
+    const MATERIALS_T = ColFilters.table({
+      table: '#materials-tbl',
+      columns: [
+        null, // výběr
+        null, // fotka
+        { key: 'id', label: 'ID', type: 'num', ph: '', get: (m) => m.id },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (m) => MAT_TYPES[m.type] || m.type || '' },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (m) => m.code || '' },
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (m) => (m.name || '') + (m.color_name ? ' ' + m.color_name : '') },
+        { key: 'cat', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (m) => (m.category ? (catPathName(m.category.id) || m.category.name) : '') },
+        { key: 'cad', label: 'Dok.', type: 'num', ph: '', get: (m) => (m._count && m._count.cad_drawings) || 0 },
+        { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (m) => MAT_STATUSES[m.status] || m.status || '' },
+        { key: 'unit', label: 'Jedn.', type: 'text', ph: 'Jedn.…', get: (m) => m.unit || 'ks' },
+        { key: 'price', label: 'Cena', type: 'num', ph: '', get: (m) => Number(m.unit_price) || 0 },
+        { key: 'stock', label: 'Sklad', type: 'num', ph: '', get: (m) => Number(m.current_stock) || 0 },
+        { key: 'min', label: 'Min.', type: 'num', ph: '', get: (m) => Number(m.min_stock) || 0 },
+        { key: 'sup', label: 'Dodavatel', type: 'text', ph: 'Dodavatel…', get: (m) => m.supplier_name || (m.supplier && m.supplier.name) || '' },
+        null,
+      ],
+      renderRow: (m) => matRowHtml(m),
+      noun: 'položek zboží',
+      emptyText: 'Žádné zboží.',
+      limit: 1000,
+      onRender: () => { const all = document.getElementById('mat-check-all'); if (all) all.checked = false; },
+    });
+    function renderMaterials(list) {
+      const el = document.getElementById('materials-table');
+      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><h3>Žádné zboží</h3><p>Přidejte první zboží nebo importujte z CSV.</p></div>'; updateMatBulkBar(); return; }
+      if (!document.getElementById('materials-tbl')) el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="materials-tbl"><thead><tr>' +
+        '<th style="width:34px"><input type="checkbox" id="mat-check-all" onclick="event.stopPropagation();toggleAllMatSelection(this.checked)"></th>' +
+        '<th></th><th>ID</th><th>Typ</th><th>Kód</th><th>Název</th><th>Kategorie</th><th title="Dokumentace od konstruktéra (CAD výkres)">Dok.</th><th>Stav</th><th>Jedn.</th><th>Cena</th><th>Sklad</th><th>Min.</th><th>Dodavatel</th><th></th></tr></thead><tbody></tbody></table></div>';
+      MATERIALS_T.setRows(list);
       updateMatBulkBar();
     }
 
@@ -2539,22 +2639,19 @@
       returned: '#6c8cff',
     };
 
-    async function loadSerialPanel(materialId) {
-      const container = document.getElementById('sn-panel-content');
-      if (!container) return;
-      const statusSel = document.getElementById('sn-filter-status');
-      const status = statusSel ? statusSel.value : '';
-      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
-      try {
-        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
-        const r = await fetch('/api/wh/materials/' + materialId + '/serials' + qs);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const serials = await r.json();
-        if (!Array.isArray(serials) || serials.length === 0) {
-          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádná sériová čísla pro tento filtr.</div>';
-          return;
-        }
-        const rows = serials.map(function(s) {
+    // Seznam (kusů) v kartě zboží: standardní filtry + řazení (js/column-filters.js); instance pro jeden materiál
+    let SN_T = null, SN_T_MAT = null;
+    function snTable(materialId) {
+      return ColFilters.table({
+        table: '#sn-tbl',
+        columns: [
+          { key: 'sn', label: 'Sériové číslo', type: 'text', ph: 'S/N…', get: (s) => s.serial_number },
+          { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (s) => SN_STATUS_LABEL[s.status] || s.status },
+          { key: 'loc', label: 'Lokace', type: 'text', ph: 'Lokace…', get: (s) => (s.location ? s.location.label : '') },
+          { key: 'ref', label: 'Vazba', type: 'text', ph: 'Vazba…', get: (s) => (s.reference_type ? s.reference_type + ' #' + s.reference_id : '') },
+          null,
+        ],
+        renderRow: function(s) {
           const c = SN_STATUS_COLOR[s.status] || '#999';
           const lbl = SN_STATUS_LABEL[s.status] || s.status;
           const loc = s.location ? esc(s.location.label) : '—';
@@ -2573,11 +2670,33 @@
             '<td style="font-size:11px;color:var(--text2)">' + ref + '</td>' +
             '<td style="text-align:right;white-space:nowrap">' + actions.join(' ') + '</td>' +
             '</tr>';
-        }).join('');
-        container.innerHTML = '<table class="data-table" style="width:100%"><thead><tr>' +
+        },
+        noun: 'kusů',
+        emptyText: 'Žádná sériová čísla.',
+        limit: 1000,
+      });
+    }
+
+    async function loadSerialPanel(materialId) {
+      const container = document.getElementById('sn-panel-content');
+      if (!container) return;
+      const statusSel = document.getElementById('sn-filter-status');
+      const status = statusSel ? statusSel.value : '';
+      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
+      try {
+        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
+        const r = await fetch('/api/wh/materials/' + materialId + '/serials' + qs);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const serials = await r.json();
+        if (!Array.isArray(serials) || serials.length === 0) {
+          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádná sériová čísla pro tento filtr.</div>';
+          return;
+        }
+        if (!SN_T || SN_T_MAT !== materialId) { SN_T = snTable(materialId); SN_T_MAT = materialId; }
+        container.innerHTML = '<table class="data-table" id="sn-tbl" style="width:100%"><thead><tr>' +
           '<th>Sériové číslo</th><th>Stav</th><th>Lokace</th><th>Vazba</th><th></th>' +
-          '</tr></thead><tbody>' + rows + '</tbody></table>' +
-          '<div style="font-size:11px;color:var(--text2);margin-top:8px">Zobrazeno ' + serials.length + ' kusů.</div>';
+          '</tr></thead><tbody></tbody></table>';
+        SN_T.setRows(serials);
       } catch (err) {
         container.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:20px">Chyba: ' + esc(err.message || String(err)) + '</div>';
       }
@@ -2775,22 +2894,21 @@
       return date;
     }
 
-    async function loadLotPanel(materialId) {
-      const container = document.getElementById('lot-panel-content');
-      if (!container) return;
-      const statusSel = document.getElementById('lot-filter-status');
-      const status = statusSel ? statusSel.value : '';
-      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
-      try {
-        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
-        const r = await fetch('/api/wh/materials/' + materialId + '/lots' + qs);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const lots = await r.json();
-        if (!Array.isArray(lots) || lots.length === 0) {
-          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádné šarže pro tento filtr.</div>';
-          return;
-        }
-        const rows = lots.map(function(l) {
+    // Seznam (šarží) v kartě zboží: standardní filtry + řazení (js/column-filters.js); instance pro jeden materiál
+    let LOT_T = null, LOT_T_MAT = null;
+    function lotTable(materialId) {
+      return ColFilters.table({
+        table: '#lot-tbl',
+        columns: [
+          { key: 'code', label: 'Lot kód', type: 'text', ph: 'Kód…', get: (l) => l.lot_code },
+          { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (l) => LOT_STATUS_LABEL[l.status] || l.status },
+          { key: 'made', label: 'Vyrobeno', type: 'date', ph: 'dd.mm.rrrr', get: (l) => l.manufactured_at || null },
+          { key: 'exp', label: 'Expiruje', type: 'date', ph: 'dd.mm.rrrr', get: (l) => l.expires_at || null },
+          { key: 'qty', label: 'Množství', type: 'num', ph: '', get: (l) => (l.stock_rows || []).reduce(function(s, row) { return s + Number(row.quantity || 0); }, 0) },
+          { key: 'loc', label: 'Lokace', type: 'text', ph: 'Lokace…', get: (l) => (l.stock_rows || []).filter(function(row) { return Number(row.quantity) > 0; }).map(function(row) { return row.location ? row.location.label : '?'; }).join(', ') },
+          null,
+        ],
+        renderRow: function(l) {
           const c = LOT_STATUS_COLOR[l.status] || '#999';
           const lbl = LOT_STATUS_LABEL[l.status] || l.status;
           const totalStock = (l.stock_rows || []).reduce(function(s, row) { return s + Number(row.quantity || 0); }, 0);
@@ -2814,11 +2932,33 @@
             '<td style="font-size:11px;color:var(--text2)">' + (locList || '—') + '</td>' +
             '<td style="text-align:right;white-space:nowrap">' + actions.join(' ') + '</td>' +
             '</tr>';
-        }).join('');
-        container.innerHTML = '<table class="data-table" style="width:100%"><thead><tr>' +
+        },
+        noun: 'šarží',
+        emptyText: 'Žádné šarže.',
+        limit: 1000,
+      });
+    }
+
+    async function loadLotPanel(materialId) {
+      const container = document.getElementById('lot-panel-content');
+      if (!container) return;
+      const statusSel = document.getElementById('lot-filter-status');
+      const status = statusSel ? statusSel.value : '';
+      container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center">Načítám…</div>';
+      try {
+        const qs = status ? ('?status=' + encodeURIComponent(status)) : '';
+        const r = await fetch('/api/wh/materials/' + materialId + '/lots' + qs);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const lots = await r.json();
+        if (!Array.isArray(lots) || lots.length === 0) {
+          container.innerHTML = '<div style="color:var(--text2);font-size:13px;padding:20px;text-align:center;font-style:italic">Žádné šarže pro tento filtr.</div>';
+          return;
+        }
+        if (!LOT_T || LOT_T_MAT !== materialId) { LOT_T = lotTable(materialId); LOT_T_MAT = materialId; }
+        container.innerHTML = '<table class="data-table" id="lot-tbl" style="width:100%"><thead><tr>' +
           '<th>Lot kód</th><th>Stav</th><th>Vyrobeno</th><th>Expiruje</th><th style="text-align:right">Množství</th><th>Lokace</th><th></th>' +
-          '</tr></thead><tbody>' + rows + '</tbody></table>' +
-          '<div style="font-size:11px;color:var(--text2);margin-top:8px">Zobrazeno ' + lots.length + ' šarží.</div>';
+          '</tr></thead><tbody></tbody></table>';
+        LOT_T.setRows(lots);
       } catch (err) {
         container.innerHTML = '<div style="color:#ef4444;font-size:13px;padding:20px">Chyba: ' + esc(err.message || String(err)) + '</div>';
       }
@@ -3028,6 +3168,43 @@
       } catch(e) { console.error(e); }
     }
 
+    // Skladové zásoby: standardní filtry + řazení (js/column-filters.js); souhrn nad tabulkou počítá z vyfiltrovaných řádků
+    const STOCK_T = ColFilters.table({
+      table: '#stock-tbl',
+      columns: [
+        { key: 'mat', label: 'Zboží', type: 'text', ph: 'Zboží…', get: (s) => s.material_name || '' },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (s) => s.material_code || '' },
+        { key: 'wh', label: 'Sklad', type: 'text', ph: 'Sklad…', get: (s) => s.warehouse_name || '' },
+        { key: 'loc', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (s) => s.location_label || 'bez pozice' },
+        { key: 'qty', label: 'Množství', type: 'num', ph: '', get: (s) => Number(s.qty) || 0 },
+        { key: 'unit', label: 'Jedn.', type: 'text', ph: 'Jedn.…', get: (s) => s.unit || 'ks' },
+        { key: 'price', label: 'Cena/ks', type: 'num', ph: '', get: (s) => (s.unit_price ? Number(s.unit_price) : null) },
+        { key: 'value', label: 'Hodnota', type: 'num', ph: '', get: (s) => (Number(s.qty) || 0) * (s.unit_price || 0) },
+      ],
+      renderRow: (s) => {
+        const value = (s.qty * (s.unit_price || 0));
+        let html = '<tr>';
+        html += '<td style="font-weight:600;">' + esc(s.material_name) + '</td>';
+        html += '<td style="font-family:monospace;font-size:12px;color:var(--text2);">' + esc(s.material_code || '—') + '</td>';
+        html += '<td><span class="badge" style="background:#3b82f622;color:#3b82f6;">' + esc(s.warehouse_name) + '</span></td>';
+        html += '<td style="font-family:monospace;font-size:12px;">' + (s.location_label ? esc(s.location_label) : '<span style="color:var(--text2);">bez pozice</span>') + '</td>';
+        html += '<td style="text-align:right;font-weight:600;">' + s.qty.toFixed(2) + '</td>';
+        html += '<td style="color:var(--text2);">' + esc(s.unit || 'ks') + '</td>';
+        html += '<td style="text-align:right;color:var(--text2);" title="' + (s.price_source === 'wap' ? 'Vážená nákupní cena' : 'Cena z karty zboží (vážená nákupní cena zatím není)') + '">' + (s.unit_price ? s.unit_price.toFixed(2) + ' Kč' + (s.price_source === 'wap' ? '' : ' *') : '—') + '</td>';
+        html += '<td style="text-align:right;font-weight:500;">' + value.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK' }) + '</td>';
+        return html + '</tr>';
+      },
+      noun: 'položek',
+      emptyText: 'Žádné zásoby.',
+      limit: 1000,
+      onRender: (list) => {
+        // Souhrn (počet, množství, hodnota) — z řádků po použití sloupcových filtrů
+        const summary = document.getElementById('stock-summary'); if (!summary) return;
+        const totalQty = list.reduce((s, i) => s + i.qty, 0);
+        const totalValue = list.reduce((s, i) => s + (i.qty * (i.unit_price || 0)), 0);
+        summary.textContent = list.length + ' položek · ' + totalQty.toFixed(0) + ' ks · ' + totalValue.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK' });
+      },
+    });
     function renderStock(list) {
       const el = document.getElementById('stock-table');
       const summary = document.getElementById('stock-summary');
@@ -3037,33 +3214,10 @@
         summary.textContent = '';
         return;
       }
-
-      // Souhrn
-      const totalItems = list.length;
-      const totalQty = list.reduce((s, i) => s + i.qty, 0);
-      const totalValue = list.reduce((s, i) => s + (i.qty * (i.unit_price || 0)), 0);
-      summary.textContent = totalItems + ' položek · ' + totalQty.toFixed(0) + ' ks · ' + totalValue.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK' });
-
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+      if (!document.getElementById('stock-tbl')) el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="stock-tbl"><thead><tr>' +
         '<th>Zboží</th><th>Kód</th><th>Sklad</th><th>Pozice</th><th style="text-align:right;">Množství</th><th>Jedn.</th><th style="text-align:right;">Cena/ks</th><th style="text-align:right;">Hodnota</th>' +
-      '</tr></thead><tbody>';
-
-      for (const s of list) {
-        const value = (s.qty * (s.unit_price || 0));
-        html += '<tr>';
-        html += '<td style="font-weight:600;">' + s.material_name + '</td>';
-        html += '<td style="font-family:monospace;font-size:12px;color:var(--text2);">' + (s.material_code || '—') + '</td>';
-        html += '<td><span class="badge" style="background:#3b82f622;color:#3b82f6;">' + s.warehouse_name + '</span></td>';
-        html += '<td style="font-family:monospace;font-size:12px;">' + (s.location_label || '<span style="color:var(--text2);">bez pozice</span>') + '</td>';
-        html += '<td style="text-align:right;font-weight:600;">' + s.qty.toFixed(2) + '</td>';
-        html += '<td style="color:var(--text2);">' + (s.unit || 'ks') + '</td>';
-        html += '<td style="text-align:right;color:var(--text2);" title="' + (s.price_source === 'wap' ? 'Vážená nákupní cena' : 'Cena z karty zboží (vážená nákupní cena zatím není)') + '">' + (s.unit_price ? s.unit_price.toFixed(2) + ' Kč' + (s.price_source === 'wap' ? '' : ' *') : '—') + '</td>';
-        html += '<td style="text-align:right;font-weight:500;">' + value.toLocaleString('cs-CZ', { style: 'currency', currency: 'CZK' }) + '</td>';
-        html += '</tr>';
-      }
-
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+      '</tr></thead><tbody></tbody></table></div>';
+      STOCK_T.setRows(list);
     }
 
     // ============================================================
@@ -3476,19 +3630,27 @@
       renderInventories();
     }
 
-    function renderInventories() {
-      const el = document.getElementById('inventories-table');
-      if (!inventories.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné inventury</h3><p>Vytvořte první inventuru</p></div>'; return; }
-      let h = '<table class="data-table"><thead><tr><th>Název</th><th>Sklad</th><th>Stav</th><th>Položky</th><th>Rozdíl</th><th>Vytvořeno</th><th></th></tr></thead><tbody>';
-      for (const inv of inventories) {
+    // Inventury: standardní filtry + řazení (js/column-filters.js)
+    const INVENTORIES_T = ColFilters.table({
+      table: '#inventories-tbl',
+      columns: [
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (inv) => inv.name || '' },
+        { key: 'wh', label: 'Sklad', type: 'text', ph: 'Sklad…', get: (inv) => inv.warehouse_name || '' },
+        { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (inv) => (INV_STATUSES[inv.status] || { label: inv.status }).label },
+        { key: 'items', label: 'Položky', type: 'num', ph: '', get: (inv) => Number(inv.items_counted) || 0, sortGet: (inv) => (inv.items_total ? inv.items_counted / inv.items_total : 0) },
+        { key: 'diff', label: 'Rozdíl', type: 'num', ph: '', get: (inv) => (inv.value_difference ? Number(inv.value_difference) : null) },
+        { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (inv) => inv.created_at },
+        null,
+      ],
+      renderRow: (inv) => {
         const st = INV_STATUSES[inv.status] || { label: inv.status, color: '#64748b' };
         const progress = inv.items_total ? Math.round(inv.items_counted / inv.items_total * 100) : 0;
         const diff = inv.value_difference ? (inv.value_difference > 0 ? '+' : '') + inv.value_difference.toFixed(2) + ' Kč' : '—';
         const diffColor = inv.value_difference > 0 ? '#10b981' : inv.value_difference < 0 ? '#ef4444' : 'var(--text2)';
-        h += '<tr onclick="openInventoryDetail(' + inv.id + ')">' +
-          '<td class="person-name">' + (inv.name || '—') + '</td>' +
-          '<td>' + (inv.warehouse_name || '—') + '</td>' +
-          '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + '">' + st.label + '</span></td>' +
+        return '<tr onclick="openInventoryDetail(' + inv.id + ')">' +
+          '<td class="person-name">' + esc(inv.name || '—') + '</td>' +
+          '<td>' + esc(inv.warehouse_name || '—') + '</td>' +
+          '<td><span class="badge" style="background:' + st.color + '22;color:' + st.color + '">' + esc(st.label) + '</span></td>' +
           '<td>' + inv.items_counted + '/' + inv.items_total + ' <span style="color:var(--text2);font-size:11px">(' + progress + '%)</span></td>' +
           '<td style="color:' + diffColor + ';font-weight:600">' + diff + '</td>' +
           '<td style="color:var(--text2);font-size:12px">' + new Date(inv.created_at).toLocaleDateString('cs-CZ') + '</td>' +
@@ -3496,9 +3658,16 @@
             (inv.status === 'draft' ? '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();startInventory(' + inv.id + ')">▶ Zahájit</button> ' : '') +
             (inv.status === 'draft' ? '<button class="btn btn-sm btn-danger" onclick="event.stopPropagation();deleteInventory(' + inv.id + ')">✕</button>' : '') +
           '</td></tr>';
-      }
-      h += '</tbody></table>';
-      el.innerHTML = h;
+      },
+      noun: 'inventur',
+      emptyText: 'Žádné inventury.',
+      limit: 1000,
+    });
+    function renderInventories() {
+      const el = document.getElementById('inventories-table');
+      if (!inventories.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Žádné inventury</h3><p>Vytvořte první inventuru</p></div>'; return; }
+      if (!document.getElementById('inventories-tbl')) el.innerHTML = '<table class="data-table" id="inventories-tbl"><thead><tr><th>Název</th><th>Sklad</th><th>Stav</th><th>Položky</th><th>Rozdíl</th><th>Vytvořeno</th><th></th></tr></thead><tbody></tbody></table>';
+      INVENTORIES_T.setRows(inventories);
     }
 
     function initInvWhFilter() {
@@ -3554,6 +3723,41 @@
       loadInventories();
     }
 
+    let INV_ITEMS_T = null, INV_ITEMS_ID = null, INV_ITEMS_CUR = { inv: null, isActive: false };
+    function invItemsTable() {
+      return ColFilters.table({
+        table: '#inv-items-tbl',
+        columns: [
+          { key: 'mat', label: 'Zboží', type: 'text', ph: 'Zboží…', get: (it) => it.material_name || '' },
+          { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (it) => it.material_code || '' },
+          { key: 'loc', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (it) => it.location_label || '' },
+          { key: 'exp', label: 'Očekáváno', type: 'num', ph: '', get: (it) => (it.expected_qty != null ? Number(it.expected_qty) : 0) },
+          { key: 'act', label: 'Skutečnost', type: 'num', ph: '', get: (it) => (it.actual_qty !== null && it.actual_qty !== undefined ? Number(it.actual_qty) : null) },
+          { key: 'diff', label: 'Rozdíl', type: 'num', ph: '', get: (it) => (it.actual_qty !== null && it.actual_qty !== undefined ? Number(it.difference) : null) },
+          null,
+        ],
+        renderRow: (it) => {
+          const inv = INV_ITEMS_CUR.inv, isActive = INV_ITEMS_CUR.isActive;
+          const diffVal = it.actual_qty !== null ? it.difference : null;
+          const diffStr = diffVal !== null ? (diffVal > 0 ? '+' : '') + diffVal : '—';
+          const diffColor = diffVal > 0 ? '#10b981' : diffVal < 0 ? '#ef4444' : 'var(--text2)';
+          const countedBg = it.actual_qty !== null ? 'rgba(16,185,129,0.06)' : '';
+          return '<tr style="background:' + countedBg + ';cursor:default">' +
+            '<td class="person-name">' + esc(it.material_name) + '</td>' +
+            '<td style="color:var(--text2);font-size:12px">' + esc(it.material_code || '') + '</td>' +
+            '<td style="font-size:12px">' + esc(it.location_label || '—') + '</td>' +
+            '<td>' + (it.expected_qty != null ? it.expected_qty : 0) + '</td>' +
+            '<td style="font-weight:600">' + (it.actual_qty !== null ? it.actual_qty : '<span style="color:var(--text2)">—</span>') + '</td>' +
+            '<td style="color:' + diffColor + ';font-weight:600">' + diffStr + '</td>' +
+            '<td style="text-align:right">' + (isActive ? '<button class="btn btn-sm btn-secondary" onclick="countItem(' + inv.id + ',' + it.id + ',' + (it.expected_qty || 0) + ',\'' + ordAttr((it.material_name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'")) + '\',' + (it.actual_qty !== null ? it.actual_qty : 'null') + ')">✏️ Počítat</button>' : '') + '</td>' +
+            '</tr>';
+        },
+        noun: 'položek',
+        emptyText: 'Žádné položky.',
+        limit: 1000,
+      });
+    }
+
     async function openInventoryDetail(id) {
       const res = await fetch('/api/wh/inventories/' + id);
       const inv = await res.json();
@@ -3564,25 +3768,10 @@
 
       let itemsHtml = '';
       if (inv.items && inv.items.length) {
-        itemsHtml = '<div style="max-height:400px;overflow-y:auto;margin-top:16px;"><table class="data-table"><thead><tr><th>Zboží</th><th>Kód</th><th>Pozice</th><th>Očekáváno</th><th>Skutečnost</th><th>Rozdíl</th>' + (isActive ? '<th></th>' : '') + '</tr></thead><tbody>';
-        for (const it of inv.items) {
-          const diffVal = it.actual_qty !== null ? it.difference : null;
-          const diffStr = diffVal !== null ? (diffVal > 0 ? '+' : '') + diffVal : '—';
-          const diffColor = diffVal > 0 ? '#10b981' : diffVal < 0 ? '#ef4444' : 'var(--text2)';
-          const countedBg = it.actual_qty !== null ? 'rgba(16,185,129,0.06)' : '';
-          itemsHtml += '<tr style="background:' + countedBg + ';cursor:default">' +
-            '<td class="person-name">' + it.material_name + '</td>' +
-            '<td style="color:var(--text2);font-size:12px">' + (it.material_code || '') + '</td>' +
-            '<td style="font-size:12px">' + (it.location_label || '—') + '</td>' +
-            '<td>' + (it.expected_qty != null ? it.expected_qty : 0) + '</td>' +
-            '<td style="font-weight:600">' + (it.actual_qty !== null ? it.actual_qty : '<span style="color:var(--text2)">—</span>') + '</td>' +
-            '<td style="color:' + diffColor + ';font-weight:600">' + diffStr + '</td>';
-          if (isActive) {
-            itemsHtml += '<td style="text-align:right"><button class="btn btn-sm btn-secondary" onclick="countItem(' + inv.id + ',' + it.id + ',' + (it.expected_qty || 0) + ',\'' + (it.material_name || '').replace(/'/g, "\\'") + '\',' + (it.actual_qty !== null ? it.actual_qty : 'null') + ')">✏️ Počítat</button></td>';
-          }
-          itemsHtml += '</tr>';
-        }
-        itemsHtml += '</tbody></table></div>';
+        // Položky inventury: standardní filtry + řazení; instance se drží pro stejnou inventuru (po „Počítat" filtr zůstane)
+        if (!INV_ITEMS_T || INV_ITEMS_ID !== inv.id) { INV_ITEMS_T = invItemsTable(); INV_ITEMS_ID = inv.id; }
+        INV_ITEMS_CUR = { inv, isActive };
+        itemsHtml = '<div style="max-height:400px;overflow-y:auto;margin-top:16px;"><table class="data-table" id="inv-items-tbl"><thead><tr><th>Zboží</th><th>Kód</th><th>Pozice</th><th>Očekáváno</th><th>Skutečnost</th><th>Rozdíl</th><th></th></tr></thead><tbody></tbody></table></div>';
       } else {
         itemsHtml = '<div class="empty-state" style="padding:30px"><div class="empty-icon">📦</div><h3>Žádné položky</h3><p>Přegenerujte položky</p></div>';
       }
@@ -3616,6 +3805,7 @@
         itemsHtml +
         '<div class="modal-actions">' + actionsHtml + '</div>' +
       '</div></div>';
+      if (inv.items && inv.items.length) INV_ITEMS_T.setRows(inv.items);
     }
 
     function countItem(invId, itemId, expected, matName, currentActual) {
@@ -3755,53 +3945,64 @@
       const search = (document.getElementById('forecast-search')?.value || '').toLowerCase();
       if (search) items = items.filter(i => (i.name + ' ' + i.code + ' ' + (i.supplier || '')).toLowerCase().includes(search));
 
-      const statusColors = { critical: '#ef4444', warning: '#f59e0b', ok: '#22c55e' };
-      const statusIcons = { critical: '🔴', warning: '🟡', ok: '🟢' };
-
-      let html = '<table class="data-table"><thead><tr>' +
+      const tbox = document.getElementById('forecast-table');
+      if (!document.getElementById('forecast-tbl')) tbox.innerHTML = '<table class="data-table" id="forecast-tbl"><thead><tr>' +
         '<th>Stav</th><th>Kód</th><th>Materiál</th><th>Dodavatel</th>' +
         '<th style="text-align:right">Zásoba</th><th style="text-align:right">Minimum</th>' +
         '<th style="text-align:right">Poptávka</th><th style="text-align:right">Příjem</th>' +
         '<th style="text-align:right">Projekce</th><th>Lead time</th>' +
         '<th>Objednat do</th><th>Poznámka</th>' +
-        '</tr></thead><tbody>';
-
-      if (items.length === 0) {
-        html += '<tr><td colspan="12" style="text-align:center;color:var(--text2);padding:32px;">Žádné materiály v tomto filtru</td></tr>';
-      }
-
-      items.forEach(item => {
+        '</tr></thead><tbody></tbody></table>';
+      FORECAST_T.setRows(items);
+    }
+    // Výhled nákupu: standardní filtry + řazení po sloupcích (horní filtr stavu a hledání zůstávají)
+    const FC_STATUS_LABEL = { critical: 'Kritické', warning: 'Varování', ok: 'V pořádku' };
+    const fcBomInfo = (item) => ((item.bom_usage || []).length > 0 ? item.bom_usage.map(b => b.product + ' (' + b.qty_per_unit + '/' + item.unit + ')').join(', ') : '');
+    const FORECAST_T = ColFilters.table({
+      table: '#forecast-tbl',
+      columns: [
+        { key: 'st', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => FC_STATUS_LABEL[i.status] || i.status_label || i.status, sortGet: (i) => ({ critical: 0, warning: 1, ok: 2 }[i.status] ?? 3) + ' ' },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (i) => i.code || '' },
+        { key: 'name', label: 'Materiál', type: 'text', ph: 'Materiál…', get: (i) => i.name || '' },
+        { key: 'sup', label: 'Dodavatel', type: 'text', ph: 'Dodavatel…', get: (i) => i.supplier || '' },
+        { key: 'stock', label: 'Zásoba', type: 'num', ph: '', get: (i) => Number(i.current_stock) || 0 },
+        { key: 'min', label: 'Minimum', type: 'num', ph: '', get: (i) => Number(i.min_stock) || 0 },
+        { key: 'dem', label: 'Poptávka', type: 'num', ph: '', get: (i) => Number(i.total_demand) || 0 },
+        { key: 'sup_q', label: 'Příjem', type: 'num', ph: '', get: (i) => Number(i.total_supply) || 0 },
+        { key: 'proj', label: 'Projekce', type: 'num', ph: '', get: (i) => Number(i.projected_stock) },
+        { key: 'lead', label: 'Lead time', type: 'num', ph: '', get: (i) => (i.lead_time_days > 0 ? Number(i.lead_time_days) : null) },
+        { key: 'order', label: 'Objednat do', type: 'date', ph: 'dd.mm.rrrr', get: (i) => i.order_by_date || null },
+        { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: (i) => fcBomInfo(i) || (i.earliest_demand_date ? 'Potřeba: ' + new Date(i.earliest_demand_date).toLocaleDateString('cs-CZ') : '') },
+      ],
+      renderRow: (item) => {
+        const statusIcons = { critical: '🔴', warning: '🟡', ok: '🟢' };
         const projColor = item.projected_stock < 0 ? '#ef4444' : item.projected_stock <= item.min_stock ? '#f59e0b' : '#22c55e';
         const orderDate = item.order_by_date ? new Date(item.order_by_date).toLocaleDateString('cs-CZ') : '—';
         const isOverdue = item.order_by_date && new Date(item.order_by_date) <= new Date();
         const demandDate = item.earliest_demand_date ? new Date(item.earliest_demand_date).toLocaleDateString('cs-CZ') : '';
-
         // BOM info
-        const bomInfo = item.bom_usage.length > 0
-          ? item.bom_usage.map(b => b.product + ' (' + b.qty_per_unit + '/' + item.unit + ')').join(', ')
-          : '';
-
-        html += '<tr onclick="showForecastDetail(' + item.material_id + ')" style="cursor:pointer">' +
-          '<td><span title="' + item.status_label + '">' + statusIcons[item.status] + '</span></td>' +
-          '<td style="font-family:monospace;font-size:12px;color:var(--text2)">' + (item.code || '') + '</td>' +
-          '<td><strong>' + item.name + '</strong></td>' +
-          '<td style="font-size:12px">' + (item.supplier || '<span style="color:var(--text2)">—</span>') + '</td>' +
-          '<td style="text-align:right;font-weight:600">' + item.current_stock + ' ' + item.unit + '</td>' +
+        const bomInfo = fcBomInfo(item);
+        return '<tr onclick="showForecastDetail(' + item.material_id + ')" style="cursor:pointer">' +
+          '<td><span title="' + ordAttr(item.status_label) + '">' + (statusIcons[item.status] || '') + '</span></td>' +
+          '<td style="font-family:monospace;font-size:12px;color:var(--text2)">' + esc(item.code || '') + '</td>' +
+          '<td><strong>' + esc(item.name) + '</strong></td>' +
+          '<td style="font-size:12px">' + (item.supplier ? esc(item.supplier) : '<span style="color:var(--text2)">—</span>') + '</td>' +
+          '<td style="text-align:right;font-weight:600">' + item.current_stock + ' ' + esc(item.unit) + '</td>' +
           '<td style="text-align:right;color:var(--text2)">' + item.min_stock + '</td>' +
           '<td style="text-align:right;color:#ef4444;font-weight:500">' + (item.total_demand > 0 ? '-' + item.total_demand : '0') + '</td>' +
           '<td style="text-align:right;color:#3b82f6">' + (item.total_supply > 0 ? '+' + item.total_supply : '0') + '</td>' +
           '<td style="text-align:right;font-weight:700;color:' + projColor + '">' + item.projected_stock.toFixed(1) + '</td>' +
           '<td style="text-align:center">' + (item.lead_time_days > 0 ? item.lead_time_days + ' d' : '—') + '</td>' +
           '<td style="font-weight:600;' + (isOverdue ? 'color:#ef4444' : '') + '">' + orderDate + (isOverdue ? ' ⚠️' : '') + '</td>' +
-          '<td style="font-size:11px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + bomInfo + '">' +
-            (bomInfo || (demandDate ? 'Potřeba: ' + demandDate : '')) +
+          '<td style="font-size:11px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + ordAttr(bomInfo) + '">' +
+            esc(bomInfo || (demandDate ? 'Potřeba: ' + demandDate : '')) +
           '</td>' +
         '</tr>';
-      });
-
-      html += '</tbody></table>';
-      document.getElementById('forecast-table').innerHTML = html;
-    }
+      },
+      noun: 'materiálů',
+      emptyText: 'Žádné materiály v tomto filtru.',
+      limit: 1000,
+    });
 
     function showForecastDetail(materialId) {
       if (!_forecastData) return;
@@ -3918,6 +4119,6 @@
       } catch (e) {}
     })();
   </script>
-  <script src="/modules/nakup-sklad/pricelist.js?v=2"></script>
+  <script src="/modules/nakup-sklad/pricelist.js?v=3"></script>
 </body>
 </html>

@@ -416,7 +416,10 @@
       const act = cols.map((c) => [c, activeConds(c.key)]).filter(([, l]) => l.length);
       if (!act.length) return rows;
       return rows.filter((row) => act.every(([col, list]) => list.every((c) => {
-        const raw = (c.op === 'in' || c.op === 'not_in') ? enumVal(col, row) : col.get(row);
+        let raw = (c.op === 'in' || c.op === 'not_in') ? enumVal(col, row) : col.get(row);
+        // datum může přijít i jako ISO string / timestamp
+        if (col.type === 'date' && raw != null && raw !== '' && !(raw instanceof Date)) { const d = new Date(raw); raw = isNaN(d) ? null : d; }
+        else if (col.type === 'date' && raw === '') raw = null;
         return matchCond(col.type || 'text', raw, c);
       })));
     }

@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=4"></script>
   <!-- Leaflet — mapa s půdorysem prádlomatu v detailu nabídky lokality -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -991,6 +992,327 @@
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
+    // ============================================================
+    // Standardní sloupcové filtry + řazení tabulek (js/column-filters.js)
+    // poCf(key, cfg, rows, renderRow) — tabulka s id=key; instance se vytvoří jednou a pak jen setRows.
+    // poCfLater + poCfFlush — pro tabulky skládané do HTML stringu (namontuje se po vložení do DOM).
+    // ============================================================
+    var _poCF = {};
+    function poCf(key, cfg, rows, renderRow, onRender) {
+      if (!window.ColFilters) return null;
+      var e = _poCF[key];
+      if (!e) {
+        e = { rr: null, on: null };
+        var c = Object.assign({}, cfg);
+        c.table = cfg.table || ('#' + key);
+        c.renderRow = function (r, i) { return e.rr(r, i); };
+        c.onRender = function (v) { if (e.on) e.on(v); };
+        e.t = ColFilters.table(c);
+        _poCF[key] = e;
+      }
+      e.rr = renderRow || cfg.renderRow;
+      e.on = onRender || cfg.onRender || null;
+      e.t.setRows(rows || []);
+      return e.t;
+    }
+    var _poCfPending = [];
+    function poCfLater(key, cfg, rows, renderRow, onRender) { _poCfPending.push([key, cfg, rows, renderRow, onRender]); }
+    function poCfFlush() {
+      var p = _poCfPending; _poCfPending = [];
+      p.forEach(function (a) { if (document.getElementById(a[0])) poCf(a[0], a[1], a[2], a[3], a[4]); });
+    }
+    function _poPerson(p) { return p ? (((p.first_name || '') + ' ' + (p.last_name || '')).trim()) : ''; }
+
+    var ORDERS_CF = { noun: 'objednávek', emptyText: 'Žádné prodejní objednávky.', limit: 1000, columns: [
+      { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: function (o) { return o.order_number; } },
+      { key: 'company', label: 'Odběratel', type: 'text', ph: 'Odběratel…', get: function (o) { return (o.company && o.company.name) || o.company_name || ''; } },
+      { key: 'seller', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: function (o) { return _poPerson(o.sales_person); } },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (o) { return (ORDER_STATUSES[o.status] || {}).label || o.status; } },
+      { key: 'items', label: 'Položek', type: 'num', ph: '', get: function (o) { return o.items_count || (Array.isArray(o.items) ? o.items.length : 0); } },
+      { key: 'total', label: 'Celkem', type: 'num', ph: '', get: function (o) { return o.total_amount == null ? null : Number(o.total_amount); } },
+      { key: 'expected', label: 'Zákazník', type: 'date', ph: 'dd.mm.rrrr', get: function (o) { return o.expected_delivery || null; } },
+      { key: 'final', label: 'Doplatek', type: 'date', ph: 'dd.mm.rrrr', get: function (o) { return (o.final_invoice && o.final_invoice.date_issued) || null; } },
+      { key: 'prod', label: 'Výroba do', type: 'date', ph: 'dd.mm.rrrr', get: function (o) { return o.production_finish_last || null; } },
+      null,
+    ] };
+
+    var SUBS_CF = { noun: 'smluv', emptyText: 'Žádné servisní smlouvy.', columns: [
+      { key: 'kiosk', label: 'Kiosk', type: 'text', ph: 'Kiosk…', get: function (s) { return s.kiosk_code; } },
+      { key: 'cust', label: 'Odběratel', type: 'text', ph: 'Odběratel…', get: function (s) { return [s.customer_name, s.buyer_ico, s.email].filter(Boolean).join(' '); } },
+      { key: 'fee', label: '%', type: 'num', ph: '', get: function (s) { return s.fee_pct == null ? null : Number(s.fee_pct); } },
+      { key: 'auto', label: 'Auto', type: 'text', ph: '', get: function (s) { return s.auto_send ? 'Ano' : 'Ne'; } },
+      { key: 'last', label: 'Naposledy', type: 'text', ph: 'rrrr-mm', get: function (s) { return s.last_billed_ym || ''; } },
+      { key: 'active', label: 'Stav', type: 'text', ph: '', get: function (s) { return s.active ? 'Aktivní' : 'Neaktivní'; } },
+      null,
+    ] };
+
+    function cmpOwnerName(l) {
+      if (l.owner_person_id) {
+        var s = (CMP_SELLERS || []).filter(function (x) { return x.id === l.owner_person_id; })[0];
+        if (s) return ((s.first_name || '') + ' ' + (s.last_name || '')).trim();
+      }
+      if (l.external_rep_id) {
+        var x = (CMP_EXT_REPS || []).filter(function (r) { return Number(r.id) === Number(l.external_rep_id); })[0];
+        if (x) return '🤝 ' + (x.jmeno || x.email || '');
+        if (l.external_rep_name) return '🤝 ' + l.external_rep_name;
+      }
+      return l.owner_name || '';
+    }
+    function cmpWarmLabel(l) { var w = l.warmthPct; return w == null ? '' : (w >= 70 ? 'Horký' : w >= 45 ? 'Zahřátý' : w >= 25 ? 'Vlažný' : 'Studený'); }
+    function cmpResvLabel(l) {
+      var rv = (_cmpResvMapCache || {})[l.id]; if (!rv) return '';
+      return (rv.status === 'active' ? 'Aktivní' : rv.status === 'hold' ? 'Blokace 1 h' : 'Rezervováno') + (rv.kiosk_code ? ' ' + rv.kiosk_code : '');
+    }
+    var CMP_LEADS_CF = { noun: 'kontaktů', emptyText: 'Žádné kontakty.', limit: 1000, columns: [
+      null,
+      { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.created_at || null; } },
+      { key: 'activity', label: 'Poslední aktivita', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.lastActivityAt || null; } },
+      { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: function (l) { return l.name; } },
+      { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: function (l) { return l.email; } },
+      { key: 'role', label: 'Role', type: 'text', ph: 'Role…', get: function (l) { return l.role === 'distributor' ? 'Distributor' : 'Compounder'; } },
+      { key: 'lang', label: 'Jazyk', type: 'text', ph: 'Jazyk…', get: function (l) { return String(l.lang || '').toLowerCase().split(/[-_]/)[0].toUpperCase(); } },
+      { key: 'owner', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: cmpOwnerName },
+      { key: 'warm', label: 'Zahřátí', type: 'text', ph: 'Zahřátí…', get: cmpWarmLabel, sortGet: function (l) { return l.warmthPct == null ? null : ('000' + Math.round(l.warmthPct)).slice(-3); } },
+      { key: 'resv', label: 'Rezervace', type: 'text', ph: 'Rezervace…', get: cmpResvLabel, enumValue: function (l) { var rv = (_cmpResvMapCache || {})[l.id]; return rv ? (rv.status === 'active' ? 'Aktivní' : rv.status === 'hold' ? 'Blokace 1 h' : 'Rezervováno') : ''; } },
+      { key: 'stav', label: 'Stav', type: 'text', ph: 'Stav…', get: function (l) { return CMP_STATUS[l.status] || l.status || ''; } },
+      { key: 'note', label: 'Poznámka', type: 'text', ph: 'Pozn…', get: function (l) { return l.notes || ''; } },
+      null,
+    ] };
+
+    var CMP_LOSS_CF = { noun: 'leadů', emptyText: 'Žádné záznamy.', columns: [
+      { key: 'lead', label: 'Lead', type: 'text', ph: 'Lead…', get: function (l) { return (l.name || '') + ' ' + (l.email || ''); } },
+      { key: 'sent', label: 'Posl. odesláno', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.lastSentAt || null; } },
+      { key: 'sends', label: '×', type: 'num', ph: '', get: function (l) { return l.sends == null ? null : Number(l.sends); } },
+      { key: 'missed', label: 'Ušlá částka', type: 'num', ph: '', get: function (l) { return l.missed == null ? null : Number(l.missed); } },
+      { key: 'deliv', label: 'Doručení', type: 'text', ph: '', get: function (l) { return (l.openedAt || l.clickedAt) ? 'Došel (inbox)' : 'Odesláno'; } },
+      { key: 'opened', label: 'Otevřel', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.openedAt || null; } },
+      { key: 'clicked', label: 'Proklik', type: 'date', ph: 'dd.mm.rrrr', get: function (l) { return l.clickedAt || null; } },
+    ] };
+
+    var VIP_CF = { noun: 'lokalit', emptyText: 'Žádné lokality.', columns: [
+      null,
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: function (r) { return r.code; } },
+      { key: 'label', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: function (r) { return r.label; } },
+      { key: 'company', label: 'Provozovatel', type: 'text', ph: 'Provozovatel…', get: function (r) { return r.company; } },
+      { key: 'version', label: 'Verze', type: 'text', ph: '', get: function (r) { return r.version; } },
+      { key: 'total', label: 'Celková cena', type: 'num', ph: '', get: function (r) { return r.total; } },
+      { key: 'lokalita', label: 'Cena lokality', type: 'num', ph: '', get: function (r) { return r.lokalita; } },
+      { key: 'yr', label: 'Roční výnos', type: 'num', ph: '', get: function (r) { return r.yr; } },
+      { key: 'roi', label: 'ROI', type: 'num', ph: '', get: function (r) { return r.roi; } },
+      { key: 'profit5', label: 'Výnos 5 let', type: 'num', ph: '', get: function (r) { return r.profit5; } },
+      { key: 'stav', label: 'Stav', type: 'text', ph: '', get: function (r) { return r.inIncubator ? 'Inkubátor' : 'Zavedená'; } },
+    ] };
+
+    function _offerTotal5(o) { return (o.guaranteeValue != null) ? ((o.yearlyYield || 0) * o.guaranteeYears + o.guaranteeValue) : null; }
+    var CMP_OFFER_CF = { noun: 'lokalit', emptyText: 'Žádné lokality.', columns: [
+      { key: 'label', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: function (o) { return (o.individual ? 'VIP ' : '') + (o.label || o.code || '') + ' ' + (o.version || ''); } },
+      { key: 'price', label: 'Cena', type: 'num', ph: '', get: function (o) { return o.totalPrice; } },
+      { key: 'yield', label: 'Roční výnos', type: 'num', ph: '', get: function (o) { return o.yearlyYield; } },
+      { key: 'guar', label: 'Garance', type: 'num', ph: '', get: function (o) { return o.guaranteeValue; } },
+      { key: 'tot5', label: 'Celkem 5 let', type: 'num', ph: '', get: _offerTotal5 },
+    ] };
+
+    var AI_CALLS_CF = { noun: 'hovorů', emptyText: 'Zatím žádné hovory.', columns: [
+      { key: 'when', label: 'Kdy', type: 'date', ph: 'dd.mm.rrrr', get: function (c) { return c.started_at || null; } },
+      { key: 'dir', label: 'Směr', type: 'text', ph: '', get: function (c) { return c.direction === 'outbound' ? 'odchozí' : 'příchozí'; } },
+      { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: function (c) { return c.direction === 'outbound' ? c.to_number : c.from_number; } },
+      { key: 'who', label: 'Kdo', type: 'text', ph: 'Kdo…', get: function (c) { return c.caller_name || ''; } },
+      { key: 'intent', label: 'Co chtěl', type: 'text', ph: 'Co chtěl…', get: function (c) { return c.caller_intent || c.summary || ''; } },
+      null,
+      { key: 'rec', label: 'Nahrávka', type: 'text', ph: '', get: function (c) { return c.audio_url ? 'Ano' : 'Ne'; }, sort: false },
+      { key: 'dur', label: 'Délka', type: 'num', ph: 's', get: function (c) { return c.duration_sec == null ? null : Number(c.duration_sec); } },
+    ] };
+
+    var AI_CHATS_CF = { noun: 'chatů', emptyText: 'Zatím nikdo nechatoval.', columns: [
+      { key: 'contact', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: function (x) { return (x.name || '') + ' ' + (x.email || ''); } },
+      { key: 'owner', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: function (x) { return x.owner || ''; } },
+      { key: 'chan', label: 'Zdroj', type: 'text', ph: '', get: function (x) { return ({ sms: 'SMS', email: 'E-mail', 'sms+email': 'obojí' })[x.channel] || ''; } },
+      { key: 'msgs', label: 'Zpráv', type: 'num', ph: '', get: function (x) { return Number(x.user_msgs || 0); } },
+      { key: 'last', label: 'Poslední', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.last_at || null; } },
+      null,
+    ] };
+
+    var AI_SMSSTAT_CF = { noun: 'SMS', emptyText: 'Zatím žádná odeslaná SMS.', columns: [
+      { key: 'name', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: function (x) { return x.name || ''; } },
+      { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: function (x) { return x.phone || ''; } },
+      { key: 'sent', label: 'Odesláno', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.sentAt || null; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (x) { return x.status || ''; } },
+      { key: 'opened', label: 'Otevřel', type: 'text', ph: '', get: function (x) { return x.opened ? 'z SMS' : (x.openedAny ? 'jinak' : 'ne'); } },
+    ] };
+
+    var AI_SMSLOG_ST = { delivered: 'doručeno', undelivered: 'nedoručeno', failed: 'neodesláno', sent: 'odesláno', unknown: 'neznámý' };
+    var AI_SMSLOG_CF = { noun: 'zpráv', emptyText: 'Zatím žádné odeslané SMS.', columns: [
+      { key: 'when', label: 'Kdy', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.created_at || null; } },
+      { key: 'to', label: 'Komu', type: 'text', ph: 'Komu…', get: function (x) { return (x.name ? (x.name + ' · ') : '') + (x.to || ''); } },
+      { key: 'ctx', label: 'Kontext', type: 'text', ph: '', get: function (x) { return AI_SMSLOG_CTX[x.context] || x.context || ''; } },
+      { key: 'text', label: 'Text', type: 'text', ph: 'Text…', get: function (x) { return x.body || ''; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: '', get: function (x) { return AI_SMSLOG_ST[x.status] || AI_SMSLOG_ST.unknown; } },
+      { key: 'opened', label: 'Otevřel odkaz', type: 'text', ph: '', get: function (x) { return x.opened === true ? 'Ano' : (x.opened === false ? 'Ne' : 'n/a'); } },
+    ] };
+
+    function _aiCampTotal(c) { var k = c.counts || {}; return (k.pending || 0) + (k.calling || 0) + (k.ringing || 0) + (k.in_progress || 0) + (k.done || 0) + (k.no_answer || 0) + (k.failed || 0); }
+    var AI_CAMP_CF = { noun: 'kampaní', emptyText: 'Žádné kampaně.', columns: [
+      { key: 'name', label: 'Sada / kampaň', type: 'text', ph: 'Název…', get: function (c) { return c.name; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: '', get: function (c) { return AI_STATUS[c.status] || c.status; } },
+      { key: 'count', label: 'Kontaktů', type: 'num', ph: '', get: _aiCampTotal },
+      { key: 'done', label: 'Hotovo', type: 'num', ph: '', get: function (c) { return (c.counts || {}).done || 0; } },
+      { key: 'noans', label: 'Bez odp.', type: 'num', ph: '', get: function (c) { return (c.counts || {}).no_answer || 0; } },
+      null,
+    ] };
+
+    var AI_TG_CF = { noun: 'kontaktů', emptyText: 'Zatím žádné leady.', limit: 1000, columns: [
+      { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: function (t) { return t.name || ''; } },
+      { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: function (t) { return t.phone || ''; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (t) { return AI_STATUS[t.status] || t.status || ''; } },
+      { key: 'called', label: 'Voláno', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return (t.call && t.call.started_at) || null; } },
+      { key: 'result', label: 'Výsledek', type: 'text', ph: 'Výsledek…', get: function (t) { return t.result_summary || ''; } },
+      { key: 'sms', label: 'SMS', type: 'text', ph: '', get: function (t) { return t.sms_sent ? 'Ano' : 'Ne'; } },
+      null,
+    ] };
+
+    var CRM_CF = { noun: 'záznamů (na této straně)', emptyText: 'Žádné záznamy pro tento filtr.', columns: [
+      { key: 'first', label: 'Jméno', type: 'text', ph: 'Jméno…', get: function (r) { return r.first_name || ''; } },
+      { key: 'last', label: 'Příjmení', type: 'text', ph: 'Příjmení…', get: function (r) { return r.last_name || ''; } },
+      { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: function (r) { return r.email || ''; } },
+      { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: function (r) { return r.phone || ''; } },
+      { key: 'city', label: 'Město', type: 'text', ph: 'Město…', get: function (r) { return r.city || ''; } },
+      { key: 'country', label: 'Země', type: 'text', ph: 'Země…', get: function (r) { return r.country || ''; } },
+      { key: 'seg', label: 'Segment', type: 'text', ph: '', get: function (r) { return (CRM_SEG[r.segment] || CRM_SEG.ostatni).l; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (r) { return r.status || ''; } },
+      { key: 'owner', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: function (r) { return r.owner_name || ''; } },
+      { key: 'source', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: function (r) { return r.source || ''; } },
+      { key: 'dup', label: 'Dup.', type: 'num', ph: '', get: function (r) { return Number(r.dup_count || 0); } },
+      { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: function (r) { return r.note || ''; } },
+      { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: function (r) { return r.crm_created_at || null; } },
+    ] };
+
+    function _lokYN(v) { return v === true ? 'ano' : (v === false ? 'ne' : '?'); }
+    function _lokOwnerName(s) {
+      var cur = s.assigned_to_id || (s.assigned_to && s.assigned_to.id) || '';
+      var list = (typeof LOK_SELLERS !== 'undefined' && LOK_SELLERS) ? LOK_SELLERS : [];
+      var x = list.filter(function (p) { return p.id === cur; })[0];
+      if (x) return ((x.first_name || '') + ' ' + (x.last_name || '')).trim();
+      return s.assigned_to ? _poPerson(s.assigned_to) : '';
+    }
+    var LOK_CF = { noun: 'nabídek', emptyText: 'Zatím žádné nabídky.', columns: [
+      { key: 'created', label: 'Přijato', type: 'date', ph: 'dd.mm.rrrr', get: function (s) { return s.created_at || null; } },
+      { key: 'contact', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: function (s) { return [s.owner_name, s.owner_phone, s.owner_email].filter(Boolean).join(' '); } },
+      { key: 'addr', label: 'Adresa', type: 'text', ph: 'Adresa…', get: function (s) { return s.address || s.city || ''; } },
+      { key: 'el', label: 'El.', type: 'text', ph: '', get: function (s) { return _lokYN((s.utility_points && s.utility_points.electricity) ? true : (s.electricity_kw != null ? true : undefined)); } },
+      { key: 'water', label: 'Voda', type: 'text', ph: '', get: function (s) { return _lokYN(s.water_supply); } },
+      { key: 'sewage', label: 'Kanal.', type: 'text', ph: '', get: function (s) { return _lokYN(s.sewage); } },
+      { key: 'parking', label: 'Park.', type: 'text', ph: '', get: function (s) { return _lokYN(s.parking); } },
+      { key: 'owner', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: _lokOwnerName },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (s) { return (LOK_STATUS[s.status] || {}).label || s.status || ''; } },
+      null,
+    ] };
+
+    // Compounding — hodnoty lokalit: hodnoty sloupců bere z kvCellVal aktuálního vykreslení
+    var _kvCellValFn = null;
+    function _kvG(key, nullNeg) { return function (k) { if (!_kvCellValFn) return null; var v = _kvCellValFn(k, key); return (nullNeg && v === -1) ? null : v; }; }
+    var KV_CF = { noun: 'lokalit', emptyText: 'Žádné lokality.', limit: 1000, columns: [
+      null,
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: _kvG('code') },
+      { key: 'label', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: _kvG('label') },
+      { key: 'company', label: 'Provozovatel', type: 'text', ph: 'Provozovatel…', get: _kvG('company') },
+      { key: 'version', label: 'Verze', type: 'text', ph: '', get: _kvG('version') },
+      { key: 'obrat', label: 'Průměrný obrat s DPH', type: 'num', ph: '', get: _kvG('obrat') },
+      { key: 'obratBez', label: 'Obrat bez DPH', type: 'num', ph: '', get: _kvG('obratBez') },
+      { key: 'lokalita', label: 'Cena lokality', type: 'num', ph: '', get: _kvG('lokalita') },
+      { key: 'kiosek', label: 'Cena kiosku', type: 'num', ph: '', get: _kvG('kiosek', true) },
+      { key: 'celkova', label: 'Celková cena', type: 'num', ph: '', get: _kvG('celkova', true) },
+      { key: 'before', label: 'Celková cena před slevou', type: 'num', ph: '', get: _kvG('before', true) },
+      { key: 'servis', label: 'Servisní smlouva', type: 'num', ph: '', get: _kvG('servis') },
+      { key: 'najem', label: 'Nájem', type: 'num', ph: '', get: _kvG('najem') },
+      { key: 'energie', label: 'Odhad energií', type: 'num', ph: '', get: _kvG('energie') },
+      { key: 'cashflow', label: 'Odhad měs. cash flow', type: 'num', ph: '', get: _kvG('cashflow') },
+      { key: 'yield', label: 'Yield', type: 'num', ph: '', get: _kvG('yield') },
+      { key: 'roi', label: 'ROI', type: 'num', ph: '', get: _kvG('roi', true) },
+      { key: 'marze', label: 'Provozní marže', type: 'num', ph: '', get: _kvG('marze', true) },
+      { key: 'guarantee', label: 'Garance odkupu', type: 'num', ph: '', get: _kvG('guarantee', true) },
+      { key: 'profit5', label: 'Celkový výnos', type: 'num', ph: '', get: _kvG('profit5', true) },
+      { key: 'forsale', label: 'Nabízet', type: 'text', ph: '', get: function (k) { return (_kvCellValFn && _kvCellValFn(k, 'forsale')) ? 'Ano' : 'Ne'; } },
+      { key: 'stav', label: 'Stav', type: 'text', ph: '', get: _kvG('stav') },
+      null,
+    ] };
+
+    var EXT_CF = { noun: 'lokalit', emptyText: 'Žádné lokality neodpovídají filtru.', columns: [
+      null,
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: function (r) { return r.code; } },
+      { key: 'label', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: function (r) { return r.label; } },
+      { key: 'company', label: 'Provozovatel', type: 'text', ph: 'Provozovatel…', get: function (r) { return r.company; } },
+      { key: 'machine', label: 'Cena kiosku', type: 'num', ph: '', get: function (r) { return r.machine; } },
+      { key: 'loc', label: 'Cena lokality', type: 'num', ph: '', get: function (r) { return r.loc; } },
+      { key: 'total', label: 'Celková cena', type: 'num', ph: '', get: function (r) { return r.total; } },
+      { key: 'navT', label: 'Návratnost (celk. cena)', type: 'num', ph: 'let', get: function (r) { return r._navratT; } },
+      { key: 'provM', label: 'Provize ze stroje', type: 'num', ph: '', get: function (r) { return r._provM; } },
+      { key: 'provL', label: 'Provize z lokality', type: 'num', ph: '', get: function (r) { return r._provL; } },
+      { key: 'provT', label: 'Provize celkem', type: 'num', ph: '', get: function (r) { return r._provTot; } },
+      { key: 'nova', label: 'Nová prodejní cena', type: 'num', ph: '', get: function (r) { return r._nova; } },
+      { key: 'navN', label: 'Návratnost (nová cena)', type: 'num', ph: 'let', get: function (r) { return r._navrat; } },
+    ] };
+
+    var EXR_CF = { noun: 'obchodníků', emptyText: 'Žádní obchodníci.', columns: [
+      { key: 'name', label: 'Jméno / firma', type: 'text', ph: 'Jméno…', get: function (x) { return [x.jmeno, x.ico].filter(Boolean).join(' '); } },
+      { key: 'contact', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: function (x) { return [x.email, x.telefon].filter(Boolean).join(' · '); } },
+      { key: 'rate', label: 'Provize', type: 'num', ph: '', get: function (x) { return (x.sazba != null && x.sazba !== '') ? Number(x.sazba) : null; } },
+      { key: 'vip', label: 'VIP lok.', type: 'num', ph: '', get: function (x) { return Array.isArray(x.lokality) ? x.lokality.length : 0; } },
+      { key: 'seen', label: 'Naposledy', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.last_seen_at || null; } },
+      { key: 'stav', label: 'Stav', type: 'text', ph: '', get: function (x) { return EXR_STAV[x.stav] || x.stav || ''; } },
+      null,
+    ] };
+
+    var EXR_LOC_CF = { noun: 'lokalit', emptyText: 'Žádné lokality.', columns: [
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: function (r) { return r.code + (r.vip ? ' VIP' : ''); }, sortGet: function (r) { return r.code; } },
+      { key: 'label', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: function (r) { return r.label; } },
+      { key: 'total', label: 'Celková cena', type: 'num', ph: '', get: function (r) { return (r.metrics && r.metrics.total != null) ? r.metrics.total : null; } },
+      { key: 'prov', label: 'Provize', type: 'num', ph: '', get: function (r) { return r._prov == null ? null : r._prov; } },
+      { key: 'nav', label: 'Návratnost', type: 'num', ph: 'let', get: function (r) { var m = r.metrics; return (m && m.total > 0 && m.yearNet > 0) ? (m.total / m.yearNet) : null; } },
+    ] };
+
+    var BL_CF = { noun: 'záznamů (na této straně)', emptyText: 'Žádné záznamy.', limit: 1000, columns: [
+      null,
+      { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: function (x) { return x.name || ''; } },
+      { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: function (x) { return x.email || ''; } },
+      { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: function (x) { return x.phone || ''; } },
+      { key: 'note', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: function (x) { return x.note || ''; } },
+      null,
+    ] };
+
+    function _kvTxTypeTxt(t) { return t === 'Washer' ? 'Pračka' : (t === 'Dryer' ? 'Sušička' : (t || '')); }
+    function _kvTxStatusTxt(s) { return s === 'Successful' ? 'Úspěšná' : (s === 'Unknown' ? 'Neznámá' : (s || '')); }
+    var KVTX_CF = { noun: 'transakcí (na této straně)', emptyText: 'Žádné transakce.', columns: [
+      { key: 'dt', label: 'Datum a čas', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return t.datetime || null; } },
+      { key: 'type', label: 'Typ', type: 'text', ph: '', get: function (t) { return _kvTxTypeTxt(t.type); } },
+      { key: 'desc', label: 'Popis', type: 'text', ph: 'Popis…', get: function (t) { return t.description || ''; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: '', get: function (t) { return _kvTxStatusTxt(t.status); } },
+      { key: 'amount', label: 'Částka', type: 'num', ph: '', get: function (t) { return t.amount == null ? null : Number(t.amount); } },
+      { key: 'pay', label: 'Platby', type: 'text', ph: 'Platby…', get: function (t) { var n = { Coin: 'Mince', Bill: 'Bankovka', Card: 'Karta', QR: 'QR', Credit: 'Kredit' }; return (t.payments || []).map(function (p) { return n[p.type] || p.type; }).join(', '); } },
+    ] };
+    var KVPERIOD_CF = { noun: 'transakcí', emptyText: 'Žádné transakce.', limit: 1000, columns: [
+      { key: 'dt', label: 'Datum a čas', type: 'date', ph: 'dd.mm.rrrr', get: function (t) { return t.datetime || null; } },
+      { key: 'type', label: 'Typ', type: 'text', ph: '', get: function (t) { return _kvTxTypeTxt(t.type); } },
+      { key: 'desc', label: 'Popis', type: 'text', ph: 'Popis…', get: function (t) { return t.description || ''; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: '', get: function (t) { return _kvTxStatusTxt(t.status); } },
+      { key: 'amount', label: 'Částka', type: 'num', ph: '', get: function (t) { return t.amount == null ? null : Number(t.amount); } },
+    ] };
+
+    function _resDisc(x) { return (x.extra_discount_pct != null && Number(x.extra_discount_pct) > 0) ? Number(x.extra_discount_pct) : 0; }
+    var RES_CF = { noun: 'rezervací', emptyText: 'Žádné rezervace.', columns: [
+      { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.created_at || null; } },
+      { key: 'loc', label: 'Lokalita', type: 'text', ph: 'Lokalita…', get: function (x) { return [x.location_name, x.kiosk_code].filter(Boolean).join(' '); } },
+      { key: 'buyer', label: 'Kupující', type: 'text', ph: 'Kupující…', get: function (x) { return [x.buyer_name_full || x.buyer_name, x.buyer_phone].filter(Boolean).join(' '); } },
+      { key: 'days', label: 'Dny', type: 'num', ph: '', get: function (x) { return x.days == null ? null : Number(x.days); } },
+      { key: 'fee', label: 'Rezervace', type: 'num', ph: '', get: function (x) { return x.fee_total == null ? null : Number(x.fee_total); } },
+      { key: 'price', label: 'Kupní cena', type: 'num', ph: '', get: function (x) { return x.purchase_price == null ? null : Number(x.purchase_price); } },
+      { key: 'disc', label: 'Sleva', type: 'num', ph: '%', get: function (x) { return _resDisc(x) || null; } },
+      { key: 'after', label: 'Cena po slevě', type: 'num', ph: '', get: function (x) { var d = _resDisc(x); return (d && x.purchase_price != null) ? Math.round(Number(x.purchase_price) * (1 - d / 100)) : null; } },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: function (x) { return RES_STATUS[x.status] || x.status || ''; } },
+      { key: 'until', label: 'Lhůty (konec)', type: 'date', ph: 'dd.mm.rrrr', get: function (x) { return x.reserved_until || null; } },
+      null,
+    ] };
+
+
     // Vykreslí badge stavu + případný sub-badge platby (Záloha ✓ / Doplaceno / Čeká…).
     // Vrací HTML pro vložení do buňky. opts.size = 'sm' (default) | 'lg' (pro detail).
     function renderStatusBadges(order, opts) {
@@ -1138,8 +1460,13 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné prodejní objednávky</h3><p>Vytvořte první prodejní objednávku.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Číslo</th><th>Odběratel</th><th title="Odpovědný obchodník">👤 Obchodník</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody>';
-      for (const o of list) {
+      if (!document.getElementById('orders-tbl')) {
+        el.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="orders-tbl"><thead><tr><th>Číslo</th><th>Odběratel</th><th title="Odpovědný obchodník">👤 Obchodník</th><th>Stav</th><th>Položek</th><th>Celkem</th><th title="Datum slíbené zákazníkovi">📅 Zákazník</th><th title="Doplatková faktura — datum vystavení / částka / stav platby">💵 Doplatek</th><th title="Konec posledního výrobního slotu">🏭 Výroba do</th><th>Akce</th></tr></thead><tbody></tbody></table></div>';
+      }
+      poCf('orders-tbl', ORDERS_CF, list, orderRowHtml);
+    }
+    function orderRowHtml(o) {
+        let html = '';
         const st = ORDER_STATUSES[o.status] || { label: o.status, color: '#9ca3af' };
         html += '<tr onclick="openOrderDetail(' + o.id + ')">';
         html += '<td class="person-name">' + o.order_number + '</td>';
@@ -1163,9 +1490,7 @@
           : '<span style="color:var(--text2);">—</span>') + '</td>';
         html += '<td>' + (o.status === 'prodano' ? '<button class="btn btn-sm" style="background:#06b6d4;color:#04121c;font-weight:700;margin-right:6px;" onclick="event.stopPropagation();openOrderDetail(' + o.id + ')" title="Doplnit podrobnosti a vygenerovat objednávku">📝 Vygenerovat objednávku</button>' : '') + '<button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteOrder(' + o.id + ')">🗑️</button></td>';
         html += '</tr>';
-      }
-      html += '</tbody></table></div>';
-      el.innerHTML = html;
+        return html;
     }
 
     // ============================================================
@@ -3622,8 +3947,8 @@
         var r = await fetch('/api/compounder/service-subscriptions', { credentials: 'include' });
         var arr = await r.json(); window._serviceSubs = arr;
         if (!arr.length) { box.innerHTML = '<div style="color:var(--text2);padding:16px;">Zatím žádné servisní smlouvy. Přidej první tlačítkem „Nová smlouva".</div>'; return; }
-        var h = '<table class="data-table" style="width:100%;"><thead><tr><th>Kiosk</th><th>Odběratel</th><th>%</th><th>Auto</th><th>Naposledy</th><th>Stav</th><th></th></tr></thead><tbody>';
-        arr.forEach(function (s) {
+        var h = '<table id="servis-subs-tbl" class="data-table" style="width:100%;"><thead><tr><th>Kiosk</th><th>Odběratel</th><th>%</th><th>Auto</th><th>Naposledy</th><th>Stav</th><th></th></tr></thead><tbody>';
+        poCfLater('servis-subs-tbl', SUBS_CF, arr, function (s) { var h = '';
           h += '<tr><td><b>' + esc(s.kiosk_code) + '</b></td>'
             + '<td>' + esc(s.customer_name || ('#' + (s.company_id || '—'))) + (s.buyer_ico ? (' · IČO ' + esc(s.buyer_ico)) : '') + '<br><span style="font-size:11px;color:var(--text2);">' + esc(s.email || '') + '</span></td>'
             + '<td>' + esc(s.fee_pct) + ' %</td>'
@@ -3635,8 +3960,9 @@
             + '<button class="btn btn-sm" onclick="genServiceContract(' + s.id + ')" title="Servisní smlouva (PDF)">📄</button> '
             + '<button class="btn btn-sm" onclick="openServiceSubForm(' + s.id + ')">✏️</button> '
             + '<button class="btn btn-danger btn-sm" onclick="delServiceSub(' + s.id + ')">🗑️</button></td></tr>';
+          return h;
         });
-        box.innerHTML = h + '</tbody></table>';
+        box.innerHTML = h + '</tbody></table>'; poCfFlush();
       } catch (e) { box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání.</div>'; }
     }
     function _findSub(id) { return (window._serviceSubs || []).filter(function (x) { return x.id === id; })[0] || {}; }
@@ -4174,33 +4500,8 @@
     var _cmpFilters = {};
     function cmpSyncFilters(){ document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ var v=(el.value||''); if(v) _cmpFilters[el.getAttribute('data-lf')]=v; else delete _cmpFilters[el.getAttribute('data-lf')]; }); }
     window.cmpSyncFilters = cmpSyncFilters;
-    function cmpApplyLeadFilters(){
-      cmpSyncFilters();
-      var f = {};
-      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el){ f[el.getAttribute('data-lf')] = (el.value||'').trim().toLowerCase(); });
-      // Když běží serverové hledání podle jména/e-mailu, klientsky už podle nich nefiltrujeme
-      // (jinak by se skryly shody jen podle e-mailu/telefonu vrácené serverem).
-      var srv = !!_cmpServerQ;
-      var adsOnly = !!(document.getElementById('cmp-ads-only')||{}).checked;
-      var chatTodayOnly = !!(document.getElementById('cmp-chat-today-only')||{}).checked;
-      var rows = document.querySelectorAll('#cmp-leads-table tr[data-lead]');
-      rows.forEach(function(r){
-        var ok = true; function a(n){ return (r.getAttribute(n)||''); }
-        if(adsOnly && a('data-source')!=='facebook_ads' && a('data-source')!=='google_ads') ok=false;
-        if(ok && chatTodayOnly && a('data-chattoday')!=='1') ok=false;
-        if(ok && !srv && f.name && a('data-name').indexOf(f.name)===-1) ok=false;
-        if(ok && !srv && f.email && a('data-email').indexOf(f.email)===-1) ok=false;
-        if(ok && f.note && a('data-note').indexOf(f.note)===-1) ok=false;
-        if(ok && f.role && a('data-role')!==f.role) ok=false;
-        if(ok && f.lang && a('data-lang')!==f.lang) ok=false;
-        if(ok && f.owner){ if(f.owner==='none'){ if(a('data-owner')) ok=false; } else if(a('data-owner')!==f.owner) ok=false; }
-        if(ok && f.warm && a('data-warm')!==f.warm) ok=false;
-        if(ok && f.resv){ var has=a('data-resv')==='1'; if(f.resv==='1'&&!has) ok=false; if(f.resv==='0'&&has) ok=false; }
-        if(ok && f.stav && a('data-stav')!==f.stav) ok=false;
-        r.style.display = ok?'':'none';
-        var nx = r.nextElementSibling; if(nx && nx.className==='cmp-act-row') nx.style.display = ok?'':'none';
-      });
-    }
+    // Sloupcové filtry + řazení řeší ColFilters (js/column-filters.js); horní přepínače překreslí tabulku.
+    function cmpApplyLeadFilters(){ renderCompounderLeads(); }
     window.cmpApplyLeadFilters = cmpApplyLeadFilters;
     // Debouncovaná změna hledání z inline polí Jméno/E-mail → server (přes všechny kontakty).
     var _cmpSrvTimer = null;
@@ -4332,31 +4633,25 @@
     function renderCompounderLeads() {
       var box = document.getElementById('cmp-leads-table');
       if (!box || !_cmpLeadsCache) return;
-      var resvMap = _cmpResvMapCache || {};
-      var leads = _cmpLeadsCache.slice();
-      if (_cmpSort.key) {
-        leads.sort(function(a, b) {
-          var va = cmpSortVal(a, _cmpSort.key), vb = cmpSortVal(b, _cmpSort.key);
-          if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb), 'cs') * _cmpSort.dir;
-          return (va - vb) * _cmpSort.dir;
-        });
+      // Horní přepínače (jen z reklamy / dnes chatovali) — klientsky nad načtenými kontakty.
+      var adsOnly = !!(document.getElementById('cmp-ads-only')||{}).checked;
+      var chatTodayOnly = !!(document.getElementById('cmp-chat-today-only')||{}).checked;
+      var _today = new Date().toDateString();
+      var leads = _cmpLeadsCache.filter(function(l) {
+        if (adsOnly && l.source !== 'facebook_ads' && l.source !== 'google_ads') return false;
+        if (chatTodayOnly && !(l.ai_last_chat_at && new Date(l.ai_last_chat_at).toDateString() === _today)) return false;
+        return true;
+      });
+      if (!document.getElementById('cmp-leads-tbl')) {
+        box.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="cmp-leads-tbl"><thead><tr><th></th>' +
+          '<th>Vytvořeno</th><th>Poslední aktivita</th><th>Jméno</th><th>E-mail</th><th>Role</th><th>Jazyk</th><th>Obchodník</th>' +
+          '<th>Zahřátí</th><th>Rezervace</th><th>Stav</th><th>Poznámka</th><th></th></tr></thead><tbody></tbody></table></div>';
       }
-      // Hodnoty filtrů bereme ze zapamatovaného stavu (_cmpFilters), ať je „Načítám…"/reload nesmaže.
-      if (document.querySelector('.cmp-filter-row')) cmpSyncFilters();
-      var fvals = _cmpFilters;
-      // Zapamatujeme si i to, které pole má fokus (ať se dá plynule psát i přes reload).
-      var _focusLf = null; var _ae = document.activeElement;
-      if (_ae && _ae.getAttribute && _ae.closest && _ae.closest('.cmp-filter-row')) _focusLf = _ae.getAttribute('data-lf');
-      function cmpTh(key, label) {
-        var arrow = _cmpSort.key === key ? (_cmpSort.dir < 0 ? ' ▼' : ' ▲') : '';
-        return '<th style="cursor:pointer;white-space:nowrap;" title="Kliknutím seřadíš" onclick="cmpSortBy(\'' + key + '\')">' + label + arrow + '</th>';
-      }
-      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th></th>' +
-        cmpTh('created', 'Vytvořeno') + cmpTh('activity', 'Poslední aktivita') + cmpTh('name', 'Jméno') +
-        cmpTh('email', 'E-mail') + cmpTh('role', 'Role') + cmpTh('lang', 'Jazyk') + cmpTh('owner', 'Obchodník') +
-        cmpTh('warm', 'Zahřátí') + cmpTh('resv', 'Rezervace') + cmpTh('stav', 'Stav') + cmpTh('note', 'Poznámka') +
-        '<th></th></tr>' + cmpFilterRowHtml() + '</thead><tbody>';
-        leads.forEach(function(l) {
+      poCf('cmp-leads-tbl', CMP_LEADS_CF, leads, cmpLeadRowHtml);
+    }
+    function cmpLeadRowHtml(l) {
+          var resvMap = _cmpResvMapCache || {};
+          var h = '';
           var dt = new Date(l.created_at).toLocaleString('cs-CZ');
           var la = l.lastActivityAt ? new Date(l.lastActivityAt).toLocaleString('cs-CZ') : '—';
           var laToday = l.lastActivityAt ? (new Date(l.lastActivityAt).toDateString() === new Date().toDateString()) : false;
@@ -4428,14 +4723,7 @@
           var _srcTag = (l.source === 'facebook_ads' || _isGoog);
           var _chatToday = l.ai_last_chat_at && (new Date(l.ai_last_chat_at).toDateString() === new Date().toDateString());
           h += '<tr data-lead="' + l.id + '" data-aichat="' + cmpEsc(l.ai_last_chat_at||'') + '" data-chattoday="' + (_chatToday?'1':'') + '" data-sections="' + cmpEsc(l.visible_sections||'') + '" data-source="' + cmpEsc(l.source||'') + '" data-approved="' + (l.access_approved_at ? '1' : '') + '" data-sent-count="' + (l.access_sent_count||0) + '" data-sent-at="' + cmpEsc(l.access_last_sent_at||'') + '" data-phone="' + cmpEsc(l.phone||'') + '" data-la="' + cmpEsc(l.lastActivityAt||'') + '" data-extra="' + cmpEsc(l.extra_offers||'') + '" data-revstats="' + (l.show_revenue_stats?'1':'') + '" data-example="' + (l.show_example?'1':'') + '" data-aispec="' + (l.show_ai_specialist?'1':'') + '" data-aispecsms="' + cmpEsc(l.ai_specialist_sms_sent_at||'') + '" data-aispecsmsstat="' + cmpEsc(l.ai_specialist_sms_status||'') + '" data-hideloss="' + (l.hide_live_loss?'1':'') + '" data-version="' + cmpEsc(l.pradlomat_version||'V3') + '" data-role="' + cmpEsc(l.role||'') + '" data-lang="' + cmpEsc(langCode) + '" data-owner="' + (l.owner_person_id||'') + '" data-warm="' + (w==null?'':(w>=70?'hot':w>=45?'warm':w>=25?'luke':'cold')) + '" data-resv="' + (rv?'1':'') + '" data-stav="' + cmpEsc(l.status||'') + '" data-name="' + cmpEsc((l.name||'').toLowerCase()) + '" data-email="' + cmpEsc((l.email||'').toLowerCase()) + '" data-note="' + cmpEsc((l.notes||'').toLowerCase()) + '" onclick="cmpActivity(' + l.id + ', this)" title="' + (l.is_test?'Testovací kontakt — nepočítá se do statistik':'Klikni pro cestu zákazníka') + '" style="cursor:pointer;' + (l.is_test?'opacity:0.6;':'') + '"><td style="color:var(--text2);">▸</td><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;color:' + laColor + ';font-size:12px;font-weight:' + (laToday ? '700' : '400') + ';">' + la + todayStr + '</td><td>' + (l.is_test ? '<span title="Testovací kontakt — nepočítá se do statistik" style="color:#c084fc;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🧪</span>' : '') + (l.external_rep_id ? '<span title="Kontakt od externího obchodníka' + (l.external_rep_name ? ': ' + cmpEsc(l.external_rep_name) : '') + '" style="color:#eab308;font-size:12px;margin-right:4px;cursor:default;vertical-align:middle;">🤝</span>' : '') + (l.is_hot ? '<span title="Zajímavý kontakt" style="color:#eab308;margin-right:3px;">★</span>' : '') + cmpEsc(l.name) + blBadge + ((!l.last_called_at && !l.blacklisted && !l.is_test && ['nezajem','nelze_pouzit','rejected','prodano','converted'].indexOf(l.status||'new')===-1) ? ' <span title="Obchodník ještě nevolal" style="font-size:11px;color:#fca5a5;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.5);border-radius:999px;padding:0 6px;vertical-align:middle;">📵</span>' : '') + (_chatToday ? ' <span title="Dnes chatoval se specialistou" style="color:#c4b5fd;">💬</span>' : '') + (l.campaign ? ' <span title="Kampaň z ' + _srcName + '" style="display:inline-block;margin-left:6px;padding:1px 7px;border-radius:10px;background:' + _srcBg + ';color:' + _srcColor + ';font-size:11px;vertical-align:middle;">' + _srcIcon + ' ' + cmpEsc(l.campaign) + '</span>' : (_srcTag ? ' <span title="Kontakt z ' + _srcName + '" style="margin-left:6px;color:' + _srcColor + ';font-size:12px;vertical-align:middle;">' + _srcIcon + '</span>' : '')) + (l.extra_offers ? ' <span title="Individuální nabídka lokalit" style="cursor:default">🎯</span>' : '') + modelBadge + invBadge + '</td><td><a href="mailto:' + cmpEsc(l.email) + '" onclick="event.stopPropagation()" style="color:#eab308;">' + cmpEsc(l.email) + '</a></td><td>' + roleLabel + '</td><td style="white-space:nowrap;">' + langSel + '</td><td style="white-space:nowrap;">' + ownerCell + '</td>' + warmthCell + resvCell + '<td>' + sel + '</td><td><input type="text" value="' + noteVal + '" data-tip="' + noteVal + '" placeholder="—" onclick="event.stopPropagation()" onblur="cmpSetNote(' + l.id + ', this.value)" style="width:140px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;"></td><td style="white-space:nowrap;"><button onclick="event.stopPropagation();cmpToggleHot(' + l.id + ',' + (l.is_hot?'false':'true') + ')" title="' + (l.is_hot?'Zajímavý kontakt — klikni pro zrušení':'Označit jako zajímavý kontakt') + '" style="background:' + (l.is_hot?'rgba(234,179,8,0.22)':'transparent') + ';color:' + (l.is_hot?'#eab308':'var(--text2)') + ';border:1px solid ' + (l.is_hot?'rgba(234,179,8,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">★</button><button onclick="event.stopPropagation();cmpToggleTest(' + l.id + ',' + (l.is_test?'false':'true') + ')" title="' + (l.is_test?'Testovací kontakt — klikni pro zrušení':'Označit jako testovací kontakt (nepočítá se do statistik)') + '" style="background:' + (l.is_test?'rgba(168,85,247,0.25)':'transparent') + ';color:' + (l.is_test?'#c084fc':'var(--text2)') + ';border:1px solid ' + (l.is_test?'rgba(168,85,247,0.6)':'var(--border)') + ';border-radius:6px;padding:4px 8px;font-size:12px;cursor:pointer;margin-right:6px;">🧪</button><button onclick="event.stopPropagation();cmpDeleteLead(' + l.id + ', ' + JSON.stringify(l.name).replace(/"/g,'&quot;') + ')" title="Smazat lead" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.4);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">🗑</button></td></tr>';
-        });
-        h += '</tbody></table></div>';
-      box.innerHTML = h;
-      // Obnovíme hodnoty filtrů a znovu je aplikujeme.
-      document.querySelectorAll('.cmp-filter-row [data-lf]').forEach(function(el) { var k = el.getAttribute('data-lf'); if (fvals[k]) el.value = fvals[k]; });
-      // Vrátíme fokus do pole, kde uživatel psal (kurzor na konec).
-      if (_focusLf) { var fe = document.querySelector('.cmp-filter-row [data-lf="' + _focusLf + '"]'); if (fe) { fe.focus(); try { var n = fe.value.length; fe.setSelectionRange(n, n); } catch(e){} } }
-      cmpApplyLeadFilters();
+          return h;
     }
     window.renderCompounderLeads = renderCompounderLeads;
     function cmpStat(k, v){ return '<div><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">'+k+'</div><div style="font-size:18px;font-weight:700;color:#eab308;">'+v+'</div></div>'; }
@@ -5142,9 +5430,10 @@
         if(!rows.length){ table='<div style="color:var(--text2);font-size:13px;">Zatím nebyl odeslán žádný e-mail se ztrátou.</div>'; }
         else {
           table='<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin:6px 0;">Po leadech ('+rows.length+')</div>';
-          table+='<div style="overflow:auto;max-height:50vh;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
+          table+='<div style="overflow:auto;max-height:50vh;"><table id="cmp-loss-tbl" style="width:100%;border-collapse:collapse;font-size:12.5px;">'
             +'<thead><tr style="text-align:left;color:var(--text2);border-bottom:1px solid var(--border);"><th style="padding:6px 8px;">Lead</th><th style="padding:6px 8px;">Posl. odesláno</th><th style="padding:6px 8px;">×</th><th style="padding:6px 8px;">Ušlá částka</th><th style="padding:6px 8px;" title="Otevření nebo proklik = prokazatelně doručeno do inboxu. Kam přesně e-mail spadl (inbox/spam) nelze u příjemce zjistit.">Doručení</th><th style="padding:6px 8px;">Otevřel</th><th style="padding:6px 8px;">Proklik</th></tr></thead><tbody>'
-            +rows.map(function(l){
+            +'</tbody></table></div>';
+          poCfLater('cmp-loss-tbl', CMP_LOSS_CF, rows, function(l){
               var op=l.openedAt?('<span style="color:#10b981;">✓ '+cmpFmtDt(l.openedAt)+(l.openImplied?' <span style="color:var(--text2);font-size:10px;">(z prokliku)</span>':'')+'</span>'):'<span style="color:var(--text2);">—</span>';
               var cl=l.clickedAt?('<span style="color:#3b82f6;">✓ '+cmpFmtDt(l.clickedAt)+'</span>'):'<span style="color:var(--text2);">—</span>';
               // Doručení: otevření/proklik = prokazatelně v inboxu; jinak jen odesláno (umístění neznámé).
@@ -5152,10 +5441,9 @@
                 ? '<span style="color:#10b981;" title="Otevřel nebo proklikl → e-mail prokazatelně dorazil do inboxu.">🟢 Došel (inbox)</span>'
                 : '<span style="color:var(--text2);" title="Server e-mail přijal, ale zda je v inboxu nebo spamu nelze zjistit.">⚪ Odesláno</span>';
               return '<tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 8px;">'+cmpEsc(l.name)+(l.email?('<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(l.email)+'</span>'):'')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cmpFmtDt(l.lastSentAt)+'</td><td style="padding:6px 8px;">'+l.sends+'</td><td style="padding:6px 8px;white-space:nowrap;">'+(l.missed!=null?(Number(l.missed).toLocaleString('cs-CZ')+' Kč'):'—')+'</td><td style="padding:6px 8px;white-space:nowrap;">'+deliv+'</td><td style="padding:6px 8px;white-space:nowrap;">'+op+'</td><td style="padding:6px 8px;white-space:nowrap;">'+cl+'</td></tr>';
-            }).join('')
-            +'</tbody></table></div>';
+          });
         }
-        body.innerHTML=cards+datesHtml+table;
+        body.innerHTML=cards+datesHtml+table; poCfFlush();
       }catch(e){ body.innerHTML='<div style="color:#ef4444;font-size:13px;">Nepodařilo se načíst statistiku: '+cmpEsc(e.message||'')+'</div>'; }
     }
     window.cmpLossStats=cmpLossStats;
@@ -5279,7 +5567,7 @@
     var _vipPick = {}; var _vipLeadId = null;
     var _vipSort = { key: 'total', dir: -1 };
     function _vipSortVal(r,key){ switch(key){ case 'code':return String(r.code||''); case 'label':return String(r.label||''); case 'company':return String(r.company||''); case 'version':return String(r.version||''); case 'stav':return r.inIncubator?1:0; case 'total':return (r.total==null?-1:r.total); case 'lokalita':return (r.lokalita||0); case 'yr':return (r.yr||0); case 'roi':return (r.roi==null?-1:r.roi); case 'profit5':return (r.profit5==null?-1:r.profit5); default:return 0; } }
-    function _vipTh(key,label,align){ var ar=_vipSort.key===key?(_vipSort.dir<0?' ▼':' ▲'):''; var st='cursor:pointer;'+(align==='r'?'text-align:right;':(align==='c'?'text-align:center;':'')); return '<th data-vipsort="'+key+'" style="'+st+'">'+label+ar+'</th>'; }
+    function _vipTh(key,label,align){ var st=(align==='r'?'text-align:right;':(align==='c'?'text-align:center;':'')); return '<th style="'+st+'">'+label+'</th>'; }
     function _vipRow(k){
       var num=function(v){return (typeof v==='number'&&isFinite(v))?v:0;};
       var st=_compoundingSettings||{};
@@ -5314,13 +5602,13 @@
       if(!_kioskData||!Array.isArray(_kioskData.kiosks)){ box.innerHTML='<div style="color:#ef4444;padding:20px;">Data lokalit se nepodařilo načíst. Zkus otevřít záložku Compounding a pak to znovu.</div>'; return; }
       var q=((document.getElementById('vip-search')||{}).value||'').trim().toLowerCase();
       var rows=_kioskData.kiosks.filter(function(k){ return String(k.companyName||'').toLowerCase().indexOf('best series')!==-1; }).map(_vipRow);
-      var sk=_vipSort.key, sd=_vipSort.dir;
-      rows.sort(function(a,b){ var va=_vipSortVal(a,sk), vb=_vipSortVal(b,sk); if(typeof va==='string'||typeof vb==='string') return String(va).localeCompare(String(vb),'cs')*sd; return (va-vb)*sd; });
+      rows.sort(function(a,b){ return (b.total==null?-1:b.total)-(a.total==null?-1:a.total); });
       var vis=rows.filter(function(r){ if(!q) return true; return ((r.code||'')+' '+(r.label||'')+' '+(r.company||'')).toLowerCase().indexOf(q)!==-1; });
-      var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12.5px;"><thead><tr>'
+      var h='<div style="overflow-x:auto;"><table id="vip-tbl" class="data-table" style="font-size:12.5px;"><thead><tr>'
         +'<th style="text-align:center;">VIP</th>'+_vipTh('code','Kód','')+_vipTh('label','Lokalita','')+_vipTh('company','Provozovatel','')+_vipTh('version','Verze','')
         +_vipTh('total','Celková cena','r')+_vipTh('lokalita','Cena lokality','r')+_vipTh('yr','Roční výnos','r')+_vipTh('roi','ROI','r')+_vipTh('profit5','Výnos 5 let','r')+_vipTh('stav','Stav','')+'</tr></thead><tbody>';
-      vis.forEach(function(r){
+      if(!document.getElementById('vip-tbl')) box.innerHTML=h+'</tbody></table></div>';
+      poCf('vip-tbl', VIP_CF, vis, function(r){ var h='';
         h+='<tr>'
           +'<td style="text-align:center;"><input type="checkbox" data-vip="'+kvEsc(r.code)+'"'+(_vipPick[r.code]?' checked':'')+'></td>'
           +'<td>'+kvEsc(r.code)+'</td><td>'+kvEsc(r.label)+'</td><td>'+kvEsc(r.company)+'</td><td>'+kvEsc(r.version)+'</td>'
@@ -5330,9 +5618,8 @@
           +'<td style="text-align:right;">'+(r.roi!=null?(Math.round(r.roi*10)/10+' %'):'—')+'</td>'
           +'<td style="text-align:right;">'+kvMoney(r.profit5,'CZK')+'</td>'
           +'<td>'+(r.inIncubator?'Inkubátor':'Zavedená')+'</td></tr>';
+        return h;
       });
-      h+='</tbody></table></div>';
-      box.innerHTML=h;
       cmpVipCount();
     }
     async function cmpVipApply(id){
@@ -5371,7 +5658,7 @@
         if(!d || !d.ok){ alert('Nabídku se nepodařilo načíst.'); return; }
         var locs = d.locations || [];
         function m(v){ return (v!=null && isFinite(v)) ? Math.round(v).toLocaleString('cs-CZ')+' Kč' : '—'; }
-        var rows = locs.map(function(o){
+        var _offRow = function(o){
           var celkem = (o.guaranteeValue!=null) ? ((o.yearlyYield||0)*o.guaranteeYears + o.guaranteeValue) : null;
           return '<tr style="border-top:1px solid var(--border)">'
             + '<td style="padding:6px 8px;">'+(o.individual?'⭐ ':'')+cmpEsc(o.label||o.code)+' <span style="color:var(--text2);font-size:11px;">'+cmpEsc(o.version||'')+'</span>'+(o.reserved?' <span style="color:#eab308;font-size:11px;">(obsazeno)</span>':'')+(o.noPhoto?' <span style="color:#eab308;font-size:11px;">⚠️ chybí fotka — leadovi se nezobrazí</span>':'')+'</td>'
@@ -5380,9 +5667,9 @@
             + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;">'+m(o.guaranteeValue)+'</td>'
             + '<td style="padding:6px 8px;text-align:right;white-space:nowrap;font-weight:700;">'+m(celkem)+'</td>'
             + '</tr>';
-        }).join('');
+        };
         var body = locs.length
-          ? '<table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="color:var(--text2);text-align:left;"><th style="padding:6px 8px;">Lokalita</th><th style="padding:6px 8px;text-align:right;">Cena</th><th style="padding:6px 8px;text-align:right;">Roční výnos</th><th style="padding:6px 8px;text-align:right;">Garance</th><th style="padding:6px 8px;text-align:right;">Celkem 5 let</th></tr></thead><tbody>'+rows+'</tbody></table>'
+          ? '<table id="cmp-offer-tbl" style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr style="color:var(--text2);text-align:left;"><th style="padding:6px 8px;">Lokalita</th><th style="padding:6px 8px;text-align:right;">Cena</th><th style="padding:6px 8px;text-align:right;">Roční výnos</th><th style="padding:6px 8px;text-align:right;">Garance</th><th style="padding:6px 8px;text-align:right;">Celkem 5 let</th></tr></thead><tbody></tbody></table>'
           : '<div style="color:var(--text2);">Žádné lokality (lead nemá odemčenou sekci Investor nebo nic není v nabídce).</div>';
         var html = '<div data-cmpmodal="1" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove()">'
           + '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;max-width:860px;width:100%;max-height:85vh;overflow:auto;padding:20px;">'
@@ -5391,6 +5678,7 @@
           + '<div style="color:var(--text2);font-size:11px;margin-top:10px;">⭐ = VIP (individuální) nabídka · hodnoty v CZK</div>'
           + '</div></div>';
         document.body.insertAdjacentHTML('beforeend', html);
+        if(locs.length) poCf('cmp-offer-tbl', CMP_OFFER_CF, locs, _offRow);
       }catch(e){ alert('Chyba načítání nabídky.'); }
     }
     window.cmpShowOffer = cmpShowOffer;
@@ -5935,10 +6223,10 @@
       var body=document.getElementById('ai-calls-body');
       body.innerHTML='<div style="color:var(--text2);">Načítám…</div>';
       try{
-        var rows=await aiApi('/calls?line=obchod&limit=100');
+        var rows=await aiApi('/calls?line=obchod&limit=200');
         if(!rows.length){ body.innerHTML='<div style="color:var(--text2);padding:10px;">Zatím žádné hovory.</div>'; return; }
-        var html='<table class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
-        rows.forEach(function(c){
+        var html='<table id="ai-calls-tbl" class="data-table"><thead><tr><th>Kdy</th><th>Směr</th><th>Číslo</th><th>Kdo</th><th>Co chtěl</th><th>Přepis</th><th>Nahrávka</th><th>Délka</th></tr></thead><tbody>';
+        poCfLater('ai-calls-tbl', AI_CALLS_CF, rows, function (c) { var html = '';
           var isOut = c.direction==='outbound';
           var dirCol = isOut ? '#3b82f6' : '#10b981';
           var dirBg  = isOut ? 'rgba(59,130,246,0.15)' : 'rgba(16,185,129,0.15)';
@@ -5957,9 +6245,10 @@
             +'<td onclick="event.stopPropagation()">'+rec+'</td>'
             +'<td>'+aiFmtDur(c.duration_sec)+'</td></tr>';
           html+='<tr id="ai-call-'+c.id+'" style="display:none;"><td colspan="8" style="background:var(--surface2);padding:14px;border-left:3px solid '+dirCol+';">'+aiCallDetail(c)+'</td></tr>';
+          return html;
         });
         html+='</tbody></table>';
-        body.innerHTML=html;
+        body.innerHTML=html; poCfFlush();
       }catch(e){ body.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
     function aiCallDetail(c){
@@ -6106,8 +6395,8 @@
           if(c==='sms+email') return '<span style="color:#8b5cf6;">📱📧 obojí</span>';
           return '<span style="color:var(--text2);">—</span>';
         };
-        var h='<div style="overflow-x:auto;"><table class="data-table" style="font-size:12px;"><thead><tr><th>Kontakt</th><th>Obchodník</th><th>Zdroj</th><th style="text-align:right;">Zpráv</th><th>Poslední</th><th></th></tr></thead><tbody>';
-        list.forEach(function(x){
+        var h='<div style="overflow-x:auto;"><table id="ai-chats-tbl" class="data-table" style="font-size:12px;"><thead><tr><th>Kontakt</th><th>Obchodník</th><th>Zdroj</th><th style="text-align:right;">Zpráv</th><th>Poslední</th><th></th></tr></thead><tbody>';
+        poCfLater('ai-chats-tbl', AI_CHATS_CF, list, function (x) { var h = '';
           var nm=cmpEsc(x.name)+(x.is_test?' <span style="color:#c084fc;" title="Testovací">🧪</span>':'');
           h+='<tr><td>'+nm+(x.email?'<br><span style="color:var(--text2);font-size:11px;">'+cmpEsc(x.email)+'</span>':'')+'</td>'
             +'<td>'+(x.owner?cmpEsc(x.owner):'<span style="color:var(--text2);">—</span>')+'</td>'
@@ -6115,9 +6404,10 @@
             +'<td style="text-align:right;">'+(x.user_msgs||0)+'</td>'
             +'<td style="white-space:nowrap;">'+fmt(x.last_at)+'</td>'
             +'<td style="white-space:nowrap;"><button class="btn" style="font-size:11px;padding:3px 8px;" onclick="aiViewChat('+x.id+',\''+cmpEsc(String(x.name)).replace(/\x27/g,"&#39;")+'\')">💬 Zobrazit chat</button></td></tr>';
+          return h;
         });
         h+='</tbody></table></div>';
-        box.innerHTML=h;
+        box.innerHTML=h; poCfFlush();
       }catch(e){ box.innerHTML='<span style="color:#ef4444;">Chyba načítání chatů.</span>'; }
     }
     window.aiLoadChats=aiLoadChats;
@@ -6358,13 +6648,14 @@
         if(sum) sum.innerHTML='Celkem <b style="color:var(--text)">'+j.total+'</b> SMS · otevřelo <b>z SMS</b> '+j.opened+(j.openedAny!=null?(' <span title="Otevřeno jakkoli: i z e-mailu, portálu nebo z HolyOS — nesrovnávat s SMS" style="color:var(--text2);">(jakkoli '+j.openedAny+')</span>'):'')+(parts.length?(' · '+parts.join(' · ')):'');
         var list=j.list||[];
         if(!list.length){ box.innerHTML='<span>Zatím žádná odeslaná SMS.</span>'; return; }
-        var h='<table class="data-table" style="width:100%;font-size:12px;"><thead><tr><th>Kontakt</th><th>Telefon</th><th>Odesláno</th><th>Stav</th><th>Otevřel</th></tr></thead><tbody>';
-        list.forEach(function(x){
+        var h='<table id="ai-smsstat-tbl" class="data-table" style="width:100%;font-size:12px;"><thead><tr><th>Kontakt</th><th>Telefon</th><th>Odesláno</th><th>Stav</th><th>Otevřel</th></tr></thead><tbody>';
+        poCfLater('ai-smsstat-tbl', AI_SMSSTAT_CF, list, function (x) { var h = '';
           var stcol = x.status==='doručeno'?'#10b981':(x.status==='nedoručeno'?'#ef4444':'#eab308');
           h+='<tr><td>'+cmpEsc(x.name||'—')+'</td><td>'+cmpEsc(x.phone||'—')+'</td><td style="white-space:nowrap;">'+aiFmtDt2(x.sentAt)+'</td><td style="color:'+stcol+';">'+cmpEsc(x.status)+'</td><td title="'+(x.opened?'otevřel z SMS':(x.openedAny?'otevřel, ale ne z SMS (e-mail / portál / HolyOS)':'neotevřel'))+'">'+(x.opened?'✓':(x.openedAny?'<span style=\"color:var(--text2);\">(✓)</span>':'—'))+'</td></tr>';
+          return h;
         });
         h+='</tbody></table>';
-        box.innerHTML=h;
+        box.innerHTML=h; poCfFlush();
       }catch(e){ if(sum) sum.textContent='Chyba spojení'; }
     }
     window.aiLoadSmsStats=aiLoadSmsStats;
@@ -6446,17 +6737,18 @@
         var rows=(r&&r.rows)||[];
         if(msg) msg.textContent = rows.length ? (rows.length+' zpráv') : '';
         if(!rows.length){ box.innerHTML='<div style="color:var(--text2);font-size:13px;">Zatím žádné odeslané SMS.</div>'; return; }
-        var h='<table class="data-table"><thead><tr><th>Kdy</th><th>Komu</th><th>Kontext</th><th>Text</th><th>Stav</th><th>Otevřel odkaz</th></tr></thead><tbody>';
-        rows.forEach(function(x){
+        var h='<table id="ai-smslog-tbl" class="data-table"><thead><tr><th>Kdy</th><th>Komu</th><th>Kontext</th><th>Text</th><th>Stav</th><th>Otevřel odkaz</th></tr></thead><tbody>';
+        poCfLater('ai-smslog-tbl', AI_SMSLOG_CF, rows, function (x) { var h = '';
           var when=aiEsc(aiFmtDate(x.created_at));
           var to=aiEsc((x.name?(x.name+' · '):'')+(x.to||''));
           var ctx=aiEsc(AI_SMSLOG_CTX[x.context]||x.context||'—');
           var txt=aiEsc(String(x.body||'').slice(0,80))+((x.body&&x.body.length>80)?'…':'');
           var opened = x.opened===true ? ('✅'+(x.opened_at?(' '+aiEsc(aiFmtDate(x.opened_at))):'')) : (x.opened===false ? '—' : '<span style="color:var(--text2);">n/a</span>');
           h+='<tr><td style="white-space:nowrap;">'+when+'</td><td>'+to+'</td><td>'+ctx+'</td><td style="max-width:280px;">'+txt+'</td><td>'+aiSmsStatusBadge(x)+'</td><td style="white-space:nowrap;">'+opened+'</td></tr>';
+          return h;
         });
         h+='</tbody></table>';
-        box.innerHTML=h;
+        box.innerHTML=h; poCfFlush();
       }catch(e){ box.innerHTML='<div style="color:#ef4444;font-size:13px;">Chyba: '+aiEsc(e.message)+'</div>'; if(msg) msg.textContent=''; }
     }
     window.aiLoadSmsLog=aiLoadSmsLog;
@@ -6483,11 +6775,12 @@
         html+='</div>';
         html+='<button class="btn" onclick="aiCreateCampaign()" style="background:#eab308;color:#0e1a22;font-weight:700;">➕ Vytvořit kampaň</button> <span id="ai-c-msg" style="margin-left:8px;font-size:13px;color:var(--text2);"></span>';
         html+='</div>';
-        function aiCampRows(list){
-          var t='<table class="data-table"><thead><tr><th>Sada / kampaň</th><th>Stav</th><th>Kontaktů</th><th>Hotovo</th><th>Bez odp.</th><th></th></tr></thead><tbody>';
-          list.forEach(function(c){
+        function aiCampRows(list, key){
+          var t='<table id="'+key+'" class="data-table"><thead><tr><th>Sada / kampaň</th><th>Stav</th><th>Kontaktů</th><th>Hotovo</th><th>Bez odp.</th><th></th></tr></thead><tbody>';
+          poCfLater(key, AI_CAMP_CF, list, function (c) { var t = '';
             var k=c.counts||{}; var totalC=(k.pending||0)+(k.calling||0)+(k.ringing||0)+(k.in_progress||0)+(k.done||0)+(k.no_answer||0)+(k.failed||0);
             t+='<tr onclick="aiOpenCampaign(\''+c.id+'\')" style="cursor:pointer;"><td><b>'+aiEsc(c.name)+'</b></td><td>'+(AI_STATUS[c.status]||c.status)+'</td><td>'+totalC+'</td><td>'+(k.done||0)+'</td><td>'+(k.no_answer||0)+'</td><td style="color:var(--text2);">otevřít ›</td></tr>';
+            return t;
           });
           return t+'</tbody></table>';
         }
@@ -6495,15 +6788,15 @@
         var archived=camps.filter(function(c){return c.status==='archived';});
         if(!camps.length){ html+='<div style="color:var(--text2);">Zatím žádné kampaně.</div>'; }
         else {
-          html+= active.length ? aiCampRows(active) : '<div style="color:var(--text2);margin-bottom:10px;">Žádná aktivní sada — vytvoř novou výše.</div>';
+          html+= active.length ? aiCampRows(active,'ai-camp-tbl-a') : '<div style="color:var(--text2);margin-bottom:10px;">Žádná aktivní sada — vytvoř novou výše.</div>';
           if(archived.length){
             html+='<details style="margin-top:14px;border:1px solid var(--border);border-radius:8px;padding:8px 12px;">'
               +'<summary style="cursor:pointer;font-size:13px;color:var(--text2);">📦 Archivované sady ('+archived.length+') — ponechané kvůli statistikám</summary>'
-              +'<div style="margin-top:10px;">'+aiCampRows(archived)+'</div>'
+              +'<div style="margin-top:10px;">'+aiCampRows(archived,'ai-camp-tbl-x')+'</div>'
               +'</details>';
           }
         }
-        wrap.innerHTML=html;
+        wrap.innerHTML=html; poCfFlush();
       }catch(e){ wrap.innerHTML='<div style="color:#ef4444;padding:10px;">Chyba: '+aiEsc(e.message)+'</div>'; }
     }
     async function aiCreateCampaign(){
@@ -6599,14 +6892,16 @@
       var tg=(c.targets||[]);
       if(batch!=null) tg=tg.filter(function(t){ return (t.batch_no||1)===batch; });
       if(!tg.length) return '<div style="color:var(--text2);">Zatím žádné leady.</div>';
-      var h='<table class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Voláno</th><th>Výsledek</th><th>SMS</th><th></th></tr></thead><tbody>';
-      tg.forEach(function(t){
+      var _tgKey='ai-tg-'+(batch==null?'all':batch);
+      var h='<table id="'+_tgKey+'" class="data-table"><thead><tr><th>Jméno</th><th>Telefon</th><th>Stav</th><th>Voláno</th><th>Výsledek</th><th>SMS</th><th></th></tr></thead><tbody>';
+      poCfLater(_tgKey, AI_TG_CF, tg, function (t) { var h = '';
         var col=AI_TSTATUS_COLOR[t.status]||'var(--text)';
         var badge='<span style="color:'+col+';font-weight:600;">'+(t.status==='calling'?'📞 ':'')+(AI_STATUS[t.status]||t.status)+'</span>';
         var voled = (t.call && t.call.started_at) ? (aiFmtDate(t.call.started_at) + (t.call.duration_sec!=null ? ' · '+aiFmtDur(t.call.duration_sec) : '')) : '—';
         var audio = (t.call && t.call.has_audio) ? '<div style="margin-top:4px;">'+aiRecPlayer(t.call.id)+'</div>' : '';
         var sms = t.sms_sent ? '<span style="color:#10b981;" title="SMS odeslána">✅</span>' : '<span style="color:var(--text2);">—</span>';
         h+='<tr><td>'+aiEsc(t.name||'—')+'</td><td>'+aiEsc(t.phone)+'</td><td>'+badge+'</td><td style="white-space:nowrap;font-size:12px;">'+voled+audio+'</td><td>'+aiEsc(t.result_summary||'—')+'</td><td style="text-align:center;">'+sms+'</td><td style="text-align:right;"><button class="btn" onclick="aiRetryTarget(\''+c.id+'\',\''+t.id+'\')" style="padding:4px 10px;font-size:12px;">📞 Volat znovu</button></td></tr>';
+        return h;
       });
       h+='</tbody></table>';
       return h;
@@ -6684,7 +6979,7 @@
           });
           html+='</div></details>';
         }
-        det.innerHTML=html;
+        det.innerHTML=html; poCfFlush();
         aiCountField('ai-camp-greeting','ai-camp-greeting-cnt',300,50);
         aiCountField('ai-camp-script','ai-camp-script-cnt',9000,1400);
         var _knc=document.getElementById('ai-kn-sec-camp'); if(_knc){ var _sc='outbound:'+c.id; _knc.innerHTML=aiKnSectionHtml(_sc); aiKnLoad(_sc); }
@@ -6698,7 +6993,7 @@
         var c=await aiApi('/campaigns/'+id);
         var st=document.getElementById('ai-camp-status'); if(st) st.innerHTML=aiCampStatusHtml(c);
         var ac=document.getElementById('ai-camp-actions'); if(ac) ac.innerHTML=aiCampActionsHtml(c);
-        var tb=document.getElementById('ai-targets'); if(tb) tb.innerHTML=aiRenderTargets(c, c.current_batch||1);
+        var tb=document.getElementById('ai-targets'); if(tb){ var _b=c.current_batch||1; var _sk=aiRenderTargets(c, _b); if(!document.getElementById('ai-tg-'+_b) || _sk.indexOf('ai-tg-')===-1) tb.innerHTML=_sk; poCfFlush(); }
       }catch(e){ /* tichý pokus */ }
     }
     function aiStartPoll(id){ aiStopPoll(); aiState.pollTimer=setInterval(function(){ aiRefreshCampaign(id); }, 4000); }
@@ -6980,7 +7275,7 @@
     // DATABÁZE LEADŮ (CRM import) — tab "databaze"
     // ============================================================
     var CRM_SEG = { horky:{l:'Horký',c:'#ef4444'}, volat:{l:'Volat příště',c:'#eab308'}, nedovolano:{l:'Nedovoláno',c:'#3b82f6'}, novy:{l:'Nový',c:'#22c55e'}, nezajem:{l:'Nezájem',c:'#6b7280'}, smlouva:{l:'Smlouva',c:'#a855f7'}, ostatni:{l:'Ostatní',c:'#9aa0ad'} };
-    var crmState = { segment:'', country:'', owner:'', q:'', contactable:false, page:1, pageSize:50, pages:1, total:0, statsLoaded:false };
+    var crmState = { segment:'', country:'', owner:'', q:'', contactable:false, page:1, pageSize:200, pages:1, total:0, statsLoaded:false };
     function crmEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
     function crmNum(v){ return (Number(v)||0).toLocaleString('cs-CZ'); }
     async function crmApi(path){ var r=await fetch('/api/sales'+path,{credentials:'include'}); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
@@ -7036,7 +7331,7 @@
       var box=document.getElementById('crm-table');
       if(!rows||!rows.length){ box.innerHTML='<div style="color:var(--text2);padding:20px;">Žádné záznamy pro tento filtr.</div>'; return; }
       var th='<tr>'+['Jméno','Příjmení','E-mail','Telefon','Město','Země','Segment','Stav','Obchodník','Zdroj','Dup.','Poznámka','Vytvořeno'].map(function(h){return '<th style="position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--text2);font-weight:600;border-bottom:1px solid var(--line,#2a2a2e);white-space:nowrap;">'+h+'</th>';}).join('')+'</tr>';
-      var body=rows.map(function(r){
+      var _crmRow=function(r){
         var m=CRM_SEG[r.segment]||CRM_SEG.ostatni;
         return '<tr>'+
           td(crmEsc(r.first_name))+td(crmEsc(r.last_name))+
@@ -7049,8 +7344,9 @@
           td('<span title="'+crmEsc(r.note)+'" style="color:var(--text2);font-size:12px;">'+crmEsc((r.note||'').slice(0,110))+'</span>')+
           td(r.crm_created_at?('<span style="color:var(--text2);font-size:12px;white-space:nowrap;">'+new Date(r.crm_created_at).toLocaleDateString('cs-CZ')+'</span>'):'—')+
         '</tr>';
-      }).join('');
-      box.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:13px;">'+th+body+'</table>';
+      };
+      if(!document.getElementById('crm-tbl')) box.innerHTML='<table id="crm-tbl" style="width:100%;border-collapse:collapse;font-size:13px;"><thead>'+th+'</thead><tbody></tbody></table>';
+      poCf('crm-tbl', CRM_CF, rows, _crmRow);
       function td(x){ return '<td style="padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top;">'+x+'</td>'; }
     }
     async function crmExport(){
@@ -7165,10 +7461,10 @@
         box.innerHTML = '<div class="empty-state"><div class="empty-icon">📍</div><h3>Zatím žádné nabídky</h3><p>Nabídky míst pro prádlomat z webu bestseries.global se zobrazí zde.</p></div>';
         return;
       }
-      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'
+      var h = '<div style="overflow-x:auto;"><table id="lok-tbl" class="data-table"><thead><tr>'
         + '<th>Přijato</th><th>Kontakt</th><th>Adresa</th><th>El.</th><th>Voda</th><th>Kanal.</th><th>Park.</th><th>Obchodník</th><th>Stav</th><th></th>'
         + '</tr></thead><tbody>';
-      items.forEach(function(s){
+      poCfLater('lok-tbl', LOK_CF, items, function (s) { var h = '';
         var contact = lokEsc(s.owner_name||'—') + (s.owner_phone?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_phone)+'</span>'):'') + (s.owner_email?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_email)+'</span>'):'');
         h += '<tr onclick="openLokalityDetail('+s.id+')">'
           + '<td style="white-space:nowrap;">'+lokDate(s.created_at)+'</td>'
@@ -7182,9 +7478,10 @@
           + '<td>'+lokStatusBadge(s.status)+'</td>'
           + '<td style="text-align:right;">›</td>'
           + '</tr>';
+        return h;
       });
       h += '</tbody></table></div>';
-      box.innerHTML = h;
+      box.innerHTML = h; poCfFlush();
     }
 
     async function openLokalityDetail(id) {
@@ -7617,9 +7914,11 @@
           case 'marze': return (obratBez > 0) ? (cisty / obratBez * 100) : -1;
           case 'forsale': return cfg.forSale ? 1 : 0;
           case 'stav': return k.inIncubator ? 'Inkubátor' : 'Zavedená';
+          case 'before': { if (machine == null) return -1; var _dmB = (_compoundingSettings.discount && _compoundingSettings.discount.machinePct) || {}; var _mpB = Number(_dmB[(cfg.version||'').toLowerCase()]) || 0; var _taB = locVal(k) + machine; return (_mpB > 0 && _mpB < 100) ? Math.round(_taB / (1 - _mpB / 100)) : _taB; }
           default: return 0;
         }
       }
+      _kvCellValFn = kvCellVal;
       if (_kvSort.key) {
         filtered.sort(function(a, b) {
           var va = kvCellVal(a, _kvSort.key), vb = kvCellVal(b, _kvSort.key);
@@ -7632,11 +7931,13 @@
 
       // Souhrn — počítáme VŽDY z právě zobrazené (filtrované) množiny, ať KPI přesně
       // sedí s počtem řádků v tabulce. Hodnota lokalit je v CZK.
+      // Souhrn se přepočítá po každém (i sloupcovém) filtru z právě zobrazených řádků.
+      var _kvSum = function(vis) {
       var s = {
-        kioskCount: filtered.length,
-        inIncubator: filtered.filter(function(k) { return k.inIncubator; }).length,
-        totalLocationValue: filtered.reduce(function(a, k) { var mm = _kvVerMachine(k.code).machine; return a + locVal(k) + (mm != null ? mm : 0); }, 0),
-        totalTransactions: filtered.reduce(function(a, k) { return a + num(k.transactions); }, 0),
+        kioskCount: vis.length,
+        inIncubator: vis.filter(function(k) { return k.inIncubator; }).length,
+        totalLocationValue: vis.reduce(function(a, k) { var mm = _kvVerMachine(k.code).machine; return a + locVal(k) + (mm != null ? mm : 0); }, 0),
+        totalTransactions: vis.reduce(function(a, k) { return a + num(k.transactions); }, 0),
       };
       var _cLoc = ({ CZ: 'Česku', PL: 'Polsku', IE: 'Irsku' })[_kvCountryTab] || _kvCountryTab;
       var _fActive = [];
@@ -7644,7 +7945,8 @@
       if (q) _fActive.push('hledání „' + q + '"');
       if (incOnly) _fActive.push('jen v inkubátoru');
       if (forSaleOnly) _fActive.push('jen nabízené');
-      var _countSub = (filtered.length !== baseList.length || _fActive.length)
+      if (vis.length !== filtered.length) _fActive.push('sloupcové filtry');
+      var _countSub = (vis.length !== baseList.length || _fActive.length)
         ? ('z ' + baseList.length + ' v ' + _cLoc + (_fActive.length ? (' · filtr: ' + _fActive.join(', ')) : ''))
         : ('celkem v ' + _cLoc + (s.inIncubator ? (' · ' + s.inIncubator + ' v inkubátoru') : ''));
       if (sumEl) {
@@ -7654,8 +7956,9 @@
           kvStat('Transakce (měsíc)', kvNum(s.totalTransactions), 'napříč zobrazenými lokalitami') +
           '</div>';
       }
+      };
 
-      if (!filtered.length) {
+      if (!filtered.length) { _kvSum(filtered);
         var _cNom = ({ CZ: 'Česko', PL: 'Polsko', IE: 'Irsko' })[_kvCountryTab] || _kvCountryTab;
         var _fList = ['země: ' + _cNom];
         if (_kvOperator) _fList.push('provozovatel: ' + _kvOperator);
@@ -7676,10 +7979,10 @@
       }
 
       function kvTh(key, label, align) {
-        var st = 'cursor:pointer;' + (align === 'r' ? 'text-align:right;' : (align === 'c' ? 'text-align:center;' : ''));
-        return '<th style="' + st + '" onclick="kvSort(\'' + key + '\')">' + label + kvSortArrow(key) + '</th>';
+        var st = (align === 'r' ? 'text-align:right;' : (align === 'c' ? 'text-align:center;' : ''));
+        return '<th style="' + st + '">' + label + '</th>';
       }
-      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+      var h = '<div style="overflow-x:auto;"><table id="kv-tbl" class="data-table kv-compact"><thead><tr>' +
         '<th style="text-align:right;color:var(--text2);">#</th>' +
         kvTh('code', 'Kód', '') + kvTh('label', 'Lokalita', '') + kvTh('company', 'Provozovatel', '') +
         kvTh('version', 'Verze', '') +
@@ -7701,7 +8004,7 @@
         kvTh('forsale', 'Nabízet', 'c') +
         kvTh('stav', 'Stav', '') +
         '<th></th></tr></thead><tbody>';
-      filtered.forEach(function(k, _i) {
+      var _kvRow = function(k, _i) { var h = '';
         var cur = k.currency || 'CZK';
         var badge = k.inIncubator
           ? '<span style="background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.4);border-radius:6px;padding:2px 8px;font-size:11px;">Inkubátor</span>'
@@ -7775,10 +8078,11 @@
             '<button class="btn" onclick="openKioskConfig(\'' + codeAttr + '\')" title="Nastavit verzi a nájem" style="padding:4px 9px;font-size:13px;">⚙️</button>' +
           '</td>' +
           '</tr>';
-      });
+        return h;
+      };
       h += '</tbody></table></div>';
       h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">' + (priceMode === 'roi' ? ('Cena lokality dopočtena tak, aby ROI = ' + roiPct + ' %') : ('Cena lokality = průměrný obrat s DPH × ' + months + ' měsíců')) + ' (nastavíš přes ⚙️). Zobrazeno v CZK. Kliknutím na řádek zobrazíš transakce stroje.</div>';
-      box.innerHTML = h;
+      box.innerHTML = h; poCf('kv-tbl', KV_CF, filtered, _kvRow, _kvSum);
     }
 
     // ─── Externí obchod — zjednodušená tabulka (kód, lokalita, provozovatel, celková cena) ───
@@ -7837,8 +8141,9 @@
       if (((document.getElementById('ext-nonzero') || {}).checked)) rows = rows.filter(function(r){ return r.loc != null && r.loc > 0; });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
       rows.sort(function(a, b){ return (b.total || 0) - (a.total || 0); });
+      rows.forEach(function(r){ r._provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null; r._provL = Math.round((r.loc || 0) * _pctL / 100); r._provTot = (r._provM != null ? r._provM : 0) + r._provL; r._nova = (r.total != null) ? Math.round(r.total * (1 + _mkPct / 100)) : null; r._navrat = (r._nova != null && r.yearNet > 0) ? (r._nova / r.yearNet) : null; r._navratT = (r.total > 0 && r.yearNet > 0) ? (r.total / r.yearNet) : null; });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádné lokality neodpovídají filtru.</div>'; return; }
-      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+      var h = '<div style="overflow-x:auto;"><table id="ext-tbl" class="data-table kv-compact"><thead><tr>' +
         '<th style="text-align:right;color:var(--text2);">#</th>' +
         '<th>Kód</th><th>Lokalita</th><th>Provozovatel</th>' +
         '<th style="text-align:right;">Cena kiosku</th>' +
@@ -7850,7 +8155,7 @@
         '<th style="text-align:right;">Provize celkem</th>' +
         '<th style="text-align:right;">Nová prodejní cena (+' + _mkPct + ' %)</th>' +
         '<th style="text-align:right;">Návratnost (nová cena)</th></tr></thead><tbody>';
-      rows.forEach(function(r, i){
+      poCfLater('ext-tbl', EXT_CF, rows, function (r, i) { var h = '';
         var _provM = (r.machine != null) ? Math.round(r.machine * _pctM / 100) : null;
         var _provL = Math.round((r.loc || 0) * _pctL / 100);
         var _provTot = (_provM != null ? _provM : 0) + _provL;
@@ -7872,10 +8177,11 @@
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#eab308;">' + (_novaCena != null ? kvMoney(_novaCena, 'CZK') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '<td style="text-align:right;white-space:nowrap;font-weight:700;color:#3b82f6;">' + (_navrat != null ? (_navrat + ' let') : '<span style="color:var(--text2);">—</span>') + '</td>' +
           '</tr>';
+        return h;
       });
       h += '</tbody></table></div>';
       h += '<div style="color:var(--text2);font-size:11px;margin-top:8px;">Celková cena (bez DPH) = cena lokality + cena kiosku, v CZK. Data ze SIS.</div>';
-      box.innerHTML = h;
+      box.innerHTML = h; poCfFlush();
     }
 
     // Nastavení výše provize pro Externí obchod (uloží se do compounding-settings).
@@ -7981,9 +8287,9 @@
         return ((x.jmeno||'') + ' ' + (x.ico||'') + ' ' + (x.email||'')).toLowerCase().indexOf(q) !== -1;
       });
       if (!rows.length) { box.innerHTML = '<div style="color:var(--text2);padding:24px;">Žádní obchodníci. Přidej prvního tlačítkem „➕ Přidat obchodníka".</div>'; return; }
-      var h = '<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr>' +
+      var h = '<div style="overflow-x:auto;"><table id="exr-tbl" class="data-table kv-compact"><thead><tr>' +
         '<th>Jméno / firma</th><th>Kontakt</th><th style="text-align:right;">Provize</th><th style="text-align:right;">VIP lok.</th><th style="white-space:nowrap;">Naposledy</th><th>Stav</th><th></th></tr></thead><tbody>';
-      rows.forEach(function(x){
+      poCfLater('exr-tbl', EXR_CF, rows, function (x) { var h = '';
         var badge = x.stav === 'aktivni' ? '#10b981' : (x.stav === 've_schvalovani' ? '#eab308' : 'var(--text2)');
         var kontakt = [x.email, x.telefon].filter(Boolean).join(' · ') || '<span style="color:var(--text2);">—</span>';
         var sazba = (x.sazba != null && x.sazba !== '') ? (x.zpusob_vypoctu === 'fix' ? (kvMoney(x.sazba,'CZK') + ' /lok.') : (String(x.sazba).replace('.', ',') + ' %')) : '—';
@@ -8000,9 +8306,10 @@
               ? '<button class="btn" onclick="exrSetStav(' + x.id + ',&#39;neaktivni&#39;)" title="Deaktivovat" style="padding:4px 9px;font-size:13px;">🚫</button>'
               : '<button class="btn" onclick="exrSetStav(' + x.id + ',&#39;aktivni&#39;)" title="Aktivovat" style="padding:4px 9px;font-size:13px;">✅</button>') +
           '</td></tr>';
+        return h;
       });
       h += '</tbody></table></div>';
-      box.innerHTML = h;
+      box.innerHTML = h; poCfFlush();
     }
     async function exrSetStav(id, stav) {
       try {
@@ -8158,8 +8465,8 @@
       h += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:8px;">Přiřazené lokality</div>';
       if (!codes.length) { h += '<div style="color:var(--text2);font-size:13px;margin-bottom:18px;">Žádné lokality. Přiřaď je přes „Upravit".</div>'; }
       else {
-        h += '<div style="overflow-x:auto;margin-bottom:18px;"><table class="data-table kv-compact"><thead><tr><th>Kód</th><th>Lokalita</th><th style="text-align:right;">Celková cena</th><th style="text-align:right;">Provize</th><th style="text-align:right;">Návratnost</th></tr></thead><tbody>';
-        rows.forEach(function(r){
+        h += '<div style="overflow-x:auto;margin-bottom:18px;"><table id="exr-loc-tbl" class="data-table kv-compact"><thead><tr><th>Kód</th><th>Lokalita</th><th style="text-align:right;">Celková cena</th><th style="text-align:right;">Provize</th><th style="text-align:right;">Návratnost</th></tr></thead><tbody>';
+        rows.forEach(function(r){ r._prov = r.metrics ? _exrCommissionFor(rec, r.metrics) : null; }); poCfLater('exr-loc-tbl', EXR_LOC_CF, rows, function (r) { var h = '';
           var m = r.metrics;
           var prov = m ? _exrCommissionFor(rec, m) : null;
           var nav = (m && m.total > 0 && m.yearNet > 0) ? ((m.total / m.yearNet).toFixed(1).replace('.',',') + ' let') : '—';
@@ -8167,6 +8474,7 @@
             '<td style="text-align:right;white-space:nowrap;">' + (m && m.total != null ? kvMoney(m.total,'CZK') : '—') + '</td>' +
             '<td style="text-align:right;white-space:nowrap;color:#10b981;font-weight:700;">' + (prov != null ? kvMoney(prov,'CZK') : '—') + '</td>' +
             '<td style="text-align:right;white-space:nowrap;color:#3b82f6;">' + nav + '</td></tr>';
+          return h;
         });
         h += '</tbody></table></div>';
       }
@@ -8182,7 +8490,7 @@
         h += '<div style="color:var(--text2);font-size:13px;margin-bottom:18px;">Zatím žádná zaznamenaná aktivita.</div>';
       }
       h += '<div style="border:1px dashed rgba(201,162,75,.4);border-radius:10px;padding:14px 16px;color:var(--text2);font-size:13px;">🤖 <b style="color:var(--text);">AI nástroje</b> (cenové tipy, skórování leadů, automatické oslovení) — připraveno pro další iteraci, zatím neaktivní.</div>';
-      dv.innerHTML = h;
+      dv.innerHTML = h; poCfFlush();
       exrLoadLeadStats(rec.id);
     }
     // Komplexní výkonnostní statistika obchodníka z jeho kontaktů (trychtýř, stavy, volání, konverze).
@@ -8265,7 +8573,7 @@
     window.openExrForm = openExrForm; window.closeExrForm = closeExrForm; window.saveExr = saveExr;
     window.exrSetStav = exrSetStav; window.openExrDetail = openExrDetail; window.exrFilterLok = exrFilterLok;
     window.renderExternalRepsList = renderExternalRepsList; window.loadExternalReps = loadExternalReps;
-    var _blData={total:0,items:[]}; var _blOffset=0; var _blLimit=100; var _blSearch='';
+    var _blData={total:0,items:[]}; var _blOffset=0; var _blLimit=500; var _blSearch='';
     async function loadBlacklist(){
       var box=document.getElementById('bl-table'); if(!box) return;
       box.innerHTML='<div style="color:var(--text2);padding:20px;">Načítám…</div>';
@@ -8280,12 +8588,13 @@
       var it=_blData.items||[]; var total=_blData.total||0;
       var cnt=document.getElementById('bl-count'); if(cnt) cnt.textContent=total.toLocaleString('cs-CZ')+' záznamů';
       if(!it.length){ box.innerHTML='<div style="color:var(--text2);padding:24px;">Žádné záznamy.</div>'; renderBlPager(); return; }
-      var h='<div style="overflow-x:auto;"><table class="data-table kv-compact"><thead><tr><th>#</th><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Zdroj</th><th></th></tr></thead><tbody>';
-      it.forEach(function(x,i){
+      var h='<div style="overflow-x:auto;"><table id="bl-tbl" class="data-table kv-compact"><thead><tr><th>#</th><th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Zdroj</th><th></th></tr></thead><tbody>';
+      poCfLater('bl-tbl', BL_CF, it, function (x,i) { var h = '';
         h+='<tr><td style="color:var(--text2);">'+(_blOffset+i+1)+'</td><td>'+(x.name?kvEsc(x.name):'—')+'</td><td>'+(x.email?kvEsc(x.email):'—')+'</td><td>'+(x.phone?kvEsc(x.phone):'—')+'</td><td style="color:var(--text2);font-size:12px;">'+kvEsc(x.note||'')+'</td>'+
           '<td style="text-align:right;"><button class="btn" onclick="delBlacklist('+x.id+')" title="Odebrat" style="padding:3px 9px;font-size:12px;color:#ef4444;">🗑</button></td></tr>';
+        return h;
       });
-      h+='</tbody></table></div>'; box.innerHTML=h; renderBlPager();
+      h+='</tbody></table></div>'; box.innerHTML=h; renderBlPager(); poCfFlush();
     }
     function renderBlPager(){
       var p=document.getElementById('bl-pager'); if(!p) return;
@@ -8312,11 +8621,11 @@
 
     // ─── Detail stroje: transakce ze SIS API (proklik na řádek Compounding) ───
     // Server-side proxy /api/compounder/kiosk-transactions/:code (klíč drží server).
-    var _kvTx = { code: null, label: '', offset: 0, limit: 20 };
+    var _kvTx = { code: null, label: '', offset: 0, limit: 100 };
     function openKioskTransactions(code) {
       var k = (_kioskData && Array.isArray(_kioskData.kiosks))
         ? _kioskData.kiosks.filter(function(x) { return x.code === code; })[0] : null;
-      _kvTx = { code: code, label: k ? (k.label || '') : '', offset: 0, limit: 20 };
+      _kvTx = { code: code, label: k ? (k.label || '') : '', offset: 0, limit: 100 };
       var html = '<div class="modal-overlay" onclick="if(event.target===this)closeModal()"><div class="modal" style="width:920px;max-width:96vw;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">' +
           '<h2 style="margin:0;">🧾 Transakce — ' + kvEsc(code) + '</h2>' +
@@ -8382,10 +8691,10 @@
           box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné transakce.</div>';
           return;
         }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' +
+        var h = '<div style="overflow-x:auto;"><table id="kvtx-tbl" class="data-table"><thead><tr>' +
           '<th>Datum a čas</th><th>Typ</th><th>Popis</th><th>Stav</th>' +
           '<th style="text-align:right;">Částka</th><th>Platby</th></tr></thead><tbody>';
-        txs.forEach(function(t) {
+        poCfLater('kvtx-tbl', KVTX_CF, txs, function (t) { var h = '';
           var dt = t.datetime ? new Date(t.datetime).toLocaleString('cs-CZ') : '—';
           h += '<tr>' +
             '<td style="white-space:nowrap;">' + dt + '</td>' +
@@ -8395,6 +8704,7 @@
             '<td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(t.amount, t.currency) + '</td>' +
             '<td style="font-size:12px;color:var(--text2);">' + kvTxPayments(t.payments, t.currency) + '</td>' +
             '</tr>';
+          return h;
         });
         h += '</tbody></table></div>';
         var from = _kvTx.offset + 1, to = _kvTx.offset + txs.length;
@@ -8405,7 +8715,7 @@
             '<button class="btn btn-secondary" style="padding:6px 12px;"' + (_kvTx.offset <= 0 ? ' disabled' : '') + ' onclick="kvTxPage(-1)">← Novější</button>' +
             '<button class="btn btn-secondary" style="padding:6px 12px;"' + (to >= total ? ' disabled' : '') + ' onclick="kvTxPage(1)">Starší →</button>' +
           '</div></div>';
-        box.innerHTML = h;
+        box.innerHTML = h; poCfFlush();
       } catch (e) {
         box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání transakcí: ' + kvEsc(e.message) + '</div>';
       }
@@ -8768,8 +9078,8 @@
         // „Aktivní" = vše mimo zrušených a propadlých.
         if (activeOnly) rows = rows.filter(function(x){ return x.status !== 'cancelled' && x.status !== 'expired'; });
         if(!rows.length){ box.innerHTML = '<div style="color:var(--text2);padding:16px;">Žádné rezervace.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Sleva</th><th>Cena po slevě</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
-        rows.forEach(function(x){
+        var h = '<div style="overflow-x:auto;"><table id="'+boxId+'-tbl'+'" class="data-table"><thead><tr><th>Vytvořeno</th><th>Lokalita</th><th>Kupující</th><th>Dny</th><th>Rezervace</th><th>Kupní cena</th><th>Sleva</th><th>Cena po slevě</th><th>Stav</th><th>Lhůty</th><th>Akce</th></tr></thead><tbody>';
+        rows.forEach(function(x){ (window._resRowsById = window._resRowsById || {})[x.id] = x; }); poCfLater(boxId+'-tbl', RES_CF, rows, function (x) { var h = '';
           (window._resRowsById = window._resRowsById || {})[x.id] = x;
           var act='';
           if(x.status==='reserved'){ act = '<button class="btn" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'fee_paid\')">Přišla rezervace</button> <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" onclick="resAction('+x.id+',\'cancel\')">Zrušit</button>'; }
@@ -8792,9 +9102,10 @@
             ? '<button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;" title="Odeslat e-mailem odkaz na formulář s údaji do smlouvy (dohledá firmu v ARES)" onclick="resDetailsEmail('+x.id+',this)">📝 Vyžádat údaje</button> '
             : '';
           h += '<tr><td style="white-space:nowrap;">'+resDate(x.created_at)+'</td><td>'+(x.location_name?(kvEsc(x.location_name)+'<br><span style="color:var(--text2);font-size:11px;">'+kvEsc(x.kiosk_code)+'</span>'):kvEsc(x.kiosk_code))+'</td><td>'+buyer+'</td><td>'+x.days+'</td><td style="white-space:nowrap;">'+feeCell+'</td><td style="white-space:nowrap;">'+buyCell+'</td><td style="white-space:nowrap;">'+discCell+'</td><td style="white-space:nowrap;">'+afterCell+'</td><td><span style="color:'+scol+';font-size:12px;font-weight:600;">'+(RES_STATUS[x.status]||x.status)+'</span></td><td style="font-size:11px;white-space:nowrap;">'+lhuty+'</td><td style="white-space:nowrap;">'+editBtn+docsBtn+payBtns+act+'</td></tr>';
+          return h;
         });
         h += '</tbody></table></div>';
-        box.innerHTML = h;
+        box.innerHTML = h; poCfFlush();
       } catch(e){ box.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání rezervací.</div>'; }
     }
     async function loadReservationsRows(){ return loadReservationsInto('res-rows', 'resf-status'); }
@@ -9177,14 +9488,15 @@
           '<div style="flex:1;min-width:130px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);">Počet transakcí</div><div style="font-size:18px;font-weight:800;margin-top:2px;">' + kvNum(d.count) + '</div></div>' +
           '</div>';
         if (!txs.length) { body.innerHTML = head + '<div style="color:var(--text2);padding:16px;">Žádné transakce v tomto období.</div>'; return; }
-        var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Datum a čas</th><th>Typ</th><th>Popis</th><th>Stav</th><th style="text-align:right;">Částka</th></tr></thead><tbody>';
-        txs.forEach(function(t) {
+        var h = '<div style="overflow-x:auto;"><table id="kvperiod-tbl" class="data-table"><thead><tr><th>Datum a čas</th><th>Typ</th><th>Popis</th><th>Stav</th><th style="text-align:right;">Částka</th></tr></thead><tbody>';
+        poCfLater('kvperiod-tbl', KVPERIOD_CF, txs, function (t) { var h = '';
           var dt = t.datetime ? new Date(t.datetime).toLocaleString('cs-CZ') : '—';
           h += '<tr><td style="white-space:nowrap;">' + dt + '</td><td style="white-space:nowrap;">' + kvTxType(t.type) + '</td><td>' + kvEsc(t.description) + '</td><td>' + kvTxStatus(t.status) + '</td><td style="text-align:right;white-space:nowrap;font-weight:700;">' + kvMoney(toCzk(t.amount), cur) + '</td></tr>';
+          return h;
         });
         h += '</tbody></table></div>';
         h += '<div style="color:var(--text2);font-size:11px;margin-top:10px;">Zobrazeno ' + kvNum(d.count) + ' transakcí' + (d.truncated ? ' (dosažen strop)' : '') + (d.complete ? '' : ' · částečně (velký objem)') + ' · jen tržby počítají úspěšné transakce' + (d.generatedAt ? (' · ' + new Date(d.generatedAt).toLocaleString('cs-CZ')) : '') + '</div>';
-        body.innerHTML = head + h;
+        body.innerHTML = head + h; poCfFlush();
       } catch (e) {
         var b = wrap.querySelector('#kvperiod-body'); if (b) b.innerHTML = '<div style="color:#ef4444;padding:16px;">Chyba načítání: ' + kvEsc(e.message) + '</div>';
       }

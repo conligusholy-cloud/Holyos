@@ -186,6 +186,30 @@
     sel.dataset.filled = '1';
   }
 
+  // Přehled ceníku: jeden řádek = jedna nabídka dodavatele (zboží v prvním sloupci),
+  // standardní filtry + řazení po sloupcích (js/column-filters.js)
+  var PL_T = ColFilters.table({
+    table: '#pl-tbl',
+    columns: [
+      { key: 'mat', label: 'Zboží', type: 'text', ph: 'Kód nebo název…', get: function (r) { return (r.m.code || '') + ' ' + (r.m.name || ''); }, sortGet: function (r) { return r.m.code || r.m.name || ''; } },
+      { key: 'sup', label: 'Dodavatel', type: 'text', ph: 'Dodavatel…', get: function (r) { return r.o.supplier_name || ''; } },
+      { key: 'price', label: 'Cena / ks', type: 'num', ph: '', get: function (r) { return r.o.price == null ? null : Number(r.o.price); } },
+      { key: 'days', label: 'Dodání', type: 'num', ph: '', get: function (r) { return r.o.delivery_days == null ? null : Number(r.o.delivery_days); } },
+      { key: 'moq', label: 'Min. odběr', type: 'num', ph: '', get: function (r) { return r.o.moq == null ? null : Number(r.o.moq); } },
+      { key: 'valid', label: 'Platnost', type: 'date', ph: 'dd.mm.rrrr', get: function (r) { return r.o.valid_to || null; } },
+      { key: 'pn', label: 'Č. dílu dodavatele', type: 'text', ph: 'Č. dílu…', get: function (r) { return r.o.supplier_part_no || ''; } },
+    ],
+    renderRow: function (r) {
+      var g = r.m, o = r.o;
+      return '<tr onclick="plOpen(' + g.id + ')" title="Otevřít kartu zboží"><td><b>' + T(g.code) + '</b> — ' + T(g.name) + ' <span style="color:var(--text2);font-weight:400">(' + T(g.unit || 'ks') + ')</span></td>' +
+        '<td><b>' + T(o.supplier_name) + '</b>' + badges(o) + '</td>' + priceCell(o) +
+        '<td>' + (o.delivery_days == null ? '—' : o.delivery_days + ' dní') + '</td><td>' + (o.moq == null ? '—' : nf(o.moq)) + '</td><td style="font-size:12px">' + validCell(o) + '</td><td style="font-size:12px">' + T(o.supplier_part_no || '') + '</td></tr>';
+    },
+    noun: 'nabídek',
+    emptyText: 'Žádné nabídky dodavatelů.',
+    limit: 2000,
+  });
+
   function renderList() {
     var box = document.getElementById('pl-table');
     if (!box) return;
@@ -193,17 +217,11 @@
       box.innerHTML = '<div class="empty-state"><div class="empty-icon">💰</div><h3>Žádné nabídky dodavatelů</h3><div>Zboží bez ceníku se tu neukazuje. Přidej nabídku tlačítkem „＋ Přidat nabídku“ nebo v kartě zboží na záložce „Dodavatelé a ceny“.</div></div>';
       return;
     }
-    var h = '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Dodavatel</th><th>Cena / ks</th><th>Dodání</th><th>Min. odběr</th><th>Platnost</th><th>Č. dílu dodavatele</th></tr></thead><tbody>';
-    pl.groups.forEach(function (g) {
-      h += '<tr class="pl-mh" onclick="plOpen(' + g.material.id + ')" title="Otevřít kartu zboží"><td colspan="6"><b>' + T(g.material.code) + '</b> — ' + T(g.material.name) + ' <span style="color:var(--text2);font-weight:400">(' + T(g.material.unit || 'ks') + ')</span></td></tr>';
-      g.offers.forEach(function (o) {
-        h += '<tr onclick="plOpen(' + g.material.id + ')"><td style="padding-left:28px"><b>' + T(o.supplier_name) + '</b>' + badges(o) + '</td>' + priceCell(o) +
-          '<td>' + (o.delivery_days == null ? '—' : o.delivery_days + ' dní') + '</td><td>' + (o.moq == null ? '—' : nf(o.moq)) + '</td><td style="font-size:12px">' + validCell(o) + '</td><td style="font-size:12px">' + T(o.supplier_part_no || '') + '</td></tr>';
-      });
-    });
-    h += '</tbody></table></div><div style="margin:12px 0;color:var(--text2);font-size:12.5px">Zobrazeno ' + pl.groups.length + ' z ' + pl.total + ' položek zboží' +
+    var rows = [];
+    pl.groups.forEach(function (g) { (g.offers || []).forEach(function (o) { rows.push({ m: g.material, o: o }); }); });
+    box.innerHTML = '<div style="overflow-x:auto"><table class="data-table" id="pl-tbl"><thead><tr><th>Zboží</th><th>Dodavatel</th><th>Cena / ks</th><th>Dodání</th><th>Min. odběr</th><th>Platnost</th><th>Č. dílu dodavatele</th></tr></thead><tbody></tbody></table></div><div style="margin:12px 0;color:var(--text2);font-size:12.5px">Načteno ' + pl.groups.length + ' z ' + pl.total + ' položek zboží' +
       (pl.groups.length < pl.total ? ' <button class="btn btn-secondary btn-sm" style="margin-left:10px" onclick="loadPriceList(true)">Načíst další</button>' : '') + '</div>';
-    box.innerHTML = h;
+    PL_T.setRows(rows);
   }
 
   window.loadPriceList = async function (append) {
@@ -213,7 +231,7 @@
     if (!append) { pl.groups = []; box.innerHTML = '<div class="empty-state">Načítám…</div>'; }
     var q = document.getElementById('pl-search').value.trim();
     var sid = document.getElementById('pl-supplier').value;
-    var url = '/api/wh/pricelist?limit=150&offset=' + pl.groups.length + (q ? '&q=' + encodeURIComponent(q) : '') + (sid ? '&supplier_id=' + sid : '') + (document.getElementById('pl-active').checked ? '' : '&only_active=0');
+    var url = '/api/wh/pricelist?limit=1000&offset=' + pl.groups.length + (q ? '&q=' + encodeURIComponent(q) : '') + (sid ? '&supplier_id=' + sid : '') + (document.getElementById('pl-active').checked ? '' : '&only_active=0');
     try {
       var r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error(await jerr(r));
