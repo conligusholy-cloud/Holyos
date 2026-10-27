@@ -4976,6 +4976,7 @@
       const avgPlan = renderPlanAverages(rows);
       renderPlanChart(rows, avgPlan);
       if (!PLAN_HIST) loadPlanHistory().then(() => renderPlanAverages(planVisibleRows()));
+      if (!PLAN_FX.source) loadPlanFx().then(() => { if (PLAN_FX.source) renderPaymentPlan(); }); // kurzy dorazily později → přepočítat
       document.getElementById('plan-summary').innerHTML = card('Po splatnosti', sOver, '#ef4444') + card('Dnes', sToday, '#f59e0b') + card('Do 7 dní', s7, '#eab308') + card('Do 30 dní', s30, '#6c8cff') + card('Celkem nezaplaceno', rows, '#22c55e');
       if (!rows.length) { document.getElementById('plan-list').innerHTML = '<div class="empty-hint">Žádné nezaplacené přijaté doklady.</div>'; planUpdateFooter(); return; }
       const dayName = (d) => d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
@@ -5078,16 +5079,16 @@
       const hist = PLAN_HIST || [];
       const workdays = (n) => { let c = 0; for (let i = 1; i <= n; i++) { const d = new Date(+today - i * 864e5).getDay(); if (d !== 0 && d !== 6) c++; } return c || 1; };
       const histSum = (days, onlyInvoices) => hist.reduce((s, t) => {
-        if ((t.currency || 'CZK') !== 'CZK') return s;
+        const k = planRate(t.currency); if (k == null) return s; // cizí měna se přepočte aktuálním kurzem ČNB (jen pro přehled)
         const d = planDay(t.transaction_date); if (d >= today || d < new Date(+today - days * 864e5)) return s;
         if (onlyInvoices && !(t.match_status === 'matched' && t.payment?.allocations?.length)) return s;
-        return s + Number(t.amount || 0);
+        return s + Number(t.amount || 0) * k;
       }, 0);
       const s30 = histSum(30), s90 = histSum(90), inv30 = histSum(30, true);
       const planNext = rows.reduce((s, r) => { if (!r.date_due) return s; const d = planDay(r.date_due); return d >= today && d < new Date(+today + 30 * 864e5) ? s + planCzk(r) : s; }, 0);
       const card = (lbl, val, sub, col, tip) => '<div title="' + escapeHtml(tip) + '" style="background:var(--surface2);border-radius:10px;padding:8px 14px;border-left:3px solid ' + col + ';min-width:170px"><div style="font-size:0.75em;color:var(--text2);text-transform:uppercase">' + lbl + '</div><b>' + fmtAmount(val) + ' Kč</b><div style="font-size:0.78em;color:var(--text2)">' + sub + '</div></div>';
       el.innerHTML = '<div style="font-size:0.78em;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin:2px 0 6px">⌀ Průměrně platím za den</div><div style="display:flex;gap:10px;flex-wrap:wrap">' +
-        card('Posledních 30 dní', s30 / 30, fmtAmount(s30 / workdays(30)) + ' Kč / pracovní den', '#a78bfa', 'Všechny odchozí platby z výpisů (vč. karet, poplatků) za posledních 30 dní ÷ 30. Z toho platby dokladů: ' + fmtAmount(inv30) + ' Kč.') +
+        card('Posledních 30 dní', s30 / 30, fmtAmount(s30 / workdays(30)) + ' Kč / pracovní den', '#a78bfa', 'Všechny odchozí platby z výpisů (vč. karet, poplatků) za posledních 30 dní ÷ 30; platby v cizí měně přepočtené aktuálním kurzem (' + planFxNote() + '). Z toho platby dokladů: ' + fmtAmount(inv30) + ' Kč.') +
         card('Posledních 90 dní', s90 / 90, fmtAmount(s90 / workdays(90)) + ' Kč / pracovní den', '#8b5cf6', 'Všechny odchozí platby z výpisů za posledních 90 dní ÷ 90.') +
         card('Plán příštích 30 dní', planNext / 30, 'celkem ' + fmtAmount(planNext) + ' Kč', '#6c8cff', 'Splatné nezaplacené přijaté doklady v příštích 30 dnech ÷ 30 (bez dokladů po splatnosti).') +
         '</div>';
