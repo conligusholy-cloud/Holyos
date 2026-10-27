@@ -5343,7 +5343,7 @@
       svg += '</svg>';
       el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text2);margin-bottom:4px">' +
         '<b style="color:var(--text)">📊 Platby v příštích 30 dnech</b>' +
-        '<span>' + (overdue ? '<span style="color:#f87171">po splatnosti ' + fmtAmount(overdue) + ' Kč</span> · ' : '') + 'později ' + fmtAmount(later) + ' Kč</span></div>' + svg;
+        '<span>' + (overdue ? '<span style="color:#f87171">po splatnosti ' + fmtAmount(overdue) + ' Kč</span> · ' : '') + '<span title="Nezaplacené doklady se splatností za víc než 30 dní — do grafu se nevejdou">splatné za 30+ dní ' + fmtAmount(later) + ' Kč</span></span></div>' + svg;
     }
     // Průměrné denní platby: skutečnost z bankovních výdajů (30/90 dní) vs. plán na příštích 30 dní
     let PLAN_HIST = null, PLAN_HIST_AT = 0;
