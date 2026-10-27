@@ -233,12 +233,24 @@ router.post('/statements/fetch-email', async (req, res, next) => {
     const w = require('../services/banking/statement-email-worker');
     if (w.getProgress().running) return res.status(202).json({ started: false, already_running: true });
     const pw = req.body && req.body.password ? [String(req.body.password)] : null;
-    w.runOnce({ all: req.query.all === '1', passwords: pw }).catch((e) => console.warn('[bank-statement-email]', e.message));
+    w.runOnce({ all: req.query.all === '1', passwords: pw, trigger: 'manual', user: req.user }).catch((e) => console.warn('[bank-statement-email]', e.message));
     res.status(202).json({ started: true });
   } catch (err) { next(err); }
 });
 
 // GET /api/banking/statements/fetch-email/status — průběh importu výpisů z e-mailu
+// GET /api/banking/statement-runs — log běhů importu výpisů (kdy, jak, výsledek, upozornění)
+router.get('/statement-runs', async (req, res, next) => {
+  try {
+    const rows = await prisma.auditLog.findMany({
+      where: { entity: 'bank_statement_run' }, orderBy: { timestamp: 'desc' },
+      take: Math.min(parseInt(req.query.limit, 10) || 300, 1000),
+      select: { id: true, timestamp: true, user_display: true, description: true, changes: true },
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
 router.get('/statements/fetch-email/status', (req, res) => {
   res.json(require('../services/banking/statement-email-worker').getProgress());
 });
@@ -379,8 +391,9 @@ router.post('/statements/upload', async (req, res, next) => {
     } catch (e) { console.warn('[banking] auto-match po nahrání selhal:', e.message); auto_match = { error: e.message }; }
     require('../services/banking/statement-monitor').afterRun({
       errors: auto_match && auto_match.error ? ['Párování po nahrání výpisu ' + created.statement.statement_number + ': ' + auto_match.error] : [],
-      imported: [{ statement_id: created.statement.id, statement: created.statement.statement_number, warnings }],
-    }).catch(() => {});
+      imported: [{ statement_id: created.statement.id, statement: created.statement.statement_number, transactions: created.inserted_count, file: req.body?.filename || null, warnings }],
+      auto_match: auto_match && !auto_match.error ? auto_match : null,
+    }, { trigger: 'upload', user: req.user }).catch(() => {});
 
     res.status(201).json({
       ok: true,

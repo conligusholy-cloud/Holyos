@@ -518,6 +518,8 @@
             <button class="btn btn-secondary" id="btn-fetch-stmt-email" onclick="fetchStatementsFromEmail()" title="Načte nové výpisy ze složky VYPISY ve schránce faktur (zaheslované PDF MONETA se odemkne samo) a spáruje platby s fakturami. Běží i automaticky každých 30 min.">📨 Načíst z e-mailu</button>
             <button class="btn btn-secondary" id="btn-fetch-stmt-email-all" onclick="fetchStatementsFromEmail(true)" title="Projde všechny e-maily ve složce VYPISY včetně přečtených (staré výpisy). Už naimportované přeskočí.">📚 Načíst i staré</button>
             <button class="btn btn-secondary btn-sm" onclick="loadStatements()">🔄 Obnovit</button>
+            <span style="flex:1"></span>
+            <button class="btn btn-secondary btn-sm" onclick="openStatementRuns()" title="Historie stahování a zpracování výpisů — kdy, jak, výsledek, upozornění">📜 Logy</button>
           </div>
 
           <table class="data-table" id="statements-table">
@@ -5581,6 +5583,60 @@
       const r = await _origLoadTransactions.apply(this, arguments);
       if (bankSub === 'pays') loadBankPayments();
       return r;
+    };
+
+    // ─── Banka → Výpisy → 📜 Logy: historie běhů importu výpisů ───
+    let runsTable = null;
+    window.openStatementRuns = async function() {
+      const old = document.getElementById('stmt-runs-modal'); if (old) old.remove();
+      const ov = document.createElement('div'); ov.id = 'stmt-runs-modal'; ov.className = 'modal-overlay';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:30px 16px';
+      ov.innerHTML = '<div style="background:var(--surface,#1f2937);color:var(--text,#e5e7eb);border:1px solid var(--border,#374151);border-radius:12px;width:min(1400px,98vw);padding:18px 22px;box-shadow:0 20px 50px rgba(0,0,0,.5)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h2 style="margin:0;font-size:18px">📜 Logy importu výpisů</h2>' +
+        '<div style="display:flex;gap:8px"><button class="btn btn-secondary btn-sm" onclick="loadStatementRuns()">🔄 Obnovit</button><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'stmt-runs-modal\').remove()">✕ Zavřít</button></div></div>' +
+        '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Každé stažení z e-mailu (automaticky každých 30 min i ručně) a každé ruční nahrání. Prázdné automatické běhy bez nového výpisu se zapisují nejvýš jednou za hodinu. 🔔 = odešlo upozornění do Velína.</div>' +
+        '<table class="data-table" id="stmt-runs-table"><thead><tr><th>Čas</th><th>Spuštění</th><th>Výsledek</th><th class="num">E-mailů</th><th class="num">Nových výpisů</th><th>Výpisy</th><th class="num">Spárováno</th><th class="num">K posouzení</th><th>Chyby a upozornění</th></tr></thead><tbody><tr><td colspan="9" class="empty-hint">Načítání…</td></tr></tbody></table></div>';
+      ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+      document.body.appendChild(ov);
+      runsTable = ColFilters.table({
+        table: '#stmt-runs-table', noun: 'běhů', emptyText: 'Zatím žádný záznam.', limit: 500,
+        columns: [
+          { key: 'at', label: 'Čas', type: 'date', ph: 'dd.mm.rrrr', get: (r) => r.timestamp },
+          { key: 'trig', label: 'Spuštění', type: 'text', ph: 'Spuštění…', get: (r) => ({ auto: 'Automaticky', manual: 'Ručně — e-mail', manual_all: 'Ručně — i staré', upload: 'Nahrání souboru' }[r.changes?.trigger] || r.changes?.trigger || '—') },
+          { key: 'lvl', label: 'Výsledek', type: 'text', ph: 'Výsledek…', get: (r) => ({ ok: 'OK', warning: 'Upozornění', error: 'Chyba' }[r.changes?.level] || '—') },
+          { key: 'msg', label: 'E-mailů', type: 'num', ph: '', get: (r) => Number(r.changes?.messages || 0) },
+          { key: 'imp', label: 'Nových výpisů', type: 'num', ph: '', get: (r) => Number(r.changes?.imported || 0) },
+          { key: 'st', label: 'Výpisy', type: 'text', ph: 'Číslo výpisu…', get: (r) => (r.changes?.statements || []).map(s => s.number).join(', '), enum: false },
+          { key: 'mat', label: 'Spárováno', type: 'num', ph: '', get: (r) => Number(r.changes?.matched || 0) },
+          { key: 'rev', label: 'K posouzení', type: 'num', ph: '', get: (r) => Number(r.changes?.needs_review || 0) },
+          { key: 'iss', label: 'Chyby a upozornění', type: 'text', ph: 'Text…', enum: false, get: (r) => [...(r.changes?.errors || []), ...(r.changes?.issues || []).map(i => i.title + ' ' + i.body)].join(' ') },
+        ],
+        renderRow: (r) => {
+          const c = r.changes || {};
+          const lvl = { ok: ['#22c55e', '✅ OK'], warning: ['#f59e0b', '⚠️ Upozornění'], error: ['#ef4444', '❌ Chyba'] }[c.level] || ['#9ca3af', '—'];
+          const trig = { auto: '⏱ Automaticky', manual: '👆 Ručně — e-mail', manual_all: '👆 Ručně — i staré', upload: '📁 Nahrání souboru' }[c.trigger] || escapeHtml(c.trigger || '—');
+          const items = [
+            ...(c.errors || []).map(e => '<div style="color:#f87171">❌ ' + escapeHtml(e) + '</div>'),
+            ...(c.no_account || []).map(n => '<div style="color:#f87171">❌ Neznámý účet ' + escapeHtml(n.account) + ' (' + escapeHtml(n.file || '') + ')</div>'),
+            ...(c.issues || []).map(i => '<div title="' + escapeHtml(i.body || '') + '">' + (i.notified ? '🔔 ' : '') + escapeHtml(i.title) + '<div style="font-size:0.85em;color:var(--text2)">' + escapeHtml(i.body || '') + '</div></div>'),
+          ];
+          return '<tr><td style="white-space:nowrap">' + fmtDateTime(r.timestamp) + '</td>' +
+            '<td style="white-space:nowrap">' + trig + (r.user_display && c.trigger !== 'auto' ? '<div style="font-size:0.8em;color:var(--text2)">' + escapeHtml(r.user_display) + '</div>' : '') + '</td>' +
+            '<td style="white-space:nowrap;color:' + lvl[0] + ';font-weight:600">' + lvl[1] + '</td>' +
+            '<td class="num">' + (c.messages || 0) + '</td>' +
+            '<td class="num">' + (c.imported || 0) + (c.duplicates ? '<div style="font-size:0.78em;color:var(--text2)">+' + c.duplicates + ' už v systému</div>' : '') + '</td>' +
+            '<td><small>' + escapeHtml((c.statements || []).map(s => s.number + (s.transactions != null ? ' (' + s.transactions + ' pl.)' : '')).join(', ') || '—') + '</small></td>' +
+            '<td class="num">' + (c.matched || 0) + (c.partial ? '<div style="font-size:0.78em;color:#eab308">' + c.partial + '× částečně</div>' : '') + '</td>' +
+            '<td class="num">' + (c.needs_review || 0) + '</td>' +
+            '<td style="font-size:0.88em;max-width:520px">' + (items.length ? items.join('') : '<span style="color:var(--text2)">—</span>') + '</td></tr>';
+        },
+      });
+      loadStatementRuns();
+    };
+    window.loadStatementRuns = async function() {
+      const r = await api('GET', '/api/banking/statement-runs?limit=500');
+      if (r.status !== 200) { const tb = document.querySelector('#stmt-runs-table tbody'); if (tb) tb.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + escapeHtml(r.data?.error || String(r.status)) + '</td></tr>'; return; }
+      if (runsTable) runsTable.setRows(r.data || []);
     };
 
     window.debounceTxLoad = function() {

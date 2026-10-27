@@ -24,8 +24,10 @@ async function recipients() {
   return [1];
 }
 
+let _collect = null; // nálezy aktuálního běhu (pro log)
 async function alert(key, title, body, link = '/modules/ucetni-doklady/index.html') {
   const now = Date.now();
+  if (_collect) _collect.push({ title, body, notified: !(sent.has(key) && now - sent.get(key) < DEDUP_MS) });
   if (sent.has(key) && now - sent.get(key) < DEDUP_MS) return false;
   sent.set(key, now);
   console.warn('[bank-monitor] ⚠', title, '—', body);
@@ -79,8 +81,9 @@ async function checkStatement(statementId) {
   return problems;
 }
 
-/** Zavolá worker po každém běhu s jeho reportem. */
-async function afterRun(report) {
+/** Zavolá worker / upload po každém běhu s jeho reportem. opts.trigger: auto | manual | manual_all | upload */
+async function afterRun(report, opts = {}) {
+  _collect = [];
   try {
     if (report.errors && report.errors.length) {
       await alert('err:' + report.errors.join('|').slice(0, 200), '❌ Výpisy z e-mailu: chyba zpracování', report.errors.slice(0, 3).join(' · ').slice(0, 300));
@@ -95,6 +98,40 @@ async function afterRun(report) {
     }
     await checkStale();
   } catch (e) { console.warn('[bank-monitor] afterRun:', e.message); }
+  const issues = _collect || []; _collect = null;
+  await logRun(report, opts, issues);
+  return issues;
+}
+
+const TRIGGER_LABEL = { auto: 'automaticky', manual: 'ručně (Načíst z e-mailu)', manual_all: 'ručně (Načíst i staré)', upload: 'ruční nahrání souboru' };
+/** Záznam o běhu do audit logu (entity bank_statement_run) — zobrazuje se v Banka → Výpisy → 📜 Logy. */
+async function logRun(report, opts, issues) {
+  try {
+    const imported = report.imported || [];
+    const importedCount = imported.length || report._imported_count || 0;
+    const errors = (report.errors || []).length + (report.no_account || []).length;
+    const level = errors ? 'error' : issues.length ? 'warning' : 'ok';
+    // prázdné automatické běhy (nic nového) logovat jen jednou za hodinu, ať log nezahltí
+    if (opts.trigger === 'auto' && !importedCount && !errors && !issues.length) {
+      const last = await prisma.auditLog.findFirst({ where: { entity: 'bank_statement_run' }, orderBy: { timestamp: 'desc' }, select: { timestamp: true, changes: true } });
+      if (last && last.changes && last.changes.level === 'ok' && !last.changes.imported && Date.now() - new Date(last.timestamp).getTime() < 3600e3) return;
+    }
+    const am = report.auto_match || {};
+    await prisma.auditLog.create({ data: {
+      action: 'run', entity: 'bank_statement_run', entity_id: null,
+      user_name: opts.user ? (opts.user.username || null) : 'system',
+      user_display: opts.user ? (opts.user.displayName || null) : 'Import výpisů',
+      description: (TRIGGER_LABEL[opts.trigger] || opts.trigger || 'běh') + ': ' + (importedCount ? importedCount + ' nových výpisů' : 'žádný nový výpis') +
+        (am.matched ? ', spárováno ' + am.matched : '') + (errors ? ', chyby ' + errors : '') + (issues.length ? ', upozornění ' + issues.length : ''),
+      changes: {
+        level, trigger: opts.trigger || null, messages: report.messages || 0, imported: importedCount,
+        duplicates: (report.duplicates || []).length, matched: am.matched || 0, partial: am.partial || 0, needs_review: am.needs_review || 0,
+        statements: imported.map(i => ({ id: i.statement_id, number: i.statement, transactions: i.transactions, file: i.file })),
+        errors: (report.errors || []).slice(0, 20), no_account: report.no_account || [],
+        issues: issues.slice(0, 30),
+      },
+    } });
+  } catch (e) { console.warn('[bank-monitor] log:', e.message); }
 }
 
 /** Žádný nový výpis déle než 3 pracovní dny (po víkendu se nepočítá). */
@@ -114,8 +151,11 @@ async function checkStale() {
   }
 }
 
-async function workerCrashed(err) {
+async function workerCrashed(err, opts = {}) {
+  _collect = [];
   await alert('crash:' + String(err && err.message).slice(0, 80), '❌ Import výpisů spadl', String(err && err.message || err).slice(0, 300));
+  const issues = _collect; _collect = null;
+  await logRun({ errors: [String(err && err.message || err)] }, opts, issues);
 }
 
 module.exports = { afterRun, checkStatement, checkStale, workerCrashed, alert, SETTING_KEY };

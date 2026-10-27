@@ -21,7 +21,7 @@ let progress = { running: false, phase: 'idle', total: 0, done: 0, current: '', 
 
 // all = true → projde VŠECHNY zprávy ve složce (i přečtené) od nejstarší; duplicity import přeskočí, zprávy neoznačuje.
 // passwords = hesla k PDF navíc k BANK_STATEMENT_PASSWORD (zkusí se postupně, nikam se neukládají).
-async function runOnce({ markRead = true, all = false, passwords = null } = {}) {
+async function runOnce({ markRead = true, all = false, passwords = null, trigger = 'auto', user = null } = {}) {
   if (running) return { skipped: 'already_running' };
   running = true;
   const report = { at: new Date().toISOString(), messages: 0, imported: [], duplicates: [], errors: [], no_account: [] };
@@ -63,13 +63,13 @@ async function runOnce({ markRead = true, all = false, passwords = null } = {}) 
     }
     if (report.imported.length || report.errors.length) console.log('[bank-statement-email]', JSON.stringify(report));
     // Kontrola výsledku + upozornění do Velína (při hromadném „Načíst i staré" jen chyby)
-    try { await require('./statement-monitor').afterRun(all ? { errors: report.errors, no_account: report.no_account, imported: [] } : report); } catch (e) { console.warn('[bank-statement-email] monitor:', e.message); }
+    try { await require('./statement-monitor').afterRun(all ? { ...report, imported: [], _imported_count: report.imported.length } : report, { trigger: all ? 'manual_all' : trigger, user }); } catch (e) { console.warn('[bank-statement-email] monitor:', e.message); }
     return report;
   } catch (e) {
     folderId = null;
     report.errors.push(e.message);
     console.warn('[bank-statement-email] chyba:', e.message);
-    try { await require('./statement-monitor').workerCrashed(e); } catch (e2) { /* ignore */ }
+    try { await require('./statement-monitor').workerCrashed(e, { trigger: all ? 'manual_all' : trigger, user }); } catch (e2) { /* ignore */ }
     return report;
   } finally {
     running = false;
