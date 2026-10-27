@@ -930,8 +930,8 @@
           '</td>' +
           accCell +
           '<td style="white-space:nowrap;">' + fmtPayment(inv.payment_method) + '</td>' +
-          '<td>' + fmtDate(inv.date_issued) + '</td>' +
-          '<td' + (isOverdue ? ' style="color:#ef4444;font-weight:600;"' : '') + '>' + fmtDate(inv.date_due) + '</td>' +
+          '<td style="white-space:nowrap;">' + fmtDate(inv.date_issued) + '</td>' +
+          '<td style="white-space:nowrap;' + (isOverdue ? 'color:#ef4444;font-weight:600;' : '') + '">' + fmtDate(inv.date_due) + '</td>' +
           '<td' + (inv.order ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : manualMatchBox(inv, 'order')) + '</td>' +
           '<td' + (inv.warehouse_document ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : manualMatchBox(inv, 'receipt')) + '</td>' +
           '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
