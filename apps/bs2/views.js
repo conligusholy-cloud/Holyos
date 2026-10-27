@@ -1524,6 +1524,14 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
 ];
 const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at'];
+// Přihlášení za uživatele ve starém systému (partner.bestseries.cz). `redirect` zkouší nasměrovat
+// rovnou na konkrétní stránku po přihlášení — parametr je odhad (redirect=), dej vědět, pokud fake-login.php
+// čeká jiný název parametru nebo cílovou stránku ignoruje, ať to doladíme.
+function fakeLogin(email, redirect) {
+  let u = `https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(email)}`;
+  if (redirect) u += `&redirect=${encodeURIComponent(redirect)}`;
+  return u;
+}
 // Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
 const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat', location: 'Prověření lokality' };
 const typeBadge = (t) => { const k = USER_TYPE_LABEL[t] ? t : 'standard'; return `<span class="badge type-${k}">${USER_TYPE_LABEL[k]}</span>`; };
@@ -1538,7 +1546,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><a class="btn sec sm" href="${fakeLogin(r.email, '/cs/bo/my-invests/')}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</a></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
@@ -1563,20 +1571,25 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     .colpick-h{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text2);margin-bottom:6px}
     .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;padding:5px 0;color:var(--text);cursor:pointer} .colpick-i input{width:auto;margin:0}
     .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
+    #sup-top{position:sticky;top:var(--hh,52px);z-index:6;background:var(--bg);padding-top:14px;margin-top:-14px}
+    #sup-thead th{position:sticky;top:calc(var(--hh,52px) + var(--sth,104px));z-index:5;background:#0a1020}
   </style>
-  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
-    <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-    <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
+  <div id="sup-top">
+    <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+      <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
+    </div>
+    ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
+    <form method="get" class="row" style="margin:10px 0 14px">
+      <input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1;min-width:200px">
+      <select name="status" style="width:auto"><option value="">Všechny stavy</option><option value="invited"${status === 'invited' ? ' selected' : ''}>Čeká na aktivaci</option><option value="active"${status === 'active' ? ' selected' : ''}>Aktivní</option><option value="blocked"${status === 'blocked' ? ' selected' : ''}>Blokovaní</option></select>
+      <select name="type" style="width:auto"><option value="">Všechny typy</option>${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${utype === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>
+      <button class="btn sec" type="submit">Vyhledat</button>
+    </form>
   </div>
-  ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
-  <form method="get" class="row" style="margin:10px 0 14px">
-    <input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1;min-width:200px">
-    <select name="status" style="width:auto"><option value="">Všechny stavy</option><option value="invited"${status === 'invited' ? ' selected' : ''}>Čeká na aktivaci</option><option value="active"${status === 'active' ? ' selected' : ''}>Aktivní</option><option value="blocked"${status === 'blocked' ? ' selected' : ''}>Blokovaní</option></select>
-    <select name="type" style="width:auto"><option value="">Všechny typy</option>${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${utype === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>
-    <button class="btn sec" type="submit">Vyhledat</button>
-  </form>
-  <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
-  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
+  <div class="card tbl-wrap"><table class="cards"><thead id="sup-thead"><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
+  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});
+  (function(){var t=document.getElementById('sup-top');if(t){var m=function(){document.documentElement.style.setProperty('--sth',t.offsetHeight+'px');};m();addEventListener('resize',m);setTimeout(m,300);}})();</script>`, holyosUrl);
 }
 // Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
 const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
