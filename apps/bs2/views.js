@@ -1582,7 +1582,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><span id="ps-sync-st" class="small muted"></span>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><span id="ps-sync-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
           function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' (' + Math.round(100*j.done/j.total) + ' %) · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') : ''; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
@@ -1999,7 +1999,7 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
   <div class="card" id="ps-prog" style="padding:14px 16px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <b id="ps-p-title">Průběh načítání</b>
-      <div class="row" style="gap:6px"><button type="button" class="btn sec sm" id="ps-p-missing" title="Znovu načte jen uživatele, u kterých chybí rok a sekce (typicky eurové účty)">↻ Znovu bez roku (${rows.filter(r => r.partner_support && r.partner_support.year == null).length})</button><button type="button" class="btn sec sm" id="ps-p-start">🔄 Spustit / pokračovat</button></div>
+      <div class="row" style="gap:6px"><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu (Kč i €, přepočet ČNB, sekce)">⬇ Export do Excelu</a><button type="button" class="btn sec sm" id="ps-p-missing" title="Znovu načte jen uživatele, u kterých chybí rok a sekce (typicky eurové účty)">↻ Znovu bez roku (${rows.filter(r => r.partner_support && r.partner_support.year == null).length})</button><button type="button" class="btn sec sm" id="ps-p-start">🔄 Spustit / pokračovat</button></div>
     </div>
     <div class="small muted" style="margin:8px 0 4px">Celkem načteno (obrat ≠ 0): <b id="ps-p-ovt">${overall.synced != null ? overall.synced + ' / ' + overall.eligible : '—'}</b></div>
     <div style="height:10px;background:var(--bg2,#eee);border-radius:6px;overflow:hidden"><div id="ps-p-ovbar" style="height:100%;width:${overall.eligible ? Math.round(100 * overall.synced / overall.eligible) : 0}%;background:var(--ok,#2e9d5b);transition:width .5s"></div></div>

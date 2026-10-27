@@ -2466,6 +2466,44 @@ async function legacyOverall() {
 }
 app.get('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => res.json({ ...LEGACY_JOB, overall: await legacyOverall() })));
 // Seznam uživatelů s načtenou podporou (od posledně načtených) — ruční kontrola
+// Export do Excelu: všichni uživatelé s nenulovou podporou ze starého portálu (seřazeno podle Celkem v Kč)
+app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const rows = (await q("SELECT id,email,first_name,last_name,nick,status,user_type,extra->>'obrat' AS obrat,partner_support AS p FROM supporters WHERE partner_support IS NOT NULL AND partner_support->>'total_all' ~ '^-?[0-9.]+$' AND (partner_support->>'total_all')::numeric > 0")).rows;
+  const n = (v) => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
+  const czkOf = (p) => (p.currency === 'EUR' ? n(p.total_all_czk) : n(p.total_all));
+  rows.sort((a, b) => (czkOf(b.p) || 0) - (czkOf(a.p) || 0));
+  const data = rows.map((r, i) => { const p = r.p || {}; const eur = p.currency === 'EUR';
+    return { '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
+      'Obrat (import)': n(String(r.obrat || '').replace(/[^0-9.-]/g, '')), 'Měna účtu': eur ? 'EUR' : 'CZK',
+      'Celkem podpořil (v měně účtu)': n(p.total_all), 'Celkem podpořil (Kč)': czkOf(p),
+      'Kurz ČNB': eur ? n(p.eur_rate) : null, 'Datum kurzu': eur ? (p.eur_rate_date || '') : '',
+      'Rok': n(p.year), 'V roce (v měně účtu)': n(p.total_year), 'V roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
+      'Palety': n(p.palety), 'Expanze': n(p.expanze), 'NeuraWash': n(p.neurawash), 'Opakovačky': n(p.opakovacky),
+      'Obrat sítě od počátku': n(p.network_all), 'Načteno ze starého portálu': p.synced_at ? new Date(p.synced_at).toLocaleString('cs-CZ') : '',
+      'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [4, 18, 14, 16, 30, 9, 10, 12, 8, 16, 16, 9, 11, 6, 14, 12, 11, 11, 11, 11, 14, 20, 42].map((w) => ({ wch: w }));
+  ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length, c: Object.keys(data[0] || { a: 1 }).length - 1 } }) };
+  XLSX.utils.book_append_sheet(wb, ws, 'Podpora');
+  const sum = (f) => data.reduce((a, d) => a + (Number(d[f]) || 0), 0);
+  const cz = data.filter((d) => d['Měna účtu'] === 'CZK'), eu = data.filter((d) => d['Měna účtu'] === 'EUR');
+  const sumWs = XLSX.utils.aoa_to_sheet([
+    ['Souhrn podpory ze starého portálu', ''], ['Export', new Date().toLocaleString('cs-CZ')], ['', ''],
+    ['Korunové účty', cz.length], ['Podpořili v Kč', cz.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu)'] || 0), 0)],
+    ['Eurové účty', eu.length], ['Podpořili v €', eu.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu)'] || 0), 0)], ['Eura přepočtená na Kč (ČNB)', eu.reduce((a, d) => a + (d['Celkem podpořil (Kč)'] || 0), 0)],
+    ['', ''], ['Celkem v Kč', sum('Celkem podpořil (Kč)')], ['Uživatelů celkem', data.length],
+  ]);
+  sumWs['!cols'] = [{ wch: 32 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, sumWs, 'Souhrn');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  await log(req.admin, 'partner_support_export', { rows: data.length });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="podpora-uzivatelu-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.send(buf);
+}));
 app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(); const onlyDiff = req.query.diff === '1';
   const params = []; let where = "partner_support->>'synced_at' IS NOT NULL";
