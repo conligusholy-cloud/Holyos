@@ -4978,7 +4978,7 @@
           const late = dd && dd < today ? Math.round((+today - +dd) / 864e5) : 0;
           html += '<tr data-plan-group="' + g.key + '">' +
             '<td><input type="checkbox" class="plan-cb" data-id="' + r.id + '" ' + (PLAN.sel.has(r.id) ? 'checked ' : '') + (why ? 'disabled title="' + escapeHtml(why) + '" ' : '') + 'onchange="planToggle(' + r.id + ',this.checked)"></td>' +
-            '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetail(' + r.id + ')" class="invoice-num">' + escapeHtml(r.invoice_number) + '</a>' + (r.external_number ? '<div style="font-size:0.78em;color:var(--text2)">' + escapeHtml(r.external_number) + '</div>' : '') + '</td>' +
+            '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetail(' + r.id + ')" title="Otevřít doklad" style="font-family:Consolas,monospace;font-weight:700;font-size:0.92em;color:#c7d2fe;text-decoration:none;white-space:nowrap">' + escapeHtml(r.invoice_number) + '</a>' + (r.external_number ? '<div style="font-size:0.8em;color:var(--text2)">' + escapeHtml(r.external_number) + '</div>' : '') + '</td>' +
             '<td>' + escapeHtml(r.company?.name || '—') + '</td>' +
             '<td>' + escapeHtml(r.variable_symbol || '—') + '</td>' +
             '<td style="white-space:nowrap"><small>' + escapeHtml(r.partner_bank_account || r.partner_iban || '—') + '</small><br>' + verBadge + '</td>' +
