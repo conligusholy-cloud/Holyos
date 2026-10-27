@@ -157,7 +157,7 @@ router.get('/invoices', async (req, res, next) => {
 
     if (overdue === 'true') {
       where.date_due = { lt: new Date() };
-      where.status = { notIn: ['paid', 'cancelled', 'written_off', 'archived'] };
+      where.status = { notIn: ['paid', 'cancelled', 'written_off', 'archived', 'qr_pending'] };
     }
 
     if (search) {
@@ -1975,7 +1975,7 @@ router.get('/summary', async (req, res, next) => {
         where: { direction: 'ar', status: { notIn: ['paid', 'cancelled', 'written_off'] } },
         _sum: { total: true }, _count: true,
       }),
-      prisma.invoice.count({ where: { direction: 'ap', date_due: { lt: now }, status: { notIn: ['paid', 'cancelled', 'written_off', 'archived'] } } }),
+      prisma.invoice.count({ where: { direction: 'ap', date_due: { lt: now }, status: { notIn: ['paid', 'cancelled', 'written_off', 'archived', 'qr_pending'] } } }),
       prisma.invoice.count({ where: { direction: 'ar', date_due: { lt: now }, status: { notIn: ['paid', 'cancelled', 'written_off'] } } }),
       prisma.invoice.count({ where: { needs_human_review: true } }),
       prisma.invoice.count({ where: { status: 'awaiting_approval' } }),

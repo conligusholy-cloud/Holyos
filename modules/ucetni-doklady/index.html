@@ -983,7 +983,7 @@
     function invRowHtml(inv) {
         const now = Date.now();
         const isOverdue = inv.date_due && new Date(inv.date_due).getTime() < now
-          && !['paid','cancelled','written_off','archived'].includes(inv.status);
+          && !['paid','cancelled','written_off','archived','qr_pending'].includes(inv.status); // qr_pending = teoreticky zaplaceno (čeká na výpis) → ne červeně
 
         // Anti-podvod kontrola — badge dle bank_account_verification.status
         const ver = inv.bank_account_verification || { status: 'no_account' };
@@ -1025,7 +1025,7 @@
           accCell +
           '<td style="white-space:nowrap;">' + fmtPayment(inv.payment_method) + '</td>' +
           '<td style="white-space:nowrap;">' + fmtDate(inv.date_issued) + '</td>' +
-          '<td style="white-space:nowrap;' + (isOverdue ? 'color:#ef4444;font-weight:600;' : '') + '">' + fmtDate(inv.date_due) + '</td>' +
+          '<td style="white-space:nowrap;' + (isOverdue ? 'color:#ef4444;font-weight:600;' : (inv.status === 'qr_pending' ? 'color:#22d3ee;font-weight:600;' : '')) + '">' + fmtDate(inv.date_due) + '</td>' +
           '<td' + (inv.order ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.order ? '<span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span>' : manualMatchBox(inv, 'order')) + '</td>' +
           '<td' + (inv.warehouse_document ? '' : ' onclick="event.stopPropagation()"') + '>' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : manualMatchBox(inv, 'receipt')) + '</td>' +
           '<td>' + escapeHtml(creatorLabel(inv)) + '</td>' +
@@ -1704,7 +1704,7 @@
       const canMarkReadyToPay = inv.direction === 'ap' && ['approved', 'goods_received'].includes(inv.status);
 
       const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-      const overdue = !['paid', 'cancelled', 'written_off', 'archived'].includes(inv.status) && inv.date_due && new Date(inv.date_due) < today0;
+      const overdue = !['paid', 'cancelled', 'written_off', 'archived', 'qr_pending'].includes(inv.status) && inv.date_due && new Date(inv.date_due) < today0;
       const remaining = Number(inv.total) - Number(inv.paid_amount || 0);
       const cur = escapeHtml(inv.currency);
       const bankVer = (() => {
