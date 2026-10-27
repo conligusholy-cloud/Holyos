@@ -1224,7 +1224,17 @@ router.post('/invoices/:id/mark-paid', async (req, res, next) => {
     }
     const total = Number(invoice.total);
     const remaining = Math.round((total - Number(invoice.paid_amount || 0)) * 100) / 100;
-    if (total <= 0) return res.status(400).json({ error: 'Doklad má nulovou celkovou částku — nejdřív v detailu doplň částku (OCR ji nepřečetlo)' });
+    if (total <= 0) {
+      // Nulový / záporný doklad (dobropis, nepřečtená částka): žádný pohyb peněz → jen uzavřít stav bez vytvoření platby
+      const closed = await prisma.invoice.update({ where: { id }, data: { paid_amount: total, status: 'paid' }, select: { id: true, status: true, paid_amount: true } });
+      logAudit({
+        action: 'update', entity: 'invoice', entity_id: id,
+        description: `${invoice.invoice_number}: ručně uzavřeno jako zaplaceno (částka ${total} ${invoice.currency}, bez platby)`,
+        changes: { manual_paid: { by: userLabel(req.user), amount: total, status_from: invoice.status, no_payment: true } },
+        user: req.user,
+      }).catch(() => {});
+      return res.json(closed);
+    }
     if (remaining <= 0) {
       // Už plně uhrazeno platbami, jen stav nebyl přepnut → jen srovnat stav
       const fixed = await prisma.invoice.update({ where: { id }, data: { status: 'paid' }, select: { id: true, status: true, paid_amount: true } });
