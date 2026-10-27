@@ -2380,6 +2380,42 @@ app.post('/admin/supporters/:id(\\d+)/partner-support', requireAdmin, wrap(async
   await log(req.admin, 'partner_support', { id: s.id, ...data });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Podpora z partnerského portálu uložena.'));
 }));
+// Načtení podpory ze starého portálu — jeden uživatel / všichni s nenulovým obratem (běží na pozadí)
+const LEGACY = require('./legacy-support');
+async function syncLegacySupport(s, admin) {
+  const r = await LEGACY.fetchLegacySupport(s.email);
+  if (!r.ok) return r;
+  const prev = s.partner_support || {};
+  const data = { ...prev, ...r.data, source: 'partner.bestseries.cz', synced_at: new Date().toISOString(), updated_at: new Date().toISOString(), updated_by: (admin && (admin.name || admin.username)) || 'synchronizace' };
+  await q('UPDATE supporters SET partner_support=$2, updated_at=now() WHERE id=$1', [s.id, JSON.stringify(data)]);
+  return { ok: true, data };
+}
+app.post('/admin/supporters/:id(\\d+)/partner-support/sync', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const r = await syncLegacySupport(s, req.admin);
+  await log(req.admin, 'partner_support_sync', { id: s.id, ok: r.ok, error: r.error || null });
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent(r.ok ? 'Načteno ze starého portálu: celkem ' + Number(r.data.total_all || 0).toLocaleString('cs-CZ') + ' Kč.' : 'Nepodařilo se načíst: ' + r.error));
+}));
+let LEGACY_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
+app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => {
+  if (LEGACY_JOB.running) return res.json(LEGACY_JOB);
+  const rows = (await q("SELECT * FROM supporters WHERE email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0 ORDER BY id")).rows;
+  LEGACY_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'partner_support_sync_all', { total: rows.length });
+  res.json(LEGACY_JOB);
+  (async () => {
+    for (const s of rows) {
+      try { const r = await syncLegacySupport(s, req.admin); if (r.ok) LEGACY_JOB.ok++; else { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + r.error); } }
+      catch (e) { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+      LEGACY_JOB.done++;
+      await new Promise((r) => setTimeout(r, 400)); // šetrně ke starému serveru
+      if (LEGACY_JOB.failed >= 10 && LEGACY_JOB.ok === 0) { LEGACY_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); break; }
+    }
+    LEGACY_JOB.running = false; LEGACY_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] sync podpory hotovo', JSON.stringify({ ...LEGACY_JOB, errors: LEGACY_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { LEGACY_JOB.running = false; LEGACY_JOB.errors.push(e.message); });
+}));
+app.get('/admin/partner-support/sync-all', requireAdmin, (req, res) => res.json(LEGACY_JOB));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';

@@ -1579,6 +1579,14 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><span id="ps-sync-st" class="small muted"></span>
+      <script>
+        (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
+          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') : ''; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
+          function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if (j.running) setTimeout(poll, 2000); }); }
+          b.onclick=function(){ if(!confirm('Načíst podporu ze starého portálu u všech uživatelů s nenulovým obratem? Běží na pozadí, může to trvat několik minut.')) return; fetch('/admin/partner-support/sync-all',{method:'POST'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+          poll(); })();
+      </script>
       <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
     </div>
     ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
@@ -1928,7 +1936,9 @@ function partnerSupportCard(s) {
       <label style="margin-top:6px">Poznámka</label><input name="note" value="${esc(p.note || '')}" placeholder="např. Expanze obsahuje i palety a opakovačky">
       ${sumYear ? `<div class="small muted" style="margin-top:6px">Součet palety + expanze + NeuraWash + opakovačky = <b>${sumYear.toLocaleString('cs-CZ')} Kč</b>${p.total_year != null && Math.abs(sumYear - Number(p.total_year)) > 0.5 ? ' (≠ „Podpořil v roce")' : ''}</div>` : ''}
       ${p.updated_at ? `<div class="small muted" style="margin-top:4px">Naposledy uloženo ${new Date(p.updated_at).toLocaleString('cs-CZ')} · ${esc(p.updated_by || '')}</div>` : ''}
-      <div style="height:10px"></div><button class="btn sm" type="submit">Uložit podporu</button>
+      <div style="height:10px"></div><div class="row" style="gap:8px"><button class="btn sm" type="submit">Uložit podporu</button>
+        <button class="btn sec sm" type="submit" formaction="/admin/supporters/${s.id}/partner-support/sync" formnovalidate title="Přihlásí se jako uživatel do partner.bestseries.cz a načte Přehled podpory + obrat sítě">🔄 Načíst ze starého portálu</button></div>
+      ${p.synced_at ? `<div class="small muted" style="margin-top:4px">Načteno ze starého portálu ${new Date(p.synced_at).toLocaleString('cs-CZ')}${p.legacy_name ? ' · účet ' + esc(p.legacy_name) : ''}</div>` : ''}
     </form>
   </div></details>`;
 }
