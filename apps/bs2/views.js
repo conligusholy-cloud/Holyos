@@ -1523,7 +1523,7 @@ const BASE_COLS = [
   { key: 'activated_at', label: 'Aktivován', render: (r) => `<span class="muted small">${fmtDT(r.activated_at)}</span>` },
   { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
-  { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
+  { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small" data-lightbox="1">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
 const DEFAULT_COLS = ['email', 'nick', 'support_czk', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
@@ -1542,6 +1542,8 @@ const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil
 const typeBadge = (t) => { const k = USER_TYPE_LABEL[t] ? t : 'standard'; return `<span class="badge type-${k}">${USER_TYPE_LABEL[k]}</span>`; };
 const typeSelect = (cur, name = 'user_type') => `<select name="${name}" style="width:auto">${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${(cur || 'standard') === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>`;
 const EXTRA_PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
+// Náhled uloženého screenshotu podpory u tlačítka — klik otevře zvětšení v okně (lightbox)
+const snapThumb = (r) => r.support_snapshot_at ? `<button type="button" class="snap-view" data-src="/admin/supporters/${r.id}/support-snapshot.png?t=${new Date(r.support_snapshot_at).getTime()}" title="Screenshot z ${fmtDT(r.support_snapshot_at)} — klikni pro zvětšení"><img src="/admin/supporters/${r.id}/support-snapshot.png?t=${new Date(r.support_snapshot_at).getTime()}" alt="screenshot" loading="lazy"></button>` : '';
 function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [], supportStats = null }) {
   const baseSel = BASE_COLS.filter(c => cols.includes(c.key));
   const extraSel = cols.filter(k => k.startsWith('x:')).map(k => k.slice(2)).filter(k => extraKeys.includes(k));
@@ -1551,7 +1553,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</button><button type="button" class="btn sec sm snap-btn" data-id="${r.id}" title="Přihlásit se jako tento uživatel, počkat na načtení Přehledu podpory a uložit screenshot k uživateli">📸 Screenshot</button></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</button><button type="button" class="btn sec sm snap-btn" data-id="${r.id}" title="Přihlásit se jako tento uživatel, počkat na načtení Přehledu podpory a uložit screenshot k uživateli">📸 Screenshot</button>${snapThumb(r)}</div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
@@ -1571,6 +1573,11 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     </form></details>`;
   return adminLayout('Uživatelé', 'sup', admin, `
   <style>
+    .snap-view{padding:0;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:zoom-in;width:44px;height:32px;overflow:hidden;flex:none;align-self:center}
+    .snap-view img{width:100%;height:100%;object-fit:cover;object-position:top left;display:block}
+    #snap-lb{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;padding:20px}
+    .snap-lb-box{max-width:min(1300px,96vw);max-height:94vh;display:flex;flex-direction:column;gap:8px}
+    .snap-lb-bar{display:flex;justify-content:flex-end;gap:8px} #snap-lb-img{max-width:100%;max-height:calc(94vh - 50px);object-fit:contain;border-radius:8px;background:#fff;overflow:auto}
     .colpick{position:relative} .colpick summary{list-style:none;cursor:pointer;display:inline-flex} .colpick summary::-webkit-details-marker{display:none}
     .colpick-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:20;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;width:min(560px,calc(100vw - 32px));box-shadow:0 12px 40px rgba(0,0,0,.5)}
     .colpick-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px} @media (max-width:600px){.colpick-grid{grid-template-columns:1fr}}
@@ -1624,6 +1631,22 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   });
   // 📸 Screenshot: server se přihlásí jako uživatel headless Chromiem, počká na načtení stránky
   // a vyfotí ji — pak se v řádku objeví odkaz s časem pořízení.
+  // Lightbox pro screenshot podpory (klik mimo / Esc / ✕ zavře)
+  window.openSnap = function (src) {
+    var o = document.getElementById('snap-lb');
+    if (!o) {
+      o = document.createElement('div'); o.id = 'snap-lb';
+      o.innerHTML = '<div class="snap-lb-box"><div class="snap-lb-bar"><a class="btn sec sm" target="_blank" rel="noopener" id="snap-lb-open">Otevřít v nové záložce</a><button type="button" class="btn sec sm" id="snap-lb-x">✕</button></div><img id="snap-lb-img" alt="screenshot podpory"></div>';
+      document.body.appendChild(o);
+      o.addEventListener('click', function (ev) { if (ev.target === o || ev.target.id === 'snap-lb-x') o.style.display = 'none'; });
+      document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') o.style.display = 'none'; });
+    }
+    document.getElementById('snap-lb-img').src = src; document.getElementById('snap-lb-open').href = src; o.style.display = 'flex';
+  };
+  document.addEventListener('click', function (e) {
+    var v = e.target.closest('.snap-view'); if (v) { e.preventDefault(); openSnap(v.dataset.src); return; }
+    var l = e.target.closest('a[data-lightbox]'); if (l) { e.preventDefault(); openSnap(l.getAttribute('href') + '?t=' + Date.now()); }
+  });
   document.addEventListener('click', function (e) {
     var b = e.target.closest('.snap-btn');
     if (!b) return;
@@ -1635,7 +1658,12 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
         if (!x.ok) { alert(x.j.error || 'Nepodařilo se pořídit screenshot.'); return; }
         var cell = b.closest('tr').querySelector('[data-l="Screenshot podpory"]');
         if (cell) cell.innerHTML = '<a href="/admin/supporters/' + id + '/support-snapshot.png" target="_blank" rel="noopener" class="small">' + new Date(x.j.at).toLocaleString('cs-CZ') + '</a>';
-        window.open('/admin/supporters/' + id + '/support-snapshot.png', '_blank');
+        var src = '/admin/supporters/' + id + '/support-snapshot.png?t=' + Date.now();
+        var th = b.parentNode.querySelector('.snap-view');
+        if (!th) { th = document.createElement('button'); th.type = 'button'; th.className = 'snap-view'; th.innerHTML = '<img alt="screenshot">'; b.parentNode.appendChild(th); }
+        th.dataset.src = src; th.querySelector('img').src = src; th.title = 'Screenshot z ' + new Date(x.j.at).toLocaleString('cs-CZ') + ' — klikni pro zvětšení';
+        if (cell) { var a = cell.querySelector('a'); if (a) a.dataset.lightbox = '1'; }
+        openSnap(src);
       })
       .catch(function (err) { alert('Chyba spojení: ' + err.message); })
       .finally(function () { b.disabled = false; b.textContent = orig; });
