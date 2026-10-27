@@ -364,6 +364,24 @@ router.post('/statements/upload', async (req, res, next) => {
       snapshot: { statement: created.statement, format: detectedFormat },
     });
 
+    // Hned po nahrání: rozpustit na platby (už hotovo) → vypořádat s doklady → zkontrolovat a případně upozornit do Velína
+    let auto_match = null;
+    try {
+      const s = await matcher.autoMatchAll(prisma, req.user);
+      auto_match = { matched: s.matched, partial: s.partial, needs_review: s.needs_review, no_match: s.no_match };
+      try {
+        const { processPaymentForDepositTaxDocs } = require('../services/accountant/deposit-tax-doc');
+        if (s.matched_ids && s.matched_ids.length) {
+          const pays = await prisma.payment.findMany({ where: { bank_transaction_id: { in: s.matched_ids } }, select: { id: true } });
+          for (const p of pays) await processPaymentForDepositTaxDocs(p.id);
+        }
+      } catch (e) { /* best-effort */ }
+    } catch (e) { console.warn('[banking] auto-match po nahrání selhal:', e.message); auto_match = { error: e.message }; }
+    require('../services/banking/statement-monitor').afterRun({
+      errors: auto_match && auto_match.error ? ['Párování po nahrání výpisu ' + created.statement.statement_number + ': ' + auto_match.error] : [],
+      imported: [{ statement_id: created.statement.id, statement: created.statement.statement_number, warnings }],
+    }).catch(() => {});
+
     res.status(201).json({
       ok: true,
       statement: created.statement,
@@ -372,6 +390,7 @@ router.post('/statements/upload', async (req, res, next) => {
       duplicates_skipped: transactions.length - created.inserted_count,
       format: detectedFormat,
       warnings,
+      auto_match,
     });
   } catch (err) { next(err); }
 });

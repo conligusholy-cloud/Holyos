@@ -45,7 +45,7 @@ async function runOnce({ markRead = true, all = false, passwords = null } = {}) 
           const file = await graph.downloadAttachment(mb, m.id, a.id);
           if (!file || !file.buffer) { allOk = false; report.errors.push(a.name + ': nelze stáhnout'); continue; }
           const r = await importStatementBuffer({ buffer: file.buffer, filename: a.name, source: 'email', passwords });
-          if (r.status === 'imported') report.imported.push({ file: a.name, statement: r.statement_number, transactions: r.inserted, matched: r.matched ? r.matched.matched : null, warnings: r.warnings });
+          if (r.status === 'imported') report.imported.push({ file: a.name, statement_id: r.statement_id, statement: r.statement_number, transactions: r.inserted, matched: r.matched ? r.matched.matched : null, warnings: r.warnings });
           else if (r.status === 'duplicate') report.duplicates.push({ file: a.name, statement: r.statement_number });
           else { allOk = false; report.no_account.push({ file: a.name, account: (r.account_number || '?') + '/' + (r.bank_code || '?') }); }
         } catch (e) { allOk = false; report.errors.push((a.name || '?') + ': ' + e.message); }
@@ -62,11 +62,14 @@ async function runOnce({ markRead = true, all = false, passwords = null } = {}) 
       } catch (e) { report.errors.push('auto-match: ' + e.message); }
     }
     if (report.imported.length || report.errors.length) console.log('[bank-statement-email]', JSON.stringify(report));
+    // Kontrola výsledku + upozornění do Velína (při hromadném „Načíst i staré" jen chyby)
+    try { await require('./statement-monitor').afterRun(all ? { errors: report.errors, no_account: report.no_account, imported: [] } : report); } catch (e) { console.warn('[bank-statement-email] monitor:', e.message); }
     return report;
   } catch (e) {
     folderId = null;
     report.errors.push(e.message);
     console.warn('[bank-statement-email] chyba:', e.message);
+    try { await require('./statement-monitor').workerCrashed(e); } catch (e2) { /* ignore */ }
     return report;
   } finally {
     running = false;
