@@ -72,7 +72,9 @@ function buildSpd(inv, remaining) {
   if (digits(inv.specific_symbol, 10)) parts.push('X-SS:' + digits(inv.specific_symbol, 10));
   const rn = ascii(inv.company && inv.company.name).slice(0, 35);
   if (rn) parts.push('RN:' + rn);
-  const msg = ascii('Uhrada ' + (inv.external_number || inv.invoice_number)).slice(0, 60);
+  // Jediné volné textové pole, které banky z QR opravdu převezmou, je „Zpráva pro příjemce" (MSG) — proto tam jde i „za co platím".
+  // (Poznámka pro mě v SPAYD neexistuje.) Doklad + popis, max 60 znaků.
+  const msg = ascii(['Uhrada ' + (inv.external_number || inv.invoice_number), inv.payment_note].filter(Boolean).join(' ')).slice(0, 60);
   if (msg) parts.push('MSG:' + msg);
   // „Poznámka pro mě" (zpráva pro plátce) = za co platím + dodavatel. Standard QR Platby: X-SELF, max 60 znaků.
   const self = ascii([inv.payment_note, inv.company && inv.company.name].filter(Boolean).join(' - ')).slice(0, 60);

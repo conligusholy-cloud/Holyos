@@ -78,8 +78,8 @@
       if (d.self_note) {
         window.__selfNote = d.self_note;
         el('notebox').style.display = '';
-        el('notebox').innerHTML = '<b>Poznámka pro mě</b><div class="note">' + esc(d.self_note) + '</div><button class="sec" id="cp" onclick="copyNote()">📋 Zkopírovat poznámku</button>' +
-          '<p style="margin:8px 0 0"><small>Banka toto pole z QR kódu nepřebírá (QR Platba ho neumí) — vlož poznámku ručně do pole „Poznámka pro mě".</small></p>';
+        el('notebox').innerHTML = '<b>Za co platím</b><div class="note">' + esc(d.self_note) + '</div>' +
+          '<p style="margin:8px 0 0"><small>Jen informace — text je už v QR kódu a v bance se předvyplní do poznámky pro příjemce.</small></p>';
       }
       el('go').style.display = 'none';
     }).catch(function () { msg('err', 'Chyba spojení.'); el('go').disabled = false; });
