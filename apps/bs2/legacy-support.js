@@ -22,6 +22,7 @@ async function get(url, jar, hops = 5) {
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { u = new URL(res.headers.get('location'), u).toString(); continue; }
     return { url: u, status: res.status, html: await res.text() };
   }
+  if (hops === 1) return { url: u, status: 302, html: '' }; // záměrně bez následování přesměrování
   throw new Error('Příliš mnoho přesměrování');
 }
 
@@ -53,7 +54,8 @@ async function fetchLegacySupport(email) {
   if (!email) return { ok: false, error: 'Uživatel nemá e-mail' };
   const jar = {};
   try {
-    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar);
+    // jen přihlášení (cookie) — nepřesměrovávat na těžký dashboard, ušetří to většinu času
+    await get(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), jar, 1).catch(() => {});
     const inv = await get(BASE + '/cs/bo/my-invests/', jar);
     const text = htmlToText(inv.html);
     if (!/jste podpořili/i.test(text)) return { ok: false, error: /přihl|login/i.test(inv.url + text.slice(0, 500)) ? 'Starý portál nepřihlásil uživatele (fake-login nefunguje bez přihlášeného admina?)' : 'Stránka podpory nemá očekávaný obsah' };

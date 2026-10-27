@@ -2404,13 +2404,20 @@ app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) 
   await log(req.admin, 'partner_support_sync_all', { total: rows.length });
   res.json(LEGACY_JOB);
   (async () => {
-    for (const s of rows) {
-      try { const r = await syncLegacySupport(s, req.admin); if (r.ok) LEGACY_JOB.ok++; else { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + r.error); } }
-      catch (e) { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
-      LEGACY_JOB.done++;
-      await new Promise((r) => setTimeout(r, 400)); // šetrně ke starému serveru
-      if (LEGACY_JOB.failed >= 10 && LEGACY_JOB.ok === 0) { LEGACY_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); break; }
-    }
+    // více souběžných „pracovníků" (každý má vlastní přihlášení/cookie) — výchozí 4, env LEGACY_SYNC_CONCURRENCY
+    const queue = rows.slice();
+    const workers = Math.max(1, Math.min(10, parseInt(process.env.LEGACY_SYNC_CONCURRENCY || '4', 10) || 4));
+    let stop = false;
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try { const r = await syncLegacySupport(s, req.admin); if (r.ok) LEGACY_JOB.ok++; else { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + r.error); } }
+        catch (e) { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
+        LEGACY_JOB.done++;
+        await new Promise((r) => setTimeout(r, 150)); // šetrně ke starému serveru
+        if (LEGACY_JOB.failed >= 10 && LEGACY_JOB.ok === 0) { stop = true; LEGACY_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
+      }
+    }));
     LEGACY_JOB.running = false; LEGACY_JOB.finished_at = new Date().toISOString();
     console.log('[bs2] sync podpory hotovo', JSON.stringify({ ...LEGACY_JOB, errors: LEGACY_JOB.errors.slice(0, 5) }));
   })().catch((e) => { LEGACY_JOB.running = false; LEGACY_JOB.errors.push(e.message); });
