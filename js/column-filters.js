@@ -13,6 +13,8 @@
 
   // [op, label, ikona, počet hodnot (0/1/2), placeholder]
   const OPS = {
+    in:           ['Je jeden z', '☑', 3],
+    not_in:       ['Není žádný z', '☒', 3],
     contains:     ['Obsahuje', FUNNEL, 1],
     not_contains: ['Neobsahuje', '⊘', 1],
     eq:           ['Rovná se', '=', 1],
@@ -32,10 +34,12 @@
   };
   const TYPE_OPS = {
     text: ['contains', 'not_contains', 'empty', 'not_empty'],
+    enum: ['in', 'not_in', 'contains', 'not_contains', 'empty', 'not_empty'],
     num:  ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'empty', 'not_empty', 'range', 'contains'],
     date: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'range', 'empty', 'not_empty', 'month', 'year', 'today', 'next_days', 'prev_days'],
   };
-  const DEFAULT_OP = { text: 'contains', num: 'eq', date: 'eq' };
+  const DEFAULT_OP = { text: 'contains', num: 'eq', date: 'eq', enum: 'in' };
+  const ENUM_MAX = 10; // sloupec s nejvýš tolika různými hodnotami = výběr zaškrtnutím
   const OP_TITLES = {
     next_days: 'Datum od dneška do dneška + zadaný počet dní',
     prev_days: 'Datum od dneška − zadaný počet dní do dneška',
@@ -89,6 +93,13 @@
     const op = c.op;
     if (op === 'empty') return isEmpty(type, raw);
     if (op === 'not_empty') return !isEmpty(type, raw);
+    if (op === 'in' || op === 'not_in') {
+      const vals = Array.isArray(c.vals) ? c.vals : [];
+      if (!vals.length) return true;
+      const s = norm(String(raw == null ? '' : raw).trim());
+      const hit = vals.some((x) => norm(x) === s);
+      return op === 'in' ? hit : !hit;
+    }
     const v = String(c.v == null ? '' : c.v).trim();
     const needVal = OPS[op][2];
     if (needVal === 1 && v === '') return true; // nevyplněno = nefiltruje
@@ -176,6 +187,14 @@
       '.cf-ed-row select,.cf-ed-row input{background:var(--bg,#111827);border:1px solid var(--border,#374151);border-radius:6px;color:var(--text,#e5e7eb);padding:5px 6px;font-size:12px}',
       '.cf-ed-row input{width:100px}',
       '.cf-ed-and{font-size:10px;color:var(--text2,#9ca3af);text-transform:uppercase;margin:2px 0 4px 4px}',
+      '.cf-pick{min-width:240px;padding:0 0 6px}',
+      '.cf-pick input.cf-ps{width:calc(100% - 20px);margin:8px 10px;box-sizing:border-box;background:var(--bg,#111827);border:1px solid var(--border,#374151);border-radius:6px;color:var(--text,#e5e7eb);padding:6px 8px;font-size:12px}',
+      '.cf-pick .cf-pl{max-height:260px;overflow-y:auto}',
+      '.cf-pick label{display:flex;align-items:center;gap:10px;padding:7px 14px;cursor:pointer;white-space:nowrap}',
+      '.cf-pick label:hover{background:rgba(129,140,248,.12)}',
+      '.cf-pick label input{width:15px;height:15px;accent-color:#818cf8;margin:0}',
+      '.cf-pick .cf-pf{display:flex;justify-content:space-between;gap:6px;padding:6px 10px 0;border-top:1px solid var(--border,#374151);margin-top:4px}',
+      '.cf-in.cf-ro{cursor:pointer}',
       '.cf-ed-btn{background:none;border:1px solid var(--border,#374151);border-radius:6px;color:var(--text,#e5e7eb);padding:4px 10px;font-size:12px;cursor:pointer}',
     ].join('\n');
     document.head.appendChild(st);
@@ -183,7 +202,7 @@
 
   let openMenu = null;
   function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null; } }
-  document.addEventListener('mousedown', (e) => { if (openMenu && !openMenu.contains(e.target) && !e.target.closest('.cf-op,.cf-more')) closeMenu(); });
+  document.addEventListener('mousedown', (e) => { if (openMenu && !openMenu.contains(e.target) && !e.target.closest('.cf-op,.cf-more,.cf-ro')) closeMenu(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
   function placeMenu(menu, anchor) {
     document.body.appendChild(menu);
@@ -205,21 +224,45 @@
     let timer = null;
     const fire = (now) => { clearTimeout(timer); if (now) onChange(); else timer = setTimeout(onChange, 120); };
 
-    const typeOf = (key) => (colBy[key] && colBy[key].type) || 'text';
-    const conds = (key) => (state[key] || (state[key] = [{ op: DEFAULT_OP[typeOf(key)], v: '', v2: '' }]));
-    const isActive = (c) => { const n = OPS[c.op][2]; return n === 0 || String(c.v || '').trim() !== '' || (n === 2 && String(c.v2 || '').trim() !== ''); };
+    // ─── Výčtové sloupce (málo různých hodnot) → výběr zaškrtnutím ───
+    let lastRows = [];
+    let enumCache = {};
+    const enumVal = (col, row) => (col.enumValue || col.get)(row);
+    function distinct(key) {
+      if (key in enumCache) return enumCache[key];
+      const col = colBy[key]; const limit = col.enum === true ? Infinity : (col.enumMax || ENUM_MAX);
+      const m = new Map();
+      for (const r of lastRows) {
+        const raw = enumVal(col, r); const v = String(raw == null ? '' : raw).trim();
+        if (!v) continue;
+        const k = norm(v); if (!m.has(k)) m.set(k, v);
+        if (m.size > limit) break;
+      }
+      return (enumCache[key] = [...m.values()].sort((a, b) => a.localeCompare(b, 'cs')));
+    }
+    function isEnum(key) {
+      const col = colBy[key]; if (!col || col.enum === false || (col.type || 'text') !== 'text') return false;
+      if (col.enum === true) return true;
+      const d = distinct(key); return d.length > 0 && d.length <= (col.enumMax || ENUM_MAX);
+    }
+    const typeOf = (key) => (isEnum(key) ? 'enum' : ((colBy[key] && colBy[key].type) || 'text'));
+    const newCond = (key) => ({ op: DEFAULT_OP[typeOf(key)], v: '', v2: '', vals: [] });
+    const conds = (key) => (state[key] || (state[key] = [newCond(key)]));
+    const isActive = (c) => { const n = OPS[c.op][2]; if (n === 3) return (c.vals || []).length > 0; return n === 0 || String(c.v || '').trim() !== '' || (n === 2 && String(c.v2 || '').trim() !== ''); };
     const activeConds = (key) => (state[key] || []).filter(isActive);
 
     function cellHtml(key) {
       const col = colBy[key]; if (!col) return '';
-      const c = conds(key)[0];
+      const c = (state[key] || [])[0] || newCond(key);
       const def = OPS[c.op];
       const on = activeConds(key).length > 0;
-      const extra = (state[key] || []).length - 1;
-      const ph = def[2] === 0 ? def[0] : (def[3] || (def[2] === 2 ? 'od' : (c.op === DEFAULT_OP[col.type] ? (col.ph || '') : def[0] + '…')));
+      const extra = Math.max(0, (state[key] || []).length - 1);
+      const ph = def[2] === 3 ? (col.ph && !/…$/.test(col.ph) ? col.ph : 'Vyber…') : def[2] === 0 ? def[0] : (def[3] || (def[2] === 2 ? 'od' : (c.op === DEFAULT_OP[col.type || 'text'] ? (col.ph || '') : def[0] + '…')));
       return '<div class="cf-cell' + (on ? ' cf-on' : '') + '" data-cfk="' + escH(key) + '">' +
         '<button type="button" class="cf-op" data-cfk="' + escH(key) + '" title="' + escH(def[0] + (OP_TITLES[c.op] ? ' — ' + OP_TITLES[c.op] : '') + ' (klikni pro změnu)') + '">' + def[1] + '</button>' +
-        '<input class="cf-in" data-cfk="' + escH(key) + '" data-vi="1" value="' + escH(def[2] ? c.v : '') + '" placeholder="' + escH(ph) + '"' + (def[2] === 0 ? ' disabled' : '') + '>' +
+        (def[2] === 3
+          ? '<input class="cf-in cf-ro" readonly data-cfk="' + escH(key) + '" data-vi="1" value="' + escH((c.vals || []).join(', ')) + '" placeholder="' + escH(ph) + '" title="' + escH((c.vals || []).join(', ') || 'Klikni a vyber hodnoty') + '">'
+          : '<input class="cf-in" data-cfk="' + escH(key) + '" data-vi="1" value="' + escH(def[2] ? c.v : '') + '" placeholder="' + escH(ph) + '"' + (def[2] === 0 ? ' disabled' : '') + '>') +
         (def[2] === 2 ? '<input class="cf-in cf-in2" data-cfk="' + escH(key) + '" data-vi="2" value="' + escH(c.v2 || '') + '" placeholder="do">' : '') +
         (extra > 0 ? '<button type="button" class="cf-more" data-cfk="' + escH(key) + '" title="Další podmínky (' + extra + ')">+' + extra + '</button>' : '') +
         (on || extra > 0 ? '<button type="button" class="cf-x" data-cfk="' + escH(key) + '" title="Zrušit filtr sloupce">✕</button>' : '') +
@@ -238,20 +281,21 @@
     function openOpMenu(btn, key) {
       const had = openMenu && openMenu.dataset.key === key && openMenu.dataset.kind === 'ops';
       closeMenu(); if (had) return;
-      const cur = conds(key)[0].op;
+      const cur = ((state[key] || [])[0] || newCond(key)).op;
       const menu = document.createElement('div'); menu.className = 'cf-menu'; menu.dataset.key = key; menu.dataset.kind = 'ops';
       menu.innerHTML = TYPE_OPS[typeOf(key)].map((op) => '<button type="button" class="cf-mi' + (op === cur ? ' cf-act' : '') + '" data-op="' + op + '" title="' + escH(OP_TITLES[op] || '') + '"><span class="cf-ic">' + OPS[op][1] + '</span>' + OPS[op][0] + '</button>').join('') +
         '<hr><button type="button" class="cf-mi" data-op="__add"><span class="cf-ic">+</span>Přidat podmínku…</button>';
       menu.addEventListener('click', (e) => {
         const b = e.target.closest('button[data-op]'); if (!b) return;
         closeMenu();
-        if (b.dataset.op === '__add') { conds(key).push({ op: DEFAULT_OP[typeOf(key)], v: '', v2: '' }); openEditor(btn, key); refreshCell(key); return; }
+        if (b.dataset.op === '__add') { conds(key).push(newCond(key)); openEditor(btn, key); refreshCell(key); return; }
         const c = conds(key)[0];
         const wasActive = isActive(c);
         c.op = b.dataset.op;
-        if (OPS[c.op][2] === 0) { c.v = ''; c.v2 = ''; }
-        refreshCell(key, true);
+        if (OPS[c.op][2] === 0) { c.v = ''; c.v2 = ''; c.vals = []; }
+        refreshCell(key, OPS[c.op][2] !== 3);
         if (wasActive || isActive(c)) fire(true);
+        if (OPS[c.op][2] === 3) { const inp = findInput(key); if (inp) openPick(inp, key); }
       });
       placeMenu(menu, btn);
     }
@@ -265,7 +309,8 @@
         menu.innerHTML = '<div style="font-size:11px;color:var(--text2,#9ca3af);text-transform:uppercase;margin-bottom:8px">Podmínky sloupce' + (col.label ? ': ' + escH(col.label) : '') + ' (musí platit všechny)</div>' +
           list.map((c, i) => (i ? '<div class="cf-ed-and">a zároveň</div>' : '') +
             '<div class="cf-ed-row" data-i="' + i + '"><select data-f="op">' + TYPE_OPS[typeOf(key)].map((op) => '<option value="' + op + '"' + (op === c.op ? ' selected' : '') + '>' + OPS[op][0] + '</option>').join('') + '</select>' +
-            (OPS[c.op][2] >= 1 ? '<input data-f="v" value="' + escH(c.v || '') + '" placeholder="' + escH(OPS[c.op][3] || (OPS[c.op][2] === 2 ? 'od' : 'hodnota')) + '">' : '') +
+            (OPS[c.op][2] === 3 ? '<input data-f="vals" style="width:180px" value="' + escH((c.vals || []).join(', ')) + '" placeholder="hodnoty oddělené čárkou">' :
+             OPS[c.op][2] >= 1 ? '<input data-f="v" value="' + escH(c.v || '') + '" placeholder="' + escH(OPS[c.op][3] || (OPS[c.op][2] === 2 ? 'od' : 'hodnota')) + '">' : '') +
             (OPS[c.op][2] === 2 ? '<input data-f="v2" value="' + escH(c.v2 || '') + '" placeholder="do">' : '') +
             '<button type="button" class="cf-ed-btn" data-rm="' + i + '" title="Odebrat podmínku">✕</button></div>').join('') +
           '<div style="display:flex;gap:6px;justify-content:space-between;margin-top:8px"><button type="button" class="cf-ed-btn" data-add="1">+ Další podmínka</button><button type="button" class="cf-ed-btn" data-done="1" style="border-color:#818cf8;color:#c7d2fe">Hotovo</button></div>';
@@ -275,22 +320,66 @@
         const row = e.target.closest('.cf-ed-row'); if (!row) return;
         const c = conds(key)[+row.dataset.i]; const f = e.target.dataset.f;
         if (f === 'v' || f === 'v2') { c[f] = e.target.value; fire(); refreshCell(key); }
+        if (f === 'vals') { c.vals = e.target.value.split(',').map((x) => x.trim()).filter(Boolean); fire(); refreshCell(key); }
       });
       menu.addEventListener('change', (e) => {
         const row = e.target.closest('.cf-ed-row'); if (!row || e.target.dataset.f !== 'op') return;
-        const c = conds(key)[+row.dataset.i]; c.op = e.target.value; if (OPS[c.op][2] === 0) { c.v = ''; c.v2 = ''; }
+        const c = conds(key)[+row.dataset.i]; c.op = e.target.value; if (OPS[c.op][2] === 0) { c.v = ''; c.v2 = ''; c.vals = []; }
         render(); refreshCell(key); fire(true);
       });
       menu.addEventListener('click', (e) => {
         const b = e.target.closest('button'); if (!b) return;
-        if (b.dataset.add) { conds(key).push({ op: DEFAULT_OP[typeOf(key)], v: '', v2: '' }); render(); refreshCell(key); }
+        if (b.dataset.add) { conds(key).push(newCond(key)); render(); refreshCell(key); }
         else if (b.dataset.rm != null) {
           const list = conds(key); list.splice(+b.dataset.rm, 1);
-          if (!list.length) list.push({ op: DEFAULT_OP[typeOf(key)], v: '', v2: '' });
+          if (!list.length) list.push(newCond(key));
           render(); refreshCell(key); fire(true);
         } else if (b.dataset.done) closeMenu();
       });
       placeMenu(menu, anchor);
+    }
+
+    function findInput(key) {
+      for (const root of roots) { const el = root.querySelector('.cf-in[data-cfk="' + CSS.escape(key) + '"]'); if (el) return el; }
+      return null;
+    }
+    // Našeptávač se zaškrtávátky (výčtové sloupce)
+    function openPick(anchor, key) {
+      if (openMenu && openMenu.dataset.key === key && openMenu.dataset.kind === 'pick') { closeMenu(); return; }
+      closeMenu();
+      const vals = distinct(key).slice();
+      const c0 = (state[key] || [])[0];
+      (c0 && c0.vals || []).forEach((v) => { if (!vals.some((x) => norm(x) === norm(v))) vals.push(v); });
+      const menu = document.createElement('div'); menu.className = 'cf-menu cf-pick'; menu.dataset.key = key; menu.dataset.kind = 'pick';
+      const sel = () => new Set(((state[key] || [])[0] || {}).vals || []);
+      const renderList = (q) => {
+        const s = sel(); const nq = norm(q || '');
+        const list = vals.filter((v) => !nq || norm(v).includes(nq));
+        menu.querySelector('.cf-pl').innerHTML = list.length
+          ? list.map((v) => '<label><input type="checkbox" data-v="' + escH(v) + '"' + (s.has(v) ? ' checked' : '') + '>' + escH(v) + '</label>').join('')
+          : '<div style="padding:8px 14px;color:var(--text2,#9ca3af)">Nic nenalezeno</div>';
+      };
+      menu.innerHTML = (vals.length > 6 ? '<input class="cf-ps" placeholder="Hledat…">' : '<div style="height:6px"></div>') + '<div class="cf-pl"></div>' +
+        '<div class="cf-pf"><button type="button" class="cf-ed-btn" data-all="1">Vybrat vše</button><button type="button" class="cf-ed-btn" data-none="1">Zrušit výběr</button></div>';
+      renderList('');
+      const apply = (list) => {
+        const c = conds(key)[0];
+        if (OPS[c.op][2] !== 3) c.op = 'in';
+        c.vals = list; refreshCell(key); fire(true);
+      };
+      menu.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[type=checkbox]'); if (!cb) return;
+        const s = sel(); if (cb.checked) s.add(cb.dataset.v); else s.delete(cb.dataset.v);
+        apply(vals.filter((v) => s.has(v)));
+      });
+      menu.addEventListener('input', (e) => { if (e.target.classList.contains('cf-ps')) renderList(e.target.value); });
+      menu.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.all) { const q = (menu.querySelector('.cf-ps') || {}).value || ''; const nq = norm(q); const s = sel(); vals.filter((v) => !nq || norm(v).includes(nq)).forEach((v) => s.add(v)); apply(vals.filter((v) => s.has(v))); renderList(q); }
+        if (b.dataset.none) { apply([]); renderList((menu.querySelector('.cf-ps') || {}).value || ''); }
+      });
+      placeMenu(menu, anchor.closest('.cf-cell') || anchor);
+      const ps = menu.querySelector('.cf-ps'); if (ps) ps.focus();
     }
 
     function bind(root) {
@@ -300,7 +389,7 @@
       if (root.__cfBound === ctrl) return;
       root.__cfBound = ctrl;
       root.addEventListener('input', (e) => {
-        const inp = e.target.closest('.cf-in'); if (!inp) return;
+        const inp = e.target.closest('.cf-in'); if (!inp || inp.readOnly) return;
         const key = inp.dataset.cfk; const c = conds(key)[0];
         if (inp.dataset.vi === '2') c.v2 = inp.value; else c.v = inp.value;
         const cell = inp.closest('.cf-cell');
@@ -308,25 +397,41 @@
         if (cell && cell.classList.contains('cf-on') !== on) { refreshCell(key); const n = root.querySelector('.cf-in[data-cfk="' + CSS.escape(key) + '"][data-vi="' + (inp.dataset.vi || '1') + '"]'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }
         fire();
       });
+      root.addEventListener('keydown', (e) => {
+        const ro = e.target.closest('.cf-ro'); if (ro && (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); openPick(ro, ro.dataset.cfk); }
+      });
       root.addEventListener('click', (e) => {
         const op = e.target.closest('.cf-op'); if (op) { e.stopPropagation(); e.preventDefault(); openOpMenu(op, op.dataset.cfk); return; }
+        const ro = e.target.closest('.cf-ro'); if (ro) { e.stopPropagation(); openPick(ro, ro.dataset.cfk); return; }
         const more = e.target.closest('.cf-more'); if (more) { e.stopPropagation(); e.preventDefault(); openEditor(more, more.dataset.cfk); return; }
         const x = e.target.closest('.cf-x'); if (x) { e.stopPropagation(); e.preventDefault(); delete state[x.dataset.cfk]; refreshCell(x.dataset.cfk); fire(true); }
         if (e.target.closest('.cf-cell')) e.stopPropagation();
       });
     }
 
+    let prevEnum = {};
     function apply(rows) {
+      lastRows = Array.isArray(rows) ? rows : []; enumCache = {};
+      cols.forEach((c) => { const e = isEnum(c.key); if (prevEnum[c.key] !== e) { prevEnum[c.key] = e; if (!state[c.key]) refreshCell(c.key); } });
       const act = cols.map((c) => [c, activeConds(c.key)]).filter(([, l]) => l.length);
       if (!act.length) return rows;
-      return rows.filter((row) => act.every(([col, list]) => { const raw = col.get(row); return list.every((c) => matchCond(col.type || 'text', raw, c)); }));
+      return rows.filter((row) => act.every(([col, list]) => list.every((c) => {
+        const raw = (c.op === 'in' || c.op === 'not_in') ? enumVal(col, row) : col.get(row);
+        return matchCond(col.type || 'text', raw, c);
+      })));
     }
 
     const ctrl = {
       cellHtml, bind, apply,
       activeCount: () => cols.filter((c) => activeConds(c.key).length).length,
       clear: () => { Object.keys(state).forEach((k) => delete state[k]); cols.forEach((c) => refreshCell(c.key)); fire(true); },
-      set: (key, op, v, v2) => { state[key] = [{ op: op || DEFAULT_OP[typeOf(key)], v: v == null ? '' : v, v2: v2 == null ? '' : v2 }]; refreshCell(key); fire(true); },
+      set: (key, op, v, v2) => {
+        op = op || DEFAULT_OP[typeOf(key)];
+        if (op === 'in' || op === 'not_in') state[key] = [{ op, v: '', v2: '', vals: (Array.isArray(v) ? v : (v == null || v === '' ? [] : [v])) }];
+        else state[key] = [{ op, v: v == null ? '' : v, v2: v2 == null ? '' : v2, vals: [] }];
+        refreshCell(key); fire(true);
+      },
+      isEnum,
       get: (key) => (state[key] ? JSON.parse(JSON.stringify(state[key])) : null),
       state,
     };

@@ -80,7 +80,7 @@
   </style>
   <script src="/js/countries.js"></script>
   <script src="/js/image-lightbox.js"></script>
-  <script src="/js/column-filters.js?v=1"></script>
+  <script src="/js/column-filters.js?v=2"></script>
 </head>
 <body>
   <div id="sidebar"></div>
@@ -3141,7 +3141,7 @@
     }
     const MV_COLS = [
       { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (mv) => new Date(mv.factorify_moved_at || mv.created_at) },
-      { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (mv) => ((MV_TYPES[mv.type] || {}).label || mv.type) + ' ' + mv.type },
+      { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (mv) => ((MV_TYPES[mv.type] || {}).label || mv.type) + ' ' + mv.type, enumValue: (mv) => (MV_TYPES[mv.type] || {}).label || mv.type },
       { key: 'mat', label: 'Zboží', type: 'text', ph: 'Název nebo kód…', get: (mv) => (mv.material?.name || mv.material_name || '') + ' ' + (mv.material?.code || '') },
       { key: 'wh', label: 'Sklad', type: 'text', ph: 'Sklad…', get: (mv) => mv.warehouse?.name || mv.warehouse_name || '' },
       { key: 'loc', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (mv) => mvLoc(mv) },
@@ -3213,8 +3213,8 @@
         if (b.dataset.act === 'desc') mvSetSort(key, -1);
         else if (b.dataset.act === 'asc') mvSetSort(key, 1);
         else if (b.dataset.act === 'none') { MV_SORT.key = null; mvMarkSort(); renderMovementRows(); }
-        else if (b.dataset.act === 'unpick') { MV_CF.set(key, 'contains', ''); }
-        else if (b.dataset.pick != null) { MV_CF.set(key, 'contains', pickVals[+b.dataset.pick]); }
+        else if (b.dataset.act === 'unpick') { MV_CF.set(key, MV_CF.isEnum(key) ? 'in' : 'contains', ''); }
+        else if (b.dataset.pick != null) { const v = pickVals[+b.dataset.pick]; if (MV_CF.isEnum(key)) MV_CF.set(key, 'in', [v]); else MV_CF.set(key, 'contains', v); }
         mvCloseSortMenu();
       });
     }

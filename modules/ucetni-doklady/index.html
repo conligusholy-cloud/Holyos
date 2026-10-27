@@ -230,7 +230,7 @@
     .dv-actions-l,.dv-actions-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     @media(max-width:800px){.dv-summary{grid-template-columns:1fr}.dv-money{text-align:left}}
 </style>
-  <script src="/js/column-filters.js?v=1"></script>
+  <script src="/js/column-filters.js?v=2"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -974,8 +974,8 @@
       { key: 'pay', label: 'Způsob úhrady', type: 'text', ph: 'Úhrada…', get: (i) => ((PAYMENT_METHOD[i.payment_method] || {}).label || i.payment_method || ''), pick: true },
       { key: 'issued', label: 'Vystaveno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => ivDate(i.date_issued) },
       { key: 'due', label: 'Splatnost', type: 'date', ph: 'dd.mm.rrrr', get: (i) => ivDate(i.date_due) },
-      { key: 'order', label: 'Objednávka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'order'), pick: true },
-      { key: 'receipt', label: 'Příjemka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'receipt'), pick: true },
+      { key: 'order', label: 'Objednávka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'order'), enum: true, enumValue: (i) => { const v = ivHas(i, 'order'); return v.startsWith('ano ručně') ? 'ano ručně' : v.startsWith('ano') ? 'ano' : 'ne'; }, pick: true },
+      { key: 'receipt', label: 'Příjemka', type: 'text', ph: 'ano / ne', get: (i) => ivHas(i, 'receipt'), enum: true, enumValue: (i) => { const v = ivHas(i, 'receipt'); return v.startsWith('ano ručně') ? 'ano ručně' : v.startsWith('ano') ? 'ano' : 'ne'; }, pick: true },
       { key: 'creator', label: 'Založil', type: 'text', ph: 'Založil…', get: (i) => creatorLabel(i), pick: true },
       { key: 'created', label: 'Založeno', type: 'date', ph: 'dd.mm.rrrr', get: (i) => ivDate(i.created_at) },
     ];
@@ -1040,8 +1040,8 @@
         if (b.dataset.act === 'desc') { INV_SORT.key = key; INV_SORT.dir = -1; }
         else if (b.dataset.act === 'asc') { INV_SORT.key = key; INV_SORT.dir = 1; }
         else if (b.dataset.act === 'none') INV_SORT.key = null;
-        else if (b.dataset.act === 'unpick') { IV_CF.set(key, 'contains', ''); return; }
-        else if (b.dataset.pick != null) { const v = pickVals[+b.dataset.pick]; IV_CF.set(key, 'contains', v === 'ano' ? 'ano !ručně' : v); return; }
+        else if (b.dataset.act === 'unpick') { IV_CF.set(key, IV_CF.isEnum(key) ? 'in' : 'contains', ''); return; }
+        else if (b.dataset.pick != null) { const v = pickVals[+b.dataset.pick]; if (IV_CF.isEnum(key)) IV_CF.set(key, 'in', [v]); else IV_CF.set(key, 'contains', v === 'ano' ? 'ano !ručně' : v); return; }
         ivMarkSort(); renderInvoiceRows();
       });
     }
