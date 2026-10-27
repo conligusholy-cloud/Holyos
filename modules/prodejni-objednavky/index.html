@@ -2618,7 +2618,7 @@
         let pricelistItems = [];
         try {
           const plRes = await fetch('/api/wh/pricelist?active=true&kind=machine');
-          if (plRes.ok) pricelistItems = await plRes.json();
+          if (plRes.ok) { const pl = await plRes.json(); pricelistItems = Array.isArray(pl) ? pl : (Array.isArray(pl && pl.items) ? pl.items : []); }
         } catch(e) { console.warn('pricelist fetch fail', e); }
         if (products.length === 0) { try { const r2 = await fetch('/api/production/products?type=product'); products = await r2.json(); } catch(e) {} }
         if (companies.length === 0) await reloadCompanies();

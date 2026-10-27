@@ -744,7 +744,7 @@ app.get('/vybery-admin/', serveVyberyAdmin);
 app.use('/api/auth', authRoutes);
 app.use('/api/hr/applicants', applicantsRoutes); // musí být PŘED /api/hr (pevný podcesta)
 app.use('/api/hr', hrRoutes);
-app.use('/api/wh/pricelist', purchasePricelistRoutes); // Nákupní ceník — PŘED /api/wh (pevná podcesta)
+app.use('/api/wh/purchase-pricelist', purchasePricelistRoutes); // Nákupní ceník — vlastní cesta (/api/wh/pricelist = prodejní ceník strojů ve warehouse.routes)
 app.use('/api/wh/inquiries', purchaseInquiriesRoutes); // Poptávky u dodavatelů (před /api/wh, ať je nepohltí :id routy)
 app.use('/api/wh', warehouseRoutes);
 app.use('/api/wh', warehouseV2Routes); // Sklad 2.0 — moves, lookup, sync (mountnuté za legacy)

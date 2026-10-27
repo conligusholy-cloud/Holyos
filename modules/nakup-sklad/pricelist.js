@@ -85,7 +85,7 @@
     await ensureCompanies();
     box.innerHTML = '<div style="color:var(--text2)">Načítám…</div>';
     try {
-      var r = await fetch('/api/wh/pricelist/material/' + matId, { cache: 'no-store' });
+      var r = await fetch('/api/wh/purchase-pricelist/material/' + matId, { cache: 'no-store' });
       if (!r.ok) throw new Error(await jerr(r));
       cur.offers = await r.json();
     } catch (e) { box.innerHTML = '<div style="color:#ef4444">Nepodařilo se načíst: ' + T(e.message) + '</div>'; return; }
@@ -150,7 +150,7 @@
     if (!body.supplier_id) { alert('Vyber dodavatele.'); return; }
     if (!tiers.length) { alert('Zadej alespoň jednu cenu.'); return; }
     try {
-      var r = await fetch(id ? '/api/wh/pricelist/' + id : '/api/wh/pricelist/material/' + cur.matId, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      var r = await fetch(id ? '/api/wh/purchase-pricelist/' + id : '/api/wh/purchase-pricelist/material/' + cur.matId, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!r.ok) { alert('Uložení selhalo: ' + await jerr(r)); return; }
       var j = await r.json(); applySync(j.material_sync);
       await window.loadMatPricing(cur.matId);
@@ -159,7 +159,7 @@
 
   window.plPrimary = async function (id) {
     try {
-      var r = await fetch('/api/wh/pricelist/' + id + '/primary', { method: 'POST' });
+      var r = await fetch('/api/wh/purchase-pricelist/' + id + '/primary', { method: 'POST' });
       if (!r.ok) { alert('Chyba: ' + await jerr(r)); return; }
       var j = await r.json(); applySync(j.material_sync); await window.loadMatPricing(cur.matId);
     } catch (e) { alert('Chyba: ' + e.message); }
@@ -168,7 +168,7 @@
   window.plDel = async function (id) {
     if (!confirm('Smazat tuto nabídku dodavatele včetně všech cen?')) return;
     try {
-      var r = await fetch('/api/wh/pricelist/' + id, { method: 'DELETE' });
+      var r = await fetch('/api/wh/purchase-pricelist/' + id, { method: 'DELETE' });
       if (!r.ok) { alert('Chyba: ' + await jerr(r)); return; }
       var j = await r.json(); applySync(j.material_sync); await window.loadMatPricing(cur.matId);
     } catch (e) { alert('Chyba: ' + e.message); }
@@ -231,7 +231,7 @@
     if (!append) { pl.groups = []; box.innerHTML = '<div class="empty-state">Načítám…</div>'; }
     var q = document.getElementById('pl-search').value.trim();
     var sid = document.getElementById('pl-supplier').value;
-    var url = '/api/wh/pricelist?limit=1000&offset=' + pl.groups.length + (q ? '&q=' + encodeURIComponent(q) : '') + (sid ? '&supplier_id=' + sid : '') + (document.getElementById('pl-active').checked ? '' : '&only_active=0');
+    var url = '/api/wh/purchase-pricelist?limit=1000&offset=' + pl.groups.length + (q ? '&q=' + encodeURIComponent(q) : '') + (sid ? '&supplier_id=' + sid : '') + (document.getElementById('pl-active').checked ? '' : '&only_active=0');
     try {
       var r = await fetch(url, { cache: 'no-store' });
       if (!r.ok) throw new Error(await jerr(r));

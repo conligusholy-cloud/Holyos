@@ -5,7 +5,7 @@
 // Jedno zboží může mít více dodavatelů; jedna nabídka = dodavatel × zboží × platnost.
 // Primární nabídka se zrcadlí do polí zboží (supplier_id, unit_price, lead_time_days),
 // aby dál fungovala stávající logika objednávek, nákupního asistenta a plánování.
-// Mount: /api/wh/pricelist
+// Mount: /api/wh/purchase-pricelist
 // =============================================================================
 
 const express = require('express');
@@ -131,7 +131,7 @@ function validationError(res, parsed) {
   return res.status(400).json({ error: (first && first.message) || 'Neplatná data', issues: parsed.error.issues });
 }
 
-// ---------- GET /api/wh/pricelist — přehled ceníku (zboží × dodavatelé) ----------
+// ---------- GET /api/wh/purchase-pricelist — přehled ceníku (zboží × dodavatelé) ----------
 // Query: q (kód/název zboží), supplier_id, only_active=1 (výchozí), no_offer=1 (zboží bez ceníku), limit, offset
 router.get('/', async (req, res, next) => {
   try {
@@ -186,7 +186,7 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- GET /api/wh/pricelist/material/:materialId — nabídky jednoho zboží ----------
+// ---------- GET /api/wh/purchase-pricelist/material/:materialId — nabídky jednoho zboží ----------
 router.get('/material/:materialId', async (req, res, next) => {
   try {
     const materialId = parseInt(req.params.materialId);
@@ -198,7 +198,7 @@ router.get('/material/:materialId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- POST /api/wh/pricelist/material/:materialId — nová nabídka dodavatele ----------
+// ---------- POST /api/wh/purchase-pricelist/material/:materialId — nová nabídka dodavatele ----------
 router.post('/material/:materialId', async (req, res, next) => {
   try {
     const materialId = parseInt(req.params.materialId);
@@ -238,7 +238,7 @@ router.post('/material/:materialId', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- PUT /api/wh/pricelist/:id — úprava nabídky (včetně nahrazení tierů) ----------
+// ---------- PUT /api/wh/purchase-pricelist/:id — úprava nabídky (včetně nahrazení tierů) ----------
 router.put('/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
@@ -278,7 +278,7 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- POST /api/wh/pricelist/:id/primary — nastavit jako primární ----------
+// ---------- POST /api/wh/purchase-pricelist/:id/primary — nastavit jako primární ----------
 router.post('/:id/primary', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
@@ -294,7 +294,7 @@ router.post('/:id/primary', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// ---------- DELETE /api/wh/pricelist/:id ----------
+// ---------- DELETE /api/wh/purchase-pricelist/:id ----------
 router.delete('/:id', async (req, res, next) => {
   try {
     const id = parseInt(req.params.id);
