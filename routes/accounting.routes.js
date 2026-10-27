@@ -257,6 +257,7 @@ router.get('/invoices/:id', async (req, res, next) => {
           include: { payment: { select: {
             id: true, executed_date: true, amount: true, currency: true, method: true, status: true, direction: true,
             partner_name: true, partner_account: true, variable_symbol: true,
+            batch: { select: { id: true, batch_number: true, status: true, due_date: true } },
             bank_transaction: { select: { id: true, transaction_date: true, amount: true, direction: true, counterparty_name: true, counterparty_account: true, variable_symbol: true, message: true, statement: { select: { statement_number: true } }, bank_account: { select: { name: true } } } },
           } } },
           orderBy: { id: 'asc' },
@@ -1818,6 +1819,54 @@ const paymentBatchCreateSchema = z.object({
   due_date: z.string().optional(), // ISO; default = dnes
   format: z.enum(['ABO-KPC', 'ABO-GPC', 'SEPA-XML', 'FIO-API', 'CSOB-API']).default('ABO-KPC'),
   note: z.string().optional().nullable(),
+  // z Plánu plateb: povolí i doklady mimo stav „K platbě" (rozpracované, schválené, částečně zaplacené),
+  // ale vždy jen na ověřený účet příjemce (anti-podvod)
+  from_plan: z.boolean().optional(),
+});
+
+// GET /api/accounting/payment-plan — Plán plateb: nezaplacené přijaté doklady (po dnech splatnosti)
+// query: to=YYYY-MM-DD (volitelně jen do data)
+router.get('/payment-plan', async (req, res, next) => {
+  try {
+    const where = { direction: 'ap', status: { notIn: ['paid', 'cancelled', 'written_off', 'archived'] } };
+    if (req.query.to) where.date_due = { lte: new Date(String(req.query.to)) };
+    const invoices = await prisma.invoice.findMany({
+      where,
+      select: {
+        id: true, invoice_number: true, external_number: true, type: true, status: true, variable_symbol: true,
+        constant_symbol: true, specific_symbol: true, date_issued: true, date_due: true, total: true, paid_amount: true,
+        currency: true, payment_method: true, partner_bank_account: true, partner_iban: true, company_id: true, tags: true,
+        company: { select: { id: true, name: true } },
+        allocations: { select: { amount: true, payment: { select: { status: true, batch: { select: { id: true, batch_number: true, status: true } } } } } },
+      },
+      orderBy: [{ date_due: 'asc' }, { id: 'asc' }],
+    });
+    const verCache = new Map();
+    const out = [];
+    for (const inv of invoices) {
+      const remaining = Math.round((Number(inv.total) - Number(inv.paid_amount || 0)) * 100) / 100;
+      if (remaining <= 0.009) continue;
+      let ver = { status: 'no_account' };
+      if ((inv.payment_method || 'bank_transfer') === 'bank_transfer' && (inv.partner_bank_account || inv.partner_iban)) {
+        const key = inv.company_id + '|' + (inv.partner_bank_account || '') + '|' + (inv.partner_iban || '');
+        if (!verCache.has(key)) {
+          try { verCache.set(key, await verifyAccount({ companyId: inv.company_id, partnerBankAccount: inv.partner_bank_account, partnerIban: inv.partner_iban, useRegistry: false })); }
+          catch (e) { verCache.set(key, { status: 'unknown', needs_physical: true, message: e.message }); }
+        }
+        const v = verCache.get(key); ver = { status: v.status, needs_physical: !!v.needs_physical, message: v.message };
+      }
+      const queued = (inv.allocations || []).find((a) => a.payment && a.payment.batch && ['queued', 'submitted', 'draft'].includes(a.payment.status) && !['cancelled', 'rejected'].includes(a.payment.batch.status));
+      out.push({
+        id: inv.id, invoice_number: inv.invoice_number, external_number: inv.external_number, type: inv.type, status: inv.status,
+        company: inv.company, variable_symbol: inv.variable_symbol, date_due: inv.date_due, date_issued: inv.date_issued,
+        total: inv.total, paid_amount: inv.paid_amount, remaining, currency: inv.currency || 'CZK',
+        payment_method: inv.payment_method || 'bank_transfer', partner_bank_account: inv.partner_bank_account, partner_iban: inv.partner_iban,
+        verification: ver,
+        in_batch: queued ? { id: queued.payment.batch.id, batch_number: queued.payment.batch.batch_number } : null,
+      });
+    }
+    res.json(out);
+  } catch (err) { next(err); }
 });
 
 // GET /api/accounting/payment-batches — list
@@ -1895,7 +1944,7 @@ router.post('/payment-batches', async (req, res, next) => {
     if (!parsed.success) {
       return res.status(400).json({ error: 'Validace selhala', details: parsed.error.issues });
     }
-    const { bank_account_id, invoice_ids, due_date, format, note } = parsed.data;
+    const { bank_account_id, invoice_ids, due_date, format, note, from_plan } = parsed.data;
 
     // 1) Bankovní účet existuje a je aktivní
     const bankAccount = await prisma.bankAccount.findUnique({ where: { id: bank_account_id } });
@@ -1910,13 +1959,32 @@ router.post('/payment-batches', async (req, res, next) => {
     if (invoices.length !== invoice_ids.length) {
       return res.status(400).json({ error: 'Některé faktury neexistují' });
     }
-    const wrongStatus = invoices.filter(i => i.status !== 'ready_to_pay');
+    const wrongStatus = from_plan
+      ? invoices.filter(i => ['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(i.status))
+      : invoices.filter(i => i.status !== 'ready_to_pay');
     if (wrongStatus.length > 0) {
       return res.status(400).json({
-        error: 'Některé faktury nejsou ve stavu "K platbě"',
+        error: from_plan ? 'Některé doklady jsou už zaplacené, zrušené nebo v jiném příkazu' : 'Některé faktury nejsou ve stavu "K platbě"',
         invalid: wrongStatus.map(i => ({ id: i.id, invoice_number: i.invoice_number, status: i.status })),
       });
     }
+    if (from_plan) {
+      // Anti-podvod: z Plánu plateb jen na ověřený účet, jen převodem a v CZK (ABO)
+      const bad = [];
+      for (const i of invoices) {
+        if ((i.payment_method || 'bank_transfer') !== 'bank_transfer') { bad.push({ id: i.id, invoice_number: i.invoice_number, reason: 'nehradí se převodem' }); continue; }
+        if ((i.currency || 'CZK') !== 'CZK') { bad.push({ id: i.id, invoice_number: i.invoice_number, reason: 'měna ' + i.currency }); continue; }
+        if (i.partner_bank_account || i.partner_iban) {
+          const v = await verifyAccount({ companyId: i.company_id, partnerBankAccount: i.partner_bank_account, partnerIban: i.partner_iban });
+          if (v.needs_physical) bad.push({ id: i.id, invoice_number: i.invoice_number, reason: 'neověřený účet příjemce' });
+        }
+      }
+      if (bad.length) return res.status(400).json({ error: 'Některé doklady nelze zařadit do příkazu', invalid: bad });
+    }
+    // Platí se zbývající částka (u částečně zaplacených jen doplatek)
+    const payAmount = (i) => Math.round((Number(i.total || 0) - Number(i.paid_amount || 0)) * 100) / 100;
+    const zero = invoices.filter(i => payAmount(i) <= 0);
+    if (zero.length) return res.status(400).json({ error: 'Některé doklady nemají co doplatit', invalid: zero.map(i => ({ id: i.id, invoice_number: i.invoice_number })) });
     const wrongDirection = invoices.filter(i => i.direction !== 'ap');
     if (wrongDirection.length > 0) {
       return res.status(400).json({
@@ -1934,7 +2002,7 @@ router.post('/payment-batches', async (req, res, next) => {
     }
 
     // 3) Approval limit guard
-    const totalAmount = invoices.reduce((s, i) => s + Number(i.total || 0), 0);
+    const totalAmount = invoices.reduce((s, i) => s + payAmount(i), 0);
     const limit = await getPaymentBatchApprovalLimit();
     if (limit > 0 && totalAmount > limit && !req.user?.isSuperAdmin) {
       return res.status(403).json({
@@ -1953,7 +2021,7 @@ router.post('/payment-batches', async (req, res, next) => {
       senderAccount: { account: `${bankAccount.account_number}/${bankAccount.bank_code}` },
       payments: invoices.map(i => ({
         targetAccount: i.partner_bank_account || i.partner_iban,
-        amount: Number(i.total),
+        amount: payAmount(i),
         variableSymbol: i.variable_symbol,
         constantSymbol: i.constant_symbol,
         specificSymbol: i.specific_symbol,
@@ -1979,7 +2047,7 @@ router.post('/payment-batches', async (req, res, next) => {
           total_count: invoices.length,
           total_amount: totalAmount,
           due_date: dueDate,
-          note: note || null,
+          note: note || (from_plan ? 'Z Plánu plateb' : null),
           created_by_id: personId,
         },
       });
@@ -1991,9 +2059,9 @@ router.post('/payment-batches', async (req, res, next) => {
             direction: 'out',
             method: 'bank_transfer',
             batch_id: batch.id,
-            amount: inv.total,
+            amount: payAmount(inv),
             currency: inv.currency || 'CZK',
-            amount_czk: inv.total, // FX rate řešíme až ve Fázi 5
+            amount_czk: payAmount(inv), // FX rate řešíme až ve Fázi 5
             partner_name: inv.company?.name || inv.external_number || `Faktura ${inv.invoice_number}`,
             partner_account: inv.partner_bank_account,
             variable_symbol: inv.variable_symbol,
@@ -2004,8 +2072,8 @@ router.post('/payment-batches', async (req, res, next) => {
             allocations: {
               create: [{
                 invoice_id: inv.id,
-                amount: inv.total,
-                note: `Generováno do batche ${batchNumber}`,
+                amount: payAmount(inv),
+                note: `Platební příkaz ${batchNumber} [prev:${inv.status}]`,
               }],
             },
           },
@@ -2132,16 +2200,27 @@ router.post('/payment-batches/:id/cancel', async (req, res, next) => {
     }
 
     const invoiceIds = [];
+    const prevById = {};
     for (const p of batch.payments) {
-      for (const a of p.allocations) invoiceIds.push(a.invoice_id);
+      for (const a of p.allocations) {
+        invoiceIds.push(a.invoice_id);
+        const m = a.note && String(a.note).match(/\[prev:([a-z_0-9]+)\]/);
+        if (m) prevById[a.invoice_id] = m[1];
+      }
+    }
+    if (batch.payments.some(p => p.bank_transaction_id)) {
+      return res.status(400).json({ error: 'Některé platby příkazu už jsou spárované s výpisem — nejdřív je v Banka → Platby odpoj.' });
     }
 
     await prisma.$transaction(async tx => {
-      // Vrátit faktury do ready_to_pay (jen pokud jsou stále v payment_queued)
-      await tx.invoice.updateMany({
-        where: { id: { in: invoiceIds }, status: 'payment_queued' },
-        data: { status: 'ready_to_pay' },
-      });
+      // Vrátit doklady do původního stavu (z Plánu plateb uložený [prev:…], jinak „K platbě")
+      for (const invId of [...new Set(invoiceIds)]) {
+        const prev = prevById[invId];
+        await tx.invoice.updateMany({
+          where: { id: invId, status: 'payment_queued' },
+          data: { status: prev && !['payment_queued', 'paid'].includes(prev) ? prev : 'ready_to_pay' },
+        });
+      }
       // Smazat allocations a payments
       const paymentIds = batch.payments.map(p => p.id);
       await tx.paymentAllocation.deleteMany({ where: { payment_id: { in: paymentIds } } });

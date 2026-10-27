@@ -287,6 +287,40 @@ async function applyMatch(tx, allocations, prismaCtx, userContext, matchMethod =
     }
   }
 
+  // Platba odchází z platebního příkazu? → napoj bankovní pohyb na už existující platbu příkazu
+  // (doklad i platba pak nesou číslo příkazu PB-…)
+  if (txDirection === 'out' && allocations.length === 1) {
+    const a0 = allocations[0];
+    const queued = await prismaCtx.payment.findFirst({
+      where: {
+        batch_id: { not: null }, bank_transaction_id: null, status: { in: ['queued', 'submitted', 'draft'] },
+        allocations: { some: { invoice_id: a0.invoice_id } },
+      },
+      include: { allocations: true, batch: { select: { id: true, batch_number: true } } },
+      orderBy: { id: 'asc' },
+    });
+    if (queued && Math.abs(Number(queued.amount) - txAmount) <= 0.01 && queued.allocations.length === 1) {
+      const payment = await prismaCtx.payment.update({
+        where: { id: queued.id },
+        data: { bank_transaction_id: tx.id, status: 'executed', executed_date: tx.transaction_date, partner_account: tx.counterparty_account || queued.partner_account },
+      });
+      const inv = invoices[0];
+      const newPaid = Number(inv.paid_amount) + txAmount;
+      const newStatus = newPaid + 0.01 >= Number(inv.total) ? 'paid' : (newPaid > 0.009 ? 'partially_paid' : inv.status);
+      const upd = await prismaCtx.invoice.update({ where: { id: inv.id }, data: { paid_amount: newPaid, status: newStatus } });
+      const updatedTx = await prismaCtx.bankTransaction.update({
+        where: { id: tx.id },
+        data: { match_status: 'matched', match_method: 'batch', resolved_by_id: userContext?.id || null, resolved_at: new Date(), note: 'Platební příkaz ' + (queued.batch?.batch_number || '') },
+      });
+      // všechny platby příkazu provedené → příkaz zpracován
+      try {
+        const open = await prismaCtx.payment.count({ where: { batch_id: queued.batch_id, status: { notIn: ['executed', 'cancelled'] } } });
+        if (open === 0) await prismaCtx.paymentBatch.update({ where: { id: queued.batch_id }, data: { status: 'processed', processed_at: new Date() } });
+      } catch (e) { /* ignore */ }
+      return { payment, updated_invoices: [upd], transaction: updatedTx, batch: queued.batch };
+    }
+  }
+
   // Vytvoř Payment
   const partnerName = tx.counterparty_name
     || (invoices[0] ? `Faktura ${invoices[0].invoice_number}` : 'Bankovní transakce');
@@ -391,6 +425,7 @@ async function unmatchTransaction(transactionId, prismaCtx, userContext) {
     });
   }
 
+  const fromBatch = !!tx.payment.batch_id;
   // Vrať invoice.paid_amount
   for (const alloc of tx.payment.allocations) {
     const newPaid = Number(alloc.invoice.paid_amount) - Number(alloc.amount);
@@ -416,9 +451,19 @@ async function unmatchTransaction(transactionId, prismaCtx, userContext) {
     });
   }
 
-  // Smaž Allocations a Payment
-  await prismaCtx.paymentAllocation.deleteMany({ where: { payment_id: tx.payment.id } });
-  await prismaCtx.payment.delete({ where: { id: tx.payment.id } });
+  if (fromBatch) {
+    // platba patří k platebnímu příkazu → jen odpojit bankovní pohyb, příkaz zůstává
+    await prismaCtx.payment.update({ where: { id: tx.payment.id }, data: { bank_transaction_id: null, status: 'queued', executed_date: null } });
+    for (const alloc of tx.payment.allocations) {
+      const inv = await prismaCtx.invoice.findUnique({ where: { id: alloc.invoice_id }, select: { paid_amount: true } });
+      if (inv && Number(inv.paid_amount) <= 0.009) await prismaCtx.invoice.update({ where: { id: alloc.invoice_id }, data: { status: 'payment_queued' } });
+    }
+    try { await prismaCtx.paymentBatch.updateMany({ where: { id: tx.payment.batch_id, status: 'processed' }, data: { status: 'submitted_to_bank', processed_at: null } }); } catch (e) { /* ignore */ }
+  } else {
+    // Smaž Allocations a Payment
+    await prismaCtx.paymentAllocation.deleteMany({ where: { payment_id: tx.payment.id } });
+    await prismaCtx.payment.delete({ where: { id: tx.payment.id } });
+  }
 
   // Reset transakce
   return prismaCtx.bankTransaction.update({

@@ -544,6 +544,7 @@ router.get('/transactions', async (req, res, next) => {
         match_rule: { select: { id: true, name: true } },
         payment: {
           include: {
+            batch: { select: { id: true, batch_number: true } },
             allocations: { include: { invoice: { select: { id: true, invoice_number: true, external_number: true, total: true, paid_amount: true, status: true, direction: true, currency: true, company: { select: { name: true } } } } } },
           },
         },
