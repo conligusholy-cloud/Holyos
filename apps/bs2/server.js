@@ -1750,7 +1750,7 @@ let SUPPORT_STATS = { at: 0, v: null };
 async function supportStats() {
   if (SUPPORT_STATS.v && Date.now() - SUPPORT_STATS.at < 60e3) return SUPPORT_STATS.v;
   // eurový účet; staré záznamy před opravou měnu nemají — poznají se podle chybějícího roku
-  const EUR = "(partner_support->>'currency' = 'EUR' OR (partner_support->>'currency' IS NULL AND partner_support->>'year' IS NULL))";
+  const EUR = "(coalesce(partner_support->>'currency','') = 'EUR' OR (partner_support->>'currency' IS NULL AND partner_support->>'year' IS NULL))"; // coalesce: NULL by jinak v NOT (…) vyřadil i korunové účty
   try {
     const r = (await q(`SELECT
       count(*) FILTER (WHERE NOT ${EUR})::int AS czk_n,
