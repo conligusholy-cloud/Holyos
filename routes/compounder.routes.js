@@ -5427,6 +5427,9 @@ router.get('/analytics/summary', requireAuth, async (req, res, next) => {
       topSections,
       todayPortalVisitors: todayPortalLeads.size,
       todayStudyMs,
+      // Celkový počet kontaktů v databázi (bez testovacích) + počet testovacích zvlášť
+      totalLeads: await prisma.compounderLead.count({ where: { is_test: false } }).catch(() => null),
+      testLeads: testLeadIds.size,
     });
   } catch (err) {
     next(err);
