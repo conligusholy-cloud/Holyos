@@ -70,7 +70,10 @@
 
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <div></div>
-        <button class="btn btn-primary" onclick="openCreateModal()">+ Nové pravidlo</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-secondary" onclick="openRulesGuide()">📖 Návod</button>
+          <button class="btn btn-primary" onclick="openCreateModal()">+ Nové pravidlo</button>
+        </div>
       </div>
 
       <table class="data-table" id="rules-table">
@@ -375,6 +378,74 @@
 
     loadRules();
   })();
+      // ─── Návod k modulu ───
+    window.openRulesGuide = function() {
+      const old = document.getElementById('rules-guide'); if (old) old.remove();
+      const ov = document.createElement('div'); ov.id = 'rules-guide';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.6);display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px';
+      const h3 = 'style="margin:18px 0 6px;font-size:15px;color:#c7d2fe"';
+      const td = 'style="padding:6px 10px;border-top:1px solid var(--border,#374151);vertical-align:top"';
+      ov.innerHTML = '<div style="background:var(--surface,#1f2937);color:var(--text,#e5e7eb);border:1px solid var(--border,#374151);border-radius:12px;max-width:760px;width:100%;padding:22px 26px;line-height:1.55;font-size:14px;box-shadow:0 20px 50px rgba(0,0,0,.5)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center"><h2 style="margin:0;font-size:19px">📖 Návod — Pravidla párování</h2><button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'rules-guide\').remove()">✕ Zavřít</button></div>' +
+
+        '<h3 ' + h3 + '>K čemu to je</h3>' +
+        '<p style="margin:0">Pravidla automaticky zpracují <b>opakované bankovní pohyby</b>, které se nedají spárovat s fakturou podle variabilního symbolu — kartové platby, bankovní poplatky, trvalé příkazy, energie, nájmy… Ušetří ruční klikání v Bance.</p>' +
+
+        '<h3 ' + h3 + '>Kdy se pravidla použijí</h3>' +
+        '<ol style="margin:0;padding-left:20px">' +
+          '<li>Po nahrání výpisu (i automaticky z e-mailu) nebo po kliknutí na <b>🔗 Auto-match</b> u výpisu.</li>' +
+          '<li>Berou se jen <b>nepárované</b> transakce — už spárované ani ručně vyřešené se nemění.</li>' +
+          '<li>Pravidla se zkoušejí <b>od nejvyšší priority</b>. Použije se <b>první</b> pravidlo, které sedí — ostatní se přeskočí.</li>' +
+          '<li>Když žádné pravidlo nesedí, proběhne běžné párování podle <b>VS + částky</b>.</li>' +
+        '</ol>' +
+
+        '<h3 ' + h3 + '>Kritéria (podmínky)</h3>' +
+        '<p style="margin:0 0 6px">Vyplň jen to, co potřebuješ. <b>Všechny vyplněné podmínky musí platit zároveň.</b> Prázdné pole = „cokoliv".</p>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<tr><td ' + td + '><b>Směr</b></td><td ' + td + '>Příjem (peníze přišly) / Výdaj (odešly).</td></tr>' +
+          '<tr><td ' + td + '><b>Účet protistrany</b></td><td ' + td + '>Číslo účtu. S kódem banky (<code>2023150318/2600</code>) = přesná shoda; bez kódu (<code>2023150318</code>) = libovolná banka.</td></tr>' +
+          '<tr><td ' + td + '><b>Název protistrany obsahuje</b></td><td ' + td + '>Kus textu z názvu protistrany nebo zprávy, velikost písmen nevadí (např. <code>OKAMŽITÁ</code>, <code>TRVALÝ</code>).</td></tr>' +
+          '<tr><td ' + td + '><b>Variabilní symbol</b></td><td ' + td + '>Přesná shoda VS (úvodní nuly se ignorují), např. <code>6042</code> u kartových plateb.</td></tr>' +
+          '<tr><td ' + td + '><b>Min. / Max. částka</b></td><td ' + td + '>Rozsah částky v Kč (bez znaménka).</td></tr>' +
+        '</table>' +
+
+        '<h3 ' + h3 + '>Akce (co se s platbou stane)</h3>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<tr><td ' + td + '><span class="badge" style="background:#6b728033;color:#d1d5db;padding:2px 8px;border-radius:6px">Ignorovat</span></td><td ' + td + '>Platba se označí jako <b>Ignorovaná</b> a zmizí z nepárovaných. Pro poplatky, kartové platby, převody mezi vlastními účty.</td></tr>' +
+          '<tr><td ' + td + '><span style="background:#10b98133;color:#34d399;padding:2px 8px;border-radius:6px">Auto-match faktura</span></td><td ' + td + '>Hledá nezaplacenou fakturu se <b>stejným VS nebo stejným účtem protistrany</b> a <b>přesně stejnou zbývající částkou</b>. Najde-li právě jednu, spáruje ji. Jinak platbu dá <b>K posouzení</b>. Pro energie, nájmy, pravidelné dodavatele.</td></tr>' +
+          '<tr><td ' + td + '><span style="background:#f59e0b33;color:#fbbf24;padding:2px 8px;border-radius:6px">Posoudit</span></td><td ' + td + '>Platba se označí <b>K posouzení</b>, aby ji někdo ručně zkontroloval (např. trvalé příkazy).</td></tr>' +
+          '<tr><td ' + td + '><b>Cost-center</b></td><td ' + td + '>Zatím jen označí platbu jako vyřešenou pro středisko — plné zaúčtování na středisko přijde později.</td></tr>' +
+        '</table>' +
+
+        '<h3 ' + h3 + '>Jak založit pravidlo — krok za krokem</h3>' +
+        '<ol style="margin:0;padding-left:20px">' +
+          '<li>V <b>Účetní doklady → Banka → Platby</b> najdi opakující se platbu a opiš si účet protistrany, VS nebo text ze zprávy.</li>' +
+          '<li>Tady klikni <b>+ Nové pravidlo</b>, dej mu srozumitelný název (např. „Energie Přelouč auto-match").</li>' +
+          '<li>Nastav <b>prioritu</b>: konkrétní pravidla vyšší číslo (např. 200), obecná nižší (např. 100).</li>' +
+          '<li>Vyplň kritéria — co nejpřesněji, ať pravidlo nechytá cizí platby (ideálně směr + účet nebo VS).</li>' +
+          '<li>Vyber akci a ulož. Projeví se na nových výpisech a při dalším kliknutí na <b>🔗 Auto-match</b>.</li>' +
+        '</ol>' +
+
+        '<h3 ' + h3 + '>Příklady</h3>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+          '<tr><td ' + td + '>Kartové platby Fio</td><td ' + td + '>Výdaj + VS <code>6042</code> → <b>Ignorovat</b></td></tr>' +
+          '<tr><td ' + td + '>Okamžité úhrady</td><td ' + td + '>Výdaj + název obsahuje <code>OKAMŽITÁ</code> → <b>Ignorovat</b></td></tr>' +
+          '<tr><td ' + td + '>Trvalé příkazy</td><td ' + td + '>Výdaj + název obsahuje <code>TRVALÝ</code> → <b>Posoudit</b></td></tr>' +
+          '<tr><td ' + td + '>Energie</td><td ' + td + '>Výdaj + účet <code>2023150318</code> → <b>Auto-match faktura</b></td></tr>' +
+        '</table>' +
+
+        '<h3 ' + h3 + '>Tipy</h3>' +
+        '<ul style="margin:0;padding-left:20px">' +
+          '<li>Pravidlo dočasně vypneš odškrtnutím <b>Pravidlo aktivní</b> — nemusíš ho mazat.</li>' +
+          '<li>Pozor u akce <b>Ignorovat</b> s příliš obecnou podmínkou (např. jen „Výdaj") — schovala by i platby faktur.</li>' +
+          '<li>Pravidlo zpětně nemění už zpracované platby. Spáruje-li něco špatně, v Bance → Platby klikni na platbu a odpoj ji.</li>' +
+          '<li>Seznam pravidel má filtry a řazení jako ostatní tabulky (šipky ↑↓ v hlavičce).</li>' +
+        '</ul>' +
+      '</div>';
+      ov.addEventListener('click', (e) => { if (e.target === ov) ov.remove(); });
+      document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { ov.remove(); document.removeEventListener('keydown', esc); } });
+      document.body.appendChild(ov);
+    };
   </script>
 </body>
 </html>
