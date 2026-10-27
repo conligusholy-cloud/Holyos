@@ -1022,8 +1022,8 @@
               : '') +
             '<button class="btn btn-secondary btn-sm" onclick="openDetail(' + inv.id + ')">Detail</button>' +
             ((window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
-              && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued', 'draft'].includes(inv.status))
-              ? ' <button class="btn btn-secondary btn-sm" onclick="markInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: ručně označit jako zaplaceno (mimo výpisy)" style="margin-left:4px;color:#22c55e;">✓ Zaplaceno</button>'
+              && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status))
+              ? ' <button class="btn btn-secondary btn-sm" onclick="markInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: ručně označit jako zaplaceno (mimo výpisy)" style="margin-left:4px;color:#22c55e;">✓</button>'
               : '') +
             (window.currentUser?.isSuperAdmin
               ? ' <button class="btn btn-danger btn-sm" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Trvale smazat (super admin)" style="margin-left:4px;">🗑️</button>'
