@@ -58,6 +58,13 @@ async function fetchLegacySupport(email) {
     const text = htmlToText(inv.html);
     if (!/jste podpořili/i.test(text)) return { ok: false, error: /přihl|login/i.test(inv.url + text.slice(0, 500)) ? 'Starý portál nepřihlásil uživatele (fake-login nefunguje bez přihlášeného admina?)' : 'Stránka podpory nemá očekávaný obsah' };
     const data = parseInvests(text);
+    // „Celkem jste podpořili" se na stránce dotahuje AJAXem (v HTML je jen zástupná hodnota = rok)
+    try {
+      const r = await fetch(BASE + '/php/load-support-total.php', { method: 'POST', headers: { cookie: cookieHeader(jar), 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', 'x-requested-with': 'XMLHttpRequest', 'user-agent': 'BS2-admin-sync' }, body: 'user_id=0' });
+      const t = (await r.text()).trim();
+      const n = Number(String(t).replace(/["\s]/g, ''));
+      if (r.ok && isFinite(n)) data.total_all = n; else data.total_all_error = 'load-support-total: ' + t.slice(0, 80);
+    } catch (e) { data.total_all_error = e.message; }
     // jméno/nick v hlavičce — kontrola, že jsme opravdu na účtu tohoto uživatele
     const who = text.match(/Počet pracujících kiosků:\s*\d+\n([^\n]+)\n([^\n]+)\nPřehled/);
     if (who) data.legacy_name = who[1] + ' (' + who[2] + ')';
