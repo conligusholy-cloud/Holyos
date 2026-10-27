@@ -872,7 +872,8 @@
       if (kf.unpaid) qs.set('unpaid', 'true');
       if (kf.needs_review) qs.set('needs_review', 'true');
       // Po splatnosti / dlaždice — ukázat celý seznam (ne jen posledních 200)
-      if (overdue || kf.unpaid || kf.needs_review || status) qs.set('limit', '1000');
+      // Celý seznam (max 1000) — sloupcové filtry pracují nad načtenými daty
+      qs.set('limit', '1000');
       const chip = document.getElementById('kpi-chip');
       if (chip) chip.innerHTML = kf.label ? '<span class="kpi-filter-chip">📊 ' + escapeHtml(kf.label) + ' <button type="button" title="Zrušit filtr z dlaždice" onclick="kpiClear()">✕</button></span>' : '';
 
@@ -882,12 +883,11 @@
         tbody.innerHTML = '<tr><td colspan="16" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
-      if (!r.data.length) {
-        tbody.innerHTML = '<tr><td colspan="16" class="empty-hint">Žádné faktury odpovídající filtrům.</td></tr>';
-        return;
-      }
-      const now = Date.now();
-      tbody.innerHTML = r.data.map(inv => {
+      INV_ALL = Array.isArray(r.data) ? r.data : [];
+      renderInvoiceRows();
+    }
+    function invRowHtml(inv) {
+        const now = Date.now();
         const isOverdue = inv.date_due && new Date(inv.date_due).getTime() < now
           && !['paid','cancelled','written_off','archived'].includes(inv.status);
 
@@ -946,7 +946,168 @@
               : '') +
           '</td>' +
         '</tr>';
-      }).join('');
+    }
+
+    // ─── Chytré filtry po sloupcích + řazení (stejně jako Pohyby ve skladu) ───
+    let INV_ALL = [];
+    const INV_F = {};
+    const INV_SORT = { key: null, dir: 1 };
+    const IV_LIMIT = 500;
+    const ivNorm = (v) => String(v == null ? '' : v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    function ivParseDate(t) {
+      const m = String(t).trim().match(/^(\d{1,2})\.\s*(\d{1,2})\.?\s*(\d{4})?$/);
+      if (!m) return null;
+      return new Date(m[3] ? +m[3] : new Date().getFullYear(), +m[2] - 1, +m[1]);
+    }
+    function ivMatchNum(val, f) {
+      const n = Number(val); const t = f.replace(/\s/g, '').replace(',', '.');
+      let m;
+      if ((m = t.match(/^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)$/))) return n >= +m[1] && n <= +m[2];
+      if ((m = t.match(/^(>=|<=|>|<|=)(-?\d+(?:\.\d+)?)$/))) { const x = +m[2]; return m[1] === '>' ? n > x : m[1] === '<' ? n < x : m[1] === '>=' ? n >= x : m[1] === '<=' ? n <= x : n === x; }
+      if (/^-?\d+(?:\.\d+)?$/.test(t)) return String(val).includes(t) || n === +t;
+      return ivNorm(val).includes(ivNorm(f));
+    }
+    function ivMatchDate(d, f) {
+      const t = ivNorm(f).trim(); if (!t) return true;
+      if (!d || isNaN(d)) return false;
+      const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      if (t === 'dnes') return +day === +today;
+      if (t === 'vcera') return +day === +today - 86400000;
+      let m;
+      if ((m = t.match(/^(.+?)\.\.(.+)$/))) { const a = ivParseDate(m[1]); const b = ivParseDate(m[2]); return (!a || day >= a) && (!b || day <= b); }
+      if ((m = t.match(/^(>=|<=|>|<)(.+)$/))) { const x = ivParseDate(m[2]); if (!x) return true; return m[1] === '>' ? day > x : m[1] === '<' ? day < x : m[1] === '>=' ? day >= x : day <= x; }
+      if ((m = t.match(/^(\d{1,2})\.(\d{4})$/))) return d.getMonth() + 1 === +m[1] && d.getFullYear() === +m[2];
+      return ivNorm(d.toLocaleString('cs-CZ')).replace(/\s/g, '').includes(t.replace(/\s/g, ''));
+    }
+    function ivMatchText(val, f) {
+      const v = ivNorm(val);
+      return ivNorm(f).split(/\s+/).filter(Boolean).every((w) => (w[0] === '!' && w.length > 1 ? !v.includes(w.slice(1)) : v.includes(w)));
+    }
+    const ivDate = (s) => (s ? new Date(s) : null);
+    const ivHas = (inv, field) => {
+      const tags = Array.isArray(inv.tags) ? inv.tags : [];
+      if (field === 'order') return inv.order ? 'ano ' + inv.order.order_number : (tags.includes('manual_order') ? 'ano ručně' : 'ne');
+      return inv.warehouse_document ? 'ano ' + inv.warehouse_document.number : (tags.includes('manual_receipt') ? 'ano ručně' : 'ne');
+    };
+    // Pořadí = pořadí sloupců tabulky (poslední sloupec s tlačítky filtr nemá)
+    const IV_COLS = [
+      { key: 'num', ph: 'Číslo…', get: (i) => i.invoice_number + ' ' + (i.direction || ''), match: ivMatchText },
+      { key: 'type', ph: 'Typ…', get: (i) => (TYPE_LABEL[i.type] || i.type), match: ivMatchText, pick: true },
+      { key: 'status', ph: 'Stav…', get: (i) => (STATUS_LABEL[i.status] || i.status), match: ivMatchText, pick: true },
+      { key: 'company', ph: 'Firma…', get: (i) => i.company?.name || '', match: ivMatchText },
+      { key: 'ext', ph: 'Externí č.…', get: (i) => i.external_number || '', match: ivMatchText },
+      { key: 'vs', ph: 'VS…', get: (i) => i.variable_symbol || '', match: ivMatchText },
+      { key: 'total', ph: '>1000, 5..10', get: (i) => Number(i.total || 0), match: ivMatchNum, kind: 'num' },
+      { key: 'acc', ph: 'Účet / ověřit…', get: (i) => (i.partner_bank_account || i.partner_iban || '') + ' ' + ({ verified: 'známý', mismatch: 'pozor', unknown: 'ověřit' }[(i.bank_account_verification || {}).status] || ''), match: ivMatchText },
+      { key: 'pay', ph: 'Úhrada…', get: (i) => ((PAYMENT_METHOD[i.payment_method] || {}).label || i.payment_method || ''), match: ivMatchText, pick: true },
+      { key: 'issued', ph: '>1.10.2026', get: (i) => ivDate(i.date_issued), match: ivMatchDate, kind: 'date' },
+      { key: 'due', ph: '<dnes, 10.2026', get: (i) => ivDate(i.date_due), match: ivMatchDate, kind: 'date' },
+      { key: 'order', ph: 'ano / ne', get: (i) => ivHas(i, 'order'), match: ivMatchText, pick: true },
+      { key: 'receipt', ph: 'ano / ne', get: (i) => ivHas(i, 'receipt'), match: ivMatchText, pick: true },
+      { key: 'creator', ph: 'Založil…', get: (i) => creatorLabel(i), match: ivMatchText, pick: true },
+      { key: 'created', ph: 'dnes, >1.10.', get: (i) => ivDate(i.created_at), match: ivMatchDate, kind: 'date' },
+    ];
+    // „<dnes" / ">dnes" v datech
+    const _ivMatchDateOrig = ivMatchDate;
+    function ivDateMatch(d, f) {
+      const t = ivNorm(f).trim();
+      const m = t.match(/^(>=|<=|>|<)dnes$/);
+      if (m) { const today = new Date(); const s = today.getDate() + '.' + (today.getMonth() + 1) + '.' + today.getFullYear(); return _ivMatchDateOrig(d, m[1] + s); }
+      return _ivMatchDateOrig(d, f);
+    }
+    IV_COLS.forEach((c) => { if (c.kind === 'date') c.match = ivDateMatch; });
+
+    function ivSortVal(c, inv) {
+      const v = c.get(inv);
+      return c.kind === 'date' ? (v ? +v : 0) : c.kind === 'num' ? Number(v) : ivNorm(v);
+    }
+    function ivEnsureFilterRow() {
+      const thead = document.querySelector('#invoices-table thead');
+      if (!thead || thead.querySelector('.iv-filter-row')) return;
+      const ths = thead.querySelectorAll('tr:first-child th');
+      IV_COLS.forEach((c, idx) => {
+        const th = ths[idx]; if (!th) return;
+        th.style.whiteSpace = 'nowrap';
+        th.insertAdjacentHTML('beforeend', ' <button type="button" class="iv-sort-btn" data-ivs="' + c.key + '" title="Řazení a výběr hodnot" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button>');
+      });
+      const tr = document.createElement('tr'); tr.className = 'iv-filter-row';
+      tr.innerHTML = IV_COLS.map((c) => '<th style="padding:4px 4px"><input data-ivf="' + c.key + '" placeholder="' + escapeHtml(c.ph) + '" style="width:100%;min-width:60px;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:5px 7px;font-size:12px;font-weight:400;text-transform:none;letter-spacing:0"></th>').join('') + '<th></th>';
+      thead.appendChild(tr);
+      tr.querySelectorAll('[data-ivf]').forEach((inp) => inp.addEventListener('input', () => { INV_F[inp.dataset.ivf] = inp.value; renderInvoiceRows(); }));
+      thead.querySelectorAll('[data-ivs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); ivOpenSortMenu(b); }));
+      // info řádek nad tabulkou
+      const tbl = document.getElementById('invoices-table');
+      if (tbl && !document.getElementById('iv-filter-info')) tbl.insertAdjacentHTML('beforebegin', '<div id="iv-filter-info" style="font-size:12px;color:var(--text2);margin:0 0 6px;display:flex;gap:10px;align-items:center"></div>');
+    }
+    function ivMarkSort() {
+      document.querySelectorAll('[data-ivs]').forEach((b) => {
+        const on = INV_SORT.key === b.dataset.ivs;
+        b.textContent = on ? (INV_SORT.dir === 1 ? '▲' : '▼') : '⇅';
+        b.style.color = on ? '#f59e0b' : 'var(--text2)';
+      });
+    }
+    function ivCloseSortMenu() { const m = document.getElementById('iv-sort-menu'); if (m) m.remove(); }
+    function ivOpenSortMenu(btn) {
+      const had = document.getElementById('iv-sort-menu'); ivCloseSortMenu();
+      if (had && had.dataset.key === btn.dataset.ivs) return;
+      const key = btn.dataset.ivs; const col = IV_COLS.find((c) => c.key === key); if (!col) return;
+      const lb = col.kind === 'num' ? ['↓ Od největšího po nejmenší', '↑ Od nejmenšího po největší']
+        : col.kind === 'date' ? ['↓ Od nejnovějšího po nejstarší', '↑ Od nejstaršího po nejnovější']
+        : ['A → Z (podle abecedy)', 'Z → A (opačně)'];
+      const first = col.kind ? 'desc' : 'asc', second = col.kind ? 'asc' : 'desc';
+      const item = 'display:block;width:100%;text-align:left;background:none;border:none;color:var(--text);padding:7px 12px;font-size:13px;cursor:pointer;white-space:nowrap';
+      const label = (btn.parentElement.firstChild && btn.parentElement.firstChild.textContent || '').trim();
+      let h = '<div style="padding:6px 12px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Řadit: ' + escapeHtml(label) + '</div>' +
+        '<button type="button" style="' + item + '" data-act="' + first + '">' + lb[0] + '</button>' +
+        '<button type="button" style="' + item + '" data-act="' + second + '">' + lb[1] + '</button>' +
+        (INV_SORT.key ? '<button type="button" style="' + item + ';color:var(--text2)" data-act="none">✕ Zrušit řazení</button>' : '');
+      let pickVals = [];
+      if (col.pick) {
+        pickVals = [...new Set(INV_ALL.map((i) => { const v = String(col.get(i)).trim(); return (key === 'order' || key === 'receipt') ? (v.startsWith('ano ručně') ? 'ano ručně' : v.startsWith('ano') ? 'ano' : 'ne') : v; }).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'cs'));
+        h += '<div style="border-top:1px solid var(--border);margin-top:4px;padding:6px 12px 2px;font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:.04em">Zobrazit jen</div><div style="max-height:220px;overflow-y:auto">' +
+          pickVals.map((v, i) => '<button type="button" style="' + item + '" data-pick="' + i + '">' + escapeHtml(v) + '</button>').join('') + '</div>' +
+          (String(INV_F[key] || '').trim() ? '<button type="button" style="' + item + ';color:var(--text2)" data-act="unpick">✕ Zrušit výběr</button>' : '');
+      }
+      const menu = document.createElement('div'); menu.id = 'iv-sort-menu'; menu.dataset.key = key;
+      const r = btn.getBoundingClientRect();
+      menu.style.cssText = 'position:fixed;z-index:4000;top:' + (r.bottom + 4) + 'px;left:' + Math.max(8, Math.min(r.left, window.innerWidth - 270)) + 'px;min-width:230px;background:var(--surface2,#1f2937);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:6px 0';
+      menu.innerHTML = h; document.body.appendChild(menu);
+      const setInput = (v) => { INV_F[key] = v; const inp = document.querySelector('[data-ivf="' + key + '"]'); if (inp) inp.value = v; };
+      menu.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.act === 'desc') { INV_SORT.key = key; INV_SORT.dir = -1; }
+        else if (b.dataset.act === 'asc') { INV_SORT.key = key; INV_SORT.dir = 1; }
+        else if (b.dataset.act === 'none') INV_SORT.key = null;
+        else if (b.dataset.act === 'unpick') setInput('');
+        else if (b.dataset.pick != null) setInput(pickVals[+b.dataset.pick] === 'ano' ? 'ano !ručně' : pickVals[+b.dataset.pick]);
+        ivMarkSort(); renderInvoiceRows(); ivCloseSortMenu();
+      });
+    }
+    document.addEventListener('click', (e) => { if (!e.target.closest('#iv-sort-menu')) ivCloseSortMenu(); });
+    window.ivClearFilters = function() {
+      Object.keys(INV_F).forEach((k) => delete INV_F[k]);
+      document.querySelectorAll('[data-ivf]').forEach((i) => { i.value = ''; });
+      renderInvoiceRows();
+    };
+    function renderInvoiceRows() {
+      ivEnsureFilterRow();
+      const tbody = document.querySelector('#invoices-table tbody');
+      const active = IV_COLS.filter((c) => String(INV_F[c.key] || '').trim());
+      let rows = active.length ? INV_ALL.filter((inv) => active.every((c) => c.match(c.get(inv), String(INV_F[c.key]).trim()))) : INV_ALL;
+      if (INV_SORT.key) {
+        const sc = IV_COLS.find((c) => c.key === INV_SORT.key);
+        if (sc) rows = rows.slice().sort((a, b) => { const x = ivSortVal(sc, a), y = ivSortVal(sc, b); const r = sc.kind ? (x - y) : String(x).localeCompare(String(y), 'cs'); return r * INV_SORT.dir; });
+      }
+      tbody.innerHTML = rows.length
+        ? rows.slice(0, IV_LIMIT).map(invRowHtml).join('')
+        : '<tr><td colspan="16" class="empty-hint">' + (INV_ALL.length ? 'Filtrům nic neodpovídá.' : 'Žádné faktury odpovídající filtrům.') + '</td></tr>';
+      const info = document.getElementById('iv-filter-info');
+      if (info) info.innerHTML = (active.length ? 'Zobrazeno <b>' + rows.length + '</b> z ' + INV_ALL.length + ' dokladů' : 'Zobrazeno všech ' + INV_ALL.length + ' dokladů') +
+        (rows.length > IV_LIMIT ? ' · prvních ' + IV_LIMIT + ' — upřesni filtr' : '') +
+        (active.length ? ' <button class="btn btn-secondary btn-sm" onclick="ivClearFilters()">✕ Zrušit filtry</button>' : '') +
+        ' <span title="Text: více slov = všechna, !slovo = vyloučit · Čísla: >1000, <0, 5..10 · Datum: dnes, včera, <dnes, 26.10., 10.2026, >1.10.2026, 1.10.2026..15.10.2026 · Objednávka/Příjemka: ano, ne, ručně" style="cursor:help">ⓘ</span>';
+      ivMarkSort();
     }
     window.loadInvoices = loadInvoices;
 
