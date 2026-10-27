@@ -1224,7 +1224,17 @@ router.post('/invoices/:id/mark-paid', async (req, res, next) => {
     }
     const total = Number(invoice.total);
     const remaining = Math.round((total - Number(invoice.paid_amount || 0)) * 100) / 100;
-    if (remaining <= 0) return res.status(400).json({ error: 'Není co doplácet' });
+    if (total <= 0) return res.status(400).json({ error: 'Doklad má nulovou celkovou částku — nejdřív v detailu doplň částku (OCR ji nepřečetlo)' });
+    if (remaining <= 0) {
+      // Už plně uhrazeno platbami, jen stav nebyl přepnut → jen srovnat stav
+      const fixed = await prisma.invoice.update({ where: { id }, data: { status: 'paid' }, select: { id: true, status: true, paid_amount: true } });
+      logAudit({
+        action: 'update', entity: 'invoice', entity_id: id,
+        description: `${invoice.invoice_number}: stav srovnán na zaplaceno (částka už byla uhrazena)`,
+        user: req.user,
+      }).catch(() => {});
+      return res.json(fixed);
+    }
 
     const method = ['bank_transfer', 'cash', 'card', 'barter'].includes(req.body?.method) ? req.body.method : 'bank_transfer';
     const d = req.body?.date ? new Date(req.body.date) : new Date();
