@@ -312,6 +312,7 @@ async function migrate() {
     ALTER TABLE location_orders ADD COLUMN IF NOT EXISTS survey_report TEXT;
     -- Účet zákazníka aplikace Prověření lokality (user_type='location'): balíček + platnost
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_package TEXT;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS partner_support JSONB; -- podpora ze starého partnerského portálu (celkem, rok, palety, expanze, NeuraWash, opakovačky, obrat sítě)
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_expires_at TIMESTAMPTZ;
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_evals INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhodnocení navíc
     ALTER TABLE supporters ADD COLUMN IF NOT EXISTS location_extra_searches INTEGER NOT NULL DEFAULT 0; -- dokoupená vyhledání (Vyhledávač míst)

@@ -1906,6 +1906,32 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
     <label style="display:flex;align-items:center;gap:8px;margin-top:12px;cursor:pointer"><input type="checkbox" name="offered_${sv.key}" value="1" ${sv.offered ? 'checked' : ''} style="width:auto"> Nabízet uživatelům</label></div>`).join('')}</div>
   <div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn sm" type="submit">Uložit služby</button></div></form>`, holyosUrl);
 }
+// Karta „Podpora (partnerský portál)" v detailu uživatele — souhrny ze starého portálu partner.bestseries.cz
+function partnerSupportCard(s) {
+  const p = (s && s.partner_support) || {};
+  const val = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('cs-CZ'));
+  const inp = (name, label, v) => `<div style="flex:1;min-width:140px"><label>${label}</label><input name="${name}" inputmode="decimal" value="${esc(val(v))}" placeholder="Kč"></div>`;
+  const sumYear = ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0);
+  return `<details class="card sec" data-sec="partner" open><summary><span>Podpora (partnerský portál)${p.total_all != null ? ` <span class="muted small">celkem ${Number(p.total_all).toLocaleString('cs-CZ')} Kč</span>` : ''}</span><span class="chev">▶</span></summary><div class="sec-body">
+    <form method="post" action="/admin/supporters/${s.id}/partner-support">
+      <div class="row" style="gap:10px;align-items:flex-end">
+        ${inp('total_all', 'Celkem podpořil (od počátku)', p.total_all)}
+        <div style="width:90px"><label>Rok</label><input name="year" inputmode="numeric" value="${esc(p.year || new Date().getFullYear())}"></div>
+        ${inp('total_year', 'Podpořil v roce', p.total_year)}
+      </div>
+      <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
+        ${inp('palety', 'Palety', p.palety)}${inp('expanze', 'Expanze', p.expanze)}${inp('neurawash', 'NeuraWash', p.neurawash)}${inp('opakovacky', 'Opakovačky', p.opakovacky)}
+      </div>
+      <div class="row" style="gap:10px;align-items:flex-end;margin-top:6px">
+        ${inp('network_all', 'Obrat sítě od počátku', p.network_all)}${inp('network_year', 'Obrat sítě v roce', p.network_year)}
+      </div>
+      <label style="margin-top:6px">Poznámka</label><input name="note" value="${esc(p.note || '')}" placeholder="např. Expanze obsahuje i palety a opakovačky">
+      ${sumYear ? `<div class="small muted" style="margin-top:6px">Součet palety + expanze + NeuraWash + opakovačky = <b>${sumYear.toLocaleString('cs-CZ')} Kč</b>${p.total_year != null && Math.abs(sumYear - Number(p.total_year)) > 0.5 ? ' (≠ „Podpořil v roce")' : ''}</div>` : ''}
+      ${p.updated_at ? `<div class="small muted" style="margin-top:4px">Naposledy uloženo ${new Date(p.updated_at).toLocaleString('cs-CZ')} · ${esc(p.updated_by || '')}</div>` : ''}
+      <div style="height:10px"></div><button class="btn sm" type="submit">Uložit podporu</button>
+    </form>
+  </div></details>`;
+}
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [], timeline = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
@@ -1947,6 +1973,7 @@ function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew
         <form method="post" action="/admin/supporters/${s.id}/delete" onsubmit="return confirm('Opravdu smazat uživatele ' + ${JSON.stringify(s.email)} + '?')"><button class="btn danger sm" type="submit">${ico('trash', 16)} Smazat</button></form>
       </div>
     </div></details>
+    ${partnerSupportCard(s)}
     <details class="card sec" data-sec="import" open><summary><span>Další údaje z importu <span class="muted small">(${keys.length})</span></span><span class="chev">▶</span></summary><div class="sec-body">${extra}</div></details>`}
   </div>
   ${isNew ? '' : `<details class="card sec" data-sec="linie" open style="margin-top:12px"><summary><span>První linie <span class="muted small">(${firstLine.length}) — kdo má v poli tab3 nick „${esc(s.nick || '—')}"</span></span><span class="chev">▶</span></summary><div class="sec-body">

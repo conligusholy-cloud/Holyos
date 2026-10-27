@@ -2364,6 +2364,22 @@ app.post('/admin/supporters/:id(\\d+)', requireAdmin, wrap(async (req, res) => {
     res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Uloženo.' + dcMsg));
   } catch (e) { res.status(400).send(V.adminSupporterDetail({ admin: req.admin, s, error: e.code === '23505' ? 'Tento e-mail už má jiný uživatel.' : e.message, holyosUrl: HOLYOS_URL })); }
 }));
+// Podpora ze starého partnerského portálu (partner.bestseries.cz) — ručně zapsané souhrny
+app.post('/admin/supporters/:id(\\d+)/partner-support', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id); if (!s) return res.redirect('/admin/supporters');
+  const num = (v) => { const t = String(v == null ? '' : v).replace(/\s|\u00a0/g, '').replace(/k[čc]|czk/ig, '').replace(',', '.'); if (t === '') return null; const n = Number(t); return isFinite(n) ? n : null; };
+  const data = {
+    year: parseInt(req.body.year, 10) || new Date().getFullYear(),
+    total_all: num(req.body.total_all), total_year: num(req.body.total_year),
+    palety: num(req.body.palety), expanze: num(req.body.expanze), neurawash: num(req.body.neurawash), opakovacky: num(req.body.opakovacky),
+    network_all: num(req.body.network_all), network_year: num(req.body.network_year),
+    note: String(req.body.note || '').trim().slice(0, 500) || null,
+    updated_at: new Date().toISOString(), updated_by: req.admin.name || req.admin.username || 'admin',
+  };
+  await q('UPDATE supporters SET partner_support=$2, updated_at=now() WHERE id=$1', [s.id, JSON.stringify(data)]);
+  await log(req.admin, 'partner_support', { id: s.id, ...data });
+  res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Podpora z partnerského portálu uložena.'));
+}));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
