@@ -1524,13 +1524,13 @@ const BASE_COLS = [
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
 ];
 const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at'];
-// Přihlášení za uživatele ve starém systému (partner.bestseries.cz). `redirect` zkouší nasměrovat
-// rovnou na konkrétní stránku po přihlášení — parametr je odhad (redirect=), dej vědět, pokud fake-login.php
-// čeká jiný název parametru nebo cílovou stránku ignoruje, ať to doladíme.
-function fakeLogin(email, redirect) {
-  let u = `https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(email)}`;
-  if (redirect) u += `&redirect=${encodeURIComponent(redirect)}`;
-  return u;
+// Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
+// Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu).
+// S `to`: přes /admin/goto-legacy — mezistránka nastaví session a pak hodí rovnou na danou stránku
+// (fake-login.php samo žádný parametr pro cílovou stránku nepřijímá).
+function fakeLogin(email, to) {
+  if (!to) return `https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(email)}`;
+  return `/admin/goto-legacy?email=${encodeURIComponent(email)}&to=${encodeURIComponent(to)}`;
 }
 // Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
 const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat', location: 'Prověření lokality' };
