@@ -1733,25 +1733,10 @@ app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
 // fake-login.php neumí cílovou stránku parametrem ovlivnit (jen přihlásí a hodí na dashboard),
 // tak tu mezistránku zavoláme na pozadí (nastaví session cookie) a pak prohlížeč sám přesměrujeme
 // na požadovanou URL ve stejné záložce — bez nutnosti znát mechanismus toho PHP skriptu.
-app.get('/admin/goto-legacy', requireAdmin, wrap(async (req, res) => {
-  const email = String(req.query.email || '').trim();
-  const to = String(req.query.to || '/cs/bo/dashboard/');
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).send('Chybí nebo neplatný e-mail.');
-  if (!to.startsWith('/')) return res.status(400).send('Neplatný cíl.');
-  const loginUrl = 'https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(email);
-  const targetUrl = 'https://partner.bestseries.cz' + to;
-  res.send(`<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8"><title>Přihlašuji…</title></head>
-  <body style="background:#04060c;color:#8ea2c2;font:15px system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
-  <div>Přihlašuji jako ${email.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))} a otevírám stránku podpory…</div>
-  <script>
-    // no-cors fetch provede požadavek a prohlížeč si uloží Set-Cookie ze staré domény, i když JS odpověď nevidí
-    fetch(${JSON.stringify(loginUrl)}, { mode: 'no-cors', credentials: 'include' })
-      .catch(function(){})
-      .finally(function(){ setTimeout(function(){ location.href = ${JSON.stringify(targetUrl)}; }, 400); });
-    // pojistka, kdyby fetch nikdy neskončil
-    setTimeout(function(){ location.href = ${JSON.stringify(targetUrl)}; }, 2500);
-  </script></body></html>`);
-}));
+// Pozn.: dřívější /admin/goto-legacy (přihlášení přes fetch no-cors) se odstranilo — cookie session
+// se cross-site fetchem nenastavovala spolehlivě (SameSite), takže se otevřela stránka pod jiným,
+// už dřív přihlášeným uživatelem. Řeší se teď na klientovi v adminSupporters (window.open + JS
+// přesměrování TÉHOŽ okna) — viz .legacy-btn skript ve views.js.
 const USER_TYPES = ['new', 'standard', 'owner', 'seller', 'location'];
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(), status = String(req.query.status || ''), utype = String(req.query.type || '');

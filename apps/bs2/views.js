@@ -1525,12 +1525,15 @@ const BASE_COLS = [
 ];
 const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at', 'x:obrat'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
-// Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu).
-// S `to`: přes /admin/goto-legacy — mezistránka nastaví session a pak hodí rovnou na danou stránku
-// (fake-login.php samo žádný parametr pro cílovou stránku nepřijímá).
-function fakeLogin(email, to) {
-  if (!to) return `https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(email)}`;
-  return `/admin/goto-legacy?email=${encodeURIComponent(email)}&to=${encodeURIComponent(to)}`;
+// Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
+// protože je to normální top-level navigace a cookie session se nastaví jako first-party.
+// S `to`: fake-login.php samo žádný parametr pro cílovou stránku nepřijímá, a mezistránka přes
+// fetch(no-cors) cookii nenastavila spolehlivě (SameSite u cross-site požadavku) — proto se
+// „Stránka podpory" řeší na klientovi (viz .legacy-btn skript níže): otevře se nové okno rovnou
+// na fake-login.php (top-level = cookie se nastaví správně) a po krátké pauze se TOTÉŽ okno
+// přesměruje na cílovou stránku.
+function fakeLogin(email) {
+  return `https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(email)}`;
 }
 // Typ uživatele: standard = stávající, owner = koupil prádlomat, seller = může prodávat
 const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil prádlomat', seller: 'Může prodávat', location: 'Prověření lokality' };
@@ -1546,7 +1549,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><a class="btn sec sm" href="${fakeLogin(r.email, '/cs/bo/my-invests/')}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</a></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</button></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
@@ -1587,7 +1590,22 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     </form>
   </div>
   <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
-  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
+  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>
+  <script>
+  // „Stránka podpory": otevři nové okno rovnou na fake-login.php (top-level navigace = cookie session
+  // se nastaví správně, žádné SameSite/third-party omezení), pak po krátké pauze přesměruj to samé okno
+  // na cílovou stránku ve starém systému.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.legacy-btn');
+    if (!b) return;
+    var email = b.dataset.email, to = b.dataset.to || '/cs/bo/dashboard/';
+    var loginUrl = 'https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(email);
+    var targetUrl = 'https://partner.bestseries.cz' + to;
+    var w = window.open(loginUrl, '_blank');
+    if (!w) return; // blokovač vyskakovacích oken — uživatel dostane aspoň info v title tlačítka
+    setTimeout(function () { try { w.location = targetUrl; } catch (err) { /* okno mezitím zavřené */ } }, 1800);
+  });
+  </script>`, holyosUrl);
 }
 // Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
 const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
