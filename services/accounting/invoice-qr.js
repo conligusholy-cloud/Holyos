@@ -48,9 +48,23 @@ function czAccountToIban(acc) {
 const ascii = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '').replace(/\*/g, ' ').replace(/\s+/g, ' ').trim();
 
 /** SPD řetězec pro QR platbu. Vrací { spd, iban } nebo { error }. */
+// Kontrolní součet IBAN (mod 97) — banky QR s neplatným IBANem zahodí a nevyplní nic
+function ibanValid(iban) {
+  const s = String(iban || '').replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(s)) return false;
+  const n = (s.slice(4) + s.slice(0, 4)).replace(/[A-Z]/g, (c) => String(c.charCodeAt(0) - 55));
+  let r = 0; for (const ch of n) r = (r * 10 + Number(ch)) % 97;
+  return r === 1;
+}
 function buildSpd(inv, remaining) {
-  const iban = inv.partner_iban ? String(inv.partner_iban).replace(/\s+/g, '').toUpperCase() : czAccountToIban(inv.partner_bank_account);
-  if (!iban) return { error: 'Účet příjemce na dokladu není ve tvaru, ze kterého jde složit IBAN.' };
+  // Přednost má IBAN složený z čísla účtu (to se ověřuje proti podvodu); IBAN z dokladu jen když je platný
+  // a nebo když tuzemský účet chybí. OCR občas IBAN přečte s posunutými číslicemi.
+  const fromAcc = czAccountToIban(inv.partner_bank_account);
+  const fromDoc = inv.partner_iban ? String(inv.partner_iban).replace(/\s+/g, '').toUpperCase() : null;
+  let iban = null;
+  if (fromAcc && ibanValid(fromAcc)) iban = fromAcc;
+  else if (fromDoc && ibanValid(fromDoc)) iban = fromDoc;
+  if (!iban) return { error: fromDoc ? 'IBAN na dokladu (' + fromDoc + ') má neplatný kontrolní součet a tuzemský účet chybí — oprav účet příjemce v detailu dokladu.' : 'Účet příjemce na dokladu není ve tvaru, ze kterého jde složit IBAN.' };
   const parts = ['SPD*1.0', 'ACC:' + iban, 'AM:' + Number(remaining).toFixed(2), 'CC:' + (inv.currency || 'CZK')];
   const digits = (v, n) => String(v || '').replace(/\D/g, '').slice(0, n);
   if (digits(inv.variable_symbol, 10)) parts.push('X-VS:' + digits(inv.variable_symbol, 10));
@@ -63,4 +77,4 @@ function buildSpd(inv, remaining) {
   return { spd: parts.join('*'), iban };
 }
 
-module.exports = { makeToken, verifyToken, czAccountToIban, buildSpd, BLOCKED, TTL_DAYS };
+module.exports = { makeToken, verifyToken, czAccountToIban, ibanValid, buildSpd, BLOCKED, TTL_DAYS };
