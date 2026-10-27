@@ -3467,6 +3467,40 @@ model CostCenter {
 // =============================================================================
 
 // Hromadný platební příkaz do banky (ABO/SEPA/API).
+// Trvalé příkazy nastavené v bankovnictví — jen evidence pro výhled (Plán plateb), HolyOS je nevykonává.
+model StandingOrder {
+  id   Int    @id @default(autoincrement())
+  name String @db.VarChar(150) // popis (např. „Nájem kancelář")
+
+  bank_account_id Int
+  bank_account    BankAccount @relation(fields: [bank_account_id], references: [id])
+
+  recipient_name  String? @db.VarChar(255)
+  recipient_account String? @db.VarChar(50)
+  variable_symbol String? @db.VarChar(20)
+  constant_symbol String? @db.VarChar(10)
+  specific_symbol String? @db.VarChar(20)
+  message         String? @db.VarChar(140)
+
+  amount   Decimal @db.Decimal(14, 2)
+  currency String  @default("CZK") @db.VarChar(3) // CZK | EUR | …
+
+  frequency    String    @default("monthly") @db.VarChar(15) // zatím jen monthly
+  day_of_month Int // 1–31 (31 = poslední den v měsíci; kratší měsíce se zkrátí)
+  valid_from   DateTime  @db.Date
+  valid_to     DateTime? @db.Date // null = bez konce
+
+  active Boolean @default(true)
+  note   String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([bank_account_id])
+  @@index([active, valid_from, valid_to])
+  @@map("standing_orders")
+}
+
 model PaymentBatch {
   id              Int         @id @default(autoincrement())
   batch_number    String      @unique @db.VarChar(50) // PB-2026-0001
@@ -3585,6 +3619,7 @@ model BankAccount {
   statements      BankStatement[]
   transactions    BankTransaction[]
   payment_batches PaymentBatch[]
+  standing_orders StandingOrder[]
 
   @@unique([account_number, bank_code])
   @@index([bank, active])

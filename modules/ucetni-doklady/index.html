@@ -426,6 +426,17 @@
           <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-pays" onclick="switchBankSub('pays')">💸 Platby</button>
           <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-orders" onclick="switchBankSub('orders')">📤 Příkazy k úhradě</button>
           <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-plan" onclick="switchBankSub('plan')">📅 Plán plateb</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="bank-sub-standing" onclick="switchBankSub('standing')">🔁 Trvalé příkazy</button>
+        </div>
+        <div id="bank-standing-wrap" style="display:none;">
+          <div class="pb-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;">
+              <h3 style="margin:0;">🔁 Trvalé příkazy — co je nastavené v bankovnictví</h3>
+              <button class="btn btn-primary btn-sm" onclick="standingEdit()">+ Nový trvalý příkaz</button>
+            </div>
+            <div style="color:var(--text2);font-size:.88em;margin-bottom:12px;">Jen evidence: banka je provádí sama, HolyOS s nimi počítá ve výhledu v Plánu plateb (graf, součty po dnech). Platí od–do, každý měsíc v zadaný den.</div>
+            <div id="standing-list"><div class="empty-hint">Načítání…</div></div>
+          </div>
         </div>
         <div id="bank-plan-wrap" style="display:none;">
           <div class="pb-card">
@@ -433,6 +444,7 @@
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
               <label>Zobrazit splatnost do:</label><input type="date" id="plan-to" onchange="loadPaymentPlan()">
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="plan-hide-batched" checked onchange="renderPaymentPlan()"> Skrýt doklady už zařazené v příkazu</label>
+              <label style="display:flex;align-items:center;gap:6px;" title="Opakované platby z agendy Trvalé příkazy (strhává banka sama)"><input type="checkbox" id="plan-show-standing" checked onchange="renderPaymentPlan()"> 🔁 Zahrnout trvalé příkazy</label>
               <input type="text" id="plan-search" placeholder="Dodavatel, číslo, VS…" oninput="renderPaymentPlan()" style="min-width:220px;">
               <button class="btn btn-secondary btn-sm" onclick="loadPaymentPlan()">🔄 Obnovit</button>
               <button class="btn btn-secondary btn-sm" onclick="planExpandAll(true)">▾ Rozbalit vše</button>
@@ -4926,16 +4938,148 @@
       document.getElementById('bank-stmts-wrap').style.display = which === 'stmts' ? '' : 'none';
       if (wrap) wrap.style.display = which === 'orders' ? '' : 'none';
       const planWrap = document.getElementById('bank-plan-wrap'); if (planWrap) planWrap.style.display = which === 'plan' ? '' : 'none';
-      [['stmts', 'bank-sub-stmts'], ['pays', 'bank-sub-pays'], ['orders', 'bank-sub-orders'], ['plan', 'bank-sub-plan']].forEach(([k, id]) => {
+      const stWrap = document.getElementById('bank-standing-wrap'); if (stWrap) stWrap.style.display = which === 'standing' ? '' : 'none';
+      [['stmts', 'bank-sub-stmts'], ['pays', 'bank-sub-pays'], ['orders', 'bank-sub-orders'], ['plan', 'bank-sub-plan'], ['standing', 'bank-sub-standing']].forEach(([k, id]) => {
         const b = document.getElementById(id); if (b) b.className = 'btn btn-sm ' + (which === k ? 'btn-primary' : 'btn-secondary');
       });
       try { sessionStorage.setItem('ud.bankSub', which); } catch (e) { /* ignore */ }
       if (which === 'pays') loadBankPayments();
       if (which === 'orders' && typeof loadPaymentsTab === 'function') loadPaymentsTab();
       if (which === 'plan') loadPaymentPlan();
+      if (which === 'standing') loadStandingOrders();
     };
+    // ─── Banka → Trvalé příkazy: evidence toho, co je nastavené v bankovnictví (výhled do Plánu plateb) ───
+    let STANDING = [];
+    const isoLocal = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const parseIsoDay = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+    // Výskyty trvalého příkazu v intervalu <from, to> (měsíčně, den 31 = poslední den měsíce)
+    function standingOccurrences(o, from, to) {
+      const out = [];
+      const vf = parseIsoDay(o.valid_from), vt = o.valid_to ? parseIsoDay(o.valid_to) : null;
+      let y = Math.max(+from, +vf) === +from ? from.getFullYear() : vf.getFullYear();
+      let m = Math.max(+from, +vf) === +from ? from.getMonth() : vf.getMonth();
+      for (let guard = 0; guard < 400; guard++) {
+        const dim = new Date(y, m + 1, 0).getDate();
+        const dt = new Date(y, m, Math.min(o.day_of_month, dim));
+        if (dt > to || (vt && dt > vt)) break;
+        if (dt >= from && dt >= vf) out.push(dt);
+        m++; if (m > 11) { m = 0; y++; }
+      }
+      return out;
+    }
+    function standingNext(o) {
+      if (!o.active) return null;
+      const today = planDay(new Date()), far = new Date(+today + 800 * 864e5);
+      const list = standingOccurrences(o, today, far);
+      return list.length ? list[0] : null;
+    }
+    window.loadStandingOrders = async function() {
+      const el = document.getElementById('standing-list'); if (!el) return;
+      const r = await api('GET', '/api/accounting/standing-orders');
+      if (r.status !== 200) { el.innerHTML = '<div class="empty-hint">Chyba: ' + escapeHtml(r.data?.error || String(r.status)) + '</div>'; return; }
+      STANDING = r.data || [];
+      if (!STANDING.length) { el.innerHTML = '<div class="empty-hint">Zatím žádný trvalý příkaz. Přidej ho tlačítkem „+ Nový trvalý příkaz".</div>'; return; }
+      const today = planDay(new Date());
+      let html = '<table class="data-table"><thead><tr><th>Popis</th><th>Příjemce</th><th>Účet příjemce</th><th>VS</th><th>Z účtu</th><th class="num">Částka</th><th>Den v měsíci</th><th>Platí od – do</th><th>Další platba</th><th>Stav</th><th></th></tr></thead><tbody>';
+      STANDING.forEach(o => {
+        const nx = standingNext(o);
+        const ended = o.valid_to && parseIsoDay(o.valid_to) < today;
+        const st = !o.active ? '<span style="color:var(--text2)">⏸ vypnutý</span>' : ended ? '<span style="color:var(--text2)">⏹ skončil</span>' : (parseIsoDay(o.valid_from) > today ? '<span style="color:#eab308">⏳ ještě neběží</span>' : '<span style="color:#22c55e">✓ aktivní</span>');
+        const ba = o.bank_account;
+        html += '<tr' + (!o.active || ended ? ' style="opacity:.6"' : '') + '>' +
+          '<td><b>' + escapeHtml(o.name) + '</b>' + (o.note ? '<div style="font-size:.78em;color:var(--text2)">' + escapeHtml(o.note) + '</div>' : '') + '</td>' +
+          '<td>' + escapeHtml(o.recipient_name || '—') + '</td>' +
+          '<td><small>' + escapeHtml(o.recipient_account || '—') + '</small></td>' +
+          '<td>' + escapeHtml(o.variable_symbol || '—') + '</td>' +
+          '<td><small>' + (ba ? escapeHtml(ba.name) + '<br>' + escapeHtml(ba.account_number) + '/' + escapeHtml(ba.bank_code) : '—') + '</small></td>' +
+          '<td class="num" style="white-space:nowrap"><b>' + fmtAmount(o.amount) + '</b> ' + escapeHtml(o.currency) + '</td>' +
+          '<td>' + (o.day_of_month >= 31 ? 'poslední den' : o.day_of_month + '.') + '</td>' +
+          '<td style="white-space:nowrap">' + parseIsoDay(o.valid_from).toLocaleDateString('cs-CZ') + ' – ' + (o.valid_to ? parseIsoDay(o.valid_to).toLocaleDateString('cs-CZ') : '<span style="color:var(--text2)">bez konce</span>') + '</td>' +
+          '<td style="white-space:nowrap">' + (nx ? nx.toLocaleDateString('cs-CZ') : '—') + '</td>' +
+          '<td>' + st + '</td>' +
+          '<td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="standingEdit(' + o.id + ')">Upravit</button> ' +
+            '<button class="btn btn-secondary btn-sm" onclick="standingToggle(' + o.id + ')" title="' + (o.active ? 'Vypnout' : 'Zapnout') + '">' + (o.active ? '⏸' : '▶') + '</button> ' +
+            '<button class="btn btn-danger btn-sm" onclick="standingDelete(' + o.id + ')" title="Smazat">🗑️</button></td></tr>';
+      });
+      el.innerHTML = html + '</tbody></table>';
+    };
+    window.standingToggle = async function(id) {
+      const o = STANDING.find(x => x.id === id); if (!o) return;
+      const r = await api('PUT', '/api/accounting/standing-orders/' + id, standingPayload(o, { active: !o.active }));
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadStandingOrders();
+    };
+    window.standingDelete = async function(id) {
+      const o = STANDING.find(x => x.id === id); if (!o) return;
+      if (!confirm('Smazat trvalý příkaz „' + o.name + '"?\n\n(Jen z evidence v HolyOS — v bance se nic nemění.)')) return;
+      const r = await api('DELETE', '/api/accounting/standing-orders/' + id);
+      if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
+      loadStandingOrders();
+    };
+    function standingPayload(o, over) {
+      return Object.assign({
+        name: o.name, bank_account_id: o.bank_account_id, recipient_name: o.recipient_name, recipient_account: o.recipient_account,
+        variable_symbol: o.variable_symbol, constant_symbol: o.constant_symbol, specific_symbol: o.specific_symbol, message: o.message,
+        amount: Number(o.amount), currency: o.currency, day_of_month: o.day_of_month,
+        valid_from: String(o.valid_from).slice(0, 10), valid_to: o.valid_to ? String(o.valid_to).slice(0, 10) : null, active: o.active, note: o.note,
+      }, over || {});
+    }
+    window.standingEdit = async function(id) {
+      const o = id ? STANDING.find(x => x.id === id) : null;
+      const ba = await api('GET', '/api/banking/accounts?active=true');
+      const accs = ba.status === 200 ? ba.data : [];
+      const v = (x) => escapeHtml(x == null ? '' : x);
+      const lbl = 'display:block;font-size:.82em;color:var(--text2);margin:8px 0 3px;';
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
+      ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:640px;max-width:96vw;max-height:94vh;overflow:auto;padding:18px 22px;">'
+        + '<h3 style="margin:0 0 4px;">🔁 ' + (o ? 'Upravit trvalý příkaz' : 'Nový trvalý příkaz') + '</h3>'
+        + '<div style="color:var(--text2);font-size:.85em;">Zadej to, co máš nastavené v bankovnictví — HolyOS to použije jen pro výhled plateb.</div>'
+        + '<label style="' + lbl + '">Popis *</label><input class="so-name form-control" style="width:100%" placeholder="např. Nájem kancelář, Leasing dodávky" value="' + v(o?.name) + '">'
+        + '<label style="' + lbl + '">Z jakého účtu se strhává *</label><select class="so-acc form-control" style="width:100%">' + accs.map(a => '<option value="' + a.id + '" data-cur="' + escapeHtml(a.currency || 'CZK') + '"' + (o && o.bank_account_id === a.id ? ' selected' : '') + '>' + escapeHtml(a.name) + ' (' + escapeHtml(a.account_number) + '/' + escapeHtml(a.bank_code) + ', ' + escapeHtml(a.currency || 'CZK') + ')</option>').join('') + '</select>'
+        + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;">'
+        + '<div><label style="' + lbl + '">Příjemce</label><input class="so-rn form-control" style="width:100%" value="' + v(o?.recipient_name) + '"></div>'
+        + '<div><label style="' + lbl + '">Účet příjemce</label><input class="so-ra form-control" style="width:100%" placeholder="číslo/kód banky nebo IBAN" value="' + v(o?.recipient_account) + '"></div>'
+        + '<div><label style="' + lbl + '">Variabilní symbol</label><input class="so-vs form-control" style="width:100%" value="' + v(o?.variable_symbol) + '"></div>'
+        + '<div><label style="' + lbl + '">Konstantní / specifický symbol</label><div style="display:flex;gap:6px;"><input class="so-ks form-control" style="width:50%" placeholder="KS" value="' + v(o?.constant_symbol) + '"><input class="so-ss form-control" style="width:50%" placeholder="SS" value="' + v(o?.specific_symbol) + '"></div></div>'
+        + '<div><label style="' + lbl + '">Částka *</label><input type="number" step="0.01" min="0" class="so-amt form-control" style="width:100%" value="' + v(o ? Number(o.amount) : '') + '"></div>'
+        + '<div><label style="' + lbl + '">Měna</label><select class="so-cur form-control" style="width:100%">' + ['CZK', 'EUR', 'USD', 'GBP', 'PLN'].map(c => '<option' + ((o ? o.currency : 'CZK') === c ? ' selected' : '') + '>' + c + '</option>').join('') + '</select></div>'
+        + '<div><label style="' + lbl + '">Den provedení v měsíci * <span style="font-weight:400">(31 = poslední den)</span></label><input type="number" min="1" max="31" class="so-day form-control" style="width:100%" value="' + v(o?.day_of_month || '') + '"></div>'
+        + '<div><label style="' + lbl + '">Zpráva pro příjemce</label><input class="so-msg form-control" style="width:100%" maxlength="140" value="' + v(o?.message) + '"></div>'
+        + '<div><label style="' + lbl + '">Platí od *</label><input type="date" class="so-vf form-control" style="width:100%" value="' + (o ? String(o.valid_from).slice(0, 10) : '') + '"></div>'
+        + '<div><label style="' + lbl + '">Platí do <span style="font-weight:400">(prázdné = bez konce)</span></label><input type="date" class="so-vt form-control" style="width:100%" value="' + (o && o.valid_to ? String(o.valid_to).slice(0, 10) : '') + '"></div>'
+        + '</div>'
+        + '<label style="' + lbl + '">Poznámka</label><input class="so-note form-control" style="width:100%" value="' + v(o?.note) + '">'
+        + '<label style="display:flex;gap:8px;align-items:center;margin-top:10px;"><input type="checkbox" class="so-act"' + (!o || o.active ? ' checked' : '') + '> Aktivní (počítat ve výhledu)</label>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px;"><button class="btn btn-secondary so-cancel">Zrušit</button><button class="btn btn-primary so-save">Uložit</button></div>'
+        + '<div class="so-err" style="color:#ef4444;margin-top:8px;font-size:.88em;"></div></div>';
+      document.body.appendChild(ov);
+      const q = (c) => ov.querySelector(c);
+      q('.so-cancel').onclick = () => ov.remove();
+      if (!o) { const ci = () => { const cur = q('.so-acc').selectedOptions[0]?.dataset.cur; if (cur && ['CZK', 'EUR', 'USD', 'GBP', 'PLN'].includes(cur)) q('.so-cur').value = cur; }; q('.so-acc').onchange = ci; ci(); }
+      q('.so-save').onclick = async () => {
+        const body = {
+          name: q('.so-name').value, bank_account_id: parseInt(q('.so-acc').value, 10) || 0,
+          recipient_name: q('.so-rn').value, recipient_account: q('.so-ra').value,
+          variable_symbol: q('.so-vs').value, constant_symbol: q('.so-ks').value, specific_symbol: q('.so-ss').value, message: q('.so-msg').value,
+          amount: parseFloat(String(q('.so-amt').value).replace(',', '.')), currency: q('.so-cur').value,
+          day_of_month: parseInt(q('.so-day').value, 10), valid_from: q('.so-vf').value, valid_to: q('.so-vt').value || null,
+          active: q('.so-act').checked, note: q('.so-note').value,
+        };
+        if (!body.name.trim()) { q('.so-err').textContent = 'Zadej popis.'; return; }
+        if (!body.bank_account_id) { q('.so-err').textContent = 'Vyber účet.'; return; }
+        if (!(body.amount > 0)) { q('.so-err').textContent = 'Zadej částku.'; return; }
+        if (!(body.day_of_month >= 1 && body.day_of_month <= 31)) { q('.so-err').textContent = 'Den v měsíci musí být 1–31.'; return; }
+        if (!body.valid_from) { q('.so-err').textContent = 'Zadej, od kdy platí.'; return; }
+        q('.so-save').disabled = true;
+        const r = o ? await api('PUT', '/api/accounting/standing-orders/' + o.id, body) : await api('POST', '/api/accounting/standing-orders', body);
+        if (r.status !== 200 && r.status !== 201) { q('.so-err').textContent = r.data?.error || ('Chyba ' + r.status); q('.so-save').disabled = false; return; }
+        ov.remove(); loadStandingOrders();
+      };
+    };
+
     // ─── Banka → Plán plateb: nezaplacené přijaté doklady po dnech + převod na platební příkaz ───
-    const PLAN = { rows: [], sel: new Set(), open: new Set() }; // open = rozbalené dny (klíče skupin)
+    const PLAN = { rows: [], sel: new Set(), open: new Set(), so: [] }; // open = rozbalené dny (klíče skupin); so = trvalé příkazy
     const planDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
     // Kurzy ČNB jen pro PŘEHLED (součty, graf, průměry) — platební příkazy zůstávají v původní měně
     let PLAN_FX = { rates: { CZK: 1 }, valid_for: null, source: null, at: 0 };
@@ -4949,7 +5093,29 @@
       } catch (e) { /* zůstanou poslední známé kurzy */ }
     }
     const planFxNote = () => PLAN_FX.source === 'CNB' && PLAN_FX.valid_for ? 'kurz ČNB k ' + new Date(PLAN_FX.valid_for).toLocaleDateString('cs-CZ') : (PLAN_FX.source ? 'orientační kurz (ČNB nedostupná)' : 'kurz není k dispozici');
+    // Virtuální řádky z trvalých příkazů (budoucí výskyty od dneška do „zobrazit do" / +45 dní)
+    function planStandingRows() {
+      const cb = document.getElementById('plan-show-standing');
+      if (cb && !cb.checked) return [];
+      const today = planDay(new Date());
+      const toVal = document.getElementById('plan-to').value;
+      const to = toVal ? parseIsoDay(toVal) : new Date(+today + 45 * 864e5);
+      const out = [];
+      (PLAN.so || []).filter(o => o.active).forEach(o => {
+        standingOccurrences(o, today, to).forEach(dt => {
+          out.push({
+            id: 'so-' + o.id + '-' + isoLocal(dt), standing: true, so_id: o.id,
+            invoice_number: o.name, external_number: null, company: { name: o.recipient_name || '—' },
+            variable_symbol: o.variable_symbol, partner_bank_account: o.recipient_account, partner_iban: null,
+            date_due: isoLocal(dt) + 'T00:00:00', total: o.amount, paid_amount: 0, remaining: Number(o.amount), currency: o.currency || 'CZK',
+            status: 'standing', payment_method: 'bank_transfer', in_batch: null, verification: {}, from_account: o.bank_account ? o.bank_account.name : '',
+          });
+        });
+      });
+      return out;
+    }
     function planEligible(r) {
+      if (r.standing) return 'Trvalý příkaz — strhne banka sama';
       if (r.in_batch) return 'Už je v příkazu ' + r.in_batch.batch_number;
       if (r.payment_method !== 'bank_transfer') return 'Nehradí se převodem (' + ((PAYMENT_METHOD[r.payment_method] || {}).label || r.payment_method) + ')';
       if (r.currency !== 'CZK') return 'Měna ' + r.currency + ' — ABO příkaz jen v CZK';
@@ -4971,6 +5137,7 @@
       const r = await api('GET', '/api/accounting/payment-plan' + (to ? '?to=' + to : ''));
       if (r.status !== 200) { document.getElementById('plan-list').innerHTML = '<div class="empty-hint">Chyba: ' + escapeHtml(r.data?.error || String(r.status)) + '</div>'; return; }
       PLAN.rows = r.data || [];
+      try { const so = await api('GET', '/api/accounting/standing-orders'); PLAN.so = so.status === 200 ? (so.data || []) : []; } catch (e) { PLAN.so = []; }
       await loadPlanFx();
       const ids = new Set(PLAN.rows.map(x => x.id));
       [...PLAN.sel].forEach(id => { if (!ids.has(id)) PLAN.sel.delete(id); });
@@ -4979,7 +5146,7 @@
     function planVisibleRows() {
       const hide = document.getElementById('plan-hide-batched').checked;
       const q = (document.getElementById('plan-search').value || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
-      return PLAN.rows.filter(r => {
+      return PLAN.rows.concat(planStandingRows()).filter(r => {
         if (hide && r.in_batch) return false;
         if (!q) return true;
         const hay = [r.invoice_number, r.external_number, r.variable_symbol, r.company?.name, r.partner_bank_account].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -5028,6 +5195,18 @@
           '<td class="num" style="font-weight:700;white-space:nowrap" title="Součet doplatků dokladů tohoto dne v Kč. Doklady v cizí měně jsou přepočtené aktuálním kurzem ČNB (jen pro přehled — platební příkaz zůstává v původní měně)."><span style="font-weight:400;font-size:0.8em;color:var(--text2)">Σ za ' + (g.overdue ? 'po splatnosti' : 'den') + '</span> ' + fmtAmount(sum(g.rows)) + ' Kč' +
             (g.rows.some(r => r.currency !== 'CZK') ? '<div style="font-weight:400;font-size:0.75em;color:var(--text2)" title="' + escapeHtml(planFxNote()) + '">z toho ' + (function () { const by = {}; g.rows.filter(r => r.currency !== 'CZK').forEach(r => { by[r.currency] = (by[r.currency] || 0) + Number(r.remaining); }); return Object.keys(by).map(c => fmtAmount(by[c]) + ' ' + escapeHtml(c)).join(' + '); })() + ' ≈ ' + fmtAmount(sum(g.rows.filter(r => r.currency !== 'CZK'))) + ' Kč</div>' : '') + '</td></tr>';
         if (!collapsed) g.rows.forEach(r => {
+          if (r.standing) {
+            html += '<tr data-plan-group="' + g.key + '" style="background:rgba(129,140,248,.06)">' +
+              '<td style="padding-left:30px;border-left:3px solid #818cf855;color:var(--text2)" title="Trvalý příkaz — strhne banka sama">🔁</td>' +
+              '<td style="white-space:nowrap"><b style="font-size:0.92em">' + escapeHtml(r.invoice_number) + '</b><div style="font-size:0.8em;color:var(--text2)">trvalý příkaz</div></td>' +
+              '<td>' + escapeHtml(r.company?.name || '—') + '</td>' +
+              '<td>' + escapeHtml(r.variable_symbol || '—') + '</td>' +
+              '<td style="white-space:nowrap"><small>' + escapeHtml(r.partner_bank_account || '—') + '</small></td>' +
+              '<td style="white-space:nowrap">' + fmtDate(r.date_due) + '</td>' +
+              '<td><span style="font-size:0.78em;color:#a5b4fc">🔁 Trvalý příkaz</span>' + (r.from_account ? '<div style="font-size:0.75em;color:var(--text2)">z ' + escapeHtml(r.from_account) + '</div>' : '') + '</td>' +
+              '<td class="num" style="white-space:nowrap"><b>' + fmtAmount(r.remaining) + '</b> ' + escapeHtml(r.currency) + '</td></tr>';
+            return;
+          }
           const why = planEligible(r);
           const ver = r.verification || {};
           const verBadge = !r.partner_bank_account && !r.partner_iban ? '<span style="color:#f87171;font-size:0.8em">bez účtu</span>'
@@ -5658,7 +5837,7 @@
       _origSwitchTab(name, dir, ev);
       if (name === 'bank') {
         loadBankAccountsForFilter().then(loadStatements);
-        try { const sub = sessionStorage.getItem('ud.bankSub'); if (sub === 'pays' || sub === 'orders' || sub === 'plan') switchBankSub(sub); } catch (e) { /* ignore */ }
+        try { const sub = sessionStorage.getItem('ud.bankSub'); if (sub === 'pays' || sub === 'orders' || sub === 'plan' || sub === 'standing') switchBankSub(sub); } catch (e) { /* ignore */ }
       }
     };
     // „K platbě" je teď podzáložka Banka → Příkazy k úhradě

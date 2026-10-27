@@ -1905,6 +1905,81 @@ const paymentBatchCreateSchema = z.object({
   from_plan: z.boolean().optional(),
 });
 
+// ─── Trvalé příkazy (evidence toho, co je nastavené v bankovnictví; výhled do Plánu plateb) ───
+const standingOrderSchema = z.object({
+  name: z.string().trim().min(1, 'Zadej popis').max(150),
+  bank_account_id: z.number().int().positive(),
+  recipient_name: z.string().trim().max(255).nullish(),
+  recipient_account: z.string().trim().max(50).nullish(),
+  variable_symbol: z.string().trim().max(20).nullish(),
+  constant_symbol: z.string().trim().max(10).nullish(),
+  specific_symbol: z.string().trim().max(20).nullish(),
+  message: z.string().trim().max(140).nullish(),
+  amount: z.number().positive('Částka musí být kladná'),
+  currency: z.string().trim().length(3).transform(s => s.toUpperCase()).default('CZK'),
+  day_of_month: z.number().int().min(1).max(31),
+  valid_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Neplatné datum „od"'),
+  valid_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullish().or(z.literal('')),
+  active: z.boolean().optional(),
+  note: z.string().max(2000).nullish(),
+});
+function standingOrderData(p) {
+  return {
+    name: p.name, bank_account_id: p.bank_account_id,
+    recipient_name: p.recipient_name || null, recipient_account: p.recipient_account || null,
+    variable_symbol: p.variable_symbol || null, constant_symbol: p.constant_symbol || null, specific_symbol: p.specific_symbol || null,
+    message: p.message || null, amount: p.amount, currency: p.currency || 'CZK',
+    frequency: 'monthly', day_of_month: p.day_of_month,
+    valid_from: new Date(p.valid_from), valid_to: p.valid_to ? new Date(p.valid_to) : null,
+    ...(p.active !== undefined ? { active: p.active } : {}),
+    note: p.note || null,
+  };
+}
+router.get('/standing-orders', async (req, res, next) => {
+  try {
+    const rows = await prisma.standingOrder.findMany({
+      orderBy: [{ active: 'desc' }, { day_of_month: 'asc' }, { id: 'asc' }],
+      include: { bank_account: { select: { id: true, name: true, account_number: true, bank_code: true, currency: true } } },
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+router.post('/standing-orders', async (req, res, next) => {
+  try {
+    const parsed = standingOrderSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    const p = parsed.data;
+    if (p.valid_to && p.valid_to < p.valid_from) return res.status(400).json({ error: 'Konec platnosti je před začátkem' });
+    const created = await prisma.standingOrder.create({ data: standingOrderData(p) });
+    logAudit({ action: 'create', entity: 'standing_order', entity_id: created.id, description: `Trvalý příkaz „${created.name}" (${p.amount} ${p.currency}, ${p.day_of_month}. v měsíci)`, user: req.user }).catch(() => {});
+    res.status(201).json(created);
+  } catch (err) { next(err); }
+});
+router.put('/standing-orders/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const parsed = standingOrderSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.issues.map(i => i.message).join('; ') });
+    const p = parsed.data;
+    if (p.valid_to && p.valid_to < p.valid_from) return res.status(400).json({ error: 'Konec platnosti je před začátkem' });
+    const exists = await prisma.standingOrder.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) return res.status(404).json({ error: 'Trvalý příkaz nenalezen' });
+    const updated = await prisma.standingOrder.update({ where: { id }, data: standingOrderData(p) });
+    logAudit({ action: 'update', entity: 'standing_order', entity_id: id, description: `Upraven trvalý příkaz „${updated.name}"`, user: req.user }).catch(() => {});
+    res.json(updated);
+  } catch (err) { next(err); }
+});
+router.delete('/standing-orders/:id', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = await prisma.standingOrder.findUnique({ where: { id }, select: { id: true, name: true } });
+    if (!row) return res.status(404).json({ error: 'Trvalý příkaz nenalezen' });
+    await prisma.standingOrder.delete({ where: { id } });
+    logAudit({ action: 'delete', entity: 'standing_order', entity_id: id, description: `Smazán trvalý příkaz „${row.name}"`, user: req.user }).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 // GET /api/accounting/payment-plan — Plán plateb: nezaplacené přijaté doklady (po dnech splatnosti)
 // query: to=YYYY-MM-DD (volitelně jen do data)
 router.get('/payment-plan', async (req, res, next) => {
