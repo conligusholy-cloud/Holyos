@@ -2471,14 +2471,17 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   const XLSX = require('xlsx');
   const rows = (await q("SELECT id,email,first_name,last_name,nick,status,user_type,extra->>'obrat' AS obrat,partner_support AS p FROM supporters WHERE partner_support IS NOT NULL AND partner_support->>'total_all' ~ '^-?[0-9.]+$' AND (partner_support->>'total_all')::numeric > 0")).rows;
   const n = (v) => (v == null || v === '' || !isFinite(Number(v)) ? null : Number(v));
+  // jména ze starého importu obsahují HTML entity (&Scaron;trbka, Blah&aacute;č) a text „NULL"
+  const ENT = { aacute: 'á', eacute: 'é', iacute: 'í', oacute: 'ó', uacute: 'ú', yacute: 'ý', Aacute: 'Á', Eacute: 'É', Iacute: 'Í', Oacute: 'Ó', Uacute: 'Ú', Yacute: 'Ý', scaron: 'š', Scaron: 'Š', ccaron: 'č', Ccaron: 'Č', rcaron: 'ř', Rcaron: 'Ř', zcaron: 'ž', Zcaron: 'Ž', ecaron: 'ě', Ecaron: 'Ě', ncaron: 'ň', Ncaron: 'Ň', tcaron: 'ť', Tcaron: 'Ť', dcaron: 'ď', Dcaron: 'Ď', uring: 'ů', Uring: 'Ů', ouml: 'ö', uuml: 'ü', auml: 'ä', Ouml: 'Ö', Uuml: 'Ü', Auml: 'Ä', ocirc: 'ô', lcaron: 'ľ', Lcaron: 'Ľ', lacute: 'ĺ', racute: 'ŕ', amp: '&', quot: '"', apos: "'", nbsp: ' ', lt: '<', gt: '>' };
+  const txt = (v) => { const s = String(v == null ? '' : v).replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)) : (ENT[e] || m)).trim(); return /^null$/i.test(s) ? '' : s; };
   const czkOf = (p) => (p.currency === 'EUR' ? n(p.total_all_czk) : n(p.total_all));
   rows.sort((a, b) => (czkOf(b.p) || 0) - (czkOf(a.p) || 0));
   const data = rows.map((r, i) => { const p = r.p || {}; const eur = p.currency === 'EUR';
-    return { '#': i + 1, 'Příjmení': r.last_name || '', 'Jméno': r.first_name || '', 'Nick': r.nick || '', 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
+    return { '#': i + 1, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Nick': txt(r.nick), 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
       'Obrat (import)': n(String(r.obrat || '').replace(/[^0-9.-]/g, '')), 'Měna účtu': eur ? 'EUR' : 'CZK',
-      'Celkem podpořil (v měně účtu)': n(p.total_all), 'Celkem podpořil (Kč)': czkOf(p),
+      'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Celkem podpořil (Kč)': czkOf(p),
       'Kurz ČNB': eur ? n(p.eur_rate) : null, 'Datum kurzu': eur ? (p.eur_rate_date || '') : '',
-      'Rok': n(p.year), 'V roce (v měně účtu)': n(p.total_year), 'V roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
+      'Aktuální rok': n(p.year), 'V aktuálním roce (v měně účtu)': n(p.total_year), 'V aktuálním roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
       'Palety': n(p.palety), 'Expanze': n(p.expanze), 'NeuraWash': n(p.neurawash), 'Opakovačky': n(p.opakovacky),
       'Obrat sítě od počátku': n(p.network_all), 'Načteno ze starého portálu': p.synced_at ? new Date(p.synced_at).toLocaleString('cs-CZ') : '',
       'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
@@ -2492,8 +2495,8 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   const cz = data.filter((d) => d['Měna účtu'] === 'CZK'), eu = data.filter((d) => d['Měna účtu'] === 'EUR');
   const sumWs = XLSX.utils.aoa_to_sheet([
     ['Souhrn podpory ze starého portálu', ''], ['Export', new Date().toLocaleString('cs-CZ')], ['', ''],
-    ['Korunové účty', cz.length], ['Podpořili v Kč', cz.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu)'] || 0), 0)],
-    ['Eurové účty', eu.length], ['Podpořili v €', eu.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu)'] || 0), 0)], ['Eura přepočtená na Kč (ČNB)', eu.reduce((a, d) => a + (d['Celkem podpořil (Kč)'] || 0), 0)],
+    ['Korunové účty', cz.length], ['Podpořili v Kč', cz.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu: Kč nebo €)'] || 0), 0)],
+    ['Eurové účty', eu.length], ['Podpořili v €', eu.reduce((a, d) => a + (d['Celkem podpořil (v měně účtu: Kč nebo €)'] || 0), 0)], ['Eura přepočtená na Kč (ČNB)', eu.reduce((a, d) => a + (d['Celkem podpořil (Kč)'] || 0), 0)],
     ['', ''], ['Celkem v Kč', sum('Celkem podpořil (Kč)')], ['Uživatelů celkem', data.length],
   ]);
   sumWs['!cols'] = [{ wch: 32 }, { wch: 20 }];
