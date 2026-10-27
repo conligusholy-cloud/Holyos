@@ -992,22 +992,48 @@
       IV_COLS.forEach((c, idx) => {
         const th = ths[idx]; if (!th) return;
         th.style.whiteSpace = 'nowrap';
-        th.insertAdjacentHTML('beforeend', ' <button type="button" class="iv-sort-btn" data-ivs="' + c.key + '" title="Řazení a výběr hodnot" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button>');
+        th.insertAdjacentHTML('beforeend', ' <button type="button" class="iv-sort-btn" data-ivs="' + c.key + '" title="Klikni pro řazení" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button>');
       });
       const tr = document.createElement('tr'); tr.className = 'iv-filter-row';
       tr.innerHTML = IV_COLS.map((c) => '<th style="padding:4px 3px">' + IV_CF.cellHtml(c.key) + '</th>').join('') + '<th></th>';
       thead.appendChild(tr);
       IV_CF.bind(tr);
-      thead.querySelectorAll('[data-ivs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); ivOpenSortMenu(b); }));
+      thead.querySelectorAll('[data-ivs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); ivCycleSort(b); }));
       const tbl = document.getElementById('invoices-table');
       if (tbl && !document.getElementById('iv-filter-info')) tbl.insertAdjacentHTML('beforebegin', '<div id="iv-filter-info" style="font-size:12px;color:var(--text2);margin:0 0 6px;display:flex;gap:10px;align-items:center"></div>');
+    }
+    // Řazení: klik na šipky v hlavičce cykluje 3 stavy — vzestupně ↑ / sestupně ↓ / bez řazení (aktivní šipka je zvýrazněná)
+    const ivSortArrows = (on, dir) => '<span style="display:inline-flex;gap:0;font-size:12px;line-height:1;vertical-align:middle">' +
+        '<span style="' + (on && dir === 1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↑</span>' +
+        '<span style="' + (on && dir === -1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↓</span></span>';
+    function ivSortDirs(col) {
+      // text: nejdřív A→Z, čísla a data: nejdřív od největšího / nejnovějšího
+      return (col.type || 'text') === 'text' ? [1, -1] : [-1, 1];
+    }
+    function ivSortTitle(col, on, dir) {
+      const k = (col.type || 'text');
+      const lab = k === 'num' ? (dir === -1 ? 'od největšího po nejmenší' : 'od nejmenšího po největší')
+        : k === 'date' ? (dir === -1 ? 'od nejnovějšího po nejstarší' : 'od nejstaršího po nejnovější')
+        : (dir === 1 ? 'A → Z' : 'Z → A');
+      return on ? 'Řazeno ' + lab + ' — klikni pro změnu' : 'Klikni pro řazení';
+    }
+    function ivCycleSort(btn) {
+      const key = btn.dataset.ivs; const col = IV_COLS.find((c) => c.key === key); if (!col) return;
+      const [d1, d2] = ivSortDirs(col);
+      if (INV_SORT.key !== key) { INV_SORT.key = key; INV_SORT.dir = d1; }
+      else if (INV_SORT.dir === d1) INV_SORT.dir = d2;
+      else INV_SORT.key = null;
+      ivMarkSort(); renderInvoiceRows();
     }
     function ivMarkSort() {
       document.querySelectorAll('[data-ivs]').forEach((b) => {
         const on = INV_SORT.key === b.dataset.ivs;
-        b.textContent = on ? (INV_SORT.dir === 1 ? '▲' : '▼') : '⇅';
-        b.style.color = on ? '#f59e0b' : 'var(--text2)';
+        const col = IV_COLS.find((c) => c.key === b.dataset.ivs);
+        b.innerHTML = ivSortArrows(on, INV_SORT.dir);
+        b.title = col ? ivSortTitle(col, on, INV_SORT.dir) : '';
+        b.style.color = 'var(--text2)';
       });
+      document.querySelectorAll('[data-ivs]').forEach((b) => { const th = b.closest('th'); if (th) th.style.color = INV_SORT.key === b.dataset.ivs ? '#f59e0b' : ''; });
     }
     function ivCloseSortMenu() { const m = document.getElementById('iv-sort-menu'); if (m) m.remove(); }
     function ivOpenSortMenu(btn) {

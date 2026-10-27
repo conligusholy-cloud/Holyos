@@ -3157,10 +3157,10 @@
       const el = document.getElementById('movements-table');
       if (!MV_ALL.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔄</div><h3>Žádné pohyby</h3><p>Zaznamenejte první příjem nebo výdej.</p></div>'; return; }
       el.innerHTML = '<div id="mv-filter-info" style="font-size:12px;color:var(--text2);margin:0 0 6px;display:flex;gap:10px;align-items:center"></div>' +
-        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + MV_COLS.map((c) => '<th>' + c.label + ' <button type="button" class="mv-sort-btn" data-mvs="' + c.key + '" title="Řazení a výběr hodnot" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button></th>').join('') + (IS_ADMIN ? '<th></th>' : '') + '</tr>' +
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + MV_COLS.map((c) => '<th>' + c.label + ' <button type="button" class="mv-sort-btn" data-mvs="' + c.key + '" title="Klikni pro řazení" style="background:none;border:none;color:var(--text2);cursor:pointer;padding:0 2px;font-size:12px">⇅</button></th>').join('') + (IS_ADMIN ? '<th></th>' : '') + '</tr>' +
         '<tr class="mv-filter-row">' + MV_COLS.map((c) => '<th style="padding:4px 3px">' + MV_CF.cellHtml(c.key) + '</th>').join('') + (IS_ADMIN ? '<th></th>' : '') + '</tr></thead><tbody id="mv-tbody"></tbody></table></div>';
       MV_CF.bind(el.querySelector('.mv-filter-row'));
-      el.querySelectorAll('[data-mvs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); mvOpenSortMenu(b); }));
+      el.querySelectorAll('[data-mvs]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); mvCycleSort(b); }));
       renderMovementRows(); mvMarkSort();
     }
 
@@ -3178,12 +3178,38 @@
       const v = c.get(mv);
       return kind === 'date' ? +v : kind === 'num' ? Number(v) : mvNorm(v);
     }
+    // Řazení: klik na šipky v hlavičce cykluje 3 stavy — vzestupně ↑ / sestupně ↓ / bez řazení (aktivní šipka je zvýrazněná)
+    const mvSortArrows = (on, dir) => '<span style="display:inline-flex;gap:0;font-size:12px;line-height:1;vertical-align:middle">' +
+        '<span style="' + (on && dir === 1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↑</span>' +
+        '<span style="' + (on && dir === -1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↓</span></span>';
+    function mvSortDirs(col) {
+      // text: nejdřív A→Z, čísla a data: nejdřív od největšího / nejnovějšího
+      return (MV_KIND[col.key] || 'text') === 'text' ? [1, -1] : [-1, 1];
+    }
+    function mvSortTitle(col, on, dir) {
+      const k = (MV_KIND[col.key] || 'text');
+      const lab = k === 'num' ? (dir === -1 ? 'od největšího po nejmenší' : 'od nejmenšího po největší')
+        : k === 'date' ? (dir === -1 ? 'od nejnovějšího po nejstarší' : 'od nejstaršího po nejnovější')
+        : (dir === 1 ? 'A → Z' : 'Z → A');
+      return on ? 'Řazeno ' + lab + ' — klikni pro změnu' : 'Klikni pro řazení';
+    }
+    function mvCycleSort(btn) {
+      const key = btn.dataset.mvs; const col = MV_COLS.find((c) => c.key === key); if (!col) return;
+      const [d1, d2] = mvSortDirs(col);
+      if (MV_SORT.key !== key) { MV_SORT.key = key; MV_SORT.dir = d1; }
+      else if (MV_SORT.dir === d1) MV_SORT.dir = d2;
+      else MV_SORT.key = null;
+      mvMarkSort(); renderMovementRows();
+    }
     function mvMarkSort() {
       document.querySelectorAll('[data-mvs]').forEach((b) => {
         const on = MV_SORT.key === b.dataset.mvs;
-        b.textContent = on ? (MV_SORT.dir === 1 ? '▲' : '▼') : '⇅';
-        b.style.color = on ? '#f59e0b' : 'var(--text2)';
+        const col = MV_COLS.find((c) => c.key === b.dataset.mvs);
+        b.innerHTML = mvSortArrows(on, MV_SORT.dir);
+        b.title = col ? mvSortTitle(col, on, MV_SORT.dir) : '';
+        b.style.color = 'var(--text2)';
       });
+      document.querySelectorAll('[data-mvs]').forEach((b) => { const th = b.closest('th'); if (th) th.style.color = MV_SORT.key === b.dataset.mvs ? '#f59e0b' : ''; });
     }
     function mvSetSort(key, dir) { MV_SORT.key = key; MV_SORT.dir = dir; mvMarkSort(); renderMovementRows(); }
     function mvCloseSortMenu() { const m = document.getElementById('mv-sort-menu'); if (m) m.remove(); }
