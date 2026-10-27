@@ -56,6 +56,7 @@ input,select,textarea{width:100%;font:inherit;font-size:16px;color:var(--text);b
 .auth{max-width:440px;margin:6vh auto 0} .auth .logo{font-size:28px;font-weight:900;text-align:center;margin-bottom:4px} .auth .sub{text-align:center;color:var(--text2);margin-bottom:18px}
 table{width:100%;border-collapse:collapse;font-size:14px} td.nm{max-width:200px;width:200px} td.nm b{display:block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} @media (max-width:720px){td.nm,td.nm b{max-width:none;width:auto;white-space:normal}} th,td{text-align:left;padding:9px 8px;border-top:1px solid var(--border);vertical-align:top} th{color:var(--text2);font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-top:0}
 .tbl-wrap{overflow:auto;-webkit-overflow-scrolling:touch}
+td.actions{white-space:nowrap} td.actions .row{flex-wrap:nowrap} td.actions .btn{white-space:nowrap}
 @media (max-width:720px){
   .cards tr{display:block;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--card2)} .cards thead{display:none}
   .cards td{display:block;border:0;padding:3px 0} .cards td[data-l]::before{content:attr(data-l) ": ";color:var(--text2);font-size:12px}
@@ -1537,7 +1538,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet ↗</a></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="https://partner.bestseries.cz/php-action/fake-login.php?email=${encodeURIComponent(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
