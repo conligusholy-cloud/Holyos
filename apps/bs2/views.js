@@ -1589,7 +1589,19 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><span id="ps-sync-st" class="small muted"></span>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><a class="btn sec sm" href="/admin/partner-support/export.xlsx" title="Všichni uživatelé s nenulovou podporou do Excelu">⬇ Excel</a><button type="button" class="btn sec sm" id="snap-all" title="U všech s nenulovým obratem pořídí screenshot Přehledu podpory ze starého portálu (na pozadí; přeskočí screenshoty mladší 24 h)">📸 Screenshot všech</button><span id="snap-all-st" class="small muted"></span>
+      <script>
+        (function(){ var b=document.getElementById('snap-all'), st=document.getElementById('snap-all-st'); if(!b) return;
+          function dur(s){ s=Math.max(0,Math.round(s)); var h=Math.floor(s/3600), m=Math.floor(s%3600/60); return h? h+' h '+m+' min' : m+' min'; }
+          function show(j){ if(!j.total){ st.textContent = j.started_at ? ' 📸 nic k pořízení' : ''; return; }
+            var el=((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000, per=j.done?el/j.done:0;
+            st.textContent=' 📸 '+(j.running?'běží ':'hotovo ')+j.done+'/'+j.total+' ('+Math.round(100*j.done/j.total)+' %) · OK '+j.ok+(j.failed?' · chyby '+j.failed:'')+(j.running&&per?' · zbývá cca '+dur(per*(j.total-j.done)):'');
+            st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
+          function poll(){ fetch('/admin/support-snapshots/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,4000); }).catch(function(){}); }
+          b.onclick=function(){ if(!confirm('Pořídit screenshot Přehledu podpory u všech uživatelů s nenulovým obratem? Běží na pozadí (cca 2–3 h), přeskočí screenshoty mladší 24 h.')) return;
+            fetch('/admin/support-snapshots/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+          poll(); })();
+      </script><span id="ps-sync-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
           function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' (' + Math.round(100*j.done/j.total) + ' %) · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') : ''; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }

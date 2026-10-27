@@ -37,4 +37,24 @@ async function captureSupportScreenshot(email, path = '/cs/bo/my-invests/') {
   }
 }
 
-module.exports = { captureSupportScreenshot };
+// ── Hromadné screenshoty: jeden sdílený Chromium, každý uživatel ve vlastním izolovaném kontextu
+// (vlastní cookies → žádné míchání přihlášení mezi souběžnými snímky). JPEG kvůli velikosti v DB.
+async function openBrowser() {
+  return puppeteer.launch({ executablePath: CHROME_PATH, headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'] });
+}
+async function captureWith(browser, email, { path = '/cs/bo/my-invests/', type = 'jpeg', quality = 72 } = {}) {
+  if (!email) throw new Error('Uživatel nemá e-mail.');
+  const ctx = await (browser.createBrowserContext ? browser.createBrowserContext() : browser.createIncognitoBrowserContext());
+  try {
+    const page = await ctx.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'networkidle2', timeout: 25000 });
+    await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
+    await new Promise((r) => setTimeout(r, 400));
+    return await page.screenshot(type === 'png' ? { type: 'png', fullPage: true } : { type: 'jpeg', quality, fullPage: true });
+  } finally {
+    await ctx.close().catch(() => {});
+  }
+}
+
+module.exports = { captureSupportScreenshot, openBrowser, captureWith };

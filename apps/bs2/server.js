@@ -2478,12 +2478,11 @@ app.get('/admin/partner-support/export.xlsx', requireAdmin, wrap(async (req, res
   rows.sort((a, b) => (czkOf(b.p) || 0) - (czkOf(a.p) || 0));
   const data = rows.map((r, i) => { const p = r.p || {}; const eur = p.currency === 'EUR';
     return { '#': i + 1, 'Příjmení': txt(r.last_name), 'Jméno': txt(r.first_name), 'Nick': txt(r.nick), 'E-mail': r.email, 'Stav': r.status, 'Typ': r.user_type || '',
-      'Obrat (import)': n(String(r.obrat || '').replace(/[^0-9.-]/g, '')), 'Měna účtu': eur ? 'EUR' : 'CZK',
-      'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Celkem podpořil (Kč)': czkOf(p),
+      'Celkem podpořil (v měně účtu: Kč nebo €)': n(p.total_all), 'Měna účtu': eur ? 'EUR' : 'CZK', 'Celkem podpořil (Kč)': czkOf(p),
       'Kurz ČNB': eur ? n(p.eur_rate) : null, 'Datum kurzu': eur ? (p.eur_rate_date || '') : '',
       'Aktuální rok': n(p.year), 'V aktuálním roce (v měně účtu)': n(p.total_year), 'V aktuálním roce (Kč)': eur ? n(p.total_year_czk) : n(p.total_year),
       'Palety': n(p.palety), 'Expanze': n(p.expanze), 'NeuraWash': n(p.neurawash), 'Opakovačky': n(p.opakovacky),
-      'Obrat sítě od počátku': n(p.network_all), 'Načteno ze starého portálu': p.synced_at ? new Date(p.synced_at).toLocaleString('cs-CZ') : '',
+      'Obrat sítě od počátku': n(p.network_all), 'Obrat ze starého importu (není podpora)': n(String(r.obrat || '').replace(/[^0-9.-]/g, '')), 'Načteno ze starého portálu': p.synced_at ? new Date(p.synced_at).toLocaleString('cs-CZ') : '',
       'Odkaz BS2': (process.env.BS2_PUBLIC_URL || 'https://www.bestseries2.cz') + '/admin/supporters/' + r.id };
   });
   const wb = XLSX.utils.book_new();
@@ -2536,11 +2535,52 @@ app.get('/admin/supporters/:id(\\d+)/support-snapshot.png', requireAdmin, wrap(a
   const r = await q('SELECT support_snapshot, support_snapshot_at FROM supporters WHERE id=$1', [req.params.id]);
   const row = r.rows[0];
   if (!row || !row.support_snapshot) return res.status(404).send('Zatím není žádný screenshot.');
-  res.set('Content-Type', 'image/png');
+  const b0 = row.support_snapshot; // hromadné snímky jsou JPEG, ruční PNG — poznat podle hlavičky souboru
+  res.set('Content-Type', b0[0] === 0xff && b0[1] === 0xd8 ? 'image/jpeg' : 'image/png');
   res.set('Cache-Control', 'private, no-store');
   res.set('Last-Modified', new Date(row.support_snapshot_at).toUTCString());
   res.send(row.support_snapshot);
 }));
+// Hromadné screenshoty podpory u všech s nenulovým obratem (na pozadí, v paměti — redeploy běh ukončí;
+// po restartu stačí spustit znovu, přeskočí ty se screenshotem mladším 24 h)
+let SNAP_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
+app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res) => {
+  if (SNAP_JOB.running) return res.json(SNAP_JOB);
+  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (support_snapshot_at IS NULL OR support_snapshot_at < now() - interval '24 hours') ORDER BY id`)).rows;
+  SNAP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
+  await log(req.admin, 'support_snapshot_all', { total: rows.length });
+  res.json(SNAP_JOB);
+  (async () => {
+    const workers = Math.max(1, Math.min(4, parseInt(process.env.SNAP_CONCURRENCY || '2', 10) || 2));
+    const queue = rows.slice(); let stop = false; let browser = null, uses = 0, opening = null;
+    const getBrowser = async () => {
+      if (browser && uses < 150 && browser.connected !== false) return browser;
+      if (opening) return opening;
+      opening = (async () => { const old = browser; browser = await SUPPORT_SNAP.openBrowser(); uses = 0; if (old) setTimeout(() => old.close().catch(() => {}), 60000); opening = null; return browser; })();
+      return opening;
+    };
+    await Promise.all(Array.from({ length: workers }, async () => {
+      while (queue.length && !stop) {
+        const s = queue.shift();
+        try {
+          const br = await getBrowser(); uses++;
+          const buf = await SUPPORT_SNAP.captureWith(br, s.email);
+          await q('UPDATE supporters SET support_snapshot=$2, support_snapshot_at=now() WHERE id=$1', [s.id, buf]);
+          SNAP_JOB.ok++;
+        } catch (e) {
+          SNAP_JOB.failed++; if (SNAP_JOB.errors.length < 50) SNAP_JOB.errors.push((s.nick || s.email) + ': ' + e.message);
+          if (/Target closed|Protocol error|disconnected/i.test(e.message)) uses = 999; // spadlý prohlížeč → otevřít nový
+        }
+        SNAP_JOB.done++; SNAP_JOB.last = s.nick || s.email;
+        if (SNAP_JOB.failed >= 10 && SNAP_JOB.ok === 0) { stop = true; SNAP_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
+      }
+    }));
+    if (browser) await browser.close().catch(() => {});
+    SNAP_JOB.running = false; SNAP_JOB.finished_at = new Date().toISOString();
+    console.log('[bs2] hromadné screenshoty hotovo', JSON.stringify({ ...SNAP_JOB, errors: SNAP_JOB.errors.slice(0, 5) }));
+  })().catch((e) => { SNAP_JOB.running = false; SNAP_JOB.finished_at = new Date().toISOString(); SNAP_JOB.errors.push(e.message); });
+}));
+app.get('/admin/support-snapshots/sync-all', requireAdmin, (req, res) => res.json(SNAP_JOB));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
