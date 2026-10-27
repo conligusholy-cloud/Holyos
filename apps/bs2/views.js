@@ -1580,10 +1580,10 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a id="ps-sync-st" class="small muted" href="/admin/partner-support" title="Zobrazit hotové uživatele a zkontrolovat ručně" style="text-decoration:underline"></a>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a class="btn sec sm" href="/admin/partner-support" title="Načtená podpora všech uživatelů — ruční kontrola, průběh načítání, eurové účty">📋 Kontrola podpory</a><span id="ps-sync-st" class="small muted"></span>
       <script>
         (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
-          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' (' + Math.round(100*j.done/j.total) + ' %) · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') + ' → zobrazit hotové' : ' zobrazit načtené'; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
+          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' (' + Math.round(100*j.done/j.total) + ' %) · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') : ''; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
           function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if (j.running) setTimeout(poll, 2000); }); }
           b.onclick=function(){ if(!confirm('Načíst podporu ze starého portálu u všech uživatelů s nenulovým obratem? Běží na pozadí, může to trvat několik minut.')) return; fetch('/admin/partner-support/sync-all',{method:'POST'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
