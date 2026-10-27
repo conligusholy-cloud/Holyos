@@ -1617,6 +1617,25 @@
     }
 
     // Platby přiřazené k dokladu (vazba doklad → platba)
+    window.editPaymentNote = async function(id, regen) {
+      let body;
+      if (regen) body = { regenerate: true };
+      else {
+        const cur = (window._detailInv && window._detailInv.id === id && window._detailInv.payment_note) || '';
+        const v = prompt('Za co platím (1–3 slova, max 60 znaků) — objeví se v poznámce pro mě u QR platby a v příkazu:', cur);
+        if (v === null) return; body = { note: v };
+      }
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/payment-note', body);
+      if (r.status !== 200) return alert('Nepodařilo se: ' + (r.data?.error || r.status));
+      openDetail(id);
+    };
+    function invPaymentNoteHtml(inv) {
+      if (inv.direction !== 'ap') return '';
+      return '<div class="dv-match" style="display:flex;align-items:center;gap:8px;">🏷 <b>Za co platím:</b> ' +
+        (inv.payment_note ? '<span>' + escapeHtml(inv.payment_note) + '</span>' : '<span style="color:var(--text2)">zatím nevyplněno — vytvoří se samo při QR platbě nebo příkazu</span>') +
+        '<span style="flex:1"></span><button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ')" title="Upravit ručně">✏️</button>' +
+        '<button class="btn btn-secondary btn-sm" onclick="editPaymentNote(' + inv.id + ',true)" title="Nechat AI shrnout z položek dokladu">🤖 Shrnout</button></div>';
+    }
     function invPaymentsHtml(inv) {
       const allocs = inv.allocations || [];
       const total = Number(inv.total || 0), paid = Number(inv.paid_amount || 0);
@@ -1805,7 +1824,7 @@
                 ' &nbsp;|&nbsp; Příjemka: ' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
                 (canEdit ? ' <button class="btn btn-secondary btn-sm" onclick="openMatchModal(' + inv.id + ')" style="margin-left:10px;">Navázat / změnit</button>' : '') + '</div>'
               : (inv.order ? '<div class="dv-match">🔗 Objednávka: <span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span></div>' : '')) +
-            invPaymentsHtml(inv) +
+            invPaymentNoteHtml(inv) + invPaymentsHtml(inv) +
 
             // Položky
             '<div class="dv-h">Položky (' + (inv.items?.length || 0) + ')</div>' +
@@ -5198,7 +5217,7 @@
       return PLAN.rows.concat(planStandingRows()).filter(r => {
         if (hide && r.in_batch) return false;
         if (!q) return true;
-        const hay = [r.invoice_number, r.external_number, r.variable_symbol, r.company?.name, r.partner_bank_account].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const hay = [r.invoice_number, r.external_number, r.variable_symbol, r.company?.name, r.partner_bank_account, r.payment_note].join(' ').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         return q.split(/\s+/).every(w => hay.includes(w));
       });
     }
@@ -5267,7 +5286,7 @@
           html += '<tr data-plan-group="' + g.key + '" style="background:rgba(255,255,255,.015)">' +
             '<td style="padding-left:30px;border-left:3px solid ' + (g.overdue ? '#ef444455' : '#818cf855') + '"><input type="checkbox" class="plan-cb" data-id="' + r.id + '" ' + (PLAN.sel.has(r.id) ? 'checked ' : '') + (why ? 'disabled title="' + escapeHtml(why) + '" ' : '') + 'onchange="planToggle(' + r.id + ',this.checked)"></td>' +
             '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetail(' + r.id + ')" title="Otevřít doklad" style="font-family:Consolas,monospace;font-weight:700;font-size:0.92em;color:#c7d2fe;text-decoration:none;white-space:nowrap">' + escapeHtml(r.invoice_number) + '</a>' + (r.external_number ? '<div style="font-size:0.8em;color:var(--text2)">' + escapeHtml(r.external_number) + '</div>' : '') + '</td>' +
-            '<td>' + escapeHtml(r.company?.name || '—') + '</td>' +
+            '<td>' + escapeHtml(r.company?.name || '—') + (r.payment_note ? '<div style="font-size:0.8em;color:#a5b4fc" title="Za co platím">🏷 ' + escapeHtml(r.payment_note) + '</div>' : '') + '</td>' +
             '<td>' + escapeHtml(r.variable_symbol || '—') + '</td>' +
             '<td style="white-space:nowrap"><small>' + escapeHtml(r.partner_bank_account || r.partner_iban || '—') + '</small><br>' + verBadge + '</td>' +
             '<td style="white-space:nowrap;' + (late ? 'color:#f87171' : '') + '">' + fmtDate(r.date_due) + (late ? '<div style="font-size:0.78em">' + late + ' dní po</div>' : '') + '</td>' +

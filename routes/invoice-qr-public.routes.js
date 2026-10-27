@@ -11,7 +11,7 @@ const router = express.Router();
 const SELECT = {
   id: true, invoice_number: true, external_number: true, direction: true, status: true, tags: true,
   total: true, paid_amount: true, currency: true, variable_symbol: true, constant_symbol: true, specific_symbol: true,
-  date_due: true, partner_bank_account: true, partner_iban: true, company_id: true,
+  date_due: true, partner_bank_account: true, partner_iban: true, company_id: true, payment_note: true,
   company: { select: { name: true } },
 };
 
@@ -55,6 +55,8 @@ router.post('/:token/generate', async (req, res) => {
     if (s.error) return res.status(s.http).json({ error: s.error });
     if (s.blocked) return res.status(409).json({ error: s.blocked });
     const { inv, remaining } = s;
+    // shrnutí „za co platím" do poznámky pro mě (vygeneruje se jednou a uloží k dokladu)
+    try { if (!inv.payment_note) inv.payment_note = await require('../services/accounting/payment-note').ensurePaymentNote(inv.id); } catch (e) { /* bez poznámky */ }
     const spd = buildSpd({ ...inv }, remaining);
     if (spd.error) return res.status(400).json({ error: spd.error });
 

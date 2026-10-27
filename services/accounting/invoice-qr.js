@@ -74,8 +74,8 @@ function buildSpd(inv, remaining) {
   if (rn) parts.push('RN:' + rn);
   const msg = ascii('Uhrada ' + (inv.external_number || inv.invoice_number)).slice(0, 60);
   if (msg) parts.push('MSG:' + msg);
-  // „Poznámka pro mě" (zpráva pro plátce) = název dodavatele. Standard QR Platby: X-SELF, max 60 znaků.
-  const self = ascii(inv.company && inv.company.name).slice(0, 60);
+  // „Poznámka pro mě" (zpráva pro plátce) = za co platím + dodavatel. Standard QR Platby: X-SELF, max 60 znaků.
+  const self = ascii([inv.payment_note, inv.company && inv.company.name].filter(Boolean).join(' - ')).slice(0, 60);
   if (self) parts.push('X-SELF:' + self);
   return { spd: parts.join('*'), iban };
 }

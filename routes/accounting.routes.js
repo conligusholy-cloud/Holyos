@@ -1350,6 +1350,21 @@ router.post('/invoices/:id/mark-paid', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/invoices/:id/payment-note — „za co platím" (ruční úprava, nebo { regenerate:true } = znovu přes AI)
+router.post('/invoices/:id/payment-note', async (req, res, next) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const svc = require('../services/accounting/payment-note');
+    if (req.body?.regenerate) {
+      await prisma.invoice.update({ where: { id }, data: { payment_note: null } });
+      return res.json({ id, payment_note: await svc.ensurePaymentNote(id) });
+    }
+    const note = String(req.body?.note || '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
+    const r = await prisma.invoice.update({ where: { id }, data: { payment_note: note }, select: { id: true, payment_note: true } });
+    res.json(r);
+  } catch (err) { next(err); }
+});
+
 // POST /api/accounting/invoices/:id/unmark-paid — admin: vrátit ručně zaplacený doklad zpět na „Rozpracovaný"
 // Odebere jen RUČNÍ úhrady (ne spárované z výpisu ani z platebního příkazu). Zbylé bankovní platby zůstanou.
 router.post('/invoices/:id/unmark-paid', async (req, res, next) => {
@@ -2097,7 +2112,7 @@ router.get('/payment-plan', async (req, res, next) => {
       select: {
         id: true, invoice_number: true, external_number: true, type: true, status: true, variable_symbol: true,
         constant_symbol: true, specific_symbol: true, date_issued: true, date_due: true, total: true, paid_amount: true,
-        currency: true, payment_method: true, partner_bank_account: true, partner_iban: true, company_id: true, tags: true,
+        currency: true, payment_method: true, partner_bank_account: true, partner_iban: true, company_id: true, tags: true, payment_note: true,
         company: { select: { id: true, name: true } },
         allocations: { select: { amount: true, payment: { select: { status: true, batch: { select: { id: true, batch_number: true, status: true } } } } } },
       },
@@ -2125,9 +2140,13 @@ router.get('/payment-plan', async (req, res, next) => {
         payment_method: inv.payment_method || 'bank_transfer', partner_bank_account: inv.partner_bank_account, partner_iban: inv.partner_iban,
         verification: ver,
         in_batch: queued ? { id: queued.payment.batch.id, batch_number: queued.payment.batch.batch_number } : null,
+        payment_note: inv.payment_note || null,
       });
     }
     res.json(out);
+    // na pozadí doplnit shrnutí „za co platím" u nejbližších splatností (příště už se ukáže)
+    const missing = out.filter(r => !r.payment_note).slice(0, 40).map(r => r.id);
+    if (missing.length) require('../services/accounting/payment-note').ensureMany(missing, 3).catch(() => {});
   } catch (err) { next(err); }
 });
 
@@ -2294,6 +2313,10 @@ router.post('/payment-batches', async (req, res, next) => {
       return res.status(400).json({ error: 'Validace ABO vstupu selhala', details: validationErrors });
     }
 
+    // Krátké shrnutí „za co platím" u každého dokladu (uloží se k dokladu a do platby příkazu)
+    let notes = {};
+    try { notes = await require('../services/accounting/payment-note').ensureMany(invoices.map(i => i.id)); } catch (e) { /* bez poznámek */ }
+
     // 5) Atomická transakce: PaymentBatch + Payments + PaymentAllocations
     //    + posun statusů faktur na payment_queued
     const created = await prisma.$transaction(async tx => {
@@ -2326,6 +2349,7 @@ router.post('/payment-batches', async (req, res, next) => {
             amount_czk: payAmount(inv), // FX rate řešíme až ve Fázi 5
             partner_name: inv.company?.name || inv.external_number || `Faktura ${inv.invoice_number}`,
             partner_account: inv.partner_bank_account,
+            message: notes[inv.id] ? String(notes[inv.id]).slice(0, 140) : null,
             variable_symbol: inv.variable_symbol,
             constant_symbol: inv.constant_symbol,
             specific_symbol: inv.specific_symbol,

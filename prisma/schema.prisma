@@ -3181,6 +3181,9 @@ model Invoice {
   manual_receipt_at DateTime?
   manual_receipt_by String?   @db.VarChar(150)
 
+  // Krátké shrnutí „za co platím" (AI z položek, např. „Nájem Brno") — do poznámky pro mě v QR / u příkazu
+  payment_note String? @db.VarChar(60)
+
   created_by_id      Int?
   created_by         Person? @relation("InvoiceCreator", fields: [created_by_id], references: [id])
   // Vždy vyplněné — User, který fakturu založil (i když nemá propojený Person)
