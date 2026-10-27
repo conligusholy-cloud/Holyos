@@ -435,6 +435,8 @@
               <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" id="plan-hide-batched" checked onchange="renderPaymentPlan()"> Skrýt doklady už zařazené v příkazu</label>
               <input type="text" id="plan-search" placeholder="Dodavatel, číslo, VS…" oninput="renderPaymentPlan()" style="min-width:220px;">
               <button class="btn btn-secondary btn-sm" onclick="loadPaymentPlan()">🔄 Obnovit</button>
+              <button class="btn btn-secondary btn-sm" onclick="planExpandAll(true)">▾ Rozbalit vše</button>
+              <button class="btn btn-secondary btn-sm" onclick="planExpandAll(false)">▸ Sbalit vše</button>
             </div>
             <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;margin-bottom:12px;">
               <div style="flex:0 1 auto;display:flex;flex-direction:column;gap:12px;">
@@ -4900,7 +4902,7 @@
       if (which === 'plan') loadPaymentPlan();
     };
     // ─── Banka → Plán plateb: nezaplacené přijaté doklady po dnech + převod na platební příkaz ───
-    const PLAN = { rows: [], sel: new Set(), openOverdue: false };
+    const PLAN = { rows: [], sel: new Set(), open: new Set() }; // open = rozbalené dny (klíče skupin)
     const planDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
     function planEligible(r) {
       if (r.in_batch) return 'Už je v příkazu ' + r.in_batch.batch_number;
@@ -4969,12 +4971,13 @@
       order.forEach(g => {
         const elig = g.rows.filter(r => !planEligible(r));
         const allSel = elig.length > 0 && elig.every(r => PLAN.sel.has(r.id));
-        const collapsed = g.overdue && !PLAN.openOverdue;
+        const collapsed = !PLAN.open.has(g.key);
+        const nSel = g.rows.filter(r => PLAN.sel.has(r.id)).length;
         const label = g.overdue ? '⚠ Po splatnosti' : (g.date ? dayName(g.date) + ' · ' + rel(g.date) : 'Bez splatnosti');
-        html += '<tbody><tr id="plan-day-' + g.key + '" style="background:' + (g.overdue ? '#ef444418' : 'var(--surface2)') + '">' +
-          '<td><input type="checkbox" ' + (allSel ? 'checked ' : '') + (elig.length ? '' : 'disabled ') + 'title="Vybrat všechny platitelné doklady dne" onchange="planToggleGroup(\'' + g.key + '\',this.checked)"></td>' +
-          '<td colspan="6" style="font-weight:700;' + (g.overdue ? 'color:#f87171;cursor:pointer' : '') + '"' + (g.overdue ? ' onclick="planToggleOverdue()"' : '') + '>' + label +
-            ' <span style="font-weight:400;color:var(--text2);font-size:0.88em">· ' + g.rows.length + ' dokladů' + (g.overdue ? (collapsed ? ' — klikni pro zobrazení ▸' : ' ▾') : '') + '</span></td>' +
+        html += '<tbody><tr id="plan-day-' + g.key + '" style="cursor:pointer;background:' + (g.overdue ? '#ef444418' : 'var(--surface2)') + '" onclick="planToggleDay(\'' + g.key + '\')" title="' + (collapsed ? 'Rozbalit den' : 'Sbalit den') + '">' +
+          '<td onclick="event.stopPropagation()"><input type="checkbox" ' + (allSel ? 'checked ' : '') + (elig.length ? '' : 'disabled ') + 'title="Vybrat všechny platitelné doklady dne" onchange="planToggleGroup(\'' + g.key + '\',this.checked)"></td>' +
+          '<td colspan="6" style="font-weight:700;' + (g.overdue ? 'color:#f87171' : '') + '"><span style="display:inline-block;width:16px;color:var(--text2)">' + (collapsed ? '▸' : '▾') + '</span>' + label +
+            ' <span style="font-weight:400;color:var(--text2);font-size:0.88em">· ' + g.rows.length + ' dokladů' + (nSel ? ' · <span style="color:#818cf8">vybráno ' + nSel + '</span>' : '') + '</span></td>' +
           '<td class="num" style="font-weight:700;white-space:nowrap" title="Součet doplatků dokladů tohoto dne v CZK (doklady v cizí měně se nesčítají)"><span style="font-weight:400;font-size:0.8em;color:var(--text2)">Σ za ' + (g.overdue ? 'po splatnosti' : 'den') + '</span> ' + fmtAmount(sum(g.rows)) + ' Kč' +
             (g.rows.some(r => r.currency !== 'CZK') ? '<div style="font-weight:400;font-size:0.75em;color:var(--text2)">+ ' + g.rows.filter(r => r.currency !== 'CZK').map(r => fmtAmount(r.remaining) + ' ' + escapeHtml(r.currency)).join(', ') + '</div>' : '') + '</td></tr>';
         if (!collapsed) g.rows.forEach(r => {
@@ -4986,8 +4989,8 @@
           const partial = Number(r.paid_amount) > 0.009;
           const dd = r.date_due ? planDay(r.date_due) : null;
           const late = dd && dd < today ? Math.round((+today - +dd) / 864e5) : 0;
-          html += '<tr data-plan-group="' + g.key + '">' +
-            '<td><input type="checkbox" class="plan-cb" data-id="' + r.id + '" ' + (PLAN.sel.has(r.id) ? 'checked ' : '') + (why ? 'disabled title="' + escapeHtml(why) + '" ' : '') + 'onchange="planToggle(' + r.id + ',this.checked)"></td>' +
+          html += '<tr data-plan-group="' + g.key + '" style="background:rgba(255,255,255,.015)">' +
+            '<td style="padding-left:30px;border-left:3px solid ' + (g.overdue ? '#ef444455' : '#818cf855') + '"><input type="checkbox" class="plan-cb" data-id="' + r.id + '" ' + (PLAN.sel.has(r.id) ? 'checked ' : '') + (why ? 'disabled title="' + escapeHtml(why) + '" ' : '') + 'onchange="planToggle(' + r.id + ',this.checked)"></td>' +
             '<td style="white-space:nowrap"><a href="javascript:void(0)" onclick="openDetail(' + r.id + ')" title="Otevřít doklad" style="font-family:Consolas,monospace;font-weight:700;font-size:0.92em;color:#c7d2fe;text-decoration:none;white-space:nowrap">' + escapeHtml(r.invoice_number) + '</a>' + (r.external_number ? '<div style="font-size:0.8em;color:var(--text2)">' + escapeHtml(r.external_number) + '</div>' : '') + '</td>' +
             '<td>' + escapeHtml(r.company?.name || '—') + '</td>' +
             '<td>' + escapeHtml(r.variable_symbol || '—') + '</td>' +
@@ -5072,11 +5075,17 @@
       return planNext / 30;
     }
     window.planScrollDay = function(key) {
+      if (!PLAN.open.has(key)) { PLAN.open.add(key); renderPaymentPlan(); }
       const tr = document.getElementById('plan-day-' + key); if (!tr) return;
       tr.scrollIntoView({ behavior: 'smooth', block: 'start' });
       tr.style.outline = '2px solid #f59e0b'; setTimeout(() => { tr.style.outline = ''; }, 2500);
     };
-    window.planToggleOverdue = function() { PLAN.openOverdue = !PLAN.openOverdue; renderPaymentPlan(); };
+    window.planToggleDay = function(key) { if (PLAN.open.has(key)) PLAN.open.delete(key); else PLAN.open.add(key); renderPaymentPlan(); };
+    window.planExpandAll = function(open) {
+      if (!open) PLAN.open.clear();
+      else { const today = planDay(new Date()); planVisibleRows().forEach(r => { const d = r.date_due ? planDay(r.date_due) : null; PLAN.open.add(d && d < today ? 'overdue' : (d ? d.toISOString().slice(0, 10) : 'none')); }); }
+      renderPaymentPlan();
+    };
     window.planToggle = function(id, on) { if (on) PLAN.sel.add(id); else PLAN.sel.delete(id); renderPaymentPlan(); };
     window.planToggleGroup = function(key, on) {
       const today = planDay(new Date());
