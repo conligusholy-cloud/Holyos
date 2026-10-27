@@ -2374,8 +2374,13 @@ app.post('/admin/supporters/:id(\\d+)/partner-support', requireAdmin, wrap(async
     palety: num(req.body.palety), expanze: num(req.body.expanze), neurawash: num(req.body.neurawash), opakovacky: num(req.body.opakovacky),
     network_all: num(req.body.network_all), network_year: num(req.body.network_year),
     note: String(req.body.note || '').trim().slice(0, 500) || null,
+    // ruční uložení nesmí smazat měnu a údaje o načtení ze starého portálu
+    currency: (s.partner_support && s.partner_support.currency) || 'CZK', network_currency: (s.partner_support && s.partner_support.network_currency) || undefined,
+    synced_at: (s.partner_support && s.partner_support.synced_at) || undefined, legacy_name: (s.partner_support && s.partner_support.legacy_name) || undefined, source: (s.partner_support && s.partner_support.source) || undefined,
     updated_at: new Date().toISOString(), updated_by: req.admin.name || req.admin.username || 'admin',
   };
+  // eurový účet: přepočet na Kč stejným kurzem ČNB, jaký byl uložen (bez kurzu → aktuální ČNB)
+  { const pv = s.partner_support || {}; await require('./legacy-support').addCzk(data, pv.eur_rate ? { rate: pv.eur_rate, date: pv.eur_rate_date } : null); }
   await q('UPDATE supporters SET partner_support=$2, updated_at=now() WHERE id=$1', [s.id, JSON.stringify(data)]);
   await log(req.admin, 'partner_support', { id: s.id, ...data });
   res.redirect('/admin/supporters/' + s.id + '?msg=' + encodeURIComponent('Podpora z partnerského portálu uložena.'));
@@ -2399,7 +2404,9 @@ app.post('/admin/supporters/:id(\\d+)/partner-support/sync', requireAdmin, wrap(
 let LEGACY_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => {
   if (LEGACY_JOB.running) return res.json(LEGACY_JOB);
-  const rows = (await q("SELECT * FROM supporters WHERE email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0 AND (partner_support IS NULL OR partner_support->>'synced_at' IS NULL OR (partner_support->>'synced_at')::timestamptz < now() - interval '24 hours') ORDER BY id")).rows; // už načtené za posledních 24 h přeskočit → po restartu/redeployi se jen pokračuje
+  // mode=missing_year → znovu jen ti, u kterých se nenačetl rok/sekce (např. eurové účty), bez ohledu na 24 h
+  const missingYear = (req.body && req.body.mode) === 'missing_year';
+  const rows = (await q("SELECT * FROM supporters WHERE email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0 AND " + (missingYear ? "partner_support IS NOT NULL AND partner_support->>'year' IS NULL" : "(partner_support IS NULL OR partner_support->>'synced_at' IS NULL OR (partner_support->>'synced_at')::timestamptz < now() - interval '24 hours')") + " ORDER BY id")).rows; // už načtené za posledních 24 h přeskočit → po restartu/redeployi se jen pokračuje
   LEGACY_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_support_sync_all', { total: rows.length });
   res.json(LEGACY_JOB);

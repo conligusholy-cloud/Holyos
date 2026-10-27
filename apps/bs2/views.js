@@ -1937,9 +1937,10 @@ function adminProducts({ admin, rows = [], error = '', msg = '', holyosUrl, rate
 function partnerSupportCard(s) {
   const p = (s && s.partner_support) || {};
   const val = (v) => (v == null || v === '' ? '' : Number(v).toLocaleString('cs-CZ'));
-  const inp = (name, label, v) => `<div style="flex:1;min-width:140px"><label>${label}</label><input name="${name}" inputmode="decimal" value="${esc(val(v))}" placeholder="Kč"></div>`;
+  const cur = p.currency === 'EUR' ? '€' : 'Kč';
+  const inp = (name, label, v) => `<div style="flex:1;min-width:140px"><label>${label}${name.startsWith('network') ? '' : ' (' + cur + ')'}</label><input name="${name}" inputmode="decimal" value="${esc(val(v))}" placeholder="${name.startsWith('network') ? 'Kč' : cur}"></div>`;
   const sumYear = ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0);
-  return `<details class="card sec" data-sec="partner" open><summary><span>Podpora (partnerský portál)${p.total_all != null ? ` <span class="muted small">celkem ${Number(p.total_all).toLocaleString('cs-CZ')} Kč</span>` : ''}</span><span class="chev">▶</span></summary><div class="sec-body">
+  return `<details class="card sec" data-sec="partner" open><summary><span>Podpora (partnerský portál)${p.total_all != null ? ` <span class="muted small">celkem ${Number(p.total_all).toLocaleString('cs-CZ')} ${cur}${p.currency === 'EUR' && p.total_all_czk != null ? ' ≈ ' + Number(p.total_all_czk).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč' : ''}</span>` : ''}</span><span class="chev">▶</span></summary><div class="sec-body">
     <form method="post" action="/admin/supporters/${s.id}/partner-support">
       <div class="row" style="gap:10px;align-items:flex-end">
         ${inp('total_all', 'Celkem podpořil (od počátku)', p.total_all)}
@@ -1953,7 +1954,9 @@ function partnerSupportCard(s) {
         ${inp('network_all', 'Obrat sítě od počátku', p.network_all)}${inp('network_year', 'Obrat sítě v roce', p.network_year)}
       </div>
       <label style="margin-top:6px">Poznámka</label><input name="note" value="${esc(p.note || '')}" placeholder="např. Expanze obsahuje i palety a opakovačky">
-      ${sumYear ? `<div class="small muted" style="margin-top:6px">Součet palety + expanze + NeuraWash + opakovačky = <b>${sumYear.toLocaleString('cs-CZ')} Kč</b>${p.total_year != null && Math.abs(sumYear - Number(p.total_year)) > 0.5 ? ' (≠ „Podpořil v roce")' : ''}</div>` : ''}
+      ${sumYear ? `<div class="small muted" style="margin-top:6px">Součet palety + expanze + NeuraWash + opakovačky = <b>${sumYear.toLocaleString('cs-CZ')} ${cur}</b>${p.total_year != null && Math.abs(sumYear - Number(p.total_year)) > 0.5 ? ' (≠ „Podpořil v roce")' : ''}</div>` : ''}
+      ${p.currency === 'EUR' ? `<div class="card" style="margin-top:8px;padding:10px 12px;background:var(--bg2,#f6f7f9)"><div class="small"><b>Přepočet na Kč</b> <span class="muted">${p.eur_rate ? 'kurz ČNB ' + Number(p.eur_rate).toLocaleString('cs-CZ', { maximumFractionDigits: 3 }) + ' Kč/€' + (p.eur_rate_date ? ' ze dne ' + esc(p.eur_rate_date) : '') : esc(p.eur_rate_error || 'kurz zatím nenačten')}</span></div>
+        <div class="small" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 12px;margin-top:6px">${[['total_all', 'Celkem'], ['total_year', 'V roce'], ['palety', 'Palety'], ['expanze', 'Expanze'], ['neurawash', 'NeuraWash'], ['opakovacky', 'Opakovačky']].map(([k, l]) => `<div><span class="muted">${l}:</span> <b>${p[k + '_czk'] != null ? Number(p[k + '_czk']).toLocaleString('cs-CZ', { maximumFractionDigits: 0 }) + ' Kč' : '—'}</b></div>`).join('')}</div></div>` : ''}
       ${p.updated_at ? `<div class="small muted" style="margin-top:4px">Naposledy uloženo ${new Date(p.updated_at).toLocaleString('cs-CZ')} · ${esc(p.updated_by || '')}</div>` : ''}
       <div style="height:10px"></div><div class="row" style="gap:8px"><button class="btn sm" type="submit">Uložit podporu</button>
         <button class="btn sec sm" type="submit" formaction="/admin/supporters/${s.id}/partner-support/sync" formnovalidate title="Přihlásí se jako uživatel do partner.bestseries.cz a načte Přehled podpory + obrat sítě">🔄 Načíst ze starého portálu</button></div>
@@ -1969,7 +1972,8 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
     return `<tr>
       <td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.nick || '')} · ${esc(r.email)}</div></td>
       <td data-l="Obrat (import)" class="small">${esc((r.extra && r.extra.obrat) || '—')}</td>
-      <td data-l="Celkem" style="text-align:right"><b>${fmt(p.total_all)}</b></td>
+      <td data-l="Celkem" style="text-align:right"><b>${fmt(p.total_all)}</b>${p.currency === 'EUR' ? ' <span class="badge" title="Účet vede podporu v eurech">€</span>' : ''}</td>
+      <td data-l="Celkem v Kč" style="text-align:right" title="${p.currency === 'EUR' && p.eur_rate ? 'Přepočet kurzem ČNB ' + p.eur_rate + (p.eur_rate_date ? ' (' + p.eur_rate_date + ')' : '') : 'Korunový účet'}">${p.currency === 'EUR' ? (p.total_all_czk != null ? fmt(Math.round(p.total_all_czk)) : '<span class="muted">—</span>') : fmt(p.total_all)}</td>
       <td data-l="Rok" class="small">${esc(p.year || '')}</td>
       <td data-l="V roce" style="text-align:right">${fmt(p.total_year)}</td>
       <td data-l="Palety" style="text-align:right">${fmt(p.palety)}</td>
@@ -1987,7 +1991,7 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
   <div class="card" id="ps-prog" style="padding:14px 16px;margin-bottom:12px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
       <b id="ps-p-title">Průběh načítání</b>
-      <button type="button" class="btn sec sm" id="ps-p-start">🔄 Spustit / pokračovat</button>
+      <div class="row" style="gap:6px"><button type="button" class="btn sec sm" id="ps-p-missing" title="Znovu načte jen uživatele, u kterých chybí rok a sekce (typicky eurové účty)">↻ Znovu bez roku (${rows.filter(r => r.partner_support && r.partner_support.year == null).length})</button><button type="button" class="btn sec sm" id="ps-p-start">🔄 Spustit / pokračovat</button></div>
     </div>
     <div class="small muted" style="margin:8px 0 4px">Celkem načteno (obrat ≠ 0): <b id="ps-p-ovt">${overall.synced != null ? overall.synced + ' / ' + overall.eligible : '—'}</b></div>
     <div style="height:10px;background:var(--bg2,#eee);border-radius:6px;overflow:hidden"><div id="ps-p-ovbar" style="height:100%;width:${overall.eligible ? Math.round(100 * overall.synced / overall.eligible) : 0}%;background:var(--ok,#2e9d5b);transition:width .5s"></div></div>
@@ -2009,9 +2013,10 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
         if(j.done){ var per=el/j.done; info.push('rychlost '+(60/per).toFixed(1).replace('.',',')+' uživ./min'); if(j.running) info.push('zbývá cca '+dur(per*(j.total-j.done))+' (hotovo kolem '+new Date(Date.now()+per*(j.total-j.done)*1000).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+')'); }
         info.push((j.running?'běží ':'trvalo ')+dur(el)); if(j.running&&j.last) info.push('naposledy: '+j.last);
         $('ps-p-info').textContent=info.join(' · ');
-        $('ps-p-start').disabled=!!j.running;
+        $('ps-p-start').disabled=!!j.running; $('ps-p-missing').disabled=!!j.running;
       }
       function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running){ wasRunning=true; setTimeout(poll,3000); } else if(wasRunning){ wasRunning=false; } }).catch(function(){ setTimeout(poll,10000); }); }
+      $('ps-p-missing').onclick=function(){ if(!confirm('Znovu načíst uživatele bez roku (eurové účty)?')) return; fetch('/admin/partner-support/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:'missing_year'})}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
       $('ps-p-start').onclick=function(){ if(!confirm('Spustit načítání podpory? Přeskočí uživatele načtené za posledních 24 h.')) return; 
         fetch('/admin/partner-support/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
       poll(); })();
@@ -2019,7 +2024,7 @@ function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyD
   <p class="small muted" style="margin-top:0">Seřazeno od posledně načtených (obnov stránku pro nové řádky). „Starý portál" otevře jeho Přehled podpory pro ruční porovnání.</p>
   ${job && job.errors && job.errors.length ? `<details class="card" style="padding:10px 14px;margin-bottom:12px"><summary class="small"><b>Chyby (${job.errors.length})</b></summary><div class="small" style="margin-top:6px">${job.errors.map(e => '<div>' + esc(e) + '</div>').join('')}</div></details>` : ''}
   <form method="get" class="row" style="gap:8px;margin-bottom:12px"><input name="q" value="${esc(qs)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1"><label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="diff" value="1"${onlyDiff ? ' checked' : ''}> jen s nesrovnalostí</label><button class="btn sm" type="submit">Filtrovat</button></form>
-  <div class="tbl-wrap"><table class="cards"><thead><tr><th>Uživatel</th><th>Obrat (import)</th><th>Celkem</th><th>Rok</th><th>V roce</th><th>Palety</th><th>Expanze</th><th>NeuraWash</th><th>Opakovačky</th><th>Obrat sítě</th><th>Kontrola</th><th>Načteno</th><th></th></tr></thead><tbody>${body || '<tr><td colspan="13" class="muted">Zatím nikdo.</td></tr>'}</tbody></table></div>
+  <div class="tbl-wrap"><table class="cards"><thead><tr><th>Uživatel</th><th>Obrat (import)</th><th>Celkem</th><th>Celkem v Kč</th><th>Rok</th><th>V roce</th><th>Palety</th><th>Expanze</th><th>NeuraWash</th><th>Opakovačky</th><th>Obrat sítě</th><th>Kontrola</th><th>Načteno</th><th></th></tr></thead><tbody>${body || '<tr><td colspan="14" class="muted">Zatím nikdo.</td></tr>'}</tbody></table></div>
   <script>
     document.addEventListener('click', function (e) { var b = e.target.closest('.legacy-btn'); if (!b) return;
       var w = window.open('https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(b.dataset.email), '_blank');

@@ -35,18 +35,48 @@ function htmlToText(html) {
 }
 const num = (s) => { const t = String(s || '').replace(/[^\d,-]/g, '').replace(',', '.'); return t === '' ? null : Number(t); };
 
+// měna: účty ze SK/EU mají podporu v eurech („535 eur"), CZ v korunách („1 582 czk")
+const CUR = '(czk|kč|kc|eur|€)';
+const curOf = (s) => (/eur|€/i.test(String(s || '')) ? 'EUR' : 'CZK');
 function parseInvests(text) {
   const out = {};
-  let m = text.match(/(\d{4}) jste podpořili:\s*\n?\s*([\d\s ]+)\s*czk/i);
-  if (m) { out.year = Number(m[1]); out.total_year = num(m[2]); }
-  m = text.match(/Celkem jste podpořili:\s*\n?\s*([\d\s ]+)\s*czk/i);
-  if (m) out.total_all = num(m[1]);
+  let m = text.match(new RegExp('(\\d{4}) jste podpořili:\\s*\\n?\\s*([\\d\\s ,.]+)\\s*' + CUR, 'i'));
+  if (m) { out.year = Number(m[1]); out.total_year = num(m[2]); out.currency = curOf(m[3]); }
+  m = text.match(new RegExp('Celkem jste podpořili:\\s*\\n?\\s*([\\d\\s ,.]+)\\s*' + CUR, 'i'));
+  if (m) { out.total_all = num(m[1]); out.currency = out.currency || curOf(m[2]); }
   const map = { palety: 'palety', expanze: 'expanze', neurawash: 'neurawash', 'opakovačky': 'opakovacky', opakovacky: 'opakovacky' };
-  const re = /Seznam vaší podpory\s*-\s*([^:\n]+):([\s\S]*?)Celkem:\s*([\d\s ]+)\s*czk/gi;
+  const re = new RegExp('Seznam vaší podpory\\s*-\\s*([^:\\n]+):([\\s\\S]*?)Celkem:\\s*([\\d\\s ,.]+)\\s*' + CUR, 'gi');
   let s;
   while ((s = re.exec(text))) { const k = map[s[1].trim().toLowerCase()]; if (k) out[k] = num(s[3]); }
   for (const k of ['palety', 'expanze', 'neurawash', 'opakovacky']) if (out[k] == null) out[k] = 0;
+  if (!out.currency) out.currency = 'CZK';
   return out;
+}
+
+// Kurz EUR z ČNB (denní kurz devizového trhu) — cache 6 h; eurové hodnoty zůstávají beze změny,
+// přepočet na Kč se ukládá do samostatných polí *_czk spolu s kurzem a jeho datem.
+let _cnb = null;
+async function cnbEurRate() {
+  if (_cnb && Date.now() - _cnb.at < 6 * 3600e3) return _cnb;
+  const r = await fetch('https://www.cnb.cz/cs/financni-trhy/devizovy-trh/kurzy-devizoveho-trhu/kurzy-devizoveho-trhu/denni_kurz.txt');
+  const t = await r.text();
+  const date = (t.match(/^(\d{2}\.\d{2}\.\d{4})/) || [])[1] || null;
+  const line = t.split('\n').find((l) => /\|EUR\|/.test(l));
+  if (!line) throw new Error('ČNB: kurz EUR nenalezen');
+  const p = line.split('|'); const rate = Number(p[4].replace(',', '.')) / (Number(p[2]) || 1);
+  if (!isFinite(rate) || rate <= 0) throw new Error('ČNB: neplatný kurz');
+  _cnb = { rate, date, at: Date.now() };
+  return _cnb;
+}
+const CZK_FIELDS = ['total_all', 'total_year', 'palety', 'expanze', 'neurawash', 'opakovacky'];
+/** U eurového účtu doplní *_czk (přepočet kurzem ČNB). U korunového účtu *_czk smaže. Volitelně použije už uložený kurz. */
+async function addCzk(data, keepRate) {
+  if (data.currency !== 'EUR') { for (const k of CZK_FIELDS) delete data[k + '_czk']; delete data.eur_rate; delete data.eur_rate_date; return data; }
+  let rate = keepRate && keepRate.rate, date = keepRate && keepRate.date;
+  if (!rate) { try { const c = await cnbEurRate(); rate = c.rate; date = c.date; } catch (e) { data.eur_rate_error = e.message; return data; } }
+  data.eur_rate = rate; data.eur_rate_date = date; delete data.eur_rate_error;
+  for (const k of CZK_FIELDS) data[k + '_czk'] = data[k] == null ? null : Math.round(Number(data[k]) * rate * 100) / 100;
+  return data;
 }
 
 /** Stáhne podporu pro e-mail uživatele. Vrací { ok, data } nebo { ok:false, error }. */
@@ -72,13 +102,15 @@ async function fetchLegacySupport(email) {
     if (who) data.legacy_name = who[1] + ' (' + who[2] + ')';
     try {
       const tot = htmlToText((await get(BASE + '/cs/bo/detailed-stats-values-totals/', jar)).html);
-      const m = tot.match(/Celkový obrat v mé síti od počátku\s*\n?\s*([\d\s ]+)\s*czk/i);
+      const m = tot.match(new RegExp('Celkový obrat v mé síti od počátku\\s*\\n?\\s*([\\d\\s ,.]+)\\s*' + CUR, 'i'));
+      if (m) data.network_currency = curOf(m[2]);
       if (m) data.network_all = num(m[1]);
     } catch (e) { /* obrat sítě je bonus */ }
+    await addCzk(data);
     return { ok: true, data };
   } catch (e) {
     return { ok: false, error: e.message };
   }
 }
 
-module.exports = { fetchLegacySupport, parseInvests, htmlToText };
+module.exports = { fetchLegacySupport, parseInvests, htmlToText, addCzk, cnbEurRate };
