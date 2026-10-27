@@ -66,6 +66,14 @@
     .status-badge.qr_pending { background: #06b6d422; color: #22d3ee; }
     .status-badge.paid,
     .status-badge.archived { background: #22c55e22; color: #86efac; }
+    /* Tmavá pole v Bance (výpisy, platby, plán plateb, příkazy) — bez bílých prohlížečových inputů */
+    #tab-bank input:not([type=checkbox]):not([type=radio]):not([type=file]):not(.cf-in),
+    #tab-bank select, #plan-footer input, #plan-footer select {
+      background: var(--bg, #111827); color: var(--text, #e5e7eb); border: 1px solid var(--border, #374151);
+      border-radius: 6px; padding: 5px 8px; font-size: 13px; color-scheme: dark; outline: none;
+    }
+    #tab-bank input:not([type=checkbox]):not([type=radio]):not(.cf-in):focus, #tab-bank select:focus { border-color: #818cf8; }
+    #tab-bank input::placeholder { color: var(--text2, #9ca3af); }
     .status-badge.partially_paid { background: #eab30822; color: #eab308; }
     .status-badge.overdue,
     .status-badge.cancelled,
