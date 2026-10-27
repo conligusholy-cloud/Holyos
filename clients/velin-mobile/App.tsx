@@ -53,6 +53,7 @@ import Ads from './screens/Ads';
 import AdsWeb from './screens/AdsWeb';
 import AdsLive from './screens/AdsLive';
 import AdsPage from './screens/AdsPage';
+import PayRequest from './screens/PayRequest';
 import { colors } from './lib/theme';
 import { useSupportAllowed, useSupportUnread } from './lib/support';
 
@@ -92,6 +93,7 @@ export type RootStackParamList = {
   AdsWeb: undefined;
   AdsLive: undefined;
   AdsPage: { key: string; name: string; color?: string };
+  PayRequest: { token: string };
 };
 
 export type TabsParamList = {
@@ -136,6 +138,9 @@ function handleNotificationTap(data: any) {
 
   if (data.kind === 'evening_reflection' || data.type === 'evening_reflection') {
     target = { name: 'EveningReflection' };
+  } else if (data.type === 'pay_request' && typeof data.token === 'string' && data.token) {
+    // Žádost o zaplacení dokladu (QR platba) → stránka s QR
+    target = { name: 'PayRequest', params: { token: data.token } };
   } else if (data.type === 'assistant_call') {
     // Zmeškaný hovor osobního asistenta → vzkazy s otevřeným konkrétním hovorem
     target = { name: 'AssistantSettings', params: data.call_id != null ? { callId: String(data.call_id) } : undefined };
@@ -368,6 +373,11 @@ export default function App() {
             name="NewGeoFence"
             component={NewGeoFence}
             options={{ animation: 'slide_from_bottom', presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="PayRequest"
+            component={PayRequest}
+            options={{ animation: 'slide_from_right' }}
           />
           <Stack.Screen
             name="SignContract"

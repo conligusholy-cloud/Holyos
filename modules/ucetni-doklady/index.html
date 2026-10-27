@@ -1036,7 +1036,7 @@
               : '') +
             '<button class="btn btn-secondary btn-sm" onclick="openDetail(' + inv.id + ')">Detail</button>' +
             (inv.direction === 'ap' && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status)
-              ? ' <button class="btn btn-secondary btn-sm" onclick="sendPayRequest(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Poslat Tomášovi / Janovi e-mail s QR platbou" style="margin-left:4px;">✉️ QR</button>'
+              ? ' <button class="btn btn-secondary btn-sm" onclick="sendPayRequest(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Poslat Tomášovi / Janovi do Velína žádost o zaplacení (QR platba)" style="margin-left:4px;">📲 QR</button>'
               : '') +
             (inv.status === 'qr_pending' && window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
               ? ' <button class="btn btn-secondary btn-sm" onclick="qrCancel(' + inv.id + ')" title="Admin: zrušit stav „platí se přes QR" (nakonec se nezaplatilo)" style="margin-left:4px;">↩ QR</button>'
@@ -1940,11 +1940,11 @@
       const ov = document.createElement('div');
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
       ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:420px;max-width:94vw;padding:20px 22px;">'
-        + '<h3 style="margin:0 0 6px;">✉️ Poslat k zaplacení (QR)</h3>'
-        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">Doklad ' + escapeHtml(num) + ' — v e-mailu bude odkaz, kde si vygeneruješ QR platbu. Po vygenerování QR se doklad označí „platí se přes QR" a přestane se nabízet k platbě; zaplaceno se potvrdí až nalezením ve výpisu.</div>'
+        + '<h3 style="margin:0 0 6px;">📲 Poslat k zaplacení do Velína (QR)</h3>'
+        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">Doklad ' + escapeHtml(num) + ' — do Velína přijde notifikace; po klepnutí si vygeneruješ QR platbu (kdo nemá Velín aktivní, dostane e-mail). Po vygenerování QR se doklad označí „platí se přes QR" a přestane se nabízet k platbě; zaplaceno se potvrdí až nalezením ve výpisu.</div>'
         + '<label style="display:flex;gap:8px;align-items:center;margin-bottom:8px;"><input type="checkbox" class="pr-t" checked> Tomáš Holý</label>'
         + '<label style="display:flex;gap:8px;align-items:center;margin-bottom:14px;"><input type="checkbox" class="pr-j"> Jan Holý</label>'
-        + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary pr-c">Zrušit</button><button class="btn btn-primary pr-s">✉️ Odeslat</button></div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary pr-c">Zrušit</button><button class="btn btn-primary pr-s">📲 Odeslat do Velína</button></div>'
         + '<div class="pr-e" style="margin-top:8px;font-size:.88em;"></div></div>';
       document.body.appendChild(ov);
       const q = (c) => ov.querySelector(c);

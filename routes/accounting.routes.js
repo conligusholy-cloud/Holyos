@@ -1238,15 +1238,33 @@ router.post('/invoices/:id/send-pay-request', async (req, res, next) => {
       `Variabilní symbol: ${inv.variable_symbol || '—'}\n\n` +
       `Odkazem níže si vygeneruješ QR kód pro platbu v bankovní aplikaci. Po vygenerování QR kódu se doklad v HolyOS označí jako „platí se přes QR" ` +
       `a přestane se nabízet k platbě; jako zaplacený se potvrdí až po nalezení platby ve výpisu.\n\nOdeslal: ${userLabel(req.user)}`;
+    // Primárně push do Velína (+ záznam v historii notifikací s odkazem); e-mail jen jako záloha, když příjemce nemá Velín na zařízení
+    const token = link.split('/').pop();
     const from = process.env.PURCHASE_MAIL_FROM || process.env.GRAPH_DEFAULT_FROM || process.env.INVOICE_IMAP_USER || undefined;
+    const { notifyPerson } = require('../services/push/expo-push');
+    const { createNotification } = require('./notifications.routes');
+    const nrm = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const holys = await prisma.person.findMany({ where: { active: true, last_name: { in: ['Holý', 'Holy'], mode: 'insensitive' } }, select: { id: true, user_id: true, first_name: true } });
+    const title = `💳 Zaplatit: ${inv.company?.name || ''} — ${fmt(remaining)} ${inv.currency}`;
+    const pushBody = `${inv.external_number || inv.invoice_number} · splatnost ${due}${inv.variable_symbol ? ' · VS ' + inv.variable_symbol : ''}`;
     const sent = [], failed = [];
     for (const k of keys) {
       const p = PAY_REQUEST_PEOPLE[k];
-      const r = await sendMail({ from, fromName: 'HolyOS', to: p.email, subject: `Zaplatit: ${inv.company?.name || ''} — ${fmt(remaining)} ${inv.currency} (${inv.external_number || inv.invoice_number})`, preheader: 'QR platba dokladu', body, link, linkLabel: 'Vygenerovat QR platbu' });
-      if (r && r.sent) sent.push(p.email); else failed.push(p.email + ': ' + ((r && (r.error || r.skipped)) || 'neodesláno'));
+      const person = holys.find((h) => nrm(h.first_name) === nrm(p.name.split(' ')[0]));
+      let viaVelin = false;
+      if (person) {
+        try {
+          const tickets = await notifyPerson(prisma, person.id, { title, body: pushBody, data: { type: 'pay_request', token, invoice_id: inv.id, link }, sound: 'default', bypassQuiet: true });
+          viaVelin = Array.isArray(tickets) && tickets.length > 0;
+        } catch (e) { console.warn('[pay-request] push:', e.message); }
+        if (person.user_id) createNotification({ userId: person.user_id, type: 'system', title, body: pushBody, link }).catch(() => {});
+      }
+      if (viaVelin) { sent.push(p.name + ' (Velín)'); continue; }
+      const r = await sendMail({ from, fromName: 'HolyOS', to: p.email, subject: title.replace('💳 ', ''), preheader: 'QR platba dokladu', body, link, linkLabel: 'Vygenerovat QR platbu' });
+      if (r && r.sent) sent.push(p.name + ' (e-mail — Velín není aktivní)'); else failed.push(p.name + ': ' + ((r && (r.error || r.skipped)) || 'neodesláno'));
     }
     logAudit({ action: 'update', entity: 'invoice', entity_id: id, description: `${inv.invoice_number}: odeslána žádost o zaplacení (QR) → ${sent.join(', ') || '—'}`, changes: { pay_request: { by: userLabel(req.user), sent, failed } }, user: req.user }).catch(() => {});
-    if (!sent.length) return res.status(502).json({ error: 'E-mail se nepodařilo odeslat: ' + failed.join('; ') });
+    if (!sent.length) return res.status(502).json({ error: 'Žádost se nepodařilo doručit: ' + failed.join('; ') });
     res.json({ sent, failed });
   } catch (err) { next(err); }
 });
