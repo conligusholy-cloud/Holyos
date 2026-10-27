@@ -265,6 +265,7 @@ function renderSidebar(activeModule) {
     { id: 'holyos-chat-widget-script', src: 'js/user-chat-widget.js' },
     { id: 'holyos-topbar-script', src: 'js/top-bar.js' },
     { id: 'holyos-global-search-script', src: 'js/global-search.js' }, // okno CTRL+PAUSE
+    { id: 'holyos-modal-autoclose-script', src: 'js/modal-autoclose.js' }, // zavření oken klikem mimo / Esc
   ];
   tbScripts.forEach(function(s) {
     if (!document.getElementById(s.id)) {
