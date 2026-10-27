@@ -65,6 +65,7 @@
     .status-badge.payment_queued { background: #a78bfa22; color: #a78bfa; }
     .status-badge.paid,
     .status-badge.archived { background: #22c55e22; color: #86efac; }
+    .status-badge.partially_paid { background: #eab30822; color: #eab308; }
     .status-badge.overdue,
     .status-badge.cancelled,
     .status-badge.written_off { background: #ef444422; color: #ef4444; }
@@ -431,6 +432,7 @@
             <select id="pay-filter-account" onchange="loadBankPayments()"><option value="">Všechny účty</option></select>
             <label>Od:</label><input type="date" id="pay-filter-from" onchange="loadBankPayments()">
             <label>Do:</label><input type="date" id="pay-filter-to" onchange="loadBankPayments()">
+            <button class="btn btn-primary btn-sm" id="btn-pay-automatch" onclick="runAutoMatchAll()" title="Projde všechny nevyřešené platby a spáruje je s doklady: výdaje s přijatými, příjmy s vydanými. Kontroluje VS, číslo účtu protistrany a částku; částečné úhrady nastaví doklad na Částečně zaplaceno.">🔗 Spárovat platby s doklady</button>
             <button class="btn btn-secondary btn-sm" onclick="loadBankPayments()">🔄 Obnovit</button>
             <span id="pay-sums" style="margin-left:auto;font-size:0.9em;color:var(--text2);"></span>
           </div>
@@ -813,6 +815,7 @@
       ready_to_pay: 'K platbě',
       payment_queued: 'V ABO frontě',
       paid: 'Zaplaceno',
+      partially_paid: 'Částečně zaplaceno',
       overdue: 'Po splatnosti',
       cancelled: 'Zrušeno',
       written_off: 'Odepsáno',
@@ -1552,6 +1555,28 @@
       box.innerHTML = html;
     }
 
+    // Platby přiřazené k dokladu (vazba doklad → platba)
+    function invPaymentsHtml(inv) {
+      const allocs = inv.allocations || [];
+      const total = Number(inv.total || 0), paid = Number(inv.paid_amount || 0);
+      const rem = Math.max(0, total - paid);
+      const head = '<div class="dv-h">💸 Platby (' + allocs.length + ')' +
+        (allocs.length ? ' <span style="font-weight:400;font-size:0.85em;color:' + (rem > 0.009 ? '#eab308' : '#22c55e') + '">' +
+          (rem > 0.009 ? 'částečně vypořádáno — uhrazeno ' + fmtAmount(paid) + ' z ' + fmtAmount(total) + ', zbývá ' + fmtAmount(rem) + ' ' + escapeHtml(inv.currency || '') : 'vypořádáno celé') + '</span>' : '') + '</div>';
+      if (!allocs.length) return head + '<div style="color:var(--text2);font-size:0.9em;margin-bottom:10px;">Zatím žádná platba. Párování probíhá automaticky po načtení výpisu (VS + účet + částka), nebo ručně v Banka → Platby.</div>';
+      return head + '<table class="data-table" style="margin-bottom:12px"><thead><tr><th>Datum</th><th class="num">Přiřazeno</th><th>Protistrana</th><th>Účet</th><th>VS</th><th>Výpis</th><th>Způsob</th></tr></thead><tbody>' +
+        allocs.map((a) => {
+          const p = a.payment || {}; const bt = p.bank_transaction;
+          const click = bt ? ' style="cursor:pointer" title="Přejít na platbu v Banka → Platby" onclick="goToPayment(' + bt.id + ',\'' + escapeHtml(String(bt.transaction_date || '')) + '\',' + ((bt.direction === 'in' ? 1 : -1) * Number(bt.amount)) + ')"' : '';
+          return '<tr' + click + '><td>' + fmtDate(bt?.transaction_date || p.executed_date) + '</td>' +
+            '<td class="num"><b>' + fmtAmount(a.amount) + '</b></td>' +
+            '<td>' + escapeHtml(bt?.counterparty_name || p.partner_name || '—') + '</td>' +
+            '<td><small>' + escapeHtml(bt?.counterparty_account || p.partner_account || '—') + '</small></td>' +
+            '<td>' + escapeHtml(bt?.variable_symbol || p.variable_symbol || '—') + '</td>' +
+            '<td><small>' + (bt ? '🔗 ' + escapeHtml(bt.statement?.statement_number || '') : escapeHtml(p.method || '')) + '</small></td>' +
+            '<td><small>' + escapeHtml((a.note || '').replace(/\s*\[prev:[^\]]*\]/, '')) + '</small></td></tr>';
+        }).join('') + '</tbody></table>';
+    }
     window.openDetail = async function(id) {
       const r = await api('GET', '/api/accounting/invoices/' + id);
       if (r.status !== 200) return alert('Nelze načíst fakturu');
@@ -1718,6 +1743,7 @@
                 ' &nbsp;|&nbsp; Příjemka: ' + (inv.warehouse_document ? '<span class="inline-code">' + escapeHtml(inv.warehouse_document.number) + '</span>' : '<span style="color:var(--text2);">— nenapojeno</span>') +
                 (canEdit ? ' <button class="btn btn-secondary btn-sm" onclick="openMatchModal(' + inv.id + ')" style="margin-left:10px;">Navázat / změnit</button>' : '') + '</div>'
               : (inv.order ? '<div class="dv-match">🔗 Objednávka: <span class="inline-code">' + escapeHtml(inv.order.order_number) + '</span></div>' : '')) +
+            invPaymentsHtml(inv) +
 
             // Položky
             '<div class="dv-h">Položky (' + (inv.items?.length || 0) + ')</div>' +
@@ -4779,14 +4805,10 @@
         const sign = t.direction === 'in' ? '+' : '−';
         const cls = t.direction === 'in' ? 'style="color:#22c55e"' : 'style="color:#f87171"';
         const matchedInvoice = t.payment?.allocations?.[0]?.invoice;
-        const cursor = t.match_status === 'matched' ? 'default' : 'pointer';
-        const onclickAttr = t.match_status === 'matched'
-          ? `onclick="confirmUnmatch(${t.id})"`
-          : `onclick="openMatchModal(${t.id})"`;
-        // Stav buňka: u matched zobrazíme číslo faktury; jinak badge
-        const statusCell = t.match_status === 'matched' && matchedInvoice
-          ? `<span class="batch-status processed" title="Klikni pro odpojení">→ ${escapeHtml(matchedInvoice.invoice_number)}</span>`
-          : (statusBadge[t.match_status] || t.match_status);
+        void matchedInvoice; void statusBadge;
+        const cursor = 'pointer';
+        const onclickAttr = txRowClick(t);
+        const statusCell = txStatusCell(t);
         return `
           <tr style="cursor:${cursor}" ${onclickAttr}>
             <td>${fmtDate(t.transaction_date)}</td>
@@ -4813,8 +4835,8 @@
         { key: 'vs', label: 'VS', type: 'text', ph: 'VS…', get: (t) => t.variable_symbol },
         { key: 'msg', label: 'Zpráva', type: 'text', ph: 'Zpráva…', get: (t) => t.message, enum: false },
         { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…',
-          get: (t) => { const inv = t.payment?.allocations?.[0]?.invoice; return (TX_STATUS_LABEL[t.match_status] || t.match_status) + (inv ? ' ' + inv.invoice_number : ''); },
-          enumValue: (t) => TX_STATUS_LABEL[t.match_status] || t.match_status },
+          get: (t) => txStatusText(t),
+          enumValue: (t) => txStatusLabel(t) },
       ],
       renderRow: (t) => renderTxRow(t),
       noun: 'transakcí',
@@ -4860,17 +4882,7 @@
     function renderPayRow(t) {
       const sign = t.direction === 'in' ? '+' : '−';
       const cls = t.direction === 'in' ? 'style="color:#22c55e"' : 'style="color:#f87171"';
-      const inv = t.payment?.allocations?.[0]?.invoice;
-      const onclickAttr = t.match_status === 'matched' ? 'onclick="confirmUnmatch(' + t.id + ')"' : 'onclick="openMatchModal(' + t.id + ')"';
-      const badge = {
-        unmatched: '<span class="batch-status draft">Nepárováno</span>',
-        matched: '<span class="batch-status processed">Spárováno</span>',
-        needs_review: '<span class="batch-status submitted_to_bank">K posouzení</span>',
-        ignored: '<span class="batch-status cancelled">Ignor.</span>',
-      }[t.match_status] || escapeHtml(t.match_status || '');
-      const statusCell = t.match_status === 'matched' && inv
-        ? '<span class="batch-status processed" title="Klikni pro odpojení">→ ' + escapeHtml(inv.invoice_number) + '</span>' : badge;
-      return '<tr style="cursor:pointer" ' + onclickAttr + '>' +
+      return '<tr data-txid="' + t.id + '" style="cursor:pointer" ' + txRowClick(t) + '>' +
         '<td style="white-space:nowrap">' + fmtDate(t.transaction_date) + '</td>' +
         '<td><small>' + escapeHtml(t.bank_account?.name || '') + '</small></td>' +
         '<td><small>' + escapeHtml(t.statement?.statement_number || '—') + '</small></td>' +
@@ -4883,7 +4895,82 @@
         '<td><small>' + escapeHtml(t.constant_symbol || '') + '</small></td>' +
         '<td><small>' + escapeHtml(t.specific_symbol || '') + '</small></td>' +
         '<td><small>' + escapeHtml(t.message || '—') + '</small></td>' +
-        '<td>' + statusCell + '</td></tr>';
+        '<td>' + txStatusCell(t) + '</td></tr>';
+    }
+    // ─── Stav platby ↔ doklad (sdílené pro Transakce výpisu i Platby) ───
+    function txIsPartial(a) {
+      const inv = a && a.invoice; if (!inv) return false;
+      return inv.status === 'partially_paid' || (Number(inv.total || 0) - Number(inv.paid_amount || 0)) > 0.009;
+    }
+    function txStatusLabel(t) {
+      const allocs = t.payment?.allocations || [];
+      if (t.match_status === 'matched') return allocs.some(txIsPartial) ? 'Spárováno (částečně)' : 'Spárováno';
+      return TX_STATUS_LABEL[t.match_status] || t.match_status;
+    }
+    function txStatusText(t) {
+      const allocs = t.payment?.allocations || [];
+      return txStatusLabel(t) + ' ' + allocs.map((a) => (a.invoice?.invoice_number || '') + ' ' + (a.invoice?.external_number || '') + ' ' + (a.invoice?.company?.name || '')).join(' ');
+    }
+    function txStatusCell(t) {
+      const allocs = t.payment?.allocations || [];
+      if (t.match_status === 'matched' && allocs.length) {
+        return '<span style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center">' + allocs.map((a) => {
+          const inv = a.invoice || {}; const part = txIsPartial(a);
+          const rem = Number(inv.total || 0) - Number(inv.paid_amount || 0);
+          const title = 'Otevřít doklad ' + (inv.invoice_number || '') + (inv.external_number ? ' (' + inv.external_number + ')' : '') + (inv.company?.name ? ' — ' + inv.company.name : '') +
+            ' · přiřazeno ' + fmtAmount(a.amount) + (part ? ' · částečně vypořádáno, zbývá ' + fmtAmount(rem) : ' · vypořádáno');
+          return '<a href="javascript:void(0)" onclick="event.stopPropagation();openDetail(' + inv.id + ')" class="batch-status ' + (part ? 'submitted_to_bank' : 'processed') + '" style="text-decoration:none;cursor:pointer;white-space:nowrap" title="' + escapeHtml(title) + '">📄 ' + escapeHtml(inv.invoice_number || '?') + (part ? ' · částečně' : '') + '</a>';
+        }).join('') +
+        '<button type="button" class="btn btn-secondary btn-sm" style="padding:0 6px;line-height:18px" title="Odpojit platbu od dokladu" onclick="event.stopPropagation();confirmUnmatch(' + t.id + ')">✕</button></span>';
+      }
+      const badge = {
+        unmatched: '<span class="batch-status draft">Nepárováno</span>',
+        matched: '<span class="batch-status processed">Vyřešeno</span>',
+        needs_review: '<span class="batch-status submitted_to_bank">K posouzení</span>',
+        ignored: '<span class="batch-status cancelled">Ignor.</span>',
+      }[t.match_status] || escapeHtml(t.match_status || '');
+      return t.note ? '<span title="' + escapeHtml(t.note) + '">' + badge + '</span>' : badge;
+    }
+    function txRowClick(t) {
+      const inv = t.payment?.allocations?.[0]?.invoice;
+      if (t.match_status === 'matched') return inv ? 'onclick="openDetail(' + inv.id + ')" title="Otevřít přiřazený doklad"' : '';
+      return 'onclick="openMatchModal(' + t.id + ')" title="Spárovat s dokladem"';
+    }
+    // Hromadné párování všech nevyřešených plateb s doklady
+    window.runAutoMatchAll = async function() {
+      const btn = document.getElementById('btn-pay-automatch');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Páruji…'; }
+      try {
+        const acc = document.getElementById('pay-filter-account')?.value;
+        const r = await api('POST', '/api/banking/transactions/auto-match-all', acc ? { bank_account_id: Number(acc) } : {});
+        if (r.status !== 200) throw new Error(r.data?.error || r.status);
+        const s = r.data || {};
+        alert('Párování hotovo\n\n' +
+          '✅ Spárováno: ' + (s.matched || 0) + (s.partial ? ' (z toho částečně: ' + s.partial + ')' : '') + '\n' +
+          '🔎 K posouzení: ' + (s.needs_review || 0) + '\n' +
+          '🚫 Ignorováno pravidlem: ' + (s.rule_ignored || 0) + '\n' +
+          '— Bez dokladu: ' + (s.no_match || 0) + (s.errors?.length ? '\n⚠ Chyby: ' + s.errors.length : ''));
+        loadBankPayments(); if (typeof loadSummary === 'function') loadSummary();
+      } catch (e) { alert('Párování selhalo: ' + e.message); }
+      finally { if (btn) { btn.disabled = false; btn.textContent = '🔗 Spárovat platby s doklady'; } }
+    };
+    // Z detailu dokladu → na konkrétní platbu v Banka → Platby
+    window.goToPayment = function(txId, date, signedAmount) {
+      try { closeModal(); } catch (e) { /* ignore */ }
+      window._payHighlight = txId;
+      payTable.cf.clear();
+      if (date) payTable.cf.set('date', 'eq', new Date(date).toLocaleDateString('cs-CZ').replace(/\s/g, ''));
+      if (signedAmount != null) payTable.cf.set('amount', 'eq', String(signedAmount));
+      switchAccountingTab('bank', null, null);
+      switchBankSub('pays');
+    };
+    function payHighlightRow() {
+      const id = window._payHighlight; if (!id) return;
+      const tr = document.querySelector('#payments-table tr[data-txid="' + id + '"]'); if (!tr) return;
+      window._payHighlight = null;
+      tr.style.outline = '2px solid #f59e0b'; tr.style.background = 'rgba(245,158,11,.12)';
+      tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => { tr.style.outline = ''; tr.style.background = ''; }, 4000);
     }
     const payTable = ColFilters.table({
       table: '#payments-table',
@@ -4901,14 +4988,15 @@
         { key: 'ss', label: 'SS', type: 'text', ph: 'SS…', get: (t) => t.specific_symbol || '' },
         { key: 'msg', label: 'Zpráva', type: 'text', ph: 'Zpráva…', get: (t) => t.message || '', enum: false },
         { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…',
-          get: (t) => { const inv = t.payment?.allocations?.[0]?.invoice; return (TX_STATUS_LABEL[t.match_status] || t.match_status) + (inv ? ' ' + inv.invoice_number : ''); },
-          enumValue: (t) => TX_STATUS_LABEL[t.match_status] || t.match_status },
+          get: (t) => txStatusText(t),
+          enumValue: (t) => txStatusLabel(t) },
       ],
       renderRow: (t) => renderPayRow(t),
       noun: 'plateb',
       emptyText: 'Žádné platby.',
       limit: 1000,
       onRender: (list) => {
+        setTimeout(payHighlightRow, 50);
         const el = document.getElementById('pay-sums'); if (!el) return;
         let inSum = 0, outSum = 0, nIn = 0, nOut = 0;
         list.forEach((t) => { if ((t.currency || 'CZK') !== 'CZK') return; const a = Number(t.amount) || 0; if (t.direction === 'in') { inSum += a; nIn++; } else { outSum += a; nOut++; } });

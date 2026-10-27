@@ -53,6 +53,14 @@ async function runOnce({ markRead = true, all = false, passwords = null } = {}) 
       progress.done++; progress.imported = report.imported.length; progress.duplicates = report.duplicates.length; progress.errors = report.errors.length + report.no_account.length;
       if (allOk && markRead) { try { await graph.markAsRead(mb, m.id); } catch (e) { /* další běh to zkusí znovu */ } }
     }
+    // Po importu znovu projít všechny nevyřešené platby (faktura mohla dorazit později než platba)
+    if (report.imported.length) {
+      try {
+        const { prisma } = require('../../config/database');
+        const s = await require('./auto-matcher').autoMatchAll(prisma, { id: null, displayName: 'Import výpisů' });
+        report.auto_match = { matched: s.matched, partial: s.partial, needs_review: s.needs_review };
+      } catch (e) { report.errors.push('auto-match: ' + e.message); }
+    }
     if (report.imported.length || report.errors.length) console.log('[bank-statement-email]', JSON.stringify(report));
     return report;
   } catch (e) {

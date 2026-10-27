@@ -544,7 +544,7 @@ router.get('/transactions', async (req, res, next) => {
         match_rule: { select: { id: true, name: true } },
         payment: {
           include: {
-            allocations: { include: { invoice: { select: { id: true, invoice_number: true } } } },
+            allocations: { include: { invoice: { select: { id: true, invoice_number: true, external_number: true, total: true, paid_amount: true, status: true, direction: true, currency: true, company: { select: { name: true } } } } } },
           },
         },
       },
@@ -577,6 +577,27 @@ router.get('/transactions/:id', async (req, res, next) => {
 // ────────────────────────────────────────────────────────────────────────────
 // AUTO-MATCH / MATCH / UNMATCH / IGNORE — Fáze 5b
 // ────────────────────────────────────────────────────────────────────────────
+
+// POST /api/banking/transactions/auto-match-all — spáruje všechny nevyřešené platby s fakturami
+// (VS + účet protistrany + částka, částečné úhrady → partially_paid). body: { bank_account_id? }
+router.post('/transactions/auto-match-all', async (req, res, next) => {
+  try {
+    const summary = await matcher.autoMatchAll(prisma, req.user, { bank_account_id: req.body?.bank_account_id ? parseInt(req.body.bank_account_id, 10) : null });
+    try {
+      const { processPaymentForDepositTaxDocs } = require('../services/accountant/deposit-tax-doc');
+      if (summary.matched_ids.length) {
+        const pays = await prisma.payment.findMany({ where: { bank_transaction_id: { in: summary.matched_ids } }, select: { id: true } });
+        for (const p of pays) await processPaymentForDepositTaxDocs(p.id);
+      }
+    } catch (e) { console.warn('[banking] DPPP po hromadném párování selhalo:', e.message); }
+    await logAudit({
+      user: req.user, action: 'auto_match', entity: 'bank_transaction', entity_id: null,
+      description: `Hromadné párování plateb: ${summary.matched} spárováno (${summary.partial} částečně), ${summary.needs_review} k posouzení, ${summary.no_match} bez faktury`,
+      snapshot: { ...summary, matched_ids: undefined, review_ids: undefined, ignored_ids: undefined },
+    });
+    res.json({ ...summary, matched_ids: undefined, review_ids: undefined, ignored_ids: undefined });
+  } catch (err) { next(err); }
+});
 
 // POST /api/banking/statements/:id/auto-match — spustí auto-match pro celý výpis
 router.post('/statements/:id/auto-match', async (req, res, next) => {

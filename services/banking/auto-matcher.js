@@ -31,203 +31,214 @@ function normalizeVs(vs) {
   return String(vs).replace(/\D/g, '').replace(/^0+/, '');
 }
 
-/**
- * Najde candidate faktury pro bankovní transakci.
- *
- * @param {Object} tx                 BankTransaction (id, direction, amount, variable_symbol, transaction_date)
- * @param {Object} prismaCtx          Prisma client nebo transaction tx
- * @param {Object} [opts]
- * @param {number} [opts.amount_tolerance=0]   tolerance v Kč pro fuzzy match
- * @param {boolean} [opts.allow_partial=false] povolit, aby se transakce alokovala jako částečná platba
- * @returns {Promise<Object>} { decision, candidates, reason }
- *   decision: 'auto_match' | 'needs_review' | 'no_match'
- *   candidates: Array<Invoice>
- *   reason: string
- */
-async function findMatchCandidates(tx, prismaCtx, opts = {}) {
-  const tolerance = opts.amount_tolerance || 0;
-  const allowPartial = !!opts.allow_partial;
+// ─── Párování: VS + číslo účtu + částka (vč. částečných úhrad) ─────────────────
+// Příjem → vydané faktury (AR), výdaj → přijaté faktury (AP).
+// Kandidát = otevřená faktura (ne paid/cancelled/written_off/archived), stejná měna, zbývá doplatit > 0.
+// Rozhodnutí:
+//   1) VS sedí + částka = zbývá doplatit (právě 1)            → auto_match (plná úhrada)
+//   2) účet protistrany sedí + částka = zbývá doplatit (1)    → auto_match
+//   3) VS sedí jen u 1 faktury, platba < zbývá doplatit,
+//      účet sedí nebo ho neznáme                               → auto_match (ČÁSTEČNÁ úhrada → partially_paid)
+//   4) VS sedí, ale částka nesedí / víc kandidátů              → needs_review
+//   5) jinak                                                   → no_match
+const CLOSED_STATUSES = ['paid', 'cancelled', 'written_off', 'archived'];
 
-  const txDirection = tx.direction === 'in' ? 'in' : 'out';
-  const invoiceDirection = txDirection === 'in' ? 'ar' : 'ap';
+/** Normalizace čísla účtu na tvar "prefix-cislo/banka" bez úvodních nul (IBAN CZ → tuzemský formát). */
+function normalizeAccount(acc) {
+  if (!acc) return '';
+  let s = String(acc).replace(/\s+/g, '').toUpperCase();
+  const iban = s.match(/^CZ\d{2}(\d{4})(\d{6})(\d{10})$/);
+  if (iban) s = (iban[2].replace(/^0+/, '') ? iban[2] + '-' : '') + iban[3] + '/' + iban[1];
+  const m = s.match(/^(?:(\d+)-)?(\d+)\/(\d{4})$/);
+  if (!m) return s.replace(/^0+/, '');
+  const pre = (m[1] || '').replace(/^0+/, '');
+  const num = m[2].replace(/^0+/, '');
+  return (pre ? pre + '-' : '') + num + '/' + m[3];
+}
+/** Účet bez kódu banky (pro porovnání, když jedna strana kód nemá). */
+const accountBase = (n) => String(n || '').split('/')[0];
+function accountsEqual(a, b) {
+  const x = normalizeAccount(a), y = normalizeAccount(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (!x.includes('/') || !y.includes('/')) return accountBase(x) === accountBase(y);
+  return false;
+}
+
+const INVOICE_SELECT = {
+  id: true, invoice_number: true, external_number: true, direction: true, status: true,
+  total: true, paid_amount: true, currency: true, variable_symbol: true, date_due: true,
+  partner_bank_account: true, partner_iban: true,
+  company: { select: { id: true, name: true, ico: true, bank_account: true, verified_bank_accounts: true } },
+};
+
+/** Načte otevřené faktury (pro dávkové párování se volá jednou). */
+async function loadOpenInvoices(prismaCtx, direction) {
+  const where = { status: { notIn: CLOSED_STATUSES } };
+  if (direction) where.direction = direction;
+  return prismaCtx.invoice.findMany({ where, select: INVOICE_SELECT });
+}
+
+/** Všechny známé účty protistrany k faktuře (AP: účet z faktury + účty firmy; AR: účty zákazníka). */
+function invoiceAccounts(inv) {
+  const out = [];
+  if (inv.direction === 'ap') { if (inv.partner_bank_account) out.push(inv.partner_bank_account); if (inv.partner_iban) out.push(inv.partner_iban); }
+  const c = inv.company || {};
+  if (c.bank_account) out.push(c.bank_account);
+  if (Array.isArray(c.verified_bank_accounts)) c.verified_bank_accounts.forEach((v) => { if (v && v.account) out.push(v.account); if (v && v.iban) out.push(v.iban); });
+  return out;
+}
+
+function scoreCandidates(tx, invoices) {
   const txAmount = Number(tx.amount);
   const txVs = normalizeVs(tx.variable_symbol);
-
-  // Bez VS nemůžeme spolehlivě párovat (kromě budoucích MatchingRule pravidel)
-  if (!txVs) {
-    return {
-      decision: 'no_match',
-      candidates: [],
-      reason: 'Transakce nemá variabilní symbol — nelze auto-párovat (zkus MatchingRule).',
-    };
+  const txCur = tx.currency || 'CZK';
+  const invDir = tx.direction === 'in' ? 'ar' : 'ap';
+  const list = [];
+  for (const inv of invoices) {
+    if (inv.direction !== invDir) continue;
+    if (CLOSED_STATUSES.includes(inv.status)) continue;
+    if ((inv.currency || 'CZK') !== txCur) continue;
+    const remaining = Math.round((Number(inv.total) - Number(inv.paid_amount || 0)) * 100) / 100;
+    if (remaining <= 0.009) continue;
+    const vsOk = !!txVs && normalizeVs(inv.variable_symbol) === txVs;
+    const accs = invoiceAccounts(inv);
+    const accKnown = accs.length > 0;
+    const accOk = !!tx.counterparty_account && accs.some((a) => accountsEqual(a, tx.counterparty_account));
+    if (!vsOk && !accOk) continue;
+    const exact = Math.abs(remaining - txAmount) <= 0.01;
+    const partial = txAmount < remaining - 0.01;
+    list.push({ ...inv, remaining, match: { vs: vsOk, account: accOk, account_known: accKnown, exact, partial } });
   }
-
-  // Najdi všechny nezaplacené faktury s odpovídajícím VS a směrem
-  const candidates = await prismaCtx.invoice.findMany({
-    where: {
-      direction: invoiceDirection,
-      variable_symbol: { not: null },
-      status: { notIn: NEVER_PAYABLE },
-    },
-    select: {
-      id: true,
-      invoice_number: true,
-      external_number: true,
-      direction: true,
-      status: true,
-      total: true,
-      paid_amount: true,
-      variable_symbol: true,
-      date_due: true,
-      company: { select: { id: true, name: true, ico: true } },
-    },
-  });
-
-  // Filtr na VS match (po normalizaci)
-  const vsMatched = candidates.filter(inv => normalizeVs(inv.variable_symbol) === txVs);
-
-  if (vsMatched.length === 0) {
-    return {
-      decision: 'no_match',
-      candidates: [],
-      reason: `Žádná otevřená faktura s VS=${txVs} a směrem ${invoiceDirection}.`,
-    };
-  }
-
-  // Najdi candidate, kde se částka vejde
-  const fittingCandidates = vsMatched.filter(inv => {
-    const remaining = Number(inv.total) - Number(inv.paid_amount);
-    if (allowPartial) {
-      // Stačí, aby remaining > 0
-      return remaining > -tolerance;
-    }
-    // Striktní: částka tx <= remaining + tolerance
-    return txAmount <= remaining + tolerance;
-  });
-
-  if (fittingCandidates.length === 0) {
-    return {
-      decision: 'needs_review',
-      candidates: vsMatched,
-      reason: `VS=${txVs} odpovídá ${vsMatched.length} faktur(ám), ale částka ${txAmount} Kč se do žádné nevejde.`,
-    };
-  }
-
-  // Najdi candidate s přesnou shodou částky (= remaining)
-  const exactMatch = fittingCandidates.filter(inv => {
-    const remaining = Number(inv.total) - Number(inv.paid_amount);
-    return Math.abs(remaining - txAmount) <= tolerance;
-  });
-
-  if (exactMatch.length === 1) {
-    return {
-      decision: 'auto_match',
-      candidates: exactMatch,
-      reason: `VS=${txVs}, částka přesně sedí na fakturu ${exactMatch[0].invoice_number}.`,
-    };
-  }
-
-  if (exactMatch.length > 1) {
-    return {
-      decision: 'needs_review',
-      candidates: exactMatch,
-      reason: `${exactMatch.length} faktur s VS=${txVs} a stejnou částkou — potřebuje ruční výběr.`,
-    };
-  }
-
-  // Nikoli přesná shoda, ale fituje (částečná platba)
-  if (fittingCandidates.length === 1 && allowPartial) {
-    return {
-      decision: 'auto_match',
-      candidates: fittingCandidates,
-      reason: `VS=${txVs}, částečná platba na fakturu ${fittingCandidates[0].invoice_number}.`,
-    };
-  }
-
-  return {
-    decision: 'needs_review',
-    candidates: fittingCandidates,
-    reason: `${fittingCandidates.length} faktur s VS=${txVs} se vejde — potřebuje ruční výběr.`,
-  };
+  // nejlepší nahoře: VS+účet+částka > VS+částka > účet+částka > VS > účet
+  const sc = (c) => (c.match.vs ? 4 : 0) + (c.match.account ? 2 : 0) + (c.match.exact ? 3 : 0);
+  list.sort((a, b) => sc(b) - sc(a) || new Date(a.date_due || 0) - new Date(b.date_due || 0));
+  return list;
 }
 
 /**
- * Provede auto-match na všechny unmatched transakce zadaného výpisu.
- *
- * @param {number} statementId
- * @param {Object} prismaCtx Prisma client (pozor: každá transakce se spojí
- *                          v subransakci pro atomičnost zápisu Payment+Allocation)
- * @param {Object} userContext { id: ?, displayName: ? }
- * @param {Object} [opts]    {  amount_tolerance, allow_partial }
- * @returns {Promise<Object>} summary { total, matched, needs_review, no_match, errors }
+ * Najde kandidáty a rozhodne. opts.invoices = předem načtené faktury (dávkové párování).
+ * @returns {Promise<{decision, candidates, reason, partial?}>}
  */
+async function findMatchCandidates(tx, prismaCtx, opts = {}) {
+  const invoices = opts.invoices || await loadOpenInvoices(prismaCtx, tx.direction === 'in' ? 'ar' : 'ap');
+  const list = scoreCandidates(tx, invoices);
+  const txVs = normalizeVs(tx.variable_symbol);
+  if (!list.length) {
+    return { decision: 'no_match', candidates: [], reason: txVs || tx.counterparty_account
+      ? 'Žádná otevřená faktura se shodným VS ani účtem protistrany.'
+      : 'Platba nemá VS ani účet protistrany — nelze automaticky spárovat.' };
+  }
+  const vsExact = list.filter((c) => c.match.vs && c.match.exact);
+  if (vsExact.length === 1) return { decision: 'auto_match', candidates: vsExact, reason: `VS ${txVs} + částka sedí na ${vsExact[0].invoice_number}.` };
+  if (vsExact.length > 1) {
+    const withAcc = vsExact.filter((c) => c.match.account);
+    if (withAcc.length === 1) return { decision: 'auto_match', candidates: withAcc, reason: `VS + účet + částka sedí na ${withAcc[0].invoice_number}.` };
+    return { decision: 'needs_review', candidates: vsExact, reason: `${vsExact.length} faktur se stejným VS a částkou — vyber ručně.` };
+  }
+  const accExact = list.filter((c) => c.match.account && c.match.exact);
+  if (accExact.length === 1) return { decision: 'auto_match', candidates: accExact, reason: `Účet protistrany + částka sedí na ${accExact[0].invoice_number}.` };
+  const vsAll = list.filter((c) => c.match.vs);
+  if (vsAll.length === 1 && vsAll[0].match.partial && (vsAll[0].match.account || !vsAll[0].match.account_known || !tx.counterparty_account)) {
+    return { decision: 'auto_match', partial: true, candidates: vsAll, reason: `VS ${txVs}: částečná úhrada faktury ${vsAll[0].invoice_number} (zbývá ${vsAll[0].remaining}).` };
+  }
+  if (vsAll.length === 1 && vsAll[0].match.partial) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} sedí (částečná úhrada ${vsAll[0].invoice_number}), ale účet protistrany neodpovídá — zkontroluj ručně.` };
+  if (vsAll.length === 1) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} sedí na ${vsAll[0].invoice_number}, ale platba je vyšší než zbývá doplatit (${vsAll[0].remaining}).` };
+  if (vsAll.length) return { decision: 'needs_review', candidates: list, reason: `VS ${txVs} odpovídá ${vsAll.length} fakturám — vyber ručně.` };
+  if (accExact.length > 1) return { decision: 'needs_review', candidates: accExact, reason: `${accExact.length} faktur stejné protistrany se stejnou částkou — vyber ručně.` };
+  return { decision: 'no_match', candidates: list, reason: 'Sedí jen účet protistrany, ne VS ani částka — případně spáruj ručně.' };
+}
+
+/**
+ * Zpracuje jednu transakci: pravidla + párování s fakturami.
+ * Párování s fakturou má přednost před pravidly typu „Ignorovat"/„Posoudit", pokud je jednoznačné.
+ * ctx = { rules, invoices } (předem načtené), opts.mode: 'new' | 'recheck'
+ */
+async function processTransaction(tx, prismaCtx, userContext, ctx, opts = {}) {
+  const { ruleMatches, applyRule } = require('./matching-rules');
+  const result = await findMatchCandidates(tx, prismaCtx, { invoices: ctx.invoices });
+  if (result.decision === 'auto_match') {
+    const inv = result.candidates[0];
+    const r = await applyMatch(tx, [{ invoice_id: inv.id, amount: Number(tx.amount) }], prismaCtx, userContext, result.partial ? 'vs-partial' : (inv.match.vs ? 'vs+amount' : 'account+amount'));
+    // aktualizovat cache faktur (další platby téže faktury)
+    const cached = ctx.invoices && ctx.invoices.find((i) => i.id === inv.id);
+    if (cached && r.updated_invoices && r.updated_invoices[0]) { cached.paid_amount = r.updated_invoices[0].paid_amount; cached.status = r.updated_invoices[0].status; }
+    return { status: 'matched', invoice: inv.invoice_number, partial: !!result.partial };
+  }
+  if (opts.mode === 'recheck') {
+    // už zpracované (ignorované pravidlem / k posouzení) — měníme jen při jednoznačné shodě (výše)
+    if (tx.match_status === 'needs_review' && result.decision === 'no_match' && tx.match_method && tx.match_method !== 'rule') {
+      await prismaCtx.bankTransaction.update({ where: { id: tx.id }, data: { match_status: 'unmatched' } });
+      return { status: 'unmatched' };
+    }
+    return { status: tx.match_status };
+  }
+  const rule = (ctx.rules || []).find((r) => ruleMatches(tx, r));
+  if (rule) {
+    const rr = await applyRule(tx, rule, prismaCtx, userContext);
+    return { status: rr.status, rule: rule.name };
+  }
+  if (result.decision === 'needs_review') {
+    await prismaCtx.bankTransaction.update({ where: { id: tx.id }, data: { match_status: 'needs_review', match_method: 'vs' , note: result.reason.slice(0, 500) } });
+    return { status: 'needs_review' };
+  }
+  return { status: 'unmatched' };
+}
+
+function newSummary(total) {
+  return { total, matched: 0, partial: 0, needs_review: 0, no_match: 0, rule_ignored: 0, rule_matched: 0, errors: [], matched_ids: [], review_ids: [], ignored_ids: [] };
+}
+function addToSummary(summary, tx, r) {
+  if (r.status === 'matched') { summary.matched++; summary.matched_ids.push(tx.id); if (r.partial) summary.partial++; if (r.rule) summary.rule_matched++; }
+  else if (r.status === 'needs_review') { summary.needs_review++; summary.review_ids.push(tx.id); }
+  else if (r.status === 'ignored') { summary.rule_ignored++; summary.ignored_ids.push(tx.id); }
+  else summary.no_match++;
+}
+async function loadCtx(prismaCtx) {
+  const [rules, invoices] = await Promise.all([
+    prismaCtx.matchingRule.findMany({ where: { active: true }, orderBy: [{ priority: 'desc' }, { id: 'asc' }] }),
+    loadOpenInvoices(prismaCtx, null),
+  ]);
+  return { rules, invoices };
+}
+
+/** Auto-match nepárovaných transakcí jednoho výpisu (volá se po importu). */
 async function autoMatchStatement(statementId, prismaCtx, userContext, opts = {}) {
-  // Lazy import — vyhne se cyklické závislosti (rules importuje auto-matcher)
-  const { evaluateRules, applyRule } = require('./matching-rules');
-
   const transactions = await prismaCtx.bankTransaction.findMany({
-    where: {
-      statement_id: statementId,
-      match_status: 'unmatched',
-    },
+    where: { statement_id: statementId, match_status: 'unmatched' },
+    orderBy: [{ transaction_date: 'asc' }, { id: 'asc' }],
   });
+  const summary = newSummary(transactions.length);
+  if (!transactions.length) return summary;
+  const ctx = await loadCtx(prismaCtx);
+  for (const tx of transactions) {
+    try { addToSummary(summary, tx, await processTransaction(tx, prismaCtx, userContext, ctx, { mode: 'new' })); }
+    catch (e) { summary.errors.push({ tx_id: tx.id, error: e.message }); }
+  }
+  return summary;
+}
 
-  const summary = {
-    total: transactions.length,
-    matched: 0,
-    needs_review: 0,
-    no_match: 0,
-    rule_ignored: 0,
-    rule_matched: 0,
-    errors: [],
-    matched_ids: [],
-    review_ids: [],
-    ignored_ids: [],
-  };
-
+/**
+ * Projde VŠECHNY nevyřešené platby: nepárované (pravidla + faktury), k posouzení a ignorované pravidlem
+ * (u těch jen jednoznačná shoda s fakturou — např. okamžitá úhrada s VS faktury). Ručně ignorované se nemění.
+ */
+async function autoMatchAll(prismaCtx, userContext, opts = {}) {
+  const where = { OR: [
+    { match_status: 'unmatched' },
+    { match_status: 'needs_review' },
+    { match_status: 'ignored', match_method: 'rule' },
+  ] };
+  if (opts.bank_account_id) where.bank_account_id = opts.bank_account_id;
+  const transactions = await prismaCtx.bankTransaction.findMany({ where, orderBy: [{ transaction_date: 'asc' }, { id: 'asc' }] });
+  const summary = newSummary(transactions.length);
+  if (!transactions.length) return summary;
+  const ctx = await loadCtx(prismaCtx);
   for (const tx of transactions) {
     try {
-      // 1) Nejdřív zkusíme pravidla (priorita > klasický VS match)
-      const rule = await evaluateRules(tx, prismaCtx);
-      if (rule) {
-        const ruleResult = await applyRule(tx, rule, prismaCtx, userContext);
-        if (ruleResult.status === 'ignored') {
-          summary.rule_ignored++;
-          summary.ignored_ids.push(tx.id);
-        } else if (ruleResult.status === 'matched') {
-          summary.rule_matched++;
-          summary.matched++;
-          summary.matched_ids.push(tx.id);
-        } else if (ruleResult.status === 'needs_review') {
-          summary.needs_review++;
-          summary.review_ids.push(tx.id);
-        }
-        continue;
-      }
-
-      // 2) Klasický VS+amount match
-      const result = await findMatchCandidates(tx, prismaCtx, opts);
-
-      if (result.decision === 'auto_match') {
-        const candidate = result.candidates[0];
-        await applyMatch(tx, [{ invoice_id: candidate.id, amount: Number(tx.amount) }], prismaCtx, userContext, 'vs+amount');
-        summary.matched++;
-        summary.matched_ids.push(tx.id);
-      } else if (result.decision === 'needs_review') {
-        await prismaCtx.bankTransaction.update({
-          where: { id: tx.id },
-          data: { match_status: 'needs_review' },
-        });
-        summary.needs_review++;
-        summary.review_ids.push(tx.id);
-      } else {
-        summary.no_match++;
-      }
-    } catch (e) {
-      summary.errors.push({ tx_id: tx.id, error: e.message });
-    }
+      const mode = tx.match_status === 'unmatched' ? 'new' : 'recheck';
+      addToSummary(summary, tx, await processTransaction(tx, prismaCtx, userContext, ctx, { mode }));
+    } catch (e) { summary.errors.push({ tx_id: tx.id, error: e.message }); }
   }
-
   return summary;
 }
 
@@ -262,7 +273,7 @@ async function applyMatch(tx, allocations, prismaCtx, userContext, matchMethod =
     throw new Error(`applyMatch: některé faktury nenalezeny (${invoiceIds.length - invoices.length} chybí)`);
   }
   for (const inv of invoices) {
-    if (NEVER_PAYABLE.includes(inv.status)) {
+    if (CLOSED_STATUSES.includes(inv.status)) {
       throw new Error(`applyMatch: faktura ${inv.invoice_number} je ve stavu "${inv.status}", nelze přiřadit platbu`);
     }
   }
@@ -300,13 +311,22 @@ async function applyMatch(tx, allocations, prismaCtx, userContext, matchMethod =
   });
 
   // Vytvoř PaymentAllocations
+  const METHOD_LABEL = { manual: 'Ruční párování', 'vs+amount': 'Auto: VS + částka', 'account+amount': 'Auto: účet + částka', 'vs-partial': 'Auto: VS, částečná úhrada', rule: 'Pravidlo' };
   for (const a of allocations) {
+    // původní stav faktury (pro vrácení při odpojení) — u už částečně placených převezmeme z dřívější alokace
+    const inv = invoices.find(i => i.id === a.invoice_id);
+    let prev = inv ? inv.status : null;
+    if (prev === 'partially_paid' || prev === 'paid') {
+      const older = await prismaCtx.paymentAllocation.findFirst({ where: { invoice_id: a.invoice_id, note: { contains: '[prev:' } }, orderBy: { id: 'asc' }, select: { note: true } });
+      const m = older && older.note && older.note.match(/\[prev:([a-z_0-9]+)\]/);
+      prev = m ? m[1] : null;
+    }
     await prismaCtx.paymentAllocation.create({
       data: {
         payment_id: payment.id,
         invoice_id: a.invoice_id,
         amount: Number(a.amount),
-        note: matchMethod === 'manual' ? 'Ruční párování' : null,
+        note: ((METHOD_LABEL[matchMethod] || matchMethod || '') + (prev ? ' [prev:' + prev + ']' : '')).slice(0, 255),
       },
     });
   }
@@ -319,9 +339,11 @@ async function applyMatch(tx, allocations, prismaCtx, userContext, matchMethod =
     const total = Number(inv.total);
     let newStatus = inv.status;
 
-    // Pokud zaplaceno >= total → status `paid`
+    // Zaplaceno celé → `paid`, část → `partially_paid` (částečně vypořádáno)
     if (newPaid + 0.01 >= total) {
       newStatus = 'paid';
+    } else if (newPaid > 0.009) {
+      newStatus = 'partially_paid';
     }
 
     const updated = await prismaCtx.invoice.update({
@@ -373,9 +395,20 @@ async function unmatchTransaction(transactionId, prismaCtx, userContext) {
   for (const alloc of tx.payment.allocations) {
     const newPaid = Number(alloc.invoice.paid_amount) - Number(alloc.amount);
     let newStatus = alloc.invoice.status;
-    // Pokud byl `paid` ale po vrácení zase ne, navrať na rozumný stav
-    if (alloc.invoice.status === 'paid' && newPaid < Number(alloc.invoice.total)) {
-      newStatus = alloc.invoice.direction === 'ap' ? 'ready_to_pay' : 'sent';
+    if (['paid', 'partially_paid'].includes(alloc.invoice.status) && newPaid + 0.01 < Number(alloc.invoice.total)) {
+      if (newPaid > 0.009) newStatus = 'partially_paid';
+      else {
+        // původní stav uložený při párování; jinak rozumný výchozí
+        let prev = null;
+        const own = alloc.note && alloc.note.match(/\[prev:([a-z_0-9]+)\]/);
+        if (own) prev = own[1];
+        if (!prev) {
+          const older = await prismaCtx.paymentAllocation.findFirst({ where: { invoice_id: alloc.invoice_id, note: { contains: '[prev:' } }, orderBy: { id: 'asc' }, select: { note: true } });
+          const m = older && older.note && older.note.match(/\[prev:([a-z_0-9]+)\]/);
+          prev = m ? m[1] : null;
+        }
+        newStatus = prev && !['paid', 'partially_paid'].includes(prev) ? prev : (alloc.invoice.direction === 'ap' ? 'ready_to_pay' : 'sent');
+      }
     }
     await prismaCtx.invoice.update({
       where: { id: alloc.invoice_id },
@@ -419,6 +452,11 @@ async function ignoreTransaction(transactionId, prismaCtx, userContext, note) {
 module.exports = {
   findMatchCandidates,
   autoMatchStatement,
+  autoMatchAll,
+  processTransaction,
+  normalizeAccount,
+  accountsEqual,
+  CLOSED_STATUSES,
   applyMatch,
   unmatchTransaction,
   ignoreTransaction,

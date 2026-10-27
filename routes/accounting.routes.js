@@ -254,7 +254,12 @@ router.get('/invoices/:id', async (req, res, next) => {
         },
         created_by_user: { select: { id: true, username: true, display_name: true } },
         allocations: {
-          include: { payment: { select: { id: true, executed_date: true, amount: true, method: true, status: true } } },
+          include: { payment: { select: {
+            id: true, executed_date: true, amount: true, currency: true, method: true, status: true, direction: true,
+            partner_name: true, partner_account: true, variable_symbol: true,
+            bank_transaction: { select: { id: true, transaction_date: true, amount: true, direction: true, counterparty_name: true, counterparty_account: true, variable_symbol: true, message: true, statement: { select: { statement_number: true } }, bank_account: { select: { name: true } } } },
+          } } },
+          orderBy: { id: 'asc' },
         },
         approval_steps: {
           include: { approver: { select: { id: true, first_name: true, last_name: true } } },
