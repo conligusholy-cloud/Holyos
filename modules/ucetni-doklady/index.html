@@ -4904,6 +4904,18 @@
     // ─── Banka → Plán plateb: nezaplacené přijaté doklady po dnech + převod na platební příkaz ───
     const PLAN = { rows: [], sel: new Set(), open: new Set() }; // open = rozbalené dny (klíče skupin)
     const planDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+    // Kurzy ČNB jen pro PŘEHLED (součty, graf, průměry) — platební příkazy zůstávají v původní měně
+    let PLAN_FX = { rates: { CZK: 1 }, valid_for: null, source: null, at: 0 };
+    const planRate = (cur) => { const c = String(cur || 'CZK').toUpperCase(); const v = PLAN_FX.rates[c]; return c === 'CZK' ? 1 : (typeof v === 'number' ? v : null); };
+    const planCzk = (r) => { const k = planRate(r.currency); return k == null ? 0 : Number(r.remaining) * k; };
+    async function loadPlanFx() {
+      if (Date.now() - PLAN_FX.at < 30 * 60e3 && PLAN_FX.source) return;
+      try {
+        const r = await api('GET', '/api/wh/exchange-rates');
+        if (r.status === 200 && r.data && r.data.rates) PLAN_FX = { rates: r.data.rates, valid_for: r.data.valid_for, source: r.data.source || 'CNB', at: Date.now() };
+      } catch (e) { /* zůstanou poslední známé kurzy */ }
+    }
+    const planFxNote = () => PLAN_FX.source === 'CNB' && PLAN_FX.valid_for ? 'kurz ČNB k ' + new Date(PLAN_FX.valid_for).toLocaleDateString('cs-CZ') : (PLAN_FX.source ? 'orientační kurz (ČNB nedostupná)' : 'kurz není k dispozici');
     function planEligible(r) {
       if (r.in_batch) return 'Už je v příkazu ' + r.in_batch.batch_number;
       if (r.payment_method !== 'bank_transfer') return 'Nehradí se převodem (' + ((PAYMENT_METHOD[r.payment_method] || {}).label || r.payment_method) + ')';
@@ -4926,6 +4938,7 @@
       const r = await api('GET', '/api/accounting/payment-plan' + (to ? '?to=' + to : ''));
       if (r.status !== 200) { document.getElementById('plan-list').innerHTML = '<div class="empty-hint">Chyba: ' + escapeHtml(r.data?.error || String(r.status)) + '</div>'; return; }
       PLAN.rows = r.data || [];
+      await loadPlanFx();
       const ids = new Set(PLAN.rows.map(x => x.id));
       [...PLAN.sel].forEach(id => { if (!ids.has(id)) PLAN.sel.delete(id); });
       renderPaymentPlan();
@@ -4952,7 +4965,7 @@
         groups.get(key).rows.push(r);
       });
       const order = [...groups.values()].sort((a, b) => (a.overdue ? -1 : b.overdue ? 1 : (a.date ? +a.date : Infinity) - (b.date ? +b.date : Infinity)));
-      const sum = (list) => list.reduce((s, r) => s + (r.currency === 'CZK' ? Number(r.remaining) : 0), 0);
+      const sum = (list) => list.reduce((s, r) => s + planCzk(r), 0); // cizí měny přepočtené kurzem ČNB (jen pro přehled)
       // souhrn
       const in7 = new Date(+today + 7 * 864e5), in30 = new Date(+today + 30 * 864e5);
       const sOver = rows.filter(r => r.date_due && planDay(r.date_due) < today);
@@ -4978,8 +4991,8 @@
           '<td onclick="event.stopPropagation()"><input type="checkbox" ' + (allSel ? 'checked ' : '') + (elig.length ? '' : 'disabled ') + 'title="Vybrat všechny platitelné doklady dne" onchange="planToggleGroup(\'' + g.key + '\',this.checked)"></td>' +
           '<td colspan="6" style="font-weight:700;' + (g.overdue ? 'color:#f87171' : '') + '"><span style="display:inline-block;width:16px;color:var(--text2)">' + (collapsed ? '▸' : '▾') + '</span>' + label +
             ' <span style="font-weight:400;color:var(--text2);font-size:0.88em">· ' + g.rows.length + ' dokladů' + (nSel ? ' · <span style="color:#818cf8">vybráno ' + nSel + '</span>' : '') + '</span></td>' +
-          '<td class="num" style="font-weight:700;white-space:nowrap" title="Součet doplatků dokladů tohoto dne v CZK (doklady v cizí měně se nesčítají)"><span style="font-weight:400;font-size:0.8em;color:var(--text2)">Σ za ' + (g.overdue ? 'po splatnosti' : 'den') + '</span> ' + fmtAmount(sum(g.rows)) + ' Kč' +
-            (g.rows.some(r => r.currency !== 'CZK') ? '<div style="font-weight:400;font-size:0.75em;color:var(--text2)">+ ' + g.rows.filter(r => r.currency !== 'CZK').map(r => fmtAmount(r.remaining) + ' ' + escapeHtml(r.currency)).join(', ') + '</div>' : '') + '</td></tr>';
+          '<td class="num" style="font-weight:700;white-space:nowrap" title="Součet doplatků dokladů tohoto dne v Kč. Doklady v cizí měně jsou přepočtené aktuálním kurzem ČNB (jen pro přehled — platební příkaz zůstává v původní měně)."><span style="font-weight:400;font-size:0.8em;color:var(--text2)">Σ za ' + (g.overdue ? 'po splatnosti' : 'den') + '</span> ' + fmtAmount(sum(g.rows)) + ' Kč' +
+            (g.rows.some(r => r.currency !== 'CZK') ? '<div style="font-weight:400;font-size:0.75em;color:var(--text2)" title="' + escapeHtml(planFxNote()) + '">z toho ' + (function () { const by = {}; g.rows.filter(r => r.currency !== 'CZK').forEach(r => { by[r.currency] = (by[r.currency] || 0) + Number(r.remaining); }); return Object.keys(by).map(c => fmtAmount(by[c]) + ' ' + escapeHtml(c)).join(' + '); })() + ' ≈ ' + fmtAmount(sum(g.rows.filter(r => r.currency !== 'CZK'))) + ' Kč</div>' : '') + '</td></tr>';
         if (!collapsed) g.rows.forEach(r => {
           const why = planEligible(r);
           const ver = r.verification || {};
@@ -5013,11 +5026,12 @@
       const buckets = Array.from({ length: DAYS }, (_, i) => ({ d: new Date(+today + i * 864e5), sum: 0, n: 0 }));
       let overdue = 0, later = 0;
       rows.forEach(r => {
-        if (r.currency !== 'CZK' || !r.date_due) return;
+        if (!r.date_due) return;
+        const amt = planCzk(r); // cizí měna přepočtená kurzem ČNB (jen pro přehled)
         const idx = Math.round((+planDay(r.date_due) - +today) / 864e5);
-        if (idx < 0) overdue += Number(r.remaining);
-        else if (idx >= DAYS) later += Number(r.remaining);
-        else { buckets[idx].sum += Number(r.remaining); buckets[idx].n++; }
+        if (idx < 0) overdue += amt;
+        else if (idx >= DAYS) later += amt;
+        else { buckets[idx].sum += amt; buckets[idx].n++; }
       });
       const max = Math.max(1, avgLine || 0, ...buckets.map(b => b.sum));
       const W = 760, H = 180, L = 54, B = 26, T = 26, bw = (W - L - 6) / DAYS;
@@ -5070,7 +5084,7 @@
         return s + Number(t.amount || 0);
       }, 0);
       const s30 = histSum(30), s90 = histSum(90), inv30 = histSum(30, true);
-      const planNext = rows.reduce((s, r) => { if (r.currency !== 'CZK' || !r.date_due) return s; const d = planDay(r.date_due); return d >= today && d < new Date(+today + 30 * 864e5) ? s + Number(r.remaining) : s; }, 0);
+      const planNext = rows.reduce((s, r) => { if (!r.date_due) return s; const d = planDay(r.date_due); return d >= today && d < new Date(+today + 30 * 864e5) ? s + planCzk(r) : s; }, 0);
       const card = (lbl, val, sub, col, tip) => '<div title="' + escapeHtml(tip) + '" style="background:var(--surface2);border-radius:10px;padding:8px 14px;border-left:3px solid ' + col + ';min-width:170px"><div style="font-size:0.75em;color:var(--text2);text-transform:uppercase">' + lbl + '</div><b>' + fmtAmount(val) + ' Kč</b><div style="font-size:0.78em;color:var(--text2)">' + sub + '</div></div>';
       el.innerHTML = '<div style="font-size:0.78em;color:var(--text2);text-transform:uppercase;letter-spacing:.04em;margin:2px 0 6px">⌀ Průměrně platím za den</div><div style="display:flex;gap:10px;flex-wrap:wrap">' +
         card('Posledních 30 dní', s30 / 30, fmtAmount(s30 / workdays(30)) + ' Kč / pracovní den', '#a78bfa', 'Všechny odchozí platby z výpisů (vč. karet, poplatků) za posledních 30 dní ÷ 30. Z toho platby dokladů: ' + fmtAmount(inv30) + ' Kč.') +
