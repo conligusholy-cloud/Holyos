@@ -1572,7 +1572,6 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     .colpick-i{display:flex;align-items:center;gap:8px;font-size:14px;margin:0;padding:5px 0;color:var(--text);cursor:pointer} .colpick-i input{width:auto;margin:0}
     .colpick-scroll{max-height:40vh;overflow:auto;padding-right:4px}
     #sup-top{position:sticky;top:var(--hh,52px);z-index:6;background:var(--bg);padding-top:14px;margin-top:-14px}
-    #sup-thead th{position:sticky;top:calc(var(--hh,52px) + var(--sth,104px));z-index:5;background:#0a1020}
   </style>
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1587,9 +1586,8 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
       <button class="btn sec" type="submit">Vyhledat</button>
     </form>
   </div>
-  <div class="card tbl-wrap"><table class="cards"><thead id="sup-thead"><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
-  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});
-  (function(){var t=document.getElementById('sup-top');if(t){var m=function(){document.documentElement.style.setProperty('--sth',t.offsetHeight+'px');};m();addEventListener('resize',m);setTimeout(m,300);}})();</script>`, holyosUrl);
+  <div class="card tbl-wrap"><table class="cards"><thead><tr>${head}</tr></thead><tbody>${rowsHtml || `<tr><td colspan="${colCount}" class="muted">Nic nenalezeno.</td></tr>`}</tbody></table></div>
+  <script>document.addEventListener('click',function(e){var d=document.getElementById('colpick');if(d&&d.open&&!d.contains(e.target))d.removeAttribute('open');});</script>`, holyosUrl);
 }
 // Produkty: aktivní stroje z prodejního ceníku HolyOS (název + cena), jen čtení
 const money = (v, c) => (v == null ? '<span class="muted">—</span>' : esc(Number(v).toLocaleString('cs-CZ', { maximumFractionDigits: 2 }) + ' ' + c));
