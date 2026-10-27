@@ -1523,7 +1523,7 @@ const BASE_COLS = [
   { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at'];
+const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at', 'x:obrat'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu).
 // S `to`: přes /admin/goto-legacy — mezistránka nastaví session a pak hodí rovnou na danou stránku
