@@ -436,7 +436,10 @@
               <input type="text" id="plan-search" placeholder="Dodavatel, číslo, VS…" oninput="renderPaymentPlan()" style="min-width:220px;">
               <button class="btn btn-secondary btn-sm" onclick="loadPaymentPlan()">🔄 Obnovit</button>
             </div>
-            <div id="plan-summary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;"></div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch;margin-bottom:12px;">
+              <div id="plan-summary" style="display:flex;gap:10px;flex-wrap:wrap;align-content:flex-start;flex:0 1 auto;"></div>
+              <div id="plan-chart" style="flex:1 1 420px;min-width:320px;background:var(--surface2);border-radius:10px;padding:10px 12px;"></div>
+            </div>
             <div id="plan-list"><div class="empty-hint">Načítání…</div></div>
           </div>
           <div id="plan-footer" style="position:sticky;bottom:0;z-index:5;background:var(--surface,#1f2937);border:1px solid var(--border,#374151);border-radius:12px;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;box-shadow:0 -8px 24px rgba(0,0,0,.35);">
@@ -4952,6 +4955,7 @@
       const s7 = rows.filter(r => r.date_due && planDay(r.date_due) >= today && planDay(r.date_due) <= in7);
       const s30 = rows.filter(r => r.date_due && planDay(r.date_due) >= today && planDay(r.date_due) <= in30);
       const card = (lbl, list, col) => '<div style="background:var(--surface2);border-radius:10px;padding:8px 14px;border-left:3px solid ' + col + '"><div style="font-size:0.75em;color:var(--text2);text-transform:uppercase">' + lbl + '</div><b>' + fmtAmount(sum(list)) + ' Kč</b> <span style="color:var(--text2);font-size:0.85em">(' + list.length + ')</span></div>';
+      renderPlanChart(rows);
       document.getElementById('plan-summary').innerHTML = card('Po splatnosti', sOver, '#ef4444') + card('Dnes', sToday, '#f59e0b') + card('Do 7 dní', s7, '#eab308') + card('Do 30 dní', s30, '#6c8cff') + card('Celkem nezaplaceno', rows, '#22c55e');
       if (!rows.length) { document.getElementById('plan-list').innerHTML = '<div class="empty-hint">Žádné nezaplacené přijaté doklady.</div>'; planUpdateFooter(); return; }
       const dayName = (d) => d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric', year: 'numeric' });
@@ -4962,7 +4966,7 @@
         const allSel = elig.length > 0 && elig.every(r => PLAN.sel.has(r.id));
         const collapsed = g.overdue && !PLAN.openOverdue;
         const label = g.overdue ? '⚠ Po splatnosti' : (g.date ? dayName(g.date) + ' · ' + rel(g.date) : 'Bez splatnosti');
-        html += '<tbody><tr style="background:' + (g.overdue ? '#ef444418' : 'var(--surface2)') + '">' +
+        html += '<tbody><tr id="plan-day-' + g.key + '" style="background:' + (g.overdue ? '#ef444418' : 'var(--surface2)') + '">' +
           '<td><input type="checkbox" ' + (allSel ? 'checked ' : '') + (elig.length ? '' : 'disabled ') + 'title="Vybrat všechny platitelné doklady dne" onchange="planToggleGroup(\'' + g.key + '\',this.checked)"></td>' +
           '<td colspan="6" style="font-weight:700;' + (g.overdue ? 'color:#f87171;cursor:pointer' : '') + '"' + (g.overdue ? ' onclick="planToggleOverdue()"' : '') + '>' + label +
             ' <span style="font-weight:400;color:var(--text2);font-size:0.88em">· ' + g.rows.length + ' dokladů' + (g.overdue ? (collapsed ? ' — klikni pro zobrazení ▸' : ' ▾') : '') + '</span></td>' +
@@ -4991,6 +4995,48 @@
       html += '</table>';
       document.getElementById('plan-list').innerHTML = html;
       planUpdateFooter();
+    };
+    // Sloupcový graf: kolik je potřeba zaplatit v příštích dnech (z viditelných dokladů, CZK)
+    function renderPlanChart(rows) {
+      const el = document.getElementById('plan-chart'); if (!el) return;
+      const today = planDay(new Date());
+      const DAYS = 30;
+      const buckets = Array.from({ length: DAYS }, (_, i) => ({ d: new Date(+today + i * 864e5), sum: 0, n: 0 }));
+      let overdue = 0, later = 0;
+      rows.forEach(r => {
+        if (r.currency !== 'CZK' || !r.date_due) return;
+        const idx = Math.round((+planDay(r.date_due) - +today) / 864e5);
+        if (idx < 0) overdue += Number(r.remaining);
+        else if (idx >= DAYS) later += Number(r.remaining);
+        else { buckets[idx].sum += Number(r.remaining); buckets[idx].n++; }
+      });
+      const max = Math.max(1, ...buckets.map(b => b.sum));
+      const W = 760, H = 170, L = 54, B = 26, T = 18, bw = (W - L - 6) / DAYS;
+      const nice = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p) * p; };
+      const top = nice(max);
+      const y = (v) => T + (H - T - B) * (1 - v / top);
+      const kfmt = (v) => v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' M' : v >= 1e3 ? Math.round(v / 1e3) + ' tis.' : String(Math.round(v));
+      let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">';
+      [0, 0.5, 1].forEach(f => { const yy = y(top * f); svg += '<line x1="' + L + '" x2="' + (W - 4) + '" y1="' + yy + '" y2="' + yy + '" stroke="#374151" stroke-dasharray="' + (f ? '3 3' : '') + '"/><text x="' + (L - 6) + '" y="' + (yy + 3) + '" fill="#9ca3af" font-size="10" text-anchor="end">' + kfmt(top * f) + '</text>'; });
+      buckets.forEach((b, i) => {
+        const x = L + i * bw + 2, w = Math.max(2, bw - 4);
+        const wd = b.d.getDay(), weekend = wd === 0 || wd === 6;
+        const key = b.d.toISOString().slice(0, 10);
+        const col = i === 0 ? '#f59e0b' : i <= 7 ? '#eab308' : '#6c8cff';
+        const tip = b.d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' }) + ': ' + fmtAmount(b.sum) + ' Kč (' + b.n + ' dokladů)';
+        if (b.sum > 0) svg += '<rect x="' + x + '" y="' + y(b.sum) + '" width="' + w + '" height="' + (y(0) - y(b.sum)) + '" rx="2" fill="' + col + '" style="cursor:pointer" onclick="planScrollDay(\'' + key + '\')"><title>' + escapeHtml(tip) + '</title></rect>';
+        else svg += '<rect x="' + x + '" y="' + (y(0) - 2) + '" width="' + w + '" height="2" fill="#374151"><title>' + escapeHtml(tip) + '</title></rect>';
+        if (i === 0 || b.d.getDate() === 1 || i % 2 === 0) svg += '<text x="' + (x + w / 2) + '" y="' + (H - 12) + '" fill="' + (weekend ? '#6b7280' : '#9ca3af') + '" font-size="9" text-anchor="middle">' + b.d.getDate() + '.' + (i === 0 || b.d.getDate() === 1 ? (b.d.getMonth() + 1) + '.' : '') + '</text>';
+      });
+      svg += '</svg>';
+      el.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--text2);margin-bottom:4px">' +
+        '<b style="color:var(--text)">📊 Platby v příštích 30 dnech</b>' +
+        '<span>' + (overdue ? '<span style="color:#f87171">po splatnosti ' + fmtAmount(overdue) + ' Kč</span> · ' : '') + 'později ' + fmtAmount(later) + ' Kč</span></div>' + svg;
+    }
+    window.planScrollDay = function(key) {
+      const tr = document.getElementById('plan-day-' + key); if (!tr) return;
+      tr.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      tr.style.outline = '2px solid #f59e0b'; setTimeout(() => { tr.style.outline = ''; }, 2500);
     };
     window.planToggleOverdue = function() { PLAN.openOverdue = !PLAN.openOverdue; renderPaymentPlan(); };
     window.planToggle = function(id, on) { if (on) PLAN.sel.add(id); else PLAN.sel.delete(id); renderPaymentPlan(); };
