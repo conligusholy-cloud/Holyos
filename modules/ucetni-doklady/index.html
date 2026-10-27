@@ -1021,6 +1021,10 @@
               ? '<a href="/api/accounting/invoices/' + inv.id + '/source-pdf" target="_blank" class="btn btn-secondary btn-sm" title="Stáhnout / zobrazit originální PDF" style="margin-right:4px;text-decoration:none;">📄</a>'
               : '') +
             '<button class="btn btn-secondary btn-sm" onclick="openDetail(' + inv.id + ')">Detail</button>' +
+            ((window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)
+              && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued', 'draft'].includes(inv.status))
+              ? ' <button class="btn btn-secondary btn-sm" onclick="markInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: ručně označit jako zaplaceno (mimo výpisy)" style="margin-left:4px;color:#22c55e;">✓ Zaplaceno</button>'
+              : '') +
             (window.currentUser?.isSuperAdmin
               ? ' <button class="btn btn-danger btn-sm" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Trvale smazat (super admin)" style="margin-left:4px;">🗑️</button>'
               : '') +
@@ -1887,6 +1891,35 @@
       const r = await api('DELETE', '/api/accounting/invoices/' + id);
       if (r.status !== 200) return alert('Chyba: ' + (r.data?.error || r.status));
       closeModal(); loadInvoices(); loadSummary();
+    };
+
+    // ✓ Ruční označení jako zaplaceno (admin) — mimo vypořádání z výpisů
+    window.markInvoicePaid = function(id, num) {
+      const today = new Date().toISOString().slice(0, 10);
+      const ov = document.createElement('div');
+      ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10050;display:flex;align-items:center;justify-content:center;';
+      ov.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:420px;max-width:94vw;padding:20px 22px;">'
+        + '<h3 style="margin:0 0 6px;">✓ Zaplaceno (ručně)</h3>'
+        + '<div style="color:var(--text2);font-size:.9em;margin-bottom:12px;">Doklad ' + escapeHtml(num) + ' se označí jako plně zaplacený. Vznikne evidovaná platba bez vazby na výpis.</div>'
+        + '<label style="display:block;font-size:.85em;color:var(--text2);margin-bottom:4px;">Datum platby</label>'
+        + '<input type="date" class="mp-d form-control" style="width:100%;margin-bottom:10px;" value="' + today + '">'
+        + '<label style="display:block;font-size:.85em;color:var(--text2);margin-bottom:4px;">Způsob</label>'
+        + '<select class="mp-m form-control" style="width:100%;margin-bottom:10px;"><option value="bank_transfer">Bankovní převod</option><option value="cash">Hotově</option><option value="card">Kartou</option><option value="barter">Zápočet / jiné</option></select>'
+        + '<label style="display:block;font-size:.85em;color:var(--text2);margin-bottom:4px;">Poznámka</label>'
+        + '<input class="mp-n form-control" style="width:100%;margin-bottom:14px;" placeholder="volitelné">'
+        + '<div style="display:flex;justify-content:flex-end;gap:8px;"><button class="btn btn-secondary mp-c">Zrušit</button><button class="btn btn-primary mp-s">✓ Označit jako zaplaceno</button></div>'
+        + '<div class="mp-e" style="color:#ef4444;margin-top:8px;font-size:.88em;"></div></div>';
+      document.body.appendChild(ov);
+      const q = (c) => ov.querySelector(c);
+      q('.mp-c').onclick = () => ov.remove();
+      q('.mp-s').onclick = async () => {
+        q('.mp-s').disabled = true;
+        const r = await api('POST', '/api/accounting/invoices/' + id + '/mark-paid', {
+          date: q('.mp-d').value, method: q('.mp-m').value, note: q('.mp-n').value,
+        });
+        if (r.status !== 200) { q('.mp-e').textContent = r.data?.error || ('Chyba ' + r.status); q('.mp-s').disabled = false; return; }
+        ov.remove(); loadInvoices(); loadSummary();
+      };
     };
 
     // 🗑️ Trvalé smazání — jen super admin

@@ -1206,6 +1206,67 @@ router.post('/invoices/:id/manual-match', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/invoices/:id/mark-paid — admin: ruční označení faktury jako zaplacené (mimo výpisy)
+// Body: { date?: 'YYYY-MM-DD', method?: 'bank_transfer'|'cash'|'card'|'barter', note?: string }
+router.post('/invoices/:id/mark-paid', async (req, res, next) => {
+  try {
+    if (!(req.user && (req.user.role === 'admin' || req.user.isSuperAdmin))) {
+      return res.status(403).json({ error: 'Ruční označení jako zaplaceno smí jen admin' });
+    }
+    const id = parseInt(req.params.id, 10);
+    const invoice = await prisma.invoice.findUnique({ where: { id }, include: { company: { select: { name: true } } } });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (['paid', 'cancelled', 'written_off', 'archived'].includes(invoice.status)) {
+      return res.status(400).json({ error: 'Faktura je už ve stavu, který nelze označit jako zaplacená (' + invoice.status + ')' });
+    }
+    if (invoice.status === 'payment_queued') {
+      return res.status(400).json({ error: 'Faktura je v platebním příkazu — nejdřív ji z dávky odeber, jinak hrozí dvojí platba' });
+    }
+    const total = Number(invoice.total);
+    const remaining = Math.round((total - Number(invoice.paid_amount || 0)) * 100) / 100;
+    if (remaining <= 0) return res.status(400).json({ error: 'Není co doplácet' });
+
+    const method = ['bank_transfer', 'cash', 'card', 'barter'].includes(req.body?.method) ? req.body.method : 'bank_transfer';
+    const d = req.body?.date ? new Date(req.body.date) : new Date();
+    const execDate = isNaN(d.getTime()) ? new Date() : d;
+    const note = String(req.body?.note || '').slice(0, 120);
+    const rate = invoice.currency === 'CZK' ? 1 : (Number(invoice.exchange_rate) || 1);
+    const amountCzk = Math.round(remaining * rate * 100) / 100;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const payment = await tx.payment.create({
+        data: {
+          direction: invoice.direction === 'ap' ? 'out' : 'in',
+          method,
+          amount: remaining,
+          currency: invoice.currency,
+          amount_czk: amountCzk,
+          partner_name: (invoice.company && invoice.company.name) || '—',
+          variable_symbol: invoice.variable_symbol || null,
+          message: ('Ručně: ' + (note || userLabel(req.user))).slice(0, 140),
+          executed_date: execDate,
+          status: 'executed',
+        },
+      });
+      await tx.paymentAllocation.create({
+        data: { payment_id: payment.id, invoice_id: id, amount: remaining, note: 'Ruční úhrada (' + userLabel(req.user) + ')' },
+      });
+      return tx.invoice.update({
+        where: { id },
+        data: { paid_amount: total, status: 'paid' },
+        select: { id: true, status: true, paid_amount: true },
+      });
+    });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: `${invoice.invoice_number}: ručně označeno jako zaplaceno (${remaining} ${invoice.currency}, ${method})`,
+      changes: { manual_paid: { by: userLabel(req.user), amount: remaining, method, status_from: invoice.status } },
+      user: req.user,
+    }).catch(() => {});
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // POST /api/accounting/invoices/:id/mark-checked — vizuální kontrola přepsaných údajů proti originálu
 // Body: { checked: true|false }. Ukládá se jako tag `ocr_checked` (bez migrace) + shodí needs_human_review.
 router.post('/invoices/:id/mark-checked', async (req, res, next) => {
