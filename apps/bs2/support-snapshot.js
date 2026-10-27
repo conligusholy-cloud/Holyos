@@ -48,9 +48,24 @@ async function captureWith(browser, email, { path = '/cs/bo/my-invests/', type =
   try {
     const page = await ctx.newPage();
     await page.setViewport({ width: 1280, height: 900 });
-    await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'networkidle2', timeout: 25000 });
+    // Rychlá cesta: přihlásit se mimo prohlížeč (fake-login bez následování přesměrování na těžký dashboard),
+    // session cookie vložit do kontextu a jít rovnou na Přehled podpory. Když se cookie nepodaří, klasická cesta.
+    let fast = false;
+    try {
+      const r = await fetch(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { redirect: 'manual', headers: { 'user-agent': 'BS2-admin-snapshot' } });
+      let list = []; try { list = r.headers.getSetCookie ? r.headers.getSetCookie() : []; } catch (e) { /* starší Node */ }
+      const host = new URL(BASE).hostname;
+      const cookies = list.map((c) => { const kv = String(c).split(';')[0]; const i = kv.indexOf('='); return i > 0 ? { name: kv.slice(0, i).trim(), value: kv.slice(i + 1).trim(), domain: host, path: '/' } : null; }).filter(Boolean);
+      if (cookies.length) { await page.setCookie(...cookies); fast = true; }
+    } catch (e) { /* fallback níže */ }
+    if (!fast) await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'domcontentloaded', timeout: 25000 });
     await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
-    await new Promise((r) => setTimeout(r, 400));
+    if (fast && !/jste podpořili/i.test(await page.evaluate(() => document.body.innerText).catch(() => ''))) {
+      // cookie nestačila (portál chce dashboard) → klasické přihlášení v prohlížeči
+      await page.goto(BASE + '/php-action/fake-login.php?email=' + encodeURIComponent(email), { waitUntil: 'domcontentloaded', timeout: 25000 });
+      await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
+    }
+    await new Promise((r) => setTimeout(r, 300));
     return await page.screenshot(type === 'png' ? { type: 'png', fullPage: true } : { type: 'jpeg', quality, fullPage: true });
   } finally {
     await ctx.close().catch(() => {});

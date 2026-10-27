@@ -1598,7 +1598,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
             st.textContent=' 📸 '+(j.running?'běží ':'hotovo ')+j.done+'/'+j.total+' ('+Math.round(100*j.done/j.total)+' %) · OK '+j.ok+(j.failed?' · chyby '+j.failed:'')+(j.running&&per?' · zbývá cca '+dur(per*(j.total-j.done)):'');
             st.title=(j.errors||[]).join(' | '); b.disabled=!!j.running; }
           function poll(){ fetch('/admin/support-snapshots/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running) setTimeout(poll,4000); }).catch(function(){}); }
-          b.onclick=function(){ if(!confirm('Pořídit screenshot Přehledu podpory u všech uživatelů s nenulovým obratem? Běží na pozadí (cca 2–3 h), přeskočí screenshoty mladší 24 h.')) return;
+          b.onclick=function(){ if(!confirm('Pořídit screenshot Přehledu podpory u všech uživatelů s nenulovým obratem? Běží na pozadí (cca 1 h), přeskočí screenshoty mladší 24 h.')) return;
             fetch('/admin/support-snapshots/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
       </script><span id="ps-sync-st" class="small muted"></span>
