@@ -65,6 +65,7 @@
   }
 
     var _lokItems = [];
+    var _lokTbl = null; // instance ColFilters tabulky nabídek
     var _lokMap = null, _lokFootprint = null, _lokCenter = null;
     var LOK_SELLERS = null; // seznam obchodníků (lazy z /api/compounder/sellers)
     async function lokLoadSellers() {
@@ -155,26 +156,46 @@
         box.innerHTML = '<div class="empty-state"><div class="empty-icon">📍</div><h3>Zatím žádné nabídky</h3><p>Nabídky míst pro prádlomat z webu bestseries.global se zobrazí zde.</p></div>';
         return;
       }
-      var h = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'
+      box.innerHTML = '<div style="overflow-x:auto;"><table class="data-table" id="lok-list-tbl"><thead><tr>'
         + '<th>Přijato</th><th>Kontakt</th><th>Adresa</th><th>El.</th><th>Voda</th><th>Kanal.</th><th>Park.</th><th>Obchodník</th><th>Stav</th><th></th>'
-        + '</tr></thead><tbody>';
-      items.forEach(function(s){
-        var contact = lokEsc(s.owner_name||'—') + (s.owner_phone?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_phone)+'</span>'):'') + (s.owner_email?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_email)+'</span>'):'');
-        h += '<tr onclick="openLokalityDetail('+s.id+')">'
-          + '<td style="white-space:nowrap;">'+lokDate(s.created_at)+'</td>'
-          + '<td>'+contact+'</td>'
-          + '<td>'+lokEsc(s.address||s.city||'—')+'</td>'
-          + '<td>'+lokYesNo((s.utility_points&&s.utility_points.electricity)?true:(s.electricity_kw!=null?true:undefined))+'</td>'
-          + '<td>'+lokYesNo(s.water_supply)+'</td>'
-          + '<td>'+lokYesNo(s.sewage)+'</td>'
-          + '<td>'+lokYesNo(s.parking)+'</td>'
-          + '<td>'+lokOwnerSelect(s)+'</td>'
-          + '<td>'+lokStatusBadge(s.status)+'</td>'
-          + '<td style="text-align:right;">›</td>'
-          + '</tr>';
-      });
-      h += '</tbody></table></div>';
-      box.innerHTML = h;
+        + '</tr></thead><tbody></tbody></table></div>';
+      // Standardní sloupcové filtry + řazení (js/column-filters.js); instance se drží, filtry přežijí obnovení dat.
+      if (!_lokTbl) {
+        var yn = function(v){ return v===true ? 'ano' : (v===false ? 'ne' : '?'); };
+        var elec = function(s){ return (s.utility_points&&s.utility_points.electricity)?true:(s.electricity_kw!=null?true:undefined); };
+        _lokTbl = ColFilters.table({
+          table: function(){ return document.getElementById('lok-list-tbl'); },
+          columns: [
+            { key: 'created', label: 'Přijato', type: 'date', get: function(s){ return s.created_at || null; } },
+            { key: 'contact', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: function(s){ return [s.owner_name, s.owner_phone, s.owner_email].filter(Boolean).join(' '); } },
+            { key: 'address', label: 'Adresa', type: 'text', ph: 'Adresa…', get: function(s){ return s.address || s.city || ''; } },
+            { key: 'el', label: 'El.', type: 'text', get: function(s){ return yn(elec(s)); } },
+            { key: 'water', label: 'Voda', type: 'text', get: function(s){ return yn(s.water_supply); } },
+            { key: 'sewage', label: 'Kanal.', type: 'text', get: function(s){ return yn(s.sewage); } },
+            { key: 'parking', label: 'Park.', type: 'text', get: function(s){ return yn(s.parking); } },
+            { key: 'seller', label: 'Obchodník', type: 'text', ph: 'Obchodník…', get: function(s){ return lokSellerName(s.assigned_to_id || (s.assigned_to && s.assigned_to.id) || null) || 'nepřiřazeno'; } },
+            { key: 'status', label: 'Stav', type: 'text', get: function(s){ return (LOK_STATUS[s.status] || { label: s.status || '' }).label; } },
+            null,
+          ],
+          renderRow: function(s){
+            var contact = lokEsc(s.owner_name||'—') + (s.owner_phone?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_phone)+'</span>'):'') + (s.owner_email?('<br><span style="color:var(--text2);font-size:11px;">'+lokEsc(s.owner_email)+'</span>'):'');
+            return '<tr onclick="openLokalityDetail('+s.id+')">'
+              + '<td style="white-space:nowrap;">'+lokDate(s.created_at)+'</td>'
+              + '<td>'+contact+'</td>'
+              + '<td>'+lokEsc(s.address||s.city||'—')+'</td>'
+              + '<td>'+lokYesNo((s.utility_points&&s.utility_points.electricity)?true:(s.electricity_kw!=null?true:undefined))+'</td>'
+              + '<td>'+lokYesNo(s.water_supply)+'</td>'
+              + '<td>'+lokYesNo(s.sewage)+'</td>'
+              + '<td>'+lokYesNo(s.parking)+'</td>'
+              + '<td>'+lokOwnerSelect(s)+'</td>'
+              + '<td>'+lokStatusBadge(s.status)+'</td>'
+              + '<td style="text-align:right;">›</td>'
+              + '</tr>';
+          },
+          limit: 500, noun: 'nabídek', emptyText: 'Žádné nabídky.',
+        });
+      }
+      _lokTbl.setRows(items);
     }
 
     async function openLokalityDetail(id) {

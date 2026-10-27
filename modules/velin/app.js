@@ -10,6 +10,32 @@
   const API = '/api/velin';
   const $ = (sel) => document.querySelector(sel);
 
+  // Standardní sloupcové filtry + řazení (js/column-filters.js). Instance se drží per tabulka,
+  // takže filtry přežijí překreslení po opětovném načtení dat.
+  const _tbl = {};
+  function mountTable(key, wrap, o) {
+    const id = 'vl-tbl-' + key;
+    if (o.fresh) delete _tbl[key];
+    wrap.innerHTML = (o.before || '') +
+      '<table class="data-table" id="' + id + '"><thead><tr>' + o.heads.map((h) => '<th>' + h + '</th>').join('') + '</tr></thead><tbody></tbody></table>';
+    let t = _tbl[key];
+    if (!t) {
+      t = _tbl[key] = ColFilters.table({
+        table: () => document.getElementById(id),
+        columns: o.columns,
+        renderRow: (r, i) => _tbl[key].cur.renderRow(r, i),
+        onRender: (v) => { const c = _tbl[key].cur; if (c.onRender) c.onRender(v); },
+        limit: o.limit || 500,
+        noun: o.noun || 'záznamů',
+        emptyText: o.emptyText || 'Žádné záznamy.',
+      });
+    }
+    t.cur = o;
+    t.setRows(o.rows);
+    return t;
+  }
+  const fullName = (p) => p ? ((p.first_name || '') + ' ' + (p.last_name || '')).trim() : '';
+
   function authHeaders() {
     const t = sessionStorage.getItem('token');
     return t ? { 'Authorization': 'Bearer ' + t } : {};
@@ -65,6 +91,10 @@
     const a = (p.first_name || '').charAt(0);
     const b = (p.last_name || '').charAt(0);
     return (a + b).toUpperCase() || '?';
+  }
+  function statusLabel(status) {
+    const m = { proposed: 'Navrženo', accepted: 'Přijato', in_progress: 'Probíhá', blocked: 'Blokováno', done: 'Hotovo', cancelled: 'Zrušeno', timed_out: 'Vypršelo' };
+    return m[status] || status;
   }
   function statusBadge(status) {
     const map = {
@@ -145,15 +175,20 @@
         wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><h3>Žádné úkoly</h3></div>`;
         return;
       }
-      wrap.innerHTML = `
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Osoba</th><th>Úkol</th><th>Zdroj</th><th>Priorita</th>
-              <th>Odhad</th><th>Termín</th><th>Stav</th>
-            </tr>
-          </thead>
-          <tbody>${rows.map((r) => `
+      mountTable('tasks', wrap, {
+        heads: ['Osoba', 'Úkol', 'Zdroj', 'Priorita', 'Odhad', 'Termín', 'Stav'],
+        columns: [
+          { key: 'person', label: 'Osoba', type: 'text', ph: 'Osoba…', get: (r) => fullName(r.person) },
+          { key: 'title', label: 'Úkol', type: 'text', ph: 'Úkol…', get: (r) => r.title },
+          { key: 'source', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: (r) => r.source },
+          { key: 'priority', label: 'Priorita', type: 'num', ph: '', get: (r) => r.priority },
+          { key: 'est', label: 'Odhad', type: 'num', ph: '', get: (r) => r.estimated_min || null },
+          { key: 'due', label: 'Termín', type: 'date', ph: '', get: (r) => r.due_at || null },
+          { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (r) => statusLabel(r.status) },
+        ],
+        rows,
+        noun: 'úkolů',
+        renderRow: (r) => `
             <tr>
               <td>${escapeHtml((r.person.first_name||'') + ' ' + (r.person.last_name||''))}</td>
               <td><b>${escapeHtml(r.title)}</b>${r.description ? '<div style="font-size:12px;color:var(--text2);margin-top:2px">'+escapeHtml(r.description.slice(0,120))+'</div>' : ''}</td>
@@ -162,10 +197,8 @@
               <td>${r.estimated_min ? r.estimated_min + ' min' : '—'}</td>
               <td>${r.due_at ? new Date(r.due_at).toLocaleString('cs-CZ') : '—'}</td>
               <td>${statusBadge(r.status)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      `;
+            </tr>`,
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
@@ -256,12 +289,20 @@
         wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">📱</div><h3>Žádné zařízení</h3><p>Klikni na <b>Aktivovat zařízení</b> a předej kolegovi 6-místný kód.</p></div>`;
         return;
       }
-      wrap.innerHTML = `
-        <table class="data-table">
-          <thead>
-            <tr><th>Osoba</th><th>Platforma</th><th>Štítek</th><th>Verze</th><th>Naposled</th><th>Stav</th><th></th></tr>
-          </thead>
-          <tbody>${devices.map((d) => `
+      mountTable('devices', wrap, {
+        heads: ['Osoba', 'Platforma', 'Štítek', 'Verze', 'Naposled', 'Stav', ''],
+        columns: [
+          { key: 'person', label: 'Osoba', type: 'text', ph: 'Osoba…', get: (d) => d.person ? fullName(d.person) : '' },
+          { key: 'platform', label: 'Platforma', type: 'text', ph: 'Platforma…', get: (d) => d.platform },
+          { key: 'label', label: 'Štítek', type: 'text', ph: 'Štítek…', get: (d) => d.device_label || '' },
+          { key: 'ver', label: 'Verze', type: 'text', ph: 'Verze…', get: (d) => ((d.app_version || '') + ' ' + (d.os_version || '')).trim() },
+          { key: 'seen', label: 'Naposled', type: 'date', ph: '', get: (d) => d.last_seen_at || null },
+          { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (d) => d.active ? 'Aktivní' : 'Zrušeno' },
+          null,
+        ],
+        rows: devices,
+        noun: 'zařízení',
+        renderRow: (d) => `
             <tr>
               <td>${d.person ? escapeHtml((d.person.first_name||'') + ' ' + (d.person.last_name||'')) : '—'}</td>
               <td><span class="badge b-platform-${d.platform}">${d.platform}</span></td>
@@ -270,15 +311,15 @@
               <td>${new Date(d.last_seen_at).toLocaleString('cs-CZ')}</td>
               <td>${d.active ? '<span class="badge b-done">Aktivní</span>' : '<span class="badge b-cancelled">Zrušeno</span>'}</td>
               <td>${d.active ? `<button class="btn btn-danger btn-sm" data-revoke="${d.id}">Odebrat</button>` : ''}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      `;
-      wrap.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', async () => {
-        if (!confirm('Opravdu odebrat přístup tomuto zařízení?')) return;
-        try { await apiSend('POST', '/admin/devices/' + b.dataset.revoke + '/revoke', { reason: 'admin_revoke_ui' }); loadDevices(); }
-        catch (e) { alert(e.message); }
-      }));
+            </tr>`,
+        onRender: () => {
+          wrap.querySelectorAll('[data-revoke]').forEach((b) => b.addEventListener('click', async () => {
+            if (!confirm('Opravdu odebrat přístup tomuto zařízení?')) return;
+            try { await apiSend('POST', '/admin/devices/' + b.dataset.revoke + '/revoke', { reason: 'admin_revoke_ui' }); loadDevices(); }
+            catch (e) { alert(e.message); }
+          }));
+        },
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
@@ -313,17 +354,12 @@
         wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><h3>Zatím žádní uživatelé</h3><p>Uživatelé se objeví, jakmile jim v záložce <b>Zařízení</b> aktivuješ přístup.</p></div>`;
         return;
       }
-      wrap.innerHTML = `
-        <table class="data-table">
-          <thead>
-            <tr><th>Jméno</th><th>Zařízení</th><th>Platforma</th><th>Naposledy aktivní</th><th>Stav</th><th>Doplňkové služby</th></tr>
-          </thead>
-          <tbody>${users.map((u) => {
-            const name = escapeHtml(((u.person.first_name || '') + ' ' + (u.person.last_name || '')).trim() || '—');
-            const plat = Object.keys(u.platforms).map((p) => `<span class="badge b-platform-${p}">${p}</span>`).join(' ') || '—';
-            const last = u.last ? new Date(u.last).toLocaleString('cs-CZ') : '—';
-            const stav = u.active > 0 ? '<span class="badge b-done">Aktivní</span>' : '<span class="badge b-cancelled">Neaktivní</span>';
-            return `<tr>
+      const userRow = (u) => {
+        const name = escapeHtml(((u.person.first_name || '') + ' ' + (u.person.last_name || '')).trim() || '—');
+        const plat = Object.keys(u.platforms).map((p) => `<span class="badge b-platform-${p}">${p}</span>`).join(' ') || '—';
+        const last = u.last ? new Date(u.last).toLocaleString('cs-CZ') : '—';
+        const stav = u.active > 0 ? '<span class="badge b-done">Aktivní</span>' : '<span class="badge b-cancelled">Neaktivní</span>';
+        return `<tr>
               <td><b>${name}</b></td>
               <td>${u.devices.length}${u.active < u.devices.length ? ` <span style="color:var(--text2)">(${u.active} akt.)</span>` : ''}</td>
               <td>${plat}</td>
@@ -331,13 +367,26 @@
               <td>${stav}</td>
               <td><button class="btn btn-sm btn-secondary" data-assistant="${u.person.id}" data-name="${escapeHtml(name)}" title="Doplňkové služby">⚙️</button></td>
             </tr>`;
-          }).join('')}
-          </tbody>
-        </table>
-      `;
-      wrap.querySelectorAll('[data-assistant]').forEach((b) => b.addEventListener('click', () => {
-        openAssistantModal(parseInt(b.dataset.assistant, 10), b.dataset.name || '');
-      }));
+      };
+      mountTable('users', wrap, {
+        heads: ['Jméno', 'Zařízení', 'Platforma', 'Naposledy aktivní', 'Stav', 'Doplňkové služby'],
+        columns: [
+          { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: (u) => fullName(u.person) },
+          { key: 'devs', label: 'Zařízení', type: 'num', ph: '', get: (u) => u.devices.length },
+          { key: 'plat', label: 'Platforma', type: 'text', ph: 'Platforma…', get: (u) => Object.keys(u.platforms).join(', ') },
+          { key: 'last', label: 'Naposledy aktivní', type: 'date', ph: '', get: (u) => u.last || null },
+          { key: 'stav', label: 'Stav', type: 'text', ph: 'Stav…', get: (u) => u.active > 0 ? 'Aktivní' : 'Neaktivní' },
+          null,
+        ],
+        rows: users,
+        noun: 'uživatelů',
+        renderRow: userRow,
+        onRender: () => {
+          wrap.querySelectorAll('[data-assistant]').forEach((b) => b.addEventListener('click', () => {
+            openAssistantModal(parseInt(b.dataset.assistant, 10), b.dataset.name || '');
+          }));
+        },
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
@@ -508,8 +557,21 @@
       if (!calls || !calls.length) { box.innerHTML = '<div class="empty-state" style="padding:16px">Zatím žádné hovory.</div>'; }
       else {
         window.__paCalls = {}; calls.forEach((c) => { window.__paCalls[c.id] = c; });
-        box.innerHTML = `<table class="data-table"><thead><tr><th>Kdy</th><th>Kdo volal</th><th>Číslo</th><th>Co potřeboval</th><th>Nahrávka</th><th>Přepis</th><th>Přepojeno</th></tr></thead><tbody>${
-          calls.map((c) => `<tr>
+        mountTable('pacalls', box, {
+          fresh: true,
+          heads: ['Kdy', 'Kdo volal', 'Číslo', 'Co potřeboval', 'Nahrávka', 'Přepis', 'Přepojeno'],
+          columns: [
+            { key: 'when', label: 'Kdy', type: 'date', ph: '', get: (c) => c.started_at || null },
+            { key: 'who', label: 'Kdo volal', type: 'text', ph: 'Kdo…', get: (c) => c.caller_name || '' },
+            { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (c) => c.from_number || '' },
+            { key: 'intent', label: 'Co potřeboval', type: 'text', ph: 'Text…', get: (c) => c.caller_intent || c.summary || '' },
+            null,
+            null,
+            { key: 'handoff', label: 'Přepojeno', type: 'text', ph: '', get: (c) => c.handoff ? 'Ano' : 'Vzkaz' },
+          ],
+          rows: calls,
+          noun: 'hovorů',
+          renderRow: (c) => `<tr>
             <td>${new Date(c.started_at).toLocaleString('cs-CZ')}</td>
             <td>${escapeHtml(c.caller_name || '—')}</td>
             <td>${escapeHtml(c.from_number || '—')}</td>
@@ -517,8 +579,8 @@
             <td>${c.audio_url ? `<audio controls preload="none" src="${escapeHtml(c.audio_url)}" style="height:30px;max-width:180px"></audio>` : '<span style="color:var(--text2)">—</span>'}</td>
             <td>${((c.full_transcript && c.full_transcript.trim()) || (Array.isArray(c.transcript) && c.transcript.length)) ? `<button class="btn btn-secondary btn-sm" onclick="__paShowTranscript('${c.id}')">📄 Přečíst</button>` : '<span style="color:var(--text2)">—</span>'}</td>
             <td>${c.handoff ? '<span class="badge b-done">Ano</span>' : '<span class="badge b-cancelled">Vzkaz</span>'}</td>
-          </tr>`).join('')
-        }</tbody></table>`;
+          </tr>`,
+        });
       }
     } catch (e) {
       const box = document.getElementById('pa-calls'); if (box) box.innerHTML = `<div class="empty-state" style="color:#ef4444;padding:16px">Chyba: ${escapeHtml(e.message)}</div>`;
@@ -563,15 +625,29 @@
         wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><h3>Žádní aktivní lidé</h3></div>`;
         return;
       }
-      wrap.innerHTML = `
-        <p style="color:var(--text2);font-size:13px;margin:0 0 12px">
+      const skillsOf = (p) => (p.profile && Array.isArray(p.profile.skills)) ? p.profile.skills : [];
+      const bindEdit = () => wrap.querySelectorAll('[data-edit-skill]').forEach((btn) => {
+        btn.addEventListener('click', () => openSkillEditor(parseInt(btn.dataset.editSkill, 10)));
+      });
+      mountTable('skills', wrap, {
+        before: `<p style="color:var(--text2);font-size:13px;margin:0 0 12px">
           Vyplň kolegům dovednosti — AI dispečer Mistr podle nich vybírá, kdo dostane jaký úkol.
           Bez vyplněných skills přiřazuje jen podle role a vytížení.
-        </p>
-        <table class="data-table">
-          <thead><tr><th>Osoba</th><th>Role</th><th>Dovednosti</th><th>Směna</th><th>Rychlost</th><th>Zařízení</th><th></th></tr></thead>
-          <tbody>${people.map((p) => {
-            const skills = (p.profile && Array.isArray(p.profile.skills)) ? p.profile.skills : [];
+        </p>`,
+        heads: ['Osoba', 'Role', 'Dovednosti', 'Směna', 'Rychlost', 'Zařízení', ''],
+        columns: [
+          { key: 'name', label: 'Osoba', type: 'text', ph: 'Osoba…', get: (p) => p.name },
+          { key: 'role', label: 'Role', type: 'text', ph: 'Role…', get: (p) => p.role || '' },
+          { key: 'skills', label: 'Dovednosti', type: 'text', ph: 'Dovednost…', get: (p) => skillsOf(p).map((sk) => `${sk.key} L${sk.level || 1}`).join(', '), enum: false },
+          { key: 'shift', label: 'Směna', type: 'text', ph: 'Směna…', get: (p) => (p.profile && p.profile.preferred_shift) || '' },
+          { key: 'speed', label: 'Rychlost', type: 'num', ph: '', get: (p) => p.profile ? p.profile.speed_factor : 1.0 },
+          { key: 'dev', label: 'Zařízení', type: 'text', ph: '', get: (p) => p.has_device ? 'Ano' : 'Ne' },
+          null,
+        ],
+        rows: people,
+        noun: 'lidí',
+        renderRow: (p) => {
+            const skills = skillsOf(p);
             const skillsTxt = skills.length
               ? skills.map(sk => `${escapeHtml(sk.key)} L${sk.level || 1}${sk.certified ? ' ✓' : ''}`).join(', ')
               : '<span style="color:var(--text2)">—</span>';
@@ -586,12 +662,8 @@
               <td>${p.has_device ? '<span class="badge b-done">📱</span>' : '<span class="badge b-cancelled">—</span>'}</td>
               <td><button class="btn btn-sm btn-secondary" data-edit-skill="${p.id}">✏️ Upravit</button></td>
             </tr>`;
-          }).join('')}
-          </tbody>
-        </table>
-      `;
-      wrap.querySelectorAll('[data-edit-skill]').forEach((btn) => {
-        btn.addEventListener('click', () => openSkillEditor(parseInt(btn.dataset.editSkill, 10)));
+        },
+        onRender: bindEdit,
       });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
@@ -699,20 +771,26 @@
         wrap.innerHTML = `<div class="empty-state"><div class="empty-icon">🗺️</div><h3>Žádné provozy</h3><p>Definuj GPS zónu kolem provozu — Velín podle ní pozná, že kolega přišel do práce.</p></div>`;
         return;
       }
-      wrap.innerHTML = `
-        <table class="data-table">
-          <thead><tr><th>Název</th><th>Souřadnice</th><th>Radius</th><th>Stav</th><th></th></tr></thead>
-          <tbody>${fences.map((f) => `
+      mountTable('fences', wrap, {
+        heads: ['Název', 'Souřadnice', 'Radius', 'Stav', ''],
+        columns: [
+          { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (f) => f.name + (f.notes ? ' ' + f.notes : '') },
+          { key: 'coords', label: 'Souřadnice', type: 'text', ph: 'Souř…', get: (f) => f.center_lat.toFixed(5) + ', ' + f.center_lng.toFixed(5) },
+          { key: 'radius', label: 'Radius', type: 'num', ph: '', get: (f) => f.radius_m },
+          { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (f) => f.active ? 'Aktivní' : 'Vypnuto' },
+          null,
+        ],
+        rows: fences,
+        noun: 'provozů',
+        renderRow: (f) => `
             <tr>
               <td><b>${escapeHtml(f.name)}</b>${f.notes ? '<div style="font-size:12px;color:var(--text2)">'+escapeHtml(f.notes)+'</div>' : ''}</td>
               <td><code style="font-size:11px">${f.center_lat.toFixed(5)}, ${f.center_lng.toFixed(5)}</code></td>
               <td>${f.radius_m} m</td>
               <td>${f.active ? '<span class="badge b-done">Aktivní</span>' : '<span class="badge b-cancelled">Vypnuto</span>'}</td>
               <td><a class="btn btn-sm btn-secondary" target="_blank" href="https://www.google.com/maps/@${f.center_lat},${f.center_lng},18z">Mapa</a></td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-      `;
+            </tr>`,
+      });
     } catch (e) {
       wrap.innerHTML = `<div class="empty-state" style="color:#ef4444">Chyba: ${escapeHtml(e.message)}</div>`;
     }
@@ -829,22 +907,24 @@
       tableWrap.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text2);">Zatím žádné reflexe.</div>`;
       return;
     }
-    tableWrap.innerHTML = `
-      <table class="data-table">
-        <thead><tr>
-          <th>Datum</th>
-          <th>Kolega</th>
-          <th>Mood</th>
-          <th>Energie</th>
-          <th>Co se povedlo</th>
-          <th>Co bylo těžké</th>
-          <th>Zítra</th>
-          <th>Volné</th>
-          <th>🤖 Shrnutí</th>
-        </tr></thead>
-        <tbody>
-          ${reflections.map((r) => {
-            const name = `${r.person?.first_name || ''} ${r.person?.last_name || ''}`.trim() || `#${r.person_id}`;
+    const reflName = (r) => `${r.person?.first_name || ''} ${r.person?.last_name || ''}`.trim() || `#${r.person_id}`;
+    mountTable('refl', tableWrap, {
+      heads: ['Datum', 'Kolega', 'Mood', 'Energie', 'Co se povedlo', 'Co bylo těžké', 'Zítra', 'Volné', '🤖 Shrnutí'],
+      columns: [
+        { key: 'date', label: 'Datum', type: 'date', ph: '', get: (r) => r.date || null },
+        { key: 'name', label: 'Kolega', type: 'text', ph: 'Kolega…', get: reflName },
+        { key: 'mood', label: 'Mood', type: 'num', ph: '', get: (r) => r.mood },
+        { key: 'energy', label: 'Energie', type: 'num', ph: '', get: (r) => r.energy },
+        { key: 'wins', label: 'Co se povedlo', type: 'text', ph: 'Text…', get: (r) => r.wins || '' },
+        { key: 'struggles', label: 'Co bylo těžké', type: 'text', ph: 'Text…', get: (r) => r.struggles || '' },
+        { key: 'tomorrow', label: 'Zítra', type: 'text', ph: 'Text…', get: (r) => r.tomorrow_focus || '' },
+        { key: 'free', label: 'Volné', type: 'text', ph: 'Text…', get: (r) => r.free_text || '' },
+        { key: 'ai', label: '🤖 Shrnutí', type: 'text', ph: 'Text…', get: (r) => r.ai_summary || '' },
+      ],
+      rows: reflections,
+      noun: 'reflexí',
+      renderRow: (r) => {
+            const name = reflName(r);
             const dateStr = new Date(r.date).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric' });
             return `
               <tr>
@@ -859,10 +939,8 @@
                 <td style="max-width:240px;white-space:normal;font-size:12px;color:var(--text2);font-style:italic;">${r.ai_summary ? escapeHtml(r.ai_summary) : '<span style=\'opacity:.5\'>generuje se…</span>'}</td>
               </tr>
             `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+      },
+    });
   }
 
   function moodToEmoji(m) {
@@ -921,19 +999,20 @@
     }
 
     // Souhrn per (person, day) — tabulka s hodinami v provozu
-    summaryWrap.innerHTML = `
-      <table class="data-table">
-        <thead><tr>
-          <th>Datum</th>
-          <th>Kolega</th>
-          <th>Příchod</th>
-          <th>Odchod</th>
-          <th>Hodiny</th>
-          <th>Záznamů</th>
-          <th>Zdroj</th>
-        </tr></thead>
-        <tbody>
-          ${summary.map((s) => {
+    mountTable('attsum', summaryWrap, {
+      heads: ['Datum', 'Kolega', 'Příchod', 'Odchod', 'Hodiny', 'Záznamů', 'Zdroj'],
+      columns: [
+        { key: 'date', label: 'Datum', type: 'date', ph: '', get: (s) => s.date || null },
+        { key: 'name', label: 'Kolega', type: 'text', ph: 'Kolega…', get: (s) => s.name },
+        { key: 'in', label: 'Příchod', type: 'date', ph: '', get: (s) => s.first_in || null },
+        { key: 'out', label: 'Odchod', type: 'date', ph: '', get: (s) => s.last_out || null },
+        { key: 'hours', label: 'Hodiny', type: 'num', ph: '', get: (s) => s.hours_in_provoz },
+        { key: 'cnt', label: 'Záznamů', type: 'num', ph: '', get: (s) => s.punch_count },
+        { key: 'src', label: 'Zdroj', type: 'text', ph: '', get: (s) => s.sources.map((x) => x === 'velin_geofence_auto' ? 'Auto' : 'Ručně').join(', '), enum: false },
+      ],
+      rows: summary,
+      noun: 'dní/osoba',
+      renderRow: (s) => {
             const dateLocal = new Date(s.date + 'T00:00:00').toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', weekday: 'short' });
             const arrival = s.first_in ? new Date(s.first_in).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '—';
             const departure = s.last_out ? new Date(s.last_out).toLocaleTimeString('cs-CZ', { hour: '2-digit', minute: '2-digit' }) : '—';
@@ -953,27 +1032,28 @@
                 <td>${srcBadges}</td>
               </tr>
             `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
+      },
+    });
 
     // Detailní punches níže (collapsible by default — pro Fázi 3 MVP necháváme jako tabulku)
-    punchesWrap.innerHTML = `
-      <h3 style="color:var(--text2);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Detail záznamů (${punches.length})</h3>
-      <table class="data-table">
-        <thead><tr>
-          <th>Čas</th>
-          <th>Kolega</th>
-          <th>Typ</th>
-          <th>Zdroj</th>
-          <th>V provoze</th>
-          <th>GPS</th>
-        </tr></thead>
-        <tbody>
-          ${punches.slice(0, 200).map((p) => {
+    const punchName = (p) => `${p.person?.first_name || ''} ${p.person?.last_name || ''}`.trim() || `#${p.person_id}`;
+    mountTable('punches', punchesWrap, {
+      before: `<h3 style="color:var(--text2);font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 8px;">Detail záznamů (${punches.length})</h3>`,
+      heads: ['Čas', 'Kolega', 'Typ', 'Zdroj', 'V provoze', 'GPS'],
+      columns: [
+        { key: 'ts', label: 'Čas', type: 'date', ph: '', get: (p) => p.punched_at || null },
+        { key: 'name', label: 'Kolega', type: 'text', ph: 'Kolega…', get: punchName },
+        { key: 'kind', label: 'Typ', type: 'text', ph: 'Typ…', get: (p) => kindLabel(p.kind) },
+        { key: 'src', label: 'Zdroj', type: 'text', ph: '', get: (p) => p.source === 'velin_geofence_auto' ? 'auto' : 'ručně' },
+        { key: 'in', label: 'V provoze', type: 'text', ph: '', get: (p) => p.inside_fence ? 'Ano' : 'Ne' },
+        null,
+      ],
+      rows: punches,
+      limit: 200,
+      noun: 'záznamů',
+      renderRow: (p) => {
             const ts = new Date(p.punched_at).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
-            const name = `${p.person?.first_name || ''} ${p.person?.last_name || ''}`.trim() || `#${p.person_id}`;
+            const name = punchName(p);
             const gps = p.lat != null && p.lng != null
               ? `${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}${p.accuracy_m ? ` (±${Math.round(p.accuracy_m)}m)` : ''}`
               : '—';
@@ -987,11 +1067,8 @@
                 <td style="font-size:11px;color:var(--text2);">${gps}</td>
               </tr>
             `;
-          }).join('')}
-        </tbody>
-      </table>
-      ${punches.length > 200 ? `<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px;">Zobrazeno prvních 200 z ${punches.length}. Zúžit rozsah dat pro úplný přehled.</div>` : ''}
-    `;
+      },
+    });
   }
 
   function kindLabel(k) {

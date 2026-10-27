@@ -29,6 +29,18 @@
     } catch (_e) { return iso; }
   }
 
+  // Standardní sloupcové filtry (js/column-filters.js): kostra tabulky + instance drženy v modulu
+  const _tbl = {};
+  function mountTable(host, id, heads, cfg, style) {
+    if (!host.querySelector('#' + id)) {
+      host.innerHTML = '<table class="data-table" id="' + id + '"' + (style ? ' style="' + style + '"' : '') + '><thead><tr>' +
+        heads.map((h) => '<th>' + h + '</th>').join('') + '</tr></thead><tbody></tbody></table>';
+    }
+    if (!_tbl[id]) _tbl[id] = ColFilters.table(Object.assign({ table: () => document.querySelector('#' + id) }, cfg));
+    return _tbl[id];
+  }
+  const YN = (v) => (v ? 'Ano' : 'Ne');
+
   async function api(path, opts = {}) {
     const res = await fetch(API + path, {
       credentials: 'include',
@@ -336,20 +348,24 @@
       host.innerHTML = '<div class="empty">Žádné úkoly nečekají.</div>';
       return;
     }
-    host.innerHTML =
-      '<table class="data-table"><thead><tr>' +
-        '<th>#</th><th>Název</th><th>Priorita</th><th>Status</th><th>Vytvořeno</th>' +
-      '</tr></thead><tbody>' +
-      items.map((t) =>
+    mountTable(host, 'queue-table', ['#', 'Název', 'Priorita', 'Status', 'Vytvořeno'], {
+      columns: [
+        { key: 'id', label: '#', type: 'num', ph: '#…', get: (t) => t.id },
+        { key: 'title', label: 'Název', type: 'text', ph: 'Název…', get: (t) => t.page_title || '(bez názvu)' },
+        { key: 'prio', label: 'Priorita', type: 'text', ph: 'Priorita…', get: (t) => t.priority },
+        { key: 'status', label: 'Status', type: 'text', ph: 'Status…', get: (t) => t.status },
+        { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (t) => t.created_at },
+      ],
+      renderRow: (t) =>
         '<tr>' +
           '<td>' + t.id + '</td>' +
           '<td>' + escapeHtml(t.page_title || '(bez názvu)') + '</td>' +
           '<td>' + escapeHtml(t.priority) + '</td>' +
           '<td><span class="chip ' + escapeHtml(t.status) + '">' + escapeHtml(t.status) + '</span></td>' +
           '<td>' + fmtDate(t.created_at) + '</td>' +
-        '</tr>'
-      ).join('') +
-      '</tbody></table>';
+        '</tr>',
+      noun: 'úkolů', emptyText: 'Žádné úkoly nečekají.', limit: 500,
+    }).setRows(items);
   }
 
   function shortSummary(text, maxLen) {
@@ -365,11 +381,18 @@
       host.innerHTML = '<div class="empty">Zatím žádné běhy.</div>';
       return;
     }
-    host.innerHTML =
-      '<table class="data-table"><thead><tr>' +
-        '<th>Spuštěno</th><th>Úkol</th><th>Status</th><th>PR</th><th>Soub.</th><th>Tokens</th><th>Shrnutí</th><th></th>' +
-      '</tr></thead><tbody>' +
-      runs.map((r) =>
+    mountTable(host, 'recent-runs-table', ['Spuštěno', 'Úkol', 'Status', 'PR', 'Soub.', 'Tokens', 'Shrnutí', ''], {
+      columns: [
+        { key: 'started', label: 'Spuštěno', type: 'date', ph: 'dd.mm.rrrr', get: (r) => r.started_at },
+        { key: 'task', label: 'Úkol', type: 'text', ph: 'Úkol…', get: (r) => '#' + r.task_id + (r.task && r.task.page_title ? ' ' + r.task.page_title : '') },
+        { key: 'status', label: 'Status', type: 'text', ph: 'Status…', get: (r) => r.status },
+        { key: 'pr', label: 'PR', type: 'text', ph: 'PR…', get: (r) => (r.pr_url ? 'PR #' + r.pr_number : '—') },
+        { key: 'files', label: 'Soub.', type: 'num', ph: '#…', get: (r) => r.file_changes_count },
+        { key: 'tokens', label: 'Tokens', type: 'num', ph: '#…', get: (r) => r.tokens_used || 0 },
+        { key: 'summary', label: 'Shrnutí', type: 'text', ph: 'Shrnutí…', get: (r) => r.summary || r.failure_reason || '' },
+        null,
+      ],
+      renderRow: (r) =>
         '<tr>' +
           '<td>' + fmtDate(r.started_at) + '</td>' +
           '<td>#' + r.task_id + ' ' + escapeHtml(r.task && r.task.page_title ? r.task.page_title : '') + '</td>' +
@@ -379,14 +402,15 @@
           '<td>' + (r.tokens_used || 0).toLocaleString('cs-CZ') + '</td>' +
           '<td title="' + escapeHtml(r.summary || r.failure_reason || '') + '" style="color:var(--text2);font-size:12px;max-width:340px;">' + escapeHtml(shortSummary(r.summary || r.failure_reason, 80)) + '</td>' +
           '<td><button class="btn" data-run-id="' + escapeHtml(r.id) + '">Detail</button></td>' +
-        '</tr>'
-      ).join('') +
-      '</tbody></table>';
-
-    host.querySelectorAll('button[data-run-id]').forEach((b) => {
-      b.addEventListener('click', () => openRunDetail(b.dataset.runId));
-    });
+        '</tr>',
+      noun: 'běhů', emptyText: 'Zatím žádné běhy.', limit: 500,
+    }).setRows(runs);
   }
+  // Delegovaný klik na Detail (řádky se překreslují při filtrování)
+  $('#recent-runs-host').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-run-id]');
+    if (b) openRunDetail(b.dataset.runId);
+  });
 
   // ─── Repozitáře ────────────────────────────────────────────────────────
 
@@ -407,11 +431,16 @@
       host.innerHTML = '<div class="empty">Žádné repozitáře. Přidej první přes tlačítko nahoře.</div>';
       return;
     }
-    host.innerHTML =
-      '<table class="data-table"><thead><tr>' +
-        '<th>Název</th><th>Git URL</th><th>Branch</th><th>Auto-merge</th><th>Aktivní</th><th></th>' +
-      '</tr></thead><tbody>' +
-      _repos.map((r) =>
+    mountTable(host, 'repos-table', ['Název', 'Git URL', 'Branch', 'Auto-merge', 'Aktivní', ''], {
+      columns: [
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (r) => r.name },
+        { key: 'url', label: 'Git URL', type: 'text', ph: 'URL…', get: (r) => r.git_url },
+        { key: 'branch', label: 'Branch', type: 'text', ph: 'Branch…', get: (r) => r.default_branch },
+        { key: 'merge', label: 'Auto-merge', type: 'text', get: (r) => YN(r.allow_auto_merge) },
+        { key: 'active', label: 'Aktivní', type: 'text', get: (r) => YN(r.active) },
+        null,
+      ],
+      renderRow: (r) =>
         '<tr>' +
           '<td><strong>' + escapeHtml(r.name) + '</strong></td>' +
           '<td style="font-family:ui-monospace,monospace; font-size:12px;">' + escapeHtml(r.git_url) + '</td>' +
@@ -422,17 +451,17 @@
             '<button class="btn" data-edit-id="' + escapeHtml(r.id) + '">Upravit</button> ' +
             '<button class="btn danger" data-del-id="' + escapeHtml(r.id) + '">Smazat</button>' +
           '</td>' +
-        '</tr>'
-      ).join('') +
-      '</tbody></table>';
-
-    host.querySelectorAll('button[data-edit-id]').forEach((b) => {
-      b.addEventListener('click', () => editRepo(b.dataset.editId));
-    });
-    host.querySelectorAll('button[data-del-id]').forEach((b) => {
-      b.addEventListener('click', () => deleteRepo(b.dataset.delId));
-    });
+        '</tr>',
+      noun: 'repozitářů', emptyText: 'Žádné repozitáře. Přidej první přes tlačítko nahoře.', limit: 500,
+    }).setRows(_repos);
   }
+  // Delegované kliky (řádky se překreslují při filtrování)
+  $('#repos-host').addEventListener('click', (e) => {
+    const ed = e.target.closest('button[data-edit-id]');
+    if (ed) return editRepo(ed.dataset.editId);
+    const del = e.target.closest('button[data-del-id]');
+    if (del) deleteRepo(del.dataset.delId);
+  });
 
   $('#btn-new-repo').addEventListener('click', () => openRepoForm(null));
   $('#btn-cancel-repo').addEventListener('click', () => { $('#repo-form-host').style.display = 'none'; });
@@ -555,11 +584,19 @@
       host.innerHTML = '<div class="empty">Žádné záznamy pro vybraný filtr.</div>';
       return;
     }
-    host.innerHTML =
-      '<table class="data-table"><thead><tr>' +
-        '<th>Spuštěno</th><th>Úkol</th><th>Repo</th><th>Status</th><th>PR</th><th>Soub.</th><th>Tokens</th><th>Shrnutí</th><th></th>' +
-      '</tr></thead><tbody>' +
-      items.map((r) =>
+    mountTable(host, 'audit-table', ['Spuštěno', 'Úkol', 'Repo', 'Status', 'PR', 'Soub.', 'Tokens', 'Shrnutí', ''], {
+      columns: [
+        { key: 'started', label: 'Spuštěno', type: 'date', ph: 'dd.mm.rrrr', get: (r) => r.started_at },
+        { key: 'task', label: 'Úkol', type: 'text', ph: 'Úkol…', get: (r) => '#' + r.task_id },
+        { key: 'repo', label: 'Repo', type: 'text', ph: 'Repo…', get: (r) => (r.repo ? r.repo.name : '—') },
+        { key: 'status', label: 'Status', type: 'text', ph: 'Status…', get: (r) => r.status },
+        { key: 'pr', label: 'PR', type: 'text', ph: 'PR…', get: (r) => (r.pr_url ? 'PR #' + r.pr_number : '—') },
+        { key: 'files', label: 'Soub.', type: 'num', ph: '#…', get: (r) => r.file_changes_count },
+        { key: 'tokens', label: 'Tokens', type: 'num', ph: '#…', get: (r) => r.tokens_used || 0 },
+        { key: 'summary', label: 'Shrnutí', type: 'text', ph: 'Shrnutí…', get: (r) => r.summary || r.failure_reason || '' },
+        null,
+      ],
+      renderRow: (r) =>
         '<tr>' +
           '<td>' + fmtDate(r.started_at) + '</td>' +
           '<td>#' + r.task_id + '</td>' +
@@ -570,14 +607,15 @@
           '<td>' + (r.tokens_used || 0).toLocaleString('cs-CZ') + '</td>' +
           '<td title="' + escapeHtml(r.summary || r.failure_reason || '') + '" style="color:var(--text2);font-size:12px;max-width:340px;">' + escapeHtml(shortSummary(r.summary || r.failure_reason, 80)) + '</td>' +
           '<td><button class="btn" data-run-id="' + escapeHtml(r.id) + '">Detail</button></td>' +
-        '</tr>'
-      ).join('') +
-      '</tbody></table>';
-
-    host.querySelectorAll('button[data-run-id]').forEach((b) => {
-      b.addEventListener('click', () => openRunDetail(b.dataset.runId));
-    });
+        '</tr>',
+      noun: 'záznamů', emptyText: 'Žádné záznamy pro vybraný filtr.', limit: 500,
+    }).setRows(items);
   }
+  // Delegovaný klik na Detail (řádky se překreslují při filtrování)
+  $('#audit-list-host').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-run-id]');
+    if (b) openRunDetail(b.dataset.runId);
+  });
 
   $('#btn-refresh-audit').addEventListener('click', loadAudit);
   $('#audit-status-filter').addEventListener('change', loadAudit);
@@ -777,39 +815,45 @@
       $('#rules-host').innerHTML = '<div class="empty">Žádná pravidla. Klikni „+ Přidat pravidlo".</div>';
       return;
     }
-    let html = '<table class="data-table" style="width:100%; border-collapse:collapse;">' +
-      '<thead><tr>' +
-      '<th>KIND</th><th>SCOPE</th><th>VALUE</th><th>POPIS</th>' +
-      '<th>AKTIVNÍ</th><th>ZABLOK.</th><th></th>' +
-      '</tr></thead><tbody>';
-    for (const r of _rules) {
-      const kindColor = r.kind === 'forbidden' ? '#ef4444' : (r.kind === 'requires_approval' ? '#f59e0b' : '#22c55e');
-      html += '<tr>' +
-        '<td><span class="chip" style="background:' + kindColor + '22; color:' + kindColor + ';">' + escapeHtml(r.kind) + '</span></td>' +
-        '<td>' + escapeHtml(r.scope) + '</td>' +
-        '<td style="font-family:ui-monospace,monospace; font-size:12px; max-width:300px; word-break:break-all;">' + escapeHtml(r.value) + '</td>' +
-        '<td style="font-size:12px; color:var(--text2); max-width:280px;">' + escapeHtml(r.description || '—') + '</td>' +
-        '<td>' + (r.active ? '✓' : '—') + '</td>' +
-        '<td>' + (r.blocked_count || 0) + '</td>' +
-        '<td>' +
-          '<button class="btn" data-edit-rule="' + escapeHtml(r.id) + '">Upravit</button> ' +
-          '<button class="btn danger" data-del-rule="' + escapeHtml(r.id) + '">Smazat</button>' +
-        '</td>' +
-      '</tr>';
-    }
-    html += '</tbody></table>';
-    $('#rules-host').innerHTML = html;
-
-    $$('[data-edit-rule]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const r = _rules.find((x) => x.id === b.dataset.editRule);
-        if (r) openRuleForm(r);
-      });
-    });
-    $$('[data-del-rule]').forEach((b) => {
-      b.addEventListener('click', () => deleteRule(b.dataset.delRule));
-    });
+    mountTable($('#rules-host'), 'rules-table', ['KIND', 'SCOPE', 'VALUE', 'POPIS', 'AKTIVNÍ', 'ZABLOK.', ''], {
+      columns: [
+        { key: 'kind', label: 'KIND', type: 'text', get: (r) => r.kind },
+        { key: 'scope', label: 'SCOPE', type: 'text', get: (r) => r.scope },
+        { key: 'value', label: 'VALUE', type: 'text', ph: 'Value…', get: (r) => r.value },
+        { key: 'desc', label: 'POPIS', type: 'text', ph: 'Popis…', get: (r) => r.description || '' },
+        { key: 'active', label: 'AKTIVNÍ', type: 'text', get: (r) => YN(r.active) },
+        { key: 'blocked', label: 'ZABLOK.', type: 'num', ph: '#…', get: (r) => r.blocked_count || 0 },
+        null,
+      ],
+      renderRow: (r) => {
+        const kindColor = r.kind === 'forbidden' ? '#ef4444' : (r.kind === 'requires_approval' ? '#f59e0b' : '#22c55e');
+        return '<tr>' +
+          '<td><span class="chip" style="background:' + kindColor + '22; color:' + kindColor + ';">' + escapeHtml(r.kind) + '</span></td>' +
+          '<td>' + escapeHtml(r.scope) + '</td>' +
+          '<td style="font-family:ui-monospace,monospace; font-size:12px; max-width:300px; word-break:break-all;">' + escapeHtml(r.value) + '</td>' +
+          '<td style="font-size:12px; color:var(--text2); max-width:280px;">' + escapeHtml(r.description || '—') + '</td>' +
+          '<td>' + (r.active ? '✓' : '—') + '</td>' +
+          '<td>' + (r.blocked_count || 0) + '</td>' +
+          '<td>' +
+            '<button class="btn" data-edit-rule="' + escapeHtml(r.id) + '">Upravit</button> ' +
+            '<button class="btn danger" data-del-rule="' + escapeHtml(r.id) + '">Smazat</button>' +
+          '</td>' +
+        '</tr>';
+      },
+      noun: 'pravidel', emptyText: 'Žádná pravidla.', limit: 500,
+    }, 'width:100%; border-collapse:collapse;').setRows(_rules);
   }
+  // Delegované kliky (řádky se překreslují při filtrování)
+  $('#rules-host').addEventListener('click', (e) => {
+    const ed = e.target.closest('[data-edit-rule]');
+    if (ed) {
+      const r = _rules.find((x) => x.id === ed.dataset.editRule);
+      if (r) openRuleForm(r);
+      return;
+    }
+    const del = e.target.closest('[data-del-rule]');
+    if (del) deleteRule(del.dataset.delRule);
+  });
 
   function openRuleForm(rule) {
     $('#rule-form-title').textContent = rule ? 'Upravit pravidlo' : 'Nové pravidlo';
@@ -889,66 +933,71 @@
       $('#approvals-host').innerHTML = '<div class="empty">Žádné approvaly. Runner zatím netvoří automaticky — vytvoř manuálně přes API pro test.</div>';
       return;
     }
-    let html = '<table class="data-table" style="width:100%; border-collapse:collapse;">' +
-      '<thead><tr>' +
-      '<th>KIND</th><th>ÚKOL</th><th>REPO</th><th>RUN STATUS</th>' +
-      '<th>VYŽÁDÁNO</th><th>DECISION</th><th>ROZHODL</th><th></th>' +
-      '</tr></thead><tbody>';
-    for (const a of _approvals) {
-      const decisionColor = a.decision === 'pending' ? '#f59e0b'
-        : (a.decision === 'approved' ? '#22c55e'
-        : (a.decision === 'rejected' ? '#ef4444' : '#888'));
-      const taskTitle = a.run && a.run.task ? a.run.task.page_title : '';
-      const taskId = a.run && a.run.task ? a.run.task.id : '?';
-      const repoName = a.run && a.run.repo ? a.run.repo.name : '—';
-      const runStatus = a.run ? a.run.status : '—';
-      const deciderName = a.decider ? (a.decider.display_name || a.decider.username) : '—';
-      html += '<tr>' +
-        '<td><span class="chip" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">' + escapeHtml(a.kind) + '</span></td>' +
-        '<td>#' + taskId + ' ' + escapeHtml(shortSummary(taskTitle, 50)) + '</td>' +
-        '<td>' + escapeHtml(repoName) + '</td>' +
-        '<td><span class="chip ' + escapeHtml(runStatus) + '">' + escapeHtml(runStatus) + '</span></td>' +
-        '<td style="font-size:12px;">' + fmtDate(a.requested_at) + '</td>' +
-        '<td><span class="chip" style="background:' + decisionColor + '22; color:' + decisionColor + ';">' + escapeHtml(a.decision) + '</span></td>' +
-        '<td style="font-size:12px;">' + escapeHtml(deciderName) + (a.decided_at ? '<br><span style="color:var(--text2);font-size:11px;">' + fmtDate(a.decided_at) + '</span>' : '') + '</td>' +
-        '<td>';
-      if (a.decision === 'pending') {
-        html +=
-          '<button class="btn" data-approve="' + escapeHtml(a.id) + '" style="background:#22c55e;color:white;border-color:#22c55e;">✓ Schválit</button> ' +
-          '<button class="btn" data-reject="' + escapeHtml(a.id) + '" style="background:#ef4444;color:white;border-color:#ef4444;">✕ Zamítnout</button>';
-      } else {
-        html += '<button class="btn" data-detail-approval="' + escapeHtml(a.id) + '">Detail</button>';
-      }
-      html += '</td>' +
-      '</tr>';
-      // Payload preview pod řádkem
-      if (a.payload && Object.keys(a.payload).length > 0) {
-        html += '<tr><td colspan="8" style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text2);background:rgba(0,0,0,0.2);padding:6px 12px;">' +
-          'payload: ' + escapeHtml(JSON.stringify(a.payload).slice(0, 300)) +
-          '</td></tr>';
-      }
-      if (a.comment) {
-        html += '<tr><td colspan="8" style="font-size:12px;color:var(--text2);background:rgba(0,0,0,0.1);padding:6px 12px;">' +
-          '💬 ' + escapeHtml(a.comment) +
-          '</td></tr>';
-      }
-    }
-    html += '</tbody></table>';
-    $('#approvals-host').innerHTML = html;
-
-    $$('[data-approve]').forEach((b) => {
-      b.addEventListener('click', () => decideApproval(b.dataset.approve, 'approved'));
-    });
-    $$('[data-reject]').forEach((b) => {
-      b.addEventListener('click', () => decideApproval(b.dataset.reject, 'rejected'));
-    });
-    $$('[data-detail-approval]').forEach((b) => {
-      b.addEventListener('click', () => {
-        const a = _approvals.find((x) => x.id === b.dataset.detailApproval);
-        if (a) alert(JSON.stringify(a, null, 2));
-      });
-    });
+    mountTable($('#approvals-host'), 'approvals-table', ['KIND', 'ÚKOL', 'REPO', 'RUN STATUS', 'VYŽÁDÁNO', 'DECISION', 'ROZHODL', ''], {
+      columns: [
+        { key: 'kind', label: 'KIND', type: 'text', get: (a) => a.kind },
+        { key: 'task', label: 'ÚKOL', type: 'text', ph: 'Úkol…', get: (a) => '#' + (a.run && a.run.task ? a.run.task.id : '?') + ' ' + (a.run && a.run.task ? a.run.task.page_title || '' : '') },
+        { key: 'repo', label: 'REPO', type: 'text', ph: 'Repo…', get: (a) => (a.run && a.run.repo ? a.run.repo.name : '—') },
+        { key: 'runstatus', label: 'RUN STATUS', type: 'text', get: (a) => (a.run ? a.run.status : '—') },
+        { key: 'requested', label: 'VYŽÁDÁNO', type: 'date', ph: 'dd.mm.rrrr', get: (a) => a.requested_at },
+        { key: 'decision', label: 'DECISION', type: 'text', get: (a) => a.decision },
+        { key: 'decider', label: 'ROZHODL', type: 'text', ph: 'Jméno…', get: (a) => (a.decider ? (a.decider.display_name || a.decider.username) : '—') },
+        null,
+      ],
+      renderRow: (a) => {
+        const decisionColor = a.decision === 'pending' ? '#f59e0b'
+          : (a.decision === 'approved' ? '#22c55e'
+          : (a.decision === 'rejected' ? '#ef4444' : '#888'));
+        const taskTitle = a.run && a.run.task ? a.run.task.page_title : '';
+        const taskId = a.run && a.run.task ? a.run.task.id : '?';
+        const repoName = a.run && a.run.repo ? a.run.repo.name : '—';
+        const runStatus = a.run ? a.run.status : '—';
+        const deciderName = a.decider ? (a.decider.display_name || a.decider.username) : '—';
+        let html = '<tr>' +
+          '<td><span class="chip" style="background:rgba(14,165,233,0.15);color:#0ea5e9;">' + escapeHtml(a.kind) + '</span></td>' +
+          '<td>#' + taskId + ' ' + escapeHtml(shortSummary(taskTitle, 50)) + '</td>' +
+          '<td>' + escapeHtml(repoName) + '</td>' +
+          '<td><span class="chip ' + escapeHtml(runStatus) + '">' + escapeHtml(runStatus) + '</span></td>' +
+          '<td style="font-size:12px;">' + fmtDate(a.requested_at) + '</td>' +
+          '<td><span class="chip" style="background:' + decisionColor + '22; color:' + decisionColor + ';">' + escapeHtml(a.decision) + '</span></td>' +
+          '<td style="font-size:12px;">' + escapeHtml(deciderName) + (a.decided_at ? '<br><span style="color:var(--text2);font-size:11px;">' + fmtDate(a.decided_at) + '</span>' : '') + '</td>' +
+          '<td>';
+        if (a.decision === 'pending') {
+          html +=
+            '<button class="btn" data-approve="' + escapeHtml(a.id) + '" style="background:#22c55e;color:white;border-color:#22c55e;">✓ Schválit</button> ' +
+            '<button class="btn" data-reject="' + escapeHtml(a.id) + '" style="background:#ef4444;color:white;border-color:#ef4444;">✕ Zamítnout</button>';
+        } else {
+          html += '<button class="btn" data-detail-approval="' + escapeHtml(a.id) + '">Detail</button>';
+        }
+        html += '</td></tr>';
+        // Payload preview pod řádkem
+        if (a.payload && Object.keys(a.payload).length > 0) {
+          html += '<tr><td colspan="8" style="font-family:ui-monospace,monospace;font-size:11px;color:var(--text2);background:rgba(0,0,0,0.2);padding:6px 12px;">' +
+            'payload: ' + escapeHtml(JSON.stringify(a.payload).slice(0, 300)) +
+            '</td></tr>';
+        }
+        if (a.comment) {
+          html += '<tr><td colspan="8" style="font-size:12px;color:var(--text2);background:rgba(0,0,0,0.1);padding:6px 12px;">' +
+            '💬 ' + escapeHtml(a.comment) +
+            '</td></tr>';
+        }
+        return html;
+      },
+      noun: 'approvalů', emptyText: 'Žádné approvaly.', limit: 500,
+    }, 'width:100%; border-collapse:collapse;').setRows(_approvals);
   }
+  // Delegované kliky (řádky se překreslují při filtrování)
+  $('#approvals-host').addEventListener('click', (e) => {
+    const ap = e.target.closest('[data-approve]');
+    if (ap) return decideApproval(ap.dataset.approve, 'approved');
+    const rj = e.target.closest('[data-reject]');
+    if (rj) return decideApproval(rj.dataset.reject, 'rejected');
+    const dt = e.target.closest('[data-detail-approval]');
+    if (dt) {
+      const a = _approvals.find((x) => x.id === dt.dataset.detailApproval);
+      if (a) alert(JSON.stringify(a, null, 2));
+    }
+  });
 
   async function decideApproval(id, decision) {
     const a = _approvals.find((x) => x.id === id);

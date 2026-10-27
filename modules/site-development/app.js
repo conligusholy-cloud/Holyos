@@ -168,6 +168,30 @@ function toggleCol(id) {
 }
 window.toggleCol = toggleCol;
 
+// Standardní sloupcové filtry + řazení (js/column-filters.js). Instance se drží, dokud se nezmění sada sloupců,
+// takže filtry přežijí překreslení (výběr k porovnání, nové načtení dat).
+let sitesTbl = null, sitesTblSig = '';
+const SITE_COL_DEF = {
+  name:     { type:'text', get: s => (s.name || '') + (s.cadastral_parcel ? ' parc. ' + s.cadastral_parcel : '') },
+  status:   { type:'text', get: s => STATUS_LABEL[s.status] || s.status || '' },
+  type:     { type:'text', get: s => TYPE_LABEL[s.site_type] || s.site_type || '' },
+  city:     { type:'text', get: s => s.city || '' },
+  address:  { type:'text', get: s => s.address || '' },
+  rent:     { type:'num',  get: s => s.rent_monthly == null || s.rent_monthly === '' ? null : Number(s.rent_monthly) },
+  energy:   { type:'num',  get: s => s.energy_monthly == null || s.energy_monthly === '' ? null : Number(s.energy_monthly) },
+  deposit:  { type:'num',  get: s => s.deposit == null || s.deposit === '' ? null : Number(s.deposit) },
+  purchase: { type:'num',  get: s => s.purchase_price == null || s.purchase_price === '' ? null : Number(s.purchase_price) },
+  area:     { type:'num',  get: s => s.area_m2 == null || s.area_m2 === '' ? null : Number(s.area_m2) },
+  owner:    { type:'text', get: s => s.owner_name || (s.company && s.company.name) || '' },
+  survey:   { type:'text', get: s => s.survey_done == null ? '' : (s.survey_done ? 'ANO' : 'NE') },
+  preapp:   { type:'text', get: s => s.preapproval_note || '' },
+  contract: { type:'text', get: s => s.contract_note || '' },
+  permit:   { type:'text', get: s => s.building_permit_note || '' },
+  score:    { type:'num',  get: s => s.score == null ? null : Number(s.score) },
+  comms:    { type:'num',  get: s => s._count ? s._count.communications : 0 },
+  updated:  { type:'date', get: s => s.updated_at || null },
+};
+
 function renderTable() {
   if (!sites.length) {
     document.getElementById('sites-table').innerHTML = `
@@ -185,7 +209,7 @@ function renderTable() {
 
   // Nabídka od Tesca (název lokality nebo vlastník obsahuje „Tesco") — v seznamu zvýrazněno modře
   const isTesco = (s) => /tesco/i.test((s.name || '') + ' ' + (s.owner_name || '') + ' ' + ((s.company && s.company.name) || ''));
-  const rows = sites.map(s => {
+  const renderRow = (s) => {
     const isCompared = compareIds.has(s.id);
     const cells = cols.map(col => {
       switch (col.id) {
@@ -217,10 +241,24 @@ function renderTable() {
       <td onclick="event.stopPropagation(); toggleCompare(${s.id});" title="Vybrat do porovnání" style="cursor:pointer;text-align:center;">
         <input type="checkbox" ${isCompared?'checked':''} style="cursor:pointer;">
       </td>${cells}</tr>`;
-  }).join('');
+  };
 
-  document.getElementById('sites-table').innerHTML = `
-    <table class="data-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  const sig = cols.map(c => c.id).join(',');
+  if (!sitesTbl || sig !== sitesTblSig) {
+    sitesTblSig = sig;
+    sitesTbl = ColFilters.table({
+      table: () => document.getElementById('sites-list-tbl'),
+      columns: [null].concat(cols.map(c => {
+        const d = SITE_COL_DEF[c.id] || { type:'text', get: () => '' };
+        return { key: c.id, label: c.label, type: d.type, get: d.get, ph: c.label + '…' };
+      })),
+      renderRow: renderRow,
+      limit: 500, noun: 'lokalit', emptyText: 'Žádné lokality.',
+    });
+  }
+  document.getElementById('sites-table').innerHTML =
+    `<table class="data-table" id="sites-list-tbl"><thead><tr>${head}</tr></thead><tbody></tbody></table>`;
+  sitesTbl.setRows(sites);
 }
 
 // ─── Porovnání ─────────────────────────────────────────────────────────────

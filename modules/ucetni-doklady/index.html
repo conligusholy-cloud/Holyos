@@ -5020,7 +5020,7 @@
         else { buckets[idx].sum += Number(r.remaining); buckets[idx].n++; }
       });
       const max = Math.max(1, avgLine || 0, ...buckets.map(b => b.sum));
-      const W = 760, H = 170, L = 54, B = 26, T = 18, bw = (W - L - 6) / DAYS;
+      const W = 760, H = 180, L = 54, B = 26, T = 26, bw = (W - L - 6) / DAYS;
       const nice = (v) => { const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p) * p; };
       const top = nice(max);
       const y = (v) => T + (H - T - B) * (1 - v / top);
@@ -5033,7 +5033,12 @@
         const key = b.d.toISOString().slice(0, 10);
         const col = i === 0 ? '#f59e0b' : i <= 7 ? '#eab308' : '#6c8cff';
         const tip = b.d.toLocaleDateString('cs-CZ', { weekday: 'short', day: 'numeric', month: 'numeric' }) + ': ' + fmtAmount(b.sum) + ' Kč (' + b.n + ' dokladů)';
-        if (b.sum > 0) svg += '<rect x="' + x + '" y="' + y(b.sum) + '" width="' + w + '" height="' + (y(0) - y(b.sum)) + '" rx="2" fill="' + col + '" style="cursor:pointer" onclick="planScrollDay(\'' + key + '\')"><title>' + escapeHtml(tip) + '</title></rect>';
+        if (b.sum > 0) {
+          svg += '<rect x="' + x + '" y="' + y(b.sum) + '" width="' + w + '" height="' + (y(0) - y(b.sum)) + '" rx="2" fill="' + col + '" style="cursor:pointer" onclick="planScrollDay(\'' + key + '\')"><title>' + escapeHtml(tip) + '</title></rect>';
+          // suma za den nad sloupcem (zkráceně: 28,9k / 1,2M)
+          const lbl = b.sum >= 1e6 ? (b.sum / 1e6).toFixed(1).replace('.', ',') + 'M' : b.sum >= 1e4 ? Math.round(b.sum / 1e3) + 'k' : b.sum >= 1e3 ? (b.sum / 1e3).toFixed(1).replace('.', ',') + 'k' : String(Math.round(b.sum));
+          svg += '<text x="' + (x + w / 2) + '" y="' + (y(b.sum) - 4) + '" fill="#e5e7eb" font-size="9" font-weight="600" text-anchor="middle" style="pointer-events:none">' + lbl + '</text>';
+        }
         else svg += '<rect x="' + x + '" y="' + (y(0) - 2) + '" width="' + w + '" height="2" fill="#374151"><title>' + escapeHtml(tip) + '</title></rect>';
         if (i === 0 || b.d.getDate() === 1 || i % 2 === 0) svg += '<text x="' + (x + w / 2) + '" y="' + (H - 12) + '" fill="' + (weekend ? '#6b7280' : '#9ca3af') + '" font-size="9" text-anchor="middle">' + b.d.getDate() + '.' + (i === 0 || b.d.getDate() === 1 ? (b.d.getMonth() + 1) + '.' : '') + '</text>';
       });

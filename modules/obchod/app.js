@@ -228,20 +228,42 @@ function renderContactsTable() {
     return;
   }
 
-  let html = '<table class="data-table"><thead><tr>' +
-    '<th>Jméno</th><th>Firma</th><th>Kontakt</th>' +
-    '<th>Zdroj</th><th>Potenciál</th><th>Stav</th>' +
-    '<th>Hodnota</th><th>Další akce</th><th>Vytvořeno</th><th></th>' +
-    '</tr></thead><tbody>';
+  // Skelet tabulky (při prázdném stavu byl kontejner nahrazen, proto se vkládá znovu)
+  if (!document.getElementById('contacts-data-table')) {
+    container.innerHTML = '<table class="data-table" id="contacts-data-table"><thead><tr>' +
+      '<th>Jméno</th><th>Firma</th><th>Kontakt</th>' +
+      '<th>Zdroj</th><th>Potenciál</th><th>Stav</th>' +
+      '<th>Hodnota</th><th>Další akce</th><th>Vytvořeno</th><th></th>' +
+      '</tr></thead><tbody></tbody></table>';
+  }
+  getContactsTable().setRows(contacts);
+}
 
-  for (const c of contacts) {
-    const fullName = esc(c.first_name) + (c.last_name ? ' ' + esc(c.last_name) : '');
-    const contactStr = [c.email, c.phone].filter(Boolean).map(esc).join('<br>');
-    const convertedPill = c.converted_company
-      ? `<br><span class="converted-pill">✓ ${esc(c.converted_company.name)}</span>`
-      : '';
-
-    html += `<tr onclick="openContactDetail(${c.id})">
+// Standardní sloupcové filtry + řazení (js/column-filters.js); instance drží stav filtrů
+let _contactsTable = null;
+function getContactsTable() {
+  if (_contactsTable) return _contactsTable;
+  _contactsTable = ColFilters.table({
+    table: () => document.getElementById('contacts-data-table'),
+    columns: [
+      { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: (c) => (c.first_name || '') + (c.last_name ? ' ' + c.last_name : '') },
+      { key: 'company', label: 'Firma', type: 'text', ph: 'Firma…', get: (c) => [c.company_name, c.position].filter(Boolean).join(' ') },
+      { key: 'contact', label: 'Kontakt', type: 'text', ph: 'E-mail / telefon…', get: (c) => [c.email, c.phone].filter(Boolean).join(' ') },
+      { key: 'source', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: (c) => SOURCE_LABELS[c.source] || c.source },
+      { key: 'potential', label: 'Potenciál', type: 'text', ph: 'Potenciál…', get: (c) => POTENTIAL_LABELS[c.potential] || c.potential },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (c) => STATUS_LABELS[c.status] || c.status },
+      { key: 'value', label: 'Hodnota', type: 'num', ph: '>1000', get: (c) => (c.expected_value == null || c.expected_value === '' ? null : Number(c.expected_value)) },
+      { key: 'next', label: 'Další akce', type: 'date', ph: 'dd.mm.rrrr', get: (c) => c.next_action_at },
+      { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (c) => c.created_at },
+      null,
+    ],
+    renderRow: (c) => {
+      const fullName = esc(c.first_name) + (c.last_name ? ' ' + esc(c.last_name) : '');
+      const contactStr = [c.email, c.phone].filter(Boolean).map(esc).join('<br>');
+      const convertedPill = c.converted_company
+        ? `<br><span class="converted-pill">✓ ${esc(c.converted_company.name)}</span>`
+        : '';
+      return `<tr onclick="openContactDetail(${c.id})">
       <td><strong>${fullName}</strong>${convertedPill}</td>
       <td>${esc(c.company_name || '—')}${c.position ? '<br><span style="font-size:11px;color:var(--text2)">' + esc(c.position) + '</span>' : ''}</td>
       <td>${contactStr || '—'}</td>
@@ -253,9 +275,10 @@ function renderContactsTable() {
       <td>${fmtDate(c.created_at)}</td>
       <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openContactDetail(${c.id})">Detail</button></td>
     </tr>`;
-  }
-  html += '</tbody></table>';
-  container.innerHTML = html;
+    },
+    noun: 'kontaktů', emptyText: 'Žádné kontakty.', limit: 1000,
+  });
+  return _contactsTable;
 }
 
 // ─── Render: pipeline (kanban) ──────────────────────────────────────────
@@ -403,16 +426,37 @@ function renderCommissions() {
     return;
   }
 
-  let table = '<table class="data-table"><thead><tr>'
+  const table = '<table class="data-table" id="commissions-data-table"><thead><tr>'
     + '<th>Kontakt</th><th>Firma</th><th>Stav</th>'
     + '<th>Hodnota</th><th>Aktuální %</th><th>Uzamčené %</th><th>Odhad provize</th><th></th>'
-    + '</tr></thead><tbody>';
-  for (const it of s.items) {
-    const c = it.contact;
-    const fullName = esc(c.first_name) + (c.last_name ? ' ' + esc(c.last_name) : '');
-    const wonBadge = it.is_won ? '<span class="badge badge-status-won">✓ Vyhráno</span>' : '';
-    const lockBadge = it.is_locked ? '<span class="badge badge-status-proposal" style="margin-left:4px;">🔒 Uzamčeno</span>' : '';
-    table += `<tr onclick="openContactDetail(${c.id})">
+    + '</tr></thead><tbody></tbody></table>';
+  panel.innerHTML = headerControls + totalsRow + table;
+  getCommTable().setRows(s.items);
+}
+
+// Standardní sloupcové filtry + řazení (js/column-filters.js)
+let _commTable = null;
+function getCommTable() {
+  if (_commTable) return _commTable;
+  const num = (v) => (v == null || v === '' ? null : Number(v));
+  _commTable = ColFilters.table({
+    table: () => document.getElementById('commissions-data-table'),
+    columns: [
+      { key: 'contact', label: 'Kontakt', type: 'text', ph: 'Kontakt…', get: (it) => (it.contact.first_name || '') + (it.contact.last_name ? ' ' + it.contact.last_name : '') },
+      { key: 'company', label: 'Firma', type: 'text', ph: 'Firma…', get: (it) => it.contact.company_name || '' },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (it) => STATUS_LABELS[it.contact.status] || it.contact.status },
+      { key: 'value', label: 'Hodnota', type: 'num', ph: '>1000', get: (it) => num(it.contact.expected_value) },
+      { key: 'pct', label: 'Aktuální %', type: 'num', ph: '>5', get: (it) => num(it.commission_pct) },
+      { key: 'lpct', label: 'Uzamčené %', type: 'num', ph: '>5', get: (it) => num(it.commission_locked_pct) },
+      { key: 'est', label: 'Odhad provize', type: 'num', ph: '>1000', get: (it) => num(it.est_commission) },
+      null,
+    ],
+    renderRow: (it) => {
+      const c = it.contact;
+      const fullName = esc(c.first_name) + (c.last_name ? ' ' + esc(c.last_name) : '');
+      const wonBadge = it.is_won ? '<span class="badge badge-status-won">✓ Vyhráno</span>' : '';
+      const lockBadge = it.is_locked ? '<span class="badge badge-status-proposal" style="margin-left:4px;">🔒 Uzamčeno</span>' : '';
+      return `<tr onclick="openContactDetail(${c.id})">
       <td><strong>${fullName}</strong> ${wonBadge}${lockBadge}</td>
       <td>${esc(c.company_name || '—')}</td>
       <td><span class="badge badge-status-${esc(c.status)}">${esc(STATUS_LABELS[c.status] || c.status)}</span></td>
@@ -422,9 +466,10 @@ function renderCommissions() {
       <td><strong>${fmtMoney(it.est_commission)}</strong></td>
       <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); openContactDetail(${c.id})">Detail</button></td>
     </tr>`;
-  }
-  table += '</tbody></table>';
-  panel.innerHTML = headerControls + totalsRow + table;
+    },
+    noun: 'kontaktů', emptyText: 'Žádné přidělené kontakty.', limit: 1000,
+  });
+  return _commTable;
 }
 window.loadCommissions = loadCommissions;
 
