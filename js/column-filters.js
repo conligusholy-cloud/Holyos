@@ -431,7 +431,7 @@
         const more = e.target.closest('.cf-more'); if (more) { e.stopPropagation(); e.preventDefault(); openEditor(more, more.dataset.cfk); return; }
         const x = e.target.closest('.cf-x'); if (x) { e.stopPropagation(); e.preventDefault(); delete state[x.dataset.cfk]; refreshCell(x.dataset.cfk); fire(true); return; }
         // Datumový sloupec: klik do pole otevře kalendář (psaní z klávesnice dál funguje — pole zůstává textové)
-        const din = e.target.closest('.cf-in'); if (din && !din.readOnly && !din.disabled) { const dk = din.dataset.cfk; const dc = (state[dk] || [])[0]; if (typeOf(dk) === 'date' && dc && ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'range'].includes(dc.op)) openDatePicker(din, dk); }
+        const din = e.target.closest('.cf-in'); if (din && !din.readOnly && !din.disabled) { const dk = din.dataset.cfk; if (typeOf(dk) !== 'date') { if (e.target.closest('.cf-cell')) e.stopPropagation(); return; } const dc = conds(dk)[0]; /* conds() založí výchozí podmínku, i když se ještě nic nefiltrovalo */ if (dc &&['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'range'].includes(dc.op)) openDatePicker(din, dk); }
         if (e.target.closest('.cf-cell')) e.stopPropagation();
       });
     }
