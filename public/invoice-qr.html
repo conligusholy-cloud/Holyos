@@ -26,6 +26,8 @@
   #qrbox { text-align:center; }
   #qrbox img { width:100%; max-width:340px; background:#fff; border-radius:12px; padding:6px; }
   small { color:var(--tx2); }
+  .note { background:#0f1220; border:1px dashed var(--bd); border-radius:10px; padding:10px 12px; margin:8px 0 10px; font-weight:600; word-break:break-word; }
+  button.sec { background:#2c3354; }
 </style>
 </head>
 <body>
@@ -34,6 +36,7 @@
   <div id="msg"></div>
   <div class="card" id="info" style="display:none"></div>
   <div class="card" id="qrbox" style="display:none"></div>
+  <div class="card" id="notebox" style="display:none"></div>
   <button id="go" style="display:none" onclick="gen()">Vygenerovat QR kód</button>
   <p><small>Po vygenerování QR kódu se doklad v HolyOS označí jako „platí se přes QR" a přestane se nabízet k platbě. Jako zaplacený se potvrdí až po nalezení platby ve výpisu z účtu.</small></p>
 </div>
@@ -59,6 +62,12 @@
     if (d.already_qr) msg('warn', 'QR kód už byl pro tento doklad vygenerován. Pokud jsi platbu už provedl, nic dalšího nedělej — zaplaceno se potvrdí po nalezení ve výpisu.');
     el('go').style.display = ''; el('go').textContent = d.already_qr ? 'Zobrazit QR kód znovu' : 'Vygenerovat QR kód';
   }).catch(function () { msg('err', 'Nepodařilo se načíst doklad.'); });
+  function copyNote() {
+    var t = window.__selfNote || '';
+    var done = function () { el('cp').textContent = '✓ Zkopírováno'; setTimeout(function () { el('cp').textContent = '📋 Zkopírovat poznámku'; }, 2000); };
+    var fb = function () { var a = document.createElement('textarea'); a.value = t; a.style.position = 'fixed'; a.style.opacity = '0'; document.body.appendChild(a); a.focus(); a.select(); try { document.execCommand('copy'); done(); } catch (e) { /* ruční kopie */ } a.remove(); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, fb); else fb();
+  }
   function gen() {
     el('go').disabled = true;
     fetch('/api/public/invoice-qr/' + encodeURIComponent(token) + '/generate', { method: 'POST' }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); }).then(function (x) {
@@ -66,6 +75,12 @@
       var d = x.d;
       msg('ok', 'Hotovo — naskenuj QR kód v bankovní aplikaci. Doklad je v HolyOS označen jako „platí se přes QR".');
       el('qrbox').style.display = ''; el('qrbox').innerHTML = '<img alt="QR platba" src="' + d.qr + '">';
+      if (d.self_note) {
+        window.__selfNote = d.self_note;
+        el('notebox').style.display = '';
+        el('notebox').innerHTML = '<b>Poznámka pro mě</b><div class="note">' + esc(d.self_note) + '</div><button class="sec" id="cp" onclick="copyNote()">📋 Zkopírovat poznámku</button>' +
+          '<p style="margin:8px 0 0"><small>Banka toto pole z QR kódu nepřebírá (QR Platba ho neumí) — vlož poznámku ručně do pole „Poznámka pro mě".</small></p>';
+      }
       el('go').style.display = 'none';
     }).catch(function () { msg('err', 'Chyba spojení.'); el('go').disabled = false; });
   }

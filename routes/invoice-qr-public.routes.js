@@ -81,7 +81,9 @@ router.post('/:token/generate', async (req, res) => {
 
     const QRCode = require('qrcode');
     const qr = await QRCode.toDataURL(spd.spd, { errorCorrectionLevel: 'M', margin: 2, width: 420 });
-    res.json({ qr, spd: spd.spd, iban: spd.iban, account: inv.partner_bank_account || null, amount: remaining, currency: inv.currency, variable_symbol: inv.variable_symbol, invoice_number: inv.invoice_number, supplier: inv.company && inv.company.name });
+    res.json({ qr, spd: spd.spd, iban: spd.iban, account: inv.partner_bank_account || null, amount: remaining, currency: inv.currency, variable_symbol: inv.variable_symbol, invoice_number: inv.invoice_number, supplier: inv.company && inv.company.name,
+      // „Poznámka pro mě" standard QR Platby (SPAYD) nezná — banka ji z QR nepřevezme, proto ji stránka nabídne ke zkopírování
+      self_note: inv.payment_note || (inv.company && inv.company.name) || '' });
   } catch (e) { console.error('[invoice-qr] generate:', e); res.status(500).json({ error: 'Chyba serveru.' }); }
 });
 
