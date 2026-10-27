@@ -300,6 +300,28 @@
       placeMenu(menu, btn);
     }
 
+    // Nativní kalendář (input type=date) kotvený pod polem filtru; vybrané datum se zapíše jako d.m.rrrr
+    function openDatePicker(inp, key) {
+      const old = document.getElementById('cf-datepick'); if (old) old.remove();
+      const r = inp.getBoundingClientRect();
+      const dp = document.createElement('input'); dp.type = 'date'; dp.id = 'cf-datepick';
+      dp.style.cssText = 'position:fixed;z-index:5000;opacity:0;pointer-events:none;border:0;padding:0;left:' + r.left + 'px;top:' + r.bottom + 'px;width:' + Math.max(r.width, 140) + 'px;height:1px';
+      const cur = parseDate(inp.value);
+      if (cur) dp.value = cur.getFullYear() + '-' + String(cur.getMonth() + 1).padStart(2, '0') + '-' + String(cur.getDate()).padStart(2, '0');
+      document.body.appendChild(dp);
+      const second = inp.dataset.vi === '2';
+      dp.addEventListener('change', () => {
+        if (dp.value) {
+          const p = dp.value.split('-'); const txt = (+p[2]) + '.' + (+p[1]) + '.' + p[0];
+          const c = conds(key)[0]; if (second) c.v2 = txt; else c.v = txt;
+          refreshCell(key); fire(true);
+        }
+        dp.remove();
+      });
+      dp.addEventListener('blur', () => setTimeout(() => dp.remove(), 150));
+      try { dp.showPicker(); } catch (e) { dp.style.opacity = '1'; dp.style.pointerEvents = 'auto'; dp.focus(); }
+    }
+
     function openEditor(anchor, key) {
       closeMenu();
       const col = colBy[key];
@@ -404,7 +426,9 @@
         const op = e.target.closest('.cf-op'); if (op) { e.stopPropagation(); e.preventDefault(); openOpMenu(op, op.dataset.cfk); return; }
         const ro = e.target.closest('.cf-ro'); if (ro) { e.stopPropagation(); openPick(ro, ro.dataset.cfk); return; }
         const more = e.target.closest('.cf-more'); if (more) { e.stopPropagation(); e.preventDefault(); openEditor(more, more.dataset.cfk); return; }
-        const x = e.target.closest('.cf-x'); if (x) { e.stopPropagation(); e.preventDefault(); delete state[x.dataset.cfk]; refreshCell(x.dataset.cfk); fire(true); }
+        const x = e.target.closest('.cf-x'); if (x) { e.stopPropagation(); e.preventDefault(); delete state[x.dataset.cfk]; refreshCell(x.dataset.cfk); fire(true); return; }
+        // Datumový sloupec: klik do pole otevře kalendář (psaní z klávesnice dál funguje — pole zůstává textové)
+        const din = e.target.closest('.cf-in'); if (din && !din.readOnly && !din.disabled) { const dk = din.dataset.cfk; const dc = (state[dk] || [])[0]; if (typeOf(dk) === 'date' && dc && ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'range'].includes(dc.op)) openDatePicker(din, dk); }
         if (e.target.closest('.cf-cell')) e.stopPropagation();
       });
     }
