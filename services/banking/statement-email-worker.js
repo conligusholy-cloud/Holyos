@@ -17,7 +17,8 @@ let running = false;
 let lastRun = null;
 let folderId = null;
 
-async function runOnce({ markRead = true } = {}) {
+// all = true → projde VŠECHNY zprávy ve složce (i přečtené) od nejstarší; duplicity import přeskočí, zprávy neoznačuje.
+async function runOnce({ markRead = true, all = false } = {}) {
   if (running) return { skipped: 'already_running' };
   running = true;
   const report = { at: new Date().toISOString(), messages: 0, imported: [], duplicates: [], errors: [], no_account: [] };
@@ -26,7 +27,8 @@ async function runOnce({ markRead = true } = {}) {
     if (!mb || !graph.isConfigured || !require('../ms-oauth2').isConfigured()) { report.errors.push('Schránka nebo Azure není nastavené'); return report; }
     if (!folderId) folderId = await graph.findMailFolderId(mb, FOLDER());
     if (!folderId) { report.errors.push(`Složka „${FOLDER()}" ve schránce ${mb} nenalezena`); return report; }
-    const msgs = await graph.listUnreadInFolder(mb, folderId, { top: 25 });
+    const msgs = all ? await graph.listAllInFolder(mb, folderId) : await graph.listUnreadInFolder(mb, folderId, { top: 25 });
+    if (all) markRead = false;
     report.messages = msgs.length;
     for (const m of msgs) {
       const atts = (m.attachments || []).filter((a) => !a.isInline && STATEMENT_FILE.test(a.name || ''));

@@ -228,7 +228,8 @@ const uploadStatementSchema = z.object({
 // POST /api/banking/statements/fetch-email — hned načíst výpisy ze složky VYPISY (jinak běží automaticky)
 router.post('/statements/fetch-email', async (req, res, next) => {
   try {
-    const r = await require('../services/banking/statement-email-worker').runOnce();
+    // ?all=1 → i přečtené (staré) zprávy ve složce, od nejstarší
+    const r = await require('../services/banking/statement-email-worker').runOnce({ all: req.query.all === '1' });
     res.json(r);
   } catch (err) { next(err); }
 });

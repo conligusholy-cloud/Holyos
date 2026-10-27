@@ -427,6 +427,7 @@
             </select>
             <button class="btn btn-primary" onclick="openUploadStatementModal()">📁 Nahrát výpis</button>
             <button class="btn btn-secondary" id="btn-fetch-stmt-email" onclick="fetchStatementsFromEmail()" title="Načte nové výpisy ze složky VYPISY ve schránce faktur (zaheslované PDF MONETA se odemkne samo) a spáruje platby s fakturami. Běží i automaticky každých 30 min.">📨 Načíst z e-mailu</button>
+            <button class="btn btn-secondary" id="btn-fetch-stmt-email-all" onclick="fetchStatementsFromEmail(true)" title="Projde všechny e-maily ve složce VYPISY včetně přečtených (staré výpisy). Už naimportované přeskočí.">📚 Načíst i staré</button>
             <button class="btn btn-secondary btn-sm" onclick="loadStatements()">🔄 Obnovit</button>
           </div>
 
@@ -4344,12 +4345,17 @@
     }
 
     // Výpisy z e-mailu (složka VYPISY) — import + automatické párování s fakturami
-    window.fetchStatementsFromEmail = async function() {
-      const b = document.getElementById('btn-fetch-stmt-email'); if (b) { b.disabled = true; b.textContent = '⏳ Načítám…'; }
+    window.fetchStatementsFromEmail = async function(all) {
+      if (all === true && !confirm('Projít VŠECHNY e-maily ve složce VYPISY (i přečtené) a naimportovat chybějící výpisy?\nUž naimportované se přeskočí. Může to trvat několik minut — nezavírej stránku.')) return;
+      const id = all === true ? 'btn-fetch-stmt-email-all' : 'btn-fetch-stmt-email';
+      const b = document.getElementById(id); const oldTxt = b ? b.textContent : '';
+      if (b) { b.disabled = true; b.textContent = '⏳ Načítám…'; }
       try {
-        const r = await api('POST', '/api/banking/statements/fetch-email', {});
+        const r = await api('POST', '/api/banking/statements/fetch-email' + (all === true ? '?all=1' : ''), {});
         const d = r.data || {};
         const lines = [];
+        if (all === true) lines.push('Prošlo se zpráv: ' + (d.messages || 0) + ', nově naimportováno: ' + (d.imported || []).length + ', už v systému: ' + (d.duplicates || []).length + '\n');
+        if ((d.duplicates || []).length > 5) d.duplicates = d.duplicates.slice(0, 0);
         (d.imported || []).forEach((x) => lines.push('✅ Výpis ' + x.statement + ': ' + x.transactions + ' transakcí' + (x.matched != null ? ', spárováno ' + x.matched : '') + ((x.warnings || []).length ? '\n   ⚠ ' + x.warnings.join('; ') : '')));
         (d.duplicates || []).forEach((x) => lines.push('↺ Výpis ' + x.statement + ' už v systému je'));
         (d.no_account || []).forEach((x) => lines.push('❓ ' + x.file + ': účet ' + x.account + ' není v Bankách založený'));
@@ -4357,7 +4363,7 @@
         alert(lines.length ? lines.join('\n') : 'Žádné nové výpisy ve složce VYPISY.');
         loadStatements();
       } catch (e) { alert('Chyba: ' + e.message); }
-      finally { if (b) { b.disabled = false; b.textContent = '📨 Načíst z e-mailu'; } }
+      finally { if (b) { b.disabled = false; b.textContent = oldTxt; } }
     };
 
     window.loadStatements = async function() {

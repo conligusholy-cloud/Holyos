@@ -94,6 +94,32 @@ async function listUnreadInFolder(userPrincipalName, folderId, opts = {}) {
 }
 
 /**
+ * VŠECHNY zprávy s přílohou ve složce (přečtené i nepřečtené), od nejstarší. Stránkuje přes @odata.nextLink.
+ * Pro jednorázové dotažení historie (např. všechny staré výpisy ve složce VYPISY).
+ */
+async function listAllInFolder(userPrincipalName, folderId, opts = {}) {
+  const { max = 1000, pageSize = 25 } = opts;
+  const url = new URL(`${GRAPH_BASE}/users/${encodeURIComponent(userPrincipalName)}/mailFolders/${encodeURIComponent(folderId)}/messages`);
+  url.searchParams.set('$filter', 'hasAttachments eq true');
+  url.searchParams.set('$top', String(pageSize));
+  url.searchParams.set('$select', 'id,subject,from,receivedDateTime,hasAttachments');
+  url.searchParams.set('$expand', 'attachments($select=id,name,contentType,size,isInline)');
+  let next = url.toString();
+  const all = [];
+  while (next && all.length < max) {
+    const r = await fetch(next, { headers: await authHeaders() });
+    if (!r.ok) {
+      const body = await r.text().catch(() => '');
+      throw new Error(`Graph list folder (vše) selhal: ${r.status} — ${body.slice(0, 300)}`);
+    }
+    const data = await r.json();
+    all.push(...(data.value || []));
+    next = data['@odata.nextLink'] || null;
+  }
+  return all.sort((a, b) => String(a.receivedDateTime).localeCompare(String(b.receivedDateTime)));
+}
+
+/**
  * Stáhne obsah konkrétní přílohy jako Buffer.
  * Pro FileAttachment vrátí bytes.
  */
@@ -360,6 +386,7 @@ module.exports = {
   listUnreadMessages,
   findMailFolderId,
   listUnreadInFolder,
+  listAllInFolder,
   downloadAttachment,
   markAsRead,
   sendReply,
