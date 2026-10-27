@@ -2413,7 +2413,7 @@ app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) 
         const s = queue.shift();
         try { const r = await syncLegacySupport(s, req.admin); if (r.ok) LEGACY_JOB.ok++; else { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + r.error); } }
         catch (e) { LEGACY_JOB.failed++; if (LEGACY_JOB.errors.length < 50) LEGACY_JOB.errors.push((s.nick || s.email) + ': ' + e.message); }
-        LEGACY_JOB.done++;
+        LEGACY_JOB.done++; LEGACY_JOB.last = s.nick || s.email; LEGACY_JOB.last_at = new Date().toISOString();
         await new Promise((r) => setTimeout(r, 150)); // šetrně ke starému serveru
         if (LEGACY_JOB.failed >= 10 && LEGACY_JOB.ok === 0) { stop = true; LEGACY_JOB.errors.push('Zastaveno — prvních 10 pokusů selhalo.'); }
       }
@@ -2422,7 +2422,13 @@ app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) 
     console.log('[bs2] sync podpory hotovo', JSON.stringify({ ...LEGACY_JOB, errors: LEGACY_JOB.errors.slice(0, 5) }));
   })().catch((e) => { LEGACY_JOB.running = false; LEGACY_JOB.errors.push(e.message); });
 }));
-app.get('/admin/partner-support/sync-all', requireAdmin, (req, res) => res.json(LEGACY_JOB));
+// celkový stav: kolik uživatelů s nenulovým obratem už má podporu načtenou (i z dřívějších běhů)
+const OBRAT_NONZERO = "email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0";
+async function legacyOverall() {
+  try { const r = (await q(`SELECT count(*)::int AS eligible, count(*) FILTER (WHERE partner_support->>'synced_at' IS NOT NULL)::int AS synced FROM supporters WHERE ${OBRAT_NONZERO}`)).rows[0]; return r; }
+  catch (e) { return { eligible: null, synced: null }; }
+}
+app.get('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => res.json({ ...LEGACY_JOB, overall: await legacyOverall() })));
 // Seznam uživatelů s načtenou podporou (od posledně načtených) — ruční kontrola
 app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(); const onlyDiff = req.query.diff === '1';
@@ -2430,7 +2436,7 @@ app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
   if (qs) { params.push('%' + qs.toLowerCase() + '%'); where += ` AND (lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`; }
   let rows = (await q(`SELECT id,email,first_name,last_name,nick,extra,partner_support FROM supporters WHERE ${where} ORDER BY (partner_support->>'synced_at') DESC LIMIT 3500`, params)).rows;
   if (onlyDiff) rows = rows.filter(r => { const p = r.partner_support || {}; const s = ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0); return p.total_all_error || (p.total_year != null && Math.abs(s - Number(p.total_year)) > 0.5); });
-  res.send(V.adminPartnerSupport({ admin: req.admin, rows, job: LEGACY_JOB, q: qs, onlyDiff }));
+  res.send(V.adminPartnerSupport({ admin: req.admin, rows, job: LEGACY_JOB, overall: await legacyOverall(), q: qs, onlyDiff }));
 }));
 // Screenshot „Přehledu podpory" ze starého portálu — vizuální důkaz vedle textového syncu výše.
 // Jeden klik = jeden uživatel (headless Chromium, ne hromadné procházení).

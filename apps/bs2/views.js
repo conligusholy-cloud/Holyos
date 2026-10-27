@@ -1583,7 +1583,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
       <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a id="ps-sync-st" class="small muted" href="/admin/partner-support" title="Zobrazit hotové uživatele a zkontrolovat ručně" style="text-decoration:underline"></a>
       <script>
         (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
-          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') + ' → zobrazit hotové' : ' zobrazit načtené'; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
+          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' (' + Math.round(100*j.done/j.total) + ' %) · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') + ' → zobrazit hotové' : ' zobrazit načtené'; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
           function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if (j.running) setTimeout(poll, 2000); }); }
           b.onclick=function(){ if(!confirm('Načíst podporu ze starého portálu u všech uživatelů s nenulovým obratem? Běží na pozadí, může to trvat několik minut.')) return; fetch('/admin/partner-support/sync-all',{method:'POST'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
@@ -1962,7 +1962,7 @@ function partnerSupportCard(s) {
   </div></details>`;
 }
 // Kontrola načtené podpory ze starého portálu — seznam hotových uživatelů (ruční kontrola)
-function adminPartnerSupport({ admin, rows, job, q: qs = '', onlyDiff = false }) {
+function adminPartnerSupport({ admin, rows, job, overall = {}, q: qs = '', onlyDiff = false }) {
   const fmt = (v) => (v == null || v === '' ? '<span class="muted">—</span>' : Number(v).toLocaleString('cs-CZ'));
   const sumY = (p) => ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0);
   const body = rows.map(r => { const p = r.partner_support || {}; const diff = p.total_year != null && Math.abs(sumY(p) - Number(p.total_year)) > 0.5;
@@ -1984,7 +1984,39 @@ function adminPartnerSupport({ admin, rows, job, q: qs = '', onlyDiff = false })
   return adminLayout('Kontrola podpory', 'sup', admin, `
   <p><a href="/admin/supporters">${ico('back', 15)} Uživatelé</a></p>
   <h1 style="margin-bottom:4px">Kontrola načtené podpory <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
-  <p class="small muted" style="margin-top:0">${esc(st)} · seřazeno od posledně načtených. „Starý portál" otevře jeho Přehled podpory pro ruční porovnání.</p>
+  <div class="card" id="ps-prog" style="padding:14px 16px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <b id="ps-p-title">Průběh načítání</b>
+      <button type="button" class="btn sec sm" id="ps-p-start">🔄 Spustit / pokračovat</button>
+    </div>
+    <div class="small muted" style="margin:8px 0 4px">Celkem načteno (obrat ≠ 0): <b id="ps-p-ovt">${overall.synced != null ? overall.synced + ' / ' + overall.eligible : '—'}</b></div>
+    <div style="height:10px;background:var(--bg2,#eee);border-radius:6px;overflow:hidden"><div id="ps-p-ovbar" style="height:100%;width:${overall.eligible ? Math.round(100 * overall.synced / overall.eligible) : 0}%;background:var(--ok,#2e9d5b);transition:width .5s"></div></div>
+    <div class="small muted" style="margin:10px 0 4px">Aktuální běh: <b id="ps-p-run">${esc(st)}</b></div>
+    <div style="height:10px;background:var(--bg2,#eee);border-radius:6px;overflow:hidden"><div id="ps-p-bar" style="height:100%;width:${job && job.total ? Math.round(100 * job.done / job.total) : 0}%;background:var(--primary,#3b6fd8);transition:width .5s"></div></div>
+    <div class="small muted" id="ps-p-info" style="margin-top:6px"></div>
+  </div>
+  <script>
+    (function(){ var $=function(i){return document.getElementById(i)}; var wasRunning=false;
+      function f(n){ return Number(n||0).toLocaleString('cs-CZ'); }
+      function dur(sec){ sec=Math.max(0,Math.round(sec)); var h=Math.floor(sec/3600), m=Math.floor(sec%3600/60); return h ? h+' h '+m+' min' : m ? m+' min' : sec+' s'; }
+      function show(j){
+        var o=j.overall||{}; if(o.eligible){ $('ps-p-ovt').textContent=f(o.synced)+' / '+f(o.eligible)+' ('+Math.round(100*o.synced/o.eligible)+' %)'; $('ps-p-ovbar').style.width=(100*o.synced/o.eligible)+'%'; }
+        if(!j.total){ $('ps-p-run').textContent=j.started_at ? 'Hotovo — nic dalšího k načtení' : 'Neběží'; $('ps-p-bar').style.width='0'; $('ps-p-info').textContent=''; return; }
+        var pct=Math.round(100*j.done/j.total); $('ps-p-bar').style.width=pct+'%';
+        $('ps-p-run').textContent=(j.running?'Běží ':'Dokončeno ')+f(j.done)+' / '+f(j.total)+' ('+pct+' %) · OK '+f(j.ok)+(j.failed?' · chyby '+f(j.failed):'');
+        $('ps-p-title').textContent=j.running?'⏳ Načítání běží…':'✅ Průběh načítání';
+        var el=((j.finished_at?new Date(j.finished_at):new Date())-new Date(j.started_at))/1000, info=[];
+        if(j.done){ var per=el/j.done; info.push('rychlost '+(60/per).toFixed(1).replace('.',',')+' uživ./min'); if(j.running) info.push('zbývá cca '+dur(per*(j.total-j.done))+' (hotovo kolem '+new Date(Date.now()+per*(j.total-j.done)*1000).toLocaleTimeString('cs-CZ',{hour:'2-digit',minute:'2-digit'})+')'); }
+        info.push((j.running?'běží ':'trvalo ')+dur(el)); if(j.running&&j.last) info.push('naposledy: '+j.last);
+        $('ps-p-info').textContent=info.join(' · ');
+        $('ps-p-start').disabled=!!j.running;
+      }
+      function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if(j.running){ wasRunning=true; setTimeout(poll,3000); } else if(wasRunning){ wasRunning=false; } }).catch(function(){ setTimeout(poll,10000); }); }
+      $('ps-p-start').onclick=function(){ if(!confirm('Spustit načítání podpory? Přeskočí uživatele načtené za posledních 24 h.')) return; 
+        fetch('/admin/partner-support/sync-all',{method:'POST',headers:{'content-type':'application/json'},body:'{}'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
+      poll(); })();
+  </script>
+  <p class="small muted" style="margin-top:0">Seřazeno od posledně načtených (obnov stránku pro nové řádky). „Starý portál" otevře jeho Přehled podpory pro ruční porovnání.</p>
   ${job && job.errors && job.errors.length ? `<details class="card" style="padding:10px 14px;margin-bottom:12px"><summary class="small"><b>Chyby (${job.errors.length})</b></summary><div class="small" style="margin-top:6px">${job.errors.map(e => '<div>' + esc(e) + '</div>').join('')}</div></details>` : ''}
   <form method="get" class="row" style="gap:8px;margin-bottom:12px"><input name="q" value="${esc(qs)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1"><label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="diff" value="1"${onlyDiff ? ' checked' : ''}> jen s nesrovnalostí</label><button class="btn sm" type="submit">Filtrovat</button></form>
   <div class="tbl-wrap"><table class="cards"><thead><tr><th>Uživatel</th><th>Obrat (import)</th><th>Celkem</th><th>Rok</th><th>V roce</th><th>Palety</th><th>Expanze</th><th>NeuraWash</th><th>Opakovačky</th><th>Obrat sítě</th><th>Kontrola</th><th>Načteno</th><th></th></tr></thead><tbody>${body || '<tr><td colspan="13" class="muted">Zatím nikdo.</td></tr>'}</tbody></table></div>
