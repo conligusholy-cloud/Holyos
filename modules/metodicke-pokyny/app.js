@@ -98,14 +98,19 @@
   }
 
   // ─── Render: tabulka ────────────────────────────────────────────────────
-  function renderTable() {
-    const tbody = document.getElementById('tbody');
-    if (!state.items.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Žádné směrnice. Vytvoř první přes "+ Nová směrnice".</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = state.items.map(d => `
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const dirTable = ColFilters.table({
+    table: '#directives-table',
+    columns: [
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (d) => d.code },
+      { key: 'title', label: 'Název', type: 'text', ph: 'Název…', get: (d) => d.title },
+      { key: 'cat', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (d) => CATEGORY_LABELS[d.category] || d.category },
+      { key: 'version', label: 'Verze', type: 'text', ph: 'Verze…', get: (d) => d.version },
+      { key: 'from', label: 'Platnost od', type: 'date', ph: 'dd.mm.rrrr', get: (d) => d.effective_from },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (d) => STATUS_LABELS[d.status] || d.status },
+      null,
+    ],
+    renderRow: (d) => `
       <tr onclick="window.HolyDir.openEditModal(${d.id})">
         <td class="code-cell">${escapeHtml(d.code)}</td>
         <td>
@@ -120,7 +125,14 @@
           <button class="btn btn-sm btn-danger" onclick="window.HolyDir.deleteItem(${d.id})">Smazat</button>
         </td>
       </tr>
-    `).join('');
+    `,
+    noun: 'směrnic',
+    emptyText: 'Žádné směrnice. Vytvoř první přes "+ Nová směrnice".',
+    limit: 1000,
+  });
+
+  function renderTable() {
+    dirTable.setRows(state.items);
   }
 
   function renderStatusBadge(s) {

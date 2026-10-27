@@ -7,6 +7,7 @@
   <link rel="icon" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=3"></script>
   <style>
     /* ===== Tabs ===== */
     .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
@@ -356,18 +357,19 @@
     // =========================================================================
     // LABEL TEMPLATES
     // =========================================================================
-    async function loadTemplates() {
-      const r = await api('GET', '/api/print/templates');
-      const tbody = document.querySelector('#templates-table tbody');
-      if (r.status !== 200) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načítání.</td></tr>';
-        return;
-      }
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Žádné šablony.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = r.data.map(t => (
+    // Standardní sloupcové filtry + řazení (js/column-filters.js)
+    const templatesTable = ColFilters.table({
+      table: '#templates-table',
+      columns: [
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (t) => t.code },
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (t) => t.name },
+        { key: 'lang', label: 'Jazyk', type: 'text', ph: 'Jazyk…', get: (t) => t.language },
+        { key: 'size', label: 'Rozměr', type: 'text', ph: 'Rozměr…', get: (t) => t.width_mm + '×' + t.height_mm + ' mm', sortGet: (t) => (Number(t.width_mm) || 0) * 10000 + (Number(t.height_mm) || 0) },
+        { key: 'ph', label: 'Placeholdery', type: 'text', ph: 'Placeholder…', enum: false, get: (t) => (t.placeholders || []).join(', ') },
+        { key: 'active', label: 'Aktivní', type: 'text', ph: 'Aktivní…', get: (t) => t.is_active ? 'Ano' : 'Ne' },
+        null,
+      ],
+      renderRow: (t) => (
         '<tr>' +
           '<td><span class="inline-code">' + escapeHtml(t.code) + '</span></td>' +
           '<td>' + escapeHtml(t.name) + '</td>' +
@@ -377,7 +379,19 @@
           '<td>' + (t.is_active ? '✓' : '—') + '</td>' +
           '<td><button class="btn btn-secondary btn-sm" onclick="openTemplateModal(' + t.id + ')">Upravit</button></td>' +
         '</tr>'
-      )).join('');
+      ),
+      noun: 'šablon',
+      emptyText: 'Žádné šablony.',
+      limit: 1000,
+    });
+    async function loadTemplates() {
+      const r = await api('GET', '/api/print/templates');
+      const tbody = document.querySelector('#templates-table tbody');
+      if (r.status !== 200) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">Chyba načítání.</td></tr>';
+        return;
+      }
+      templatesTable.setRows(r.data);
     }
     window.openTemplateModal = async function(id) {
       let tpl = { code: '', name: '', language: 'ZPL', width_mm: 60, height_mm: 20, body: '^XA\n\n^XZ', description: '', is_active: true };
@@ -468,29 +482,41 @@
     // =========================================================================
     // PRINT JOBS
     // =========================================================================
+    const JOB_STATUS_LABEL = { done: 'Hotovo', failed: 'Selhalo', queued: 'Ve frontě', printing: 'Tiskne se', sent: 'Odesláno' };
+    const jobsTable = ColFilters.table({
+      table: '#jobs-table',
+      columns: [
+        { key: 'time', label: 'Čas', type: 'date', ph: 'dd.mm.rrrr', get: (j) => j.created_at },
+        { key: 'tpl', label: 'Šablona', type: 'text', ph: 'Šablona…', get: (j) => j.template?.code || '' },
+        { key: 'printer', label: 'Tiskárna', type: 'text', ph: 'Tiskárna…', get: (j) => j.printer?.name || '' },
+        { key: 'copies', label: 'Kopie', type: 'num', ph: '', get: (j) => j.copies == null ? null : Number(j.copies) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (j) => JOB_STATUS_LABEL[j.status] || j.status },
+        { key: 'error', label: 'Chyba', type: 'text', ph: 'Chyba…', get: (j) => j.error || '' },
+      ],
+      renderRow: (j) => (
+        '<tr>' +
+          '<td>' + formatDate(j.created_at) + '</td>' +
+          '<td>' + escapeHtml(j.template?.code || '—') + '</td>' +
+          '<td>' + escapeHtml(j.printer?.name || '—') + '</td>' +
+          '<td>' + j.copies + '</td>' +
+          '<td><span class="status-badge ' + escapeHtml(j.status) + '">' + escapeHtml(JOB_STATUS_LABEL[j.status] || j.status) + '</span></td>' +
+          '<td style="color:#ef4444;font-size:0.85em;">' + escapeHtml(j.error || '') + '</td>' +
+        '</tr>'
+      ),
+      noun: 'tiskových úloh',
+      emptyText: 'Žádné záznamy.',
+      limit: 500,
+    });
     window.loadJobs = async function() {
       const status = document.getElementById('jobs-status-filter')?.value || '';
-      const q = status ? ('?status=' + status) : '';
+      const q = '?limit=500' + (status ? ('&status=' + status) : '');
       const r = await api('GET', '/api/print/jobs' + q);
       const tbody = document.querySelector('#jobs-table tbody');
       if (r.status !== 200) {
         tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Chyba načítání.</td></tr>';
         return;
       }
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Žádné záznamy.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = r.data.map(j => (
-        '<tr>' +
-          '<td>' + formatDate(j.created_at) + '</td>' +
-          '<td>' + escapeHtml(j.template?.code || '—') + '</td>' +
-          '<td>' + escapeHtml(j.printer?.name || '—') + '</td>' +
-          '<td>' + j.copies + '</td>' +
-          '<td><span class="status-badge ' + j.status + '">' + j.status + '</span></td>' +
-          '<td style="color:#ef4444;font-size:0.85em;">' + escapeHtml(j.error || '') + '</td>' +
-        '</tr>'
-      )).join('');
+      jobsTable.setRows(r.data);
     };
 
     // =========================================================================

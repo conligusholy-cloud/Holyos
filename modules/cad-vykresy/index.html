@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=3"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
 
@@ -343,7 +344,63 @@
         el.innerHTML = '<div class="empty">Žádné výkresy. Pošli je přes desktop klienta (kontextové menu "Odevzdat do výroby").</div>';
         return;
       }
-      const rows = state.drawings.map(d => {
+      if (!document.getElementById('cad-drawings-table')) {
+        el.innerHTML = `
+        <table class="data-table" id="cad-drawings-table">
+          <thead><tr>
+            <th>Typ</th><th>Kód</th><th>Projekt</th><th>Blok</th><th>Verze</th><th>Poznámka</th>
+            <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Zboží</th><th>Akce</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>`;
+      }
+      drawingsTable.setRows(state.drawings);
+    }
+
+    // Typ výkresu z přípony (Díl / Sestava / Výkres / přípona)
+    function drawingTypeLabel(d) {
+      const extLower = (d.extension || '').toLowerCase();
+      return extLower === 'sldprt' ? 'Díl'
+           : extLower === 'sldasm' ? 'Sestava'
+           : extLower === 'slddrw' ? 'Výkres'
+           : extLower.toUpperCase();
+    }
+    // Druhy příloh výkresu (unikátní, velkými písmeny) — pro filtr sloupce Přílohy
+    function drawingAttachmentKinds(d) {
+      const set = new Set();
+      for (const c of (d.configurations || [])) for (const a of (c.attachments || [])) if (a.kind) set.add(String(a.kind).toUpperCase());
+      const sw = (d.extension || '').toLowerCase();
+      if (['sldprt', 'sldasm', 'slddrw'].includes(sw)) set.add(sw.toUpperCase());
+      return Array.from(set).join(', ');
+    }
+
+    // Standardní sloupcové filtry + řazení (js/column-filters.js)
+    const drawingsTable = ColFilters.table({
+      table: '#cad-drawings-table',
+      columns: [
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (d) => drawingTypeLabel(d) },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (d) => (d.file_name || '').replace(/\.[^./\\]+$/, '') + (d.title ? ' ' + d.title : ''), sortGet: (d) => (d.file_name || '').replace(/\.[^./\\]+$/, '') },
+        { key: 'project', label: 'Projekt', type: 'text', ph: 'Projekt…', get: (d) => d.project ? d.project.code : '' },
+        { key: 'block', label: 'Blok', type: 'text', ph: 'Blok…', get: (d) => d.block ? d.block.name : '' },
+        { key: 'version', label: 'Verze', type: 'num', ph: '', get: (d) => d.version == null ? null : Number(d.version) },
+        { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: (d) => (d.change_logs && d.change_logs[0] && d.change_logs[0].note) || '' },
+        { key: 'configs', label: 'Konfig.', type: 'num', ph: '', get: (d) => (d.configurations || []).length },
+        { key: 'pdf', label: 'PDF', type: 'text', ph: 'PDF…', get: (d) => (d.configurations || []).some(c => c.pdf_path) ? 'Ano' : 'Ne' },
+        { key: 'att', label: 'Přílohy', type: 'text', ph: 'Přílohy…', enum: false, get: (d) => drawingAttachmentKinds(d) },
+        { key: 'creator', label: 'Importoval', type: 'text', ph: 'Importoval…', get: (d) => d.creator ? (d.creator.first_name + ' ' + d.creator.last_name) : '' },
+        { key: 'imported', label: 'Poslední import', type: 'date', ph: 'dd.mm.rrrr', get: (d) => d.last_import_at },
+        { key: 'material', label: 'Zboží', type: 'text', ph: 'Zboží…', get: (d) => d.material ? (d.material.code || '') : '' },
+        null,
+      ],
+      renderRow: (d) => drawingRowHtml(d),
+      noun: 'výkresů',
+      emptyText: 'Žádné výkresy.',
+      limit: 5000,
+      onRender: () => bindDrawingRowEvents(),
+    });
+
+    // HTML jednoho výkresu (hlavní řádek + případně rozbalený detail)
+    function drawingRowHtml(d) {
         const creatorName = d.creator ? escapeHtml(d.creator.first_name + ' ' + d.creator.last_name) : '<span style="color:var(--text2)">—</span>';
         // 3D viewer tlacitko — otevre prvni konfiguraci s STL rovnou ze seznamu.
         // STL hledame v dvou mistech: dedikovane c.stl_path (stare importy) NEBO
@@ -505,16 +562,13 @@
             <button class="btn btn-sm btn-danger" style="padding:3px 8px;font-size:11px;margin-left:4px;" onclick="deleteDrawing(${d.id})" title="Smazat">\ud83d\uddd1\ufe0f</button>
           </td>
         </tr>` + (isExpanded ? renderExpandedDetail(d) : '');
-      }).join('');
-      el.innerHTML = `
-        <table class="data-table">
-          <thead><tr>
-            <th>Typ</th><th>Kód</th><th>Projekt</th><th>Blok</th><th>Verze</th><th>Poznámka</th>
-            <th>Konfig.</th><th>PDF</th><th>Přílohy</th><th>Importoval</th><th>Poslední import</th><th>Zboží</th><th>Akce</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
-      el.querySelectorAll('tr[data-id]').forEach(tr => {
+    }
+
+    // Navázání událostí na vykreslené řádky výkresů (volá se po každém renderu tabulky)
+    function bindDrawingRowEvents() {
+      const el = document.getElementById('cad-drawings-table');
+      if (!el || !el.tBodies[0]) return;
+      el.tBodies[0].querySelectorAll('tr[data-id]').forEach(tr => {
         // Jeden klik na řádek = rozbalit/sbalit inline detail. (Dříve fungoval
         // single-click pro otevření spodního detail pane — ten byl odstraněn.)
         tr.addEventListener('click', () => {

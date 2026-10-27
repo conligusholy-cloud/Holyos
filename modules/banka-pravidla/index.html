@@ -50,6 +50,7 @@
     .criteria-summary code { background: var(--surface2); padding: 1px 6px; border-radius: 3px; font-family: 'Consolas', monospace; }
     .checkbox-row { display: flex; align-items: center; gap: 8px; }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -151,12 +152,11 @@
         return;
       }
 
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-hint">Zatím nejsou žádná pravidla. Klikni <strong>+ Nové pravidlo</strong>.</td></tr>';
-        return;
-      }
+      rulesTable.setRows(r.data);
+    }
 
-      tbody.innerHTML = r.data.map(rule => `
+    function renderRuleRow(rule) {
+      return `
         <tr onclick="openEditModal(${rule.id})">
           <td><strong>${rule.priority}</strong></td>
           <td>
@@ -171,8 +171,35 @@
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); deleteRule(${rule.id}, '${escapeHtml(rule.name).replace(/'/g, "\\'")}')">🗑️</button>
           </td>
         </tr>
-      `).join('');
+      `;
     }
+
+    // Standardní sloupcové filtry + řazení
+    const DIR_LABEL = { in: 'příchozí', out: 'odchozí', incoming: 'příchozí', outgoing: 'odchozí' };
+    function criteriaText(rule) {
+      const parts = [];
+      if (rule.direction) parts.push('směr=' + (DIR_LABEL[rule.direction] || rule.direction));
+      if (rule.counterparty_account) parts.push('účet=' + rule.counterparty_account);
+      if (rule.counterparty_name_contains) parts.push('název obsahuje ' + rule.counterparty_name_contains);
+      if (rule.variable_symbol) parts.push('VS=' + rule.variable_symbol);
+      if (rule.amount_min != null) parts.push('min=' + rule.amount_min);
+      if (rule.amount_max != null) parts.push('max=' + rule.amount_max);
+      return parts.length ? parts.join(' AND ') : 'bez kritérií';
+    }
+    const rulesTable = ColFilters.table({
+      table: '#rules-table',
+      columns: [
+        { key: 'prio', label: 'Priorita', type: 'num', ph: '', get: (r) => r.priority == null ? null : Number(r.priority) },
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (r) => r.name },
+        { key: 'crit', label: 'Kritéria', type: 'text', ph: 'Kritéria…', get: (r) => criteriaText(r), enum: false },
+        { key: 'action', label: 'Akce', type: 'text', ph: 'Akce…', get: (r) => ACTION_LABEL[r.action] || r.action },
+        { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (r) => r.active ? 'Aktivní' : 'Neaktivní' },
+        null,
+      ],
+      renderRow: (r) => renderRuleRow(r),
+      noun: 'pravidel',
+      emptyText: 'Zatím nejsou žádná pravidla. Klikni + Nové pravidlo.',
+    });
 
     function renderModal(rule) {
       const isEdit = !!rule;

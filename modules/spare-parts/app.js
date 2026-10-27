@@ -236,6 +236,7 @@
     const params = new URLSearchParams();
     if (q) params.set('q', q);
     if (status) params.set('status', status);
+    params.set('limit', '500'); // server max 500
 
     try {
       const [orders, stats] = await Promise.all([
@@ -243,11 +244,31 @@
         fetchJSON(`${API}/orders/stats`),
       ]);
       renderOrderStats(stats);
-      if (!orders.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Žádné objednávky.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = orders.map(o => `
+      ordersTable.setRows(orders);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  const ORDER_STATUS_LABEL = {
+    new: 'Nová', confirmed: 'Potvrzená', picking: 'Pickování',
+    shipped: 'Odeslaná', delivered: 'Doručená', closed: 'Uzavřená',
+    cancelled: 'Zrušená',
+  };
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const ordersTable = ColFilters.table({
+    table: '#sp-orders-table',
+    columns: [
+      { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (o) => o.order_number },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (o) => ORDER_STATUS_LABEL[o.status] || o.status },
+      { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (o) => o.created_at },
+      { key: 'partner', label: 'Partner', type: 'text', ph: 'Partner…', get: (o) => o.partner ? o.partner.display_name : '' },
+      { key: 'company', label: 'Firma', type: 'text', ph: 'Firma…', get: (o) => o.company ? o.company.name : (o.ship_to_company || '') },
+      { key: 'items', label: 'Položek', type: 'num', ph: '', get: (o) => o._count ? o._count.items : null },
+      { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (o) => o.total_incl_vat == null ? null : Number(o.total_incl_vat) },
+      null,
+    ],
+    renderRow: (o) => `
         <tr>
           <td><strong>${esc(o.order_number)}</strong></td>
           <td>${statusBadge(o.status)}</td>
@@ -257,11 +278,11 @@
           <td class="num">${o._count ? o._count.items : '—'}</td>
           <td class="num">${esc(fmtMoney(o.total_incl_vat, o.currency))}</td>
           <td><button class="btn btn-secondary btn-sm" onclick="openOrder(${o.id})">Detail</button></td>
-        </tr>`).join('');
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
-    }
-  }
+        </tr>`,
+    noun: 'objednávek',
+    emptyText: 'Žádné objednávky.',
+    limit: 500,
+  });
 
   function renderOrderStats(stats) {
     const order = ['new', 'confirmed', 'picking', 'shipped', 'delivered', 'closed', 'cancelled'];
@@ -517,11 +538,27 @@
 
     try {
       const items = await fetchJSON(`${API}/materials?${params}`);
-      if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Žádné položky.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = items.map(m => `
+      catalogTable.setRows(items);
+      refreshCatalogBulkBar();
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const catalogTable = ColFilters.table({
+    table: '#sp-catalog-table',
+    columns: [
+      null,
+      { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (m) => m.code },
+      { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (m) => m.name },
+      { key: 'eshop', label: 'Eshop', type: 'text', ph: 'Eshop…', get: (m) => m.sells_on_eshop ? 'Ano' : 'Ne' },
+      { key: 'wh', label: 'Sklad', type: 'text', ph: 'Sklad…', get: (m) => m.eshop_warehouse ? m.eshop_warehouse.name : '' },
+      { key: 'cat', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (m) => (m.eshop_categories || []).map(c => c.name).join(', ') },
+      { key: 'stock', label: 'Stav (sklad)', type: 'num', ph: '', get: (m) => Number(m.current_stock || 0) },
+      null,
+    ],
+    renderRow: (m) => `
         <tr>
           <td><input type="checkbox" class="catalog-row-cb" data-id="${m.id}" ${_catalogSelected.has(m.id) ? 'checked' : ''} onchange="toggleCatalogRow(${m.id}, this.checked)"></td>
           <td><code>${esc(m.code)}</code></td>
@@ -531,12 +568,11 @@
           <td>${(m.eshop_categories && m.eshop_categories.length) ? m.eshop_categories.map(c => esc(c.name)).join(', ') : '—'}</td>
           <td class="num">${Number(m.current_stock || 0).toFixed(2)} ${esc(m.unit || '')}</td>
           <td><button class="btn btn-secondary btn-sm" onclick="editMaterialEshop(${m.id})">Eshop nastavení</button></td>
-        </tr>`).join('');
-      refreshCatalogBulkBar();
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
-    }
-  }
+        </tr>`,
+    noun: 'položek',
+    emptyText: 'Žádné položky.',
+    limit: 1000,
+  });
 
   document.getElementById('catalog-refresh').addEventListener('click', loadCatalog);
   document.getElementById('catalog-search').addEventListener('input', debounce(loadCatalog, 350));
@@ -631,11 +667,25 @@
     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Načítám…</td></tr>';
     try {
       const items = await fetchJSON(`${API}/pricelists`);
-      if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Zatím žádný ceník. Klikni „+ Nový ceník".</td></tr>';
-        return;
-      }
-      tbody.innerHTML = items.map(p => `
+      pricelistsTable.setRows(items);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const pricelistsTable = ColFilters.table({
+    table: '#sp-pricelists-table',
+    columns: [
+      { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (p) => p.name + (p.description ? ' ' + p.description : ''), sortGet: (p) => p.name },
+      { key: 'cur', label: 'Měna', type: 'text', ph: 'Měna…', get: (p) => p.currency },
+      { key: 'vat', label: 'DPH', type: 'num', ph: '', get: (p) => p.vat_pct == null ? null : Number(p.vat_pct) },
+      { key: 'items', label: 'Položek', type: 'num', ph: '', get: (p) => p._count ? p._count.items : 0 },
+      { key: 'cos', label: 'Firem', type: 'num', ph: '', get: (p) => p._count ? p._count.companies : 0 },
+      { key: 'active', label: 'Stav', type: 'text', ph: 'Stav…', get: (p) => p.active ? 'Aktivní' : 'Neaktivní' },
+      null,
+    ],
+    renderRow: (p) => `
         <tr>
           <td><strong>${esc(p.name)}</strong>${p.description ? `<br><small style="color:var(--text2)">${esc(p.description)}</small>` : ''}</td>
           <td>${esc(p.currency)}</td>
@@ -648,11 +698,11 @@
             <button class="btn btn-secondary btn-sm" onclick="renamePricelist(${p.id})">✎</button>
             <button class="btn btn-danger btn-sm" onclick="deletePricelist(${p.id})">×</button>
           </td>
-        </tr>`).join('');
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
-    }
-  }
+        </tr>`,
+    noun: 'ceníků',
+    emptyText: 'Zatím žádný ceník. Klikni „+ Nový ceník".',
+    limit: 1000,
+  });
 
   document.getElementById('pricelist-refresh').addEventListener('click', loadPricelists);
   document.getElementById('pricelist-new').addEventListener('click', () => renamePricelist(null));
@@ -877,27 +927,49 @@
         _allPricelists.length ? Promise.resolve(_allPricelists) : fetchJSON(`${API}/pricelists`),
       ]);
       _allPricelists = pricelists;
-      if (!companies.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Žádné firmy.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = companies.map(c => {
+      _assignPending = {};
+      assignTable.setRows(companies);
+    } catch (err) {
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
+    }
+  }
+
+  // Neuložený výběr ceníku v řádku — přežije překreslení tabulky (filtr/řazení)
+  let _assignPending = {};
+  window.onAssignSelect = function (companyId, value) { _assignPending[companyId] = value; };
+  const assignCurrent = (c) => (Object.prototype.hasOwnProperty.call(_assignPending, c.id)
+    ? (_assignPending[c.id] ? parseInt(_assignPending[c.id], 10) : null)
+    : c.eshop_pricelist_id);
+
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const assignTable = ColFilters.table({
+    table: '#sp-assign-table',
+    columns: [
+      { key: 'name', label: 'Firma', type: 'text', ph: 'Firma…', get: (c) => c.name },
+      { key: 'ico', label: 'IČO', type: 'text', ph: 'IČO…', get: (c) => c.ico },
+      { key: 'country', label: 'Země', type: 'text', ph: 'Země…', get: (c) => c.country },
+      { key: 'partners', label: 'Partneři', type: 'num', ph: '', get: (c) => c._count ? c._count.partner_accounts : 0 },
+      { key: 'pl', label: 'Ceník', type: 'text', ph: 'Ceník…', get: (c) => { const p = _allPricelists.find(x => x.id === c.eshop_pricelist_id); return p ? p.name : '— bez ceníku —'; } },
+      null,
+    ],
+    renderRow: (c) => {
+        const cur = assignCurrent(c);
         const opts = '<option value="">— bez ceníku —</option>' +
-          pricelists.map(p => `<option value="${p.id}"${c.eshop_pricelist_id===p.id?' selected':''}>${esc(p.name)} (${esc(p.currency)})</option>`).join('');
+          _allPricelists.map(p => `<option value="${p.id}"${cur===p.id?' selected':''}>${esc(p.name)} (${esc(p.currency)})</option>`).join('');
         return `
         <tr>
           <td><strong>${esc(c.name)}</strong></td>
           <td>${esc(c.ico || '—')}</td>
           <td>${esc(c.country || '—')}</td>
           <td class="num">${c._count ? c._count.partner_accounts : 0}</td>
-          <td><select class="filter-select" id="as-${c.id}" style="min-width:180px;">${opts}</select></td>
+          <td><select class="filter-select" id="as-${c.id}" style="min-width:180px;" onchange="onAssignSelect(${c.id}, this.value)">${opts}</select></td>
           <td><button class="btn btn-primary btn-sm" onclick="saveAssignment(${c.id})">Uložit</button></td>
         </tr>`;
-      }).join('');
-    } catch (err) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
-    }
-  }
+    },
+    noun: 'firem',
+    emptyText: 'Žádné firmy.',
+    limit: 1000,
+  });
 
   document.getElementById('assign-refresh').addEventListener('click', loadAssignments);
   document.getElementById('assign-search').addEventListener('input', debounce(loadAssignments, 350));
@@ -911,6 +983,9 @@
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ pricelist_id }),
       });
+      const row = assignTable.getRows().find(x => x.id === companyId);
+      if (row) row.eshop_pricelist_id = pricelist_id;
+      delete _assignPending[companyId];
       sel.style.borderColor = '#22c55e';
       setTimeout(() => { sel.style.borderColor = ''; }, 1500);
     } catch (err) { alert('Chyba: ' + err.message); }
@@ -1094,8 +1169,21 @@
     try {
       const items = await fetchJSON(`${API}/categories`);
       _catalogCategories = items;
-      if (!items.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Žádné kategorie. Klikni „+ Nová kategorie".</td></tr>'; return; }
-      tbody.innerHTML = items.map(c => `
+      categoriesTable.setRows(items);
+    } catch (err) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`; }
+  }
+
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const categoriesTable = ColFilters.table({
+    table: '#sp-categories-table',
+    columns: [
+      { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (c) => c.name },
+      { key: 'slug', label: 'Slug', type: 'text', ph: 'Slug…', get: (c) => c.slug },
+      { key: 'icon', label: 'Ikona', type: 'text', ph: '', filter: false, sort: false, get: (c) => c.icon },
+      { key: 'mats', label: 'Materiálů', type: 'num', ph: '', get: (c) => c._count ? c._count.materials : 0 },
+      null,
+    ],
+    renderRow: (c) => `
         <tr>
           <td><strong>${esc(c.name)}</strong></td>
           <td><code>${esc(c.slug)}</code></td>
@@ -1105,9 +1193,11 @@
             <button class="btn btn-secondary btn-sm" onclick="editCategory(${c.id})">✎</button>
             <button class="btn btn-danger btn-sm" onclick="deleteCategory(${c.id})">×</button>
           </td>
-        </tr>`).join('');
-    } catch (err) { tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`; }
-  }
+        </tr>`,
+    noun: 'kategorií',
+    emptyText: 'Žádné kategorie. Klikni „+ Nová kategorie".',
+    limit: 1000,
+  });
 
   document.getElementById('category-refresh').addEventListener('click', loadCategories);
   document.getElementById('category-new').addEventListener('click', () => editCategory(null));

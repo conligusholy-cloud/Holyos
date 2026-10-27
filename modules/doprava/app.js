@@ -52,6 +52,38 @@
   }
 
   // ─── Fronta ─────────────────────────────────────────────────────────────────
+  // Standardní sloupcové filtry + řazení (js/column-filters.js)
+  const queueTable = ColFilters.table({
+    table: '#queue-table',
+    columns: [
+      { key: 'order', label: 'Objednávka', type: 'text', ph: 'Číslo…', get: (r) => (r.order || {}).order_number },
+      { key: 'country', label: 'Země', type: 'text', ph: 'Země…', get: (r) => (r.order || {}).ship_to_country },
+      { key: 'recipient', label: 'Příjemce', type: 'text', ph: 'Příjemce…', get: (r) => { const o = r.order || {}; return o.ship_to_company || o.ship_to_name; } },
+      { key: 'carrier', label: 'Dopravce', type: 'text', ph: 'Dopravce…', get: (r) => r.carrier },
+      { key: 'sell', label: 'Prodejní cena', type: 'num', ph: '', get: (r) => Number(r.sell_excl) > 0 ? Number(r.sell_excl) : null },
+      { key: 'price_status', label: 'Cena dopravy', type: 'text', ph: 'Stav…', get: (r) => (r.order || {}).shipping_price_status === 'defined' ? 'Definovaná' : 'Čeká' },
+      { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (r) => REQ_LABELS[r.status] || r.status },
+      null,
+    ],
+    renderRow: (r) => {
+      const o = r.order || {};
+      const recipient = esc(o.ship_to_company || o.ship_to_name || '—');
+      return `<tr>
+          <td><strong>${esc(o.order_number || '—')}</strong><br><span style="font-size:11px;color:var(--text2);">${esc(ORDER_LABELS[o.status] || o.status || '')}</span></td>
+          <td>${esc(o.ship_to_country || '—')}</td>
+          <td>${recipient}</td>
+          <td>${esc(r.carrier || '—')}</td>
+          <td class="num">${Number(r.sell_excl) > 0 ? money(r.sell_excl, r.currency) : '—'}</td>
+          <td><span class="badge badge-${esc(o.shipping_price_status || 'pending')}">${o.shipping_price_status === 'defined' ? 'Definovaná' : 'Čeká'}</span></td>
+          <td><span class="badge badge-${esc(r.status)}">${esc(REQ_LABELS[r.status] || r.status)}</span></td>
+          <td><button class="btn btn-secondary btn-sm" onclick="openRequest(${r.id})">Otevřít</button></td>
+        </tr>`;
+    },
+    noun: 'požadavků',
+    emptyText: 'Žádné požadavky na dopravu.',
+    limit: 1000,
+  });
+
   async function loadQueue() {
     const tbody = document.getElementById('queue-tbody');
     tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Načítám…</td></tr>';
@@ -63,21 +95,7 @@
     try {
       const rows = await fetchJSON(`${API}/requests?${params}`);
       document.getElementById('header-count').textContent = rows.length ? `(${rows.length})` : '';
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Žádné požadavky na dopravu.</td></tr>'; return; }
-      tbody.innerHTML = rows.map(r => {
-        const o = r.order || {};
-        const recipient = esc(o.ship_to_company || o.ship_to_name || '—');
-        return `<tr>
-          <td><strong>${esc(o.order_number || '—')}</strong><br><span style="font-size:11px;color:var(--text2);">${esc(ORDER_LABELS[o.status] || o.status || '')}</span></td>
-          <td>${esc(o.ship_to_country || '—')}</td>
-          <td>${recipient}</td>
-          <td>${esc(r.carrier || '—')}</td>
-          <td class="num">${Number(r.sell_excl) > 0 ? money(r.sell_excl, r.currency) : '—'}</td>
-          <td><span class="badge badge-${esc(o.shipping_price_status || 'pending')}">${o.shipping_price_status === 'defined' ? 'Definovaná' : 'Čeká'}</span></td>
-          <td><span class="badge badge-${esc(r.status)}">${esc(REQ_LABELS[r.status] || r.status)}</span></td>
-          <td><button class="btn btn-secondary btn-sm" onclick="openRequest(${r.id})">Otevřít</button></td>
-        </tr>`;
-      }).join('');
+      queueTable.setRows(rows || []);
     } catch (err) {
       tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Chyba: ${esc(err.message)}</td></tr>`;
     }

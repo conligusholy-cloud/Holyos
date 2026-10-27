@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=3"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .page-header {
@@ -88,6 +89,7 @@
 
     const WH_TYPES = { main: 'Hlavní', raw: 'Suroviny', finished: 'Hotové výrobky', wip: 'Rozpracovaná výroba', tools: 'Nářadí', consumables: 'Spotřební', external: 'Externí' };
     let warehouses = [];
+    let whLocTable = null;
 
     // ─── NAČTENÍ DAT ────────────────────────────────────────────────────────
     async function loadWarehouses() {
@@ -104,32 +106,54 @@
       renderWarehouses(filtered);
     }
 
+    // Řádek tabulky skladů
+    function whRowHtml(w) {
+      const typeLabel = WH_TYPES[w.type] || w.type;
+      let html = '<tr style="cursor:pointer;" onclick="openWarehouseModal(' + w.id + ')">';
+      html += '<td onclick="event.stopPropagation()"><input type="checkbox" class="wh-checkbox" value="' + w.id + '" onchange="updateWhSelection()"></td>';
+      html += '<td style="font-weight:600;">' + w.name + '</td>';
+      html += '<td style="font-family:monospace;font-size:12px;color:var(--text2);">' + (w.code || '—') + '</td>';
+      html += '<td><span class="badge" style="background:#f59e0b22;color:#f59e0b;">' + typeLabel + '</span></td>';
+      html += '<td style="font-size:12px;color:var(--text2);">' + (w.address || '—') + '</td>';
+      html += '<td>' + (w.locations_count || 0) + '</td>';
+      html += '<td onclick="event.stopPropagation()">' +
+        '<button class="btn btn-sm btn-secondary" onclick="openWarehouseModal(' + w.id + ')" style="margin-right:4px;">✏️</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteWarehouse(' + w.id + ')">🗑️</button>' +
+      '</td>';
+      html += '</tr>';
+      return html;
+    }
+
+    // Standardní sloupcové filtry + řazení (js/column-filters.js)
+    const whTable = ColFilters.table({
+      table: '#wh-table',
+      columns: [
+        null,
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (w) => w.name },
+        { key: 'code', label: 'Kód', type: 'text', ph: 'Kód…', get: (w) => w.code },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (w) => WH_TYPES[w.type] || w.type },
+        { key: 'address', label: 'Adresa', type: 'text', ph: 'Adresa…', get: (w) => w.address },
+        { key: 'locs', label: 'Pozic', type: 'num', ph: '', get: (w) => w.locations_count || 0 },
+        null,
+      ],
+      renderRow: (w) => whRowHtml(w),
+      noun: 'skladů',
+      emptyText: 'Žádné sklady.',
+      limit: 1000,
+      onRender: () => { updateWhSelection(); },
+    });
+
     function renderWarehouses(list) {
       document.getElementById('wh-count').textContent = '(' + list.length + ')';
       const el = document.getElementById('warehouses-table');
-      if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏭</div><h3>Žádné sklady</h3><p>Vytvořte první sklad.</p></div>'; return; }
-
-      let html = '<table class="data-table"><thead><tr>' +
-        '<th style="width:40px;"><input type="checkbox" id="wh-select-all" onchange="toggleAllWarehouses(this.checked)"></th>' +
-        '<th>Název</th><th>Kód</th><th>Typ</th><th>Adresa</th><th>Pozic</th><th style="width:100px;">Akce</th>' +
-      '</tr></thead><tbody>';
-      for (const w of list) {
-        const typeLabel = WH_TYPES[w.type] || w.type;
-        html += '<tr style="cursor:pointer;" onclick="openWarehouseModal(' + w.id + ')">';
-        html += '<td onclick="event.stopPropagation()"><input type="checkbox" class="wh-checkbox" value="' + w.id + '" onchange="updateWhSelection()"></td>';
-        html += '<td style="font-weight:600;">' + w.name + '</td>';
-        html += '<td style="font-family:monospace;font-size:12px;color:var(--text2);">' + (w.code || '—') + '</td>';
-        html += '<td><span class="badge" style="background:#f59e0b22;color:#f59e0b;">' + typeLabel + '</span></td>';
-        html += '<td style="font-size:12px;color:var(--text2);">' + (w.address || '—') + '</td>';
-        html += '<td>' + (w.locations_count || 0) + '</td>';
-        html += '<td onclick="event.stopPropagation()">' +
-          '<button class="btn btn-sm btn-secondary" onclick="openWarehouseModal(' + w.id + ')" style="margin-right:4px;">✏️</button>' +
-          '<button class="btn btn-sm btn-danger" onclick="deleteWarehouse(' + w.id + ')">🗑️</button>' +
-        '</td>';
-        html += '</tr>';
+      if (!warehouses.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏭</div><h3>Žádné sklady</h3><p>Vytvořte první sklad.</p></div>'; return; }
+      if (!document.getElementById('wh-table')) {
+        el.innerHTML = '<table class="data-table" id="wh-table"><thead><tr>' +
+          '<th style="width:40px;"><input type="checkbox" id="wh-select-all" onchange="toggleAllWarehouses(this.checked)"></th>' +
+          '<th>Název</th><th>Kód</th><th>Typ</th><th>Adresa</th><th>Pozic</th><th style="width:100px;">Akce</th>' +
+        '</tr></thead><tbody></tbody></table>';
       }
-      html += '</tbody></table>';
-      el.innerHTML = html;
+      whTable.setRows(list);
     }
 
     // ─── VÝBĚR & HROMADNÉ MAZÁNÍ ────────────────────────────────────────────
@@ -151,7 +175,8 @@
         info.style.display = 'none';
       }
       const all = document.querySelectorAll('.wh-checkbox');
-      document.getElementById('wh-select-all').checked = all.length > 0 && checked.length === all.length;
+      const sa = document.getElementById('wh-select-all');
+      if (sa) sa.checked = all.length > 0 && checked.length === all.length;
     }
 
     async function bulkDeleteWarehouses() {
@@ -243,23 +268,15 @@
       const locations = (w.locations || []);
       let locsTableHtml = '';
       if (locations.length > 0) {
-        locsTableHtml = '<table style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:10px;">' +
+        // Kostra tabulky; řádky vykreslí ColFilters (whLocTable) po otevření modalu
+        locsTableHtml = '<div onkeydown="if(event.key===\'Enter\'&&event.target.classList.contains(\'cf-in\'))event.preventDefault()">' +
+          '<table id="wh-loc-table" style="width:100%;font-size:12px;border-collapse:collapse;margin-bottom:10px;">' +
           '<thead><tr style="color:var(--text2);border-bottom:1px solid var(--border);">' +
             '<th style="text-align:left;padding:6px 8px;">Označení</th>' +
             '<th style="text-align:left;padding:6px 8px;">Sklad</th>' +
             '<th style="text-align:left;padding:6px 8px;">Regál</th>' +
             '<th style="text-align:left;padding:6px 8px;">Police</th><th style="width:30px;"></th>' +
-          '</tr></thead><tbody>';
-        locations.forEach(loc => {
-          locsTableHtml += '<tr style="border-bottom:1px solid var(--border);">' +
-            '<td style="padding:5px 8px;font-weight:600;">' + (loc.label||'—') + '</td>' +
-            '<td style="padding:5px 8px;">' + (loc.section||'—') + '</td>' +
-            '<td style="padding:5px 8px;">' + (loc.rack||'—') + '</td>' +
-            '<td style="padding:5px 8px;">' + (loc.position||'—') + '</td>' +
-            '<td style="padding:5px 8px;"><span onclick="deleteLocAndRefresh(' + loc.id + ',' + id + ')" style="cursor:pointer;color:var(--text2);font-size:14px;" title="Smazat">&times;</span></td>' +
-          '</tr>';
-        });
-        locsTableHtml += '</tbody></table>';
+          '</tr></thead><tbody></tbody></table></div>';
       } else if (id) {
         locsTableHtml = '<div style="color:var(--text2);font-size:12px;padding:8px 0;">Zatím žádné pozice</div>';
       }
@@ -309,6 +326,29 @@
         wsHtml +
         generatorHtml +
         '<div class="modal-actions"><button type="button" class="btn btn-secondary" onclick="closeModal()">Zrušit</button><button type="submit" class="btn btn-primary">' + (id?'Uložit':'Vytvořit') + '</button></div></form></div></div>';
+      if (locations.length > 0) {
+        whLocTable = ColFilters.table({
+          table: '#wh-loc-table',
+          columns: [
+            { key: 'label', label: 'Označení', type: 'text', ph: 'Označení…', get: (l) => l.label },
+            { key: 'section', label: 'Sklad', type: 'text', ph: 'Sklad…', get: (l) => l.section },
+            { key: 'rack', label: 'Regál', type: 'text', ph: 'Regál…', get: (l) => l.rack },
+            { key: 'position', label: 'Police', type: 'text', ph: 'Police…', get: (l) => l.position },
+            null,
+          ],
+          renderRow: (loc) => '<tr style="border-bottom:1px solid var(--border);">' +
+            '<td style="padding:5px 8px;font-weight:600;">' + (loc.label||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.section||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.rack||'—') + '</td>' +
+            '<td style="padding:5px 8px;">' + (loc.position||'—') + '</td>' +
+            '<td style="padding:5px 8px;"><span onclick="deleteLocAndRefresh(' + loc.id + ',' + id + ')" style="cursor:pointer;color:var(--text2);font-size:14px;" title="Smazat">&times;</span></td>' +
+          '</tr>',
+          noun: 'pozic',
+          emptyText: 'Zatím žádné pozice.',
+          limit: 1000,
+        });
+        whLocTable.setRows(locations);
+      }
     }
 
     // ─── AKCE SKLADU ────────────────────────────────────────────────────────

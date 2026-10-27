@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=3"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .page-header {
@@ -296,6 +297,34 @@
       });
     }
 
+    // Standardní sloupcové filtry + řazení (js/column-filters.js)
+    const VEH_STATUS_LABEL = { expired: 'Po termínu', warning: 'Blíží se termín', ok: 'V pořádku' };
+    const vehStatusLabel = (st, date) => !date ? '—' : (VEH_STATUS_LABEL[st] || '—');
+    const vehTable = ColFilters.table({
+      table: '#veh-table',
+      columns: [
+        { key: 'spz', label: 'SPZ', type: 'text', ph: 'SPZ…', get: (v) => v.license_plate },
+        { key: 'company', label: 'Firma', type: 'text', ph: 'Firma…', get: (v) => v.company || '' },
+        { key: 'model', label: 'Vozidlo', type: 'text', ph: 'Vozidlo / VIN…', get: (v) => (v.model || '') + (v.vin ? ' ' + v.vin : ''), sortGet: (v) => v.model || '' },
+        { key: 'driver', label: 'Řidič', type: 'text', ph: 'Řidič…', get: (v) => v.driver ? (v.driver.first_name + ' ' + v.driver.last_name) : '' },
+        { key: 'category', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (v) => v.category },
+        { key: 'pov', label: 'POV do', type: 'date', ph: 'dd.mm.rrrr', get: (v) => v.insurance_to },
+        { key: 'pov_st', label: 'Stav POV', type: 'text', ph: 'Stav…', get: (v) => vehStatusLabel(v.insurance_status, v.insurance_to), sortGet: (v) => v.insurance_to ? v.insurance_days : null },
+        { key: 'stk', label: 'STK do', type: 'date', ph: 'dd.mm.rrrr', get: (v) => v.stk_valid_to },
+        { key: 'stk_st', label: 'Stav STK', type: 'text', ph: 'Stav…', get: (v) => vehStatusLabel(v.stk_status, v.stk_valid_to), sortGet: (v) => v.stk_valid_to ? v.stk_days : null },
+        { key: 'toll', label: 'Známka do', type: 'date', ph: 'dd.mm.rrrr', get: (v) => v.toll_sticker_to },
+        { key: 'toll_st', label: 'Stav známky', type: 'text', ph: 'Stav…', get: (v) => vehStatusLabel(v.toll_status, v.toll_sticker_to), sortGet: (v) => v.toll_sticker_to ? v.toll_days : null },
+        { key: 'tire', label: 'Výměna pneu', type: 'date', ph: 'dd.mm.rrrr', get: (v) => v.next_tire_change },
+        { key: 'service', label: 'Servis', type: 'date', ph: 'dd.mm.rrrr', get: (v) => v.next_service },
+        { key: 'financing', label: 'Financování', type: 'text', ph: 'Financování…', get: (v) => v.financing_type ? FINANCING_TYPES[v.financing_type] || v.financing_type : (v.financing_owner || '') },
+        null,
+      ],
+      renderRow: (v) => vehRowHtml(v),
+      noun: 'vozidel',
+      emptyText: 'Žádná vozidla.',
+      limit: 1000,
+    });
+
     function renderTable(list) {
       const data = list || vehicles;
       document.getElementById('veh-count').textContent = '(' + data.length + ')';
@@ -305,7 +334,7 @@
         return;
       }
 
-      let html = '<table class="data-table"><thead><tr>' +
+      if (!document.getElementById('veh-table')) el.innerHTML = '<table class="data-table" id="veh-table"><thead><tr>' +
         '<th>SPZ</th>' +
         '<th>Firma</th>' +
         '<th>Vozidlo</th>' +
@@ -321,9 +350,14 @@
         '<th>Servis</th>' +
         '<th>Financování</th>' +
         '<th style="width:100px;">Akce</th>' +
-      '</tr></thead><tbody>';
+      '</tr></thead><tbody></tbody></table>';
 
-      for (const v of data) {
+      vehTable.setRows(data);
+    }
+
+    // HTML jednoho řádku vozidla
+    function vehRowHtml(v) {
+        let html = '';
         const driverCell = v.driver
           ? escHtml(v.driver.first_name + ' ' + v.driver.last_name)
           : '<span style="color:var(--text2);font-size:12px;font-style:italic;">+ přiřadit</span>';
@@ -359,10 +393,9 @@
           '<button class="btn btn-sm btn-danger" onclick="deleteVehicle(' + v.id + ')" title="Smazat">🗑️</button>' +
         '</td>';
         html += '</tr>';
-      }
-      html += '</tbody></table>';
-      el.innerHTML = html;
+        return html;
     }
+
 
     // ─── Modal — editace / vytvoření ───────────────────────────────────────
     function closeModal() { document.getElementById('modal-root').innerHTML = ''; }

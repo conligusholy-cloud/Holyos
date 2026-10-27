@@ -75,6 +75,7 @@
 
     @media (max-width: 768px) { .main-wrapper { margin-left: 0; } .info-grid { grid-template-columns:1fr; } }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside class="sidebar" id="sidebar"></aside>
@@ -108,7 +109,7 @@
           <span style="flex:1;"></span>
           <button class="btn btn-secondary btn-sm" id="q-refresh">↻ Aktualizovat</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="queue-table">
           <thead>
             <tr>
               <th>Objednávka</th><th>Země</th><th>Příjemce</th><th>Dopravce</th>

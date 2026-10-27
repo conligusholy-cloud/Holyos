@@ -327,6 +327,7 @@
       .person-name { white-space: nowrap; }
     }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
@@ -802,6 +803,141 @@
     }
 
     // ============================================================
+    // SLOUPCOVÉ FILTRY + ŘAZENÍ (js/column-filters.js) — standard tabulek HolyOS
+    // ============================================================
+    // Datum pro filtr — komponenta filtruje jen nad objekty Date (YYYY-MM-DD = místní půlnoc)
+    const cfDate = (v) => { if (!v) return null; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v)); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v); return isNaN(d) ? null : d; };
+    // "HH:MM" → minuty (pro řazení/filtr časů)
+    const cfTimeMins = (t) => { if (!t) return null; const m = /^(\d{1,2}):(\d{2})/.exec(String(t)); return m ? (+m[1] * 60 + +m[2]) : null; };
+    const cfWorkedMins = (r) => { const a = cfTimeMins(r.clock_in), b = cfTimeMins(r.clock_out); if (a == null || b == null) return null; const m = b - a - (r.break_minutes || 0); return m > 0 ? m : null; };
+    let hrOtCtx = { limit: 150, alertPct: 80 };
+    const hrOtYearH = (item) => item.overtime_year_total_mins ? +(item.overtime_year_total_mins / 60).toFixed(1) : +(item.overtime_mins / 60).toFixed(1);
+    const hrOtStatus = (item) => {
+      const pct = Math.round((hrOtYearH(item) / hrOtCtx.limit) * 100);
+      return pct >= 100 ? 'Překročen limit' : (pct >= hrOtCtx.alertPct ? 'Blízko limitu' : 'OK');
+    };
+    const hrDocStatus = (d) => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (d.status === 'archived') return 'Archiv';
+      if (d.valid_to && d.valid_to < today) return 'Prošlý';
+      if (d.valid_to && d.valid_to <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)) return 'Vyprší brzy';
+      return 'Aktivní';
+    };
+    const HR_ATT_TYPE = { work: 'Práce', vacation: 'Dovolená', sick: 'Nemoc', holiday: 'Svátek', other: 'Jiné' };
+    const HR_LEAVE_STATUS = { pending: 'Čekající', approved: 'Schváleno', rejected: 'Zamítnuto' };
+    const hrPersonName = (pid) => { const pp = Array.isArray(people) ? people.find(x => x.id === pid) : null; return pp ? (pp.last_name + ' ' + pp.first_name) : '#' + pid; };
+    const hrPeopleCols = (isArchive) => [
+      { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: (p) => (p.last_name || '') + ' ' + (p.first_name || '') },
+      { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (p) => TYPE_LABELS[p.type] || p.type || '' },
+    ].concat(isArchive ? [{ key: 'end', label: 'Konec zaměstnání', type: 'date', ph: 'dd.mm.rrrr', get: (p) => cfDate(p.end_date) }] : []).concat([
+      { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: (p) => p.email || '' },
+      { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: (p) => p.phone || '' },
+      { key: 'company', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (p) => p.department_name || '' },
+      { key: 'role', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (p) => p.role_name || '' },
+      { key: 'contract', label: 'Smlouva', type: 'text', ph: 'Smlouva…', get: (p) => p.contract_type ? (CONTRACT_LABELS[p.contract_type] || p.contract_type) : '' },
+      { key: 'account', label: 'Účet', type: 'text', ph: 'Účet…', get: (p) => p.username || '', enum: false },
+      null,
+    ]);
+    function hrOtCols() {
+      return [
+        { key: 'person', label: 'Zaměstnanec', type: 'text', ph: 'Zaměstnanec…', get: (i) => i.person_name || '' },
+        { key: 'worked', label: 'Odpracováno (h)', type: 'num', ph: '', get: (i) => +(i.total_worked_mins / 60).toFixed(1) },
+        { key: 'fund', label: 'Fond (h)', type: 'num', ph: '', get: (i) => +(i.total_fund_mins / 60).toFixed(1) },
+        { key: 'ot', label: 'Přesčas (h)', type: 'num', ph: '', get: (i) => +(i.overtime_mins / 60).toFixed(1) },
+        { key: 'limit', label: 'Přesčas za rok (h)', type: 'num', ph: '', get: (i) => hrOtYearH(i) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => hrOtStatus(i) },
+      ];
+    }
+    const HR_CF_DEFS = {
+      'hr-people-dt': { noun: 'osob', emptyText: 'Žádné osoby.', columns: () => hrPeopleCols(false) },
+      'hr-people-archive-dt': { noun: 'osob', emptyText: 'Archiv je prázdný.', columns: () => hrPeopleCols(true) },
+      'hr-attendance-dt': { noun: 'záznamů', emptyText: 'Žádné záznamy docházky.', columns: () => [
+        { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (r) => cfDate(r.date) },
+        { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: (r) => (r.last_name || '') + ' ' + (r.first_name || '') },
+        { key: 'in', label: 'Příchod', type: 'text', ph: 'Příchod…', get: (r) => r.clock_in || '', sortGet: (r) => cfTimeMins(r.clock_in), enum: false },
+        { key: 'out', label: 'Odchod', type: 'text', ph: 'Odchod…', get: (r) => r.clock_out || '', sortGet: (r) => cfTimeMins(r.clock_out), enum: false },
+        { key: 'break', label: 'Přestávka (min)', type: 'num', ph: 'min', get: (r) => r.break_minutes || 0 },
+        { key: 'worked', label: 'Odpracováno (min)', type: 'num', ph: 'min', get: (r) => cfWorkedMins(r) },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (r) => HR_ATT_TYPE[r.type] || r.type || '' },
+        { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: (r) => r.note || '' },
+        null,
+      ] },
+      'hr-leave-dt': { noun: 'žádostí', emptyText: 'Žádné žádosti o volno.', columns: () => [
+        { key: 'person', label: 'Zaměstnanec', type: 'text', ph: 'Zaměstnanec…', get: (r) => hrPersonName(r.person_id) },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (r) => r.type || '' },
+        { key: 'from', label: 'Od', type: 'date', ph: 'dd.mm.rrrr', get: (r) => cfDate(r.date_from) },
+        { key: 'to', label: 'Do', type: 'date', ph: 'dd.mm.rrrr', get: (r) => cfDate(r.date_to) },
+        { key: 'note', label: 'Poznámka', type: 'text', ph: 'Poznámka…', get: (r) => r.note || '' },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (r) => HR_LEAVE_STATUS[r.status] || r.status || '' },
+        null,
+      ] },
+      'hr-roles-dt': { noun: 'rolí', emptyText: 'Žádné role.', columns: () => [
+        { key: 'name', label: 'Role', type: 'text', ph: 'Role…', get: (r) => r.name || '' },
+        { key: 'company', label: 'Společnost', type: 'text', ph: 'Společnost…', get: (r) => r.department_name || '' },
+        { key: 'parent', label: 'Nadřazená role', type: 'text', ph: 'Nadřazená…', get: (r) => { const pr = r.parent_role_id ? roles.find(x => x.id === r.parent_role_id) : null; return pr ? pr.name : ''; } },
+        { key: 'desc', label: 'Popis', type: 'text', ph: 'Popis…', get: (r) => r.description || '' },
+        null,
+      ] },
+      'hr-overtime-dt': { noun: 'zaměstnanců', emptyText: 'Žádná data.', columns: () => hrOtCols() },
+      'hr-overtime-year-dt': { noun: 'zaměstnanců', emptyText: 'Žádná data.', columns: () => hrOtCols() },
+      'hr-leave-bal-dt': { noun: 'zaměstnanců', emptyText: 'Žádní zaměstnanci.', columns: () => [
+        { key: 'person', label: 'Zaměstnanec', type: 'text', ph: 'Zaměstnanec…', get: (i) => i.person_name || '' },
+        { key: 'ent', label: 'Nárok (dní)', type: 'num', ph: '', get: (i) => i.entitlement },
+        { key: 'carry', label: 'Převod', type: 'num', ph: '', get: (i) => i.carryover },
+        { key: 'total', label: 'Celkem', type: 'num', ph: '', get: (i) => (i.entitlement || 0) + (i.carryover || 0) },
+        { key: 'used', label: 'Čerpaná', type: 'num', ph: '', get: (i) => i.used },
+        { key: 'company', label: 'Celozávodní', type: 'num', ph: '', get: (i) => i.company_leave_days },
+        { key: 'remaining', label: 'Zbývá', type: 'num', ph: '', get: (i) => i.remaining },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (i) => i.remaining <= 0 ? 'Vyčerpáno' : (i.remaining <= 3 ? 'Málo' : 'OK') },
+      ] },
+      'hr-company-leave-dt': { noun: 'záznamů', emptyText: 'Žádná celozávodní dovolená.', columns: () => [
+        { key: 'name', label: 'Název', type: 'text', ph: 'Název…', get: (i) => i.name || '' },
+        { key: 'from', label: 'Od', type: 'date', ph: 'dd.mm.rrrr', get: (i) => cfDate(i.date_from) },
+        { key: 'to', label: 'Do', type: 'date', ph: 'dd.mm.rrrr', get: (i) => cfDate(i.date_to) },
+        { key: 'days', label: 'Dní', type: 'num', ph: '', get: (i) => Math.ceil((new Date(i.date_to) - new Date(i.date_from)) / 86400000) + 1 },
+        { key: 'excl', label: 'Výjimky', type: 'num', ph: '', get: (i) => (i.excluded_person_ids || []).length },
+        null,
+      ] },
+      'hr-documents-dt': { noun: 'dokumentů', emptyText: 'Žádné dokumenty.', columns: () => [
+        { key: 'title', label: 'Název', type: 'text', ph: 'Název…', get: (d) => (d.title || '') + (d.file_name ? ' ' + d.file_name : ''), sortGet: (d) => d.title || '' },
+        { key: 'cat', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (d) => DOC_CATEGORIES[d.category] || d.category || '' },
+        { key: 'person', label: 'Zaměstnanec', type: 'text', ph: 'Zaměstnanec…', get: (d) => d.person_name || '' },
+        { key: 'from', label: 'Platnost od', type: 'date', ph: 'dd.mm.rrrr', get: (d) => cfDate(d.valid_from) },
+        { key: 'to', label: 'Platnost do', type: 'date', ph: 'dd.mm.rrrr', get: (d) => cfDate(d.valid_to) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (d) => hrDocStatus(d) },
+        null,
+      ] },
+      'hr-applicants-dt': { noun: 'uchazečů', emptyText: 'Žádní uchazeči.', columns: () => [
+        { key: 'name', label: 'Jméno', type: 'text', ph: 'Jméno…', get: (a) => ((a.last_name || '') + ' ' + (a.first_name || '')).trim() },
+        { key: 'email', label: 'E-mail', type: 'text', ph: 'E-mail…', get: (a) => a.email || '' },
+        { key: 'phone', label: 'Telefon', type: 'text', ph: 'Telefon…', get: (a) => a.phone || '' },
+        { key: 'position', label: 'Pozice', type: 'text', ph: 'Pozice…', get: (a) => a.position || '' },
+        { key: 'source', label: 'Zdroj', type: 'text', ph: 'Zdroj…', get: (a) => APPLICANT_SOURCE_LABELS[a.source] || a.source || '' },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (a) => APPLICANT_STATUS_LABELS[a.status] || a.status || '' },
+        { key: 'assigned', label: 'Náborář', type: 'text', ph: 'Náborář…', get: (a) => a.assigned_to ? (a.assigned_to.last_name + ' ' + a.assigned_to.first_name) : '' },
+        { key: 'created', label: 'Vloženo', type: 'date', ph: 'dd.mm.rrrr', get: (a) => cfDate(a.created_at) },
+        null,
+      ] },
+    };
+    const HR_CF = {};
+    // Vykreslí řádky do kostry tabulky #id přes standardní komponentu (stav filtrů/řazení se drží mezi překresleními)
+    function hrCfShow(id, rows, rowFn) {
+      let h = HR_CF[id];
+      if (!h) {
+        const def = HR_CF_DEFS[id];
+        const st = { rowFn: rowFn };
+        h = HR_CF[id] = { st: st, t: ColFilters.table({
+          table: () => document.getElementById(id),
+          columns: def.columns(),
+          renderRow: (r, i) => st.rowFn(r, i),
+          noun: def.noun, emptyText: def.emptyText, limit: 1000,
+        }) };
+      }
+      h.st.rowFn = rowFn;
+      h.t.setRows(rows || []);
+    }
+
+    // ============================================================
     // STATS
     // ============================================================
     async function loadStats() {
@@ -861,11 +997,11 @@
         return;
       }
 
-      let html = archiveNote + `<table class="data-table"><thead><tr>
+      let html = archiveNote + `<table class="data-table" id="${isArchive ? 'hr-people-archive-dt' : 'hr-people-dt'}"><thead><tr>
         <th>Jméno</th><th>Typ</th>${isArchive ? '<th>Konec zaměstnání</th>' : ''}<th>E-mail</th><th>Telefon</th><th>Společnost</th><th>Pozice</th><th>Smlouva</th><th>Účet</th><th></th>
       </tr></thead><tbody>`;
 
-      for (const p of people) {
+      const __rowFn = (p) => { let html = '';
         html += `<tr onclick="openPersonModal(${p.id})">
           <td class="person-name"><div style="display:flex;align-items:center;gap:8px;"><span style="width:28px;height:28px;border-radius:50%;background:var(--surface2);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;font-size:11px;color:var(--text2);">${p.photo_url ? '<img src="' + p.photo_url + '" style="width:100%;height:100%;object-fit:cover;">' : p.first_name.charAt(0).toUpperCase()}</span>${p.last_name} ${p.first_name}${!p.active ? ' <span style="color:var(--text2)">(neaktivní)</span>' : ''}${p.is_super_admin ? ' <span style="font-size:9px;background:rgba(239,68,68,0.15);color:#ef4444;padding:1px 5px;border-radius:4px;">SA</span>' : ''}</div></td>
           <td><span class="badge badge-${p.type}">${TYPE_LABELS[p.type] || p.type}</span></td>
@@ -878,9 +1014,11 @@
           <td>${p.username ? '<span class="badge badge-active">' + p.username + '</span>' : '<span style="color:var(--text2);font-size:11px">—</span>'}</td>
           <td><button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();deletePerson(${p.id},'${p.last_name} ${p.first_name}')">✕</button></td>
         </tr>`;
-      }
+        return html;
+      };
       html += '</tbody></table>';
       el.innerHTML = html;
+      hrCfShow(isArchive ? 'hr-people-archive-dt' : 'hr-people-dt', people, __rowFn);
     }
 
     // Typy osob, které mají plnou kartu zaměstnance (včetně bývalých zaměstnanců).
@@ -1539,11 +1677,11 @@
         return;
       }
 
-      let html = `<table class="data-table"><thead><tr>
+      let html = `<table class="data-table" id="hr-attendance-dt"><thead><tr>
         <th>Datum</th><th>Jméno</th><th>Příchod</th><th>Odchod</th><th>Přestávka</th><th>Odpracováno</th><th>Typ</th><th>Poznámka</th><th></th>
       </tr></thead><tbody>`;
 
-      for (const r of records) {
+      const __rowFn = (r) => { let html = '';
         let worked = '—';
         if (r.clock_in && r.clock_out) {
           const [ih, im] = r.clock_in.split(':').map(Number);
@@ -1561,9 +1699,11 @@
           <td>${r.note || ''}</td>
           <td><button class="btn btn-sm btn-danger" onclick="deleteAttendance(${r.id})">✕</button></td>
         </tr>`;
-      }
+        return html;
+      };
       html += '</tbody></table>';
       el.innerHTML = html;
+      hrCfShow('hr-attendance-dt', records, __rowFn);
     }
 
     function formatDate(d) {
@@ -1990,8 +2130,8 @@
         return;
       }
       const statusLabels = { pending: 'Čekající', approved: 'Schváleno', rejected: 'Zamítnuto' };
-      let html = '<table class="data-table"><thead><tr><th>Zaměstnanec</th><th>Typ</th><th>Od</th><th>Do</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>';
-      for (const r of reqs) {
+      let html = '<table class="data-table" id="hr-leave-dt"><thead><tr><th>Zaměstnanec</th><th>Typ</th><th>Od</th><th>Do</th><th>Poznámka</th><th>Stav</th><th></th></tr></thead><tbody>';
+      const __rowFn = (r) => { let html = '';
         const person = people.find(p => p.id === r.person_id);
         const personName = person ? `${person.last_name} ${person.first_name}` : `#${r.person_id}`;
         const actions = r.status === 'pending' ? `
@@ -2007,9 +2147,11 @@
           <td><span class="leave-status ${r.status}">${statusLabels[r.status] || r.status}</span></td>
           <td>${actions}</td>
         </tr>`;
-      }
+        return html;
+      };
       html += '</tbody></table>';
       el.innerHTML = html;
+      hrCfShow('hr-leave-dt', reqs, __rowFn);
     }
 
     async function openLeaveRequestModal() {
@@ -2559,8 +2701,8 @@
         return;
       }
 
-      let html = `<table class="data-table"><thead><tr><th>Role</th><th>Společnost</th><th>Nadřazená role</th><th>Popis</th><th></th></tr></thead><tbody>`;
-      for (const r of roles) {
+      let html = `<table class="data-table" id="hr-roles-dt"><thead><tr><th>Role</th><th>Společnost</th><th>Nadřazená role</th><th>Popis</th><th></th></tr></thead><tbody>`;
+      const __rowFn = (r) => { let html = '';
         const parentRole = r.parent_role_id ? roles.find(x => x.id === r.parent_role_id) : null;
         html += `<tr>
           <td class="person-name">${r.name}</td>
@@ -2572,9 +2714,11 @@
             <button class="btn btn-sm btn-danger" onclick="deleteRole(${r.id})">✕</button>
           </td>
         </tr>`;
-      }
+        return html;
+      };
       html += '</tbody></table>';
       el.innerHTML = html;
+      hrCfShow('hr-roles-dt', roles, __rowFn);
     }
 
     async function openRoleModal(id) {
@@ -2792,7 +2936,7 @@
       const alertPct = settings.alert_threshold_percent || 80;
       const surcharge = settings.surcharge_percent || 25;
 
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table" id="' + (month ? 'hr-overtime-dt' : 'hr-overtime-year-dt') + '"><thead><tr>';
       html += '<th>Zaměstnanec</th>';
       if (month) {
         html += '<th>Odpracováno (h)</th><th>Fond (h)</th><th>Přesčas (h)</th>';
@@ -2801,7 +2945,7 @@
       }
       html += '<th>Limit ' + limit + ' h</th><th>Stav</th></tr></thead><tbody>';
 
-      for (const item of data) {
+      const __rowFn = (item) => { let html = '';
         const workedH = (item.total_worked_mins / 60).toFixed(1);
         const fundH = (item.total_fund_mins / 60).toFixed(1);
         const otH = (item.overtime_mins / 60).toFixed(1);
@@ -2827,7 +2971,8 @@
         html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><span style="font-size:11px;color:var(--text2);white-space:nowrap;">' + otYearH + '/' + limit + '</span></div></td>';
         html += '<td>' + statusBadge + '</td>';
         html += '</tr>';
-      }
+        return html;
+      };
       html += '</tbody></table></div>';
 
       // Summary cards at top
@@ -2846,6 +2991,8 @@
         + '</div>';
 
       el.innerHTML = summaryHTML + html;
+      hrOtCtx = { limit: limit, alertPct: alertPct };
+      hrCfShow(month ? 'hr-overtime-dt' : 'hr-overtime-year-dt', data, __rowFn);
     }
 
     // ============================================================
@@ -2879,11 +3026,11 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖️</div><h3>Žádní zaměstnanci</h3><p>Přidejte zaměstnance pro zobrazení zůstatků dovolené.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table" id="hr-leave-bal-dt"><thead><tr>';
       html += '<th>Zaměstnanec</th><th>Nárok (dní)</th><th>Převod</th><th>Celkem</th><th>Čerpaná</th><th>Celozávodní</th><th>Zbývá</th><th>Stav</th>';
       html += '</tr></thead><tbody>';
 
-      for (const item of data) {
+      const __rowFn = (item) => { let html = '';
         const total = item.entitlement + item.carryover;
         const remaining = item.remaining;
         let statusBadge;
@@ -2908,7 +3055,8 @@
         html += '<td><div style="display:flex;align-items:center;gap:8px;"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;"><div style="width:' + barPct + '%;height:100%;background:' + barColor + ';border-radius:4px;"></div></div><strong style="white-space:nowrap;">' + remaining + ' dní</strong></div></td>';
         html += '<td>' + statusBadge + '</td>';
         html += '</tr>';
-      }
+        return html;
+      };
       html += '</tbody></table></div>';
 
       // Summary
@@ -2925,6 +3073,7 @@
         + '</div>';
 
       el.innerHTML = summaryHTML + html;
+      hrCfShow('hr-leave-bal-dt', data, __rowFn);
     }
 
     // ============================================================
@@ -2944,11 +3093,11 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">🏢</div><h3>Žádná celozávodní dovolená</h3><p>Přidejte celozávodní dovolenou — automaticky se propíše všem zaměstnancům.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table" id="hr-company-leave-dt"><thead><tr>';
       html += '<th>Název</th><th>Od</th><th>Do</th><th>Dní</th><th>Výjimky</th><th>Akce</th>';
       html += '</tr></thead><tbody>';
 
-      for (const item of data) {
+      const __rowFn = (item) => { let html = '';
         const from = new Date(item.date_from);
         const to = new Date(item.date_to);
         const days = Math.ceil((to - from) / 86400000) + 1;
@@ -2964,9 +3113,11 @@
         html += '<td>' + excluded + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="deleteCompanyLeave(' + item.id + ')">🗑️ Smazat</button></td>';
         html += '</tr>';
-      }
+        return html;
+      };
       html += '</tbody></table></div>';
       el.innerHTML = html;
+      hrCfShow('hr-company-leave-dt', data, __rowFn);
     }
 
     async function openCompanyLeaveModal() {
@@ -3131,10 +3282,10 @@
         el.innerHTML = '<div class="empty-state"><div class="empty-icon">📄</div><h3>Žádné dokumenty</h3><p>Přidejte první dokument tlačítkem výše.</p></div>';
         return;
       }
-      let html = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>';
+      let html = '<div style="overflow-x:auto;"><table class="data-table" id="hr-documents-dt"><thead><tr>';
       html += '<th>Název</th><th>Kategorie</th><th>Zaměstnanec</th><th>Platnost od</th><th>Platnost do</th><th>Stav</th><th>Akce</th>';
       html += '</tr></thead><tbody>';
-      for (const d of docs) {
+      const __rowFn = (d) => { let html = '';
         const catColor = DOC_CATEGORY_COLORS[d.category] || '#9ca3af';
         const catLabel = DOC_CATEGORIES[d.category] || d.category;
         const isExpired = d.valid_to && d.valid_to < new Date().toISOString().slice(0,10);
@@ -3154,9 +3305,11 @@
         html += '<td>' + statusBadge + '</td>';
         html += '<td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteDocument(' + d.id + ')">🗑️</button></td>';
         html += '</tr>';
-      }
+        return html;
+      };
       html += '</tbody></table></div>';
       el.innerHTML = html;
+      hrCfShow('hr-documents-dt', docs, __rowFn);
     }
 
     async function populateDocPersonFilter() {
@@ -3604,7 +3757,7 @@
           </div>`;
         return;
       }
-      const rows = list.map(a => {
+      const __rowFn = (a) => {
         const fullName = ((a.last_name || '') + ' ' + a.first_name).trim();
         const assigned = a.assigned_to ? (a.assigned_to.last_name + ' ' + a.assigned_to.first_name) : '—';
         const sourceLabel = APPLICANT_SOURCE_LABELS[a.source] || a.source;
@@ -3627,19 +3780,20 @@
               <button class="btn btn-sm btn-danger" onclick="deleteApplicant(${a.id})" title="Smazat">×</button>
             </td>
           </tr>`;
-      }).join('');
+      };
       box.innerHTML = `
         <div style="overflow-x:auto;">
-          <table class="data-table">
+          <table class="data-table" id="hr-applicants-dt">
             <thead>
               <tr>
                 <th>Jméno</th><th>E-mail</th><th>Telefon</th><th>Pozice</th>
                 <th>Zdroj</th><th>Stav</th><th>Náborář</th><th>Vloženo</th><th></th>
               </tr>
             </thead>
-            <tbody>${rows}</tbody>
+            <tbody></tbody>
           </table>
         </div>`;
+      hrCfShow('hr-applicants-dt', list, __rowFn);
     }
 
     function escapeHtml(s) {

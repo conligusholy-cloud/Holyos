@@ -228,10 +228,19 @@ const uploadStatementSchema = z.object({
 // POST /api/banking/statements/fetch-email — hned načíst výpisy ze složky VYPISY (jinak běží automaticky)
 router.post('/statements/fetch-email', async (req, res, next) => {
   try {
-    // ?all=1 → i přečtené (staré) zprávy ve složce, od nejstarší
-    const r = await require('../services/banking/statement-email-worker').runOnce({ all: req.query.all === '1' });
-    res.json(r);
+    // ?all=1 → i přečtené (staré) zprávy ve složce, od nejstarší. Běží na pozadí, průběh viz GET .../status.
+    // Body { password } = volitelné heslo k PDF navíc k BANK_STATEMENT_PASSWORD (nikam se neukládá).
+    const w = require('../services/banking/statement-email-worker');
+    if (w.getProgress().running) return res.status(202).json({ started: false, already_running: true });
+    const pw = req.body && req.body.password ? [String(req.body.password)] : null;
+    w.runOnce({ all: req.query.all === '1', passwords: pw }).catch((e) => console.warn('[bank-statement-email]', e.message));
+    res.status(202).json({ started: true });
   } catch (err) { next(err); }
+});
+
+// GET /api/banking/statements/fetch-email/status — průběh importu výpisů z e-mailu
+router.get('/statements/fetch-email/status', (req, res) => {
+  res.json(require('../services/banking/statement-email-worker').getProgress());
 });
 
 // POST /api/banking/statements/upload

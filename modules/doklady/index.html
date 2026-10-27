@@ -56,6 +56,7 @@
     .btn-sm { padding: 6px 12px; font-size: 0.85em; }
     .inline-code { font-family: 'Consolas', monospace; background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.88em; }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -167,11 +168,10 @@
         tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
-      if (r.data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné doklady.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = r.data.map(d => (
+      docsTable.setRows(r.data || []);
+    }
+    function renderDocRow(d) {
+      return (
         '<tr>' +
           '<td><span class="doc-number">' + escapeHtml(d.number) + '</span></td>' +
           '<td><span class="type-badge ' + d.type + '">' + (TYPE_LABEL[d.type] || d.type) + '</span></td>' +
@@ -183,8 +183,26 @@
           '<td>' + (d.completed_at ? formatDate(d.completed_at) : '—') + '</td>' +
           '<td><button class="btn btn-secondary btn-sm" onclick="openDetail(' + d.id + ')">Detail</button></td>' +
         '</tr>'
-      )).join('');
+      );
     }
+    // Standardní sloupcové filtry + řazení
+    const docsTable = ColFilters.table({
+      table: '#docs-table',
+      columns: [
+        { key: 'num', label: 'Číslo', type: 'text', ph: 'Číslo…', get: (d) => d.number },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (d) => TYPE_LABEL[d.type] || d.type },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (d) => STATUS_LABEL[d.status] || d.status },
+        { key: 'partner', label: 'Partner', type: 'text', ph: 'Partner…', get: (d) => d.partner && d.partner.name },
+        { key: 'ref', label: 'Reference', type: 'text', ph: 'Reference…', get: (d) => d.reference },
+        { key: 'moves', label: 'Pohybů', type: 'num', ph: '', get: (d) => (d._count && d._count.movements) || 0 },
+        { key: 'created', label: 'Vytvořeno', type: 'date', ph: 'dd.mm.rrrr', get: (d) => d.created_at },
+        { key: 'completed', label: 'Uzavřeno', type: 'date', ph: 'dd.mm.rrrr', get: (d) => d.completed_at },
+        null,
+      ],
+      renderRow: (d) => renderDocRow(d),
+      noun: 'dokladů',
+      emptyText: 'Žádné doklady.',
+    });
     window.loadDocs = loadDocs;
 
     window.openDetail = async function(id) {

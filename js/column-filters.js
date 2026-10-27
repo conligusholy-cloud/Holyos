@@ -438,5 +438,124 @@
     return ctrl;
   }
 
-  window.ColFilters = { create, matchCond, OPS, TYPE_OPS };
+  // ─── Hotová tabulka: filtry + 3-stavové řazení ↑↓ + info řádek + render řádků ───
+  // const t = ColFilters.table({
+  //   table: '#my-table',            // selektor nebo funkce vracející <table> (může se překreslovat — vždy se dohledá znovu)
+  //   columns: [ {key,label,type,get,ph,enum,enumValue,sortGet,sort:false,filter:false} | null, ... ],  // 1 položka na <th> hlavičky; null = bez filtru i řazení
+  //   renderRow: (row, idx) => '<tr>…</tr>',
+  //   limit: 500, noun: 'záznamů', emptyText: 'Žádné záznamy.', onRender: (visibleRows) => {}
+  // });
+  // t.setRows(data)  — po načtení dat;  t.refresh()  — překreslit;  t.cf — controller filtrů
+  const SORT_ARROWS = (on, dir) => '<span style="display:inline-flex;font-size:12px;line-height:1;vertical-align:middle">' +
+    '<span style="' + (on && dir === 1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↑</span>' +
+    '<span style="' + (on && dir === -1 ? 'color:#f59e0b;font-weight:900;font-size:14px' : 'opacity:.4') + '">↓</span></span>';
+  function sortTitle(type, on, dir) {
+    const lab = type === 'num' ? (dir === -1 ? 'od největšího po nejmenší' : 'od nejmenšího po největší')
+      : type === 'date' ? (dir === -1 ? 'od nejnovějšího po nejstarší' : 'od nejstaršího po nejnovější')
+      : (dir === 1 ? 'A → Z' : 'Z → A');
+    return on ? 'Řazeno ' + lab + ' — klikni pro změnu' : 'Klikni pro řazení';
+  }
+  function table(o) {
+    const colsAll = o.columns || [];
+    const fcols = colsAll.filter((c) => c && c.filter !== false);
+    const sort = { key: null, dir: 1 };
+    let rows = [];
+    let visible = [];
+    const limit = o.limit || 500;
+    const noun = o.noun || 'záznamů';
+    const getTable = () => (typeof o.table === 'function' ? o.table() : (typeof o.table === 'string' ? document.querySelector(o.table) : o.table));
+    const cf = create({ columns: fcols, onChange: () => render() });
+    const colByKey = {}; colsAll.forEach((c) => { if (c) colByKey[c.key] = c; });
+
+    function ensure(tbl) {
+      if (!tbl) return null;
+      let thead = tbl.tHead;
+      if (!thead) return null;
+      const head = thead.rows[0]; if (!head) return null;
+      if (!thead.querySelector('.cf-filter-row')) {
+        const ths = head.cells;
+        colsAll.forEach((c, i) => {
+          const th = ths[i]; if (!th || !c || c.sort === false) return;
+          if (th.querySelector('.cf-sort')) return;
+          th.style.whiteSpace = 'nowrap';
+          th.insertAdjacentHTML('beforeend', ' <button type="button" class="cf-sort" data-sk="' + escH(c.key) + '" style="background:none;border:none;color:var(--text2,#9ca3af);cursor:pointer;padding:0 2px"></button>');
+        });
+        const tr = document.createElement('tr'); tr.className = 'cf-filter-row';
+        let h = '';
+        for (let i = 0; i < head.cells.length; i++) {
+          const c = colsAll[i];
+          h += '<th style="padding:4px 3px;text-transform:none;letter-spacing:0">' + (c && c.filter !== false ? cf.cellHtml(c.key) : '') + '</th>';
+        }
+        tr.innerHTML = h;
+        thead.appendChild(tr);
+        cf.bind(tr);
+        head.addEventListener('click', (e) => {
+          const b = e.target.closest('.cf-sort'); if (!b) return;
+          e.stopPropagation(); e.preventDefault();
+          const c = colByKey[b.dataset.sk]; if (!c) return;
+          const order = (c.type || 'text') === 'text' ? [1, -1] : [-1, 1];
+          if (sort.key !== c.key) { sort.key = c.key; sort.dir = order[0]; }
+          else if (sort.dir === order[0]) sort.dir = order[1];
+          else sort.key = null;
+          render();
+        });
+      }
+      let info = tbl.previousElementSibling;
+      if (!info || !info.classList || !info.classList.contains('cf-info')) {
+        info = document.createElement('div'); info.className = 'cf-info';
+        info.style.cssText = 'font-size:12px;color:var(--text2,#9ca3af);margin:0 0 6px;display:flex;gap:10px;align-items:center';
+        tbl.parentNode.insertBefore(info, tbl);
+      }
+      return { thead, info };
+    }
+    function markSort(tbl) {
+      tbl.querySelectorAll('.cf-sort').forEach((b) => {
+        const c = colByKey[b.dataset.sk]; const on = sort.key === b.dataset.sk;
+        b.innerHTML = SORT_ARROWS(on, sort.dir);
+        b.title = sortTitle((c && c.type) || 'text', on, sort.dir);
+        const th = b.closest('th'); if (th) th.style.color = on ? '#f59e0b' : '';
+      });
+    }
+    function render() {
+      const tbl = getTable();
+      let list = cf.apply(rows);
+      if (sort.key) {
+        const c = colByKey[sort.key];
+        if (c) {
+          const t = c.type || 'text'; const g = c.sortGet || c.get;
+          // prázdné hodnoty vždy na konec
+          const val = (r) => { const v = g(r); if (v == null || v === '') return null; if (t === 'date') { const d = +new Date(v); return isNaN(d) ? null : d; } if (t === 'num') { const n = Number(v); return isNaN(n) ? null : n; } return norm(v); };
+          list = list.slice().sort((a, b) => { const x = val(a), y = val(b); if (x == null || y == null) return x == null && y == null ? 0 : x == null ? 1 : -1; const r = t === 'text' ? String(x).localeCompare(String(y), 'cs') : (x - y); return r * sort.dir; });
+        }
+      }
+      visible = list;
+      if (!tbl) return;
+      const parts = ensure(tbl);
+      const tbody = tbl.tBodies[0] || tbl.appendChild(document.createElement('tbody'));
+      const ncol = (tbl.tHead && tbl.tHead.rows[0] && tbl.tHead.rows[0].cells.length) || 1;
+      tbody.innerHTML = list.length
+        ? list.slice(0, limit).map((r, i) => o.renderRow(r, i)).join('')
+        : '<tr><td colspan="' + ncol + '" style="text-align:center;color:var(--text2,#9ca3af);padding:18px">' + (rows.length ? 'Filtrům nic neodpovídá.' : escH(o.emptyText || 'Žádné záznamy.')) + '</td></tr>';
+      markSort(tbl);
+      if (parts && parts.info) {
+        const n = cf.activeCount();
+        parts.info.innerHTML = (n ? 'Zobrazeno <b>' + list.length + '</b> z ' + rows.length + ' ' + noun : 'Zobrazeno všech ' + rows.length + ' ' + noun) +
+          (list.length > limit ? ' · prvních ' + limit + ' — upřesni filtr' : '') +
+          (n ? ' <button type="button" class="btn btn-secondary btn-sm cf-clear-all">✕ Zrušit filtry</button>' : '') +
+          ' <span title="Ikona vlevo v poli filtru = typ podmínky (Obsahuje, Rovná se, Větší než, Rozsah, Měsíc, Dnes…). Kliknutím ji změníš, „Přidat podmínku…“ přidá další. Sloupce s málo hodnotami: klikni do pole a zaškrtej. Šipky ↑↓ v hlavičce = řazení (3 stavy). Rychlý zápis: >1000, 5..10, >1.10.2026, 10.2026, dnes, !slovo" style="cursor:help">ⓘ</span>';
+        const cb = parts.info.querySelector('.cf-clear-all'); if (cb) cb.onclick = () => cf.clear();
+      }
+      if (typeof o.onRender === 'function') o.onRender(list);
+    }
+    return {
+      cf,
+      setRows(r) { rows = Array.isArray(r) ? r : []; render(); },
+      refresh: render,
+      getRows: () => rows,
+      getVisible: () => visible,
+      sort,
+    };
+  }
+
+  window.ColFilters = { create, table, matchCond, OPS, TYPE_OPS };
 })();

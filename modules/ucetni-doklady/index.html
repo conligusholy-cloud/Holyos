@@ -230,7 +230,7 @@
     .dv-actions-l,.dv-actions-r{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
     @media(max-width:800px){.dv-summary{grid-template-columns:1fr}.dv-money{text-align:left}}
 </style>
-  <script src="/js/column-filters.js?v=2"></script>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -4328,24 +4328,53 @@
 
     // Výpisy z e-mailu (složka VYPISY) — import + automatické párování s fakturami
     window.fetchStatementsFromEmail = async function(all) {
-      if (all === true && !confirm('Projít VŠECHNY e-maily ve složce VYPISY (i přečtené) a naimportovat chybějící výpisy?\nUž naimportované se přeskočí. Může to trvat několik minut — nezavírej stránku.')) return;
+      let password = '';
+      if (all === true) {
+        if (!confirm('Projít VŠECHNY e-maily ve složce VYPISY (i přečtené) a naimportovat chybějící výpisy?\nUž naimportované se přeskočí. Průběh uvidíš pod tlačítky.')) return;
+        const p = prompt('Heslo k PDF výpisům (nepovinné — zkusí se i heslo uložené na serveru; nikam se neukládá).\nNechej prázdné, pokud stačí uložené.', '');
+        if (p === null) return;
+        password = p.trim();
+      }
       const id = all === true ? 'btn-fetch-stmt-email-all' : 'btn-fetch-stmt-email';
       const b = document.getElementById(id); const oldTxt = b ? b.textContent : '';
-      if (b) { b.disabled = true; b.textContent = '⏳ Načítám…'; }
+      const btns = ['btn-fetch-stmt-email', 'btn-fetch-stmt-email-all'].map((x) => document.getElementById(x)).filter(Boolean);
+      btns.forEach((x) => { x.disabled = true; });
+      if (b) b.textContent = '⏳ Probíhá…';
+      // Řádek s průběhem pod tlačítky
+      let box = document.getElementById('stmt-progress');
+      if (!box) { box = document.createElement('div'); box.id = 'stmt-progress'; box.style.cssText = 'margin:10px 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface2,rgba(255,255,255,.04))'; const anchor = document.getElementById('btn-fetch-stmt-email-all'); const host = anchor && anchor.parentNode; if (host && host.parentNode) host.parentNode.insertBefore(box, host.nextSibling); }
+      box.style.display = 'block'; box.innerHTML = '⏳ Spouštím…';
+      const esc2 = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       try {
-        const r = await api('POST', '/api/banking/statements/fetch-email' + (all === true ? '?all=1' : ''), {});
-        const d = r.data || {};
-        const lines = [];
-        if (all === true) lines.push('Prošlo se zpráv: ' + (d.messages || 0) + ', nově naimportováno: ' + (d.imported || []).length + ', už v systému: ' + (d.duplicates || []).length + '\n');
-        if ((d.duplicates || []).length > 5) d.duplicates = d.duplicates.slice(0, 0);
-        (d.imported || []).forEach((x) => lines.push('✅ Výpis ' + x.statement + ': ' + x.transactions + ' transakcí' + (x.matched != null ? ', spárováno ' + x.matched : '') + ((x.warnings || []).length ? '\n   ⚠ ' + x.warnings.join('; ') : '')));
-        (d.duplicates || []).forEach((x) => lines.push('↺ Výpis ' + x.statement + ' už v systému je'));
-        (d.no_account || []).forEach((x) => lines.push('❓ ' + x.file + ': účet ' + x.account + ' není v Bankách založený'));
-        (d.errors || []).forEach((x) => lines.push('❌ ' + x));
-        alert(lines.length ? lines.join('\n') : 'Žádné nové výpisy ve složce VYPISY.');
+        const r0 = await api('POST', '/api/banking/statements/fetch-email' + (all === true ? '?all=1' : ''), password ? { password } : {});
+        if (r0.status >= 400) throw new Error((r0.data && r0.data.error) || ('HTTP ' + r0.status));
+        let pr = null;
+        for (;;) {
+          await new Promise((res) => setTimeout(res, 1500));
+          const s = await api('GET', '/api/banking/statements/fetch-email/status');
+          pr = s.data || {};
+          const pct = pr.total ? Math.round(pr.done / pr.total * 100) : 0;
+          box.innerHTML = (pr.phase === 'listing' ? '📥 Načítám seznam e-mailů…' : '⚙️ Zpracovávám e-mail <b>' + pr.done + ' / ' + pr.total + '</b> (' + pct + ' %)') +
+            '<div style="height:6px;background:rgba(255,255,255,.08);border-radius:4px;margin:6px 0;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:#22c55e"></div></div>' +
+            '<div style="color:var(--text2)">' + esc2(pr.current || '') + '</div>' +
+            '<div style="margin-top:4px">✅ nově: <b>' + (pr.imported || 0) + '</b> · ↺ už v systému: <b>' + (pr.duplicates || 0) + '</b> · ❌ chyby: <b>' + (pr.errors || 0) + '</b></div>';
+          if (!pr.running && pr.phase === 'done') break;
+          if (!pr.running && pr.phase === 'idle') break;
+        }
+        const d = pr.report || {};
+        // Stejné chyby seskupit (např. 40× špatné heslo)
+        const errCount = {}; (d.errors || []).forEach((x) => { const k = String(x).replace(/^[^:]*:\s*/, ''); errCount[k] = (errCount[k] || 0) + 1; });
+        const lines = ['Prošlo se e-mailů: ' + (d.messages || 0) + ' · nově naimportováno: ' + (d.imported || []).length + ' · už v systému: ' + (d.duplicates || []).length + ''];
+        (d.imported || []).slice(0, 40).forEach((x) => lines.push('✅ Výpis ' + x.statement + ': ' + x.transactions + ' transakcí' + (x.matched != null ? ', spárováno ' + x.matched : '')));
+        if ((d.imported || []).length > 40) lines.push('… a dalších ' + ((d.imported || []).length - 40));
+        (d.no_account || []).slice(0, 10).forEach((x) => lines.push('❓ ' + x.file + ': účet ' + x.account + ' není v Bankách založený'));
+        Object.keys(errCount).forEach((k) => lines.push('❌ ' + (errCount[k] > 1 ? errCount[k] + '× ' : '') + k));
+        if (Object.keys(errCount).some((k) => /heslo/i.test(k))) lines.push('\nTip: starší výpisy můžou mít jiné heslo. Spusť „Načíst i staré“ znovu a zadej heslo ve vyskakovacím okně, nebo ulož víc hesel do BANK_STATEMENT_PASSWORD oddělených čárkou.');
+        box.innerHTML = '✅ Hotovo — nově ' + (d.imported || []).length + ', už v systému ' + (d.duplicates || []).length + ', chyby ' + ((d.errors || []).length + (d.no_account || []).length);
+        alert(lines.join('\n'));
         loadStatements();
-      } catch (e) { alert('Chyba: ' + e.message); }
-      finally { if (b) { b.disabled = false; b.textContent = oldTxt; } }
+      } catch (e) { box.innerHTML = '❌ ' + esc2(e.message); alert('Chyba: ' + e.message); }
+      finally { btns.forEach((x) => { x.disabled = false; }); if (b) b.textContent = oldTxt; }
     };
 
     window.loadStatements = async function() {

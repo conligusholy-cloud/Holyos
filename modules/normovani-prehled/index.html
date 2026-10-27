@@ -157,6 +157,7 @@
     .row-actions button:hover { border-color: #dc2626; color: #dc2626; background: rgba(220,38,38,0.05); }
     .row-actions button.danger:hover { background: #dc2626; color: white; }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar" class="sidebar"></aside>
@@ -365,21 +366,19 @@
         '<div class="stat-card"><div class="v">' + totalEvents + '<\/div><div class="l">Eventů (start/end)<\/div><\/div>';
     }
 
-    function renderTable(sessions) {
-      const body = document.getElementById('sessions-body');
-      if (sessions.length === 0) {
-        body.innerHTML = '<tr><td colspan="11" class="empty"><div class="ico">📭<\/div>Žádné měření neodpovídá filtru.<\/td><\/tr>';
-        return;
-      }
-      body.innerHTML = '';
-      sessions.forEach(function (s) {
-        const tr = document.createElement('tr');
-        tr.dataset.id = s.id;
-        const personName = s.person ? ((s.person.first_name || '') + ' ' + (s.person.last_name || '')).trim() : '#' + s.person_id;
-        const statusClass = 'status-' + (s.status || 'unknown');
-        tr.innerHTML =
+    // Standardní sloupcové filtry + řazení (js/column-filters.js)
+    // Datum pro sloupcový filtr — komponenta filtruje jen nad objekty Date (YYYY-MM-DD = místní půlnoc)
+    const cfDate = (v) => { if (!v) return null; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v)); const d = m ? new Date(+m[1], +m[2] - 1, +m[3]) : new Date(v); return isNaN(d) ? null : d; };
+    const SESSION_STATUS_LABEL = { active: 'Aktivní', done: 'Dokončeno' };
+    const sessionById = {};
+    function personNameOf(s) {
+      return s.person ? ((s.person.first_name || '') + ' ' + (s.person.last_name || '')).trim() : '#' + s.person_id;
+    }
+    function renderSessionRow(s) {
+      const statusClass = 'status-' + (s.status || 'unknown');
+      return '<tr data-id="' + s.id + '">' +
           '<td>#' + s.id + '<\/td>' +
-          '<td>' + escapeHtml(personName) + '<\/td>' +
+          '<td>' + escapeHtml(personNameOf(s)) + '<\/td>' +
           '<td><strong>' + escapeHtml(s.fy_batch_number) + '<\/strong><\/td>' +
           '<td>' + escapeHtml(s.fy_goods_code || '') + ' ' + escapeHtml((s.fy_goods_name || '').slice(0, 40)) + '<\/td>' +
           '<td>' + escapeHtml(s.fy_operation_name || '') + '<\/td>' +
@@ -388,19 +387,48 @@
           '<td>' + fmtDuration(durationOfSession(s)) + '<\/td>' +
           '<td>' + (s._count ? s._count.events : 0) + '<\/td>' +
           '<td><span class="status-pill ' + statusClass + '">' + escapeHtml(s.status) + '<\/span><\/td>' +
-          '<td class="row-actions"><button class="danger" data-action="delete" title="Smazat měření">🗑<\/button><\/td>';
-        tr.addEventListener('click', function (e) {
-          // Kliknutí na akci nesmí spustit toggleDetail
-          if (e.target.closest('[data-action]')) return;
-          toggleDetail(tr, s);
-        });
-        const delBtn = tr.querySelector('button[data-action="delete"]');
-        delBtn.addEventListener('click', function (e) {
-          e.stopPropagation();
-          deleteSession(s);
-        });
-        body.appendChild(tr);
-      });
+          '<td class="row-actions"><button class="danger" data-action="delete" title="Smazat měření">🗑<\/button><\/td>' +
+        '<\/tr>';
+    }
+    const sessionsTable = ColFilters.table({
+      table: '#sessions-table',
+      columns: [
+        { key: 'id', label: 'ID', type: 'num', ph: '', get: (s) => s.id },
+        { key: 'person', label: 'Pracovník', type: 'text', ph: 'Pracovník…', get: (s) => personNameOf(s) },
+        { key: 'batch', label: 'Dávka', type: 'text', ph: 'Dávka…', get: (s) => s.fy_batch_number },
+        { key: 'goods', label: 'Zboží', type: 'text', ph: 'Zboží…', get: (s) => ((s.fy_goods_code || '') + ' ' + (s.fy_goods_name || '')).trim() },
+        { key: 'op', label: 'Operace', type: 'text', ph: 'Operace…', get: (s) => s.fy_operation_name || '' },
+        { key: 'start', label: 'Začátek', type: 'date', ph: 'dd.mm.rrrr', get: (s) => cfDate(s.started_at) },
+        { key: 'end', label: 'Konec', type: 'date', ph: 'dd.mm.rrrr', get: (s) => cfDate(s.ended_at) },
+        { key: 'dur', label: 'Doba', type: 'num', ph: 's', get: (s) => durationOfSession(s) },
+        { key: 'events', label: 'Eventů', type: 'num', ph: '', get: (s) => (s._count ? s._count.events : 0) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (s) => SESSION_STATUS_LABEL[s.status] || s.status || '' },
+        null,
+      ],
+      renderRow: (s) => renderSessionRow(s),
+      noun: 'měření',
+      emptyText: 'Žádné měření neodpovídá filtru.',
+      limit: 1000,
+    });
+    // Delegace kliků — řádky se překreslují komponentou
+    document.getElementById('sessions-body').addEventListener('click', function (e) {
+      const tr = e.target.closest('tr[data-id]');
+      if (!tr) return;
+      const s = sessionById[tr.dataset.id];
+      if (!s) return;
+      if (e.target.closest('button[data-action="delete"]')) {
+        e.stopPropagation();
+        deleteSession(s);
+        return;
+      }
+      if (e.target.closest('[data-action]')) return;
+      toggleDetail(tr, s);
+    });
+
+    function renderTable(sessions) {
+      Object.keys(sessionById).forEach(function (k) { delete sessionById[k]; });
+      sessions.forEach(function (s) { sessionById[s.id] = s; });
+      sessionsTable.setRows(sessions);
     }
 
     async function deleteSession(s) {

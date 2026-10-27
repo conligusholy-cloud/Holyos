@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Databáze leadů — HolyOS</title>
+<script src="/js/column-filters.js?v=3"></script>
 <style>
   :root{--bg:#0f1115;--surface:#171a21;--surface2:#1f2430;--line:rgba(255,255,255,.09);--text:#f2f3f5;--muted:#9aa0ad;--muted2:#6b7280;--primary:#eab308}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -26,7 +27,8 @@
   input,select{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px 10px;font-size:13px}
   input[type=text]{flex:1;min-width:180px}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th{position:sticky;top:0;background:#1b2028;text-align:left;padding:9px 10px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+  thead{position:sticky;top:0;z-index:2}
+  th{background:#1b2028;text-align:left;padding:9px 10px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
   td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:top}
   tr:hover td{background:rgba(255,255,255,.02)}
   .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
@@ -56,14 +58,14 @@
       <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer"><input type="checkbox" id="contactable" onchange="reload(1)"> jen s kontaktem</label>
       <button class="btn gold" onclick="reload(1)">Hledat</button>
     </div>
-    <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"><tr><td class="empty">Načítám…</td></tr></tbody></table></div>
+    <div class="tablewrap"><table id="crm-table"><thead id="thead"><tr><th>Jméno</th><th>Příjmení</th><th>E-mail</th><th>Telefon</th><th>Město</th><th>Země</th><th>Segment</th><th>Stav</th><th>Obchodník</th><th>Zdroj</th><th>Dup.</th><th>Poznámka</th></tr></thead><tbody id="tbody"><tr><td colspan="12" class="empty">Načítám…</td></tr></tbody></table></div>
     <div class="pager" id="pager"></div>
   </div>
 
 <script>
   var API='/api/sales';
   var SEG={horky:{l:'Horký',c:'#ef4444'},volat:{l:'Volat příště',c:'#eab308'},nedovolano:{l:'Nedovoláno',c:'#3b82f6'},novy:{l:'Nový',c:'#22c55e'},nezajem:{l:'Nezájem',c:'#6b7280'},smlouva:{l:'Smlouva',c:'#a855f7'},ostatni:{l:'Ostatní',c:'#9aa0ad'}};
-  var state={segment:'',country:'',owner:'',q:'',contactable:false,page:1,pageSize:50,pages:1,total:0};
+  var state={segment:'',country:'',owner:'',q:'',contactable:false,page:1,pageSize:200,pages:1,total:0};
   function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 
   async function api(path){var r=await fetch(API+path,{credentials:'include'});if(r.status===401){location.href='/login.html?redirect='+encodeURIComponent(location.pathname);throw new Error('401');}return r.json();}
@@ -115,11 +117,24 @@
       '<span>Strana '+state.page+' / '+(d.pages||1)+' · '+d.total.toLocaleString('cs-CZ')+' záznamů</span>'+
       '<button class="btn" '+(state.page>=d.pages?'disabled':'')+' onclick="reload('+(state.page+1)+')">Další ›</button>';
   }
-  function renderTable(rows){
-    document.getElementById('thead').innerHTML='<tr><th>Jméno</th><th>Příjmení</th><th>E-mail</th><th>Telefon</th><th>Město</th><th>Země</th><th>Segment</th><th>Stav</th><th>Obchodník</th><th>Zdroj</th><th>Dup.</th><th>Poznámka</th></tr>';
-    var tb=document.getElementById('tbody');
-    if(!rows.length){tb.innerHTML='<tr><td colspan="12" class="empty">Žádné záznamy. (Pokud jsi ještě nespustil import, databáze je prázdná.)</td></tr>';return;}
-    tb.innerHTML=rows.map(function(r){
+  // Standardní sloupcové filtry + řazení (js/column-filters.js) — nad načtenou stránkou
+  var crmTable=ColFilters.table({
+    table:'#crm-table',
+    columns:[
+      {key:'first',label:'Jméno',type:'text',ph:'Jméno…',get:function(r){return r.first_name;}},
+      {key:'last',label:'Příjmení',type:'text',ph:'Příjmení…',get:function(r){return r.last_name;}},
+      {key:'email',label:'E-mail',type:'text',ph:'E-mail…',get:function(r){return r.email;}},
+      {key:'phone',label:'Telefon',type:'text',ph:'Telefon…',get:function(r){return r.phone;}},
+      {key:'city',label:'Město',type:'text',ph:'Město…',get:function(r){return r.city;}},
+      {key:'country',label:'Země',type:'text',ph:'Země…',get:function(r){return r.country;}},
+      {key:'segment',label:'Segment',type:'text',ph:'Segment…',get:function(r){return (SEG[r.segment]||SEG.ostatni).l;}},
+      {key:'status',label:'Stav',type:'text',ph:'Stav…',get:function(r){return r.status;}},
+      {key:'owner',label:'Obchodník',type:'text',ph:'Obchodník…',get:function(r){return r.owner_name;}},
+      {key:'source',label:'Zdroj',type:'text',ph:'Zdroj…',get:function(r){return r.source;}},
+      {key:'dup',label:'Dup.',type:'num',ph:'',get:function(r){return r.dup_count==null?null:Number(r.dup_count);}},
+      {key:'note',label:'Poznámka',type:'text',ph:'Poznámka…',get:function(r){return r.note;}}
+    ],
+    renderRow:function(r){
       var m=SEG[r.segment]||SEG.ostatni;
       return '<tr>'+
         '<td>'+esc(r.first_name)+'</td><td>'+esc(r.last_name)+'</td>'+
@@ -131,8 +146,12 @@
         '<td>'+(r.dup_count?'<span class="dup">+'+r.dup_count+'</span>':'')+'</td>'+
         '<td><span class="note" title="'+esc(r.note)+'">'+esc((r.note||'').slice(0,120))+'</span></td>'+
       '</tr>';
-    }).join('');
-  }
+    },
+    noun:'kontaktů na této stránce',
+    emptyText:'Žádné záznamy. (Pokud jsi ještě nespustil import, databáze je prázdná.)',
+    limit:500
+  });
+  function renderTable(rows){ crmTable.setRows(rows||[]); }
 
   async function exportCsv(){
     var btn=event.target; btn.disabled=true; btn.textContent='Exportuji…';

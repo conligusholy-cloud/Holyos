@@ -85,6 +85,7 @@
     }
     .receipt-link:hover { text-decoration: underline; }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
   <aside id="sidebar"></aside>
@@ -292,13 +293,17 @@
         tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Chyba: ' + r.status + '</td></tr>';
         return;
       }
-      if (!r.data?.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-hint">Žádné pohyby ve zvoleném rozsahu.</td></tr>';
-        updateKpiFrom([]);
-        return;
-      }
+      movementsTable.setRows(r.data || []);
+      updateKpiFrom(r.data || []);
+    }
 
-      tbody.innerHTML = r.data.map(m => {
+    function cashPurposeLabel(m) {
+      return (purposes.find(p => p.value === m.purpose) || {}).label || m.purpose;
+    }
+    function cashAuthor(m) {
+      return m.created_by ? `${m.created_by.first_name || ''} ${m.created_by.last_name || ''}`.trim() : '';
+    }
+    function renderMovementRow(m) {
         const purposeLabel = (purposes.find(p => p.value === m.purpose) || {}).label || m.purpose;
         const dirLabel = m.direction === 'in' ? '⬇ Příjem' : '⬆ Výdaj';
         const sign = m.direction === 'in' ? '+' : '−';
@@ -326,10 +331,26 @@
             <td>${deleteBtn}</td>
           </tr>
         `;
-      }).join('');
-
-      updateKpiFrom(r.data);
     }
+
+    // Standardní sloupcové filtry + řazení
+    const movementsTable = ColFilters.table({
+      table: '#movements-table',
+      columns: [
+        { key: 'date', label: 'Datum', type: 'date', ph: 'dd.mm.rrrr', get: (m) => m.date },
+        { key: 'doc', label: 'Doklad', type: 'text', ph: 'Doklad…', get: (m) => m.document_number },
+        { key: 'dir', label: 'Typ', type: 'text', ph: 'Typ…', get: (m) => m.direction === 'in' ? 'Příjem' : 'Výdaj' },
+        { key: 'purpose', label: 'Účel', type: 'text', ph: 'Účel…', get: (m) => cashPurposeLabel(m) },
+        { key: 'desc', label: 'Popis', type: 'text', ph: 'Popis…', get: (m) => [m.description, m.invoice && m.invoice.invoice_number].filter(Boolean).join(' '), enum: false },
+        { key: 'author', label: 'Vystavil', type: 'text', ph: 'Vystavil…', get: (m) => cashAuthor(m) },
+        { key: 'amount', label: 'Částka', type: 'num', ph: '', get: (m) => m.amount == null ? null : (m.direction === 'in' ? 1 : -1) * Number(m.amount) },
+        { key: 'receipt', label: 'Paragon', type: 'text', ph: 'Paragon…', get: (m) => m.receipt_file_path ? 'Nahráno' : 'Chybí' },
+        null,
+      ],
+      renderRow: (m) => renderMovementRow(m),
+      noun: 'pohybů',
+      emptyText: 'Žádné pohyby ve zvoleném rozsahu.',
+    });
 
     function updateKpiFrom(movements) {
       const today = new Date();

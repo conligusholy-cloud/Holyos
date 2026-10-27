@@ -11,8 +11,21 @@ const { parseMonetaPdf, isPdf } = require('./parsers/moneta-pdf-parser');
 
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, '..', '..', 'data', 'storage');
 
-async function parseAny(buffer, filename) {
-  if (isPdf(buffer)) return parseMonetaPdf(buffer, { password: process.env.BANK_STATEMENT_PASSWORD || '' });
+// Hesla k PDF: BANK_STATEMENT_PASSWORD může obsahovat víc hesel oddělených čárkou/středníkem (heslo se časem mění),
+// plus volitelně hesla předaná při ručním spuštění. Zkouší se postupně, dokud některé nesedí.
+function passwordCandidates(extra) {
+  const fromEnv = String(process.env.BANK_STATEMENT_PASSWORD || '').split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+  return [...new Set([...(extra || []).map((s) => String(s).trim()).filter(Boolean), ...fromEnv, ''])];
+}
+async function parseAny(buffer, filename, extraPasswords) {
+  if (isPdf(buffer)) {
+    let lastErr = null;
+    for (const pw of passwordCandidates(extraPasswords)) {
+      try { return await parseMonetaPdf(buffer, { password: pw }); }
+      catch (e) { lastErr = e; if (!/heslo nesed|password/i.test(String(e && e.message))) throw e; }
+    }
+    throw lastErr || new Error('PDF výpisu se nepodařilo otevřít');
+  }
   return parseStatement(buffer, { filename });
 }
 
@@ -28,8 +41,8 @@ async function findAccount(statement, fallbackId) {
 /**
  * @returns {Promise<{status:'imported'|'duplicate'|'no_account', statement_id?, inserted?, total?, matched?, warnings?, statement_number?}>}
  */
-async function importStatementBuffer({ buffer, filename, bankAccountId = null, source = 'email', userId = null, autoMatch = true }) {
-  const parsed = await parseAny(buffer, filename);
+async function importStatementBuffer({ buffer, filename, bankAccountId = null, source = 'email', userId = null, autoMatch = true, passwords = null }) {
+  const parsed = await parseAny(buffer, filename, passwords);
   const { statement, transactions, warnings, format } = parsed;
   const account = await findAccount(statement, bankAccountId);
   if (!account) return { status: 'no_account', statement_number: statement.statement_number, account_number: statement.account_number, bank_code: statement.bank_code };

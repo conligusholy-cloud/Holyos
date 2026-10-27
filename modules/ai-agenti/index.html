@@ -237,6 +237,7 @@
     .toast.error { background: #ef4444; }
     @keyframes fadeInUp { from { opacity:0; transform:translateX(-50%) translateY(20px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
   </style>
+  <script src="/js/column-filters.js?v=3"></script>
 </head>
 <body>
 <aside id="sidebar" class="sidebar"></aside>
@@ -493,28 +494,43 @@
     grid.innerHTML = html;
   }
 
+  // Standardní sloupcové filtry + řazení (js/column-filters.js) — vytvoří se při prvním renderu
+  let skillsCF = null;
+  function getSkillsTable() {
+    if (skillsCF) return skillsCF;
+    skillsCF = ColFilters.table({
+      table: '#skills-table',
+      columns: [
+        { key: 'name', label: 'Skill', type: 'text', ph: 'Skill…', get: (s) => s.name },
+        { key: 'slug', label: 'Slug', type: 'text', ph: 'Slug…', get: (s) => s.slug },
+        { key: 'cat', label: 'Kategorie', type: 'text', ph: 'Kategorie…', get: (s) => s.category || 'system' },
+        { key: 'type', label: 'Typ', type: 'text', ph: 'Typ…', get: (s) => s.handler_type || 'db_query' },
+        { key: 'agents', label: 'Agenti', type: 'text', ph: 'Agent…', enum: false, get: (s) => findAgentsForSkill(s.slug || s.id) },
+        { key: 'status', label: 'Stav', type: 'text', ph: 'Stav…', get: (s) => s.is_active !== false ? 'Aktivní' : 'Neaktivní' },
+      ],
+      renderRow: (s) => {
+        const cat = s.category || 'system';
+        const agents = findAgentsForSkill(s.slug || s.id);
+        return '<tr>' +
+          '<td><strong>' + esc(s.name) + '</strong></td>' +
+          '<td><code style="font-size:11px;color:var(--text2);">' + esc(s.slug || '') + '</code></td>' +
+          '<td><span class="category-badge ' + cat + '">' + cat + '</span></td>' +
+          '<td>' + esc(s.handler_type || 'db_query') + '</td>' +
+          '<td style="font-size:12px;">' + esc(agents) + '</td>' +
+          '<td><span class="status-dot ' + (s.is_active !== false ? 'active' : 'inactive') + '"></span>' +
+            (s.is_active !== false ? 'Aktivní' : 'Neaktivní') + '</td></tr>';
+      },
+      noun: 'skillů',
+      emptyText: 'Žádné skilly',
+      limit: 1000,
+    });
+    return skillsCF;
+  }
+
   // ─── Render Skills Table ───
   function renderSkillsTable() {
-    const tbody = document.getElementById('skills-tbody');
     const data = allSkills.length > 0 ? allSkills : extractSkillsFromAssistants();
-
-    if (data.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="loading-text">Žádné skilly</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = data.map(s => {
-      const cat = s.category || 'system';
-      const agents = findAgentsForSkill(s.slug || s.id);
-      return '<tr>' +
-        '<td><strong>' + esc(s.name) + '</strong></td>' +
-        '<td><code style="font-size:11px;color:var(--text2);">' + esc(s.slug || '') + '</code></td>' +
-        '<td><span class="category-badge ' + cat + '">' + cat + '</span></td>' +
-        '<td>' + esc(s.handler_type || 'db_query') + '</td>' +
-        '<td style="font-size:12px;">' + esc(agents) + '</td>' +
-        '<td><span class="status-dot ' + (s.is_active !== false ? 'active' : 'inactive') + '"></span>' +
-          (s.is_active !== false ? 'Aktivní' : 'Neaktivní') + '</td></tr>';
-    }).join('');
+    getSkillsTable().setRows(data);
   }
 
   function extractSkillsFromAssistants() {

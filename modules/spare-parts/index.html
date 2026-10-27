@@ -7,6 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="../../logo-holyos-icon.svg">
   <base href="../../">
   <link rel="stylesheet" href="css/dashboard.css">
+  <script src="/js/column-filters.js?v=3"></script>
   <style>
     .main-wrapper { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; display: flex; flex-direction: column; }
     .page-header {
@@ -158,7 +159,7 @@
           <button class="btn btn-secondary btn-sm" onclick="exportOrdersCsv()">📥 Export CSV</button>
           <button class="btn btn-secondary btn-sm" id="orders-refresh">↻ Aktualizovat</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="sp-orders-table">
           <thead>
             <tr>
               <th>Číslo</th><th>Stav</th><th>Datum</th><th>Partner</th><th>Firma</th>
@@ -200,7 +201,7 @@
           <button class="btn btn-primary btn-sm" onclick="applyCatalogBulk()">Aplikovat</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleCatalogAll(false)">Zrušit výběr</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="sp-catalog-table">
           <thead>
             <tr>
               <th style="width:36px;"><input type="checkbox" onchange="toggleCatalogAll(this.checked)" title="Vybrat vše"></th>
@@ -219,7 +220,7 @@
           <span style="flex:1;"></span>
           <button class="btn btn-secondary btn-sm" id="pricelist-refresh">↻ Aktualizovat</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="sp-pricelists-table">
           <thead>
             <tr>
               <th>Název</th><th>Měna</th><th class="num">DPH</th><th class="num">Položek</th>
@@ -244,7 +245,7 @@
           <span style="flex:1;"></span>
           <button class="btn btn-secondary btn-sm" id="assign-refresh">↻ Aktualizovat</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="sp-assign-table">
           <thead>
             <tr>
               <th>Firma</th><th>IČO</th><th>Země</th><th>Partneři</th><th>Ceník</th><th></th>
@@ -296,7 +297,7 @@
           <span style="flex:1;"></span>
           <button class="btn btn-secondary btn-sm" id="category-refresh">↻ Aktualizovat</button>
         </div>
-        <table class="data-table">
+        <table class="data-table" id="sp-categories-table">
           <thead>
             <tr>
               <th>Název</th><th>Slug</th><th>Ikona</th><th class="num">Materiálů</th><th></th>
@@ -374,6 +375,6 @@
 
   <script src="js/sidebar.js?v=2026-05-18-1"></script>
   <script>renderSidebar('spare-parts');</script>
-  <script src="modules/spare-parts/app.js?v=2026-05-18-1"></script>
+  <script src="modules/spare-parts/app.js?v=2026-10-27-cf"></script>
 </body>
 </html>
