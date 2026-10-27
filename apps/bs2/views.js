@@ -1542,7 +1542,7 @@ const USER_TYPE_LABEL = { new: 'Nový', standard: 'Stávající', owner: 'Koupil
 const typeBadge = (t) => { const k = USER_TYPE_LABEL[t] ? t : 'standard'; return `<span class="badge type-${k}">${USER_TYPE_LABEL[k]}</span>`; };
 const typeSelect = (cur, name = 'user_type') => `<select name="${name}" style="width:auto">${Object.keys(USER_TYPE_LABEL).map(k => `<option value="${k}"${(cur || 'standard') === k ? ' selected' : ''}>${USER_TYPE_LABEL[k]}</option>`).join('')}</select>`;
 const EXTRA_PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
-function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [] }) {
+function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', total, msg = '', holyosUrl, cols = DEFAULT_COLS, extraKeys = [], supportStats = null }) {
   const baseSel = BASE_COLS.filter(c => cols.includes(c.key));
   const extraSel = cols.filter(k => k.startsWith('x:')).map(k => k.slice(2)).filter(k => extraKeys.includes(k));
   const sortedExtra = extraKeys.slice().sort((a, b) => { const ia = EXTRA_PRIO.indexOf(a), ib = EXTRA_PRIO.indexOf(b); return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib) || a.localeCompare(b); });
@@ -1592,6 +1592,12 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
       </script>
       <div class="row"><a class="btn" href="/admin/import">${ico('upload', 17)} Import CSV / Excel</a><a class="btn sec" href="/admin/supporters/new">+ Přidat ručně</a>${picker}</div>
     </div>
+    ${supportStats ? (() => { const st = supportStats, n0 = (v) => Math.round(Number(v) || 0).toLocaleString('cs-CZ'); const box = (lbl, val, sub, hl) => `<div class="card" style="flex:1;min-width:170px;padding:10px 14px;margin:0${hl ? ';border-color:var(--primary,#3b82f6)' : ''}"><div class="small muted">${lbl}</div><div style="font-size:20px;font-weight:800;white-space:nowrap">${val}</div><div class="small muted">${sub}</div></div>`;
+      return `<div class="row" style="gap:10px;margin:10px 0 4px;flex-wrap:wrap">
+        ${box('Podpořili v Kč', n0(st.czk_sum) + ' Kč', n0(st.czk_n) + ' korunových účtů')}
+        ${box('Podpořili v eurech', n0(st.eur_sum) + ' €', n0(st.eur_n) + ' eurových účtů · ≈ ' + n0(st.eur_czk) + ' Kč')}
+        ${box('Celkem v Kč', n0(st.total_czk) + ' Kč', 'eura přepočtena kurzem ČNB' + (st.rate_date ? ' (' + esc(st.rate_date) + ')' : '') + (st.partial ? ' · část eur bez kurzu' : ''), true)}
+      </div>`; })() : ''}
     ${msg ? `<div class="msg ok">${esc(msg)}</div>` : ''}
     <form method="get" class="row" style="margin:10px 0 14px">
       <input name="q" value="${esc(qstr)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1;min-width:200px">

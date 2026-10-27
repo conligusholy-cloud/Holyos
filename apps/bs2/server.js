@@ -1744,6 +1744,29 @@ app.post('/admin/supporters/columns', requireAdmin, (req, res) => {
 // už dřív přihlášeným uživatelem. Řeší se teď na klientovi v adminSupporters (window.open + JS
 // přesměrování TÉHOŽ okna) — viz .legacy-btn skript ve views.js.
 const USER_TYPES = ['new', 'standard', 'owner', 'seller', 'location'];
+// Souhrn podpory ze starého portálu (nad celou databází, cache 60 s): koruny, eura a vše v Kč
+// (eura přepočtená uloženým kurzem ČNB z načtení; kde přepočet ještě chybí, aktuálním kurzem ČNB)
+let SUPPORT_STATS = { at: 0, v: null };
+async function supportStats() {
+  if (SUPPORT_STATS.v && Date.now() - SUPPORT_STATS.at < 60e3) return SUPPORT_STATS.v;
+  // eurový účet; staré záznamy před opravou měnu nemají — poznají se podle chybějícího roku
+  const EUR = "(partner_support->>'currency' = 'EUR' OR (partner_support->>'currency' IS NULL AND partner_support->>'year' IS NULL))";
+  try {
+    const r = (await q(`SELECT
+      count(*) FILTER (WHERE NOT ${EUR})::int AS czk_n,
+      coalesce(sum((partner_support->>'total_all')::numeric) FILTER (WHERE NOT ${EUR}),0) AS czk_sum,
+      count(*) FILTER (WHERE ${EUR})::int AS eur_n,
+      coalesce(sum((partner_support->>'total_all')::numeric) FILTER (WHERE ${EUR}),0) AS eur_sum,
+      coalesce(sum((partner_support->>'total_all_czk')::numeric) FILTER (WHERE ${EUR} AND partner_support->>'total_all_czk' IS NOT NULL),0) AS eur_czk_sum,
+      coalesce(sum((partner_support->>'total_all')::numeric) FILTER (WHERE ${EUR} AND partner_support->>'total_all_czk' IS NULL),0) AS eur_unconv,
+      max(partner_support->>'eur_rate_date') AS rate_date
+      FROM supporters WHERE partner_support IS NOT NULL AND partner_support->>'total_all' IS NOT NULL AND partner_support->>'total_all' ~ '^-?[0-9.]+$'`)).rows[0];
+    let rate = null; if (Number(r.eur_unconv) > 0) { try { rate = (await LEGACY.cnbEurRate()).rate; } catch (e) { /* bez kurzu */ } }
+    const eurCzk = Number(r.eur_czk_sum) + (rate ? Number(r.eur_unconv) * rate : 0);
+    SUPPORT_STATS = { at: Date.now(), v: { czk_n: r.czk_n, czk_sum: Number(r.czk_sum), eur_n: r.eur_n, eur_sum: Number(r.eur_sum), eur_czk: eurCzk, total_czk: Number(r.czk_sum) + eurCzk, rate_date: r.rate_date, partial: Number(r.eur_unconv) > 0 && !rate } };
+  } catch (e) { console.warn('[bs2] supportStats', e.message); return null; }
+  return SUPPORT_STATS.v;
+}
 app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const qs = String(req.query.q || '').trim(), status = String(req.query.status || ''), utype = String(req.query.type || '');
   const where = [], params = [];
@@ -1756,7 +1779,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
   const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at,partner_support->>'currency' AS support_currency, CASE WHEN partner_support->>'currency'='EUR' THEN partner_support->>'total_all_czk' ELSE partner_support->>'total_all' END AS support_czk${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
-  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
+  res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys, supportStats: await supportStats() }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
 let productsCache = { at: 0, items: null };
