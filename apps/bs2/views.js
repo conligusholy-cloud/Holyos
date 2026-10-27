@@ -1522,8 +1522,9 @@ const BASE_COLS = [
   { key: 'activated_at', label: 'Aktivován', render: (r) => `<span class="muted small">${fmtDT(r.activated_at)}</span>` },
   { key: 'created_at', label: 'Vytvořen v BS2', render: (r) => `<span class="muted small">${fmtDT(r.created_at)}</span>` },
   { key: 'source', label: 'Zdroj importu', render: (r) => `<span class="muted small">${esc(r.source || '—')}</span>` },
+  { key: 'support_snapshot', label: 'Screenshot podpory', render: (r) => r.support_snapshot_at ? `<a href="/admin/supporters/${r.id}/support-snapshot.png" target="_blank" rel="noopener" class="small">${fmtDT(r.support_snapshot_at)}</a>` : '<span class="muted small">—</span>' },
 ];
-const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at', 'x:obrat'];
+const DEFAULT_COLS = ['email', 'nick', 'user_type', 'status', 'last_login_at', 'x:obrat', 'support_snapshot'];
 // Přihlášení za uživatele ve starém systému (partner.bestseries.cz).
 // Bez `to`: přímý odkaz na fake-login.php (přistane na výchozím dashboardu) — funguje spolehlivě,
 // protože je to normální top-level navigace a cookie session se nastaví jako first-party.
@@ -1549,7 +1550,7 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     <td data-l="Jméno" class="nm"><b title="${esc([r.last_name, r.first_name].filter(Boolean).join(' '))}">${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b></td>
     ${baseSel.map(c => `<td data-l="${esc(c.label)}">${c.render(r)}</td>`).join('')}
     ${extraSel.map(k => { const v = r.extra ? r.extra[k] : null; return `<td data-l="${esc(k)}" class="small" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(v == null ? '' : v)}">${v == null || v === '' ? '<span class="muted">—</span>' : esc(v)}</td>`; }).join('')}
-    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</button></div></td></tr>`).join('');
+    <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><a class="btn sec sm" href="${fakeLogin(r.email)}" target="_blank" rel="noopener" title="Přihlásit se jako tento uživatel ve starém systému (partner.bestseries.cz)">Starý účet</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Přihlásit se jako tento uživatel a otevřít rovnou Přehled podpory">Stránka podpory</button><button type="button" class="btn sec sm snap-btn" data-id="${r.id}" title="Přihlásit se jako tento uživatel, počkat na načtení Přehledu podpory a uložit screenshot k uživateli">📸 Screenshot</button></div></td></tr>`).join('');
   const colCount = 2 + baseSel.length + extraSel.length;
   const picker = `
   <details class="colpick" id="colpick"><summary class="btn sec" title="Vybrat sloupce tabulky" style="padding:10px 12px">${ico('settings', 18)}</summary>
@@ -1579,10 +1580,10 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
   <div id="sup-top">
     <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
       <h1 style="margin:0">Uživatelé <span class="muted" style="font-size:14px;font-weight:500">${total}</span></h1>
-      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><span id="ps-sync-st" class="small muted"></span>
+      <button type="button" class="btn sec sm" id="ps-sync-all" title="U všech uživatelů s nenulovým obratem načte podporu ze starého portálu (palety, expanze, NeuraWash, opakovačky, celkem) do detailu">🔄 Načíst podporu (obrat ≠ 0)</button><a id="ps-sync-st" class="small muted" href="/admin/partner-support" title="Zobrazit hotové uživatele a zkontrolovat ručně" style="text-decoration:underline"></a>
       <script>
         (function(){ var b=document.getElementById('ps-sync-all'), st=document.getElementById('ps-sync-st'); if(!b) return;
-          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') : ''; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
+          function show(j){ st.textContent = j.total ? (j.running ? ' běží ' : ' hotovo ') + j.done + '/' + j.total + ' · OK ' + j.ok + (j.failed ? ' · chyby ' + j.failed : '') + ' → zobrazit hotové' : ' zobrazit načtené'; if (j.errors && j.errors.length) st.title = j.errors.join(' | '); }
           function poll(){ fetch('/admin/partner-support/sync-all').then(function(r){return r.json()}).then(function(j){ show(j); if (j.running) setTimeout(poll, 2000); }); }
           b.onclick=function(){ if(!confirm('Načíst podporu ze starého portálu u všech uživatelů s nenulovým obratem? Běží na pozadí, může to trvat několik minut.')) return; fetch('/admin/partner-support/sync-all',{method:'POST'}).then(function(r){return r.json()}).then(function(j){ show(j); poll(); }); };
           poll(); })();
@@ -1612,6 +1613,24 @@ function adminSupporters({ admin, rows, qstr = '', status = '', utype = '', tota
     var w = window.open(loginUrl, '_blank');
     if (!w) return; // blokovač vyskakovacích oken — uživatel dostane aspoň info v title tlačítka
     setTimeout(function () { try { w.location = targetUrl; } catch (err) { /* okno mezitím zavřené */ } }, 1800);
+  });
+  // 📸 Screenshot: server se přihlásí jako uživatel headless Chromiem, počká na načtení stránky
+  // a vyfotí ji — pak se v řádku objeví odkaz s časem pořízení.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.snap-btn');
+    if (!b) return;
+    var id = b.dataset.id, orig = b.textContent;
+    b.disabled = true; b.textContent = 'Pořizuji…';
+    fetch('/admin/supporters/' + id + '/support-snapshot', { method: 'POST' })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (x) {
+        if (!x.ok) { alert(x.j.error || 'Nepodařilo se pořídit screenshot.'); return; }
+        var cell = b.closest('tr').querySelector('[data-l="Screenshot podpory"]');
+        if (cell) cell.innerHTML = '<a href="/admin/supporters/' + id + '/support-snapshot.png" target="_blank" rel="noopener" class="small">' + new Date(x.j.at).toLocaleString('cs-CZ') + '</a>';
+        window.open('/admin/supporters/' + id + '/support-snapshot.png', '_blank');
+      })
+      .catch(function (err) { alert('Chyba spojení: ' + err.message); })
+      .finally(function () { b.disabled = false; b.textContent = orig; });
   });
   </script>`, holyosUrl);
 }
@@ -1942,6 +1961,39 @@ function partnerSupportCard(s) {
     </form>
   </div></details>`;
 }
+// Kontrola načtené podpory ze starého portálu — seznam hotových uživatelů (ruční kontrola)
+function adminPartnerSupport({ admin, rows, job, q: qs = '', onlyDiff = false }) {
+  const fmt = (v) => (v == null || v === '' ? '<span class="muted">—</span>' : Number(v).toLocaleString('cs-CZ'));
+  const sumY = (p) => ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0);
+  const body = rows.map(r => { const p = r.partner_support || {}; const diff = p.total_year != null && Math.abs(sumY(p) - Number(p.total_year)) > 0.5;
+    return `<tr>
+      <td data-l="Jméno" class="nm"><b>${esc([r.last_name, r.first_name].filter(Boolean).join(' ') || '—')}</b><div class="small muted">${esc(r.nick || '')} · ${esc(r.email)}</div></td>
+      <td data-l="Obrat (import)" class="small">${esc((r.extra && r.extra.obrat) || '—')}</td>
+      <td data-l="Celkem" style="text-align:right"><b>${fmt(p.total_all)}</b></td>
+      <td data-l="Rok" class="small">${esc(p.year || '')}</td>
+      <td data-l="V roce" style="text-align:right">${fmt(p.total_year)}</td>
+      <td data-l="Palety" style="text-align:right">${fmt(p.palety)}</td>
+      <td data-l="Expanze" style="text-align:right">${fmt(p.expanze)}</td>
+      <td data-l="NeuraWash" style="text-align:right">${fmt(p.neurawash)}</td>
+      <td data-l="Opakovačky" style="text-align:right">${fmt(p.opakovacky)}</td>
+      <td data-l="Obrat sítě" style="text-align:right">${fmt(p.network_all)}</td>
+      <td data-l="Kontrola" class="small">${diff ? '<span class="badge blocked" title="Součet sekcí ≠ podpořil v roce">≠ součet</span>' : ''}${p.total_all_error ? '<span class="badge blocked" title="' + esc(p.total_all_error) + '">celkem ?</span>' : ''}</td>
+      <td data-l="Načteno" class="small">${p.synced_at ? new Date(p.synced_at).toLocaleString('cs-CZ') : '—'}</td>
+      <td class="actions"><div class="row"><a class="btn sec sm" href="/admin/supporters/${r.id}">Detail</a><button type="button" class="btn sec sm legacy-btn" data-email="${esc(r.email)}" data-to="/cs/bo/my-invests/" title="Otevřít jeho Přehled podpory ve starém portálu a porovnat">Starý portál</button></div></td></tr>`; }).join('');
+  const st = job && job.total ? `${job.running ? 'Běží' : 'Hotovo'} ${job.done}/${job.total} · OK ${job.ok}${job.failed ? ' · chyby ' + job.failed : ''}` : 'Hromadné načítání neběží';
+  return adminLayout('Kontrola podpory', 'sup', admin, `
+  <p><a href="/admin/supporters">${ico('back', 15)} Uživatelé</a></p>
+  <h1 style="margin-bottom:4px">Kontrola načtené podpory <span class="muted" style="font-size:14px;font-weight:500">${rows.length}</span></h1>
+  <p class="small muted" style="margin-top:0">${esc(st)} · seřazeno od posledně načtených. „Starý portál" otevře jeho Přehled podpory pro ruční porovnání.</p>
+  ${job && job.errors && job.errors.length ? `<details class="card" style="padding:10px 14px;margin-bottom:12px"><summary class="small"><b>Chyby (${job.errors.length})</b></summary><div class="small" style="margin-top:6px">${job.errors.map(e => '<div>' + esc(e) + '</div>').join('')}</div></details>` : ''}
+  <form method="get" class="row" style="gap:8px;margin-bottom:12px"><input name="q" value="${esc(qs)}" placeholder="Hledat jméno / e-mail / nick…" style="flex:1"><label class="small" style="display:flex;align-items:center;gap:6px"><input type="checkbox" name="diff" value="1"${onlyDiff ? ' checked' : ''}> jen s nesrovnalostí</label><button class="btn sm" type="submit">Filtrovat</button></form>
+  <div class="tbl-wrap"><table class="cards"><thead><tr><th>Uživatel</th><th>Obrat (import)</th><th>Celkem</th><th>Rok</th><th>V roce</th><th>Palety</th><th>Expanze</th><th>NeuraWash</th><th>Opakovačky</th><th>Obrat sítě</th><th>Kontrola</th><th>Načteno</th><th></th></tr></thead><tbody>${body || '<tr><td colspan="13" class="muted">Zatím nikdo.</td></tr>'}</tbody></table></div>
+  <script>
+    document.addEventListener('click', function (e) { var b = e.target.closest('.legacy-btn'); if (!b) return;
+      var w = window.open('https://partner.bestseries.cz/php-action/fake-login.php?email=' + encodeURIComponent(b.dataset.email), '_blank');
+      if (w) setTimeout(function () { try { w.location.href = 'https://partner.bestseries.cz' + b.dataset.to; } catch (x) {} }, 2500); });
+  </script>`);
+}
 function adminSupporterDetail({ admin, s, msg = '', error = '', holyosUrl, isNew = false, firstLine = [], purchases = [], machines = [], credits = [], timeline = [] }) {
   const PRIO = ['active', 'pozice', 'level', 'obrat', 'profit', 'podil', 'visit', 'date', 'country', 'currency', 'lang', 'vip', 'founder_terms_accepted_at', 'id'];
   const HIDE_IN_LIST = /^(password|hash|secret|loggin_token|login_token|aed)$/i; // technické hodnoty ze starého systému — uložené jsou, jen se nezobrazují v detailu
@@ -2094,4 +2146,4 @@ function errorPage(title, text, back = '/') {
   return layout({ title, body: `<div class="auth"><div class="card"><h2 style="margin-top:0">${esc(title)}</h2><p class="muted">${esc(text)}</p><a class="btn full" href="${back}">Pokračovat</a></div></div>` });
 }
 
-module.exports = { presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };
+module.exports = { adminPartnerSupport, presenceWidget, PRESENCE_HTML, PRESENCE_CSS, PRESENCE_JS, locVopPage, locGdprPage, adminLayout, ADMIN_NAV, adminSuggestions, adminLive: (...a) => SV.adminLive(...a), adminStats: (...a) => SV.adminStats(...a), adminStatsUser: (...a) => SV.adminStatsUser(...a), consentPage, resetPage, admin2faPage, vopPage, gdprPage, supportPage, adminSupport, adminTransfers, DEFAULT_COLS, esc, layout, loginPage, activatePage, forgotPage, joinPage, supporterHome, supporterCompounder, supporterTeam, supporterNetwork, supporterMine, supporterCredit, supporterProducts, passwordPage, aiChatPage, adminDash, adminSupporters, adminProducts, adminOrders, adminAiChat, setBuild, adminSupporterDetail, adminImport, errorPage };

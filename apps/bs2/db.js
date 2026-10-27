@@ -355,6 +355,9 @@ async function migrate() {
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_at TIMESTAMPTZ; -- první vyhodnocení = odečet lokality z balíčku
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_status TEXT; -- running | done | error (studie běží na pozadí)
     ALTER TABLE location_sites ADD COLUMN IF NOT EXISTS study_error TEXT;
+    -- Screenshot Přehledu podpory ze starého portálu (vizuální důkaz, nezávisle na partner_support textovém syncu)
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS support_snapshot BYTEA;
+    ALTER TABLE supporters ADD COLUMN IF NOT EXISTS support_snapshot_at TIMESTAMPTZ;
   `);
 }
 

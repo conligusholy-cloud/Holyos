@@ -1749,7 +1749,7 @@ app.get('/admin/supporters', requireAdmin, wrap(async (req, res) => {
   const keys = await extraKeys();
   const needExtra = cols.some(c => c.startsWith('x:'));
   const total = (await q('SELECT count(*)::int AS c ' + sql, params)).rows[0].c;
-  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
+  const rows = (await q(`SELECT id,email,first_name,last_name,nick,status,user_type,last_login_at,activated_at,created_at,source,support_snapshot_at${needExtra ? ',extra' : ''} ` + sql + " ORDER BY lower(coalesce(last_name,'')), lower(coalesce(first_name,'')), email LIMIT 500", params)).rows;
   res.send(V.adminSupporters({ admin: req.admin, rows, qstr: qs, status, utype, total, msg: req.query.msg || '', holyosUrl: HOLYOS_URL, cols, extraKeys: keys }));
 }));
 // Produkty = aktivní stroje z prodejního ceníku HolyOS (jen čtení; cache 5 min)
@@ -2399,7 +2399,7 @@ app.post('/admin/supporters/:id(\\d+)/partner-support/sync', requireAdmin, wrap(
 let LEGACY_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) => {
   if (LEGACY_JOB.running) return res.json(LEGACY_JOB);
-  const rows = (await q("SELECT * FROM supporters WHERE email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0 ORDER BY id")).rows;
+  const rows = (await q("SELECT * FROM supporters WHERE email IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '') IS NOT NULL AND NULLIF(regexp_replace(coalesce(extra->>'obrat',''), '[^0-9.-]', '', 'g'), '')::numeric <> 0 AND (partner_support IS NULL OR partner_support->>'synced_at' IS NULL OR (partner_support->>'synced_at')::timestamptz < now() - interval '24 hours') ORDER BY id")).rows; // už načtené za posledních 24 h přeskočit → po restartu/redeployi se jen pokračuje
   LEGACY_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'partner_support_sync_all', { total: rows.length });
   res.json(LEGACY_JOB);
@@ -2416,6 +2416,41 @@ app.post('/admin/partner-support/sync-all', requireAdmin, wrap(async (req, res) 
   })().catch((e) => { LEGACY_JOB.running = false; LEGACY_JOB.errors.push(e.message); });
 }));
 app.get('/admin/partner-support/sync-all', requireAdmin, (req, res) => res.json(LEGACY_JOB));
+// Seznam uživatelů s načtenou podporou (od posledně načtených) — ruční kontrola
+app.get('/admin/partner-support', requireAdmin, wrap(async (req, res) => {
+  const qs = String(req.query.q || '').trim(); const onlyDiff = req.query.diff === '1';
+  const params = []; let where = "partner_support->>'synced_at' IS NOT NULL";
+  if (qs) { params.push('%' + qs.toLowerCase() + '%'); where += ` AND (lower(email) LIKE $1 OR lower(coalesce(first_name,'')) LIKE $1 OR lower(coalesce(last_name,'')) LIKE $1 OR lower(coalesce(nick,'')) LIKE $1)`; }
+  let rows = (await q(`SELECT id,email,first_name,last_name,nick,extra,partner_support FROM supporters WHERE ${where} ORDER BY (partner_support->>'synced_at') DESC LIMIT 3500`, params)).rows;
+  if (onlyDiff) rows = rows.filter(r => { const p = r.partner_support || {}; const s = ['palety', 'expanze', 'neurawash', 'opakovacky'].reduce((a, k) => a + (Number(p[k]) || 0), 0); return p.total_all_error || (p.total_year != null && Math.abs(s - Number(p.total_year)) > 0.5); });
+  res.send(V.adminPartnerSupport({ admin: req.admin, rows, job: LEGACY_JOB, q: qs, onlyDiff }));
+}));
+// Screenshot „Přehledu podpory" ze starého portálu — vizuální důkaz vedle textového syncu výše.
+// Jeden klik = jeden uživatel (headless Chromium, ne hromadné procházení).
+const SUPPORT_SNAP = require('./support-snapshot');
+app.post('/admin/supporters/:id(\\d+)/support-snapshot', requireAdmin, wrap(async (req, res) => {
+  const s = await loadSupporter(req.params.id);
+  if (!s) return res.status(404).json({ error: 'Uživatel nenalezen.' });
+  if (!s.email) return res.status(400).json({ error: 'Uživatel nemá e-mail.' });
+  try {
+    const buf = await SUPPORT_SNAP.captureSupportScreenshot(s.email, '/cs/bo/my-invests/');
+    const r = await q('UPDATE supporters SET support_snapshot=$2, support_snapshot_at=now() WHERE id=$1 RETURNING support_snapshot_at', [s.id, buf]);
+    await log(req.admin, 'support_snapshot', { id: s.id, email: s.email, bytes: buf.length });
+    res.json({ ok: true, at: r.rows[0].support_snapshot_at });
+  } catch (e) {
+    await log(req.admin, 'support_snapshot_error', { id: s.id, email: s.email, error: e.message });
+    res.status(502).json({ error: 'Nepodařilo se pořídit screenshot: ' + e.message });
+  }
+}));
+app.get('/admin/supporters/:id(\\d+)/support-snapshot.png', requireAdmin, wrap(async (req, res) => {
+  const r = await q('SELECT support_snapshot, support_snapshot_at FROM supporters WHERE id=$1', [req.params.id]);
+  const row = r.rows[0];
+  if (!row || !row.support_snapshot) return res.status(404).send('Zatím není žádný screenshot.');
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'private, no-store');
+  res.set('Last-Modified', new Date(row.support_snapshot_at).toUTCString());
+  res.send(row.support_snapshot);
+}));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
