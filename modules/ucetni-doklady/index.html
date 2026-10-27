@@ -1045,6 +1045,9 @@
               && !['paid', 'cancelled', 'written_off', 'archived', 'payment_queued'].includes(inv.status))
               ? ' <button class="btn btn-secondary btn-sm" onclick="markInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: ručně označit jako zaplaceno (mimo výpisy)" style="margin-left:4px;color:#22c55e;">✓</button>'
               : '') +
+            ((window.currentUser && (window.currentUser.role === 'admin' || window.currentUser.isSuperAdmin)) && ['paid', 'partially_paid'].includes(inv.status)
+              ? ' <button class="btn btn-secondary btn-sm" onclick="unmarkInvoicePaid(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Admin: vrátit ruční úhradu — doklad zpět na Rozpracovaný" style="margin-left:4px;color:#f59e0b;">↩</button>'
+              : '') +
             (window.currentUser?.isSuperAdmin
               ? ' <button class="btn btn-danger btn-sm" onclick="hardDeleteInvoice(' + inv.id + ', \'' + escapeHtml(inv.invoice_number) + '\')" title="Trvale smazat (super admin)" style="margin-left:4px;">🗑️</button>'
               : '') +
@@ -1945,6 +1948,13 @@
     };
 
     // ✓ Ruční označení jako zaplaceno (admin) — mimo vypořádání z výpisů
+    window.unmarkInvoicePaid = async function(id, num) {
+      if (!confirm('Vrátit doklad ' + num + ' zpět na „Rozpracovaný"?\n\nOdebere se jen ruční úhrada. Platby spárované z bankovního výpisu zůstanou (ty se odpojují v Banka → Platby).')) return;
+      const r = await api('POST', '/api/accounting/invoices/' + id + '/unmark-paid');
+      if (r.status !== 200) return alert('Nepodařilo se: ' + (r.data?.error || r.status));
+      if (typeof showToast === 'function') showToast('↩ ' + num + ' → ' + (STATUS_LABEL[r.data.status] || r.data.status));
+      loadInvoices(); if (typeof loadSummary === 'function') loadSummary();
+    };
     window.markInvoicePaid = function(id, num) {
       const today = new Date().toISOString().slice(0, 10);
       const ov = document.createElement('div');

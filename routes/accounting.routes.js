@@ -1350,6 +1350,49 @@ router.post('/invoices/:id/mark-paid', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// POST /api/accounting/invoices/:id/unmark-paid — admin: vrátit ručně zaplacený doklad zpět na „Rozpracovaný"
+// Odebere jen RUČNÍ úhrady (ne spárované z výpisu ani z platebního příkazu). Zbylé bankovní platby zůstanou.
+router.post('/invoices/:id/unmark-paid', async (req, res, next) => {
+  try {
+    if (!(req.user && (req.user.role === 'admin' || req.user.isSuperAdmin))) {
+      return res.status(403).json({ error: 'Vrátit ruční úhradu smí jen admin' });
+    }
+    const id = parseInt(req.params.id, 10);
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+      include: { allocations: { include: { payment: { select: { id: true, bank_transaction_id: true, batch_id: true, message: true, _count: { select: { allocations: true } } } } } } },
+    });
+    if (!invoice) return res.status(404).json({ error: 'Faktura nenalezena' });
+    if (!['paid', 'partially_paid'].includes(invoice.status)) {
+      return res.status(400).json({ error: 'Doklad není ve stavu Zaplaceno' });
+    }
+    const isManual = (a) => a.payment && !a.payment.bank_transaction_id && !a.payment.batch_id &&
+      ((a.note || '').startsWith('Ruční úhrada') || (a.payment.message || '').startsWith('Ručně:'));
+    const manual = invoice.allocations.filter(isManual);
+    const total = Number(invoice.total);
+    if (!manual.length && total > 0) {
+      return res.status(400).json({ error: 'Doklad nemá ruční úhradu — je zaplacený platbou z výpisu. Tu odpoj v Banka → Platby.' });
+    }
+    const removed = manual.reduce((s, a) => s + Number(a.amount), 0);
+    const newPaid = total <= 0 && !manual.length ? 0 : Math.max(0, Math.round((Number(invoice.paid_amount || 0) - removed) * 100) / 100);
+    const newStatus = newPaid > 0.009 ? (newPaid + 0.01 >= total ? 'paid' : 'partially_paid') : 'draft';
+    const result = await prisma.$transaction(async (tx) => {
+      for (const a of manual) {
+        await tx.paymentAllocation.delete({ where: { id: a.id } });
+        if (a.payment._count.allocations <= 1) await tx.payment.delete({ where: { id: a.payment.id } });
+      }
+      return tx.invoice.update({ where: { id }, data: { paid_amount: newPaid, status: newStatus }, select: { id: true, status: true, paid_amount: true } });
+    });
+    logAudit({
+      action: 'update', entity: 'invoice', entity_id: id,
+      description: `${invoice.invoice_number}: ruční úhrada vrácena (${removed} ${invoice.currency}) → ${newStatus}`,
+      changes: { manual_paid_undo: { by: userLabel(req.user), amount: removed, status_from: invoice.status, status_to: newStatus } },
+      user: req.user,
+    }).catch(() => {});
+    res.json(result);
+  } catch (err) { next(err); }
+});
+
 // POST /api/accounting/invoices/:id/mark-checked — vizuální kontrola přepsaných údajů proti originálu
 // Body: { checked: true|false }. Ukládá se jako tag `ocr_checked` (bez migrace) + shodí needs_human_review.
 router.post('/invoices/:id/mark-checked', async (req, res, next) => {
