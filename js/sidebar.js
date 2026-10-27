@@ -266,6 +266,7 @@ function renderSidebar(activeModule) {
     { id: 'holyos-topbar-script', src: 'js/top-bar.js' },
     { id: 'holyos-global-search-script', src: 'js/global-search.js' }, // okno CTRL+PAUSE
     { id: 'holyos-modal-autoclose-script', src: 'js/modal-autoclose.js' }, // zavření oken klikem mimo / Esc
+    { id: 'holyos-tab-memory-script', src: 'js/tab-memory.js' }, // po obnovení stránky zůstat na stejné záložce
   ];
   tbScripts.forEach(function(s) {
     if (!document.getElementById(s.id)) {
