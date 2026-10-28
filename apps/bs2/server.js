@@ -2575,7 +2575,7 @@ app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res
   // mode=verify → znovu všichni, kdo už screenshot mají a ještě nebyli zkontrolováni čtením hodnoty ze stránky
   const verify = (req.body && req.body.mode) === 'verify';
   const rows = (await q(verify
-    ? `SELECT id,email,nick FROM supporters WHERE support_snapshot_at IS NOT NULL AND email IS NOT NULL AND (partner_support IS NULL OR partner_support->>'snapshot_checked_at' IS NULL) ORDER BY id`
+    ? `SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND email IS NOT NULL AND (partner_support IS NULL OR partner_support->>'snapshot_checked_at' IS NULL) ORDER BY id`
     : `SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (support_snapshot_at IS NULL OR support_snapshot_at < now() - interval '24 hours') ORDER BY id`)).rows;
   SNAP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'support_snapshot_all', { total: rows.length });
