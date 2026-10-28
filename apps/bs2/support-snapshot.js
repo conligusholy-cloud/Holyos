@@ -66,7 +66,17 @@ async function captureWith(browser, email, { path = '/cs/bo/my-invests/', type =
       await page.goto(BASE + path, { waitUntil: 'networkidle2', timeout: 25000 });
     }
     await new Promise((r) => setTimeout(r, 300));
-    return await page.screenshot(type === 'png' ? { type: 'png', fullPage: true } : { type: 'jpeg', quality, fullPage: true });
+    // Přečíst z vykreslené stránky přesně to, co je na screenshotu: „Celkem jste podpořili" (po dopočtu JS) + měnu
+    const read = await page.evaluate(() => {
+      const t = document.body.innerText || '';
+      const m = t.match(/Celkem jste\s*podpořili:\s*([\d\s\u00a0.,]+)\s*(czk|kč|eur|€)/i);
+      const y = t.match(/(\d{4}) jste podpořili:\s*([\d\s\u00a0.,]+)\s*(czk|kč|eur|€)/i);
+      return { total: m ? m[1] : null, cur: m ? m[2] : (y ? y[3] : null), year: y ? y[1] : null, year_total: y ? y[2] : null };
+    }).catch(() => ({}));
+    const buf = await page.screenshot(type === 'png' ? { type: 'png', fullPage: true } : { type: 'jpeg', quality, fullPage: true });
+    const num = (s) => { if (s == null) return null; const v = Number(String(s).replace(/[\s\u00a0]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')); return isFinite(v) ? v : null; };
+    buf.read = { total: num(read.total), currency: read.cur ? (/eur|€/i.test(read.cur) ? 'EUR' : 'CZK') : null, year: read.year ? Number(read.year) : null, year_total: num(read.year_total) };
+    return buf;
   } finally {
     await ctx.close().catch(() => {});
   }

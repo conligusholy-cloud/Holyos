@@ -2546,7 +2546,11 @@ app.get('/admin/supporters/:id(\\d+)/support-snapshot.png', requireAdmin, wrap(a
 let SNAP_JOB = { running: false, total: 0, done: 0, ok: 0, failed: 0, errors: [], started_at: null, finished_at: null };
 app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res) => {
   if (SNAP_JOB.running) return res.json(SNAP_JOB);
-  const rows = (await q(`SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (support_snapshot_at IS NULL OR support_snapshot_at < now() - interval '24 hours') ORDER BY id`)).rows;
+  // mode=verify → znovu všichni, kdo už screenshot mají a ještě nebyli zkontrolováni čtením hodnoty ze stránky
+  const verify = (req.body && req.body.mode) === 'verify';
+  const rows = (await q(verify
+    ? `SELECT id,email,nick FROM supporters WHERE support_snapshot_at IS NOT NULL AND email IS NOT NULL AND (partner_support IS NULL OR partner_support->>'snapshot_checked_at' IS NULL) ORDER BY id`
+    : `SELECT id,email,nick FROM supporters WHERE ${OBRAT_NONZERO} AND (support_snapshot_at IS NULL OR support_snapshot_at < now() - interval '24 hours') ORDER BY id`)).rows;
   SNAP_JOB = { running: true, total: rows.length, done: 0, ok: 0, failed: 0, errors: [], started_at: new Date().toISOString(), finished_at: null };
   await log(req.admin, 'support_snapshot_all', { total: rows.length });
   res.json(SNAP_JOB);
@@ -2567,6 +2571,27 @@ app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res
           const buf = await SUPPORT_SNAP.captureWith(br, s.email);
           await q('UPDATE supporters SET support_snapshot=$2, support_snapshot_at=now() WHERE id=$1', [s.id, buf]);
           SNAP_JOB.ok++;
+          // Hodnota přečtená ze screenshotu (vykreslená stránka) → porovnat s uloženou podporou a případně opravit
+          const rd = buf.read || {};
+          if (rd.total != null) {
+            const cur = (await q('SELECT partner_support FROM supporters WHERE id=$1', [s.id])).rows[0];
+            const p = (cur && cur.partner_support) || {};
+            // Pozor: starý portál u části účtů „Celkem" nedopočítá (AJAX neproběhne) a ukáže jen částku za aktuální rok
+            // (např. Kovar: stránka 0 €, ale v roce 2020 podpořil 144 €). Takovou hodnotu nebrat jako opravu.
+            const placeholder = rd.year_total != null && Math.abs(rd.total - rd.year_total) < 0.01 && p.total_all != null && Number(p.total_all) > rd.total + 0.01;
+            const differs = !placeholder && (p.total_all == null || Math.abs(Number(p.total_all) - rd.total) > 0.01 || (rd.currency && (p.currency || 'CZK') !== rd.currency));
+            if (placeholder) SNAP_JOB.placeholder = (SNAP_JOB.placeholder || 0) + 1;
+            const np = { ...p, snapshot_total: rd.total, snapshot_currency: rd.currency, snapshot_checked_at: new Date().toISOString() };
+            if (differs) {
+              np.total_all_before_snapshot = p.total_all != null ? p.total_all : null;
+              np.total_all = rd.total; if (rd.currency) np.currency = rd.currency;
+              np.corrected_from_snapshot = true;
+              await LEGACY.addCzk(np, np.eur_rate ? { rate: np.eur_rate, date: np.eur_rate_date } : null);
+              SNAP_JOB.corrected = (SNAP_JOB.corrected || 0) + 1;
+              if ((SNAP_JOB.corrections || (SNAP_JOB.corrections = [])).length < 200) SNAP_JOB.corrections.push({ id: s.id, who: s.nick || s.email, before: np.total_all_before_snapshot, after: rd.total, currency: np.currency });
+            } else if (!placeholder) SNAP_JOB.matched = (SNAP_JOB.matched || 0) + 1;
+            await q('UPDATE supporters SET partner_support=$2 WHERE id=$1', [s.id, JSON.stringify(np)]);
+          } else SNAP_JOB.unread = (SNAP_JOB.unread || 0) + 1;
         } catch (e) {
           SNAP_JOB.failed++; if (SNAP_JOB.errors.length < 50) SNAP_JOB.errors.push((s.nick || s.email) + ': ' + e.message);
           if (/Target closed|Protocol error|disconnected/i.test(e.message)) uses = 999; // spadlý prohlížeč → otevřít nový
@@ -2580,7 +2605,7 @@ app.post('/admin/support-snapshots/sync-all', requireAdmin, wrap(async (req, res
     console.log('[bs2] hromadné screenshoty hotovo', JSON.stringify({ ...SNAP_JOB, errors: SNAP_JOB.errors.slice(0, 5) }));
   })().catch((e) => { SNAP_JOB.running = false; SNAP_JOB.finished_at = new Date().toISOString(); SNAP_JOB.errors.push(e.message); });
 }));
-app.get('/admin/support-snapshots/sync-all', requireAdmin, (req, res) => res.json(SNAP_JOB));
+app.get('/admin/support-snapshots/sync-all', requireAdmin, (req, res) => res.json({ ...SNAP_JOB, corrections: (SNAP_JOB.corrections || []).slice(-20) }));
 // Nové dočasné heslo — nick zůstává, heslo se zobrazí JEDNOU adminovi (předá uživateli), ten si ho pak změní v Můj účet
 app.post('/admin/supporters/:id(\\d+)/password', requireAdmin, wrap(async (req, res) => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
