@@ -16,6 +16,16 @@ router.use((req, res, next) => {
   return requireAuth(req, res, next);
 });
 
+// Pro externí API (x-api-key, např. partner.bestseries.cz) se NESMÍ posílat jména zákazníků/firem,
+// která bývají v názvu slotu („Prádlomat MINI CZ — Ester Šilha…") ani v důvodu blokace → neutrální název podle data.
+function publicSlotName(s) {
+  const n = String(s.name || '');
+  const d = new Date(s.start_date); const iso = isNaN(d) ? '' : new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  if (/^Výrobní týden \d{4}-\d{2}-\d{2}$/.test(n)) return n; // automaticky založený týden — bez jmen
+  return 'Výrobní slot ' + iso;
+}
+const isExternal = (req) => !!(req.user && req.user.isApiKey);
+
 // GET /api/slots
 router.get('/', async (req, res, next) => {
   try {
@@ -70,6 +80,7 @@ router.get('/calendar', async (req, res, next) => {
       },
       orderBy: { start_date: 'asc' },
     });
+    const ext = isExternal(req);
     const now = new Date(); now.setHours(0, 0, 0, 0);
     const calendar = slots.map(s => {
       const start = new Date(s.start_date);
@@ -91,14 +102,14 @@ router.get('/calendar', async (req, res, next) => {
       else if (occupancyPct >= 100) { derivedStatus = 'full'; label = 'Plno'; }
       else if (s.assignments.length > 0) { derivedStatus = 'occupied'; label = `Obsazeno ${occupancyPct} %`; }
       return {
-        id: s.id, name: s.name, start_date: s.start_date, end_date: s.end_date,
+        id: s.id, name: ext ? publicSlotName(s) : s.name, start_date: s.start_date, end_date: s.end_date,
         workstation: s.workstation, status: derivedStatus, label,
         occupancy_pct: occupancyPct, assignment_count: s.assignments.length,
         used_hours: Math.round(usedHours * 10) / 10,
         capacity_hours_per_day: Number(s.capacity_hours),
         capacity_total_hours: Math.round(capacityTotal * 10) / 10,
         color: s.color, is_blocked: isBlocked,
-        blocks: s.blocks.map(b => ({ id: b.id, start_date: b.start_date, end_date: b.end_date, reason: b.reason, block_type: b.block_type })),
+        blocks: s.blocks.map(b => ({ id: b.id, start_date: b.start_date, end_date: b.end_date, reason: ext ? null : b.reason, block_type: b.block_type })),
       };
     });
     res.json({ range: { from: from || null, to: to || null }, count: calendar.length, slots: calendar });
@@ -155,7 +166,7 @@ router.get('/calendar/next-free', async (req, res, next) => {
       const used = s.assignments.reduce((sum, a) => sum + Number(a.estimated_hours || 0), 0);
       const free = capacity - used;
       if (free >= neededHours) {
-        return res.json({ id: s.id, name: s.name, start_date: s.start_date, end_date: s.end_date, free_hours: Math.round(free * 10) / 10, needed_hours: neededHours });
+        return res.json({ id: s.id, name: isExternal(req) ? publicSlotName(s) : s.name, start_date: s.start_date, end_date: s.end_date, free_hours: Math.round(free * 10) / 10, needed_hours: neededHours });
       }
     }
     res.status(404).json({ error: 'Žádný volný slot s dostatečnou kapacitou' });
