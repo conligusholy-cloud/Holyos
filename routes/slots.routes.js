@@ -24,7 +24,10 @@ function publicSlotName(s) {
   if (/^Výrobní týden \d{4}-\d{2}-\d{2}$/.test(n)) return n; // automaticky založený týden — bez jmen
   return 'Výrobní slot ' + iso;
 }
-const isExternal = (req) => !!(req.user && req.user.isApiKey);
+// Kalendář (/calendar, /calendar/next-free) je určený pro externí odběratele — partner portál se může
+// přihlašovat API klíčem i JWT účtem, proto se jména anonymizují VŽDY. Interní obrazovky (obchodník)
+// z kalendáře název nepoužívají; plné názvy dál vrací GET /api/slots a detail slotu (jen přihlášení).
+const isExternal = () => true;
 
 // GET /api/slots
 router.get('/', async (req, res, next) => {
